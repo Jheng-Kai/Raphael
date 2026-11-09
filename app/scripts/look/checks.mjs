@@ -2965,7 +2965,9 @@ export function checkRendered(name, context = {}) {
     const probe = document.createElement("i"); probe.style.color = "var(--link)"; document.documentElement.append(probe);
     const link = getComputedStyle(probe).color; probe.remove();
     const shown = [...document.querySelectorAll(".au-room-message .message-link")].filter(visible).at(-1);
-    require(shown && shown.textContent === shown.dataset.url && shown.textContent.includes("ref_src=twsrc"), `the group's message shows the whole address: ${shown?.textContent}`);
+    // A link is a chip in the words (R-UI-82): its site, or its page's title once read, over the whole address it opens.
+    require(shown && shown.matches(".link-chip") && shown.dataset.url.includes("ref_src=twsrc") && shown.dataset.url.startsWith("https://x.com/someone/status/") && shown.querySelector(".link-name")?.textContent.trim(),
+      `the group's message links the whole address as a chip: ${shown?.textContent} → ${shown?.dataset.url}`);
     require(getComputedStyle(shown).color === link, `in the link colour: ${getComputedStyle(shown).color} / ${link}`);
     return { check: name };
   }
@@ -4000,6 +4002,17 @@ export function checkRendered(name, context = {}) {
     }
     return { check: name, text: row.textContent };
   }
+  if (name === "room-contained-scroll") {
+    const main = document.querySelector(".main"), thread = document.querySelector(".au-room-pane .ra-scroll"), composer = document.querySelector(".au-room-pane .ra-dock .composer");
+    require(thread.scrollHeight > thread.clientHeight * 2, "the room thread is long enough to scroll");
+    require(document.querySelectorAll(".au-room-pane .au-room-meta .au-room-reply").length >= 3, "the latest messages carry reply chips");
+    require(main.scrollTop === 0 && main.scrollHeight <= main.clientHeight + 1, `the main area stays put (scrollTop ${main.scrollTop}, height ${main.scrollHeight} in ${main.clientHeight})`);
+    require(Math.abs(thread.scrollTop + thread.clientHeight - thread.scrollHeight) <= 2, "the wheel reached the end of the thread itself");
+    require(innerHeight - composer.getBoundingClientRect().bottom < 48, "the composer stays at the bottom of the window");
+    // A screen-reader name is placed absolutely; its box must be the thread, or it escapes the clip and stretches the main area.
+    for (const author of document.querySelectorAll(".au-room-pane .au-room-author")) require(!author.offsetParent || author.offsetParent === thread || thread.contains(author.offsetParent), "a room author's name stays inside the thread it scrolls with");
+    return { check: name, main: { scrollTop: main.scrollTop, scrollHeight: main.scrollHeight, clientHeight: main.clientHeight }, thread: { scrollTop: Math.round(thread.scrollTop), scrollHeight: thread.scrollHeight, clientHeight: thread.clientHeight } };
+  }
   if (name === "room-discussion") {
     require(document.querySelectorAll('.au-room-reply').length >= 3, "multiple replies identify their colleagues");
     require(document.querySelector('.au-room-thread').textContent.includes('我不同意'), "members can disagree");
@@ -4013,6 +4026,15 @@ export function checkRendered(name, context = {}) {
     // Each message is led by its face alone; the name is for screen readers and the face's tooltip (owner, 2026-11-09).
     require([...document.querySelectorAll('.au-room-message .au-room-author')].every(author => author.getBoundingClientRect().width <= 1 && author.textContent.trim()), "no name line above a message, but a name for screen readers");
     require([...document.querySelectorAll('.au-room-message .ra-face')].every(face => face.dataset.tooltip), "a message's face names its member on hover");
+    // The face stands beside the first bubble, mirroring the owner's on the right; a reply chip sits above, in the bubbles' column.
+    for (const face of document.querySelectorAll('.au-room-message .ra > .ra-face')) {
+      const bubble = face.closest('.ra').querySelector('.ans, .bubble');
+      if (!bubble) continue;
+      const f = face.getBoundingClientRect(), b = bubble.getBoundingClientRect();
+      require(f.right <= b.left + 1 && f.top >= b.top - 1 && f.bottom <= b.bottom + 1, "a message's face stands beside its first bubble, not above it");
+      const chip = face.closest('.au-room-message').querySelector(':scope > .au-room-meta .au-room-reply');
+      if (chip) require(chip.getBoundingClientRect().bottom <= b.top + 1 && Math.abs(chip.getBoundingClientRect().left - b.left) <= 2, "its reply chip sits above the bubble, at its left edge");
+    }
     return { check: name, replyChips: document.querySelectorAll('.au-room-reply').length };
   }
   if (name === "room-wrapup") {

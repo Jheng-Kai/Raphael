@@ -49,6 +49,13 @@ events and durable handoffs. The same AgentService owns member work.
 A room message carries no speaker name (owner, 2026-11-09: 「開會的時候不用有名字…不用顯示拉菲爾」):
 the face beside it says who spoke, its name in the face's tooltip and for a screen reader (the author
 stays in the markup, visually hidden); a message with nothing else in its meta line has no meta line.
+The face stands beside the message, never above it (owner, 2026-11-09): left of the first bubble and centred on
+its first line, mirroring the owner's face on the right; a reply chip (回覆 …) sits above the bubble at its left
+edge. The side thread lays its replies out the same way. Check: `room-discussion` (face beside the first bubble,
+chip above it).
+That hidden name is placed absolutely, so the thread (`.ra-scroll`) is its box: before 2026-11-09 it took the
+stage instead, escaped the clip at its depth in a long room and stretched the main area, and the wheel past
+the last message scrolled the whole room away (owner screenshot). Scene: `room-long-reply-wheel`; R-UI-62.
 The room's right-click dialogs 參與成員 and 房內角色 (and the new room dialog) are one list of rows
 (`.room-list`, owner 2026-11-09): each member's face and name, a check on the right of a chosen member,
 a pressed state for a reader; in 房內角色 each row carries its role as a bare dropdown on the right.
@@ -113,7 +120,7 @@ npm run look -- room-handoff-running room-handoff-result room-handoff-failed roo
 npm run look -- room-routing-fallback room-role-assignment room-round-typing room-mention-after-hop-limit room-mention-after-turn-limit room-mention-blocked room-wrapup-after-replies compact-rooms --theme both --width 1120,720,1920x1080
 npm run look -- new-room room-group-menu room-draft room-menu room-replies room-discussion room-wrapup new-room-responder --theme both --width 1120,720,1920x1080
 npm run look -- room-required-chief room-generated-name room-private-isolation room-reply-owner room-reply-peer room-reply-source-missing room-reply-send room-thinking --theme both --width 1120,720,1920x1080
-npm run look -- room-stop room-row-menu room-rename room-members room-delete room-hover esc-room-armed --theme both --width 1120,720,1920x1080
+npm run look -- room-stop room-row-menu room-rename room-members room-delete room-hover esc-room-armed room-long-reply-wheel --theme both --width 1120,720,1920x1080
 ```
 
 The following retained room and sidebar journeys cover their shared consumers:

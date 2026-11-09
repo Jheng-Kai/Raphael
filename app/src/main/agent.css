@@ -125,7 +125,9 @@
 
 /* ---------- the stage ---------- */
 .ra-stage { grid-row: 3; position: relative; display: flex; flex-direction: column; min-height: 0; }
-.ra-scroll { flex: 1; min-height: 0; overflow-x: hidden; overflow-y: auto; scrollbar-width: none; overflow-anchor: none; padding: var(--sp-1) var(--sp-1) var(--sp-4); }
+/* The thread is the box of what it scrolls: without `position` an absolutely placed node in it (a room
+   author's screen-reader name) took the stage as its box, escaped the clip and stretched the main area. */
+.ra-scroll { position: relative; flex: 1; min-height: 0; overflow-x: hidden; overflow-y: auto; scrollbar-width: none; overflow-anchor: none; padding: var(--sp-1) var(--sp-1) var(--sp-4); }
 .thread-window-sentinel { height: 1px; pointer-events: none; }
 .ra-col { max-width: var(--pa-colw); margin: 0 auto; }
 .ra-older { display: flex; justify-content: center; padding: var(--sp-1) 0 var(--sp-1); }

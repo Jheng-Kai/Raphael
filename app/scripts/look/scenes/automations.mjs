@@ -147,6 +147,8 @@ export default [
   scene("room-private-isolation", "Room delivery stays outside private history", [room(1), type('#room-message', 'roomnonce-private-isolation'), key('Enter'), check('room-isolation-send'), { action: "member", id: 1 }, check('room-private-isolation')]),
   scene("room-reply-owner", "Member answers identify the owner source", [room(1), check("room-reply-owner")]),
   scene("room-reply-peer", "Peer replies identify the source author", [room(1), check("room-reply-peer")], { roomDiscussion: true }),
+  // Owner 2026-11-09: in a long room ending in reply chips the wheel scrolled the whole conversation away into an empty main area.
+  scene("room-long-reply-wheel", "A long room ending in reply chips scrolls only inside its thread", [room(1), { action: "wheel", selector: ".au-room-pane .ra-scroll", deltaY: 4000 }, { action: "wheel", selector: ".au-room-pane .ra-scroll", deltaY: 4000 }, check("room-contained-scroll")], { longRoomMessages: true, roomDiscussion: true }),
   scene("room-reply-source-missing", "Deleted reply source stays unavailable", [room(1), check("room-reply-source-missing")], { roomMissingSource: true }),
   scene("room-reply-send", "Reply to a specific member through the composer", [room(1), hover('[data-room-message="2"] .chat-message'), click('[data-room-message="2"] [data-room-act="reply"]'), click('[data-room-act="cancel-reply"]'), check("room-reply-cancel"), click('[data-room-message="2"] [data-room-act="reply"]'), type('#room-message', '請補充檢查結果。'), key("Enter"), check("room-reply-send")]),
   scene("room-thinking", "One speaking row for queued member replies", [room(1), wait(".au-room-thinking"), check("room-thinking")], { roomThinking: true }),

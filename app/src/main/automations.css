@@ -80,11 +80,16 @@
 /* A group's message is led by its face alone (owner, 2026-11-09: the name made a meeting too long); the name stays for
    screen readers and on the face's tooltip. */
 .au-room-author { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-.au-room-meta:not(:has(.au-room-reply)) { display: none; }
+/* A reply chip (whom a message answers) stands above the message, in its bubbles' column. */
+.au-room-thread .tn > .au-room-meta { padding-left: calc(var(--pa-ra-face) + var(--pa-ra-gap)); margin-bottom: var(--sp-1); }
+.au-room-thread .tn > .au-room-meta > .au-room-reply { margin-left: 0; }
 /* Each message keeps its hover actions' row under it, which already parts it from the next. */
 .au-room-thread { padding: var(--sp-3) 0; gap: var(--sp-2); }
 .au-room-thread > .handoff-row, .au-room-thread > .room-intent-blocked { margin-block: var(--sp-2); }
-.au-room-thread .ra { align-items: flex-start; }
+/* A member's face stands beside its words, mirroring the owner's face on the right: left of the first bubble and centred
+   on its first line. A private conversation draws no face and lays its replies in one column, so a room sets its own. */
+:is(.page-agent, body) :is(.au-room-thread, .room-side-thread) .tn > .ra { grid-template-columns: var(--pa-ra-face) minmax(0, 1fr); align-items: start; }
+:is(.au-room-thread, .room-side-thread) .tn > .ra > .ra-face { margin-top: max(0px, calc(var(--pa-bpy) + var(--pa-lh-a) / 2 - var(--pa-ra-face) / 2)); }
 .au-room-thread .room-turn { white-space: nowrap; }
 .au-room-row [aria-current="true"] { background: var(--accent-soft) !important; color: var(--text); }
 .au-rooms-section { border-top: 1px solid var(--line); margin-top: var(--sp-4); padding: var(--sp-2) 0; }

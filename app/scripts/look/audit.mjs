@@ -102,6 +102,9 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
     const scrollbar = element.offsetWidth - element.clientWidth - (parseFloat(style.borderLeftWidth) || 0) - (parseFloat(style.borderRightWidth) || 0);
     if (['auto', 'scroll'].includes(style.overflowY) && scrollbar > 1 && !element.matches('.main, .modal-body, .cs-results, .cs-form .add-grid')) violation('R-UI-62', 'A scrollbar takes room from a narrow part; only a wide page shows one');
     if (element.matches('.main') && scrollbar > 1 && element.querySelector(':scope > .page-agent:not([hidden])')) violation('R-UI-62', 'A conversation never scrolls the main area, so it keeps no strip for a scrollbar');
+    // An overlay scrollbar takes no width, so the height says it as well: a node that escaped a thread's clip
+    // once stretched the area under a long room and the wheel scrolled the whole conversation away (owner, 2026-11-09).
+    else if (element.matches('.main') && element.scrollHeight > element.clientHeight + 1 && element.querySelector(':scope > .page-agent:not([hidden])')) violation('R-UI-62', `A conversation scrolls inside itself, yet the main area around it scrolls ${element.scrollHeight - element.clientHeight}px`);
     if (element.matches('.mb-av-slime') && style.overflow !== 'visible') {
       const reserve = Number(style.overflowClipMargin?.match(/([\d.]+)px/)?.[1] ?? 0);
       if (style.overflow !== 'clip' || reserve < Math.max(box.width, box.height)) violation('R-UI-54', 'A crop cuts the horns and wings of a slime');

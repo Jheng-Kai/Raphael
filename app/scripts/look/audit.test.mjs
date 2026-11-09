@@ -702,6 +702,18 @@ describe("rendered look checks", () => {
     window.document.querySelector('.main').innerHTML = '<section class="page-agent">x</section>';
     expect(audit().productRules.filter(item => item.rule === 'R-UI-62').map(item => item.class)).toEqual(['main']);
   });
+  it("rejects a main area that scrolls under an open conversation, even with an overlay scrollbar (R-UI-62)", () => {
+    const { window, audit } = productAudit('<div class="main" style="overflow-y:auto"><section class="page-agent">x</section></div>');
+    const main = window.document.querySelector('.main');
+    Object.defineProperty(main, 'clientHeight', { value: 800 });
+    Object.defineProperty(main, 'scrollHeight', { value: 1781, configurable: true });
+    expect(audit().productRules.filter(item => item.rule === 'R-UI-62').map(item => item.reason)).toEqual(['A conversation scrolls inside itself, yet the main area around it scrolls 981px']);
+    Object.defineProperty(main, 'scrollHeight', { value: 800, configurable: true });
+    expect(audit().productRules.filter(item => item.rule === 'R-UI-62')).toEqual([]);
+    main.querySelector('.page-agent').hidden = true;
+    Object.defineProperty(main, 'scrollHeight', { value: 1781 });
+    expect(audit().productRules.filter(item => item.rule === 'R-UI-62')).toEqual([]);
+  });
   it("rejects a slime on a fraction of a pixel (R-UI-63)", () => {
     const { window, audit } = productAudit('<span class="mb-av-slime" style="overflow:visible"><svg></svg></span>');
     const slime = window.document.querySelector(".mb-av-slime");
