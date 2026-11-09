@@ -15,7 +15,9 @@ inside the panel: share belongs to the conversation's header, hide to the sideba
 The page, top to bottom: a cover the owner can change (owner, 2026-11-08: 「上方那個背景也是可以讓使用者自己做更換的」):
 a pattern in the member's own slime colour (dots by default, grid, lines, glow, plain; tokens only) or
 the owner's picture (`members.set_cover`, `members.update {cover}`), changed from one soft round image
-icon at the cover's lower right whose menu shows the patterns as small covers and 從電腦選…; then the
+icon at the cover's lower right whose menu shows the patterns as small covers and 從電腦選…; the picture
+stays put under the pointer and cannot be dragged out of the window, as no picture in the app can (R-UI-119,
+owner 2026-11-09: 「這個圖片放進去不要可以拖拉出來」); then the
 face large across the cover's lower edge with the panel's dim-and-pencil edit (the same picker), the
 name and the role typed in place (Raphael's name is not typed). Under them the settings are kinds in a
 column on the left, as Settings' own, each an icon and a name, and only the chosen kind is shown beside
@@ -39,7 +41,7 @@ member-edit, member-edit-memory, settings-raphael-memory, settings-raphael-voice
 speaker-draft-chief, member-draft-switch, global-private-memory and primary-contact-set.
 
 ```powershell
-npm run look -- member-settings member-settings-raphael member-settings-skills member-settings-model member-settings-tools member-settings-voice member-settings-general member-settings-field member-settings-skill member-settings-command member-settings-memory member-settings-cover member-settings-back details member-panel-library member-face-hover --theme both --width 1120,720,1920x1080
+npm run look -- member-settings member-settings-raphael member-settings-skills member-settings-model member-settings-tools member-settings-voice member-settings-general member-settings-field member-settings-skill member-settings-command member-settings-memory member-settings-cover member-settings-cover-picture member-settings-back details member-panel-library member-face-hover --theme both --width 1120,720,1920x1080
 ```
 
 ## Private member voice chat (2026-11-05)

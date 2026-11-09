@@ -85,6 +85,8 @@ export function installMock(fixture, config = {}, target = window) {
     data.commands.push({ id: 41, member_id: 1, name: "weekly", description: "每週整理", template: "整理本週：{input}" });
     data.settings.tts_fish_voice = "voice-calm";
   }
+  // The owner's own picture as the member's cover (members.set_cover): a drawn landscape, so no photo is needed.
+  if (variant.coverPicture) data.members.find(member => member.id === 1).cover = { kind: "image", url: "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='960' height='240'><rect width='960' height='240' fill='%233a6f5c'/><circle cx='760' cy='70' r='90' fill='%2396c8b0'/><rect y='170' width='960' height='70' fill='%23264d40'/></svg>" };
   if (variant.computerHost) data.settings.computer_ssh_alias = variant.computerHost;
   if (variant.routineEmpty) data.routines = [];
 

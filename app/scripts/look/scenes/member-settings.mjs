@@ -21,5 +21,6 @@ export default [
   scene('member-settings-command', 'A command opens in a view of its own with its name, description and template', [...page, ...kind('skills', '.ms-pane [data-ms="command-open"]'), click('.ms-pane [data-ms="command-open"]'), wait('.ms-pane #ms-command-name'), check('member-settings-command')], filled),
   scene('member-settings-memory', 'The memory kind shows both documents beside the column, each with its pencil', [...page, ...kind('memory', '.ms-pane [data-mem-space="own"] .mem-entry'), check('member-settings'), check('member-settings-memory')], filled),
   scene('member-settings-cover', 'The cover\'s round button opens its patterns as small covers and a picture from this PC', [...page, click('.ms-pane [data-ms="cover"]'), wait('#app-popover .ms-swatch'), check('member-settings-cover')], filled),
+  scene('member-settings-cover-picture', 'The owner\'s picture as the cover fills it and cannot be dragged out of the window', [...page, wait('.ms-pane .ms-cover-img'), check('member-settings-cover-picture')], { ...filled, coverPicture: true }),
   scene('member-settings-back', 'Escape and the arrow return to the member\'s conversation, and the panel is as it was', [...page, key('Escape'), wait('.page-agent:not([hidden]) .mb-chat .composer'), check('member-settings-back')], filled),
 ];

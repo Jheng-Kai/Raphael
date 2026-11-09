@@ -127,6 +127,9 @@
 html, body { margin: 0; height: 100%; overflow-x: hidden; }
 body { font: var(--fs-md)/1.6 var(--ui); color: var(--text); background: var(--side); -webkit-font-smoothing: antialiased; overflow: hidden; }
 button, input, select, textarea { font: inherit; color: inherit; }
+/* A picture in the app (a cover, a face, a wallpaper, a reply's image) stays where it is: it cannot be dragged out of the
+   window, as nothing in a desktop app comes loose under the pointer (R-UI-119). */
+img { -webkit-user-drag: none; }
 /* What is typed is never heavier than the words around it: a field inside a label does not take the label's weight. */
 input, textarea { font-weight: var(--weight-regular); }
 h1, h2, h3, h4, h5, h6, b, strong { font-weight: var(--weight-semibold); }

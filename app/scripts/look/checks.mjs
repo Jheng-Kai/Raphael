@@ -5712,6 +5712,17 @@ export function checkRendered(name, context = {}) {
     const back = pane.querySelector('[data-ms="back"]');
     require(visible(back) && back.classList.contains("icon") && back.textContent.trim() === "" && back.querySelector("svg.i"), "the way back is an arrow icon with no words");
     const cover = pane.querySelector(".ms-cover"), face = pane.querySelector(".ms-face");
+    if (name === "member-settings-cover-picture") {
+      // The owner's picture fills the cover and stays put: no picture in the app can be dragged out of the window (R-UI-119).
+      const img = cover.querySelector("img.ms-cover-img"), box = img?.getBoundingClientRect(), edge = cover.getBoundingClientRect();
+      require(visible(img) && img.complete && img.naturalWidth > 0, "the owner's picture is drawn as the cover");
+      require(Math.abs(box.width - edge.width) <= 1 && Math.abs(box.height - edge.height) <= 1, "the picture fills the cover");
+      require(getComputedStyle(img).getPropertyValue("-webkit-user-drag") === "none", "the cover's picture cannot be dragged out of the window");
+      const loose = [...document.images].filter(image => getComputedStyle(image).getPropertyValue("-webkit-user-drag") !== "none");
+      require(loose.length === 0, `no picture on the page can be dragged (${loose.map(image => image.className || image.src.slice(0, 40)).join(", ")})`);
+      require(visible(face) && face.getBoundingClientRect().bottom > edge.bottom + 8, "the face still crosses the cover's lower edge");
+      return { check: name };
+    }
     if (name === "member-settings-cover") {
       // Its menu: the patterns as small covers in the member's colour, then a picture from this PC (owner, 2026-11-08).
       const menu = document.querySelector("#app-popover"), swatches = [...menu.querySelectorAll(".ms-swatch")];

@@ -57,6 +57,15 @@ test("every button and every menu row takes its height from the shared controls,
   expect(bad).toEqual([]);
 });
 
+test("no picture can be dragged out of the window (owner, 2026-11-09: 「這個圖片放進去不要可以拖拉出來」)", () => {
+  const css = (file: string): string => read(file).replace(/\/\*[\s\S]*?\*\//g, "");
+  const base = [...css(join(MAIN, "styles.css")).matchAll(/([^{}]+)\{([^{}]*)\}/g)].filter(([, selector]) => selector!.trim() === "img");
+  expect(base.map(([, , body]) => body!.trim())).toEqual(["-webkit-user-drag: none;"]);
+  // No stylesheet hands a picture back to the pointer.
+  const loose = mainFiles.filter((f) => f.endsWith(".css") && /-webkit-user-drag\s*:\s*(?:auto|element)/.test(css(f))).map(rel);
+  expect(loose).toEqual([]);
+});
+
 test("closing is a ×, never a 「關閉」 text button (owner, 2026-11-08: 「上面明明就有叉叉了，為什麼下面還要有關閉」)", () => {
   for (const file of sources) {
     const text = read(file);
