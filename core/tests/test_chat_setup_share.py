@@ -466,7 +466,11 @@ def test_migration_preserves_pending_secret_cards_and_adds_conversation_cleanup(
         patch.setattr(db, "LATEST_VERSION", 69)
         conn = db.connect(tmp_path / "before.db")
     history = AgentHistory(conn)
-    turn = history.add(session_id="old", question="Check", route="answer", prefix="", text="", status="done", source="app")
+    with conn:
+        turn = conn.execute(
+            "INSERT INTO agent_turns(created_at_ms,session_id,question,route,prefix,text,status,source)"
+            " VALUES(1,'old','Check','answer','','','done','app')"
+        ).lastrowid
     old = SecretCardStore(conn).open(turn_id=turn, member_id=0, conversation_id=None, server_id="old-server", kind="header", secret="Authorization", name="Existing", language="en")
     db.migrate(conn)
     assert SecretCardStore(conn).get(old.id) == old

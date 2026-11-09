@@ -361,7 +361,7 @@ SCHEMA_V27 = {
         "stop_requested INTEGER NOT NULL DEFAULT 0", "wrapup_sent INTEGER NOT NULL DEFAULT 0", "reason TEXT NOT NULL DEFAULT ''",
     ],
 }
-LATEST = 73
+LATEST = 74
 
 
 def test_v59_existing_tasks_default_to_no_artifact_and_keep_their_reports(monkeypatch, tmp_path):
@@ -649,7 +649,9 @@ SCHEMA_V73 = {
 }
 
 
-@pytest.mark.parametrize("start_version, expected_steps", [(version, [step for step in (63, 64, 67, 68, 69, 70, 71, 72, 73) if step > version]) for version in (62, 63, 64, 67, 68, 69, 70, 71, 72)])
+SCHEMA_V74 = {**SCHEMA_V73, "agent_turns": [*SCHEMA_V73["agent_turns"], "failure TEXT"]}
+
+@pytest.mark.parametrize("start_version, expected_steps", [(version, [step for step in (63, 64, 67, 68, 69, 70, 71, 72, 73, 74) if step > version]) for version in (62, 63, 64, 67, 68, 69, 70, 71, 72, 73)])
 def test_latest_upgrade_runs_only_pending_migrations_and_preserves_vault_entries(monkeypatch, tmp_path, start_version, expected_steps):
     path = tmp_path / f"v{start_version}-to-latest.db"
     with monkeypatch.context() as old:
@@ -671,7 +673,7 @@ def test_latest_upgrade_runs_only_pending_migrations_and_preserves_vault_entries
     db.migrate(conn)
     assert steps == expected_steps
     assert conn.execute("PRAGMA user_version").fetchone()[0] == LATEST
-    for table, columns in SCHEMA_V73.items():
+    for table, columns in SCHEMA_V74.items():
         if table != "agent_turns_fts":
             assert describe_columns(conn, table) == columns
     entry = conn.execute("SELECT kind,label,hint,origin,members,credential FROM vault_entries WHERE id='legacy-login'").fetchone()
@@ -841,7 +843,7 @@ def describe_columns(conn, table):
 
 
 def test_connect_creates_the_latest_schema(conn):
-    assert schema_names(conn, "table") == set(SCHEMA_V73) | FTS_SHADOWS | SEQUENCE
+    assert schema_names(conn, "table") == set(SCHEMA_V74) | FTS_SHADOWS | SEQUENCE
     assert {
         "history_created",
         "agent_turns_created",
@@ -862,7 +864,7 @@ def test_connect_creates_the_latest_schema(conn):
         "one_standard_conversation",
     } <= schema_names(conn, "index")
     assert conn.execute("PRAGMA user_version").fetchone()[0] == LATEST
-    for table, columns in SCHEMA_V73.items():
+    for table, columns in SCHEMA_V74.items():
         if table != "agent_turns_fts":
             assert describe_columns(conn, table) == columns
     assert [c["name"] for c in conn.execute("PRAGMA table_info(agent_turns_fts)")] == [
@@ -1065,7 +1067,7 @@ def test_a_v4_database_gets_the_turns_table_at_v5_and_keeps_its_rows(tmp_path):
 
     conn = db.connect(path)
     assert conn.execute("PRAGMA user_version").fetchone()[0] == LATEST
-    assert describe_columns(conn, "agent_turns") == SCHEMA_V29["agent_turns"]
+    assert describe_columns(conn, "agent_turns") == SCHEMA_V74["agent_turns"]
     assert conn.execute("SELECT count(*) FROM agent_turns").fetchone()[0] == 0
     assert HistoryStore(conn).latest().text == "A"
     assert [e.word for e in DictionaryStore(conn).list()] == ["拉斐爾"]
@@ -1676,14 +1678,17 @@ def test_v24_assigns_each_legacy_member_a_stable_default_conversation(tmp_path, 
 
 def test_v52_login_cards_preserve_pending_cards_and_the_turn_delete_trigger(tmp_path):
     from raphael_core.connectors.secret_cards import SecretCardStore
-    from raphael_core.agent.history import AgentHistory
     path = tmp_path / "v51.db"
     raw = sqlite3.connect(path)
     raw.row_factory = sqlite3.Row
     for version in range(1, 52):
         step = db._MIGRATIONS[version]
         step(raw) if callable(step) else raw.executescript(step)
-    turn = AgentHistory(raw).add(session_id="test", question="Test", route="answer", prefix="", text="", status="running", source="app", member_id=0)
+    with raw:
+        turn = raw.execute(
+            "INSERT INTO agent_turns (created_at_ms,session_id,question,route,prefix,text,status,source)"
+            " VALUES (1,'test','Test','answer','','','running','app')"
+        ).lastrowid
     original = SecretCardStore(raw).open(turn_id=turn, member_id=0, conversation_id=None, server_id="connection",
         kind="header", secret="Authorization", name="Example", language="en")
     raw.close()
@@ -1703,7 +1708,6 @@ def test_v52_login_cards_preserve_pending_cards_and_the_turn_delete_trigger(tmp_
 
 
 def test_v53_follows_v52_and_keeps_login_references_and_both_card_tables(tmp_path):
-    from raphael_core.agent.history import AgentHistory
     from raphael_core.connectors.secret_cards import SecretCardStore
 
     path = tmp_path / "login-before-proposals.db"
@@ -1713,7 +1717,11 @@ def test_v53_follows_v52_and_keeps_login_references_and_both_card_tables(tmp_pat
         step = db._MIGRATIONS[version]
         step(raw) if callable(step) else raw.executescript(step)
     assert raw.execute("PRAGMA user_version").fetchone()[0] == 52
-    turn = AgentHistory(raw).add(session_id="sample", question="Connect", route="answer", prefix="", text="", status="running", source="app")
+    with raw:
+        turn = raw.execute(
+            "INSERT INTO agent_turns (created_at_ms,session_id,question,route,prefix,text,status,source)"
+            " VALUES (1,'sample','Connect','answer','','','running','app')"
+        ).lastrowid
     login = SecretCardStore(raw).open(turn_id=turn, member_id=0, conversation_id=None, server_id="sample-reference",
         kind="login", secret="login", name="https://example.invalid", language="en")
     with raw:
@@ -1744,7 +1752,11 @@ def test_v71_preserves_pairing_states_and_separates_them_from_secret_cards(tmp_p
         old.setattr(db, "LATEST_VERSION", 70)
         conn = db.connect(tmp_path / "v70-pairings.db")
     history = AgentHistory(conn)
-    turn_id = history.add(session_id="setup", question="Connect", route="answer", prefix="", text="", status="done")
+    with conn:
+        turn_id = conn.execute(
+            "INSERT INTO agent_turns (created_at_ms,session_id,question,route,prefix,text,status)"
+            " VALUES (1,'setup','Connect','answer','','','done')"
+        ).lastrowid
     secret = SecretCardStore(conn).open(turn_id=turn_id, member_id=0, conversation_id=None, server_id="telegram",
                                        kind="messaging", secret="bot_token", name="Telegram", language="en")
     with conn:

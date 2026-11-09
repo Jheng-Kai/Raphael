@@ -1864,6 +1864,14 @@ PRAGMA user_version = 73;
 COMMIT;
 """
 
+# Public turn failure metadata is nullable for all existing rows.
+_MIGRATIONS[74] = """
+BEGIN;
+ALTER TABLE agent_turns ADD COLUMN failure TEXT;
+PRAGMA user_version = 74;
+COMMIT;
+"""
+
 LATEST_VERSION = max(_MIGRATIONS)
 
 

@@ -87,7 +87,12 @@ async def test_private_messaging_after_fold_appends_to_main(tmp_path, monkeypatc
         connection = db.connect(paths.db_path(tmp_path))
     main = Conversations(connection).main()
     extra = connection.execute("INSERT INTO conversations(member_id,title,created_at_ms,updated_at_ms) VALUES(0,'Old',1,2)").lastrowid
-    previous = AgentHistory(connection).add(session_id="previous-message", question="Earlier message", route="answer", prefix="", text="Saved answer", status="done", conversation_id=extra)
+    with connection:
+        previous = connection.execute(
+            "INSERT INTO agent_turns(created_at_ms,session_id,question,route,prefix,text,status,conversation_id)"
+            " VALUES(1,'previous-message','Earlier message','answer','','Saved answer','done',?)", (extra,),
+        ).lastrowid
+        AgentHistory(connection)._index(previous, "Earlier message", "Saved answer", None)
     connection.commit()
     connection.close()
     app = App(data_dir=tmp_path, fake_llm=True, load_kit=lambda: SimpleNamespace())

@@ -21,7 +21,12 @@ async def folded(tmp_path, monkeypatch, client, actions):
     main = Conversations(conn).main()
     extra = conn.execute("INSERT INTO conversations(member_id,title,created_at_ms,updated_at_ms) VALUES(0,'Old',1,2)").lastrowid
     history = AgentHistory(conn)
-    tid = history.add(session_id="old", question="Cobalt evidence", route="answer", prefix="", text="Saved answer", status="done", conversation_id=extra)
+    with conn:
+        tid = conn.execute(
+            "INSERT INTO agent_turns(created_at_ms,session_id,question,route,prefix,text,status,conversation_id)"
+            " VALUES(1,'old','Cobalt evidence','answer','','Saved answer','done',?)", (extra,),
+        ).lastrowid
+        history._index(tid, "Cobalt evidence", "Saved answer", None)
     task = conn.execute("INSERT INTO worker_tasks(created_at_ms,state,session_id,turn_id,language,text) VALUES(1,'waiting','old',?,'en','Choose a source')", (tid,)).lastrowid
     questions = OwnerQuestions(conn)
     question = questions.open(SimpleNamespace(id=task, turn_id=tid, member_id=0), "ask_owner", {"question": "Which source?", "options": [], "free_text": True})

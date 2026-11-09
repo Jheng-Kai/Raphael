@@ -284,6 +284,7 @@ async def test_a_command_is_done_at_once_and_answered_with_the_fixed_reply(rig, 
         "text": "",
         "detail": None,
         "status": "done",
+        "failure": None,
         "session_id": "s1",
         "source": "voice",
         "cost_usd": 0.00004,
@@ -1495,7 +1496,7 @@ async def test_the_history_lists_the_newest_turn_first_with_the_fields_the_app_r
         "id", "created_at_ms", "question", "route", "prefix", "text", "detail", "status",
         "session_id", "source", "cost_usd", "model", "attachments", "steps", "task", "member_id",
         "peer_id", "messages", "conversation_id", "scope", "room_id", "thread_id", "pages",
-        "reactions",
+        "reactions", "failure",
     }  # fmt: skip
 
 

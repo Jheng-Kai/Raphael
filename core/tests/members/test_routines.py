@@ -23,7 +23,13 @@ async def test_routine_after_fold_appends_to_the_same_main_with_existing_turns(t
     main = Conversations(connection).main(member.id)
     extra = connection.execute("INSERT INTO conversations(member_id,title,created_at_ms,updated_at_ms) VALUES(?,'Old',1,2)", (member.id,)).lastrowid
     history = AgentHistory(connection)
-    previous = history.add(session_id="previous-routine", question="Previous routine", route="routine", source="routine", prefix="", text="Saved report", status="done", member_id=member.id, conversation_id=extra)
+    with connection:
+        previous = connection.execute(
+            "INSERT INTO agent_turns(created_at_ms,session_id,question,route,source,prefix,text,status,member_id,conversation_id)"
+            " VALUES(1,'previous-routine','Previous routine','routine','routine','','Saved report','done',?,?)",
+            (member.id, extra),
+        ).lastrowid
+        history._index(previous, "Previous routine", "Saved report", None)
     connection.commit()
     db.migrate(connection)
     rig = Rig(connection, tmp_path)

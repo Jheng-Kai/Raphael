@@ -3,7 +3,6 @@ import sqlite3
 
 import pytest
 
-from raphael_core.agent.history import AgentHistory
 from raphael_core.brain import db
 
 
@@ -15,7 +14,11 @@ def legacy(tmp_path, monkeypatch):
         conn = db.connect(path)
     # This regression isolates migration 69; later migrations may add unrelated tables.
     monkeypatch.setattr(db, "LATEST_VERSION", 69)
-    turn = AgentHistory(conn).add(session_id='old', question='Owner', route='answer', prefix='', text='Reply', status='done')
+    with conn:
+        turn = conn.execute(
+            "INSERT INTO agent_turns(created_at_ms,session_id,question,route,prefix,text,status)"
+            " VALUES(1,'old','Owner','answer','','Reply','done')"
+        ).lastrowid
     with conn:
         room = conn.execute("INSERT INTO rooms(name,created) VALUES('Old room',1)").lastrowid
         thread = conn.execute('INSERT INTO room_threads(room_id,created) VALUES(?,1)', (room,)).lastrowid

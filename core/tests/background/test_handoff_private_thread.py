@@ -105,9 +105,11 @@ async def test_parent_receives_only_summary_location_and_evidence(make_rig):
     assert result["state"] == "completed"
 
 
-async def test_failed_work_rerun_preserves_private_thread_and_creates_new_audit(make_rig, monkeypatch):
+@pytest.mark.parametrize("model,provider", [("fake/model", "openrouter"), ("@chatgpt:gpt-6-sol", "chatgpt"),
+                                           ("cli:codex:sample", "cli:codex")])
+async def test_failed_work_rerun_preserves_private_thread_and_creates_new_audit(make_rig, monkeypatch, model, provider):
     rig = make_rig()
-    target, source = setup(rig, room=False)
+    target, source = setup(rig, model=model, room=False)
     monkeypatch.setattr(rig.service, "_ensure_pump", lambda: None)
     first = rig.service.handoff(RAPHAEL, args(target), source_turn_id=source.id, language="en")
     old = rig.task(first.data["task_id"])
@@ -116,7 +118,11 @@ async def test_failed_work_rerun_preserves_private_thread_and_creates_new_audit(
     new_id = (await rig.service._rerun({"task_id": old.id}))["task_id"]
     new = rig.task(new_id)
     history = AgentHistory(rig.conn)
+    assert history.get(old.turn_id).failure == {"kind": "network", "provider": provider, "resets_at": None}
+    terminal = [data for method, data in rig.notifications if method == "agent.turn" and data.get("failure")]
+    assert terminal[-1]["failure"] == history.get(old.turn_id).failure
     work = history.get(new.turn_id)
+    assert work.failure is None
     audit = history.get(rig.service._store.exchange_turn_id(new_id))
     assert (work.scope, work.question, work.route, work.source) == ("private", "", "worker", "worker")
     assert work.conversation_id == history.get(old.turn_id).conversation_id

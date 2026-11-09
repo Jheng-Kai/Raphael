@@ -10,7 +10,12 @@ def test_v73_upgrades_and_reopens_existing_history_and_room_documents(tmp_path, 
         before.setattr(db, 'LATEST_VERSION', 72)
         conn = db.connect(path)
         history = AgentHistory(conn)
-        identifier = history.add(session_id='synthetic', question='amber memory', prefix='', text='kept', route='chat', status='done')
+        with conn:
+            identifier = conn.execute(
+                "INSERT INTO agent_turns(created_at_ms,session_id,question,prefix,text,route,status)"
+                " VALUES(1,'synthetic','amber memory','','kept','chat','done')"
+            ).lastrowid
+            history._index(identifier, 'amber memory', 'kept', None)
         with conn:
             room = conn.execute("INSERT INTO rooms(name,created) VALUES('Synthetic',0)").lastrowid
             conn.execute("INSERT INTO room_messages(room_id,text,created) VALUES(?,'既有會議',0)", (room,))

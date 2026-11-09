@@ -5,6 +5,9 @@ kinds below retain those phrases. An optional shared diagnostic carries a bounde
 provider reason; raw packets and credentials never cross this boundary.
 """
 
+import math
+import re
+
 from httpx import ConnectError, TimeoutException
 
 from ..brain.openrouter import OpenRouterError
@@ -40,6 +43,35 @@ class AgentFailure(Exception):
         self.kind = kind if kind in KINDS or kind in SHARED_KINDS else "error"
         self.diagnostic = diagnostic
         self.model = model
+
+
+def public_failure(value):
+    """Allow only public classification, provider identity and a finite epoch time."""
+    if not isinstance(value, dict) or not isinstance(value.get("kind"), str) or value["kind"] not in SHARED_KINDS:
+        return None
+    provider = value.get("provider")
+    if not isinstance(provider, str) or not re.fullmatch(r"(?:cli:)?[a-z][a-z0-9_-]{0,63}", provider):
+        return None
+    resets_at = value.get("resets_at")
+    if type(resets_at) not in (int, float) or not 0 < resets_at <= 253402300799 or not math.isfinite(resets_at):
+        resets_at = None
+    return {"kind": value["kind"], "provider": provider, "resets_at": resets_at}
+
+
+def turn_failure(kind, model, diagnostic=None):
+    """Project a classified error without copying its reason, detail or missing-resource data."""
+    aliases = {"no_key": "auth_expired", "auth": "auth_expired", "offline": "network",
+               "monthly_budget": "credits", "budget": "credits", "error": "unknown"}
+    kind = diagnostic.kind if diagnostic is not None else aliases.get(kind, kind)
+    kind = kind if kind in SHARED_KINDS else "unknown"
+    if isinstance(model, str) and model.startswith("cli:"):
+        provider = ":".join(model.split(":", 2)[:2])
+    elif isinstance(model, str) and model.startswith("@"):
+        provider = model[1:].split(":", 1)[0]
+    else:
+        provider = "openrouter"
+    return public_failure({"kind": kind, "provider": provider,
+                           "resets_at": diagnostic.resets_at if diagnostic is not None else None})
 
 
 def failure_kind(error: BaseException) -> str:

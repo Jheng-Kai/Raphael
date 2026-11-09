@@ -29,11 +29,22 @@ def conversation(conn, member, updated, default=False, kind="standard"):
 
 
 def turn(conn, member, cid, request, state=None):
-    return AgentHistory(conn, now_ms=lambda: 100).add(
-        session_id=request, question=request, route="answer", prefix="", text="Saved answer",
-        status="done" if state is None else state, member_id=member, conversation_id=cid,
-        **({"admission": '{"text":"Queued","language":"en","source":"app"}'} if state else {}),
-    )
+    # Seed the historical schema without using the current turn writer.
+    with conn:
+        identifier = conn.execute(
+            "INSERT INTO agent_turns(created_at_ms,session_id,question,route,prefix,text,status,member_id,conversation_id)"
+            " VALUES(100,?,?,'answer','','Saved answer',?,?,?)",
+            (request, request, "done" if state is None else state, member, cid),
+        ).lastrowid
+        AgentHistory(conn)._index(identifier, request, "Saved answer", None)
+        Conversations(conn, now_ms=lambda: 100).touch(cid, request)
+        if state:
+            conn.execute(
+                "INSERT INTO agent_inbox(turn_id,request_id,member_id,conversation_id,seq,state,payload_json,created_at_ms)"
+                " SELECT ?,?,?,?,COALESCE(MAX(seq),0)+1,'queued',?,100 FROM agent_inbox WHERE member_id=? AND conversation_id=?",
+                (identifier, request, member, cid, '{"text":"Queued","language":"en","source":"app"}', member, cid),
+            )
+    return identifier
 
 
 def test_v68_moves_every_conversation_record_and_keeps_quick_and_target_context(legacy):
@@ -101,7 +112,7 @@ def test_v68_moves_every_conversation_record_and_keeps_quick_and_target_context(
         assert {row[0] for row in conn.execute(f"SELECT conversation_id FROM {table}")} == {target, chief, quick}
     assert {tuple(row) for row in conn.execute("SELECT conversation_id,session_id FROM agent_conversation_cli_sessions")} == {(cid, f"native-{cid}") for cid in (target, chief, quick)}
     assert tuple(conn.execute("SELECT * FROM conversations WHERE id=?", (quick,)).fetchone()) == quick_before
-    assert tuple(conn.execute("SELECT * FROM agent_turns WHERE id=?", (quick_turn,)).fetchone()) == quick_turn_before
+    assert tuple(conn.execute("SELECT * FROM agent_turns WHERE id=?", (quick_turn,)).fetchone()) == (*quick_turn_before, None)
     assert conn.execute("PRAGMA foreign_key_check").fetchall() == []
     before = conn.total_changes
     db.migrate(conn)

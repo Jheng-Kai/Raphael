@@ -23,8 +23,12 @@ def test_v67_preserves_existing_conversation_and_rolls_back_a_failed_upgrade(mon
         old.setattr(db, "LATEST_VERSION", 64)
         connection = db.connect(":memory:")
     try:
-        history = AgentHistory(connection, lambda: 1000)
-        turn = history.add(session_id="existing", question="Keep this", route="answer", prefix="", text="Reply", status="done", member_id=1)
+        conversation = Conversations(connection, lambda: 1000).main(1)
+        with connection:
+            turn = connection.execute(
+                "INSERT INTO agent_turns(created_at_ms,session_id,question,route,prefix,text,status,member_id,conversation_id)"
+                " VALUES(1000,'existing','Keep this','answer','','Reply','done',1,?)", (conversation,),
+            ).lastrowid
         connection.execute("CREATE TABLE voice_call_turns (placeholder TEXT)")
         connection.commit()
         with pytest.raises(sqlite3.OperationalError):
@@ -48,7 +52,12 @@ async def test_call_after_conversation_fold_uses_main_and_refuses_the_deleted_id
     main = Conversations(connection).main(1)
     extra = connection.execute("INSERT INTO conversations(member_id,title,created_at_ms,updated_at_ms) VALUES(1,'Old',1,2)").lastrowid
     history = AgentHistory(connection)
-    turn = history.add(session_id="previous-call", question="Saved call", route="answer", prefix="", text="Member reply", status="done", member_id=1, conversation_id=extra)
+    with connection:
+        turn = connection.execute(
+            "INSERT INTO agent_turns(created_at_ms,session_id,question,route,prefix,text,status,member_id,conversation_id)"
+            " VALUES(1,'previous-call','Saved call','answer','','Member reply','done',1,?)", (extra,),
+        ).lastrowid
+        history._index(turn, "Saved call", "Member reply", None)
     connection.execute("INSERT INTO voice_calls(id,member_id,conversation_id,started_at_ms,ended_at_ms,summary_id) VALUES('old-call',1,?,1,2,?)", (extra, turn))
     connection.execute("INSERT INTO voice_call_turns VALUES('old-call',?)", (turn,))
     connection.commit()

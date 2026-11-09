@@ -50,6 +50,7 @@ from ..clock import wall_clock_ms
 from ..protocol import RpcError
 from ..memory.terms import QueryWord, fts_quote, index_terms, query_words
 from .steps import Step, reason_of, work_summary
+from .failure import public_failure
 from .quotes import quote_from_wire
 from .conversations import Conversations
 from .public_events import event_text
@@ -94,6 +95,7 @@ class Turn:
     work: str = ""
     reactions: dict = field(default_factory=dict)
     card_outcomes: list[str] = field(default_factory=list)
+    failure: dict | None = None
 
 
 def is_unfinished(turn: Turn) -> bool:
@@ -114,7 +116,7 @@ def is_readable(turn: Turn) -> bool:
 
 _COLUMNS = (
     "id, created_at_ms, session_id, question, route, prefix, text, detail, status, cost_usd,"
-    " source, model, attachments, member_id, peer_id, quote, conversation_id, scope, room_id, thread_id, source_turn_id"
+    " source, model, attachments, member_id, peer_id, quote, conversation_id, scope, room_id, thread_id, source_turn_id, failure"
 )
 _STEP_COLUMNS = "turn_id, kind, tool, server, outcome, ms, reason, at_ms, detail"
 _TURN_COLUMNS = ", ".join(f"t.{name.strip()}" for name in _COLUMNS.split(","))
@@ -142,9 +144,18 @@ def _attachments(saved: str | None) -> list[dict[str, str | int]] | None:
     return kept or None
 
 
+def _failure_json(value, status):
+    failure = public_failure(value) if status == "error" else None
+    return json.dumps(failure) if failure else None
+
+
 def _to_turn(row: sqlite3.Row) -> Turn:
     data = dict(row)
     data["attachments"] = _attachments(data.get("attachments"))
+    try:
+        data["failure"] = public_failure(json.loads(data["failure"])) if data.get("failure") and data["status"] == "error" else None
+    except (ValueError, TypeError):
+        data["failure"] = None
     try:
         data["quote"] = quote_from_wire(json.loads(data["quote"])) if data.get("quote") else None
     except (ValueError, TypeError, RpcError):
@@ -252,6 +263,7 @@ class AgentHistory:
         thread_id: int | None = None,
         source_turn_id: int | None = None,
         admission: str | None = None,
+        failure: dict | None = None,
     ) -> int:
         """Store a new turn, made now, in the thread of `member_id`, with the steps taken for it,
         and return its id. `attachments` are the names and the types of the files handed with the
@@ -273,8 +285,8 @@ class AgentHistory:
             conversation_id = conversations.resolve(member_id, conversation_id) if scope in ("private", "exchange") else None
             cursor = self._conn.execute(
                 "INSERT INTO agent_turns (created_at_ms, session_id, question, route, prefix,"
-                " text, detail, status, cost_usd, source, model, attachments, member_id, peer_id, quote, conversation_id, scope, room_id, thread_id, source_turn_id)"
-                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                " text, detail, status, cost_usd, source, model, attachments, member_id, peer_id, quote, conversation_id, scope, room_id, thread_id, source_turn_id, failure)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     self._now_ms(),
                     session_id,
@@ -292,7 +304,7 @@ class AgentHistory:
                     peer_id,
                     json.dumps(quote, ensure_ascii=False) if quote else None,
                     conversation_id,
-                    scope, room_id, thread_id, source_turn_id,
+                    scope, room_id, thread_id, source_turn_id, _failure_json(failure, status),
                 ),
             )
             turn_id = cursor.lastrowid
@@ -421,11 +433,11 @@ class AgentHistory:
                 found.setdefault(data.pop("turn_id"), []).append(data)
         return found
 
-    def publish_terminal(self, turn_id, *, prefix, text, detail, status, cost_usd, replies, model):
+    def publish_terminal(self, turn_id, *, prefix, text, detail, status, cost_usd, replies, model, failure=None):
         """Publish inside TaskStore's transaction, together with its terminal outbox event."""
         cursor = self._conn.execute("UPDATE agent_turns SET prefix=?,text=?,detail=?,status=?,cost_usd=cost_usd+?,"
-                                    "model=COALESCE(?,model) WHERE id=?",
-                                    (prefix,text,detail,status,cost_usd,model,turn_id))
+                                    "model=COALESCE(?,model),failure=? WHERE id=?",
+                                    (prefix,text,detail,status,cost_usd,model,_failure_json(failure, status),turn_id))
         if not cursor.rowcount:
             return
         row = self._conn.execute('SELECT question FROM agent_turns WHERE id=?',(turn_id,)).fetchone()
@@ -447,6 +459,7 @@ class AgentHistory:
         cost_usd: float = 0.0,
         model: str | None = None,
         route: str | None = None,
+        failure: dict | None = None,
     ) -> bool:
         """Give a turn its outcome: what Raphael said in the end, how it ended, and the cost of
         getting there on top of what the turn cost so far (and the model that worded it, if one
@@ -455,8 +468,8 @@ class AgentHistory:
             cursor = self._conn.execute(
                 "UPDATE agent_turns SET prefix = ?, text = ?, detail = ?, status = ?,"
                 " cost_usd = cost_usd + ?, model = COALESCE(?, model),"
-                " route = COALESCE(?, route) WHERE id = ?",
-                (prefix, text, detail, status, cost_usd, model, route, turn_id),
+                " route = COALESCE(?, route), failure = ? WHERE id = ?",
+                (prefix, text, detail, status, cost_usd, model, route, _failure_json(failure, status), turn_id),
             )
             if cursor.rowcount:
                 row = self._conn.execute(

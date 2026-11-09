@@ -180,7 +180,7 @@ from ..brain.owner import owner_context
 from .cities import cities_in
 from .commands import COMMANDS, AppCatalog, run_command
 from .device import DeviceActions
-from .failure import AgentFailure, failure_kind
+from .failure import AgentFailure, failure_kind, turn_failure
 from ..failures import Failure, classify
 from .gate import BUILTIN_SERVER, ToolGate
 from .history import VOICE, AgentHistory, Turn
@@ -2499,7 +2499,8 @@ class AgentService:
             return self._finish(ask, "delegate", "question", arguments["question"], ledger)
         reply = loop.reply(outcome)
         if isinstance(loop, CliLoop) and loop.failure:
-            return self._finish(ask, "answer", "negative", reply.text, ledger, status="error", detail=outcome.detail)
+            return self._finish(ask, "answer", "negative", reply.text, ledger, status="error", detail=outcome.detail,
+                                failure=turn_failure(loop.failure, settings.model, loop.failure_reason))
         if ask.source == "greeting":
             if not reply.text.strip():
                 raise AgentFailure("error")
@@ -5254,6 +5255,7 @@ class AgentService:
                     "text": turn.text,
                     "detail": turn.detail,
                     "status": turn.status,
+                    "failure": turn.failure,
                     "cost_usd": turn.cost_usd,
                     "model": turn.model,
                     # Whose thread it is in, and for an exchange the member on the other side.
@@ -5503,21 +5505,22 @@ class AgentService:
         model = kind.model if isinstance(kind, AgentFailure) else None
         diagnostic = kind.diagnostic if isinstance(kind, AgentFailure) else None
         kind = kind.kind if isinstance(kind, AgentFailure) else kind
+        failure = turn_failure(kind, model or self._read_settings(ask.speaker, ask.conversation_id).model, diagnostic)
         if diagnostic is not None and diagnostic.missing is not None:
             missing = diagnostic.missing
             reason = (diagnostic.kind if diagnostic.kind.startswith("chatgpt_") else "provider_" + missing.state)
             ask.steps.append(self._step("model", "provider", None, "error", time.perf_counter(), reason, missing.resource))
         if model:
             diagnostic = diagnostic or classify(kind, record=False)
-            return self._finish(ask, route, "negative", diagnostic.sentence(self._model_name(model), ask.language), ledger, status="error")
+            return self._finish(ask, route, "negative", diagnostic.sentence(self._model_name(model), ask.language), ledger, status="error", failure=failure)
         if diagnostic is not None:
             name = RAPHAEL_NAMES[ask.language] if ask.speaker.is_raphael else ask.speaker.name
-            return self._finish(ask, route, "negative", diagnostic.sentence(name, ask.language), ledger, status="error")
+            return self._finish(ask, route, "negative", diagnostic.sentence(name, ask.language), ledger, status="error", failure=failure)
         if kind == "monthly_budget":
             text = monthly_budget_notice(ask.language, self._settings.get("monthly_limit_usd"))
         else:
             text = classify(kind, record=False).sentence(RAPHAEL_NAMES[ask.language], ask.language) if kind in ("context_overflow", "payload_too_large", "content_policy") else phrase(ask.language, kind)
-        return self._finish(ask, route, "negative", text, ledger, status="error")
+        return self._finish(ask, route, "negative", text, ledger, status="error", failure=failure)
 
     def _finish(
         self,
@@ -5529,12 +5532,13 @@ class AgentService:
         *,
         detail: str | None = None,
         status: str = "done",
+        failure: dict | None = None,
     ) -> dict:
         """Write the turn down and answer. `which` is a prefix of the language (understood,
         negative, ...) or a prefix as the model wrote it. A member of the team says it with no
         prefix: it speaks in plain sentences."""
         prefix = _prefix(ask.language, which) if ask.speaker.is_raphael else ""
-        turn_id = self._record(ask, route, prefix, text, status, detail, ledger)
+        turn_id = self._record(ask, route, prefix, text, status, detail, ledger, failure=failure)
         replies = []
         if (ask.source != VOICE or not ask.speaker.is_raphael) and status != "confirm":
             replies = ask.replies or [text]
@@ -5676,6 +5680,8 @@ class AgentService:
         status: str,
         detail: str | None,
         ledger: Ledger,
+        *,
+        failure: dict | None = None,
     ) -> int:
         """Write a turn to the history, in the thread of the request's speaker, with the steps of
         its request; 0 if that fails, since the answer matters more. A request one member handed
@@ -5716,7 +5722,7 @@ class AgentService:
                 self._history.resolve(
                     turn_id, prefix=prefix, text=text, detail=detail, status=status,
                     cost_usd=max(cost - ask.recorded_cost, 0.0), model=ledger.model,
-                    route="exchange" if ask.nested else route,
+                    route="exchange" if ask.nested else route, failure=failure,
                 )
                 self._history.add_steps(turn_id, ask.steps[ask.recorded_steps:])
             else:
@@ -5730,7 +5736,7 @@ class AgentService:
                     member_id=member_id, peer_id=ask.peer,
                     conversation_id=ask.conversation_id,
                     source_turn_id=ask.source_turn_id,
-                    scope=ask.scope, room_id=ask.room_id, thread_id=ask.thread_id,
+                    scope=ask.scope, room_id=ask.room_id, thread_id=ask.thread_id, failure=failure,
                 )
                 ask.turn_id = turn_id
             ask.recorded_cost = cost
@@ -5784,7 +5790,8 @@ class AgentService:
             turn = self.turn(turn_id)
             member_id = 0 if turn is None else turn.member_id
         turn = self.turn(turn_id)
-        self._notify("agent.turn", {"turn_id": turn_id, "member_id": member_id})
+        self._notify("agent.turn", {"turn_id": turn_id, "member_id": member_id,
+                                    "failure": turn.failure if turn is not None else None})
 
     @staticmethod
     def _write(action: Callable[[], Any]) -> None:

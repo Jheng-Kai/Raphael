@@ -474,7 +474,7 @@ async def test_public_reply_arrives_before_voice_while_completion_waits(
     assert len(timed_rig.history.messages([1])[1]) == 1
     speaker.gate.set()
     result = await asyncio.wait_for(asking, 2)
-    assert announced == [("agent.turn", {"turn_id": result["turn_id"], "member_id": 0})] * 3
+    assert announced == [("agent.turn", {"turn_id": result["turn_id"], "member_id": 0, "failure": None})] * 3
 
 
 async def test_the_answer_to_a_yes_is_announced_when_the_voice_is_ready_too(
@@ -489,7 +489,7 @@ async def test_the_answer_to_a_yes_is_announced_when_the_voice_is_ready_too(
     assert announced == []
     speaker.gate.set()
     done = await asyncio.wait_for(confirming, 2)
-    assert announced == [("agent.turn", {"turn_id": done["turn_id"], "member_id": 0})]
+    assert announced == [("agent.turn", {"turn_id": done["turn_id"], "member_id": 0, "failure": None})]
 
 
 async def test_with_no_voice_the_reply_and_its_announcement_do_not_wait(
@@ -502,14 +502,14 @@ async def test_with_no_voice_the_reply_and_its_announcement_do_not_wait(
     client.replies.append(spoken("答", "好。"))
     result = await asyncio.wait_for(rig.ask("你好"), 2)
     assert result["text"] == "好。" and speaker.said == []
-    assert announced == [("agent.turn", {"turn_id": result["turn_id"], "member_id": 0})] * 3
+    assert announced == [("agent.turn", {"turn_id": result["turn_id"], "member_id": 0, "failure": None})] * 3
 
 
 async def test_a_message_from_a_phone_is_announced_at_once(timed_rig, announced, client, speaker):
     speaker.gate = asyncio.Event()
     client.chats.append(chat('{"prefix":"答","text":"好。","detail":""}'))
     result = await asyncio.wait_for(ask_from(timed_rig, "telegram"), 2)
-    assert announced and all(note == ("agent.turn", {"turn_id": result["turn_id"], "member_id": 0}) for note in announced)
+    assert announced and all(note == ("agent.turn", {"turn_id": result["turn_id"], "member_id": 0, "failure": None}) for note in announced)
 
 
 async def test_a_question_for_a_yes_is_announced_at_once(timed_rig, announced, client, speaker):
@@ -517,7 +517,7 @@ async def test_a_question_for_a_yes_is_announced_at_once(timed_rig, announced, c
     timed_rig.seed("q", "a")
     asked = await asyncio.wait_for(ask_to_copy(timed_rig, client), 2)
     assert asked["status"] == "confirm"
-    assert ("agent.turn", {"turn_id": asked["turn_id"], "member_id": 0}) in announced
+    assert ("agent.turn", {"turn_id": asked["turn_id"], "member_id": 0, "failure": None}) in announced
 
 
 async def test_a_cancel_while_the_voice_is_awaited_still_announces_the_turn(

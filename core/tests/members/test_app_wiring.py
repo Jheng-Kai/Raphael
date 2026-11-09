@@ -30,7 +30,7 @@ async def test_a_member_made_by_rpc_answers_in_its_thread(make_app):  # noqa: F8
     turns = (await app.call("agent.history.list", {"member_id": member["id"]}))["turns"]
     assert [t["member_id"] for t in turns] == [member["id"]]
     assert (await app.call("agent.history.list", {}))["turns"] == []
-    assert ("agent.turn", {"turn_id": turns[0]["id"], "member_id": member["id"]}) in heard
+    assert ("agent.turn", {"turn_id": turns[0]["id"], "member_id": member["id"], "failure": None}) in heard
     # Nobody viewed the thread: it is news.
     listed = {m["id"]: m for m in (await app.call("members.list", {}))["members"]}
     assert listed[member["id"]]["unread"] is True

@@ -152,6 +152,40 @@ class Brains:
         return True
 
 
+@pytest.mark.parametrize("model,provider", [("@chatgpt:gpt-6-sol", "chatgpt"), ("cli:codex:sample", "cli:codex")])
+async def test_room_usage_limit_commits_safe_failure_and_emits_it(meeting, monkeypatch, tmp_path, model, provider):
+    import time
+    from raphael_core.brain.openrouter import OpenRouterError
+
+    rig, members, rooms, room, alice = meeting
+    members.store.update_member(alice.id, model=model)
+    reset = time.time() + 7200
+    if model.startswith("cli:"):
+        rig.service.use_cli(Brains(tmp_path))
+
+        async def run(driver, **kwargs):
+            yield Event("error", "usage_limit", {"kind": "usage_limit", "reason": "Usage limit reached",
+                "resets_at": reset, "detail": "PRIVATE_STDERR"})
+
+        monkeypatch.setattr("raphael_core.agent.cli.loop.Driver.run", run)
+    else:
+        error = OpenRouterError(429, "usage_limit", "Usage limit reached PRIVATE_PROVIDER_PACKET")
+        error.retry_after = 7200
+        rig.client.replies = [error]
+    rooms.turn_view = lambda turn: {"id": turn.id, "failure": turn.failure}
+    await rooms._send({"room_id": room["id"], "text": "@Alice summarize the synthetic project", "request_id": "limit", "ui_language": "en"})
+    await until(lambda: rig.conn.execute("SELECT 1 FROM worker_tasks WHERE room_id=? AND state='failed'", (room["id"],)).fetchone())
+    messages = (await rooms._messages({"room_id": room["id"]}))["messages"]
+    [failed] = [message for message in messages if message.get("turn", {}).get("failure")]
+    failure = failed["turn"]["failure"]
+    assert failure["kind"] == "usage_limit" and failure["provider"] == provider
+    assert reset - 1 <= failure["resets_at"] <= reset + 1
+    assert "PRIVATE" not in json.dumps(failure)
+    assert AgentHistory(rig.conn).get(failed["turn_id"]).failure == failure
+    terminal = [data for method, data in rig.notifications if method == "agent.turn" and data.get("failure")]
+    assert terminal[-1]["failure"] == failure
+
+
 async def test_private_member_task_uses_its_cli_brain_without_api_fallback(make_rig, monkeypatch, tmp_path):
     from raphael_core.members.service import MembersService
     rig = make_rig()

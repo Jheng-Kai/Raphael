@@ -94,7 +94,7 @@ from typing import Any
 from ..agent.answers import Reply, owner_script, parse_reply, pending_replies
 from ..brain.textnorm import authored_chinese
 from ..languages import chinese_variant
-from ..agent.failure import KINDS, AgentFailure
+from ..agent.failure import KINDS, AgentFailure, turn_failure
 from ..agent.gate import ATTACHMENT_TOOLS, MEMORY_READ_TOOLS, WEB_TOOLS, ToolGate
 from ..memory.conversation import turn_text
 from ..agent.history import VOICE, AgentHistory, Turn
@@ -1733,6 +1733,7 @@ class BackgroundService:
                 if run.ceiling and outcome.status == "done":  # it reported where it stands, as it was asked to
                     reply = {"status": "stopped", "kind": run.ceiling, "final": outcome.final}
                 if loop.failure:
+                    run.model_failure = loop.failure_reason or Failure(loop.failure, loop.failure)
                     legacy = {"rate_limit": "rate_limited", "usage_limit": "quota", "auth_expired": "login", "unknown": "error"}
                     reply = {"status":"stopped", "kind":"failed", "detail":"cli_" + legacy.get(loop.failure, loop.failure), "final":outcome.final, "diagnostic_detail":outcome.detail}
                 self._conclude_run(task, run, reply)
@@ -2614,6 +2615,8 @@ class BackgroundService:
                     self._history.publish_terminal(task.turn_id,prefix=prefix,text=turn_text,detail=turn_detail,
                         status=_TURN_STATUS.get(state,'error'),cost_usd=max(0.0, cost - prior_cost - getattr(run, "conversation_cost", 0.0)),
                         model=run.ledger.model if run is not None else None,
+                        failure=turn_failure(reason, run.model if run is not None else task.model_ref,
+                                             getattr(run, "model_failure", None)) if state == "failed" else None,
                         replies=pending_replies(
                             [item["text"] for item in self._history.messages([task.turn_id]).get(task.turn_id, []) if item["kind"] == "reply"],
                             [compose(prefix,line,None) for line in terminal_replies if line]))
@@ -2629,7 +2632,9 @@ class BackgroundService:
             logger.warning("Could not write down the end of a task: %s", type(exc).__name__)
             return
         if self._has_linked_turn(task):
-            self._notify("agent.turn", {"turn_id":task.turn_id,"member_id":task.member_id})
+            turn = self._history.get(task.turn_id)
+            self._notify("agent.turn", {"turn_id":task.turn_id,"member_id":task.member_id,
+                                       "failure": turn.failure if turn is not None else None})
             if state == "done" and self._memory is not None:
                 turn = self._history.get(task.turn_id)
                 after_turn = getattr(self._memory, "after_turn", None)
