@@ -230,6 +230,9 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 .bubble > .btn.message-expand { margin-top: var(--sp-1); margin-inline-start: calc(-1 * var(--sp-2)); align-self: flex-start; font: inherit; color: inherit; border-color: transparent; background: transparent; padding-inline: var(--sp-2); }
 .bubble > .btn.message-expand:hover:not(:disabled) { background: color-mix(in srgb, currentColor 14%, transparent); border-color: transparent; }
 .bubble > .btn.message-expand:active:not(:disabled) { background: color-mix(in srgb, currentColor 22%, transparent); border-color: transparent; }
+/* White words on a member's colour: the press darkens, since lightening the colour would wash the words out (R-UI-52). */
+.mb-chat[data-member-bubble="light"] .owner-message .bubble > .btn.message-expand:hover:not(:disabled) { background: color-mix(in srgb, black 16%, transparent); }
+.mb-chat[data-member-bubble="light"] .owner-message .bubble > .btn.message-expand:active:not(:disabled) { background: color-mix(in srgb, black 24%, transparent); }
 /* A link is a chip in the words, as Grok Bot's source chips (owner, 2026-11-08): the site's mark, then its name. */
 .link-chip { font-weight: var(--weight-medium); }
 .link-chip .link-mark { display: inline-flex; vertical-align: -3px; margin-inline-end: var(--sp-1); color: inherit; }
