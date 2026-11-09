@@ -983,9 +983,10 @@ class BackgroundService:
     def _work_report(self, task):
         """What a work hand-off says back to whoever handed it over: its hand-back (background/handback.py),
         or, for a report without one, its first sentence without a greeting to the owner. The full result
-        belongs only to the owner's work turn."""
-        from .handback import fallback
-        return task.handback or fallback(task.full_report, self._settings.get("owner_name") or "")
+        belongs only to the owner's work turn. Neither may open by addressing the owner."""
+        from .handback import fallback, unaddressed
+        owner = self._settings.get("owner_name") or ""
+        return unaddressed(task.handback, owner) if task.handback else fallback(task.full_report, owner)
 
     def _own_work(self, task):
         """Whether a work hand-off is the member's own background work (it handed the work to itself, as a

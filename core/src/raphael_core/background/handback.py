@@ -40,12 +40,17 @@ def _salutation(owner: str) -> re.Pattern[str] | None:
     return re.compile(r"^(?:" + "|".join(re.escape(name) for name in sorted(names, key=len, reverse=True)) + r")\s*[，,:：、]\s*")
 
 
+def unaddressed(text: str, owner: str = "") -> str:
+    """`text` without a greeting to the owner at its start: words shown between two members never
+    open by addressing the owner, even when the model wrote one."""
+    pattern = _salutation(owner)
+    return pattern.sub("", text, count=1) if pattern and text else text
+
+
 def fallback(report: str, owner: str = "") -> str:
     """For a report written before hand-backs existed, or one that left the block out: its first
     sentence, without a greeting to the owner at its start, so a colleague is not shown words
     addressed to someone else. At most 240 characters."""
     text = " ".join((report or "").split())
-    first = re.split(r"(?<=[.!?。！？])\s+|(?<=[。！？])", text, maxsplit=1)[0]
-    if pattern := _salutation(owner):
-        first = pattern.sub("", first, count=1)
+    first = unaddressed(re.split(r"(?<=[.!?。！？])\s+|(?<=[。！？])", text, maxsplit=1)[0], owner)
     return first if len(first) <= 240 else first[:237] + "..."

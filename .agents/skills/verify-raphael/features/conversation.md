@@ -1446,7 +1446,7 @@ npm run look -- busy-team-thread busy-team-up busy-team-steps busy-team-typing b
 
 ## Folded colleague exchanges (2026-11-02)
 
-R-UI-72 uses handoff-line.ts and event-line.ts for private turn groups and consecutive room receipts. A message or blocked-intent entry separates room groups. Shared thread-diff.ts keeps every handoff line node, and the open state of received-message lines. What was said opens in the conversation between members (see below, 2026-11-07).
+R-UI-72 uses handoff-line.ts and event-line.ts for private turn groups and consecutive room receipts. A message or blocked-intent entry separates room groups, and so does a different pair of members (2026-11-09, below). Shared thread-diff.ts keeps every handoff line node, and the open state of received-message lines. What was said opens in the conversation between members (see below, 2026-11-07).
 
 Selected matrix: handoff-group, handoff-group-done, handoff-group-many, handoff-group-open, handoff-group-room, centred-system-events, handoff-centred-line, room-handoff-queued, room-handoff-running, room-handoff-result, room-handoff-failed, room-workflow-blocked, room-immediate-work, room-mention-after-hop-limit, busy-team-thread, busy-team-room. Both themes at 1120,720,1920x1080. The centred-system-events assertion retains the two original handoff receipt labels; the meeting is in reply detail (owner, 2026-11-05).
 Additional R-UI-72 coverage: handoff-group-long checks long and unbroken names at all three sizes. Arriving receipts update only the event subtree; the owner question, answer and intervening room message retain their DOM nodes.
@@ -1463,6 +1463,29 @@ Since 2026-11-07 (owner, after Grok Bot's 「2 messages with Savio」) the line 
 ```powershell
 npm run look -- peer-chat peer-chat-close handoff-group handoff-group-open handoff-group-room centred-system-events bot-ask-centred handoff-centred-line room-workflow-blocked room-handoff-result --theme both --width 1120,720,1920x1080
 ```
+
+### Who each message speaks to (2026-11-09)
+
+The owner saw 「Jack，…」 in the view between two members: 「他是在跟我說話 但是這邊是兩個史萊姆在溝通才對」. As Grok Bot's
+hand-off shows (bots/research/grokbot/handoff-2026-11-08), what one member says to the other mentions the owner only in the
+third person, and what the owner reads stays in the worker's own conversation:
+
+- The worker speaks to the owner in its own conversation and ends its final reply with a `<handback>` block written to the
+  member who asked (for its own work, to the place the work came from). background/handback.py takes the block out of
+  everything the owner reads, a block spread over two messages and a stray tag included, and keeps it on
+  `worker_tasks.handback` (migration 75). The view's answer, the asker's side, a room's report line and a parent task read
+  only that; a report without the block falls back to its first sentence without a greeting to the owner.
+- The brief tells a peer hand-off which colleague sent it and to name the owner in the third person; work a member handed
+  itself (`own_work` in `handoff_views`) is told it is no colleague's request.
+- A group chat takes nobody's side: its line names both members, 「A 和 B 之間的 N 則訊息」, and only the same pair in a
+  row folds into one line (handoff-line.ts `handoffRun`, `roomHandoffHTML`).
+- Own work is never a conversation between members: in a group chat it is a line of its own, 「X 的私人工作」 with its
+  state, that opens the work in the member's conversation as the report card does (`data-room-act="private-work"`);
+  a private conversation draws no line for it, since the work goes on in that same conversation. peer-chat.ts leaves it
+  out of every view.
+
+handoff-group-room checks three pair lines (Raphael and Ada twice in a row as one line) and Ben's own-work line waiting
+for the owner; group-chats.test.ts, peer-chat.test.ts and core tests/background/test_handback.py cover the rest.
 
 ## Review: one group state and scroll intent (2026-11-02)
 

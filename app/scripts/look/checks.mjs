@@ -4116,7 +4116,10 @@ export function checkRendered(name, context = {}) {
     require(visible(event) && document.querySelectorAll('[data-handoff]').length === 1, "one durable receipt is visible");
     require(!event.closest('.chat-message'), "handoffs are events outside message bodies");
     require(event.dataset.state === task.state, "receipt and rendered state agree");
-    require(event.textContent.startsWith('與 小晴 的'), "the receipt names its assignee");
+    // A group chat takes nobody's side: its receipt names both members of the exchange; the asker's own
+    // conversation names the colleague (2026-11-09).
+    const inRoom = !!event.closest('.au-room-thread');
+    require(event.textContent.startsWith(inRoom ? '拉斐爾和小晴 之間的' : '與 小晴 的'), `the receipt names ${inRoom ? "both members" : "its assignee"} (${event.textContent})`);
     require(visible(event.querySelector('.av')), "the compact line includes the member face");
     eventLines(1);
     require(task.ready_at_ms === task.created_at_ms && task.dispatch_policy === 'immediate', "source dates do not schedule work");

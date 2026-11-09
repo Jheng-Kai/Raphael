@@ -13,7 +13,7 @@ import pytest
 from raphael_core.agent.cli.loop import CliLoop
 from raphael_core.agent.history import AgentHistory
 from raphael_core.agent.speaker import RAPHAEL
-from raphael_core.background.handback import fallback, split
+from raphael_core.background.handback import fallback, split, unaddressed
 from raphael_core.brain.settings import SettingsStore
 from raphael_core.worker.loop import Outcome
 from .conftest import call, report, turn, until
@@ -45,6 +45,9 @@ def test_a_report_without_a_handback_loses_its_greeting_to_the_owner():
     assert fallback("Jack，比對做完了，結果貼在房間 17。其餘細節。", "Jack") == "比對做完了，結果貼在房間 17。"
     assert fallback("主人：已經完成。", "") == "已經完成。"
     assert fallback("The review is complete.", "Jack") == "The review is complete."
+    # A hand-back the model opened with the owner's name is shown without it too.
+    assert unaddressed("Jack, Raphael asked and it is done.", "Jack") == "Raphael asked and it is done."
+    assert unaddressed("Raphael, done.", "Jack") == "Raphael, done."
 
 
 @pytest.mark.parametrize("brain", ["api", "cli"])

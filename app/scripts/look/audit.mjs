@@ -72,7 +72,8 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
     if (element.namespaceURI !== 'http://www.w3.org/2000/svg' && element.clientWidth > 0 && element.scrollWidth > element.clientWidth + 1 && !/auto|scroll|hidden|clip/.test(style.overflowX || style.overflow))
       horizontalOverflow.push({ ...description, width: element.clientWidth, scrollWidth: element.scrollWidth });
     if (!onScreen(element)) continue;
-    const floatingLatest = element.matches(".page-agent .ra-stage > button.conversation-latest");
+    // The conversation between members has the same jump-to-latest edge button as a conversation (peer-chat.ts).
+    const floatingLatest = element.matches(".page-agent .ra-stage > button.conversation-latest, .peer-chat > button.conversation-latest");
     // The sidebar's icons and the buttons on the window's edges are Grok Bot's soft round buttons (owner, 2026-11-06);
     // so is an icon that floats on a picture (the lightbox's close, a member cover's change), which needs its own surface.
     const sidebarAction = element.matches(".side .btn.icon, .page-agent .mb-det-head .btn.icon, .page-agent .mb-head :is(.ra-tools, .mb-head-l) .btn.icon, :is(.mb-dlg-head, .cs-dlg-head, .room-side-thread > header, .desktop-panel[data-expanded] .desktop-dock) .btn.icon, .btn.icon.modal-x, .media-lightbox .lb-card > .btn.icon.lb-close, .ms-cover > .btn.icon.ms-cover-btn");

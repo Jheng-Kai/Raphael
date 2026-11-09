@@ -896,7 +896,8 @@ describe("rendered look checks", () => {
     expect(failedChecks({ ...result, runtimeErrors: [] })).toBe(true);
   });
   it("permits the scoped floating latest action without relaxing ordinary icon rules", () => {
-    const { audit } = productAudit('<div class="page-agent"><div class="ra-stage"><button class="btn icon conversation-latest" style="border:1px solid gray;background:white"></button></div></div><button class="btn icon conversation-latest" style="border:1px solid gray;background:white"></button>');
+    const { audit } = productAudit('<div class="page-agent"><div class="ra-stage"><button class="btn icon conversation-latest" style="border:1px solid gray;background:white"></button></div></div>' +
+      '<div class="peer-chat"><button class="btn icon conversation-latest peer-latest" style="border:1px solid gray;background:white"></button></div><button class="btn icon conversation-latest" style="border:1px solid gray;background:white"></button>');
     expect(audit().productRules.map(item => item.rule)).toEqual(['R-UI-16', 'R-UI-18']);
   });
   it("checks text frames and bare icon borders", () => {
