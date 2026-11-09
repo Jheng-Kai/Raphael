@@ -616,7 +616,7 @@ class Conversation:
         ledger.add(
             model=completion.model,
             cost_usd=completion.cost_usd,
-            prompt_tokens=completion.prompt_tokens,
+            usage=getattr(completion, "usage", None), prompt_tokens=completion.prompt_tokens,
             completion_tokens=completion.completion_tokens,
         )
         data = completion.data

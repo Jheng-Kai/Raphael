@@ -702,7 +702,7 @@ class ComputerRun:
         self.ledger.add(
             model=turn.model,
             cost_usd=cost,
-            prompt_tokens=turn.prompt_tokens,
+            usage=getattr(turn, "usage", None), prompt_tokens=turn.prompt_tokens,
             completion_tokens=turn.completion_tokens,
         )
         return turn

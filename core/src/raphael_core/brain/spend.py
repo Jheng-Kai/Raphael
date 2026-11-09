@@ -13,6 +13,7 @@ from collections.abc import Callable
 from datetime import UTC, date, datetime, timedelta, tzinfo
 
 from ..clock import wall_clock_ms
+from .meter import Usage
 
 _EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
 _ONE_DAY = timedelta(days=1)
@@ -64,19 +65,31 @@ class SpendTracker:
         cost_usd: float,
         prompt_tokens: int,
         completion_tokens: int,
+        usage: Usage | None = None,
+        job: str | None = None,
+        billing: str | None = None,
+        member_id: int | None = None,
     ) -> None:
         """Write down one paid call, made now.
+
+        `usage` is the call's exact split (brain/meter.py): its cache reads and writes, its reasoning and the
+        cost the provider reported. `job` names the kind of work, `billing` "api" or "subscription". All of it
+        stays internal; the month's total still rests on `cost_usd` alone.
 
         Raises ValueError, and stores nothing, for a cost that is negative or not a finite number:
         it would lower the month's total or ruin it, and the monthly limit rests on that total.
         """
         if not (math.isfinite(cost_usd) and cost_usd >= 0):
             raise ValueError(f"cost_usd must be a finite number, 0 or more, not {cost_usd!r}")
+        usage = usage or Usage()
         with self._conn:
             self._conn.execute(
-                "INSERT INTO spend (created_at_ms, purpose, model, cost_usd, prompt_tokens,"
-                " completion_tokens) VALUES (?, ?, ?, ?, ?, ?)",
-                (self._now_ms(), purpose, model, cost_usd, prompt_tokens, completion_tokens),
+                "INSERT INTO spend (created_at_ms, purpose, model, cost_usd, prompt_tokens, completion_tokens,"
+                " job, billing, cache_read_tokens, cache_write_tokens, cache_write_long_tokens, reasoning_tokens,"
+                " reported_cost_usd, member_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (self._now_ms(), purpose, model, cost_usd, prompt_tokens, completion_tokens,
+                 job or purpose, billing, usage.cache_read, usage.cache_write, usage.cache_write_long,
+                 usage.reasoning, usage.reported_cost, member_id),
             )
 
     def month_total(self) -> float:

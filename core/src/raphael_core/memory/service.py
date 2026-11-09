@@ -741,8 +741,11 @@ class MemoryService(Growth):
             return self._turn_clears == clears and file_clears == (own.clears, self.shared.clears)
 
         from .growth import tainted_turn
+        from .reflection import readable_turns
         steps = self._history.steps([turn.id for turn in turns if turn.id is not None])
         outside = {turn.id for turn in turns if tainted_turn(turn, steps.get(turn.id, ()))}
+        # Only what fits one pass: the newest turns; the watermark moves past the rest (memory/reflection.py).
+        turns = readable_turns(self._today(), own, self.shared, turns, outside, self._name_of(member_id))
         private_request = any(keeps_private(turn.question) for turn in turns)
         applied = await Reflector(self._brain(member_id)).reflect(
             own, self.shared, turns,
