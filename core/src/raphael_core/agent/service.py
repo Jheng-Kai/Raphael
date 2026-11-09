@@ -2116,9 +2116,11 @@ class AgentService:
             from ..management import tools_for_request
             management_tools = tools_for_request(ask.text, member_named=bool(
                 self._team and getattr(self._team, "named_in", lambda _: [])(ask.text)))
+            # The system prompt stays the same turn after turn, or the whole conversation is cached again: the
+            # management guidance a request needs goes with that turn's message (owner, 2026-11-09).
+            leadership = self._management_chat(ask) and bool(management_tools)
             if self._management_chat(ask):
-                system += (LEADERSHIP if management_tools else
-                           "\nEvery member has the same owner-private management tools. Find them with find_tools when needed. "
+                system += ("\nEvery member has the same owner-private management tools. Find them with find_tools when needed. "
                            "They manage members, folders, group chats, conversations, connections, models and settings. "
                            "Destructive and permission changes always wait for the owner's approval.")
                 system += "\nGrok template CreateAgent instructions map to member_create (legacy alias: create_member)."
@@ -2136,6 +2138,8 @@ class AgentService:
             native_sections = {}
             if ask.speaker.has_no_job and ask.scope == "private" and ask.exchange_speakers is None:
                 user += NEW_MEMBER_STEP
+            if leadership:
+                user += LEADERSHIP
             from .intents import instruction as intent_instruction
             user += intent_instruction(ask.intent)
             from .self_check import requested as diagnosis_requested
@@ -2452,6 +2456,10 @@ class AgentService:
             else:
                 loop = NarratedLoop(client=self._client, reasoning_effort=self._effort(settings),
                                     context_window=context_window(self._tool_support._catalog() or builtin_catalog(), settings.model), **common)
+                # The owner waits on this conversation and comes back to it: its provider keeps it in one place,
+                # cached for an hour (owner, 2026-11-09, decisions 1 and 4).
+                loop.cache_session = f"raphael-{ask.speaker.id}-{ask.conversation_id}"
+                loop.cache_ttl = "1h"
             def refresh_computer():
                 if not snapshot.refresh_computer(self._plugins, ask.speaker.id):
                     return False

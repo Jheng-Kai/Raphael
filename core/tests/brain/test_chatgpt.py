@@ -127,7 +127,9 @@ class Rig:
             body = json.loads(request.content)
             self.body_checks.append(body)
             assert body["store"] is False and body["stream"] is True
-            if "prompt_cache_key" not in body:
+            # A conversation (no key, or one named by its session, as Codex sends it) keeps its reasoning;
+            # a one-off call with a fixed key does not.
+            if "prompt_cache_key" not in body or request.headers.get("session-id"):
                 assert body["include"] == ["reasoning.encrypted_content"]
             else:
                 assert "include" not in body
@@ -760,6 +762,18 @@ async def test_reasoning_continuity_is_kept_only_for_the_guarded_conversation(ri
     assert all(body["reasoning"] == {"effort": "high"} for body in bodies)
     assert [body.get("prompt_cache_key") for body in bodies[1:]] == ["raphael-text", "raphael-planner"]
     assert all("include" not in body for body in bodies[1:])
+
+
+async def test_a_named_conversation_is_its_own_cache_key_and_session_as_codex_sends_them(rig):
+    # Codex (core/src/client.rs, requests/headers.rs): ChatGPT derives cache affinity from the session-id header.
+    await rig.sign_in()
+    rig.auth.model_rows = [{"id": "chosen-model", "reasoning_efforts": ["low"]}]
+    rig.responses = [sse([message("Text")])]
+    await rig.registry.chatgpt.chat_tools(messages=[], tools=[], model="chosen-model", timeout_s=2, max_tokens=50,
+                                          session="raphael-5-7", cache_ttl="1h")
+    [request] = [r for r in rig.requests if r.url.path == "/v1/responses"]
+    assert json.loads(request.content)["prompt_cache_key"] == "raphael-5-7"
+    assert request.headers["session-id"] == "raphael-5-7"
 
 
 @pytest.mark.parametrize("scope,kind", [(None, "auth_expired"), ("openid", "chatgpt_scope")])

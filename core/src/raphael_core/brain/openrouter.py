@@ -29,6 +29,7 @@ import httpx
 
 from .meter import Usage
 from .meter import chat as _chat_usage
+from .prompt_cache import mark as mark_cache
 from .settings import DEFAULTS
 from .streams import MalformedStream, chat_completion
 from ..failures import classify, redact
@@ -910,9 +911,16 @@ class OpenRouterClient:
         timeout_s: float,
         max_tokens: int,
         reasoning_effort: str = "none",
+        session: str | None = None,
+        cache_ttl: str | None = None,
     ) -> ChatTurn:
         """One turn of a conversation in which `model` may call `tools` (the chat format, as for
-        plan_tools). `messages` are the whole conversation so far, in the chat format: the system
+        plan_tools).
+
+        `session` names the conversation the turn belongs to (owner, 2026-11-09, decision 4): OpenRouter
+        keeps every turn of it on the same upstream (`x-session-id`), whose cache holds its prefix, rather
+        than choosing the fastest upstream each time and finding no cache there. `cache_ttl` ("1h" or "5m")
+        marks an Anthropic model's prompt for caching (brain/prompt_cache.py). `messages` are the whole conversation so far, in the chat format: the system
         message, the user's, the model's own earlier replies with their `tool_calls`, and a `tool`
         message for the result of each call. The reply holds the words of the model and the calls it
         asks for; none of them is made here. With no `tools` the model can only answer.
@@ -925,10 +933,13 @@ class OpenRouterClient:
         thinks, not how long the whole reply may take, and a stream that has begun to answer and goes quiet
         is a dead connection long before that (`brain.streams`).
         """
+        provider: dict[str, Any] = {"require_parameters": True, "data_collection": "deny"}
+        if session is None:
+            provider["sort"] = "latency"
         body: dict[str, Any] = {
             "model": model,
-            "messages": list(messages),
-            "provider": {"require_parameters": True, "sort": "latency", "data_collection": "deny"},
+            "messages": mark_cache(messages, tools, cache_ttl) if cache_ttl and model.startswith("anthropic/") else list(messages),
+            "provider": provider,
             "reasoning": {"effort": reasoning_effort},
             "max_tokens": max_tokens,
         }
@@ -939,7 +950,8 @@ class OpenRouterClient:
         if models:
             body["models"] = models
         reply = await self._request(
-            "POST", "/chat/completions", self._stored_key(), timeout_s, body, stream=True
+            "POST", "/chat/completions", self._stored_key(), timeout_s, body, stream=True,
+            headers={"x-session-id": session} if session else None,
         )
         return _to_chat_turn(reply, model)
 
@@ -1065,14 +1077,15 @@ class OpenRouterClient:
         public: bool = False,
         base_url: str = BASE_URL,
         stream: bool = False,
+        headers: dict[str, str] | None = None,
     ) -> _Reply:
         """Send one request and return the decoded reply, or raise the OpenRouterError it earns.
 
         A `public` request is for an endpoint that needs no key: `key` is ignored and not sent.
         `path` is under `base_url`. With `stream` the reply is asked for as a stream and read as one
-        (`exchange`).
+        (`exchange`). `headers` are added to the app's own.
         """
-        headers = dict(_APP_HEADERS)
+        headers = {**_APP_HEADERS, **(headers or {})}
         if not public:
             headers["Authorization"] = _authorization(key)
         if stream:

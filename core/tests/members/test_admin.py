@@ -58,7 +58,9 @@ async def test_cli_turn_applies_or_denies_the_whole_batch_through_http_mcp(setup
             yield Event("final", "Created COO, PM and RD.")
             return
         assert "COO, PM, RD" in kwargs["user"]
-        assert "Every member has the same management tools" in kwargs["system"]
+        # The guidance this request needs rides with its turn; the system prompt stays the same every turn (2026-11-09).
+        assert "Every member has the same management tools" in kwargs["user"]
+        assert "Every member has the same owner-private management tools" in kwargs["system"]
         async with httpx.AsyncClient(headers={"Authorization": "Bearer " + kwargs["token"]}, trust_env=False) as http:
             async def rpc(method, params):
                 response = await http.post(kwargs["endpoint"], json={"jsonrpc": "2.0", "id": method, "method": method, "params": params})

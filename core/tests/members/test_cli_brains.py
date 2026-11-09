@@ -282,7 +282,9 @@ print(json.dumps({"type":"result", "subtype":"success", "session_id":native, "re
         assert result["text"] == "Finished."
     assert (await typed(rig, "Hello", teacher.id))["text"] == "Finished."
     rows = [json.loads(line) for line in record.read_text(encoding="utf-8").splitlines()]
-    assert [row["resume"] for row in rows] == [None, None, f"native-{first}", f"native-{first}"]
+    # Claude Code keeps one working directory per member (decision 3, 2026-11-09): the fake names its session after
+    # the member's directory, and only the teacher's own conversation resumes it.
+    assert [row["resume"] for row in rows] == [None, None, f"native-{teacher.id}", f"native-{teacher.id}"]
     assert rows[0]["workspace"] == rows[2]["workspace"]
     assert len({row["workspace"] for row in rows}) == 2
 

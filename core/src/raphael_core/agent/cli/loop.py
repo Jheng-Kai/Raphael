@@ -598,7 +598,12 @@ class CliLoop:
             try:
                 # A stable, empty workspace keeps native CLI resume independent of turn temp files.
                 workspace_root = native_directory("workspaces") or self.brains.home / ".raphael" / "cli-workspaces"
-                workspace = workspace_root / str(self.member_id) / str(self.conversation_id) / name
+                # Claude Code shares a cached prefix only within one working directory, which its own system prompt
+                # names: one per member (owner, 2026-11-09, decision 3), so all the member's conversations and tasks
+                # start from the same cached prefix. Codex keys its cache by thread and keeps its login beside its
+                # workspace, and Gemini rewrites its instructions there every turn: one per conversation for them.
+                member_root = workspace_root / str(self.member_id)
+                workspace = member_root / name if name == "claude" else member_root / str(self.conversation_id) / name
                 workspace.mkdir(parents=True, exist_ok=True)
                 await secure_directory(workspace)
                 async with RaphaelMcp(self._mcp_tools, self._tool) as server:
