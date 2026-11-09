@@ -11,6 +11,7 @@ import json
 import logging
 import re
 import secrets
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -18,7 +19,7 @@ import httpx
 
 from ..protocol import invalid_params
 from .vm import SHARED, VmError
-from .rfb_input import RfbInputGate
+from .viewer_relay import Policy, ViewerRelay
 from ..paths import local_storage_root
 
 LEASE_SECONDS = 15
@@ -26,7 +27,7 @@ LEASE_SECONDS = 15
 UNWATCHED_STATUS_S = 10
 # What the owner's press may open; anything else, such as a program a member wrote, is only shown in its folder.
 READABLE = frozenset(".html .htm .pdf .png .jpg .jpeg .gif .webp .svg .txt .md .csv .json .mp3 .wav .m4a .mp4 .webm .docx .xlsx .pptx".split())
-BOOTSTRAP = b'''let RFB, rfb, connecting = false, closed = false, controlAt = 0, revision = 0;
+BOOTSTRAP = b'''let RFB, rfb, connecting = false, closed = false, controlAt = 0, revision = 0, framesTimer = null;
 const screen = document.getElementById('noVNC_container');
 const tell = state => parent.postMessage({type:'raphael-desktop', state}, '*');
 async function connect() {
@@ -54,7 +55,13 @@ async function connect() {
 }
 addEventListener('message', event => {
   if (event.source !== parent) return;
+  if (event.data?.type === 'raphael-desktop-frames') {
+    clearInterval(framesTimer); framesTimer = null;
+    if (event.data.on === true) { snapshot(); framesTimer = setInterval(snapshot, 3000); }
+    return;
+  }
   if (event.data?.type === 'raphael-desktop-disable') {
+    clearInterval(framesTimer); framesTimer = null;
     if (rfb) { rfb.viewOnly = true; rfb.disconnect(); rfb = null; }
     return;
   }
@@ -87,16 +94,16 @@ screen.addEventListener('mousedown', () => {
     controlAt = 0;
   }
 }, true);
-// The last picture of the screen: the window shows it at once when it comes back.
-setInterval(() => {
+// Pictures are opt-in; watching alone never schedules canvas encoding.
+function snapshot() {
   const canvas = screen.querySelector('canvas');
   if (!rfb || !rfb.viewOnly || !canvas?.width) return;
   const small = document.createElement('canvas'), scale = Math.min(1, 480 / canvas.width);
   small.width = Math.round(canvas.width * scale); small.height = Math.round(canvas.height * scale);
   small.getContext('2d').drawImage(canvas, 0, 0, small.width, small.height);
   parent.postMessage({type:'raphael-desktop', state:'frame', image:small.toDataURL('image/jpeg', 0.6)}, '*');
-}, 3000);
-addEventListener('pagehide', () => {closed = true; rfb?.disconnect();});
+}
+addEventListener('pagehide', () => {snapshot(); clearInterval(framesTimer); framesTimer = null; closed = true; rfb?.disconnect();});
 document.documentElement.classList.remove('noVNC_loading');
 connect();
 setInterval(() => { if (!rfb) connect(); }, 2000);
@@ -130,7 +137,6 @@ class Session:
     conversation_id: int | None = None
     preview: bool = False
     input_sequence: int = 0
-    inputs: dict = field(default_factory=dict)
     connection: tuple | None = field(default=None, repr=False)
     connection_changes: int = -1
     connection_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
@@ -146,12 +152,12 @@ class DesktopViewer:
         self.vm.viewer_owners = self.owners
         self.server = self.monitor = None
         self.origin = ""
-        self.tasks = set()
+        self.relay = None
+        self.closing = False
         self.control_lock = asyncio.Lock()
         self.teaching = None
         self.task_artifact = lambda task, evidence: None
         self.open_lock = asyncio.Lock()
-        self.client = httpx.AsyncClient(trust_env=False, timeout=10)
 
     def register(self, router):
         for name, handler in (("status", self.status), ("open", self.open), ("renew", self.renew),
@@ -210,7 +216,14 @@ class DesktopViewer:
 
     async def revoke(self, params):
         self.target(params)
-        self.vm.grants.set(params.get("member_id", 0), False)
+        member = params.get("member_id", 0)
+        self.vm.grants.set(member, False)
+        tokens = [token for token, session in self.sessions.items() if session.member_id == member]
+        for token in tokens:
+            self.sessions[token].expires = self.vm.clock()
+            self.publish_session(token)
+        for token in tokens:
+            await self.close({"session": token})
         return {"granted": False}
 
     async def lifecycle(self, params):
@@ -264,10 +277,14 @@ class DesktopViewer:
 
     async def _open(self, params):
         target = self.target(params)
+        if self.closing:
+            raise invalid_params("desktop viewer closed")
         if len(self.sessions) >= 8:
             raise invalid_params("too many desktop viewers")
         if self.server is None:
-            self.server = await asyncio.start_server(self._connection, "127.0.0.1", 0, limit=65536)
+            self.relay = ViewerRelay(self._prepare_request, self._register_peer, self._unregister_peer,
+                                     self._peer_failed, self._teach_input, embedded_page)
+            self.server = await self.relay.start()
             self.origin = f"http://127.0.0.1:{self.server.sockets[0].getsockname()[1]}"
             self.monitor = asyncio.create_task(self._monitor())
         token = secrets.token_urlsafe(32)
@@ -288,6 +305,7 @@ class DesktopViewer:
                 pass
         session.expires = self.vm.clock() + LEASE_SECONDS
         self.sessions[token] = session
+        self.publish_session(token)
         return {"session": token, "url": f"{self.origin}/{token}/vnc.html"}
 
     def connection_failed(self, session):
@@ -327,6 +345,7 @@ class DesktopViewer:
         session.expires = self.vm.clock() + LEASE_SECONDS
         if self.owners.get(session.target.key) == token:
             self.vm.hold(session.target, True)
+        self.publish_session(token)
         return await self.session_state(session, read=not session.sockets)
 
     async def session_state(self, session, *, read=True):
@@ -425,19 +444,15 @@ class DesktopViewer:
                 raise invalid_params("explicit takeover handback required")
             # The socket's RFB gate rejects input as soon as ownership is removed.
             self.owners.pop(target.key, None)
-            for socket, gate in list(session.inputs.items()):
-                released = gate.release()
-                if released:
-                    try:
-                        socket.write(released)
-                        await socket.drain()
-                    except OSError:
-                        socket.close()
+            self.publish_session(token)
+            if self.relay:
+                await self.relay.call(self.relay.release(token))
             await self.disconnect_target(target, keep=session)
             self.vm.hold(target, False)
             if pending:
                 self.vm.work.complete(target, params["takeover"])
         session.expires = self.vm.clock() + LEASE_SECONDS
+        self.publish_session(token)
         if session.sockets:
             return {"state": "running", "ready": True, "control": "owner" if self.owners.get(target.key) == token else "member",
                     "works": self.vm.work.views(session.member_id, session.conversation_id)}
@@ -445,13 +460,19 @@ class DesktopViewer:
 
     async def disconnect_target(self, target, *, keep=None):
         # Invalidate handshakes that fetched their connection before this switch.
-        for session in self.sessions.values():
-            if session.target == target and (session is not keep or not session.sockets):
+        tokens = []
+        for token, session in self.sessions.items():
+            if session.target != target:
+                continue
+            if session is not keep or not session.sockets:
                 session.revision += 1
-        sockets = [socket for session in self.sessions.values() if session.target == target and session is not keep for socket in session.sockets]
-        for socket in sockets:
-            socket.close()
-        await asyncio.gather(*(socket.wait_closed() for socket in sockets), return_exceptions=True)
+            self.publish_session(token)
+            if session is not keep:
+                tokens.append(token)
+        if self.relay:
+            await self.relay.call(self.relay.close_tokens(tokens))
+        for token in tokens:
+            self.sessions[token].sockets.clear()
 
     async def close(self, params):
         async with self.control_lock:
@@ -461,16 +482,20 @@ class DesktopViewer:
         token = params.get("session")
         session = self.sessions.get(token) if isinstance(token, str) else None
         if session:
+            owned = self.owners.get(session.target.key) == token
+            self.sessions.pop(token)
+            if owned:
+                self.owners.pop(session.target.key, None)
+            self.publish_session(token)
             if self.teaching:
                 await self.teaching.disconnected(token)
-            if self.owners.get(session.target.key) == token:
+            if self.relay:
+                await self.relay.call(self.relay.close_tokens([token]))
+            session.sockets.clear()
+            if owned:
                 await self.disconnect_target(session.target)
-                self.owners.pop(session.target.key, None)
                 if not self.vm.work.pending(session.target):
                     self.vm.hold(session.target, False)
-            for socket in list(session.sockets):
-                socket.close()
-            self.sessions.pop(token, None)
             if not any(other.target == session.target for other in self.sessions.values()):
                 await self.vm.close_viewer(session.target)
         return {}
@@ -484,146 +509,85 @@ class DesktopViewer:
                 elif self.teaching:
                     await self.teaching.tick(token)
 
-    async def _respond(self, writer, code, body=b"", content_type="text/plain"):
-        writer.write(f"HTTP/1.1 {code} Response\r\nContent-Type: {content_type}\r\nContent-Length: {len(body)}\r\n"
-                     "Cache-Control: no-store\r\nReferrer-Policy: no-referrer\r\nX-Content-Type-Options: nosniff\r\n"
-                     "Connection: close\r\n\r\n".encode() + body)
-        await writer.drain()
-
-    async def _connection(self, reader, writer):
-        task = asyncio.current_task()
-        if len(self.tasks) >= 64:
-            writer.close()
+    def publish_session(self, token):
+        if not self.relay:
             return
-        self.tasks.add(task)
-        upstream = None
-        session = None
-        try:
-            async with asyncio.timeout(15):
-                method, path, _ = (await reader.readline()).decode("ascii").strip().split()
-                headers = {}
-                total = 0
-                while (line := await reader.readline()) not in (b"\r\n", b"\n", b""):
-                    total += len(line)
-                    if total > 16384:
-                        return
-                    key, value = line.decode("latin-1").split(":", 1)
-                    if key.lower() in headers:
-                        return
-                    headers[key.lower()] = value.strip()
-                parts = path.split("/", 2)
-                token, asset = parts[1:] if len(parts) == 3 else ("", "")
-                session = self.sessions.get(token)
-                if (method != "GET" or headers.get("host") != self.origin.removeprefix("http://")
-                        or not session or session.expires <= self.vm.clock()
-                        or headers.get("origin", self.origin) != self.origin
-                        or not re.fullmatch(r"[A-Za-z0-9_./-]+", asset) or ".." in asset):
-                    await self._respond(writer, 403)
-                    return
-                if asset == "bridge.js":
-                    await self._respond(writer, 200, BOOTSTRAP, "text/javascript")
-                    return
-                if asset == "control":
-                    held = not session.preview and self.owners.get(session.target.key) == token
-                    await self._respond(writer, 200, json.dumps({"held": held, "input_sequence": session.input_sequence}).encode(), "application/json")
-                    return
-                port, password = await self.connection_for(session)
-                if asset == "connection":
-                    config = {"password": password, "held": not session.preview and self.owners.get(session.target.key) == token,
-                              "preview": session.preview,
-                              "path": f"/{token}/websockify/{session.revision}"}
-                    await self._respond(writer, 200, json.dumps(config).encode(), "application/json")
-                    return
-                if headers.get("upgrade", "").lower() == "websocket":
-                    if asset != f"websockify/{session.revision}":
-                        await self._respond(writer, 403)
-                        return
-                    revision = session.revision
-                    remote, upstream = await asyncio.open_connection("127.0.0.1", port)
-                    request = f"GET /websockify HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n"
-                    for key in ("upgrade", "connection", "sec-websocket-key", "sec-websocket-version", "sec-websocket-protocol"):
-                        if key in headers:
-                            request += f"{key}: {headers[key]}\r\n"
-                    upstream.write((request + "\r\n").encode())
-                    await upstream.drain()
-                else:
-                    response = await self.client.get(f"http://127.0.0.1:{port}/{asset}")
-                    if response.status_code != 200:
-                        raise VmError("viewer_unreachable")
-                    body = embedded_page(response.text) if asset == "vnc.html" and response.status_code == 200 else response.content
-                    await self._respond(writer, response.status_code, body, response.headers.get("content-type", "application/octet-stream"))
-                    return
-            # No await separates this check from registration in the close set.
-            if self.sessions.get(token) is not session or session.expires <= self.vm.clock() or session.revision != revision:
-                return
-            session.sockets.update((writer, upstream))
+        session = self.sessions.get(token)
+        policy = None
+        if session:
+            policy = Policy(session.revision, time.monotonic() + max(0, session.expires - self.vm.clock()),
+                            not session.preview and self.owners.get(session.target.key) == token,
+                            self.teaching.relay_hook(token) if self.teaching else None)
+        self.relay.publish(token, policy)
 
-            async def pipe(source, destination):
-                while data := await source.read(65536):
-                    destination.write(data)
-                    await destination.drain()
+    async def _register_peer(self, token, revision, identifier):
+        session = self.sessions.get(token)
+        if not session or session.revision != revision or session.expires <= self.vm.clock():
+            return False
+        session.sockets.add(identifier)
+        return True
 
-            def input_allowed():
-                allowed = (not session.preview and self.sessions.get(token) is session
-                    and session.expires > self.vm.clock() and self.owners.get(session.target.key) == token)
-                if allowed:
-                    session.input_sequence += 1
-                return allowed
+    def _unregister_peer(self, token, identifier):
+        session = self.sessions.get(token)
+        if session:
+            session.sockets.discard(identifier)
 
-            gate = RfbInputGate(input_allowed)
-            session.inputs[upstream] = gate
+    def _peer_failed(self, token, revision):
+        session = self.sessions.get(token)
+        if session and session.revision == revision:
+            self.connection_failed(session)
 
-            async def input_pipe():
-                while data := await reader.read(65536):
-                    accepted = gate.feed(data)
-                    packets, gate.packets = gate.packets, []
-                    if self.teaching and self.teaching.active(token):
-                        from .rfb_input import frame
-                        for is_input, message, opcode in packets:
-                            if is_input:
-                                await self.teaching.input(token, message)
-                            if not is_input or input_allowed():
-                                upstream.write(frame(message, opcode))
-                                await upstream.drain()
-                    elif accepted:
-                        upstream.write(accepted)
-                        await upstream.drain()
+    async def _teach_input(self, token, revision, identifier, payload):
+        session = self.sessions.get(token)
+        if (self.teaching and session and session.revision == revision and session.expires > self.vm.clock()
+                and not session.preview and self.owners.get(session.target.key) == token):
+            await self.teaching.relay_input(token, identifier, payload)
 
-            streams = [asyncio.create_task(input_pipe()), asyncio.create_task(pipe(remote, writer))]
-            try:
-                await asyncio.wait(streams, return_when=asyncio.FIRST_COMPLETED)
-            finally:
-                for stream in streams:
-                    stream.cancel()
-                await asyncio.gather(*streams, return_exceptions=True)
-        except (ValueError, OSError, TimeoutError, VmError, httpx.HTTPError, asyncio.IncompleteReadError):
-            if session:
-                self.connection_failed(session)
-            if upstream is None:
-                try:
-                    await self._respond(writer, 503)
-                except OSError:
-                    pass
-        finally:
-            for socket in (writer, upstream):
-                if socket:
-                    socket.close()
-                    if session:
-                        session.sockets.discard(socket)
-                        session.inputs.pop(socket, None)
-            self.tasks.discard(task)
+    async def flush_teaching(self, token):
+        if self.relay:
+            await self.relay.call(self.relay.flush_teaching(token))
+
+    async def _prepare_request(self, method, path, headers):
+        # Validation and VM resolution belong to the core loop; no writers cross it.
+        parts = path.split("/", 2)
+        token, asset = parts[1:] if len(parts) == 3 else ("", "")
+        session = self.sessions.get(token)
+        if (method != "GET" or headers.get("host") != self.origin.removeprefix("http://")
+                or not session or session.expires <= self.vm.clock()
+                or headers.get("origin", self.origin) != self.origin
+                or not re.fullmatch(r"[A-Za-z0-9_./-]+", asset) or ".." in asset):
+            return {"code": 403}
+        if asset == "bridge.js":
+            return {"code": 200, "body": BOOTSTRAP, "type": "text/javascript", "token": token, "revision": session.revision}
+        if asset == "control":
+            held = not session.preview and self.owners.get(session.target.key) == token
+            session.input_sequence = self.relay.sequence(token)
+            return {"code": 200, "body": json.dumps({"held": held, "input_sequence": session.input_sequence}).encode(),
+                    "type": "application/json", "token": token, "revision": session.revision}
+        revision = session.revision
+        websocket = headers.get("upgrade", "").lower() == "websocket"
+        if websocket and asset != f"websockify/{revision}":
+            return {"code": 403}
+        port, password = await self.connection_for(session)
+        if self.sessions.get(token) is not session or session.revision != revision or session.expires <= self.vm.clock():
+            return {"code": 403}
+        if asset == "connection":
+            config = {"password": password, "held": not session.preview and self.owners.get(session.target.key) == token,
+                      "preview": session.preview, "path": f"/{token}/websockify/{revision}"}
+            return {"code": 200, "body": json.dumps(config).encode(), "type": "application/json", "token": token, "revision": revision}
+        return {"token": token, "revision": revision, "port": port, "asset": asset, "websocket": websocket}
 
     async def aclose(self):
+        self.closing = True
+        async with self.open_lock:
+            await self._shutdown()
+
+    async def _shutdown(self):
         if self.monitor:
             self.monitor.cancel()
             await asyncio.gather(self.monitor, return_exceptions=True)
         for token in list(self.sessions):
             await self.close({"session": token})
-        if self.server:
-            self.server.close()
-        for task in list(self.tasks):
-            task.cancel()
-        await asyncio.gather(*self.tasks, return_exceptions=True)
-        if self.server:
-            await self.server.wait_closed()
-        await self.client.aclose()
+        if self.relay:
+            await self.relay.aclose()
+        self.server = None

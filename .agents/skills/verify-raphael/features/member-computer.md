@@ -1,5 +1,45 @@
 # Member computer (Phases A and B)
 
+## Viewer transport isolation, phase 1 (2026-11-09)
+
+`computer/viewer_relay.py` owns the loopback HTTP listener, both WebSocket pumps,
+RFB gate, socket writers and teaching observation subprocesses on one dedicated
+event-loop thread. Core retains sessions, VM/SSH resolution, SQLite, recording
+files and ownership. Immutable revision/monotonic-deadline/control/teaching policies
+cross a short threading lock; authorization and each write share that lock.
+Session socket sets contain opaque IDs, never writers from another loop.
+Close/revoke/revision changes publish denial before awaiting worker cancellation;
+the relay independently expires connections even while core is blocked. Revoke
+closes that member's viewer sessions but does not stop running commands or containers.
+This supersedes the earlier exception for owner viewers under grant revocation.
+
+Teaching captures privacy context before input on a read-only, relay-owned CuaBridge
+using an immutable command resolved by core at recording start. Only the existing
+accessibility/desktop observation pair is admitted. Privacy-checked immutable JSON
+is queued back for core-owned, ordered recording persistence, without awaiting core
+on the byte path. The queue is bounded (64 pending payloads / 4 MiB, with a small
+full-state notification per overflowing recording); Stop disables new captures and
+flushes prior captures/persistence before drafting. Owner/revision/expiry checks
+run again before forwarding and before recording; close cancels outstanding capture.
+The accepted-input counter increments only for actual forwarded input messages.
+
+BOOTSTRAP snapshots default off. Only parent messages
+`{type:'raphael-desktop-frames', on:true}` take one immediate picture and schedule
+the existing three-second cadence; `on:false` clears it. `pagehide` takes one final
+picture and clears the timer. All pictures require a view-only RFB canvas, retain
+JPEG quality 0.6 and a maximum width of 480 pixels, and use the unchanged
+`{type:'raphael-desktop', state:'frame', image}` response. The separate app consumer
+owns requesting these pictures; this core-only phase changes no app TypeScript.
+
+Offline checks: `tests/computer`, `tests/members/test_teaching.py`,
+`tests/evaluate/test_teaching.py` and `tests/architecture/test_boundaries.py`.
+The fake VNC and client run independently of core; a synthetic 300 ms main-loop
+block must leave framebuffer, owner/teaching input and relay expiry below 200 ms.
+Tests also cover both socket ends closing, preview/watch input denial, stale
+handshakes, privacy and the 8-session/64-connection caps. Evidence and exact exits:
+`app/.look/briefs/viewer-path-report.md`. Actual container/SSH/noVNC rendering,
+native frame pacing and browser canvas performance remain separate acceptance.
+
 ## Library: only what the member delivered (owner, 2026-11-07 night)
 
 This supersedes the Library notes below (team-file chips, the workspace/team scan, This week / Earlier). The owner found

@@ -22,7 +22,7 @@ async def test_a_team_file_is_found_and_only_what_reads_opens(tmp_path):
         assert page == {"path": str((tmp_path / "office" / "index.html").resolve()), "reads": True}
         assert (await found.team_file({"path": "/home/cua/team/office/setup.exe"}))["reads"] is False
     finally:
-        await found.client.aclose()
+        await found.aclose()
 
 
 @pytest.mark.parametrize("path", ["/home/cua/team/../secret.txt", "/home/cua/team/office/missing.html", "/home/cua/workspace/a.txt",
@@ -35,7 +35,7 @@ async def test_nothing_else_is_a_team_file(tmp_path, path):
         with pytest.raises(RpcError):
             await found.team_file({"path": path})
     finally:
-        await found.client.aclose()
+        await found.aclose()
 
 
 async def test_a_team_folder_on_another_computer_has_no_place_here(tmp_path):
@@ -44,7 +44,7 @@ async def test_a_team_folder_on_another_computer_has_no_place_here(tmp_path):
         with pytest.raises(RpcError):
             await found.team_file({"path": "/home/cua/team/index.html"})
     finally:
-        await found.client.aclose()
+        await found.aclose()
 
 
 async def test_a_recorded_task_file_uses_the_same_read_only_opening_policy(tmp_path):
@@ -60,4 +60,4 @@ async def test_a_recorded_task_file_uses_the_same_read_only_opening_policy(tmp_p
             with pytest.raises(RpcError):
                 await found.team_file({"path": path})
     finally:
-        await found.client.aclose()
+        await found.aclose()

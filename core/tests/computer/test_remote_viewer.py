@@ -276,10 +276,12 @@ async def test_remote_asset_requests_share_resolution_and_failures_reach_renew(r
         assert request.url.port == 43123
         body = b'<script src="app/ui.js"></script><div id="noVNC_container"></div>'
         return httpx.Response(asset_status, content=body)
-    await bridge.client.aclose()
-    bridge.client = httpx.AsyncClient(transport=httpx.MockTransport(asset), trust_env=False)
     try:
         opened = await bridge.open({"member_id": 1, "preview": True})
+        async def replace_client():
+            await bridge.relay.client.aclose()
+            bridge.relay.client = httpx.AsyncClient(transport=httpx.MockTransport(asset), trust_env=False)
+        await bridge.relay.call(replace_client())
         runtime.calls.clear()
         base = opened["url"].removesuffix("vnc.html")
         async with httpx.AsyncClient(trust_env=False) as client:
