@@ -1872,6 +1872,15 @@ PRAGMA user_version = 74;
 COMMIT;
 """
 
+# A work hand-off's reply to whoever handed it over (background/handback.py), kept apart from the
+# report the owner reads in the worker's own conversation. Existing rows have none.
+_MIGRATIONS[75] = """
+BEGIN;
+ALTER TABLE worker_tasks ADD COLUMN handback TEXT;
+PRAGMA user_version = 75;
+COMMIT;
+"""
+
 LATEST_VERSION = max(_MIGRATIONS)
 
 

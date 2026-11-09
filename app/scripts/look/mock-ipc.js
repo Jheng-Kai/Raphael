@@ -402,6 +402,10 @@ export function installMock(fixture, config = {}, target = window) {
     const turn = data.turns.find(turn => turn.id === 1);
     data.turns = [{ ...turn, question: sample.request, text: sample.answer, messages: [], steps: [], handoffs: tasks }];
     if (variant.handoffGroup === "room") {
+      // A room takes nobody's side: one line per pair of members in a row (Raphael and Ada twice), and work a member
+      // handed itself (Ben, waiting for the owner) is a line of its own that opens Ben's conversation (owner, 2026-11-09).
+      tasks.forEach((task, i) => Object.assign(task, i === 2 ? { member_id: 2, member_name: people[1], from_member_id: 2, own_work: true, mode: "work" }
+        : { member_id: i < 2 ? 1 : i < 5 ? 3 : 4, member_name: people[i < 2 ? 0 : i < 5 ? 2 : 3] }));
       data.roomHandoffs = tasks;
       const first = { ...data.messages[0], created: tasks[0].created_at_ms - 1, text: sample.request };
       data.messages = [first, { ...data.messages[1], id: 800, created: tasks[4].created_at_ms + .5, text: sample.separator }];

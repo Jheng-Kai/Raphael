@@ -3719,7 +3719,7 @@ export function checkRendered(name, context = {}) {
   }
   if (name.startsWith("handoff-group")) {
     const groups = [...document.querySelectorAll('[data-handoff-group]')].filter(visible);
-    require(groups.length === (name === "handoff-group-room" ? 2 : 1), "only consecutive exchanges fold together");
+    require(groups.length === (name === "handoff-group-room" ? 3 : 1), "only consecutive exchanges fold together");
     for (const group of groups) {
       const line = group.querySelector('.event-line'), box = line.getBoundingClientRect(), column = line.closest('.ra-col').getBoundingClientRect();
       require(group.matches('button[data-act="peer-chat"]'), "the exchanges' line is a button that opens their conversation");
@@ -3737,6 +3737,17 @@ export function checkRendered(name, context = {}) {
       require(document.querySelector('.tn[data-id="1"] .me') === window.__handoffOwner && document.querySelector('.tn[data-id="1"] .ra') === window.__handoffAnswer, "new work leaves the question and answer nodes untouched");
       require(words.includes("15 則訊息"), "new work updates the count");
       require(visible(chat.querySelector('.peer-line .message-text')) && visible(chat.querySelector('.handoff-files')), "the requests, answers and files are readable in the conversation");
+    }
+    if (name === "handoff-group-room") {
+      // A room takes nobody's side (owner, 2026-11-09): a line names both members, one pair in a row folds into one
+      // line, and work a member handed itself is a line of its own that opens the member's conversation.
+      require(groups.every(item => item.querySelectorAll('.event-person').length === 2), "a room's exchange line names both members");
+      require(words.startsWith("拉斐爾") && words.includes("Ada") && words.includes("3 則訊息"), `the same pair in a row is one line (${words})`);
+      const own = [...document.querySelectorAll('.au-room-thread .own-work-event')].filter(visible);
+      require(own.length === 1 && own[0].matches('button[data-room-act="private-work"]:not([data-act]):not([data-handoff-group])'), "own work is its own line, never a conversation between members");
+      require(own[0].textContent.startsWith("Ben 的私人工作") && own[0].querySelector('.event-state')?.textContent === "等待你回答 · 1 項", "own work names its member and its state");
+      const line = own[0].querySelector('.event-line'), box = line.getBoundingClientRect(), column = line.closest('.ra-col').getBoundingClientRect();
+      require(Math.abs(box.left + box.width / 2 - column.left - column.width / 2) < 2 && box.left >= column.left - 1 && box.right <= column.right + 1, "own work line is centred in the column");
     }
     if (name === "handoff-group-done") require(!summary.querySelector('.event-state'), "done has no state words");
     if (name === "handoff-group-many") require(summary.querySelectorAll('.event-person').length === 3 && words.includes("其他 3 位"), "three people and a remainder");

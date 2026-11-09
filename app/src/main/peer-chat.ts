@@ -20,6 +20,12 @@ const REASONS = { missing_artifact: "handoff.missingArtifact", artifact_changed:
 
 export const peerKey = (task: HandoffView): string => String(task.task_id ?? `x${task.work_turn_id}`);
 
+/**
+ * Work a member handed to itself (the core's `own_work`), as a speaker in a group chat starts tool work: there is no
+ * colleague on the other side, so it is never a conversation between two members (owner, 2026-11-09).
+ */
+export const ownWork = (task: HandoffView): boolean => (task as HandoffView & { own_work?: boolean }).own_work === true;
+
 /** The quiet words that stand for the other side's answer while there is none. */
 export function peerStateWords(task: HandoffView): string {
   if (task.waiting_owner) return t("ownerQuestion.waiting", { p0: task.waiting_owner });
@@ -29,7 +35,7 @@ export function peerStateWords(task: HandoffView): string {
 /** Both sides of `tasks`, oldest first: each request from its sender, then the answer or the state it stands at. */
 export function peerLines(tasks: readonly HandoffView[]): PeerLine[] {
   const lines: PeerLine[] = [];
-  const ordered = [...new Map(tasks.map(task => [peerKey(task), task])).values()]
+  const ordered = [...new Map(tasks.filter(task => !ownWork(task)).map(task => [peerKey(task), task])).values()]
     .sort((a, b) => a.created_at_ms - b.created_at_ms || (a.task_id ?? 0) - (b.task_id ?? 0));
   for (const task of ordered) {
     const key = peerKey(task);
@@ -87,10 +93,11 @@ export function peerChatHTML(host: number, tasks: readonly HandoffView[], people
  */
 export function peerTasks(keys: string, all: readonly HandoffView[]): { tasks: HandoffView[]; host: number } | null {
   const wanted = new Set(keys.split(" ").filter(Boolean));
-  const picked = all.filter(task => wanted.has(peerKey(task)));
+  const exchanges = all.filter(task => !ownWork(task));
+  const picked = exchanges.filter(task => wanted.has(peerKey(task)));
   if (!picked.length) return null;
   const pairs = new Set(picked.map(task => `${task.from_member_id}:${task.member_id}`));
-  return { tasks: all.filter(task => pairs.has(`${task.from_member_id}:${task.member_id}`)), host: picked[0]!.from_member_id };
+  return { tasks: exchanges.filter(task => pairs.has(`${task.from_member_id}:${task.member_id}`)), host: picked[0]!.from_member_id };
 }
 
 export interface PeerChatView { readonly el: HTMLElement; update(): void; close(): void }

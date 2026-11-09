@@ -473,7 +473,8 @@ test("a hand-off line names its assignee and opens their conversation with the r
  api.roomMessages.mockResolvedValue({messages:[{id:1,member_id:0,text:'Alice, write the report.',created:1,status:'done',turn_id:5}],exchange:null,handoffs:[{task_id:42,source_turn_id:5,work_turn_id:6,member_id:1,member_name:'Alice',from_member_id:0,stage_id:'stage-xyz',mode:'work',state:'done',reason:null,created_at_ms:2,ready_at_ms:2,dispatch_policy:'immediate',request:'Write the report.',result:'Report ready.',evidence:[{kind:'artifact',uri:'out/report.html',mime:'text/html',digest:'abc',verdict:'verified'}]}]});
  const view=await pane();
  const line=document.querySelector<HTMLElement>('[data-handoff="42"]')!;
- expect(line.textContent).toBe('2 messages with Alice');
+ // The room takes nobody's side: the line names both members of the exchange.
+ expect(line.textContent).toBe(`2 messages between ${t("agent.title")} and Alice`);
  line.click();
  const chat=view.el.querySelector<HTMLElement>(':scope > .peer-chat')!;
  expect(chat.getAttribute('aria-label')).toBe(`${t("agent.title")} ⇄ Alice`);
@@ -483,6 +484,31 @@ test("a hand-off line names its assignee and opens their conversation with the r
  expect(line.textContent+chat.textContent).not.toMatch(/42|abc|stage-xyz/);
  chat.querySelector<HTMLElement>('.peer-close')!.click();
  expect(view.el.querySelector('.peer-chat')).toBeNull();
+});
+
+test("a member's own work is its own line that opens its conversation, and each pair of members has its own line",async()=>{
+ // Owner, 2026-11-09: 「他是在跟我說話 但是這邊是兩個史萊姆在溝通才對」. Work a member handed itself is no exchange.
+ const base={source_turn_id:5,member_name:'Alice',stage_id:'',mode:'work' as const,reason:null,created_at_ms:2,ready_at_ms:2,dispatch_policy:'immediate' as const,request:'',result:'',evidence:[]};
+ api.roomMessages.mockResolvedValue({messages:[{id:1,member_id:0,text:'Team, compare the sources.',created:1,status:'done',turn_id:5}],exchange:null,handoffs:[
+  {...base,task_id:41,work_turn_id:61,member_id:1,from_member_id:1,own_work:true,state:'running'},
+  {...base,task_id:42,work_turn_id:62,member_id:1,from_member_id:0,state:'running',request:'Check the first source.'},
+  {...base,task_id:43,work_turn_id:63,member_id:2,member_name:'Bob',from_member_id:0,state:'done',request:'Check the second source.',result:'Bob, done.'},
+  {...base,task_id:44,work_turn_id:64,member_id:2,member_name:'Bob',from_member_id:0,state:'done',request:'And the third.',result:'Done too.'}]});
+ const view=await pane();
+ const lines=[...view.el.querySelectorAll<HTMLElement>('.handoff-row > button')];
+ expect(lines.map(line=>line.textContent)).toEqual([`Alice's private workRunning`,`1 message between ${t("agent.title")} and AliceRunning`,`4 messages between ${t("agent.title")} and Bob`]);
+ expect(lines[0]!.dataset.act).toBeUndefined();
+ const opened=vi.fn();window.addEventListener('raphael:open-member',opened);
+ try {
+  lines[0]!.click();
+  expect(opened.mock.calls[0][0].detail).toEqual({memberId:1,turnId:61});
+  expect(view.el.querySelector('.peer-chat')).toBeNull();
+ } finally { window.removeEventListener('raphael:open-member',opened); }
+ lines[2]!.click();
+ const chat=view.el.querySelector<HTMLElement>(':scope > .peer-chat')!;
+ expect(chat.getAttribute('aria-label')).toBe(`${t("agent.title")} ⇄ Bob`);
+ expect([...chat.querySelectorAll('.peer-line .message-text')].map(text=>text.textContent)).toEqual(['Check the second source.','Bob, done.','And the third.','Done too.']);
+ view.close();
 });
 
 test("concurrent speech stays visible beside the board and a report opens its real private turn",async()=>{
