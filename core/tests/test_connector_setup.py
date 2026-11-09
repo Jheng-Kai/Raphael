@@ -194,6 +194,18 @@ async def test_the_toolkit_says_what_is_asked_and_where_to_get_it(tmp_path, conn
     assert (await rig.router.call("connectors.toolkit", {"toolkit": "gmail"}))["needs"] == "sign_in"
 
 
+async def test_the_member_gets_the_public_developer_setup_guide_without_field_values(tmp_path, conn):
+    rig = Rig(tmp_path, conn)
+    await rig.catalog()
+    app = await rig.cards.resolve("bigco")
+    guide = await rig.cards.setup_guide(app)
+    assert guide["guide_url"] == "https://developers.bigco.example/apps"
+    assert guide["redirect_url"]
+    assert [field["name"] for field in guide["fields"]] == ["client_id", "client_secret"]
+    assert all("default" not in field and "value" not in field for field in guide["fields"])
+    assert SECRET not in json.dumps(guide)
+
+
 async def test_a_key_is_given_to_composio_and_the_apps_tools_come_through(tmp_path, conn, caplog):
     caplog.set_level(logging.DEBUG)
     rig = Rig(tmp_path, conn)
@@ -302,6 +314,7 @@ async def test_a_card_pressed_without_what_the_app_needs_says_what_and_where(tmp
     _, bigco = await rig.press(bigco)
     assert bigco.error == "needs_own_app"
     assert "developer app of their own" in rig.failures[-1].reason and "Client ID" in rig.failures[-1].reason
+    assert "card in this conversation" in rig.failures[-1].reason and "Settings" not in rig.failures[-1].reason
 
 
 async def test_a_card_whose_key_was_refused_says_so(tmp_path, conn):

@@ -28,6 +28,9 @@ APPS: dict[str, App] = {app.id: app for app in (
     App("googlecalendar", "Google Calendar", "calendar_", "googlecalendar", "google"),
 )}
 
+# Per-owner addresses cannot live in the fixed-address integrations catalog.
+SERVER_APPS = {"n8n": App("n8n", "n8n", "", "n8n", "own_server")}
+
 
 async def catalog_apps(connectors):
     """The same deduplicated public catalog as the store; built-in services win."""
@@ -43,8 +46,9 @@ async def catalog_apps(connectors):
     apps = [(App(s.id, s.name, "", s.id, "builtin"), search_text(s.id, s.name, " ".join([*s.summary.values(), *s.about.values()]))) for s in SERVICES]
     identities = {identity(s.id) for s in SERVICES} | {identity(s.name) for s in SERVICES}
     descriptions = {row["slug"]: row["description"] for row in catalog}
-    apps += [(app, search_text(app.id, app.name, descriptions.get(app.id, ""))) for app in APPS.values()]
-    identities.update(identity(app.id) for app in APPS.values())
+    local_apps = [*APPS.values(), *SERVER_APPS.values()]
+    apps += [(app, search_text(app.id, app.name, descriptions.get(app.id, ""))) for app in local_apps]
+    identities.update(identity(app.id) for app in local_apps)
     for row in catalog:
         if identity(row["slug"]) not in identities and identity(row["name"]) not in identities:
             apps.append((App(row["slug"], row["name"], "", row["slug"], logo=row.get("logo", "")), search_text(row["slug"], row["name"], row["description"])))

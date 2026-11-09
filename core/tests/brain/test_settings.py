@@ -37,6 +37,8 @@ def test_the_defaults_are_the_documented_ones():
         "owner_output_folder": "",
         "chief_pinned": False,
         "raphael_draft_first": True,
+        "raphael_tools": None,
+        "raphael_notify": False,
         "first_bot_profile": {},
         "owner_name": "",
         "owner_about": "",

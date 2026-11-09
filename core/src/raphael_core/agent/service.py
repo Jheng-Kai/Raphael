@@ -3400,11 +3400,15 @@ class AgentService:
         ask.owner_card_ids = [card.id]
         self._turn_changed(ask.turn_id, ask.speaker.id)
         needs = self._cards.view(card)["needs"]
+        guide = await self._cards.setup_guide(app)
         asks = {"key": f" {app.name} signs in with the owner's own key, which the card asks for (Composio keeps it; you never see it): say so.",
                 "own_app": f" {app.name} needs a developer app of the owner's own, which the card walks them through: say so."}.get(needs, "")
-        return {"app": app.name, "card": card.state, "needs": needs, "note": (
-            f"A card to connect {app.name} is shown to the owner in this chat.{asks} End this turn now with one short "
-            "sentence. This request resumes by itself, once, after the owner connects; never claim its data now.")}
+        return {"app": app.name, "card": card.state, "needs": needs, "setup": guide, "note": (
+            f"A card to connect {app.name} is shown to the owner in this chat.{asks} Explain what each field means and where "
+            "to find it, in the owner's language, in plain words with no unexplained terms, one step at a time. "
+            "Use the setup guide; answer follow-up questions in this conversation. All values belong only in the card, "
+            "never ask for them in chat. Then end this turn. This request resumes by itself, once, after the owner "
+            "connects; never claim its data now.")}
 
     def _show_messaging(self, ask, args):
         if self._secret_cards is None or not ask.turn_id:

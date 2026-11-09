@@ -37,7 +37,7 @@ from dataclasses import dataclass
 
 from ..clock import wall_clock_ms
 from ..protocol import RpcError, invalid_params
-from .apps import APPS, App, catalog_apps
+from .apps import APPS, SERVER_APPS, App, catalog_apps
 from .composio import KEY
 from .google import PREFIX
 from .service import GOOGLE_SERVER
@@ -231,6 +231,8 @@ class ConnectorCards:
             return None
         if ident in APPS:
             return APPS[ident]
+        if ident in SERVER_APPS:
+            return SERVER_APPS[ident]
         return next((app for app, _ in await catalog_apps(self._connectors) if app.id == ident), None)
 
     async def find(self, query):
@@ -257,6 +259,10 @@ class ConnectorCards:
         """The tools of `app` that can be called now, through either provider; none while its read
         tools cannot, or when the connections cannot be read (unknown is never connected)."""
         try:
+            if app.provider == "own_server":
+                server = self._own_server(app)
+                hub = self._connectors.hub
+                return [tool.name for tool in server.tools if server.tool_on(tool)] if server and hub._server_entry(server)["state"] == "ready" else []
             if app.provider == "builtin":
                 hub = self._connectors.hub
                 return [tool.name for server in hub._config.servers() if server.catalog_id == app.id
@@ -291,8 +297,9 @@ class ConnectorCards:
                                app_name=app.name, provider=app.provider, app_logo=app.logo)
 
     def _needs_of(self, app: App) -> str:
-        """What adding the app asks of the owner (`toolkits`): a sign-in, their own key, or a developer app of
-        their own. Only an app of Composio's catalog can ask for more than a sign-in."""
+        """The public setup kind: sign-in, key, developer app or the owner's server."""
+        if app.provider == "own_server":
+            return "own_server"
         if app.provider != "composio":
             return SIGN_IN
         try:
@@ -305,7 +312,89 @@ class ConnectorCards:
         known = APPS.get(card.app)
         app = known if known and known.provider == card.provider else App(card.app, card.name, "", card.app, card.provider)
         needs = self._needs_of(app)
-        return {**card.view(), "needs": needs, **({"toolkit": app.composio} if needs != SIGN_IN else {})}
+        view = {**card.view(), "needs": needs, **({"toolkit": app.composio} if needs in {"key", "own_app"} else {})}
+        if needs == "own_server":
+            view["fields"] = self._server_fields()
+            if card.state == "failed":
+                view["error_message"] = self._server_failure(card.error).reason
+        return view
+
+    @staticmethod
+    def _server_fields() -> list[dict]:
+        """Public form metadata only; submitted values never become card state."""
+        return [
+            {"name": "url", "label": "MCP server address", "required": True, "secret": False,
+             "description": "In n8n Settings, enable MCP access and copy the server address into this card. MCP is the connection other apps use to reach the workflows you expose in n8n."},
+            {"name": "token", "label": "Access token", "required": True, "secret": True,
+             "description": "Copy the access token from the same n8n MCP settings into this card. It lets Raphael access the workflows you expose; never paste it into chat."},
+        ]
+
+    async def setup_guide(self, app: App) -> dict:
+        """Give the member instructions and field names, never defaults or entered values."""
+        if app.provider == "own_server":
+            return {"fields": self._server_fields()}
+        if self._needs_of(app) not in {"key", "own_app"}:
+            return {}
+        try:
+            plan = await self._connectors.toolkit({"toolkit": app.composio})
+        except Exception:
+            # Showing the secure card must still work when its public guide is unavailable.
+            return {"note": "The app's setup guide could not be loaded. Explain the card's fields; ask what step the owner needs help with, never for field values."}
+        return {**{key: plan.get(key) for key in ("guide_url", "app_url", "redirect_url")},
+                "fields": [{key: field.get(key) for key in ("name", "label", "description", "required", "secret")}
+                           for field in plan["fields"]]}
+
+    def _own_server(self, app: App):
+        return next((server for server in self._connectors.hub._config.servers()
+                     if not server.managed_by and not server.catalog_id and server.auth == "none"
+                     and server.transport == "http" and server.name.casefold() == app.name.casefold()), None)
+
+    @staticmethod
+    def _server_failure(kind: str) -> Failure:
+        reason = {
+            "needs_server_fields": "Enter the n8n server address and access token in the card. Try again after filling both fields.",
+            "server_address": "The n8n server address is not valid. Copy the MCP server address from n8n settings into the card. Try again.",
+            "auth": "n8n did not accept the access token. Copy a current token from n8n MCP settings into the card. Try again.",
+            "scope": "n8n returned no available workflows. Enable MCP access and expose a workflow in n8n settings. Try again from the card.",
+        }.get(kind, "Could not connect to n8n. Check that n8n is running and that the card has the MCP server address and current access token from n8n settings. Try again from the card.")
+        return Failure("auth_expired" if kind == "auth" else "network", reason)
+
+    async def _connect_server(self, app: App, fields: dict | None) -> None:
+        """Only the owner's card press reaches this existing add/test path."""
+        if not fields or set(fields) != {"url", "token"} or not all(value.strip() for value in fields.values()):
+            raise _Failed("needs_server_fields")
+        from ..integrations.config import checked_url
+        try:
+            address = checked_url(fields["url"].strip())
+        except ValueError:
+            raise _Failed("server_address") from None
+        token = fields["token"].strip()
+        token = token if token.startswith("Bearer ") else "Bearer " + token
+        draft = {"name": app.name, "transport": "http", "url": address,
+                 "headers": [{"name": "Authorization", "value": token}]}
+        server = self._own_server(app)
+        try:
+            if server:
+                await self._router.call("integrations.set_enabled", {"id": server.id, "enabled": False})
+                result = await self._router.call("integrations.update", {"id": server.id, **draft})
+            else:
+                result = await self._router.call("integrations.add", draft)
+            identifier = result["server"]["id"]
+            tested = await self._router.call("integrations.test", {"id": identifier})
+            if not tested.get("ok"):
+                raise _Failed("auth" if tested.get("error") == "auth" else "server_unreachable")
+            if not tested.get("tools"):
+                raise _Failed("scope")
+            # Refresh retains the checked schemas; enabling happens only after both checks succeed.
+            refreshed = await self._router.call("integrations.refresh", {"id": identifier})
+            if refreshed["server"].get("error"):
+                raise _Failed("server_unreachable")
+            await self._router.call("integrations.set_enabled", {"id": identifier, "enabled": True})
+        except _Failed:
+            raise
+        except Exception:
+            # A provider or vault exception may echo the form; never classify its raw text.
+            raise _Failed("server_unreachable") from None
 
     def views(self, turn_ids: Iterable[int]) -> dict[int, list[dict]]:
         return {turn_id: [self.view(card) for card in cards] for turn_id, cards in self.store.for_turns(turn_ids).items()}
@@ -391,7 +480,7 @@ class ConnectorCards:
             pass
         if kind == "needs_own_app":
             return Failure("auth_expired", f"{name} needs {asks}: its provider gives Composio no shared sign-in.{link} The owner adds it "
-                                           f"from the card or with Add on {name} in {WHERE}, then signs in in the browser.")
+                                           "from the card in this conversation, then signs in in the browser. Explain each field step by step; never ask for its value in chat.")
         return Failure("auth_expired", f"{name} needs the owner's own key ({asks}); Composio keeps it.{link} The owner enters it from the "
                                        f"card or with Add on {name} in {WHERE}.")
 
@@ -402,21 +491,25 @@ class ConnectorCards:
         try:
             try:
                 if card.reconnect or not self.ready_tools(app):
-                    provider = self._provider(app)
-                    if provider is None:
-                        raise _Failed("needs_composio_key")
-                    method, params = provider
-                    if method == "connectors.connect" and fields:
-                        params = {**params, "fields": fields}
-                    fields = None
-                    result = await self._router.call(method, params)
-                    params = None
-                    if not result.get("connected"):
-                        raw = str(result.get("error") or "unknown")
-                        if method == "connectors.connect" and raw == "auth":
-                            raw = "missing_key"  # Composio refused its own key: as good as none
-                        raise _Failed(_FAILURES.get(raw, classify(raw).kind),
-                                      classify(result["failure"]) if result.get("failure") else None)
+                    if app.provider == "own_server":
+                        await self._connect_server(app, fields)
+                        fields = None
+                    else:
+                        provider = self._provider(app)
+                        if provider is None:
+                            raise _Failed("needs_composio_key")
+                        method, params = provider
+                        if method == "connectors.connect" and fields:
+                            params = {**params, "fields": fields}
+                        fields = None
+                        result = await self._router.call(method, params)
+                        params = None
+                        if not result.get("connected"):
+                            raw = str(result.get("error") or "unknown")
+                            if method == "connectors.connect" and raw == "auth":
+                                raw = "missing_key"  # Composio refused its own key: as good as none
+                            raise _Failed(_FAILURES.get(raw, classify(raw).kind),
+                                          classify(result["failure"]) if result.get("failure") else None)
                 tools = self.ready_tools(app)
                 if not tools:
                     raise _Failed("scope")
@@ -445,6 +538,8 @@ class ConnectorCards:
             except Exception as exc:
                 await self._failed(ended, classify(exc))
         elif ended is not None and ended.state == "failed":
+            if app.provider == "own_server":
+                diagnostic = self._server_failure(ended.error)
             if diagnostic is None and ended.error in SETUP:
                 diagnostic = await self._missing(ended.error, app)
             await self._failed(ended, diagnostic or classify(ended.error))

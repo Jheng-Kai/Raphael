@@ -373,6 +373,8 @@ INTERACTION_RPCS = {
 # Native device settings such as auto_update stay owner-only in DeviceStore;
 # they are not core settings or accepted by the model's settings_update tool.
 OWNER_ONLY_SETTINGS = {
+    **dict.fromkeys(("raphael_tools", "raphael_notify"),
+                   "First Bot preferences use member_update validation; tool access retains exact-action approval instead of a generic setting write."),
     "memory_threshold_tokens_cap": "Conversation compression policy is chosen by the owner.",
     "memory_max_unused_days": "Automatic forgetting policy is chosen by the owner.",
     "routine_timezone": "The owner's routine time zone preference is never model-editable.",
