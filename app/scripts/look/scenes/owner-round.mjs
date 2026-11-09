@@ -6,7 +6,8 @@ const open = id => [...details, click(`[data-conversation-open="${id}"]`)];
 const voice = id => [click('.mb-det [data-det="close"]'), wait('.conversation-trigger[aria-expanded="false"]'), id ? hold('.cmp-voice') : click('.cmp-voice')];
 const language = locale => [click('[data-k="ui-language"]'), click(`#app-popover [data-value="${locale}"]`), wait(`html[lang="${locale}"]`), check(`locale-${locale}`)];
 // 連結應用程式 is walked from the sidebar below: it is a dialog of its own, not a tab of Settings (R-UI-111).
-const panes = ["general", "appearance", "models", "dictation", "tools", "safety", "messaging", "about"];
+// The tabs as Settings lists them; appearance and messaging are sections of 一般 (owner, 2026-11-07).
+const panes = ["general", "memory", "tools", "safety", "models", "dictation", "about"];
 
 export default [
   ...["en", "ja", "zh-TW"].map(locale => scene(`settings-language-${locale}`, `Switch to ${locale} in Settings and walk every page and section`, [

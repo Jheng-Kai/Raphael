@@ -3438,7 +3438,8 @@ export function checkRendered(name, context = {}) {
     const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
     for (let node; (node = walker.nextNode());) {
       const element = node.parentElement, text = node.textContent.trim();
-      if (!text || !visible(element) || element.closest('[hidden], [inert], script, style, input, textarea, .message-text, .mb-preview, .mb-pv, .mem-entry')) continue;
+      // A file's type badge is its own name's extension (「PDF」), the owner's, not interface copy.
+      if (!text || !visible(element) || element.closest('[hidden], [inert], script, style, input, textarea, .message-text, .mb-preview, .mb-pv, .mem-entry, .attachment-icon')) continue;
       if (user.has(text)) continue;
       const interfaceText = authored.reduce((copy, value) => copy.split(value).join(""), text);
       if (foreign.has(text) || (locale === "en" && /[\u3400-\u9fff\u3040-\u30ff]/.test(interfaceText))) stale.push(text.slice(0, 90));
