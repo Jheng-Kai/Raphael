@@ -492,6 +492,10 @@ the current session only; conversation creation, search, switching and row menus
 live in the details list. The header's only tool is the computer, for Raphael too (2026-11-05). Use sidebar search, or
 the compact picker's search action, for messages.
 
+A jump lights nothing (R-UI-118, owner 2026-11-09): opening a conversation focuses the composer, which keeps
+the same black shadow focused or not (no white halo in the dark theme), and a search result or report opens its
+turn in the middle of the view with no tint. Scenes: `chat`, `search-target`.
+
 ## Driving it with look
 
 ```powershell

@@ -67,6 +67,7 @@
   --track: #e5e5e5; --menu: #ffffff; --scrim: rgba(0, 0, 0, 0.3);
   --pop: 0 20px 64px rgba(0, 0, 0, 0.14), 0 3px 10px rgba(0, 0, 0, 0.07);
   --tab-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+  --composer-shadow: 0 6px 20px rgba(0, 0, 0, 0.06);
   /* the window's close button under the pointer: Windows' own red, the same in both themes */
   --close: #c42b1c; --on-close: #ffffff;
   /* What is drawn on a slime's colour: white, as its eyes are, in both themes. */
@@ -106,6 +107,8 @@
   --track: #333333; --menu: #161616; --scrim: rgba(0, 0, 0, 0.65);
   --pop: 0 20px 64px rgba(0, 0, 0, 0.5), 0 3px 10px rgba(0, 0, 0, 0.3);
   --tab-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  /* Black in the dark theme too: a shadow in the text colour would be a light halo (R-UI-118). */
+  --composer-shadow: 0 6px 20px rgba(0, 0, 0, 0.06);
   --toast-action: #333333; --toast-hover: #dddddd;
   --heat-0: #202020; --hatch: #555555;
   --scroll-thumb: #555555; --scroll-hover: #929292;

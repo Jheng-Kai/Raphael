@@ -49,12 +49,8 @@ function rings(body: string): string[] {
 const FOCUS = /:focus(-visible|-within)?\b/;
 const GATE = /^(:where\(:root\[data-keys\]\)|:root\[data-keys\])\s/;
 
-/**
- * Focus styles that are not a frame and so stay under the pointer too. The composer's shadow
- * deepens a little while it is typed into; its edge does not change colour.
- */
+/** Focus styles that are not a frame and so stay under the pointer too. */
 const SOFT = new Map([
-  [".composer:focus-within", /^box-shadow: 0 6px 24px color-mix\(/],
   // Inline mail editing reveals its existing hairline on focus; keyboard outlines remain gated.
   [".conversation-card .mail-in.mb-fin:focus", /^border-color: var\(--edge\)$/],
   [".conversation-card .mail-body.mb-fin:focus", /^border-color: var\(--edge\)$/],
@@ -108,9 +104,19 @@ describe("focus rings follow the keyboard only", () => {
     expect(bad).toEqual([]);
   });
 
-  test("the composer keeps its edge colour while it is typed into", () => {
-    const composer = rules.filter((rule) => rule.selectors.includes(".composer:focus-within"));
+  // Owner, 2026-11-09: 「跳轉的時候現在好像會有亮光 那個全部拿掉」. Opening a conversation focuses its
+  // composer and a search opens a turn; neither may light anything up.
+  test("a jump lights nothing: the composer looks the same focused, and the opened turn has no tint", () => {
+    const composerFocus = rules.filter((rule) => rule.selectors.some((one) => /\.composer:focus(-within|-visible)?\b/.test(one)));
+    expect(composerFocus.map((rule) => `${rule.file}: ${rule.selectors.join(", ")}`)).toEqual([]);
+    // A shadow in the text colour is a light halo in the dark theme.
+    const composer = rules.filter((rule) => rule.selectors.includes(".composer") && /box-shadow/.test(rule.body));
     expect(composer.length).toBeGreaterThan(0);
-    for (const rule of composer) expect(rule.body).not.toMatch(/border/);
+    for (const rule of composer) expect(rule.body).not.toMatch(/box-shadow:[^;]*var\(--text\)/);
+    const tokens = rules.flatMap((rule) => [...rule.body.matchAll(/--composer-shadow\s*:\s*([^;]+)/g)].map(([, value]) => value.trim()));
+    expect(tokens.length).toBeGreaterThanOrEqual(2);
+    for (const value of tokens) expect(value).toMatch(/^0 6px 20px rgba\(0, 0, 0, 0\.\d+\)$/);
+    const target = rules.filter((rule) => rule.selectors.some((one) => one.includes("is-search-target")));
+    expect(target.map((rule) => `${rule.file}: ${rule.selectors.join(", ")} { ${rule.body.trim()} }`)).toEqual([]);
   });
 });
