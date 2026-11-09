@@ -375,6 +375,25 @@ test("the details panel has no fold button: its left edge drags it, narrower tha
   agent.hide();
 });
 
+test("the settings page folds the details panel away at any width, and leaving it puts the panel back as it was", async () => {
+  const agent = mount(); await flush(); await pick(3);
+  await openDetails();
+  const panel = document.querySelector<HTMLElement>(".mb-det")!;
+  expect(panel.hidden).toBe(false);
+  agent.showSettings(3); await flush();
+  await vi.waitFor(() => expect(panel.hidden).toBe(true));
+  expect(document.querySelector<HTMLElement>("[data-member-settings]")!.hidden).toBe(false);
+  agent.showSettings(null); await flush();
+  await vi.waitFor(() => expect(panel.hidden).toBe(false));
+  // A panel that was closed stays closed after the page.
+  $('[data-det="close"]').click(); await flush();
+  await vi.waitFor(() => expect(panel.hidden).toBe(true));
+  agent.showSettings(3); await flush();
+  agent.showSettings(null); await flush();
+  expect(panel.hidden).toBe(true);
+  agent.hide();
+});
+
 test("a closed details panel reads nothing while work runs, and the settings page reads its counts only once it is opened", async () => {
   const agent = mount(); await flush(); await pick(3);
   expect(document.querySelector<HTMLElement>(".mb-det")!.hidden).toBe(true);

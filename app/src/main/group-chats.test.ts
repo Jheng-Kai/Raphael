@@ -304,12 +304,20 @@ test("generated room names preserve owner edits and creation retries reuse the r
  expect(api.roomsCreate.mock.calls[1][0].name).toBe('Owner name');
 });
 
-test("reply labels distinguish owner sources from unavailable sources",async()=>{
+test("a reply quotes its source at the top of its bubble: who said it and its first words, or that it is gone",async()=>{
  api.roomMessages.mockResolvedValue({messages:[
+  {id:1,member_id:null,text:'Please **check** the [launch list](https://example.test) today',created:0,status:'done'},
   {id:2,member_id:1,text:'Answer',created:1,status:'done',reply_reference:{message_id:1,author_kind:'owner',author_member_id:null}},
   {id:3,member_id:1,text:'Kept reply',created:1,status:'done',reply_reference:{message_id:9,unavailable:true}},
  ]});await pane();
- expect([...document.querySelectorAll('.au-room-reply')].map(el=>el.textContent)).toEqual(['Reply to You','Source unavailable']);
+ const quote=document.querySelector<HTMLElement>('[data-room-message="2"] .ans > .room-quote.message-quote')!;
+ expect([quote.querySelector('.quote-author')!.textContent,quote.querySelector('.quote-text')!.textContent]).toEqual(['You','Please check the launch list today']);
+ expect(quote.matches('button[data-room-act="jump-reply"][data-message="1"]')).toBe(true);
+ expect(quote.getAttribute('aria-label')).toBe('Reply to You: Please check the launch list today');
+ expect(quote.nextElementSibling!.matches('.message-text')).toBe(true);
+ const gone=document.querySelector('[data-room-message="3"] .room-quote.is-missing')!;
+ expect([gone.tagName,gone.textContent]).toEqual(['SPAN','Source unavailable']);
+ expect(document.querySelector('.au-room-meta, .au-room-reply')).toBeNull();
 });
 
 test("the room voice target seeds correction learning while preserving reply delivery",async()=>{
@@ -381,12 +389,12 @@ test("room rows expose rename, membership and confirmed deletion through more",a
  expect(api.roomsDelete).toHaveBeenCalledWith(1);
 });
 
-test("reply chips identify their recipient including Raphael's zero id and escape names",async()=>{
+test("reply quotes name their source including Raphael's zero id and escape names",async()=>{
  api.membersList.mockResolvedValue({members:[{id:0,name:'Raphael',avatar:''},{id:1,name:'<img src=x onerror=bad()>',avatar:''}],groups:[]});
  api.roomMessages.mockResolvedValue({messages:[{id:1,member_id:0,text:'Agreed',reply_reference:{message_id:8,author_kind:'member',author_member_id:1},reply_to_member:1,kind:'message',created:1,status:'done'},{id:2,member_id:1,text:'Thanks',reply_reference:{message_id:9,author_kind:'member',author_member_id:0},reply_to_member:0,created:2,status:'done'}]});
- await pane();const chips=[...document.querySelectorAll('.au-room-reply')];
- expect(chips.map(el=>el.textContent)).toEqual(['Reply to <img src=x onerror=bad()>','Reply to Raphael']);
- expect(document.querySelector('.au-room-reply img')).toBeNull();
+ await pane();const quotes=[...document.querySelectorAll('.room-quote')];
+ expect(quotes.map(el=>el.querySelector('.quote-author')!.textContent)).toEqual(['<img src=x onerror=bad()>','Raphael']);
+ expect(document.querySelector('.room-quote img')).toBeNull();
 });
 
 test("a streamed room table stays provisional and becomes a rich card only after completion",async()=>{

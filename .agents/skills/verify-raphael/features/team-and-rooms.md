@@ -50,9 +50,11 @@ A room message carries no speaker name (owner, 2026-11-09: 「開會的時候不
 the face beside it says who spoke, its name in the face's tooltip and for a screen reader (the author
 stays in the markup, visually hidden); a message with nothing else in its meta line has no meta line.
 The face stands beside the message, never above it (owner, 2026-11-09): left of the first bubble and centred on
-its first line, mirroring the owner's face on the right; a reply chip (回覆 …) sits above the bubble at its left
-edge. The side thread lays its replies out the same way. Check: `room-discussion` (face beside the first bubble,
-chip above it).
+its first line, mirroring the owner's face on the right. Whom a message answers is quoted at the top of its bubble
+(owner, 2026-11-09: 「回覆 小晴」 above it did not show who answered whom): the shared conversation quote, the
+source's name over its first words (two lines at most, Markdown marks dropped), a press jumps to it; a source that
+is gone says so without a name. The side thread lays its replies out the same way. Checks: `room-discussion`,
+`room-replies`, `room-reply-owner`, `room-reply-peer`, `room-reply-source-missing`.
 That hidden name is placed absolutely, so the thread (`.ra-scroll`) is its box: before 2026-11-09 it took the
 stage instead, escaped the clip at its depth in a long room and stretched the main area, and the wheel past
 the last message scrolled the whole room away (owner screenshot). Scene: `room-long-reply-wheel`; R-UI-62.

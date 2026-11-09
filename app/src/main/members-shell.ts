@@ -73,8 +73,10 @@ export interface MembersShell {
   readonly details: HTMLElement;
   /** The open member's settings page, which takes the conversation's place while it is open. */
   readonly settings: MemberSettings;
-  /** Opens the settings page of the open member (the panel closes first where it covers the page). */
+  /** Opens the settings page of the open member; the details panel folds away while it is open. */
   openSettings(): void;
+  /** Leaves the settings page for the conversation and puts the details panel back as it was. */
+  closeSettings(): void;
   computer(): void;
   /** The narrow windows' dropdown of members, for the left of the chat's top row. */
   readonly picker: HTMLElement;
@@ -126,6 +128,8 @@ export function createMembers(host: MembersHost): MembersShell {
   let refreshDue = 0;
   let refreshTimer: ReturnType<typeof setTimeout> | null = null;
   let open = typeof innerWidth === "number" ? innerWidth >= DETAILS_COLUMN_MIN_PX : true;
+  /** Whether the details panel was open when the settings page folded it away; null while the page is closed. */
+  let panelBeforeSettings: boolean | null = null;
   let stopLeaving: (() => void) | null = null;
   let panelRead = false;
   let refreshOnShow = false;
@@ -337,6 +341,7 @@ export function createMembers(host: MembersHost): MembersShell {
 
   function select(id: number): void {
     // Another member (or the same one, from the sidebar) leaves the settings page for the conversation.
+    panelBeforeSettings = null;
     settings.close();
     if (!host.visible()) host.app.go("agent");
     if (id === current) {
@@ -532,7 +537,7 @@ export function createMembers(host: MembersHost): MembersShell {
   window.addEventListener("raphael:member-store", () => newMember(null, true));
   onLocaleChange(() => { drawAll(); });
   // A group chat comes where the conversation is: the settings page gives way to it.
-  window.addEventListener("raphael:open-room", () => settings.close());
+  window.addEventListener("raphael:open-room", () => { panelBeforeSettings = null; settings.close(); });
   details.el.hidden = !open;
   drawAll();
 
@@ -540,9 +545,18 @@ export function createMembers(host: MembersHost): MembersShell {
     column: column.el,
     details: details.el,
     settings,
+    // The settings page takes the room: the details panel folds away while it is open, at every width, and comes back
+    // as it was when the page is left for the conversation.
     openSettings() {
-      if (innerWidth < 860) setDetails(false);
+      if (!settings.isOpen()) panelBeforeSettings = open;
+      setDetails(false);
       settings.open();
+    },
+    closeSettings() {
+      const wasOpen = settings.isOpen(), restore = panelBeforeSettings;
+      panelBeforeSettings = null;
+      settings.close();
+      if (wasOpen && restore) setDetails(true);
     },
     computer() { setDetails(true); details.select('computer'); },
     picker,

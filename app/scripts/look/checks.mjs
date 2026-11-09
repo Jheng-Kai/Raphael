@@ -702,7 +702,7 @@ export function checkRendered(name, context = {}) {
     require(mounted.length <= 100, "no more than 100 turns are mounted");
     if (name === "thread-window-open") {
       require(mounted.length === 25, "only the newest 25 turns open");
-      const quote = scroll.querySelector('button.message-quote, button.au-room-reply');
+      const quote = scroll.querySelector('button.message-quote');
       require(quote, "the newest turn retains its actionable quote");
       const style = getComputedStyle(quote);
       require(style.borderTopWidth === "0px" && style.borderBottomWidth === "0px" && style.borderInlineEndWidth === "0px", "quote jumps retain the shared excerpt style without browser button borders");
@@ -3807,9 +3807,9 @@ export function checkRendered(name, context = {}) {
   }
   if (['room-reply-owner','room-reply-peer','room-reply-source-missing'].includes(name)) {
     const id = name === 'room-reply-owner' ? 2 : 3;
-    const chip = document.querySelector(`[data-room-message="${id}"] .au-room-reply`);
+    const chip = document.querySelector(`[data-room-message="${id}"] .room-quote`);
     require(visible(chip), 'source chip is visible');
-    require(chip.textContent === (name === 'room-reply-owner' ? '回覆 你' : name === 'room-reply-peer' ? '回覆 小晴' : '來源訊息已無法取得'), 'chip uses server source identity');
+    require((chip.querySelector('.quote-author') ?? chip.querySelector('.quote-text')).textContent === (name === 'room-reply-owner' ? '你' : name === 'room-reply-peer' ? '小晴' : '來源訊息已無法取得'), 'the quote names the source the server gave');
     return { check: name, source: chip.textContent };
   }
   if (name === "quick-model-row") {
@@ -4006,7 +4006,7 @@ export function checkRendered(name, context = {}) {
     const main = document.querySelector(".main"), thread = document.querySelector(".au-room-pane .ra-scroll"), composer = document.querySelector(".au-room-pane .ra-dock .composer");
     // The escaped name only lands outside the main area when the thread is taller than the window.
     require(thread.scrollHeight > innerHeight + 200, "the room thread is taller than the window");
-    require(document.querySelectorAll(".au-room-pane .au-room-meta .au-room-reply").length >= 3, "the latest messages carry reply chips");
+    require(document.querySelectorAll(".au-room-pane .room-quote").length >= 3, "the latest messages carry reply quotes");
     require(main.scrollTop === 0 && main.scrollHeight <= main.clientHeight + 1, `the main area stays put (scrollTop ${main.scrollTop}, height ${main.scrollHeight} in ${main.clientHeight})`);
     require(Math.abs(thread.scrollTop + thread.clientHeight - thread.scrollHeight) <= 2, "the wheel reached the end of the thread itself");
     require(innerHeight - composer.getBoundingClientRect().bottom < 48, "the composer stays at the bottom of the window");
@@ -4015,7 +4015,7 @@ export function checkRendered(name, context = {}) {
     return { check: name, main: { scrollTop: main.scrollTop, scrollHeight: main.scrollHeight, clientHeight: main.clientHeight }, thread: { scrollTop: Math.round(thread.scrollTop), scrollHeight: thread.scrollHeight, clientHeight: thread.clientHeight } };
   }
   if (name === "room-discussion") {
-    require(document.querySelectorAll('.au-room-reply').length >= 3, "multiple replies identify their colleagues");
+    require(document.querySelectorAll('.room-quote').length >= 3, "multiple replies quote their colleagues");
     require(document.querySelector('.au-room-thread').textContent.includes('我不同意'), "members can disagree");
     require(visible(document.querySelector('.au-room-crown')), "Raphael has the chief badge");
     const crown = document.querySelector('.au-room-crown').getBoundingClientRect();
@@ -4023,20 +4023,21 @@ export function checkRendered(name, context = {}) {
     require(crown.right <= face.right && crown.left >= face.left, "the chief badge stays inside its participant slot");
     // Messages carry face, name and reply chip only; roles stay with the faces of the header and the member column.
     require(document.querySelectorAll('.au-room-participant[data-tooltip*=" · "]').length === 3, "header faces name each member and role");
-    for (const meta of document.querySelectorAll('.au-room-meta')) require([...meta.children].every(child => child.matches('.au-room-author, .au-room-reply')), "no role tag above a message");
+    require(!document.querySelector('.au-room-meta, .au-room-reply'), "no tag line above a message: whom it answers is quoted in its bubble");
     // Each message is led by its face alone; the name is for screen readers and the face's tooltip (owner, 2026-11-09).
     require([...document.querySelectorAll('.au-room-message .au-room-author')].every(author => author.getBoundingClientRect().width <= 1 && author.textContent.trim()), "no name line above a message, but a name for screen readers");
     require([...document.querySelectorAll('.au-room-message .ra-face')].every(face => face.dataset.tooltip), "a message's face names its member on hover");
-    // The face stands beside the first bubble, mirroring the owner's on the right; a reply chip sits above, in the bubbles' column.
+    // The face stands beside the first bubble, mirroring the owner's on the right.
     for (const face of document.querySelectorAll('.au-room-message .ra > .ra-face')) {
       const bubble = face.closest('.ra').querySelector('.ans, .bubble');
       if (!bubble) continue;
       const f = face.getBoundingClientRect(), b = bubble.getBoundingClientRect();
       require(f.right <= b.left + 1 && f.top >= b.top - 1 && f.bottom <= b.bottom + 1, "a message's face stands beside its first bubble, not above it");
-      const chip = face.closest('.au-room-message').querySelector(':scope > .au-room-meta .au-room-reply');
-      if (chip) require(chip.getBoundingClientRect().bottom <= b.top + 1 && Math.abs(chip.getBoundingClientRect().left - b.left) <= 2, "its reply chip sits above the bubble, at its left edge");
+      // Whom it answers opens that bubble, as a quote does in a private conversation (2026-11-09: 「回覆 小晴」 above it said too little).
+      const quote = bubble.querySelector('.room-quote');
+      if (quote) require(bubble.firstElementChild === quote && quote.querySelector('.quote-author')?.textContent.trim() && quote.getBoundingClientRect().left >= b.left, "its reply quote opens the bubble with the source's name");
     }
-    return { check: name, replyChips: document.querySelectorAll('.au-room-reply').length };
+    return { check: name, replyQuotes: document.querySelectorAll('.room-quote').length };
   }
   if (name === "room-wrapup") {
     const card = document.querySelector('.au-room-wrapup');
@@ -4075,9 +4076,9 @@ export function checkRendered(name, context = {}) {
     return { check: name, stopRequested: true };
   }
   if (name === "room-replies") {
-    const chip = document.querySelector('[data-room-message="3"] .au-room-reply');
-    require(visible(chip) && chip.textContent === "回覆 小晴", "the reply identifies its recipient");
-    require(chip.getBoundingClientRect().right <= innerWidth, "the reply chip fits the viewport");
+    const quote = document.querySelector('[data-room-message="3"] .room-quote');
+    require(visible(quote) && quote.querySelector('.quote-author').textContent === "小晴" && quote.querySelector('.quote-text')?.textContent.trim(), "the reply quotes whom it answers, with their words");
+    require(quote.getBoundingClientRect().right <= innerWidth, "the reply quote fits the viewport");
     return { check: name, recipient: 1 };
   }
   if (name === "room-thinking") {
@@ -5688,11 +5689,14 @@ export function checkRendered(name, context = {}) {
     const chat = document.querySelector(".page-agent .mb-chat");
     const view = pane.dataset.view;
     const raphael = !pane.querySelector("#ms-name");
+    // The details panel folds away while the page is open and comes back as it was once the page is left.
     if (name === "member-settings-back") {
       require(!visible(pane) && visible(chat) && visible(chat.querySelector(".composer")), "the conversation is where the page was");
+      require(visible(document.querySelector(".mb-det")), "the details panel that was open comes back with the conversation");
       return { check: name };
     }
     require(visible(pane) && !visible(chat), "the page takes the conversation's place");
+    require(!visible(document.querySelector(".mb-det")), "the details panel folds away while the settings page is open");
     const scroller = pane.querySelector(".ms-scroll"), body = pane.querySelector(".ms-body");
     require(scroller.scrollWidth <= scroller.clientWidth + 1 && pane.scrollWidth <= pane.clientWidth + 1, "nothing overflows sideways");
     require(body.getBoundingClientRect().width <= 20 * 32 + 200 + 1, "the page is a reading page and its column of kinds");

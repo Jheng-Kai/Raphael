@@ -2603,12 +2603,12 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     sidebar: members.column,
     loadSidebar: () => members.load(),
     settingsOf: () => members.settings.isOpen() ? members.current() : null,
-    showSettings(id) { if (id !== null && id === members.current()) members.openSettings(); else members.settings.close(); },
+    showSettings(id) { if (id !== null && id === members.current()) members.openSettings(); else members.closeSettings(); },
     show(arg) {
       const wasVisible = visible;
       // The member settings page (member-settings.ts) is asked for by the gear; any other way here is the conversation.
       const settingsFor = typeof arg === "string" && arg.startsWith("member-settings:") ? Number(arg.slice("member-settings:".length)) : null;
-      if (settingsFor === null) members.settings.close();
+      if (settingsFor === null) members.closeSettings();
       if (!wasVisible) { unreadFrom = null; unreadCaptured = false; openingThread = true; }
       visible = true;
       if (arg === "computer") { if (roomPane.active) roomPane.close(); members.computer(); }

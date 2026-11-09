@@ -4,8 +4,9 @@
 
 Owner request: a member's settings are a page of their own, where the conversation is (R-PANEL-05).
 The panel keeps Details / Library / Computer and its bots; its head is the gear on the left and the
-close on the right, apart. The gear opens `member-settings.ts` over the conversation (the panel stays
-beside it, and a window narrower than 860 px closes the panel first); the arrow at the page's top left
+close on the right, apart. The gear opens `member-settings.ts` over the conversation (the panel folds
+away at every width while the page is open, owner 2026-11-09, and comes back as it was when the page is left
+for the conversation; member-settings and member-settings-back check both); the arrow at the page's top left
 and Escape go back to the conversation (a skill or a command first back to the page), and
 the page is a place of the navigation history (`Place.member`, `member-settings:<id>`). It supersedes
 every older paragraph below that puts memory, skills, commands, voice, the edit dialog, hide or share

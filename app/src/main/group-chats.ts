@@ -420,6 +420,25 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
     const entries=[...messages.map(message=>({created:message.created,order:0,message})),...handoffs.filter(task=>!messages.some(message=>message.report?.task_id===task.task_id)).map(task=>({created:task.created_at_ms,order:0,task})),...blocked]
       .sort((a,b)=>a.created-b.created||a.order-b.order);
     const addressable=mentionTargets(list);
+    // What a quote shows of a message: its first words as plain text, without Markdown's marks (two lines are drawn).
+    const quoteWords = (message: RoomMessage): string => {
+      const text = message.member_id === null ? message.text : plainReplies(replyMessages(message.text)).join("\n");
+      return text.replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1").replace(/[*_`#>~|]+/g, "").replace(/\s+/g, " ").trim().slice(0, 200);
+    };
+    const replyQuoteHTML = (source: RoomMessage["reply_reference"]): string => {
+      if (!source) return "";
+      if (source.unavailable) return `<span class="message-quote room-quote is-missing"><span class="quote-text">${esc(t("rooms.sourceMissing"))}</span></span>`;
+      const author = source.author_kind === "owner" ? t("rooms.owner") : person(source.author_member_id ?? null)?.name ?? t("rooms.sourceMissing");
+      const original = messages.find(item => item.id === source.message_id);
+      const words = original ? quoteWords(original) : "";
+      return `<button type="button" class="message-quote room-quote" data-room-act="jump-reply" data-message="${source.message_id}" aria-label="${esc(t("rooms.replyTo", { p0: author }) + (words ? `: ${words}` : ""))}">` +
+        `<span class="quote-author">${esc(author)}</span>${words ? `<span class="quote-text">${esc(words)}</span>` : ""}</button>`;
+    };
+    /** A quote opens a reply's first bubble; a reply that opens with a card carries it just above. */
+    const quoted = (html: string, quote: string): string => {
+      const opening = '<div class="ans"><div class="message-text">';
+      return !quote ? html : html.startsWith(opening) ? `<div class="ans">${quote}<div class="message-text">${html.slice(opening.length)}` : quote + html;
+    };
     const presentation = JSON.stringify([getLocale(), list.members.map(member => [member.id, member.name, member.avatar])]);
     const entryKey = (entry: typeof entries[number]): string => "message" in entry ? `message:${entry.message.id}` : "task" in entry ? `task:${entry.task.task_id ?? entry.task.work_turn_id}` : `intent:${entry.intent.id}`;
     const mounted = roomWindow.select(entries, entryKey, follows && !finder.isOpen());
@@ -436,7 +455,8 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
       turnId: "message" in entry ? entry.message.id : undefined,
       html: renderedMessages.line("message" in entry ? `message:${entry.message.id}` : "task" in entry ? `task:${entry.task.task_id ?? entry.task.work_turn_id}` : `intent:${entry.intent.id}`,
         "task" in entry ? tasks : entry, [presentation, addressable, "message" in entry && expandedMessages.has(entry.message.id),
-          "message" in entry && entry.message.status === "running" ? person(entry.message.member_id)?.activity_label : ""], () => {
+          "message" in entry && entry.message.status === "running" ? person(entry.message.member_id)?.activity_label : "",
+          "message" in entry ? replyQuoteHTML(entry.message.reply_reference) : ""], () => {
       if("intent" in entry){
         const intent=entry.intent,name=person(intent.recipient_id)?.name??intent.recipient_name;
         return `<li class="tn room-intent-blocked" role="status">${eventLineHTML(t("rooms.intentBlocked",{p0:NAME,p1:t(BLOCKED[intent.reason as keyof typeof BLOCKED]??"rooms.blockedWorker")}),faceOf(intent.recipient_id,name),name)}</li>`;
@@ -452,12 +472,14 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
       }
       const member=person(m.member_id),owner=m.member_id===null,parts=owner?[m.text]:plainReplies(replyMessages(m.text)).map(text=>composioText(text,composioAction(m.turn))),words=parts.join("\n\n")||(owner?"":t(m.status==="error"?"auto.error":"auto.running"));
       const source=m.reply_reference;
-      const reply=source?`<${source.unavailable ? 'span' : `button type="button" data-room-act="jump-reply" data-message="${source.message_id}"`} class="au-room-reply">${esc(source.unavailable?t("rooms.sourceMissing"):t("rooms.replyTo",{p0:source.author_kind==="owner"?t("rooms.owner"):person(source.author_member_id??null)?.name??t("rooms.sourceMissing")}))}</${source.unavailable ? 'span' : 'button'}>`:"";
+      // Whom a message answers is quoted at the top of its bubble, as a quote is in a private conversation: the author's name over
+      // the first lines of the message it answers, which a press jumps to.
+      const reply=replyQuoteHTML(source);
       const actions= messageActionsHTML(m.created, false, undefined, false).replace('</div>',reactionControlHTML() + iconButton("chat", t("rooms.thread"), ` data-room-act="thread" data-message="${m.id}"`).replace(" title=", " data-tooltip=") + (!owner?iconButton("reply",t("rooms.reply"),` data-room-act="reply" data-message="${m.id}"`).replace(" title="," data-tooltip="):"")+"</div>");
       const reactions = reactionRowHTML(m.reactions);
       const metadata = (m.reply_count ? `<button type="button" class="btn sm room-thread-chip" data-room-act="thread" data-message="${m.id}">${esc(t("rooms.threadCount", { p0: m.reply_count }))}</button>` : "");
       const preview = ` data-expandable="true"`, expanded = expandedMessages.has(m.id) ? " is-expanded" : "";
-      return `<li class="tn au-room-message${m.kind==="wrapup"?" au-room-wrapup":""}" data-room-message="${m.id}">${owner?`<div class="me">${ownerFaceHTML()}<div class="chat-message owner-message${expanded}"${preview}>${reply}${filesHTML(m.attachments)}${words?`<div class="bubble"><div class="message-text">${messageHTML(words, "", false, addressable)}</div>${messageExpandHTML(words, expandedMessages.has(m.id))}</div>`:""}${reactions}${actions}${metadata}</div></div>`:`${reply?`<div class="au-room-meta">${reply}</div>`:""}<div class="ra"><span class="ra-face"${member?` data-tooltip="${esc(member.name)}"`:""}>${member?faceHTML(member,30):""}</span><div class="ra-body"><b class="au-room-author">${esc(member?.name??t("members.title"))}</b>${(parts.some(part=>part.trim())?parts:[words]).map((part,index)=>`<div class="chat-message" data-room-part="${index}">${replyContentHTML(part,"",m.status==="running")}${index===parts.length-1?reactions+actions+metadata:""}</div>`).join("")}${m.turn ? conversationCardsHTML(m.turn, m.member_id ? member?.name : t("agent.title")) : ""}</div></div>`}</li>`;
+      return `<li class="tn au-room-message${m.kind==="wrapup"?" au-room-wrapup":""}" data-room-message="${m.id}">${owner?`<div class="me">${ownerFaceHTML()}<div class="chat-message owner-message${expanded}"${preview}>${words?"":reply}${filesHTML(m.attachments)}${words?`<div class="bubble">${reply}<div class="message-text">${messageHTML(words, "", false, addressable)}</div>${messageExpandHTML(words, expandedMessages.has(m.id))}</div>`:""}${reactions}${actions}${metadata}</div></div>`:`<div class="ra"><span class="ra-face"${member?` data-tooltip="${esc(member.name)}"`:""}>${member?faceHTML(member,30):""}</span><div class="ra-body"><b class="au-room-author">${esc(member?.name??t("members.title"))}</b>${(parts.some(part=>part.trim())?parts:[words]).map((part,index)=>`<div class="chat-message" data-room-part="${index}">${index===0?quoted(replyContentHTML(part,"",m.status==="running"),reply):replyContentHTML(part,"",m.status==="running")}${index===parts.length-1?reactions+actions+metadata:""}</div>`).join("")}${m.turn ? conversationCardsHTML(m.turn, m.member_id ? member?.name : t("agent.title")) : ""}</div></div>`}</li>`;
     }), })).filter(line => line.html) : [{ key: "empty", html: `<li class="au-empty">${esc(t("rooms.empty"))}</li>`, turnId: undefined }];
     renderedMessages.retain(new Set(grouped.map(({entry}) => entryKey(entry))));
     const changed = patchThread(thread, wanted, drawn, {
