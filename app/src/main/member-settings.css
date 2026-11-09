@@ -26,8 +26,9 @@
 .ms-cover[data-pattern="plain"] { background: color-mix(in srgb, var(--ms-tint) 24%, var(--content)); }
 .ms-cover[data-pattern="image"] { background: var(--panel); }
 .ms-cover-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
-/* Its one control, a soft round icon at its lower right (Grok Bot's edge buttons), away from the face on the left. */
-.ms-cover-btn { position: absolute; right: var(--sp-4); bottom: var(--sp-3); border-radius: var(--r-pill); background: color-mix(in srgb, var(--content) 72%, transparent); color: var(--text); }
+/* Its one control, a soft round icon at its lower right (Grok Bot's edge buttons), away from the face on the left. Its
+   round surface outranks the bare icon button's, so it reads on any picture in either theme. */
+.ms-cover > .btn.icon.ms-cover-btn { position: absolute; right: var(--sp-4); bottom: var(--sp-3); border-radius: var(--r-pill); background: color-mix(in srgb, var(--content) 72%, transparent); color: var(--text); }
 .ms-pane:not([data-view="main"]) .ms-cover, .ms-pane:not([data-view="main"]) .ms-id { display: none; }
 /* The cover's menu: its patterns as small covers in a row, then a picture from this PC. */
 .ms-swatches { display: grid; grid-template-columns: repeat(5, 52px); gap: var(--sp-2); padding: var(--sp-1) var(--sp-1) var(--sp-2); }

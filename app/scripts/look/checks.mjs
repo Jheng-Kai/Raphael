@@ -5721,6 +5721,9 @@ export function checkRendered(name, context = {}) {
       const loose = [...document.images].filter(image => getComputedStyle(image).getPropertyValue("-webkit-user-drag") !== "none");
       require(loose.length === 0, `no picture on the page can be dragged (${loose.map(image => image.className || image.src.slice(0, 40)).join(", ")})`);
       require(visible(face) && face.getBoundingClientRect().bottom > edge.bottom + 8, "the face still crosses the cover's lower edge");
+      // Its round icon keeps its own soft surface on the picture, so it reads on a dark photo in the light theme too.
+      const change = cover.querySelector('[data-ms="cover"]'), surface = getComputedStyle(change).backgroundColor;
+      require(visible(change) && !/^(transparent|rgba\(0, 0, 0, 0\))$/.test(surface), `the cover's icon has its round surface on the picture (${surface})`);
       return { check: name };
     }
     if (name === "member-settings-cover") {
