@@ -214,7 +214,6 @@ export const ja = {
   "composio.resultUnavailable": "結果の詳細を表示できません",
   "composio.moreResults": "ほか {p0} 件の結果",
   "chat.newMessages": "新着",
-  "work.inspect": "過程を見る",
   "work.thinking": "考えています",
   "work.thought": "依頼を検討しました",
   "work.command": "コマンドを実行しました",

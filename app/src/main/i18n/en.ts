@@ -214,7 +214,6 @@ export const en = {
   "composio.resultUnavailable": "Result details unavailable",
   "composio.moreResults": "{p0} more results",
   "chat.newMessages": "New",
-  "work.inspect": "View process",
   "work.thinking": "Thinking",
   "work.thought": "Considered the request",
   "work.command": "Ran a command",

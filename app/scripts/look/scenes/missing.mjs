@@ -6,7 +6,8 @@ const turn = {id: 502, session_id: "look-missing", member_id: 1, conversation_id
   detail: null, status: "error", cost_usd: 0, model: "openai/gpt-6-luna", attachments: [],
   messages: [{seq: 1, kind: "reply", text: "搜尋尚未完成，請先補齊服務設定。", at_ms: 1792807160000}],
   steps: [{kind: "tool", tool: "web_search", server: "Raphael", outcome: "error", reason: "not_configured", detail: "searxng", ms: 20, at_ms: 1792807155000, missing: prerequisite}]};
-const search = [member(1), click('.page-agent:not([hidden]) [data-act="thinking"]'), wait('.work-section .missing-note')];
+// What a step was missing stands in sight with its repair: the work it was part of is never opened (owner, 2026-11-10).
+const search = [member(1), wait('.page-agent:not([hidden]) .turn-prerequisites .missing-note')];
 const voice = {action: "main-event", event: {type: "SetupMissing", missing: {resource: "fish", requirement: "setup", state: "missing", repair: "voice"}}};
 const cause = (reason, detail, missing, outcome = "error") => ({...turn, steps: [{kind: missing.requirement === "provider" ? "model" : "tool", tool: missing.resource === "openrouter" ? "provider" : "read_attachment", server: "Raphael", reason, detail, outcome, missing, ms: 20}]});
 const provider = {resource: "openrouter", requirement: "provider", state: "broken", repair: "models"};

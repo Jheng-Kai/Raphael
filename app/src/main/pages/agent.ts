@@ -1760,18 +1760,6 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     rememberLine(button);
   }
 
-  function toggleThinking(button: HTMLElement): void {
-    const box = button.closest<HTMLElement>(".tn")?.querySelector<HTMLElement>(".think-box");
-    const body = box?.querySelector<HTMLElement>(".think-body");
-    if (!box || !body) return;
-    const id = Number(box.dataset.thinkingTurn ?? button.closest<HTMLElement>(".tn")?.dataset.id);
-    const next = Boolean(body.hidden);
-    body.hidden = !next;
-    box.classList.toggle("is-open", next);
-    button.closest(".tn")?.querySelectorAll('[data-act="thinking"]').forEach(control => control.setAttribute("aria-expanded", String(next)));
-    if (!Number.isNaN(id)) state.thinkingOpen.set(id, next);
-    rememberLine(button);
-  }
 
   function togglePdfExpand(button: HTMLElement): void {
     const card = button.closest<HTMLElement>(".media-pdf");
@@ -1857,11 +1845,10 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     if (!source && !pending) return;
     const owner = !source || source.key === "question";
     const message = control.closest<HTMLElement>(".chat-message");
-    const work = message?.querySelector<HTMLElement>('[data-act="thinking"]');
     const items: Parameters<typeof openActions>[1][number][] = [];
     if (source) items.push({ id: "reply", label: t("chat.reply"), icon: "reply" });
     items.push({ id: "copy", label: t("chat.copy"), icon: "copy" });
-    if (work) items.push({ id: "work", label: work.getAttribute("aria-label") ?? t("work.inspect"), icon: "steps" });
+    // No 「查看過程」: how a reply was worked out is not shown (owner, 2026-11-10: 「不用有查看過程」).
     // A greeting that came through stays: only a failed one is written again (its rerun button), never a second.
     if (source && !owner && control.dataset.regenerate === "true" && look().regenerateTurnId === source.turn.id && source.turn.route !== "greeting") items.push({ id: "regenerate", label: t("chat.regenerate"), icon: "refresh" });
     const ownerAct = pending ? "cancel" : control.dataset.ownerAct;
@@ -1871,7 +1858,6 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     openActions(control, items, pick => {
       if (pick === "regenerate") void regenerate(control);
       else if (pick === "reply") replyMessage(control);
-      else if (pick === "work" && work) toggleThinking(work);
       else if (pick === "edit") void editMessage(control);
       else if (pick === "cancel") void cancelMessage(control);
       else void copyMessage(message?.querySelector<HTMLElement>('[data-act="copy-message"]') ?? control);
@@ -2230,9 +2216,6 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
         break;
       case "detail":
         toggleDetail(act);
-        break;
-      case "thinking":
-        toggleThinking(act);
         break;
       case "open-url": {
         e.preventDefault();

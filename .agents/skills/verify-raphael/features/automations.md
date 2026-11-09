@@ -11,7 +11,7 @@ member's conversation with the owner's words for it in the composer (`auto.askRo
 window. The member panel has no plus; a routine row keeps its own switch, inside the row's one lit surface.
 
 ```powershell
-npm run look -- automations-detail-routine details-routine-view details-routine-hover automation-drag-asks routine-sentence event-routine-opens context-menu-routine panel-routine-row --theme both --width 1120,720,1920x1080
+npm run look -- automations-detail-routine details-routine-view details-routine-hover automation-drag-asks routine-sentence context-menu-routine panel-routine-row --theme both --width 1120,720,1920x1080
 ```
 
 `routine-view` checks the dialog holds nothing to change; `routine-asked` that the dropped member's composer holds

@@ -242,7 +242,6 @@ export const th = {
   "composio.resultUnavailable": "ไม่มีรายละเอียดผลลัพธ์",
   "composio.moreResults": "อีก {p0} ผลลัพธ์",
   "chat.newMessages": "ใหม่",
-  "work.inspect": "ดูกระบวนการ",
   "work.thinking": "กำลังคิด",
   "work.thought": "พิจารณาคำขอแล้ว",
   "work.command": "เรียกใช้คำสั่งแล้ว",

@@ -242,7 +242,6 @@ export const id = {
   "composio.resultUnavailable": "Detail hasil tidak tersedia",
   "composio.moreResults": "{p0} hasil lainnya",
   "chat.newMessages": "Baru",
-  "work.inspect": "Lihat proses",
   "work.thinking": "Berpikir",
   "work.thought": "Permintaan dipertimbangkan",
   "work.command": "Perintah dijalankan",

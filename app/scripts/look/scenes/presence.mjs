@@ -1,7 +1,6 @@
 import { scene, member, room, wait, hover, click, stableClick, check, type, drag } from "./steps.mjs";
 
 const conversation = (name, description, variant = "clean", extra = []) => ({ ...scene(name, description, [member(1), wait('.tn[data-id="651"]'),
-  ...(["event-routine-opens", "event-calendar-opens", "event-lines-collapse"].includes(name) ? [hover('[data-id="651"] .message-work'), click('[data-id="651"] .message-work'), wait('[data-id="651"] .work-body:not([hidden])')] : []),
   ...extra, check(name)], { presence: variant }), motion: extra.some(step => step.action === "event-storm" && step.roster) });
 export default [
   scene("presence-states-sidebar", "Distinct silhouettes in the shared sidebar", [{action: "member-column", collapsed: false}, check("presence-states-sidebar")], {presence: "states"}),
@@ -12,20 +11,14 @@ export default [
   conversation("presence-waiting-colleague", "Dependency waiting has lidded eyes rather than an attention mark", "colleague"),
   conversation("transcript-clean", "Private bubbles leave room for the words"),
   conversation("transcript-working", "The live avatar and one line follow public progress", "working", [hover('.live-presence')]),
-  conversation("transcript-hover-detail", "Work and model receipt open from message hover", "detail", [hover('[data-id="651"] [data-reply]'), click('[data-id="651"] .message-work')]),
   conversation("transcript-action-long", "One long action truncates with its full words on hover", "action-long", [hover('.live-presence')]),
-  conversation("transcript-action-list", "Completed work is a quiet list of sentences", "actions", [hover('[data-id="651"] [data-reply]'), click('[data-id="651"] .message-work')]),
-  conversation("transcript-old-list", "Old turns retain readable work and failure reasons", "old-actions", [hover('[data-id="651"] [data-reply]'), click('[data-id="651"] .message-work')]),
   scene("group-live-line", "A group action sits below its working member", [room(1),wait('.au-room-thinking .live-action'),hover('.au-room-thinking .live-presence'),check("group-live-line")], {presence:"action-group"}),
   conversation("transcript-time-gap", "Hour gaps within one day add no separator", "gap"),
   conversation("event-routine-line", "A routine receipt stays in collapsed reply detail", "events"),
   conversation("event-routine-find", "Conversation find visits the receipt title without exposing transport metadata", "events", [click('.mb-chat:not([hidden]) [data-act="search"]'), type('.mb-chat:not([hidden]) .ra-find-input', 'Sample briefing'), wait('[data-id="651"] .event-line mark')]),
   conversation("event-routine-find-group", "Find reveals a selected receipt inside its collapsed group and keeps it through refresh", "collapse", [click('.mb-chat:not([hidden]) [data-act="search"]'), type('.mb-chat:not([hidden]) .ra-find-input', 'Sample briefing'), wait('[data-event-group][open] .handoff-detail mark.is-current'), {action: "event-storm", selector: ".mb-chat:not([hidden]) .ra-scroll", roster: true, wheelBy: 0, measure: {name: "event-find-presence", enforce: false}, limits: {replacedFaces: 0, longTaskMs: 600}}]),
   conversation("event-routine-spacing", "Receipts add no vertical gaps between replies or media cards", "spacing"),
-  conversation("event-routine-opens", "The receipt opens the routine it names, to read", "events", [click('[data-id="651"] [data-act="open-routine"]'), wait('.rv-dialog')]),
   conversation("event-calendar-line", "A calendar receipt keeps the event name and date", "calendar"),
-  conversation("event-calendar-opens", "A calendar receipt opens that event's detail", "calendar", [click('[data-id="651"] [data-act="open-calendar-event"]'), wait('.au-pop-detail')]),
-  conversation("event-lines-collapse", "Consecutive routine receipts fold and keep their disclosure", "collapse", [click('[data-event-group] > summary'), {action: "event-storm", selector: ".mb-chat:not([hidden]) .ra-scroll", roster: true, wheelBy: 0, measure: {name: "event-presence", enforce: false}, limits: {replacedFaces: 0, longTaskMs: 600}}]),
   scene("sidebar-row-time", "A row shows the name and one line with no time, and its overflow appears under the pointer", [{action: "member-column", collapsed: false}, hover('[data-member="1"]'), check("sidebar-row-time")], {presence: "clean"}),
   scene("sidebar-group-author", "The group preview names its author", [{action: "member-column", collapsed: false}, check("sidebar-group-author")], {presence: "clean"}),
 ];

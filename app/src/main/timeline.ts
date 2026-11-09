@@ -639,7 +639,7 @@ function messageBlockHTML(turn: AgentTurn, key: string, text: string, time: numb
     (reply ? replyContentHTML(text, query, turn.status === "running") : `<div class="ans progress"><div class="message-text">${messageHTML(text, query)}</div></div>`) +
     (reply && last ? usageActionHTML(turn) : "") +
     // Its links are chips in its words, with no row of cards under it (owner, 2026-11-08; link-previews.ts).
-    reactionRowHTML(turn.reactions?.[key]) + messageActionsHTML(time, regenerate, undefined, reply, reply ? workActionHTML(turn, state) + retry : "") + `</div>`;
+    reactionRowHTML(turn.reactions?.[key]) + messageActionsHTML(time, regenerate, undefined, reply, reply ? retry : "") + `</div>`;
 }
 
 /** The plans whose usage page the app knows: ChatGPT's, which Codex signs in with too. */
@@ -659,14 +659,6 @@ function rerunActionHTML(turn: AgentTurn, state: TimelineState, regenerate: bool
   return turn.status === "error" && regenerate ? rerun(' data-act="regenerate"') : "";
 }
 
-function workActionHTML(turn: AgentTurn, state: TimelineState): string {
-  if (turn.status === "running" || isLive(turn.task)) return "";
-  if (!(shownSteps(turn).length || workActions(turn).length || turn.messages?.some(m => m.kind !== "reply" && m.kind !== "media") || hasDetail(turn) || turn.model)) return "";
-  const end = turn.task?.finished_at_ms ?? Math.max(turn.created_at_ms, ...(turn.messages ?? []).filter(message => message.kind === "reply").map(message => message.at_ms), ...(turn.steps ?? []).map(step => step.at_ms || turn.created_at_ms));
-  const label = t("work.inspect") + ` · ${formatDuration(Math.max(0, end - turn.created_at_ms))}`;
-  // Out of sight: the ⋯ menu offers the work and presses this control, which keeps the open state for assistive tech.
-  return btn(ico("steps"), "sm icon message-work", ` data-act="thinking" aria-expanded="${state.thinkingOpen.get(turn.id) ?? false}" aria-controls="work-${turn.id}" aria-label="${esc(label)}" data-tooltip="${esc(label)}" hidden`);
-}
 
 export function livePresenceHTML(look: TurnLook, progress?: string, showAction = true): string {
   const face = look.liveFace?.() ?? look.face(true);
@@ -803,15 +795,22 @@ function workSectionHTML(turn: AgentTurn, state: TimelineState, query: string, r
   const actions = workActions(turn).filter(action => action.state === "done").map(action => ({ ...action, past: composioText(action.past, composioAction(turn)) }));
   const steps = shownSteps(turn).filter(step => step.kind !== "model");
   const rows = actions.length ? actions.map(action => `<li>${esc(action.past)}${action.outcome && action.outcome !== "ok" ? ` · ${esc(reasonText({kind:"tool", tool:"", server:null, ms:0, at_ms:0, outcome:action.outcome, reason:action.reason ?? null}))}` : ""}</li>`).join("") : steps.length ? steps.map(step => `<li>${esc(pastStep(step))}${!step.missing && step.outcome !== "ok" ? ` · ${esc(reasonText(step))}` : ""}</li>`).join("") : messages.map(message => `<li class="work-progress">${messageHTML(message.text, query)}</li>`).join("");
-  // A prerequisite the reply already states is said once, in the reply.
-  const stated = new Set((turn.messages ?? []).filter(m => m.kind === "media").map(m => missingKey(m.text)).filter(Boolean));
-  const prerequisites = shownSteps(turn).map(step => step.missing && !stated.has(`${step.missing.resource}:${step.missing.requirement}`) ? missingHTML(step.missing) : "").join("");
   const meta = [esc(answerMeta(turn)), ...shownSteps(turn).map(mediaBillHTML)].filter(Boolean).join(" · ");
   const detail = hasDetail(turn) && (!turn.messages?.length || turn.status === "error" || turn.task?.state === "failed");
-  const body = (rows ? `<ol class="work-sentences">${rows}</ol>` : "") + events + prerequisites + (detail ? `<pre class="failure-detail">${highlightHTML(turn.detail, query)}</pre>` : "") + (meta ? `<p class="work-meta">${meta}</p>` : "");
-  if (!body) return "";
-  return `<div class="work-section think-box${open ? " is-open" : ""}" data-thinking-turn="${turn.id}">` +
+  const body = (rows ? `<ol class="work-sentences">${rows}</ol>` : "") + events + (detail ? `<pre class="failure-detail">${highlightHTML(turn.detail, query)}</pre>` : "") + (meta ? `<p class="work-meta">${meta}</p>` : "");
+  // The work itself is never shown (owner, 2026-11-10: 「不用有查看過程」): what a step was missing stands in sight with its
+  // repair, and the closed body stays only for a search that finds words in it.
+  const prerequisites = prerequisitesHTML(turn);
+  if (!body) return prerequisites;
+  return prerequisites + `<div class="work-section think-box${open ? " is-open" : ""}" data-thinking-turn="${turn.id}">` +
     `<div class="work-body think-body" id="work-${turn.id}"${open ? "" : " hidden"}>${body}</div></div>`;
+}
+
+/** What a step of the turn was missing, each with its one repair, unless the reply already states it (then it is said once). */
+function prerequisitesHTML(turn: AgentTurn): string {
+  const stated = new Set((turn.messages ?? []).filter(m => m.kind === "media").map(m => missingKey(m.text)).filter(Boolean));
+  const notes = shownSteps(turn).map(step => step.missing && !stated.has(`${step.missing.resource}:${step.missing.requirement}`) ? missingHTML(step.missing) : "").join("");
+  return notes ? `<div class="turn-prerequisites">${notes}</div>` : "";
 }
 
 /** An inline media card (`link`, `image`, `video`, or `pdf`) with a safe `在網站開啟` action button. */

@@ -86,6 +86,11 @@
 /* The turn a search or a report opened is only brought to the middle of the view: `.is-search-target` marks it for
    the code and draws nothing, no tint and no ring (owner, 2026-11-09: 「跳轉的時候…不用有亮光」). */
 .work-section { margin: var(--sp-1) 0 var(--sp-2); }
+/* What a step was missing stands in sight under the reply with its repair; the work itself is never shown (2026-11-10). */
+.turn-prerequisites { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); max-width: var(--layout-reading-max); margin: var(--sp-2) 0; }
+/* The repair button follows its sentence instead of standing at the far edge of the reading width. */
+.turn-prerequisites > .missing-note { margin: 0; }
+:is(.turn-prerequisites, .chat-message) > .missing-note > span { flex: 0 1 auto; text-wrap: pretty; }
 /* Work is a muted one-line state above the answer, not a framed control. */
 .page-agent .btn.work-toggle { display: inline-flex; justify-self: start; align-items: center; gap: var(--sp-1); min-height: 0; max-width: 100%; padding: 2px 0; border-color: transparent; border-radius: var(--r-sm); background: transparent; font-size: var(--fs-xs); color: var(--text-3); }
 .page-agent .btn.work-toggle:hover:not(:disabled) { border-color: transparent; background: transparent; color: var(--text-2); }

@@ -853,7 +853,7 @@ export function checkRendered(name, context = {}) {
     require(row.querySelector('.av').getBoundingClientRect().width === 28, 'the group shares the 28px live face');
     return {check:name};
   }
-  if (name.startsWith("presence-") || name.startsWith("transcript-") || name.startsWith("event-routine-") || name.startsWith("event-calendar-") || name === "event-lines-collapse" || name === "sidebar-row-time" || name === "sidebar-group-author") {
+  if (name.startsWith("presence-") || name.startsWith("transcript-") || name.startsWith("event-routine-") || name.startsWith("event-calendar-") || name === "sidebar-row-time" || name === "sidebar-group-author") {
     const turn = document.querySelector('[data-id="651"]');
     if (name.startsWith("transcript-")) {
       require(!turn.querySelector('.ra-face, .me > .owner-face'), "private bubbles have no faces");
@@ -889,25 +889,12 @@ export function checkRendered(name, context = {}) {
       require(!turn.querySelector('.think, .work-time, .work-latest'), "no text dots or ticking line");
       require(live.dataset.tooltip === window.__look.data.presenceSample.progress, "public progress is the hover");
     }
-    if (name === "transcript-hover-detail") {
-      require(visible(turn.querySelector('.work-body')) && turn.querySelector('.work-body').textContent.includes("sample"), "hover action opens the same work detail");
-      const controls = [...turn.querySelectorAll('.message-work')];
-      require(controls.length === 2 && controls.every(control => control.getAttribute('aria-expanded') === 'true'), "both reply controls reflect the same expanded work detail");
-    }
     if (name === "transcript-action-long") {
       const line = turn.querySelector('.live-action'), live = line.closest('.live-presence');
       require(visible(line) && getComputedStyle(line).whiteSpace === 'nowrap' && getComputedStyle(line).textOverflow === 'ellipsis', 'one action stays on one line');
       require(live.dataset.tooltip === line.textContent && line.textContent.startsWith('正在搜尋範例'), 'hover keeps the whole action');
       if (innerWidth <= 720) require(line.scrollWidth > line.clientWidth, 'a long line really ellipsizes at 720px');
       require(!turn.querySelector('.work-time, .work-latest, .think'), 'the action has no timer or text dots');
-    }
-    if (["transcript-action-list", "transcript-old-list"].includes(name)) {
-      const body = turn.querySelector('.work-body');
-      require(visible(body) && body.querySelectorAll('.work-sentences > li').length >= 2, 'the icon opens past action sentences');
-      require(!body.querySelector('.step-mark, .step-ms'), 'rows have no ticks or per-row duration');
-      require(!/local|NOTION_|COMPOSIO_/.test(body.textContent), 'old and new turns hide tool identifiers');
-      require([...turn.querySelectorAll('.message-work')].every(button=>button.textContent === '' && button.dataset.tooltip.startsWith('查看過程')), 'process controls match adjacent icon buttons');
-      require(body.lastElementChild.classList.contains('work-meta'), 'model and cost stay at the bottom');
     }
     if (name === "transcript-time-gap") require([...turn.parentElement.children].filter(line => line.classList.contains('day')).length === 1, "hour gaps within one day have one date separator");
     if (name === "event-routine-line") {
@@ -918,19 +905,12 @@ export function checkRendered(name, context = {}) {
       require(!turn.querySelector('.ra-body > .timeline-event,.ra-body > .event-group'), 'receipts add no rows between replies and cards');
       require(turn.querySelector('.work-body[hidden] .timeline-event'), 'the full receipt remains available in collapsed detail');
     }
-    if (name === "event-routine-opens") require(visible(document.querySelector('.rv-dialog')) && document.querySelector('.rv-dialog h2')?.textContent === window.__look.data.presenceSample.routine, "the named routine opens to read");
     if (name === "event-routine-find") {
       require(turn.querySelector('.event-line mark')?.textContent === window.__look.data.presenceSample.routine, "find marks the public receipt title");
       require(!turn.textContent.includes('"type"') && !turn.textContent.includes('"created"'), "transport metadata stays out of thread selection");
     }
     if (name === "event-routine-find-group") require(turn.querySelector('[data-event-group]')?.open && visible(turn.querySelector('.handoff-detail mark.is-current')), "the selected receipt is visible in the retained open group");
     if (name === "event-calendar-line") require(turn.querySelector('.work-body[hidden] [data-act="open-calendar-event"][data-event="1"][data-date="2026-10-24"]'), "the collapsed calendar receipt keeps its inspection target");
-    if (name === "event-calendar-opens") require(visible(document.querySelector('.au-pop-detail')) && document.querySelector('.au-pop-detail h2')?.textContent === window.__look.data.presenceSample.calendar, "the named calendar event detail opens");
-    if (name === "event-lines-collapse") {
-      const group = turn.querySelector('[data-event-group]');
-      require(group?.open && turn.querySelectorAll('[data-event-group] [data-routine="2"]').length === 3, "every receipt stays in the open group");
-      require(visible(group.closest('.work-body')) && !turn.querySelector('.ra-body > .event-group'), 'the opened receipt group stays in reply detail without adding a transcript row');
-    }
     if (name === "sidebar-row-time") {
       const row = document.querySelector('.side [data-member="1"]');
       require(!row.querySelector('.mb-row-t i') && !row.querySelector('time'), "the name and one line, without a role pill or a time, as Grok Bot's rows");
@@ -1506,12 +1486,6 @@ export function checkRendered(name, context = {}) {
     require(!window.__look.calls.some(c => c.method === 'settings.set' && ['image_model','video_model'].includes(c.params.key)), 'viewing or repair never chooses a paid model');
     return {check:name};
   }
-  if (name === 'generated-media-bill') {
-    const step = document.querySelector('.work-meta');
-    require(visible(step) && /google\/gemini-image/.test(step.textContent) && /API 費用.*0.042/.test(step.textContent), 'the visible work step names the model and actual bill');
-    require(visible(step.querySelector('.step-detail')) && !document.querySelector('.work-sentences .step-why'), 'a successful drawing bill stays in the neutral footer');
-    return {check:name};
-  }
   if (name === 'generated-image' || name === 'generated-video') {
     const selector = name === 'generated-image' ? 'img[data-attachment]' : 'video[data-attachment]';
     const element = document.querySelector('.ra-body ' + selector);
@@ -1628,7 +1602,7 @@ export function checkRendered(name, context = {}) {
     return { check: name };
   }
   if (name.startsWith("missing-")) {
-    const noteScope = name === 'missing-vision' ? '#svc-dialog .missing-note' : name === 'missing-search' ? '.work-section .missing-note' : name === 'missing-voice' ? '.toast .missing-note' : '.missing-note';
+    const noteScope = name === 'missing-vision' ? '#svc-dialog .missing-note' : name === 'missing-search' ? '.turn-prerequisites .missing-note' : name === 'missing-voice' ? '.toast .missing-note' : '.missing-note';
     const note = [...document.querySelectorAll(noteScope)].find(visible);
     if (name === 'missing-onboarding-repair') {
       require(visible(document.querySelector('[data-act="rerun-guide"]')), 'repair reaches the existing Start tour action');
@@ -1660,7 +1634,7 @@ export function checkRendered(name, context = {}) {
     const thread = document.querySelector('.page-agent:not([hidden])');
     if (name === "generated-audio-missing") {
       require([...thread.querySelectorAll('[data-missing-repair="voice"]')].filter(visible).length === 1, "the missing voice service is said once with one repair");
-      require(visible(thread.querySelector('.work-body')) && !thread.querySelector('.work-body [data-missing-repair]'), "the opened work does not repeat the reply's repair");
+      require(!thread.querySelector('.turn-prerequisites [data-missing-repair="voice"]') && !thread.querySelector('[data-act="thinking"]'), "the repair the reply states is not repeated, and no work is offered to open");
     } else {
       require(visible(document.querySelector('#svc-key-fish')), "the repair reaches the voice service key");
       require(document.querySelector('[data-pane="tools"][aria-current="page"]'), "the voice repair opens the shared Tools pane");
@@ -3867,8 +3841,8 @@ export function checkRendered(name, context = {}) {
     const turn = document.querySelector('.tn[data-id="91"]');
     require(visible(turn) && turn.querySelector('.me')?.textContent.includes("明天早上要帶傘嗎"), "the Alt+Space question arrived in the open quick conversation");
     require(visible(turn.querySelector('.ra .chat-message[data-reply]')) && turn.querySelector('.ra .chat-message[data-reply]').textContent.includes("出門記得帶傘"), "its answer shows below its public step");
-    // The calm thread keeps the model in the reply's work detail, not in the work button's tooltip.
-    const meta = turn.querySelector('.work-meta')?.textContent ?? turn.querySelector('.message-work')?.dataset.tooltip ?? "";
+    // The model stays recorded in the reply's closed work detail (R-UI-120: the detail is never opened from the reply).
+    const meta = turn.querySelector('.work-meta')?.textContent ?? "";
     require(/luna/i.test(meta) && !/\bsol\b/i.test(meta), `the answer names the quick model that answered it: ${meta}`);
     require(document.querySelector('.conversation-trigger')?.textContent.includes("快速提問"), "the quick conversation stays open");
     require(!document.querySelector('.tn[data-id="1"]'), "formal history stays out of quick questions");
@@ -5976,28 +5950,6 @@ export function checkRendered(name, context = {}) {
       require(titleBox.bottom <= bounds.bottom + 1 && titleBox.height <= parseFloat(getComputedStyle(label).lineHeight) * 2 + 1, "two title lines fit inside the event");
     }
     return { check: name, chips: chips.length };
-  }
-  if (name === "task-ending-reasons") {
-    const turn = document.querySelector('.page-agent:not([hidden]) [data-status="cancelled"]');
-    const body = turn?.querySelector('.work-body:not([hidden])');
-    require(visible(body), "the cancelled turn can open its recorded work");
-    const words = body.textContent;
-    for (const reason of ["等待你在程式內核准", "這次記憶修改未符合記憶規則", "不允許讀取憑證儲存區", "這個網址尚未由你提供，也未出現在工具結果中"])
-      require(words.includes(reason), `the recorded refusal is explained: ${reason}`);
-    require(turn.textContent.includes("已核對兩個項目。") && turn.textContent.includes("7 次工具呼叫"), "the original answer and real count survive cancellation");
-    require(!turn.querySelector('.live-presence'), "cancelled history is terminal");
-    return { check: name, reasons: 4 };
-  }
-  if (name === "work-steps-own-words") {
-    // Old turns name actions in sentences, without reconstructing private arguments.
-    const body = document.querySelector('.page-agent:not([hidden]) .work-body');
-    const rows = [...body.querySelectorAll('.work-sentences li')].filter(visible);
-    const words = rows.map(row => row.textContent);
-    require(visible(body) && rows.length === 6 && words.filter(word=>word === '查看了 Notion').length === 2, `each old step remains readable: ${words.join("|")}`);
-    require(!words.some(word=>/^(讀取|修改)$|local/.test(word)), 'old steps never expose bare verbs or local');
-    require(!rows.some(row => row.textContent.includes("拉斐爾") || row.querySelector('[title*="拉斐爾"], [aria-label*="拉斐爾"]')), "no row or picture names Raphael");
-    require(!body.querySelector('.step-mark,.step-ms'), 'the list has no per-row ticks or milliseconds');
-    return { check: name, words };
   }
   if (name === "overlay-emblem-gold" || name === "overlay-emblem-angry") {
     // The rune band, sampled where the letters stand: gold for a report, red while he refuses (owner, 2026-11-07).

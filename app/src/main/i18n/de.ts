@@ -242,7 +242,6 @@ export const de = {
   "composio.resultUnavailable": "Ergebnisdetails nicht verfügbar",
   "composio.moreResults": "{p0} weitere Ergebnisse",
   "chat.newMessages": "Neu",
-  "work.inspect": "Ablauf anzeigen",
   "work.thinking": "Denkt nach",
   "work.thought": "Anfrage geprüft",
   "work.command": "Befehl ausgeführt",

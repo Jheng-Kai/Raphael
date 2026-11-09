@@ -242,7 +242,6 @@ export const tr = {
   "composio.resultUnavailable": "Sonuç ayrıntıları kullanılamıyor",
   "composio.moreResults": "{p0} sonuç daha",
   "chat.newMessages": "Yeni",
-  "work.inspect": "Süreci görüntüle",
   "work.thinking": "Düşünüyor",
   "work.thought": "İstek değerlendirildi",
   "work.command": "Komut çalıştırıldı",

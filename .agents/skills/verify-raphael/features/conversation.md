@@ -1,5 +1,12 @@
 # Conversation
 
+## No 查看過程 (owner, 2026-11-10)
+
+Owner: 「查看過程那個可以拿掉 不用有查看過程」. A reply offers no way to view how it was worked out: no work control,
+and no 查看過程 in its ⋯ menu. What a member said while working is progress, folded out of sight (dev/u-reply);
+the closed work body stays only so a search that finds words in it can open it. What a step was missing stands in
+sight under the reply with its one repair (`.turn-prerequisites`), unless the reply already states it (R-UI-120).
+Scenes: missing-search, missing-provider, generated-audio-missing.
 ## Finding by name forgives typos (owner, 2026-11-08, R-FIND-01)
 
 Every place that finds a thing by its name uses `app/src/main/find-match.ts`: the @ and / menus, the store and the
@@ -153,13 +160,8 @@ not establish native, subscription, provider or live recovery acceptance.
 Selected rendered verification (both themes, all three sizes):
 
 ```powershell
-npm run look -- calm-thread calm-thread-days handoff-group-room transcript-action-list thread-new-divider-short owner-question-asked event-routine-line event-routine-find-group event-calendar-opens routine-sentence-webhook centred-system-events --theme both --width 1120,720,1920x1080
+npm run look -- calm-thread calm-thread-days handoff-group-room thread-new-divider-short owner-question-asked event-routine-line event-routine-find-group routine-sentence-webhook centred-system-events --theme both --width 1120,720,1920x1080
 ```
-
-Also verify direct grouped-receipt disclosure with `event-lines-collapse` in the
-same theme/size matrix. Its opened group stays inside reply detail and retains
-every inspection target through roster refreshes; the obsolete 32px gap to the
-next bubble is no longer a contract. Review its look run with judge as well.
 
 calm-thread uses synthetic zh-TW words for the 07:00 failed routine and 08:00 owner
 retry. Its check counts one day heading, three messages and no other centred item,
@@ -301,15 +303,13 @@ three or more, and the share opening with process words, per brain family (Claud
 Selected matrix (both themes, 1120,720,1920x1080):
 
 ```powershell
-npm run look -- running running-motion transcript-working transcript-hover-detail transcript-clean generated-video-running busy-team-thread busy-team-typing busy-team-room presence-hover-action transcript-action-long group-live-line transcript-action-list transcript-old-list work-member-builtin room-thinking generated-image-bill --theme both --width 1120,720,1920x1080
+npm run look -- running running-motion transcript-working transcript-clean generated-video-running busy-team-thread busy-team-typing busy-team-room presence-hover-action transcript-action-long group-live-line room-thinking --theme both --width 1120,720,1920x1080
 ```
 
 `busy-team-typing` changes the live progress text during real keyboard input and
 requires zero replaced lines/faces/cards. Compare the shared live line in
-transcript-working and group-live-line, and steps buttons in transcript-action-list
-and transcript-old-list with adjacent reply/copy icons at the same size/theme.
-`work-steps-own-words`, `room-thinking` and `generated-media-bill` retain their old
-coverage with the new sentence/footer markup. Core privacy/path regressions live
+transcript-working and group-live-line at the same size/theme.
+`room-thinking` keeps its coverage. Core privacy/path regressions live
 in test_action_sentences.py, test_harness.py and background/test_service.py;
 work-line.test.ts covers precedence, text-only patches, escaping and detail.
 
@@ -342,7 +342,7 @@ npm run look -- dataset-table dataset-chart --theme both --width 1120,720,1920x1
 ```
 
 ```powershell
-npm run look -- media-models-unset media-models-set media-models-menu generated-image-bill generated-image generated-video generated-image-missing generated-video-missing generated-image-repair generated-video-repair generated-video-running generated-video-cancelled quick-model-menu generated-audio-member running generated-audio-missing --theme both --width 1120,720,1920x1080
+npm run look -- media-models-unset media-models-set media-models-menu generated-image generated-video generated-image-missing generated-video-missing generated-image-repair generated-video-repair generated-video-running generated-video-cancelled quick-model-menu generated-audio-member running generated-audio-missing --theme both --width 1120,720,1920x1080
 ```
 
 Inspect all sheets and full-size controls at both themes and all selected viewports.
@@ -372,7 +372,7 @@ starts, starts again in the same native thread when `find_tools` shows it more t
 the same tools on the API and the CLI path: core/tests/members/test_plugins_everywhere.py.
 A step of the app's own tools (server "Raphael") reads 「讀取」, 「修改」 or 「詢問同事」 and
 never names Raphael, on a member's turn or his; a connected service keeps its name
-(`work-member-builtin`).
+(timeline.test.ts; the work itself is no longer shown, R-UI-120).
 
 Conversation and routing fallback controls are absent from the UI. Only the chosen
 model is called; hidden legacy agent_fallbacks/router_fallbacks confer no consent.
@@ -493,7 +493,7 @@ The affected scene set includes every private-thread pending/live fixture and th
 pending/Stop result journeys; room speaking rows use a separate room contract.
 
 ```powershell
-npm run look -- composer-stop-pending composer-stop-pending-result work composer-stop-roster composer-stop-voice composer-stop-voice-result composer-stop-member composer-stop-navigation composer-stop-background composer-stop-background-result composer-task-stop running running-motion quick-stop quick-formal-isolation --theme both --width 1120,720,1920x1080
+npm run look -- composer-stop-pending composer-stop-pending-result composer-stop-roster composer-stop-voice composer-stop-voice-result composer-stop-member composer-stop-navigation composer-stop-background composer-stop-background-result composer-task-stop running running-motion quick-stop quick-formal-isolation --theme both --width 1120,720,1920x1080
 ```
 
 Compare full-size `composer-stop-pending` and `running-motion` images in every size and
@@ -521,7 +521,7 @@ turn in the middle of the view with no tint. Scenes: `chat`, `search-target`.
 npm run look -- composer-task-stop chat running running-motion empty details raphael-details details-closed --theme both --width 1120,720,1920x1080
 npm run look -- quick-conversation-list quick-conversation quick-question-result quick-formal-isolation quick-stop --theme both --width 1120,720,1920x1080
 npm run look -- live-scenario-owner-view --theme both --width 1120,720,1920x1080
-npm run look -- work work-member-builtin composer mode actions reply search search-target tooltip slash-commands --theme both --width 1120,720,1920x1080
+npm run look -- composer mode actions reply search search-target tooltip slash-commands --theme both --width 1120,720,1920x1080
 npm run look -- member-composer-empty member-text member-composer-hover conversation-notice --theme both --width 1120,720,1920x1080
 npm run look -- composer-learn member-composer-learn room-composer-learn --theme both --width 1120,720,1920x1080
 npm run look -- plain-bot-chat centred-system-events --theme both --width 1120,720,1920x1080
@@ -942,16 +942,13 @@ accepted owner input and execution records; effects are never replayed by the
 harness. Another overflow is terminal. New sessions with oversized input do not
 enter this retry path.
 
-Selected UI matrix: task-ending-chief, task-ending-member and work-member-builtin,
-both themes at 1120,720,1920x1080. Inspect the expanded reasons and preserved
-answer/count in both conversation consumers; compare their work lists at equal
-theme/width. Run npm run verify and the affected offline pytest suites. Native
+The expanded reasons are no longer shown (R-UI-120); the stored reasons and preserved
+answer/count are pytest and timeline.test.ts contracts.
+Run npm run verify and the affected offline pytest suites. Native
 history/Stop, real CLI continuation and live tool selection remain separate from
 fixture evidence; network and judge calls require the task's authorization.
 
-```powershell
-npm run look -- task-ending-chief task-ending-member work-member-builtin --theme both --width 1120,720,1920x1080
-```
+(Its scenes were retired with 「查看過程」 on 2026-11-10.)
 
 ## Failure diagnosis and continuation (2026-10-29)
 
@@ -1595,15 +1592,14 @@ npm run look -- owner-question-room owner-question-asked owner-question-typed ow
 R-UI-74/75/76/77 use the existing real entry, shared tooltip, timeline renderer,
 event-line.ts and thread-diff. New scenes: presence-states-sidebar,
 presence-hover-action, presence-blocked-stays, presence-waiting-colleague,
-transcript-clean, transcript-working, transcript-hover-detail, transcript-time-gap,
-event-routine-line, event-routine-opens, event-lines-collapse, sidebar-row-time,
+transcript-clean, transcript-working, transcript-time-gap,
+event-routine-line, sidebar-row-time,
 sidebar-group-author. Capture both themes at 1120,720,1920x1080.
 
 Affected consumers: busy-team-thread/up/steps/typing/follow/anchor/hover/room/home,
 composer-stop scenes, reply, conversation-running/midnight, handoff-group scenes,
 centred-system-events, representative room and Home scenes, search and polish-search
-scenes. Generated-image-bill opens work through .message-work, while work-dots and
-pending-work now assert one live avatar without a second waiting style or clock.
+scenes. Work-dots and pending-work assert one live avatar without a second waiting style or clock.
 Quick-question-result checks the same model receipt in message hover actions.
 
 Core contracts: tests/members/test_presence.py distinguishes queued, colleague and
@@ -1613,11 +1609,11 @@ receipts. MainEvent::MemberActivity forwards waiting/blocked and the public labe
 no RPC or migration is added. Historical plain-text events remain readable without
 invented inspection IDs.
 
-Additional calendar target journeys: event-calendar-line and event-calendar-opens
-verify the named event opens directly in its existing calendar detail.
+Additional calendar target journey: event-calendar-line keeps the receipt inside the
+closed work detail; the detail itself is no longer opened from a reply (R-UI-120).
 
 ```powershell
-npm run look -- presence-hover-action presence-sidebar-hover presence-rail-hover presence-blocked-stays presence-waiting-colleague transcript-clean transcript-working transcript-hover-detail transcript-time-gap event-routine-line event-routine-opens event-calendar-line event-calendar-opens event-lines-collapse sidebar-row-time sidebar-hidden-folder sidebar-group-author --theme both --width 1120,720,1920x1080
+npm run look -- presence-hover-action presence-sidebar-hover presence-rail-hover presence-blocked-stays presence-waiting-colleague transcript-clean transcript-working transcript-time-gap event-routine-line event-calendar-line sidebar-row-time sidebar-hidden-folder sidebar-group-author --theme both --width 1120,720,1920x1080
 ```
 
 The hidden members' folder (R-UI-112, `sidebar-hidden-folder`) starts closed at every start: `sidebar-hidden-folder-closed` requires it closed, inert and collapsed to its header, then the scene presses the header and the right click brings the member back. Its open state lives only in the session and is never stored.
@@ -1628,8 +1624,6 @@ Owner 2026-11-05 supersedes the notes-1 32px between-message event gaps: receipt
 npm run look -- event-routine-spacing --theme both --width 1120,720,1920x1080
 ```
 
-The multi-reply transcript-hover-detail fixture checks that all reply work controls
-share aria-expanded. agent-page.test.ts pins opening and closing from either reply.
 centred-system-events retains handoff receipt states; historical and meeting receipts now live in reply detail (owner, 2026-11-05).
 Private ordered event containers live inside collapsed reply detail (owner, 2026-11-05)
 while reply bubbles retain their reading-width limit.
@@ -1639,9 +1633,8 @@ Review regression coverage (R-UI-79): test_event_readers.py exercises both searc
 RPCs, repaired historical indexes, model context, voice and Telegram delivery;
 test_home.py covers Home and sidebar readers. presence-transcript.test.ts covers
 find, highlight, copy and rendered thread selection for all four receipt kinds;
-message-search.test.ts covers event-only result snippets. event-lines-collapse
-checks the receipt group inside reply work detail; receipts add no gap between bubbles (owner, 2026-11-05). Run it with
-event-routine-line, event-routine-spacing, event-calendar-line,
+message-search.test.ts covers event-only result snippets; receipts add no gap between
+bubbles (owner, 2026-11-05). Run event-routine-line, event-routine-spacing, event-calendar-line,
 centred-system-events, transcript-clean and the existing search scenes.
 
 ```powershell
@@ -1660,7 +1653,7 @@ npm run look -- event-routine-find-group --theme both --width 1120,720,1920x1080
 R-UI-85..91: fixed sidebar actions, newest window entry, group heading press, copy feedback, isolated drafts, long paste files and bare overlapping room identities. See README daily section for affected existing sidebar consumers and performance assertions.
 
 ```powershell
-npm run look -- daily-footer-hover daily-footer-marks daily-footer-home daily-press-feedback daily-press-surfaces daily-press-event daily-press-card daily-press-desktop daily-newest daily-folder-heading daily-copy-chief daily-copy-member daily-copy-room daily-draft-member daily-draft-room daily-paste-chief daily-paste-room daily-long-draft daily-faces-2-rail daily-faces-3-rail daily-faces-4-rail daily-faces-2 daily-faces-3 daily-faces-4 --theme both --width 1120,720,1920x1080
+npm run look -- daily-footer-hover daily-footer-marks daily-footer-home daily-press-feedback daily-press-surfaces daily-press-card daily-press-desktop daily-newest daily-folder-heading daily-copy-chief daily-copy-member daily-copy-room daily-draft-member daily-draft-room daily-paste-chief daily-paste-room daily-long-draft daily-faces-2-rail daily-faces-3-rail daily-faces-4-rail daily-faces-2 daily-faces-3 daily-faces-4 --theme both --width 1120,720,1920x1080
 ```
 
 Local unit authorization excludes judge, native, network and providers. Browser fixture evidence remains separate from native and design acceptance.

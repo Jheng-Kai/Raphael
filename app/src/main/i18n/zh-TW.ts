@@ -213,7 +213,6 @@ export const zhTW = {
   "composio.resultUnavailable": "無法顯示結果詳情",
   "composio.moreResults": "另有 {p0} 項結果",
   "chat.newMessages": "新訊息",
-  "work.inspect": "查看過程",
   "work.thinking": "正在思考",
   "work.thought": "思考了問題",
   "work.command": "執行了指令",

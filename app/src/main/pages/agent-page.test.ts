@@ -152,21 +152,18 @@ test("message link chips use the safe opener with the full target, and no row of
   agent.hide();
 });
 
-test("each reply control reflects the shared work detail expansion", async () => {
+// Owner, 2026-11-10: 「查看過程那個可以拿掉 不用有查看過程」.
+test("a reply offers no way to view its work: no control and no 查看過程 in its menu", async () => {
   api.agentHistoryList.mockResolvedValue({ turns: [turn(1, { messages: [
     { seq: 1, kind: "progress", text: "Checking the sample.", at_ms: 1 },
     { seq: 2, kind: "reply", text: "First sample reply.", at_ms: 2 },
     { seq: 3, kind: "reply", text: "Second sample reply.", at_ms: 3 },
   ] })] });
   const agent = mount(); await flush();
-  const buttons = [...document.querySelectorAll<HTMLButtonElement>('.tn[data-id="1"] .message-work')];
-  expect(buttons).toHaveLength(2);
-  buttons[0].click();
-  expect(document.querySelector<HTMLElement>('.tn[data-id="1"] .think-body')!.hidden).toBe(false);
-  expect(buttons.map(button => button.getAttribute("aria-expanded"))).toEqual(["true", "true"]);
-  buttons[1].click();
+  expect(document.querySelectorAll('.tn[data-id="1"] .message-work, .tn[data-id="1"] [data-act="thinking"]')).toHaveLength(0);
   expect(document.querySelector<HTMLElement>('.tn[data-id="1"] .think-body')!.hidden).toBe(true);
-  expect(buttons.map(button => button.getAttribute("aria-expanded"))).toEqual(["false", "false"]);
+  document.querySelector<HTMLElement>('.tn[data-id="1"] [data-act="more-message"]')!.click();
+  expect(document.querySelector("#app-popover")?.textContent ?? "").not.toContain("查看過程");
   agent.hide();
 });
 
@@ -467,16 +464,9 @@ describe("a continuous typed turn", () => {
     mount();
     await flush();
 
-    // Thinking block starts collapsed on a done turn, and expands on click
-    const thinkBtn = document.querySelector<HTMLButtonElement>('[data-act="thinking"]')!;
-    const thinkBody = document.querySelector<HTMLElement>(".think-body")!;
-    expect(thinkBtn.getAttribute("aria-expanded")).toBe("false");
-    expect(thinkBody.hidden).toBe(true);
-    thinkBtn.click();
-    expect(thinkBtn.getAttribute("aria-expanded")).toBe("true");
-    expect(thinkBody.hidden).toBe(false);
-    thinkBtn.click();
-    expect(thinkBody.hidden).toBe(true);
+    // The work of a done turn stays closed, with no control that opens it (owner, 2026-11-10).
+    expect(document.querySelector('[data-act="thinking"]')).toBeNull();
+    expect(document.querySelector<HTMLElement>(".think-body")!.hidden).toBe(true);
 
     // Clicking image opens in-app lightbox, Escape closes it
     document.querySelector<HTMLButtonElement>('[data-act="lightbox"]')!.click();

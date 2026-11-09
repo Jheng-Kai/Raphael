@@ -99,8 +99,7 @@ test("private bubbles have no faces and completed work opens from the message ho
   const root = dom(turnHTML(turn({ messages: [{seq: 1, kind: "progress", text: "Checking a sample", at_ms: time}], model: "sample/model", cost_usd: .001 }), emptyTimelineState(), false, look));
   expect(root.querySelector(".ra-face, .me > .owner-face, .me > .av")).toBeNull();
   expect(root.querySelector(".work-section > .work-toggle")).toBeNull();
-  expect(root.querySelector('.message-actions [data-act="thinking"]')).not.toBeNull();
-  expect(root.querySelector('.message-actions [data-act="thinking"]')?.getAttribute("data-tooltip")).toContain("查看過程");
+  expect(root.querySelector('.message-actions [data-act="thinking"]')).toBeNull();
 });
 
 test("live and pending private work shows only a 28px avatar with the public progress tooltip", () => {

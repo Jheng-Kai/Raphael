@@ -242,7 +242,6 @@ export const ptBR = {
   "composio.resultUnavailable": "Detalhes do resultado indisponíveis",
   "composio.moreResults": "Mais {p0} resultados",
   "chat.newMessages": "Novo",
-  "work.inspect": "Ver processo",
   "work.thinking": "Pensando",
   "work.thought": "Solicitação analisada",
   "work.command": "Comando executado",

@@ -242,7 +242,6 @@ export const ko = {
   "composio.resultUnavailable": "결과 세부 정보를 확인할 수 없습니다",
   "composio.moreResults": "결과 {p0}개 더 보기",
   "chat.newMessages": "새 메시지",
-  "work.inspect": "과정 보기",
   "work.thinking": "생각 중",
   "work.thought": "요청 검토함",
   "work.command": "명령 실행함",

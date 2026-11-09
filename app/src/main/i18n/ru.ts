@@ -242,7 +242,6 @@ export const ru = {
   "composio.resultUnavailable": "Подробности результата недоступны",
   "composio.moreResults": "Ещё результатов: {p0}",
   "chat.newMessages": "Новое",
-  "work.inspect": "Показать процесс",
   "work.thinking": "Размышляет",
   "work.thought": "Запрос обдуман",
   "work.command": "Команда выполнена",

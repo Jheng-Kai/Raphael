@@ -242,7 +242,6 @@ export const zhCN = {
   "composio.resultUnavailable": "无法显示结果详情",
   "composio.moreResults": "另有 {p0} 项结果",
   "chat.newMessages": "新消息",
-  "work.inspect": "查看过程",
   "work.thinking": "正在思考",
   "work.thought": "思考了问题",
   "work.command": "运行了指令",

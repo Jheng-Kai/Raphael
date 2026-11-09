@@ -22,8 +22,8 @@ test("completed work is one closed section above the answer; opening retains pub
     { seq: 4, kind: "reply" as const, text: "Done", at_ms: 27000 },
   ] };
   const host = document.createElement("div"); host.innerHTML = turnHTML(turn, state, false, { face: () => "" });
-  expect(host.querySelector(".message-actions .message-work")?.textContent).toBe("");
-  expect(host.querySelector(".message-actions .message-work")?.getAttribute("data-tooltip")).toBe("View process · 26s");
+  // No 「查看過程」 anywhere (owner, 2026-11-10); the closed body stays only for a search that finds words in it.
+  expect(host.querySelector('.message-work, [data-act="thinking"]')).toBeNull();
   expect(host.querySelector(".work-body")?.hasAttribute("hidden")).toBe(true);
   expect(host.querySelector(".work-body")?.textContent).toContain("Found the report");
   expect(host.querySelectorAll(".work-section")).toHaveLength(1);

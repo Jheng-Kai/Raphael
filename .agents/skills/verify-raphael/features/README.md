@@ -685,7 +685,7 @@ and the single participant row. No new page, setting, RPC or migration.
 
 Selected look scenes: all existing sidebar.mjs scenes; busy-team-typing;
 daily-footer-hover, daily-footer-marks, daily-footer-home, daily-press-feedback,
-daily-press-surfaces, daily-press-event, daily-press-card, daily-press-desktop, daily-newest,
+daily-press-surfaces, daily-press-card, daily-press-desktop, daily-newest,
 daily-folder-heading, daily-copy-chief, daily-copy-member, daily-copy-room, daily-copy-setup, daily-copy-webhook,
 daily-draft-member, daily-draft-room, daily-paste-chief, daily-paste-room,
 daily-long-draft, daily-faces-2, daily-faces-3, daily-faces-4,

@@ -242,7 +242,6 @@ export const vi = {
   "composio.resultUnavailable": "Không có chi tiết kết quả",
   "composio.moreResults": "Thêm {p0} kết quả",
   "chat.newMessages": "Mới",
-  "work.inspect": "Xem quá trình",
   "work.thinking": "Đang suy nghĩ",
   "work.thought": "Đã xem xét yêu cầu",
   "work.command": "Đã chạy lệnh",
