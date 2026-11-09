@@ -33,7 +33,8 @@ def test_required_mcp_failure_names_server_and_retains_original_error():
     driver = Driver("codex", ["fake"])
     event = driver._event("error", "required MCP servers failed to initialize: computer")
     failure = classify(event.data)
-    assert failure.kind == "cli_stopped"
+    # A server that cannot start does not start on a second try: no retries, the owner is told which (2026-11-09).
+    assert failure.kind == "tool_broken" and not failure.transient
     assert "computer" in failure.sentence("Codex CLI", "en")
     assert "required MCP servers failed to initialize: computer" in event.data["detail"]
     assert classify(ConnectionError("connection refused")).kind == "network"

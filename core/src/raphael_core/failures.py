@@ -25,6 +25,8 @@ TRANSIENT = frozenset(("rate_limit", "overloaded", "server", "network", "timeout
 # was done yet, and he learns in seconds. After something was done it goes on at the patient pace until he stops it.
 RETRY_WAITS = (1.0, 3.0, 8.0)
 PATIENT_WAITS = (30.0, 60.0, 120.0, 300.0)
+# How a CLI says a tool server it needs did not start.
+_MCP_START = r"required MCP servers failed to initialize"
 RECENT = deque(maxlen=40)
 logger = logging.getLogger(__name__)
 
@@ -304,7 +306,7 @@ class Failure:
                 'en': '{name} encountered a tool error. Check the work details and keep this conversation for diagnosis.',
                 'ja': '{name} のツール呼び出しでエラーが発生しました。作業の詳細を確認し、この会話を残してください。'}))
             return messages[language].format(name=name)
-        if self.kind == "cli_stopped" and (server := re.search(r"required MCP servers failed to initialize:\s*([\w., -]+)", self.reason, re.I)):
+        if self.kind in ("tool_broken", "cli_stopped") and (server := re.search(_MCP_START + r":\s*([\w., -]+)", self.reason, re.I)):
             servers = server[1].strip()[:100]
             return with_ui_words({"zh-TW": "{name} 無法啟動必要的 MCP 伺服器：{servers}。", "en": "{name} could not start the required MCP server: {servers}.", "ja": "{name} は必須の MCP サーバーを起動できませんでした：{servers}。"})[language].format(name=name, servers=servers)
         if self.missing is not None:
@@ -418,7 +420,10 @@ def classify(value: object, *, secrets=(), record=True) -> Failure:
         fallback = kind if kind in KINDS else "unknown"
         patterns = (
             ('tool_broken', r'\bCLI tool (?:is missing|failed)\b'),
-            ("cli_stopped", r"CLI (?:process|stream) ended before completion|CLI ended without an answer|required MCP servers failed to initialize"),
+            # A server that cannot start does not start on a second try: a setting is wrong, and the owner is told
+            # which server rather than kept waiting through retries (design, 2026-11-09).
+            ("tool_broken", _MCP_START),
+            ("cli_stopped", r"CLI (?:process|stream) ended before completion|CLI ended without an answer"),
             ("credits", _CREDITS),
             ("usage_limit", _QUOTA),
             ("refused", r"safety|policy violation|refusal|owner.{0,20}(?:denied|said no)"),
