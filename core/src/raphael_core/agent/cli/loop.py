@@ -199,6 +199,8 @@ class CliLoop:
         self._buffer = ""
         self._publish_reply, self._published, self._message_ids = reply, [], set()
         self._completed_buffer, self._separated = False, []
+        # Speech not yet shown (`_release_held`), whether the one opening was shown, and whether a step has started.
+        self._held, self._opened, self._worked = [], False, False
         self._thought = ""
         self._final_nudged = False
         self._calls = 0
@@ -231,7 +233,9 @@ class CliLoop:
         effort = brain_effort(self.model)
         return f"cli:{brain_ref(self.model)[0]}:{self.actual_model}" + (f"?effort={effort}" if effort else "")
 
-    def _publish(self, text, *, final=False, previous=()):
+    def _publish(self, text, *, final=False, previous=(), settled=False):
+        """Show public speech. A message the CLI marks as its answer (`settled`) or the terminal result
+        (`final`) is shown at once, after anything held; other speech waits for the next event."""
         if self._publish_reply is None:
             return
         reply = (self._written_reply(text)
@@ -241,10 +245,34 @@ class CliLoop:
             return
         lines = reply.messages or [reply.text]
         lines = pending_replies(self._published if final else previous, lines)
-        if lines:
-            self._publish_reply(replace(reply, messages=lines, text="\n\n".join(lines)))
-            self._published.extend(lines)
+        if lines and not (final or settled):
+            # Speech before the outcome waits for the CLI's next event: work after it makes it progress.
+            self._held.append((reply, lines))
+        elif lines:
+            self._release_held(answer=True)
+            self._show(reply, lines)
         return lines
+
+    def _show(self, reply, lines):
+        self._publish_reply(replace(reply, messages=lines, text="\n\n".join(lines)))
+        self._published.extend(lines)
+
+    def _release_held(self, *, answer):
+        """What the model said since its last step. Followed by the end of its turn (`answer`), it stands as
+        said. Followed by more work, it was said while working: only one short opening before the first step
+        reaches the owner, as Grok Bot's 「可以，我先…」, and the rest is progress in the folded work (owner,
+        2026-11-09: 「不會太多不重要的思考文字 然後重點都有說到」)."""
+        held, self._held = self._held, []
+        for reply, lines in held:
+            if answer:
+                self._show(reply, lines)
+                continue
+            for line in lines:
+                if not self._worked and not self._opened:
+                    self._opened = True
+                    self._show(reply, [line])
+                elif text := public_line(line, "auto"):
+                    self.progress(text[:400])
 
     def _progress(self):
         if line := public_line(self._buffer, "auto"):
@@ -721,7 +749,11 @@ class CliLoop:
                 self._submitted_user = user
             with StreamSteps(lambda: self.activity_turn) as steps:
                 self.catalog_changed = False
-                return await self._stream_attempt(name, command, model, server, session, workspace, steps, user=user)
+                try:
+                    return await self._stream_attempt(name, command, model, server, session, workspace, steps, user=user)
+                finally:
+                    # Speech no step followed when an attempt ends (a failure, a restart, a hand-off) stands as said.
+                    self._release_held(answer=True)
         except ValueError as error:
             if str(error) != "context_overflow":
                 raise
@@ -781,13 +813,15 @@ class CliLoop:
                     public = bool(event.data.get("final") or public_reply(event.text, self.language, plain=self.plain, explicit=True))
                     if not key[1] or key not in self._message_ids:
                         if public:
-                            self._publish(event.text, previous=self._separated)
+                            self._publish(event.text, previous=self._separated, settled=bool(event.data.get("final")))
                         self._message_ids.add(key)
                     self._buffer = "" if public else event.text
                     self._completed_buffer, self._separated = True, []
                 elif event.kind == "thinking":
                     self._thought = (self._thought + event.text)[-240:]
                 elif event.kind in ("tool_start", "permission"):
+                    self._release_held(answer=False)
+                    self._worked = True
                     if event.kind == "tool_start":
                         steps.start(event.data)
                         key = event.data.get("id") or event.data.get("name")
@@ -831,6 +865,7 @@ class CliLoop:
                             self.reload_note = check
                             self.catalog_changed = True
                             return "tools_changed"
+                        self._release_held(answer=True)
                         self._publish(final, final=True)
                         self._save_context()
                         self._buffer = ""
@@ -849,6 +884,7 @@ class CliLoop:
         return "cli_stopped"
 
     def _missing_terminal(self):
+        self._release_held(answer=True)
         if not self._final_nudged:
             self._final_nudged = True
             self.no_tools, self.tools = True, []

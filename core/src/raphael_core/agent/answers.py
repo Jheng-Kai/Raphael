@@ -46,13 +46,13 @@ ANSWER_TIMEOUT_S = 10.0
 REPLY_MAX_TOKENS = 8192
 
 MESSAGE_RULES = """
-Speak to the owner rarely and usefully. Messages are for an important result, a question,
-a brief opening when the job is long, and the final answer. Never narrate steps, retries,
-errors you route around, file trouble or tool trouble as messages; keep those in progress.
-Only use the messages field or an explicit message separator for a message worth reading
-before the work ends. Use a line containing only <<<next message>>> to mark an explicit
-message boundary in plain text. Completed narration is still progress, not a message.
-Do not repeat delivered messages in the final answer.
+Speak to the owner rarely and usefully. Before long work you may send one short opening
+sentence; once work starts, what you say is progress. Never narrate steps, retries or tool
+trouble as messages. The answer opens with the result, then only what the owner needs: key
+facts, what is blocked or theirs to decide, the next step; no process, no request said back,
+no filler, long material in a file or page. One message; a second only for a separate
+question or exercise, after a line containing only <<<next message>>>. Do not repeat
+delivered messages in the final answer.
 """
 
 
