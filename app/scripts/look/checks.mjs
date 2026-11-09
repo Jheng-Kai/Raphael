@@ -4004,7 +4004,8 @@ export function checkRendered(name, context = {}) {
   }
   if (name === "room-contained-scroll") {
     const main = document.querySelector(".main"), thread = document.querySelector(".au-room-pane .ra-scroll"), composer = document.querySelector(".au-room-pane .ra-dock .composer");
-    require(thread.scrollHeight > thread.clientHeight * 2, "the room thread is long enough to scroll");
+    // The escaped name only lands outside the main area when the thread is taller than the window.
+    require(thread.scrollHeight > innerHeight + 200, "the room thread is taller than the window");
     require(document.querySelectorAll(".au-room-pane .au-room-meta .au-room-reply").length >= 3, "the latest messages carry reply chips");
     require(main.scrollTop === 0 && main.scrollHeight <= main.clientHeight + 1, `the main area stays put (scrollTop ${main.scrollTop}, height ${main.scrollHeight} in ${main.clientHeight})`);
     require(Math.abs(thread.scrollTop + thread.clientHeight - thread.scrollHeight) <= 2, "the wheel reached the end of the thread itself");
