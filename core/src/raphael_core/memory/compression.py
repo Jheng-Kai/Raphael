@@ -9,6 +9,20 @@ SUMMARY_MIN_TOKENS = 2_000
 SUMMARY_MAX_TOKENS = 10_000
 PROTECT_FIRST_MESSAGES = 3
 PROTECT_LAST_MESSAGES = 20
+# Bound a fresh request before transport-specific overhead and optional records.
+FRESH_CONTEXT_CHARS = 16000
+
+
+def recent_turns(turns, chars, byte_limit=float("inf")):
+    """Select recent records whole, in chronological order, within both transport budgets."""
+    recent = []
+    for identifier, text in reversed(turns):
+        size = len(text.encode("utf-8")) + 2
+        if len(text) + 2 <= chars and size <= byte_limit:
+            recent.insert(0, (identifier, text))
+            chars -= len(text) + 2
+            byte_limit -= size
+    return recent
 
 
 def threshold_tokens(window, max_output=0, cap=DEFAULT_THRESHOLD_CAP):

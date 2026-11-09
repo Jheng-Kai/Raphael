@@ -9,10 +9,12 @@ import logging
 import re
 from dataclasses import dataclass
 
+from ..memory.compression import FRESH_CONTEXT_CHARS, recent_turns
 from ..agent.ledger import Ledger
 from ..brain.spend import SpendTracker
 from ..brain.settings import DEFAULTS
 from ..protocol import RpcError
+from ..worker.guards import neutralize
 
 # Safety bounds apply to colleague chatter, including repeated mention pairs.
 MAX_TURNS = 10
@@ -23,7 +25,24 @@ MAX_PAIR_REPLIES = 2
 LISTEN_TIMEOUT_S = 20.0
 # Bound the listener's recent public context; speech itself reads its cursor delta.
 LISTEN_MESSAGES = 40
+# Leave room for the task wrapper, recovery receipts and the member's system prompt.
+ROOM_CONTEXT_CHARS = FRESH_CONTEXT_CHARS - 4000
 logger = logging.getLogger(__name__)
+
+
+def bounded_transcript(transcript, *, chars=ROOM_CONTEXT_CHARS, byte_limit=ROOM_CONTEXT_CHARS, required=()):
+    """Fold older records out of the prompt; preserve the source and newest messages whole."""
+    if not transcript:
+        return [], 0
+    required = {*required, transcript[-1]["id"]}
+    encoded = [(item["id"], neutralize(json.dumps(item, ensure_ascii=False))) for item in transcript]
+    mandatory = [text for identifier, text in encoded if identifier in required]
+    chars -= 2 + sum(len(text) + 2 for text in mandatory)
+    byte_limit -= 2 + sum(len(text.encode("utf-8")) + 2 for text in mandatory)
+    kept = required | {identifier for identifier, _ in recent_turns(
+        [(identifier, text) for identifier, text in encoded if identifier not in required], chars, byte_limit)}
+    result = [item for item in transcript if item["id"] in kept]
+    return result, len(transcript) - len(result)
 
 
 def is_pass(text):
@@ -198,7 +217,8 @@ class RoomExchanges:
                                    (exchange.origin_message_id, room['id'])).fetchone()
         if origin is None:
             return [], False
-        transcript = self.transcript(room, origin['thread_id'])[-LISTEN_MESSAGES:]
+        transcript, _ = bounded_transcript(self.transcript(room, origin['thread_id'])[-LISTEN_MESSAGES:],
+                                            chars=8000, byte_limit=8000)
         people = [s for s in self.rooms._members.roster() if s.id in self.rooms._ids(room)]
         default = self.rooms._settings.get("agent_model") or DEFAULTS["agent_model"]
         asked, themselves = [], []

@@ -20,3 +20,13 @@ def api_ref(reference: str) -> str:
 def short_name(reference: str) -> str:
     """The model as a person would name it in a sentence: "gpt-6-sol" for "@chatgpt:gpt-6-sol?effort=max"."""
     return reference.split("?", 1)[0].rsplit(":", 1)[-1].rsplit("/", 1)[-1]
+
+
+CLI_NAMES = {"claude": "Claude Code", "codex": "Codex CLI", "gemini": "Antigravity"}
+
+
+def cli_name(reference: str | None) -> str | None:
+    """Human-readable provider identity for a persisted CLI model reference."""
+    if not isinstance(reference, str) or not reference.startswith("cli:"):
+        return None
+    return CLI_NAMES.get(reference.split("?", 1)[0].split(":", 2)[1])

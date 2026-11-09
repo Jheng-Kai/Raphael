@@ -4,8 +4,9 @@ import hashlib
 import json
 from difflib import SequenceMatcher
 
+from ...memory.compression import FRESH_CONTEXT_CHARS, recent_turns
 
-FRESH_CONTEXT_CHARS = 16000
+
 DEFAULT_CONTEXT_TOKENS = 64000
 CONTEXT_HEADROOM = .75
 
@@ -59,14 +60,10 @@ def fresh_user(owner_text, attachments, additions, note, records, *, turns=(), s
         raise ValueError("context_overflow")
     remaining = FRESH_CONTEXT_CHARS - len(mandatory)
     remaining_bytes = byte_limit - mandatory_bytes if byte_limit is not None else float("inf")
-    recent = []
-    for _, text in reversed(turns):
-        size = len(text.encode("utf-8")) + 2
-        if len(text) + 2 <= remaining and size <= remaining_bytes:
-            recent.insert(0, text)
-            remaining -= len(text) + 2
-            remaining_bytes -= size
-    parts.extend(recent)
+    recent = recent_turns(turns, remaining, remaining_bytes)
+    parts.extend(text for _, text in recent)
+    remaining -= sum(len(text) + 2 for _, text in recent)
+    remaining_bytes -= sum(len(text.encode("utf-8")) + 2 for _, text in recent)
     for text in [summary, *(sections or {}).values()]:
         size = len(text.encode("utf-8")) + 2
         if text and len(text) + 2 <= remaining and size <= remaining_bytes:

@@ -230,3 +230,14 @@ for line in sys.stdin:
         assert result["clis"][1]["models"][0]["is_default"]
     finally:
         await brains.aclose()
+
+
+def test_persisted_cli_references_share_the_discovery_display_names():
+    from raphael_core.brain.model_ref import CLI_NAMES, cli_name
+    from raphael_core.agent.cli.discovery import NAMES
+    assert NAMES is CLI_NAMES
+    for reference, expected in (("cli:claude?effort=low", "Claude Code"),
+                                ("cli:codex:sample?effort=high", "Codex CLI"),
+                                ("cli:gemini", "Antigravity"),
+                                ("@chatgpt:sample", None), (None, None)):
+        assert cli_name(reference) == expected

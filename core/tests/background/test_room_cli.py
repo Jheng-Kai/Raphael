@@ -461,3 +461,86 @@ print(json.dumps({'type':'result', 'subtype':'success', 'session_id':'synthetic-
     messages = (await rooms._messages({'room_id': room['id']}))['messages']
     assert any(message['text'] == 'The real child read the board.' for message in messages)
     assert not rig.service.waiting_questions() and not rig.client.chat_calls
+
+
+@pytest.mark.parametrize("brain", ["claude", "codex", "gemini"])
+async def test_long_cli_room_keeps_answering_with_whole_recent_messages(meeting, monkeypatch, tmp_path, brain):
+    rig, members, rooms, room, alice = meeting
+    members.store.update_member(alice.id, model="cli:" + brain)
+    rig.service.use_cli(Brains(tmp_path))
+    AgentHistory(rig.conn).add(session_id="private-owner", question="PRIVATE-OWNER-CONTEXT", route="answer",
+                               prefix="", text="Private notes.", status="done")
+    old = []
+    with rig.conn:
+        for index in range(16):
+            text = f"SYNTHETIC-{index}-START " + ("notes \"quoted\" " * 360) + f" END-{index}"
+            old.append(text)
+            rig.conn.execute("INSERT INTO room_messages(room_id,member_id,text,created) VALUES (?,NULL,?,1)",
+                             (room["id"], text))
+    prompts = []
+    async def run(driver, **kwargs):
+        prompts.append(kwargs["user"])
+        assert len(kwargs["fresh_context"]()) <= 16000
+        yield Event("final", "The next step is documented.")
+    monkeypatch.setattr("raphael_core.agent.cli.loop.Driver.run", run)
+    for index in range(2):
+        await rooms._send({"room_id": room["id"], "text": f"@Alice NEXT-{index}",
+                                  "request_id": f"long-{index}", "ui_language": "en"})
+        await until(lambda: rooms._exchanges.latest(room["id"])["state"] in ("done", "stopped"))
+        tasks = list(rig.conn.execute("SELECT state,reason FROM worker_tasks WHERE scope='room'"))
+    assert tasks and len(tasks) == 2 and all(task["state"] == "done" for task in tasks), [dict(task) for task in tasks]
+    assert all(f"NEXT-{index}" in prompt for index, prompt in enumerate(prompts))
+    assert json.dumps(old[-1], ensure_ascii=False)[1:-1] in prompts[0]
+    assert "earlier room messages folded out" in prompts[0]
+    for text in old:
+        if text.split()[0] in prompts[0]:
+            assert json.dumps(text, ensure_ascii=False)[1:-1] in prompts[0]
+    assert "PRIVATE" not in prompts[0] and not rig.client.chat_calls
+
+
+async def test_one_oversized_room_message_reports_overflow_and_does_not_poison_next_turn(meeting, monkeypatch, tmp_path):
+    from raphael_core.failures import classify
+    rig, members, rooms, room, alice = meeting
+    members.store.update_member(alice.id, model="cli:claude")
+    rig.service.use_cli(Brains(tmp_path))
+    played = scripted_cli(monkeypatch, [Event("final", "The smaller request works.")])
+    with rig.conn:
+        source = rig.conn.execute("INSERT INTO room_messages(room_id,member_id,text,created) VALUES (?,NULL,?,1)",
+                                  (room["id"], "@Alice " + "oversized " * 10000)).lastrowid
+    await rooms._exchanges.start(room, source, "en", ())
+    await until(lambda: rooms._exchanges.latest(room["id"])["state"] in ("done", "stopped"))
+    assert not played
+    assert not rig.conn.execute("SELECT 1 FROM room_member_cursor WHERE room_id=? AND member_id=?", (room["id"], alice.id)).fetchone()
+    expected = classify("context_overflow").sentence("Claude Code", "en")
+    assert rooms._unfinished(source, "en") == [("Alice", expected)]
+    assert rig.conn.execute("SELECT COUNT(*) FROM room_messages WHERE origin_message_id=? AND kind='wrapup'", (source,)).fetchone()[0] == 1
+    await rooms._send({"room_id": room["id"], "text": "@Alice A smaller request", "request_id": "after-overflow", "ui_language": "en"})
+    await until(lambda: rooms._exchanges.latest(room["id"])["state"] in ("done", "stopped"))
+    assert played and list(rig.conn.execute("SELECT state FROM worker_tasks ORDER BY id"))[-1][0] == "done"
+    assert not rig.client.chat_calls
+
+
+async def test_cli_room_listener_also_receives_a_bounded_public_snapshot(meeting, monkeypatch, tmp_path):
+    rig, members, rooms, room, alice = meeting
+    members.store.update_member(alice.id, model="cli:claude")
+    rig.service.use_cli(Brains(tmp_path))
+    old = []
+    with rig.conn:
+        for index in range(40):
+            text = f"RECORD-{index} " + "合成記錄" * 200 + f" END-{index}"
+            old.append(text)
+            rig.conn.execute("INSERT INTO room_messages(room_id,member_id,text,created) VALUES (?,NULL,?,1)", (room["id"], text))
+    listening = []
+    async def run(driver, **kwargs):
+        if kwargs.get("no_tools"):
+            listening.append(json.loads(kwargs["user"]))
+            yield Event("final", '{"speak":true,"urgency":0.5}')
+        else:
+            yield Event("final", "(pass)")
+    monkeypatch.setattr("raphael_core.agent.cli.loop.Driver.run", run)
+    await rooms._send({"room_id": room["id"], "text": "Review the next step", "request_id": "long-listening", "ui_language": "en"})
+    await until(lambda: rooms._exchanges.latest(room["id"])["state"] in ("done", "stopped"))
+    assert listening and len(json.dumps(listening[0], ensure_ascii=False).encode("utf-8")) < 10000
+    assert any(item["text"] == old[-1] for item in listening[0]["messages"])
+    assert not rooms._unfinished(rooms._exchanges.latest(room["id"])["origin_message_id"], "en")
+    assert not rig.client.chat_calls

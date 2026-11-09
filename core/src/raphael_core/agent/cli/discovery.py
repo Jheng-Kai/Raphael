@@ -9,9 +9,9 @@ from pathlib import Path
 
 from .process import Child, subscription_env
 from .models import claude_cli_models, claude_models, codex_models, antigravity_models
+from ...brain.model_ref import CLI_NAMES as NAMES
 
 # "gemini" is Google's Antigravity CLI (`agy`), which replaced Gemini CLI.
-NAMES = {"claude": "Claude Code", "codex": "Codex CLI", "gemini": "Antigravity"}
 LOGIN = {"claude": "claude auth login", "codex": "codex login", "gemini": "agy"}
 EXECUTABLE = {"claude": "claude", "codex": "codex", "gemini": "agy"}
 # The CLIs asked for their models in the background.

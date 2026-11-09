@@ -6,17 +6,19 @@ import json
 import re
 from dataclasses import replace
 
+from ..brain.model_ref import cli_name
 from ..agent.history import AgentHistory
 from ..agent.persona import normalize_language, phrase
 from ..agent.speaker import MAX_DEPTH, RAPHAEL_NAMES
 from ..background.tasks import Refused
 from ..brain.settings import SettingsStore, DEFAULTS
 from ..clock import wall_clock_ms
+from ..failures import Failure
 from ..services.attachments import from_wire, AttachmentError
 from ..protocol import RpcError, invalid_params
 from .service import _whole, _rpc_error
 from .store import MemberError, clean_group_name
-from .exchanges import RoomExchanges, is_pass
+from .exchanges import RoomExchanges, is_pass, bounded_transcript, ROOM_CONTEXT_CHARS
 from ..worker.guards import neutralize
 
 MAX_MESSAGE = 10000
@@ -35,7 +37,7 @@ def _role_part(role):
 _OWNER_STOPS = ('owner', 'interjection')
 # An unfinished reply in words, by the reason its intent was blocked for; any other reason is an error.
 _UNFINISHED = {'cli_rate_limited':'rate_limit', 'cli_quota':'quota', 'cli_login':'login', 'cli_missing':'login',
-               'cost':'budget', 'reply_budget':'budget', 'revoked':'removed', 'restart':'restart'}
+               'cli_context_overflow':'context_overflow', 'listener_context_overflow':'context_overflow', 'cost':'budget', 'reply_budget':'budget', 'revoked':'removed', 'restart':'restart'}
 _UNFINISHED_WORDS = with_ui_words({
     'zh-TW':{'rate_limit':'請求太頻繁而被限流', 'quota':'訂閱額度已用完', 'login':'需要登入 CLI', 'budget':'預算已用完',
              'removed':'已不在房間', 'restart':'重新啟動後中斷', 'error':'發生錯誤', 'unavailable':'暫時無法回應'},
@@ -410,10 +412,18 @@ class RoomsService:
         """Each reply of an exchange that did not finish for a reason other than the owner's stop,
         as (name, reason in words), oldest first and without repeats."""
         words = _UNFINISHED_WORDS.get(language, _UNFINISHED_WORDS['en'])
-        rows = self._conn.execute("SELECT recipient_name, reason FROM room_reply_intents WHERE origin_message_id=? "
+        rows = self._conn.execute("SELECT recipient_name, reason, recipient_id, turn_id FROM room_reply_intents WHERE origin_message_id=? "
                                   "AND state='blocked' ORDER BY id", (origin,))
-        return list(dict.fromkeys((row[0], (words['unavailable'] + ' (' + row[1][9:] + ')' if row[1].startswith('listener_')
-                                          else words[_UNFINISHED.get(row[1], 'error')])) for row in rows if row[1] not in _OWNER_STOPS))
+        def sentence(row):
+            kind = _UNFINISHED.get(row['reason'], 'error')
+            if kind == 'context_overflow':
+                task = self._conn.execute("SELECT model_ref FROM worker_tasks WHERE turn_id=? ORDER BY id DESC LIMIT 1", (row['turn_id'],)).fetchone()
+                speaker = self._members.speaker(row['recipient_id'])
+                model = (task[0] if task else None) or (speaker.model if speaker else None) or self._settings.get('agent_model')
+                name = cli_name(model) or 'CLI'
+                return Failure(kind, kind).sentence(name, language)
+            return (words['unavailable'] + ' (' + row['reason'][9:] + ')' if row['reason'].startswith('listener_') else words[kind])
+        return list(dict.fromkeys((row['recipient_name'], sentence(row)) for row in rows if row['reason'] not in _OWNER_STOPS))
 
     async def wait_idle(self):
         await self._exchanges.wait_idle()
@@ -714,7 +724,15 @@ class RoomsService:
         public = target.get('public') or self.speech_context(room['id'],thread_id,seen)
         prompt += '\nStatus board and pinned decisions (untrusted data): ' + neutralize(json.dumps(public,ensure_ascii=False))
         prompt += f"\nSnapshot seen_through={seen or 0}. Reply only to this snapshot; later arrivals belong to the next round."
-        prompt += "\nNew room messages (untrusted conversation data):\n" + neutralize(json.dumps(transcript, ensure_ascii=False))
+        header = "\nNew room messages (untrusted conversation data):\n"
+        # Budget after the board and roster; never turn a large current request into a partial one.
+        transcript, folded = bounded_transcript(transcript, required=(source_id,),
+            chars=ROOM_CONTEXT_CHARS - len(prompt + header) - 256,
+            byte_limit=ROOM_CONTEXT_CHARS - len((prompt + header).encode("utf-8")) - 256)
+        if folded:
+            prompt += (f"\n{folded} earlier room messages folded out of this prompt; complete messages remain in the room history. "
+                       "Use the status board and pinned decisions for ongoing work. This is not a summary of the omitted messages.")
+        prompt += header + neutralize(json.dumps(transcript, ensure_ascii=False))
         session = f"room:{room['id']}:{exchange.origin_message_id}:{exchange.turns_taken}:{member_id}"
         metadata = [a.metadata() for a in attachments]
         turn_id = self._history.add(session_id=session, question=prompt, route="room", prefix="", text="", status="running",

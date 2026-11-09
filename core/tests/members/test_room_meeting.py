@@ -79,3 +79,30 @@ async def test_chief_targets_an_existing_superset_room_without_faking_owner_inpu
     assert sum(m['text']=='Review the release.' for m in messages)==1 and messages[0]['member_id']==0
     assert all(m['author_kind']=='member' for m in messages)
     assert not rig.conn.execute('SELECT 1 FROM room_exchanges WHERE reason=\'interjection\'').fetchone()
+
+
+def test_room_context_preserves_the_source_and_unicode_messages_without_partial_records():
+    import json
+    from raphael_core.members.exchanges import bounded_transcript
+    source = {"id": 1, "text": "The exact question to answer", "attachments": [{"name": "plan.pdf"}]}
+    huge = {"id": 2, "text": "合成舊記錄" * 5000}
+    recent = {"id": 3, "text": "最新記錄" * 160}
+    current = {"id": 4, "text": "Reply to message 1"}
+    messages, folded = bounded_transcript([source, huge, recent, current], required=(1,), chars=2200, byte_limit=2200)
+    assert messages == [source, recent, current] and folded == 1
+    assert len(json.dumps(messages, ensure_ascii=False).encode("utf-8")) <= 2200
+    # A giant current request is mandatory: the CLI reports it instead of changing its meaning.
+    messages, folded = bounded_transcript([source, huge], chars=2200, byte_limit=2200)
+    assert huge in messages and messages[-1]["text"] == huge["text"]
+
+
+async def test_listener_overflow_uses_the_shared_sentence_in_the_requested_language(rig, exchange):
+    from raphael_core.failures import Failure
+    room, ids = await team(rig)
+    rig.service.store.update_member(ids[0], model="cli:claude")
+    await send(rig, room, "@Alice Review the next step")
+    origin = exchange._exchanges.latest(room["id"])["origin_message_id"]
+    with rig.conn:
+        rig.conn.execute("UPDATE room_reply_intents SET state='blocked',reason='listener_context_overflow' WHERE origin_message_id=?", (origin,))
+    for language in ("zh-TW", "en", "ja", "fr"):
+        assert exchange._unfinished(origin, language) == [("Alice", Failure("context_overflow", "context_overflow").sentence("Claude Code", language))]
