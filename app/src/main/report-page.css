@@ -8,14 +8,19 @@
 .rp-view { position: relative; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); min-height: 0; background: var(--content); }
 .rp-view[hidden] { display: none; }
 /* The page scrolls as the thread does: what scrolls away fades before it meets the header, and at rest the title
-   stands clear of the fade (conversations.css). */
-.rp-scroll { position: relative; min-height: 0; overflow-x: hidden; overflow-y: auto; scrollbar-width: none; container-type: inline-size; mask-image: linear-gradient(to bottom, transparent 16px, var(--text) 40px); }
+   stands clear of the fade (conversations.css). Its sides are the composer's (`.ra-dock`, agent.css), so the report
+   starts and ends where the composer does at every size, as the thread it stands for (R-UI-45). */
+.rp-scroll { position: relative; min-height: 0; overflow-x: hidden; overflow-y: auto; scrollbar-width: none; container-type: inline-size; padding-inline: var(--pa-dock-x); mask-image: linear-gradient(to bottom, transparent 16px, var(--text) 40px); }
 .rp-scroll::-webkit-scrollbar { display: none; }
 .rp-scroll:focus { outline: none; }
-/* The × back to the conversation stays at the top right, out of the fade, while the page scrolls under it. */
-.rp-top { position: absolute; top: var(--sp-3); right: var(--sp-4); z-index: 2; }
+/* Share and the × back to the conversation stay at the top right, out of the fade, while the page scrolls under them:
+   the window edge's round buttons, apart as the conversation header's are, ending where the composer ends. */
+.rp-top { position: absolute; top: var(--sp-3); right: max(var(--pa-dock-x), calc((100% - var(--pa-colw)) / 2)); z-index: 2; display: flex; gap: var(--sp-1); }
+/* While a report is open its Share is the one share in sight, as a Grok Bot Page's: the member's own share in the
+   conversation header above it, the same icon for another thing, waits in its place until the report closes. */
+.page-agent:has(.ra-stage.is-report) .mb-head [data-act="share-member"] { visibility: hidden; }
 
-.rp-doc { max-width: calc(24 * var(--sp-6)); margin: 0 auto; padding: calc(var(--sp-6) + var(--sp-2)) var(--sp-6) calc(2 * var(--sp-6)); }
+.rp-doc { max-width: var(--pa-colw); margin: 0 auto; padding: calc(var(--sp-6) + var(--sp-2)) 0 calc(2 * var(--sp-6)); }
 .rp-title { margin: 0; font: var(--weight-medium) var(--fs-h1)/1.35 var(--ui); overflow-wrap: anywhere; }
 .rp-sub { margin: var(--sp-1) 0 0; color: var(--text-3); font-size: var(--fs-sm); }
 .rp-toc { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--sp-1) var(--sp-4); margin-top: var(--sp-5); padding: var(--sp-2) 0; border-block: 1px solid var(--line); font-size: var(--fs-sm); }
@@ -71,12 +76,10 @@
 .rp-notes dt { color: var(--text-3); }
 .rp-notes dd { margin: 0; color: var(--text-2); overflow-wrap: anywhere; }
 
-/* The title clears the × where the page is no wider than its column. */
-@container (max-width: 860px) {
-  .rp-head { padding-inline-end: calc(36px + var(--sp-4)); }
-}
+/* The title clears share and the ×, which stand over its column's top right (in the app: a file has neither). */
+.rp-view .rp-head { padding-inline-end: calc(2 * 36px + var(--sp-1) + var(--sp-4)); }
 @container (max-width: 640px) {
-  .rp-doc { padding: calc(var(--sp-6) + var(--sp-2)) var(--sp-4) var(--sp-6); }
+  .rp-doc { padding-bottom: var(--sp-6); }
 }
 /* A narrow page lists a status over its words, and a table's rows as name and value. */
 @container (max-width: 560px) {
@@ -88,10 +91,12 @@
   .rp-table td { display: grid; grid-template-columns: calc(3 * var(--sp-6)) minmax(0, 1fr); gap: var(--sp-2); padding: 2px 0; border: 0; }
   .rp-table td::before { content: attr(data-col); color: var(--text-3); font-size: var(--fs-xs); }
 }
-/* A wide page keeps its contents in a column of their own at the right, in sight while it scrolls. */
-@container (min-width: 1100px) {
-  .rp-doc { max-width: calc(32 * var(--sp-6)); display: grid; grid-template-columns: minmax(0, 1fr) calc(6 * var(--sp-6)); column-gap: var(--sp-6); align-items: start; }
+/* A page as wide as the composer's whole column (960 px, --layout-thread-max) keeps its contents in a column of their
+   own at the right, in sight while it scrolls, under share and the × (which then leave the title its width). */
+@container (min-width: 960px) {
+  .rp-doc { display: grid; grid-template-columns: minmax(0, 1fr) calc(6 * var(--sp-6)); column-gap: var(--sp-6); align-items: start; }
   .rp-head, .rp-body { grid-column: 1; }
+  .rp-view .rp-head { padding-inline-end: 0; }
   .rp-toc { grid-column: 2; grid-row: 1 / span 2; position: sticky; top: calc(var(--sp-6) + var(--sp-2)); flex-direction: column; align-items: flex-start; gap: var(--sp-2); margin: 0; padding: 0 0 0 var(--sp-4); border-block: 0; border-inline-start: 1px solid var(--line); }
 }
 

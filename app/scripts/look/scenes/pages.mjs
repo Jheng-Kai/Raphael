@@ -2,6 +2,7 @@ import { scene, check, click, member, room, scroll, type, wait } from "./steps.m
 
 const shown = [member(1), wait('.pg-body[data-state="ready"] iframe'), { action: "frame-wait", selector: "#buy" }];
 const report = [member(1), wait(".pg-link"), click(".pg-link"), wait(".rp-view:not([hidden]) .rp-team-draw")];
+const share = [click(".rp-view [data-report-act=share]"), wait(".toast")];
 
 export default [
   scene("page-product", "A member shows an operable product page, as tall as its content, in the reply", [...shown, check("page-card")], { pageTurn: true }),
@@ -17,4 +18,8 @@ export default [
   scene("page-report-team", "The contents take the owner to the team: boxes in each member's colour joined by labelled arrows", [...report, click('.rp-toc [data-report-goto="rp-s2"]'), check("page-report-team")], { reportTurn: true }),
   scene("page-report-tab", "A tab over the table shows only its group's rows", [...report, { ...scroll(".rp-table-box"), block: "center" }, click('.rp-table-box [data-report-tab="g1"]'), check("page-report-tab")], { reportTurn: true }),
   scene("page-report-close", "The × brings the thread back where it was, with the link card in sight", [...report, click(".rp-view [data-report-act=close]"), check("page-report-closed")], { reportTurn: true }),
+  // Share (owner, 2026-11-10: 存成檔案): the report saved as one HTML file, and that file opened on its own, as a browser opens it.
+  scene("page-report-share", "Share saves the report as a file and says where it went, and the report stays open", [...report, ...share, check("page-report-shared")], { reportTurn: true }),
+  { ...scene("page-report-file", "The saved file opened on its own: the same page in its reader's theme, with nothing of the app", [...report, ...share, { action: "saved-file" }, check("page-report-file")], { reportTurn: true }), file: true },
+  { ...scene("page-report-file-team", "The file's contents take its reader to the team, drawn for the width it is read at", [...report, ...share, { action: "saved-file" }, click('.rp-toc a[href="#rp-s2"]'), check("page-report-file-team")], { reportTurn: true }), file: true },
 ];

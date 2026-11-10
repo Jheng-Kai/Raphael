@@ -16,9 +16,10 @@ from raphael_core.agent.history import AgentHistory
 from raphael_core.agent.pages import HTML_BYTES, MCP_MIME, PageError, PageHost, PageStore, domains
 from raphael_core.agent.permissions import PermissionCards
 from raphael_core.agent.policy import Tier
+from raphael_core.agent.report_page import FILE_POLICY, file_name
 from raphael_core.agent.speaker import RAPHAEL
 from raphael_core.brain.db import connect
-from raphael_core.protocol import RpcError
+from raphael_core.protocol import INVALID_PARAMS, RpcError
 
 from .test_narration import chat, typed, use
 from .test_plugins import plugins, calls  # noqa: F401
@@ -426,3 +427,112 @@ async def test_a_page_is_either_html_or_a_report(make_rig, client, arguments):
     await typed(rig)
     assert rig.conn.execute("SELECT COUNT(*) FROM pages").fetchone()[0] == 0
     assert "Give either html or report" in _tool_reply(client)
+
+
+# --- a report shared as a file (report_page.checked_file, pages.export) -------------------------------
+
+FILE_HEAD = ('<!doctype html><html lang="en"><head><meta charset="utf-8">'
+             f'<meta http-equiv="Content-Security-Policy" content="{FILE_POLICY}">'
+             '<meta name="viewport" content="width=device-width, initial-scale=1">')
+# What the app's drawing makes (app/src/main/report-page.ts `reportFile`): each kind of section, the team and an icon.
+DRAWING = (
+    '<header class="rp-head"><h1 class="rp-title">Team report</h1><p class="rp-sub">Data as of 2026/11/10 09:30</p></header>'
+    '<nav class="rp-toc" aria-label="Contents"><span class="rp-toc-h">Contents</span><a href="#rp-s0" data-report-goto="rp-s0">Findings</a></nav>'
+    '<div class="rp-body"><section class="rp-sec" id="rp-s0" data-kind="findings"><h2 class="rp-h2">Findings</h2>'
+    '<div class="rp-callout"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/>'
+    '<path d="M12 16v-4"/></svg><p>Two things wait &lt;script&gt;</p></div><ul class="rp-items has-status"><li>'
+    '<span class="rp-item-st"><span class="rp-st" data-tone="warn">Ready</span></span><div class="rp-item-t"><b>Timeline</b>'
+    '<span>Since Monday</span></div></li></ul></section><section class="rp-sec" id="rp-s1" data-kind="table">'
+    '<div class="rp-table-box"><table class="rp-table"><thead><tr><th scope="col">Member</th></tr></thead><tbody>'
+    '<tr data-group="g0"><td data-col="Member"><span><span class="rp-dot" style="--rp-c:#1f9fe8"></span>Raphael</span></td>'
+    '</tr></tbody></table></div></section><section class="rp-sec" id="rp-s2" data-kind="team">'
+    '<div class="rp-team" data-report-team="2" role="img" aria-label="Owner → Raphael: Asks"><div class="rp-team-at" data-at="0">'
+    '<div class="rp-team-draw" style="width:300px;height:200px"><svg class="rp-lines" width="300" height="200" viewBox="0 0 300 200" '
+    'aria-hidden="true"><defs><marker id="rp-arrow-1" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" '
+    'orient="auto-start-reverse"><path d="M0 0 L8 4 L0 8 Z"/></marker></defs><path d="M10 10 L10 50" marker-end="url(#rp-arrow-1)"/>'
+    '</svg><div class="rp-node" data-node="o" style="left:44px;top:0px;width:212px;--rp-c:var(--text-3)"><b>Owner</b><small>asks</small>'
+    '</div><span class="rp-lab" style="left:150px;top:90px">Asks</span></div></div></div><dl class="rp-notes"><div><dt>Gap</dt>'
+    '<dd>Nobody</dd></div></dl></section></div>')
+
+
+def _file(drawing=DRAWING, *, style=":root{--content:#fff}.rp-items > li{padding:0}", head=FILE_HEAD):
+    return f'{head}<title>Team report</title><style>{style}</style></head><body><article class="rp-doc">{drawing}</article></body></html>'
+
+
+async def _shown_report(rig, client):
+    client.chats = [chat("", ("show_page", {"title": "Team report", "report": REPORT})), chat('{"text":"Here it is."}')]
+    await typed(rig)
+    return (await rig.turns())[0]["pages"][0]["id"]
+
+
+async def test_a_shared_report_is_saved_as_its_file_in_the_output_folder_else_downloads_never_over_a_file(make_rig, client, tmp_path):
+    rig = make_rig()
+    page = await _shown_report(rig, client)
+    downloads = tmp_path / "Downloads"
+    saved = await rig.call("pages.export", {"id": page, "html": _file(), "downloads": str(downloads)})
+    assert saved == {"path": str(downloads / "Team report.html"), "place": "downloads", "folder": "Downloads"}
+    assert (downloads / "Team report.html").read_bytes() == _file().encode("utf-8")
+    again = await rig.call("pages.export", {"id": page, "html": _file(), "downloads": str(downloads)})
+    assert again["path"] == str(downloads / "Team report (2).html") and len(list(downloads.iterdir())) == 2
+
+    # The owner's output folder first, made if it is gone; one that takes nothing leaves the file in Downloads.
+    rig.settings.set("owner_output_folder", str(tmp_path / "Out" / "Reports"))
+    chosen = await rig.call("pages.export", {"id": page, "html": _file(), "downloads": str(downloads)})
+    assert chosen == {"path": str(tmp_path / "Out" / "Reports" / "Team report.html"), "place": "output", "folder": "Reports"}
+    (tmp_path / "taken").write_text("a file, not a folder")
+    rig.settings.set("owner_output_folder", str(tmp_path / "taken" / "Reports"))
+    fallen = await rig.call("pages.export", {"id": page, "html": _file(), "downloads": str(downloads)})
+    assert fallen["place"] == "downloads" and fallen["path"] == str(downloads / "Team report (3).html")
+
+
+@pytest.mark.parametrize("html", [
+    _file(head=FILE_HEAD.replace("default-src 'none'", "default-src *")),
+    _file(head=FILE_HEAD.replace('<meta name="viewport" content="width=device-width, initial-scale=1">', "")),
+    "<p>Team report</p>",
+    _file(DRAWING + "<script>alert(1)</script>"),
+    _file(DRAWING + '<div onclick="alert(1)">x</div>'),
+    _file(DRAWING + '<svg><path d="M0 0" onload="alert(1)"/></svg>'),
+    _file(DRAWING + '<a href="https://example.com/">away</a>'),
+    _file(DRAWING + '<meta http-equiv="refresh" content="0;url=https://example.com/">'),
+    _file(DRAWING + '<img src="https://example.com/x.png">'),
+    _file(DRAWING + "<!-- a comment -->"),
+    _file(style="</style><script>alert(1)</script><style>"),
+    _file(DRAWING + "<style>body{}</style>"),
+    _file(DRAWING + "<p>" + "x" * (2 * 1024 * 1024) + "</p>"),
+    "",
+    None,
+], ids=["policy", "no-viewport", "no-head", "script", "handler", "svg-handler", "link-away", "refresh", "image", "comment",
+        "style-markup", "two-styles", "too-large", "empty", "missing"])
+async def test_a_report_file_where_anything_could_run_or_load_is_refused_and_nothing_written(make_rig, client, tmp_path, html):
+    rig = make_rig()
+    page = await _shown_report(rig, client)
+    with pytest.raises(RpcError) as error:
+        await rig.call("pages.export", {"id": page, "html": html, "downloads": str(tmp_path)})
+    assert error.value.code == INVALID_PARAMS
+    assert list(tmp_path.iterdir()) == []
+
+
+async def test_only_a_report_is_saved_as_a_file(make_rig, tmp_path):
+    rig = make_rig()
+    page = stored(rig.conn)
+    with pytest.raises(RpcError) as error:
+        await rig.call("pages.export", {"id": page["id"], "html": _file(), "downloads": str(tmp_path)})
+    assert error.value.data == {"kind": "not_report"}
+    with pytest.raises(RpcError) as error:
+        await rig.call("pages.export", {"id": "missing", "html": _file(), "downloads": str(tmp_path)})
+    assert error.value.data == {"kind": "page_gone"}
+    assert list(tmp_path.iterdir()) == []
+
+
+@pytest.mark.parametrize("title,name", [
+    ("Team report", "Team report"),
+    ('Q4: a/b\\c *now*? "x" <y> | z', "Q4 a b c now x y z"),
+    ("週報 · 11/10", "週報 · 11 10"),
+    ("Ends with dots...", "Ends with dots"),
+    ("CON", "CON_"),
+    ("aux.txt", "aux.txt_"),
+    ("?:*", "report"),
+    ("x" * 90, "x" * 80),
+], ids=["plain", "reserved-characters", "chinese", "dots", "device", "device-extension", "nothing-left", "long"])
+def test_a_report_file_is_named_after_its_page_as_windows_takes_a_name(title, name):
+    assert file_name(title) == name

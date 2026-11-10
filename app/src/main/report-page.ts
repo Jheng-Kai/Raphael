@@ -4,8 +4,9 @@
 // the time its data is from and the promise that it only states recorded facts, its contents, findings with coloured
 // status words under a summary box, tables with tabs for their groups, and the team as boxes in each member's colour
 // joined by labelled arrows. Everything in it is the member's plain text, escaped here: no markup or script of a model
-// ever runs, so a report needs no frame (R-PAGE-01).
+// ever runs, so a report needs no frame (R-PAGE-01). Shared, it is a file of this same drawing (`reportFile`).
 import "./report-page.css";
+import pageStyle from "./report-page.css?raw";
 import * as api from "./api";
 import { formatClock, formatDate } from "./format";
 import { t } from "./i18n";
@@ -46,12 +47,12 @@ function findingsHTML(section: Extract<ReportSection, { kind: "findings" }>): st
     (section.items.length ? `<ul class="rp-items${statuses ? " has-status" : ""}">${section.items.map(item).join("")}</ul>` : "");
 }
 
-function tableHTML(section: Extract<ReportSection, { kind: "table" }>, people: ReportPeople): string {
+function tableHTML(section: Extract<ReportSection, { kind: "table" }>, people: ReportPeople, tabbed: boolean): string {
   const groups = [...new Set(section.rows.flatMap(row => (row.group ? [row.group] : [])))];
   const statuses = section.rows.some(row => row.status);
   const columns = [...section.columns, ...(statuses ? [section.status_title || t("page.report.status")] : [])];
   // A tab per group, as Grok Bot's report has over its table; only where there is more than one group to choose.
-  const filter = groups.length > 1 ? tabs([
+  const filter = tabbed && groups.length > 1 ? tabs([
     { id: "all", label: t("page.report.all"), count: section.rows.length, attrs: ' data-report-tab="all"' },
     ...groups.map((group, index) => ({ id: `g${index}`, label: group, count: section.rows.filter(row => row.group === group).length, attrs: ` data-report-tab="g${index}"` })),
   ], "all", { label: section.title || t("page.report.all"), kind: "nav", plain: true }) : "";
@@ -72,30 +73,110 @@ function nodeName(node: ReportNode, people: ReportPeople): string {
   return node.owner ? ownerName() : node.name ?? "";
 }
 
-function teamHTML(section: Extract<ReportSection, { kind: "team" }>, index: number, people: ReportPeople): string {
+function teamHTML(section: Extract<ReportSection, { kind: "team" }>, index: number, people: ReportPeople, file?: FileDrawing): string {
   const names = new Map(section.nodes.map(node => [node.id, nodeName(node, people)]));
   // Read aloud as the arrows say it: 「主人 → 拉斐爾：交辦」.
   const said = section.edges.map(edge => `${names.get(edge.from)} → ${names.get(edge.to)}${edge.label ? `: ${edge.label}` : ""}`).join("; ");
   const notes = section.notes?.length ? `<dl class="rp-notes">${section.notes.map(note => `<div><dt>${esc(note.label)}</dt><dd>${esc(note.text)}</dd></div>`).join("")}</dl>` : "";
-  return `<div class="rp-team" data-report-team="${index}" role="img" aria-label="${esc(said || [...names.values()].join(", "))}"></div>${notes}`;
+  // In a file the team is drawn at once, for each width it may be read at; in the app once its width is known.
+  const drawn = file ? FILE_TEAMS.map((team, at) => `<div class="rp-team-at" data-at="${at}">${teamDiagramHTML(section, team.width, people, file.font)}</div>`).join("") : "";
+  return `<div class="rp-team" data-report-team="${index}" role="img" aria-label="${esc(said || [...names.values()].join(", "))}">${drawn}</div>${notes}`;
 }
 
-function sectionHTML(section: ReportSection, index: number, people: ReportPeople): string {
+function sectionHTML(section: ReportSection, index: number, people: ReportPeople, file?: FileDrawing): string {
   const body = section.kind === "findings" ? findingsHTML(section)
-    : section.kind === "table" ? tableHTML(section, people)
-    : section.kind === "team" ? teamHTML(section, index, people)
+    : section.kind === "table" ? tableHTML(section, people, !file)
+    : section.kind === "team" ? teamHTML(section, index, people, file)
     : section.text.split("\n").filter(line => line.trim()).map(line => `<p class="rp-p">${esc(line)}</p>`).join("");
   return `<section class="rp-sec" id="rp-s${index}" data-kind="${section.kind}">${section.title ? `<h2 class="rp-h2">${esc(section.title)}</h2>` : ""}${body}</section>`;
 }
 
-/** The whole page but its team diagrams, which are laid out once their width is known (`layoutTeam`). */
-export function reportHTML(title: string, report: Report, people: ReportPeople): string {
+/**
+ * The whole page. In the app its team diagrams are laid out once their width is known (`layoutTeam`); in a file
+ * (`file`) they are drawn at once and the table has no tabs, since nothing runs in a file to switch them.
+ */
+export function reportHTML(title: string, report: Report, people: ReportPeople, file?: FileDrawing): string {
   const titled = report.sections.flatMap((section, index) => (section.title ? [{ title: section.title, index }] : []));
   const contents = t("page.report.contents");
   const toc = titled.length > 1 ? `<nav class="rp-toc" aria-label="${esc(contents)}"><span class="rp-toc-h">${esc(contents)}</span>` +
     titled.map(entry => `<a href="#rp-s${entry.index}" data-report-goto="rp-s${entry.index}">${esc(entry.title)}</a>`).join("") + `</nav>` : "";
   return `<header class="rp-head"><h1 class="rp-title">${esc(title)}</h1><p class="rp-sub">${esc(subtitle(report))}</p></header>${toc}` +
-    `<div class="rp-body">${report.sections.map((section, index) => sectionHTML(section, index, people)).join("")}</div>`;
+    `<div class="rp-body">${report.sections.map((section, index) => sectionHTML(section, index, people, file)).join("")}</div>`;
+}
+
+// ---------- the page as a file ----------
+
+/**
+ * The owner shares a report as a file (2026-11-10, of Grok Bot's Share: 存成檔案): this same drawing as one HTML
+ * document that any browser opens, in its reader's light or dark theme and white on paper. Nothing in it runs or loads,
+ * as its policy says first; the core checks it so before writing it (agent/report_page.py `checked_file`).
+ */
+export const FILE_POLICY = "default-src 'none'; style-src 'unsafe-inline'; form-action 'none'; base-uri 'none'";
+/**
+ * The team in a file, drawn for each width it may be read at, widest first, since nothing runs in a file to lay it out
+ * again: `from` is the least width of the page's column that holds `width` (one column up to 960 px, then the body
+ * column of 736 px beside the contents: report-page.css).
+ */
+const FILE_TEAMS = [{ width: 704, from: 704 }, { width: 480, from: 480 }, { width: 300, from: 0 }] as const;
+/** How a file is drawn: the font its team labels are measured in. */
+interface FileDrawing { font: string }
+/** The theme's own words, as the window's stylesheet holds them: light, and what the dark theme changes. */
+export interface ThemeWords { light: ReadonlyMap<string, string>; dark: ReadonlyMap<string, string> }
+
+/**
+ * What a file needs of the window's base styles (styles.css), the page being the whole document there: the column of a
+ * conversation (agent.css --pa-colw) and room at its sides, less on a narrow screen.
+ */
+const FILE_BASE = "*{box-sizing:border-box}" +
+  "body{margin:0;padding:0 var(--sp-6);--pa-colw:var(--layout-thread-max);background:var(--content);color:var(--text);font:var(--fs-md)/1.6 var(--ui);-webkit-font-smoothing:antialiased;container-type:inline-size}" +
+  "@media (max-width: 640px){body{padding-inline:var(--sp-4)}}" +
+  "h1,h2,b{font-weight:var(--weight-semibold)}::selection{background:var(--selection);color:var(--on-selection)}" +
+  "svg.i{width:16px;height:16px;flex:none;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}" +
+  ".rp-sec{scroll-margin-top:var(--sp-5)}" +
+  // One drawing of the team shows, the one its page's width holds. (No `<` in a file's style: the core refuses it.)
+  `.rp-team-at:not([data-at="0"]){display:none}` +
+  FILE_TEAMS.slice(1).map((_, at) => `@container (max-width: ${FILE_TEAMS[at]!.from - 0.02}px){.rp-team-at[data-at="${at}"]{display:none}.rp-team-at[data-at="${at + 1}"]{display:block}}`).join("");
+
+/** The theme's words in `sheets` (styles.css `:root` and `:root[data-theme="dark"]`). */
+export function themeWords(sheets: Iterable<CSSStyleSheet> = document.styleSheets): ThemeWords {
+  const light = new Map<string, string>(), dark = new Map<string, string>();
+  for (const sheet of sheets) {
+    let rules: CSSRuleList;
+    try { rules = sheet.cssRules; } catch { continue; } // a sheet of another origin keeps its rules to itself
+    for (const rule of Array.from(rules)) {
+      if (!(rule instanceof CSSStyleRule)) continue;
+      const into = rule.selectorText === ":root" ? light : rule.selectorText === ':root[data-theme="dark"]' ? dark : null;
+      for (let index = 0; into && index < rule.style.length; index++) {
+        const name = rule.style.item(index);
+        if (name.startsWith("--")) into.set(name, rule.style.getPropertyValue(name).trim());
+      }
+    }
+  }
+  return { light, dark };
+}
+
+/** A file's style: the theme's words its rules use, the dark ones only on a dark screen, then the page's own rules. */
+export function fileStyle(words: ThemeWords): string {
+  const rules = FILE_BASE + pageStyle.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\s+/g, " ");
+  const named = (text: string): string[] => [...text.matchAll(/var\((--[\w-]+)/g)].map(match => match[1]!);
+  const used = new Set<string>(), waiting = named(rules);
+  while (waiting.length) {
+    const name = waiting.pop()!;
+    if (used.has(name)) continue;
+    used.add(name);
+    waiting.push(...named(words.light.get(name) ?? ""), ...named(words.dark.get(name) ?? ""));
+  }
+  const declared = (theme: ReadonlyMap<string, string>): string => [...used].sort().flatMap(name => (theme.has(name) ? [`${name}:${theme.get(name)};`] : [])).join("");
+  return `:root{${declared(words.light)}color-scheme:light}` +
+    `@media screen and (prefers-color-scheme: dark){:root{${declared(words.dark)}color-scheme:dark}}${rules}`;
+}
+
+/** The report as the file it is shared as: its policy, its style (`fileStyle`) and the page drawn for a file. */
+export function reportFile(title: string, report: Report, people: ReportPeople, look: { style: string; font: string }): string {
+  return `<!doctype html><html lang="${esc(document.documentElement.lang || "zh-TW")}"><head><meta charset="utf-8">` +
+    `<meta http-equiv="Content-Security-Policy" content="${FILE_POLICY}"><meta name="viewport" content="width=device-width, initial-scale=1">` +
+    `<title>${esc(title)}</title><style>${look.style}</style></head>` +
+    `<body><article class="rp-doc">${reportHTML(title, report, people, { font: look.font })}</article></body></html>`;
 }
 
 // ---------- the team diagram ----------
@@ -449,21 +530,42 @@ export interface ReportView {
  */
 export function mountReportView(stage: HTMLElement, people: () => ReportPeople): ReportView {
   let view: HTMLElement | null = null;
-  let current: { id: string; rev: number; report: Report } | null = null;
+  let current: { id: string; rev: number; title: string; report: Report } | null = null;
   let opener: HTMLElement | null = null;
   let generation = 0;
   let drawnWidth = 0;
+  let saving = false;
+
+  /** The font a team's labels are measured in: the page's own. */
+  const labelFont = (): string => `12px ${getComputedStyle(view!.querySelector<HTMLElement>(".rp-h2") ?? view!).fontFamily}`;
 
   function layout(force = false): void {
     if (!view || !current) return;
     const width = view.querySelector<HTMLElement>(".rp-body")?.clientWidth ?? 0;
     if (!width || (!force && width === drawnWidth)) return;
     drawnWidth = width;
-    const sample = view.querySelector<HTMLElement>(".rp-h2") ?? view;
-    const font = `12px ${getComputedStyle(sample).fontFamily}`;
+    const font = labelFont();
     for (const team of view.querySelectorAll<HTMLElement>("[data-report-team]")) {
       const section = current.report.sections[Number(team.dataset.reportTeam)];
       if (section?.kind === "team") team.innerHTML = teamDiagramHTML(section, Math.min(width, 760), people(), font);
+    }
+  }
+
+  /**
+   * Share (owner, 2026-11-10: 存成檔案): the report on screen saved as a file, in the owner's output folder or else in
+   * Downloads, shown selected in its folder, and a word of where it went.
+   */
+  async function share(): Promise<void> {
+    if (!view || !current || saving) return;
+    saving = true;
+    try {
+      const file = reportFile(current.title, current.report, people(), { style: fileStyle(themeWords()), font: labelFont() });
+      const saved = await api.reportSave(current.id, file);
+      toaster.show(t("page.report.saved", { p0: saved.place === "downloads" ? t("page.report.downloads") : saved.folder }));
+    } catch {
+      toaster.show(t("page.report.saveFailed"));
+    } finally {
+      saving = false;
     }
   }
 
@@ -480,6 +582,7 @@ export function mountReportView(stage: HTMLElement, people: () => ReportPeople):
     view.addEventListener("click", event => {
       const target = event.target as Element;
       if (target.closest("[data-report-act=close]")) { close(); return; }
+      if (target.closest("[data-report-act=share]")) { void share(); return; }
       const goto = target.closest<HTMLAnchorElement>("[data-report-goto]");
       if (goto) {
         event.preventDefault();
@@ -510,10 +613,12 @@ export function mountReportView(stage: HTMLElement, people: () => ReportPeople):
     }
     if (mine !== generation || opened?.kind !== "report") return;
     const host = element(), place = keep ? scroller()?.scrollTop ?? 0 : 0;
-    current = { id, rev: opened.rev, report: opened.report };
+    current = { id, rev: opened.rev, title: opened.title, report: opened.report };
     host.setAttribute("aria-label", opened.title);
+    // Share before the way back, as Grok Bot's Page has them at its top right.
     host.innerHTML = `<div class="rp-scroll" tabindex="-1"><article class="rp-doc">${reportHTML(opened.title, opened.report, people())}</article></div>` +
-      `<div class="rp-top">${iconButton("x", t("page.report.back"), ' data-report-act="close"', "rp-close")}</div>`;
+      `<div class="rp-top">${iconButton("share", t("page.report.share"), ' data-report-act="share"', "rp-share")}` +
+      `${iconButton("x", t("page.report.back"), ' data-report-act="close"', "rp-close")}</div>`;
     host.hidden = false;
     stage.classList.add("is-report");
     layout(true);

@@ -1878,6 +1878,8 @@ export function installMock(fixture, config = {}, target = window) {
       }
       if (command === "open_team_file") { state.openedTeamFile = args.path; return; }
       if (command === "open_library_file") { state.openedLibraryFile = { member_id: args.memberId, id: args.id }; return; }
+      // A report saved as a file (report_save, which the core writes): in Downloads, as when no output folder is chosen.
+      if (command === "report_save") return { place: "downloads", folder: "Downloads" };
       if (command === "pick_output_folder") return variant.folderCancel ? null : data.colleagueSample.path;
       if (command === "member_template_file") {
         if (args.action === "open") return JSON.stringify(data.colleagueSample.template);

@@ -1017,6 +1017,17 @@ describe("rendered look checks", () => {
     expect(result.horizontalOverflow.document).toBe(true);
     expect(failedChecks(result)).toBe(true);
   });
+  it("keeps what is below the fold of a document that scrolls as a whole, as a saved report, but never in the app's still body", () => {
+    const window = new Window();
+    window.document.body.innerHTML = '<p id="below">Team</p><button id="aside">Save</button>';
+    window.document.querySelector("#below").getBoundingClientRect = () => ({ left: 10, top: 1400, right: 300, bottom: 1430, width: 290, height: 30 });
+    window.document.querySelector("#aside").getBoundingClientRect = () => ({ left: 1100, top: 10, right: 1200, bottom: 40, width: 100, height: 30 });
+    Object.defineProperty(window.document.documentElement, "scrollHeight", { value: 2000 });
+    Object.defineProperty(window.document.documentElement, "clientHeight", { value: 900 });
+    expect(auditDocument(window.document, { width: 1120, height: 900 }, []).outsideViewport.map(item => item.id)).toEqual(["aside"]);
+    window.document.body.style.overflow = "hidden";
+    expect(auditDocument(window.document, { width: 1120, height: 900 }, []).outsideViewport.map(item => item.id)).toEqual(["below", "aside"]);
+  });
   it("excludes content deliberately outside a scrolling container", () => {
     const window = new Window();
     window.document.body.innerHTML = '<div style="overflow-y: auto"><button>Older item</button></div>';

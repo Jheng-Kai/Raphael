@@ -775,7 +775,7 @@ class AgentService:
         self._metrics_conn = conn
         self._spend = SpendTracker(conn, now_ms, tz)
         self._history = AgentHistory(conn, now_ms)
-        self.pages = Pages(conn, notify=notify, now_ms=now_ms)
+        self.pages = Pages(conn, notify=notify, now_ms=now_ms, output_folder=lambda: self._settings.get("owner_output_folder"))
         self.pages.tool_call = self._page_tool_call
         self.conversations = Conversations(conn, now_ms)
         self.quotas = Quotas(conn, now_ms, notify)

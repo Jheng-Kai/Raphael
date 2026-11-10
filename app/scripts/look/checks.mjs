@@ -4782,6 +4782,43 @@ export function checkRendered(name, context = {}) {
     require(!document.querySelector(".pg-card .pg-body iframe"), "there is one frame, moved, not a second one");
     return { check: name };
   }
+  if (name.startsWith("page-report-file")) {
+    // A report's saved file opened on its own (the `saved-file` step): the app's drawing in its reader's theme, nothing of the app.
+    const overlaps = (a, b) => a.left < b.right - 0.5 && b.left < a.right - 0.5 && a.top < b.bottom - 0.5 && b.top < a.bottom - 0.5;
+    require(document.querySelector('meta[http-equiv="Content-Security-Policy"]')?.content === "default-src 'none'; style-src 'unsafe-inline'; form-action 'none'; base-uri 'none'", "nothing in the file runs or loads");
+    require(!document.querySelector("script, iframe, img, button, .page-agent, .rp-view, .tabs"), "nothing of the app comes with it, and its table has no tabs");
+    require(document.title === "團隊總覽報告" && document.querySelector(".rp-title")?.textContent === "團隊總覽報告", "its title");
+    const dark = matchMedia("(prefers-color-scheme: dark)").matches, page = getComputedStyle(document.body);
+    require(page.backgroundColor === (dark ? "rgb(10, 10, 10)" : "rgb(255, 255, 255)") && page.color === (dark ? "rgb(245, 245, 245)" : "rgb(10, 10, 10)"), `its reader's ${dark ? "dark" : "light"} theme: ${page.color} on ${page.backgroundColor}`);
+    require(document.documentElement.scrollWidth <= innerWidth, "nothing runs out sideways");
+    const team = document.querySelector(".rp-sec[data-kind=team]"), drawings = [...team.querySelectorAll(".rp-team-at")].filter(visible);
+    require(drawings.length === 1, "one drawing of the team shows, the one its width holds");
+    const draw = drawings[0].querySelector(".rp-team-draw"), box = draw.getBoundingClientRect(), column = team.getBoundingClientRect();
+    require(box.left >= column.left - 1 && box.right <= column.right + 1, `the drawing fits its column: ${Math.round(box.width)} in ${Math.round(column.width)}`);
+    if (name === "page-report-file") {
+      const sub = document.querySelector(".rp-sub")?.textContent ?? "";
+      require(/^資料截至 \d{4}\/\d\d\/\d\d \d\d:\d\d · 只寫有紀錄的事實$/.test(sub), `the time its data is from: ${sub}`);
+      const toc = [...document.querySelectorAll(".rp-toc a")].map(entry => entry.textContent);
+      require(toc.join("|") === "重點發現|總覽表|分工與協作", `its contents: ${toc}`);
+      const words = [...document.querySelectorAll(".rp-items .rp-st")].map(word => getComputedStyle(word).color);
+      require(words.length === 4 && new Set(words).size === 4, "four status words, each in its own colour");
+      require(document.querySelectorAll(".rp-table tbody tr").length === 4 && ![...document.querySelectorAll(".rp-table tbody tr")].some(row => row.hidden), "every row of the table, as 全部 shows them");
+      return { check: name, team: Math.round(box.width) };
+    }
+    const top = team.getBoundingClientRect().top;
+    require(top >= 0 && top <= 48 || innerHeight + scrollY >= document.documentElement.scrollHeight - 1, `the contents brought the team to the top (${Math.round(top)} px)`);
+    const nodes = [...draw.querySelectorAll(".rp-node")].map(node => ({ node, box: node.getBoundingClientRect() }));
+    require(nodes.length === 5, "one box for each of the five");
+    nodes.forEach((a, index) => nodes.slice(index + 1).forEach(b => require(!overlaps(a.box, b.box), "no box over another")));
+    const labels = [...draw.querySelectorAll(".rp-lab")].map(label => label.getBoundingClientRect());
+    require(labels.length === 6 && draw.querySelectorAll(".rp-lines > path").length === 6, "six arrows, each saying what passes along it");
+    labels.forEach((label, index) => {
+      nodes.forEach(({ box: node }) => require(!overlaps(label, node), "no label over a box"));
+      labels.slice(index + 1).forEach(other => require(!overlaps(label, other), "no label over another"));
+    });
+    require(new Set(nodes.map(({ node }) => getComputedStyle(node, "::before").backgroundColor)).size === 5, "each one's own colour down the left of its box");
+    return { check: name, team: Math.round(box.width), height: Math.round(box.height) };
+  }
   if (name.startsWith("page-report")) {
     const overlaps = (a, b) => a.left < b.right - 0.5 && b.left < a.right - 0.5 && a.top < b.bottom - 0.5 && b.top < a.bottom - 0.5;
     const view = document.querySelector(".page-agent .rp-view"), stage = document.querySelector(".page-agent .ra-stage");
@@ -4800,6 +4837,8 @@ export function checkRendered(name, context = {}) {
     require(view, "the report view exists");
     if (name === "page-report-closed") {
       require(view.hidden && !stage.classList.contains("is-report"), "the report is put away");
+      const member = document.querySelector('.page-agent .mb-head [data-act="share-member"]');
+      require(!member || member.hidden || getComputedStyle(member).visibility === "visible", "the conversation header's share is back");
       require(getComputedStyle(scroller).visibility === "visible", "the thread is in sight again");
       require(document.activeElement === link, "the focus is back on the card that opened it");
       const box = link.getBoundingClientRect(), area = scroller.getBoundingClientRect();
@@ -4811,6 +4850,11 @@ export function checkRendered(name, context = {}) {
     const dock = stage.querySelector(":scope > .ra-dock"), composer = dock.querySelector(".composer");
     require(composer && visible(composer), "the member's composer stays below the report");
     require(view.getBoundingClientRect().bottom <= dock.getBoundingClientRect().top + 1, "the report ends where the composer begins");
+    // The report stands for the thread: its column starts and ends where the composer does, and so do its tools (R-UI-45,
+    // the judge on the first Share run: the × ended past the composer at every width).
+    const column = composer.getBoundingClientRect(), doc = view.querySelector(".rp-doc").getBoundingClientRect(), tools = view.querySelector(".rp-top").getBoundingClientRect();
+    require(Math.abs(doc.left - column.left) <= 1 && Math.abs(doc.right - column.right) <= 1, `the report's column is the composer's: ${Math.round(doc.left)}-${Math.round(doc.right)} and ${Math.round(column.left)}-${Math.round(column.right)}`);
+    require(Math.abs(tools.right - column.right) <= 1, `share and the × end where the composer does: ${Math.round(tools.right)} and ${Math.round(column.right)}`);
     const page = view.querySelector(":scope > .rp-scroll");
     require(page.scrollWidth <= page.clientWidth + 1, "nothing runs out sideways");
     require(getComputedStyle(page).maskImage.includes("gradient"), "what scrolls away fades before the header, as the thread does");
@@ -4823,10 +4867,31 @@ export function checkRendered(name, context = {}) {
       require(visible(document.querySelector(".rp-callout")), "the summary box above the findings");
       const words = [...document.querySelectorAll(".rp-items .rp-st")].map(word => getComputedStyle(word).color);
       require(words.length === 4 && new Set(words).size === 4, "four status words, each in its own colour");
-      const close = view.querySelector(".rp-close").getBoundingClientRect(), title = document.querySelector(".rp-title").getBoundingClientRect();
-      require(Math.round(close.width) === 36 && Math.round(close.height) === 36, "the × is the window edge's soft round button");
-      require(!overlaps(close, title), "the title clears the ×");
+      const close = view.querySelector(".rp-close").getBoundingClientRect(), share = view.querySelector(".rp-share").getBoundingClientRect();
+      const title = document.querySelector(".rp-title").getBoundingClientRect();
+      require([close, share].every(box => Math.round(box.width) === 36 && Math.round(box.height) === 36), "share and the × are the window edge's soft round buttons");
+      // Share just before the ×, as the conversation header's buttons stand apart (agent.css .ra-tools).
+      require(Math.abs(share.top - close.top) < 1 && Math.round(close.left - share.right) === 4, `share stands just before the ×: ${Math.round(close.left - share.right)} px`);
+      require(!overlaps(close, title) && !overlaps(share, title), "the title clears both");
+      // One share in sight: the member's own, in the conversation header, waits until the report closes.
+      const member = document.querySelector('.page-agent .mb-head [data-act="share-member"]');
+      require(!member || getComputedStyle(member).visibility === "hidden", "the conversation header's share waits while the report is open");
       return { check: name, toc };
+    }
+    if (name === "page-report-shared") {
+      const saves = window.__look.calls.filter(call => call.command === "report_save");
+      require(saves.length === 1 && saves[0].id === "page-report", "one press saved the report on screen, once");
+      const file = saves[0].html;
+      require(file.startsWith(`<!doctype html><html lang="zh-TW"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none';`), "the file starts with its policy");
+      require(!/<script|<iframe|<img|<button|data-report-tab/.test(file), "nothing in it runs, and its table has no tabs");
+      require(file.includes("<title>團隊總覽報告</title>") && (file.match(/class="rp-team-at"/g) ?? []).length === 3, "its title, and the team drawn for each width it may be read at");
+      // Both themes' words, as the window's stylesheet holds them, and the page's own rules (report-page.css).
+      require(/^[^]*?<style>:root\{[^}]*--content:#ffffff;/.test(file) && /prefers-color-scheme: dark\)\{:root\{[^}]*--content:#0a0a0a;/.test(file), "the light theme's words and the dark theme's");
+      require(file.includes('.rp-st[data-tone="ok"]') && !/<style>[^<]*<(?!\/style>)/.test(file), "the page's own rules, with no tag in them");
+      const toast = [...document.querySelectorAll(".toast")].at(-1)?.textContent;
+      require(toast === "已存到「下載」", `it says where the file went: ${toast}`);
+      require(document.activeElement?.closest(".rp-view") || document.activeElement === document.body, "the report keeps the focus");
+      return { check: name, bytes: file.length };
     }
     if (name === "page-report-team") {
       const team = document.querySelector(".rp-sec[data-kind=team]"), top = team.getBoundingClientRect().top, from = page.getBoundingClientRect().top;

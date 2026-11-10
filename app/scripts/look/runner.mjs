@@ -217,29 +217,31 @@ export async function run(options) {
         });
         const actualLocale = await page.evaluate(() => document.documentElement.lang || "zh-TW");
         result.locale = actualLocale;
-        const englishUI = actualLocale === "zh-TW" && !scene.name.startsWith("overlay-") ? await page.evaluate(async () => {
+        // A scene marked `file` ends on a file the app saved, opened on its own (the `saved-file` step): none of the
+        // app's own checks reach into it, and its boundary was read before it was left.
+        const englishUI = actualLocale === "zh-TW" && !scene.name.startsWith("overlay-") && !scene.file ? await page.evaluate(async () => {
           const [{ en }, { zhTW }] = await Promise.all([import('/src/main/i18n/en.ts'), import('/src/main/i18n/zh-TW.ts')]);
           // Brand/key names and deliberately shared CTA decisions have identical values.
           return [...new Set(Object.entries(en).filter(([key, value]) => typeof value === 'string' && /[A-Za-z]/.test(value) && !/[<{}]/.test(value) && /[\u3400-\u9fff]/.test(zhTW[key] ?? '') && value !== zhTW[key]).map(([, value]) => value.trim()))];
         }) : [];
         // The ⋯ buttons that no row of the app's own table (context-menu.ts) reaches with a right click: R-UI-44.
-        const unreached = scene.entry ? [] : await page.evaluate(async () => {
+        const unreached = scene.entry || scene.file ? [] : await page.evaluate(async () => {
           const { uncoveredOverflows } = await import('/src/main/context-menu.ts');
           return uncoveredOverflows(document).map(button => ({ tag: "button", id: button.id, class: button.className, text: button.getAttribute("aria-label") ?? "" }));
         });
         result.viewport=page.viewport();
         Object.assign(result, await page.evaluate(auditDocument, undefined, result.viewport, namespaces, latinFor(scene, actualLocale), englishUI, unreached));
-        if (!scene.entry) {
+        if (!scene.entry && !scene.file) {
           for (const name of ["content-width", "thread-edges", "message-no-inner-scroll", "message-no-raw-envelope"]) {
             try { (result.assertions ??= []).push(await page.evaluate(checkRendered, name)); }
             catch (value) { error("layout", value.message); }
           }
         }
-        if (!scene.entry && await page.evaluate(() => [...document.querySelectorAll('.conversation-card')].some(card => !card.closest('[hidden]')))) {
+        if (!scene.entry && !scene.file && await page.evaluate(() => [...document.querySelectorAll('.conversation-card')].some(card => !card.closest('[hidden]')))) {
           try { (result.assertions ??= []).push(await page.evaluate(checkRendered, "card-shell")); }
           catch (value) { error("layout", value.message); }
         }
-        const mockErrors = await page.evaluate(() => window.__look?.errors ?? ["Mock boundary was not installed"]);
+        const mockErrors = scene.file ? [] : await page.evaluate(() => window.__look?.errors ?? ["Mock boundary was not installed"]);
         for (const message of mockErrors) error("ipc", message);
         const image = `${scene.name}-${theme}-${width}.png`;
         await page.screenshot({ path: join(directory, image), type: "png" });

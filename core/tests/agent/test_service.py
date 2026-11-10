@@ -52,6 +52,7 @@ METHODS = [
     "conversations.clear",
     "conversations.list",
     "messages.search",
+    "pages.export",
     "pages.open",
     "pages.tool_call",
     "quota.list",

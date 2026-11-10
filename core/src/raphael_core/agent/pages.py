@@ -10,11 +10,12 @@ import ipaddress
 import json
 import re
 import secrets
+from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
 from ..clock import wall_clock_ms
 from ..memory.scan import find_secret
-from ..protocol import NOT_FOUND, RpcError, invalid_params
+from ..protocol import INTERNAL_ERROR, NOT_FOUND, RpcError, invalid_params
 
 HTML_BYTES = 256 * 1024
 MCP_MIME = "text/html;profile=mcp-app"
@@ -293,14 +294,18 @@ class PageHost:
 
 
 class Pages:
-    def __init__(self, conn, *, notify=None, now_ms=wall_clock_ms):
+    def __init__(self, conn, *, notify=None, now_ms=wall_clock_ms, output_folder=lambda: ""):
         self.store = PageStore(conn, now_ms)
         self.host = PageHost(self.store)
         self.notify, self.tool_call = notify, None
+        # The owner's output folder (settings `owner_output_folder`), read when a report is saved.
+        self.output_folder = output_folder
 
     def register(self, router):
         router.register("pages.open", self.open)
         router.register("pages.tool_call", self.call)
+        # The shell's alone (`report_save`): the window may not call it, so it never names a folder.
+        router.register("pages.export", self.export)
 
     def changed(self, page):
         if self.notify is not None:
@@ -334,3 +339,26 @@ class Pages:
         if page["source"] != "mcp" or self.tool_call is None:
             raise RpcError(NOT_FOUND, "This page has no plugin server", {"kind": "not_mcp"})
         return await self.tool_call(page, params)
+
+    async def export(self, params):
+        """Saves a report as a file the owner can pass on (owner, 2026-11-10: 存成檔案): the document the app drew of it
+        (`html`, checked by report_page.checked_file), named after the page, in the owner's output folder, or in
+        `downloads` (the shell's Downloads folder) when none is chosen or it takes nothing. Answers where it went; the
+        shell shows the file selected in its folder."""
+        from .report_page import checked_file, file_name, save_file  # report_page imports this module
+        page = self.of(params)
+        if not is_report(page):
+            raise RpcError(NOT_FOUND, "Only a report is saved as a file", {"kind": "not_report"})
+        try:
+            text = checked_file(params.get("html"))
+        except PageError as error:
+            raise invalid_params(str(error)) from None
+        folders = [("output", Path(chosen))] if (chosen := self.output_folder()) else []
+        downloads = params.get("downloads")
+        folders.append(("downloads", Path(downloads) if isinstance(downloads, str) and Path(downloads).is_absolute()
+                        else Path.home() / "Downloads"))
+        try:
+            place, path = await asyncio.to_thread(save_file, text, file_name(page["title"]), folders)
+        except PageError as error:
+            raise RpcError(INTERNAL_ERROR, "The report could not be saved", {"kind": error.kind}) from None
+        return {"path": str(path), "place": place, "folder": path.parent.name or str(path.parent)}

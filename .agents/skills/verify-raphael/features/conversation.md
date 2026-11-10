@@ -1904,10 +1904,28 @@ The core stamps `as_of` (ISO text, never 13 digits of milliseconds, which can pa
 - **Open.** The card opens the report in the thread's place (`.ra-stage.is-report`): the thread
   stays laid out and hidden under it, so its scroll is kept; the composer stays below and the
   owner can ask for changes. The × at the top right is the window edge's 36 px soft round button
-  (`.rp-top`, R-UI-16 list). Sending, another conversation, or the card leaving the thread puts
+  (`.rp-top`, R-UI-16 list). Like the thread it stands for, the report's column starts and ends
+  where the composer does, and its top-right buttons end at the composer's right edge (R-UI-45;
+  `.rp-scroll` takes `--pa-dock-x`, `.rp-doc` `--pa-colw`; the contents become a right column once
+  the column is the full 960 px). Sending, another conversation, or the card leaving the thread puts
   it away; the focus returns to the card. A changed revision is drawn again where it was read.
+- **Share** (owner, 2026-11-10, Grok Bot's Page has Share at its top right; of the three ways put
+  to the owner, save a file, open it in the browser or copy it as text, the owner chose 存成檔案).
+  Before the ×, 4 px apart as the conversation header's buttons: the same 36 px soft round button
+  with Lucide `share`, named 分享 (it has no words of its own, so its tooltip repeats nothing). A
+  press saves the report as one HTML file of the app's own drawing (`reportFile`): its policy
+  first (`default-src 'none'`, nothing in it runs or loads), the theme's words for light and for a
+  dark screen (white on paper), the table with every row and no tabs, the team drawn at 704, 480
+  and 300 px with the one its page width holds shown. The shell's `report_save` gives it to the
+  core's `pages.export` (the window may not call it, so no folder comes from the window): only a
+  report page, only that drawing's elements and attributes, links within the page; the file is
+  named after the page as Windows takes a name, `(2)` and on, never over a file, in 設定 › 一般 ›
+  輸出資料夾, or in Downloads when none is chosen or it takes nothing. The shell selects it in File
+  Explorer; a toast says 已存到「下載」 or the output folder's name (a failure: 檔案沒有存成，請再試一次。),
+  and the report stays open. While a report is open the conversation header's own share (the
+  member's template, the same icon for another thing) is hidden, so one share is in sight.
 - **Page.** Title (`--fs-h1`), 「資料截至 <date time> · 只寫有紀錄的事實」, 「本頁內容」 (a row under
-  the title; a sticky column at the right from 1100 px of report width). Findings: a summary box
+  the title; a sticky column at the right once the report's column is 960 px wide). Findings: a summary box
   (`--panel`, info icon) and rows with a status word in the theme's own colour (`--ok`,
   `--warn`, `--err`, `--text-3`; the member's own word or the window's: 運作中, 完成, 待執行,
   等你回覆, 卡住, 暫停, 沒有完成). Table: tabs (`tabs()` nav, plain) for its groups when there are
@@ -1925,20 +1943,45 @@ npm run look -- page-report-card page-report page-report-team page-report-tab pa
 ```
 
 page-report-card checks the file card, its words and icon, and that nothing opens before a press;
-page-report the composer below, the date line, the contents, four status colours, the fade and
-the ×; page-report-team that the contents bring the team to where the title stands, five boxes
+every open report scene that the report's column is the composer's and share and the × end at its
+right edge; page-report the composer below, the date line, the contents, four status colours, the
+fade, share and the × (36 px, 4 px apart, clear of the title) and the conversation header's share
+hidden; page-report-team that the contents bring the team to where the title stands, five boxes
 and six labels overlap nothing, five colours, the names from the roster and the notes;
-page-report-tab the group filter; page-report-close the thread, the scroll and the focus back.
+page-report-tab the group filter; page-report-close the thread, the scroll, the focus and the
+header's share back.
 The page scenes are the consumers of the shared page card and host (`mountPages`, the room
 composer's send). Compare the link card with a member's file card (`dataset-chart`) at the same
 theme and width: same component, size, surface and type.
 
+Share alone (every state of the report view, whose top right it joins, and its saved file; the link
+card, the page card and its host are untouched):
+
+```powershell
+npm run look -- page-report page-report-team page-report-tab page-report-close page-report-share page-report-file page-report-file-team --theme both --width 1120,720,1920x1080
+```
+
+page-report-share checks one `report_save` of the page on screen, a file that starts with its
+policy and holds no script, button or tabs, its title, three drawings of the team, both themes'
+words and the page's own rules with no tag in its style, the toast 已存到「下載」, and the report
+still open. page-report-file and page-report-file-team are scenes marked `file`: the `saved-file`
+step opens what was saved on its own (a blank page given the file; it is also kept as
+`saved-report.html` in the run), so the runner's app checks stay out of it and the audit treats a
+document that scrolls as a whole as its own scrollport. They check the policy, nothing of the app,
+the title, the reader's theme (`prefers-color-scheme`), no sideways overflow, one drawing of the
+team that fits its column; the file's date line, contents, four status colours and every table
+row; and that its contents link brings the team up with five boxes and six labels overlapping
+nothing. Compare share with the conversation header's share (`.ra-tools`, page-report-close) at
+the same theme and width: same component, icon and size.
+
 Tests: core `tests/agent/test_pages.py` (report store, open, update, refusals, the card-number
-time), `tests/agent/test_owner_questions.py` (no background wait), `tests/members/test_team_work.py`
-(projection, window, caps, privacy, time zone, the harness end to end);
-`app/src/main/report-page.test.ts` (escaping, contents, statuses, tabs, diagram layout invariants,
-open/close/refresh). The fixture proves drawing only; a real member turn on a real model is the
-native boundary.
+time; the saved file's folder, names and refusals), `tests/agent/test_owner_questions.py` (no
+background wait), `tests/members/test_team_work.py` (projection, window, caps, privacy, time zone,
+the harness end to end); `app/src/main/report-page.test.ts` (escaping, contents, statuses, tabs,
+diagram layout invariants, open/close/refresh; the file, its style, the theme's words, share);
+`app/src-tauri/src/commands.rs` (the window may not call `pages.export`). The fixture proves
+drawing only; a real member turn on a real model, the core writing the file and File Explorer
+selecting it are the native boundary.
 
 ## Diagnostic credential security (2026-11-05)
 

@@ -16,7 +16,11 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
     }
     return true;
   };
-  // Content outside a scrollport is intentionally offscreen. Inspect its container instead.
+  // Content outside a scrollport is intentionally offscreen. Inspect its container instead. A document that scrolls as a
+  // whole (a report saved as a file) is its own scrollport up and down; the app's body never scrolls, so nothing changes there.
+  const root = doc.scrollingElement ?? doc.documentElement;
+  const bodyStyle = win.getComputedStyle(doc.body);
+  const pageScrolls = !/hidden|clip/.test(bodyStyle.overflowY || bodyStyle.overflow) && root.scrollHeight > root.clientHeight + 1;
   const clipped = element => {
     const box = element.getBoundingClientRect();
     for (let parent = element.parentElement; parent && parent !== doc.body; parent = parent.parentElement) {
@@ -25,7 +29,7 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
       const y = /auto|scroll|hidden|clip/.test(style.overflowY || style.overflow);
       if ((x && (box.left < rect.left - 1 || box.right > rect.right + 1)) || (y && (box.top < rect.top - 1 || box.bottom > rect.bottom + 1))) return true;
     }
-    return false;
+    return pageScrolls && (box.top < -1 || box.bottom > viewport.height + 1);
   };
   const onScreen = element => {
     const box = element.getBoundingClientRect();
