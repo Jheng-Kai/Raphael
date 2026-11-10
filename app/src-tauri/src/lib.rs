@@ -549,11 +549,8 @@ fn log_plugin<R: Runtime>() -> TauriPlugin<R> {
         // Other crates (the webview, the HTTP stack) stay at Info even when Raphael logs more.
         .level_for("tao", log::LevelFilter::Info)
         .level_for("wry", log::LevelFilter::Info)
-        // Until the "hotkey does nothing while Raphael's own window is in front" report is
-        // explained, the keyboard hook and the hotkey service always log their decisions. They
-        // log modifier keys only (Alt, Ctrl, Shift, Win), and a Space that went down just before
-        // the modifier of its hotkey (Right Alt+Space); never what is typed.
-        .level_for("handy_keys", log::LevelFilter::Debug)
+        // Suppress per-modifier hook diagnostics; keep actual Raphael hotkey events visible.
+        .level_for("handy_keys", log::LevelFilter::Info)
         .level_for("app_lib::hotkey", log::LevelFilter::Debug)
         // Keep overlay event delivery and page diagnostics visible during normal dictations.
         .level_for("app_lib::overlay", log::LevelFilter::Debug)

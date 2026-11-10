@@ -66,12 +66,25 @@ def fast_search(monkeypatch):
     monkeypatch.setattr(web, "SEARCH_INTERVAL_S", .03, raising=False)
 
 
-async def test_searches_share_a_provider_queue_across_clients_and_successive_calls(fast_search):
+async def test_searches_share_a_provider_queue_across_clients_and_successive_calls(fast_search, monkeypatch):
     starts, active, peak = [], 0, 0
+    loop = asyncio.get_running_loop()
+    now = loop.time()
+    sleep = asyncio.sleep
+
+    async def advance(delay):
+        nonlocal now
+        now += delay
+        await sleep(0)
+
+    # Measure the queue's cooldown without Windows timer granularity or scheduling delays
+    # between dispatch and the mock transport. Still yield so the clients compete for the gate.
+    monkeypatch.setattr(loop, "time", lambda: now)
+    monkeypatch.setattr(asyncio, "sleep", advance)
 
     async def answer(request):
         nonlocal active, peak
-        starts.append(time.monotonic())
+        starts.append(loop.time())
         active += 1
         peak = max(peak, active)
         await asyncio.sleep(.01)
@@ -82,7 +95,8 @@ async def test_searches_share_a_provider_queue_across_clients_and_successive_cal
         await asyncio.gather(web.search("brave", "one", http=first, key=KEY), web.search("brave", "two", http=second, key=KEY))
         await web.search("brave", "next turn", http=first, key=KEY)
     assert peak == 1
-    assert all(b - a >= .025 for a, b in zip(starts, starts[1:]))
+    assert len(starts) == 3
+    assert [b - a for a, b in zip(starts, starts[1:])] == pytest.approx([web.SEARCH_INTERVAL_S] * 2)
 
 
 async def test_a_search_rechecks_the_cooldown_after_an_early_timer_wakeup(fast_search, monkeypatch):
