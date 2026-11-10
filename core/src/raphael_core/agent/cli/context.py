@@ -9,7 +9,15 @@ from ...memory.compression import FRESH_CONTEXT_CHARS, recent_turns
 
 
 DEFAULT_CONTEXT_TOKENS = 64000
+# The window of a CLI's models before one has reported its own (`context_window`): Claude Code reports 200K tokens
+# for its models, or 1M for the long-context ones, so the smaller is a safe start. Other CLIs start from the default.
+KNOWN_CONTEXT_TOKENS = {"claude": 200_000}
 CONTEXT_HEADROOM = .75
+
+
+def window_tokens(*candidates):
+    """The first window of `candidates` that is one, else the default."""
+    return next((value for value in candidates if type(value) is int and value > 0), DEFAULT_CONTEXT_TOKENS)
 
 
 def line_hashes(text):
@@ -87,10 +95,10 @@ def context_tokens(usage):
                number("total_tokens"), number("context_tokens"))
 
 
-def should_compact(state, system, user):
-    window = state.get("window")
-    if type(window) is not int or window <= 0:
-        window = DEFAULT_CONTEXT_TOKENS
+def should_compact(state, system, user, window=None):
+    """Whether `system` and `user` would fill the native session past its headroom. A session's measured window comes
+    first, then `window`, what is known of the model's."""
+    window = window_tokens(state.get("window"), window)
     # UTF-8 bytes conservatively bound added tokens even for scripts with dense tokenization.
     incoming = len((system + user).encode("utf-8"))
     return max(state.get("tokens", 0), state.get("estimated_tokens", 0)) + incoming >= window * CONTEXT_HEADROOM

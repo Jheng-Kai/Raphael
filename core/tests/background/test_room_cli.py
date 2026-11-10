@@ -503,14 +503,17 @@ async def test_long_cli_room_keeps_answering_with_whole_recent_messages(meeting,
 
 
 async def test_one_oversized_room_message_reports_overflow_and_does_not_poison_next_turn(meeting, monkeypatch, tmp_path):
+    from raphael_core.agent.cli.context import CONTEXT_HEADROOM, KNOWN_CONTEXT_TOKENS
     from raphael_core.failures import classify
     rig, members, rooms, room, alice = meeting
     members.store.update_member(alice.id, model="cli:claude")
     rig.service.use_cli(Brains(tmp_path))
     played = scripted_cli(monkeypatch, [Event("final", "The smaller request works.")])
+    # More than Claude Code's whole budget (its known window, counted as bytes): the owner's words are never cut to fit.
+    oversized = "oversized " * (int(KNOWN_CONTEXT_TOKENS["claude"] * CONTEXT_HEADROOM) // len("oversized ") + 1)
     with rig.conn:
         source = rig.conn.execute("INSERT INTO room_messages(room_id,member_id,text,created) VALUES (?,NULL,?,1)",
-                                  (room["id"], "@Alice " + "oversized " * 10000)).lastrowid
+                                  (room["id"], "@Alice " + oversized)).lastrowid
     await rooms._exchanges.start(room, source, "en", ())
     await until(lambda: rooms._exchanges.latest(room["id"])["state"] in ("done", "stopped"))
     assert not played

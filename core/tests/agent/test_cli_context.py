@@ -6,9 +6,11 @@ from types import SimpleNamespace
 import pytest
 
 from raphael_core.agent.cli.context import FRESH_CONTEXT_CHARS, context_tokens, fresh_user, line_hashes, resumed_user, section_delta
+from raphael_core.agent.cli.discovery import CliBrains
 from raphael_core.agent.cli.drivers import Driver, Event
 from raphael_core.agent.cli.loop import CliLoop, RECOVER, Sessions
 from raphael_core.background.cli import RoomCliSessions
+from raphael_core.worker.guards import wrap_untrusted
 
 from agent.test_cli_recovery import recovery_rig
 
@@ -175,6 +177,77 @@ async def test_measured_near_limit_compacts_before_starting_provider(monkeypatch
     assert len(rig.calls) == 1 and rig.calls[0]["session"] is None
     assert "Keep this request." in rig.calls[0]["user"] and "Most recent task." in rig.calls[0]["user"]
     assert sessions.get_context(5, rig.loop.model, "new-session", 7)["window"] == 10000
+
+
+def tool_call(identifier, name, arguments, result, *, ok=True):
+    return [{"role": "assistant", "content": None, "tool_calls": [{"id": identifier, "type": "function",
+             "function": {"name": name, "arguments": json.dumps(arguments)}}]},
+            {"role": "tool", "tool_call_id": identifier, "content": wrap_untrusted(name, result, ok=ok)}]
+
+
+@pytest.mark.parametrize("brain", ["claude", "codex", "gemini"])
+async def test_an_over_budget_continuation_starts_afresh_with_the_owners_answer_first(monkeypatch, tmp_path, brain):
+    # Failed lookups would fill the short work record; the owner's answer still leads it, so it is never asked again.
+    earlier = [message for index in range(10)
+               for message in tool_call(f"look-{index}", "find_app", {"query": "q" * 1500}, "e" * 1500, ok=False)]
+    earlier += tool_call("ask", "ask_owner", {"question": "Which day?"}, json.dumps({"answer": "Wednesday after lunch"}))
+
+    async def play(loop, attempt):
+        yield Event("final", "Tuesday confirmed.")
+
+    rig = recovery_rig(monkeypatch, tmp_path, play, brain=brain, owner_text="Arrange a visit.", tool_conversation=earlier)
+    assert "Previous tool conversation" in rig.loop.user and "Wednesday after lunch" in rig.loop.user
+    rig.loop.user += "z" * 160_000  # over any window's budget
+    assert (await rig.loop.run()).final == "Tuesday confirmed."
+    [call] = rig.calls
+    assert call["session"] is None and len(call["user"]) <= FRESH_CONTEXT_CHARS
+    assert '"status": "answered"' in call["user"]
+    assert call["user"].index("Wednesday after lunch") < call["user"].index("find_app")
+
+
+async def test_a_new_claude_code_loop_sends_a_long_request_whole(monkeypatch, tmp_path):
+    # Nothing is measured yet, but Claude Code's models hold at least 200K tokens: 60 KB is no reason to start from a
+    # short work record, as the 64K guess made it.
+    async def play(loop, attempt):
+        yield Event("final", "Done.")
+
+    rig = recovery_rig(monkeypatch, tmp_path, play, brain="claude", owner_text="Keep this request.")
+    rig.loop.user = "<question>Keep this request.</question>" + "z" * 60_000
+    await rig.loop.run()
+    assert rig.calls[0]["user"] == rig.loop.user
+
+
+async def test_the_window_a_cli_reported_sizes_its_next_loop(monkeypatch, tmp_path):
+    calls = []
+
+    class FakeDriver:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def run(self, **kwargs):
+            calls.append(kwargs)
+            yield Event("usage", data={"input_tokens": 10, "context_window": 1_000_000})
+            yield Event("final", "Done.")
+
+        async def interrupt(self):
+            pass
+
+    monkeypatch.setattr("raphael_core.agent.cli.loop.Driver", FakeDriver)
+    brains = CliBrains(home=tmp_path, environ={}, commands={"gemini": ["fake"]})
+    monkeypatch.setattr(brains, "available", lambda *args, **kwargs: True)
+    long = "<question>Request</question>" + "z" * 60_000
+
+    async def submitted(model):
+        loop = CliLoop(brains=brains, sessions=RoomCliSessions(), member_id=5, conversation_id=7, model=model,
+            ledger=SimpleNamespace(add=lambda **kwargs: None), language="en", plain=True, system="Persona", user=long,
+            owner_text="Request", tools=[], progress=lambda _: None, thinking=lambda _: None, event=lambda _: None,
+            execute=None)
+        await loop.run()
+        return calls[-1]["user"]
+
+    assert await submitted("cli:gemini:fake") != long  # nothing known yet: the 64K guess compacts it
+    assert await submitted("cli:gemini:fake?effort=high") == long  # the window its first run reported
+    assert await submitted("cli:gemini:other") != long  # another model's window is its own
 
 
 def test_native_context_state_survives_restart_and_is_scoped_and_deleted(conn):

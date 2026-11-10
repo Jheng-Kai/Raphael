@@ -91,7 +91,7 @@ def member_loop(brains, quota, task, run, spec, *, wait_s, progress):
     loop = CliLoop(brains=brains, sessions=RoomCliSessions(), member_id=task.member_id,
         conversation_id=f"room-task-{task.id}", model=run.model, ledger=run.ledger,
         language=task.language, plain=True, system=spec["system"], user=spec["user"],
-        owner_text=task.text,
+        owner_text=task.text, tool_conversation=spec.get("tool_conversation", ()), steps=spec.get("steps", ()),
         tools=spec["tools"], skills=spec.get("skills", ()), attachments=run.attachments, progress=progress,
         thinking=lambda text: None, event=progress, reply=getattr(run, "_reply", None), execute=execute, quota=quota, wait_timeout_s=wait_s,
         rate_limit_waits=cli_loop.ROOM_RATE_LIMIT_WAITS_S, alive=run.touch)

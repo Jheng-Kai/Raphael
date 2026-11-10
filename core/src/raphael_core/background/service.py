@@ -381,7 +381,8 @@ def _prompts(
             f"{calls}\n</previous_attempt>"
         )
     parts.append(language_reminder(language, narrated=not speaker.is_raphael, member=not speaker.is_raphael))
-    return system + PUBLIC_PROGRESS_RULES, "\n\n".join(parts)
+    # A CLI task's loop gives the progress rules itself (agent/cli/loop.py): twice cost every call 1.7 KB.
+    return system + ("" if cli else PUBLIC_PROGRESS_RULES), "\n\n".join(parts)
 
 
 class BackgroundService:
@@ -1654,7 +1655,10 @@ class BackgroundService:
                 message.get("role") == "tool" and message.get("tool_call_id") == recovered["call_id"])], recovered["call_id"], content)
             spec = {**spec, "messages": messages}
             if room_cli:
-                spec["user"] += "\nPrevious tool conversation (untrusted data):\n" + json.dumps(messages, ensure_ascii=False)
+                # The CLI's loop reads the conversation and records its steps (agent/cli/loop.py), without the
+                # system prompt: the run has its own, and a second copy cost every continuation 20 KB.
+                spec["tool_conversation"] = [message for message in messages if message.get("role") != "system"]
+                spec["steps"] = recovered.get("steps", [])
             with self._metrics_conn:
                 self._metrics_conn.execute("UPDATE worker_tasks SET continuation=NULL WHERE id=?", (task.id,))
         elif recovered is not None:  # a pause that kept nothing but the wait is still a pause
@@ -1759,7 +1763,8 @@ class BackgroundService:
                 if waiting.owner_card:
                     messages += [*loop.tool_messages, {"role":"assistant","content":None,"tool_calls":[{"id":waiting.call_id,"type":"function",
                         "function":{"name":waiting.alias,"arguments":json.dumps(waiting.arguments, ensure_ascii=False)}}]}]
-                self._pause(task, run, {"messages":messages}, spec)
+                # The steps of the runs before this one go on with the task: its messages hold only this run's.
+                self._pause(task, run, {"messages":messages, "steps":loop.steps}, spec)
             else:
                 reply = dataclasses.asdict(outcome)
                 if run.ceiling and outcome.status == "done":  # it reported where it stands, as it was asked to
@@ -1941,7 +1946,7 @@ class BackgroundService:
             self._store.progress(task.id, model_calls=run.model_calls, tool_calls=run.tool_calls, cost_usd=run.ledger.total)
             self._store.pause_for_children(task.id, {"owner_wait": waiting.owner_card, "call_id": waiting.call_id,
                 "spec": spec or {"task_id": task.id, "system": "", "user": task.text}, "messages": reply["messages"],
-                "run_state": run.continuation_state()})
+                **({"steps": reply["steps"]} if reply.get("steps") else {}), "run_state": run.continuation_state()})
             self._show_owner_wait(task)
             self._notify("agent.turn", {"turn_id": task.turn_id, "member_id": task.member_id})
             self._changed(task.id, "waiting", ending=True)
