@@ -156,6 +156,9 @@ async def test_chat_revocation_changes_next_model_offer_and_refuses_an_old_alias
         assert "Sample__look" not in names, kwargs["messages"]
         return chat("Old cached call.", use("Sample__look", {"topic": "sample"}))
     client.chats = [chat("Change access.", use("manage_connection", {"connection": server.id, "operation": operation, "tool": "look"})), after, chat("Access was revoked."), chat("Access was revoked.")]
+    if operation == "disconnect":
+        # R-AG-MGMT-02: a disconnect is held until the turn is in and the owner says yes, so the old alias is tried after it.
+        client.chats.insert(1, chat("Asked."))
     result = await typed(rig, "Turn off Sample access")
     if operation == "disconnect":
         assert result["status"] == "confirm" and hub.offered()

@@ -133,7 +133,7 @@ async def test_worker_stops_and_persists_a_failed_report_for_missing_grant(tmp_p
     vm.start = AsyncMock()
     hub = VmTools(EmptyHub(), vm, attachments=AttachmentStore(tmp_path), conn=conn, bridge=Bridge)
     caller = SimpleNamespace(tool_allowed=lambda key: True, _gate=ToolGate(hub), task_id=123, tool_calls=0, snapshot=take_snapshot(hub),
-                             _check=lambda **kwargs: None, _end_step=Mock())
+                             _check=lambda **kwargs: None, _end_step=Mock(), _note_action=lambda *args: None)
     caller._plugin = lambda *args: TaskRun._plugin(caller, *args)
     with pytest.raises(RpcError) as stopped:
         await TaskRun._tool(caller, "computer__request_computer", {"reason": "Routine needs desktop"})
