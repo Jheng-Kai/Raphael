@@ -793,7 +793,61 @@ async def test_missing_sign_in_and_scope_report_the_selected_model(rig, scope, k
     assert not [r for r in rig.requests if r.url.host == "api.openai.com"]
 
 
-@pytest.mark.parametrize("status,body,kind,shape", [(503, {"detail": "secret-provider-text"}, "chatgpt_unavailable", "detail"),
+async def chat_once(rig):
+    return await rig.client.chat_tools(model="@chatgpt:chosen-model", messages=[], tools=[], timeout_s=2, max_tokens=50)
+
+
+async def test_a_busy_service_is_asked_again_and_is_not_a_plan_that_cannot_be_checked(rig):
+    await rig.sign_in()
+    rig.responses = [httpx.Response(503, json={"detail": "secret-provider-text"})]
+    with pytest.raises(OpenRouterError) as error:
+        await chat_once(rig)
+    failed = classify(error.value)
+    assert failed.kind == "server" and failed.transient
+    # The plan's own word that it cannot be checked is still that.
+    rig.responses = [httpx.Response(503, json={"error": {"code": "subscription_sharing_usage_unavailable"}})]
+    with pytest.raises(OpenRouterError) as error:
+        await chat_once(rig)
+    assert classify(error.value).kind == "chatgpt_unavailable"
+
+
+def stream_error(packet):
+    return httpx.Response(200, headers={"content-type": "text/event-stream"},
+                          text="data: " + json.dumps(packet) + "\n\n")
+
+
+@pytest.mark.parametrize("packet,kind", [
+    ({"type": "error", "code": "server_error", "message": "secret-provider-text"}, "server"),
+    ({"type": "error", "code": "rate_limit_exceeded", "message": "secret-provider-text"}, "rate_limit"),
+    ({"type": "response.failed", "response": {"status": "failed", "error": {"code": "server_error", "message": "x"}}}, "server"),
+    ({"type": "response.failed", "response": {"status": "failed", "error": {"code": "something_new", "message": "x"}}}, "server"),
+    ({"type": "response.failed", "response": {"status": "failed"}}, "server"),
+    ({"type": "response.failed", "response": {"status": "failed", "error": {"code": "invalid_prompt", "message": "x"}}}, "content_policy"),
+    ({"type": "response.incomplete", "response": {"status": "incomplete", "incomplete_details": {"reason": "content_filter"}}}, "content_policy"),
+    ({"type": "response.failed", "response": {"status": "failed", "error": {"code": "invalid_value", "message": "x"}}}, "invalid_request"),
+    ({"type": "response.failed", "response": {"status": "failed", "error": {"code": "context_length_exceeded", "message": "x"}}}, "context_overflow"),
+])
+async def test_an_error_inside_the_stream_is_the_kind_it_is_and_not_a_call_to_update_raphael(rig, packet, kind):
+    await rig.sign_in()
+    rig.responses = [stream_error(packet)]
+    with pytest.raises(OpenRouterError) as error:
+        await chat_once(rig)
+    failed = classify(error.value)
+    assert failed.kind == kind and "secret-provider-text" not in failed.reason
+    assert failed.transient == (kind in ("server", "rate_limit"))
+
+
+async def test_a_stream_that_ends_early_and_cleanly_is_a_cut_connection_not_a_broken_tool(rig):
+    await rig.sign_in()
+    rig.responses = [httpx.Response(200, headers={"content-type": "text/event-stream"},
+                                    text="data: " + json.dumps({"type": "response.output_text.delta", "delta": "Par"}) + "\n\n")]
+    with pytest.raises(OpenRouterError) as error:
+        await chat_once(rig)
+    failed = classify(error.value)
+    assert failed.kind == "network" and failed.transient
+
+
+@pytest.mark.parametrize("status,body,kind,shape", [(503, {"detail": "secret-provider-text"}, "server", "detail"),
     (403, {"error": {"code": "subscription_sharing_user_not_eligible", "message": "secret-provider-text"}},
      "chatgpt_plan_unavailable", "error_object")])
 async def test_rpc_errors_preserve_safe_protocol_metadata_and_credentials(rig, caplog, status, body, kind, shape):

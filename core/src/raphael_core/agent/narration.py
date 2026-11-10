@@ -145,7 +145,7 @@ class NarratedLoop:
         self.batch_calls = []
         self.guardrails = ToolGuardrails()
         self.last_failure = None
-        self.acted = False
+        self.used_tools = False
         # The conversation as the model last saw it (the loop's own list, which it goes on adding to).
         self.live: list[dict] = []
         from ..worker.owner_input import OwnerInput
@@ -163,7 +163,10 @@ class NarratedLoop:
         try:
             # Once a turn has done something it rides out a failed call for as long as that lasts, until the owner stops
             # it: asking again repeats nothing, since the tools run only after a reply. Before that the owner learns in seconds.
-            outage = Outage(RETRY_WAITS, PATIENT_WAITS, patient_ok=self.acted)
+            # Here "done something" is still any tool, a read included (owner, 2026-10-31, "Long team work", pinned by
+            # test_long_turn). A CLI turn and a background task count only what they changed outside (`acted`); whether
+            # this loop does too is the owner's open decision.
+            outage = Outage(RETRY_WAITS, PATIENT_WAITS, patient_ok=self.used_tools)
             while True:
                 try:
                     refresh = getattr(self, "refresh_tools", None)
@@ -241,7 +244,7 @@ class NarratedLoop:
         return reply.text
 
     async def tool(self, call_id: str, name: str, arguments: dict) -> ToolOutcome:
-        self.acted = True
+        self.used_tools = True
         return await self.execute(call_id, name, arguments)
 
     async def run(self) -> Outcome:

@@ -655,7 +655,8 @@ class BackgroundService:
         ]
         self._store.pause_for_children(task_id, {"owner_wait": question["id"], "call_id": call_id,
             "messages": messages, "run_state": {"declined": [key for key, _ in ask.declined],
-                "seen_urls": list(seen_urls), "untrusted": ask.memory_untrusted, "conversation_cost": loop.ledger.total},
+                "seen_urls": list(seen_urls), "untrusted": ask.memory_untrusted, "conversation_cost": loop.ledger.total,
+                "acted": bool(ask.made)},
             "spec": {"task_id": task_id, "system": loop.system, "user": loop.user}})
         self._notify("agent.turn", {"turn_id": ask.turn_id, "member_id": ask.speaker.id})
         self._changed(task_id, "waiting")
@@ -1566,6 +1567,8 @@ class BackgroundService:
         run.scope = lambda: vm_scope(("task", task.id), progress=lambda text: self._progress(task, text), notice=lambda text: self._computer_notice(task, text), language=language)
         if recovered is not None:
             run.model_calls,run.tool_calls = task.model_calls,task.tool_calls
+            # A continuation from before it kept whether the task acted (`restore_continuation`) takes any call to have.
+            run.acted = run.tool_calls > 0
             run.ledger.total = task.cost_usd
             run.restore_continuation(recovered.get("run_state", {}))
             run.reopen()

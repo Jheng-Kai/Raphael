@@ -173,7 +173,7 @@ from .narration import NarratedLoop
 from ..members.activity import Activity, member_turn, step as activity_step, tool_step
 from .actions import action_call
 from .cli.discovery import CliBrains, brain_ref
-from .cli.loop import COMPUTER_CHANGED, CliLoop, Sessions as CliSessions
+from .cli.loop import CLI_SILENCE_S, CLI_TOOL_S, COMPUTER_CHANGED, CliLoop, Sessions as CliSessions
 from .persona import cli_system_prompt, memory_files
 from .persona import FULL_PERMISSION, NEW_MEMBER, NEW_MEMBER_STEP, PLAN_MODE
 from ..brain.owner import owner_context
@@ -2421,7 +2421,10 @@ class AgentService:
                     rate_limit_waits=() if ask.quick else None,
                     conversation_id=ask.conversation_id, quota=self.quotas.record,
                     member_id=ask.speaker.id, event=lambda text: self._message(ask, "event", text),
-                    expire=lambda: self._expire(self._confirmations.sweep()), **common)
+                    expire=lambda: self._expire(self._confirmations.sweep()),
+                    # `ask.made` is the calls that succeeded and were not reads, kept for the turn and for what it resumed.
+                    acted=lambda: bool(ask.made or ask.resumption is not None and ask.resumption.done),
+                    stall_s=CLI_SILENCE_S, tool_s=CLI_TOOL_S, **common)
                 self._cli_loops.add(loop)
                 loop.on_done = self._cli_loops.discard
             else:
@@ -2515,7 +2518,8 @@ class AgentService:
             loop = CliLoop(brains=self._cli_brains, sessions=self._cli_sessions, member_id=ask.speaker.id,
                            owner_text=ask.text,
                            conversation_id=ask.conversation_id, quota=self.quotas.record, resume_session=False,
-                           no_tools=True, rate_limit_waits=(), event=lambda text: None, **common)
+                           no_tools=True, rate_limit_waits=(), event=lambda text: None,
+                           stall_s=CLI_SILENCE_S, tool_s=CLI_TOOL_S, **common)
             self._cli_loops.add(loop)
             loop.on_done = self._cli_loops.discard
             return loop

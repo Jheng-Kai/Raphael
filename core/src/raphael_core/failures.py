@@ -410,11 +410,16 @@ def classify(value: object, *, secrets=(), record=True) -> Failure:
     said = f"{reason} {code}" if isinstance(code, str) and kind not in KINDS else str(reason)
     if kind not in KINDS or kind in ("unknown", "tool_broken", "refused", "invalid_request"):
         kind = _turned_down(status, said) or kind
+    if status == 429 and kind not in KINDS:
+        # A provider that sends no kind of its own (Google's, through CompatibleProvider) is told by its status.
+        kind = "rate_limit"
     if kind == "rate_limit":
-        # A 429 is a throttle that passes, unless it says the money or the plan's allowance is spent.
-        if re.search(_CREDITS, said, re.I):
+        # A 429 is a throttle that passes, unless it says the money or the plan's allowance is spent. A spent allowance
+        # names no short wait: "retry in 12s" is a per-minute limit, whatever else the words say of the quota.
+        soon = bool(wait and wait <= RETRY_AFTER_CAP_S)
+        if re.search(_CREDITS, said, re.I) and not soon:
             kind = "credits"
-        elif re.search(_QUOTA_WALL, said, re.I) and not re.search(_THROTTLE, said, re.I) and not (wait and wait <= RETRY_AFTER_CAP_S):
+        elif re.search(_QUOTA_WALL, said, re.I) and not re.search(_THROTTLE, said, re.I) and not soon:
             kind = "usage_limit"
     if kind not in KINDS or kind in ("unknown", "tool_broken", "server"):
         fallback = kind if kind in KINDS else "unknown"

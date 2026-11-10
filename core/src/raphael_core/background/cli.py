@@ -92,7 +92,7 @@ def member_loop(brains, quota, task, run, spec, *, wait_s, progress):
         owner_text=task.text, tool_conversation=spec.get("tool_conversation", ()), steps=spec.get("steps", ()),
         tools=spec["tools"], skills=spec.get("skills", ()), attachments=run.attachments, progress=progress,
         thinking=lambda text: None, event=progress, reply=getattr(run, "_reply", None), execute=execute, quota=quota, wait_timeout_s=wait_s,
-        rate_limit_waits=cli_loop.ROOM_RATE_LIMIT_WAITS_S, alive=run.touch)
+        rate_limit_waits=cli_loop.ROOM_RATE_LIMIT_WAITS_S, alive=run.touch, acted=lambda: run.acted)
     def listed():
         extra = [item for item in loop.tools if item["function"]["name"] in ("cli_permission", "approve")]
         loop.tools[:] = [*run.snapshot.definitions, *extra]

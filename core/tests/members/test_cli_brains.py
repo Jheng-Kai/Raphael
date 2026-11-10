@@ -557,6 +557,55 @@ async def test_member_cli_recovers_after_an_answered_card_and_write(setup, tmp_p
     assert not client.chat_calls and not client.json_calls
 
 
+def hanging_mcp(rig, tmp_path, calls):
+    """A CLI that makes `calls` through the MCP server and then says nothing. A second launch answers."""
+    launches = tmp_path / "launches.txt"
+    fake_brain(rig, tmp_path, '''import json, sys, time, urllib.request
+from pathlib import Path
+def send(value): print(json.dumps(value), flush=True)
+launches = Path(LAUNCHES)
+json.loads(sys.stdin.readline())
+with launches.open("a", encoding="utf-8") as out:
+    out.write("x")
+send({"type":"system", "session_id":"hung-session"})
+if len(launches.read_text(encoding="utf-8")) == 1:
+    config = json.loads(Path(sys.argv[sys.argv.index("--mcp-config")+1]).read_text())["mcpServers"]["raphael"]
+    for number, (name, arguments) in enumerate(CALLS, 1):
+        packet = {"jsonrpc":"2.0", "id":number, "method":"tools/call", "params":{"name":name, "arguments":arguments}}
+        request = urllib.request.Request(config["url"], data=json.dumps(packet).encode(), headers={**config["headers"], "Content-Type":"application/json"})
+        assert not json.load(urllib.request.urlopen(request, timeout=15))["result"]["isError"]
+    time.sleep(600)
+send({"type":"result", "subtype":"success", "result":"Asked again, and finished."})
+'''.replace("LAUNCHES", repr(str(launches))).replace("CALLS", repr(calls)))
+    return launches
+
+
+async def test_a_private_cli_that_goes_silent_after_a_write_is_not_run_again_and_the_owner_is_told(setup, tmp_path, client, monkeypatch):
+    rig, team = setup
+    teacher = member(team, model="cli:claude")
+    monkeypatch.setattr("raphael_core.agent.service.CLI_SILENCE_S", 1.0)
+    monkeypatch.setattr("raphael_core.agent.service.CLI_TOOL_S", 5.0)
+    monkeypatch.setattr("raphael_core.agent.cli.loop.RATE_LIMIT_WAITS_S", (0.0,))
+    launches = hanging_mcp(rig, tmp_path, [("memory_update", {"target": "memory", "operations": [{"action": "add", "content": "Use examples."}]})])
+    result = await asyncio.wait_for(typed(rig, "Remember that I prefer examples", teacher.id, language="en"), 30)
+    assert launches.read_text() == "x"  # one launch: the write was made, and nothing runs again after it
+    assert "took too long" in result["text"] and "1 completed or answered" in result["text"]
+    [turn] = (await rig.call("agent.history.list", {"member_id": teacher.id}))["turns"]
+    assert turn["status"] == "error"
+    assert team.memory.own(teacher.id).read().count("Use examples.") == 1
+
+
+async def test_a_private_cli_that_goes_silent_after_reading_is_asked_again(setup, tmp_path, client, monkeypatch):
+    rig, team = setup
+    teacher = member(team, model="cli:claude")
+    monkeypatch.setattr("raphael_core.agent.service.CLI_SILENCE_S", 1.0)
+    monkeypatch.setattr("raphael_core.agent.service.CLI_TOOL_S", 5.0)
+    monkeypatch.setattr("raphael_core.agent.cli.loop.RATE_LIMIT_WAITS_S", (0.0,))
+    launches = hanging_mcp(rig, tmp_path, [("local_time", {})])
+    result = await asyncio.wait_for(typed(rig, "What time is it?", teacher.id, language="en"), 30)
+    assert launches.read_text() == "xx" and result["text"] == "Asked again, and finished."
+
+
 async def test_cli_web_search_uses_auxiliary_api_model(setup, tmp_path, client):
     from agent.test_service import found
 

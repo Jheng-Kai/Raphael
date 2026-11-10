@@ -316,6 +316,8 @@ class TaskRun:
         self._max_tokens = CHAT_MAX_TOKENS
         self.model_calls = 0
         self.tool_calls = 0
+        # Something was done outside: a call succeeded and was not a read (`_note_action`). Reading is not acting.
+        self.acted = False
         self.cancelled = False
         self.timed_out = False
         # A call of a plugin's tool was under way when the task was cancelled: it may have been made.
@@ -563,9 +565,10 @@ class TaskRun:
         began = time.perf_counter()
         try:
             from ..failures import PATIENT_WAITS, RETRY_WAITS, classify
-            # Asking again repeats nothing, since the tools run only after a reply: a task that has done something rides
-            # a failed call out for as long as its time lasts. Before that it fails in seconds, as a question does.
-            outage = Outage(RETRY_WAITS, PATIENT_WAITS, patient_ok=bool(self.tool_calls) and not self.room_speech)
+            # Asking again repeats nothing, since the tools run only after a reply: a task that has done something outside
+            # rides a failed call out for as long as its time lasts. Before that, and after reads alone, it fails in
+            # seconds, as a question does.
+            outage = Outage(RETRY_WAITS, PATIENT_WAITS, patient_ok=self.acted and not self.room_speech)
             while True:
                 remaining = self._remaining_s()
                 try:
@@ -756,6 +759,7 @@ class TaskRun:
             reply, outcome, tier = self._refused_use(arguments)
         else:
             reply, outcome, tier, detail = await self._builtin(ref, arguments, name, call_id)
+        self._note_action(ref, arguments, bool(reply.get("ok")))  # before the limits: the call was made
         self._check()
         if reply.get("ok") and isinstance(reply.get("content"), str):
             self.seen_urls.add_from(reply["content"])  # what it returned may be read next
@@ -799,8 +803,16 @@ class TaskRun:
                 self._artifact({"missing": missing.wire()})
         return reply
 
+    def _note_action(self, ref: ToolRef, arguments: dict, ok: bool) -> None:
+        """A call that succeeded and was not a read is something done outside. What reads is told as the conversation
+        tells it (its `made`): a plugin's tool by what its server says (`reads_only`), Raphael's own by the tier T0."""
+        if not ok or ref.kind not in (MCP, BUILTIN):
+            return
+        if not (self._gate.reads_only(ref.server, ref.name, arguments) if ref.kind == MCP else ref.tier == Tier.T0):
+            self.acted = True
+
     def continuation_state(self):
-        return {"declined": sorted(self._declined), "seen_urls": self.seen_urls.snapshot(),
+        return {"declined": sorted(self._declined), "seen_urls": self.seen_urls.snapshot(), "acted": self.acted,
                 "untrusted": self._memory_untrusted, "handoff_receipts": self.handoff_receipts,
                 "conversation_cost": getattr(self, "conversation_cost", 0.0)}
 
@@ -809,6 +821,8 @@ class TaskRun:
         for url in state.get("seen_urls", []):
             self.seen_urls.add(url)
         self._memory_untrusted = self._memory_untrusted or state.get("untrusted", False)
+        if isinstance(state.get("acted"), bool):
+            self.acted = state["acted"]
         self.handoff_receipts = state.get("handoff_receipts", [])
         self.conversation_cost = state.get("conversation_cost", 0.0)
 
@@ -976,6 +990,7 @@ class TaskRun:
                 outcome=outcome, ms=_ms(began), reason=reason_of(outcome, result.error),
             )  # fmt: skip
             content = json.dumps(result.data, ensure_ascii=False) if result.ok else ""
+            self._note_action(ref, waiting.arguments, result.ok)
             if status is not None:
                 status.update(outcome=outcome, reason=reason_of(outcome, result.error))
             return result_text(waiting.alias, ToolOutcome(result.ok, result.error, content))
@@ -1021,6 +1036,7 @@ class TaskRun:
         )  # fmt: skip
         if result.ok:
             self.seen_urls.add_from(text)
+        self._note_action(ref, waiting.arguments, result.ok)
         shown = ToolOutcome(result.ok, result.kind, text, cut or result.truncated)
         if status is not None:
             status.update(outcome=outcome, reason=reason_of(outcome, result.kind))

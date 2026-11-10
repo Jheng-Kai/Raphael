@@ -154,3 +154,35 @@ def test_a_model_is_named_in_a_sentence_by_its_short_name(reference, name):
 def test_the_kind_survives_to_the_turn_instead_of_becoming_a_refusal():
     failure = classify(OpenRouterError(400, "context_overflow", "maximum context length"))
     assert AgentFailure(failure.kind, diagnostic=failure).kind == "context_overflow"
+
+
+GOOGLE_PER_MINUTE = {"error": {"code": 429, "status": "RESOURCE_EXHAUSTED", "message": (
+    "You exceeded your current quota, please check your plan and billing details. Quota exceeded for metric: "
+    "generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 15, model: gemini-2.0-flash\n"
+    "Please retry in 12.3s."), "details": [{"@type": "type.googleapis.com/google.rpc.RetryInfo", "retryDelay": "12s"}]}}
+GOOGLE_PER_DAY = {"error": {"code": 429, "status": "RESOURCE_EXHAUSTED", "message": (
+    "Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 1500. "
+    "Please retry in 20h 3m.")}}
+
+
+async def through_a_compatible_provider(status, body):
+    from raphael_core.brain.providers.clients import CompatibleProvider
+
+    transport = httpx.MockTransport(lambda request: httpx.Response(status, json=body))
+    async with httpx.AsyncClient(transport=transport) as http:
+        client = CompatibleProvider("google", "https://generativelanguage.googleapis.com/v1beta/openai", lambda: "key", http=http)
+        with pytest.raises(OpenRouterError) as error:
+            await client.chat_tools(model="gemini-2.0-flash", fallbacks=[], messages=[{"role": "user", "content": "x"}],
+                                    tools=[], timeout_s=5, max_tokens=10)
+    return error.value
+
+
+async def test_a_per_minute_429_that_names_its_wait_is_a_throttle_to_wait_out_on_every_route():
+    error = await through_a_compatible_provider(429, GOOGLE_PER_MINUTE)
+    failure = classify(error)
+    assert error.kind == failure.kind == "rate_limit" and failure.transient
+    assert 11 <= failure.retry_after <= 12.5
+    # A quota that lasts hours is still spent, and so is one that names no wait at all.
+    assert classify(await through_a_compatible_provider(429, GOOGLE_PER_DAY)).kind == "usage_limit"
+    spent = {"error": {"code": 429, "status": "RESOURCE_EXHAUSTED", "message": "You exceeded your current quota, please check your plan."}}
+    assert classify(await through_a_compatible_provider(429, spent)).kind == "credits"

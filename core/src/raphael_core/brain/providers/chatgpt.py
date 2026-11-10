@@ -218,7 +218,10 @@ class ChatGPTProvider:
             raise OpenRouterError(0, "network", "ChatGPT response was interrupted") from None
         except (ValueError, TypeError, KeyError):
             raise OpenRouterError(200, "invalid_request", "Invalid ChatGPT response stream") from None
-        if completed is None or completed.get("status") != ("incomplete" if cut else "completed") or not isinstance(completed.get("output"), list):
+        if completed is None:
+            # The connection closed before the reply was whole, with no error: a cut connection, asked again like one.
+            raise OpenRouterError(0, "network", "ChatGPT response ended early")
+        if completed.get("status") != ("incomplete" if cut else "completed") or not isinstance(completed.get("output"), list):
             raise OpenRouterError(200, "tool_broken", "ChatGPT stream ended without completed inference")
         self.auth.check_session(login)
         # The plan endpoint streams its items and closes with an empty `output`.

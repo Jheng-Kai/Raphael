@@ -43,13 +43,52 @@ def asking(kind, status, seconds, message="slow down"):
     return error
 
 
+async def done_something(rig):
+    """The task changes something outside: a plugin's write succeeds."""
+    await rig.plugins.connect(note="T0")
+    rig.resnap()
+    assert (await rig.tool("Notes__note", {"text": "x"}))["ok"] and rig.run.acted
+
+
 async def test_a_task_that_has_done_something_asks_again_after_a_failed_call(rig, no_waits):
-    await rig.tool("local_time")
+    await done_something(rig)
     rig.client.replies = [OpenRouterError(503, "server", "down"), OpenRouterError(429, "rate_limit", "x")] * 3 + [turn("Done.")]
     reply = await rig.chat()
     assert reply["content"] == "Done." and len(rig.client.chat_calls) == 7
     # It is the same call each time: nothing the task knew or did is lost.
     assert all(call["messages"] == MESSAGES for call in rig.client.chat_calls)
+
+
+async def test_a_task_that_only_read_has_done_nothing_and_gives_up_after_the_quick_waits(rig, no_waits):
+    await rig.plugins.connect(look="T0")
+    rig.resnap()
+    assert (await rig.tool("local_time"))["ok"] and (await rig.tool("Notes__look", {"topic": "tea"}))["ok"]
+    assert rig.run.tool_calls == 2 and not rig.run.acted
+    rig.client.replies = [OpenRouterError(503, "server", "down")] * 5
+    assert await stop_of(rig.chat()) == ("failed", "error")
+    assert len(rig.client.chat_calls) == 4
+
+
+async def test_a_write_that_failed_is_no_action_and_one_that_succeeded_is(rig):
+    await rig.plugins.connect(note="T0")
+    rig.resnap()
+    assert not (await rig.tool("Notes__note", {}))["ok"] and not rig.run.acted  # missing argument: nothing was done
+    assert (await rig.tool("Notes__note", {"text": "x"}))["ok"] and rig.run.acted
+
+
+async def test_a_task_that_goes_on_after_a_pause_remembers_whether_it_acted(rig):
+    await done_something(rig)
+    state = rig.run.continuation_state()
+    assert state["acted"] is True
+    rig.run.acted = False
+    rig.run.restore_continuation(state)
+    assert rig.run.acted
+    rig.run.restore_continuation({**state, "acted": False})
+    assert not rig.run.acted
+    # A continuation written before it was kept says nothing, and leaves what the run was told.
+    rig.run.acted = True
+    rig.run.restore_continuation({key: value for key, value in state.items() if key != "acted"})
+    assert rig.run.acted
 
 
 async def test_a_task_that_has_done_nothing_gives_up_after_the_quick_waits(rig, no_waits):

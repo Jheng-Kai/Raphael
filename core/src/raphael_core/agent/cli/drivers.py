@@ -27,6 +27,10 @@ from ...clock import wall_clock_ms
 logger = logging.getLogger(__name__)
 
 CODEX_SESSION_PREFIX = "raphael-codex-v1:"
+# The longest the child may say nothing at all before a read gives up on it. A loop with a watchdog of its own (`CliLoop`
+# stall_s) decides far sooner; this is for the rest, so that no read waits for ever. It is above the longest window the
+# loops give a call in flight (`CLI_TOOL_S`), since a CLI waiting for a tool of ours says nothing meanwhile.
+READ_LIMIT_S = 3 * 3600.0
 
 
 def toml_value(value) -> str:
@@ -328,7 +332,8 @@ class Driver:
                     forget_antigravity_server(cwd or str(files.path))
 
     async def _read(self):
-        line = await self.child.process.stdout.readline()
+        # TimeoutError ends the run as a failed read (`run`), classified as a timeout.
+        line = await asyncio.wait_for(self.child.process.stdout.readline(), READ_LIMIT_S)
         if not line:
             raise EOFError("cli_exited")
         value = json.loads(line)

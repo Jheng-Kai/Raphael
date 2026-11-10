@@ -648,6 +648,15 @@ errors remain terminal. Each post-action wait is localized progress. Permanent
 failures and cancellation stop on the same model and billing source. Terminal
 summaries expose counts/status only; exact receipts stay out of public events.
 
+Post-action means acted (R-CLI-08, 2026-11-11): a call that succeeded and was not a read, told
+by the signal the conversation already keeps (`ask.made`, from `gate.reads_only` and tier T0; a
+task's `TaskRun.acted`), or a command or file change the CLI started that no MCP receipt
+accounts for. A turn that only read takes the quick waits. A private CLI turn passes `stall_s`
+and `tool_s` to `CliLoop` (R-CLI-09): `_events` ends the attempt after 1,800 s of silence
+(7,200 s while a call is out, no clock while the owner's yes is awaited); a stalled CLI is asked
+again once, and never after an action or with a call out. Tasks pass neither: `TaskRun.watch`
+is their watchdog. `Driver._read` gives up after 3 h in any case.
+
 No RPC, Rust allowlist entry, migration, new worker, settings or frontend is added.
 Tests use generic fake CLI subprocesses and the existing authenticated MCP/gates.
 Real CLI subscription/service recovery and native UX require separate acceptance.
