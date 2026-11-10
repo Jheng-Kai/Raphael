@@ -23,9 +23,9 @@ const STATUS_WORDS = {
   running: "page.status.running", done: "page.status.done", pending: "page.status.pending", waiting: "page.status.waiting",
   blocked: "page.status.blocked", paused: "page.status.paused", failed: "page.status.failed",
 } as const satisfies Record<ReportStatus, string>;
-/** The colour a status word takes: the theme's own good, waiting and error colours, or its quiet grey. */
-const TONES: Record<ReportStatus, "ok" | "warn" | "err" | "quiet"> = {
-  running: "ok", done: "ok", pending: "warn", waiting: "warn", blocked: "err", failed: "err", paused: "quiet",
+/** The colour a status word takes: the theme's own good, waiting and error colours, or its third grey. */
+const TONES: Record<ReportStatus, "ok" | "warn" | "err" | "muted"> = {
+  running: "ok", done: "ok", pending: "warn", waiting: "warn", blocked: "err", failed: "err", paused: "muted",
 };
 
 const statusHTML = (status: ReportStatus, label?: string): string =>

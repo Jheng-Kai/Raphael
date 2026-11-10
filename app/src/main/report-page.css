@@ -44,7 +44,7 @@
 .rp-st[data-tone="ok"] { color: var(--ok); }
 .rp-st[data-tone="warn"] { color: var(--warn); }
 .rp-st[data-tone="err"] { color: var(--err); }
-.rp-st[data-tone="quiet"] { color: var(--text-3); }
+.rp-st[data-tone="muted"] { color: var(--text-3); }
 
 .rp-table-box > .tabs { margin-bottom: var(--sp-2); }
 .rp-table { width: 100%; border-collapse: collapse; font-size: var(--fs-sm); line-height: 1.5; }
