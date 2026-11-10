@@ -31,9 +31,9 @@ def found_names(offered, query):
 
 
 def test_default_primary_offer_fits_the_measured_pre_unit_budget():
-    # feat/members at 5933b60f: 60 native tools with the same widest fixture; 52 before the fixed list.
+    # feat/members at 5933b60f: 60 native tools with the same widest fixture; 53 before the fixed list.
     offered = snapshot()
-    assert len(offered.definitions) == 43
+    assert len(offered.definitions) == 44
     assert not set(offered.refs) & MANAGEMENT_TOOLS
     assert set(offered.management) == set(DEFINITIONS)
     assert {"find_tools", "use_tool"} <= set(offered.refs)
@@ -138,8 +138,8 @@ async def test_default_production_prompt_stays_below_the_measured_pre_unit_budge
         call = client.chat_calls[0]
         captured.append((call["messages"][0]["content"], call["tools"]))
     system, tools = captured[0]
-    # feat/members has 58 for this same production fixture; 50 before the fixed list.
-    assert len(tools) == 42
+    # feat/members has 58 for this same production fixture; 51 before the fixed list.
+    assert len(tools) == 43
     assert estimate_tokens(system + json.dumps(tools, ensure_ascii=False, separators=(",", ":"))) <= budget
 
 
