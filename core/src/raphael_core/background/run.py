@@ -349,6 +349,9 @@ class TaskRun:
         # A reply in a room: each of its model attempts has the whole stall time, and one that hears nothing for all of
         # it has stalled and ends the reply rather than being tried again. A reply is no work to ride an outage out for.
         self.room_speech = False
+        # How long one tool call may be out before the task counts as stalled, where that is longer than the
+        # window of the model's silence (`limits.seconds`); None: the same.
+        self.tool_seconds: float | None = None
         # The task's stall time ran out (`limit_time`).
         self.stalled = False
 
@@ -698,6 +701,13 @@ class TaskRun:
             raise invalid_params("name must be a string and arguments an object")
         call_id = params.get("call_id")
         async with self._turn:
+            # A tool in flight is no stall (owner, 2026-11-09): the window watches the model's silence. A reply in
+            # a group has a short one, and asking a colleague (ask_member) takes that colleague's whole turn: the
+            # call has as long as any task's step (`tool_seconds`), and the window starts again when it returns.
+            # A task already out of time stays so: its call is refused below, as before.
+            longer = (self.tool_seconds or 0.0) - self.limits.seconds
+            if longer > 0 and self._clock() < self.deadline:
+                self.touch(waiting=longer)
             try:
                 with self.action(name, arguments) as status:
                     from ..management import background_management

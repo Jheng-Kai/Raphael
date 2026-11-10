@@ -83,7 +83,7 @@ class HonestBrain(FakeClient):
         if "記住" in question and "全團隊" in question:
             text = json.dumps({"text": "好，我記住了。", "memory": [remembered(question)]}, ensure_ascii=False)
         elif consults(question, user) and not results:
-            calls = [consultation(self.tool, system, question)]
+            calls = [consultation(self.tool, system + "\n" + user, question)]  # the team comes with the message
         elif "群組代碼" in question and not results and "You are speaking in a meeting" not in system:
             calls = [("history_search", {"query": "群組代碼"})]
         elif results and '"task_id"' in results[-1]:

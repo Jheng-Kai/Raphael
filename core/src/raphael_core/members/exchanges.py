@@ -13,6 +13,7 @@ import logging
 from dataclasses import dataclass
 
 from ..background.final import is_pass
+from ..failures import KINDS
 from ..memory.compression import FRESH_CONTEXT_CHARS, recent_turns
 from ..brain.spend import SpendTracker
 from ..protocol import RpcError
@@ -27,8 +28,10 @@ MAX_PAIR_REPLIES = 2
 ROOM_CONTEXT_CHARS = FRESH_CONTEXT_CHARS - 4000
 # A speech turn that ended without a word for this long, or whose provider gave up waiting, made no progress.
 _STALLED = ('limit_time', 'timeout')
-# An API brain's failures that a room's status line names, as it names a CLI's (`cli_…`); any other is "worker".
-_NAMED = ('rate_limit', 'usage_limit', 'context_overflow')
+# An API brain's failures that a room's status line names, as it names a CLI's (`cli_…`): the closed kinds, each
+# with its own words where the owner can act on it (`rooms.unfinished_kind`). A reply that went silent is
+# "stalled" (`_STALLED`); any other reason is "worker".
+_NAMED = KINDS - {'timeout', 'unknown'}
 # Why an exchange stopped, when that is not a failure: the owner's Stop or new message, and the bound on colleague chatter.
 _NOT_FAILURES = ('owner', 'interjection', 'reply_budget')
 logger = logging.getLogger(__name__)

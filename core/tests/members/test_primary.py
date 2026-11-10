@@ -330,9 +330,12 @@ async def test_an_api_turn_of_a_member_is_told_the_primary_of_that_moment(setup,
     await typed(rig, "Hello", one.id, language="en")
     team.members.store.set_primary(other.id)
     await typed(rig, "Again", one.id, language="en")
-    first, second = (call["messages"][0]["content"] for call in client.chat_calls)
+    # The team comes with each turn's message, so the member reads the primary of that moment while its system
+    # prompt stays the one the provider cached.
+    first, second = (call["messages"][1]["content"] for call in client.chat_calls)
     assert says(first).startswith('"Raphael" (id 0).') and says(second).startswith('"Coach" (id %d).' % other.id)
     assert "hand it to the primary contact" in says(second)
+    assert client.chat_calls[0]["messages"][0]["content"] == client.chat_calls[1]["messages"][0]["content"]
 
 
 async def test_a_resumed_cli_thread_is_told_the_primary_it_has_now_not_the_one_it_began_with(setup, tmp_path, client):

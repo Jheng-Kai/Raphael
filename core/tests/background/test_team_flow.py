@@ -80,8 +80,9 @@ class Crew:
         return ChatToolCall(f"call{self.count}", tool, arguments, json.dumps(arguments))
 
     async def chat_tools(self, **kwargs):
-        messages, system = kwargs["messages"], kwargs["messages"][0]["content"]
-        me = json.loads(system.split("<team_roster>")[-1].split("</team_roster>")[0])["self_id"]
+        messages = kwargs["messages"]
+        # The team comes with the task, in the first message after the rules.
+        me = json.loads(messages[1]["content"].split("<team_roster>")[-1].split("</team_roster>")[0])["self_id"]
         told = " ".join(str(message.get("content")) for message in messages if message.get("role") == "user")
         if me == 0 and "handoff_results" in told:
             self.seen["chief"] = messages[-1]["content"]

@@ -19,14 +19,16 @@ async def test_narrated_prompt_contains_only_its_own_persona_and_thread(setup, c
     who = {"first": first, "second": second}.get(selected)
     client.chats = [chat('{"text":"Ready."}')]
     await typed(rig, "Start", who.id if who else 0, source=source)
-    system = client.chat_calls[0]["messages"][0]["content"]
+    system, team_now = (message["content"] for message in client.chat_calls[0]["messages"][:2])
     messages = str(client.chat_calls[0]["messages"])
-    assert "<team_roster>" in system
+    # The team as it is now comes with the message; the system prompt holds the speaker and its rules alone, so it
+    # is the same at the next turn (tests/agent/test_cache_sessions.py).
+    assert "<team_roster>" in team_now and "<team_roster>" not in system
     for person in (first, second):
         if who is None or person.id != who.id:
-            assert person.name in system and person.role in system
+            assert person.name in team_now and person.role in team_now
     if who:
-        assert "拉斐爾" in system and '"coordination_duty": "primary_contact"' in system
+        assert "拉斐爾" in team_now and '"coordination_duty": "primary_contact"' in team_now
     assert "ask_member" in system and "another member's thread" in system
     assert "The interface language never selects" in system
     assert "By default use" not in system
@@ -53,10 +55,10 @@ async def test_voice_answer_keeps_raphael_persona_without_member_personalities(s
     client.decisions.append(decision("chat"))
     client.replies.append(raphael_said("你好。"))
     await rig.ask("你好")
-    system = client.json_calls[0]["system"]
+    system, told = client.json_calls[0]["system"], client.json_calls[0]["user"]
     assert "You are Raphael" in system and "主人" in system
-    assert "MEMBER-ONLY-CHARACTER" not in system
-    assert "<team_roster>" in system
+    assert "MEMBER-ONLY-CHARACTER" not in system + told
+    assert "<team_roster>" in told and "<team_roster>" not in system  # the team comes with the message
 
 
 @pytest.mark.parametrize("caller", ["raphael", "coach"])
@@ -72,11 +74,12 @@ async def test_naming_another_members_lesson_queries_the_member_as_itself(setup,
     result = await typed(rig, "剛剛紫苑教了幾句日文，你可以看一下嗎？", 0 if caller == "raphael" else coach.id)
     assert "雨が降りそうです。" in result["text"]
     assert "我無法讀取" not in result["text"]
-    caller_system = client.chat_calls[0]["messages"][0]["content"]
+    caller_system, caller_told = (message["content"] for message in client.chat_calls[0]["messages"][:2])
     target_system = client.chat_calls[1]["messages"][0]["content"]
     assert "ask_member" in caller_system and "another member's thread" in caller_system
-    assert teacher.name in caller_system and teacher.role in caller_system
-    assert teacher.personality not in caller_system
+    # Who is on the team comes with the message, never a colleague's character.
+    assert teacher.name in caller_told and teacher.role in caller_told
+    assert teacher.personality not in caller_system + caller_told
     assert teacher.personality in target_system and coach.personality not in target_system
     for marker in ("主人", "マスター", "《", "You are Raphael"):
         assert marker not in target_system

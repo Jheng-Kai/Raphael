@@ -10,6 +10,7 @@ from raphael_core.brain.openrouter import OpenRouterClient
 from .test_openrouter_chat_tools import MESSAGES, TOOLS, reply
 
 HOUR = {"type": "ephemeral", "ttl": "1h"}
+FIVE_MINUTES = {"type": "ephemeral"}  # the marker without a lifetime
 
 
 def test_breakpoints_close_the_system_prompt_and_the_last_three_messages_that_can_carry_one():
@@ -18,11 +19,13 @@ def test_breakpoints_close_the_system_prompt_and_the_last_three_messages_that_ca
     assert marked[0]["content"] == [{"type": "text", "text": "Work.", "cache_control": HOUR}]
     # The assistant turn that only calls a tool has no content to carry a marker; the three after the system do.
     assert marked[2] == MESSAGES[2]
-    assert [message["content"][-1]["cache_control"] for message in (marked[1], marked[3], marked[4])] == [HOUR] * 3
+    # Only the system prompt is read again after minutes: the messages are read by the same turn's next call and
+    # written anew by the next turn, so an hour for them would cost twice the input for nothing. The longer
+    # lifetime comes first, as Anthropic requires.
+    assert [message["content"][-1]["cache_control"] for message in (marked[1], marked[3], marked[4])] == [FIVE_MINUTES] * 3
     # The caller's conversation is never changed.
     assert messages[0]["content"] == "Work." and messages[4]["content"] == "And the oolong?"
-    # Five minutes is the marker without a lifetime.
-    assert prompt_cache.mark(messages, TOOLS, "5m")[0]["content"][0]["cache_control"] == {"type": "ephemeral"}
+    assert prompt_cache.mark(messages, TOOLS, "5m")[0]["content"][0]["cache_control"] == FIVE_MINUTES
 
 
 def test_a_one_shot_request_writes_nothing_nobody_would_read():

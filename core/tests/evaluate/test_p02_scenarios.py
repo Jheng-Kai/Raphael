@@ -77,7 +77,8 @@ class P02Brain(FakeClient):
         return f"幕僚長：{names[snapshot['chief_id']]}"
 
     def answer(self, system, user):
-        raw = system.split('<team_roster>')[-1].split('</team_roster>')[0].strip()
+        # The team comes with the message (an API brain) or as a CLI session's section, never among the rules.
+        raw = (system + '\n' + user).split('<team_roster>')[-1].split('</team_roster>')[0].strip()
         snapshot = json.loads(raw)
         if self.scenario == 'S02':
             people = '；'.join(person['name'] + '：' + person['role'] for person in snapshot['members'])

@@ -174,7 +174,7 @@ from ..members.activity import Activity, member_turn, step as activity_step, too
 from .actions import action_call
 from .cli.discovery import CliBrains, brain_ref
 from .cli.loop import COMPUTER_CHANGED, CliLoop, Sessions as CliSessions
-from .persona import cli_system_prompt
+from .persona import cli_system_prompt, memory_files
 from .persona import FULL_PERMISSION, NEW_MEMBER, NEW_MEMBER_STEP, PLAN_MODE
 from ..brain.owner import owner_context
 from .cities import cities_in
@@ -1573,7 +1573,7 @@ class AgentService:
                 memory_snapshot=memory,
                 looked_up=looked_up,
                 speaker=ask.speaker,
-                roster=roster_prompt(self._team, ask.speaker, ask.language) + owner_context(self._settings),
+                roster=roster_prompt(self._team, ask.speaker, ask.language), owner=owner_context(self._settings),
                 reasoning_effort=self._effort(settings),
                 recall=self._recall(ask, context), source=ask.source, messaging=self._messaging_context(ask.speaker.id),
             )
@@ -2039,21 +2039,24 @@ class AgentService:
                 await prepare(ask.speaker.id)
             context = self._memory_context(ask.speaker, ask.conversation_id)
             memory = None if self._memory is None else self._memory.snapshot(ask.speaker.id)
+            # The system prompt says who the speaker is and how it works, and is the same turn after turn: a
+            # change in it has the provider read the whole conversation again at full price. What holds for
+            # this turn only (the team as it is now, the memory files, who is asking) goes with the turn's
+            # message (owner, 2026-11-09). The owner's permission mode stays here: it changes seldom, and
+            # a rule the whole turn obeys belongs where the model reads its rules.
             if brain_ref(settings.model):
                 system = cli_system_prompt(ask.language,
                     name=None if ask.speaker.is_raphael else ask.speaker.name,
                     role=ask.speaker.role, instructions=ask.speaker.instructions,
                     personality=ask.speaker.personality, memory=memory is not None, speaker=ask.speaker)
             elif ask.speaker.is_raphael:
-                system = system_prompt(ask.language, "answer", memory, narrated=True, speaker=ask.speaker)
+                system = system_prompt(ask.language, "answer", memory, narrated=True, speaker=ask.speaker, memory_inline=False)
             else:
                 system = member_system_prompt(
                     ask.language, "answer", name=ask.speaker.name, role=ask.speaker.role,
                     instructions=ask.speaker.instructions, personality=ask.speaker.personality,
-                    memory_snapshot=memory, narrated=True,
+                    memory_snapshot=memory, narrated=True, memory_inline=False,
                 )
-            if not brain_ref(settings.model):
-                system += roster_prompt(self._team, ask.speaker, ask.language)
             system += owner_context(self._settings)
             if ask.speaker.has_no_job and ask.scope == "private" and ask.exchange_speakers is None:
                 system += NEW_MEMBER
@@ -2061,8 +2064,11 @@ class AgentService:
                 system += PLAN_MODE
             if self._gate.full_permission:
                 system += FULL_PERMISSION
-            if ask.exchange_speakers is not None:
-                system += "\nA colleague, another of the owner's assistants, asks you this for the owner. " + CONSULTED
+            # A CLI's own session already holds what it was told: it gets the team and the files as sections
+            # below, whole at first and then only their edits.
+            standing = [] if brain_ref(settings.model) else [
+                roster_prompt(self._team, ask.speaker, ask.language).strip(),
+                memory_files(memory) if memory is not None else ""]
             from ..management import tools_for_request
             management_tools = tools_for_request(ask.text, member_named=bool(
                 self._team and getattr(self._team, "named_in", lambda _: [])(ask.text)))
@@ -2081,12 +2087,15 @@ class AgentService:
                 background=background_block(self._briefs(ask.speaker.id)), summary=context.summary, narrated=True,
                 quote=ask.quote,
                 recall=self._recall(ask, context), source=ask.source, messaging=self._messaging_context(ask.speaker.id),
+                standing="\n\n".join(part for part in standing if part),
             )
             user = build_user_message(**message_args)
             native_base = user
             # Native history already holds this conversation; memory changes travel separately below.
             native_turn = build_user_message(**{**message_args, "context": [], "summary": ""}) if brain_ref(settings.model) else None
             native_sections = {}
+            if ask.exchange_speakers is not None:
+                user += "\n\nA colleague, another of the owner's assistants, asks you this for the owner. " + CONSULTED
             if ask.speaker.has_no_job and ask.scope == "private" and ask.exchange_speakers is None:
                 user += NEW_MEMBER_STEP
             if leadership:

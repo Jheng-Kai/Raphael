@@ -85,7 +85,7 @@ async def test_p03_immediate_start_uses_production_rpc_worker_and_mcp(tmp_path,m
     class Client(FakeClient):
         async def chat_tools(self,**kwargs):
             messages=kwargs['messages']
-            child='Acceptance criteria' in messages[0]['content']
+            child='Acceptance criteria' in messages[1]['content']  # what the work must deliver comes with the task
             from test_p14_scenarios import asked
             speech = 'You are speaking in a meeting' in messages[0]['content']
             if child:
@@ -106,7 +106,7 @@ async def test_p03_immediate_start_uses_production_rpc_worker_and_mcp(tmp_path,m
         async def run(self,*,endpoint,token,system,user,**kwargs):
             yield Event('model','owner-model')
             from test_p14_scenarios import asked
-            child='Acceptance criteria' in system
+            child='Acceptance criteria' in user
             if 'You are speaking in a meeting' in system and 'handoff 立即交給' not in asked(user):
                 yield Event('final','已核對目前狀態。')
                 return
@@ -150,8 +150,8 @@ async def test_a_primary_contact_that_does_not_dispatch_what_it_is_given_fails_s
     class Client(FakeClient):
         async def chat_tools(self,**kwargs):
             messages=kwargs['messages']
-            system=messages[0]['content']
-            me=json.loads(system.split('<team_roster>')[-1].split('</team_roster>')[0])['self_id']
+            # The team comes with the first message, after the rules.
+            me=json.loads(str(messages[1]['content']).split('<team_roster>')[-1].split('</team_roster>')[0])['self_id']
             done=any(m['role']=='tool' for m in messages)
             calls=[]
             if not done and me==1:

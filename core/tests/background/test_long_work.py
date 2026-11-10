@@ -45,6 +45,39 @@ async def test_every_reply_and_every_tool_moves_the_stall_deadline(conn, plugins
     await rig.meteo.http.aclose()
 
 
+async def test_a_tool_in_flight_is_no_stall_for_a_reply_with_a_short_window(conn, plugins):
+    """Live, a reply in a group that asked a colleague (ask_member) could be ended as stalled: the colleague's
+    whole turn took longer than the reply's own 180 seconds of silence."""
+    rig = RunRig(conn, plugins)
+    rig.run.limits = RunLimits(seconds=180)
+    rig.run.tool_seconds = 1800  # a task's own window, as the service gives a reply
+    rig.run.touch()
+    left, call_tool = [], rig.run._tool
+
+    async def slow(name, arguments, call_id=""):
+        left.append(rig.run.remaining_s())
+        rig.clock.now += 600  # the tool is out for ten minutes
+        left.append(rig.run.remaining_s())
+        return await call_tool(name, arguments, call_id)
+
+    rig.run._tool = slow
+    await rig.tool("local_time")
+    assert left == [1800, 1200]
+    # Back from the tool, the reply's own short window watches the model's silence again.
+    assert rig.run.remaining_s() == 180
+    rig.clock.now += 181
+    assert await stop_of(rig.chat()) == ("limit_time", None)
+    # Out of time, a call does not bring the reply back: it is refused, as any step is.
+    assert await stop_of(rig.tool("local_time", call_id="late")) == ("limit_time", None)
+    # A task whose window is already as long gets nothing more.
+    rig.run.limits, rig.run.tool_seconds = RunLimits(), 1800
+    rig.run._tool = call_tool
+    rig.run.touch()
+    await rig.tool("local_time", call_id="c2")
+    assert rig.run.remaining_s() == 1800
+    await rig.meteo.http.aclose()
+
+
 def wrap_up():
     """The conversation the worker sends for the one call after a ceiling."""
     return [*MESSAGES, {"role": "user", "content": worker_loop.WRAP_UP}]

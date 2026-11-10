@@ -26,7 +26,7 @@ from ..agent.cli.loop import CliLoop, Sessions
 from ..memory.store import MemorySnapshot
 from ..agent.ledger import Ledger
 from ..agent.narration import NarratedLoop
-from ..agent.persona import cli_system_prompt, member_system_prompt, system_prompt
+from ..agent.persona import cli_system_prompt, member_system_prompt, memory_files, system_prompt
 from ..agent.policy import Action, Confirmations, NotApproved, Tier, ToolRegistry
 from ..agent.speaker import Speaker
 from ..agent.team_admin import LEADERSHIP
@@ -273,9 +273,11 @@ async def cell(model, member, scenario, *, brains, client, sessions, conn, budge
         system = cli_system_prompt("zh-TW", name=None if member == 0 else speaker.name, role=speaker.role, memory=True)
         user += "\n\n" + str(files_now)
     elif member == 0:
-        system = system_prompt("zh-TW", "answer", files_now, narrated=True)
+        system = system_prompt("zh-TW", "answer", files_now, narrated=True, memory_inline=False)
     else:
-        system = member_system_prompt("zh-TW", "answer", name=speaker.name, role=speaker.role, instructions="", personality="", memory_snapshot=files_now, narrated=True)
+        system = member_system_prompt("zh-TW", "answer", name=speaker.name, role=speaker.role, instructions="", personality="", memory_snapshot=files_now, narrated=True, memory_inline=False)
+    if not cli:
+        user += "\n\n" + memory_files(files_now)  # as a conversation's: the files come with the message
     system += LEADERSHIP
     loop = None
     try:

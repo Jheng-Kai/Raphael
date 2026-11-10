@@ -32,6 +32,7 @@ from .persona import (
     canonical_prefix,
     language_reminder,
     member_system_prompt,
+    memory_files,
     phrase,
     system_prompt,
 )
@@ -167,13 +168,16 @@ def build_user_message(
     recall: str = "",
     source: str = "",
     messaging: str = "",
+    standing: str = "",
 ) -> str:
     """What the model is shown: the summary of the earlier conversation, the latest turns
     (oldest first), the date and time, the results of the tools, the question in tags, which mark it
     as the user's words, and last the language to reply in. What changes least comes first.
     `looked_up` says that the lookups the model asked for were made (their results are among the
     tools) and that it is to answer now. `narrated` and `member` retain call compatibility; all authored speech follows the speaker,
-    never the interface locale."""
+    never the interface locale. `standing` is what holds for the turn and may differ at the next: the team as it
+    is now and the memory files. It comes after the conversation, so that the system prompt and the
+    conversation before it stay as the provider cached them (owner, 2026-11-09)."""
     parts = []
     if summary:
         parts.append(
@@ -189,6 +193,8 @@ def build_user_message(
         f"Current date and time: {moment['date']} {moment['time']}, {moment['weekday']} "
         f"({moment['utc_offset']})"
     )
+    if standing:
+        parts.append(standing)
     if tools:
         parts.append("Tool results:\n" + "\n".join(_tool_line(result) for result in tools))
     if background:  # the block of the tasks in the background (`background.brief`), as data
@@ -521,6 +527,7 @@ class Voice:
         looked_up: bool = False,
         speaker: Speaker = RAPHAEL,
         roster: str = "",
+        owner: str = "",
         reasoning_effort: str = "none",
         recall: str = "",
         source: str = "",
@@ -531,12 +538,16 @@ class Voice:
         turns; `memory_snapshot` is the memory files, or None when there is no memory (then the
         reply has no `memory` and no `need`). With a `speaker` who is a member of the team, the
         member says it instead, in its persona and in plain sentences (`parse_reply`'s `plain`).
-        The screen language does not determine the authored reply.
+        The screen language does not determine the authored reply. `roster` (the team as it is now) and the
+        memory files go with the message, `owner` (the owner's profile) with the system prompt, which so
+        stays the same from one turn to the next (`build_user_message`).
         AgentFailure (of a kind) if the model fails or says nothing."""
         plain = not speaker.is_raphael
+        standing = [roster.strip(), memory_files(memory_snapshot) if memory_snapshot is not None else ""]
         user = build_user_message(
             question, moment, context, tools, language, background,
             summary=summary, looked_up=looked_up, member=plain, recall=recall, source=source, messaging=messaging,
+            standing="\n\n".join(part for part in standing if part),
         )  # fmt: skip
         if plain:
             system = member_system_prompt(
@@ -547,10 +558,11 @@ class Voice:
                 instructions=speaker.instructions,
                 personality=speaker.personality,
                 memory_snapshot=memory_snapshot,
+                memory_inline=False,
             )
         else:
-            system = system_prompt(language, route, memory_snapshot, speaker=speaker)
-        system += MESSAGE_RULES + roster
+            system = system_prompt(language, route, memory_snapshot, speaker=speaker, memory_inline=False)
+        system += MESSAGE_RULES + owner
         began = time.perf_counter()
         try:
             completion = await asyncio.wait_for(

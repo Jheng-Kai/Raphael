@@ -91,11 +91,13 @@ async def test_a_request_to_remember_is_written_at_once_and_said_so(rig, client,
     assert memory.own(0).read().strip() == "主人住在台北市。"
     assert await steps_of(rig) == [("memory_update", "ok")]
     call = client.json_calls[0]
-    # Both files, the shared one first, each in its tags and with how full it is.
+    # Both files, the shared one first, each in its tags and with how full it is: with the message, so that
+    # the system prompt is the same after the files change (tests/agent/test_cache_sessions.py).
     assert (
         '<shared_memory file="USER.md" usage="0% — 0/1,375 chars">\n(empty)\n</shared_memory>\n'
         '<own_memory file="MEMORY.md" usage="0% — 0/2,200 chars">\n(empty)\n</own_memory>'
-    ) in call["system"]
+    ) in call["user"]
+    assert "<own_memory file=" not in call["system"]
     assert {"memory", "need"} <= set(call["schema"]["properties"])
 
 
@@ -184,21 +186,23 @@ async def test_what_one_member_learns_of_the_owner_the_next_turn_of_raphael_read
     client.decisions.append(decision("chat"))
     client.replies.append(reply("Sam，你好。", prefix="答"))
     await rig.ask("你好")
-    assert "主人的名字是 Sam" in client.json_calls[-1]["system"]
+    assert "主人的名字是 Sam" in client.json_calls[-1]["user"]
 
 
 # --- reading ------------------------------------------------------------------------------------------
 
 
-async def test_the_files_are_in_the_system_prompt_and_the_same_from_one_turn_to_the_next(rig, client, memory):
+async def test_the_files_come_with_the_message_and_the_system_prompt_is_the_same_whatever_they_hold(rig, client, memory):
     assert memory.update_memory(0, {"target": "memory", "operations": [{"action": "add", "content": "主人住在台北。"}]}).ok
     for _ in range(2):
         client.decisions.append(decision("chat"))
         client.replies.append(reply("你好。", prefix="答"))
         await rig.ask("你好")
+        assert memory.update_memory(0, {"target": "memory", "operations": [{"action": "add", "content": "主人喜歡爬山。"}]}).ok
     first, second = client.json_calls
-    assert "主人住在台北。" in first["system"]
-    assert first["system"] == second["system"]
+    assert "主人住在台北。" in first["user"] and "主人喜歡爬山。" not in first["user"]
+    assert "主人喜歡爬山。" in second["user"]
+    assert first["system"] == second["system"] and "台北" not in first["system"]
 
 
 async def test_a_turn_that_asks_twice_reads_one_snapshot(rig, client, memory):

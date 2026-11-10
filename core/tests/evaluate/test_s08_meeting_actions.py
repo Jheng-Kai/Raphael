@@ -35,7 +35,7 @@ def owners(user):
 
 def act(system, user, results, *, promise=False):
     """What a fake brain does with one prompt: its words and its calls."""
-    if "Acceptance criteria" in system:
+    if "Acceptance criteria" in user:  # what handed work must deliver comes with the task
         if not results:
             return "", [("use_tool", {"name": "Guardian__read", "arguments": {}})]
         nonce = re.search(r"nonce: (\w+)", "\n".join(results))

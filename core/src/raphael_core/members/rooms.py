@@ -35,19 +35,40 @@ def _role_part(role):
 
 # The owner's Stop, and a new owner message that preempts the exchange.
 _OWNER_STOPS = ('owner', 'interjection')
-# An unfinished reply in words, by the reason its intent was blocked for; any other reason is an error.
-_UNFINISHED = {'cli_rate_limited':'rate_limit', 'cli_quota':'quota', 'cli_login':'login', 'cli_missing':'login',
-               'cli_context_overflow':'context_overflow', 'cost':'budget', 'reply_budget':'budget', 'revoked':'removed', 'restart':'restart',
-               'stalled':'unavailable', 'no_reply':'unavailable', 'rate_limit':'rate_limit', 'usage_limit':'quota',
-               'context_overflow':'context_overflow'}
+# An unfinished reply in words, by the reason its intent was blocked for (`RoomExchanges.failure`): the kind of
+# the closed set (`failures.KINDS`), which a CLI's loop names with `cli_` before it. Each kind the owner can act on
+# has its own words (owner, 2026-11-09: no more "an error occurred" for a brain that only ran out of credits); a
+# kind whose cause is not known stays an error.
+_UNFINISHED = {'rate_limit':'rate_limit', 'rate_limited':'rate_limit', 'usage_limit':'quota', 'quota':'quota', 'credits':'credits',
+               'context_overflow':'context_overflow', 'cost':'budget', 'reply_budget':'budget', 'revoked':'removed', 'restart':'restart',
+               # What asking again did not mend: the provider is busy, down or out of reach, or the reply went silent.
+               **dict.fromkeys(('stalled', 'no_reply', 'overloaded', 'server', 'network', 'timeout', 'cli_stopped',
+                                'chatgpt_unavailable'), 'unavailable'),
+               **dict.fromkeys(('auth_expired', 'chatgpt_scope', 'chatgpt_plan_unavailable'), 'sign_in'),
+               **dict.fromkeys(('refused', 'content_policy'), 'refused')}
+# A CLI signs in on the owner's computer, not with a key in Settings.
+_CLI_UNFINISHED = {'login':'login', 'missing':'login', 'auth_expired':'login'}
 _UNFINISHED_WORDS = with_ui_words({
     'zh-TW':{'rate_limit':'請求太頻繁而被限流', 'quota':'訂閱額度已用完', 'login':'需要登入 CLI', 'budget':'預算已用完',
-             'removed':'已不在房間', 'restart':'重新啟動後中斷', 'error':'發生錯誤', 'unavailable':'暫時無法回應'},
+             'removed':'已不在房間', 'restart':'重新啟動後中斷', 'error':'發生錯誤', 'unavailable':'暫時無法回應',
+             'credits':'服務點數已用完', 'sign_in':'需要登入或設定金鑰', 'refused':'拒絕了這項請求'},
     'en':{'rate_limit':'rate-limited (too many requests)', 'quota':'subscription quota used up', 'login':'CLI sign-in needed',
-          'budget':'budget exhausted', 'removed':'no longer in the room', 'restart':'interrupted by a restart', 'error':'an error occurred', 'unavailable':'unavailable'},
+          'budget':'budget exhausted', 'removed':'no longer in the room', 'restart':'interrupted by a restart', 'error':'an error occurred', 'unavailable':'unavailable',
+          'credits':'credits used up', 'sign_in':'sign-in or key needed', 'refused':'declined the request'},
     'ja':{'rate_limit':'リクエスト過多で制限中', 'quota':'サブスクリプションの上限', 'login':'CLI のログインが必要', 'budget':'予算の上限',
-          'removed':'ルームから外れました', 'restart':'再起動で中断', 'error':'エラーが発生', 'unavailable':'応答できません'},
+          'removed':'ルームから外れました', 'restart':'再起動で中断', 'error':'エラーが発生', 'unavailable':'応答できません',
+          'credits':'クレジット切れ', 'sign_in':'ログインまたはキーが必要', 'refused':'リクエストを拒否'},
 })
+
+
+def unfinished_kind(reason):
+    """The words (a key of `_UNFINISHED_WORDS`) for the reason a reply's intent was blocked for."""
+    reason = reason or ''
+    if reason in _UNFINISHED:  # a kind as it is, `cli_stopped` among them
+        return _UNFINISHED[reason]
+    if reason.startswith('cli_'):
+        return _CLI_UNFINISHED.get(reason[4:]) or _UNFINISHED.get(reason[4:], 'error')
+    return 'error'
 
 
 class RoomsService:
@@ -424,7 +445,7 @@ class RoomsService:
         rows = self._conn.execute("SELECT recipient_name, reason, recipient_id, turn_id FROM room_reply_intents WHERE origin_message_id=? "
                                   "AND state='blocked' ORDER BY id", (origin,))
         def sentence(row):
-            kind = _UNFINISHED.get(row['reason'], 'error')
+            kind = unfinished_kind(row['reason'])
             if kind == 'context_overflow':
                 task = self._conn.execute("SELECT model_ref FROM worker_tasks WHERE turn_id=? ORDER BY id DESC LIMIT 1", (row['turn_id'],)).fetchone()
                 speaker = self._members.speaker(row['recipient_id'])

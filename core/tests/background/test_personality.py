@@ -54,19 +54,21 @@ async def test_worker_and_scheduler_use_only_the_selected_persona(make_rig, conn
             assert not progress
             assert any(method == "worker.progress" and data["turn_id"] == current.id and "我來檢查。" in data["text"] for method,data in rig.notifications)
         model_call = rig.client.chat_calls[0]
-        system = model_call["messages"][0]["content"]
+        system, team = (message["content"] for message in model_call["messages"][:2])
         shown = json.dumps(model_call["messages"], ensure_ascii=False)
         assert "CITY-TAIPEI" in shown
-        assert "<team_roster>" in system
+        # The team as it is now comes with the task; the rules stay the same from one task to the next
+        # (tests/background/test_task_prefix.py).
+        assert "<team_roster>" in team and "<team_roster>" not in system
         assert "another member's thread" in system and "ask_member" in system
         assert "The interface language never selects" in system
         assert "By default use" not in system
         assert "ask_member" in {t["function"]["name"] for t in model_call["tools"]}
         for person in (teacher, coach):
             if person.id != speaker_id:
-                assert person.name in system and person.role in system
+                assert person.name in team and person.role in team
         if who:
-            assert "拉斐爾" in system and '"coordination_duty": "primary_contact"' in system
+            assert "拉斐爾" in team and '"coordination_duty": "primary_contact"' in team
             other = coach if who.id == teacher.id else teacher
             assert who.personality in system and who.instructions in system
             assert f"OWN-{who.name}" in shown and f"THREAD-{who.name}" in shown
