@@ -2,7 +2,7 @@
 import { expect, test } from "vitest";
 import { messageHTML, messagePlainText, messageUrls, shortUrl } from "./message-content";
 
-test("URLs stop at CJK punctuation, and a bare link is a chip that says its site (owner, 2026-11-08, as Grok Bot's)", () => {
+test("URLs stop at CJK punctuation, and a bare link is a chip that says its site", () => {
   const url = "https://www.cwa.gov.tw/V8/C/P/Typhoon/TY_WARN.html?lang=zh-TW&full=1";
   const text = `《答。${url}（颱風警報）。「https://example.com/a_(b)」》`;
   expect(messageUrls(text)).toEqual([url, "https://example.com/a_(b)"]);

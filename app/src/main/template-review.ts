@@ -1,4 +1,4 @@
-// A template reviewed as Grok Bot reviews one (owner, 2026-11-08): the face, the name and what it is for; then three rows
+// A template reviewed as separate pages: the face, the name and what it is for; then three rows
 // that open pages - 內容 (role, instructions, personality, how it replies and skills, each skill opening its own page),
 // 例行工作 (each routine opening its content and trigger) and 整合 (the apps it needs). Every field of a raphael-member is
 // shown here and no other (template-contract.test.ts); a template carries no memory (owner, 2026-11-11). A page has a

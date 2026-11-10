@@ -7,7 +7,7 @@
 
 /* ---------- the size of the page ---------- */
 /* Layout geometry follows the window: a small window keeps the compact sizes of the first design,
-   a maximised one the roomier ones of a desktop messenger (Grok's: a flexible column and
+   a maximised one the roomier ones of a desktop messenger (a flexible column and
    composer), while typography uses the shared scale; geometry is interpolated, so nothing jumps at a breakpoint.
      --pa-t   how far the window is past 960 px wide, held between 0 and 960 px (so 0 up to 960 px
               wide, and the full 960 px from 1920 px on);
@@ -25,14 +25,14 @@
   /* the member column */
   --pa-pad: var(--sp-2);
   --pa-tool: calc(30px + 18 * var(--pa-u));
-  /* A folder's heading is one quiet line: the members are what matters (owner, 2026-11-07). */
+  /* A folder's heading is one quiet line: the members are what matters. */
   --pa-gh-h: 24px;
   --pa-gh-fs: var(--fs-2xs);
   --pa-gh-btn: 20px;
   --pa-row-h: 64px;
   --pa-row-av: 40px;
   --pa-row-gap: var(--sp-2);
-  /* Grok Bot's measured type (owner, 2026-11-07: learn its type and spacing): a sidebar name 15 px bold, its preview 13. */
+  /* Shared typography: a sidebar name 15 px bold, its preview 13. */
   --pa-row-name: var(--fs-md);
   --pa-row-role: var(--fs-2xs);
   --pa-row-pv: var(--fs-xs);
@@ -49,7 +49,7 @@
   --pa-pill-fs: var(--fs-sm);
   --pa-gap: var(--sp-5);
   --pa-gap-in: var(--sp-3);
-  /* Messages are 15 px on a 22 px line, as Grok Bot's. */
+  /* Messages are 15 px on a 22 px line. */
   --pa-fs-b: var(--fs-md);
   --pa-lh-b: 22px;
   --pa-fs-a: var(--fs-md);
@@ -61,7 +61,7 @@
   --pa-br: calc(var(--pa-lh-b) / 2 + var(--pa-bpy));
   --pa-ra-face: calc(26px + 10 * var(--pa-u));
   --pa-ra-gap: calc(10px + 4 * var(--pa-u));
-  /* System lines and day dividers are 12 px grey, as Grok Bot's. */
+  /* System lines and day dividers are 12 px grey. */
   --pa-sys: var(--fs-2xs);
   --pa-sys-face: calc(18px + 6 * var(--pa-u));
   --pa-day: var(--fs-2xs);
@@ -99,7 +99,7 @@
   /* the dialogs and the menus */
   --pa-dlg-w: calc(420px + 100 * var(--pa-u));
   --pa-dlg-pad: calc(18px + 8 * var(--pa-u));
-  /* Dialog titles 16 px, weight 600 (Grok Bot's 15-16). */
+  /* Dialog titles 16 px, weight 600. */
   --pa-dlg-h2: 16px;
   --pa-dlg-lab: calc(76px + 28 * var(--pa-u));
   --pa-new-av: calc(64px + 24 * var(--pa-u));
@@ -165,7 +165,7 @@
 .ans { margin: 0; font: var(--pa-fs-a)/var(--pa-lh-a) var(--voice); color: var(--text); overflow-wrap: anywhere; user-select: text; }
 .ra-body > .ans { justify-self: start; max-width: 100%; padding: var(--pa-bpy) var(--pa-bpx); border: 0; border-radius: var(--pa-br); background: var(--panel); white-space: pre-wrap; }
 .ans.progress { color: var(--text-2); }
-/* As Grok Bot's, a message's actions sit beside its bubble, centred on it: the message is one column of its parts with
+/* A message's actions sit beside its bubble, centred on it: the message is one column of its parts with
    the actions in a second (a first, for the owner's), on the bubble's row. */
 /* The first column stops at the bubble's own limit: a long paragraph would otherwise stretch the message to the whole
    column, so the empty room beside the bubble answered the pointer and a right click, and the actions stood far from it
@@ -188,7 +188,7 @@
 .mb-chat[data-member-bubble] .owner-message :is(.bubble, .bubble *)::selection { background: var(--on-bubble); color: var(--member-bubble); }
 /* The member's colour also marks the controls of its conversation: send and stop (memberAccent in owner-bubble.ts). */
 .mb-chat[data-member-bubble] .composer .cmp-pair { --accent-icon: var(--member-accent); --accent-text: var(--member-accent); }
-/* A reply is a fill with a barely seen edge, as every surface of Grok Bot's is; drawn inside, so no size changes. */
+/* A reply is a fill with a barely seen edge; drawn inside, so no size changes. */
 .chat-message > .ans { padding: var(--pa-bpy) var(--pa-bpx); border: 0; border-radius: var(--pa-br); background: var(--panel); box-shadow: inset 0 0 0 1px var(--ans-edge); }
 .message-text { white-space: pre-wrap; overflow-wrap: anywhere; }
 .ans .message-text { white-space: normal; }
@@ -228,7 +228,7 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 .message-actions .i, .message-code .i { width: 16px; height: 16px; }
 .chat-message:hover > .message-actions, .chat-message:focus-within > .message-actions { opacity: 1; }
 .ra-scroll::-webkit-scrollbar { display: none; }
-/* Centred just above the composer, as Grok Bot places it (owner, 2026-11-06). */
+/* Centred just above the composer. */
 .page-agent .btn.conversation-latest { position: absolute; left: 50%; transform: translateX(-50%); z-index: 2; width: 36px; height: 36px; min-height: 36px; border-radius: var(--r-sm); background: var(--panel); border: 1px solid var(--edge); box-shadow: var(--pop); }
 .page-agent .btn.conversation-latest:hover:not(:disabled) { background: var(--surface-2); border-color: var(--edge); color: var(--text); }
 .page-agent .btn.conversation-latest:active:not(:disabled) { color: color-mix(in srgb, var(--text) 85%, transparent); }
@@ -238,7 +238,7 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 /* White words on a member's colour: the press darkens, since lightening the colour would wash the words out (R-UI-52). */
 .mb-chat[data-member-bubble="light"] .owner-message .bubble > .btn.message-expand:hover:not(:disabled) { background: color-mix(in srgb, black 16%, transparent); }
 .mb-chat[data-member-bubble="light"] .owner-message .bubble > .btn.message-expand:active:not(:disabled) { background: color-mix(in srgb, black 24%, transparent); }
-/* A link is a chip in the words, as Grok Bot's source chips (owner, 2026-11-08): the site's mark, then its name. */
+/* A link is a chip in the words: the site's mark, then its name. */
 .link-chip { font-weight: var(--weight-medium); }
 .link-chip .link-mark { display: inline-flex; vertical-align: -3px; margin-inline-end: var(--sp-1); color: inherit; }
 .link-chip .link-mark .i, .link-chip .link-mark .logo { display: block; width: 16px; height: 16px; }
@@ -376,7 +376,7 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 .mail-done > .mono { align-self: center; }
 
 /* image lightbox */
-/* Only the picture, as large as the window allows; its close button sits inside it on the photo scrim (owner, 2026-11-07). */
+/* Only the picture, as large as the window allows; its close button sits inside it on the photo scrim. */
 .media-lightbox .lb-card { position: relative; max-width: 100%; max-height: 100%; overflow: hidden; border-radius: var(--r-lg); background: var(--surface-2); box-shadow: var(--pop); }
 .media-lightbox .lb-img { display: block; min-width: 160px; min-height: 120px; max-width: min(1400px, calc(100vw - 2 * var(--sp-4))); max-height: calc(100vh - var(--window-controls-height) - 3 * var(--sp-4)); object-fit: contain; }
 .media-lightbox .lb-card > .btn.icon.lb-close { position: absolute; top: var(--sp-2); right: var(--sp-2); width: 32px; min-height: 32px; border-radius: var(--r-pill); background: var(--photo-dim); color: var(--photo-mark); }
@@ -461,7 +461,7 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 .ra-dock > .composer, .ra-dock > .ask-card { max-width: var(--pa-colw); margin: 0 auto; }
 .page-agent .ask-card { width: 100%; max-width: var(--layout-reading-max); margin-inline: auto; }
 /* In the thread the question is the member's own line: it starts where its replies start and is as wide as a permission
-   card, never centred under the owner's message (owner, 2026-11-08). */
+   card, never centred under the owner's message. */
 .page-agent [data-question-turn] .ask-card { width: min(calc(400px + 100 * var(--pa-u)), 100%); margin-inline: 0 auto; }
 .composer { width: 100%; max-width: var(--layout-thread-max); margin-inline: auto; display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); background: var(--panel); border: 1px solid var(--edge); border-radius: var(--pa-cmp-r); padding: var(--pa-cmp-p) calc(var(--pa-cmp-p) + 1px) var(--pa-cmp-p) calc(var(--pa-cmp-p) + 2px); box-shadow: var(--composer-shadow); transition: border-color 0.16s ease; }
 /* The shadow is always black and focus changes nothing, so opening a conversation (which focuses the field)
@@ -502,11 +502,11 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 .cmp-field.has-mentions > .cmp-input::selection { color: transparent; }
 .cmp-composing { text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 3px; }
 /* A mention, in the field and in the owner's bubble: its mark stands where the @ is (the @ keeps its width, unseen), then the
-   name, as Grok Bot's: the logo and the words alone, with no frame or fill (owner, 2026-11-07). The words keep the field's
+   name: the logo and the words alone, with no frame or fill. The words keep the field's
    own metrics, so the caret and a wrapping line fall exactly as for plain words. */
 .cmp-mirror .url-chip { color: var(--link); }
 .mention-at { position: relative; -webkit-text-fill-color: transparent; }
-/* The 16 px mark is wider than the @ it covers, so it leans 3 px left: a little air before the name (owner, 2026-11-07),
+/* The 16 px mark is wider than the @ it covers, so it leans 3 px left: a little air before the name,
    without changing the words' metrics. */
 .mention-ico { position: absolute; inset: 0; display: grid; place-items: center; translate: -3px 0; -webkit-text-fill-color: currentColor; }
 .mention-ico .i, .mention-ico .mono { width: 16px; height: 16px; margin: 0; }
@@ -530,7 +530,7 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 .me-file-t, .cmp-chip-t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cmp-chip .chip-x { display: inline-grid; place-items: center; flex: 0 0 20px; width: 20px; height: 20px; padding: 0; border: 0; border-radius: var(--r-pill); background: transparent; color: var(--text-3); }
 .cmp-chip .chip-x:hover { background: transparent; color: var(--text); }
-/* A picture is only its thumbnail, which opens it large; the remove button sits inside its corner (owner, 2026-11-07). */
+/* A picture is only its thumbnail, which opens it large; the remove button sits inside its corner. */
 .cmp-chip:has(> .cmp-pic) { position: relative; flex: 0 0 auto; width: 56px; height: 56px; padding: 0; overflow: hidden; }
 .btn.cmp-pic { display: block; width: 100%; height: 100%; min-height: 0; padding: 0; border: 0; border-radius: inherit; background: transparent; }
 .cmp-pic .cmp-thumb { width: 100%; height: 100%; }
@@ -738,12 +738,11 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 .thread mark[data-find-match] { padding: 0; background: var(--hover); color: var(--text); text-decoration: underline dotted; text-underline-offset: 2px; }
 .thread mark.is-current { outline: 2px solid var(--text); outline-offset: 1px; text-decoration: underline; text-decoration-thickness: 2px; background: var(--text); color: var(--content); }
 .chat-message.is-search-expanded .message-text { max-height: none; -webkit-line-clamp: unset; mask-image: none; }
-/* Reactions sit on the bubble's bottom-right corner, half over its edge, and add no height to the conversation (owner,
-   2026-11-07: they made it longer). A ring of the page's own colour parts them from the bubble. */
+/* Reactions sit on the bubble's bottom-right corner, half over its edge, and add no height to the conversation. A ring of the page's own colour parts them from the bubble. */
 .message-reactions { display: flex; gap: 2px; margin-block: -11px; }
 .chat-message > .message-reactions { justify-self: end; position: relative; z-index: 1; margin-inline-end: var(--sp-2); }
 .message-reactions .btn.reaction { min-width: 22px; height: 22px; min-height: 22px; padding: 0 6px; border: 1px solid var(--btn-edge); border-radius: var(--r-pill); background: var(--surface-2); color: var(--text); font-size: var(--fs-xs); line-height: 1; box-shadow: 0 0 0 2px var(--content); }
-/* A message menu opens with its reactions in one quiet row (Grok Bot's right click). */
+/* A message menu opens with its reactions in one quiet row. */
 .menu-reactions { display: flex; justify-content: space-between; gap: 2px; padding: 2px 2px var(--sp-1); margin-bottom: var(--sp-1); border-bottom: 1px solid var(--line); }
 .menu-reactions .btn.reaction { flex: 1; justify-content: center; min-height: 32px; padding: 0; border-color: transparent; background: transparent; font-size: var(--fs-lg); border-radius: var(--r-sm); }
 .menu-reactions .btn.reaction:hover:not(:disabled) { border-color: transparent; background: var(--surface-2); }
@@ -751,7 +750,7 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 .menu-reactions .btn.reaction[aria-pressed="true"] { border-color: transparent; background: color-mix(in srgb, var(--text) 8%, transparent); }
 /* The last slot opens every emoji: a smiley with a plus, drawn as a line icon beside the emoji. */
 .btn.reaction-more .i { width: 20px; height: 20px; color: var(--text-3); }
-/* The react button opens a pill of the quick reactions (emoji-picker.ts), as Grok Bot does. */
+/* The react button opens a pill of the quick reactions (emoji-picker.ts). */
 .menu.reaction-bar { display: flex; gap: 2px; min-width: 0; padding: var(--sp-1); border-radius: var(--r-pill); }
 .reaction-bar .btn.reaction { width: 36px; min-height: 36px; padding: 0; justify-content: center; border-color: transparent; background: transparent; font-size: var(--fs-lg); border-radius: var(--r-pill); }
 .reaction-bar .btn.reaction:hover:not(:disabled) { border-color: transparent; background: var(--surface-2); }

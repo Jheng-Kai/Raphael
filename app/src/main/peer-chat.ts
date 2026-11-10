@@ -1,4 +1,4 @@
-// What members said to each other, as Grok Bot shows it (owner, 2026-11-06): the centred line 「與 X 的 2 則訊息」 opens
+// What members said to each other: the centred line 「與 X 的 2 則訊息」 opens
 // the real conversation in place of the thread, with a pill 「A ⇄ X」 on top, each message under its speaker's face and
 // coloured name, day dividers, and 「關閉對話」 where the composer was. A hand-off is two messages: what one member sent
 // (`request`) and what the other answered (`result`, with its files); an unfinished one ends on the other's state.
@@ -82,7 +82,7 @@ export function peerChatHTML(host: number, tasks: readonly HandoffView[], people
   return `<div class="peer-head"><span class="peer-pill" role="heading" aria-level="2" aria-label="${esc(title)}">${personHTML(who(host))}` +
     `<span class="peer-swap">${ico("swap")}</span>${others.map(id => personHTML(who(id))).join("")}</span></div>` +
     `<div class="peer-scroll"><ol class="thread peer-thread">${rows}</ol></div>` +
-    // The same 「跳至最新訊息」 button the conversations have (owner, 2026-11-07); shown once the view is scrolled up.
+    // The same 「跳至最新訊息」 button the conversations have; shown once the view is scrolled up.
     iconButton("down", t("chat.latest"), ' data-peer="latest" hidden', "conversation-latest peer-latest") +
     `<div class="peer-foot"><button type="button" class="btn peer-close" data-peer="close">${esc(t("peer.close"))}</button></div>`;
 }

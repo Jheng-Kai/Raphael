@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-// Settings › 用量 as plain as Grok Bot's (owner, 2026-11-06): only what each subscription has left, one card each.
+// Settings › 用量: only what each subscription has left, one card each.
 import { afterEach, expect, it, vi } from "vitest";
 import { setLocale } from "./i18n";
 import { mountUsageAnalytics, type UsageAnalyticsApi } from "./usage-analytics";

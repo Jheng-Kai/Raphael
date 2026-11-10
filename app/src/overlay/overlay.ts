@@ -144,7 +144,7 @@ interface Notice {
    * own answers (`say`) are written whatever the subtitles setting says.
    */
   kind: "notice" | "learned" | "say";
-  /** A refusal (《否。…》 / 《Negative. …》): Raphael's emblem is red while it shows (owner, 2026-11-07). */
+  /** A refusal (《否。…》 / 《Negative. …》): Raphael's emblem is red while it shows. */
   angry?: boolean;
 }
 

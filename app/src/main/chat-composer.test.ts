@@ -53,11 +53,11 @@ test("switching rooms while a send completes preserves the new room draft",async
 });
 test("failed delivery preserves voice correction evidence for a retry, and learns only after delivery",async()=>{
  const {view}=mount(vi.fn().mockRejectedValueOnce(new Error("offline")).mockResolvedValue(undefined));
- view.setDraft("Please use Open Mouse Bot");view.seedDictation("Please use Open Mouse Bot");
- view.input.value="Please use OpenMausBot";view.input.dispatchEvent(new Event("input"));
+ view.setDraft("Please use Sample Tool Ex");view.seedDictation("Please use Sample Tool Ex");
+ view.input.value="Please use SampleToolX";view.input.dispatchEvent(new Event("input"));
  view.el.requestSubmit();await flush();expect(api.core).not.toHaveBeenCalledWith("dictionary.correct",expect.anything());
  api.core.mockResolvedValue({learned:[]});view.el.requestSubmit();await flush();
- expect(api.core).toHaveBeenCalledWith("dictionary.correct",{edits:[{before:"Please use Open Mouse Bot",after:"Please use OpenMausBot"}]});
+ expect(api.core).toHaveBeenCalledWith("dictionary.correct",{edits:[{before:"Please use Sample Tool Ex",after:"Please use SampleToolX"}]});
 });
 test("composer buttons do not also trigger an enclosing member composer",()=>{
  const outer=document.createElement("section"),handler=vi.fn();outer.addEventListener("click",handler);const {view}=mount();outer.append(view.el);document.body.append(outer);view.el.querySelector<HTMLButtonElement>(".cmp-attach")!.click();expect(handler).not.toHaveBeenCalled();
@@ -65,8 +65,8 @@ test("composer buttons do not also trigger an enclosing member composer",()=>{
 
 test("a pending learning response does not keep a delivered composer busy",async()=>{
  api.core.mockImplementation(()=>new Promise(()=>{}));const {view,send}=mount();
- view.setDraft("Please use Open Mouse Bot");view.seedDictation("Please use Open Mouse Bot");
- view.input.value="Please use OpenMausBot";view.input.dispatchEvent(new Event("input"));view.el.requestSubmit();await flush();
+ view.setDraft("Please use Sample Tool Ex");view.seedDictation("Please use Sample Tool Ex");
+ view.input.value="Please use SampleToolX";view.input.dispatchEvent(new Event("input"));view.el.requestSubmit();await flush();
  expect(send).toHaveBeenCalledOnce();expect(view.input.value).toBe("");
  view.input.value="Next message";view.input.dispatchEvent(new Event("input"));
  expect(view.el.querySelector<HTMLButtonElement>(".cmp-send")!.disabled).toBe(false);
@@ -103,8 +103,8 @@ test("voice shows Send while recording and its next press delivers the combined 
  const stopTrack=vi.fn(),stop=vi.fn();let recorder:any;Object.defineProperty(navigator,"mediaDevices",{configurable:true,value:{getUserMedia:vi.fn().mockResolvedValue({getTracks:()=>[{stop:stopTrack}]})}});
  vi.stubGlobal("MediaRecorder",class {state="inactive";onstop?:()=>void;ondataavailable?:(e:any)=>void;constructor(){recorder=this;}start(){this.state="recording";}stop(){stop();this.state="inactive";this.onstop?.();}});
  vi.stubGlobal("AudioContext",class {decodeAudioData=async()=>({numberOfChannels:1,sampleRate:16000,getChannelData:()=>new Float32Array([0,0.5])});close=async()=>{};});
- api.roomTranscribe.mockResolvedValue({text:"Please use Open Mouse Bot"});const {view,send}=mount();view.setDraft("Typed first");view.el.querySelector<HTMLButtonElement>(".cmp-voice")!.click();await flush();expect(view.el.dataset.taskState).toBe("recording");expect(view.el.querySelector(".cmp-voice .cmp-plane")).not.toBeNull();expect(recorder.state).toBe("recording");expect(stop).not.toHaveBeenCalled();
- expect(view.el.querySelector<HTMLButtonElement>(".cmp-send")!.disabled).toBe(true);view.el.querySelector<HTMLButtonElement>(".cmp-voice")!.click();await flush();expect(stop).toHaveBeenCalledOnce();expect(stopTrack).toHaveBeenCalledOnce();expect(send).toHaveBeenCalledExactlyOnceWith("Typed first Please use Open Mouse Bot", []);expect(view.input.value).toBe("");expect(api.roomTranscribe).toHaveBeenCalledOnce();
+ api.roomTranscribe.mockResolvedValue({text:"Please use Sample Tool Ex"});const {view,send}=mount();view.setDraft("Typed first");view.el.querySelector<HTMLButtonElement>(".cmp-voice")!.click();await flush();expect(view.el.dataset.taskState).toBe("recording");expect(view.el.querySelector(".cmp-voice .cmp-plane")).not.toBeNull();expect(recorder.state).toBe("recording");expect(stop).not.toHaveBeenCalled();
+ expect(view.el.querySelector<HTMLButtonElement>(".cmp-send")!.disabled).toBe(true);view.el.querySelector<HTMLButtonElement>(".cmp-voice")!.click();await flush();expect(stop).toHaveBeenCalledOnce();expect(stopTrack).toHaveBeenCalledOnce();expect(send).toHaveBeenCalledExactlyOnceWith("Typed first Please use Sample Tool Ex", []);expect(view.input.value).toBe("");expect(api.roomTranscribe).toHaveBeenCalledOnce();
  vi.unstubAllGlobals();
 });
 test("WAV encoding produces mono PCM with correct sample rate and clipping",()=>{
@@ -164,14 +164,14 @@ test("a voice delivery failure keeps the combined draft and learns corrections o
  Object.defineProperty(navigator,"mediaDevices",{configurable:true,value:{getUserMedia:vi.fn().mockResolvedValue({getTracks:()=>[{stop(){}}]})}});
  vi.stubGlobal("MediaRecorder",class {state="inactive";onstop?:()=>void;start(){this.state="recording";}stop(){this.state="inactive";this.onstop?.();}});
  vi.stubGlobal("AudioContext",class {decodeAudioData=async()=>({numberOfChannels:1,sampleRate:16000,getChannelData:()=>new Float32Array([0])});close=async()=>{};});
- api.roomTranscribe.mockResolvedValue({text:'Open Mouse Bot'});
+ api.roomTranscribe.mockResolvedValue({text:'Sample Tool Ex'});
  try {
   const {view,send}=mount(vi.fn().mockRejectedValueOnce(new Error('Synthetic delivery failure')).mockResolvedValue(undefined));view.setDraft('Use');
   const voice=view.el.querySelector<HTMLButtonElement>('.cmp-voice')!;voice.click();await flush();voice.click();await flush();
-  expect(send).toHaveBeenCalledExactlyOnceWith('Use Open Mouse Bot',[]);expect(view.input.value).toBe('Use Open Mouse Bot');
+  expect(send).toHaveBeenCalledExactlyOnceWith('Use Sample Tool Ex',[]);expect(view.input.value).toBe('Use Sample Tool Ex');
   expect(document.querySelector('.conversation-card')?.textContent).toContain('Could not send');
-  view.input.value='Use OpenMausBot';view.input.dispatchEvent(new Event('input'));view.el.requestSubmit();await flush();
-  expect(api.core).toHaveBeenCalledWith('dictionary.correct',{edits:[{before:'Open Mouse Bot',after:'OpenMausBot'}]});
+  view.input.value='Use SampleToolX';view.input.dispatchEvent(new Event('input'));view.el.requestSubmit();await flush();
+  expect(api.core).toHaveBeenCalledWith('dictionary.correct',{edits:[{before:'Sample Tool Ex',after:'SampleToolX'}]});
  } finally {vi.unstubAllGlobals();}
 });
 
@@ -240,7 +240,7 @@ test("an image pasted into the composer is attached with its picture, and its wo
  const {view,send}=mount();const event=paste(view.input,[png()],"caption");expect(event.defaultPrevented).toBe(true);await flush();await new Promise(resolve=>setTimeout(resolve));await flush();
  expect(view.input.value).toBe("caption");
  expect(view.el.querySelector<HTMLImageElement>(".cmp-chip img.cmp-thumb")!.src).toContain("data:image/png;base64,");
- // Only the picture: its name is for screen readers, never printed beside it (owner, 2026-11-07).
+ // Only the picture: its name is for screen readers, never printed beside it.
  expect(view.el.querySelector(".cmp-chip .cmp-pic")!.getAttribute("aria-label")).toBe("shot.png");
  expect(view.el.querySelector(".cmp-chip")!.textContent!.trim()).toBe("");
  // The composer keeps its clicks, so its own picture opens large from inside it.

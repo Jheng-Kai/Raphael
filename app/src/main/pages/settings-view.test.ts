@@ -120,7 +120,7 @@ test("appearance is a section of 一般: one theme dropdown and the language, wi
   }
   expect(canonicalPane("appearance")).toBe("general");
 });
-test("no bot is set in Settings: Telegram, Slack and Discord live in each member's panel (owner, 2026-11-07)", () => {
+test("no bot is set in Settings: Telegram, Slack and Discord live in each member's panel", () => {
   for (const id of ["general", "dictation", "agent", "connections", "usage", "about"] as const) expect(tab(id)).not.toContain("data-msg");
   expect(canonicalPane("messaging")).toBe("general");
 });
@@ -216,7 +216,7 @@ const described = (html: string): string[] =>
   html.split(/(?=<div class="row[ "])/).filter((r) => r.includes('<div class="d">')).map((r) => /<div class="t">(.*?)<\/div>/.exec(r)![1]);
 
 describe("the tabs", () => {
-  test("are Grok Bot's six: General, Tools, Safety, Models & usage, Dictation and About, in each language", () => {
+  test("are the six: General, Tools, Safety, Models & usage, Dictation and About, in each language", () => {
     expect(IDS).toEqual(["general", "tools", "safety", "models", "dictation", "about", "connections"]);
     const titles = {
       "zh-TW": ["一般", "工具", "安全", "模型與用量", "聽寫與快捷鍵", "關於", "連結應用程式"],
@@ -229,7 +229,7 @@ describe("the tabs", () => {
     }
   });
 
-  test("sit flat, as Grok Bot's: no group names and no search (owner, 2026-11-07)", () => {
+  test("sit flat: no group names and no search", () => {
     const list = paneListHTML();
     // 連結應用程式 is no tab: the sidebar opens it as a dialog of its own (R-UI-111).
     expect([...list.matchAll(/data-pane="(\w+)"/g)].map((m) => m[1])).toEqual(["general", "tools", "safety", "models", "dictation", "about"]);
@@ -245,7 +245,7 @@ describe("the tabs", () => {
     expect(canonicalPane("messaging")).toBe("general");
   });
 
-  test("each opens with its name alone, as Grok Bot's: no line under it (owner, 2026-11-07)", () => {
+  test("each opens with its name alone: no line under it", () => {
     for (const locale of LOCALES) {
       setLocale(locale);
       for (const id of IDS) {
@@ -253,9 +253,9 @@ describe("the tabs", () => {
         const title = PANES.find((p) => p.id === id)!.title();
         const head = `<h1 id="set-title" tabindex="-1">${title.replace("&", "&amp;")}</h1>`;
         expect(html).not.toContain("set-purpose");
-        // Connections' Add stands on the row of its two views, clear of the dialog's ✕ (owner, 2026-11-07).
+        // Connections' Add stands on the row of its two views, clear of the dialog's ✕.
         if (id === "connections") expect(html).toMatch(/<div class="cs-bar">.*?<\/div><button type="button" class="sel cs-add"[^>]*data-k="conn-add"/s);
-        // 模型與用量's one refresh stands at its top right: it is read once while the app runs (owner, 2026-11-08).
+        // 模型與用量's one refresh stands at its top right: it is read once while the app runs.
         expect(html.startsWith(id === "models" ? `<div class="set-head">${head}` : head)).toBe(true);
         expect(html).not.toContain('class="purpose"');
       }
@@ -320,15 +320,15 @@ describe("一般", () => {
     expect(chosen).toContain('<span class="output-name">交付成果</span>');
     expect(chosen).toContain('<span class="output-path">C:\\Owner\\交付成果\\</span>');
     expect(chosen).toContain('aria-label="變更輸出資料夾（目前是 交付成果）"');
-    // As Claude's and ChatGPT's: the folder is changed, never cleared with a button standing open (R-UI-56); no title repeats the path.
+    // The folder is changed, never cleared with a button standing open (R-UI-56); no title repeats the path.
     expect(buttons(chosen)).toHaveLength(1);
     expect(chosen).not.toMatch(/title="/);
   });
-  test("General is Grok Bot's sections: you, appearance, Raphael and the guide; the bots live elsewhere", () => {
+  test("General groups its sections: you, appearance, Raphael and the guide, the bots live elsewhere", () => {
     const html = tab("general");
     expect(html).not.toContain("data-msg-section");
     expect(groups(html)).toEqual(["關於你", t("skin.title"), t("agent.title"), "啟動"]);
-    // The tour is one button, named for what it does, with no row repeating the name (owner, 2026-11-07).
+    // The tour is one button, named for what it does, with no row repeating the name.
     expect(html).toMatch(/<button[^>]*data-act="rerun-guide"[^>]*>導覽<\/button>/);
     expect(names(html).slice(0, 4)).toEqual([t("settings.067"), t("settings.059"), "時區", "輸出資料夾"]);
   });
@@ -467,8 +467,8 @@ describe("Models", () => {
     expect(html).not.toContain("data-usage-host");
     expect(html).not.toContain("data-fallback");
     const usage = tab("usage");
-    // This month's spending of the app is Grok Bot's usage card above the allowances; an OpenRouter account's own usage is
-    // read on OpenRouter (owner, 2026-11-07).
+    // This month's spending of the app is the spending card above the allowances; an OpenRouter account's own usage is
+    // read on OpenRouter.
     expect(names(usage)).toEqual(["金鑰"]);
     expect(usage.indexOf('data-row="raphael-spend"')).toBeLessThan(usage.indexOf("data-usage-host"));
     expect(usage).toContain("<h2>拉斐爾本月花費</h2>");
@@ -479,7 +479,7 @@ describe("Models", () => {
     expect(usage).not.toContain('data-pv="directory"');
   });
 
-  test("this month's spending is Grok Bot's usage card: the amount, the share of the monthly limit as a bar, the month's end", () => {
+  test("this month's spending is the spending card: the amount, the share of the monthly limit as a bar, the month's end", () => {
     const card = (over: Partial<SettingsView>): string => /<section class="spend-card"[\s\S]*?<\/section>/.exec(tab("usage", over))![0];
     const full = card({});
     expect(full).toContain('<strong class="num">US$1.20</strong><small>已使用 12%</small>');
@@ -639,7 +639,7 @@ describe("dictation history retention", () => {
 });
 
 describe("關於", () => {
-  test("has the version, and help and the license behind icons, no text buttons (owner, 2026-11-08)", () => {
+  test("has the version, and help and the license behind icons, no text buttons", () => {
     const html = tab("about", { version: "0.2.0" });
     expect(rowOf(html, "版本")).toContain(">0.2.0</span>");
     expect(rowOf(html, "開源授權")).toMatch(/<button type="button" class="btn icon row" aria-label="查看"[^>]*data-act="license">/);

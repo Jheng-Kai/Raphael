@@ -89,7 +89,7 @@ test("a local command that waits shows the command itself, its directory and set
   const html = permissionCardHTML(card({ kind: "local_command", service: "Alex", summary: "Get-Process", reason: "D:\\Project", always: false }));
   expect(html).toContain('<b class="card-title cc-name">Alex 想要執行指令</b>');
   expect(html).toContain('<p class="card-body cc-state">在你的電腦執行這個指令前，需要你確認。</p>');
-  // The owner allows what they can read (owner, 2026-11-08: 「我根本不知道指令是甚麼」).
+  // The owner allows what they can read.
   expect(html).toContain('<pre class="local-command">Get-Process</pre>');
   expect(html).not.toContain("data-card-disclosure");
   expect(html).toContain("D:\\Project");

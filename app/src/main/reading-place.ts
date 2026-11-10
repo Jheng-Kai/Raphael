@@ -1,5 +1,5 @@
 // When a conversation's column changes width (the details panel dragged wider or narrower, the window resized) the
-// reading place stays (owner, 2026-11-07): the message at the top of the view keeps its place while the lines rewrap,
+// reading place stays: the message at the top of the view keeps its place while the lines rewrap,
 // and a view at the bottom stays at the bottom. The thread's own scroll anchoring is off (agent.css: the thread
 // manages its scrolling itself), so this corrects width changes only; growth and new turns are left to the thread.
 

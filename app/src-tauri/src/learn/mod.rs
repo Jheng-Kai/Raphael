@@ -700,11 +700,11 @@ mod tests {
 
     #[test]
     fn a_short_name_corrected_in_a_normal_field_is_kept_before_submission() {
-        let pasted = "Please use Open Mouse Bot";
+        let pasted = "Please use Sample Tool Ex";
         let mut field = Script(
             vec![
                 t(pasted),
-                t("Please use OpenMausBot"),
+                t("Please use SampleToolX"),
                 t(""),
                 t("Unrelated output"),
             ],
@@ -713,7 +713,7 @@ mod tests {
         let corrections = watch(&mut field, pasted, QUICK, || true);
         assert_eq!(
             misheard_and_word(&corrections),
-            [("Open Mouse Bot", "OpenMausBot")]
+            [("Sample Tool Ex", "SampleToolX")]
         );
         assert_eq!(field.1, 3, "never read output after a cleared field");
     }
@@ -963,7 +963,7 @@ mod tests {
 
     #[tokio::test]
     async fn confirmed_words_use_the_dedicated_learned_notice_route() {
-        let core = Core::default().on("dictionary.learn", json!({"learned": ["Typeless"]}));
+        let core = Core::default().on("dictionary.learn", json!({"learned": ["Wordnote"]}));
         let (_, overlay, _, learner) = learner(core, sent_field());
         run(&learner, &target("notepad.exe")).await;
         assert_eq!(overlay.1.load(Ordering::SeqCst), 1);
@@ -1112,12 +1112,12 @@ mod tests {
 
     #[tokio::test]
     async fn several_words_get_one_notice() {
-        let core = Core::default().on("dictionary.learn", json!({"learned": ["手機", "Typeless"]}));
+        let core = Core::default().on("dictionary.learn", json!({"learned": ["手機", "Wordnote"]}));
         let (_, overlay, _, learner) = learner(core, sent_field());
         run(&learner, &target("notepad.exe")).await;
         assert_eq!(
             overlay.0.lock().unwrap()[0],
-            "《了。「手機」、「Typeless」已加入詞典。》"
+            "《了。「手機」、「Wordnote」已加入詞典。》"
         );
     }
 }

@@ -21,19 +21,19 @@ test("every character and colour makes a bubble whose words read", () => {
   expect(colours.length).toBeGreaterThan(20);
   for (const colour of colours) {
     const { fill, words } = ownerBubble(colour);
-    // White words as Grok Bot's coloured bubbles hold them; dark words on a nearly white slime read at 4.5:1 or more.
+    // White words on coloured bubbles use a 3.4:1 minimum; dark words on a nearly white slime read at 4.5:1 or more.
     expect(ratio(fill, WORDS[words]), `${colour} as ${fill} with ${words} words`).toBeGreaterThanOrEqual(words === "light" ? LIGHT_WORDS_RATIO : 4.5);
   }
 });
 
-test("Raphael's colour is his first blue slime's everywhere: his bubble, his controls and his name (owner, 2026-11-07)", () => {
+test("Raphael's colour is his first blue slime's everywhere: his bubble, his controls and his name", () => {
   expect(memberColor({ id: 0 })).toBe(RAPHAEL_COLOR);
   expect(ownerBubble(memberColor({ id: 0 }))).toEqual(ownerBubble(slimeColorOf({ id: 3, avatar: "slime:rimuru" })));
   expect(ownerBubble(memberColor({ id: 0 })).words).toBe("light");
   expect(nameAccent({ id: 0 })).toBe(memberAccent(RAPHAEL_COLOR));
 });
 
-test("as Grok Bot's, words are white on a shade darkened only to 3.4:1; a nearly white slime keeps dark words", () => {
+test("words are white on a shade darkened only to 3.4:1, a nearly white slime keeps dark words", () => {
   expect(ownerBubble("#2F4A80")).toEqual({ fill: "#2f4a80", words: "light" });
   for (const colour of ["#14C370", "#5AB4E8", "#F69412"]) {
     const bubble = ownerBubble(colour);

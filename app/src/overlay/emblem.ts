@@ -100,7 +100,7 @@ export function params(phase: Phase, pt: number, lvl: number): Params | null {
     coreR: 0.08 + 0.03 * lvl,
     coreA: 1,
     ringR: RING_R,
-    // As thick at rest as the owner's photo of 2026-11-07 shows it, a twentieth of the radius.
+    // At rest the stroke is a twentieth of the radius.
     ringW: 0.06 + lvl * 0.05,
     ringA: 1,
     glyphR: 0.86,
@@ -161,11 +161,11 @@ function mulberry32(seed: number): () => number {
 
 // ---------- the glyph texture ----------
 
-/** How Raphael feels: calm, or angry (red) while he refuses (owner, 2026-11-07). */
+/** How Raphael feels: calm, or angry (red) while he refuses. */
 export type Mood = "calm" | "angry";
 
 // The ring texture is app/public/brand/glyph-ring.png, the runes of the owner's own picture, kept soft as they always were
-// (owner, 2026-11-07: a crisp redrawing looked wrong). If it fails to load, a plain vector ring is drawn.
+// If it fails to load, a plain vector ring is drawn.
 let glyph: HTMLImageElement | null = null;
 let tintCanvas: HTMLCanvasElement | null = null;
 let completedGlyph: { source: HTMLImageElement; canvas: HTMLCanvasElement } | null = null;
@@ -352,7 +352,7 @@ function dot(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, sty
 /** Transparent overlays cannot assume that the desktop behind them is dark. */
 export type EmblemSurface = "light" | "dark" | "transparent";
 
-/** The dark ground of the owner's photo, laid under the emblem on a light page so it looks the same as on a dark one. */
+/** The dark background under the emblem keeps its appearance consistent on light and dark pages. */
 export const BACKDROP = { inner: "#222724", outer: "#2c312d", r: 1.035 } as const;
 
 /** What the renderer needs besides the look of the frame. */
@@ -371,7 +371,7 @@ export interface DrawOptions {
   lvl: number;
   /** Extra light on the glyph ring while the user speaks, 0 to `BOOST_MAX` (see `boostAmount`). */
   boost?: number;
-  /** Calm in gold, or angry in red: the ring, its rays and its centre (owner, 2026-11-07). */
+  /** Calm in gold, or angry in red: the ring, its rays and its centre. */
   mood?: Mood;
 }
 
@@ -386,7 +386,7 @@ export function drawEmblem(
   const base = ctx.globalAlpha;
   const angry = o.mood === "angry";
   const unknown = o.surface === "transparent";
-  // On a light page the emblem stands on the photo's dark ground and is drawn exactly as on a dark one (owner, 2026-11-07).
+  // On a light page the emblem stands on the photo's dark ground and is drawn exactly as on a dark one.
   const surface: EmblemSurface = o.surface === "light" ? "dark" : o.surface ?? "dark";
   if (o.surface === "light" && (p.glyphA > 0.003 || p.ringA > 0.01 || p.coreA > 0.01)) {
     ctx.save();
@@ -449,8 +449,8 @@ export function drawEmblem(
     ctx.restore();
   }
 
-  // The rays, as the owner's photo shows them: forty thin yellow-green wedges from the centre, most reaching the white ring,
-  // some passing through it to the letters' feet and a few out past the letters: his light shines out (owner, 2026-11-07).
+  // Forty thin yellow-green rays extend from the centre, most reaching the white ring,
+  // some passing through it to the letters' feet and a few out past the letters: his light shines out.
   // They go under the white ring, which hides them where they cross it.
   if (p.rays > 0.01) {
     ctx.save();

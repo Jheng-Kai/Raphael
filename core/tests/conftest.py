@@ -11,11 +11,9 @@ skipped unless the environment variable RAPHAEL_TEST_MODELS is 1.
 the brain, the assistant and the plugins.
 """
 
-import inspect
 import os
 import sqlite3
 from collections.abc import Iterator
-from pathlib import Path
 
 import keyring
 import keyring.backend
@@ -114,17 +112,12 @@ def conn() -> Iterator[sqlite3.Connection]:
     connection.close()
 
 
-_EVAL_FILE_MARKERS = ("case_named(", "all_cases(", "HELD_OUT", "REGRESSION", 'REPO / "eval"')
-
-
 def pytest_collection_modifyitems(config, items):
     """Keep this machine's share of the suite, then skip what cannot run here: the tests marked
-    `models` unless RAPHAEL_TEST_MODELS=1, and the tests that read the evaluation sets when the
-    ../eval folder is not checked out. A module keeps only the last function of a name, so all
-    three must go through this one hook."""
+    `models` unless RAPHAEL_TEST_MODELS=1. A module keeps only the last function of a name, so
+    both must go through this one hook."""
     keep_this_share(config, items)
     skip_model_tests(items)
-    skip_eval_file_tests(items)
 
 
 def keep_this_share(config, items) -> None:
@@ -186,19 +179,4 @@ def skip_model_tests(items) -> None:
     skip = pytest.mark.skip(reason="needs the speech models: set RAPHAEL_TEST_MODELS=1")
     for item in items:
         if item.get_closest_marker("models"):
-            item.add_marker(skip)
-
-
-def skip_eval_file_tests(items) -> None:
-    if (Path(__file__).resolve().parents[2] / "eval").is_dir():
-        return
-    skip = pytest.mark.skip(reason="the eval/ folder is not part of this checkout")
-    for item in items:
-        if item.path.name != "test_eval_tools.py":
-            continue
-        try:
-            source = inspect.getsource(item.function)
-        except (OSError, TypeError):
-            continue
-        if any(marker in source for marker in _EVAL_FILE_MARKERS):
             item.add_marker(skip)

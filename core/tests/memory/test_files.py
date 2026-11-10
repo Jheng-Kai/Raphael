@@ -72,23 +72,23 @@ def shared_file(tmp_path):
 
 
 @pytest.mark.parametrize("again", [
-    "使用者用 Typeless 在 Mac mini 上語音輸入",
-    "使用者用 Typeless 在 Mac mini 上語音輸入。",
-    "  使用者用  Typeless 在 Mac mini 上語音輸入 ",
-    "使用者用typeless在mac mini上語音輸入",
-    "使用者用 Typeless",  # said already, in more words
+    "使用者用 Typepad 在 workstation 上語音輸入",
+    "使用者用 Typepad 在 workstation 上語音輸入。",
+    "  使用者用  Typepad 在 workstation 上語音輸入 ",
+    "使用者用typepad在workstation上語音輸入",
+    "使用者用 Typepad",  # said already, in more words
 ])
 def test_the_same_fact_said_twice_leaves_one_line(memory, tmp_path, again):
-    first = "使用者用 Typeless 在 Mac mini 上語音輸入"
+    first = "使用者用 Typepad 在 workstation 上語音輸入"
     assert edit(memory, 1, add(first)).ok
     assert edit(memory, 1, add(again)).ok
     assert own_file(tmp_path, 1).strip() == first
 
 
 def test_a_paraphrase_is_refused_with_the_entry_it_repeats(memory, tmp_path):
-    first = "使用者用 Typeless 在 Mac mini 上語音輸入"
+    first = "使用者用 Typepad 在 workstation 上語音輸入"
     assert edit(memory, 1, add(first)).ok
-    said = edit(memory, 1, add("使用者在 Mac mini 上用 Typeless 語音輸入"))
+    said = edit(memory, 1, add("使用者在 workstation 上用 Typepad 語音輸入"))
     assert not said.ok and said.error == "similar"
     assert first in said.instruction and "replace" in said.instruction
     assert own_file(tmp_path, 1).strip() == first
@@ -619,8 +619,8 @@ def legacy_home(root):
     note_file(own, "reference-mic", "使用者已購買 USB 麥克風", "使用者已購買 USB 桌面麥克風。")
     note_file(own, "reference-mic-2", "使用者已購買 USB 麥克風", "使用者已購買 USB 桌面麥克風。")  # the same words
     note_file(own, "reference-mic-3", "麥克風", "使用者 已購買  USB 桌面麥克風")  # the same fact, other spacing
-    note_file(own, "reference-voice", "語音輸入", "使用者用 Typeless 在 Mac mini 上語音輸入")
-    note_file(own, "reference-voice-2", "語音輸入", "使用者在 Mac mini 上用 Typeless 語音輸入")  # another wording
+    note_file(own, "reference-voice", "語音輸入", "使用者用 Typepad 在 workstation 上語音輸入")
+    note_file(own, "reference-voice-2", "語音輸入", "使用者在 workstation 上用 Typepad 語音輸入")  # another wording
     note_file(own, "preference-short", "回答要短", "回答保持兩三句，除非主人要求詳細。\nWhy: 主人說太長了。")
     note_file(own, "ongoing-trip", "下週去東京", "主人下週要去東京出差。", expires="2026-11-01")
     note_file(own, "ongoing-old", "去年的旅行", "主人要去大阪。", expires="2020-01-01")
@@ -636,7 +636,7 @@ def legacy_home(root):
     (root / "shared/USER.md").write_text("## user-name\n主人叫 Sam\n\n主人的名字是 Sam。\n", encoding="utf-8")
     (root / "shared/team.md").write_text("", encoding="utf-8")
     note_file(root / "bots/0/memory", "user-city", "主人住在台北", "主人住在台北市。")  # also in the shared file
-    pending_file(root, 0, "a" * 24, "add", "reference-typeless", "使用者用 Typeless 在 Mac mini 上語音輸入")
+    pending_file(root, 0, "a" * 24, "add", "reference-typepad", "使用者用 Typepad 在 workstation 上語音輸入")
     pending_file(root, 1, "b" * 24, "replace", "reference-mic", "使用者已購買綠聯有線 USB 桌面麥克風")
     pending_file(root, 1, "c" * 24, "remove", "preference-short", "")
     (root / "bot-state/migration.json").write_text("{}", encoding="utf-8")
@@ -651,7 +651,7 @@ def test_migration_loses_nothing_merges_duplicates_and_runs_twice_harmlessly(mak
     shared = shared_file(tmp_path)
     # Every fact is in the file of its space, once.
     assert own.count("使用者已購買 USB 桌面麥克風") == 1
-    assert own.count("Typeless") == 1
+    assert own.count("Typepad") == 1
     assert "回答保持兩三句" in own and "Why: 主人說太長了" in own
     assert "主人下週要去東京出差" in own and "2026-11-01" in own
     assert "主人要去大阪" in own  # past its date, and still not lost
@@ -661,7 +661,7 @@ def test_migration_loses_nothing_merges_duplicates_and_runs_twice_harmlessly(mak
     # Who was told a shared note stays with it.
     assert "主人的名字是 Sam。 — 拉斐爾 · 2026-10-20" in shared or "主人的名字是 Sam。 — Raphael · 2026-10-20" in shared
     # What waited for the owner enters visibly unconfirmed; it is in the document he reads.
-    assert "（待確認）使用者用 Typeless 在 Mac mini 上語音輸入" in own_file(tmp_path, 0)
+    assert "（待確認）使用者用 Typepad 在 workstation 上語音輸入" in own_file(tmp_path, 0)
     assert "（待確認）使用者已購買綠聯有線 USB 桌面麥克風" in own
     # The note files are gone, the folder holds only the log, and the queue is gone.
     assert sorted(path.name for path in (tmp_path / "bots/1/memory").iterdir()) == ["log"]

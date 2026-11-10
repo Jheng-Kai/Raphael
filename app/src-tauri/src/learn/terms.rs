@@ -513,7 +513,7 @@ mod tests {
                 &[("cloud code", "Claude Code")],
             ),
             ("Allice", "Alice", &[("Allice", "Alice")]),
-            ("Tyeless", "Typeless", &[("Tyeless", "Typeless")]),
+            ("Wornote", "Wordnote", &[("Wornote", "Wordnote")]),
             ("openrouter", "OpenRouter", &[("openrouter", "OpenRouter")]),
             ("kubernets", "Kubernetes", &[("kubernets", "Kubernetes")]),
             ("gpt four", "GPT4", &[("gpt four", "GPT4")]),

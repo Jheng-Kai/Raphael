@@ -143,7 +143,7 @@ async function start(): Promise<void> {
 
   // A right click presses the ⋯ of the row under it; elsewhere the browser's own menu has no place in an app. Text fields keep theirs.
   installContextMenus(document);
-  // A title that only repeats the words under it never shows (owner, 2026-11-07).
+  // A title that only repeats the words under it never shows.
   dropEchoTitles(document);
   prefetchEmojiWhenIdle();
 

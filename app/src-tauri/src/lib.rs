@@ -39,7 +39,7 @@ const MAIN_WINDOW: &str = "main";
 /// Label of the overlay window. It is created in Rust, never by the config.
 const OVERLAY_WINDOW: &str = "overlay";
 
-/// Nothing is restored: every launch opens at the designed 1280x800, centred (owner, 2026-10-30), even
+/// Nothing is restored: every launch opens at the designed 1280x800, centred, even
 /// after the window was maximized last time. Launch policy and the native frame stay under app control.
 fn main_window_state_flags() -> StateFlags {
     StateFlags::empty()
@@ -635,7 +635,7 @@ mod window_state_tests {
 
     #[test]
     fn ctrl_plus_and_minus_zoom_the_main_window_within_three_steps() {
-        // The owner zooms with Ctrl + plus / minus (2026-10-25) but only three steps either way: the app's
+        // Ctrl + plus / minus supports three zoom steps either way: the app's
         // window-zoom.ts handles the keys, so WebView2's own 25%-500% zoom keys stay off.
         let config: serde_json::Value =
             serde_json::from_str(include_str!("../tauri.conf.json")).unwrap();

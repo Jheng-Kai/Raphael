@@ -1,4 +1,4 @@
-/* Home (owner, 2026-11-08): Raphael's emblem alive beside the greeting, then the day in numbers and pictures. No boxes:
+/* Home: Raphael's emblem alive beside the greeting, then the day in numbers and pictures. No boxes:
    plain sections under a hairline, figures between thin dividers, and the chart's own colours only on its marks. */
 .page.page-home { container: home / inline-size; max-width: var(--layout-page-max); min-height: 100%; margin: 0 auto; padding: calc(var(--window-controls-height) + var(--sp-3)) 40px var(--sp-6); box-sizing: border-box; display: grid; grid-template-columns: minmax(0, 1fr); align-content: safe center; gap: var(--sp-6); }
 .page-home .btn { line-height: inherit; }

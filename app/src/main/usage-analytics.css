@@ -1,7 +1,7 @@
 /* What each subscription has left, one card each (usage-analytics.ts). */
 .run-allowance { margin-bottom: var(--sp-5); min-width: 0; }
 /* The one refresh of 模型與用量 (settings-view.ts modelsRefreshHTML): it turns while it reads and is a check for a moment
-   once done (owner, 2026-11-08: 「這個 Icon 沒有任何的 feedback」); with reduced motion it fades instead of turning. */
+   once done; with reduced motion it fades instead of turning. */
 .models-refresh[data-state="busy"] { cursor: progress; }
 .models-refresh[data-state="busy"] > .i { animation: models-refresh-turn 0.9s linear infinite; }
 .models-refresh[data-state="done"] > .i { color: var(--ok); }
@@ -26,7 +26,7 @@
 .run-window .run-bar-track { width: 100%; }
 .run-bar-track { background: var(--hover); height: 7px; border-radius: var(--r-sm); overflow: hidden; }
 .run-bar-track i { display: block; background: var(--meter); height: 100%; border-radius: var(--r-sm); }
-/* What the app spent this month, as Grok Bot's usage card: the amount large, the share of the monthly limit beside it, a
+/* What the app spent this month, in a card: the amount large, the share of the monthly limit beside it, a
    coloured bar and one quiet line (settings-view.ts `spendCardHTML`). */
 .spend-card { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); padding: var(--sp-4); border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--panel); }
 .spend-card h2 { margin: 0; font: 500 var(--fs-sm)/1.4 var(--ui); color: var(--text); }

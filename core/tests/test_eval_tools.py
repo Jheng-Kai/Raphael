@@ -23,9 +23,9 @@ from raphael_core.evaluate import record as eval_record
 from raphael_core.evaluate import stt as eval_stt
 from raphael_core.languages import chinese_variant
 
-REPO = Path(__file__).resolve().parents[2]
-HELD_OUT = REPO / "eval" / "cleanup_cases.jsonl"
-REGRESSION = REPO / "eval" / "regression_cases.jsonl"
+FIXTURES = Path(__file__).parent / "fixtures" / "cleanup"
+HELD_OUT = FIXTURES / "cleanup_cases.jsonl"
+REGRESSION = FIXTURES / "regression_cases.jsonl"
 
 
 def all_cases():
@@ -41,18 +41,18 @@ def case_named(case_id):
 
 
 def test_dictation_prompts_are_thirty_lines_in_all_three_languages():
-    lines = (REPO / "eval" / "dictation_prompts.txt").read_text(encoding="utf-8").splitlines()
+    lines = (FIXTURES / "dictation_prompts.txt").read_text(encoding="utf-8").splitlines()
     assert len(lines) == 30 and all(line.strip() for line in lines)
     text = "".join(lines)
     assert any("぀" <= ch <= "ゟ" for ch in text), "no Japanese (hiragana)"
     assert any("一" <= ch <= "鿿" for ch in text), "no Chinese"
     assert any(ch.isascii() and ch.isalpha() for ch in text), "no English"
     assert min(map(len, lines)) < 15 and max(map(len, lines)) > 60, "short and long lines both"
-    assert eval_record.load_prompts(REPO / "eval" / "dictation_prompts.txt") == lines
+    assert eval_record.load_prompts(FIXTURES / "dictation_prompts.txt") == lines
 
 
 def test_cleanup_cases_file_has_the_required_cases():
-    cases = eval_cleanup.load_cases(REPO / "eval" / "cleanup_cases.jsonl")
+    cases = eval_cleanup.load_cases(FIXTURES / "cleanup_cases.jsonl")
     ids = [case.id for case in cases]
     assert len(cases) >= 15 and len(set(ids)) == len(ids)
     required = {
@@ -608,16 +608,16 @@ def test_cases_survive_the_apps_text_processing():
     assert by_id["command-stays-text"].must_contain == ["YouTube"]
     assert by_id["command-stays-text"].must_not_contain == ["了。"]
     assert by_id["question-capital"].must_contain == ["首都是哪裡", "？"]
-    # The cases built from the user's own dictations, and the tone of a chat app.
+    # Synthetic recognition cases and chat application tone.
     assert "Alt" in by_id["mishear-alt-key"].must_contain
     assert "隻要" in by_id["opencc-zhi"].must_not_contain
     assert by_id["chat-tone-line"].target_app == "LINE.exe"
-    # The lists: the user's own long dictation into a terminal, and one that is not a list.
+    # Long terminal lists, varied ordinals and ordinary prose.
     assert by_id["numbered-list-long-terminal"].target_app == "WindowsTerminal.exe"
     assert by_id["numbered-list-varied-ordinals"].target_app == "OUTLOOK.EXE"
     assert "1." in by_id["first-time-not-a-list"].must_not_contain
     terminal_cases = {
-        "real-hermes-personal-agent", "real-claude-pretraining", "mishear-ai-product-names",
+        "synthetic-helper-personal-agent", "synthetic-model-name", "mishear-ai-product-names",
         "mishear-dev-product-names", "literal-common-words-stay",
     }
     assert all(by_id[case_id].target_app == "WindowsTerminal.exe" for case_id in terminal_cases)
@@ -661,13 +661,13 @@ def test_cases_survive_the_apps_text_processing():
     "case_id, cleaned",
     [
         (
-            "real-hermes-personal-agent",
-            "之後會有 Hermes Agent 可以幫我看 Gmail，處理 GitHub 的東西，"
-            "基本上任何事情它都可以做，它就是一個 personal agent。",
+            "synthetic-helper-personal-agent",
+            "這組 Helion Agent 可以整理 Outlook，檢查 GitLab 的工單，"
+            "團隊例行事項都能處理，它是一個 personal agent。",
         ),
         (
-            "real-claude-pretraining",
-            "理論上 Claude 的 pre-training 的資料應該有辦法知道 Hermes Agent 是什麼。",
+            "synthetic-model-name",
+            "測試中的 Claude 應該能辨識 Helion Agent 這個合成名稱。",
         ),
         ("false-start-zh-fuller-phrase", "我想先把這個功能做完，明天再測試。"),
         (
@@ -710,7 +710,7 @@ def test_new_cleanup_cases_reject_the_reported_errors_and_accept_corrected_text(
 def test_variant_cases_accept_information_without_forcing_it_into_data(
     case_id, cleaned, wrong_variant
 ):
-    cases = eval_cleanup.load_cases(REPO / "eval" / "cleanup_cases.jsonl")
+    cases = eval_cleanup.load_cases(FIXTURES / "cleanup_cases.jsonl")
     case = next(case for case in cases if case.id == case_id)
     assert eval_cleanup.failed_checks(case, cleaned) == []
     assert eval_cleanup.failed_checks(case, wrong_variant)
@@ -731,27 +731,27 @@ def test_variant_cases_accept_information_without_forcing_it_into_data(
         ),
         (
             "mishear-related-book-names",
-            "我在做魔戒裡的甘道夫這個角色，作者是托爾金。",
-            "我在做魔界裡的甘道夫這個角色，作者是托耳金。",
+            "書架上有星河之書，作者是林安。",
+            "書架上有星河之輸，作者是林昂。",
         ),
         (
             "literal-distance-stays",
-            "這段影片裡我轉身走了十來米，再坐在地上。",
-            "這段影片裡我轉生走了史萊姆，再坐在地上。",
+            "示範記錄說我轉身走了十來米，再坐在長椅上。",
+            "示範記錄說我轉生走了史萊姆，再坐在長椅上。",
         ),
     ],
 )
 def test_context_cases_distinguish_corrections_from_changes_of_meaning(
     case_id, cleaned, changed_meaning
 ):
-    cases = eval_cleanup.load_cases(REPO / "eval" / "cleanup_cases.jsonl")
+    cases = eval_cleanup.load_cases(FIXTURES / "cleanup_cases.jsonl")
     case = next(case for case in cases if case.id == case_id)
     assert eval_cleanup.failed_checks(case, cleaned) == []
     assert eval_cleanup.failed_checks(case, changed_meaning)
 
 
 def test_literal_common_words_case_rejects_overcorrection():
-    cases = eval_cleanup.load_cases(REPO / "eval" / "cleanup_cases.jsonl")
+    cases = eval_cleanup.load_cases(FIXTURES / "cleanup_cases.jsonl")
     case = next(case for case in cases if case.id == "literal-common-words-stay")
     assert eval_cleanup.failed_checks(case, case.input) == []
     overcorrected = case.input.replace("cloud", "Claude").replace("cursor", "Cursor")
@@ -774,18 +774,18 @@ def prompt_examples(prompt):
     ]
 
 
-def test_the_held_out_file_has_new_cases_and_none_of_the_real_dictations():
+def test_the_held_out_file_has_new_cases_and_none_of_the_regression_samples():
     cases = eval_cleanup.load_cases(HELD_OUT)
     assert len([case for case in cases if case.id.startswith("heldout-")]) >= 8
-    assert not any(case.id.startswith("real-") for case in cases)
+    assert not any(case.id.startswith("synthetic-") for case in cases)
 
 
-def test_the_regression_file_holds_the_real_dictations_and_runs_with_the_same_tool(tmp_path):
+def test_the_regression_file_holds_synthetic_samples_and_runs_with_the_same_tool(tmp_path):
     regression = eval_cleanup.load_cases(REGRESSION)
     ids = {case.id for case in regression}
     assert {
-        "real-hermes-personal-agent",
-        "real-claude-pretraining",
+        "synthetic-helper-personal-agent",
+        "synthetic-model-name",
         "false-start-zh-fuller-phrase",
         "false-start-en-fuller-phrase",
         "mishear-alt-key",
@@ -815,7 +815,7 @@ def test_the_prompt_holds_no_case_input_and_none_of_the_old_examples():
         for case in all_cases():
             assert case.input not in example and example not in case.input, case.id
     for leaked in (
-        "Hermes，Hermes agents",
+        "Helion，Helion agents",
         "cloud 的 pre-training",
         "personal agent",
         "我想要，我想先",
@@ -823,7 +823,7 @@ def test_the_prompt_holds_no_case_input_and_none_of_the_old_examples():
         "隻要",
         "隻有",
         "開啟拉斐爾老師",
-        "TypeList",
+        "TypePat",
         "試床",
         "轉入",
         "轉路",
@@ -835,7 +835,7 @@ def test_the_prompt_holds_no_case_input_and_none_of_the_old_examples():
 
 def test_the_prompt_still_has_its_general_rules():
     prompt = brain_cleanup.build_system_prompt([], [])
-    # The owner's version C (2026-11-07) words the same general rules more briefly.
+    # Keep the general rules concise.
     for kept in (
         "Keep every point, name, number, condition, negation and aside",
         "Never drop a sentence, never summarize, never add anything",
@@ -848,22 +848,22 @@ def test_the_prompt_still_has_its_general_rules():
     assert len(prompt) < 5_000, "general rules must stay within the short cleanup prompt"
 
 
-@pytest.mark.parametrize("name", ["Hermes agent", "Hermes Agent", "Hermes agents"])
+@pytest.mark.parametrize("name", ["Helion agent", "Helion Agent", "Helion agents"])
 @pytest.mark.parametrize("role", ["permission agent", "personal agent"])
-def test_the_hermes_case_accepts_every_acceptable_spelling_and_role(name, role):
-    case = case_named("real-hermes-personal-agent")
+def test_the_helper_case_accepts_every_acceptable_spelling_and_role(name, role):
+    case = case_named("synthetic-helper-personal-agent")
     cleaned = (
-        f"之後會有 {name} 可以幫我看 Gmail，處理 GitHub 的東西，"
-        f"基本上任何事情它都可以做，它就是一個 {role}。"
+        f"這組 {name} 可以整理 Outlook，檢查 GitLab 的工單，"
+        f"團隊例行事項都能處理，它是一個 {role}。"
     )
     assert eval_cleanup.failed_checks(case, cleaned) == []
 
 
-def test_the_hermes_case_still_rejects_the_stutter_and_a_missing_role():
-    case = case_named("real-hermes-personal-agent")
-    stutter = "之後會有 Hermes，Hermes agent 可以幫我看 Gmail，處理 GitHub，任何事情都是 personal agent。"
-    assert any("Hermes，Hermes" in f for f in eval_cleanup.failed_checks(case, stutter))
-    no_role = "之後會有 Hermes Agent 可以幫我看 Gmail，處理 GitHub 的東西，任何事情它都可以做。"
+def test_the_helper_case_still_rejects_the_stutter_and_a_missing_role():
+    case = case_named("synthetic-helper-personal-agent")
+    stutter = "這組 Helion，Helion agent 可以整理 Outlook，檢查 GitLab，例行事項由 personal agent 處理。"
+    assert any("Helion，Helion" in f for f in eval_cleanup.failed_checks(case, stutter))
+    no_role = "這組 Helion Agent 可以整理 Outlook，檢查 GitLab 的工單，團隊例行事項都能處理。"
     assert any("一個都沒有" in f for f in eval_cleanup.failed_checks(case, no_role))
 
 
@@ -889,8 +889,8 @@ def test_the_chinese_restart_case_still_rejects_the_restart_and_a_lost_idea(clea
 
 
 def test_names_are_looked_for_in_any_letter_case_where_the_case_asks_for_it():
-    case = case_named("real-claude-pretraining")
-    cleaned = "理論上 Claude 的 pre-training 的資料應該有辦法知道 HERMES AGENT 是什麼。"
+    case = case_named("synthetic-model-name")
+    cleaned = "測試中的 Claude 應該能辨識 HELION AGENT 這個合成名稱。"
     assert eval_cleanup.failed_checks(case, cleaned) == []
     wrong_name = cleaned.replace("Claude", "claude")
     assert eval_cleanup.failed_checks(case, wrong_name), "the canonical spelling is the point here"
@@ -992,25 +992,25 @@ def test_the_held_out_cases_accept_a_good_cleanup_and_reject_the_error(case_id, 
 def test_render_report_lists_the_case_insensitive_and_alternative_checks():
     case = make_case(
         id="c",
-        must_contain_ci=["Hermes agent"],
+        must_contain_ci=["Helion agent"],
         must_contain_any=["personal agent", "permission agent"],
     )
     outcome = eval_cleanup.Outcome("c", "m", "好。", None, 1, 0.0, ["x"], reply="好。")
     report = eval_cleanup.render_report([case], ["m"], [outcome], "now")
-    assert "必須出現（不分大小寫）：「Hermes agent」" in report
+    assert "必須出現（不分大小寫）：「Helion agent」" in report
     assert "至少出現一個（不分大小寫）：「personal agent」、「permission agent」" in report
 
 
 def test_failed_checks_say_which_kind_of_check_failed():
     case = make_case(
-        input="hermes agent and c d tools",
-        must_contain_ci=["Hermes agent"],
+        input="helion agent and c d tools",
+        must_contain_ci=["Helion agent"],
         must_contain_any=["a b", "c d"],
     )
-    failures = eval_cleanup.failed_checks(case, "hermes tools")
-    assert any("Hermes agent" in f and "不分大小寫" in f for f in failures)
+    failures = eval_cleanup.failed_checks(case, "helion tools")
+    assert any("Helion agent" in f and "不分大小寫" in f for f in failures)
     assert any("一個都沒有" in f and "a b" in f and "c d" in f for f in failures)
-    assert eval_cleanup.failed_checks(case, "HERMES AGENT, C D tools") == []
+    assert eval_cleanup.failed_checks(case, "HELION AGENT, C D tools") == []
 
 
 class FakeClient:

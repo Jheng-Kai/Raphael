@@ -1,4 +1,4 @@
-// A template reviewed as Grok Bot reviews one (template-review.ts).
+// A template reviewed as separate pages (template-review.ts).
 export const reviewZh = {
   "template.review.context": "內容",
   "template.review.skills": "技能",

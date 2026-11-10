@@ -6,11 +6,11 @@ const channels = { slack: connected("Research", "SL1234"), discord: connected("R
 const desktop = { desktop: { state: "running", ready: true, control: "member" }, checkpoints: true };
 const review = [member(1), {action:'open-details'}, click('[data-det="tab"][data-tab="computer"]'), wait('.desktop-panel[data-desktop-state="member"]'), click('[data-desktop="enlarge"]'),click('[data-desktop="take"]'),wait('.desktop-panel[data-expanded][data-interactive="true"]'),click('[data-desktop="menu"]'),click('#app-popover [data-pick="files"]'), wait('.checkpoint'), scroll('.checkpoint'), click('.checkpoint summary'), wait('.checkpoint details[open] pre')];
 const login = [member(1), wait('[data-secret-card="card-login"]')];
-// Raphael's bots live in his panel since 2026-11-07, not in Settings.
+// Raphael's bots live in his panel, not in Settings.
 const raphael = [member(0), { action: "open-details" }];
 
 export default [
-  scene("work-messaging-setup", "Raphael's panel: a work chat not set up is one row whose 設定 asks him in the conversation, with no token field (owner, 2026-11-07)", [...raphael, wait('.mb-panel-suggest [data-intent="setup-slack"]'), click('.mb-panel-suggest [data-intent="setup-slack"]'), click('.mb-panel-suggest [data-intent="setup-slack"]'), check("work-messaging")], { workMessaging: { slack: disconnected, discord: disconnected } }),
+  scene("work-messaging-setup", "Raphael's panel: a work chat not set up is one row whose 設定 asks him in the conversation, with no token field", [...raphael, wait('.mb-panel-suggest [data-intent="setup-slack"]'), click('.mb-panel-suggest [data-intent="setup-slack"]'), click('.mb-panel-suggest [data-intent="setup-slack"]'), check("work-messaging")], { workMessaging: { slack: disconnected, discord: disconnected } }),
   scene("work-messaging-pairing", "Slack and Discord have independent pairing codes in Raphael's panel and no remote approval", [...raphael, scroll('.mb-panel-suggest [data-msg-kind="discord"]'), wait('[data-msg-kind="discord"] [data-code="DC1234"]'), check("work-pairing")], { workMessaging: channels }),
   scene("computer-file-changes", "The existing computer panel exposes a readable before/after file diff", [...review, check("file-changes")], desktop),
   scene("computer-file-partial", "Uncovered files are named without claiming they can be restored", [...review, check("file-partial")], { ...desktop, checkpointPartial: true }),

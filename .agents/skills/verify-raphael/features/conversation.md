@@ -2167,8 +2167,8 @@ and last-recalled timestamps support local stale-entry pruning before consolidat
 until dates are inclusive, and untrusted duplicate additions cannot expire confirmed entries.
 The 50% unattended floor and file revision history still apply.
 
-Offline coverage: tests/memory, tests/agent, tests/brain/test_memory_hermes_migration.py,
-tests/architecture/test_boundaries.py. test_hermes_standard.py covers 200K/1M windows,
+Offline coverage: tests/memory, tests/agent, tests/brain/test_memory_schema_migration.py,
+tests/architecture/test_boundaries.py. test_memory_window_standard.py covers 200K/1M windows,
 early names/dates, giant-turn restart, private tool readback, recent exclusion, expiry,
 auxiliary fallback and a synthetic 5000-turn recall benchmark. Exact commands/results
 and benchmark evidence are in app/.look/briefs/memory-hermes-standard-report.md.

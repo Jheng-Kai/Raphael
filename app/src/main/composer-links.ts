@@ -1,5 +1,4 @@
-// A link in the composer stands as its whole address, drawn in the link colour as Claude's and ChatGPT's composers do
-// (owner, 2026-11-07: a shortened name without its frame read as broken text). The field paints each address as a chip
+// A link in the composer shows its whole address in the link colour. The field paints each address as a chip
 // it treats as one unit (mention-field.ts); the words already hold the address, so nothing is swapped in or out.
 import { bareUrl, messageUrl } from "./message-content";
 

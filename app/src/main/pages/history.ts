@@ -80,7 +80,7 @@ export function createHistory(app: AppContext): HistoryPage {
     `${fieldHTML(t("history.007"), "", { icon: "search", get label() { return t("history.008"); }, id: "hist-q" })}</div>` +
     `<div class="day-row" hidden></div>` +
     `<div class="days"></div>` +
-    // No 「顯示更多」 anywhere (owner, 2026-11-08): the next page loads by itself as the end of the list comes near.
+    // No 「顯示更多」 anywhere: the next page loads by itself as the end of the list comes near.
     `<div class="more" hidden aria-hidden="true"></div>` +
     `<div class="empty" hidden></div>`;
   const search = el.querySelector<HTMLInputElement>("#hist-q")!;

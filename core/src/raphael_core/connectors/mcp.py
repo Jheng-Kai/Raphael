@@ -1,3 +1,4 @@
+# Adapted from OpenMausBot (Apache-2.0); see core/packaging/licenses.
 """Managed MCP adapters, sharing Raphael's hub, gate and value-free audit.
 
 The Composio HTTP adapter does not need a background GET stream. POST replies may

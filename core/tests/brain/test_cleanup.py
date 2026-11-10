@@ -672,9 +672,7 @@ async def test_the_dictated_text_and_the_reply_are_never_logged(make_svc, fake_c
 def test_the_prompt_is_package_data_with_one_placeholder_at_its_end():
     file = resources.files("raphael_core.brain.prompts").joinpath("cleanup_system.md")
     text = file.read_text(encoding="utf-8")
-    # The owner's shorter prompt of 2026-11-07: a short prompt is faster and cheaper. The rules added the same night
-    # (other-language recognition slips, repeats said again, spoken sentence types, nothing but the text) cost
-    # about 230 characters.
+    # Keep the general cleanup rules within the short prompt budget.
     assert text.startswith("You edit dictated text.")
     assert len(text) < 3700
     assert text.count("{dictionary}") == 1 and text.rstrip().endswith("\n{dictionary}")

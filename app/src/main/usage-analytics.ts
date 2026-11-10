@@ -1,4 +1,4 @@
-// Settings › 模型與用量 › 用量, as plain as Grok Bot's (owner, 2026-11-06): what each subscription has left, one card
+// Settings › 模型與用量 › 用量: what each subscription has left, one card
 // each, above the rows of what was spent (settings-view.ts). No periods, charts, breakdowns or exports.
 // Mount it in the page's slot and destroy it when the page leaves.
 
@@ -78,7 +78,7 @@ export function mountUsageAnalytics(host: HTMLElement, api: UsageAnalyticsApi): 
     root.hidden = !busy && !cards;
     root.setAttribute("aria-busy", String(busy));
     root.setAttribute("aria-label", t("runs.allowance"));
-    // No refresh of its own: the one at the top of 模型與用量 reads this too (owner, 2026-11-08: 「為甚麼會有兩個 icon」).
+    // No refresh of its own: the one at the top of 模型與用量 reads this too.
     patchHTML(root, `<header><h2 tabindex="-1">${t("runs.allowance")}</h2></header>${cards}`);
     if (focused) root.querySelector<HTMLElement>(`[data-run-act="${focused}"]`)?.focus({ preventScroll: true });
   }

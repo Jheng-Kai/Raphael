@@ -16,7 +16,7 @@ export function applyAppearance(appearance: "system" | "light" | "dark", systemD
 export function ownerProfileHTML(brain: BrainSettings | null): string {
   return `<section class="sgroup owner-profile" aria-label="${esc(t("owner.profile"))}"><div class="slist">` +
     // The photo is the button: under the pointer a pencil shows on it, and a press goes straight to the file dialog
-    // (no menu, no reset; owner, 2026-11-07).
+    // (no menu, no reset).
     btn(ownerFaceHTML(72, brain?.owner_photo) + `<span class="owner-photo-edit" aria-hidden="true">${ico("pencil")}</span>`, "owner-photo", ` data-owner-photo aria-label="${esc(t("members.changeAvatar"))}"${brain ? "" : " disabled"}`) +
     `<div class="owner-fields"><label>${esc(t("owner.name"))}<input class="field" data-owner="owner_name" maxlength="100" value="${esc(brain?.owner_name ?? "")}" ${brain ? "" : "disabled"}></label>` +
     `<label>${esc(t("owner.about"))}<textarea class="field" rows="4" data-owner="owner_about" maxlength="4000" ${brain ? "" : "disabled"}>${esc(brain?.owner_about ?? "")}</textarea></label></div></div></section>`;

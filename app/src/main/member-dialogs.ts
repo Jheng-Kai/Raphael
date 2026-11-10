@@ -63,7 +63,7 @@ export function openDialog(o: DialogOptions): Dialog {
     `<div class="mb-dialog${o.cls ? ` ${o.cls}` : ""}" role="dialog" aria-modal="true" aria-labelledby="${id}"${o.describedByBody ? ` aria-describedby="${id}-body"` : ""}>` +
     `<div class="mb-dlg-head"><h2 id="${id}">${esc(o.title)}</h2>${iconButton("x", t("common.close"), ' data-dlg="close"')}</div>` +
     `<div class="mb-dlg-body" id="${id}-body">${o.body}</div>` +
-    // A dialog that only shows something has no footer: its × closes it (owner, 2026-11-08: no 「關閉」 under a ×).
+    // A dialog that only shows something has no footer: its × closes it.
     (o.actions.primary || o.actions.secondary || o.actions.destructive ? actionRow({ ...o.actions, cls: "mb-dlg-act" }) : "") +
     `</div>`;
   let open = true;

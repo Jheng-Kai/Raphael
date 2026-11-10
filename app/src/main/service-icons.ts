@@ -1,4 +1,4 @@
-// Adapted from Simple Icons (CC0-1.0); see core/packaging/licenses.
+// Adapted from Simple Icons (CC0-1.0); see app/scripts/release-licenses.
 // The marks of the well-known programs a connection can be, to tell them apart in the lists. Two kinds,
 // and nothing is fetched at run time:
 // - one drawn path, bare, in the owner's official colour (`BRAND_COLORS`) on every

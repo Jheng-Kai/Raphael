@@ -1,5 +1,4 @@
-// Finding a thing by its name forgives the way people type (owner, 2026-11-08: 「選字的部分要再寬容一點，就是如果打錯字，或者是
-// 有一點排列問題的話…讓我們更快速地找到 connectors 或者是任何東西」). One matcher serves every place that finds a thing by name:
+// Finding a thing by its name forgives the way people type. One matcher serves every place that finds a thing by name:
 // the @ and / menus, the store and the connected apps, members, models, languages, time zones and commands.
 //
 // A query word finds a name, best first, when it is the name, starts it or one of its words, is inside it, is inside it

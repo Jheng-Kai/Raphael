@@ -1,0 +1,14 @@
+{"id": "mishear-alt-key", "input": "按下 all 鍵後再輸入測試代碼。", "dictionary": [], "must_contain": ["Alt"], "must_not_contain": ["all 鍵"]}
+{"id": "mishear-window", "input": "請把測試視窗移到左邊。", "dictionary": [], "must_contain": ["視窗"], "must_not_contain": ["試床"]}
+{"id": "mishear-transcription", "input": "把這段合成語音轉成文字。", "dictionary": [], "must_contain": ["轉成文字"], "must_not_contain": ["轉入"]}
+{"id": "opencc-zhi", "input": "只要檢查這個合成欄位就好。", "dictionary": [], "must_contain": ["只要"], "must_not_contain": ["隻要"]}
+{"id": "numbered-list-long-terminal", "input": "這段合成口述要列出兩件事，第一件事情是整理測試資料並檢查欄位名稱，第二件事情是核對輸出檔案與示範頁面上的項目，整理成清單後就能進行下一輪離線檢查。", "dictionary": [], "must_contain": ["1.", "2."], "must_not_contain": [], "target_app": "WindowsTerminal.exe"}
+{"id": "numbered-list-varied-ordinals", "input": "合成事項清單，首先核對標籤，再來整理樣本，最後檢查計數。", "dictionary": [], "must_contain": ["1.", "2."], "must_not_contain": [], "target_app": "OUTLOOK.EXE"}
+{"id": "synthetic-helper-personal-agent", "input": "這組 Helion，Helion agents 可以整理 Outlook，檢查 GitLab 的工單，團隊例行事項都能處理，它是一個 personal agent。", "dictionary": ["Helion Agent"], "must_contain": ["Outlook", "GitLab"], "must_not_contain": ["Helion，Helion"], "must_contain_ci": ["Helion agent"], "must_contain_any": ["personal agent", "permission agent"], "target_app": "WindowsTerminal.exe"}
+{"id": "synthetic-model-name", "input": "測試中的 cloud 應該能辨識 Helion Agent 這個合成名稱。", "dictionary": ["Claude", "Helion Agent"], "must_contain": ["Claude"], "must_not_contain": ["cloud"], "must_contain_ci": ["Helion agent"], "target_app": "WindowsTerminal.exe"}
+{"id": "false-start-zh-fuller-phrase", "input": "我想要，我想先把這個功能做完，明天再測試。", "dictionary": [], "must_contain": ["先", "功能", "明天", "測試"], "must_not_contain": ["我想要，我想先", "我想要我想先", "我想，我想先"]}
+{"id": "false-start-en-fuller-phrase", "input": "Please update, please update the config file before we restart the server.", "dictionary": [], "must_contain": ["config file", "restart"], "must_not_contain": ["Please update, please update"], "languages": ["en-US"]}
+{"id": "false-start-ja-fuller-phrase", "input": "明日の、明日の会議は三時からです。資料を先に送ってください。", "dictionary": [], "must_contain": ["三時", "資料"], "must_not_contain": ["明日の、明日の"], "languages": ["ja-JP"]}
+{"id": "mishear-ai-product-names", "input": "我用 cloud 和 ChatGPT 比較模型，再用 gem and I 跑一次，結果放在 GitHub。", "dictionary": [], "must_contain": ["Claude", "ChatGPT", "Gemini", "GitHub"], "must_not_contain": ["cloud", "gem and I"], "target_app": "WindowsTerminal.exe"}
+{"id": "mishear-dev-product-names", "input": "我用 open router 呼叫模型，在 Cursor 裡寫 pie thon，再用 Tauri 做桌面介面。", "dictionary": [], "must_contain": ["OpenRouter", "Python", "Tauri"], "must_not_contain": ["open router", "pie thon"], "target_app": "WindowsTerminal.exe"}
+{"id": "opencc-zhi-only", "input": "隻有這個版本可以用，隻要按一下就好。", "dictionary": [], "must_contain": ["只有", "只要"], "must_not_contain": ["隻有", "隻要"]}

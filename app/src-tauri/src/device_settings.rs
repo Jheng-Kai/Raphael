@@ -166,7 +166,7 @@ impl Default for DeviceSettings {
             appearance: Appearance::default(),
             ui_language: "zh-TW".to_owned(),
             autostart: true,
-            // On by default (owner, 2026-11-07): a new version is checked for hourly and installed while idle.
+            // On by default: a new version is checked for hourly and installed while idle.
             auto_update: true,
             update_receipt: String::new(),
             onboarded: false,

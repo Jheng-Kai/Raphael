@@ -1,4 +1,4 @@
-// What the corner writes of a line of Raphael's (owner, 2026-10-27): never an address, since the
+// What the corner writes of a line of Raphael's: never an address, since the
 // details are read in the app, and never more than about two lines at a time. A long line is told
 // in pages, one after the other, each cut where a sentence or an item of a numbered list ends.
 import type { UiLanguage } from "./overlay";

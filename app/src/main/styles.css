@@ -16,14 +16,14 @@
   --layout-card-min: calc(9 * var(--sp-6));
   --layout-card-max: calc(12 * var(--sp-6));
   --layout-reading-max: calc(20 * var(--sp-6));
-  /* Grok Bot's message column is 960 px (owner, 2026-11-07). */
+  /* The message column is 960 px. */
   --layout-thread-max: calc(30 * var(--sp-6));
   --layout-page-max: calc(3 * var(--layout-card-max) + 2 * var(--sp-5) + 2 * var(--sp-6));
   --layout-workspace-max: calc(55 * var(--sp-6));
   --fs-2xs: 12px; --fs-xs: 13px; --fs-sm: 14px; --fs-md: 15px; --fs-lg: 18px; --fs-h1: 22px;
   --weight-regular: 400; --weight-medium: 500; --weight-semibold: 500;
   --r-sm: 8px; --r-md: 12px; --r-lg: 12px; --r-pill: 999px;
-  /* Controls are slim, as Grok Bot's (owner, 2026-11-08: 「button 都太胖了，能變小就變小」): a button's height hugs its
+  /* Controls are slim: a button's height hugs its
      words (「上下高度會剛好貼齊文字」), every button and every menu row takes its height from these and nowhere else
      (「全部一致…共用同一個」), and a menu row is short so a menu reads at a glance. A field keeps a little more room to type. */
   --h-ctl: 26px; --h-ctl-sm: 22px; --h-menu: 28px; --h-field: 30px; --h-row: 48px; --h-tab: 26px;
@@ -31,8 +31,7 @@
   --brand-telegram: #26a5e4;
   /* marks drawn over a photo (the picture crop frame): one set for both themes, as the photo under them is the same */
   --photo-mark: #ffffff; --photo-edge: rgba(255, 255, 255, 0.72); --photo-grid: rgba(255, 255, 255, 0.55); --photo-dim: rgba(0, 0, 0, 0.52);
-  /* Chinese in Noto Sans TC first, as Grok Bot's text falls back to it on Windows (measured 2026-11-07: identical
-     renders); JhengHei only where it is not installed. */
+  /* Chinese uses Noto Sans TC first; JhengHei is the fallback when it is not installed. */
   --ui: "Inter", "Noto Sans TC", "PingFang TC", "Microsoft JhengHei UI", "Microsoft JhengHei", system-ui, sans-serif;
   --display: var(--ui);
   /* Windows' own fixed-width faces for Latin, the UI face for Chinese: the generic family is MingLiU on zh-TW Windows. */
@@ -48,7 +47,7 @@
   /* text: body, secondary, muted (all at least AA on every surface above) */
   --text: #0a0a0a; --text-2: #404040; --text-3: #595959;
   --accent: #0a0a0a; --accent-text: #0a0a0a; --accent-icon: #0a0a0a; --on-accent: #ffffff; --accent-soft: #ededed;
-  /* Links are blue, as Claude's are (owner, 2026-11-07). */
+  /* Links are blue. */
   --link: #1f63d1;
   --accent-hover: #262626; --accent-pressed: #404040;
   --accent-ring: rgba(0, 0, 0, 0.14); --conversation-glow: transparent; --focus: #0a0a0a;
@@ -57,10 +56,10 @@
   --bubble: #efefef; --on-bubble: #0a0a0a; --on-tint-light: #ffffff; --on-tint-dark: #0a0a0a;
   --ok: #15703f; --warn: #80560f; --err: #b3261e; --warn-soft: #f7f7f7; --warn-edge: #d4d4d4;
   --computer-active: #7138bd;
-  /* Raphael's blue: his own colour, and the usage bars' (owner, 2026-11-08: the lavender of 2026-11-07 became his blue). */
+  /* Raphael's blue: his own colour, and the usage bars'. */
   --raphael-color: #1f9fe8;
   --meter: var(--raphael-color);
-  /* Home's chart: work, messages and routines, in the order a bar stacks them (validated for colour blindness, 2026-11-08). */
+  /* Home's chart: work, messages and routines, in the order a bar stacks them (validated for colour blindness). */
   --series-1: #2a78d6; --series-2: #eb6834; --series-3: #1baf7a;
   --ans-edge: #ececec;
   --btn: #ffffff; --btn-edge: #d4d4d4; --key: #f7f7f7; --key-edge: #d4d4d4;
@@ -85,10 +84,10 @@
 :root[data-theme="dark"] {
   --side: #000000; --content: #0a0a0a; --panel: #161616; --surface-2: #1f1f1f;
   --edge: #262626; --line: #262626;
-  /* No light edges in the dark (owner, 2026-11-07): controls are told apart by their fill; the edge only just shows. */
+  /* No light edges in the dark: controls are told apart by their fill; the edge only just shows. */
   --hover: #262626; --pressed: #303030; --hover-edge: #3d3d3d; --edge-rim: #1f1f1f; --rail-line: #1c1c1c;
   --danger-hover: #322023; --danger-pressed: #3c2429;
-  /* Grok Bot's three steps of grey, a little lighter to keep the small words readable: primary, secondary, quiet.
+  /* Three steps of grey, a little lighter to keep the small words readable: primary, secondary, quiet.
      The quiet grey keeps 4.5:1 on the pressed surface (check-palette.mjs). */
   --text: #f5f5f5; --text-2: #b4b4b4; --text-3: #999999;
   --accent: #f5f5f5; --accent-text: #eeeeee; --accent-icon: #eeeeee; --on-accent: #0a0a0a; --accent-soft: #262626;
@@ -157,20 +156,20 @@ input::placeholder { color: var(--text-3); opacity: 1; }
 [data-price] { font-feature-settings: "tnum"; }
 [hidden] { display: none !important; }
 /* Every icon is Lucide's 24 x 24 drawing (icon-set.ts) with its stroke of 2, shown at 16 px (1.33 px lines), or 18 on the
-   round edge buttons (Grok Bot's 1.5 px) and 20 where a larger one is meant: never 12 to 15 px, nor with a stroke of its own. */
+   round edge buttons (1.5 px) and 20 where a larger one is meant: never 12 to 15 px, nor with a stroke of its own. */
 svg.i { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 
 /* ---------- window: sidebar and content ---------- */
 .window-chrome { position: fixed; inset: 0 0 auto; z-index: 150; display: flex; height: var(--window-controls-height); background: var(--content); user-select: none; }
 :root[data-window-layout="main"] .window-chrome { left: var(--sidebar-width); border-top-left-radius: var(--r-lg); border-top: 0; border-left: 0; }
 :root[data-window-modal="true"] .window-chrome { background: transparent; border-color: transparent; }
-/* As Grok Bot's (owner, 2026-11-07): over the conversations the caption buttons are drawn into the window itself, with no
+/* Over the conversations the caption buttons are drawn into the window itself, with no
    strip of their own; the right panel reaches the window's top under them, and the columns below keep their room. */
 :root[data-window-layout="main"]:has(.main > .page-agent:not([hidden])) .window-chrome { background: transparent; }
 /* A dialog dims the caption with everything else; its buttons still answer on top of the dim. */
 :root:has(.mb-scrim:not(.cr-scrim)) .window-chrome, :root:has(.menu.side-search) .window-chrome { background: transparent; border-color: transparent; }
 .window-drag { flex: 1; min-width: 0; }
-/* As Grok Bot's (owner, 2026-11-06): Windows' own caption buttons, 46 px cells the strip's full height with square
+/* Windows' own caption buttons, 46 px cells the strip's full height with square
    corners; under the pointer the whole cell fills, and close turns red with a white cross. */
 .window-controls { display: flex; flex: none; gap: 0; padding: 0; }
 .window-button { display: grid; place-items: center; width: 46px; height: 100%; padding: 0; border: 0; border-radius: 0; background: transparent; color: var(--text); cursor: default; transition: background-color 120ms ease, color 120ms ease; }
@@ -368,7 +367,7 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
 .hist-top .t .i { margin-right: var(--sp-2); vertical-align: -3px; color: var(--text-2); }
 .tools { display: flex; align-items: center; gap: var(--sp-3); margin-top: var(--sp-5); flex-wrap: wrap; }
 .tools .field { flex: 1; min-width: 160px; max-width: 300px; margin-left: auto; }
-/* The one tab component (ui.ts tabs()), drawn as Grok Bot draws its tabs (owner, 2026-11-08: 「button 都太胖了」): short
+/* The one tab component (ui.ts tabs()), drawn with shared compact pills: short
    pills of small type, each on a soft fill, the open or pressed one a step darker in the body ink. .seg narrows one list
    (History, Dictionary, the Library), .switch and .plain switch views; all three look alike. */
 .tabs { display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--sp-1); }
@@ -406,7 +405,7 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
 .hdetail .raw { font-size: var(--fs-sm); line-height: 1.6; color: var(--text-2); overflow-wrap: anywhere; user-select: text; }
 .empty { padding: 36px 0; text-align: center; color: var(--text-3); font-size: var(--fs-sm); }
 .empty .say { font-family: var(--voice); font-weight: var(--weight-semibold); color: var(--text); font-size: var(--fs-md); margin-bottom: var(--sp-1); }
-/* The end of a paged list: an empty mark that loads the next page as it comes near (no 「顯示更多」 button, owner 2026-11-08). */
+/* The end of a paged list: an empty mark that loads the next page as it comes near (no 「顯示更多」 button). */
 .more { display: block; height: 1px; margin-top: var(--sp-3); }
 
 /* ---------- dictionary ---------- */
@@ -440,11 +439,11 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
 .modal-scrim { --modal-gap: 24px; --set-nav: 196px; position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; padding: calc(var(--window-controls-height) + var(--modal-gap)) var(--modal-gap) var(--modal-gap); background: var(--scrim); }
 .modal { position: relative; display: grid; grid-template-columns: var(--set-nav) minmax(0, 1fr); width: min(1000px, 100%); height: min(760px, 100%); border-radius: var(--r-lg); overflow: hidden; background: var(--content); border: 1px solid var(--edge); box-shadow: var(--pop); }
 .modal-nav { display: flex; flex-direction: column; gap: var(--sp-1); padding: var(--sp-4) var(--sp-2); background: var(--side); border-right: 0; overflow-x: hidden; overflow-y: auto; min-height: 0; }
-/* 連結應用程式 opens alone, as Grok Bot's Connect apps: one column, no list of Settings (R-UI-111). */
+/* 連結應用程式 opens alone: one column, no list of Settings (R-UI-111). */
 .modal-scrim[data-standalone] > .modal { grid-template-columns: minmax(0, 1fr); width: min(900px, 100%); }
 .modal-scrim[data-standalone] .modal-nav { display: none; }
 .modal-nav .nav { min-height: 34px; padding: var(--sp-1) var(--sp-2); }
-/* Six tabs, flat, as Grok Bot's: no group names and no search (owner, 2026-11-07). */
+/* Six tabs, flat: no group names and no search. */
 .set-list { display: flex; flex-direction: column; gap: var(--sp-1); min-height: 0; }
 .nav-em { display: inline-grid; width: 18px; height: 18px; margin: -1px; flex: none; }
 .nav-em img { width: 100%; height: 100%; display: block; }
@@ -459,7 +458,7 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
 /* A settings pane has one measure, including its header, tools and grids. */
 .modal-body > * { max-width: var(--layout-reading-max); }
 .modal-body :is(.list, .slist, .cs-list, .cs) { max-width: var(--layout-reading-max); }
-/* A section of Settings is Grok Bot's: a small name, then its rows on one rounded card with no lines between them. */
+/* A section of Settings has a small name, then its rows on one rounded card with no lines between them. */
 .modal-body .slist { --slist-pad: var(--sp-4); padding-inline: var(--slist-pad); border-radius: var(--r-lg); background: var(--panel); }
 .modal-body .slist > .row { min-height: 52px; padding: var(--sp-2) 0; }
 .modal-body .slist > .row + .row::before, .modal-body .slist > .note + .row::before { display: none; }
@@ -468,7 +467,7 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
 .modal-body .sgroup > .data-heading > h2 { margin-bottom: 0; }
 .modal-body .sgroup > .foot { margin-inline: var(--sp-4); }
 .set-content { width: 100%; max-width: var(--layout-reading-max); }
-/* Connect apps on its own (the sidebar's button) is as wide as its dialog, as Grok Bot's, so its two columns have room. */
+/* Connect apps on its own (the sidebar's button) is as wide as its dialog, so its two columns have room. */
 .modal-scrim[data-standalone] :is(.modal-body > *, .set-content, .cs, .cs-list, .cs-card) { max-width: none; }
 .modal-body h1 { font: 500 var(--fs-h1)/1.3 var(--display); margin: 0; letter-spacing: -0.015em; padding-right: var(--sp-5); }
 .modal-body h1:focus { outline: none; }
@@ -476,7 +475,7 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
 .modal-x { position: absolute; top: 12px; right: 12px; }
 /* A group of settings: a short name, then its rows on one card with hairlines between them. */
 .sgroup { margin-top: var(--sp-5); }
-/* A section whose one control is a button named for what it does (owner, 2026-11-07): no row repeating its name. */
+/* A section whose one control is a button named for what it does: no row repeating its name. */
 .sgroup-act { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
 .sgroup > h2 { margin: 0 0 var(--sp-2) var(--sp-1); }
 .sgroup > h2, .sgroup > .data-heading > h2 { font: 500 var(--fs-sm)/1.4 var(--ui); color: var(--text-2); }
@@ -603,8 +602,7 @@ body:has(.page-agent:not([hidden])[data-det="open"]:not(.is-room)) .toast { max-
 .main { scroll-padding-top: calc(var(--window-controls-height) + 16px); }
 
 /* ---------- the guide (first run, and from the settings) ---------- */
-/* One card of a designed size in the middle of the window. Each step is one calm centred column, as Grok Bot's first run
-   (owner, 2026-11-07): a title with two small slimes floating by it, the choice (tiles in a grid of three), one wide black
+/* One card of a designed size in the middle of the window. Each step is one calm centred column: a title with two small slimes floating by it, the choice (tiles in a grid of three), one wide black
    pill with a round arrow beside it for the way back. No progress bar, no side. A smaller window shrinks the card. */
 .ob { display: grid; grid-template-columns: minmax(0, 1fr); place-items: center; height: 100%; min-height: 0; padding: calc(var(--window-controls-height) + var(--sp-4)) var(--sp-5) var(--sp-5); background: var(--side); }
 /* The guide's window is the card itself (guide-window.ts): no gutter, frame or way to make it larger. */
@@ -618,7 +616,7 @@ body:has(.page-agent:not([hidden])[data-det="open"]:not(.is-room)) .toast { max-
 .ob-col > h2 { margin: 0; font: 500 30px/1.3 var(--display); text-align: center; text-wrap: balance; }
 .ob-col > h2:focus { outline: none; }
 .ob[data-step="abilities"] .ob-col { width: min(100%, 560px); }
-/* The two stores are wide enough for three tiles of one row each (owner, 2026-11-09: 「導覽的頁面有一點點太小」). */
+/* The two stores are wide enough for three tiles of one row each. */
 .ob:is([data-step="tools"], [data-step="services"]) .ob-col { width: min(100%, 900px); }
 /* The welcome is short: it stands in the middle of the card, its emblem over its name and an ask he answers. */
 .ob[data-step="welcome"] .ob-body { display: grid; grid-template-columns: minmax(0, 1fr); align-content: center; padding-top: var(--sp-4); }
@@ -630,7 +628,7 @@ body:has(.page-agent:not([hidden])[data-det="open"]:not(.is-room)) .toast { max-
 .ob-wordmark > .ob-name { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .ob-emblem { display: grid; grid-template-columns: minmax(0, 1fr); place-items: center; height: 125px; }
 .ob-emblem canvas { display: block; }
-/* What the team can do, typed (owner, 2026-11-08): an ask appears a letter at a time with a caret, his answer (告。…)
+/* What the team can do, typed: an ask appears a letter at a time with a caret, his answer (告。…)
    fades in under it in a quieter grey, then the ask is deleted and the next one typed. Both lines keep their height, so
    nothing under them moves. A reader hears one sentence instead (.ob-sr). */
 .ob-demo { display: grid; grid-template-columns: minmax(0, 1fr); justify-items: center; gap: var(--sp-2); width: 100%; margin-top: var(--sp-4); }
@@ -658,10 +656,10 @@ body:has(.page-agent:not([hidden])[data-det="open"]:not(.is-room)) .toast { max-
 /* Under the choice: one row, the round arrow for the way back at its left and the wide black pill filling the rest (owner,
    2026-11-11: 「上下堆疊會造成我們畫面有些空間比較緊…感覺左右放，或者左右放那個箭頭之類的，或許會比較好」). The row is as wide
    as the welcome's single pill, so the pill's place does not move from step to step, and the step above keeps the room the
-   second pill took. The grid fades out over the foot, as Grok Bot's tiles do. */
+   second pill took. The grid fades out over the foot. */
 .ob-foot { --ob-pill: 44px; position: relative; display: grid; grid-template-columns: minmax(0, 1fr); justify-items: center; padding: var(--sp-3) var(--sp-6) var(--sp-5); }
 .ob-foot::before { content: ""; position: absolute; inset: auto 0 100% 0; height: 28px; background: linear-gradient(to bottom, color-mix(in srgb, var(--content) 0%, transparent), var(--content)); pointer-events: none; }
-/* The guide keeps its own wide pills, the one exception to the shared button height (owner, 2026-11-08: 「這邊可以用原本的」). */
+/* The guide keeps its own wide pills, the one exception to the shared button height. */
 .ob-foot .ob-actions { display: flex; flex-direction: row; flex-wrap: nowrap; align-items: stretch; justify-content: flex-start; gap: var(--sp-2); width: min(100%, 360px); }
 .ob-foot .btn { min-height: var(--ob-pill); border-radius: 999px; font-size: var(--fs-md); }
 .ob-foot .btn.pri { flex: 1 1 0; min-width: 0; }
@@ -675,8 +673,8 @@ body:has(.page-agent:not([hidden])[data-det="open"]:not(.is-room)) .toast { max-
    drops them. */
 .ob-floaters { position: relative; height: 0; pointer-events: none; }
 .ob-fl { position: absolute; display: block; }
-/* Every choice is a store of tiles, three to a row where they fit (Grok Bot's "What do you use every day?"), each one row as
-   a store's app is (owner, 2026-11-09: the tiles were too tall, an email broke over two lines and the marks sat unevenly):
+/* Every choice is a store of tiles, three to a row where they fit, each one row as
+   a store's app is:
    the mark in a soft square, the name over one quiet line that ends in … rather than wrapping, and on the right the
    control, then the check of a tile that is on. A tile that is a button is pressed whole; a wide one spans its row while
    a key or an address is typed in it. */
@@ -698,7 +696,7 @@ button.ob-tile:disabled { opacity: 0.55; cursor: default; }
 .ob-tx { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1px; min-width: 0; }
 .ob-tx .nm { font-size: var(--fs-md); font-weight: var(--weight-medium); line-height: 1.35; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ob-tx .ds { color: var(--text-2); font-size: var(--fs-sm); line-height: 1.4; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-/* A status wraps inside its tile in every language (owner, 2026-11-08: Japanese 「ブラウザでのログインを待って…」 ran out). */
+/* A status wraps inside its tile in every language. */
 .ob-tx .ds:has(> .st) { white-space: normal; }
 .ob-tx .ds .st { display: flex; align-items: flex-start; min-width: 0; white-space: normal; overflow-wrap: anywhere; }
 .ob-tx .ds .st > .dot { flex: none; margin-top: 0.45em; }
@@ -826,18 +824,18 @@ button.ob-tile:hover:not(:disabled) .ob-get { background: var(--pressed); }
 }
 
 /* Custom icon controls share the same interaction policy as iconButton. */
-/* Window controls use caption hover surfaces, as requested by the owner (2026-10-25). */
+/* Window controls use caption hover surfaces. */
 :is(.btn.icon, .cmp-attach, .cmp-voice, .mp-star, .chip-x):is(:hover, :active) { background: transparent; color: var(--text); filter: none; }
 :is(.btn.icon, .cmp-attach, .cmp-voice, .mp-star, .chip-x):is([aria-pressed="true"], [aria-expanded="true"], [aria-selected="true"]):not(:disabled) { background: transparent; color: var(--accent-icon); }
 :is(.btn.icon, .cmp-attach, .cmp-voice, .mp-star, .chip-x):active:not(:disabled) { background: transparent; color: color-mix(in srgb, var(--text) 85%, transparent); }
-/* As Grok Bot's (owner, 2026-11-06), no row, list item or card draws a ⋯: a right click on it, or Shift+F10 and the Menu key,
+/* No row, list item or card draws a ⋯: a right click on it, or Shift+F10 and the Menu key,
    opens its menu (context-menu.ts presses the button, which stays in the page for that). A message keeps its ⋯ beside the
-   bubble, as Grok Bot's does; a dialog's or the computer's header keeps its own. */
+   bubble; a dialog's or the computer's header keeps its own. */
 :is([data-member-more], [data-group-more], [data-conversation-more], [data-room-more], [data-room-menu], [data-panel-task-menu], [data-det="routine-menu"], [data-dlg="routine-menu"], [data-res="skill-menu"], [data-res="command-menu"], [data-act="key-menu"], [data-act="local-menu"], [data-rule="more"], [data-vault="menu"], [data-act="word-menu"], [data-act="history-menu"], [data-act="computer-menu"], [data-cli-menu], [data-chatgpt-menu], [data-au="event-more"], [data-msg="user-menu"])[data-overflow]:not(.modal-scrim [data-overflow]) { display: none; }
-/* Settings keep their ⋯ beside what they act on (owner, 2026-11-07): an account's sign-out, a key's removal, a rule's menu. */
-/* Grok Bot's edge buttons (owner, 2026-11-06): the panel's back, settings and close, the icons of a conversation's
+/* Settings keep their ⋯ beside what they act on: an account's sign-out, a key's removal, a rule's menu. */
+/* The round edge buttons: the panel's back, settings and close, the icons of a conversation's
    header, a dialog's close and the composer's attach are an icon in a soft round button, a little lighter under the
-   pointer. Small actions beside a message or inside a bar stay bare icons, as Grok Bot's; the sidebar's search and plus
+   pointer. Small actions beside a message or inside a bar stay bare icons; the sidebar's search and plus
    are the same buttons (sidebar.css). So are the member page's way back and its cover's change icon, which stand on a
    picture and need the solid surface in every state (owner, 2026-11-11). */
 :is(.page-agent .mb-det-head, .page-agent .mb-head .ra-tools, .page-agent .mb-head .mb-head-l, .mb-dlg-head, .cs-dlg-head, .lb-head, .room-side-thread > header, .desktop-panel[data-expanded] .desktop-dock, .rp-top, .ms-bar, .ms-cover) .btn.icon, .btn.icon.modal-x, .page-agent .cmp-bar .btn.cmp-attach { flex: none; width: 36px; min-width: 36px; height: 36px; min-height: 36px; padding: 0; border-color: transparent; border-radius: var(--r-pill); background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--edge-rim); color: var(--text-2); }

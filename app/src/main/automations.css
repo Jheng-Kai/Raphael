@@ -17,7 +17,7 @@
 .routine-run-link.btn { white-space: normal; height: auto; text-align: left; }
 .au-event .note { white-space: pre-line; }
 .au-event label { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); }
-/* When it runs: rows on one tinted list, the name left and the choice right, as Settings' rows (owner, 2026-11-08). */
+/* When it runs: rows on one tinted list, the name left and the choice right, as Settings' rows. */
 .au-rows { display: grid; grid-template-columns: minmax(0, 1fr); border-radius: var(--r-md); background: var(--surface-2); padding: var(--sp-1) var(--sp-3); }
 .au-days { display: flex; flex-wrap: wrap; gap: var(--sp-1); }
 .au-days .btn { border-radius: var(--r-pill); }
@@ -43,7 +43,7 @@
 .au-room-heading > b { font-size: var(--fs-md); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .au-room-faces { display: flex; gap: 0; flex-shrink: 0; }
 .au-room-pane .ra-dock .composer { width: 100%; max-width: var(--pa-colw); margin-inline: auto; }
-/* A group's message is led by its face alone (owner, 2026-11-09: the name made a meeting too long); the name stays for
+/* A group's message is led by its face alone; the name stays for
    screen readers and on the face's tooltip. */
 .au-room-author { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 /* A quote in a group (whom a message answers) is the shared quote of a conversation; a missing source has no author. */
@@ -216,7 +216,7 @@
 .cal-chip.btn.is-past { opacity: 0.6; }
 .cal-chip.is-own.btn.is-past, .cal-chip.is-own.btn.is-past:hover:not(:disabled) { opacity: 1; background: var(--surface-2); color: var(--text-2); }
 .cal-chip.is-own.btn.is-past:active:not(:disabled) { background: var(--pressed); }
-/* The event whose panel is open, or that Home opened, lifts as Google Calendar's does; a ring stays keyboard focus's (R-UI-31). */
+/* The event whose panel is open, or that Home opened, lifts when its details are open; a ring stays keyboard focus's (R-UI-31). */
 .cal-chip.is-home-focus, .cal-chip[aria-current="true"] { z-index: 2; box-shadow: var(--pop); }
 .cal-chip.is-event.is-home-focus, .cal-chip.is-event[aria-current="true"] { box-shadow: inset 0 0 0 1px var(--btn-edge), var(--pop); }
 .au-history-mark { position: absolute; right: var(--sp-1); bottom: var(--sp-1); width: 6px; height: 6px; border-radius: var(--r-pill); background: var(--err); pointer-events: none; }

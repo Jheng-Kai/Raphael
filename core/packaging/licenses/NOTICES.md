@@ -1,7 +1,5 @@
 # Third-party notices
 
-The member panel's Details / Library / Computer layout and sleeping-screen presentation were informed by Grok Bot's public product video (https://www.youtube.com/watch?v=nnTqbMhKr3E, 04:35-05:00 and 10:00-11:00) and documentation reviewed on 2026-11-05; this is a visual reference only, and no Grok Bot code, artwork or marks are copied or bundled.
-
 `app/src/main/transcript-window.ts` adapts the centered focus range from OpenMausBot `src/lib/transcript-window.ts` (Apache-2.0; license retained in `Apache-2.0.txt`).
 
 ## OpenBot demonstrations (MIT)
@@ -13,9 +11,6 @@ omission, and reuse through ordinary skills and routines. Raphael implements its
 own noVNC input recording, member-brain draft and existing skill editor.
 Upstream: https://github.com/CopilotKit/OpenBot. Copyright (c) 2026 CopilotKit.
 The upstream MIT permission and copyright are retained in `core/packaging/licenses/OpenBot-MIT.txt`.
-The closed Grok Bot product was a visual requirement reference only; no code or
-marks were copied.
-
 ## NousResearch/hermes-agent (MIT)
 
 Configured capability dispatch in `services/generation.py`, `generation_tools.py`
@@ -52,15 +47,6 @@ Modified ports and adaptations, with upstream file names:
   bounded SQL results and chart-file delivery. Raphael runs its own Python helper
   through the existing member `vm_exec`, with workspace-only paths and first-use
   dependencies; no `enterprise/` code or separate host database service is used.
-
-- The event routine contract in `members/events.py` and `agent/harness_tools.py`
-  was informed by the app/event trigger separation in
-  `server/drivers/agents-call-triggers.ts`. Raphael's poller, durable receipts and
-  task dispatch are its own implementation; no webhook server or enterprise code
-  was copied. Design comparison also used OpenBot's MIT-licensed
-  `server/src/responsibilities/trigger-tools.ts` (narrow source filters) and
-  Hermes' MIT-licensed `gateway/hooks.py` (isolated handler failures). These two
-  files were reviewed, not copied or ported.
 
 - `core/src/raphael_core/agent/pages.py`: Python adaptation of the HTML limits,
   bounded revision history, CDN CSP allowlist and document preamble handling from
@@ -284,8 +270,8 @@ Durable owner admission in `core/src/raphael_core/agent/inbox.py` adapts
 `hermes_state_runtime.py`; consumed and leftover tickets in `worker/owner_input.py`
 adapt `agent/interrupt_control.py`; active-turn steering in `agent/cli/drivers.py`
 adapts `agent/transports/codex_app_server_session.py`, all at revision `c419cf7c`.
-Copyright (c) 2025 Nous Research. Raphael uses a single-process FIFO without
-Hermes' epoch/authority machinery or queue limit. The MIT license follows below.
+Copyright (c) 2025 Nous Research. Admission uses a single-process FIFO.
+The MIT license follows below.
 
 The Discord admission/gateway behavior in `core/src/raphael_core/messaging/channels/discord.py`
 draws on `tools/discord_tool.py` and `plugins/platforms/discord/adapter.py`; guest file checkpoints
@@ -375,10 +361,6 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-## Grok Bot conversation reference
-
-Raphael's calm conversation presentation was informed by the owner's Grok Bot walkthrough notes and message-and-collaboration research of 2026-11-05; this implementation copies no Grok Bot code, text or assets and implies no endorsement.
-
 ## Simple Icons (CC0-1.0)
 
 The single-path service marks in `app/src/main/service-icons.ts` use Simple Icons
@@ -389,6 +371,3 @@ CC0 text remain in `app/scripts/release-licenses/manifest.json` and
 `app/scripts/release-licenses/simple-icons-16.35.0-LICENSE.txt`.
 The marks are trademarks of their owners, who do not sponsor or endorse Raphael.
 
-Member templates, goal-first greetings, team folders, named accounts and webhook tunnel guidance are original Raphael implementations informed by the Grok Bot walkthrough (Gary Chen, 2026-11-04, frames f000405/f000920/f002005 and sheets 05/08/09/10) and xAI Grok Bot documentation reviewed 2026-11-05; no third-party code or artwork was copied.
-
-Member-store catalogue validation and export scanning were informed by OpenMausBot server/team-library.ts and shared/package-format.ts (Apache-2.0; https://github.com/milind-soni/openmausbot); original Raphael implementation, no enterprise code, artwork or branding copied.

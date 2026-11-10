@@ -1,8 +1,7 @@
 import { isLocalAddress, messageUrl, urlLabel } from "./message-content";
 import { esc } from "./ui";
 
-// The links of a reply are chips in its words, as Grok Bot's source chips (owner, 2026-11-08: 「我覺得挺亂的」 of a row of
-// cards under every reply repeating its links). This reads, for the chips near the reader, the page behind a bare
+// The links of a reply are chips in its words. This reads, for the chips near the reader, the page behind a bare
 // address, so the chip can say the page's own title, and shows the page's preview under the pointer.
 
 export interface LinkPreview {

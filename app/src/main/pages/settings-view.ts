@@ -6,9 +6,9 @@
 // The rules for every row: a choice among options is a dropdown (`sel`, never the options
 // in a row), an action is a button with a shape (`btn`, never a word that can be clicked), and a
 // line under a row's name only where the setting would otherwise be set wrong. Each tab opens with
-// its name, then its rows in a few named sections, each a rounded card (Grok Bot's settings, owner 2026-11-07).
+// its name, then its rows in a few named sections, each a rounded card.
 //
-// Six tabs sit flat on the left, as Grok Bot's: 一般 (account, appearance, the bot's timezone and folder, messaging),
+// Six tabs sit flat on the left: 一般 (account, appearance, the bot's timezone and folder, messaging),
 // 工具, 安全, 模型與用量, 聽寫與快捷鍵 and 關於. No group names, no search, no line under a tab's name. No tab shows
 // memory (owner, 2026-11-11: 「可以像 Hermes Agent 一樣，都不要讓我們看到記憶好了…」); the core keeps it.
 
@@ -74,7 +74,7 @@ export const RETENTIONS: Choice[] = [1, 7, 30, 365, KEEP_FOREVER_DAYS].map((days
 const PRICES_LOADING = () => t("settings.026");
 
 /**
- * The tabs on the left of the panel, flat and in order, as Grok Bot's six (owner, 2026-11-07): appearance and messaging
+ * The tabs on the left of the panel, flat and in order: appearance and messaging
  * are sections of 一般 now, and 連結應用程式 is no tab.
  */
 export const PANES: { id: SettingsPane; icon: IconName; title: () => string }[] = [
@@ -85,7 +85,7 @@ export const PANES: { id: SettingsPane; icon: IconName; title: () => string }[] 
   // Dictation and its keys are not what most people come here for: under the models (owner, 2026-11-10).
   { id: "dictation", icon: "mic", title: () => t("settings.paneDictation") },
   { id: "about", icon: "info", title: () => t("common.about") },
-  // Not a tab: the sidebar's 連結應用程式 opens it as a dialog of its own, its only way in (owner, 2026-11-06; R-UI-111).
+  // Not a tab: the sidebar's 連結應用程式 opens it as a dialog of its own, its only way in (R-UI-111).
   { id: "connections", icon: "plug", title: () => t("nav.apps") },
 ];
 
@@ -96,7 +96,7 @@ export const STANDALONE_PANE: SettingsPane = "connections";
 const paneButton = (p: (typeof PANES)[number]): string =>
   `<button type="button" class="nav" data-pane="${p.id}" aria-current="false">${ico(p.icon)}<span>${esc(p.title())}</span></button>`;
 
-/** The tabs, flat, as Grok Bot's list. */
+/** The flat list of tabs. */
 export const paneListHTML = (): string => PANES.filter((p) => p.id !== STANDALONE_PANE).map(paneButton).join("");
 
 /** Where a link to a tab of before lands: Models for usage, Tools for the agent, 聽寫 for data, 一般 for appearance, messaging and the memory tab that is gone. */
@@ -340,7 +340,7 @@ function keyRow(v: SettingsView): string {
       keyStatus(v),
       actionRow({
         secondary: btn(v.checkingOpenrouter ? t("common.checking") : t("settings.046"), "", ` data-act="or-check"${v.checkingOpenrouter ? " disabled" : ""}`) +
-          // Changing it is the pencil, as everywhere (owner, 2026-11-08: icons over text buttons).
+          // Changing it is the pencil, as everywhere.
           iconBtn("pencil", t("home.018"), ' data-act="key-replace" data-k="key"'),
       }) + iconButton("more", t("members.more", { p0: t("common.apiKey") }), ' data-act="key-menu" aria-haspopup="menu" aria-expanded="false"'),
       { attrs, cls: "row-key" },
@@ -359,7 +359,7 @@ function keyRow(v: SettingsView): string {
 }
 
 /**
- * What this app spent this month, as Grok Bot's usage card (owner, 2026-11-07): the amount, how much of the monthly limit
+ * What this app spent this month, in a card: the amount, how much of the monthly limit
  * it is, as a bar in a member's colour, and where the month ends at this pace. Only the app's own spending: an OpenRouter
  * account's usage is the owner's to read on OpenRouter.
  */
@@ -408,7 +408,7 @@ const altgrNote = (v: SettingsView, bindings: readonly string[]): string[] =>
  * The pane title receives focus when settings open. Actions share its row.
  */
 export const headingHTML = (v: SettingsView, actions = ""): string => {
-  // A tab is its name alone, as Grok Bot's: no line under it (owner, 2026-11-07).
+  // A tab is its name alone: no line under it.
   const title = `<h1 id="set-title" tabindex="-1">${esc(paneTitle(v.pane))}</h1>`;
   return actions ? `<div class="set-head">${title}${actions}</div>` : title;
 };
@@ -419,7 +419,7 @@ const coreNote = (v: SettingsView): string => (v.brain === null ? `<div class="a
 // ---------- the tabs ----------
 
 /**
- * The output folder as a folder picker of Claude's or ChatGPT's (owner, 2026-11-07): no text field. Unset, it is 選擇資料夾 alone;
+ * The output folder as a native folder picker: no text field. Unset, it is 選擇資料夾 alone;
  * set, the button names the folder and the whole path stands under the row's name, so where it is stays plain.
  */
 function outputFolderRow(v: SettingsView): string {
@@ -432,7 +432,7 @@ function outputFolderRow(v: SettingsView): string {
 }
 
 /**
- * 一般, in Grok Bot's order of sections: who you are, how the window looks, what Raphael works with (the timezone of
+ * 一般, in a fixed order of sections: who you are, how the window looks, what Raphael works with (the timezone of
  * routines and the folder of what is delivered), and the guide. What he remembers is the 記憶 tab.
  */
 function generalHTML(v: SettingsView): string {
@@ -448,10 +448,10 @@ function generalHTML(v: SettingsView): string {
       outputFolderRow(v),
     ]) +
     // Telegram, Slack and Discord moved to each member's panel, Raphael's too, and are set up in the conversation
-    // (owner, 2026-11-07): nothing of them is set here.
-    // The emblem's size, its subtitles and starting with Windows are fixed (device-fixed.ts, owner 2026-11-06), and the
+    // Nothing of them is set here.
+    // The emblem's size, its subtitles and starting with Windows are fixed (device-fixed.ts), and the
     // weather city is the member's to ask when it needs it: none of them is a setting any more.
-    // The tour, as one button named 導覽 (owner, 2026-11-07: it is there to look at the guide while it is built).
+    // The tour, as one button named 導覽.
     `<section class="sgroup"><h2>${esc(t("settings.groupStartup"))}</h2><div class="sgroup-act">${btn(esc(t("settings.rerunGuide")), "", ' data-act="rerun-guide"')}</div></section>`
   );
 }
@@ -488,7 +488,7 @@ function dictationHTML(v: SettingsView): string {
         row: { cls: "row-mic" },
       }),
     ]) +
-    // How long the history is kept lives with dictation; there is no separate Data page (2026-11-05).
+    // How long the history is kept lives with dictation; there is no separate Data page.
     section(t("data.groupDictation"), [row(t("data.retention"), "", sel(retentionChoices(v), retentionOf(v), t("data.retention"), ` data-k="retention"${v.brain === null ? " disabled" : ""}`))])
   );
 }
@@ -541,10 +541,10 @@ export const retentionOf = (v: SettingsView): string => String(v.brain?.history_
 
 /**
  * One page with model connections and usage in separate views. Legacy ids choose their own view. Usage is as plain as
- * Grok Bot's (owner, 2026-11-06): what each subscription has left, then the key and what was spent, with no charts.
+ * Usage: what each subscription has left, then the key and what was spent, with no charts.
  */
 /**
- * The one refresh of 模型與用量 and what it is doing (owner, 2026-11-08: 「這個 Icon 沒有任何的 feedback」): it turns while it
+ * The one refresh of 模型與用量 and what it is doing: it turns while it
  * reads, then is a check for a moment. It stays a button that keeps the focus; a press while it reads does nothing.
  */
 export function modelsRefreshHTML(state: "idle" | "busy" | "done"): string {
@@ -561,7 +561,7 @@ function modelsHTML(v: SettingsView): string {
       keyRow(v),
       ...(v.keyError ? [note(st("err", v.keyError()), ' role="alert"')] : []),
     ]);
-  // Read once while the app runs; this reads it all again (owner, 2026-11-08: 「點一下右上角的那個重跑」).
+  // Read once while the app runs; this reads it all again.
   return headingHTML(v, modelsRefreshHTML(v.modelsRefresh ?? "idle")) + coreNote(v) + `<div class="models-page">` +
     tabs((["models", "usage"] as const).map((id) => ({
       id, label: id === "models" ? t("providers.title") : t("models.usage"),
@@ -577,7 +577,7 @@ function aboutHTML(v: SettingsView): string {
     `<div class="about-brand">${brandIcon("about-icon")}<span class="about-name">Raphael</span></div>` +
     `<div class="slist about">` +
     row(t("settings.078"), "", `<span class="val num">${esc(v.version)}</span>`) +
-    // The row names it; its control is an icon, never the same words again (owner, 2026-11-08: icons over text buttons):
+    // The row names it; its control is an icon, never the same words again:
     // a page out of the app has the outward arrow, one inside it the chevron.
     row(t("nav.help"), "", iconBtn("external", t("desktop.openShort"), ' data-act="help"')) +
     row(t("settings.079"), t("settings.080"), iconBtn("right", t("settings.081"), ' data-act="license"')) +

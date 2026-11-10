@@ -15,9 +15,9 @@ test("calm threads have one divider per calendar day and no hour in its label", 
 });
 
 test("routine failures keep their origin and rerun in the reply without a duplicate event", () => {
-  const item = turn(1, {source:"routine", question:"NHK Easy News 每日摘要", routine:{id:2,title:"NHK Easy News 每日摘要"}, task:{id:9,state:"failed"}, messages:[{seq:1,kind:"event",text:failure,at_ms:at}]});
+  const item = turn(1, {source:"routine", question:"範例晨間筆記摘要", routine:{id:2,title:"範例晨間筆記摘要"}, task:{id:9,state:"failed"}, messages:[{seq:1,kind:"event",text:failure,at_ms:at}]});
   document.body.innerHTML = turnHTML(item, emptyTimelineState(), false, {face:()=>"", regenerateTurnId:1});
-  expect(document.querySelector(".chat-message .routine-run-link")?.textContent).toContain("NHK Easy News");
+  expect(document.querySelector(".chat-message .routine-run-link")?.textContent).toContain("範例晨間筆記摘要");
   expect(document.querySelector('.chat-message .message-actions [data-act="rerun"]')?.getAttribute("data-task")).toBe("9");
   expect(document.querySelector(".task-actions,.timeline-event,.sys")).toBeNull();
   expect(document.body.textContent?.split(failure).length).toBe(2);

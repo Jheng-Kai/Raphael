@@ -50,7 +50,7 @@ export default [
   scene("member-mentions-bots-apps", "Private composer shares the current team and app inventory", [type(".composer .cmp-input", "@"), wait("#app-popover"), check("p02-mentions")]),
   scene("plus-create-room", "Plus opens a room picker with selected chips", [click('[data-col="add"]'), click('[data-pick="group-chat"]'), wait(".mb-dialog"), click('[data-dlg="member"][data-member="1"]'), check("p02-picker")]),
   scene("room-mentions", "Room mention menu follows the typed character", [room(1), type("#room-message", "@"), wait("#app-popover"), check("p02-room-mentions")]),
-  scene("room-routing-fallback", "A saved routing fallback adds no line to the room (owner, 2026-11-08)", [room(1), check("p02-fallback")], { p02Fallback: true }),
+  scene("room-routing-fallback", "A saved routing fallback adds no line to the room", [room(1), check("p02-fallback")], { p02Fallback: true }),
   scene("meeting-open-room", "A centered chief event opens the meeting", [wait("[data-meeting-room]"), check("p02-meeting-event"), click("[data-meeting-room]"), wait(".au-room-heading b"), check("p02-meeting-open")], { p02Meeting: true }),
   scene("meeting-chief-event", "The chief private chat has one centered meeting link", [wait("[data-meeting-room]"), check("p02-meeting-event")], { p02Meeting: true }),
   scene("room-role-assignment", "Room roles use shared dropdowns and save", [room(1), click("[data-room-menu]"), click('[data-pick="roles"]'), wait(".mb-dialog"), click('[data-dlg="role"][data-member="1"]'), click('[data-value="moderator"]'), click('[data-dlg="save"]'), wait(".au-room-heading b"), check("p02-roles"), click("[data-room-menu]"), click('[data-pick="roles"]'), wait(".mb-dialog")]),

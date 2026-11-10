@@ -69,7 +69,7 @@ test("without an input method the menu follows every keystroke as before", () =>
   expect(menu()).toBeNull();
 });
 
-test("a typo or swapped letters still find the app or member, the plain matches first (owner, 2026-11-08)", () => {
+test("a typo or swapped letters still find the app or member, the plain matches first", () => {
   const roster = { ...list, team_context: { apps: [{ name: "Gmail", state: "ready" }, { name: "Google Calendar", state: "ready" }, { name: "Notion", state: "ready" }] } } as unknown as MembersList;
   bindTeamMentions(input, () => ({ list: roster }));
   for (const [typed, found] of [["@gamil", "Gmail"], ["@calender", "Google Calendar"], ["@notoin", "Notion"]] as const) {

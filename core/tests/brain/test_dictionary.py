@@ -532,20 +532,20 @@ def test_a_rule_added_by_hand_overrides_a_blocked_pair_and_a_hint(conn):
 def test_hint_words_put_what_the_user_chose_before_what_was_learned(conn):
     d = DictionaryStore(conn, now_ms=ticking_clock())
     d.add("OpenRouter")
-    learn(d, "Typeless", "type list")
+    learn(d, "Typepad", "type pat")
     d.add("Tailscale", source="suggested")
     learn(d, "Gemini", "gem mini")
     # A list of hints is cut off at its end, so the learned words go there.
-    assert d.hint_words() == ["Tailscale", "OpenRouter", "Gemini", "Typeless"]
-    assert [e.word for e in d.list()] == ["Gemini", "Tailscale", "Typeless", "OpenRouter"]
+    assert d.hint_words() == ["Tailscale", "OpenRouter", "Gemini", "Typepad"]
+    assert [e.word for e in d.list()] == ["Gemini", "Tailscale", "Typepad", "OpenRouter"]
 
 
 def test_hint_forms_are_the_rules_and_then_the_newest_hints_first(conn):
     d = DictionaryStore(conn, now_ms=ticking_clock())
     d.add("拉斐爾", ["拉菲爾"])
     learn(d, "Claude", "cloud")
-    learn(d, "Typeless", "type list")
-    assert d.hint_forms() == [("拉菲爾", "拉斐爾"), ("type list", "Typeless"), ("cloud", "Claude")]
+    learn(d, "Typepad", "type pat")
+    assert d.hint_forms() == [("拉菲爾", "拉斐爾"), ("type pat", "Typepad"), ("cloud", "Claude")]
     assert d.replacements() == [("拉菲爾", "拉斐爾")]
 
 

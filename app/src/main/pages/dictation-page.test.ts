@@ -26,7 +26,7 @@ describe("the dictation page", () => {
       .toEqual([["overview", true, "true"], ["history", true, "false"], ["dictionary", true, "false"]]);
   });
 
-  test("it opens on 總覽 again after it was left on another tab (owner, 2026-11-09)", () => {
+  test("it opens on 總覽 again after it was left on another tab", () => {
     const pages = { overview: page("overview"), history: page("history"), dictionary: page("dictionary") };
     const dictation = createDictation({} as AppContext, pages);
     document.body.append(dictation.el);

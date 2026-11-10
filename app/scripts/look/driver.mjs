@@ -143,7 +143,7 @@ export function findVisibleElement(selector) {
   };
   const found = [...document.querySelectorAll(selector)].find(shown);
   if (found) return found;
-  // A row draws no ⋯, as Grok Bot's (styles.css): a step that waits for one, or hovers it, has the row it sits in. A
+  // A row draws no ⋯ (styles.css): a step that waits for one, or hovers it, has the row it sits in. A
   // message's work is in its ⋯ menu (timeline.ts): a step that waits for the work control has that ⋯.
   for (const element of document.querySelectorAll(selector)) {
     if (element.matches("[data-overflow]") && getComputedStyle(element).display === "none") {
@@ -168,7 +168,7 @@ export async function perform(page, step, evidenceDirectory) {
     catch (error) { throw new Error(`No visible match: ${selector}`, { cause: error }); }
   };
   const click = async selector => {
-    // Rows keep their ⋯ out of sight, as Grok Bot's (owner, 2026-11-06): a step that names one presses it the way the
+    // Rows keep their ⋯ out of sight: a step that names one presses it the way the
     // owner does, with a right click on its row (context-menu.ts), which presses the very same button.
     if (await page.evaluate(selector => matchMedia("(max-width: 859px)").matches && !document.documentElement.hasAttribute("data-sidebar-open") && !!document.querySelector(selector)?.matches("[data-overflow]") && !!document.querySelector(selector)?.closest("#nav"), selector)) await page.click('[data-sidebar="open"]');
     const row = await page.evaluate(selector => {
@@ -187,7 +187,7 @@ export async function perform(page, step, evidenceDirectory) {
       await page.evaluate(at => { window.__look.pointer = at; }, row);
       return;
     }
-    // A message's work opens from its ⋯ menu, as Grok Bot's keeps only react, reply and ⋯ beside the bubble.
+    // A message's work opens from its ⋯ menu; only react, reply and ⋯ beside the bubble.
     const work = await page.evaluate(selector => {
       const control = [...document.querySelectorAll(selector)].find(node => node.matches('[data-act="thinking"][hidden]') && node.closest(".chat-message")?.getClientRects().length);
       if (!control) return null;
@@ -455,10 +455,10 @@ export async function perform(page, step, evidenceDirectory) {
       await element.hover();
       await new Promise(resolve => setTimeout(resolve, 160));
       const hovered = await measure();
-      // Grok Bot's caption buttons are Windows cells: the token surface fills the square cell (R-UI-16).
+      // The caption buttons are Windows cells: the token surface fills the square cell (R-UI-16).
       if (hovered.background !== (step.control === 'close' ? hovered.close : hovered.hover) || hovered.radius !== 0) throw new Error('Caption hover needs its token surface on a square cell');
       if (Math.abs(hovered.centerX - hovered.x) > .5 || Math.abs(hovered.centerY - hovered.y) > .5 || Math.abs(rest.x - hovered.x) > .5 || Math.abs(rest.y - hovered.y) > .5) throw new Error('Caption glyph moved or is not centered');
-      if (hovered.marginTop > .5 || hovered.marginBottom > .5) throw new Error("A caption cell fills the strip from top to bottom, as Windows' and Grok Bot's");
+      if (hovered.marginTop > .5 || hovered.marginBottom > .5) throw new Error("A caption cell fills the strip from top to bottom, like a native Windows caption cell");
       if (!hovered.label || hovered.title !== hovered.label) throw new Error('Caption tooltip and accessible label must remain');
       if (step.control === 'close') {
         const rgb = value => value.match(/[\d.]+/g).slice(0, 3).map(Number).map(c => c / 255).map(c => c <= .04045 ? c / 12.92 : ((c + .055) / 1.055) ** 2.4);
@@ -665,7 +665,7 @@ export async function perform(page, step, evidenceDirectory) {
           active = await state();
         } finally { await page.mouse.move(0, 0); await page.mouse.up(); }
         if ([hover, active].some(value => value.background !== "rgba(0, 0, 0, 0)")) throw new Error("Icon hover/active must remain transparent");
-        // R-UI-88 (2026-11-03): a press changes colour from the hover, without a surface (R-UI-16).
+        // R-UI-88: a press changes colour from the hover, without a surface (R-UI-16).
         if (active.color === hover.color) throw new Error("A pressed icon must change colour from its hover");
         await page.keyboard.press("Tab");
         await element.focus();

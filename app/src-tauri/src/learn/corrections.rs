@@ -324,46 +324,46 @@ mod tests {
 
     #[test]
     fn a_known_span_is_followed_even_when_the_text_occurs_again_after_it() {
-        let field = "Tyeless is here and Tyeless again";
+        let field = "Wornote is here and Wornote again";
         // `new` takes the last occurrence; the caller knows it is the first.
-        assert_eq!(Tracker::new(field, "Tyeless").unwrap().span, 20..27);
+        assert_eq!(Tracker::new(field, "Wornote").unwrap().span, 20..27);
         let tracker = Tracker::with_span(field, 0..7).unwrap();
-        let tracker = tracker.advanced("Typeless is here and Tyeless again");
+        let tracker = tracker.advanced("Wordnote is here and Wornote again");
         let learned: Vec<_> = tracker
             .corrections()
             .into_iter()
             .map(|c| (c.misheard, c.word))
             .collect();
-        assert_eq!(learned, [("Tyeless".to_owned(), "Typeless".to_owned())]);
+        assert_eq!(learned, [("Wornote".to_owned(), "Wordnote".to_owned())]);
     }
 
     #[test]
     fn only_a_change_inside_the_pasted_text_counts_as_an_edit() {
-        let pasted = "Use Tyeless for this";
+        let pasted = "Use Wornote for this";
         let field = format!("PS> {pasted} and more");
         let tracker = Tracker::new(&field, pasted).unwrap();
         assert!(!tracker.edited());
         // The prompt, and the text after the paste, are not the paste.
         assert!(
             !tracker
-                .advanced("PS2> Use Tyeless for this and more")
+                .advanced("PS2> Use Wornote for this and more")
                 .edited()
         );
         assert!(
             !tracker
-                .advanced("PS> Use Tyeless for this and more more")
+                .advanced("PS> Use Wornote for this and more more")
                 .edited()
         );
         // A letter typed inside it, a word deleted from it, and a replaced word are.
         assert!(
             tracker
-                .advanced("PS> Use Typeless for this and more")
+                .advanced("PS> Use Wordnote for this and more")
                 .edited()
         );
-        assert!(tracker.advanced("PS> Use Tyeless this and more").edited());
+        assert!(tracker.advanced("PS> Use Wornote this and more").edited());
         assert!(
             tracker
-                .advanced("PS> Use Tyeless for that and more")
+                .advanced("PS> Use Wornote for that and more")
                 .edited()
         );
     }
@@ -468,13 +468,13 @@ mod tests {
 
     // ---------- Latin ----------
 
-    const EN: &str = "I tried type less yesterday and it works really well for long emails";
+    const EN: &str = "I tried word note yesterday and it works really well for long emails";
 
     #[test]
     fn latin_words_replaced_by_a_term_are_learned() {
         assert_eq!(
-            learned_after(EN, &[("type less", "Typeless")]),
-            pairs(&[("type less", "Typeless")])
+            learned_after(EN, &[("word note", "Wordnote")]),
+            pairs(&[("word note", "Wordnote")])
         );
     }
 
@@ -486,18 +486,18 @@ mod tests {
             pairs(&[("tailscail", "Tailscale")])
         );
         // one letter typed into the word
-        let pasted = "I tried Tyeless yesterday and it works really well for long emails";
+        let pasted = "I tried Wornote yesterday and it works really well for long emails";
         assert_eq!(
-            learned_after(pasted, &[("Tyeless", "Typeless")]),
-            pairs(&[("Tyeless", "Typeless")])
+            learned_after(pasted, &[("Wornote", "Wordnote")]),
+            pairs(&[("Wornote", "Wordnote")])
         );
     }
 
     #[test]
     fn capitalized_terms_are_candidates_for_the_dictionary() {
         assert_eq!(
-            learned_after(EN, &[("type less", "Type Less")]),
-            pairs(&[("type less", "Type Less")])
+            learned_after(EN, &[("word note", "Word Note")]),
+            pairs(&[("word note", "Word Note")])
         );
     }
 

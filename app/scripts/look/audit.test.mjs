@@ -65,7 +65,7 @@ describe("rendered look checks", () => {
     } finally { vi.unstubAllGlobals(); browser.happyDOM.abort(); }
   });
   it("rejects words, a face or a recovery button drawn over an absent computer's wallpaper", () => {
-    // Owner ruling 2026-11-07: an offline computer shows its wallpaper alone and the whole screen is the one press that starts it.
+    // An offline computer shows its wallpaper alone and the whole screen is the one press that starts it.
     const browser = new Window();
     const markup = extra => `<header class="desktop-location-header"><button data-computer-location>This computer</button></header><section class="desktop-panel"><div class="desktop-screen"><img class="desktop-wallpaper"><div class="desktop-placeholder">${extra}</div><button data-desktop="enlarge"><span class="desktop-open-pill">Open</span></button></div></section>`;
     browser.__look = { calls: [] };
@@ -922,7 +922,7 @@ describe("rendered look checks", () => {
     const window = new Window(), { before, after } = scene.fixture.dictationText;
     expect(scene.steps.find(step => step.action === "dictation-paste").text).toBe(before);
     expect(scene.steps.find(step => step.action === "type").text).toBe(after);
-    window.document.body.innerHTML = `<p>${after}</p><p>OpenMausBot</p><button>Message</button>`;
+    window.document.body.innerHTML = `<p>${after}</p><p>SampleToolX</p><button>Message</button>`;
     for (const element of window.document.querySelectorAll("*")) element.getBoundingClientRect = () => ({ left: 10, top: 10, right: 100, bottom: 40, width: 90, height: 30 });
     const allowed = Object.values(scene.fixture.dictationText).flatMap(text => text.match(/[A-Za-z]{2,}/g) ?? []).map(word => word.toLowerCase());
     expect(auditDocument(window.document, { width: 1120, height: 900 }, [], allowed).mixedLanguage.map(item => item.word)).toEqual(["Message"]);
@@ -1058,7 +1058,7 @@ describe("rendered look checks", () => {
 
 it("rejects divergent store add classes, row markup and card styling", () => {
   const browser = new Window();
-  // As Grok Bot's store rows: a name, and under it only what the app asks for.
+  // Store rows: a name, and under it only what the app asks for.
   const row = `<div class="cs-card" style="display:grid;grid-template-columns:240px 64px;border-radius:12px;border-bottom:0px solid;border-left:0px solid"><button class="btn cs-main" data-conn="open-store"><span class="ic"></span><span class="tx"><span class="nm">App</span><span class="sub"><b class="need">Needs a key</b></span></span></button><button class="btn sm" data-conn="join">Add</button></div>`;
   browser.document.body.innerHTML = row + row;
   // happy-dom has no pseudo-elements, so the divider line is stood in for by a data attribute.

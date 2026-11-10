@@ -1,4 +1,4 @@
-"""Hermes context-compressor policy, adapted without its session lifecycle.
+"""Context-compression policy with independent session lifecycle.
 
 Adapted from NousResearch/hermes-agent (MIT); see core/packaging/licenses.
 """

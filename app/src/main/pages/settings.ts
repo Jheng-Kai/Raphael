@@ -363,8 +363,7 @@ export function createSettings(app: AppContext): SettingsPage {
     return anchor?.dataset.k;
   }
 
-  // 模型與用量 is read once while the app runs and kept (owner, 2026-11-08: 「跑一次之後先暫存它的狀態，然後除非重新開 app，
-  // 或者是你點一下右上角的那個重跑，它才會重新 loading 一次」): its providers, the models' catalogue, this computer's speech
+  // 模型與用量 is read once while the app runs and kept: its providers, the models' catalogue, this computer's speech
   // models and the usage. A change the core tells of (a provider added) still reads again; the refresh at the tab's top
   // right reads everything again.
   let providersRead = false, catalogRead = false, localRead = false;
@@ -374,7 +373,7 @@ export function createSettings(app: AppContext): SettingsPage {
     providersRead = providers.view().state === "ready";
   }
   /**
-   * The one refresh of 模型與用量 (owner, 2026-11-08: 「為甚麼會有兩個 icon…沒有任何的 feedback」): it turns while everything is
+   * The one refresh of 模型與用量: it turns while everything is
    * read again, shows a check for a moment when it is done, and a failure is said in a toast.
    */
   let refreshDone: ReturnType<typeof setTimeout> | undefined;
@@ -463,7 +462,7 @@ export function createSettings(app: AppContext): SettingsPage {
     }
     body.scrollTop = scroll;
     el.querySelectorAll<HTMLElement>("[data-pane]").forEach((b) => b.setAttribute("aria-current", b.dataset.pane === pane ? "page" : "false"));
-    // 連結應用程式 is a dialog of its own, as Grok Bot's Connect apps: no list of Settings beside it (R-UI-111).
+    // 連結應用程式 is a dialog of its own: no list of Settings beside it (R-UI-111).
     if ((el.dataset.standalone ?? "") !== (pane === STANDALONE_PANE ? pane : "")) {
       if (pane === STANDALONE_PANE) el.dataset.standalone = pane; else delete el.dataset.standalone;
     }
@@ -480,7 +479,7 @@ export function createSettings(app: AppContext): SettingsPage {
 
   // ---------- the tabs ----------
 
-  /** The list on the left: the six tabs, flat, as Grok Bot's. */
+  /** The list on the left: the six tabs, flat. */
   function paintNav(): void {
     // A tab chosen with Enter is drawn anew here: the keyboard stays on it, and Esc still closes.
     repaintKeepingFocus(navList, document.activeElement, () => { navList.innerHTML = paneListHTML(); });
@@ -1285,7 +1284,7 @@ export function createSettings(app: AppContext): SettingsPage {
       try { const apply = await readSettings(); if (!visible) apply(); }
       finally { preloading = false; }
       // Connect apps opens on what it already holds: its lists, the store and Composio's catalog are read once the app
-      // is idle after launch, not when the owner first asks for them (owner, 2026-11-07). Opening reads them again quietly.
+      // is idle after launch, not when the owner first asks for them. Opening reads them again quietly.
       if (!connectionsWarmed) {
         connectionsWarmed = true;
         // After the first view, and one read at a time with the other optional reads (startup-reads.ts).

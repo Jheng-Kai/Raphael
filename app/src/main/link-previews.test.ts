@@ -14,7 +14,7 @@ const thread = (text: string): HTMLElement => {
 };
 const chips = (root: ParentNode): HTMLElement[] => [...root.querySelectorAll<HTMLElement>("a.link-chip")];
 
-test("a link is a chip in the words: the site's mark, then its words or, bare, its site (owner, 2026-11-08)", () => {
+test("a link is a chip in the words: the site's mark, then its words or, bare, its site", () => {
   const root = thread("看 [Google 帳戶安全通知](https://myaccount.google.com/notifications)，或 https://www.github.com/x/y，或 http://127.0.0.1:5173/tool");
   const [named, bare, local] = chips(root);
   expect(named!.querySelector(".link-name")!.textContent).toBe("Google 帳戶安全通知");
