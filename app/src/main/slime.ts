@@ -651,14 +651,32 @@ export function slimeColorsHTML(avatar: string | null | undefined, esc: (text: s
   }).join("");
 }
 
-/** The picture menu groups costumes before the plain colours, without changing their saved identities. */
-export function slimePickerHTML(avatar: string | null | undefined, esc: (text: string) => string): string {
-  return (Object.keys(GROUP_NAMES) as (keyof typeof GROUP_NAMES)[]).map(group => {
-    const name = esc(t(GROUP_NAMES[group]));
+/** The groups of the picker, in the order of its tabs. */
+export const SLIME_GROUPS = Object.keys(GROUP_NAMES) as (keyof typeof GROUP_NAMES)[];
+export type SlimeGroup = (typeof SLIME_GROUPS)[number];
+/** The words of a group's tab. */
+export const slimeGroupName = (group: SlimeGroup): string => t(GROUP_NAMES[group]);
+
+/** The group that holds a face: where the picker opens. A face the picker does not list opens on the first group. */
+export function slimeGroupOf(avatar: string | null | undefined): SlimeGroup {
+  const slime = parseSlime(avatar);
+  if (slime === null) return SLIME_GROUPS[0];
+  return "color" in slime ? "colors" : CHARACTERS[slime.character].group;
+}
+
+/**
+ * The picker's slimes: one panel for each group, none of them with a heading (its tab says it; owner, 2026-11-11:
+ * 「要跟…Grokbot 他們的 UI 類似，就是上面會有一些 tab」). They are all drawn and stand on one another in one cell, so the
+ * place is as big as the largest group and a press on a tab moves nothing; the one that is open is `data-active`, and
+ * the others are `inert` (the keys and the pointer pass them by). `open` is the group that shows first.
+ */
+export function slimePickerHTML(avatar: string | null | undefined, esc: (text: string) => string, open: SlimeGroup = slimeGroupOf(avatar)): string {
+  return SLIME_GROUPS.map(group => {
     const grid = group === "colors"
       ? `<div class="mb-slime-colors">${slimeColorsHTML(avatar, esc, IN_MENU)}</div>`
       : `<div class="mb-presets mb-slime-characters">${slimeCharactersHTML(avatar, esc, IN_MENU, group)}</div>`;
-    return `<div class="mb-slime-group" data-slime-group="${group}" role="group" aria-label="${name}"><h3 class="mb-slime-group-title">${name}</h3>${grid}</div>`;
+    const on = group === open;
+    return `<div class="mb-slime-group" id="slime-panel-${group}" data-slime-group="${group}" role="tabpanel" aria-labelledby="slime-tab-${group}"${on ? " data-active" : " inert"}>${grid}</div>`;
   }).join("");
 }
 

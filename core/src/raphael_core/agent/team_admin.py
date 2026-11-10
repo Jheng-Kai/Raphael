@@ -132,25 +132,34 @@ def proposal_operations(calls: list[dict]) -> list[dict]:
     return operations
 
 
-def confirmation(name: str, arguments: dict, language: str, target: str = "", *, question: bool = True) -> str:
-    """Complete owner-facing details; never truncate fields that the owner is approving."""
+_ACTION_NAMES = ("member_create", "member_update", "member_delete", "group_create", "group_rename", "member_skill_import", "member_command_save", "routine_create", "routine_update", "routine_delete")
+_ACTION_TITLES = {
+    "en": ("Create member", "Update member", "Permanently delete member and all its data", "Create group", "Rename group", "Import member skills", "Save member command", "Create routine", "Update routine", "Delete routine"),
+    "zh-TW": ("建立成員", "更新成員", "永久刪除成員及其所有資料", "建立群組", "重新命名群組", "匯入成員技能", "儲存成員指令", "建立例行任務", "更新例行任務", "刪除例行任務"),
+    "ja": ("メンバーを作成", "メンバーを更新", "メンバーと全データを完全に削除", "グループを作成", "グループ名を変更", "スキルをインポート", "コマンドを保存", "定期タスクを作成", "定期タスクを更新", "定期タスクを削除"),
+}
+
+
+def title_of(name: str, language: str) -> str:
+    """What a change of the first group of tools does, in the owner's language; the tool's name when none says."""
     from ..ui_languages import fixed_language
     language = fixed_language(language)
-    if name == "create_member":
-        name = "member_create"
-    actions = with_ui_words({
-        "en": ("Create member", "Update member", "Permanently delete member and all its data", "Create group", "Rename group", "Import member skills", "Save member command", "Create routine", "Update routine", "Delete routine"),
-        "zh-TW": ("建立成員", "更新成員", "永久刪除成員及其所有資料", "建立群組", "重新命名群組", "匯入成員技能", "儲存成員指令", "建立例行任務", "更新例行任務", "刪除例行任務"),
-        "ja": ("メンバーを作成", "メンバーを更新", "メンバーと全データを完全に削除", "グループを作成", "グループ名を変更", "スキルをインポート", "コマンドを保存", "定期タスクを作成", "定期タスクを更新", "定期タスクを削除"),
-    })
-    names = ("member_create", "member_update", "member_delete", "group_create", "group_rename", "member_skill_import", "member_command_save", "routine_create", "routine_update", "routine_delete")
+    name = "member_create" if name == "create_member" else name
+    return with_ui_words(_ACTION_TITLES)[language][_ACTION_NAMES.index(name)] if name in _ACTION_NAMES else name
+
+
+def confirmation(name: str, arguments: dict, language: str, target: str = "", *, question: bool = True) -> str:
+    """Complete owner-facing details; never truncate fields that the owner is approving. No ID line: the card names
+    its target (owner, 2026-11-11: 「不用這麼複雜」)."""
+    from ..ui_languages import fixed_language
+    language = fixed_language(language)
     fields = ("name", "role", "blurb", "personality", "instructions", "group", "avatar_preset", "source", "description", "template", "title", "prompt", "schedule", "enabled")
     labels = with_ui_words({
         "en": ("Name", "Role", "About", "Personality", "Instructions", "Group", "Avatar preset", "Skill source", "Description", "Template", "Title", "Prompt", "Schedule", "Enabled"),
         "zh-TW": ("名稱", "職責", "簡介", "個性", "工作指示", "群組", "預設頭像", "技能來源", "說明", "指令範本", "任務名稱", "任務內容", "排程", "啟用"),
         "ja": ("名前", "役割", "紹介", "性格", "指示", "グループ", "アバター", "スキルの取得元", "説明", "テンプレート", "タスク名", "内容", "スケジュール", "有効"),
     })
-    title = actions[language][names.index(name)] if name in names else name
+    title = title_of(name, language)
     separator = ": " if language == "en" else "："
     lines = [title + (separator + target if target else "")]
     for field, label in zip(fields, labels[language]):
@@ -160,6 +169,4 @@ def confirmation(name: str, arguments: dict, language: str, target: str = "", *,
                 # Every schedule value is visible, including advanced fields from existing RPCs.
                 value = "; ".join(f"{key}{separator}{item}" for key, item in value.items())
             lines.append(f"{label}{separator}{value}")
-    if "id" in arguments:
-        lines.append(f"ID{separator}{arguments['id']}")
     return "\n".join(lines) + (with_ui_words({"en": "\nAllow this change?", "zh-TW": "\n允許這項變更嗎？", "ja": "\nこの変更を許可しますか？"})[language] if question else "")

@@ -465,7 +465,8 @@ def test_every_approval_label_including_target_id_and_schedule_uses_local_punctu
                                   "avatar_preset": "alpha", "source": "repository", "description": "Daily",
                                   "template": "Report {input}", "title": "Report", "prompt": "Review",
                                   "schedule": {"kind": "daily", "time": "09:00"}, "enabled": True}, language, "COO")
-        assert ("ID: 1" if language == "en" else "ID\uff1a1") in text
+        # The card names its target and shows no ID (owner, 2026-11-11: \u300c\u4e0d\u7528\u9019\u9ebc\u8907\u96dc\u300d).
+        assert "ID" not in text
         assert ("time: 09:00" if language == "en" else "time\uff1a09:00") in text
         if language != "en":
             assert ": " not in text

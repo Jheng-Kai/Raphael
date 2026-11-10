@@ -244,13 +244,18 @@ test("a member's face is the button of its picture picker, with a pencil under t
   expect(panel.el.querySelector(".mb-panel-identity > small")!.textContent).toBe("N2 嚴格版");
 });
 
-test("a member's face picker offers the slimes alone, with no tab that draws a picture", async () => {
+test("a member's face picker offers the slimes alone, in tabs of their kinds, with no tab that draws a picture", async () => {
   const panel = mount(); await flush();
   panel.el.querySelector<HTMLElement>('[data-det="avatar"]')!.click();
   const picker = document.querySelector<HTMLElement>("#app-popover")!;
   expect(picker.classList.contains("mb-avpop")).toBe(true);
   expect(picker.querySelectorAll("[data-slime-character], [data-slime-color]").length).toBeGreaterThan(0);
-  expect(picker.querySelector("[data-avp-tab], [data-avp-pane], .tabs, textarea, input")).toBeNull();
+  expect(picker.querySelector("[data-avp-tab], [data-avp-pane], textarea, input")).toBeNull();
+  // The tabs are the kinds of slime (owner, 2026-11-11), one chosen, and none of them draws a picture.
+  const tabs = [...picker.querySelectorAll<HTMLElement>('[role="tab"]')];
+  expect(tabs.length).toBe(7);
+  expect(tabs.every(tab => tab.dataset.slimeTab)).toBe(true);
+  expect(tabs.filter(tab => tab.getAttribute("aria-selected") === "true")).toHaveLength(1);
 });
 
 test("a late routine response cannot replace the newly selected member's routines", async () => {

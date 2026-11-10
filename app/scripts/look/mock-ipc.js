@@ -1879,7 +1879,7 @@ export function installMock(fixture, config = {}, target = window) {
           notify("MembersChanged", { member_id: data.adminMember.id });
         }
         adminTurn.status = args.approved ? "done" : "denied";
-        adminTurn.text = args.approved ? "已建立 COO：營運長。" : "已取消建立成員。";
+        adminTurn.text = args.approved ? (adminQuestion.done ?? "已建立 COO：營運長。") : "已取消建立成員。";
         adminTurn.messages.push({ seq: 4, kind: "reply", text: adminTurn.text, at_ms: data.now });
         notify("AgentQuestionClosed", { id: adminQuestion.id });
         notify("AgentTurn", { turn_id: adminTurn.id, member_id: 0 });

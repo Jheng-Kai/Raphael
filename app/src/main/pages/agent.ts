@@ -874,10 +874,22 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     const commandBox = askCard.querySelector<HTMLElement>(".ask-cmd")!;
     commandBox.textContent = command;
     commandBox.hidden = !command;
-    askCard.querySelector<HTMLElement>(".card-disclosure")!.hidden = !!command || q.text.trim() === copy.body || copy.title.includes(q.text.trim());
+    const disclosure = askCard.querySelector<HTMLElement>(".card-disclosure")!;
+    // What cannot be undone is read before it is agreed to: its lines (what is deleted, by name, one line for each change on
+    // a card of several) stand open under the heading instead of behind 顯示 (owner, 2026-11-11: 「不要分這麼多卡片」).
+    const readable = q.text.split("\n").slice(1).join("\n").trim();
+    const reads = q.tier === "T3" && !command;
+    if (reads && copy.body === lead.trim() && readable !== "") askText.textContent = readable;
+    disclosure.hidden = !!command || q.text.trim() === copy.body || copy.title.includes(q.text.trim());
+    const toggle = disclosure.querySelector<HTMLElement>("[data-card-disclosure]")!;
+    const open = reads && !disclosure.hidden;
+    disclosure.querySelector<HTMLElement>(".card-detail")!.hidden = !open;
+    toggle.setAttribute("aria-expanded", String(open));
+    toggle.dataset.closedLabel = t("cards.show");
+    const toggleLabel = toggle.querySelector("span");
+    if (toggleLabel) toggleLabel.textContent = open ? t("cards.hide") : t("cards.show");
     drawAskLabels();
     noButton.disabled = alwaysButton.disabled = yesButton.disabled = answering;
-    yesButton.dataset.hold = "idle";
   }
 
   /** One line of the thread as HTML, with the key it keeps across draws. */

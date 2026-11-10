@@ -103,9 +103,6 @@ export interface EmblemControl {
  */
 export const isRefusal = (text: string): boolean => /^\s*《?\s*(?:否|Negative|No|거절|Non|Nein|Não|Нет|Không|ไม่|Tidak|Hayır)[。.]/u.test(text);
 
-/** How far a pointer hold on the YES of a T3 question has come. */
-export type HoldState = "idle" | "holding" | "armed";
-
 /** What the buttons of a question say, and how strict the question is. */
 export interface AskButtons {
   yes: string;
@@ -130,17 +127,11 @@ export interface OverlayView {
   showWaiting(text: string | null, language: UiLanguage): void;
   /** The buttons (two, or three with `always`) come in under the line. */
   showAsk(buttons: AskButtons): void;
-  /** The filling underline of the YES button of a T3 question. */
-  setHold(state: HoldState): void;
   /** An answer was sent: the buttons stop taking clicks and the chosen one stays pressed; null takes it back. */
   setChoice(choice: "yes" | "no" | "always" | null): void;
   hideAsk(): void;
 }
 
-/** How long the pointer must stay down on the YES of a T3 question before it is armed. */
-export const HOLD_MS = 600;
-/** An armed button whose release never comes (the window went click-through again) is disarmed after this. */
-const ARMED_MAX_MS = 5000;
 /** The app answers a question that ran out itself; the page lets go of it this long after. */
 const ASK_GRACE_MS = 1500;
 /** Used when a question does not say how long it waits. */
@@ -170,7 +161,6 @@ interface Ask {
   timeoutMs: number;
   /** The words and the buttons are on screen (the appear animation has played). */
   shown: boolean;
-  hold: HoldState;
   /** The question's own words, to show the card again if the answer could not be sent. */
   text: string;
   /** The answer that was sent while the app has not yet replaced the question.*/
@@ -205,7 +195,6 @@ export class OverlayController {
   /** Raphael's greeting is on screen (or about to be) while he listens for a question. */
   private greeting = false;
   private greetTimer: ReturnType<typeof setTimeout> | undefined;
-  private holdTimer: ReturnType<typeof setTimeout> | undefined;
   private readonly progress = new ProgressArc();
   private progressTimer: ReturnType<typeof setInterval> | undefined;
   private progressClock = 0;
@@ -327,70 +316,19 @@ export class OverlayController {
   }
 
   /**
-   * A click on a button. The YES of a T3 question is answered by `holdEnd`, never by a click. The
-   * `always` button exists only on a question that has the label (always T2); without it a click
-   * on it is ignored.
+   * A click on a button: one press answers, for every tier (owner, 2026-11-11: 「長按才會繼續，點一下就可以了，不用這麼複雜」;
+   * it was a press held for 0.6 s on the YES of a T3 question until then). The `always` button exists only on a question
+   * that has the label (always T2); without it a click on it is ignored. A second press finds the question answered.
    */
   clickAsk(button: "yes" | "no" | "always"): void {
     const ask = this.open();
-    if (!ask || (button === "yes" && ask.tier === "T3")) return;
+    if (!ask) return;
     if (button === "always" && ask.always === null) return;
     this.choose(ask, button !== "no", button === "always");
   }
 
-  /** The pointer went down on the YES button: for a T3 question the hold begins (true). */
-  holdStart(): boolean {
-    const ask = this.open();
-    if (!ask || ask.tier !== "T3") return false;
-    this.resetHold(ask);
-    ask.hold = "holding";
-    this.view.setHold("holding");
-    this.holdTimer = setTimeout(() => {
-      ask.hold = "armed";
-      this.view.setHold("armed");
-      // A release that never comes must not leave the button armed for good.
-      this.holdTimer = setTimeout(() => this.resetHold(ask), ARMED_MAX_MS);
-    }, HOLD_MS);
-    return true;
-  }
-
-  /** The pointer came up. On the button, after a full hold, the answer is YES; otherwise the hold is dropped. */
-  holdEnd(onButton: boolean): void {
-    const ask = this.open();
-    if (!ask || ask.tier !== "T3") return;
-    if (ask.hold === "armed" && onButton) {
-      clearTimeout(this.holdTimer);
-      this.holdTimer = undefined;
-      this.choose(ask, true);
-    } else {
-      this.resetHold(ask);
-    }
-  }
-
-  /** The pointer was taken away (the system cancelled it): nothing was confirmed. */
-  holdCancel(): void {
-    const ask = this.open();
-    if (ask) this.resetHold(ask);
-  }
-
-  private resetHold(ask: Ask): void {
-    clearTimeout(this.holdTimer);
-    this.holdTimer = undefined;
-    if (ask.hold !== "idle") {
-      ask.hold = "idle";
-      this.view.setHold("idle");
-    }
-  }
-
   /** Sends the answer, and the card goes at once: waiting for the app to replace it left a pressed card on screen. */
   private choose(ask: Ask, approved: boolean, always = false): void {
-    // A hold that was still going (NO was clicked meanwhile) must not arm a button that is dead now.
-    clearTimeout(this.holdTimer);
-    this.holdTimer = undefined;
-    if (!approved && ask.hold !== "idle") {
-      ask.hold = "idle";
-      this.view.setHold("idle");
-    }
     ask.chosen = always ? "always" : approved ? "yes" : "no";
     this.view.setChoice(ask.chosen);
     this.view.hideAsk();
@@ -406,7 +344,6 @@ export class OverlayController {
       // The question is still there for another try, unless something replaced it meanwhile.
       if (this.ask === ask) {
         ask.chosen = null;
-        this.resetHold(ask);
         this.view.showLine(ask.line, this.language);
         this.view.showQuestion?.(ask.text, this.language);
         this.view.showAsk({ yes: ask.yes, no: ask.no, ...(ask.always !== null ? { always: ask.always } : {}), tier: ask.tier, language: this.language });
@@ -435,7 +372,6 @@ export class OverlayController {
       always,
       timeoutMs: Number.isFinite(event.timeout_ms) && event.timeout_ms > 0 ? event.timeout_ms : DEFAULT_ASK_TIMEOUT_MS,
       shown: false,
-      hold: "idle",
       chosen: null,
     };
     this.ask = ask;
@@ -471,8 +407,6 @@ export class OverlayController {
   private dropAsk(): void {
     clearTimeout(this.askTimer);
     this.askTimer = undefined;
-    clearTimeout(this.holdTimer);
-    this.holdTimer = undefined;
     if (this.ask) {
       this.ask = null;
       this.view.hideAsk();
@@ -724,7 +658,6 @@ class DomView implements OverlayView {
     this.always.hidden = always === undefined;
     this.question.lang = language;
     this.question.dataset.tier = tier;
-    this.setHold("idle");
     this.setChoice(null);
     this.question.hidden = false;
     this.box.classList.add("asking");
@@ -753,10 +686,6 @@ class DomView implements OverlayView {
     requestAnimationFrame(() => { expand.hidden = details.scrollHeight <= details.clientHeight + 1; });
   }
 
-  setHold(state: HoldState): void {
-    this.yes.dataset.hold = state;
-  }
-
   setChoice(choice: "yes" | "no" | "always" | null): void {
     this.question.dataset.choice = choice ?? "";
     this.yes.disabled = this.no.disabled = this.always.disabled = choice !== null;
@@ -766,7 +695,6 @@ class DomView implements OverlayView {
     this.question.classList.remove("on");
     this.question.hidden = true;
     this.box.classList.remove("asking");
-    this.setHold("idle");
     this.setChoice(null);
   }
 }
@@ -817,35 +745,16 @@ function reportUncaught(): void {
   });
 }
 
-/** Whether a pointer event ended on `button` (a captured pointer reports the button even when it left it). */
-function onButton(button: HTMLElement, event: PointerEvent): boolean {
-  const r = button.getBoundingClientRect();
-  return event.clientX >= r.left && event.clientX <= r.right && event.clientY >= r.top && event.clientY <= r.bottom;
-}
-
-/** The pointer on the buttons of a question, handed to the controller. */
+/** The buttons of a question, handed to the controller: one click answers. */
 function wireQuestion(
   controller: OverlayController,
   yes: HTMLButtonElement,
   no: HTMLButtonElement,
   always: HTMLButtonElement,
 ): void {
-  yes.style.setProperty("--hold-ms", `${HOLD_MS}ms`);
   yes.addEventListener("click", () => controller.clickAsk("yes"));
   no.addEventListener("click", () => controller.clickAsk("no"));
   always.addEventListener("click", () => controller.clickAsk("always"));
-  yes.addEventListener("pointerdown", (event) => {
-    if (event.button !== 0 || !controller.holdStart()) return;
-    // A hold goes on if the pointer strays; where it ends is decided on release. (A click is not
-    // captured: pressing, moving off and letting go is how one changes one's mind.)
-    try {
-      yes.setPointerCapture(event.pointerId);
-    } catch {
-      // not capturable: the release still arrives while the pointer is over the button
-    }
-  });
-  yes.addEventListener("pointerup", (event) => controller.holdEnd(onButton(yes, event)));
-  yes.addEventListener("pointercancel", () => controller.holdCancel());
 }
 
 async function start(): Promise<void> {

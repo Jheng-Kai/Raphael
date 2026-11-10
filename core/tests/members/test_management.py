@@ -7,6 +7,8 @@ from .test_answering import client, setup, member, typed, live_said  # noqa: F40
 from raphael_core.agent.harness_tools import definitions_for
 from raphael_core.agent.policy import Action, Confirmations, NotApproved
 from raphael_core.agent.gate import ToolGate
+from raphael_core.agent.team_admin import title_of
+from raphael_core.management_words import effect
 from raphael_core.management import ACTIONS, MANAGEMENT_TOOLS, REGISTRY, destructive, publish, resolve
 from raphael_core.protocol import RpcError
 
@@ -99,8 +101,10 @@ async def test_every_destructive_row_shows_a_card_and_waits_for_the_exact_yes(se
     assert asked["confirm"]["tier"] == "T3"
     assert writes == []
     text = asked["confirm"]["text"]
-    assert ("Affected target" in text and resolve(name, args)[0].description in text) if name != "member_delete" else "ID: " in text
-    assert all(str(value) in text for value in args.values() if not isinstance(value, (list, dict, bool)))
+    # The card says the effect in words (owner, 2026-11-11: no JSON, no ID, one language), never a raw argument list.
+    action, values = resolve(name, args)
+    words = title_of(name, "en") if name in team.members.TRADITIONAL else effect(team.members.management_effect(action, values), "en")
+    assert words in text and "Affected target" not in text and "{" not in text and "ID" not in text
     await rig.confirm(asked["confirm"]["id"])
     assert len(writes) == 1
 
@@ -292,7 +296,7 @@ async def test_deleting_the_requesting_chat_finishes_without_cancelling_itself(s
     rig, team = setup
     team.members.register(rig.rpc)
     args = {"member_id": 0} if tool == "member_history_clear" else {"id": rig.service.conversations.main(0)}
-    client.chats = [chat("Removing the records.", use(*publish(tool, args))), live_said("Records removed.")]
+    client.chats = [chat("Removing the records.", use(*publish(tool, args))), live_said("Waiting for your yes."), live_said("Records removed.")]
     asked = await typed(rig, "Remove this conversation's records", 0, language="en")
     assert asked["status"] == "confirm"
     import asyncio
@@ -308,7 +312,7 @@ async def test_primary_can_approve_its_own_deletion_and_leave_a_receipt_with_the
     primary = member(team, name="Coordinator")
     team.members.store.set_primary(primary.id)
     rig.settings.set("action_mode", "bypass")
-    client.chats = [chat("Delete this member.", use("member_delete", {"id": primary.id})), live_said("Deleted.")]
+    client.chats = [chat("Delete this member.", use("member_delete", {"id": primary.id})), live_said("Waiting for your yes."), live_said("Deleted.")]
     asked = await typed(rig, "Delete Coordinator", primary.id, language="en")
     assert asked["status"] == "confirm" and "Coordinator" in asked["confirm"]["text"]
     done = await rig.confirm(asked["confirm"]["id"])

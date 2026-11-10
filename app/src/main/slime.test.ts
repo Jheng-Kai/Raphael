@@ -43,15 +43,17 @@ test("every character belongs to one labeled group, in the owner's order without
   expect(catalogIds).toEqual([...ungrouped.querySelectorAll<HTMLElement>("[data-slime-character]")].map(button => button.dataset.slimeCharacter));
   expect(catalogButtons.every(button => groupIds.slice(0, -1).includes(button.closest<HTMLElement>("[data-slime-group]")!.dataset.slimeGroup as typeof groupIds[number]))).toBe(true);
   for (const [index, group] of groups.entries()) {
-    expect(group.getAttribute("role")).toBe("group");
-    expect(group.getAttribute("aria-label")).toBe(group.querySelector("h3")!.textContent);
+    // A tab names it (owner, 2026-11-11), so there is no heading inside.
+    expect(group.getAttribute("role")).toBe("tabpanel");
+    expect(group.getAttribute("aria-labelledby")).toBe(`slime-tab-${groupIds[index]!}`);
+    expect(group.querySelector("h1, h2, h3, h4")).toBeNull();
     for (const [locale, messages] of Object.entries(catalogs)) {
       const label = messages[`slime.group.${groupIds[index]!}`];
       expect(label.trim(), `${locale}:${groupIds[index]}`).not.toBe("");
       expect(label).not.toMatch(/\uFFFD|\?{2,}|^slime\./);
     }
   }
-  expect(pickSlime(groups[0]!.querySelector<HTMLElement>("h3")!)).toBeNull();
+  expect(pickSlime(groups[0]!)).toBeNull();
 });
 
 test.each(colorIds)("plain colour %s has a localized name and round-trips through selection and saved avatars", id => {

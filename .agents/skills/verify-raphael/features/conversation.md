@@ -22,7 +22,7 @@ they became cards of rows. The behaviour is unchanged (a skill's full text behin
 now presses `[data-tpl-skill] [data-card-disclosure]` (2026-11-11) and `member-templates.test.ts` holds the selector.
 
 ```
-npm run look -- admin-approval admin-approval-batch admin-approval-long admin-delete-approval member-draft member-draft-edit admin-cli-draft-edit admin-draft-apply-result chat-secret-saved-not-resumed card-approval card-team card-secret-failed page-gone page-product --theme both --width 1120,720,1920x1080
+npm run look -- admin-approval admin-approval-batch admin-approval-long admin-delete-approval admin-delete-approved admin-delete-many admin-delete-many-approved member-draft member-draft-edit admin-cli-draft-edit admin-draft-apply-result chat-secret-saved-not-resumed card-approval card-team card-secret-failed page-gone page-product --theme both --width 1120,720,1920x1080
 ```
 
 ```
@@ -781,7 +781,11 @@ service (its own mark, or the computer's), the exact action in plain words as th
 rules had it asked, and 拒絕, 一律允許 and the primary 允許一次. It is a connector card with a second row for its answers.
 The question is the one `agent.confirm` has always answered (the shell holds it); the card follows it
 (`agent.permissions`) and the gold card stays away while a card waits on that question, so it is answered once. A
-call that cannot be undone (T3) keeps the gold card that is held to confirm. 一律允許 keeps a narrow rule for that one
+call that cannot be undone (T3) keeps the gold card, whose lines stand open; one press of its yes answers (since 2026-11-11 it is
+no longer held for 0.6 s, in the app and in the overlay: owner, 「長按才會繼續，點一下就可以了，不用這麼複雜」), and the changes of one
+turn that cannot be undone are one card with a line each, one yes and one no (`management_batch`, owner: 「不要分這麼多卡片，讓我去按同意」).
+Scenes: admin-delete-approval (words, no JSON, no ID), admin-delete-approved (one press settles), admin-delete-many (one card,
+three lines), admin-delete-many-approved. 一律允許 keeps a narrow rule for that one
 tool (`safety_rules.scope`, Always) and is offered only where it can take effect: an owner's Ask first always wins
 over an Always, so where a rule asks the card names the rule and offers no 一律允許, and a rule of the owner's that is
 Never refuses the call without a card. A yes is bound to the digest of the action asked about: changed inputs, a replay,

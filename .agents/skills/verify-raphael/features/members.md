@@ -108,14 +108,21 @@ Discord bot not set up is one row with 設定; a connected one is its card with 
 (commands, voice, personality, instructions, group, hiding), each opening its page in the panel with a way back. A bot's
 設定 and the header's share send the owner's words into that member's conversation with an `intent` (chat-ask.ts): the
 member sets it up there, with a card for a token, and share answers with a template card. Settings holds no bot. Scenes: details, raphael-details,
-member-avatar, slime-picker, work-messaging-setup, work-messaging-pairing, messaging-paired-aligned. The sidebar plus is the member creation entry; verify the
+member-avatar, slime-picker, slime-picker-tab, work-messaging-setup, work-messaging-pairing, messaging-paired-aligned. The sidebar plus is the member creation entry; verify the
 complete flow for creation changes.
 
 A member's face is a slime (R-UI-116, owner 2026-11-09: 「生成拿掉 我們改成把史萊姆的種類與造型大幅擴增」): its picker in
 the details panel and on the settings page shows the slimes alone, with no 生成 tab and no picture drawn by an image
-model. A picture drawn earlier still shows where it is the face (`mb-av-pic`, from `avatar_url`). Under the pointer the
+model. Since 2026-11-11 (owner: 「這個不要這樣放，這個要跟…Grokbot 他們的 UI 類似，就是上面會有一些 tab、button 之類的，然後可以選擇」)
+it is one row of tabs, the groups in their order (角色, 動物, 職業, 自然, 季節與食物, 小物, 純色) as the app's small pill tabs in a
+chip row (`slime-tabs.ts`), and under it only the open group's slimes with no heading. It opens on the group that holds
+the face now, with that face marked. The groups stand on one another in one cell, so the picker is one size and a press on
+a tab moves nothing; Left and Right move between tabs, Down goes into the group and Up back to the tab. Scenes:
+`slime-picker` (tabs in one row above the grid, one chosen, inside the window, no heading), `slime-picker-tab` (presses
+another tab and compares the picker's, the place's and every tab's box before and after), `member-avatar`. A picture
+drawn earlier still shows where it is the face (`mb-av-pic`, from `avatar_url`). Under the pointer the
 face itself dims along its outline (a slime's base and hat included, never a circle that leaves corners) with a white
-pencil in its middle (owner, 2026-11-08). Scenes: member-face-hover, slime-picker.
+pencil in its middle (owner, 2026-11-08). Scenes: member-face-hover, slime-picker, slime-picker-tab.
 
 ## Driving it with look
 
@@ -126,7 +133,7 @@ npm run look -- sidebar-folders member-text --theme both --width 1120,720,1920x1
 npm run look -- member-delete member-conversation-sections --theme both --width 1120,720,1920x1080
 npm run look -- member-maker member-maker-chosen member-maker-greeting member-maker-made --theme both --width 1120,720,1920x1080
 npm run look -- slime-states slime-picker slime-sizes slime-gallery slime-motion-idle slime-motion-busy slime-motion-moments slime-motion-change slime-sharp slime-pointer slime-cost --theme both --width 1120,720,1920x1080
-npm run look -- member-face-hover slime-picker --theme both --width 1120,720,1920x1080
+npm run look -- member-face-hover slime-picker slime-picker-tab --theme both --width 1120,720,1920x1080
 ```
 
 These walk the owner's flows to their end: `member-delete`
@@ -194,7 +201,7 @@ Management tools, including the legacy create_member alias, are offered to every
 presets, then the neutral silhouette, and the create dialog defaults.
 
 ```powershell
-npm run look -- admin-approval admin-approval-batch admin-approval-long admin-delete-approval admin-approved admin-denied --theme both --width 1120,720,1920x1080
+npm run look -- admin-approval admin-approval-batch admin-approval-long admin-delete-approval admin-delete-approved admin-delete-many admin-delete-many-approved admin-approved admin-denied --theme both --width 1120,720,1920x1080
 npm run look -- member-draft member-draft-edit member-draft-done --theme both --width 1120,720,1920x1080
 ```
 

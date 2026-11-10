@@ -8,7 +8,8 @@
 // nothing under reduced motion), closes on Escape, on its × and on a click beside it, and gives the
 // focus back to what had it. What a person types goes into the page through `esc` only.
 
-import { pickSlime, slimePickerHTML } from "./slime";
+import { pickSlime } from "./slime";
+import { selectSlimeTab, slimeKeys, slimePickerHTML as slimeTabsPickerHTML } from "./slime-tabs";
 import { onLocaleChange, t } from "./i18n";
 import "./member-profile.css";
 import { isTopLayer, registerDismissal } from "./dismissals";
@@ -363,21 +364,25 @@ export interface AvatarPickerOptions {
  */
 export function openAvatarPicker(anchor: HTMLElement, o: AvatarPickerOptions): void {
   const actions = [...(o.onComputer ? [{ label: t("members.fromPc"), run: o.onComputer }] : []), ...(o.more ?? [])];
-  const slimes = (o.slimes ? slimePickerHTML(o.current, esc) : "") +
+  const slimes = (o.slimes ? slimeTabsPickerHTML(o.current, esc) : "") +
     actions
       .map((action, i) => `<button type="button" role="menuitem" tabindex="-1" class="menu-action" data-pick="${i}"><span class="mt">${esc(action.label)}</span></button>`)
       .join("");
-  const el = openPopover(anchor, slimes, { className: "menu mb-avpop", role: "menu", label: t("settings.avatar"), placement: "center" });
+  let el: HTMLElement;
+  el = openPopover(anchor, slimes, { className: "menu mb-avpop", role: "menu", label: t("settings.avatar"), placement: "center", onKey: (e) => slimeKeys(el, e) });
   el.addEventListener("click", (e) => {
     const target = (e.target as Element).closest<HTMLElement>("button");
     if (!target) return;
+    // A tab shows its group in the place the others stand in; the chip row's arrows scroll the row (chip-scroll.ts).
+    if (target.dataset.slimeTab) { selectSlimeTab(el, target.dataset.slimeTab); return; }
+    if (target.dataset.chipStep) return;
     // Trying slimes is the point of this menu, so a press on one leaves it where it is.
     const slime = pickSlime(target);
     if (slime) { o.onSlime?.(slime); return; }
     closeMenu();
     actions[Number(target.dataset.pick)]?.run();
   });
-  el.querySelector<HTMLElement>("button")?.focus();
+  (el.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]') ?? el.querySelector<HTMLElement>("button"))?.focus();
 }
 
 // ---------- the groups' dropdowns ----------

@@ -240,7 +240,12 @@ export default [
   ], { adminApproval: "create" }),
   scene("admin-approval-batch", "One approval lists eight members and the new group", [wait('.ask-card-host:not([hidden])'), check("admin-approval-batch")], { adminApproval: "batch" }),
   scene("admin-approval-long", "Complete long instructions remain readable in the approval card", [wait('.ask-card-host:not([hidden])'), check("admin-approval-long")], { adminApproval: "long" }),
-  scene("admin-delete-approval", "Deleting a member requires explicit approval", [wait('.ask-card-host[data-tier="T3"]:not([hidden])'), check("admin-approval")], { adminApproval: "delete" }),
+  scene("admin-delete-approval", "Deleting a member requires explicit approval, in words with no JSON", [wait('.ask-card-host[data-tier="T3"]:not([hidden])'), check("admin-approval")], { adminApproval: "delete" }),
+  // One press of 是 answers it (owner, 2026-11-11: 「長按才會繼續，點一下就可以了，不用這麼複雜」): the scene presses once and the card settles.
+  scene("admin-delete-approved", "One press of the yes settles the card of a change that cannot be undone", [wait('.ask-card-host[data-tier="T3"]:not([hidden])'), click('.ask-yes'), wait('.composer:not([hidden])'), check("admin-answered-once")], { adminApproval: "delete" }),
+  // Several changes in one turn are one card with a line each and one yes (owner, 2026-11-11: 「理論上是要一張卡片顯示出來就好」).
+  scene("admin-delete-many", "Three changes that cannot be undone are one card, a line each, in the owner's language", [wait('.ask-card-host[data-tier="T3"]:not([hidden])'), check("admin-delete-many")], { adminApproval: "deleteMany" }),
+  scene("admin-delete-many-approved", "One press of the yes answers all three changes once, and the card settles", [wait('.ask-card-host[data-tier="T3"]:not([hidden])'), click('.ask-yes'), wait('.composer:not([hidden])'), check("admin-answered-once")], { adminApproval: "deleteMany" }),
   scene("admin-approved", "Approve creation and select the live member", [wait('.ask-card-host:not([hidden])'), click('.ask-yes'), member(8), { action: "open-details" }, wait('.mb-det:not([hidden])'), check("admin-created")], { adminApproval: "create" }),
   scene("admin-denied", "Declining creation leaves the team unchanged", [wait('.ask-card-host:not([hidden])'), click('.ask-no'), wait('.composer:not([hidden])'), check("admin-denied")], { adminApproval: "create" }),
   scene("member-draft", "Editable member draft cards in the conversation", [wait('.draft-panel:not([hidden])'), check("member-draft")], { adminApproval: "draft" }),
@@ -297,7 +302,7 @@ export default [
   scene("chat-setup-cards", "In the member's conversation: the Slack bot token card with where to make the bot, a pairing to allow, and the template card (owner, 2026-11-07)", [member(1), wait('[data-template-card-id="tpl-1"]'), scroll('[data-secret-card="card-slack"]'), check("chat-setup-cards")], { chatCards: true }),
   scene("chat-pairing-bottom", "A pairing code that came later is the last thing in the conversation, and the field asks about the setup that waits (owner, 2026-11-07)", [member(1), wait('[data-pairing-card="pair-late"]'), check("chat-pairing-bottom")], { chatCards: true, latePairing: true }),
   scene("chat-pairing-allowed", "Allowing a pairing answers in the card", [member(1), wait('[data-pairing-card="pair-1"]'), scroll('[data-pairing-card="pair-1"]'), click('[data-pairing-card="pair-1"] [data-act="pairing-allow"]'), wait('[data-pairing-card="pair-1"][data-card-state="approved"]')], { chatCards: true }),
-  scene("member-avatar", "A press on the member's face in its panel shows every picture at once (owner, 2026-11-07)", [...details, click('.mb-panel-identity [data-det="avatar"]'), wait("#app-popover")]),
+  scene("member-avatar", "A press on the member's face in its panel opens the picker: a row of tabs and the open group's slimes (owner, 2026-11-11)", [...details, click('.mb-panel-identity [data-det="avatar"]'), wait("#app-popover"), check("slime-picker-shape")]),
   scene("member-edit", "The member settings page: the face, the name and the role in place, the kinds on the left and the first one beside them", [...details, ...gear, wait('.ms-pane [data-k="ms-tools"]')], { memberSettings: true }),
   scene("composer", "Composer attachment menu", composer),
   scene("mode", "Composer permission modes, each saying what it does", [...composer, wait("#app-popover [data-mode]"), check("permission-menu")]),
