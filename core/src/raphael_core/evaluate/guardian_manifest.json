@@ -397,6 +397,10 @@
         "production_state"
       ]
     },
+    "raphael/core/team_work": {
+      "scenario_ids": ["S21.members-groups.overview"],
+      "expected_assertions": ["production_state"]
+    },
     "raphael/core/team_overview": {
       "scenario_ids": [
         "S21.members-groups.overview"

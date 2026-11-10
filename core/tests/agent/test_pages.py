@@ -5,6 +5,7 @@ Only in-process MCP fixtures and a loopback test listener are used. No provider 
 
 import asyncio
 import json
+import re
 from urllib.parse import urlsplit
 
 import pytest
@@ -51,7 +52,7 @@ async def test_harness_stores_page_on_turn_updates_in_place_and_notifies(make_ri
     [turn] = await rig.turns()
     [page] = turn["pages"]
     assert page == {"id": page["id"], "title": "Calculator", "rev": 1, "height": 320,
-                    "source": "html", "server": None, "fallback": "Enter a number"}
+                    "source": "html", "server": None, "fallback": "Enter a number", "kind": "page"}
     assert ("agent.turn", {"turn_id": turn["id"], "member_id": 0}) in notices
     assert any(page["id"] in message.get("content", "") for message in client.chat_calls[-1]["messages"] if message["role"] == "tool")
     client.chats = [chat("Updating.", ("update_page", {"page_id": page["id"], "html": "<button>Done</button>", "title": "Done"})),
@@ -304,3 +305,123 @@ async def test_app_visibility_is_rechecked_on_server_at_execution(make_rig, plug
     assert bought == []
     assert result["error"] == "tool_not_visible"
     assert not plugins.hub._failure
+
+
+# --- report pages (agent/report_page.py) ----------------------------------------------------------
+
+REPORT = {"sections": [
+    {"kind": "findings", "title": "Findings", "callout": "Two things wait for you.",
+     "items": [{"title": "Timeline", "text": "Ready since Monday.", "status": "pending", "label": "Ready"},
+               {"title": "Prices", "status": "blocked"}]},
+    {"kind": "table", "title": "Overview", "columns": ["Member", "Part"],
+     "rows": [{"cells": ["Raphael", "Hands out work"], "group": "Core", "member_id": 0, "status": "running"},
+              {"cells": ["Mira", "Research"], "group": "Projects"}]},
+    {"kind": "team", "title": "Who works with whom",
+     "nodes": [{"id": "o", "owner": True}, {"id": "r", "member_id": 0, "note": "Hands out work"}, {"id": "x", "name": "Clients"}],
+     "edges": [{"from": "o", "to": "r", "label": "Asks"}, {"from": "x", "to": "r"}],
+     "notes": [{"label": "Gap", "text": "Nobody answers client mail."}]},
+    {"kind": "text", "title": "Next", "text": "Nothing else is on record."},
+]}
+
+
+def _tool_reply(client):
+    return next(message["content"] for message in client.chat_calls[-1]["messages"] if message["role"] == "tool")
+
+
+def test_report_is_offered_beside_html_and_its_statuses_match_the_checker():
+    from raphael_core.agent.harness_tools import REPORT as SCHEMA
+    from raphael_core.agent.report_page import KINDS, STATUSES
+    definitions = dict(definitions_for(RAPHAEL))
+    for name, required in (("show_page", ["title"]), ("update_page", ["page_id"])):
+        parameters = definitions[name]["parameters"]
+        assert parameters["required"] == required and {"report", "html"} <= set(parameters["properties"])
+    assert "report" in definitions["show_page"]["description"].split(".")[0]
+    item = SCHEMA["properties"]["sections"]["items"]["properties"]
+    assert item["kind"]["enum"] == list(KINDS)
+    assert item["items"]["items"]["properties"]["status"]["enum"] == list(STATUSES)
+
+
+async def test_a_report_is_kept_as_checked_content_and_opens_without_a_frame(make_rig, client):
+    rig = make_rig()
+    client.chats = [chat("", ("show_page", {"title": "Team report", "report": REPORT})), chat('{"text":"Here it is."}')]
+    await typed(rig)
+    [turn] = await rig.turns()
+    [page] = turn["pages"]
+    assert page["kind"] == "report" and page["title"] == "Team report" and page["fallback"].startswith("Team report\nTwo things")
+    kept = rig.service.pages.store.get(page["id"])
+    report = kept["tool_input"]["report"]
+    assert re.fullmatch(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ", report["as_of"])
+    assert [section["kind"] for section in report["sections"]] == ["findings", "table", "team", "text"]
+    assert report["sections"][0]["items"][1] == {"title": "Prices", "status": "blocked"}
+    assert "<h1>Team report</h1>" in kept["html"] and "Owner → " in kept["html"]
+    assert "link card" in _tool_reply(client)
+    opened = await rig.call("pages.open", {"id": page["id"], "theme": "dark"})
+    assert opened["kind"] == "report" and opened["report"] == report and "url" not in opened
+    assert rig.service.pages.host.server is None
+
+
+async def test_report_update_replaces_its_content_and_html_makes_it_a_page_again(make_rig, client):
+    rig = make_rig()
+    client.chats = [chat("", ("show_page", {"title": "Team report", "report": REPORT})), chat('{"text":"Here it is."}')]
+    await typed(rig)
+    [page] = (await rig.turns())[0]["pages"]
+    smaller = {"sections": [{"kind": "text", "text": "Only this is on record."}]}
+    client.chats = [chat("", ("update_page", {"page_id": page["id"], "report": smaller})), chat('{"text":"Updated."}')]
+    await rig.call("agent.ask", {"session_id": "update", "text": "Shorter", "ui_language": "en", "source": "app"})
+    kept = rig.service.pages.store.get(page["id"])
+    assert kept["rev"] == 2 and kept["title"] == "Team report" and kept["tool_input"]["report"]["sections"] == smaller["sections"]
+    client.chats = [chat("", ("update_page", {"page_id": page["id"], "html": "<p>Plain</p>"})), chat('{"text":"Plain now."}')]
+    await rig.call("agent.ask", {"session_id": "plain", "text": "Plain", "ui_language": "en", "source": "app"})
+    kept = rig.service.pages.store.get(page["id"])
+    assert kept["rev"] == 3 and kept["tool_input"] == {} and kept["html"] == "<p>Plain</p>"
+    assert (await rig.turns())[-1]["pages"][0]["kind"] == "page"
+
+
+def _broken(path, value):
+    report = json.loads(json.dumps(REPORT))
+    target = report
+    for key in path[:-1]:
+        target = target[key]
+    target[path[-1]] = value
+    return report
+
+
+@pytest.mark.parametrize("report,words", [
+    (_broken(["sections", 1, "rows", 0, "member_id"], 42), "rows[0].member_id is not a member"),
+    (_broken(["sections", 0, "kind"], "chart"), "sections[0].kind must be one of findings, table, team, text"),
+    (_broken(["sections", 1, "rows", 0, "cells"], ["only one"]), "one value for each of the 2 columns"),
+    (_broken(["sections", 2, "edges", 0, "to"], "nobody"), "edges[0] must join two different node ids"),
+    (_broken(["sections", 2, "nodes", 1, "owner"], True), "nodes[1] needs exactly one of member_id, owner or name"),
+    (_broken(["sections", 0, "items", 0, "status"], "late"), "status must be one of running"),
+    (_broken(["sections", 0, "items", 0, "label"], "much too long a label"), "label exceeds 12 characters"),
+    (_broken(["sections", 0, "callout"], "password is hunter"), "callout contains a secret"),
+    ({"sections": [{"kind": "text", "text": "x"}] * 9}, "sections has more than 8 entries"),
+    ({"sections": []}, "sections needs at least 1"),
+], ids=["unknown-member", "unknown-kind", "cells", "edge", "two-identities", "status", "label", "secret", "sections", "empty"])
+async def test_a_report_that_breaks_the_format_is_refused_with_what_to_fix(make_rig, client, report, words):
+    rig = make_rig()
+    client.chats = [chat("", ("show_page", {"title": "Team report", "report": report})), chat('{"text":"I could not."}')]
+    await typed(rig)
+    assert (await rig.turns())[0]["pages"] == []
+    assert rig.conn.execute("SELECT COUNT(*) FROM pages").fetchone()[0] == 0
+    reply = _tool_reply(client)
+    assert words in reply and "hunter" not in reply
+
+
+def test_a_report_time_never_reads_as_a_card_number():
+    from raphael_core.agent.report_page import checked_report
+    from raphael_core.memory.scan import _luhn, find_secret
+    # One millisecond time in ten passes the Luhn check; the kept content is scanned for secrets as a whole.
+    at = next(ms for ms in range(1794240000000, 1794240000100) if _luhn(str(ms)))
+    kept = checked_report(REPORT, exists=lambda member_id: member_id == 0, as_of_ms=at)
+    assert find_secret(json.dumps({"report": kept})) is None and kept["as_of"] == "2026-11-09T16:00:00Z"
+
+
+@pytest.mark.parametrize("arguments", [{"title": "Both", "html": "<p>x</p>", "report": REPORT}, {"title": "Neither"}],
+                         ids=["both", "neither"])
+async def test_a_page_is_either_html_or_a_report(make_rig, client, arguments):
+    rig = make_rig()
+    client.chats = [chat("", ("show_page", arguments)), chat('{"text":"I could not."}')]
+    await typed(rig)
+    assert rig.conn.execute("SELECT COUNT(*) FROM pages").fetchone()[0] == 0
+    assert "Give either html or report" in _tool_reply(client)

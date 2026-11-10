@@ -60,15 +60,20 @@ def definition(description, properties=None, required=()):
             "required": list(required), "additionalProperties": False}}
 
 
-# The overview is shared work context, not management authority.
+# Team reads do not grant management authority.
+TEAM_READS = frozenset({"team_overview", "team_work"})
 DEFINITIONS = {
     "team_overview": definition("Read a compact complete roster: IDs, names, roles, models and counts. Supply member_id for that member's full brain, grants, tools, skills, commands and routines. Rooms are limited to the caller's own membership.",
                                 {"member_id": {"type": "integer", "minimum": 0}}),
+    "team_work": definition("Read the team's recorded work for a report or status overview (報告, 統整, 總覽, 進度, 狀況, report, overview, status, progress): each member's role, recent finished and failed work, unfinished work, what waits for the owner, routines, outputs and hand-offs between members. "
+                            "Read-only; every item is a stored record with its local time and nothing is estimated: write only these facts and say what is unknown. Only in the owner's private chat. member_id narrows it to one member; days (1-30, default 14) is the window.",
+                            {"member_id": {"type": "integer", "minimum": 0},
+                             "days": {"type": "integer", "minimum": 1, "maximum": 30}}),
     **MANAGEMENT_DEFINITIONS,
 }
-TIERS = {"team_overview": Tier.T0, **MANAGEMENT_TIERS}
+TIERS = {"team_overview": Tier.T0, "team_work": Tier.T0, **MANAGEMENT_TIERS}
 BATCH_TOOLS = {"member_create", "create_member", "member_update", "group_create", "group_rename"}
-CONFIRM_TOOLS = (set(DEFINITIONS) - {"team_overview"}) | {"create_member", "routine_create", "routine_update", "routine_delete"}
+CONFIRM_TOOLS = (set(DEFINITIONS) - TEAM_READS) | {"create_member", "routine_create", "routine_update", "routine_delete"}
 
 DELEGATED_MANAGEMENT_GUIDANCE = (
     "Member management cannot be delegated through ask_member or handoff. Every member has management tools "

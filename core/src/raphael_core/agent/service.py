@@ -190,7 +190,8 @@ from .quotes import quote_from_wire
 from .ledger import Ledger
 from .reactions import private_reactions
 from .drafts import DraftError, clean_field, is_mail_sender, is_slack_sender
-from .pages import Pages, PageError
+from .pages import Pages, PageError, checked_text, is_report
+from .report_page import checked_report, report_fallback, report_html
 from .public_events import event_record
 from .harness_tools import (
     CALENDAR_LIST, CALENDAR_TOOLS, CONNECTION_TOOLS, CONNECT_APP, CONNECT_MESSAGING, SHARE_TEMPLATE, FIND_APP, DEFINITIONS as HARNESS_TOOLS, EMAIL_DRAFT, SLACK_DRAFT, REQUEST_SECRET, ROUTINE_TOOLS, SET_MY_JOB, HarnessToolError,
@@ -2937,7 +2938,7 @@ class AgentService:
             return PASS
         if tool.key in HARNESS_TOOLS:
             # A card only shows a card: the owner's own sign-in, or the key they type, is the consent.
-            if tool.key in ("ask_owner", "routine_list", CALENDAR_LIST, "team_overview", "show", "computer", "show_page", "update_page", FIND_APP, CONNECT_APP, CONNECT_MESSAGING, SHARE_TEMPLATE, REQUEST_SECRET, EMAIL_DRAFT, SLACK_DRAFT, SET_MY_JOB, "connections_list", "add_mcp_server"):
+            if tool.key in ("ask_owner", "routine_list", CALENDAR_LIST, "team_overview", "team_work", "show", "computer", "show_page", "update_page", FIND_APP, CONNECT_APP, CONNECT_MESSAGING, SHARE_TEMPLATE, REQUEST_SECRET, EMAIL_DRAFT, SLACK_DRAFT, SET_MY_JOB, "connections_list", "add_mcp_server"):
                 return PASS
             return await self._gate.screen(Proposed(tool.key, tool.description, summarize(call.arguments), narrow_scope(tool.key)), language=ask.language, ledger=ledger)
         if tool.key in TEAM_TOOLS:
@@ -3237,10 +3238,15 @@ class AgentService:
     def _show_page(self, ask: _Ask, name: str, args: Mapping[str, Any]) -> dict:
         if not ask.turn_id or (not ask.background_owner and (ask.scope != "private" or ask.nested or ask.quick or ask.source not in _AT_THIS_COMPUTER)):
             raise PageError("private_only", "Pages need the owner's private chat at this computer; answer in text here")
+        report = args.get("report")
+        if (report is None) == (args.get("html") is None):
+            raise PageError("bad_arguments", "Give either html or report")
         if name == "show_page":
+            title = checked_text(args.get("title"), "title", 320, required=True)
+            made = self._report_page(title, report) if report is not None else {
+                "html": args.get("html"), "fallback_text": args.get("fallback_text", ""), "height": args.get("height", 320)}
             page = self.pages.store.write(turn_id=ask.turn_id, member_id=ask.speaker.id,
-                conversation_id=ask.conversation_id, title=args.get("title"), html=args.get("html"),
-                fallback_text=args.get("fallback_text", ""), height=args.get("height", 320))
+                conversation_id=ask.conversation_id, title=title, **made)
         else:
             page_id = args.get("page_id")
             page = self.pages.store.get(page_id) if isinstance(page_id, str) else None
@@ -3248,9 +3254,28 @@ class AgentService:
                 raise PageError("gone", "There is no page with that id in this conversation; use show_page")
             if page["source"] != "html":
                 raise PageError("not_html", "Plugin pages cannot be replaced; use show_page for your own page")
-            page = self.pages.store.update(page_id, args.get("html"), args.get("title"))
+            title = args.get("title")
+            if report is not None:
+                made = self._report_page(page["title"] if title is None else checked_text(title, "title", 320, required=True), report)
+                page = self.pages.store.update(page_id, made["html"], title, tool_input=made["tool_input"])
+            else:
+                page = self.pages.store.update(page_id, args.get("html"), title, tool_input={})
         self.pages.changed(page)
-        return {"page_id": page["id"], "rev": page["rev"], "note": "The owner can see the page in this conversation."}
+        note = ("The owner sees a link card to the report in this conversation; it opens over the conversation."
+                if is_report(page) else "The owner can see the page in this conversation.")
+        return {"page_id": page["id"], "rev": page["rev"], "note": note}
+
+    def _report_page(self, title: str, report: Any) -> dict:
+        """A report's checked content and its plain rendition (agent/report_page.py)."""
+        def name(member_id):
+            try:
+                speaker = self._speaker(member_id)
+            except (sqlite3.Error, LookupError):
+                return None
+            return speaker.name if speaker is not None else None
+        checked = checked_report(report, exists=lambda member_id: name(member_id) is not None, as_of_ms=self._now_ms())
+        return {"html": report_html(title, checked, name), "fallback_text": report_fallback(title, checked),
+                "tool_input": {"report": checked}}
 
     def _page_tool(self, page_id, name, speaker):
         page = self.pages.of({"id": page_id})
@@ -3549,7 +3574,8 @@ class AgentService:
         elif name in (EMAIL_DRAFT, SLACK_DRAFT):
             drafts = self._drafts.store.shown_in([task.turn_id]).get(task.turn_id, [])
             card = {"kind": name, "id": drafts[-1].id}
-        elif name == "show_page":
+        elif name == "show_page" and arguments.get("report") is None:
+            # A report only shows facts: the work goes on without waiting for the owner to touch it.
             card = {"kind": name, "id": result.data["page_id"], "question": result.data.get("note", "")}
         elif name == "add_mcp_server" and ask.owner_card_ids:
             card = {"kind": name, "id": ask.owner_card_ids[0]}
