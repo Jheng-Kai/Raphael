@@ -19,6 +19,12 @@ def core_service():
     return service
 
 
+def members():
+    """What Home reads of the members service to name people: no members, no unread, no profile."""
+    return SimpleNamespace(store=SimpleNamespace(routines=lambda: [], unread_from=lambda: {}),
+                           _ui_language=lambda params: "en", first_bot_profile=lambda: {})
+
+
 class Provider:
     def __init__(self):
         self.calls = []
@@ -26,8 +32,6 @@ class Provider:
         self.fail = False
 
     async def call(self, method, params):
-        if method == "members.list":
-            return {"members": []}
         assert method == "connectors.status" and params == {"refresh": False}
         return {"connectors": [{"id": "composio:googlecalendar", "status": "ACTIVE",
                                 "enabled_tools": ["GOOGLECALENDAR_EVENTS_LIST"]}]}
@@ -72,7 +76,7 @@ async def test_member_waits_for_first_read_while_window_returns_immediately(conn
     provider = Provider()
     provider.fail = fail
     calendar = ConnectedCalendar(provider, provider)
-    home = HomeOverview(conn, provider, SimpleNamespace(store=SimpleNamespace(routines=lambda: [])), calendar_events=calendar)
+    home = HomeOverview(conn, provider, members(), calendar_events=calendar)
     start, end = 1792800000000, 1793404800000
     assert await asyncio.wait_for(calendar(start, end), .1) == []
     reading = asyncio.create_task(home.between(start, end, None))
@@ -105,7 +109,7 @@ async def test_member_first_read_timeout_reports_unreadable_without_holding_the_
     monkeypatch.setattr("raphael_core.home.CALENDAR_READ_TIMEOUT", .03)
     provider = Provider()
     calendar = ConnectedCalendar(provider, provider)
-    home = HomeOverview(conn, provider, SimpleNamespace(store=SimpleNamespace(routines=lambda: [])), calendar_events=calendar)
+    home = HomeOverview(conn, provider, members(), calendar_events=calendar)
     assert await asyncio.wait_for(calendar(0, 1), .01) == []
     assert await asyncio.wait_for(home.between(0, 1, None), .2) == []
     assert await home.google_state() == "unreadable"

@@ -53,15 +53,24 @@ def brain(request, setup, client, tmp_path, monkeypatch):
         operations[:] = calls
         prepare.then = then
         if request.param == "api":
-            client.chats = [chat("Preparing proposals.", *calls), live_said("草稿已準備好，等待確認。"), live_said(then)]
+            replies = [chat("Preparing proposals.", *calls), live_said("草稿已準備好，等待確認。"), live_said(then)]
             if rig.settings.get("action_mode") == "direct":
-                client.chats = [chat("Preparing proposals.", *calls), live_said(then)]
+                replies = [chat("Preparing proposals.", *calls), live_said(then)]
+            # A member made in the turn greets the owner in its own conversation: a call without tools, beside the turn's.
+            def answer(**kwargs):
+                return replies.pop(0) if kwargs["tools"] else live_said("Hello, I am ready to help.")
+            client.chats = [answer] * (len(replies) + len(calls))
 
     def continued():
         """What the brain was shown when the turn went on."""
-        return runs[-1] if request.param == "cli" else str(client.chat_calls[-1]["messages"])
+        return runs[-1] if request.param == "cli" else str(turn_calls()[-1]["messages"])
+
+    def turn_calls():
+        """The turn's own calls to the model, without the new members' greetings."""
+        return [call for call in client.chat_calls if call["tools"]]
     prepare.cli = request.param == "cli"
     prepare.continued = continued
+    prepare.turn_calls = turn_calls
     return prepare
 
 
@@ -87,7 +96,7 @@ async def test_in_automatic_mode_the_members_exist_at_once_and_the_model_sees_th
     made = (await rig.call("members.list", {}))["members"][1:]
     assert [m["name"] for m in made] == ["Research", "Writer"]
     if not brain.cli:
-        results = " ".join(m["content"] for m in client.chat_calls[1]["messages"] if m.get("role") == "tool")
+        results = " ".join(m["content"] for m in brain.turn_calls()[1]["messages"] if m.get("role") == "tool")
         assert all(f'"id": {m["id"]}' in results for m in made)
 
 
