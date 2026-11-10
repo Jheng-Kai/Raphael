@@ -639,6 +639,8 @@ export async function perform(page, step, evidenceDirectory) {
       await page.evaluate(events => { for (const event of events) window.__look.emit(event); }, step.events);
       await new Promise(resolve => setTimeout(resolve, step.wait ?? 300));
       return { action: "emit", events: step.events.map(event => event.type) };
+    // The models of the CLI held back by the mock (`codexLate`) arrive now.
+    case "codex-arrives": await page.evaluate(() => { window.__look.codexArrives(); }); break;
     // From now on the roster answers after `ms` (the mock's rosterDelay): the thread is asked for first and the roster comes late.
     case "late-roster": await page.evaluate(ms => { window.__look.rosterDelay = ms; }, step.ms); break;
     case "send-probe": return await sendProbe(page, step);

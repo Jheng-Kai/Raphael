@@ -1,4 +1,4 @@
-import { scene, click, hover, type, wait, waitGone, page, settings, scroll, key, check, member, rightClick } from "./steps.mjs";
+import { scene, click, hover, type, wait, waitGone, codexArrives, page, settings, scroll, key, check, member, rightClick } from "./steps.mjs";
 
 const connections = settings("connections");
 const add = [...connections, click('[data-k="conn-add"]')];
@@ -34,7 +34,9 @@ export default [
   member(1), click('.composer .cmp-model .mp-trigger'), wait('.cb-menu'), click('.cb-pick'), click('.cb-menu [data-cb-source="cli:codex"]'), click('.cb-menu [data-model="cli:codex:gpt-6.1"]'), wait('.cb-now:not([hidden]) .cb-pick'), check("member-model-own"),
   click('.composer .cmp-model .mp-trigger'), waitGone('.cb-menu'), member(2), check("member-model-others"), member(1), check("member-model-kept"), ...settings("models"), check("member-model-settings")]),
   scene("settings-chatgpt-row", "A model on the ChatGPT plan has its maker's mark and says it is on the plan", [...settings("models"), wait('.modal-scrim [data-row="quick-model"] .mp-trigger'), check("settings-chatgpt-row")], { chatgptSignedIn: true }),
-  scene("composer-model-arrives", "A CLI's models arrive while its menu is open, with no dead end", [click('.composer .cmp-model .mp-trigger'), wait('.cb-menu'), click('.cb-pick'), click('.cb-menu [data-cb-source="cli:codex"]'), check("composer-model-reading"), wait('.cb-menu [data-model="cli:codex:gpt-6.1"]'), check("composer-model-arrived")], { codexLate: 1500 }),
+  // The models are held back by the mock until the `codex-arrives` step, so the menu is seen in both states whatever the speed of the run:
+  // first "being read" (nothing is known of them yet), then the models in its place, and a menu opened again shows them at once (R-START-05).
+  scene("composer-model-arrives", "A CLI's models arrive while its menu is open, with no dead end; once known they are there at once", [click('.composer .cmp-model .mp-trigger'), wait('.cb-menu'), click('.cb-pick'), click('.cb-menu [data-cb-source="cli:codex"]'), check("composer-model-reading"), codexArrives(), wait('.cb-menu [data-model="cli:codex:gpt-6.1"]'), check("composer-model-arrived"), key("Escape"), waitGone('.cb-menu'), click('.composer .cmp-model .mp-trigger'), wait('.cb-menu'), click('.cb-pick'), click('.cb-menu [data-cb-source="cli:codex"]'), check("composer-model-arrived")], { codexLate: true }),
   scene("quick-model-menu", "Quick questions shared model picker in existing model settings", [...settings("models"), click('[data-k="quick-model"]'), wait('.model-chooser'), click('[data-source="openrouter"]'), wait('.model-chooser [data-model="openai/gpt-6-luna"]')]),
   scene("quick-effort-menu", "Quick questions pick their effort inside the shared model list, as the answer model does, starting quick (low)", [
     ...settings("models"), check("quick-model-row"), click('[data-k="quick-model"]'), wait('.model-chooser'), click('.model-chooser [data-source="cli:codex"]'),
