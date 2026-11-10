@@ -443,12 +443,17 @@ messages at 20 px and the composer at 32 at 720, and 29 against 43 at 1120). The
 (`.ra-col` in `.ra-scroll`), the search field over it (`.ra-find`) and the members' conversation laid over it
 (`.peer-thread` in `.peer-scroll`) each take the composer's sides, `--pa-dock-x`. The members' conversation keeps the
 conversation's own sides (`.mb-chat`'s, 16 px under 860 px), and a group's side thread holds its composer at the sides
-of its messages and header (24 px). Inside the column the owner's messages end at its right edge (in a group the owner's
-face does) and a reply begins at its left edge (in a group the member's face does, its words beside it). A reply keeps
+of its messages and header (24 px). Inside the column the owner's messages end at its right edge and a reply begins at its
+left edge. In a group's side thread the faces stand inside that column, the owner's at its right and the member's at its
+left with its words beside it; in the group itself they hang in the gutter outside it (2026-11-11), so its words, its
+cards and the owner's bubble begin and end where the composer does (the judge on 6e2ca315 read the face's 32 px slot as
+the messages starting inside the composer, page-room-draft and owner-card-room-page). The group's scroll holds the pane's
+own side padding for this (`--room-pad`), and its faces are 24 px, 20 px under 860 px, so they fit the gutter. A reply keeps
 its reading measure (`--pa-bw`, 60 ch), so a long reply ends short of the composer's right edge by design: that is
 the reply's measure, not the column ending early. `checkRendered("thread-edges")` runs on every main-entry scene
 beside `content-width` and measures exactly this within 1 px: each column box, the owner's last mark and the leftmost
-reply against their composer. A chat wide enough holds both in the same centred 960 px column; 1280x800 is the
+reply against their composer; in a group also its words and cards (`.ra-body`), and that each hung face stands beside the
+column, inside the scroll (it measured the reply's box, which held the face's slot, and passed while the judge failed it). A chat wide enough holds both in the same centred 960 px column; 1280x800 is the
 designed window, where the `max-height: 860px` block holds the thread's sides too. The selected scenes are under
 [Conversation](conversation.md#one-column-with-the-composer-2026-11-10).
 

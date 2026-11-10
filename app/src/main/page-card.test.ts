@@ -1,4 +1,6 @@
 // @vitest-environment happy-dom
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import * as api from "./api";
 import { t } from "./i18n";
@@ -290,6 +292,26 @@ test("expand takes the same frame to the large dialog and closing brings it back
   expect(document.querySelector(".pg-view")).toBeNull();
   expect(thread.querySelector(".pg-body iframe")).toBe(frame);
   expect(api.pagesOpen).toHaveBeenCalledTimes(1);
+});
+
+test("a page made larger keeps its × outside the page: above its top right corner, on the scrim", async () => {
+  // The × once lay over the page's top right corner (top: 12px; right: 16px), so whatever a page drew there was covered (2026-11-11).
+  const { thread } = mount();
+  await flush();
+  thread.querySelector<HTMLElement>('[data-page-act="expand"]')!.click();
+  const dialog = document.querySelector<HTMLElement>(".pg-view-dialog")!;
+  const close = dialog.querySelector<HTMLElement>('[data-dlg="close"]')!;
+  expect(close.closest(".mb-dlg-head")!.parentElement).toBe(dialog);
+  expect(dialog.querySelector(".pg-view")!.contains(close)).toBe(false);
+  const css = readFileSync(join(__dirname, "page-card.css"), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+  const rule = (selector: string): string => { const at = css.indexOf(`\n${selector} {`); return at < 0 ? "" : css.slice(at, css.indexOf("}", at)); };
+  // Just outside the page's top right corner (the dialog is the page's box), right-aligned with it, the standard small gap above it.
+  expect(rule(".pg-view-dialog .mb-dlg-head")).toContain("position: absolute; bottom: calc(100% + var(--sp-2)); right: 0;");
+  // So the dialog must not clip what stands outside it, nor leave its page's corners to it; the scrim keeps the room above.
+  expect(rule(".mb-dialog.pg-view-dialog")).toContain("overflow: visible");
+  expect(rule(".mb-dialog.pg-view-dialog .mb-dlg-body")).toContain("overflow: hidden; border-radius: var(--r-lg)");
+  expect(rule(".mb-scrim:has(> .pg-view-dialog)")).toContain("padding-top: calc(var(--window-controls-height) + var(--sp-2) + 36px + var(--sp-2))");
+  close.click();
 });
 
 test("a page made larger is as tall in its dialog as it says it is there, under its card's title", async () => {

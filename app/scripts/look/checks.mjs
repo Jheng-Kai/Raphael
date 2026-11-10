@@ -1744,6 +1744,17 @@ export function checkRendered(name, context = {}) {
           }
         }
       }
+      // A card's text buttons stand at the field height, and an answer's button as tall as the field beside it (R-UI-17; the
+      // judge on 6e2ca315: 送出回答 was 22 px beside a 30 px field). The token is read, so a change of it moves the rule.
+      const fieldHeight = parseFloat(getComputedStyle(document.documentElement).getPropertyValue?.('--h-field')) || 30;
+      for (const button of [...card.querySelectorAll('.card-actions .btn:not(.icon),.question-submit .btn:not(.icon)')].filter(visible))
+        require(button.getBoundingClientRect().height >= fieldHeight - 0.5, `a card's text button stands at the field height: ${button.textContent.trim()} is ${button.getBoundingClientRect().height} px against ${fieldHeight}`);
+      for (const row of [...card.querySelectorAll('.question-submit')].filter(visible)) {
+        const field = row.querySelector('input'), button = row.querySelector('button');
+        if (!field || !button) continue;
+        const a = field.getBoundingClientRect(), b = button.getBoundingClientRect();
+        require(Math.abs(a.height - b.height) <= 1 && Math.abs((a.top + a.bottom) / 2 - (b.top + b.bottom) / 2) <= 1, `the answer field and its button share one height and centre: ${a.height} px at ${Math.round(a.top)} against ${b.height} px at ${Math.round(b.top)}`);
+      }
       require(card.scrollWidth <= card.clientWidth + 1, 'card never scrolls sideways');
     }
     return {check:name,cards:cards.length};
@@ -3265,19 +3276,35 @@ export function checkRendered(name, context = {}) {
   if (name === "thread-edges") {
     // R-UI-45: a conversation's column starts and ends where its composer does, at every window size (the judge on
     // 2d5e3cf8: at 720 the messages began at 20 px and the composer at 32). The column is the thread, the search field over
-    // it and the members' conversation laid over it; the owner's last mark (a bubble, or the owner's face in a group) ends
-    // at the composer's right edge and a reply begins at its left. A group's side thread keeps the same rule.
+    // it and the members' conversation laid over it; the owner's last mark (a bubble, or the owner's face in a group's side
+    // thread) ends at the composer's right edge and a reply begins at its left. A group's side thread keeps the same rule.
+    // In the group itself the faces hang in the gutter beside the column (2026-11-11; the judge on 6e2ca315 read the face's
+    // slot as the messages starting 32 px inside the composer), so there the words and cards (`.ra-body`) and the owner's
+    // bubble are measured, and each face must stand beside the column, inside the scroll, never over it or cut by it.
     const shown = element => visible(element) && !element.closest('[hidden]');
     const round = value => Math.round(value * 10) / 10;
     const edges = [];
     const align = (where, composer, column, scope = column) => {
       const dock = composer.getBoundingClientRect(), box = column.getBoundingClientRect();
       require(Math.abs(box.left - dock.left) <= 1 && Math.abs(box.right - dock.right) <= 1, `${where} spans the composer's edges: ${round(box.left)}-${round(box.right)} against ${round(dock.left)}-${round(dock.right)}`);
-      const owner = [...scope.querySelectorAll('.me .bubble, .me > .owner-face')].filter(shown).map(element => element.getBoundingClientRect().right);
+      const hung = column.matches('.ra-col') && !!column.querySelector('.au-room-thread');
+      const owner = [...scope.querySelectorAll(hung ? '.me .bubble' : '.me .bubble, .me > .owner-face')].filter(shown).map(element => element.getBoundingClientRect().right);
       const replies = [...scope.querySelectorAll('.ra')].filter(shown).map(element => element.getBoundingClientRect().left);
       if (owner.length) require(Math.abs(Math.max(...owner) - dock.right) <= 1, `${where}: the owner's messages end at the composer's right edge (${round(Math.max(...owner))} against ${round(dock.right)})`);
       if (replies.length) require(Math.abs(Math.min(...replies) - dock.left) <= 1, `${where}: replies begin at the composer's left edge (${round(Math.min(...replies))} against ${round(dock.left)})`);
-      edges.push({ where, left: round(box.left), right: round(box.right), composer: [round(dock.left), round(dock.right)], owner: owner.length, replies: replies.length });
+      if (hung) {
+        const words = [...scope.querySelectorAll('.ra > .ra-body')].filter(shown).map(element => element.getBoundingClientRect().left), edge = column.closest('.ra-scroll').getBoundingClientRect();
+        if (words.length) require(Math.abs(Math.min(...words) - dock.left) <= 1, `${where}: words and cards begin at the composer's left edge (${round(Math.min(...words))} against ${round(dock.left)})`);
+        for (const face of [...scope.querySelectorAll('.ra > .ra-face')].filter(shown)) {
+          const at = face.getBoundingClientRect();
+          require(at.right <= dock.left + 0.5 && at.left >= edge.left - 0.5, `${where}: a member's face hangs in the left gutter, inside the scroll (${round(at.left)}-${round(at.right)} against ${round(edge.left)}-${round(dock.left)})`);
+        }
+        for (const face of [...scope.querySelectorAll('.me > .owner-face')].filter(shown)) {
+          const at = face.getBoundingClientRect();
+          require(at.left >= dock.right - 0.5 && at.right <= edge.right + 0.5, `${where}: the owner's face hangs in the right gutter, inside the scroll (${round(at.left)}-${round(at.right)} against ${round(dock.right)}-${round(edge.right)})`);
+        }
+      }
+      edges.push({ where, left: round(box.left), right: round(box.right), composer: [round(dock.left), round(dock.right)], owner: owner.length, replies: replies.length, hung });
     };
     for (const stage of document.querySelectorAll('.ra-stage')) {
       const composer = stage.querySelector(':scope > .ra-dock > .composer');
@@ -4818,12 +4845,19 @@ export function checkRendered(name, context = {}) {
     require(Math.abs(frame.height - Math.min(said, innerHeight * 0.75)) <= 1, `as tall as the page says (${Math.round(frame.height)} of ${said} px)`);
     require(frame.height < innerHeight * 0.5, `a short page makes a short dialog (${Math.round(frame.height)} px)`);
     require(["left", "top", "right", "bottom"].every(side => Math.abs(frame[side] - box[side]) <= 1.5), "the page fills the dialog");
-    // No title over the page, whose own heading says it (the judge, R-UI-02): the card's title only names the dialog, and
-    // the × is the soft round edge button at the top right, where a report's stands (.rp-top).
-    const label = document.getElementById(dialog.getAttribute("aria-labelledby")), close = dialog.querySelector('[data-dlg="close"]').getBoundingClientRect();
+    // No title over the page, whose own heading says it (the judge, R-UI-02): the card's title only names the dialog. The ×
+    // is the soft round edge button and never covers the page (owner, 2026-11-11): just outside the page's top right corner,
+    // above it and right-aligned with it, on the scrim, with the standard small gap (--sp-2), and inside the window under the
+    // caption strip at every width, also when the page is as wide as the window.
+    const label = document.getElementById(dialog.getAttribute("aria-labelledby")), button = dialog.querySelector('[data-dlg="close"]'), close = button.getBoundingClientRect();
     require(label?.textContent === document.querySelector(".pg-card .card-title").textContent && label.getBoundingClientRect().width <= 1, "the card's title names the dialog without standing over the page");
     const token = side => parseFloat(getComputedStyle(document.documentElement).getPropertyValue(side));
-    require(Math.abs(box.right - close.right - token("--sp-4")) <= 1.5 && Math.abs(close.top - box.top - token("--sp-3")) <= 1.5 && Math.abs(close.width - 36) <= 0.5, `the × stands at the top right, as a report's (${Math.round(box.right - close.right)}, ${Math.round(close.top - box.top)})`);
+    require(Math.abs(close.width - 36) <= 0.5 && Math.abs(close.height - 36) <= 0.5 && parseFloat(getComputedStyle(button).borderRadius) >= 18, "the × is the soft round edge button, 36 px");
+    require(/^rgb\(/.test(getComputedStyle(button).backgroundColor), `the × keeps its solid surface: ${getComputedStyle(button).backgroundColor}`);
+    require(Math.abs(close.right - box.right) <= 1.5, `the × is right-aligned with the page (${Math.round(box.right - close.right)} px in)`);
+    require(Math.abs(box.top - close.bottom - token("--sp-2")) <= 1.5, `the × stands above the page's top edge with the small gap (${Math.round(box.top - close.bottom)} px, not ${token("--sp-2")})`);
+    require(close.bottom <= frame.top + 0.5 && close.left >= box.left, "the × never covers the page");
+    require(close.top >= token("--window-controls-height") && close.left >= 0 && close.right <= innerWidth, `the × stands inside the window, under its caption strip (${Math.round(close.top)} px from the top, ${Math.round(innerWidth - close.right)} px from the right)`);
     return { check: name, width: box.width, height: frame.height };
   }
   if (name.startsWith("page-report-file")) {

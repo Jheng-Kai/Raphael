@@ -26,7 +26,7 @@
 .conversation-card .card-actions .pri, .conversation-card .sc-form .pri, .conversation-card .question-submit .pri { background: var(--card-primary); color: var(--card-primary-ink); border: 1px solid var(--card-primary-edge); }
 /* A card's text buttons are a little taller than the compact ones, not hugging their words to the limit (owner,
    2026-11-10: 「button 上下寬度太窄…可以再胖一點」): the field height. */
-.conversation-card .card-actions .btn:not(.icon) { min-height: var(--h-field); padding-block: 0; line-height: calc(var(--h-field) - 2px); }
+.conversation-card :is(.card-actions, .question-submit) .btn:not(.icon) { min-height: var(--h-field); padding-block: 0; line-height: calc(var(--h-field) - 2px); }
 /* The quiet way out stands left of the others, as Cancel does beside a dialog's action. */
 .conversation-card .card-actions > .card-quiet { background: transparent; border-color: transparent; color: var(--text-2); }
 .card-disclosure-toggle.btn { display: flex; align-items: center; gap: 6px; padding: 1px 8px; margin-inline: -8px; border: 0; background: transparent; color: var(--text-2); font-size: var(--fs-xs); min-height: var(--h-ctl-sm); }
@@ -50,7 +50,8 @@
 .conversation-card .question-choices { display: flex; flex-direction: column; }
 .question-choices .btn { display: flex; justify-content: start; align-items: start; gap: 10px; width: 100%; border: 0; border-radius: 0; padding: 10px 12px; text-align: start; white-space: normal; background: transparent; }
 [data-choice-letter] { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 22px; flex: 0 0 20px; border-radius: var(--sp-1); background: var(--hover); color: var(--text-3); }
-.question-submit { display: flex; align-items: start; gap: 8px; }
+/* The answer field and its button stand as one row at the same height (the judge: the 送出回答 button was 22 px beside a 30 px field, R-UI-17). */
+.question-submit { display: flex; align-items: stretch; gap: 8px; }
 .question-submit input { flex: 1; width: 0; }
 .conversation-card .sc-form { display: flex; grid-column: auto; flex-wrap: wrap; gap: 8px; }
 .conversation-card .sc-field { min-width: 100px; flex: 1; }

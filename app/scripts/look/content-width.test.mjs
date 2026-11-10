@@ -87,6 +87,32 @@ it("rejects the judge's 720 thread inset on 2d5e3cf8: the column starts and ends
   } finally { vi.unstubAllGlobals(); browser.happyDOM.abort(); }
 });
 
+it("rejects the judge's room inset on 6e2ca315: a group's words and cards begin and end where its composer does, its faces hang in the gutter", () => {
+  const browser = new Window(), doc = browser.document;
+  doc.body.innerHTML = '<section class="mb-chat au-room-pane"><div class="ra-stage"><div class="ra-scroll"><div class="ra-col"><ol class="thread au-room-thread">' +
+    '<li class="tn"><div class="me"><span class="owner-face"></span><div class="chat-message owner-message"><div class="bubble"></div></div></div></li>' +
+    '<li class="tn"><div class="ra"><span class="ra-face"></span><div class="ra-body"></div></div></li></ol></div></div><div class="ra-dock"><form class="composer"></form></div></div></section>';
+  const measure = (element, left, right) => { element.getBoundingClientRect = () => ({ left, right, width: right - left, top: 0, bottom: 40, height: 40 }); };
+  const $ = selector => doc.querySelector(selector);
+  // 720 wide: the composer and the column at 32-688, the scroll the whole pane, so the gutter is the 32 px beside them.
+  measure($('.ra-stage'), 0, 720); measure($('.ra-scroll'), 0, 720); measure($('.ra-dock .composer'), 32, 688); measure($('.ra-col'), 32, 688);
+  measure($('.bubble'), 488, 688); measure($('.owner-face'), 692, 712); measure($('.ra'), 32, 688); measure($('.ra-body'), 64, 400); measure($('.ra-face'), 8, 28);
+  vi.stubGlobal('document', doc);
+  vi.stubGlobal('getComputedStyle', browser.getComputedStyle.bind(browser));
+  try {
+    // What the judge saw: the face's slot made the words begin 32 px inside the composer.
+    expect(() => checkRendered('thread-edges')).toThrow(/words and cards begin at the composer's left edge \(64 against 32\)/);
+    measure($('.ra-body'), 32, 400);
+    measure($('.ra-face'), -4, 16);
+    expect(() => checkRendered('thread-edges')).toThrow(/a member's face hangs in the left gutter, inside the scroll \(-4-16 against 0-32\)/);
+    measure($('.ra-face'), 8, 28);
+    measure($('.owner-face'), 668, 688);
+    expect(() => checkRendered('thread-edges')).toThrow(/the owner's face hangs in the right gutter/);
+    measure($('.owner-face'), 692, 712);
+    expect(checkRendered('thread-edges').edges.map(edge => [edge.where, edge.owner, edge.replies, edge.hung])).toEqual([["the thread", 1, 1, true]]);
+  } finally { vi.unstubAllGlobals(); browser.happyDOM.abort(); }
+});
+
 it("keeps Home's lead across the page and its two panels side by side at one width", () => {
   const browser = new Window();
   const doc = browser.document;

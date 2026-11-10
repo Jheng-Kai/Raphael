@@ -16,8 +16,10 @@ The card shell measures the primary against the card's own right padding, not ag
 parent had shrunk to its button left a failed page's 再試一次 at the card's left and still passed (2026-11-10). Over
 the 152 scenes that show a conversation card (dark, 1120) the new measure found no other card. admin-approval,
 member-draft and secret-saved-not-resumed still asked for the old order (允許 or the primary at the left; the head's ×
-taken for the first action) and failed on every run since; they now ask for this one. template-skill-expanded fails
-on its own (`.template-skill [data-card-disclosure]` is gone), unrelated to the buttons.
+taken for the first action) and failed on every run since; they now ask for this one. template-skill-expanded failed
+on its own, unrelated to the buttons: it pressed `.template-skill [data-card-disclosure]`, a class the skill rows lost when
+they became cards of rows. The behaviour is unchanged (a skill's full text behind its row's disclosure), so the scene
+now presses `[data-tpl-skill] [data-card-disclosure]` (2026-11-11) and `member-templates.test.ts` holds the selector.
 
 ```
 npm run look -- admin-approval admin-approval-batch admin-approval-long admin-delete-approval member-draft member-draft-edit admin-cli-draft-edit admin-draft-apply-result chat-secret-saved-not-resumed card-approval card-team card-secret-failed page-gone page-product --theme both --width 1120,720,1920x1080
@@ -59,14 +61,23 @@ Scenes: missing-search, missing-provider, missing-pdf, generated-image-missing.
 R-UI-45 (the judge on 2d5e3cf8: at 720 the messages began at 20 px and the composer at 32): a conversation's column
 starts and ends where its composer does, as [Content width](README.md#content-width) says. The thread, the search field
 over it and the members' conversation laid over it take the composer's sides (`--pa-dock-x`); a group's side thread
-holds its composer at the sides of its messages and header. A reply keeps its 60 ch measure, and a group message its
-face at the column's left. `thread-edges` checks every main-entry scene. The selected matrix covers the private, quick,
+holds its composer at the sides of its messages and header. A reply keeps its 60 ch measure. In a group's side thread a
+message keeps its face at the column's left; in the group itself the faces hang in the gutter beside the column
+(2026-11-11, `.au-room-pane`'s `--room-pad`), so its words and cards begin where the composer does: the judge on
+6e2ca315 failed page-room-draft and owner-card-room-page for the face's slot, which `thread-edges` did not see because it
+measured the reply's box, and it now also measures the words (`.ra-body`) and the faces. `thread-edges` checks every
+main-entry scene. The selected matrix covers the private, quick,
 group, side-thread and members' conversations, the search field, and the empty and details states:
 
 ```powershell
 npm run look -- chat member-text missing-search long-owner quick-conversation search shortcut-find-member shortcut-find-room conversation-member-up room-text conversation-room-up room-composer-learn room-thread-open peer-chat empty details --theme both --width 1120,720,1920x1080
 npm run look -- chat shortcut-find-member room-thread-open peer-chat --theme both --width 1120,720,1920x1080,1280x800
+npm run look -- page-room-draft owner-card-room-page room-text --theme both --width 1120,720,1920x1080
 ```
+
+The question card in page-room-draft is the other half of the same judge run (R-UI-17): its 送出回答 button was 22 px
+beside a 30 px field. A card's text buttons, the answer's included, stand at the field height (`--h-field`) and the answer
+field and its button share one height; `card-shell` asserts both.
 
 ## Finding by name forgives typos (owner, 2026-11-08, R-FIND-01)
 
@@ -1893,13 +1904,19 @@ was put away: the member's reply ends the thread and nothing opens again (the ju
 A page made larger (page-expand) is the page alone, as a picture made larger (the media lightbox) and a report are:
 it fills the dialog edge to edge, as tall as it says it is there, up to three quarters of the window, at most the
 conversation's 960 px column (R-UI-45). Its card's title, which the page's own heading says again, only names the
-dialog for a screen reader, and the × is the soft round edge button at the top right, where a report's stands
-(`.rp-top`). Wider, the page says again how tall it is; only the dialog follows, and the card keeps its own height
+dialog for a screen reader. The × is the soft round edge button with its solid surface and it never covers the page
+(2026-11-11: a page with something at its top right was covered by it): it stands just outside the page's top right
+corner, above it and right-aligned with it, on the scrim, with the small gap (`--sp-2`), at every width; the scrim keeps
+the room for it under the window's caption strip (`.mb-scrim:has(> .pg-view-dialog)`), so a page as wide as the window
+still has it above the page and inside the window, and the dialog no longer clips (the page's rounded corners are its
+body's). Wider, the page says again how tall it is; only the dialog follows, and the card keeps its own height
 behind it until the page is back. The judge gave 3/5 for a dialog three quarters of the window tall around a short
 page, then for the title twice, in the dialog's head and the page's heading (2026-11-10); the dialog's title was also
 escaped twice (a title's & or < showed as an entity). The look fixture's page now reports its height as the core's
 helper does (`agent/pages.py`); it had added 32 px, a blank band under every fixture page. page-expanded checks the
-width, the height the page says, the page filling the dialog, the hidden name and the ×'s place.
+width, the height the page says, the page filling the dialog, the hidden name and the ×'s place (since 2026-11-11: its
+36 px round solid button above the page's top edge by the small gap, right-aligned with it, never over it, inside the
+window under the caption strip; `answer-forms.test.mjs` and `page-card.test.ts` hold the same).
 
 The follow-up explicitly selects both themes at 1120 and 720 once. The maintained
 matrix below also includes the standard 1920x1080 size for later acceptance:
