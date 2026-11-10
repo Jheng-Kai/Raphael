@@ -79,8 +79,9 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
     // The conversation between members has the same jump-to-latest edge button as a conversation (peer-chat.ts).
     const floatingLatest = element.matches(".page-agent .ra-stage > button.conversation-latest, .peer-chat > button.conversation-latest");
     // The sidebar's icons and the buttons on the window's edges are Grok Bot's soft round buttons (owner, 2026-11-06);
-    // so is an icon that floats on a picture (the lightbox's close, a member cover's change), which needs its own surface.
-    const sidebarAction = element.matches(".side .btn.icon, .page-agent .mb-det-head .btn.icon, .page-agent .mb-head :is(.ra-tools, .mb-head-l) .btn.icon, :is(.mb-dlg-head, .cs-dlg-head, .room-side-thread > header, .desktop-panel[data-expanded] .desktop-dock, .rp-top) .btn.icon, .btn.icon.modal-x, .media-lightbox .lb-card > .btn.icon.lb-close, .ms-cover > .btn.icon.ms-cover-btn");
+    // so is an icon that floats on a picture (the lightbox's close, a member cover's change), which needs its own surface,
+    // and so is the guide's arrow beside its primary pill, on the grey the old 上一步 pill had (owner, 2026-11-11).
+    const sidebarAction = element.matches(".side .btn.icon, .page-agent .mb-det-head .btn.icon, .page-agent .mb-head :is(.ra-tools, .mb-head-l) .btn.icon, :is(.mb-dlg-head, .cs-dlg-head, .room-side-thread > header, .desktop-panel[data-expanded] .desktop-dock, .rp-top) .btn.icon, .btn.icon.modal-x, .ob-foot .btn.icon.ob-back, .media-lightbox .lb-card > .btn.icon.lb-close, .ms-cover > .btn.icon.ms-cover-btn");
     const violation = (rule, reason) => productRules.push({ ...description, rule, reason });
     if (element.matches('button:disabled[title], [aria-disabled="true"][title]')) {
       const title = element.getAttribute('title')?.trim();
@@ -214,8 +215,9 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
       const routineNavigation = element.matches('.chat-message .routine-origin > button.routine-run-link[data-act="open-routine"]');
       if (!navigation && !routineNavigation && !element.classList.contains('icon') && element.textContent.trim() && !hasBorder) violation('R-UI-18', 'Text action button has no frame');
     }
-    // The guide's two pills are stacked, the black primary over the grey way back (Grok Bot's first run, owner 2026-11-07).
-    if (element.matches('.action-row:not(.ob-actions)')) {
+    // The guide's row follows the rule like any other: since 2026-11-11 its round arrow (or ×) is at the left of the black
+    // primary, no longer stacked above it (owner 2026-11-07), so nothing in the guide is exempt.
+    if (element.matches('.action-row')) {
       const buttons = [...element.querySelectorAll('button')].filter(visible);
       const primary = buttons.find(button => button.matches('.pri'));
       if (primary && buttons.some(button => button !== primary && button.getBoundingClientRect().right > primary.getBoundingClientRect().left + 1)) violation('R-UI-27', 'Primary action is not rightmost');

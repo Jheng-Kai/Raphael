@@ -23,7 +23,7 @@ import { openConnectionSetup } from "../connection-setup";
 import { modelPickerHTML, mountModelPicker, type ModelPickerLook } from "../model-picker";
 import { createServices, servicesHTML as abilityRowsHTML } from "../services";
 import type { AppContext, BrainSettings, MainEvent, ModelCatalog, StoreService } from "../types";
-import { actionRow, btn, closeMenu, esc, openMenuOnArrow, toaster } from "../ui";
+import { actionRow, closeMenu, esc, iconButton, openMenuOnArrow, toaster } from "../ui";
 import { SERVICES_WAIT_MS, mergeServices, within } from "./helpers";
 import { type FlowState, type Mode, initialState, isLast, reduce } from "./flow";
 import {
@@ -164,15 +164,18 @@ export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: A
   const accountsError = (): string => accounts.view().chatgptError;
 
   /**
-   * One wide black pill, with a grey one for the way back under it (as Grok Bot's first run); a first run has nothing to
-   * go back to from its welcome, and a rerun's welcome leaves the guide.
+   * One row: a round arrow for the way back, then the wide black pill that fills the rest (owner, 2026-11-11: 「上下堆疊會造成
+   * 我們畫面有些空間比較緊…感覺左右放，或者左右放那個箭頭之類的」), so the step above keeps the room the second pill took. The
+   * left slot is the way out of the screen: the arrow on a step, and on a rerun's welcome a × that leaves the guide (a close
+   * is the × alone, never a word button). A first run has nothing to go back to from its welcome, which is the pill alone.
    */
   function footHTML(): string {
     const label = flow.step === "welcome" ? "onboarding.start" : isLast(flow) ? (mode === "rerun" ? "onboarding.finishRerun" : "onboarding.finish") : "onboarding.next";
-    const way = flow.step === "welcome" ? (mode === "rerun" ? "common.cancel" : null) : "onboarding.back";
+    const secondary = flow.step !== "welcome" ? iconButton("left", t("onboarding.back"), ' data-ob="back"', "ob-back")
+      : mode === "rerun" ? iconButton("x", t("common.cancel"), ' data-ob="back"', "ob-back") : undefined;
     return actionRow({
       cls: "ob-actions",
-      secondary: way ? btn(esc(t(way)), "ob-back", ' data-ob="back"') : undefined,
+      secondary,
       primary: { label: esc(t(label)), attrs: ` data-ob="next"${finishing ? " disabled" : ""}` },
     });
   }

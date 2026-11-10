@@ -18,8 +18,19 @@ state saved. There are no practice lessons, no microphone step and no completion
 the window, with no progress bar and no side, as Grok Bot's first run (owner, 2026-11-07): every
 step is one calm centred column, a title (three of the team's own characters float by it, aria-hidden,
 others on every step and in other places — Gobta, Shion, Ranga; Shuna, Diablo, Benimaru; Milim, Souei,
-Rigurd — owner 2026-11-08; gone below 640px wide), the choice, one wide black pill (下一步 / 開始使用) and under it a grey pill 上一步 (kept by the owner on 2026-11-08 as the one exception to the shared button height; a status in a tile wraps inside it in every language)
-(no back arrow at the top; a rerun's welcome has a grey 取消 that leaves the guide).
+Rigurd — owner 2026-11-08; gone below 640px wide), the choice, and under it one row: the wide black pill
+(下一步 / 開始使用), kept by the owner on 2026-11-08 as the one exception to the shared button height, with at
+its left a round button that holds only a left arrow (a circle as tall as the pill, on the grey the old 上一步
+pill had, one step lighter under the pointer, the app's focus ring from the keyboard, before the pill in the
+tab order; its name and tooltip are `onboarding.back`, 上一步). On 2026-11-11 the owner moved the way back from
+a grey pill stacked under the primary to this arrow beside it, because the stack took room the AI tools and
+services steps need: 「導覽這個 button…上下堆疊會造成我們畫面有些空間比較緊，像是選擇 AI 工具，還有連接你的服務這邊會比較需要空間。
+感覺左右放，或者左右放那個箭頭之類的，或許會比較好」. The row is as wide as the welcome's single pill (360 px, less in a
+narrow card), never stacks, and the height the second pill used belongs to the step's content; a status in a tile
+wraps inside it in every language. There is no back arrow at the top; the first run's welcome has the pill alone.
+The left slot is the way out of the screen: on a rerun's welcome (the guide opened again from Settings, scene
+`onboarding-rerun`) it is the same round button holding a × named 取消, which leaves the guide (a close is the × alone,
+never a word button; owner, 2026-11-11), so nothing in the guide stacks.
 
 0. **Welcome** (`onboarding`, check `onboarding-welcome`): Raphael's emblem (the voice screen's
    canvas renderer, appearing as on the desktop), his name as one wordmark for every language,
@@ -78,7 +89,7 @@ state.
 ## Driving it with look
 
 ```powershell
-npm run look -- onboarding onboarding-tools onboarding-tools-key onboarding-services onboarding-service-waiting onboarding-services-composio onboarding-composio-key onboarding-composio-saved onboarding-services-n8n onboarding-abilities onboarding-abilities-choice after-onboarding --theme both --width 1120,720,1920x1080
+npm run look -- onboarding onboarding-tools onboarding-tools-key onboarding-back-hover onboarding-back-focus onboarding-rerun onboarding-services onboarding-service-waiting onboarding-services-composio onboarding-composio-key onboarding-composio-saved onboarding-services-n8n onboarding-abilities onboarding-abilities-choice after-onboarding --theme both --width 1120,720,1920x1080
 ```
 
 Keep the welcome and each step's PNGs, the contact sheet and the report. Each scene presses the
@@ -89,9 +100,13 @@ key (refused beside its field), `onboarding-composio-saved` a project key (the c
 Composio's apps join); `onboarding-services-n8n` searches n8n and opens its address field (check
 `onboarding-composio` for the card). Check that each tile is one row with its mark in its square,
 its name, one line and its control on the right inside it, that the tiles stand in three columns
-(two at 720), that the controls are real buttons and switches, that the two pills
-under the choice are centred and the grid fades out over them, that nothing is cut off at 720 wide
-and that the dark theme has no light edges. Native proof needs an authorized fresh `RAPHAEL_DATA_DIR`: finish the
+(two at 720), that the controls are real buttons and switches, that the foot is one row (the round back
+arrow, then the pill, on one line, centred and as wide as the welcome's pill, never stacked at 720) and the
+grid fades out over it, that the steps' content ends above the foot, that nothing is cut off at 720 wide
+and that the dark theme has no light edges. `onboarding-back-hover` hovers the arrow (a lighter surface than at rest)
+and `onboarding-back-focus` presses Shift+Tab from the pill (the arrow takes the app's focus ring, so it
+is before the pill in the tab order); `onboarding-rerun` opens the guide from Settings 導覽 and checks that the
+welcome's row is the × and the pill on one line. Native proof needs an authorized fresh `RAPHAEL_DATA_DIR`: finish the
 steps, relaunch and verify onboarding stays dismissed and the chosen tools, services and switches
 persist. Keep sanitized readback and stop the owned dev process.
 
@@ -111,11 +126,17 @@ rendered checks enforce this on `.ob-tile`: one row of at most 64 px (a wrapping
 the 36 px mark square, the line on one line and the control on the right of the name, centred (the
 older `.ob-item` hook of audit.mjs matches no element of the guide any more).
 R-UI-37: a headline of at least 28px per screen (`.ob-col > h2`; the dialogs of the abilities keep
-their own size) and a primary action that fills the action row (`.ob-actions`, a 360px pill).
+their own size) and a primary action that fills what the back arrow leaves of the action row (`.ob-actions`, 360px
+wide with the arrow, a circle as tall as the pill, at its left; R-UI-16 lets this one icon button keep the
+grey surface of the pill it replaced).
 `onboarding`, `onboarding-tools`, `onboarding-services` and `onboarding-abilities` carry the
 rendered check of the same name (`onboarding-welcome` for the welcome): the expected tiles in three
 columns, the control inside its tile, whole names, a headline, the floating slimes clear of the
-title, the pills centred and no purpose line.
+title, the arrow and the pill on one centred row as wide as the welcome's pill (the foot one control
+tall plus its padding, the content ending above it) and no purpose line. Vitest
+(`onboarding/mount.test.ts`): a step with a way back draws the arrow, which has no text and the name
+`onboarding.back` and goes back, then the pill and nothing else; the first run's welcome draws the pill alone and
+a rerun's the × (named 取消, leaves the guide) then the pill.
 
 UI hand-off also runs these named scenes at 1920x1080 in both themes, as required by the shared
 guardian hand-off gate.

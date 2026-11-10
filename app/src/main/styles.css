@@ -605,7 +605,7 @@ body:has(.page-agent:not([hidden])[data-det="open"]:not(.is-room)) .toast { max-
 /* ---------- the guide (first run, and from the settings) ---------- */
 /* One card of a designed size in the middle of the window. Each step is one calm centred column, as Grok Bot's first run
    (owner, 2026-11-07): a title with two small slimes floating by it, the choice (tiles in a grid of three), one wide black
-   pill and, under it, a grey one for the way back. No progress bar, no side. A smaller window shrinks the card. */
+   pill with a round arrow beside it for the way back. No progress bar, no side. A smaller window shrinks the card. */
 .ob { display: grid; grid-template-columns: minmax(0, 1fr); place-items: center; height: 100%; min-height: 0; padding: calc(var(--window-controls-height) + var(--sp-4)) var(--sp-5) var(--sp-5); background: var(--side); }
 /* The guide's window is the card itself (guide-window.ts): no gutter, frame or way to make it larger. */
 :root[data-window-fixed] .ob { padding: var(--window-controls-height) 0 0; background: var(--content); }
@@ -655,16 +655,22 @@ body:has(.page-agent:not([hidden])[data-det="open"]:not(.is-room)) .toast { max-
 .lang-search .i { width: 16px; height: 16px; }
 :where(:root[data-keys]) .lang-search:focus-within { box-shadow: inset 0 0 0 2px var(--focus); }
 .lang-none { margin: 0; padding: var(--sp-2) var(--sp-3); font-size: var(--fs-sm); color: var(--text-3); }
-/* Under the choice: one wide black pill and a grey one for the way back (Grok Bot's Next and Back). The grid fades out
-   over the foot, as Grok Bot's tiles do. */
-.ob-foot { position: relative; display: grid; grid-template-columns: minmax(0, 1fr); justify-items: center; padding: var(--sp-3) var(--sp-6) var(--sp-5); }
+/* Under the choice: one row, the round arrow for the way back at its left and the wide black pill filling the rest (owner,
+   2026-11-11: 「上下堆疊會造成我們畫面有些空間比較緊…感覺左右放，或者左右放那個箭頭之類的，或許會比較好」). The row is as wide
+   as the welcome's single pill, so the pill's place does not move from step to step, and the step above keeps the room the
+   second pill took. The grid fades out over the foot, as Grok Bot's tiles do. */
+.ob-foot { --ob-pill: 44px; position: relative; display: grid; grid-template-columns: minmax(0, 1fr); justify-items: center; padding: var(--sp-3) var(--sp-6) var(--sp-5); }
 .ob-foot::before { content: ""; position: absolute; inset: auto 0 100% 0; height: 28px; background: linear-gradient(to bottom, color-mix(in srgb, var(--content) 0%, transparent), var(--content)); pointer-events: none; }
 /* The guide keeps its own wide pills, the one exception to the shared button height (owner, 2026-11-08: 「這邊可以用原本的」). */
-.ob-foot .ob-actions { display: flex; flex-direction: column-reverse; flex-wrap: nowrap; align-items: stretch; justify-content: flex-start; gap: var(--sp-2); width: min(100%, 360px); }
-.ob-foot .btn { min-height: 44px; border-radius: 999px; font-size: var(--fs-md); }
-.ob-foot .btn.pri { width: 100%; }
+.ob-foot .ob-actions { display: flex; flex-direction: row; flex-wrap: nowrap; align-items: stretch; justify-content: flex-start; gap: var(--sp-2); width: min(100%, 360px); }
+.ob-foot .btn { min-height: var(--ob-pill); border-radius: 999px; font-size: var(--fs-md); }
+.ob-foot .btn.pri { flex: 1 1 0; min-width: 0; }
+/* The way out of a screen (the arrow on a step, the × on a rerun's welcome) is a circle as tall as the pill, on the grey the
+   old 上一步 pill had, with only a drawing in it. */
 .ob-foot .ob-back { border-color: var(--hover); background: var(--hover); }
-.ob-foot .ob-back:hover:not(:disabled) { background: var(--pressed); }
+.ob-foot .ob-back:is(:hover, :active):not(:disabled) { background: var(--pressed); }
+.ob-foot .btn.icon.ob-back { flex: none; width: var(--ob-pill); height: var(--ob-pill); border-color: transparent; color: var(--text); }
+.ob-foot .btn.icon.ob-back svg.i { width: 20px; height: 20px; }
 /* The team's characters float by a step's title, each where screens.ts puts it: they take no room, and a narrow card
    drops them. */
 .ob-floaters { position: relative; height: 0; pointer-events: none; }

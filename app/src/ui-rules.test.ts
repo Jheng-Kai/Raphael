@@ -183,6 +183,8 @@ describe("buttons", () => {
       'desktop-viewer.css: .window-chrome > .btn.icon:is([data-desktop="collapse"], [data-desktop="back"]):active:not(:disabled)',
       "styles.css: .window-button:hover", "styles.css: .window-button:active",
       "styles.css: .window-close:hover", "styles.css: .window-close:active",
+      // The guide's round arrow keeps the grey surface its 上一步 pill had, lighter under the pointer (owner, 2026-11-11).
+      "styles.css: .ob-foot .ob-back:is(:hover, :active):not(:disabled)",
       // R-UI-50: the contextual latest action floats over messages and needs an opaque surface.
       "agent.css: .page-agent .btn.conversation-latest:hover:not(:disabled)",
       "conversations.css: .peer-chat > .btn.peer-latest:hover:not(:disabled)",
