@@ -43,16 +43,26 @@ def labelled_lines(speaker: str, text: str) -> str:
     return "\n".join(f"{label}: {line}" for line in text.splitlines())
 
 
+def _said_by_owner(turn: Turn) -> bool:
+    return (is_readable(turn) and turn.route not in ("exchange", "routine")
+            and turn.source not in ("member", "routine"))
+
+
 def owner_lines(turns: Sequence[Turn]) -> tuple[str, ...]:
     """Verbatim owner lines from the turns the model reads (answered, or a request that did not
     finish); assistant requests and routines are excluded."""
     return tuple(dict.fromkeys(
         line
-        for turn in turns
-        if is_readable(turn) and turn.route not in ("exchange", "routine")
-        and turn.source not in ("member", "routine")
+        for turn in turns if _said_by_owner(turn)
         for line in turn.question.splitlines() if line.strip()
     ))
+
+
+def owner_words(turns: Sequence[Turn]) -> list[tuple[int, str]]:
+    """The owner's own questions of the turns the model reads, oldest first, each with its turn's id and its
+    speaker label: what a fresh native session keeps of them when the turns themselves do not fit."""
+    return [(turn.id, labelled_lines("owner", turn.question)) for turn in turns
+            if turn.id is not None and _said_by_owner(turn) and turn.question.strip()]
 
 
 def relayed_answer(speaker: str, text: str, owner_sources: Sequence[str] = ()) -> str:

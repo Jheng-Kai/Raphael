@@ -5,7 +5,9 @@ from types import SimpleNamespace
 
 import pytest
 
-from raphael_core.agent.cli.context import FRESH_CONTEXT_CHARS, context_tokens, fresh_user, line_hashes, resumed_user, section_delta
+from raphael_core.agent.cli.context import (CONTEXT_HEADROOM, DEFAULT_CONTEXT_TOKENS, FRESH_CONTEXT_SHARE, OWNER_WORDS_BYTES, context_tokens,
+                                            fresh_budget, fresh_user, line_hashes, resumed_user, section_delta)
+from raphael_core.memory.compression import FRESH_CONTEXT_CHARS
 from raphael_core.agent.cli.discovery import CliBrains
 from raphael_core.agent.cli.drivers import Driver, Event
 from raphael_core.agent.cli.loop import CliLoop, RECOVER, Sessions
@@ -55,8 +57,59 @@ def test_fresh_context_keeps_question_and_file_names_before_a_12k_tail():
 
 
 def test_fresh_context_never_silently_truncates_a_large_owner_request():
+    # Only a request that alone outgrows the model's window is an overflow, not one over the old 16,000 characters.
+    window = 200_000
+    prompt = fresh_user("x" * (FRESH_CONTEXT_CHARS + 1), (), (), RECOVER, "records", window=window)
+    assert "x" * (FRESH_CONTEXT_CHARS + 1) in prompt
     with pytest.raises(ValueError, match="context_overflow"):
-        fresh_user("x" * FRESH_CONTEXT_CHARS, (), (), RECOVER, "records")
+        fresh_user("x" * int(window * CONTEXT_HEADROOM), (), (), RECOVER, "records", window=window)
+    with pytest.raises(ValueError, match="context_overflow"):  # the system prompt beside it counts
+        fresh_user("x" * 150_000, (), (), RECOVER, "records", window=window, reserve=20_000)
+
+
+def test_the_fresh_budget_grows_with_the_models_window_and_leaves_room_for_the_turn():
+    small, large = fresh_budget(50_000), fresh_budget(1_000_000)
+    assert small[0] < large[0] and small[1] < large[1]
+    assert fresh_budget(None) == fresh_budget(DEFAULT_CONTEXT_TOKENS)  # a conservative default for an unknown window
+    assert small == (int(50_000 * CONTEXT_HEADROOM), int(50_000 * FRESH_CONTEXT_SHARE))
+    assert fresh_budget(50_000, reserve=10_000)[1] == small[1] - 10_000
+    assert fresh_budget(1_000_000, byte_limit=5_000) == (5_000, 5_000)  # a provider's own limit still wins
+    turns = [(number, f"turn {number} " + "w" * 9_000) for number in range(1, 41)]
+    kept = [len(fresh_user("Q", (), (), RECOVER, "r", turns=turns, window=window).encode()) for window in (50_000, 200_000)]
+    assert kept[0] < kept[1] <= fresh_budget(200_000)[1] and kept[0] <= small[1]
+
+
+def test_a_fresh_context_keeps_memory_and_summary_before_recent_turns_and_trims_the_oldest_turns():
+    turns = [(number, f"[turn {number}] " + "t" * 3_000) for number in range(1, 31)]
+    prompt = fresh_user("Current request", (), (), RECOVER, "records", turns=turns, summary="SUMMARY " * 500,
+                        sections={"Team": "TEAM ROSTER", "Memory": "MEMORY SNAPSHOT"}, window=20_000)
+    assert prompt.startswith("<question>\nCurrent request\n</question>")
+    assert "SUMMARY " * 500 in prompt and "TEAM ROSTER" in prompt and "MEMORY SNAPSHOT" in prompt
+    shown = [number for number in range(1, 31) if f"[turn {number}]" in prompt]
+    assert 0 < len(shown) < 30 and shown == list(range(31 - len(shown), 31))  # the newest, no gap
+    assert len(prompt.encode()) <= fresh_budget(20_000)[1]
+    # Order: the request, memory, summary, then the turns oldest first.
+    assert prompt.index("MEMORY SNAPSHOT") < prompt.index("SUMMARY") < prompt.index(f"[turn {shown[0]}]")
+
+
+def test_the_owners_own_words_outlive_the_turns_that_do_not_fit():
+    turns = [(number, f"owner: said <{number:02}>\nRaphael: " + "r" * 2_000) for number in range(1, 21)]
+    words = [(number, f"owner: said <{number:02}>") for number in range(1, 21)]
+    prompt = fresh_user("Q", (), (), RECOVER, "r", turns=turns, owner_words=words, window=12_000)
+    assert "The owner's own recent words" in prompt
+    whole = [number for number in range(1, 21) if f"<{number:02}>\nRaphael:" in prompt]
+    assert 0 < len(whole) < 20
+    # Each owner line is there once: in a turn that fit whole, or alone among the owner's own words.
+    assert all(prompt.count(f"<{number:02}>") == 1 for number in range(1, 21))
+    capped = fresh_user("Q", (), (), RECOVER, "r", owner_words=[(n, "o" * 1_000) for n in range(1, 200)], window=1_000_000)
+    assert 0 < capped.count("o" * 1_000) <= OWNER_WORDS_BYTES // 1_000
+
+
+def test_the_summary_is_not_dropped_behind_recent_turns_and_each_part_is_whole():
+    turns = [(number, "t" * 9_000) for number in range(1, 9)]
+    prompt = fresh_user("Q", (), (), RECOVER, "r", turns=turns, summary="S" * 3_000, window=20_000)
+    assert "S" * 3_000 in prompt and prompt.count("t" * 9_000) < 8
+    assert all(part == "t" * 9_000 for part in prompt.split("\n\n") if part.startswith("t"))
 
 
 def test_compacted_context_respects_utf8_budget_with_complete_request():
@@ -203,6 +256,25 @@ async def test_an_over_budget_continuation_starts_afresh_with_the_owners_answer_
     assert call["session"] is None and len(call["user"]) <= FRESH_CONTEXT_CHARS
     assert '"status": "answered"' in call["user"]
     assert call["user"].index("Wednesday after lunch") < call["user"].index("find_app")
+
+
+async def test_a_fresh_session_keeps_a_long_request_the_summary_and_memory_inside_the_models_window(monkeypatch, tmp_path):
+    # Claude Code's models hold 200K tokens: a 30K request is no overflow, and the summary and memory are not left behind
+    # the recent turns (they were, and the request was refused above 16,000 characters).
+    async def play(loop, attempt):
+        yield Event("final", "Done.")
+
+    request = "Q" + "y" * 30_000
+    turns = [(number, f"[turn {number}] " + "t" * 6_000) for number in range(1, 41)]
+    rig = recovery_rig(monkeypatch, tmp_path, play, brain="claude", owner_text=request, context_turns=turns,
+                       context_summary="SUMMARY of the earlier talk", context_sections={"Memory": "MEMORY SNAPSHOT"})
+    rig.loop.user = rig.loop.user + "z" * 200_000  # more than the window takes: the session starts afresh
+    result = await rig.loop.run()
+    [call] = rig.calls
+    assert result.final == "Done." and not rig.loop.failure and call["session"] is None
+    assert request in call["user"] and "SUMMARY of the earlier talk" in call["user"] and "MEMORY SNAPSHOT" in call["user"]
+    shown = [number for number in range(1, 41) if f"[turn {number}]" in call["user"]]
+    assert 0 < len(shown) < 40 and shown[-1] == 40
 
 
 async def test_a_new_claude_code_loop_sends_a_long_request_whole(monkeypatch, tmp_path):

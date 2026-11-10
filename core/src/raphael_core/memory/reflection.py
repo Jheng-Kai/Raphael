@@ -245,10 +245,10 @@ def reflection_message(today: date, own: MemoryFile, shared: MemoryFile, turns: 
     return "\n\n".join(parts)
 
 
-# What one pass may read (owner, 2026-11-09: 「長度永遠不是錯誤」). A CLI member's brain starts each pass from a fresh
-# context of 16,000 characters at most (memory.compression.FRESH_CONTEXT_CHARS); a pass that was shown more failed,
-# kept its watermark and stopped the memory learning (12 times on 2026-11-09). It now reads the newest whole turns
-# that fit beside the files, each held to TURN_CHARS, and the watermark moves past the older ones it left.
+# What one pass may read (owner, 2026-11-09: 「長度永遠不是錯誤」). A CLI member's brain once refused a pass over 16,000
+# characters (a fresh context's old fixed bound), kept its watermark and stopped the memory learning (12 times on
+# 2026-11-09). A fresh context now follows the model's window (agent/cli/context.py); a pass still reads only the newest
+# whole turns that fit beside the files, each held to TURN_CHARS, and the watermark moves past the older ones it left.
 REFLECTION_CHARS = 12000
 TURN_CHARS = 2000
 

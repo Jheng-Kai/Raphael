@@ -168,7 +168,7 @@ from ..messaging.words import compose
 from ..worker.loop import Stop, ToolOutcome, WAITING
 from ..worker.guards import MAX_ARGUMENT_CHARS, canonical
 from .answers import Reply, Voice, build_user_message, owner_script, turn_text
-from .attribution import labelled_lines, owner_lines, relayed_answer
+from .attribution import labelled_lines, owner_lines, owner_words, relayed_answer
 from .narration import NarratedLoop
 from ..members.activity import Activity, member_turn, step as activity_step, tool_step
 from .actions import action_call
@@ -2442,6 +2442,7 @@ class AgentService:
                     context_summary_through=context.summary_through_turn_id,
                     context_turns=[(turn.id, turn_text(turn, detail=turn.route == "discuss"))
                                    for turn in context.turns if turn.id is not None],
+                    context_owner_words=owner_words(context.turns),
                     skills=getattr(self._team, "native_skills", lambda member: [])(ask.speaker.id),
                     attachments=ask.attachments, resume_session=not ask.nested,
                     rate_limit_waits=() if ask.quick else None,

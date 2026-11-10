@@ -26,7 +26,7 @@ from ..policy import CONFIRM_TIMEOUT_S
 from ..persona import phrase
 from .discovery import NAMES, brain_ref, brain_effort
 from .drivers import Driver
-from .context import (CONTEXT_HEADROOM, KNOWN_CONTEXT_TOKENS, context_tokens, fresh_user, line_hashes, resumed_user,
+from .context import (KNOWN_CONTEXT_TOKENS, context_tokens, fresh_user, line_hashes, resumed_user,
                       should_compact, window_tokens)
 from .process import secure_directory
 from .native_diagnostics import capture as native_capture, directory as native_directory
@@ -168,7 +168,7 @@ class CliLoop:
                  conversation_id=None, quota=None, attachments=(), wait_timeout_s=None, resume_session=True,
                  rate_limit_waits=None, structured=None, alive=lambda waiting=0.0: None, skills=(), no_tools=False, reply=None,
                  owner_text=None, resume_user=None, context_sections=None, context_turns=(), context_summary="",
-                 context_summary_through=0, turn_id=None, tool_conversation=(), steps=(),
+                 context_summary_through=0, context_owner_words=(), turn_id=None, tool_conversation=(), steps=(),
                  acted=None, stall_s=None, tool_s=None):
         self.brains, self.sessions, self.member_id, self.model = brains, sessions, member_id, model
         # Told whenever the CLI does anything (a word, a tool): whoever watches for a stalled turn hears it. Told too before
@@ -221,6 +221,7 @@ class CliLoop:
         self.context_sections = context_sections or {}
         self.context_turns, self.context_summary, self.turn_id = context_turns, context_summary, turn_id
         self.context_summary_through = context_summary_through
+        self.context_owner_words = context_owner_words
         self._context_state = {}
         self._context_window = None
         # Claude Code's per-model running totals after each session's latest run, and whether a run reported any
@@ -645,8 +646,8 @@ class CliLoop:
             [message["content"] for message in self.tool_messages if message["role"] == "user"],
             RECOVER, self._recovery_block(8000), turns=self.context_turns,
             summary=self.context_summary, sections=self.context_sections,
-            current_user=self.resume_user,
-            byte_limit=max(0, int(window * CONTEXT_HEADROOM) - len(self.system.encode("utf-8"))))
+            owner_words=self.context_owner_words, current_user=self.resume_user,
+            window=window, reserve=len(self.system.encode("utf-8")))
         self._fresh_sections = {name: text for name, text in self.context_sections.items() if text and text in user}
         return user
 
