@@ -431,6 +431,20 @@ and group chats; below 860px the same list opens in a 320px drawer. Settings ret
 640px content measure for every pane header, toolbar, row and grid. Charts and
 heatmaps contain several data columns inside their capped containers.
 
+A conversation's column starts and ends where its composer does (2026-11-10; the judge on 2d5e3cf8 measured the
+messages at 20 px and the composer at 32 at 720, and 29 against 43 at 1120). The column is a box: the thread's
+(`.ra-col` in `.ra-scroll`), the search field over it (`.ra-find`) and the members' conversation laid over it
+(`.peer-thread` in `.peer-scroll`) each take the composer's sides, `--pa-dock-x`. The members' conversation keeps the
+conversation's own sides (`.mb-chat`'s, 16 px under 860 px), and a group's side thread holds its composer at the sides
+of its messages and header (24 px). Inside the column the owner's messages end at its right edge (in a group the owner's
+face does) and a reply begins at its left edge (in a group the member's face does, its words beside it). A reply keeps
+its reading measure (`--pa-bw`, 60 ch), so a long reply ends short of the composer's right edge by design: that is
+the reply's measure, not the column ending early. `checkRendered("thread-edges")` runs on every main-entry scene
+beside `content-width` and measures exactly this within 1 px: each column box, the owner's last mark and the leftmost
+reply against their composer. A chat wide enough holds both in the same centred 960 px column; 1280x800 is the
+designed window, where the `max-height: 860px` block holds the thread's sides too. The selected scenes are under
+[Conversation](conversation.md#one-column-with-the-composer-2026-11-10).
+
 The look runner invokes `checkRendered("content-width")` on **every main-entry scene**
 after its interactions (overlay entry is separate). It measures rendered border boxes,
 including list rows and offscreen items in a visible scrolling page, and records the

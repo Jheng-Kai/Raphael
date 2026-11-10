@@ -26,6 +26,21 @@ sight under the reply with its one repair (`.turn-prerequisites`), said once (R-
 is only the 開啟設定 button, after the reply (the judge flagged the sentence as said twice, R-UI-02); a turn with no
 words keeps the note's sentence, its button following the sentence.
 Scenes: missing-search, missing-provider, missing-pdf, generated-audio-missing, generated-image-missing.
+
+## One column with the composer (2026-11-10)
+
+R-UI-45 (the judge on 2d5e3cf8: at 720 the messages began at 20 px and the composer at 32): a conversation's column
+starts and ends where its composer does, as [Content width](README.md#content-width) says. The thread, the search field
+over it and the members' conversation laid over it take the composer's sides (`--pa-dock-x`); a group's side thread
+holds its composer at the sides of its messages and header. A reply keeps its 60 ch measure, and a group message its
+face at the column's left. `thread-edges` checks every main-entry scene. The selected matrix covers the private, quick,
+group, side-thread and members' conversations, the search field, and the empty and details states:
+
+```powershell
+npm run look -- chat member-text missing-search generated-audio-missing long-owner quick-conversation search shortcut-find-member shortcut-find-room conversation-member-up room-text conversation-room-up room-composer-learn room-thread-open peer-chat empty details --theme both --width 1120,720,1920x1080
+npm run look -- chat shortcut-find-member room-thread-open peer-chat --theme both --width 1120,720,1920x1080,1280x800
+```
+
 ## Finding by name forgives typos (owner, 2026-11-08, R-FIND-01)
 
 Every place that finds a thing by its name uses `app/src/main/find-match.ts`: the @ and / menus, the store and the
