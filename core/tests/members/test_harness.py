@@ -148,7 +148,9 @@ async def test_api_model_receives_the_free_group_discussion_contract(setup, clie
     assert "Everyone reads every message" in meeting["description"]
     assert "no fixed rounds" in meeting["description"]
     assert "include Raphael (0)" not in meeting["description"]
-    assert "no automatic conclusion" in request["messages"][0]["content"]
+    # The team and what its primary contact does come with the message (tests/agent/test_cache_sessions.py).
+    assert "no automatic conclusion" in request["messages"][1]["content"]
+    assert "no automatic conclusion" not in request["messages"][0]["content"]
 
 
 async def test_routine_tools_cannot_modify_another_speakers_routine(setup):

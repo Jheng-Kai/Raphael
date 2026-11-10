@@ -468,15 +468,38 @@ a per-file lock across threads and processes; `BotHomes` does the allowlisted at
 and keeps the revision journal outside the homes. `memory/growth.py` holds the one
 `memory_update` tool (API and CLI consume one definition registry, A-03/A-04), the daily
 logs and silent, permission-scoped ephemeral FTS5 retrieval over logs and turns.
-`MemoryService.snapshot` is what a turn reads, once, at its start: the system prompt for an
-API brain and the turn's message for a CLI brain, since a resumed session keeps its first
-instructions. `memory/brain.py` runs the reflection pass, the consolidation and folding on
+`MemoryService.snapshot` is what a turn reads, once, at its start, and it comes with the
+turn's message for every brain (2026-11-10, see "Prompt prefixes a provider can cache"): an
+API brain's system prompt holds the memory's rules alone, and a CLI's session gets the files
+whole at first and then their edits. `memory/brain.py` runs the reflection pass, the consolidation and folding on
 the selected member brain; CLI uses the production CliLoop with no tools and a separate
 ephemeral session. `memory/legacy.py` moves what the row-per-note store left into the files
 at every start until none is left, and backs it up under `bot-state/<id>/notes-backup/`.
 There is no review queue: `memory/scan.py` refuses instructions and secrets, a turn that
 read outside content writes only marked entries, and the reflection pass reads only the
 owner's words of such a turn. Reads never call notification or mutation paths (A-01).
+
+
+## Prompt prefixes a provider can cache (2026-11-10)
+
+A provider reads a request from its cache only as far as it begins like an earlier one:
+tools, then the system prompt, then the messages. One changed byte is paid for again, with
+everything after it. So a system prompt says who the speaker is and how it works, and
+nothing that changes between turns (owner, 2026-11-09). What holds for one turn comes with
+that turn's message: the memory files and the team as it is now (`build_user_message`'s
+`standing`, after the conversation so far, whose start is so cached as well), who is asking
+(`CONSULTED`), the guidance one request needs (`LEADERSHIP`), and for background work the
+team and what the one task must deliver (`background.service._execute_scoped`). A CLI's
+own session gets the team and the files as sections, whole at first and then their edits
+(`agent/cli/context.py`). The owner's permission mode and a new member's first-job note stay
+in the system prompt: they change seldom, and a rule a whole turn obeys belongs with the
+rules. The tool list is fixed per member (decision 2), a Claude Code member has one working
+directory (decision 3), a named conversation stays on one OpenRouter upstream and names
+itself to ChatGPT (decision 4), and Anthropic's markers (`brain/prompt_cache.py`) keep the
+system prompt for the conversation's lifetime and the messages five minutes (decision 1).
+Tests: `core/tests/agent/test_cache_sessions.py`, `core/tests/background/test_task_prefix.py`,
+`core/tests/brain/test_prompt_cache.py`. They prove what is sent, not what a provider
+bills: the hit rate is read from the usage ledger after real turns.
 
 
 ## Growing skills (phase 3, 2026-10-29)

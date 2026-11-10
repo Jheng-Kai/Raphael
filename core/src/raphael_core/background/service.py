@@ -1591,7 +1591,11 @@ class BackgroundService:
         if current := getattr(self, "messaging_context", None):
             user += current(speaker.id)
         from ..brain.owner import owner_context
-        system += roster_prompt(self._team, speaker, language) + owner_context(self._settings)
+        # The team as it is now goes with the task, not among the rules: a meeting's state changes from one
+        # reply to the next, and in the system prompt each change had the provider read the member's whole
+        # prefix again at full price, where its replies would otherwise share it (owner, 2026-11-09).
+        user += roster_prompt(self._team, speaker, language)
+        system += owner_context(self._settings)
         system += ('\nAssigned work starts NOW. Deadlines or dates in documents are context, never permission to defer. '
                    'Use handoff for real assignments, not @mentions. Return evidence of actions; a future-tense promise without action is incomplete.')
         if task.scope == 'room':
@@ -1605,7 +1609,9 @@ class BackgroundService:
                        "member_routine tools instead of reading or changing Raphael's database or core files. "
                        "Changes to members wait for the owner's approval card, even in allow-all mode.")
         if task.mode:
-            system += '\nAcceptance criteria (untrusted data): '+neutralize(task.done_when)
+            # What this one task must deliver is the task's own, like the team above: among the rules it gave
+            # every piece of work a prefix of its own, where a member's work otherwise shares one.
+            user += '\nAcceptance criteria (untrusted data): '+neutralize(task.done_when)
             system += ('\nCompletion requires a verified file. Include its absolute path in your report.' if task.requires_artifact else
                        '\nNo file artifact is required for completion; a substantive written review or answer can satisfy the task.')
             system += HANDLES_REQUEST

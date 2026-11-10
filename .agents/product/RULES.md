@@ -576,6 +576,16 @@ This owner decision supersedes the sequential room speech and room-scope tool-wo
 | R-ROOM-06 | 2026-11-04 | Stop invalidates all room-linked task trees before cancelling any transport, including private work lanes; late or cancelled results cannot dispatch new work or digest rounds. | pytest | hard | core/tests/background/test_room_meeting.py::test_stop_invalidates_all_room_lanes_before_any_transport_cancel; core/tests/background/test_room_meeting.py::test_cancelled_lane_reports_without_starting_a_digest |
 | R-ROOM-07 | 2026-11-04 | A report is one short shared card with task state, public result, actionable produced-file chips without visible digests and a link to its private work turn. Questions between members remain on the asker's side alone. | pytest, vitest, look | hard | core/tests/background/test_room_meeting.py::test_self_lane_reads_private_context_and_reports_a_short_card_once; app/src/main/room-meeting.test.ts; room-report-card |
 
+## Prompt prefixes a provider can cache (2026-11-10)
+
+Owner decisions of 2026-11-09 (cache plan): a conversation's next call finds what its last one sent already cached. ARCHITECTURE.md has the mechanism.
+
+| ID | Date | Rule | Check | Severity | Evidence |
+| --- | --- | --- | --- | --- | --- |
+| R-CACHE-01 | 2026-11-10 | A private conversation's system prompt is the same from one turn to the next: the memory files and the team as it is now come with the turn's message, after the conversation so far, for an API brain as for a quick reply. A CLI's session gets them as sections, whole at first and then their edits. | pytest | hard | core/tests/agent/test_cache_sessions.py::test_an_api_conversation_keeps_its_system_prompt_while_its_memory_and_team_change; core/tests/agent/test_cache_sessions.py::test_a_quick_reply_keeps_its_system_prompt_while_its_memory_changes; core/tests/agent/test_memory_cost.py::test_resumed_cli_receives_only_memory_and_roster_edits |
+| R-CACHE-02 | 2026-11-10 | A member's tasks and room replies begin with the same rules: the team as it is when the task starts and what one piece of work must deliver come with the task itself. | pytest | hard | core/tests/background/test_task_prefix.py::test_a_members_tasks_keep_one_system_prompt_while_the_team_changes |
+| R-CACHE-03 | 2026-11-10 | A named conversation stays where its prefix is cached: one OpenRouter upstream (`x-session-id`, no latency sort), ChatGPT's prompt cache key, one working directory per Claude Code member. Anthropic's markers keep the system prompt for the conversation's lifetime (an hour for a private one, five minutes for background work) and the messages five minutes; a one-shot request gets none. | pytest | hard | core/tests/brain/test_prompt_cache.py::test_breakpoints_close_the_system_prompt_and_the_last_three_messages_that_can_carry_one; core/tests/brain/test_prompt_cache.py::test_a_named_conversation_stays_on_one_upstream_and_an_anthropic_prompt_is_marked; core/tests/agent/test_cache_sessions.py::test_claude_code_keeps_one_working_directory_per_member_and_codex_one_per_conversation |
+
 ## Speaker capability parity (2026-11-04)
 
 | ID | Date | Rule | Check | Severity | Evidence |
