@@ -12,6 +12,17 @@ the card shell (`the card's buttons stand at its right`), `delete-confirmation`,
 confirmation's text buttons stand at the field height (`--h-field`), not the compact one (owner, 2026-11-10:
 「button 上下寬度太窄 不用到這麼極限 上下寬度可以再胖一點」).
 
+The card shell measures the primary against the card's own right padding, not against the end of its row: a row its
+parent had shrunk to its button left a failed page's 再試一次 at the card's left and still passed (2026-11-10). Over
+the 152 scenes that show a conversation card (dark, 1120) the new measure found no other card. admin-approval,
+member-draft and secret-saved-not-resumed still asked for the old order (允許 or the primary at the left; the head's ×
+taken for the first action) and failed on every run since; they now ask for this one. template-skill-expanded fails
+on its own (`.template-skill [data-card-disclosure]` is gone), unrelated to the buttons.
+
+```
+npm run look -- admin-approval admin-approval-batch admin-approval-long admin-delete-approval member-draft member-draft-edit admin-cli-draft-edit admin-draft-apply-result chat-secret-saved-not-resumed card-approval card-team card-secret-failed page-gone page-product --theme both --width 1120,720,1920x1080
+```
+
 ```
 npm run look -- room-delete quick-clear-confirm computer-file-confirm computer-maintenance-reset card-question-waiting card-permission-waiting card-mail-ready card-connect-waiting card-key-waiting card-send-failed card-page-failed card-mcp-draft connector-key email-draft-handed-off chat-secret-masked card-send-retry card-mail-failed card-key-failed --theme both --width 1120,720,1920x1080
 ```

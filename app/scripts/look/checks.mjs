@@ -1729,9 +1729,11 @@ export function checkRendered(name, context = {}) {
         if (pri) {
           require(buttons[0] === pri, 'primary button is first');
           require(getComputedStyle(pri).backgroundColor === 'rgb(255, 255, 255)', 'primary button is white in both themes');
-          // The row stands at the card's right with the primary rightmost (owner, 2026-11-10: 卡片的按鈕盡量放在右側).
+          // The row stands at the card's right with the primary rightmost (owner, 2026-11-10: 卡片的按鈕盡量放在右側), measured
+          // against the card's own right padding, not the row: a row its parent had shrunk to its buttons left a failed
+          // page's 再試一次 at the card's left and still passed (2026-11-10).
           if (row.matches('.card-actions')) {
-            const end = row.getBoundingClientRect().right, right = pri.getBoundingClientRect().right;
+            const end = box.right - parseFloat(style.paddingRight) - parseFloat(style.borderRightWidth), right = pri.getBoundingClientRect().right;
             require(Math.abs(right - end) <= 1 && buttons.every(button => button.getBoundingClientRect().right <= right + 0.5), `the card's buttons stand at its right, the primary rightmost (${Math.round(end - right)} px)`);
           }
         }
@@ -4651,7 +4653,9 @@ export function checkRendered(name, context = {}) {
     require(visible(yes) && visible(no), "both approval actions remain visible");
     require(yes.textContent.trim() === "允許" && no.textContent.trim() === "拒絕", "approval uses explicit allow and deny words");
     require(yes.getBoundingClientRect().right <= box.right && yes.getBoundingClientRect().bottom <= innerHeight, "approval action fits the card");
-    require(yes.getBoundingClientRect().right <= no.getBoundingClientRect().left, "primary action comes first");
+    // 允許 is the first Tab stop and stands rightmost, 拒絕 to its left, as every card's buttons do (R-CARD-01, owner
+    // 2026-11-10); this asked for 允許 at the left until 2026-11-10.
+    require(yes.compareDocumentPosition(no) & Node.DOCUMENT_POSITION_FOLLOWING && no.getBoundingClientRect().right <= yes.getBoundingClientRect().left, "允許 comes first and stands at the right of 拒絕");
     if (name === "admin-approval-batch") {
       const text = details.textContent;
       for (const member of ["COO", "PM", "RD", "CEO", "CTO", "Marketing", "Finance", "Design"]) {
@@ -4678,7 +4682,8 @@ export function checkRendered(name, context = {}) {
     const confirmBtn = panel.querySelector('[data-draft-act="confirm"]');
     const cancelBtn = panel.querySelector('[data-draft-act="cancel"]');
     require(visible(confirmBtn) && visible(cancelBtn), "confirm and cancel buttons are visible");
-    require(confirmBtn.getBoundingClientRect().right <= cancelBtn.getBoundingClientRect().left, "primary action comes first");
+    // The primary is the first Tab stop and stands rightmost, 取消 to its left (R-CARD-01, owner 2026-11-10).
+    require(confirmBtn.compareDocumentPosition(cancelBtn) & Node.DOCUMENT_POSITION_FOLLOWING && cancelBtn.getBoundingClientRect().right <= confirmBtn.getBoundingClientRect().left, "the primary comes first and stands at the right of 取消");
     for (const card of cards) {
       const roleInput = card.querySelector('[data-draft-field="role"]');
       const nameInput = card.querySelector('[data-draft-field="name"]');
@@ -6413,7 +6418,9 @@ export function checkRendered(name, context = {}) {
     if (name === "secret-saved-not-resumed") {
       require(card.dataset.cardState === "saved" && card.dataset.cardError === "resume_failed", `saved, and the task did not continue (${card.dataset.cardState}/${card.dataset.cardError})`);
       require(state === "金鑰已儲存，這項工作沒有繼續", `the card says both things: "${state}"`);
-      require(!card.querySelector('input') && buttons.some(button => button.dataset.act === "card-resume" && button.textContent.trim() === "再試一次") && buttons[0].classList.contains('pri'), "no field is asked again: one primary 再試一次");
+      // The × in its heading puts the failed card away (R-UI-117); it is no action of the card's, so it is not counted.
+      const actions = buttons.filter(button => !button.closest('.card-head'));
+      require(!card.querySelector('input') && actions.some(button => button.dataset.act === "card-resume" && button.textContent.trim() === "再試一次") && actions[0].classList.contains('pri'), "no field is asked again: one primary 再試一次");
       require(visible(card.querySelector('.cc-name')) && !card.querySelector('.cc-done'), "the check is the resumed task's, not the saved key's");
       const sent = calls.filter(carrying);
       require(sent.length === 1 && sent[0].method === "integrations.card_save", "the key crossed one call, integrations.card_save, and no other");

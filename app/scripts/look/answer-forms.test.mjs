@@ -68,6 +68,25 @@ it("a × in a card's head is always shown and ends the head at the right padding
   } finally { vi.unstubAllGlobals(); browser.happyDOM.abort(); }
 });
 
+it("a card's buttons stand at the card's right padding, not only at the end of their own row", () => {
+  // A failed page's 再試一次 stood at the card's left in a row its parent had shrunk to the button, and passed (2026-11-10).
+  const browser = new Window(), doc = browser.document;
+  doc.body.innerHTML = '<section class="conversation-card"><header class="card-head"><b>Page</b><span class="card-status">Failed</span></header><div class="card-actions"><button class="btn pri">Retry</button></div></section>';
+  const places = { "card-status": { left: 400, right: 480 }, "card-actions": { left: 0, right: 80 }, "btn pri": { left: 0, right: 80 } };
+  for (const element of doc.querySelectorAll('*')) {
+    element.checkVisibility = () => true;
+    element.getBoundingClientRect = () => ({ left: 0, right: 480, width: 480, height: 50, ...places[element.className] });
+  }
+  vi.stubGlobal("document", doc);
+  vi.stubGlobal("getComputedStyle", () => ({ paddingRight: "0", borderRightWidth: "0", overflowY: "visible", backgroundColor: "rgb(255, 255, 255)" }));
+  try {
+    expect(() => checkRendered("card-shell")).toThrow("the card's buttons stand at its right");
+    places["card-actions"] = { left: 0, right: 480 };
+    places["btn pri"] = { left: 400, right: 480 };
+    expect(() => checkRendered("card-shell")).not.toThrow();
+  } finally { vi.unstubAllGlobals(); browser.happyDOM.abort(); }
+});
+
 it("form checks count the active conversation without hidden private replies", () => {
   const browser = new Window(), doc = browser.document;
   const card = kind => `<section class="message-${kind}"><button data-rich-act="copy-source"></button>${kind === "chart" ? `<svg>${'<circle><title>Value: 3</title></circle>'.repeat(6)}</svg>` : ""}</section>`;
