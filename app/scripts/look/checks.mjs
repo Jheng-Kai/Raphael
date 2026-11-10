@@ -5853,9 +5853,11 @@ export function checkRendered(name, context = {}) {
     const grid = document.querySelector('.cs-form .add-grid'), port = grid.getBoundingClientRect();
     const last = document.querySelector('#conn-limit'), edge = last.getBoundingClientRect().right;
     if (name === "connections-form-edges") {
-      const add = document.querySelector('[data-k="conn-add"]'), save = document.querySelector('.add-acts [data-conn="connect"]');
-      const rights = [add, save].map(button => button.getBoundingClientRect().right);
-      require(rights.every(right => Math.abs(right - edge) <= 1), `header and footer actions share the form field right edge: fields ${edge}, actions ${rights.join(', ')}`);
+      // The form is the whole tab (no bar, so no 新增 above it since 2026-11-07): its only actions are the footer's, and the last one ends where the fields end.
+      const actions = [...document.querySelectorAll('.add-acts button')];
+      require(actions.length === 3 && !document.querySelector('[data-k="conn-add"]'), `the form has its three footer actions and no add menu above it: ${actions.length}`);
+      const rights = actions.map(button => button.getBoundingClientRect().right);
+      require(Math.abs(Math.max(...rights) - edge) <= 1, `footer actions end at the form field right edge: fields ${edge}, actions ${rights.join(', ')}`);
       return { check: name, right: edge };
     }
     const footer = document.querySelector('.cs-form > .trust').getBoundingClientRect();

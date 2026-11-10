@@ -7,6 +7,7 @@ export const drag = (selector, dx, options = {}) => ({ action: "drag", selector,
 export const type = (selector, text) => ({ action: "type", selector, text });
 export const wait = selector => ({ action: "wait", selector });
 export const waitGone = selector => ({ action: "wait-gone", selector });
+export const codexArrives = () => ({ action: "codex-arrives" });
 export const check = name => ({ action: "check", name });
 export const key = value => ({ action: "key", key: value });
 // What an input method hands the page, in order: `{ compose }` is a composition in progress, `{ commit }` the text it finishes with.

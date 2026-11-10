@@ -198,7 +198,7 @@ export function installMock(fixture, config = {}, target = window) {
       messages: [{ seq: 1, kind: "reply", text: source, at_ms: data.now }], attachments: [] }));
     data.messages = [{ ...structuredClone(data.messages.find(message => message.member_id !== null)), id: 701, member_id: 1, text: source, kind: "message", status: "done", attachments: [] }];
   }
-  let codexArrived = false, codexTimer;
+  let codexArrived = false;
   const desktopSessions = new Map();
   let desktopSequence = 0;
   let teaching;
@@ -793,6 +793,8 @@ export function installMock(fixture, config = {}, target = window) {
   } };
   let maximized = false;
   target.__look = state;
+  // The late CLI models (`codexLate`) come now, and the window is told as the core tells it.
+  state.codexArrives = () => { codexArrived = true; notify("BrainsChanged", {}); };
   // What the owner could see of the open conversation's place, frame by frame (`scrollTimeline`): a place seen once is the
   // place the thread opens at, so a bottom followed by the line (or the other way) shows as two samples.
   if (variant.scrollTimeline) {
@@ -1410,10 +1412,9 @@ export function installMock(fixture, config = {}, target = window) {
       case "rooms.send": { const message = { thread_id:p.thread_id ?? 1, id: nextId(data.messages), room_id: p.room_id, member_id: null, text: p.text, request_id: p.request_id, status: "done", created: data.now, reply_to: p.reply_to ?? null, turn_id: null, reply_to_member: data.messages.find(item => item.id === p.reply_to)?.member_id ?? null, origin_message_id: nextId(data.messages), kind: "message", attachments: (p.attachments ?? []).map((file, index) => { const id = `${"f".repeat(30)}${String(index).padStart(2, "0")}.png`; (data.keptFiles ??= {})[id] = { mime: file.mime, data: file.data }; return { id, name: file.name, mime: file.mime }; }) }; data.messages.push(message); return { message_id: message.id, duplicate: false }; }
       case "computer.revoke": if (data.desktop) data.desktop.granted = false; return { granted: false };
       case "brains.cli":
-        // As the core does: a CLI's models come after the first read, in the background.
+        // As the core does: a CLI's models come after the first read, in the background. With `codexLate` they come when the scene's
+        // `codex-arrives` step says so, not after a wall-clock delay: a slow or busy run must see the same two states in the same order.
         if (variant.codexLate && !codexArrived) {
-          // Counted from the menu opening, so that a slow start of the scene still sees them come.
-          if (!codexTimer && target.document.querySelector(".cb-menu")) codexTimer = setTimeout(() => { codexArrived = true; notify("BrainsChanged", {}); }, variant.codexLate);
           return { clis: data.clis.map(cli => cli.id === "codex" ? { ...cli, models: [] } : cli) };
         }
         return { clis: data.clis };
