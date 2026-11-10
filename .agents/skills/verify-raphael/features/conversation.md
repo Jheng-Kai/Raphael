@@ -8,7 +8,9 @@ the primary still first in the markup (R-CARD-01). A confirmation (`.mb-confirm`
 Grok Bot's dialog: 440 px, a compact semibold question over a hairline, the consequence in secondary words, a footer
 over a hairline with Cancel then the action at the right, and no × beside a Cancel (R-UI-27). A card drawn failed keeps
 one ×: `cardFailure` reuses it instead of adding a second (it had two on a message that could not be sent). Checks:
-the card shell (`the card's buttons stand at its right`), `delete-confirmation`, card-send-failed.
+the card shell (`the card's buttons stand at its right`), `delete-confirmation`, card-send-failed. A card's and a
+confirmation's text buttons stand at the field height (`--h-field`), not the compact one (owner, 2026-11-10:
+「button 上下寬度太窄 不用到這麼極限 上下寬度可以再胖一點」).
 
 ```
 npm run look -- room-delete quick-clear-confirm computer-file-confirm computer-maintenance-reset card-question-waiting card-permission-waiting card-mail-ready card-connect-waiting card-key-waiting card-send-failed card-page-failed card-mcp-draft connector-key email-draft-handed-off chat-secret-masked card-send-retry card-mail-failed card-key-failed --theme both --width 1120,720,1920x1080

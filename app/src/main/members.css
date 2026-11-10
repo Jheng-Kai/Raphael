@@ -239,6 +239,8 @@
 /* With nothing to say under the question, one hairline parts it from the buttons, not two. */
 .mb-confirm:has(.mb-dlg-body:empty) .mb-dlg-act { border-top: 0; }
 .mb-confirm .mb-dlg-act .btn { padding-inline: var(--sp-4); }
+/* A dialog's footer buttons are the field height, as a card's are (owner, 2026-11-10: 「上下寬度可以再胖一點」). */
+.mb-dlg-act .btn:not(.icon) { min-height: var(--h-field); padding-block: 0; line-height: calc(var(--h-field) - 2px); }
 .mb-addrow { display: flex; gap: var(--sp-2); }
 .mb-addrow .mb-fin { flex: 1; }
 

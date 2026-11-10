@@ -24,6 +24,9 @@
 .conversation-card .card-actions { display: flex; flex-direction: row-reverse; flex-wrap: wrap; align-items: center; justify-content: flex-start; gap: 8px; margin: 0; grid-column: auto; }
 .conversation-card .btn { transform: none; }
 .conversation-card .card-actions .pri, .conversation-card .sc-form .pri, .conversation-card .question-submit .pri { background: var(--card-primary); color: var(--card-primary-ink); border: 1px solid var(--card-primary-edge); }
+/* A card's text buttons are a little taller than the compact ones, not hugging their words to the limit (owner,
+   2026-11-10: 「button 上下寬度太窄…可以再胖一點」): the field height. */
+.conversation-card .card-actions .btn:not(.icon) { min-height: var(--h-field); padding-block: 0; line-height: calc(var(--h-field) - 2px); }
 /* The quiet way out stands left of the others, as Cancel does beside a dialog's action. */
 .conversation-card .card-actions > .card-quiet { background: transparent; border-color: transparent; color: var(--text-2); }
 .card-disclosure-toggle.btn { display: flex; align-items: center; gap: 6px; padding: 1px 8px; margin-inline: -8px; border: 0; background: transparent; color: var(--text-2); font-size: var(--fs-xs); min-height: var(--h-ctl-sm); }
