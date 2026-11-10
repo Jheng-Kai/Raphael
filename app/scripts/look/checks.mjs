@@ -4779,10 +4779,23 @@ export function checkRendered(name, context = {}) {
     return { check: name };
   }
   if (name === "page-expanded") {
-    const frame = document.querySelector(".pg-view iframe")?.getBoundingClientRect();
-    require(frame && frame.width >= Math.min(1100, innerWidth * 0.6) && frame.height > innerHeight * 0.6, "the same page fills the large dialog");
-    require(!document.querySelector(".pg-card .pg-body iframe"), "there is one frame, moved, not a second one");
-    return { check: name };
+    const view = document.querySelector(".pg-view"), frame = view?.querySelector("iframe")?.getBoundingClientRect();
+    require(frame && !document.querySelector(".pg-card .pg-body iframe"), "the same page moved to the dialog: one frame, not a second one");
+    // The page alone: past its card, within the conversation's 960 px column (R-UI-45), and as tall as it says it is there,
+    // so a short page makes a short dialog (the judge on page-expand, 3/5, 2026-11-10: blank below the page).
+    const dialog = view.closest(".mb-dialog"), box = dialog.getBoundingClientRect(), card = document.querySelector(".pg-card").getBoundingClientRect();
+    require(box.width <= 960.5 && frame.width > card.width, `wider than its card, within the conversation's column (${Math.round(box.width)} px)`);
+    const said = parseFloat(view.style.getPropertyValue("--pg-h"));
+    require(Math.abs(frame.height - Math.min(said, innerHeight * 0.75)) <= 1, `as tall as the page says (${Math.round(frame.height)} of ${said} px)`);
+    require(frame.height < innerHeight * 0.5, `a short page makes a short dialog (${Math.round(frame.height)} px)`);
+    require(["left", "top", "right", "bottom"].every(side => Math.abs(frame[side] - box[side]) <= 1.5), "the page fills the dialog");
+    // No title over the page, whose own heading says it (the judge, R-UI-02): the card's title only names the dialog, and
+    // the × is the soft round edge button at the top right, where a report's stands (.rp-top).
+    const label = document.getElementById(dialog.getAttribute("aria-labelledby")), close = dialog.querySelector('[data-dlg="close"]').getBoundingClientRect();
+    require(label?.textContent === document.querySelector(".pg-card .card-title").textContent && label.getBoundingClientRect().width <= 1, "the card's title names the dialog without standing over the page");
+    const token = side => parseFloat(getComputedStyle(document.documentElement).getPropertyValue(side));
+    require(Math.abs(box.right - close.right - token("--sp-4")) <= 1.5 && Math.abs(close.top - box.top - token("--sp-3")) <= 1.5 && Math.abs(close.width - 36) <= 0.5, `the × stands at the top right, as a report's (${Math.round(box.right - close.right)}, ${Math.round(close.top - box.top)})`);
+    return { check: name, width: box.width, height: frame.height };
   }
   if (name.startsWith("page-report")) {
     const overlaps = (a, b) => a.left < b.right - 0.5 && b.left < a.right - 0.5 && a.top < b.bottom - 0.5 && b.top < a.bottom - 0.5;

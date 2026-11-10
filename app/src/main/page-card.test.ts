@@ -292,6 +292,24 @@ test("expand takes the same frame to the large dialog and closing brings it back
   expect(api.pagesOpen).toHaveBeenCalledTimes(1);
 });
 
+test("a page made larger is as tall in its dialog as it says it is there, under its card's title", async () => {
+  const { thread, frame } = mount();
+  await flush();
+  const card = thread.querySelector<HTMLElement>(".pg-card")!;
+  thread.querySelector<HTMLElement>('[data-page-act="expand"]')!.click();
+  // The title once, as the card has it (it was escaped twice and showed 「&lt;b&gt;」).
+  expect(document.querySelector(".pg-view-dialog .mb-dlg-head h2")!.textContent).toBe("藍色背包 <b>");
+  const view = document.querySelector<HTMLElement>(".pg-view")!;
+  expect(view.style.getPropertyValue("--pg-h")).toBe("400px");
+  // Wider, the page says again how tall it is: only the dialog follows, the card keeps its height behind it.
+  fromFrame(frame, { raphaelPage: 1, type: "height", height: 243.4 });
+  expect(view.style.getPropertyValue("--pg-h")).toBe("244px");
+  expect(card.style.getPropertyValue("--pg-h")).toBe("400px");
+  document.querySelector<HTMLElement>('.pg-view-dialog [data-dlg="close"]')!.click();
+  fromFrame(frame, { raphaelPage: 1, type: "height", height: 300 });
+  expect(card.style.getPropertyValue("--pg-h")).toBe("300px");
+});
+
 test("a plugin's page gets the MCP Apps handshake and its tools go through the core; a member's page gets neither", async () => {
   vi.mocked(api.pagesOpen).mockResolvedValue({ ...opened, source: "mcp", server: "Shop", tool_input: { sku: "a" }, tool_result: { content: [{ type: "text", text: "ok" }] } });
   const call = vi.spyOn(api, "pagesToolCall").mockResolvedValue({ status: "done", ok: true, tool_result: { content: [] } });

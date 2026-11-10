@@ -132,8 +132,10 @@ export function mountPages(thread: HTMLElement, o: { place(pageId: string, text:
     else if (state !== "failed") close?.remove();
   }
 
+  /** A page is as tall as it says. Made larger, it says again once it is wider, and only its dialog follows: the card
+   *  keeps its own height behind it until the page is back and says so there. */
   function applyHeight(live: Live): void {
-    if (live.height !== null) cardOf(live)?.style.setProperty("--pg-h", `${live.height}px`);
+    if (live.height !== null) (live.frame.closest<HTMLElement>(".pg-view") ?? cardOf(live))?.style.setProperty("--pg-h", `${live.height}px`);
   }
 
   async function open(live: Live): Promise<void> {
@@ -303,11 +305,12 @@ export function mountPages(thread: HTMLElement, o: { place(pageId: string, text:
     else if (data.type === "open") openLink(live, data.url);
   });
 
-  /** Larger in the shared dialog, the frame moved there and back, so nothing the owner did in it is lost. */
+  /** Larger in the shared dialog, the frame moved there and back, so nothing the owner did in it is lost. The dialog is
+   *  as tall as the card until the page, now wider, says how tall it is there (applyHeight). */
   function expand(live: Live, card: HTMLElement): void {
-    const title = card.getAttribute("aria-label") ?? "";
     const dialog = openDialog({
-      title: esc(title), body: `<div class="pg-view"></div>`, cls: "rich-view-dialog pg-view-dialog",
+      // openDialog escapes the title itself: escaping it here too showed a title's & or < as an entity.
+      title: card.getAttribute("aria-label") ?? "", body: `<div class="pg-view"></div>`, cls: "pg-view-dialog",
       // Its × closes it, with no 「關閉」 under it (owner, 2026-11-08).
       actions: {},
       onAct(_act, _target, shown) { shown.close(); },
@@ -318,9 +321,11 @@ export function mountPages(thread: HTMLElement, o: { place(pageId: string, text:
         if (home) moveFrame(live.frame, home);
       },
     });
+    const view = dialog.el.querySelector<HTMLElement>(".pg-view")!;
+    view.style.setProperty("--pg-h", card.style.getPropertyValue("--pg-h") || "320px");
     live.expanded = true;
     live.closeExpanded = () => dialog.close();
-    moveFrame(live.frame, dialog.el.querySelector<HTMLElement>(".pg-view")!);
+    moveFrame(live.frame, view);
   }
 
   thread.addEventListener("click", event => {

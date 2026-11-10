@@ -1879,6 +1879,17 @@ in a card's heading to be shown; card-page-close presses the × in the heading, 
 was put away: the member's reply ends the thread and nothing opens again (the judge read that as a missing card,
 3/5 in dark, 2026-11-10).
 
+A page made larger (page-expand) is the page alone, as a picture made larger (the media lightbox) and a report are:
+it fills the dialog edge to edge, as tall as it says it is there, up to three quarters of the window, at most the
+conversation's 960 px column (R-UI-45). Its card's title, which the page's own heading says again, only names the
+dialog for a screen reader, and the × is the soft round edge button at the top right, where a report's stands
+(`.rp-top`). Wider, the page says again how tall it is; only the dialog follows, and the card keeps its own height
+behind it until the page is back. The judge gave 3/5 for a dialog three quarters of the window tall around a short
+page, then for the title twice, in the dialog's head and the page's heading (2026-11-10); the dialog's title was also
+escaped twice (a title's & or < showed as an entity). The look fixture's page now reports its height as the core's
+helper does (`agent/pages.py`); it had added 32 px, a blank band under every fixture page. page-expanded checks the
+width, the height the page says, the page filling the dialog, the hidden name and the ×'s place.
+
 The follow-up explicitly selects both themes at 1120 and 720 once. The maintained
 matrix below also includes the standard 1920x1080 size for later acceptance:
 
