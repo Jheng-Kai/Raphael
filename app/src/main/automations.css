@@ -71,6 +71,9 @@
 .au-room-pane { --room-gutter: calc(var(--room-face) + var(--sp-1)); }
 .au-room-pane.mb-chat { padding-inline: 0; }
 .au-room-pane.mb-chat > .mb-head { margin-inline: var(--room-pad); }
+/* The members' conversation opens over the room and takes its sides from the pane (conversations.css: `inherit`); the
+   pane has none of its own here, so it is given the room's, and its thread stands between the composer's edges. */
+.au-room-pane.mb-chat > .peer-chat { padding-inline: var(--room-pad); }
 .au-room-pane > .ra-find { width: calc(100% - 2 * (var(--room-pad) + var(--pa-dock-x))); }
 @media (min-width: 1100px) { .au-room-pane.has-side-thread.mb-chat > .page-head { margin-right: calc(440px + var(--room-pad)); } }
 .au-room-pane > .ra-stage > .ra-scroll, .au-room-pane .ra-dock { padding-inline: calc(var(--room-pad) + var(--pa-dock-x)); }
