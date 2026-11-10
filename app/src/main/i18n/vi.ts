@@ -804,6 +804,7 @@ export const vi = {
   "chat.workingFor": "· {p0} giây",
   "chat.quota": "{p0} đã đạt giới hạn",
   "chat.quotaReset": ", đặt lại {p0}",
+  "chat.quotaLow": "{p0} ({p1}) chỉ còn {p2}",
   "chat.searchAll": "Tìm thành viên và tin nhắn",
   "chat.noMessages": "Không có tin nhắn phù hợp",
   "chooser.title": "Chọn mô hình",

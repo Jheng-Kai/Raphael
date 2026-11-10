@@ -43,6 +43,7 @@ import { Undoable } from "./undo";
 import { Cleared } from "./cleared";
 import { leave, toaster } from "./ui";
 import { bindMissing, missingHTML, noticeHTML } from "./missing";
+import { warnQuota } from "./quota-warning";
 import "./styles.css";
 import "./sidebar.css";
 
@@ -371,6 +372,7 @@ watchChipRows(document.body);
   api.subscribeMainEvents((event) => {
     if (event.type === "CoreReady") console.info("main page: CoreReady");
     if (event.type === "SetupMissing") toaster.notice(() => missingHTML(event.missing));
+    if (event.type === "QuotaWarning") warnQuota(event);
     if (event.type === "Dictation") followDictation(event.phase, event.agent);
     if (event.type === "DictationPasted" && document.activeElement instanceof HTMLTextAreaElement) {
       document.activeElement.dispatchEvent(new CustomEvent("dictation-pasted", { detail: event.text }));

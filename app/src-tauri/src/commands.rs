@@ -214,6 +214,16 @@ pub enum MainEvent {
         member_id: u64,
     },
     QuotaChanged,
+    /// A subscription window is nine-tenths used (`quota.warning`, told once per window by the core): the window says
+    /// which one, what is left and when it resets (`resets_at`, unix seconds). Only these known identifiers and numbers
+    /// pass, never a provider's words.
+    QuotaWarning {
+        provider: String,
+        period: String,
+        remaining_percent: f64,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        resets_at: Option<u64>,
+    },
     ActionModeChanged,
     /// Data changed: the window re-reads it without receiving private content.
     RoutinesChanged {
@@ -1262,6 +1272,26 @@ pub fn main_event_from(notification: &Notification, monitoring: bool) -> Option<
             member_id: params.get("member_id").and_then(Value::as_u64).unwrap_or(0),
         }),
         "quota.changed" => Some(MainEvent::QuotaChanged),
+        "quota.warning" => {
+            let provider = params.get("provider")?.as_str()?;
+            let period = params.get("period")?.as_str()?;
+            let remaining = params.get("remaining_percent")?.as_f64()?;
+            if !matches!(provider, "codex" | "claude" | "gemini")
+                || !matches!(
+                    period,
+                    "fiveHour" | "weekly" | "weeklyOpus" | "weeklySonnet"
+                )
+                || !(0.0..=100.0).contains(&remaining)
+            {
+                return None;
+            }
+            Some(MainEvent::QuotaWarning {
+                provider: provider.to_owned(),
+                period: period.to_owned(),
+                remaining_percent: remaining,
+                resets_at: params.get("resets_at").and_then(Value::as_u64),
+            })
+        }
         "action_mode.changed" => Some(MainEvent::ActionModeChanged),
         "providers.changed" => Some(MainEvent::ProvidersChanged),
         "settings.changed" => Some(MainEvent::SettingsChanged),
@@ -3565,6 +3595,43 @@ mod tests {
             ),
         ] {
             assert_eq!(main_event_from(&notification(method, params), false), None);
+        }
+    }
+
+    #[test]
+    fn a_quota_warning_carries_only_its_window_and_numbers() {
+        let warning = notification(
+            "quota.warning",
+            json!({"provider": "codex", "period": "fiveHour", "remaining_percent": 8,
+                   "resets_at": 1_792_818_900_u64, "detail": "private"}),
+        );
+        for monitoring in [false, true] {
+            assert_eq!(
+                serde_json::to_value(main_event_from(&warning, monitoring)).unwrap(),
+                json!({"type": "QuotaWarning", "provider": "codex", "period": "fiveHour",
+                       "remaining_percent": 8.0, "resets_at": 1_792_818_900_u64})
+            );
+        }
+        let unknown_reset = notification(
+            "quota.warning",
+            json!({"provider": "claude", "period": "weeklyOpus", "remaining_percent": 7.5, "resets_at": null}),
+        );
+        assert_eq!(
+            serde_json::to_value(main_event_from(&unknown_reset, false)).unwrap(),
+            json!({"type": "QuotaWarning", "provider": "claude", "period": "weeklyOpus", "remaining_percent": 7.5})
+        );
+        for broken in [
+            json!({"provider": "openrouter", "period": "fiveHour", "remaining_percent": 8}),
+            json!({"provider": "codex", "period": "daily", "remaining_percent": 8}),
+            json!({"provider": "codex", "period": "fiveHour", "remaining_percent": 120}),
+            json!({"provider": "codex", "period": "fiveHour", "remaining_percent": "8"}),
+            json!({"provider": "codex", "period": "fiveHour"}),
+        ] {
+            assert_eq!(
+                main_event_from(&notification("quota.warning", broken.clone()), false),
+                None,
+                "{broken}"
+            );
         }
     }
 

@@ -2869,6 +2869,24 @@ export function checkRendered(name, context = {}) {
     }
     return { check: name, toasts: toasts.length, targets: targets.length };
   }
+  if (name === "quota-warning-before") {
+    window.__quotaCallsBefore = window.__look.calls.length;
+    return { check: name, calls: window.__quotaCallsBefore };
+  }
+  if (name === "quota-warning" || name === "quota-warning-weekly") {
+    // R-QUOTA-01: one toast names the subscription, its window, what is left and when it resets; words only.
+    const notes = [...document.querySelectorAll(".toast .quota-warning")].filter(visible);
+    require(notes.length === 1, `one toast says it: ${notes.length}`);
+    const note = notes[0], box = note.closest(".toast").getBoundingClientRect();
+    const expected = name === "quota-warning" ? "Codex（5 小時）額度只剩 8%，13:15 重設" : "Claude（每週 · Opus）額度只剩 8%，10/27 08:00 重設";
+    require(note.textContent === expected, `which subscription, what is left and when it resets: ${note.textContent}`);
+    require(note.getAttribute("role") === "status", "it is read out as a status");
+    require(box.left >= 0 && box.top >= 0 && box.right <= innerWidth + 0.5 && box.bottom <= innerHeight + 0.5, `the toast is inside the window: ${JSON.stringify(box)}`);
+    const moved = window.__look.calls.slice(window.__quotaCallsBefore ?? 0)
+      .filter(call => ["members.update", "settings.set"].includes(call.method) || /model/i.test(`${call.method ?? ""} ${call.command ?? ""}`));
+    require(moved.length === 0, `no model, member or setting moves: ${JSON.stringify(moved)}`);
+    return { check: name, text: note.textContent, width: Math.round(box.width), height: Math.round(box.height) };
+  }
   if (name === "member-brain-saved") {
     const saved = window.__look.calls.filter(call => call.method === "members.update" && call.params.model);
     require(saved.length === 1 && saved[0].params.id === 1 && saved[0].params.model.startsWith("cli:codex"), "a member's composer saves that member's model");

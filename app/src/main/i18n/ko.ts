@@ -804,6 +804,7 @@ export const ko = {
   "chat.workingFor": "· {p0}초",
   "chat.quota": "{p0} 한도 도달",
   "chat.quotaReset": ", {p0}에 초기화",
+  "chat.quotaLow": "{p0}({p1}) 남은 한도 {p2}",
   "chat.searchAll": "멤버 및 메시지 검색",
   "chat.noMessages": "일치하는 메시지가 없습니다",
   "chooser.title": "모델 선택",

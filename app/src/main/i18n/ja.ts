@@ -460,6 +460,7 @@ export const ja = {
   "chat.workingFor": "· {p0} 秒",
   "chat.quota": "{p0} の上限に到達",
   "chat.quotaReset": "、{p0} にリセット",
+  "chat.quotaLow": "{p0}（{p1}）の残りは {p2}",
   "chat.searchAll": "メンバーとメッセージを検索",
   "chat.members": "メンバー",
   "chat.messages": "メッセージ",

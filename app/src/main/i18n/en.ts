@@ -460,6 +460,7 @@ export const en = {
   "chat.workingFor": "· {p0}s",
   "chat.quota": "{p0} at its limit",
   "chat.quotaReset": ", resets {p0}",
+  "chat.quotaLow": "{p0} ({p1}) has only {p2} left",
   "chat.searchAll": "Search members and messages",
   "chat.members": "Members",
   "chat.messages": "Messages",

@@ -804,6 +804,7 @@ export const tr = {
   "chat.workingFor": "· {p0}sn",
   "chat.quota": "{p0} sınırına ulaştı",
   "chat.quotaReset": ", sıfırlama {p0}",
+  "chat.quotaLow": "{p0} ({p1}): yalnızca {p2} kaldı",
   "chat.searchAll": "Üye ve ileti ara",
   "chat.noMessages": "Eşleşen ileti yok",
   "chooser.title": "Model seç",

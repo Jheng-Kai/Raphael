@@ -459,6 +459,7 @@ export const zhTW = {
   "chat.workingFor": "· {p0} 秒",
   "chat.quota": "{p0} 額度已滿",
   "chat.quotaReset": "，{p0} 重設",
+  "chat.quotaLow": "{p0}（{p1}）額度只剩 {p2}",
   "chat.searchAll": "搜尋成員與訊息",
   "chat.members": "成員",
   "chat.messages": "訊息",

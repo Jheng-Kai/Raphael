@@ -804,6 +804,7 @@ export const ptBR = {
   "chat.workingFor": "· {p0}s",
   "chat.quota": "{p0} atingiu o limite",
   "chat.quotaReset": ", redefine {p0}",
+  "chat.quotaLow": "{p0} ({p1}): restam só {p2}",
   "chat.searchAll": "Buscar membros e mensagens",
   "chat.noMessages": "Nenhuma mensagem correspondente",
   "chooser.title": "Escolher modelo",

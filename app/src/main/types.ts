@@ -825,6 +825,8 @@ export type MainEvent =
   | { type: "DictationPasted"; text: string }
   | { type: "ConversationsChanged"; member_id: number }
   | { type: "QuotaChanged" }
+  /** A subscription window is nine-tenths used: said once per window (quota-warning.ts); `resets_at` is unix seconds. */
+  | { type: "QuotaWarning"; provider: "codex" | "claude" | "gemini"; period: import("./usage-analytics-types").CliAllowanceWindow["period"]; remaining_percent: number; resets_at?: number }
   | { type: "ActionModeChanged" }
   | { type: "Level"; value: number }
   | { type: "ModelProgress"; name: string; done: number; total: number }
