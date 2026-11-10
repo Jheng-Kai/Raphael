@@ -587,10 +587,6 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 .page-agent .btn.ask-yes:hover:not(:disabled) { background: var(--rg-btn); border-color: var(--rg-btn); filter: brightness(1.05); }
 .page-agent .btn.ask-yes:active:not(:disabled) { background: color-mix(in srgb, var(--rg-btn) 85%, var(--text)); filter: none; }
 .ask-yes-t { position: relative; z-index: 1; }
-/* the YES of what cannot be undone is held: a line fills under it */
-.ask-fill { position: absolute; left: 0; bottom: 0; height: 3px; width: 0; background: var(--rg-on); opacity: 0.55; }
-.ask-yes[data-hold="holding"] .ask-fill { width: 100%; transition: width 0.6s linear; }
-.ask-yes[data-hold="armed"] .ask-fill { width: 100%; opacity: 0.9; }
 
 /* ---------- nothing yet: Raphael in the middle, his line, the composer under him ---------- */
 .ra-empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--sp-3); min-height: 0; padding: var(--sp-4) var(--sp-4) 48px; text-align: center; }
@@ -627,7 +623,6 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 @media (prefers-reduced-motion: reduce) {
   .tn.is-new, .step.is-new, .task-check.is-pop, .spin, .shimmer-mask::after, .think i, .ask-card::before { animation: none !important; }
   .steps-body, .steps-chev .i, .tn-more .i, .composer, .btn.cmp-voice { transition: none !important; }
-  .ask-yes[data-hold="holding"] .ask-fill { transition: none; }
 }
 
 /* The icons are drawn on a 16 px grid and are shown at 16 or 20 px, never between (ui-rules.test.ts): so

@@ -38,7 +38,7 @@ Speaker parity excludes only management and existing coordination duties.
 
 Deferred selected look scope (both themes, 1120,720,1920x1080):
 admin-approval, admin-approval-batch, admin-approval-long, admin-delete-approval,
-admin-approved, admin-denied, member-draft, member-draft-edit, member-draft-done,
+admin-delete-approved, admin-delete-many, admin-delete-many-approved, admin-approved, admin-denied, member-draft, member-draft-edit, member-draft-done,
 primary-contact-set, room-question-card and card-background. Compare the T3 member-delete approval with each new
 destructive summary at identical theme and width; inspect complete target names,
 all profile fields, retention before/after and absence of an Always action.
@@ -93,3 +93,13 @@ rule travels beside the owner message, never inside the visible history. Tests i
 core/tests/members/test_chat_settings.py cover API/CLI self scope, peer refusal, real
 profile/command/skill/voice/memory writes and exact-action deletion approval.
 The window-owned settings button and visual/native acceptance remain an integration handoff.
+
+## One card, words and one press (2026-11-11)
+
+The changes that cannot be undone and that the model asks for in one turn are held until its turn is in and asked on one
+card (`management_batch`): a line each in the owner's language (target by name, effect in words, no ID and no JSON; the core
+words them in `management_words.py`, in every locale), one yes and one no. The yes is for exactly that list (its digest and
+its lines); each change is carried out in order under its own part of it (`Approval.covering`), one that fails does not stop
+the others and is said plainly, and a card nobody answered says that it ran out and what it was. The yes is one press, in the
+app and in the overlay. Verify with `core/tests/members/test_management_batch.py` and the scenes admin-delete-approval,
+admin-delete-approved, admin-delete-many and admin-delete-many-approved.

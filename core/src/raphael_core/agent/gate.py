@@ -116,6 +116,7 @@ class ToolGate:
             self._registry.register(name, tier)
         self._registry.register("cli_permission", Tier.T2)
         self._registry.register("team_admin_batch", Tier.T2)
+        self._registry.register("management_batch", Tier.T3)
         self._audit = None if conn is None else AuditLog(conn, now_ms)
 
     @property
@@ -126,7 +127,8 @@ class ToolGate:
         from ..management import destructive, background_requires_approval
         retention = self._settings.get("history_retention_days") if self._settings else None
         return (self.data_floor.access(name, arguments) == "read" or background_requires_approval(name, arguments)
-                or name.endswith("/fill_card") or name == "routine_delete" or destructive(name, arguments, retention))
+                or name.endswith("/fill_card") or name == "routine_delete" or name == "management_batch"
+                or destructive(name, arguments, retention))
 
     @property
     def ask_first(self) -> bool:
@@ -250,6 +252,21 @@ class ToolGate:
             raise NotApproved("team_admin_batch")
         for operation in action.args["operations"]:
             if operation["name"] not in BATCH_TOOLS or self.tier(operation["name"]) > Tier.T1:
+                raise NotApproved(operation["name"])
+        self.check(action, approval)
+
+    def check_management_batch(self, action: Action, approval: Approval | None) -> None:
+        """One single-use approval covers exactly the listed changes that cannot be undone, as the owner read them on one
+        card (owner, 2026-11-11: 「不要分這麼多卡片，讓我去按同意」). A list that holds anything else is refused."""
+        from ..management import MANAGEMENT_TOOLS
+
+        operations = action.args.get("operations")
+        if action.tool != "management_batch" or not isinstance(operations, list) or not operations:
+            raise NotApproved("management_batch")
+        retention = self._settings.get("history_retention_days") if self._settings else None
+        from ..management import destructive
+        for operation in operations:
+            if operation["name"] not in MANAGEMENT_TOOLS or not destructive(operation["name"], operation["arguments"], retention):
                 raise NotApproved(operation["name"])
         self.check(action, approval)
 

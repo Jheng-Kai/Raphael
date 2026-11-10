@@ -3,12 +3,10 @@ import { noticeDurationMs } from "./notice";
 import { COMPLETION_MS, formatProgress } from "./progress-caption";
 import { WAITING_LINE_MS } from "./waiting-lines";
 import {
-  HOLD_MS,
   OverlayController,
   isRefusal,
   type AskButtons,
   type EmblemControl,
-  type HoldState,
   type OverlayEvent,
   type OverlayView,
   type UiLanguage,
@@ -144,9 +142,6 @@ class FakeView implements OverlayView {
   showAsk(buttons: AskButtons): void {
     this.asked.push(buttons);
     this.log.push(`ask:${buttons.yes}|${buttons.no}|${buttons.tier}`);
-  }
-  setHold(state: HoldState): void {
-    this.log.push(`hold:${state}`);
   }
   setChoice(choice: "yes" | "no" | "always" | null): void {
     this.log.push(`choice:${choice}`);
@@ -849,8 +844,6 @@ test("YES of a T2 question is a click, answered once", () => {
   expect(view.log).toEqual(["choice:yes", "ask-hide", "clear"]);
   controller.clickAsk("yes");
   controller.clickAsk("no");
-  controller.holdStart();
-  controller.holdEnd(true);
   expect(confirm).toHaveBeenCalledTimes(1);
 });
 
@@ -861,6 +854,27 @@ test("NO is a click too, and it is the same for T3", () => {
   expect(view.log).toEqual(["choice:no", "ask-hide", "clear"]);
 });
 
+// (owner, 2026-11-11: 「長按才會繼續，點一下就可以了，不用這麼複雜」) The YES of a question that cannot be undone was a press
+// held for 0.6 s with a line filling under it; one press answers it now, as every other.
+test("YES of a T3 question is one click too, answered once, with no hold in between", () => {
+  asked({ tier: "T3" });
+  controller.clickAsk("yes");
+  expect(confirm).toHaveBeenCalledExactlyOnceWith("c1", true);
+  expect(view.log).toEqual(["choice:yes", "ask-hide", "clear"]);
+  controller.clickAsk("yes");
+  vi.advanceTimersByTime(60_000);
+  expect(confirm).toHaveBeenCalledTimes(1);
+});
+
+test("the controller has no hold left: no timer waits after a question is asked, and no hold method exists", () => {
+  asked({ tier: "T3" });
+  expect(vi.getTimerCount()).toBeGreaterThan(0); // the question's own time limit
+  const before = vi.getTimerCount();
+  controller.clickAsk("yes");
+  expect(vi.getTimerCount()).toBeLessThanOrEqual(before);
+  for (const name of ["holdStart", "holdEnd", "holdCancel"]) expect((controller as unknown as Record<string, unknown>)[name]).toBeUndefined();
+});
+
 test("a click before the buttons are on screen is not an answer", () => {
   send(ask());
   controller.clickAsk("yes");
@@ -868,134 +882,16 @@ test("a click before the buttons are on screen is not an answer", () => {
   expect(confirm).not.toHaveBeenCalled();
 });
 
-test("only a T3 question begins a hold: the page captures the pointer for that and for nothing else", () => {
-  expect(controller.holdStart()).toBe(false); // no question
-  send(ask({ tier: "T3" }));
-  expect(controller.holdStart()).toBe(false); // its buttons are not there yet: the emblem is still appearing
-  vi.advanceTimersByTime(833);
-  expect(controller.holdStart()).toBe(true);
-  controller.holdCancel();
-  send(ask({ id: "c2" })); // T2
-  vi.advanceTimersByTime(1);
-  expect(controller.holdStart()).toBe(false); // its YES is a click, which one takes back by moving off
-  controller.clickAsk("no");
-  expect(controller.holdStart()).toBe(false); // answered
-});
-
 test("a click without a question does nothing", () => {
   controller.clickAsk("yes");
-  controller.holdStart();
-  controller.holdEnd(true);
-  controller.holdCancel();
   expect(confirm).not.toHaveBeenCalled();
   expect(view.log).toEqual([]);
 });
 
-test("the YES of a T3 question is not answered by a click", () => {
-  asked({ tier: "T3" });
-  controller.clickAsk("yes");
-  expect(confirm).not.toHaveBeenCalled();
-});
-
-test("T3: a hold shorter than the arming time answers nothing", () => {
-  asked({ tier: "T3" });
-  controller.holdStart();
-  expect(view.log).toEqual(["hold:holding"]);
-  vi.advanceTimersByTime(HOLD_MS - 1);
-  controller.holdEnd(true);
-  expect(view.log).toEqual(["hold:holding", "hold:idle"]);
-  vi.advanceTimersByTime(5000);
-  expect(confirm).not.toHaveBeenCalled();
-  expect(view.log).toEqual(["hold:holding", "hold:idle"]);
-});
-
-test("T3: held for the arming time, the button arms, and letting go on it answers YES", () => {
-  expect(HOLD_MS).toBe(600);
-  asked({ tier: "T3" });
-  controller.holdStart();
-  vi.advanceTimersByTime(HOLD_MS - 1);
-  expect(view.log).toEqual(["hold:holding"]);
-  vi.advanceTimersByTime(1);
-  expect(view.log).toEqual(["hold:holding", "hold:armed"]);
-  expect(confirm).not.toHaveBeenCalled(); // armed is not answered: letting go is
-  controller.holdEnd(true);
-  expect(confirm).toHaveBeenCalledExactlyOnceWith("c1", true);
-  expect(view.log).toEqual(["hold:holding", "hold:armed", "choice:yes", "ask-hide", "clear"]);
-});
-
-test("T3: armed, but let go away from the button, answers nothing and disarms", () => {
-  asked({ tier: "T3" });
-  controller.holdStart();
-  vi.advanceTimersByTime(HOLD_MS);
-  controller.holdEnd(false);
-  expect(view.last).toBe("hold:idle");
-  expect(confirm).not.toHaveBeenCalled();
-  controller.holdEnd(true); // the release of a later press does not find an armed button
-  expect(confirm).not.toHaveBeenCalled();
-});
-
-test("T3: a pointer the system took away drops the hold", () => {
-  asked({ tier: "T3" });
-  controller.holdStart();
-  vi.advanceTimersByTime(300);
-  controller.holdCancel();
-  vi.advanceTimersByTime(HOLD_MS);
-  expect(view.log).toEqual(["hold:holding", "hold:idle"]);
-  controller.holdEnd(true);
-  expect(confirm).not.toHaveBeenCalled();
-});
-
-test("T3: a release that never comes does not leave the button armed", () => {
-  asked({ tier: "T3" });
-  controller.holdStart();
-  vi.advanceTimersByTime(HOLD_MS);
-  expect(view.last).toBe("hold:armed");
-  vi.advanceTimersByTime(5000);
-  expect(view.last).toBe("hold:idle");
-  controller.holdEnd(true);
-  expect(confirm).not.toHaveBeenCalled();
-});
-
-test("T3: pressing again starts the hold again", () => {
-  asked({ tier: "T3" });
-  controller.holdStart();
-  vi.advanceTimersByTime(400);
-  controller.holdStart();
-  vi.advanceTimersByTime(400); // 800 ms since the first press, 400 since the second
-  controller.holdEnd(true);
-  expect(confirm).not.toHaveBeenCalled();
-});
-
-test("T3: NO clicked while YES is being held ends the hold and the YES stays dead", () => {
-  asked({ tier: "T3" });
-  controller.holdStart();
-  vi.advanceTimersByTime(300);
-  controller.clickAsk("no");
-  expect(confirm).toHaveBeenCalledExactlyOnceWith("c1", false);
-  expect(view.log).toEqual(["hold:holding", "hold:idle", "choice:no", "ask-hide", "clear"]);
-  vi.advanceTimersByTime(HOLD_MS);
-  expect(view.log).toEqual(["hold:holding", "hold:idle", "choice:no", "ask-hide", "clear"]); // nothing arms later
-  controller.holdEnd(true);
-  expect(confirm).toHaveBeenCalledTimes(1);
-});
-
-test("a question whose tier is not plainly T2 is asked the strict way", () => {
+test("a question whose tier is not plainly T2 is answered by one click too", () => {
   asked({ tier: "T9" as Ask["tier"] });
   controller.clickAsk("yes");
-  expect(confirm).not.toHaveBeenCalled();
-  controller.holdStart();
-  vi.advanceTimersByTime(HOLD_MS);
-  controller.holdEnd(true);
   expect(confirm).toHaveBeenCalledExactlyOnceWith("c1", true);
-});
-
-test("a hold on the YES of a T2 question is no answer: its YES is a click", () => {
-  asked();
-  controller.holdStart();
-  vi.advanceTimersByTime(HOLD_MS);
-  controller.holdEnd(true);
-  expect(confirm).not.toHaveBeenCalled();
-  expect(view.log).toEqual([]);
 });
 
 test("an answer that could not be sent gives the question back for another try", async () => {
@@ -1381,11 +1277,10 @@ test("levels and settings leave the lines going", () => {
 
 // ---- a question with a third answer ----
 
-test("a question with the third answer shows three buttons, and is never held", () => {
+test("a question with the third answer shows three buttons", () => {
   send(ask({ tier: "T3", yes: "允許一次", no: "不要", always: "一律允許" }));
   vi.advanceTimersByTime(833);
   expect(view.asked).toEqual([{ yes: "允許一次", no: "不要", always: "一律允許", tier: "T2", language: "zh-TW" }]);
-  expect(controller.holdStart()).toBe(false);
 });
 
 test("a question without the third answer has no always label", () => {

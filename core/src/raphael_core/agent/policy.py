@@ -100,6 +100,17 @@ class Approval:
         self.digest = digest
         self.spent = False
 
+    def covering(self, index: int) -> "Approval":
+        """The yes of a batch, for the `index`-th change it lists. A batch is one action whose `operations` are the
+        changes the owner read on one card; this approval was spent on exactly that list (its digest), so each
+        change is covered by it and by nothing else, and each is carried out once: the part has an id of its own,
+        which the door of the management service remembers as used."""
+        operations = self.action.args.get("operations")
+        if not self.spent or not isinstance(operations, list) or not 0 <= index < len(operations):
+            raise NotApproved("this yes covers no such change")
+        part = Action(operations[index]["name"], operations[index]["arguments"])
+        return Approval(_MINT, f"{self.pending_id}#{index}", part, part.digest)
+
 
 class ToolRegistry:
     """The tier of each tool, and the check an action passes before it runs.

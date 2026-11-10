@@ -3715,6 +3715,7 @@ export function checkRendered(name, context = {}) {
   if (name === "admin-draft-cancel" || name === "admin-edited-result") {
     const calls = window.__look.calls.filter(call => call.command === 'agent_question_answer');
     require(calls.length === 1 && calls[0].approved === (name === "admin-edited-result"), "one owner decision");
+    require(!/[{}]|"[A-Za-z_]+"\s*:/.test(document.querySelector('.mb-chat, .page-agent')?.textContent ?? ""), "no raw JSON is shown");
     const created = window.__look.data.members.filter(member => member.id >= 8);
     require(created.length === (name === "admin-edited-result" ? 2 : 0), "only selected drafts are applied");
     if (name === "admin-edited-result") {
@@ -4675,6 +4676,16 @@ export function checkRendered(name, context = {}) {
     const box = card.getBoundingClientRect();
     require(box.width <= 480.5, "approval uses the shared card width");
     require(visible(yes) && visible(no), "both approval actions remain visible");
+    // No raw JSON and no sentence of another language on a card of the owner's (owner, 2026-11-11: 「不用這麼複雜」; the standing
+    // rules of one language and no raw JSON): no block of code, no brace or quoted key, and every line has a word of 中文.
+    require(!card.querySelector('pre:not([hidden])') && !/[{}]|"[A-Za-z_]+"\s*:/.test(card.textContent), "the card shows no JSON");
+    const lines = (details.textContent || "").split("\n").map(line => line.trim()).filter(Boolean);
+    require(lines.every(line => /[\u3400-\u9fff]/.test(line)), `no line is in another language than the owner's: ${lines.find(line => !/[\u3400-\u9fff]/.test(line))}`);
+    require(!/\bID\b/.test(card.textContent), "the card names its target and shows no ID");
+    require(!yes.matches('[data-hold]') && !yes.querySelector('.ask-fill'), "the yes has no hold: one press answers");
+    if (card.closest('.ask-card-host')?.dataset.tier === 'T3') {
+      require(card.querySelector('[data-card-disclosure]').getAttribute('aria-expanded') === 'true' && visible(details), "what cannot be undone is read open, not behind 顯示");
+    }
     require(yes.textContent.trim() === "允許" && no.textContent.trim() === "拒絕", "approval uses explicit allow and deny words");
     require(yes.getBoundingClientRect().right <= box.right && yes.getBoundingClientRect().bottom <= innerHeight, "approval action fits the card");
     // 允許 is the first Tab stop and stands rightmost, 拒絕 to its left, as every card's buttons do (R-CARD-01, owner
@@ -4695,6 +4706,27 @@ export function checkRendered(name, context = {}) {
       require(getComputedStyle(details).overflowY === 'visible', 'details use document scrolling');
     }
     return { check: name, height: box.height, detailsHeight: details.clientHeight, contentHeight: details.scrollHeight };
+  }
+  if (name === "admin-delete-many") {
+    const cards = [...document.querySelectorAll('.ask-card')].filter(visible);
+    require(cards.length === 1, `three changes are one card (${cards.length})`);
+    const card = cards[0], details = card.querySelector('.ask-q');
+    const lines = details.textContent.split("\n").map(line => line.trim()).filter(Boolean);
+    require(lines.length === 4 && lines.slice(0, 3).every(line => /「.+」$/.test(line) && /[\u3400-\u9fff]/.test(line)), `a line each, in the owner's language: ${lines}`);
+    require(lines[0].includes("工程師") && lines[1].includes("架構師") && lines[2].includes("Raphael macOS 版規劃"), "each change names its target");
+    require(card.querySelector('.card-body.cc-state').textContent.includes("3"), "the card says how many changes it asks for");
+    require(card.querySelectorAll('.ask-yes').length === 1 && card.querySelectorAll('.ask-no').length === 1, "one yes and one no");
+    require(!card.querySelector('pre:not([hidden])') && !/[{}]|\bID\b/.test(card.textContent), "no JSON and no ID");
+    const box = card.getBoundingClientRect();
+    require(box.left >= 0 && box.right <= innerWidth && box.bottom <= innerHeight, "the card stands inside the window");
+    return { check: name, lines };
+  }
+  if (name === "admin-answered-once") {
+    const answers = window.__look.calls.filter(call => call.command === 'agent_question_answer');
+    require(answers.length === 1 && answers[0].approved === true, `one press is one answer (${answers.length})`);
+    require(![...document.querySelectorAll('.ask-card-host')].some(visible), "the card settled");
+    require(!document.querySelector('.ask-card [data-hold]'), "nothing waited for a hold");
+    return { check: name };
   }
   if (name === "member-draft" || name === "member-draft-edit") {
     const panel = [...document.querySelectorAll('.draft-panel')].find(visible);
@@ -5306,8 +5338,9 @@ export function checkRendered(name, context = {}) {
     require(menu && menu.querySelector('[data-slime-character="shion"]').getAttribute("aria-pressed") === "true", "the menu stays open on the chosen slime");
     require(menu.querySelectorAll('[aria-pressed="true"]').length === 1, "nothing else looks chosen");
     require(window.__look.data.members.find(row => row.id === 1)?.avatar === "slime:shion", "the member keeps it");
-    // The slimes alone: no tab that draws a picture (R-UI-116, owner 2026-11-09), every one of them in the window.
-    require(!menu.querySelector('.tabs, [data-avp-tab], [data-avp-pane], textarea, input'), "the picker is the slimes alone, with no 生成");
+    // The slimes alone: no tab that draws a picture (R-UI-116, owner 2026-11-09); its tabs are the kinds of slime (owner, 2026-11-11).
+    require(!menu.querySelector('[data-avp-tab], [data-avp-pane], textarea, input'), "the picker is the slimes alone, with no 生成");
+    require(menu.querySelector('[role="tab"][aria-selected="true"]')?.dataset.slimeTab === "characters", "it stands on the group of the chosen slime");
     const whole = menu.getBoundingClientRect();
     require(whole.top >= 0 && whole.bottom <= innerHeight && whole.left >= 0 && whole.right <= innerWidth, `the whole picker stands in the window (${Math.round(whole.bottom)} of ${innerHeight})`);
     require(menu.scrollHeight <= menu.clientHeight + 1, "the picker has no scroll of its own");
@@ -5324,6 +5357,42 @@ export function checkRendered(name, context = {}) {
     const centred = Math.abs((box.left + box.right) / 2 - (face.left + face.right) / 2) <= 2 || box.left <= 9 || box.right >= innerWidth - 9;
     require(box.top >= face.bottom - 1 && centred, `the picker is under the middle of the face: face ${Math.round(face.left)}-${Math.round(face.right)}, menu ${Math.round(box.left)}-${Math.round(box.right)}`);
     return { check: name };
+  }
+  if (name === "slime-picker-shape" || name === "slime-picker-box" || name === "slime-picker-tab") {
+    // The picker is a row of tabs above the open group's slimes, one size for every group (owner, 2026-11-11: 「上面會有一些 tab、
+    // button 之類的，然後可以選擇」; a control just pressed never moves).
+    const menu = document.querySelector(".mb-avpop");
+    require(menu, "the picker is open");
+    const tabs = [...menu.querySelectorAll('[role="tab"]')], panels = menu.querySelector(".mb-slime-panels");
+    const box = element => { const r = element.getBoundingClientRect(); return [r.left, r.top, r.width, r.height].map(n => Math.round(n * 10) / 10); };
+    if (name === "slime-picker-box") {
+      window.__look.pickerBox = { menu: box(menu), panels: box(panels), tabs: tabs.map(box) };
+      return { check: name };
+    }
+    require(tabs.length === 7 && menu.querySelector('[role="tablist"]'), "the groups are tabs of one tablist");
+    require(tabs.filter(tab => tab.getAttribute("aria-selected") === "true").length === 1, "exactly one tab is chosen");
+    require(tabs.every(tab => visible(tab)) && tabs.every(tab => Math.abs(tab.getBoundingClientRect().top - tabs[0].getBoundingClientRect().top) <= 1), "the tabs stand in one row");
+    require(tabs.every(tab => tab.getBoundingClientRect().bottom <= panels.getBoundingClientRect().top + 1), "the tabs are above the slimes");
+    const whole = menu.getBoundingClientRect();
+    require(whole.top >= 0 && whole.bottom <= innerHeight && whole.left >= 0 && whole.right <= innerWidth, `the picker stands inside the window (${Math.round(whole.bottom)} of ${innerHeight})`);
+    require(tabs.every(tab => tab.getBoundingClientRect().right <= whole.right + 1) || menu.querySelector("[data-chip-row][data-more-after], [data-chip-row][data-more-before]"), "the tabs fit the picker, or the chip row scrolls with its arrows");
+    const open = [...menu.querySelectorAll("[data-slime-group]")].filter(panel => getComputedStyle(panel).visibility !== "hidden" && !panel.hasAttribute("inert"));
+    require(open.length === 1 && open[0].dataset.slimeGroup === menu.querySelector('[role="tab"][aria-selected="true"]').dataset.slimeTab, "only the chosen tab's slimes show");
+    require(!menu.querySelector("h1, h2, h3, h4"), "no heading inside the grid: the tab says it");
+    const shown = [...open[0].querySelectorAll("button")];
+    require(shown.length > 0 && shown.every(visible), "the group's slimes are all there");
+    require(panels.scrollHeight <= panels.clientHeight + 1, `the largest group fits without scrolling (${panels.scrollHeight} of ${panels.clientHeight})`);
+    if (name === "slime-picker-tab") {
+      const before = window.__look.pickerBox;
+      require(before, "the picker was measured before the press");
+      const same = (a, b) => a.length === b.length && a.every((n, i) => Math.abs(n - b[i]) <= 0.6);
+      require(same(box(menu), before.menu), `the picker did not move or change size: ${box(menu)} / ${before.menu}`);
+      require(same(box(panels), before.panels), "the place of the slimes did not change");
+      require(tabs.every((tab, i) => same(box(tab), before.tabs[i])), "no tab moved");
+      require(menu.querySelector('[role="tab"][aria-selected="true"]').dataset.slimeTab === "animals", "the pressed tab is the chosen one");
+      require(shown.every(button => button.getAttribute("aria-pressed") === "false"), "the face that is now is not in this group, so none is marked");
+    }
+    return { check: name, tabs: tabs.length, slimes: shown.length };
   }
   if (name === "conversation-picker") {
     const list = document.querySelector("#app-popover .conversation-menu-list");

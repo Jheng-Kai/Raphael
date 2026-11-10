@@ -136,8 +136,10 @@ noninteractive snapshots exclude it. Own routines, memory, skill tools,
 connect_app/request_secret cards, room_post, ask_member and handoff remain shared.
 Firm destructive confirmation is evaluated by ToolGate/ToolRegistry even under
 bypass and cannot be waived by Always. MembersService also requires the exact
-consumed Approval and refuses replay. Existing T3 hold-to-confirm cards carry the
-full scope. A trusted origin-turn context prevents a requested history deletion
+consumed Approval and refuses replay. T3 cards carry the full scope in words and are
+answered by one press (2026-11-11); the changes of one turn that cannot be undone are held
+until the turn is in and asked as one `management_batch` card, whose single yes covers
+exactly its listed changes (`Approval.covering`, one part each). A trusted origin-turn context prevents a requested history deletion
 from cancelling its own executing tool; completion writes a fresh receipt.
 
 ## Bounded transcript rendering and incremental history (2026-11-05)

@@ -1375,25 +1375,24 @@ class MembersService:
         return result
 
     def admin_confirmation(self, name: str, arguments: dict, language: str, *, question: bool = True) -> str:
+        """The card of one change, in words: what it does, to what (by name), and the question. No ID and no JSON
+        (owner, 2026-11-11: 「不用這麼複雜」)."""
         from ..agent.team_admin import confirmation
-        from ..ui_languages import fixed_language
-        language = fixed_language(language)
         from ..management import resolve
+        from ..management_words import effect, question as asked
+        from ..ui_languages import fixed_language
 
+        language = fixed_language(language)
         action, values = resolve(name, arguments)
-        traditional = {"member_create", "member_update", "member_delete", "group_create", "group_rename",
-                       "member_skill_import", "member_command_save"}
-        if action is not None and name not in traditional:
-            labels = with_ui_words({"en": "Affected target", "zh-TW": "影響對象", "ja": "対象"})
-            target = self.management_target(name, arguments)
-            values = {key: value for key, value in values.items() if key != "data"}
-            if "data" in arguments:
-                values["image"] = arguments.get("name", "uploaded image")
-            heading = with_ui_words({"en": "Requested change", "zh-TW": "要求的變更", "ja": "変更内容"})[language]
-            scope = action.description if language == "en" else self.management_label(action.name, language)
-            return (f"{heading}: {scope}\n{labels[language]}: {target}\n"
-                    + json.dumps(values, ensure_ascii=False, indent=2)
-                    + (with_ui_words({"en": "\nAllow this change?", "zh-TW": "\n允許這項變更嗎？", "ja": "\nこの変更を許可しますか？"})[language] if question else ""))
+        if action is not None and name not in self.TRADITIONAL:
+            detail, notes = self.management_target(name, arguments, language)
+            lines = [effect(self.management_effect(action, values), language)]
+            if detail:
+                lines.append(detail)
+            lines += notes
+            if not action.destructive:
+                lines += self.readable_values(values, language)
+            return "\n".join(lines) + ("\n" + asked(language, several=False) if question else "")
 
         identifier = arguments.get("member_id", 0) if name.startswith("routine_") else arguments.get("member_id", arguments.get("id"))
         target = ""
@@ -1414,10 +1413,134 @@ class MembersService:
                          "blurb": current.blurb if current else "", "group": group.name if group else "", **arguments}
         text = confirmation(name, arguments, language, target, question=False)
         original_fields = {"id", "name", "role", "blurb", "personality", "instructions", "group", "avatar_preset", "source", "member_id", "description", "template"}
-        extra = {key: value for key, value in arguments.items() if key not in original_fields}
-        if extra:
-            text += "\n" + json.dumps(extra, ensure_ascii=False, indent=2)
-        return text + (with_ui_words({"en": "\nAllow this change?", "zh-TW": "\n允許這項變更嗎？", "ja": "\nこの変更を許可しますか？"})[language] if question else "")
+        text += "".join("\n" + line for line in self.readable_values({key: value for key, value in arguments.items() if key not in original_fields}, language))
+        return text + ("\n" + asked(language, several=False) if question else "")
+
+    #: Tools whose card lists the fields the owner approves (`confirmation`), not an effect and a target.
+    TRADITIONAL = frozenset({"member_create", "member_update", "member_delete", "group_create", "group_rename",
+                             "member_skill_import", "member_command_save"})
+
+    @staticmethod
+    def management_effect(action, values) -> str:
+        """The key of the words that say what a registry action does."""
+        if action.setting == "history_retention_days":
+            return "settings_history_retention_days"
+        if action.name == "manage_connection" and values.get("operation") != "disconnect":
+            return "manage_connection"
+        return action.name
+
+    def readable_values(self, values: dict, language: str) -> list[str]:
+        """The fields of a change that have words, one line each; what has none (flags, IDs, raw structures) is not shown."""
+        from ..agent.team_admin import confirmation
+        from ..management_words import joined, say
+
+        shown = {key: value for key, value in values.items() if isinstance(value, str) and value and key in (
+            "name", "role", "blurb", "personality", "instructions", "group", "avatar_preset", "source", "description", "template", "title", "prompt")}
+        lines = confirmation("-", shown, language, question=False).split("\n")[1:] if shown else []
+        extra = {"model": ("Model", "模型", "モデル"), "effort": ("Effort", "思考強度", "思考の強さ")}
+        for key, words in extra.items():
+            if isinstance(values.get(key), str) and values[key]:
+                lines.append(joined(say(language, *words), values[key], language))
+        if isinstance(values.get("tools"), list) and values["tools"]:
+            lines.append(joined(say(language, "Tools", "工具", "ツール"), "、".join(str(tool) for tool in values["tools"]) if language in ("zh-TW", "zh-CN", "ja") else ", ".join(str(tool) for tool in values["tools"]), language))
+        return lines
+
+    def admin_line(self, name: str, arguments: dict, language: str) -> str:
+        """One change as one line of a card that lists several: its effect, then its target by name."""
+        from ..agent.team_admin import title_of
+        from ..management import resolve
+        from ..management_words import effect, joined
+        from ..ui_languages import fixed_language
+
+        language = fixed_language(language)
+        action, values = resolve(name, arguments)
+        if action is None or name in self.TRADITIONAL:
+            identifier = arguments.get("member_id", arguments.get("id"))
+            target = self.name_of(identifier) if type(identifier) is int and name != "group_rename" else ""
+            if name == "group_rename" and type(identifier) is int:
+                group = self.store.group(identifier)
+                target = group.name if group else ""
+            from ..management_words import quoted
+            return joined(title_of(name, language), quoted(target, language) if target else "", language)
+        detail, notes = self.management_target(name, arguments, language)
+        return joined(effect(self.management_effect(action, values), language), " ".join([detail, *notes]).strip(), language)
+
+    def admin_batch_confirmation(self, operations: list[dict], language: str) -> str:
+        """One card for the changes asked for in one turn: a line each, one question."""
+        from ..management_words import batch
+        from ..ui_languages import fixed_language
+
+        language = fixed_language(language)
+        if len(operations) == 1:
+            return self.admin_confirmation(operations[0]["name"], operations[0]["arguments"], language)
+        return batch([self.admin_line(op["name"], op["arguments"], language) for op in operations], language)
+
+    def management_target(self, name: str, arguments: dict, language: str) -> tuple[str, list[str]]:
+        """What a change is about, by name, resolved at card time: the quoted names, and the notes under them.
+        Nothing here is an ID, and nothing is in a language the owner did not choose."""
+        from ..management import resolve
+        from ..management_words import joined, listed, say
+
+        item, arguments = resolve(name, arguments)
+        name = item.name
+        identifier = arguments.get("room_id", arguments.get("member_id", arguments.get("id")))
+        routine = None
+        if item.rpc.startswith("routines."):
+            identifier = arguments.get("id")
+            routine = self.store.routine(identifier) if type(identifier) is int else None
+        names: list[str] = []
+        notes: list[str] = []
+        if item.rpc.startswith("members.") or name.startswith(("member_history", "member_routine", "member_skill", "member_command")):
+            member_id = (arguments.get("member_id", routine.member_id if routine else None)
+                         if item.rpc.startswith(("routines.", "members.skills", "members.commands")) or name.startswith("member_history")
+                         else arguments.get("member_id", arguments.get("id")))
+            who = self.name_of(member_id) if type(member_id) is int else None
+        else:
+            who = None
+        table = ("member_groups" if item.rpc.startswith("groups.") else "rooms" if item.rpc.startswith("rooms.")
+                 else "conversations" if item.rpc.startswith("conversations.") else "routines" if item.rpc.startswith("routines.") else None)
+        if table and type(identifier) is int:
+            # Table names are fixed above, never model input.
+            record = self._conn.execute(f"SELECT * FROM {table} WHERE id=?", (identifier,)).fetchone()
+            if record:
+                data = dict(record)
+                label = str(data.get("name", data.get("title", "")))
+                if label:
+                    names.append(label)
+        if name in ("member_skill_delete", "member_command_delete"):
+            member = arguments.get("member_id", 0)
+            try:
+                resources = (self.capabilities.skills(-1 if arguments.get("shared") else member)
+                             if name == "member_skill_delete" else self.capabilities.commands(member))
+            except MemberError:
+                resources = []
+            names += [str(entry["name"]) for entry in resources if entry["id"] == arguments.get("id")]
+        if name == "member_history_delete":
+            turn = self._history.get(arguments.get("turn_id"))
+            if turn is not None and turn.question:
+                names.append(turn.question)
+        if name == "room_members":
+            previous = [row[0] for row in self._conn.execute("SELECT member_id FROM room_members WHERE room_id=?", (identifier,))]
+            removed = sorted(set(previous) - set(arguments.get("member_ids", [])))
+            if removed:
+                notes.append(joined(say(language, "Removed members", "移除的成員", "外すメンバー"),
+                                    listed([self.name_of(member) or "" for member in removed if self.name_of(member)], language), language))
+        if name == "dictionary_delete":
+            record = self._conn.execute("SELECT word FROM dictionary WHERE id=?", (identifier,)).fetchone()
+            if record:
+                names.append(record[0])
+        if who and name not in ("member_primary",) or name == "member_primary" and who:
+            names.append(who)
+        if item.setting == "history_retention_days":
+            def span(days) -> str:
+                return say(language, "forever", "永久保留", "無期限") if days is None or days < 0 else say(language, "{days} days", "{days} 天", "{days} 日").format(days=days)
+            return f"{span(self._settings.get(item.setting))} → {span(arguments.get('value'))}", notes
+        if item.rpc in ("integrations.disconnect", "connectors.disconnect") or name == "manage_connection":
+            connection = arguments.get("id", arguments.get("connection"))
+            names = [str(next((entry.get("name", connection) for entry in self._connections() if entry.get("id") == connection), connection))]
+        if name == "member_history_clear" and who:
+            names = [who]
+        return listed(names, language) if names else "", notes
 
     async def admin_drafts(self, operations: list[dict]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
         """Build structured member and group drafts for a pending team administration batch."""
@@ -1603,97 +1726,6 @@ class MembersService:
             for identifier, language in greetings:
                 greeting(identifier, language)
         return results
-
-    @staticmethod
-    def management_label(name, language):
-        labels = {
-            "member_primary": ("移轉主要聯絡人與管理權", "主担当と管理権限を移動"),
-            "member_history_clear": ("清除此成員的全部對話紀錄", "メンバーの全会話履歴を消去"),
-            "member_history_delete": ("刪除此則對話紀錄", "会話記録を削除"),
-            "group_delete": ("刪除資料夾；成員保留並移至未分類", "フォルダーを削除しメンバーは保持"),
-            "room_members": ("替換群聊成員；移除下列成員", "グループのメンバーを置換"),
-            "room_delete": ("刪除群聊及全部訊息", "グループと全メッセージを削除"),
-            "conversation_clear": ("清除此對話的全部紀錄", "会話の全記録を消去"),
-            "member_skill_delete": ("刪除技能套件與授權", "スキルと権限を削除"),
-            "member_skill_undo": ("???????????????", "???????????????????"),
-            "member_command_delete": ("刪除成員指令", "コマンドを削除"),
-            "member_routine_delete": ("刪除例行任務及排程", "定期タスクと予定を削除"),
-            "connection_disconnect": ("中斷連線並撤銷認證", "接続と認証を解除"),
-            "connector_disconnect": ("中斷應用程式連線並撤銷認證", "アプリ接続と認証を解除"),
-            "manage_connection": ("變更連線；中斷連線會撤銷認證", "接続を変更・認証を解除"),
-            "dictionary_delete": ("刪除字典詞彙", "辞書の単語を削除"),
-            "dictation_delete": ("刪除此則聽寫紀錄", "音声入力記録を削除"),
-            "dictation_clear": ("刪除全部聽寫紀錄", "音声入力の全記録を削除"),
-            "memory_clear": ("清除記憶文件", "メモリ文書を消去"),
-            "memory_summary_clear": ("清除對話摘要", "会話の要約を消去"),
-            "settings_history_retention_days": ("變更保留天數；較舊紀錄會被永久刪除", "保持期間を変更・古い記録を完全削除"),
-        }
-        return labels.get(name, ("套用下列管理變更", "次の管理変更を適用"))[0 if language == "zh-TW" else 1]
-
-    def management_target(self, name: str, arguments: dict) -> str:
-        """Resolve the target at card time; retain exact IDs and all removal scope."""
-        from ..management import resolve
-
-        item, arguments = resolve(name, arguments)
-        name = item.name
-        identifier = arguments.get("room_id", arguments.get("member_id", arguments.get("id")))
-        routine = None
-        if item.rpc.startswith("routines."):
-            identifier = arguments.get("id")
-            routine = self.store.routine(identifier) if type(identifier) is int else None
-        target = (f"ID {identifier}" if identifier is not None else
-                  str(arguments.get("name", arguments.get("title", "all relevant records"))))
-        if item.rpc.startswith("members.") or name.startswith(("member_history", "member_routine")):
-            member_id = (arguments.get("member_id", routine.member_id if routine else None)
-                         if item.rpc.startswith("routines.") else arguments.get("member_id", arguments.get("id")))
-            if type(member_id) is int:
-                target += f" / {self.name_of(member_id)}"
-        table = ("member_groups" if item.rpc.startswith("groups.") else "rooms" if item.rpc.startswith("rooms.")
-                 else "conversations" if item.rpc.startswith("conversations.") else "routines" if item.rpc.startswith("routines.") else None)
-        if table and type(identifier) is int:
-            # Table names are fixed above, never model input.
-            record = self._conn.execute(f"SELECT * FROM {table} WHERE id=?", (identifier,)).fetchone()
-            if record:
-                data = dict(record)
-                target += " / " + str(data.get("name", data.get("title", "")))
-        if name == "member_delete":
-            target += " / conversations, memory, routines, skills, commands and resources"
-        if name == "member_history_delete":
-            turn = self._history.get(arguments.get("turn_id"))
-            target += f" / turn {arguments.get('turn_id')}"
-            if turn is not None:
-                target += " / " + turn.question
-        if name == "member_primary":
-            target += f" / default contact moves from {self.name_of(self.primary_id())}"
-        if name == "group_delete":
-            target += " / folder only; members remain ungrouped"
-        if name == "room_delete":
-            target += " / all room messages and room state"
-        if name == "room_members":
-            previous = [row[0] for row in self._conn.execute("SELECT member_id FROM room_members WHERE room_id=?", (identifier,))]
-            removed = sorted(set(previous) - set(arguments.get("member_ids", [])))
-            target += " / removed: " + ", ".join(f"{i} ({self.name_of(i)})" for i in removed)
-        if name == "dictionary_delete":
-            record = self._conn.execute("SELECT word FROM dictionary WHERE id=?", (identifier,)).fetchone()
-            if record:
-                target += " / " + record[0]
-        if name in ("member_skill_delete", "member_command_delete"):
-            member = arguments.get("member_id", 0)
-            try:
-                resources = (self.capabilities.skills(-1 if arguments.get("shared") else member)
-                             if name == "member_skill_delete" else self.capabilities.commands(member))
-            except MemberError:
-                resources = []
-            target += f" / {self.name_of(member)} / " + ", ".join(item["name"] for item in resources if item["id"] == arguments.get("id"))
-        if name == "member_skill_undo":
-            target += " / restore the last skill snapshot, replacing its current documents"
-        if item.setting:
-            target = f"{item.setting}: {self._settings.get(item.setting)} -> {arguments.get('value')}"
-        if item.rpc in ("integrations.disconnect", "connectors.disconnect") or name == "manage_connection":
-            connection = arguments.get("id", arguments.get("connection"))
-            label = next((entry.get("name", connection) for entry in self._connections() if entry.get("id") == connection), connection)
-            target = f"{label} (ID {connection}) / connection and stored authorization"
-        return target
 
     def authorize_management(self, member_id, name, arguments, *, interactive=False, approval=None):
         """Recheck live authority and the consumed exact-action gate token before a write."""

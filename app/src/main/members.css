@@ -106,7 +106,6 @@
 .page-agent .ask-card.is-member .btn { border-color: var(--edge); color: var(--text); background: var(--surface-2); }
 .page-agent .ask-card.is-member .btn:hover:not(:disabled) { background: var(--hover); }
 .page-agent .ask-card.is-member .btn:active:not(:disabled) { background: var(--pressed); }
-.page-agent .ask-card.is-member .ask-fill { background: var(--text-2); }
 .bgq-card.is-member { border-color: var(--edge); background: var(--panel); box-shadow: none; animation: none; }
 .bgq-card.is-member .bgq-q, .bgq-card.is-member .bgq-name { color: var(--text); }
 .bgq-card.is-member .btn { border-color: var(--edge); color: var(--text); background: var(--surface-2); }

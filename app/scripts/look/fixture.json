@@ -1437,9 +1437,19 @@
       "turn_id": 1,
       "member_id": 0,
       "prefix": "問",
-      "text": "永久刪除成員及其所有資料：小晴\nID：1\n允許這項變更嗎？",
+      "text": "永久刪除成員及其所有資料：「小晴」\n允許這項變更嗎？",
       "tier": "T3",
       "timeout_ms": 30000
+    },
+    "deleteMany": {
+      "id": "look-admin-delete-many",
+      "turn_id": 1,
+      "member_id": 0,
+      "prefix": "問",
+      "text": "有 3 項變更需要你同意\n永久刪除成員及其所有資料：「工程師」\n永久刪除成員及其所有資料：「架構師」\n刪除群聊及全部訊息：「Raphael macOS 版規劃」\n允許以上所有變更嗎？",
+      "tier": "T3",
+      "timeout_ms": 30000,
+      "done": "已完成：永久刪除成員及其所有資料：「工程師」\n已完成：永久刪除成員及其所有資料：「架構師」\n已完成：刪除群聊及全部訊息：「Raphael macOS 版規劃」"
     },
     "draft": {
       "id": "look-admin-draft",
@@ -1493,7 +1503,7 @@
       "turn_id": 1,
       "member_id": 0,
       "prefix": "問",
-      "text": "永久刪除成員及其所有資料：小晴\nID：1\n允許這項變更嗎？",
+      "text": "永久刪除成員及其所有資料：「小晴」\n允許這項變更嗎？",
       "tier": "T3",
       "timeout_ms": 30000
     }

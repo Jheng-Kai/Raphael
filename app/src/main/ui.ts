@@ -194,7 +194,7 @@ export interface TabItem {
  * quiet words with a soft fill under the one that is open, for a bar that also holds a search (the
  * 「已安裝」 and 「商店」 of 連接): still tabs, with the same roles and keys.
  */
-export function tabs(items: TabItem[], selected: string, o: { label: string; kind: "nav" | "filter"; fill?: boolean; plain?: boolean }): string {
+export function tabs(items: TabItem[], selected: string, o: { label: string; kind: "nav" | "filter"; fill?: boolean; plain?: boolean; className?: string; attrs?: string }): string {
   const nav = o.kind === "nav";
   const one = (it: TabItem): string => {
     const on = it.id === selected;
@@ -205,7 +205,7 @@ export function tabs(items: TabItem[], selected: string, o: { label: string; kin
     return `<button type="button" class="tab" ${state}${it.attrs ?? ""}>${label}${n}</button>`;
   };
   const cls = nav ? `tabs ${o.plain ? "plain" : "switch"}${o.fill ? " fill" : ""}` : "tabs seg";
-  return `<div class="${cls}" role="${nav ? "tablist" : "group"}" aria-label="${esc(o.label)}">${items.map(one).join("")}</div>`;
+  return `<div class="${cls}${o.className ? ` ${o.className}` : ""}" role="${nav ? "tablist" : "group"}" aria-label="${esc(o.label)}"${o.attrs ?? ""}>${items.map(one).join("")}</div>`;
 }
 
 /** How long 「中斷連線」 (of a connection or a messaging app) waits for its second press. */
@@ -429,7 +429,7 @@ function closeMenuLevel(): void {
 
 /** The buttons of the open menu that can be reached with the arrow keys. */
 const menuItems = (el: HTMLElement): HTMLButtonElement[] =>
-  Array.from(el.querySelectorAll<HTMLButtonElement>("button")).filter((b) => !b.disabled && b.offsetParent !== null);
+  Array.from(el.querySelectorAll<HTMLButtonElement>("button")).filter((b) => !b.disabled && b.offsetParent !== null && !b.closest("[inert]"));
 
 const MENU_LEAVE_MS = 700;
 
