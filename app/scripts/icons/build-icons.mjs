@@ -11,11 +11,11 @@ const MAP = {
   info: "info", lock: "lock", left: "chevron-left", right: "chevron-right", refresh: "refresh-cw", link: "link",
   chat: "message-square", globe: "globe", monitor: "monitor", expand: "maximize", open: "maximize-2", shrink: "minimize-2",
   eye: "eye", shield: "shield", star: "star", grid: "layout-grid", check: "check", sliders: "sliders-horizontal",
-  keyboard: "keyboard", cloud: "cloud", send: "arrow-up", stop: "square", bot: "bot", pencil: "pencil", steps: "list",
+  keyboard: "keyboard", cloud: "cloud", send: "arrow-up", stop: "square", bot: "bot", pencil: "pencil", share: "share", steps: "list",
   plug: "plug", bell: "bell", calendar: "calendar", news: "newspaper", folder: "folder", memory: "brain", attach: "paperclip",
   voice: "audio-lines", database: "database", smile: "smile", smilePlus: "smile-plus", play: "play", pause: "pause",
   external: "external-link", minus: "minus", image: "image", file: "file", download: "download", more: "ellipsis",
-  repeat: "repeat", mail: "mail", swap: "arrow-left-right",
+  repeat: "repeat", mail: "mail", swap: "arrow-left-right", report: "file-chart-column",
 };
 
 const root = new URL("../../", import.meta.url);

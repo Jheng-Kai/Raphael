@@ -1855,6 +1855,64 @@ npm run look -- page-product page-buy page-send page-expand page-expand-place pa
 Use judge on this same run when its prerequisites and network are authorized.
 Offline fixture/browser evidence does not prove native MCP/provider transport.
 
+## Report pages (owner, 2026-11-09, after Grok Bot's Page)
+
+R-PAGE-01. The owner asked a member to bring all the members' facts together in a report inside
+the app, as Grok Bot does (「grokbot 甚至可以在內部做報告 挺猛的」「還有這種圖 也挺好的」). A report
+is a page of the existing page system (core `agent/pages.py`): the same `pages` row, revisions,
+turn card list and `update_page`, with no migration. The member gives `report` to `show_page` or
+`update_page` instead of `html`; core `agent/report_page.py` checks it (kinds `findings`, `table`,
+`team`, `text`; lengths, member ids, node ids, secrets) and keeps it as the page's `tool_input`,
+with a plain HTML rendition in `html`. `pages.open` returns the checked content and starts no
+loopback host. A report from background work shows its card and does not wait for the owner.
+The core stamps `as_of` (ISO text, never 13 digits of milliseconds, which can pass the card check).
+
+- **Read tool.** `team_work` (core `members/team_work.py`, T0, owner's private chat only) gives each
+  member's role, finished and failed work in a 1–30 day window, unfinished work, what waits for the
+  owner, routines with their last run, outputs (member deliveries, verified artifacts and pages,
+  never the owner's uploads) and hand-offs both ways, in the owner's time zone, capped, with
+  secrets redacted. The page says it states recorded facts only; the tool says to write only these.
+- **Link card.** In the reply, after the member's words: the same `.btn.attachment-file` card as a
+  file a member made (56 px, `--surface-2`), the Lucide `file-chart-column` icon (`report`), the
+  title and 「頁面」. No frame, no expand control.
+- **Open.** The card opens the report in the thread's place (`.ra-stage.is-report`): the thread
+  stays laid out and hidden under it, so its scroll is kept; the composer stays below and the
+  owner can ask for changes. The × at the top right is the window edge's 36 px soft round button
+  (`.rp-top`, R-UI-16 list). Sending, another conversation, or the card leaving the thread puts
+  it away; the focus returns to the card. A changed revision is drawn again where it was read.
+- **Page.** Title (`--fs-h1`), 「資料截至 <date time> · 只寫有紀錄的事實」, 「本頁內容」 (a row under
+  the title; a sticky column at the right from 1100 px of report width). Findings: a summary box
+  (`--panel`, info icon) and rows with a status word in the theme's own colour (`--ok`,
+  `--warn`, `--err`, `--text-3`; the member's own word or the window's: 運作中, 完成, 待執行,
+  等你回覆, 卡住, 暫停, 沒有完成). Table: tabs (`tabs()` nav, plain) for its groups when there are
+  two or more, an extra status column, the member's colour dot on its row; below 560 px each row
+  reads as column name and value. Team: boxes in rows by who hands work to whom (cycle-closing
+  arrows go up), each with the member's slime colour down its left edge (the owner and others
+  grey), right-angle arrows with labels that cover no box and no other label, then notes such as
+  重複 and 缺口. Everything is the member's plain text, escaped; no model markup or script runs.
+
+How to get to it: open a member's conversation; ask for a report on the team (the member reads
+`team_work` and calls `show_page` with `report`); press the card in its reply.
+
+```powershell
+npm run look -- page-report-card page-report page-report-team page-report-tab page-report-close page-product page-buy page-send page-expand page-expand-place page-gone page-room-draft owner-card-room-page dataset-chart --theme both --width 1120,720,1920x1080
+```
+
+page-report-card checks the file card, its words and icon, and that nothing opens before a press;
+page-report the composer below, the date line, the contents, four status colours, the fade and
+the ×; page-report-team that the contents bring the team to where the title stands, five boxes
+and six labels overlap nothing, five colours, the names from the roster and the notes;
+page-report-tab the group filter; page-report-close the thread, the scroll and the focus back.
+The page scenes are the consumers of the shared page card and host (`mountPages`, the room
+composer's send). Compare the link card with a member's file card (`dataset-chart`) at the same
+theme and width: same component, size, surface and type.
+
+Tests: core `tests/agent/test_pages.py` (report store, open, update, refusals, the card-number
+time), `tests/agent/test_owner_questions.py` (no background wait), `tests/members/test_team_work.py`
+(projection, window, caps, privacy, time zone, the harness end to end);
+`app/src/main/report-page.test.ts` (escaping, contents, statuses, tabs, diagram layout invariants,
+open/close/refresh). The fixture proves drawing only; a real member turn on a real model is the
+native boundary.
 
 ## Diagnostic credential security (2026-11-05)
 

@@ -57,6 +57,7 @@ import type {
   StatsSummary,
   WireAttachment,
   PageOpened,
+  ReportOpened,
 } from "./types";
 
 /** Calls `method` of the core. Only the methods of the main window go through (commands.rs). */
@@ -505,6 +506,8 @@ export const openExternalUrl = (url: string): Promise<void> => invoke("open_exte
 /** A sign-in in the browser has finished: the owner's way back is this window coming to the front. */
 export const mainWindowForward = (): Promise<void> => invoke("main_window_forward");
 export const pagesOpen = (id: string, theme: "dark" | "light"): Promise<PageOpened> => core("pages.open", { id, theme });
+/** A report page's checked content: the app draws it (report-page.ts), in whichever theme, with no frame. */
+export const reportOpen = (id: string): Promise<ReportOpened> => core("pages.open", { id, theme: "light" });
 export const pagesToolCall = (id: string, tool: string, args: object): Promise<{ status: string; ok?: boolean; tool_result?: object | null; error?: string | null }> => core("pages.tool_call", { id, tool, arguments: args });
 
 

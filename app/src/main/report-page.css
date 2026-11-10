@@ -1,0 +1,101 @@
+/* A report page (report-page.ts): a link card in the reply, and the page in the thread's place with the composer below.
+   The thread stays laid out under it, hidden, so its place and its scroll are as they were when the report closes. */
+.ra-stage.is-report { display: grid; grid-template-rows: minmax(0, 1fr) auto; grid-template-columns: minmax(0, 1fr); }
+.ra-stage.is-report > :not(.ra-scroll, .rp-view, .ra-dock) { display: none; }
+.ra-stage.is-report > .ra-scroll { grid-area: 1 / 1; visibility: hidden; }
+.ra-stage.is-report > .rp-view { grid-area: 1 / 1; }
+.ra-stage.is-report > .ra-dock { grid-area: 2 / 1; }
+.rp-view { position: relative; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); min-height: 0; background: var(--content); }
+.rp-view[hidden] { display: none; }
+/* The page scrolls as the thread does: what scrolls away fades before it meets the header, and at rest the title
+   stands clear of the fade (conversations.css). */
+.rp-scroll { position: relative; min-height: 0; overflow-x: hidden; overflow-y: auto; scrollbar-width: none; container-type: inline-size; mask-image: linear-gradient(to bottom, transparent 16px, var(--text) 40px); }
+.rp-scroll::-webkit-scrollbar { display: none; }
+.rp-scroll:focus { outline: none; }
+/* The × back to the conversation stays at the top right, out of the fade, while the page scrolls under it. */
+.rp-top { position: absolute; top: var(--sp-3); right: var(--sp-4); z-index: 2; }
+
+.rp-doc { max-width: calc(24 * var(--sp-6)); margin: 0 auto; padding: calc(var(--sp-6) + var(--sp-2)) var(--sp-6) calc(2 * var(--sp-6)); }
+.rp-title { margin: 0; font: var(--weight-medium) var(--fs-h1)/1.35 var(--ui); overflow-wrap: anywhere; }
+.rp-sub { margin: var(--sp-1) 0 0; color: var(--text-3); font-size: var(--fs-sm); }
+.rp-toc { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--sp-1) var(--sp-4); margin-top: var(--sp-5); padding: var(--sp-2) 0; border-block: 1px solid var(--line); font-size: var(--fs-sm); }
+.rp-toc-h { color: var(--text-3); font-size: var(--fs-xs); }
+.rp-toc a { color: var(--text-2); text-decoration: none; }
+.rp-toc a:hover { color: var(--text); text-decoration: underline; text-underline-offset: 3px; }
+:where(:root[data-keys]) .rp-toc a:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: var(--r-sm); }
+
+.rp-sec { margin-top: calc(var(--sp-6) + var(--sp-1)); }
+.rp-h2 { margin: 0 0 var(--sp-3); font: var(--weight-medium) var(--fs-lg)/1.4 var(--ui); }
+.rp-p { margin: 0 0 var(--sp-2); color: var(--text-2); font-size: var(--fs-md); line-height: 1.7; overflow-wrap: anywhere; }
+
+.rp-callout { display: flex; align-items: flex-start; gap: var(--sp-2); padding: var(--sp-3) var(--sp-4); border-radius: var(--r-md); background: var(--panel); }
+.rp-callout > .i { flex: none; width: 16px; height: 16px; margin-top: 3px; color: var(--text-2); }
+.rp-callout p { margin: 0; font-size: var(--fs-sm); line-height: 1.6; overflow-wrap: anywhere; }
+
+.rp-items { list-style: none; margin: var(--sp-2) 0 0; padding: 0; }
+.rp-items > li { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-3); padding: var(--sp-3) 0; border-bottom: 1px solid var(--line); }
+.rp-items.has-status > li { grid-template-columns: calc(3 * var(--sp-6)) minmax(0, 1fr); }
+.rp-items > li:last-child { border-bottom: 0; }
+.rp-item-t { min-width: 0; }
+.rp-item-t b { display: block; font-weight: var(--weight-medium); font-size: var(--fs-sm); line-height: 1.5; overflow-wrap: anywhere; }
+.rp-item-t span { display: block; color: var(--text-2); font-size: var(--fs-sm); line-height: 1.6; overflow-wrap: anywhere; }
+/* A status is a word in the theme's own colour for it, never a pill. */
+.rp-st { font-size: var(--fs-xs); font-weight: var(--weight-medium); line-height: 1.6; white-space: nowrap; }
+.rp-st[data-tone="ok"] { color: var(--ok); }
+.rp-st[data-tone="warn"] { color: var(--warn); }
+.rp-st[data-tone="err"] { color: var(--err); }
+.rp-st[data-tone="quiet"] { color: var(--text-3); }
+
+.rp-table-box > .tabs { margin-bottom: var(--sp-2); }
+.rp-table { width: 100%; border-collapse: collapse; font-size: var(--fs-sm); line-height: 1.5; }
+.rp-table th { padding: var(--sp-2) var(--sp-3) var(--sp-2) 0; text-align: start; font-weight: var(--weight-regular); font-size: var(--fs-xs); color: var(--text-3); border-bottom: 1px solid var(--line); }
+.rp-table td { padding: var(--sp-2) var(--sp-3) var(--sp-2) 0; vertical-align: top; color: var(--text-2); border-bottom: 1px solid var(--line); overflow-wrap: anywhere; }
+.rp-table td:first-child { color: var(--text); }
+.rp-table tbody tr:last-child td { border-bottom: 0; }
+.rp-table tr[hidden] { display: none; }
+.rp-dot { display: inline-block; width: 8px; height: 8px; margin-inline-end: var(--sp-2); border-radius: var(--r-pill); background: var(--rp-c); vertical-align: 1px; }
+
+.rp-team { margin-top: var(--sp-2); }
+.rp-team-draw { position: relative; margin: 0 auto; }
+.rp-lines { position: absolute; inset: 0; overflow: visible; }
+.rp-lines > path { fill: none; stroke: var(--text-3); stroke-width: 1.25; }
+.rp-lines marker path { fill: var(--text-3); stroke: none; }
+/* A member is a box with its colour down its left edge, its name and its part; the owner and anyone else are grey. */
+.rp-node { position: absolute; display: flex; flex-direction: column; justify-content: center; gap: 2px; height: 56px; padding: 0 var(--sp-3) 0 calc(var(--sp-4) + 2px); border-radius: var(--r-md); background: var(--panel); box-shadow: inset 0 0 0 1px var(--line); overflow: hidden; }
+.rp-node::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 4px; background: var(--rp-c); }
+.rp-node b { font-weight: var(--weight-medium); font-size: var(--fs-sm); line-height: 1.35; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rp-node small { font-size: var(--fs-2xs); color: var(--text-3); line-height: 1.35; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rp-lab { position: absolute; transform: translate(-50%, -50%); padding: 1px var(--sp-2); border-radius: var(--r-pill); background: var(--content); color: var(--text-2); font-size: var(--fs-2xs); line-height: 1.5; white-space: nowrap; }
+.rp-notes { margin: var(--sp-4) 0 0; }
+.rp-notes > div { display: grid; grid-template-columns: calc(3 * var(--sp-6)) minmax(0, 1fr); gap: var(--sp-3); padding: var(--sp-2) 0; border-top: 1px solid var(--line); font-size: var(--fs-sm); line-height: 1.6; }
+.rp-notes dt { color: var(--text-3); }
+.rp-notes dd { margin: 0; color: var(--text-2); overflow-wrap: anywhere; }
+
+/* The title clears the × where the page is no wider than its column. */
+@container (max-width: 860px) {
+  .rp-head { padding-inline-end: calc(36px + var(--sp-4)); }
+}
+@container (max-width: 640px) {
+  .rp-doc { padding: calc(var(--sp-6) + var(--sp-2)) var(--sp-4) var(--sp-6); }
+}
+/* A narrow page lists a status over its words, and a table's rows as name and value. */
+@container (max-width: 560px) {
+  .rp-items.has-status > li, .rp-notes > div { grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); }
+  .rp-table thead { display: none; }
+  .rp-table, .rp-table tbody, .rp-table tr { display: block; }
+  .rp-table tr { padding: var(--sp-2) 0; border-bottom: 1px solid var(--line); }
+  .rp-table tbody tr:last-child { border-bottom: 0; }
+  .rp-table td { display: grid; grid-template-columns: calc(3 * var(--sp-6)) minmax(0, 1fr); gap: var(--sp-2); padding: 2px 0; border: 0; }
+  .rp-table td::before { content: attr(data-col); color: var(--text-3); font-size: var(--fs-xs); }
+}
+/* A wide page keeps its contents in a column of their own at the right, in sight while it scrolls. */
+@container (min-width: 1100px) {
+  .rp-doc { max-width: calc(32 * var(--sp-6)); display: grid; grid-template-columns: minmax(0, 1fr) calc(6 * var(--sp-6)); column-gap: var(--sp-6); align-items: start; }
+  .rp-head, .rp-body { grid-column: 1; }
+  .rp-toc { grid-column: 2; grid-row: 1 / span 2; position: sticky; top: calc(var(--sp-6) + var(--sp-2)); flex-direction: column; align-items: flex-start; gap: var(--sp-2); margin: 0; padding: 0 0 0 var(--sp-4); border-block: 0; border-inline-start: 1px solid var(--line); }
+}
+
+/* The link card in the reply: the same card as a file a member made, with the page's icon and the word 頁面. */
+.attachment-file.pg-link { justify-self: start; max-width: 100%; color: var(--text-2); }
+.attachment-file.pg-link > .i { flex: none; width: 20px; height: 20px; }
+.attachment-file.pg-link .me-file-t { color: var(--text); }

@@ -8,16 +8,22 @@ import * as api from "./api";
 import { describeError } from "./format";
 import { t } from "./i18n";
 import { openDialog } from "./member-dialogs";
+import { mountReportView, type ReportPeople, type ReportView } from "./report-page";
 import type { AgentTurn, PageCard, PageOpened } from "./types";
-import { btn, esc, iconBtn, iconButton } from "./ui";
+import { btn, esc, ico, iconBtn, iconButton } from "./ui";
 
 const MIN_HEIGHT = 80, MAX_HEIGHT = 2400;
 const SEND_LIMIT = 4000, SEND_GAP_MS = 1000;
 const MCP_PROTOCOL = "2026-01-26";
 
-/** The cards a turn shows, below what it said. A card holds no frame: `mountPages` brings it. */
+/** A report's link card, as Grok Bot's Page: the same card as a file a member made, its icon, its title and 「頁面」. */
+const reportLinkHTML = (page: PageCard): string =>
+  `<button type="button" class="btn attachment-file pg-link" data-page-act="report" data-page="${esc(page.id)}" data-page-rev="${page.rev}">` +
+  `${ico("report")}<span class="attachment-name"><span class="me-file-t">${esc(page.title)}</span><small>${esc(t("page.kind"))}</small></span></button>`;
+
+/** The cards a turn shows, below what it said. A card holds no frame: `mountPages` brings it. A report is a link card. */
 export function pageCardsHTML(turn: AgentTurn): string {
-  return (turn.pages ?? []).map(page => cardHTML({ title: page.title, status: "ready",
+  return (turn.pages ?? []).map(page => page.kind === "report" ? reportLinkHTML(page) : cardHTML({ title: page.title, status: "ready",
     // A page that failed offers 重試 under what happened; the × at the card's top right puts it away (owner, 2026-11-08).
     content: `<div class="pg-body" data-state="loading"></div><div class="pg-failed" hidden><p>${esc(page.fallback || t("page.failed"))}</p><div class="card-actions">${btn(esc(t("page.retry")), "sm pri", ' data-page-act="retry"')}</div></div>`,
     close: iconBtn("x", t("common.close"), " data-card-failed-close", "card-close pg-close"),
@@ -82,16 +88,22 @@ function moveFrame(frame: HTMLIFrameElement, target: HTMLElement): void {
 }
 
 export interface PagesHost {
-  /** Every card in the thread has its frame. */
+  /** Every card in the thread has its frame; an open report follows its card. */
   sync(): void;
   /** Before a line is replaced: moves its frames to the new line, once that line is in the document. */
   carry(from: Element, to: Element): () => void;
+  /** Puts an open report away, so the thread is in sight again (the owner sent something, or left the conversation). */
+  closeReport(): void;
 }
 
-export function mountPages(thread: HTMLElement, o: { place(pageId: string, text: string): boolean }): PagesHost {
+export function mountPages(thread: HTMLElement, o: { place(pageId: string, text: string): boolean; people?: () => ReportPeople }): PagesHost {
   const frames = new Map<string, Live>();
   let lastSend = 0, asking = false;
   hearInput();
+  // A report opens in the thread's place: in the conversation's stage, above the composer that stays below it.
+  let reports: ReportView | null = null;
+  const reportView = (): ReportView => reports ??= mountReportView(thread.closest<HTMLElement>(".ra-stage") ?? thread.parentElement!,
+    o.people ?? (() => ({ nameOf: () => "", colorOf: () => "var(--text-3)" })));
 
   const cardOf = (live: Live): HTMLElement | null => thread.querySelector<HTMLElement>(`.pg-card[data-page="${CSS.escape(live.id)}"]`);
 
@@ -154,7 +166,19 @@ export function mountPages(thread: HTMLElement, o: { place(pageId: string, text:
       if (live.rev !== rev) { live.rev = rev; void open(live); }
     }
     for (const id of [...frames.keys()]) if (!seen.has(id)) frames.delete(id);
+    followReport();
   }
+
+  /** An open report closes when its card left the thread (another conversation, or none), and follows its member's changes. */
+  function followReport(): void {
+    const shown = reports?.shown();
+    if (!shown) return;
+    const link = thread.querySelector<HTMLElement>(`.pg-link[data-page="${CSS.escape(shown.id)}"]`);
+    if (!link) reports!.close();
+    else if (Number(link.dataset.pageRev) !== shown.rev) void reports!.refresh();
+  }
+  // A thread emptied or redrawn without a sync (a conversation that is loading, empty or failed) is followed too.
+  new MutationObserver(followReport).observe(thread, { childList: true });
 
   function carry(from: Element, to: Element): () => void {
     const moves = [...from.querySelectorAll<HTMLElement>(".pg-card[data-page]")].flatMap(card => {
@@ -283,6 +307,7 @@ export function mountPages(thread: HTMLElement, o: { place(pageId: string, text:
 
   thread.addEventListener("click", event => {
     const target = (event.target as Element).closest<HTMLElement>("[data-page-act]");
+    if (target?.dataset.pageAct === "report") { void reportView().open(target.dataset.page!, target); return; }
     const card = target?.closest<HTMLElement>(".pg-card");
     const live = card ? frames.get(card.dataset.page!) : undefined;
     if (!target || !card || !live) return;
@@ -299,7 +324,7 @@ export function mountPages(thread: HTMLElement, o: { place(pageId: string, text:
     for (const live of frames.values()) void open(live);
   }).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
 
-  return { sync, carry };
+  return { sync, carry, closeReport: () => reports?.close() };
 }
 
 export type { PageCard };

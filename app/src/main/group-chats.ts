@@ -40,10 +40,10 @@ import { mountTaskResults } from "./task-result";
 import { mountPages } from "./page-card";
 import { carryTyped } from "./secret-card";
 import { carryMail } from "./mail-card";
-import { plainLine, primaryFirst, primaryIdOf, memberRole, faceHTML } from "./members";
+import { plainLine, primaryFirst, primaryIdOf, memberRole, faceHTML, memberOf } from "./members";
 import { NAME, eventLineHTML } from "./event-line";
 import { handoffGroupHTML } from "./handoff-line";
-import { nameAccent } from "./owner-bubble";
+import { memberColor, nameAccent } from "./owner-bubble";
 import { openPeerChat, type PeerChatView } from "./peer-chat";
 import type { WireAttachment, HandoffView } from "./types";
 import type { AppContext, MembersList, Room, RoomMessage, RoomExchange, MainEvent } from "./types";
@@ -320,7 +320,8 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
   });
   const resultCards = new WeakMap<HTMLElement, { sync(): void }>();
   mountConversationCardActions(thread, () => _app.go("settings", "connections"));
-  const pagesHost = mountPages(thread, { place: (id, text) => composer.placePageText(id, text) });
+  const pagesHost = mountPages(thread, { place: (id, text) => composer.placePageText(id, text),
+    people: () => ({ nameOf: id => memberOf(list, id)?.name ?? "", colorOf: id => memberColor(memberOf(list, id) ?? { id }) }) });
   const measureAllMessages = messagePreviewMeasure(thread);
   const messageResize = typeof ResizeObserver === "function" ? new ResizeObserver(measureAllMessages) : null;
   messageResize?.observe(thread);
@@ -345,6 +346,8 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
   const sendingRooms=new Set<number>(),pendingStops=new Set<number>();
   const composer=createChatComposer({stopTask:stopRoom,placeholder:()=>t("rooms.message"),answerPage:(id,text)=>!replyTo && answerOwnerPage(thread,id,text,()=>{void refresh();}),transcriptTarget(){const id=roomId;return text=>{if(roomId===id){composer.input.value+=(composer.input.value?" ":"")+text;composer.seedDictation(text);}else if(id){const draft=drafts.get(id)??{text:"",files:[]};draft.text+=(draft.text?" ":"")+text;drafts.set(id,draft);writeDraftWords(`room:${id}`,{text:draft.text,quote:draft.quote,pageId:draft.pageId});}};},async send(text,files){
     if (!roomId) return;
+    // What is sent shows in the thread, so a report open in its place goes away.
+    pagesHost.closeReport();
     const id = roomId, sentQuote = replyTo?.id, key = JSON.stringify([id,text,files,sentQuote]);
     const requestId = failedRequests.get(key) ?? crypto.randomUUID();
     failedRequests.delete(key);

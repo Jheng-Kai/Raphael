@@ -636,7 +636,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   let searching = false;
   /** What each line of the thread was drawn from, so that a line whose HTML is the same stays as it is. */
   const drawnHTML = new WeakMap<Element, string>();
-  const pagesHost = mountPages(thread, { place: pageDraft.place });
+  const pagesHost = mountPages(thread, { place: pageDraft.place, people: () => ({ nameOf: id => members.nameOf(id), colorOf: id => members.colorOf(id) }) });
   mountOwnerQuestions(thread, () => { void load(false); });
   mountGreeting(thread, sendFromPage);
   const floatingQuestions = mountPendingQuestions(thread, scroller, () => load(false), () => pendingQuestions?.member === memberId() && pendingQuestions.conversation === conversationId() ? pendingQuestions.questions : [], revealTurn);
@@ -1321,6 +1321,8 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       return;
     }
     composer.querySelector(".composer-failure")?.remove();
+    // What is sent shows in the thread, so a report open in its place goes away.
+    pagesHost.closeReport();
     const sending = files;
     const dictation = correctionLearning.snapshot();
     const corrections = correctionLearning.take(input.value);

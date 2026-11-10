@@ -528,6 +528,14 @@ export function installMock(fixture, config = {}, target = window) {
       messages: [{ seq: 1, kind: "reply", text: "這款符合你的需求,可以直接在下面操作。", at_ms: data.now }], attachments: [],
       pages: [{ id: "page-product", title: "輕量後背包", rev: 1, height: 320, source: "html", server: null, fallback: "輕量後背包 NT$ 1,280,防潑水、重量 480 公克。" }] });
   }
+  // A member said a word first, then made the report (core agent/report_page.py) and sent it as a link card.
+  if (variant.reportTurn) {
+    const base = data.turns.find(turn => turn.member_id === 1);
+    const opening = "好，我把每位成員的紀錄整理成一頁。", done = "整理好了。卡住的兩件都在「重點發現」，等你回答就能繼續。";
+    data.turns.push({ ...structuredClone(base), id: 802, question: "你可以統整所有成員的狀況，做一份報告給我嗎？", text: done, status: "done", route: "answer", steps: [],
+      messages: [{ seq: 1, kind: "reply", text: opening, at_ms: data.now - 60000 }, { seq: 2, kind: "reply", text: done, at_ms: data.now }], attachments: [],
+      pages: [{ id: "page-report", title: data.pageReport.title, rev: 1, height: 320, source: "html", server: null, fallback: data.pageReport.title, kind: "report" }] });
+  }
   if (variant.roomOwnerCard) {
     const kind = variant.roomOwnerCard;
     const base = kind === "connect" ? data.connectorTurns.gmail : kind === "secret" ? data.secretTurns.notion : kind === "mail" ? data.mailTurns.draft : data.turns.at(-1);
@@ -896,6 +904,11 @@ export function installMock(fixture, config = {}, target = window) {
       case "links.preview": return new URL(p.url).hostname === "example.com" ? { url: p.url, site: "example.com", title: "範例網頁標題", description: "這一頁的一句摘要。", thumbnail: null } : { url: p.url, site: new URL(p.url).hostname, title: "", description: "", thumbnail: null };
       case "pages.open":
         if (variant.pageGone) throw { kind: "not_found", message: "gone" };
+        // A report has no frame: its checked content, which the app draws, and the time its data is from.
+        if (p.id === "page-report") {
+          const { title, sections } = data.pageReport;
+          return { kind: "report", title, rev: 1, height: 320, source: "html", server: null, report: { as_of: new Date(data.now - 30 * 60000).toISOString().replace(/\.\d+Z$/, "Z"), sections: structuredClone(sections) } };
+        }
         // Not a file of the dev server, which would write its own client into the page.
         return { url: `data:text/html;charset=utf-8,${encodeURIComponent(data.pageProductHtml)}`, title: "輕量後背包", rev: 1, height: 320, source: "html", server: null };
       case "computer.wallpaper": return variant.ownWallpaper ? { image: variant.ownWallpaper } : {};
