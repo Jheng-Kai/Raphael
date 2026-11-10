@@ -507,10 +507,10 @@ export async function perform(page, step, evidenceDirectory) {
         try {
           const snapshot = () => element.evaluate(button => {
             const box = button.getBoundingClientRect();
-            return { active: button.matches(':active'), bounds: [box.x, box.y, box.width, box.height], colors: [button.parentElement, button, ...button.querySelectorAll('*')].map(node => {
-              const style = getComputedStyle(node);
-              return [style.color, style.backgroundColor, style.borderColor, style.opacity];
-            }) };
+            // A control may answer on a drawn pseudo-element (a pill's ::before surface), which the owner sees as the control's own colour.
+            const colorsOf = (node, pseudo) => { const style = getComputedStyle(node, pseudo); return [style.color, style.backgroundColor, style.borderColor, style.opacity]; };
+            return { active: button.matches(':active'), bounds: [box.x, box.y, box.width, box.height], colors: [button.parentElement, button, ...button.querySelectorAll('*')].flatMap(node =>
+              [colorsOf(node), ...['::before', '::after'].filter(pseudo => !['none', 'normal'].includes(getComputedStyle(node, pseudo).content)).map(pseudo => colorsOf(node, pseudo))]) };
           });
           await element.hover();
           await new Promise(resolve => setTimeout(resolve, 180));
