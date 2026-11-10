@@ -2,6 +2,7 @@
 
 import asyncio
 import re
+import sys
 import tempfile
 import time
 from pathlib import Path
@@ -22,22 +23,67 @@ def ssh_args(alias):
             "-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=2", checked_alias(alias)]
 
 
-async def _login_user(alias, run):
-    """The user name ssh logs in with for `alias`, read locally from `ssh -G` (no connection). An IP
+async def _ssh_config(alias, run):
+    """The user name and host name ssh uses for `alias`, read locally from `ssh -G` (no connection). An IP
     without a config entry logs in as this computer's user, often not the host's account."""
     try:
         code, out, _ = await run(["ssh", "-G", checked_alias(alias)])
     except (OSError, TimeoutError):
-        return ""
+        return "", ""
     if code:
-        return ""
-    user = next((line.split(None, 1)[1].strip() for line in out.splitlines() if line.lower().startswith("user ") and len(line.split(None, 1)) > 1), "")
-    return user if re.fullmatch(r"[A-Za-z0-9._-]{1,64}", user) else ""
+        return "", ""
+
+    def value(name):
+        return next((line.split(None, 1)[1].strip() for line in out.splitlines()
+                     if line.lower().startswith(name + " ") and len(line.split(None, 1)) > 1), "")
+    user, hostname = value("user"), value("hostname")
+    return (user if re.fullmatch(r"[A-Za-z0-9._-]{1,64}", user) else "",
+            hostname if re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,252}", hostname) else "")
+
+
+# What a macOS non-interactive shell needs to find Docker Desktop's command. No `$` so no local shell expands it.
+MAC_PATH = "/usr/local/bin:/opt/homebrew/bin:/Applications/Docker.app/Contents/Resources/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+
+
+def repair_command(kind, alias, *, os_name="", user="", hostname=""):
+    """The one line (or config snippet) that fixes a failed check, or "" when only the owner at the host can (Docker
+    Desktop on a Mac cannot be installed over ssh). (owner, 2026-11-11) Every line is pasted into a terminal on this
+    computer and reaches the host through `ssh <alias>`: nothing is built from this app's sources, and no `$` or double
+    quote inside a quoted part keeps one meaning in PowerShell, cmd and sh."""
+    from .vm import IMAGE
+
+    def remote(line, tty=False):
+        return f'ssh {"-t " if tty else ""}{alias} "{line}"'
+    if kind in ("ssh_unreachable", "ssh_hostkey"):
+        return f"ssh {alias}"
+    if kind == "ssh_hostkey_changed":
+        return f"ssh-keygen -R {hostname or alias}"
+    if kind == "ssh_alias_unknown":
+        return f"Host {alias}\n  HostName HOST_ADDRESS\n  User ACCOUNT_ON_HOST\n  IdentityFile ~/.ssh/id_ed25519"
+    if kind == "ssh_key":
+        install = ("Get-Content $env:USERPROFILE\\.ssh\\id_ed25519.pub | " + remote("mkdir -p ~/.ssh && cat >> ~/.ssh/authorized_keys")
+                   if sys.platform == "win32" else f"ssh-copy-id {alias}")
+        return "ssh-keygen -t ed25519\n" + install
+    if kind == "docker_path":
+        if os_name == "darwin":
+            return remote(f"echo 'export PATH={MAC_PATH}' >> ~/.zshenv")
+        return remote("sudo ln -s /usr/local/bin/docker /usr/bin/docker", tty=True) if os_name == "linux" else ""
+    if kind == "docker_missing":
+        return remote("curl -fsSL https://get.docker.com | sh", tty=True) if os_name == "linux" else ""
+    if kind == "docker_stopped":
+        return remote("sudo systemctl start docker", tty=True) if os_name == "linux" else remote("open -a Docker") if os_name == "darwin" else ""
+    if kind == "docker_access":
+        return remote(f"sudo usermod -aG docker {user}", tty=True) if os_name == "linux" and user else ""
+    if kind == "architecture":
+        # The next start prepares an image for this host's architecture; only the stale copy has to go.
+        return remote(f"docker image rm {IMAGE}")
+    return ""
 
 
 async def host_health(alias, *, run=None):
     """Read-only noninteractive checks. Return classifications, never raw SSH diagnostics."""
     checked_alias(alias)
+
     async def execute(args):
         process = await asyncio.create_subprocess_exec(*args, stdin=asyncio.subprocess.DEVNULL,
             stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE, creationflags=NO_WINDOW)
@@ -51,35 +97,58 @@ async def host_health(alias, *, run=None):
                 await process.wait()
     run = run or execute
     from .vm import IMAGE
+
+    def failed(kind, *, user="", **context):
+        command = repair_command(kind, alias, user=user, **context)
+        return {"kind": kind, "ok": False, **({"user": user} if user and kind == "ssh_key" else {}), **({"command": command} if command else {})}
+
     try:
-        # Only the two architectures are read: Docker Desktop's whole `docker info` JSON and the image's
+        # The first line says which system answers (Linux or Darwin), so the repair is the one that host needs. Only the
+        # two architectures are read after it: Docker Desktop's whole `docker info` JSON and the image's
         # passed the 16 KiB read together, the image line was cut, and a matching arm64 host read as unsupported.
-        code, out, err = await run([*ssh_args(alias), "command -v docker >/dev/null 2>&1 || { test -x /usr/local/bin/docker -o -x /opt/homebrew/bin/docker -o -x /Applications/Docker.app/Contents/Resources/bin/docker && exit 42; exit 43; }; "
+        code, out, err = await run([*ssh_args(alias), "uname -s; command -v docker >/dev/null 2>&1 || { test -x /usr/local/bin/docker -o -x /opt/homebrew/bin/docker -o -x /Applications/Docker.app/Contents/Resources/bin/docker && exit 42; exit 43; }; "
             "docker info --format '{{.Architecture}}' || exit 44; " + f"docker image inspect {IMAGE} --format '{{{{.Architecture}}}}' || exit 45"])
     except (OSError, TimeoutError):
-        return {"host": alias, "ok": False, "checks": [{"kind": "ssh_unreachable", "ok": False}]}
+        return {"host": alias, "ok": False, "checks": [failed("ssh_unreachable")]}
     checks = []
     if code == 255:
-        kind = "ssh_key" if "permission denied" in err.lower() or "authentication" in err.lower() else "ssh_unreachable"
-        check = {"kind": kind, "ok": False}
-        if kind == "ssh_key" and (user := await _login_user(alias, run)):
-            check["user"] = user
-        checks.append(check)
+        low = err.lower()
+        if "identification has changed" in low:
+            kind = "ssh_hostkey_changed"
+        elif "host key verification failed" in low:
+            kind = "ssh_hostkey"
+        elif "permission denied" in low or "authentication" in low:
+            kind = "ssh_key"
+        elif "could not resolve hostname" in low:
+            kind = "ssh_alias_unknown"
+        else:
+            kind = "ssh_unreachable"
+        user, hostname = await _ssh_config(alias, run) if kind in ("ssh_key", "ssh_hostkey_changed") else ("", "")
+        checks.append(failed(kind, user=user, hostname=hostname))
     else:
+        lines = [line.strip() for line in out.splitlines() if line.strip()]
+        os_name = {"linux": "linux", "darwin": "darwin"}.get(lines[0].lower(), "") if lines else ""
+        if os_name:
+            lines.pop(0)
         checks.append({"kind": "ssh", "ok": True})
         if code and code != 45:
-            checks.append({"kind": "docker_path" if code == 42 else "docker_missing" if code == 43 else "docker_stopped", "ok": False})
+            kind = "docker_path" if code == 42 else "docker_missing" if code == 43 else (
+                "docker_access" if "permission denied" in err.lower() else "docker_stopped")
+            user = (await _ssh_config(alias, run))[0] if kind == "docker_access" else ""
+            checks.append(failed(kind, os_name=os_name, user=user))
         else:
             checks.append({"kind": "docker", "ok": True})
             normalize = lambda value: {"x86_64": "amd64", "aarch64": "arm64"}.get(value, value)
-            lines = [line.strip() for line in out.splitlines() if line.strip()]
             architecture = normalize(lines[0]) if lines else ""
             image = normalize(lines[1]) if len(lines) > 1 else ""
+            shown = architecture if architecture in ("amd64", "arm64") else "unknown"
             if code == 45:
-                checks.append({"kind": "image_missing", "ok": False})
+                # A first start pulls and builds the image on this host by itself (vm.py `build`): not a failure.
+                checks.append({"kind": "image_pending", "ok": True})
+            elif architecture and architecture == image:
+                checks.append({"kind": "architecture", "ok": True, "architecture": shown})
             else:
-                checks.append({"kind": "architecture", "ok": bool(architecture and architecture == image),
-                    "architecture": architecture if architecture in ("amd64", "arm64") else "unknown"})
+                checks.append({**failed("architecture"), "architecture": shown})
     return {"host": alias, "ok": all(check["ok"] for check in checks), "checks": checks}
 
 

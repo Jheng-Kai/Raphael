@@ -589,7 +589,9 @@ export function checkRendered(name, context = {}) {
     const note = document.querySelector('[data-computer-host-health]');
     require(visible(note) && note.textContent.includes('正常'), 'each check has its own clear state');
     const repair = document.querySelector('[data-computer-host-repair]');
-    require(visible(repair) && repair.textContent.includes('終端機') && repair.querySelector('code')?.textContent.includes('~/.zshenv'), 'host health says where to run the exact repair command');
+    const command = repair.querySelector('code')?.textContent ?? '';
+    require(visible(repair) && repair.textContent.includes('終端機') && command.startsWith('ssh studio-mini ') && command.includes('~/.zshenv'), 'host health says where to run the exact repair command, and the command reaches the remote host as pasted');
+    require(!/core\/src|docker build|專案資料夾/.test(repair.textContent), 'no repair asks for a build from the app project sources');
     require(visible(repair.querySelector('[data-act="copy-code"]')), 'repair command uses the shared copy control');
     require(window.__look.calls.some(call => call.method === 'computer.viewer_status' && call.params.check_host && call.params.alias === 'studio-mini'), 'checks the selected alias through the existing owner RPC');
     return {check:name};

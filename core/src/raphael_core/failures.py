@@ -419,6 +419,9 @@ def classify(value: object, *, secrets=(), record=True) -> Failure:
     if kind not in KINDS or kind in ("unknown", "tool_broken", "server"):
         fallback = kind if kind in KINDS else "unknown"
         patterns = (
+            # Docker Desktop is the member computer's engine (owner, 2026-11-11): still starting is a wait, not a defect.
+            ("timeout", r"docker_start_timeout"),
+            ("tool_broken", r"docker_(?:stopped|start_failed|missing)"),
             ('tool_broken', r'\bCLI tool (?:is missing|failed)\b'),
             # A server that cannot start does not start on a second try: a setting is wrong, and the owner is told
             # which server rather than kept waiting through retries (design, 2026-11-09).

@@ -933,7 +933,7 @@ export function installMock(fixture, config = {}, target = window) {
       }
       case "computer.viewer_status": {
         if (p.start_docker) data.desktop = {state:'stopped',ready:false,control:'member',host:'',target:'synthetic-member'};
-        return p.check_host ? {host:p.alias,ok:false,checks:[{kind:'ssh',ok:true},{kind:'docker_path',ok:false}]} : data.desktop ?? { state: "absent", ready: false, control: "member" };
+        return p.check_host ? {host:p.alias,ok:false,checks:[{kind:'ssh',ok:true},{kind:'docker_path',ok:false,command:`ssh ${p.alias} "echo 'export PATH=/usr/local/bin:/opt/homebrew/bin:/Applications/Docker.app/Contents/Resources/bin:/usr/bin:/bin:/usr/sbin:/sbin' >> ~/.zshenv"`}]} : data.desktop ?? { state: "absent", ready: false, control: "member" };
       }
       case "computer.viewer_open": {
         if (variant.desktopStarts) data.desktop = { ...data.desktop, state: "running", ready: true };

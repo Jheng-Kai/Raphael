@@ -20462,3 +20462,20 @@ WORDS.update({
         'tr': 'isteği reddetti',
     },
 })
+
+WORDS.update({
+    'Starting Docker Desktop for the computer; this takes about a minute': {
+        'zh-CN': '正在启动 Docker Desktop 来准备电脑，大约需要一分钟',
+        'ko': '컴퓨터를 위해 Docker Desktop을 시작하는 중입니다. 약 1분 걸립니다',
+        'es': 'Iniciando Docker Desktop para el ordenador; tarda aproximadamente un minuto',
+        'fr': 'Démarrage de Docker Desktop pour l’ordinateur ; cela prend environ une minute',
+        'de': 'Docker Desktop wird für den Computer gestartet; das dauert etwa eine Minute',
+        'pt-BR': 'Iniciando o Docker Desktop para o computador; leva cerca de um minuto',
+        'it': 'Avvio di Docker Desktop per il computer; ci vuole circa un minuto',
+        'ru': 'Запускаю Docker Desktop для компьютера; это занимает около минуты',
+        'vi': 'Đang khởi động Docker Desktop cho máy tính; mất khoảng một phút',
+        'th': 'กำลังเริ่ม Docker Desktop สำหรับคอมพิวเตอร์ ใช้เวลาประมาณหนึ่งนาที',
+        'id': 'Memulai Docker Desktop untuk komputer; butuh sekitar satu menit',
+        'tr': 'Bilgisayar için Docker Desktop başlatılıyor; yaklaşık bir dakika sürer',
+    },
+})
