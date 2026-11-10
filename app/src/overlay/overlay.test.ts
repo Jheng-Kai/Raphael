@@ -579,28 +579,15 @@ const LONG = "1. 建立帳號並登入控制台。 2. 若設定只要求金鑰�
   "[官方說明](https://docs.composio.dev/reference/authenticating-to-composio) 3. 將金鑰填入設定頁，再回到 Gmail 連結卡完成 Google 授權。" +
   "金鑰請只填入專用欄位，不要貼到聊天中。";
 
-test("a long voiced answer is told page by page without its address, and its last page waits for the voice", () => {
-  send({ type: "say", prefix: "答", text: LONG, hold: true });
-  vi.advanceTimersByTime(60_000);
+test("a long answer is told page by page without its address, then the emblem vanishes", () => {
+  send({ type: "say", prefix: "答", text: LONG });
+  vi.advanceTimersByTime(120_000);
   const pages = lines().map((line) => line.slice("line:".length));
   expect(pages.length).toBeGreaterThan(2);
   expect(pages[0]!.startsWith("《答。1. ")).toBe(true);
   expect(pages[pages.length - 1]!.endsWith("》")).toBe(true);
   expect(pages.join("")).not.toMatch(/https?:|\]\(/);
-  expect(emblem.log).not.toContain("vanish"); // the last page stays while the voice speaks
-  send({ type: "release" });
   expect(view.last).toBe("clear");
-  expect(emblem.last).toBe("vanish");
-});
-
-test("a voice that ends before the last page lets the pages that are left run on their own time", () => {
-  send({ type: "say", prefix: "答", text: LONG, hold: true });
-  vi.advanceTimersByTime(833);
-  expect(lines()).toHaveLength(1);
-  send({ type: "release" });
-  vi.advanceTimersByTime(120_000);
-  expect(lines().length).toBeGreaterThan(2);
-  expect(lines()[lines().length - 1]!.endsWith("》")).toBe(true);
   expect(emblem.last).toBe("vanish");
 });
 

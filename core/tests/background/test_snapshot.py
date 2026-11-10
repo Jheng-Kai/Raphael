@@ -22,7 +22,7 @@ def test_without_plugins_a_task_has_raphaels_lookups_and_calendar():
     writes = {"calendar_add", "calendar_update", "calendar_delete", "routine_create", "routine_delete", "routine_update"}
     assert all(ref.tier is (Tier.T2 if ref.name == "manage_connection" else Tier.T1 if ref.name in writes else Tier.T0) for ref in snapshot.refs.values())
     # Seldom called: found, not listed.
-    assert {"generate_audio", "slack_draft"} <= set(snapshot.work)
+    assert "slack_draft" in snapshot.work
 
 
 def test_the_commands_for_this_computer_are_not_in_it():

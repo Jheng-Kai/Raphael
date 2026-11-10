@@ -1305,7 +1305,7 @@ export function createSettings(app: AppContext): SettingsPage {
     async show(open?: PageArgument) {
       const repair = open?.startsWith("repair:") ? open.split(":").slice(1) : null;
       if (repair?.[0] === "computer") { app.closeSettings(); app.go("agent", "computer"); return; }
-      if (repair) open = ({ search: "tools", read: "tools", vision: "tools", pdf: "tools", voice: "tools", store: "connections" } as Record<string, SettingsPane>)[repair[0]] ?? repair[0] as SettingsPane;
+      if (repair) open = ({ search: "tools", read: "tools", vision: "tools", pdf: "tools", store: "connections" } as Record<string, SettingsPane>)[repair[0]] ?? repair[0] as SettingsPane;
       visible = true;
       stopOutside();
       stopOutside = registerDismissal(el.querySelector<HTMLElement>(".modal")!, () => app.closeSettings(), () => !recording.active());
@@ -1343,10 +1343,10 @@ export function createSettings(app: AppContext): SettingsPage {
       if (apply() || loading) { loading = false; render(); }
       if (repair) {
         const [target, resource] = repair;
-        if (["search", "read", "vision", "pdf", "voice"].includes(target)) {
+        if (["search", "read", "vision", "pdf"].includes(target)) {
           await services.load();
           if (mine !== loads || !visible) return;
-          services.openRepair(target as "search" | "read" | "vision" | "pdf" | "voice", ["searxng", "tavily", "brave", "exa", "fish", "jina", "firecrawl"].includes(resource) ? resource : null);
+          services.openRepair(target as "search" | "read" | "vision" | "pdf", ["searxng", "tavily", "brave", "exa", "jina", "firecrawl"].includes(resource) ? resource : null);
           el.querySelector<HTMLElement>('#svc-dialog input, #svc-dialog button')?.focus();
         } else if (target === "models") {
           await loadProviders();

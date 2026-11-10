@@ -721,18 +721,6 @@ print(json.dumps({"type":"result","subtype":"success","result":"Finished after t
         await active.aclose()
 
 
-async def test_spoken_cli_reply_retains_japanese_without_showing_json(setup, tmp_path):
-    from raphael_core.agent.cli.loop import CliLoop
-    from raphael_core.worker.loop import Outcome
-    # Exercise the same reply boundary used by Raphael's optional voice renderer.
-    loop = CliLoop(brains=None, sessions=None, member_id=0, model="cli:claude", ledger=None,
-                   language="zh-TW", plain=False, system="persona", user="hello", tools=[],
-                   progress=lambda _: None, thinking=lambda _: None, event=lambda _: None,
-                   execute=None, spoken=True)
-    reply = loop.reply(Outcome("done", final=json.dumps({"text": "明天練習。", "messages": ["明天練習。"], "say_ja": "明日練習します。"})))
-    assert reply.text == "明天練習。" and reply.say_ja == "明日練習します。"
-
-
 async def test_mcp_memory_update_in_ask_first_is_audited_as_user(setup, tmp_path):
     rig, team = setup
     teacher = member(team, model="cli:claude")

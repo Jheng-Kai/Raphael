@@ -213,18 +213,18 @@ class Missing:
             return None
         if any(not isinstance(value[k], str) or not re.fullmatch(r"[a-z0-9_-]{1,64}", value[k]) for k in ("resource", "requirement")):
             return None
-        if value["repair"] not in (None, "models", "connections", "store", "search", "read", "vision", "pdf", "voice", "computer", "dictation"):
+        if value["repair"] not in (None, "models", "connections", "store", "search", "read", "vision", "pdf", "computer", "dictation"):
             return None
         return cls(**value)
 
     def sentence(self, language):
         language = _language(language)
         paths = with_ui_words({
-            "zh-TW": {"models": "設定 › 模型與用量 › 模型", "connections": "設定 › 連接", "store": "設定 › 連接 › 商店", "search": "設定 › 拉斐爾 › 服務 › 搜尋網路", "read": "設定 › 拉斐爾 › 服務 › 讀網頁", "vision": "設定 › 拉斐爾 › 服務 › 看圖片", "pdf": "設定 › 拉斐爾 › 服務 › 讀 PDF", "voice": "設定 › 拉斐爾 › 服務 › 拉斐爾的聲音", "computer": "設定 › 拉斐爾 › 電腦操作", "dictation": "設定 › 聽寫"},
-            "en": {"models": "Settings > Models & usage > Models", "connections": "Settings > Connections", "store": "Settings > Connections > Store", "search": "Settings > Raphael > Services > Search the web", "read": "Settings > Raphael > Services > Read web pages", "vision": "Settings > Raphael > Services > See images", "pdf": "Settings > Raphael > Services > Read PDF", "voice": "Settings > Raphael > Services > Raphael's voice", "computer": "Settings > Raphael > Computer operation", "dictation": "Settings > Dictation"},
-            "ja": {"models": "設定 › モデルと使用量 › モデル", "connections": "設定 › 接続", "store": "設定 › 接続 › ストア", "search": "設定 › ラファエル › サービス › ウェブ検索", "read": "設定 › ラファエル › サービス › ウェブページを読む", "vision": "設定 › ラファエル › サービス › 画像を見る", "pdf": "設定 › ラファエル › サービス › PDF を読む", "voice": "設定 › ラファエル › サービス › ラファエルの声", "computer": "設定 › ラファエル › PC 操作", "dictation": "設定 › ディクテーション"},
+            "zh-TW": {"models": "設定 › 模型與用量 › 模型", "connections": "設定 › 連接", "store": "設定 › 連接 › 商店", "search": "設定 › 拉斐爾 › 服務 › 搜尋網路", "read": "設定 › 拉斐爾 › 服務 › 讀網頁", "vision": "設定 › 拉斐爾 › 服務 › 看圖片", "pdf": "設定 › 拉斐爾 › 服務 › 讀 PDF", "computer": "設定 › 拉斐爾 › 電腦操作", "dictation": "設定 › 聽寫"},
+            "en": {"models": "Settings > Models & usage > Models", "connections": "Settings > Connections", "store": "Settings > Connections > Store", "search": "Settings > Raphael > Services > Search the web", "read": "Settings > Raphael > Services > Read web pages", "vision": "Settings > Raphael > Services > See images", "pdf": "Settings > Raphael > Services > Read PDF", "computer": "Settings > Raphael > Computer operation", "dictation": "Settings > Dictation"},
+            "ja": {"models": "設定 › モデルと使用量 › モデル", "connections": "設定 › 接続", "store": "設定 › 接続 › ストア", "search": "設定 › ラファエル › サービス › ウェブ検索", "read": "設定 › ラファエル › サービス › ウェブページを読む", "vision": "設定 › ラファエル › サービス › 画像を見る", "pdf": "設定 › ラファエル › サービス › PDF を読む", "computer": "設定 › ラファエル › PC 操作", "dictation": "設定 › ディクテーション"},
         })
-        name = {"searxng": "SearXNG", "chatgpt": "ChatGPT", "composio": "Composio", "fish": "Fish Audio", "search": "Search", "read": "Page reader", "vision": "Image reading", "pdf": "PDF", "computer": "Computer"}.get(self.resource, with_ui_words({"zh-TW": "這項功能", "en": "This feature", "ja": "この機能"})[language])
+        name = {"searxng": "SearXNG", "chatgpt": "ChatGPT", "composio": "Composio", "search": "Search", "read": "Page reader", "vision": "Image reading", "pdf": "PDF", "computer": "Computer"}.get(self.resource, with_ui_words({"zh-TW": "這項功能", "en": "This feature", "ja": "この機能"})[language])
         if self.resource in ("search", "read", "vision", "computer"):
             name = ui_word(name, language)
         path = paths[language].get(self.repair, "")
@@ -260,10 +260,10 @@ def missing_for(kind, tool, detail=None):
         return Missing("audio", detail, "missing" if detail != "audio_decode" else "broken", None)
     if tool == "read_attachment" and kind in ("encrypted", "bad_pdf", "no_text"):
         return Missing("pdf", kind, "broken", "vision" if kind == "no_text" else None)
-    repair = {"web_search": "search", "web_read": "read", "read_attachment": "pdf" if detail == "pdf" else "vision", "tts": "voice", "generate_audio": "voice", "computer": "computer"}.get(tool)
+    repair = {"web_search": "search", "web_read": "read", "read_attachment": "pdf" if detail == "pdf" else "vision", "computer": "computer"}.get(tool)
     if not repair or kind not in ("not_configured", "missing_secret", "no_key", "disabled", "vision_unsupported", "unavailable"):
         return None
-    resource = detail if detail in ("searxng", "tavily", "brave", "exa", "jina", "firecrawl", "openrouter", "fish") else repair
+    resource = detail if detail in ("searxng", "tavily", "brave", "exa", "jina", "firecrawl", "openrouter") else repair
     requirement = "url" if detail == "searxng" and kind == "not_configured" else "key" if kind in ("missing_secret", "no_key") else "model" if kind == "vision_unsupported" else "installation" if kind == "unavailable" else "setup"
     return Missing(resource, requirement, "off" if kind == "disabled" else "missing", None if requirement == "installation" else repair)
 

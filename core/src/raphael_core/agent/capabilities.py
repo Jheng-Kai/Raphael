@@ -8,10 +8,7 @@ creating members and managing shared settings. Destructive and permission change
 The primary contact is the default contact, not a higher permission level.
 A role is a work and output contract, never a rank or a hidden tool list.
 You work on the owner's Windows computer through the offered local command tools, and on
-your own isolated computer when granted. generate_audio creates deliverable audio files when
-requested (find it with find_tools and call it with use_tool, like every tool that is not in your
-list). Ordinary chat replies are text; only Alt+Space quick questions and voice calls play
-spoken answers. Put requested sentences and examples in the reply.
+your own isolated computer when granted. Replies are text. Put requested sentences and examples in the reply.
 In a private conversation, use handoff with your own member_id to move long work (including
 background-only tools such as video generation) into your own background lane. Use a stable
 stage_id and done_when; its result returns to this conversation. End the foreground turn after
@@ -26,7 +23,7 @@ PARITY_EXCEPTIONS = {
     "first_contact": "The current primary contact receives and coordinates incoming work.",
     "room_wrap_up": "The current chief pins decisions and closes room discussions.",
     "team_incidents": "The current chief coordinates shared team incidents.",
-    "quick_voice": "Alt+Space is Raphael's quick voice entry and uses its short spoken caption.",
+    "quick_voice": "Alt+Space is Raphael's quick dictation entry and answers in a short caption.",
 }
 COORDINATION_TOOLS = {"room_meeting": "room_wrap_up"}
 MEMBER_ONLY_TOOLS = {"share_template": "member_recipe"}

@@ -154,7 +154,6 @@ test.each(["zh-TW", "en", "ja"] as const)("a completed turn keeps the exact miss
   for (const missing of [
     { resource: "searxng", requirement: "url", state: "missing", repair: "search" },
     { resource: "pdf", requirement: "no_text", state: "broken", repair: "vision" },
-    { resource: "fish", requirement: "setup", state: "missing", repair: "voice" },
   ] as const) {
     for (const [withActions, words] of [[false, ""], [true, ""], [false, "台北現在 24 度。"], [true, "台北現在 24 度。"]] as const) {
       const item = turn(1, {
@@ -196,17 +195,17 @@ test("a meeting opened and a skill learned stay one line each in the conversatio
 
 test("a prerequisite the reply already states is said once", () => {
   setLocale("zh-TW");
-  const missing = { resource: "fish", requirement: "setup", state: "missing", repair: "voice" } as const;
+  const missing = { resource: "searxng", requirement: "url", state: "missing", repair: "search" } as const;
   const item = turn(1, {
-    status: "error", text: "請先設定語音服務。",
-    steps: [step({ tool: "generate_audio", server: "Raphael", outcome: "error", reason: "not_configured", missing })],
+    status: "error", text: "請先設定搜尋服務。",
+    steps: [step({ tool: "web_search", server: "Raphael", outcome: "error", reason: "not_configured", missing })],
     messages: [{ seq: 1, kind: "media", text: JSON.stringify({ missing }), at_ms: T0 }],
   });
   const root = document.createElement("div"); root.innerHTML = turnHTML(item, emptyTimelineState(), false, LOOK);
-  expect(root.querySelectorAll('[data-missing-repair="voice"]')).toHaveLength(1);
-  expect(root.textContent).not.toContain(t("missing.voice"));
+  expect(root.querySelectorAll('[data-missing-repair="search"]')).toHaveLength(1);
+  expect(root.textContent).not.toContain(t("missing.search"));
   // The repair comes after the reply that says what is missing, never above it.
-  const reply = root.querySelector(".chat-message[data-reply]")!, repair = root.querySelector('.turn-prerequisites [data-missing-repair="voice"]')!;
+  const reply = root.querySelector(".chat-message[data-reply]")!, repair = root.querySelector('.turn-prerequisites [data-missing-repair="search"]')!;
   expect(reply.compareDocumentPosition(repair) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 });
 

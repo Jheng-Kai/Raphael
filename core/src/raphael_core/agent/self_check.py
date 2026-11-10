@@ -91,7 +91,7 @@ REFERENCES = {
 }
 PANES = ("general", "dictation", "tools", "safety", "models", "about", "connections")
 SAFE_SETTINGS = ("agent_model", "quick_model", "action_mode", "monthly_limit_usd", "stt_engine",
-                 "web_search_enabled", "web_read_enabled", "vision_enabled", "pdf_enabled", "tts_enabled")
+                 "web_search_enabled", "web_read_enabled", "vision_enabled", "pdf_enabled")
 
 
 def requested(text):

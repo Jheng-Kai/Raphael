@@ -76,9 +76,9 @@ def said(text, *, detail="", memory=None, search=""):
     return completion(data)
 
 
-def raphael_said(text, prefix="答", say_ja="台北です。"):
+def raphael_said(text, prefix="答"):
     return completion(
-        {"prefix": prefix, "text": text, "detail": "", "say_ja": say_ja, "memory": [],
+        {"prefix": prefix, "text": text, "detail": "", "memory": [],
          "need": {"search": ""}}
     )  # fmt: skip
 
@@ -158,8 +158,8 @@ async def test_a_member_answers_with_its_selected_model(setup, client):
 
 
 @pytest.mark.parametrize("source", ["voice", None])
-async def test_a_spoken_question_reaches_the_named_member(voiced, client, source):
-    rig, team, voice = voiced
+async def test_a_spoken_question_reaches_the_named_member(setup, client, source):
+    rig, team = setup
     one = member(team, model="own/model")
     client.chats.append(live_said("Your next lesson.", messages=["Example.", "Your next lesson."]))
     result = await typed(rig, "Teach me", one.id, source=source, language="en")
@@ -170,7 +170,6 @@ async def test_a_spoken_question_reaches_the_named_member(voiced, client, source
     assert (await rig.call("agent.history.list", {}))["turns"] == []
     assert client.chat_calls[0]["model"] == "own/model"
     assert "You are 小行程" in client.chat_calls[0]["messages"][0]["content"]
-    assert voice.said == []
 
 
 async def test_requests_and_history_reject_an_unknown_member(setup):
@@ -393,64 +392,6 @@ async def test_voice_picked_members_share_one_proposal(setup, client):
     # The overlay confirms the complete proposal without sending edited drafts.
     await rig.confirm(asked["confirm"]["id"])
     assert len(team.members.store.members()) == 3
-
-
-class _Voice:
-    """Raphael's voice, as a note of what he was told to say and how often he was stopped."""
-
-    def __init__(self):
-        self.said = []
-
-    def speaks(self):
-        return True
-
-    async def say(self, prefix, text, *, turn_id=None):
-        self.said.append((prefix, text))
-
-    def stop(self):
-        pass
-
-
-@pytest.fixture
-async def voiced(conn, tmp_path, client):
-    team = Team(conn, tmp_path)
-    voice = _Voice()
-    rig = Rig(conn, client, FakeActions(), team=team.members, memory=team.memory, speaker=voice)
-    yield rig, team, voice
-    await rig.aclose()
-    await team.memory.aclose()
-
-
-async def test_a_members_reply_is_not_spoken(voiced, client):
-    """Typed replies stay silent in both member and Raphael conversations."""
-    rig, team, voice = voiced
-    one = member(team)
-    client.decisions.append(decision("chat"))
-    client.chats.append(live_said("明天早上九點開會。"))
-    result = await typed(rig, "明天有什麼行程", one.id)
-    assert result["text"] == "明天早上九點開會。"
-    assert voice.said == []
-    # Raphael's typed replies follow the same boundary.
-    client.decisions.append(decision("chat"))
-    client.chats.append(live_said("台北。", prefix="答", say_ja="台北です。"))
-    await typed(rig, "主人住哪裡", 0)
-    assert voice.said == []
-    assert all("say_ja" not in call["messages"][0]["content"] for call in client.chat_calls)
-
-
-async def test_a_typed_exchange_and_raphaels_final_reply_are_never_spoken(voiced, client):
-    rig, team, voice = voiced
-    member(team, name="小研究")
-    client.decisions.append(decision("answer"))  # Raphael's request
-    client.chats.append(chat("先問小研究。", ("ask_member", {"member": "小研究", "request": "上季的數字"})))
-    client.decisions.append(decision("answer"))  # the member's flags
-    client.chats.append(live_said("PRIVATE-ANSWER 上季營收兩百萬。"))
-    client.chats.append(
-        live_said("小研究說上季營收兩百萬。", prefix="答", say_ja="小研究によると、前期の売上は二百万です。")
-    )  # Raphael, to the owner
-    await typed(rig, "問小研究上季的數字", 0)
-    assert voice.said == []
-    assert all("say_ja" not in call["messages"][0]["content"] for call in client.chat_calls)
 
 
 async def test_a_member_asks_raphael_who_answers_as_himself(setup, client, conn):

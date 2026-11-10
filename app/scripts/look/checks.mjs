@@ -132,51 +132,6 @@ export function checkRendered(name, context = {}) {
     }
     return {check:name};
   }
-  if (name.startsWith("voice-call-")) {
-    require(["voice-call-idle", "voice-call-panel", "voice-call-transcript", "voice-call-settings", "voice-call-ended", "voice-call-no-mic", "voice-call-busy"].includes(name), "known voice call check");
-    const calls = window.__look.calls;
-    if (["voice-call-idle", "voice-call-no-mic"].includes(name)) {
-      const composer = document.querySelector('.page-agent .composer');
-      require(document.querySelector('[data-mount="background-questions"]')?.nextElementSibling === composer, "background questions remain directly above the composer");
-      require(composer?.contains(document.querySelector('.vc-failure')), "transient call failures stay inside the composer");
-    }
-    if (name === "voice-call-idle") {
-      const button = document.querySelector('.cmp-voice[data-voice-call-start="true"]');
-      require(visible(button), "empty member composer offers voice chat");
-      require(button.dataset.tooltip === "按住說話；點一下開始語音對話" && button.getAttribute('aria-label') === button.dataset.tooltip, "one localized line explains both gestures");
-      const tooltip = document.querySelector('.message-tooltip:not([hidden])');
-      require(visible(tooltip) && tooltip.textContent === button.dataset.tooltip, "the shared visible tooltip explains both gestures");
-      require(!calls.some(call => call.method === "voice_chat.start"), "hover never starts a call");
-    }
-    if (["voice-call-panel", "voice-call-transcript", "voice-call-settings"].includes(name)) {
-      require(visible(document.querySelector('.voice-call')), "one call panel is visible");
-      require(!visible(document.querySelector('.page-agent .composer')), "call replaces the composer");
-      require(document.querySelectorAll('.voice-call svg.slime').length === 1, "one existing member slime");
-      require(![...document.querySelectorAll('.ra-empty > .ra-hero')].some(visible), "the call does not duplicate the empty-thread character");
-      require(calls.filter(call => call.method === "voice_chat.start").length === 1, "one call admission");
-    }
-    if (name === "voice-call-transcript") require(document.querySelectorAll('.voice-call [data-call-turn]').length === 1, "transcript contains the owner and member turn");
-    if (name === "voice-call-settings") require(document.querySelectorAll('.vc-settings .sel').length === 3, "three shared dropdowns");
-    if (name === "voice-call-ended") {
-      require(document.querySelectorAll('[data-call-card]').length === 1, "one receipt after hang-up");
-      require(!document.querySelector('.tn[data-id="8701"]'), "normal call turns fold under the card");
-      require(document.querySelector('[data-call-rating="good"]').getAttribute('aria-pressed') === 'true', "local rating persists");
-      const toggle = document.querySelector('[data-call-card] [data-card-disclosure]');
-      require(toggle?.tagName === 'BUTTON' && toggle.textContent.trim() === '隱藏逐字稿', "the open transcript toggle is a button that says it hides");
-      require(visible(document.querySelector('[data-call-card] .vc-transcript')), "the transcript opens inside the receipt");
-      require(/已結束 · \d+:\d{2}/.test(document.querySelector('[data-call-card] [data-card-status-text]')?.textContent ?? ''), "the receipt says the call length beside its state");
-      require(calls.some(call => call.method === "voice_chat.end") && calls.some(call => call.method === "voice_chat.feedback"), "hang-up and feedback cross the real IPC boundary");
-    }
-    if (name === "voice-call-no-mic") {
-      require(visible(document.querySelector('.vc-card [data-missing-repair="dictation"]')), "one actionable shared repair entry");
-      require(!visible(document.querySelector('.vc-failure')), "no duplicate failure sentence by the composer");
-    }
-    if (name === "voice-call-busy") {
-      require(visible(document.querySelector('.vc-confirm [data-dlg="replace"]')), "explicit end and start confirmation");
-      require(!calls.some(call => call.method === "voice_chat.end"), "opening confirmation does not hang up");
-    }
-    return { check: name };
-  }
   if (name.startsWith("colleague-")) {
     const calls = window.__look.calls;
     if (name === "colleague-gallery") require(document.querySelectorAll('.template-gallery svg.slime').length === 8, "eight existing slime characters");
@@ -1609,7 +1564,7 @@ export function checkRendered(name, context = {}) {
     return { check: name };
   }
   if (name.startsWith("missing-")) {
-    const noteScope = name === 'missing-vision' ? '#svc-dialog .missing-note' : name === 'missing-search' ? '.turn-prerequisites .missing-note' : name === 'missing-voice' ? '.toast .missing-note' : '.missing-note';
+    const noteScope = name === 'missing-vision' ? '#svc-dialog .missing-note' : name === 'missing-search' ? '.turn-prerequisites .missing-note' : '.missing-note';
     const note = [...document.querySelectorAll(noteScope)].find(visible);
     if (name === 'missing-onboarding-repair') {
       require(visible(document.querySelector('[data-act="rerun-guide"]')), 'repair reaches the existing Start tour action');
@@ -1622,7 +1577,7 @@ export function checkRendered(name, context = {}) {
       require(visible(document.querySelector('#conn-key')), 'the shared card opens the existing Composio key field');
       require(document.querySelector('.cs-key-form .note')?.textContent.includes('專案設定 › API 金鑰'), 'the form says where to obtain the project key before typing it');
     } else if (name.endsWith('-repair')) {
-      const field = document.querySelector(name === 'missing-search-repair' ? '#svc-url' : '#svc-key-fish');
+      const field = document.querySelector('#svc-url');
       require(visible(field), 'repair reaches the existing exact field');
       require(document.querySelector('[data-pane="tools"][aria-current="page"]'), 'service repairs open the shared Tools pane');
     } else if (name === 'missing-model-list') {
@@ -1644,20 +1599,6 @@ export function checkRendered(name, context = {}) {
       if (name === 'missing-search') require(note.textContent.includes('尚未設定 SearXNG 網址') && note.querySelectorAll('button').length === 1, 'the step says address, not key, with one action');
       if (name === 'missing-card') require(note.textContent.includes('設定 › 連接 › 商店') && note.querySelectorAll('button').length === 1, 'the card names its existing repair form with one action');
       if (name === 'missing-vision') require(document.querySelector('[data-svc="use"]').disabled && note.textContent.includes('回答模型無法讀取圖片'), 'same-as-answer says why it cannot be used');
-    }
-    return {check:name};
-  }
-  if (name === "generated-audio-missing" || name === "generated-audio-repair") {
-    const thread = document.querySelector('.page-agent:not([hidden])');
-    if (name === "generated-audio-missing") {
-      const repairs = [...thread.querySelectorAll('[data-missing-repair="voice"]')].filter(visible);
-      require(repairs.length === 1 && repairs[0].closest('.turn-prerequisites .missing-note.is-repair'), "the missing voice service has one repair, under the reply that says it");
-      const reply = [...repairs[0].closest('.tn').querySelectorAll('.chat-message[data-reply]')].find(visible);
-      require(reply && reply.getBoundingClientRect().bottom <= repairs[0].getBoundingClientRect().top + 1, "the repair comes after the reply, not above it");
-      require(!thread.querySelector('[data-act="thinking"]'), "no work is offered to open");
-    } else {
-      require(visible(document.querySelector('#svc-key-fish')), "the repair reaches the voice service key");
-      require(document.querySelector('[data-pane="tools"][aria-current="page"]'), "the voice repair opens the shared Tools pane");
     }
     return {check:name};
   }
@@ -2464,11 +2405,10 @@ export function checkRendered(name, context = {}) {
     else require(panel.querySelector('input')?.value === 'studio-mini' && visible(panel.querySelector('[role="alert"]')), "remote failure stays in its host popover");
     return {check:name};
   }
-  if (["settings-owner", "settings-tools", "settings-raphael-memory", "settings-raphael-voice", "settings-draft-grouped", "settings-speech-service"].includes(name)) {
+  if (["settings-owner", "settings-tools", "settings-raphael-memory", "settings-draft-grouped"].includes(name)) {
     if (name === 'settings-owner') require(visible(document.querySelector('[data-owner="owner_name"]')) && !document.querySelector('#agent-city') && !document.querySelector('[data-mem-space]'), "the owner's profile stands without memory (its own tab, owner 2026-11-08), and no weather city is asked for (owner, 2026-11-06)");
     else if (name === 'settings-tools') require(document.querySelector('[data-pane="tools"]')?.getAttribute('aria-current') === 'page' && !document.querySelector('[data-pane="agent"]'), "legacy agent pane resolves to Tools");
     else if (name === 'settings-raphael-memory') require(visible(document.querySelector('.ms-pane [data-mem-space="own"]')) && document.querySelector('.ms-pane [data-mem-space="own"]').textContent.includes('拉斐爾'), "Raphael memory belongs to the member settings page");
-    else if (name === 'settings-speech-service') { require(visible(document.querySelector('#svc-dialog [type="password"]')) && !document.querySelector('#svc-voice-id, #svc-dialog [data-svc="try"]'), 'shared speech setup retains its key and leaves personal voice controls in details'); }
     else if (name === 'settings-draft-grouped') require(!!document.querySelector('.ms-pane .ms-list [data-ms="draft"]') && document.querySelectorAll('.ms-pane [data-ms="draft"]').length === 1, 'the draft switch is one row of the page, in the list with the group');
     return {check:name};
   }
@@ -2782,7 +2722,7 @@ export function checkRendered(name, context = {}) {
     const items = [...document.querySelectorAll(name === "onboarding-abilities" ? '.svc-item' : '.ob-tile:not([data-item^="provider:"]):not([data-item="composio"])')].filter(visible);
     const searched = !!document.querySelector('#ob-find')?.value.trim();
     items.forEach(item => { item.dataset.item ??= item.dataset.id; });
-    const expected = { "onboarding-tools": ["chatgpt", "claude", "codex", "openrouter", "gemini"], "onboarding-abilities": ["search", "read", "vision", "pdf", "voice"] }[name];
+    const expected = { "onboarding-tools": ["chatgpt", "claude", "codex", "openrouter", "gemini"], "onboarding-abilities": ["search", "read", "vision", "pdf"] }[name];
     if (name === "onboarding-tools") {
       // A store (owner, 2026-11-08): a search box, 熱門 first and the same for everyone, then every other tool by kind.
       const find = document.querySelector('.ob-find input#ob-tools-find');

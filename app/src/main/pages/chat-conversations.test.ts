@@ -69,7 +69,7 @@ test("quota notices stay immediately above the composer and disappear at reset",
 test("quick questions scope history, quote the entire answer, send their ID, and a message menu has reactions, Reply and Copy", async () => {
   api.agentQuestionOpen.mockResolvedValue(null);
   const conversations = [{ id: 1, member_id: 0, title: "Main", is_default: 1, kind: "standard" }, { id: 2, member_id: 0, title: "", is_default: 0, kind: "quick" }];
-  api.core.mockImplementation(async method => method === "conversations.list" ? { conversations } : method === "agent.speech.status" ? { ready: true } : method === "background.questions.list" ? { questions: [] } : {});
+  api.core.mockImplementation(async method => method === "conversations.list" ? { conversations } : method === "background.questions.list" ? { questions: [] } : {});
   api.agentHistoryList.mockImplementation(async ({ conversation_id }) => ({ turns: [{ id: conversation_id, conversation_id, member_id: 0, question: "Explain", text: "**Entire** answer\n\nSecond paragraph.", prefix: "", created_at_ms: 1000, status: "done", route: "answer", source: "app", detail: null }] }));
   const page = createAgent({ go() {}, device: () => ({}), onEvent: () => () => {}, undo: { begin() {} }, cleared: new Cleared() } as unknown as AppContext);
   document.body.append(page.el); page.show(); await flush();

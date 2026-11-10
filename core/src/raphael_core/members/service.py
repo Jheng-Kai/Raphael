@@ -278,7 +278,6 @@ class MembersService:
     ) -> None:
         self.store = MemberStore(conn, now_ms)
         self.capabilities = MemberCapabilities(conn, local_dir / "member-skills", self.store)
-        self._speech = None
         self.greeting = None  # Bound by the interactive AgentService, never the routine worker.
         self._delivered: set[tuple[int, int, str]] = set()
         self._conn = conn
@@ -356,7 +355,6 @@ class MembersService:
             "members.duplicate": self._duplicate,
             "members.template": self._member_template,
             "members.mark_all_read": self._mark_all_read,
-            "members.voices": self._voices,
             "members.list": self._list,
             "members.create": self._create,
             "members.greet": self._greet,
@@ -656,7 +654,7 @@ class MembersService:
         last = latest.get(0)
         activity, activity_label = self.activity.describe(0, waiting, tasks=tasks)
         view: dict[str, Any] = {
-            "blurb": "", "reply_style": "full", "voice": "",
+            "blurb": "", "reply_style": "full",
             "notify": self._settings.get("raphael_notify"), "ask_before_members": False, "pinned": self._chief_pinned(), "hidden": False, "draft_first": self._settings.get("raphael_draft_first"),
             "id": 0,
             "chief": self.store.is_chief(0),
@@ -909,14 +907,6 @@ class MembersService:
             raise _rpc_error(error if isinstance(error, MemberError) else MemberError("io", "could not copy skills")) from None
         self._changed()
         return {"member": self.view_of(copy)}
-
-    def use_speech(self, speech) -> None:
-        self._speech = speech
-
-    async def _voices(self, params: dict) -> dict:
-        voice = self._settings.get("tts_fish_voice")
-        configured = bool(self._speech and self._speech.speaks())
-        return {"voices": [{"id": voice, "name": "Fish Audio"}] if voice else [], "configured": configured}
 
     async def _list(self, params: dict) -> dict:
         if "panel_member_id" in params:
@@ -1797,7 +1787,7 @@ class MembersService:
             if name == "member_update" and params.get("id") == 0:
                 from ..brain.settings import checked
 
-                preferences = {"model": "agent_model", "pinned": "chief_pinned", "voice": "tts_fish_voice"}
+                preferences = {"model": "agent_model", "pinned": "chief_pinned"}
                 # Profile drafts include these empty fields for ordinary members.
                 for field in ("blurb", "group", "avatar_preset"):
                     if params.get(field) == "":

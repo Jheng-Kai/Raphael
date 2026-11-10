@@ -414,7 +414,7 @@ test("pickers opened outside Models include enabled connections with zero models
   api.providersList.mockResolvedValue({ providers: [{ id: "p9", kind: "ollama", name: "Empty server", enabled: true, has_key: false, base_url: "http://localhost:11434/v1", status: "unknown", models: 0 }] });
   api.servicesStatus.mockResolvedValue({
     search: { enabled: true, service: "openrouter", options: [] }, read: { enabled: true, service: "builtin", options: [] },
-    pdf: { enabled: true, service: "builtin", options: [] }, voice: { enabled: false, service: "fish", options: [] },
+    pdf: { enabled: true, service: "builtin", options: [] },
     vision: { enabled: true, model: "", resolved_model: "example", supports_images: true },
   });
   await mount("agent");
@@ -429,7 +429,7 @@ test("vision keeps its primary image picker without fallback controls", async ()
   api.modelsCatalog.mockResolvedValue(visionCatalog);
   api.servicesStatus.mockResolvedValue({
     search: { enabled: true, service: "openrouter", options: [] }, read: { enabled: true, service: "builtin", options: [] },
-    pdf: { enabled: true, service: "builtin", options: [] }, voice: { enabled: false, service: "fish", options: [] },
+    pdf: { enabled: true, service: "builtin", options: [] },
     vision: { enabled: true, model: "", resolved_model: "example", supports_images: true },
   });
   await mount(); click('[data-pane="tools"]'); await flush();

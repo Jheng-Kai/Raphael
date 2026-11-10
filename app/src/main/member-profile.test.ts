@@ -7,7 +7,7 @@ import { mountMemberResources } from "./member-profile-resources";
 import { memberPreset, randomMemberName } from "./member-profile-presets";
 import type { Member } from "./types";
 
-vi.mock("./api", () => ({ core: vi.fn(), membersUpdate: vi.fn(), membersSkillsList: vi.fn(), membersSkillsImport: vi.fn(), membersSkillsUpdate: vi.fn(), membersSkillsDelete: vi.fn(), membersCommandsList: vi.fn(), membersCommandsSave: vi.fn(), membersCommandsDelete: vi.fn(), membersVoices: vi.fn(), routinesList: vi.fn(), routinesCreate: vi.fn(), routinesUpdate: vi.fn(), routinesDelete: vi.fn() }));
+vi.mock("./api", () => ({ core: vi.fn(), membersUpdate: vi.fn(), membersSkillsList: vi.fn(), membersSkillsImport: vi.fn(), membersSkillsUpdate: vi.fn(), membersSkillsDelete: vi.fn(), membersCommandsList: vi.fn(), membersCommandsSave: vi.fn(), membersCommandsDelete: vi.fn(), routinesList: vi.fn(), routinesCreate: vi.fn(), routinesUpdate: vi.fn(), routinesDelete: vi.fn() }));
 const member: Member = { id: 7, name: "Mia", role: "Research", instructions: "Keep sources", personality: "Careful", avatar: "", group_id: null, model: "", tools: null, position: 0, created: 0, unread: false, waiting: false, preview: "", last_at: null };
 const flush = async (): Promise<void> => { for (let i = 0; i < 25; i++) await Promise.resolve(); };
 
@@ -39,7 +39,6 @@ beforeEach(() => {
   setLocale("zh-TW");
   vi.mocked(api.membersSkillsList).mockResolvedValue({ skills: [] });
   vi.mocked(api.membersCommandsList).mockResolvedValue({ commands: [] });
-  vi.mocked(api.membersVoices).mockResolvedValue({ voices: [{ id: "fish:1", name: "Voice 1" }], configured: true });
   vi.mocked(api.core).mockResolvedValue({ memories: [] });
   vi.mocked(api.routinesList).mockResolvedValue({ routines: [] });
 });
@@ -97,7 +96,7 @@ test("a member is a slime and every pane groups content in cards", async () => {
   expect(dialog.el.querySelector('.mb-new-av .mb-av-slime')).not.toBeNull();
   fill(dialog.el, '#mb-new-name', 'Ada');
   expect(dialog.el.querySelector('.mb-new-av .mb-av-slime')).not.toBeNull();
-  for (const tab of ['identity', 'soul', 'skills', 'memory', 'routines', 'permissions', 'voice']) {
+  for (const tab of ['identity', 'soul', 'skills', 'memory', 'routines', 'permissions']) {
     click(dialog.el, `#mp-tab-${tab}`); await flush();
     expect(dialog.el.querySelector(`#mp-page-${tab} .mp-card`)).not.toBeNull();
   }
@@ -171,12 +170,12 @@ test("a preset in edit mode suggests a command without writing until its explici
   dialog.close();
 });
 
-test("editing then closing does not save main fields or voice switches", async () => {
+test("editing then closing does not save main fields or the notify switch", async () => {
   const update = vi.fn(async () => true);
   const dialog = openEditMemberDialog(host({ update }), member);
   fill(dialog.el, '#mb-new-name', 'Changed');
-  click(dialog.el, '#mp-tab-voice'); await flush();
-  click(dialog.el, '[data-res="notify"]'); await flush();
+  click(dialog.el, '#mp-tab-permissions'); await flush();
+  click(dialog.el, '[data-dlg="notify"]'); await flush();
   click(dialog.el, '[data-dlg="cancel"]');
   expect(update).not.toHaveBeenCalled();
   expect(api.membersUpdate).not.toHaveBeenCalled();
@@ -190,6 +189,20 @@ test("editing saves reply style, blurb and permission through the footer", async
   click(dialog.el, '#mp-tab-permissions'); click(dialog.el, '[data-dlg="ask"]');
   click(dialog.el, '[data-dlg="save"]'); await flush();
   expect(update).toHaveBeenCalledWith(7, expect.objectContaining({ reply_style: 'conversational', blurb: 'A useful teammate', ask_before_members: true }));
+});
+
+test("the notify switch is one of the permissions, saved with the rest and never a voice choice", async () => {
+  const update = vi.fn(async () => true);
+  const dialog = openEditMemberDialog(host({ update, taken: ['Mia'] }), member, "soul");
+  expect(dialog.el.querySelector('#mp-tab-voice')).toBeNull();
+  click(dialog.el, '#mp-tab-permissions');
+  const notify = dialog.el.querySelector<HTMLElement>('[data-dlg="notify"]')!;
+  expect(notify.getAttribute("role")).toBe("switch");
+  click(dialog.el, '[data-dlg="notify"]');
+  expect(notify.getAttribute("aria-checked")).toBe("true");
+  click(dialog.el, '[data-dlg="save"]'); await flush();
+  expect(update).toHaveBeenCalledWith(7, expect.objectContaining({ notify: true }));
+  expect(update).not.toHaveBeenCalledWith(7, expect.objectContaining({ voice: expect.anything() }));
 });
 
 test("a member writes mail as a draft for the owner to send unless the owner turns that off, and it is saved with the rest", async () => {

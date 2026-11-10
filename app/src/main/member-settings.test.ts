@@ -16,7 +16,6 @@ const api = vi.hoisted(() => ({
   membersCommandsList: vi.fn(),
   membersCommandsSave: vi.fn(),
   membersCommandsDelete: vi.fn(),
-  membersVoices: vi.fn(),
   membersToolChoices: vi.fn(),
   membersSetAvatar: vi.fn(),
   settingsGet: vi.fn(),
@@ -84,10 +83,7 @@ beforeEach(() => {
   api.membersCommandsList.mockResolvedValue({ commands: [{ id: 5, name: "weekly", description: "每週整理", template: "整理本週：{input}" }] });
   api.membersCommandsSave.mockResolvedValue({});
   api.membersCommandsDelete.mockResolvedValue({});
-  api.membersVoices.mockResolvedValue({ configured: true, voices: [{ id: "v1", name: "Helix" }, { id: "v2", name: "Nova" }] });
   api.membersToolChoices.mockResolvedValue({ tools: ["read_file"], connections: [{ id: "gmail", name: "Gmail", enabled: true }, { id: "notion", name: "Notion", enabled: true }, { id: "slack", name: "Slack", enabled: false }] });
-  api.settingsGet.mockResolvedValue({ settings: { tts_fish_voice: "v2" } });
-  api.settingsSet.mockImplementation(async (_key: string, value: string) => ({ settings: { tts_fish_voice: value } }));
   api.core.mockImplementation(async (method: string, params: { space?: string }) => {
     if (method === "memory.get" || method === "memory.update") {
       const shared = params?.space === "shared";
@@ -444,7 +440,6 @@ describe("tools and notifications", () => {
       await cat(kind);
       expect(page.el.querySelector('[data-ms="voice"]'), kind).toBeNull();
     }
-    expect(api.membersVoices).not.toHaveBeenCalled();
   });
 });
 

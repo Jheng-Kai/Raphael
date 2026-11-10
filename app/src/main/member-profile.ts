@@ -1,6 +1,6 @@
 // The one dialog with every setting of a member (owner, 2026-11-07): opened from the member's face in its panel, which
 // has no settings page of its own any more. No groups here; the sidebar arranges members. Raphael opens it too, with
-// what is his to change: his picture, skills and commands, memory, drafts and voice. The footer owns member fields;
+// what is his to change: his picture, skills and commands, memory and drafts. The footer owns member fields;
 // explicit resource actions belong to the resource itself. A new member is made in member-creator.ts.
 import * as api from "./api";
 import { defaultSlimeAvatar } from "./slime";
@@ -18,9 +18,9 @@ import { btn, esc, openMenu, sel, tabs, tg, toaster } from "./ui";
 import { openRoutineView } from "./routine-view";
 import "./member-profile.css";
 
-export type ProfileTab = "identity" | "soul" | "skills" | "memory" | "routines" | "permissions" | "voice";
-const TAB_KEYS = { identity: "members.profile.identity", soul: "members.profile.soul", skills: "members.profile.skills", memory: "members.profile.memory", routines: "members.profile.routines", permissions: "members.profile.permissions", voice: "members.profile.voice" } as const;
-const TABS: ProfileTab[] = ["identity", "soul", "skills", "memory", "routines", "permissions", "voice"];
+export type ProfileTab = "identity" | "soul" | "skills" | "memory" | "routines" | "permissions";
+const TAB_KEYS = { identity: "members.profile.identity", soul: "members.profile.soul", skills: "members.profile.skills", memory: "members.profile.memory", routines: "members.profile.routines", permissions: "members.profile.permissions" } as const;
+const TABS: ProfileTab[] = ["identity", "soul", "skills", "memory", "routines", "permissions"];
 
 export interface MemberProfileHost {
   groups: readonly MemberGroup[];
@@ -34,13 +34,13 @@ const area = (id: string, label: string, value: string, max: number, rows: numbe
 
 export function openEditMemberDialog(host: MemberProfileHost, member: Member, initialTab: ProfileTab = "identity"): Dialog {
   const raphael = member.id === RAPHAEL_ID;
-  const pages: ProfileTab[] = raphael ? ["identity", "skills", "memory", "permissions", "voice"] : TABS;
+  const pages: ProfileTab[] = raphael ? ["identity", "skills", "memory", "permissions"] : TABS;
   let tab = pages.includes(initialTab) ? initialTab : "identity";
   let busy = false;
   let alive = true;
   let avatar = member.avatar ?? "";
   let preset: ProfilePreset = "custom";
-  const voice = { voice: member.voice ?? "", notify: member.notify ?? false };
+  let notify = member.notify ?? false;
   let ask = member.ask_before_members ?? false;
   let draftFirst = member.draft_first ?? true;
   let reply = member.reply_style ?? "full";
@@ -50,7 +50,6 @@ export function openEditMemberDialog(host: MemberProfileHost, member: Member, in
   let memoryLoaded = false;
   let routinesLoaded = false;
   let resources: ResourceEditor | null = null;
-  let voiceEditor: ResourceEditor | null = null;
   let suggestedCommand: ReturnType<typeof presetCommand> = null;
   const dialog = openDialog({
     title: t("members.profile.edit"),
@@ -70,6 +69,7 @@ export function openEditMemberDialog(host: MemberProfileHost, member: Member, in
       else if (act === "reply") openMenu(target, [{ value: "full", label: t("members.profile.full") }, { value: "conversational", label: t("members.profile.conversational") }], reply, value => { reply = value as typeof reply; drawReply(); });
       else if (act === "ask") { ask = !ask; target.setAttribute("aria-checked", String(ask)); }
       else if (act === "draft") { draftFirst = !draftFirst; target.setAttribute("aria-checked", String(draftFirst)); }
+      else if (act === "notify") { notify = !notify; target.setAttribute("aria-checked", String(notify)); }
       else if (act === "routine-add") routineForm();
       // A routine opens its editor (where it is also deleted); its switch is beside it, as in the panel.
       else if (act === "routine-edit") {
@@ -84,7 +84,7 @@ export function openEditMemberDialog(host: MemberProfileHost, member: Member, in
       else if (act === "routine-retry") void loadRoutines();
     },
     onEnter() { if (tab === "identity") void save(); },
-    onClose() { alive = false; resources?.destroy(); voiceEditor?.destroy(); },
+    onClose() { alive = false; resources?.destroy(); },
   });
   const nameInput = dialog.el.querySelector<HTMLInputElement>("#mb-new-name");
   const disabledBeforeBusy = new Map<HTMLInputElement | HTMLTextAreaElement | HTMLButtonElement, boolean>();
@@ -104,8 +104,9 @@ export function openEditMemberDialog(host: MemberProfileHost, member: Member, in
     if (key === "memory") return `<section class="mp-card"><h3>${esc(t("members.profile.memory"))}</h3><textarea id="mp-memory" class="mb-fin mb-ta" maxlength="${MEMORY_MAX}" rows="8" spellcheck="false" aria-label="${esc(t("members.profile.remember"))}"></textarea></section>`;
     if (key === "routines") return `<section class="mp-card"><div class="mp-card-head"><h3>${esc(t("members.profile.routines"))}</h3>${btn(esc(t("members.routineAdd")), "sm", ' data-dlg="routine-add"')}</div><div class="mp-routine-list"></div></section>`;
     if (key === "permissions") return `<section class="mp-card"><h3>${esc(t("members.profile.permissions"))}</h3>` + (raphael ? "" : `<div class="mp-resource"><div><b>${esc(t("members.profile.ask"))}</b><p>${esc(t("members.profile.askHint"))}</p></div>${tg(ask, t("members.profile.ask"), ' data-dlg="ask"')}</div>`) +
-      `<div class="mp-resource"><div><b>${esc(t("members.profile.draft"))}</b><p>${esc(t("members.profile.draftHint"))}</p></div>${tg(draftFirst, t("members.profile.draft"), ' data-dlg="draft"')}</div></section>`;
-    return `<div class="mp-voice"></div>`;
+      `<div class="mp-resource"><div><b>${esc(t("members.profile.draft"))}</b><p>${esc(t("members.profile.draftHint"))}</p></div>${tg(draftFirst, t("members.profile.draft"), ' data-dlg="draft"')}</div>` +
+      `<div class="mp-resource"><span>${esc(t("members.profile.notify"))}</span>${tg(notify, t("members.profile.notify"), ' data-dlg="notify"')}</div></section>`;
+    return "";
   }
   function drawFace(): void {
     // Raphael's face is his picture when he has one; a member's is the slime picked here, until it is saved.
@@ -142,7 +143,6 @@ export function openEditMemberDialog(host: MemberProfileHost, member: Member, in
       resources = mountMemberResources(dialog.el.querySelector<HTMLElement>(".mp-resources")!, { memberId: member.id, tab: "skills" });
       if (suggestedCommand) resources.suggest(suggestedCommand);
     }
-    if (tab === "voice" && !voiceEditor) voiceEditor = mountMemberResources(dialog.el.querySelector<HTMLElement>(".mp-voice")!, { memberId: member.id, tab: "voice", member: { ...member, ...voice }, patch: patch => Object.assign(voice, patch) });
     if (tab === "memory" && !memoryLoaded) void loadMemory();
     if (tab === "routines" && !routinesLoaded) void loadRoutines();
   }
@@ -222,13 +222,13 @@ export function openEditMemberDialog(host: MemberProfileHost, member: Member, in
   async function save(): Promise<void> {
     if (busy) return;
     let fields: MemberPatch;
-    if (raphael) fields = { draft_first: draftFirst, ...voice };
+    if (raphael) fields = { draft_first: draftFirst, notify };
     else {
       const name = cleanName(nameInput!.value);
       if (!name || isMemberNameTaken(name, host.taken.filter(taken => taken.toLocaleLowerCase() !== member.name.toLocaleLowerCase()))) {
         selectTab("identity"); nameInput!.focus(); toaster.info(name ? t("members.nameTaken", { p0: name }) : t("members.nameEmpty")); return;
       }
-      fields = { name, role: cleanName(value("mb-new-role")), blurb: cleanName(value("mp-blurb")), personality: value("mb-new-personality").trim(), instructions: value("mb-new-instr").trim(), reply_style: reply, ask_before_members: ask, draft_first: draftFirst, ...voice, ...(avatar ? { avatar } : {}) };
+      fields = { name, role: cleanName(value("mb-new-role")), blurb: cleanName(value("mp-blurb")), personality: value("mb-new-personality").trim(), instructions: value("mb-new-instr").trim(), reply_style: reply, ask_before_members: ask, draft_first: draftFirst, notify, ...(avatar ? { avatar } : {}) };
     }
     busy = true; setBusy();
     try {

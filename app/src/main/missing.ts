@@ -11,7 +11,7 @@ export interface Missing {
   repair: string | null;
 }
 
-const repairs = new Set(["models", "connections", "store", "search", "read", "vision", "pdf", "voice", "computer", "dictation", "general"]);
+const repairs = new Set(["models", "connections", "store", "search", "read", "vision", "pdf", "computer", "dictation", "general"]);
 type MissingKey = Extract<MessageKey, `missing.${string}`> | "conn.emptyInstalled";
 const messages: Record<string, MissingKey> = {
   "hidden": "missing.hidden",
@@ -51,7 +51,7 @@ const messages: Record<string, MissingKey> = {
 export function missingText(value: Missing): string {
   if (value.requirement === "google_client") return t("card.notConfigured");
   if (value.requirement === "composio_key") return t("card.needsComposioKey");
-  const repairMessages: Record<string, MissingKey> = {search: "missing.search", read: "missing.read", vision: "missing.vision", pdf: "missing.pdf", voice: "missing.voice"};
+  const repairMessages: Record<string, MissingKey> = {search: "missing.search", read: "missing.read", vision: "missing.vision", pdf: "missing.pdf"};
   const key = value.state === "unknown" ? "missing.unknown" : value.state === "off" ? "missing.off" : messages[value.requirement] ??
     (value.requirement === "provider" ? (value.resource === "chatgpt" ? "missing.chatgptAuth" : value.state === "broken" ? "missing.providerAuth" : "missing.provider") : value.requirement === "installation" ? "missing.installation" :
     value.requirement === "url" && value.resource === "searxng" ? "missing.url" : repairMessages[value.repair ?? ""] ?? "missing.unknown");

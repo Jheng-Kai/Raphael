@@ -292,9 +292,6 @@ export interface AgentTurn {
   /** What kind of failure ended the turn and which brain it came from; null for a turn that did not fail. */
   failure?: { kind: string; provider: string; resets_at: number | null } | null;
   reactions?: Record<string, string[]>;
-  voice_call_id?: string;
-  voice_call_summary_id?: number;
-  voice_call?: import("./voice-chat").VoiceCall;
   routine?: Pick<Routine, "id" | "schedule" | "when" | "app_name">;
   handoffs?: HandoffView[];
   conversation_id?: number;
@@ -702,19 +699,11 @@ export interface BrainSettings {
   pdf_service?: string;
   /** The address of the owner's own SearXNG, `http(s)`; "" while there is none. */
   searxng_url?: string;
-  /** Whether each capability of the tools is used at all (the switch of its row in 服務): the first four are on until turned off. */
+  /** Whether each capability of the tools is used at all (the switch of its row in 服務): all are on until turned off. */
   web_search_enabled?: boolean;
   web_read_enabled?: boolean;
   vision_enabled?: boolean;
   pdf_enabled?: boolean;
-  /** Whether Raphael speaks his answers aloud: off until the owner turns it on. */
-  tts_enabled?: boolean;
-  /** Who speaks Raphael's answers aloud: `fish` (Fish Audio), the one voice service; "no voice" is `tts_enabled` off. */
-  tts_service?: string;
-  /** The id of the owner's Fish Audio voice model: 32 hexadecimal characters, or "" while none is set. Not a secret. */
-  tts_fish_voice?: string;
-  /** The Fish Audio model; the window never changes it. */
-  tts_fish_model?: string;
 }
 
 /** One service a capability can use, as `services.status` lists it. Never a key, only whether there is one. */
@@ -743,8 +732,6 @@ export interface ServicesStatus {
   search: ServiceChoice;
   read: ServiceChoice;
   pdf: ServiceChoice;
-  /** Raphael's voice: `fish` (which needs a key), and whether the voice model id is filled in. */
-  voice: ServiceChoice & { fish_voice_set: boolean };
   vision: {
     /** The owner has reading images on. */
     enabled: boolean;
@@ -943,7 +930,6 @@ export interface Member {
   personality?: string;
   blurb?: string;
   reply_style?: "full" | "conversational";
-  voice?: string;
   notify?: boolean;
   ask_before_members?: boolean;
   /** Writes an email as a draft in the owner's chat for them to send, instead of sending it (on unless turned off). */
@@ -1035,7 +1021,6 @@ export interface NewMember {
   ui_language?: string;
   blurb?: string;
   reply_style?: "full" | "conversational";
-  voice?: string;
   notify?: boolean;
   ask_before_members?: boolean;
   draft_first?: boolean;
@@ -1045,7 +1030,7 @@ export interface NewMember {
  * What `members.update` may change, beside its `id`: the avatar only as `""` or `"preset:<stem>"`
  * (a picture of the PC goes by `members.set_avatar`).
  */
-export type MemberPatch = Partial<Pick<Member, "name" | "role" | "personality" | "instructions" | "group_id" | "model" | "tools" | "avatar" | "position" | "blurb" | "reply_style" | "voice" | "notify" | "ask_before_members" | "draft_first" | "pinned" | "hidden">> & {
+export type MemberPatch = Partial<Pick<Member, "name" | "role" | "personality" | "instructions" | "group_id" | "model" | "tools" | "avatar" | "position" | "blurb" | "reply_style" | "notify" | "ask_before_members" | "draft_first" | "pinned" | "hidden">> & {
   /** `pattern:<id>` chooses a pattern; null puts the dotted band back and forgets a picture. */
   cover?: string | null;
   /** Where a cover picture is shown, 0 (its top) to 100 (its bottom), as Notion's Reposition. */
@@ -1340,4 +1325,3 @@ export interface McpTest { ok: boolean; tools: string[]; error?: string }
 /** Member-owned resources; command templates expand only in the core. */
 export interface MemberSkill { set_id?: number; set_kind?: "skill" | "command"; plugin_version?: string; shared?: boolean; source_changed?: boolean | null; id: number; name: string; description: string; enabled: boolean; source: string; plugin?: string; slash_name?: string; provenance?: "learned" | "imported" | "owner"; revision?: string; learned_at?: string | null; updated_at?: string | null }
 export interface MemberCommand { id: number; name: string; description: string; template: string }
-export interface MemberVoice { id: string; name: string }

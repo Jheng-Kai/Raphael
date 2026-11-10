@@ -108,10 +108,6 @@ async def test_bill_survives_deleted_runs_and_uses_the_sidebar_tracker(conn):
     result = await reader.read({'range':'month', 'tz':'UTC'})
     assert result['bill']['cost_usd'] == ledger.month_total() == .5
     assert result['summary']['cost_usd'] == .1
-    assert not result['fish_voice']
-    settings.set('tts_enabled', True)
-    result = await reader.read({'range':'month', 'tz':'UTC'})
-    assert result['fish_voice']
     conn.execute('DELETE FROM agent_turns')
     after = await reader.read({'range':'month'})
     assert after['bill'] == result['bill']

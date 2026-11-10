@@ -19,7 +19,7 @@ const MAKERS: Record<string, ServiceIconId> = {
   "ibm-granite": "ibm", rekaai: "reka", "dots-studio": "dotsstudio", cognitivecomputations: "dolphin", "nex-agi": "nex_agi",
   "xingchen-agi": "xingchen_agi", "prism-ml": "prism_ml", "anthracite-org": "anthracite", "black-forest-labs": "bfl",
   kwaivgi: "kling", voyageai: "voyage", "nace-ai": "nace_ai", "sentence-transformers": "sentence_transformers",
-  "fish-audio": "fish", togethercomputer: "together",
+  togethercomputer: "together",
 };
 
 const markOf = (key: string): ServiceIconId | null =>

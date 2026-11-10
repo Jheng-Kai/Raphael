@@ -38,11 +38,10 @@ const entry = (id: string, name: string, over = {}) => ({
 });
 const cli = (id: string, over = {}) => ({ id, name: id, installed: true, logged_in: true, disconnected: false, available: true, version: "1.0.0", login_command: "", models: [], ...over });
 const option = { id: "builtin", needs_key: false, has_key: false, key_optional: false };
-const serviceStatus = (voiceOn = false) => ({
+const serviceStatus = () => ({
   search: { enabled: true, service: "builtin", options: [option] },
   read: { enabled: true, service: "builtin", options: [option] },
   pdf: { enabled: true, service: "builtin", options: [option] },
-  voice: { enabled: voiceOn, service: "fish", options: [{ ...option, id: "fish", needs_key: true }], fish_voice_set: false },
   vision: { enabled: true, model: "", resolved_model: "x", supports_images: true },
 });
 

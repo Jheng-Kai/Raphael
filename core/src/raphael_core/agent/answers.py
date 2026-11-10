@@ -71,10 +71,6 @@ class Reply:
     # The lookup the model asked for before it answers: words to search for.
     search: str = ""
     messages: list[str] = field(default_factory=list)
-    # The line in Japanese, for the voice, when it was asked for (`reply_schema`'s `say_ja`): one
-    # line of at most SAY_JA_MAX characters, or "" when there is none or it is not Japanese. Only
-    # spoken, never shown or stored.
-    say_ja: str = ""
     explicit_messages: bool = False
 
     @property
@@ -108,12 +104,9 @@ _NEED = {
 }
 
 
-def reply_schema(
-    language: str, memory: bool = False, *, plain: bool = False, say_ja: bool = False
-) -> dict:
+def reply_schema(language: str, memory: bool = False, *, plain: bool = False) -> dict:
     """The JSON the model must return: the prefixes offered are the language's own. With a
-    `memory`, the fields `memory` and `need` too. A `plain` reply (a member's) has no prefix. With
-    `say_ja`, the field `say_ja`: the line in Japanese, for the voice."""
+    `memory`, the fields `memory` and `need` too. A `plain` reply (a member's) has no prefix."""
     properties: dict[str, Any] = {
         "prefix": {"type": "string", "enum": list(PREFIXES[language])},
         "text": {"type": "string"},
@@ -125,9 +118,6 @@ def reply_schema(
         required.remove("prefix")
         properties["messages"] = {"type": "array", "items": {"type": "string"}}
         required.append("messages")
-    if say_ja:
-        properties["say_ja"] = {"type": "string"}
-        required.append("say_ja")
     if memory:
         properties["memory"] = {"type": "array", "items": MEMORY_ITEM}
         properties["need"] = _NEED
@@ -171,7 +161,6 @@ def build_user_message(
     *,
     summary: str = "",
     looked_up: bool = False,
-    say_ja: bool = False,
     narrated: bool = False,
     member: bool = False,
     quote: dict[str, str] | None = None,
@@ -221,7 +210,7 @@ def build_user_message(
             "The lookups you asked for are done: their results are among the tool results. "
             "Answer now, and leave \"need\" empty."
         )
-    parts.append(language_reminder(language, say_ja=say_ja, narrated=narrated, member=member))
+    parts.append(language_reminder(language, narrated=narrated, member=member))
     return "\n\n".join(parts)
 
 
@@ -260,33 +249,12 @@ def _plain_text(value: Any) -> str:
     return _one_line_text(value).strip()
 
 
-# The most characters of the Japanese line for the voice; a line the model made longer is cut.
-SAY_JA_MAX = 200
-_KANA = re.compile("[\u3041-\u30ff]")
-_BRACKETS = re.compile("[《》]")
-
-
-def japanese_line(value: Any) -> str:
-    """The model's Japanese rendering of a line, as the voice is given it: one line, without the
-    brackets that show a line of Raphael's, cut at a sentence end within SAY_JA_MAX characters.
-    "" when it is not text or has no kana in it (a model that ignored the field, or answered it in
-    the language of the screen, must not have Chinese or English read by a Japanese voice)."""
-    line = " ".join(_BRACKETS.sub("", _one_line_text(value)).split())
-    if not _KANA.search(line):
-        return ""
-    if len(line) <= SAY_JA_MAX:
-        return line
-    cut = line[:SAY_JA_MAX]
-    end = max(cut.rfind(mark) for mark in "。！？")
-    return cut[: end + 1] if end > SAY_JA_MAX // 3 else cut
-
-
 _REPLY_OPEN = re.compile(
     r"^《(" + "|".join(re.escape(prefix) for prefixes in PREFIXES.values() for prefix in prefixes)
     + r")[。.：:]\s*", re.I,
 )
 _REPLY_FRAME = re.compile(_REPLY_OPEN.pattern + r"(.*?)》$", re.S | re.I)
-_LOOSE_FIELD = re.compile(r'\s*"(?:prefix|text|messages|detail|say_ja|memory|need|thinking|progress)"\s*[:：]')
+_LOOSE_FIELD = re.compile(r'\s*"(?:prefix|text|messages|detail|memory|need|thinking|progress)"\s*[:：]')
 _LOOSE_TEXT = re.compile(
     r'"text"\s*[:：]\s*(?:"((?:[^"\\]|\\.)*)"|「(.*?)」(?=\s*[,，]?\s*(?:"\w+"\s*[:：]|\}|$)))', re.S)
 
@@ -457,7 +425,6 @@ def parse_reply(data: Any, language: str, *, plain: bool = False, long: bool = F
         detail=detail if detail and detail != line else None,
         memory=memory,
         search=search,
-        say_ja=japanese_line(data.get("say_ja")),
         messages=messages,
         explicit_messages=explicit_messages,
     )
@@ -553,7 +520,6 @@ class Voice:
         memory_snapshot: "str | MemorySnapshot | None" = None,
         looked_up: bool = False,
         speaker: Speaker = RAPHAEL,
-        say_ja: bool = False,
         roster: str = "",
         reasoning_effort: str = "none",
         recall: str = "",
@@ -565,15 +531,12 @@ class Voice:
         turns; `memory_snapshot` is the memory files, or None when there is no memory (then the
         reply has no `memory` and no `need`). With a `speaker` who is a member of the team, the
         member says it instead, in its persona and in plain sentences (`parse_reply`'s `plain`).
-        With `say_ja`, the reply also holds the line in Japanese for the voice (`Reply.say_ja`),
-        made in this same call, never a second one, when Raphael's reply will be spoken.
-        The screen language does not determine the authored reply or its voice rendering.
+        The screen language does not determine the authored reply.
         AgentFailure (of a kind) if the model fails or says nothing."""
         plain = not speaker.is_raphael
-        say_ja = say_ja and not plain
         user = build_user_message(
             question, moment, context, tools, language, background,
-            summary=summary, looked_up=looked_up, say_ja=say_ja, member=plain, recall=recall, source=source, messaging=messaging,
+            summary=summary, looked_up=looked_up, member=plain, recall=recall, source=source, messaging=messaging,
         )  # fmt: skip
         if plain:
             system = member_system_prompt(
@@ -586,7 +549,7 @@ class Voice:
                 memory_snapshot=memory_snapshot,
             )
         else:
-            system = system_prompt(language, route, memory_snapshot, say_ja=say_ja, speaker=speaker)
+            system = system_prompt(language, route, memory_snapshot, speaker=speaker)
         system += MESSAGE_RULES + roster
         began = time.perf_counter()
         try:
@@ -598,9 +561,7 @@ class Voice:
                     fallbacks=[],
                     system=system,
                     user=user,
-                    schema=reply_schema(
-                        language, memory=memory_snapshot is not None, plain=plain, say_ja=say_ja
-                    ),
+                    schema=reply_schema(language, memory=memory_snapshot is not None, plain=plain),
                     schema_name="raphael_reply",
                     timeout_s=self._timeout_s,
                     max_tokens=REPLY_MAX_TOKENS,

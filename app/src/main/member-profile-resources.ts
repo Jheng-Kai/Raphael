@@ -1,26 +1,20 @@
 // The profile and details panel share the member-owned skill and command editor. Each explicit
 // resource action is written immediately.
-import { noticeHTML } from "./missing";
-import { createServices, voiceLineHTML } from "./services";
-import type { BrainSettings } from "./types";
 import * as api from "./api";
 import { eventRead } from './event-read';
 import { openActions } from "./member-column";
 import { describeError } from "./format";
 import { onLocaleChange, t } from "./i18n";
 import { skillOriginLabel } from "./skill-source";
-import type { Member, MemberCommand, MemberPatch, MemberSkill, MemberVoice, WireAttachment } from "./types";
-import { btn, esc, iconButton, openMenu, sel, tg, toaster } from "./ui";
+import type { MemberCommand, MemberSkill, WireAttachment } from "./types";
+import { btn, esc, iconButton, tg, toaster } from "./ui";
 
 export interface ResourceHost {
   memberId: number;
   scope?: object;
-  tab: "skills" | "commands" | "voice";
+  tab: "skills" | "commands";
   /** The narrow details panel gives skills and commands separate subpages. */
   standalone?: boolean;
-  member?: Member;
-  /** Profile fields remain drafts until its footer is saved. The details panel writes now. */
-  patch?(patch: MemberPatch): void;
   changed?(): void;
   onCount?(counts: { skills: number; commands: number }): void;
   draft?: { text: string; save(text: string): Promise<void>; discard(): Promise<void> };
@@ -32,12 +26,6 @@ export interface ResourceEditor {
 }
 
 export function mountMemberResources(container: HTMLElement, host: ResourceHost): ResourceEditor {
-  let brain: BrainSettings | null = null;
-  let voiceDraft: string | null = null;
-  const raphaelVoice = host.memberId === 0 && host.tab === "voice" ? createServices({
-    root: container, visible: () => alive, redraw: () => draw(), brain: () => brain,
-    changeSetting: async (key, value) => { brain = (await api.settingsSet(key, value)).settings; },
-  }) : null;
   let alive = true;
   let busy = false;
   let failed = false;
@@ -45,20 +33,15 @@ export function mountMemberResources(container: HTMLElement, host: ResourceHost)
   let loaded = !!host.draft;
   let skills: MemberSkill[] = [];
   let commands: MemberCommand[] = [];
-  let voices: MemberVoice[] = [];
-  let configured = false;
-  const voiceState = { voice: host.member?.voice ?? "", notify: host.member?.notify ?? false };
   let command: Omit<MemberCommand, "id"> & { id?: number } = { name: "", description: "", template: "" };
   let suggested = false;
   let source = "";
   let undo: string | null = null;
   let editing: { id?: number; text: string; revision?: string } | null = host.draft ? { text: host.draft.text } : null;
-  const counts = (): void => { if (host.tab !== "voice") host.onCount?.({ skills: skills.length, commands: commands.length }); };
+  const counts = (): void => { host.onCount?.({ skills: skills.length, commands: commands.length }); };
   const empty = (text: string): string => `<p class="mp-empty">${esc(text)}</p>`;
-  const label = (text: string, content: string): string => `<label class="mp-label"><span>${esc(text)}</span>${content}</label>`;
   const input = (id: string, value: string, placeholder: string, max = 200): string => `<input id="${id}" class="mb-fin" maxlength="${max}" value="${esc(value)}" placeholder="${esc(placeholder)}" aria-label="${esc(placeholder)}" autocomplete="off">`;
   const capture = (): void => {
-    if (raphaelVoice) voiceDraft = container.querySelector<HTMLInputElement>("#svc-voice-id")?.value ?? voiceDraft;
     if (editing) editing.text = container.querySelector<HTMLTextAreaElement>("#mp-skill-text")?.value ?? editing.text;
     source = container.querySelector<HTMLInputElement>("#mp-skill-source")?.value ?? source;
     command.name = container.querySelector<HTMLInputElement>("#mp-command-name")?.value ?? command.name;
@@ -81,32 +64,19 @@ export function mountMemberResources(container: HTMLElement, host: ResourceHost)
       `<div class="mp-command-fields">${input("mp-command-name", command.name, t("members.profile.commandName"), 32)}${input("mp-command-description", command.description, t("members.profile.commandDescription"), 200)}</div>` +
       `<textarea id="mp-command-template" class="mb-fin mb-ta" rows="4" maxlength="8000" placeholder="${esc(t("members.profile.commandTemplate", { input: "{input}" }))}" aria-label="${esc(t("members.profile.commandTemplate", { input: "{input}" }))}">${esc(command.template)}</textarea>` +
       `<div class="mp-end">${command.id === undefined ? "" : btn(esc(t("common.cancel")), "sm", ` data-res="command-cancel"${off}`)}${btn(esc(t("members.profile.saveCommand")), "sm", ` data-res="command-save"${off}`)}</div></section>`;
-    const voiceChoices = [{ value: "", label: t("members.profile.defaultVoice") }, ...voices.map(v => ({ value: v.id, label: v.name }))];
-    if (voiceState.voice && !voiceChoices.some(v => v.value === voiceState.voice)) voiceChoices.push({ value: voiceState.voice, label: voiceState.voice });
     container.innerHTML = failed ? `<div class="mp-error" role="alert">${btn(esc(t("members.profile.retry")), "sm", ' data-res="retry"')}</div>` : !loaded ? `<span class="spin" role="status" aria-label="${esc(t("common.loading"))}"></span>` :
-      raphaelVoice ? `<section class="mp-card"><h3>${esc(t("members.panelVoice"))}</h3>${voiceLineHTML(raphaelVoice.view(), voiceDraft ?? brain?.tts_fish_voice ?? "")}</section>` :
-      host.tab === "voice" ? `<section class="mp-card">${label(t("members.profile.voiceLabel"), sel(voiceChoices, voiceState.voice, t("members.profile.voiceLabel"), ` data-res="voice"${!configured || busy ? " disabled" : ""}`))}${configured ? "" : noticeHTML("voice", "voice", "fish")}</section>` +
-        `<section class="mp-card"><div class="mp-resource"><span>${esc(t("members.profile.notify"))}</span>${tg(voiceState.notify, t("members.profile.notify"), ` data-res="notify"${off}`)}</div></section>` :
       (host.tab === "skills" ? skillHTML : "") + (host.tab === "commands" || !host.standalone ? commandsHTML : "");
   }
   async function refresh(fromEvent = false): Promise<void> {
     const mine = ++generation;
     try {
-      if (host.tab === "voice") {
-        if (raphaelVoice) { brain = (await api.settingsGet()).settings; await raphaelVoice.load(); }
-        const answer = await (fromEvent ? eventRead('members.voices',()=>api.membersVoices(),host.scope ?? container) : api.membersVoices());
-        if (!alive || mine !== generation) return;
-        voices = answer.voices;
-        configured = answer.configured;
-      } else {
-        const [s, c] = await Promise.all(fromEvent ? [eventRead(`members.skills.list:${host.memberId}`,()=>api.membersSkillsList(host.memberId),host.scope ?? container),eventRead(`members.commands.list:${host.memberId}`,()=>api.membersCommandsList(host.memberId),host.scope ?? container)] : [api.membersSkillsList(host.memberId), api.membersCommandsList(host.memberId)]);
-        if (!alive || mine !== generation) return;
-        skills = s.skills;
-        undo = s.undo ?? null;
-        commands = c.commands;
-        if (suggested && command.id === undefined && command.name) command.id = commands.find(saved => saved.name === command.name)?.id;
-        counts();
-      }
+      const [s, c] = await Promise.all(fromEvent ? [eventRead(`members.skills.list:${host.memberId}`,()=>api.membersSkillsList(host.memberId),host.scope ?? container),eventRead(`members.commands.list:${host.memberId}`,()=>api.membersCommandsList(host.memberId),host.scope ?? container)] : [api.membersSkillsList(host.memberId), api.membersCommandsList(host.memberId)]);
+      if (!alive || mine !== generation) return;
+      skills = s.skills;
+      undo = s.undo ?? null;
+      commands = c.commands;
+      if (suggested && command.id === undefined && command.name) command.id = commands.find(saved => saved.name === command.name)?.id;
+      counts();
       loaded = true;
       failed = false;
     } catch (error) {
@@ -125,12 +95,7 @@ export function mountMemberResources(container: HTMLElement, host: ResourceHost)
     catch (error) { toaster.info(describeError(error)); }
     finally { busy = false; draw(); }
   }
-  async function patch(next: MemberPatch): Promise<void> {
-    if (host.patch) host.patch(next);
-    else await api.membersUpdate(host.memberId, next);
-    Object.assign(voiceState, next);
-  }
-  function choose(action: string | undefined, id: number, target: HTMLButtonElement): void {
+  function choose(action: string | undefined, id: number): void {
     if (action === "skill-cancel") {
       if (host.draft) void run(async () => { await host.draft!.discard(); editing = null; });
       else { editing = null; draw(); }
@@ -146,11 +111,6 @@ export function mountMemberResources(container: HTMLElement, host: ResourceHost)
       return;
     }
     if (action === "retry") { void refresh(); return; }
-    if (action === "voice") {
-      openMenu(target, [{ value: "", label: t("members.profile.defaultVoice") }, ...voices.map(v => ({ value: v.id, label: v.name }))], voiceState.voice, value => void run(() => patch({ voice: value })));
-      return;
-    }
-    if (action === "notify") { void run(() => patch({ notify: !voiceState.notify })); return; }
     if (action === "command-edit") { suggested = false; command = { ...commands.find(c => c.id === id)! }; container.innerHTML = ""; draw(); container.querySelector<HTMLInputElement>("#mp-command-name")?.focus(); return; }
     if (action === "command-cancel") { suggested = false; command = { name: "", description: "", template: "" }; container.innerHTML = ""; draw(); return; }
     void run(async () => {
@@ -203,21 +163,18 @@ export function mountMemberResources(container: HTMLElement, host: ResourceHost)
       }
     });
   }
-  const key = (event: KeyboardEvent): void => { raphaelVoice?.key(event); };
   const click = (e: Event): void => {
-    if (raphaelVoice?.click(e.target as Element)) return;
     const target = (e.target as Element).closest<HTMLButtonElement>("[data-res]");
     if (!target || target.disabled || busy) return;
     capture();
     const action = target.dataset.res;
     const id = Number(target.dataset.id);
 
-    if (action === "skill-menu") openActions(target, [{ id: "skill-edit", label: t("members.profile.editResource"), icon: "pencil" }, { id: "skill-delete", label: t("members.profile.delete"), icon: "trash" }], choice => choose(choice, id, target));
-    else if (action === "command-menu") openActions(target, [{ id: "command-edit", label: t("members.profile.editResource"), icon: "pencil" }, { id: "command-delete", label: t("members.profile.delete"), icon: "trash" }], choice => choose(choice, id, target));
-    else choose(action, id, target);
+    if (action === "skill-menu") openActions(target, [{ id: "skill-edit", label: t("members.profile.editResource"), icon: "pencil" }, { id: "skill-delete", label: t("members.profile.delete"), icon: "trash" }], choice => choose(choice, id));
+    else if (action === "command-menu") openActions(target, [{ id: "command-edit", label: t("members.profile.editResource"), icon: "pencil" }, { id: "command-delete", label: t("members.profile.delete"), icon: "trash" }], choice => choose(choice, id));
+    else choose(action, id);
   };
   container.addEventListener("click", click);
-  container.addEventListener("keydown", key);
   const stopLocale = onLocaleChange(draw);
   draw();
   if (!host.draft) void refresh();
@@ -230,7 +187,7 @@ export function mountMemberResources(container: HTMLElement, host: ResourceHost)
       container.innerHTML = "";
       draw();
     },
-    destroy() { raphaelVoice?.reset(); container.removeEventListener("keydown", key); alive = false; generation++; stopLocale(); container.removeEventListener("click", click); },
+    destroy() { alive = false; generation++; stopLocale(); container.removeEventListener("click", click); },
   };
 }
 

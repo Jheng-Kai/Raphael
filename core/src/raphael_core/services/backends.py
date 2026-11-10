@@ -38,18 +38,6 @@ READ = tuple(row for row in SEARCH if row.id not in ("ddgs", "xai", "xai-oauth",
     Backend("exa", "Exa", "metered", "exa"),
     Backend("nous", "Nous Subscription Page Extraction", "subscription", integration="oauth_required"),
 )
-VOICE = (
-    Backend("edge", "Microsoft Edge Text to Speech", "free"),
-    Backend("piper", "Piper (local)", "local"),
-    Backend("kittentts", "KittenTTS (local)", "local"),
-    *(Backend(id, name, "metered", id) for id, name in (
-        ("openai", "OpenAI Text to Speech"), ("xai", "xAI Text to Speech"),
-        ("elevenlabs", "ElevenLabs Text to Speech"), ("mistral", "Mistral Voxtral Text to Speech"),
-        ("gemini", "Google Gemini Text to Speech"), ("deepinfra", "DeepInfra Text to Speech"),
-    )),
-    Backend("nous", "Nous Subscription Text to Speech", "subscription", integration="oauth_required"),
-    Backend("xai-oauth", "xAI Text to Speech (OAuth)", "subscription", integration="oauth_required"),
-)
 TRANSCRIPTION = (
     Backend("whisper", "Whisper (local faster-whisper)", "local"),
     *(Backend(id, name, "free_tier" if id == "groq" else "metered", id) for id, name in (
@@ -90,7 +78,7 @@ EXECUTION = (
     Backend("vercel-sandbox", "Vercel Sandbox", "metered", "vercel", "computer_required"),
     Backend("nous-modal", "Nous Subscription Modal", "subscription", integration="oauth_required"),
 )
-GROUPS = {"search": SEARCH, "read": READ, "voice": VOICE, "transcription": TRANSCRIPTION,
+GROUPS = {"search": SEARCH, "read": READ, "transcription": TRANSCRIPTION,
           "image": IMAGE, "video": VIDEO, "browser": BROWSER, "execution": EXECUTION,
           "x_search": (Backend("xai", "xAI X Search", "metered", "xai", "agent_required"),
                        Backend("xai-oauth", "xAI X Search (OAuth)", "subscription", integration="oauth_required"))}

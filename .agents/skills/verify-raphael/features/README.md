@@ -617,11 +617,10 @@ See [Conversation](conversation.md#durable-owner-questions-and-background-cards-
 for ask_owner, background card completion and the selected question-card matrix.
 
 
-## Owner input, Telegram files and deliverable audio (2026-11-01)
+## Owner input and Telegram files (2026-11-01)
 
-See [Conversation](conversation.md#owner-input-and-deliverable-audio-2026-11-01).
-Selected scenes: generated-audio-chief, generated-audio-member,
-generated-audio-room, generated-audio-missing, generated-audio-repair and owner-addition.
+See [Conversation](conversation.md#owner-input-2026-11-01). Selected scene: owner-addition. Members make no audio
+files since 2026-11-10 ([No voice](conversation.md#no-voice-owner-decision-2026-11-10)).
 
 
 ## CLI failure recovery (2026-11-01)

@@ -163,7 +163,7 @@ test("Tools contains five shared service rows and leaves memory in the owner pan
   expect(agent).toContain("<h2>服務</h2>");
   expect(agent.indexOf("data-svc-section")).toBeGreaterThan(agent.indexOf('data-k="worker-cap"'));
   expect(agent).not.toContain("data-mem-section");
-  expect(agent.match(/data-k="svc-open:/g)).toHaveLength(5);
+  expect(agent.match(/data-k="svc-open:/g)).toHaveLength(4);
   // Service choices and fields belong to their dialog rather than the shared list.
   expect(agent).not.toContain("data-model-picker");
   expect(agent).not.toContain('data-k="svc-search"');

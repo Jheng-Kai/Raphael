@@ -6,8 +6,7 @@ written in app/src/main/service-logos/sources.json. They are not licensed to Rap
 property of their owners.
 
 monday.com, Jam, Fireflies, Close, Attio, Granola, Klaviyo, Apify, Jotform, Context7, DeepWiki, Mobbin,
-Microsoft Learn (Microsoft), Amazon Web Services, Hugging Face, Exa, Tavily, Jina, Firecrawl and
-Fish Audio (https://fish.audio/apple-touch-icon.png, from https://fish.audio/), and the marks drawn
+Microsoft Learn (Microsoft), Amazon Web Services, Hugging Face, Exa, Tavily, Jina and Firecrawl, and the marks drawn
 from Simple Icons (Notion, GitHub, Google Drive, Gmail, Google Calendar, Linear, Figma, Spotify, Discord, Slack, Todoist,
 Obsidian, Atlassian, Cloudflare, Sentry, Stripe, Zapier, PayPal, Webflow, Wix, Netlify, Neon, Prisma,
 Airtable, Calendly, PostHog, Postman, Sanity, Bitly, Telegram, OpenRouter, Brave and SearXNG) are

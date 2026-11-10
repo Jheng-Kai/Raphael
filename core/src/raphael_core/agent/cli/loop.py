@@ -154,7 +154,7 @@ class Sessions:
 
 class CliLoop:
     def __init__(self, *, brains, sessions, member_id, model, ledger, language, plain,
-                 system, user, tools, progress, thinking, event, execute, expire=None, spoken=False,
+                 system, user, tools, progress, thinking, event, execute, expire=None,
                  conversation_id=None, quota=None, attachments=(), wait_timeout_s=None, resume_session=True,
                  rate_limit_waits=None, structured=None, alive=lambda waiting=0.0: None, skills=(), no_tools=False, reply=None,
                  owner_text=None, resume_user=None, context_sections=None, context_turns=(), context_summary="",
@@ -173,19 +173,13 @@ class CliLoop:
         # (RATE_LIMIT_WAITS_S), () never waits.
         self.rate_limit_waits = rate_limit_waits
         self.ledger, self.language, self.plain = ledger, language, plain
-        self.spoken = spoken
         mcp_names = "Raphael and computer" if any(item["function"]["name"].startswith("computer__") for item in tools) else "Raphael"
         self.system = system + "\n" + PUBLIC_PROGRESS_RULES + f"\nUse only {mcp_names} MCP tools for actions and lookups. "
         self.system += (
-            'For the spoken reply only, return one JSON object with text, messages (usually one; several only '
-            'when naturally separate), '
-            'and say_ja (the Japanese rendering for the voice). No other fields or prose.'
-            if spoken else (
-                "Reply in plain text (Markdown is fine). It is one chat message unless it is naturally "
-                "several (an answer, then a separate exercise or question): then put a line with only "
-                f"{MESSAGE_BREAK} between them. Preserve the complete answer. Never split one thought or pad to fill. "
-                "Never output a JSON reply envelope."
-            )
+            "Reply in plain text (Markdown is fine). It is one chat message unless it is naturally "
+            "several (an answer, then a separate exercise or question): then put a line with only "
+            f"{MESSAGE_BREAK} between them. Preserve the complete answer. Never split one thought or pad to fill. "
+            "Never output a JSON reply envelope."
         )
         # Only Claude Code asks through `approve` (its --permission-prompt-tool); Codex and Antigravity ask natively. Live,
         # a Codex model offered it called it itself to ask for permission: a question about no action at all.
@@ -277,7 +271,7 @@ class CliLoop:
         if self._publish_reply is None:
             return
         reply = (self._written_reply(text)
-                 if text.strip() and not self.spoken and self.structured is None
+                 if text.strip() and self.structured is None
                  else public_reply(text, self.language, plain=self.plain))
         if reply is None:
             return
@@ -1015,7 +1009,7 @@ class CliLoop:
         return self._written_reply(text)
 
     def _written_reply(self, text):
-        literal = not self.spoken and self.structured is None
+        literal = self.structured is None
         if literal and len(parts := message_parts(text)) > 1:
             # Split authored boundaries before normalizing each persona frame. Authored JSON and code stay literal.
             text = {"messages": parts}

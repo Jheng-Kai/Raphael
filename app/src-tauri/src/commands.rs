@@ -40,8 +40,7 @@
 //! hotkeys or the overlay may not be there, and the settings page still has to work.
 //!
 //! The window may also read and set the services of Raphael's tools (`services.status`,
-//! `services.set_key`, `services.clear_key`), try Raphael's voice (`tts.preview`, `tts.stop`), and
-//! a typed question may carry images and PDFs
+//! `services.set_key`, `services.clear_key`), and a typed question may carry images and PDFs
 //! (`agent_ask_text`'s `attachments`, which go on to `agent.ask` untouched).
 //!
 //! Never log the params of a call: `secrets.set_openrouter_key` carries the OpenRouter key,
@@ -544,13 +543,6 @@ const ALLOWED_METHODS: &[&str] = &[
     "agent.history.delete",
     "messages.search",
     "quota.list",
-    "agent.speech.status",
-    "voice_chat.start",
-    "voice_chat.status",
-    "voice_chat.mute",
-    "voice_chat.settings",
-    "voice_chat.end",
-    "voice_chat.feedback",
     "agent.react",
     "members.create",
     "members.greet",
@@ -574,7 +566,6 @@ const ALLOWED_METHODS: &[&str] = &[
     "members.commands.list",
     "members.commands.save",
     "members.commands.delete",
-    "members.voices",
     "members.duplicate",
     "members.template",
     "members.template_card",
@@ -618,10 +609,6 @@ const ALLOWED_METHODS: &[&str] = &[
     "background.questions.list",
     "background.waiting.list",
     "background.answer",
-    // Raphael's voice, in the settings: the 「Try it」 line is spoken in the voice that is set up,
-    // and stopped by `tts.stop`. His answers are spoken by the core itself and need neither.
-    "tts.preview",
-    "tts.stop",
 ];
 
 /// The most a memory document may hold, in characters (the core's limit; it checks it again).
@@ -1275,16 +1262,6 @@ pub fn main_event_from(notification: &Notification, monitoring: bool) -> Option<
             member_id: params.get("member_id").and_then(Value::as_u64).unwrap_or(0),
         }),
         "quota.changed" => Some(MainEvent::QuotaChanged),
-        "setup.missing" => {
-            let resource = params.get("resource")?.as_str()?;
-            let requirement = params.get("requirement")?.as_str()?;
-            if resource != "fish" || !["setup", "key"].contains(&requirement) {
-                return None;
-            }
-            Some(MainEvent::SetupMissing {
-                missing: json!({"resource": "fish", "requirement": requirement, "state": "missing", "repair": "voice"}),
-            })
-        }
         "action_mode.changed" => Some(MainEvent::ActionModeChanged),
         "providers.changed" => Some(MainEvent::ProvidersChanged),
         "settings.changed" => Some(MainEvent::SettingsChanged),
@@ -2544,7 +2521,6 @@ mod tests {
             "members.commands.list",
             "members.commands.save",
             "members.commands.delete",
-            "members.voices",
             "members.duplicate",
             "members.mark_all_read",
             "members.list",
@@ -2601,16 +2577,6 @@ mod tests {
     }
 
     #[test]
-    fn the_main_window_tries_the_voice_by_its_two_names_only() {
-        for method in ["tts.preview", "tts.stop"] {
-            assert!(is_allowed_method(method), "{method}");
-        }
-        for method in ["tts.", "tts", "tts.say", "Tts.preview", "xtts.stop"] {
-            assert!(!is_allowed_method(method), "{method}");
-        }
-    }
-
-    #[test]
     fn a_question_is_answered_only_by_an_id_that_could_be_one() {
         for id in ["c-1", "6f1c2a9e-4b7d-4c1e-9f3a-2d5b8e7c0a11", "a_b"] {
             assert!(is_question_id(id), "{id}");
@@ -2657,16 +2623,6 @@ mod tests {
         assert!(
             !is_allowed_method("dictation.start") && !is_allowed_method("brain.finalize_dictation")
         );
-    }
-
-    #[test]
-    fn member_voice_calls_have_only_explicit_owner_methods() {
-        for method in ["start", "status", "mute", "settings", "end", "feedback"] {
-            assert!(is_allowed_method(&format!("voice_chat.{method}")));
-        }
-        for method in ["voice_chat", "voice_chat.record", "voice_chat.start.extra"] {
-            assert!(!is_allowed_method(method));
-        }
     }
 
     #[test]
@@ -3386,48 +3342,6 @@ mod tests {
         assert_eq!(
             main_event_from(&plain, true),
             Some(MainEvent::Level { value: 0.5 })
-        );
-    }
-
-    #[test]
-    fn missing_setup_forwards_only_fixed_voice_metadata() {
-        for requirement in ["setup", "key"] {
-            let params = json!({"resource": "fish", "requirement": requirement,
-                "state": "broken", "repair": "https://untrusted.invalid", "token": "never-forward"});
-            let event = main_event_from(&notification("setup.missing", params), false);
-            assert_eq!(
-                event,
-                Some(MainEvent::SetupMissing {
-                    missing: json!({
-                        "resource": "fish", "requirement": requirement, "state": "missing", "repair": "voice"
-                    })
-                })
-            );
-            assert!(
-                !serde_json::to_string(&event)
-                    .unwrap()
-                    .contains("never-forward")
-            );
-        }
-        assert_eq!(
-            main_event_from(
-                &notification(
-                    "setup.missing",
-                    json!({"resource": "other", "requirement": "setup"})
-                ),
-                true
-            ),
-            None
-        );
-        assert_eq!(
-            main_event_from(
-                &notification(
-                    "setup.missing",
-                    json!({"resource": "fish", "requirement": "raw-error"})
-                ),
-                true
-            ),
-            None
         );
     }
 

@@ -2,25 +2,11 @@
 export function installMock(fixture, config = {}, target = window) {
   const data = structuredClone(fixture);
   const variant = config.fixture ?? {};
-  // One second of 8 kHz mono silence: the stored audio fixture.
-  const syntheticWav = () => {
-    const bytes = new Uint8Array(16044), view = new DataView(bytes.buffer);
-    const word = (offset, text) => [...text].forEach((letter, index) => { bytes[offset + index] = letter.charCodeAt(0); });
-    word(0, "RIFF"); view.setUint32(4, 16036, true); word(8, "WAVEfmt "); view.setUint32(16, 16, true);
-    view.setUint16(20, 1, true); view.setUint16(22, 1, true); view.setUint32(24, 8000, true); view.setUint32(28, 16000, true);
-    view.setUint16(32, 2, true); view.setUint16(34, 16, true); word(36, "data"); view.setUint32(40, 16000, true);
-    return bytes;
-  };
   if (variant.hiddenMember) {
     // One member and one group chat taken off the list: they wait in the sidebar's hidden folder.
     const member = data.members.find(item => item.id === 2), room = data.rooms.find(item => item.id === 1);
     if (member) member.hidden = true;
     if (room) room.hidden = true;
-  }
-  if (variant.voiceCall) {
-    data.members.forEach(member => Object.assign(member, {unread:false,unread_from:null,activity:"idle",waiting:false}));
-    data.voiceCallBase = structuredClone(data.turns.find(turn => turn.member_id === 1 && turn.conversation_id === 11));
-    data.turns = data.turns.filter(turn => turn.member_id !== 1);
   }
   if (variant.chatMetadata === 'long') {
     // A reply whose paragraphs run far past one line, with a list: the shape that once stretched a message to the column.
@@ -75,17 +61,13 @@ export function installMock(fixture, config = {}, target = window) {
     Object.assign(latest, { status: "error", text: sentence, model: "@chatgpt:gpt-6-sol", failure: { kind: "usage_limit", provider: "chatgpt", resets_at: null },
       messages: [{ seq: 1, kind: "reply", text: sentence, at_ms: latest.created_at_ms }], task: null });
   }
-  if (variant.raphaelVoice) data.settings.tts_fish_voice = "0123456789abcdef0123456789abcdef";
-  // The member settings page (member-settings.ts): a voice service with two voices, two connections that are on, and a voice chosen.
+  // The member settings page (member-settings.ts): two connections that are on.
   if (variant.memberSettings) {
-    data.voices = { configured: true, voices: [{ id: "voice-clear", name: "清澈女聲" }, { id: "voice-calm", name: "沉穩男聲" }] };
     data.servers.forEach(server => { server.enabled = true; });
     data.servers.push({ ...structuredClone(data.servers[0]), id: "calendar", name: "行事曆" });
     // An app named as Claude's connectors name it, drawn with its own mark (owner, 2026-11-10).
     data.servers.push({ ...structuredClone(data.servers[0]), id: "mobbin", name: "Mobbin MCP" });
-    data.members.find(member => member.id === 1).voice = "voice-clear";
     data.commands.push({ id: 41, member_id: 1, name: "weekly", description: "每週整理", template: "整理本週：{input}" });
-    data.settings.tts_fish_voice = "voice-calm";
   }
   // A long conversation as the owner's are (2026-11-10: pages of 100-440 KB): `count` answered turns of written words,
   // a list, a table and a code card each, the newest with the id `heavyThread.newest`.
@@ -892,44 +874,9 @@ export function installMock(fixture, config = {}, target = window) {
     const head = text.startsWith("---") ? text.split("---")[1] ?? "" : "";
     return head.split("\n").map(line => line.trim()).find(line => line.startsWith(`${key}:`))?.slice(key.length + 1).trim() ?? "";
   };
-  let voiceCall = null, endedCall = null;
-  const makeCall = (member, state = "listening") => {
-    const profile = data.members.find(row => row.id === member);
-    return {id:`fixture-call-${member}`,member_id:member,conversation_id:member === 1 ? 11 : 12,name:profile.name,avatar:profile.avatar,
-      started_at_ms:data.now-83000,state,muted:false,voice:profile.voice ?? "",member_voice:profile.voice ?? "",speed:1,language:"auto",
-      transcript:[{id:8701,question:data.voiceCallSample.question,text:data.voiceCallSample.reply,status:"done"}]};
-  };
-  if (variant.voiceCall === "busy") voiceCall = makeCall(2);
-  const finishVoiceCall = (failure = null) => {
-    if (!voiceCall) return;
-    endedCall = {...voiceCall,ended_at_ms:data.now,state:"ended",summary_id:8702,failure};
-    const base = data.voiceCallBase;
-    if (voiceCall.transcript.length) data.turns.push({...base,id:8701,session_id:"fixture-call-turn",voice_call_id:voiceCall.id,question:data.voiceCallSample.question,text:data.voiceCallSample.reply,created_at_ms:data.now-30000,status:"done",messages:[],steps:[],task:null});
-    data.turns.push({...base,id:8702,session_id:"fixture-call-summary",route:"voice_call",voice_call:endedCall,question:"",text:"",created_at_ms:data.now,status:"done",messages:[],steps:[],task:null});
-    voiceCall = null;
-    notify("AgentTurn",{turn_id:8702,member_id:1});
-  };
   async function core(method, p = {}) {
     // Settings reads the hidden list as it opens, before the list's section is drawn; the sidebar keeps the roster it already read.
     switch (method) {
-      case "voice_chat.status": return {call:voiceCall,ended:endedCall};
-      case "voice_chat.start": {
-        if (voiceCall) return {busy:voiceCall};
-        voiceCall = makeCall(p.member_id, ["connecting","speaking"].includes(variant.voiceCall) ? variant.voiceCall : "listening");
-        if (variant.voiceCall === "no-mic") {
-          voiceCall.state = "connecting"; voiceCall.transcript = []; voiceCall.started_at_ms = data.now;
-          setTimeout(() => finishVoiceCall("microphone"), 100);
-        }
-        return {call:voiceCall};
-      }
-      case "voice_chat.mute": voiceCall.muted = p.muted; return {call:voiceCall};
-      case "voice_chat.settings": Object.assign(voiceCall,p); return {call:voiceCall};
-      case "voice_chat.end": {
-        if (!voiceCall) return {summary_id:8702};
-        finishVoiceCall();
-        return {summary_id:8702};
-      }
-      case "voice_chat.feedback": endedCall.rating = p.rating; return {ok:true};
       case "vault.list": return { entries: data.vaultEntries };
       case "vault.preview": return data.vaultImportPreview;
       case "vault.cancel": return { cancelled: true };
@@ -998,15 +945,13 @@ export function installMock(fixture, config = {}, target = window) {
         if (desktopSessions.get(p.session)?.held && data.desktop) data.desktop.control = "member";
         desktopSessions.delete(p.session); return {};
       }
-      case "tts.preview": return {ok:true};
       case "settings.get": return { settings: data.settings };
       // A question opening later is not there at the first read, as one that opens while the owner is elsewhere.
       case "background.waiting.list": { data.waitingReads = (data.waitingReads ?? 0) + 1; return { waiting: variant.roomQuestion && (!variant.roomQuestionLate || data.waitingReads > 1) ? [{ id: "room-q", member_id: 1, member_name: "小晴", room_id: 1 }] : [] }; }
       case "attachments.get": {
         if (variant.generatedFile?.id === p.id) return {mime:variant.generatedFile.mime,data:variant.generatedData};
         if (data.keptFiles?.[p.id]) return data.keptFiles[p.id];
-        if (!variant.audioFile || p.id !== variant.audioFile.id) return unsupported(method);
-        return {mime: "audio/wav", data: btoa(String.fromCharCode(...syntheticWav()))};
+        return unsupported(method);
       }
       case "settings.set": data.settings[p.key] = p.value; notify("SettingsChanged"); return { settings: data.settings };
       case "status.get": return data.status;
@@ -1254,7 +1199,6 @@ export function installMock(fixture, config = {}, target = window) {
         return { deleted };
       }
       case "members.commands.list": return { commands: byMember(data.commands, p) };
-      case "members.voices": return data.voices;
       case "groups.create": { const group = { ...p, id: nextId(data.groups), position: data.groups.length, sources: [] }; data.groups.push(group); notify("MembersChanged", { member_id: 0 }); return { group }; }
       case "groups.update": { const group = update(data.groups, p.id, p); notify("MembersChanged", { member_id: 0 }); return { group }; }
       case "groups.delete": data.groups = data.groups.filter(item => item.id !== p.id); notify("MembersChanged", { member_id: 0 }); return { deleted: true };
@@ -1305,7 +1249,6 @@ export function installMock(fixture, config = {}, target = window) {
         if (p.active) reactions[p.message_key].push(p.emoji);
         notify('AgentTurn',{turn_id:turn.id,member_id:turn.member_id}); return {ok:true};
       }
-      case "agent.speech.status": return data.speech;
       case "agent.question.open": return null;
       case "background.questions.list": {
         if (variant.roomQuestion && p.room_id === 1) return { questions: [{ id: "room-q", task_id: 950, member_id: 1, prefix: "問", text: "本機指令", tier: "T2", created_at_ms: data.now, expires_at_ms: data.now + 1800000, room_id: 1,
@@ -1822,7 +1765,6 @@ export function installMock(fixture, config = {}, target = window) {
       }
       // The native asset protocol streams stored media from disk; the browser harness serves the same bytes as a Blob.
       if (command === "attachment_source") {
-        if (variant.audioFile?.id === args.id) return URL.createObjectURL(new Blob([syntheticWav()], {type: "audio/wav"}));
         if (variant.generatedFile?.id === args.id) return URL.createObjectURL(new Blob([Uint8Array.from(atob(variant.generatedData), c => c.charCodeAt(0))], {type: variant.generatedFile.mime}));
         return `C:\\synthetic\\${args.id}`;
       }

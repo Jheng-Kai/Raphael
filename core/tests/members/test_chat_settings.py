@@ -25,7 +25,7 @@ async def test_settings_intent_is_next_to_owner_message(setup, client, identifie
 
 
 @pytest.mark.parametrize("action,fields", [
-    ("member_update", {"voice": "voice-fixture"}),
+    ("member_update", {"personality": "Calm and exact."}),
     ("member_skill_update", {"id": 1, "enabled": False}),
     ("member_command_save", {"name": "draft", "template": "Draft {input}"}),
 ])
@@ -50,7 +50,7 @@ async def test_nonprimary_can_change_itself_or_peers_in_the_owner_private_chat(s
     public, values = publish(action, args)
     client.chats = [chat("Find my tool", ("find_tools", {"query": public})),
                     chat("Make the requested change", use(public, values)), live_said("Changed.")]
-    result = await typed(rig, "Change the requested member skills, commands or voice", own.id, language="en")
+    result = await typed(rig, "Change the requested member skills, commands or profile", own.id, language="en")
     assert result["status"] == "done"
     assert writes == [args]
 
@@ -59,9 +59,9 @@ async def test_nonprimary_can_change_itself_or_peers_in_the_owner_private_chat(s
     ("member_update", {"id": 1, "model": "other"}),
     ("member_skill_delete", {"member_id": 1, "id": 1, "shared": True}),
     ("memory_document_update", {"member_id": 1, "text": "x", "revision": "r", "space": "shared"}),
-    ("settings_update", {"key": "tts_fish_voice", "value": "v"}),
+    ("settings_update", {"key": "owner_name", "value": "v"}),
 ])
-def test_self_scope_excludes_shared_models_and_global_voice(name, args):
+def test_self_scope_excludes_shared_models_and_global_settings(name, args):
     assert not self_action(1, name, args)
 
 
@@ -70,12 +70,11 @@ async def test_self_delete_needs_exact_yes_and_self_scope_classifier_stays_narro
     own = member(team)
     with pytest.raises(RpcError, match="owner's approval"):
         await team.members.admin_tool(own.id, "member_command_delete", {"member_id": own.id, "id": 1}, interactive=True)
-    assert self_action(0, "settings_update", {"key": "tts_fish_voice", "value": "v"})
     assert not self_action(0, "settings_update", {"key": "owner_name", "value": "v"})
-    assert "settings_update" not in self_definitions(own.id)
+    assert "settings_update" not in self_definitions(own.id) and "settings_update" not in self_definitions(0)
 
 
-async def test_own_resources_and_voice_are_persisted_by_existing_services(setup):
+async def test_own_resources_are_persisted_by_existing_services(setup):
     from .test_skill_growth import DOCUMENT
     rig, team = setup
     team.members.register(rig.rpc)
@@ -88,8 +87,6 @@ async def test_own_resources_and_voice_are_persisted_by_existing_services(setup)
     await admin(own.id, "member_command_save", {"member_id": own.id, "name": "draft", "template": "Draft {input}"}, interactive=True)
     commands = await admin(own.id, "member_commands_list", {"member_id": own.id}, interactive=True)
     assert commands["commands"][0]["template"] == "Draft {input}"
-    await admin(own.id, "member_update", {"id": own.id, "voice": "0123456789abcdef0123456789abcdef"}, interactive=True)
-    assert team.members.store.member(own.id).voice == "0123456789abcdef0123456789abcdef"
     view = await admin(own.id, "memory_document_read", {"member_id": own.id}, interactive=True)
     await admin(own.id, "memory_document_update", {"member_id": own.id, "text": "The fixture workshop uses amber notebooks.", "revision": view["revision"]}, interactive=True)
     assert "amber notebooks" in team.memory.own(own.id).read()

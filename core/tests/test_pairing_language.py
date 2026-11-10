@@ -229,14 +229,6 @@ async def test_pairing_restart_and_deleted_turn_cannot_be_answered(rig):
     restarted.close()
 
 
-@pytest.mark.parametrize("ui", ["en", "ja", "zh-TW"])
-def test_authored_voice_does_not_treat_interface_as_spoken_language(ui):
-    from raphael_core.agent.persona import spoken_line
-    assert spoken_line(ui, "Answer", "The result is ready.", "結果ができました。") == ("解", "結果ができました。")
-    assert spoken_line(ui, "Answer", "The result is ready.") is None
-    assert spoken_line(ui, "Answer", "結果ができました。") == ("解", "結果ができました。")
-
-
 @pytest.mark.parametrize("platform", list(LINKS))
 @pytest.mark.parametrize("owner", [0, 1])
 async def test_platform_reply_uses_own_language_through_fake_channel(rig, platform, owner):

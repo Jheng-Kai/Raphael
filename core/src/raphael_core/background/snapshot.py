@@ -85,13 +85,9 @@ USE_TOOL = "use_tool"
 # background tool calls up to 2026-11-10. They are found, like a connection's tools, not listed. `open`
 # stays listed: live, a model asked to open an address showed it with `show` instead of looking for it
 # (Guardian's "open" cell, 2026-11-10); `update_page` stays beside `show_page`, whose description names it.
-SELDOM = frozenset({*COMMANDS, "computer", "generate_audio"}) - {"open"}
+SELDOM = frozenset({*COMMANDS, "computer"}) - {"open"}
 
 _DEFINITIONS: dict[str, dict[str, Any]] = {
-    "generate_audio": {
-        "description": "Generate a downloadable WAV audio file from the owner's script using the configured voice service. Returns an attachment shown in the conversation. Never claim MP3 output. An optional voice selects a voice on that same service.",
-        "parameters": {"type": "object", "properties": {"text": {"type": "string", "maxLength": 1000}, "voice": {"type": "string"}}, "required": ["text"]},
-    },
     "weather": {
         "description": (
             "The weather now, today and tomorrow in a city. Leave the city out for the "
@@ -185,7 +181,6 @@ _DEFINITIONS: dict[str, dict[str, Any]] = {
         },
     },
 }
-_OWN_TIERS = {"generate_audio": Tier.T1}
 
 # The names that are Raphael's own: a plugin's tool never takes one of them.
 TAKEN = frozenset({*WEB_TOOLS, *MEMORY_READ_TOOLS, *ATTACHMENT_TOOLS, *TEAM_TOOLS, *_DEFINITIONS,
@@ -221,7 +216,7 @@ def _native_tool(name: str) -> PluginTool:
     """One of Raphael's own tools, as the finder compares it with a query."""
     if name in _DEFINITIONS:
         item = _DEFINITIONS[name]
-        return PluginTool(name, BUILTIN_SERVER, name, item["description"], item["parameters"], _OWN_TIERS.get(name, Tier.T0))
+        return PluginTool(name, BUILTIN_SERVER, name, item["description"], item["parameters"], Tier.T0)
     return harness_tool(name)
 
 
@@ -433,7 +428,7 @@ def take_snapshot(
     cycle guards (`agent.team`: asking another member, adding one), T1 like the plugins' tools that are
     on. `turned_off` are the tools of Raphael's own that the owner switched off (`Tools.turned_off`):
     they are not offered, whatever the task or the speaker."""
-    snapshot = Snapshot({}, [], max_tier=max_tier, tool_allowed=speaker.uses_plugin)
+    snapshot =Snapshot({}, [], max_tier=max_tier, tool_allowed=speaker.uses_plugin)
 
     def own(name: str, tier: Tier, item: dict[str, Any], kind: str = BUILTIN) -> None:
         snapshot.refs[name] = ToolRef(kind, name, BUILTIN_SERVER, name, tier)
@@ -454,7 +449,6 @@ def take_snapshot(
     for name in ATTACHMENT_TOOLS:
         if name not in turned_off:
             own(name, Tier.T0, _DEFINITIONS[name])
-    snapshot.work["generate_audio"] = _DEFINITIONS["generate_audio"]
     for name in team:
         if name == "create_member":
             # The management catalog offers member_create to every owner-private chat.

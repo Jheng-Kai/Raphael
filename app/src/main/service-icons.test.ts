@@ -84,7 +84,6 @@ describe("the marks of well-known programs", () => {
     [{ name: "Tavily" }, "tavily"],
     [{ name: "Jina AI" }, "jina"],
     [{ name: "Firecrawl" }, "firecrawl"],
-    [{ name: "Fish Audio" }, "fish"],
   ] as const)("%j is %s", (hints, id) => {
     expect(serviceIconOf(hints)).toBe(id);
   });
@@ -182,14 +181,6 @@ describe("the marks of well-known programs", () => {
     expect(html).toMatch(/class="logo lg-d" src="data:image\/svg\+xml/);
   });
 
-  test("Fish Audio uses its official PNG artwork instead of an unattributed vector", () => {
-    expect(hasLogo("fish")).toBe(true);
-    expect(SERVICE_ICONS).not.toHaveProperty("fish");
-    expect(serviceLogoHTML("fish")).toMatch(/^<img class="logo lg-l" src="data:image\/png;base64,/);
-    const sources = JSON.parse(readFileSync("src/main/service-logos/sources.json", "utf8"));
-    expect(sources.fish).toMatchObject({ file: "fish.png", url: "https://fish.audio/apple-touch-icon.png", page: "https://fish.audio/" });
-  });
-
   test("release credits name all the added service marks and their source groups", () => {
     const notice = readFileSync("scripts/release-licenses/brand-logos-NOTICE.txt", "utf8");
     const manifest = JSON.parse(readFileSync("scripts/release-licenses/manifest.json", "utf8"));
@@ -199,7 +190,7 @@ describe("the marks of well-known programs", () => {
       expect(notice).toContain(name);
       expect(icons.usage).toContain(name);
     }
-    for (const name of ["Tavily", "Jina", "Firecrawl", "Fish Audio"]) {
+    for (const name of ["Tavily", "Jina", "Firecrawl"]) {
       expect(notice).toContain(name);
       expect(logos.usage).toContain(name);
     }

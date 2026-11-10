@@ -120,12 +120,12 @@ No private key belongs in source.
 
 General keeps the owner profile, weather city, output folder and shared memory
 together in About you. Tools and Safety retain their shared scope; legacy agent
-links resolve to Tools. Raphael's memory and voice remain in member details.
+links resolve to Tools. Raphael's memory remains in member details.
 Computer search opens that member's panel. Host checks and copyable repair
 commands use the location popover, never the retired settings pane.
 
 ```powershell
-npm run look -- settings-raphael-memory desktop-host-local desktop-host-error settings-speech-service settings-owner --theme both --width 1120,720,1920x1080
+npm run look -- settings-raphael-memory desktop-host-local desktop-host-error settings-owner --theme both --width 1120,720,1920x1080
 ```
 
 ## Owner output folder in General (2026-11-05)
@@ -331,16 +331,15 @@ Native `appearance` drives all three theme choices at 1120,720,1920x1080, checks
 This owner decision supersedes the former Settings > Raphael pane and its earlier
 scene names. General owns the owner profile, weather city and shared owner memory.
 Dictation & shortcuts groups dictation, paste, cancel and Ask Raphael shortcuts.
-Tools owns shared search, page reading, images, PDFs, speech services and keys;
+Tools owns shared search, page reading, images, PDFs and their keys (no voice service since 2026-11-10);
 Safety owns shared safety rules, local command policy and always-allowed apps.
 Navigation groups are Basics, Team, Integrations and Account. Every pane retains
 its localized purpose as explicitly requested by this brief (a scoped R-UI-02
 exception); Tools and Safety explicitly apply to every member.
 Legacy pane `agent` resolves to `tools`; setting keys, RPCs and stored values stay
-unchanged. Raphael owns his memory and voice ID/preview in his ordinary details
-panel. The shared voice service/key stays in Tools; voice controls retain
-`tts_fish_voice` and `tts.preview`. Every member's draft preference switch is the
-first row inside the same grouped resource card as Memory, Skills, Commands, Voice.
+unchanged. Raphael owns his memory in his ordinary details panel. Every member's draft
+preference switch is the first row inside the same grouped resource card as Memory,
+Skills and Commands.
 
 The computer panel header owns one compact shared location control, also available
 in its empty state. It shows Local or the saved SSH alias, uses the shared popover,
@@ -354,10 +353,9 @@ existing viewer stream is not replaced by changing the setting.
 
 Selected scenes (synthetic zh-TW, both themes, 1120,720,1920x1080):
 profile, settings-owner, settings-memory, appearance, dictation, tools, safety,
-models, connections, messaging, about, settings-speech-service,
+models, connections, messaging, about,
 local-command-settings, local-command-setting-always, local-command-setting-never,
 menu-settings-redraw, missing-vision, missing-search, missing-search-repair,
-missing-voice, missing-voice-repair,
 speaker-draft-chief, speaker-draft-member, speaker-draft-profile,
 settings-raphael-memory, desktop-host-local,
 desktop-host-remote, desktop-host-invalid, desktop-host-error, desktop-install,
@@ -369,7 +367,7 @@ and the computer panel header in the landing and expanded viewer. Inspect all
 contact sheets and relevant full-size panes/popovers at matching sizes/themes.
 Focused tests: settings-view.test.ts, settings-providers.test.ts,
 agent-settings.test.ts, agent-members.test.ts, member-details.test.ts, services.test.ts,
-member-resource-voice.test.ts, computer-location.test.ts, desktop-viewer.test.ts,
+computer-location.test.ts, desktop-viewer.test.ts,
 missing.test.ts, missing-consumers.test.ts, timeline.test.ts, group-chats.test.ts,
 mcp-proposal.test.ts, nav-history.test.ts and the shared look audit test. Per the integrator's 2026-11-05 handoff instruction,
 tsc and these targeted tests run without the waiter. The selected look matrix

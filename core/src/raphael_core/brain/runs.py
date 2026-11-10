@@ -184,9 +184,7 @@ class RunAnalytics:
             groups[grouping] = sorted([{"label": label, **value} for label, value in values.items()], key=lambda v: (-v["tokens"], -(v["cost_usd"] or 0), v["label"]))
         return {"range": period, "start_day": start.isoformat() if start else None, "end_day": (end-timedelta(days=1)).isoformat(),
                 "summary": self.summary(rows), "groups": groups, "total": len(rows),
-                "bill": self.spend.bill(period),
-                "fish_voice": bool(self.settings and self.settings.get("tts_enabled")
-                                   and self.settings.get("tts_service") == "fish")}
+                "bill": self.spend.bill(period)}
 
     async def export(self, params):
         _, _, _, _, lower, upper = self._period(params)

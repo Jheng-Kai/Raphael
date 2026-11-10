@@ -18,7 +18,6 @@ const downloaded = [
 ];
 const dictation = tab => [page("dictation"), click(`[data-dictation-tab="${tab}"]`), check("dictation-navigation"), ...(tab === "overview" ? [wait('.page-overview .icard'), check("dictation-overview")] : [])];
 export default [
-  scene("settings-speech-service", "Shared speech setup owns its key while the voice and preview belong to member details", [...settings("tools"),click('[data-svc="open"][data-id="voice"]'),wait('#svc-dialog'),click('[data-k="svc-svc:fish"]'),wait('#svc-dialog [type="password"]'),check('settings-speech-service')]),
 
 
   scene("settings-owner", "Owner identity leads General without memory, with no weather city to set", [...settings("general"), wait('[data-owner="owner_name"]'), check('settings-owner')]),
