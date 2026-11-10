@@ -2697,6 +2697,9 @@ export function checkRendered(name, context = {}) {
     const pill = document.querySelector('.ob-actions > .btn.pri'), box = pill.getBoundingClientRect();
     // The guide keeps its wide pill, the owner's one exception to the shared button height (2026-11-08).
     require(box.width >= 240 && box.height >= 40 && parseFloat(getComputedStyle(pill).borderTopLeftRadius) >= box.height / 2 - 1, "the one button is a wide pill");
+    // The steps' row (an arrow and a pill) is exactly this wide, so the pill's place never moves from step to step (owner, 2026-11-11).
+    const foot = document.querySelector('.ob-foot'), footStyle = getComputedStyle(foot), room = foot.getBoundingClientRect().width - parseFloat(footStyle.paddingLeft) - parseFloat(footStyle.paddingRight);
+    require(Math.abs(box.width - Math.min(360, room)) <= 1, `the welcome's pill is the width of the steps' row (${Math.round(box.width)} px of ${Math.round(Math.min(360, room))})`);
     const ink = getComputedStyle(pill).backgroundColor, text = getComputedStyle(document.body).color;
     require(ink !== 'rgba(0, 0, 0, 0)' && ink !== getComputedStyle(document.querySelector('.ob-card')).backgroundColor, `the pill is the solid accent, not the card's colour (${ink} on ${text})`);
     const drawn = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data;
@@ -2705,10 +2708,71 @@ export function checkRendered(name, context = {}) {
     require(inked > 40, `the emblem is drawn on its canvas (${inked} pixels)`);
     return { check: name, inked };
   }
+  // The guide's foot (owner, 2026-11-11), the same on every step and on a rerun's welcome: one row with the round button for
+  // the way out of the screen at its left and the wide primary pill filling the rest.
+  const requireGuideRow = card => {
+    // Under the choice: one row, as wide as the welcome's pill, with the round arrow for the way back at its left and the
+    // wide black pill filling the rest (owner, 2026-11-11: 「上下堆疊會造成我們畫面有些空間比較緊」), so the step keeps the room
+    // a second pill took.
+    const primary = document.querySelector('.ob-actions > .btn.pri'), back = document.querySelector('.ob-actions > .btn.ob-back'), rowEl = document.querySelector('.ob-actions'), row = rowEl.getBoundingClientRect();
+    const foot = document.querySelector('.ob-foot'), footBox = foot.getBoundingClientRect(), footStyle = getComputedStyle(foot);
+    const ink = primary.getBoundingClientRect(), arrow = back?.getBoundingClientRect();
+    require(ink.width >= row.width * .8 && ink.width >= 240 && parseFloat(getComputedStyle(primary).borderTopLeftRadius) >= ink.height / 2 - 1, "the primary action is a wide pill that fills what the arrow leaves of its row");
+    require(back && back.matches('.btn.icon') && !back.textContent.trim() && back.querySelector(':scope > svg.i'), "the way back is a button with an arrow drawn in it and no words");
+    require(back.getAttribute('aria-label')?.trim() && back.getAttribute('aria-label') === back.getAttribute('title'), `the arrow is named for assistive tech and its tooltip alike (${back.getAttribute('aria-label')})`);
+    // One row at any width: the arrow and the pill centre on one line, the arrow at the left with the gap of the spacing token.
+    require(Math.abs((arrow.top + arrow.bottom) / 2 - (ink.top + ink.bottom) / 2) <= 1, `the arrow and the pill are on one row (${Math.round((arrow.top + arrow.bottom) / 2)} against ${Math.round((ink.top + ink.bottom) / 2)})`);
+    const gap = parseFloat(getComputedStyle(rowEl).columnGap);
+    require(arrow.right <= ink.left && Math.abs(ink.left - arrow.right - gap) <= 1 && gap === 8, `the arrow is left of the pill with an 8 px gap (${Math.round(ink.left - arrow.right)} px)`);
+    require(Math.abs(arrow.width - arrow.height) <= 1 && Math.abs(arrow.height - ink.height) <= 1 && parseFloat(getComputedStyle(back).borderTopLeftRadius) >= arrow.height / 2 - 1, `the arrow is a circle as tall as the pill (${Math.round(arrow.width)} x ${Math.round(arrow.height)} against ${Math.round(ink.height)})`);
+    const surface = getComputedStyle(back).backgroundColor;
+    require(!['rgba(0, 0, 0, 0)', 'transparent'].includes(surface) && surface !== getComputedStyle(primary).backgroundColor && surface !== getComputedStyle(document.querySelector('.ob-card')).backgroundColor, `the arrow keeps a surface of its own, not the card's or the pill's (${surface})`);
+    // Together they are as wide as the welcome's single pill: the foot's padding leaves the row 360 px, or less in a narrow card.
+    const room = footBox.width - parseFloat(footStyle.paddingLeft) - parseFloat(footStyle.paddingRight), together = ink.right - arrow.left;
+    require(Math.abs(together - Math.min(360, room)) <= 1 && Math.abs(arrow.left - row.left) <= 1 && Math.abs(ink.right - row.right) <= 1, `the arrow and the pill fill the width of the welcome's pill (${Math.round(together)} px of ${Math.round(Math.min(360, room))})`);
+    require(Math.abs((arrow.left + ink.right) / 2 - (card.left + card.width / 2)) <= 2, "the arrow and the pill are centred in the card");
+    // The foot is one control and its padding tall: the second pill's height is the content's.
+    const pad = parseFloat(footStyle.paddingTop) + parseFloat(footStyle.paddingBottom);
+    require(footBox.height <= ink.height + pad + 1, `the foot is one control plus its padding tall (${Math.round(footBox.height)} px, a control ${Math.round(ink.height)} + ${Math.round(pad)})`);
+    require(document.querySelector('.ob-body').getBoundingClientRect().bottom <= footBox.top + 1, "the content area ends where the foot begins");
+    // Tab order: the arrow, then the pill.
+    require(!!(back.compareDocumentPosition(primary) & Node.DOCUMENT_POSITION_FOLLOWING), "the arrow comes before the pill in the tab order");
+    return { ink, arrow };
+  };
+  if (name === "onboarding-back-hover" || name === "onboarding-back-focus") {
+    // The round back arrow of the guide's foot (owner, 2026-11-11): its surface is the grey the 上一步 pill had, one step
+    // lighter under the pointer, and the keyboard shows the app's usual ring on it, the arrow coming before the pill.
+    const back = document.querySelector('.ob-foot [data-ob="back"]');
+    const token = value => { const probe = document.createElement('i'); probe.style.backgroundColor = `var(${value})`; document.body.append(probe); const colour = getComputedStyle(probe).backgroundColor; probe.remove(); return colour; };
+    require(visible(back) && back.matches('.btn.icon'), "the guide's foot has its round back arrow");
+    if (name === "onboarding-back-hover") {
+      require(back.matches(':hover'), "the pointer is on the arrow");
+      require(getComputedStyle(back).backgroundColor === token('--pressed') && token('--pressed') !== token('--hover'), `the arrow is one step lighter under the pointer (${getComputedStyle(back).backgroundColor})`);
+      require(!document.documentElement.hasAttribute('data-keys') && getComputedStyle(back).outlineStyle === 'none', "the pointer adds no keyboard ring");
+    } else {
+      const style = getComputedStyle(back);
+      require(document.activeElement === back && document.documentElement.hasAttribute('data-keys'), "Shift+Tab from the pill lands on the arrow, by the keyboard");
+      require(style.outlineStyle !== 'none' && parseFloat(style.outlineWidth) >= 2 && style.outlineColor !== 'rgba(0, 0, 0, 0)', `the arrow shows the app's focus ring (${style.outlineWidth} ${style.outlineStyle} ${style.outlineColor})`);
+      require(style.backgroundColor === token('--hover'), "the arrow rests on the grey of the old pill");
+      require(parseFloat(style.borderTopLeftRadius) >= back.getBoundingClientRect().height / 2 - 1, "the ring follows a circle");
+    }
+    return { check: name };
+  }
+  if (name === "onboarding-rerun") {
+    // The guide opened again from Settings: its welcome has the same one row as the steps, the way out being a round × (a
+    // close is the × alone, never a word button; owner, 2026-11-11), then the pill. Nothing stacks.
+    const card = document.querySelector('.ob-card').getBoundingClientRect();
+    require(visible(document.querySelector('.ob-emblem canvas.ob-emb')) && document.querySelector('.ob-col > h2.ob-wordmark'), "the welcome is on screen");
+    const { ink, arrow } = requireGuideRow(card);
+    const back = document.querySelector('.ob-actions > .btn.ob-back');
+    require(back.dataset.ob === "back" && back.querySelector('svg.i') && !back.textContent.trim(), "the way out is a × with no words");
+    require(document.querySelectorAll('.ob-foot .btn').length === 2, "the foot holds the × and the pill and nothing else");
+    return { check: name, arrow: Math.round(arrow.width), pill: Math.round(ink.width) };
+  }
   if (name === "onboarding-tools" || name === "onboarding-services" || name === "onboarding-abilities") {
     // Each first-run choice is one calm centred column in one card of a designed size: a title with two small slimes
-    // floating by it, the choice as tiles in a grid of three (rows for the abilities), one wide black pill and, under
-    // it, a grey one for the way back (owner, 2026-11-07, after Grok Bot's first run).
+    // floating by it, the choice as tiles in a grid of three (rows for the abilities), one wide black pill and, beside
+    // it, a round arrow for the way back (owner, 2026-11-07, after Grok Bot's first run; the arrow since 2026-11-11).
     const title = document.querySelector('.ob-col > h2');
     require(title && parseFloat(getComputedStyle(title).fontSize) >= 28, "the headline is large");
     const card = document.querySelector('.ob-card').getBoundingClientRect();
@@ -2803,14 +2867,7 @@ export function checkRendered(name, context = {}) {
       }
       require(document.querySelector('[data-svc="toggle"][data-id="read"]').getAttribute('aria-checked') === 'false', "a switch that was pressed turned off");
     }
-    // Under the choice: one wide black pill that fills its row, and a grey pill for the way back below it (the guide's
-    // own buttons, kept by the owner on 2026-11-08).
-    const primary = document.querySelector('.ob-actions > .btn.pri'), back = document.querySelector('.ob-actions > .btn.ob-back'), row = document.querySelector('.ob-actions').getBoundingClientRect();
-    const ink = primary.getBoundingClientRect(), grey = back?.getBoundingClientRect();
-    require(ink.width >= row.width * .9 && ink.width >= 240 && parseFloat(getComputedStyle(primary).borderTopLeftRadius) >= ink.height / 2 - 1, "the primary action is a wide pill that fills its row");
-    require(back && grey.top >= ink.bottom - 1 && Math.abs(grey.width - ink.width) <= 1 && Math.abs((grey.left + grey.width / 2) - (ink.left + ink.width / 2)) <= 1, "the way back is a grey pill of the same width under it");
-    require(parseFloat(getComputedStyle(back).borderTopLeftRadius) >= grey.height / 2 - 1 && getComputedStyle(back).backgroundColor !== getComputedStyle(primary).backgroundColor, "the way back is a pill of another colour");
-    require(Math.abs(ink.left + ink.width / 2 - (card.left + card.width / 2)) <= 2, "the pills are centred in the card");
+    const { ink, arrow } = requireGuideRow(card);
     // Every word of a tile stays inside it, in every language (owner, 2026-11-08: a Japanese status ran out of its tile).
     for (const tile of document.querySelectorAll('.ob-tile')) {
       const t = tile.getBoundingClientRect();
@@ -2819,7 +2876,7 @@ export function checkRendered(name, context = {}) {
         require(p.right <= t.right + 1 && p.left >= t.left - 1, `${part.textContent.trim().slice(0, 24)} stays inside its tile`);
       }
     }
-    require(ink.bottom <= card.bottom && grey.bottom <= card.bottom, "both pills stay inside the card");
+    require(ink.bottom <= card.bottom && arrow.bottom <= card.bottom && arrow.left >= card.left, "the arrow and the pill stay inside the card");
     return { check: name, items: items.length, columns: lefts.size, headline: getComputedStyle(title).fontSize };
   }
   if (name === "chat-usage-limit") {

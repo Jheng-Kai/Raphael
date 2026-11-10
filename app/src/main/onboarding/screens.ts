@@ -1,7 +1,7 @@
 // What each screen of the guide looks like, as HTML for a given state. Each screen is one calm centred column, as Grok
 // Bot's first run is (owner, 2026-11-07): a title, the choice it is about (tiles in a grid, or rows), and, drawn by
-// mount.ts, one wide black pill under it with a grey pill for the way back. Nothing here reads the window or the core,
-// so a screen can be drawn from made-up data (the browser check does).
+// mount.ts, one wide black pill under it with a round arrow beside it for the way back. Nothing here reads the window or
+// the core, so a screen can be drawn from made-up data (the browser check does).
 
 import { getLocale, t } from "../i18n";
 import type { MessageKey } from "../i18n/zh-TW";

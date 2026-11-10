@@ -119,13 +119,57 @@ describe("the guide", () => {
     expect(root.dataset.step).toBe("services");
   });
 
-  test("under every step a wide primary pill and, once there is a step to go back to, a grey Back pill", async () => {
+  test("the foot is one row, the welcome's pill alone and then a round back arrow before the pill", async () => {
     await open();
-    expect(root.querySelectorAll(".ob-foot .btn")).toHaveLength(1);
+    const foot = (): HTMLElement[] => [...root.querySelectorAll<HTMLElement>(".ob-foot .btn")];
+    expect(foot().map((control) => control.dataset.ob)).toEqual(["next"]);
+    for (const step of ["tools", "services", "abilities"]) {
+      await press('[data-ob="next"]');
+      expect(root.dataset.step).toBe(step);
+      // Exactly two controls, the arrow first and the primary after it, so that is also the tab order.
+      const [arrow, primary, ...more] = foot();
+      expect(more).toHaveLength(0);
+      expect(arrow!.dataset.ob).toBe("back");
+      expect(primary!.dataset.ob).toBe("next");
+      expect(primary!.classList.contains("pri")).toBe(true);
+      expect(arrow!.classList.contains("icon")).toBe(true);
+      // The arrow carries no words: its name and tooltip are the old pill's label, and only a drawing shows.
+      expect(arrow!.textContent).toBe("");
+      expect(arrow!.getAttribute("aria-label")).toBe("Back");
+      expect(arrow!.getAttribute("title")).toBe("Back");
+      expect(arrow!.querySelector("svg.i")).not.toBeNull();
+    }
+    expect(text('[data-ob="next"]')).toBe("Start using Raphael");
+  });
+
+  test("the round back arrow goes back one step, and the pill keeps its words", async () => {
+    await open();
     await press('[data-ob="next"]');
+    await press('[data-ob="next"]');
+    expect(root.dataset.step).toBe("services");
     expect(text('[data-ob="next"]')).toBe("Next");
-    expect(text('.ob-foot [data-ob="back"].ob-back')).toBe("Back");
-    expect(root.querySelector(".ob-foot .btn.pri")).not.toBeNull();
+    await press('.ob-foot button[aria-label="Back"]');
+    expect(root.dataset.step).toBe("tools");
+    await press('.ob-foot button[aria-label="Back"]');
+    expect(root.dataset.step).toBe("welcome");
+    expect(root.querySelector('[data-ob="back"]')).toBeNull();
+  });
+
+  test("a rerun's welcome is one row too: a round × that leaves the guide, then the pill", async () => {
+    await open("rerun");
+    const [close, primary, ...more] = [...root.querySelectorAll<HTMLElement>(".ob-foot .btn")];
+    expect(more).toHaveLength(0);
+    expect(close!.dataset.ob).toBe("back");
+    expect(primary!.dataset.ob).toBe("next");
+    // A close is the × alone, with the name 取消 had: no words, a drawing, the same round button as the arrow.
+    expect(close!.classList.contains("icon") && close!.classList.contains("ob-back")).toBe(true);
+    expect(close!.textContent).toBe("");
+    expect(close!.getAttribute("aria-label")).toBe("Cancel");
+    expect(close!.getAttribute("title")).toBe("Cancel");
+    expect(close!.querySelector("svg.i")).not.toBeNull();
+    expect(done).not.toHaveBeenCalled();
+    await press('.ob-foot button[aria-label="Cancel"]');
+    expect(done).toHaveBeenCalledWith({ finished: false });
   });
 
   test("a first run saves onboarded once, on the last step, and tells who opened it", async () => {
