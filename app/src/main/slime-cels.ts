@@ -42,13 +42,16 @@ export function motionStrips(state: LoopState, body: string, eyes: string, face:
   };
   const strip = (kind: string, cells: string, height = FRAME): string => `<span class="slime-loop slime-loop-${kind}${blink ? ' has-blink' : ''}" data-state="${state}" style='--loop-body:${timing.body}s;--loop-eyes:${timing.eyes}s;--loop-props:${propPeriod}s;--loop-prop-delay:${propDelay}ms;--loop-cels:${cels};--loop-gaze:${gazes};--loop-prop-rows:${PROP_ROWS};--loop-rows:${gazes*(blink?4:1)};${eyeStyle(state)}'><span class="slime-cels">${kind === 'eyes' ? '<span class="slime-eye-cels"><span class="slime-blink-cels">' : independent ? '<span class="slime-prop-cels">' : ''}<svg width="${FRAME*cels}" height="${height}" viewBox="-19 -12 ${FRAME*cels} ${height}">${cells}</svg>${kind === 'eyes' ? '</span></span>' : independent ? '</span>' : ''}</span></span>`;
   const bodyCells = Array.from({length:independent?PROP_ROWS:1},(_,row) => Array.from({length:cels},(_,index) => { const pose=poses[index]!; return `<g transform="translate(${index*FRAME} ${row*FRAME})"><g transform="${aboutBase(pose)}">${back}<path class="slime-cel-body" d="${body}" fill="var(--slime-color)"/>${wornAt(independent?row/PROP_ROWS:index/cels)}</g></g>`; }).join('')).join('');
+  // What does not change from one eye path to the next is worked out once: a strip has some 1,500 of them.
+  const about = poses.map(pose => cssTransform(aboutBase(pose))), faceFit = `var(--slime-face-fit,${cssTransform(face)})`;
   const eyeCells = Array.from({length:gazes}, (_, gazeIndex) => {
     const gaze = sample(`slime-${state}-gaze`,gazeIndex/gazes,timing.gaze);
     if (state === 'blocked') gaze.translate = [0,-6];
-    return poses.flatMap((pose,bodyIndex) => (blink ? blinkPoses : [[1,1]]).map(([sx,sy],blinkIndex) => {
+    const look = cssTransform(poseTransform(gaze));
+    return poses.flatMap((_pose,bodyIndex) => (blink ? blinkPoses : [[1,1]]).map(([sx,sy],blinkIndex) => {
       const origin = 50;
       // These transforms are static poses; a single path avoids collecting two transient groups per cel.
-      const transform=`${cssTransform(`translate(${bodyIndex*FRAME} ${(gazeIndex*(blink?4:1)+blinkIndex)*FRAME}) ${aboutBase(pose)}`)} var(--slime-face-fit,${cssTransform(face)}) ${cssTransform(poseTransform(gaze))} translate(50px,${origin}px) scale(${sx},${sy}) translate(-50px,-${origin}px)`;
+      const transform=`translate(${bodyIndex*FRAME}px,${(gazeIndex*(blink?4:1)+blinkIndex)*FRAME}px) ${about[bodyIndex]} ${faceFit} ${look} translate(50px,${origin}px) scale(${sx},${sy}) translate(-50px,-${origin}px)`;
       return `<path class="slime-cel-eye" d="${eyes}" fill="none" stroke="#fff" stroke-linecap="round" style="transform:${transform}"/>`;
     })).join('');
   }).join('');
