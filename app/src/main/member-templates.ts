@@ -12,17 +12,21 @@ import type { Member, NewMember, Routine } from "./types";
 import { appMarkHTML } from "./connector-card";
 import { btn, esc, ico, toaster } from "./ui";
 
+export interface TemplateSkill { text: string; files?: Record<string, string> }
+/** What a routine runs and when; it starts paused, and an importer is asked nothing. */
+export interface TemplateRoutine { title: string; prompt: string; schedule: Routine["schedule"]; when: Exclude<Routine["when"], undefined> }
+/**
+ * The recipe a shared member is: exactly the fields core/src/raphael_core/members/templates.py accepts, which refuses any other
+ * (core/tests/fixtures/member-template/full.raphael-member pins both sides). Memory and history are never part of it.
+ */
 export interface MemberTemplate {
   format: "raphael-member"; version: 1;
   name: string; role: string; personality: string; instructions: string; reply_style: "full" | "conversational";
-  skills: { text: string; files?: Record<string, string> }[];
-  routines: (Pick<Routine, "title" | "prompt" | "schedule" | "when"> & {
-    /** One line on what it does, the trigger in words and what an importer is asked (core brief 15; absent in older templates). */
-    description?: string; fires_on?: string; ask?: string[];
-  })[];
+  skills: TemplateSkill[];
+  routines: TemplateRoutine[];
   connections: string[];
-  /** What it is for, the reusable memories it passes on and when it was last updated (core brief 15; optional). */
-  description?: string; memories?: string[]; updated_at_ms?: number;
+  /** What it is for, in a sentence the member wrote for strangers (optional). */
+  description?: string;
 }
 const STARTERS = [
   ["coordinator", "rimuru", ""], ["researcher", "souei", ""], ["writer", "shuna", ""], ["developer", "diablo", "github"],

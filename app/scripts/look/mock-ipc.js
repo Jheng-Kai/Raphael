@@ -452,7 +452,7 @@ export function installMock(fixture, config = {}, target = window) {
     const turn = (id, question, text, extra) => ({ ...base, id, member_id: 1, conversation_id: 11, question, text, steps: [], messages: [], secrets: [], ...extra });
     data.turns.push(turn(141, "幫我設定 Slack", "我需要一個 Slack 機器人權杖：照卡片上的步驟建立機器人，再把權杖貼進來。", { secrets: [{ id: "card-slack", name: "Slack", secret: "bot_token", state: "pending", error: null, expires_at_ms: data.now + 600000, resumed: false, platform: "slack", link: "https://api.slack.com/apps" }],
       pairings: [{ id: "pair-1", platform: "slack", member_id: 1, code: "SL7Q2K", who: "Sam", expires_at_ms: data.now + 300000, state: "pending" }] }));
-    data.turns.push(turn(142, "把你自己打包成範本，讓別人也能用", "範本做好了，可以先看內容再儲存或發布。", { templates: [{ id: "tpl-1", state: "draft", name: "研究與資訊整理", avatar: "slime:shion", description: "幫人查證來源、整理成一份能直接讀的研究摘要。", counts: { skills: 2, routines: 1 }, connections: ["Gmail", "Notion"], findings: [] }] }));
+    data.turns.push(turn(142, "把你自己打包成範本，讓別人也能用", "範本做好了，可以先看內容，再儲存成檔案或準備發布請求。", { templates: [{ id: "tpl-1", state: "draft", name: "研究與資訊整理", avatar: "slime:shion", description: "幫人查證來源、整理成一份能直接讀的研究摘要。", counts: { skills: 2, routines: 1 }, connections: ["Gmail", "Notion"], findings: [] }] }));
     // A code that came later is a turn of its own at the bottom, with no words (the core's pairing turn, 2026-11-07).
     if (variant.latePairing) data.turns.push(turn(143, "", "", { route: "pairing", source: "messaging", session_id: "pairing-late", created_at_ms: data.now + 1000,
       pairings: [{ id: "pair-late", platform: "slack", member_id: 1, code: "SL9X4M", who: "Sam", expires_at_ms: data.now + 600000, state: "pending" }] }));

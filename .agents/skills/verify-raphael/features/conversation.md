@@ -2062,8 +2062,8 @@ npm run look -- voice-flyer-emblem --theme both --width 1120,720,1920x1080
 The panel's 設定 and share send an intent into the member's conversation (chat-ask.ts). The member answers with
 cards there: a bot token card (secret-card.ts `platform`: where to make the bot through a fixed link, Slack's scopes
 as code, one masked field, the token straight to the vault), a pairing card for someone messaging that bot (code,
-Allow first, then Deny; `messaging.pairing.answer`) and a template card (what it brings, no face; Publish, Save file
-and View contents on the core's snapshot; a key inside stops saving and publishing). chat-cards.ts draws the last two.
+Allow first, then Deny; `messaging.pairing.answer`) and a template card (what it brings, no face; Prepare publish request,
+Save file and View contents on the core's snapshot, then Open GitHub page once the request is prepared; a key inside stops saving and preparing it). chat-cards.ts draws the last two.
 
 ```powershell
 npm run look -- chat-setup-cards chat-pairing-allowed chat-pairing-bottom --theme both --width 1120,720,1920x1080

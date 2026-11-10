@@ -34,6 +34,11 @@
         "conversational"
       ]
     },
+    "description": {
+      "type": "string",
+      "minLength": 0,
+      "maxLength": 280
+    },
     "skills": {
       "type": "array",
       "items": {

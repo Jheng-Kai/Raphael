@@ -968,7 +968,7 @@ characters and shared buttons. Preview shows full instructions, personality, ski
 documents/dependencies, routine schedules and individual disabled app connect cards.
 Adding installs skills and routines off and grants no apps; only subsequent per-app
 Connect can request login. Export now opens Review contents before Export file or
-Publish to store. A secret finding disables both. Publishing prepares only a local
+Prepare publish request (2026-11-11; it was "Publish to store"). A secret finding disables both. Publishing prepares only a local
 package folder and opens GitHub's prefilled PR page; the owner submits through GitHub.
 
 The catalogue uses Ed25519 over exact index bytes, two compiled trust roots for
@@ -981,12 +981,19 @@ No production key or account is needed by fake HTTP or the signed synthetic fixt
 npm run look -- store-home store-category store-search store-empty store-offline template-preview template-preview-warning template-export-review template-review-pages member-template-gallery member-template-preview member-template-imported member-template-export sidebar-plus --theme both --width 1120,720,1920x1080
 
 A template card's 查看內容 and the export review read as Grok Bot's review (template-review.ts, owner 2026-11-08): a
-first page of the face, the name, 「最後更新」 (when the template carries `updated_at_ms`) and what it is for, then one
-tinted card of rows 內容 (instructions, personality, memories, skills), 例行工作 and 整合, each opening a page with a
-back arrow and its title in the head; a skill page is its description and text (no front matter), a routine page its
-description (when it has one), content, trigger in words with "starts paused", and what an importer is asked. The
-dialog's foot is the card's next step (發布 while it is a draft, else 關閉). The import preview keeps its own layout.
-Memories, routine descriptions, triggers and asks arrive with core brief 15; older templates read without them.
+first page of the face, the name and what it is for, then one
+tinted card of rows 內容 (role, instructions, personality, reply style, skills), 例行工作 and 整合, each opening a page with a
+back arrow and its title in the head; a skill page is its description and text (no front matter) and its files, a routine page
+its content and its trigger in words with "starts paused". The dialog's foot is the card's next step (準備發布請求 while it
+is a draft, else none). The import preview keeps its own layout.
+Since 2026-11-11 (R-COLLEAGUE-01, R-STORE-04) the review shows every field of a raphael-member and no other: a template
+carries no memory (so there is no 記憶 row), no 最後更新, and a routine holds only its title, prompt and trigger (no
+description, fires_on or ask: an importer is asked nothing). `template-contract.test.ts` reads
+`core/tests/fixtures/member-template/full.raphael-member`, the one recipe the core and the catalogue schema also accept.
+The words say what happens: the conversation header's share line reads 「存成檔案，或在 GitHub 準備發布請求」, the card's
+buttons 儲存檔案 / 準備發布請求 / 查看內容, then 開啟 GitHub 頁面 and 「已準備發布請求」. No string promises a link. Inspect
+template-export-review, template-review-pages, chat-setup-cards, member-template-export and conversation-share at both
+themes and the three widths.
 
 Inspect every contact sheet and each new scene at light 720 and dark 1120. Compare
 store chips/buttons with starter gallery and sidebar-plus, and preview/export cards

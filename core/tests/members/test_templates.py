@@ -1,5 +1,6 @@
 """Portable recipes never carry private state or grant connected-app access."""
 import json
+from pathlib import Path
 
 import pytest
 
@@ -137,3 +138,73 @@ async def test_template_matches_an_app_name_without_its_transport_suffix(rig, mo
                   "schedule": {"kind": "daily", "time": "09:00"}})
     value = (await rig.call("members.template", {"action": "export", "id": member}))["template"]
     assert value["connections"] == ["Mobbin MCP"]
+
+
+# One recipe holding every field raphael-member v1 has. The front end reads the same file
+# (app/src/main/template-contract.test.ts), so a field added or dropped on one side fails the other.
+FIXTURE = Path(__file__).resolve().parents[1] / "fixtures" / "member-template" / "full.raphael-member"
+CATALOG_SCHEMA = Path(__file__).resolve().parents[3] / "catalog-template" / "member.schema.json"
+
+
+def fixture():
+    return json.loads(FIXTURE.read_text(encoding="utf-8"))
+
+
+def test_the_shared_recipe_is_accepted_whole_by_the_core_and_the_catalogue_schema():
+    import jsonschema
+    from raphael_core.members.templates import checked, findings
+    value = fixture()
+    assert checked(value) == value and findings(value) == []
+    # What the author writes may be published, so the catalogue's CI must accept it too.
+    jsonschema.validate(value, json.loads(CATALOG_SCHEMA.read_text(encoding="utf-8")))
+
+
+def test_only_the_description_may_be_left_out_and_no_other_field_is_accepted():
+    from raphael_core.members.templates import checked
+    value = fixture()
+    for key in value:
+        rest = {k: v for k, v in value.items() if k != key}
+        if key == "description":
+            assert checked(rest) == rest
+        else:
+            with pytest.raises(RpcError):
+                checked(rest)
+    # The fields the front end once expected: memory is never shared, a routine holds exactly what it runs and when.
+    for patch in ({"memories": ["x"]}, {"updated_at_ms": 1}):
+        with pytest.raises(RpcError):
+            checked({**value, **patch})
+    for extra in ({"description": "x"}, {"fires_on": "x"}, {"ask": ["x"]}):
+        with pytest.raises(RpcError):
+            checked({**value, "routines": [{**value["routines"][0], **extra}]})
+    for extra in ({"title": "x"}, {"path": "x"}):
+        with pytest.raises(RpcError):
+            checked({**value, "skills": [{**value["skills"][0], **extra}]})
+
+
+def test_what_the_author_may_write_is_inside_the_core_contract():
+    import jsonschema
+    from raphael_core.members.template_author import SCHEMA
+    from raphael_core.members.templates import checked
+    value = fixture()
+    # The author asks the model for every top-level field, a routine in full and the text of each skill.
+    assert set(SCHEMA["properties"]) == set(value)
+    routine = SCHEMA["properties"]["routines"]["items"]["properties"]
+    assert set(routine) == set(value["routines"][0])
+    assert set(SCHEMA["properties"]["skills"]["items"]["properties"]) <= set(value["skills"][0])
+    written = {**value, "skills": [{"text": value["skills"][0]["text"]}], "routines": [value["routines"][0]]}
+    jsonschema.validate(written, SCHEMA)
+    assert checked(written, review=True) == written
+    jsonschema.validate(written, json.loads(CATALOG_SCHEMA.read_text(encoding="utf-8")))
+
+
+async def test_the_shared_recipe_previews_and_imports_whole(rig):
+    value = fixture()
+    shown = await rig.call("members.template", {"action": "preview", "template": value})
+    assert shown == {"template": value, "findings": []}
+    made = (await rig.call("members.template", {"action": "import", "template": value, "name": "Copy"}))["member"]
+    assert made["role"] == "Writer" and made["reply_style"] == "conversational" and made["blurb"] == value["description"]
+    [skill] = rig.service.capabilities.owned_skills(made["id"])
+    assert (rig.service.capabilities._path(made["id"], skill["id"]).parent / "references/glossary.md").read_text() == value["skills"][0]["files"]["references/glossary.md"]
+    routines = rig.service.store.routines(made["id"])
+    assert [(r.title, r.enabled) for r in routines] == [("Weekly clarity pass", False), ("On a request", False)]
+    assert (await rig.call("members.template", {"action": "export", "id": made["id"]}))["template"]["routines"][1]["when"] == {"webhook": True}
