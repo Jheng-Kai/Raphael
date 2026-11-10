@@ -10,6 +10,7 @@ import handoffGroup from "./handoff-group.mjs";
 import menus from "./menus.mjs";
 import presence from "./presence.mjs";
 import sidebar from "./sidebar.mjs";
+import pressThrough from "./press-through.mjs";
 import shortcuts from "./shortcuts.mjs";
 import routineWorkflow from "./routine-workflow.mjs";
 import daily from "./daily.mjs";
@@ -65,6 +66,7 @@ scenes.push(...threadWindow);
 scenes.push(...memberPanel);
 scenes.push(...memberSettings);
 scenes.push(...quota);
+scenes.push(...pressThrough);
 scenes.push({name:'motion-cost-details',description:'Isolated emblem decoder and single large vector cost',fixture:{},motion:true,steps:[{action:'motion-details'}]});
 scenes.push({name:'motion-cost-comparison',description:'Identical mixed-state fixture and sampling window, starting revision versus current cels',fixture:{},motion:true,steps:[{action:'motion-cost',revision:'e2143ec7'},{action:'motion-cost'}]});
 for (const scene of scenes) if (['admin-approval','room-question-card','composer-stop-voice'].includes(scene.name)) {

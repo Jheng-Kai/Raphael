@@ -6838,5 +6838,42 @@ export function checkRendered(name, context = {}) {
     require(handed.length === 1 && handed[0].params.choice === "yes" && draftCalls.length === 1, "handing over was answered once, and nothing was saved");
     return { check: name, version: card.dataset.version };
   }
+  if (name.startsWith("press-through-")) {
+    // R-UI-121 (owner, 2026-11-11): one press closes what was open AND acts on what was pressed. The scene pressed once; what the
+    // press did must already be true, so this waits only for the page to draw it (and never presses again).
+    const leftOpen = () => document.querySelector('#app-popover, .mb-avpop, .cb-menu, .mb-scrim, .cs-scrim, .modal-scrim:not([hidden])');
+    const currentMember = () => document.querySelector('.mb-col [data-member][aria-current="true"]')?.dataset.member;
+    const rows = window.__look.data.members;
+    const until = async (ready, what) => {
+      const end = performance.now() + 3000;
+      while (!ready()) {
+        if (performance.now() > end) throw new Error(`${name}: ${what}`);
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
+    };
+    const opened = async (id) => {
+      await until(() => currentMember() === String(id), `the press on member ${id} did not open that member (the open one is ${currentMember()})`);
+      const named = rows.find(row => row.id === id)?.name;
+      await until(() => document.querySelector('.mb-pill-t')?.textContent === named, `the conversation shows ${document.querySelector('.mb-pill-t')?.textContent}, not ${named}`);
+      require(!leftOpen(), `what was open went with the same press (${leftOpen()?.className})`);
+    };
+    return (async () => {
+      if (name === "press-through-avatar-picker") await opened(2);
+      else if (name === "press-through-row-menu") await opened(1);
+      else if (name === "press-through-delete-dialog") {
+        await opened(1);
+        require(!document.querySelector('.mb-dialog') && rows.some(row => row.id === 2) && document.querySelector('.mb-col [data-member="2"]'), "the confirmation was abandoned: member 2 is still there and nothing was deleted");
+      } else if (name === "press-through-right-click") {
+        await until(() => document.querySelector('#app-popover'), "the right click on the other row left no menu");
+        require(document.querySelectorAll('#app-popover').length === 1, "one menu is open, not two");
+        require(document.querySelector('.mb-col [data-member-more="1"][aria-expanded="true"]') && !document.querySelector('.mb-col [data-member-more="2"][aria-expanded="true"]'),
+          "the open menu is the pressed row's, and the first row's menu is gone");
+      } else if (name === "press-through-model-menu") {
+        await until(() => document.querySelector('.conversation-trigger[aria-expanded="true"]') && document.querySelector('.mb-det:not([hidden])'), "the press on the header button did not open the details");
+        require(!document.querySelector('.cb-menu, #app-popover'), "the model menu went with the same press");
+      } else throw new Error(`no expectation for ${name}`);
+      return { check: name };
+    })();
+  }
   throw new Error(`Unknown rendered check: ${name}`);
 }

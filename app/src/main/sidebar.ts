@@ -7,6 +7,7 @@ import { iconHTML } from "./service-mark";
 import { serviceIconOf } from "./service-icons";
 import type { AppContext } from "./types";
 import { onOwnerProfile, ownerFaceHTML, ownerName } from "./owner-avatar";
+import { closeAndPress } from "./dismissals";
 import { esc, ico, iconButton } from "./ui";
 import { mountEdge, savedWidth, saveWidth } from "./edge-drag";
 import { mountUpdateNotice } from "./update-notice";
@@ -150,7 +151,8 @@ export function createSidebar(nav: HTMLElement, column: HTMLElement, app?: Pick<
   nav.addEventListener("click", event => {
     if ((event.target as Element).closest('[data-sidebar="close"], [data-go], [data-connect-apps], [data-member], [data-room]')) close();
   });
-  scrim.addEventListener("click", close);
+  // The press that closes the drawer goes on to what it was over (R-UI-121).
+  scrim.addEventListener("click", event => closeAndPress(event, scrim, close));
   // What takes the whole window from a menu of the drawer has no use for the drawer behind it.
   window.addEventListener("raphael:close-sidebar", close);
   document.addEventListener("keydown", event => {

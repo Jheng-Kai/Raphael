@@ -1098,3 +1098,20 @@ forever; pre-existing counters without a retry timestamp can recover immediately
 Offline tests: core/tests/memory/test_subscription_passes.py, tests/members/test_skill_growth.py
 and tests/agent/test_self_diagnosis.py. Live evidence is recorded separately in the brief report;
 only that documented route is live-verified. Memory provenance and owner-only permissions remain.
+
+## One press closes what is open and acts (2026-11-11)
+
+R-UI-121 (owner, 2026-11-11, after a report from real use): a press outside an open menu, picker, popover or dialog closes it
+and is delivered to what was pressed in the same press, so a member in the sidebar opens at once even while the avatar
+picker, a row menu, the composer's model menu or a dialog is open. One shared policy does it (`app/src/main/dismissals.ts`):
+a press on a control closes the panel without being stopped; a press on a scrim closes the panel and the element under the
+pointer receives the focus and one click; bare scrim only closes; a menu open over a dialog is closed first and the dialog by the
+next press. Unit proof: `app/src/main/dismissals.test.ts` and `app/src/main/dialog-outside-close.test.ts`.
+
+Each scene presses once with the real mouse on a control that is not part of what is open and fails if either half is missing;
+`checks.mjs` `press-through-*` waits only for the page to draw the result, never presses again. At drawer widths (720) the list
+opens from the menu button in the caption first, which closes nothing; the press on the member is still one press.
+
+```text
+npm run look -- press-through-avatar-picker press-through-row-menu press-through-right-click press-through-delete-dialog press-through-model-menu --theme both --width 1120,720,1920x1080
+```
