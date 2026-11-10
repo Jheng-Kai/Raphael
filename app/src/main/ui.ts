@@ -3,7 +3,7 @@
 // the core wrote goes through `esc` first.
 
 import { onLocaleChange, t, translatedMessage } from "./i18n";
-import { registerDismissal } from "./dismissals";
+import { pressWentThrough, registerDismissal } from "./dismissals";
 
 import { type Notifier, UNDO_MS } from "./undo";
 import { ICON } from "./icon-set";
@@ -708,7 +708,7 @@ export function openPopover(anchor: HTMLElement, html: string, o: PopoverOptions
   document.body.append(el);
   if (at) at.until = Infinity;
   menu = { el, anchor, rect, parent, placement: at ? "pointer" : o.placement, anchorRect: at ? () => pointRect(at) : o.anchorRect, at,
-    stopOutside: registerDismissal(el, () => { const root = menuRootAnchor(); closeMenu(); root?.focus({ preventScroll: true }); }, undefined, parent?.el ?? anchor), onKey: o.onKey, onClose: o.onClose };
+    stopOutside: registerDismissal(el, () => { const root = menuRootAnchor(); closeMenu(); if (!pressWentThrough()) root?.focus({ preventScroll: true }); }, undefined, parent?.el ?? anchor), onKey: o.onKey, onClose: o.onClose };
   anchor.setAttribute("aria-expanded", "true");
   anchor.setAttribute("aria-controls", el.id);
   placeMenu();

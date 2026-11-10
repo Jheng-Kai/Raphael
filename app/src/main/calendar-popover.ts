@@ -3,7 +3,7 @@
 import * as api from "./api";
 import { googleMark, clockRange, type CalendarEntry } from "./calendar-view";
 import { describeError, formatClock } from "./format";
-import { isTopLayer, registerDismissal } from "./dismissals";
+import { isTopLayer, pressWentThrough, registerDismissal } from "./dismissals";
 import { getLocale, t } from "./i18n";
 import { faceHTML, routineSentenceHTML } from "./members";
 import { ownerFaceHTML } from "./owner-avatar";
@@ -61,7 +61,8 @@ function openPanel(rect: Pick<DOMRect, "left" | "right" | "top">, cls: string, l
       document.removeEventListener("keydown", onKey, true);
       closeMenu();
       el.remove();
-      if (opener?.isConnected) opener.focus({ preventScroll: true });
+      // A press that went on to something else leaves the focus where it put it.
+      if (opener?.isConnected && !pressWentThrough()) opener.focus({ preventScroll: true });
       o.onClose?.();
     },
   };

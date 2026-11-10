@@ -114,6 +114,7 @@ import {
   wantsRefresh,
 } from "../timeline";
 import type { PageArgument, AgentQuestion, AgentTurn, AppContext, GroupDraft, MemberDraft, MessageQuote, OwnerQuestion, Page, TurnAttachment, WireAttachment } from "../types";
+import { closeAndPress } from "../dismissals";
 import { closeMenu, copyButton, esc, ico, iconButton, openMenu, patchHTML, toaster } from "../ui";
 import { askInChat } from "../chat-ask";
 import { createRoomPane } from "../group-chats";
@@ -346,7 +347,8 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   const detailsScrim = document.createElement("div");
   detailsScrim.className = "mb-det-scrim";
   detailsScrim.setAttribute("aria-hidden", "true");
-  detailsScrim.addEventListener("click", () => members.setDetails(false));
+  // The press that closes the panel goes on to what it was over (R-UI-121).
+  detailsScrim.addEventListener("click", event => closeAndPress(event, detailsScrim, () => members.setDetails(false)));
   el.insertBefore(detailsScrim, members.details);
   if (members.detailsOpen()) el.dataset.det = "open";
   el.querySelector(".mb-head-l")!.append(members.picker);

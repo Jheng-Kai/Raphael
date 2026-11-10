@@ -169,15 +169,16 @@ test("outside gestures close the provider or chooser before settings, preserving
     end.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, button: 0, pointerId: 1, isPrimary: true }));
     end.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, detail: 1 }));
   };
-  outside(page.el.querySelector("#pv-dialog")!, document.body);
+  const providerScrim = (): Element => page.el.querySelector(".cs-scrim[data-pv]")!;
+  outside(page.el.querySelector("#pv-dialog")!, providerScrim());
   expect(page.el.querySelector("#pv-dialog")).not.toBeNull();
   send({ type: "ProvidersChanged" }); await flush();
-  outside(document.body);
+  outside(providerScrim());
   expect(page.el.querySelector("#pv-dialog")).toBeNull(); expect(closeSettings).not.toHaveBeenCalled();
   click('[data-model-picker="answer"] .mp-trigger');
-  outside(document.body);
+  outside(document.querySelector(".model-chooser")!.parentElement!);
   expect(document.querySelector(".model-chooser")).toBeNull(); expect(closeSettings).not.toHaveBeenCalled();
-  outside(document.body); expect(closeSettings).toHaveBeenCalledOnce();
+  outside(page.el); expect(closeSettings).toHaveBeenCalledOnce();
 });
 
 test("models in use precede subscription accounts and providers, login uses the core, and live readiness refreshes only the answer picker", async () => {

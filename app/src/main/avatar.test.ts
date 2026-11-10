@@ -203,9 +203,11 @@ describe("the crop dialog", () => {
       end.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, button: 0, pointerId: 1, isPrimary: true }));
       end.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, detail: 1 }));
     };
-    press(document.querySelector(".av-crop h2")!, document.body);
+    const scrim = document.querySelector(".av-crop-scrim")!;
+    press(document.querySelector(".av-crop h2")!, scrim);
     expect(document.querySelector(".av-crop")).not.toBeNull();
-    press(document.body); expect(await done).toBeNull();
+    // The crop's scrim hides the dialog under it, so the press is spent on the crop alone.
+    press(scrim); expect(await done).toBeNull();
     expect(under.el.isConnected).toBe(true); expect(document.activeElement).toBe(under.el.querySelector("input"));
     under.close();
   });
