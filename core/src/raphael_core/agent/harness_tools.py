@@ -30,20 +30,20 @@ class HarnessToolError(Exception):
 SCHEDULE = {
     "type": "object", "description": "Owner's local time zone, times as HH:MM (24-hour). once: on start_date at time. daily, weekdays (Monday to Friday) or weekly (days, Sunday is 0): at time. monthly: day 1-31, clamped to the last day of shorter months. every: hours 1-24 or minutes 5, 10, 15, 30, never both. Several times a day within part of the day is one routine with hours, from and to, never one routine per time. Example: every 3 hours, not at night = hours:3, from:08:00, to:23:00. The window restarts at from each local day and includes to when due. Supply both from and to, with from before to. start_date holds it back until that day, until ends it after that day, max_runs ends it after so many runs.",
     "properties": {"kind": {"type": "string", "enum": list(KINDS)}, "time": {"type": "string"}, "days": {"type": "array", "items": {"type": "integer"}}, "hours": {"type": "integer"}, "minutes": {"type": "integer", "enum": [5,10,15,30]}, "day": {"type": "integer", "minimum": 1, "maximum": 31},
-                   "from": {"type": "string", "description": "HH:MM, optional every window start"}, "to": {"type": "string", "description": "HH:MM, optional every window end"},
-                   "timezone": {"type": "string", "description": "Optional IANA zone requested by the owner. Otherwise use the General setting; existing routines keep their saved zone."},
+                   "from": {"type": "string", "description": "HH:MM, every window start"}, "to": {"type": "string", "description": "HH:MM, every window end"},
+                   "timezone": {"type": "string", "description": "Optional IANA zone the owner asked for; else the General setting (a saved routine keeps its zone)."},
                    "start_date": {"type": "string", "description": "YYYY-MM-DD"}, "until": {"type": "string", "description": "YYYY-MM-DD"}, "max_runs": {"type": "integer"}}, "required": ["kind"],
 }
 WHEN = {
     "type": "object", "description": "Poll a connected app through its read tool, without model calls while idle. First poll only records old items. Use routine_list with event and optional value to detect a catalogue event from one gated read. For these events use its returned when unchanged, including the empty field/equals filter for all new items. For manual events ask for a narrow sender/channel filter before creating. app is the connection id. event.tool is its exact mcp:server/tool key. For a Composio connection (composio:toolkit), use mcp:connectors_composio/COMPOSIO_MULTI_EXECUTE_TOOL with exactly one enabled read tool_slug and its arguments. items is the dot path to the result array (empty for a top-level array); id is the stable item id path. Choose these from an observed read result, never guess. Only bounded complete results (up to 1000 items) are accepted; use tool arguments to request a bounded recent window that covers every poll.",
     "properties": {"app": {"type": "string"}, "event": {"type": "object", "properties": {
         "tool": {"type": "string"}, "arguments": {"type": "object"}, "items": {"type": "string"}, "id": {"type": "string"},
-        "since": {"type": "object", "description": "Optional moving window: fill this read argument with the previous check time minus five minutes, in UTC; the first poll uses now. For Composio it belongs in the single tool's arguments. Preserve the catalogue's returned field unchanged.",
+        "since": {"type": "object", "description": "Optional moving window: this read argument gets the previous check time minus five minutes (UTC); the first poll uses now. For Composio it goes in the single tool's arguments. Keep the catalogue's returned field unchanged.",
             "properties": {"arg": {"type": "string"}, "format": {"type": "string", "enum": ["iso"]}}, "required": ["arg", "format"], "additionalProperties": False}}, "required": ["tool", "arguments", "items", "id"]},
         "filter": {"type": "object", "properties": {"field": {"type": "string"}, "equals": {"type": "string"}, "operator": {"type": "string", "enum": ["equals", "contains"], "description": "Default equals. Use contains on Slack text for a literal phrase or <@USER_ID> mention."}}, "required": ["field", "equals"]}},
     "required": ["app", "event", "filter"],
 }
-ROUTINE_FIELDS = {"title": {"type": "string"}, "prompt": {"type": "string", "description": "What this speaker should do when due, including the learning goal."}, "schedule": SCHEDULE, "when": {"oneOf": [WHEN, {"type":"object", "properties":{"webhook":{"type":"boolean", "const":True}}, "required":["webhook"], "additionalProperties":False}]}, "enabled": {"type": "boolean"}}
+ROUTINE_FIELDS = {"title": {"type": "string"}, "prompt": {"type": "string", "description": "What to do when due, with the learning goal."}, "schedule": SCHEDULE, "when": {"oneOf": [WHEN, {"type":"object", "properties":{"webhook":{"type":"boolean", "const":True}}, "required":["webhook"], "additionalProperties":False}]}, "enabled": {"type": "boolean"}}
 
 
 def definition(description, properties=None, required=()):
@@ -66,18 +66,16 @@ CALENDAR_FIELDS = {
 
 
 _STATUS = {"type": "string", "enum": list(REPORT_STATUSES),
-           "description": "running, done, pending (ready, waiting to start), waiting (on the owner), blocked, paused or failed; drawn as a coloured word."}
-_LABEL = {"type": "string", "maxLength": 12, "description": "Optional short word of your own for the status, in the owner's language."}
+           "description": "pending: ready, not started; waiting: on the owner."}
+_LABEL = {"type": "string", "maxLength": 12, "description": "Your own word for the status, owner's language."}
 # A report page (agent/report_page.py): the app draws it, so the schema only says what goes where.
 REPORT = {
     "type": "object",
-    "description": "A designed report instead of html. Sections in order; each titled section is listed in the page's contents. "
-                   "findings: an optional callout (one summary box) and items with a status. table: columns and rows, each row "
-                   "one cell per column, an optional group (the groups become tabs over the table), an optional member_id (the "
-                   "first cell gets the member's colour) and an optional status (an extra last column). team: who works with whom, "
-                   "nodes (a member_id, owner true for the owner, or a name for anyone else; note is a few words on their part) and "
-                   "edges (from, to, label: what passes between them), then notes (label and text, such as overlaps and gaps). "
-                   "text: one paragraph.",
+    "description": "A designed report instead of html; titled sections are listed in its contents. "
+                   "findings: optional callout (one summary box), items with a status. table: columns; rows of one cell per "
+                   "column, optional group (tabs over the table), member_id (colours the first cell), status (a last column). "
+                   "team: nodes (member_id, owner true, or a name; note: their part in a few words), edges (from, to, label: "
+                   "what passes), notes (label, text: overlaps, gaps). text: one paragraph.",
     "properties": {"sections": {"type": "array", "minItems": 1, "maxItems": 8, "items": {"type": "object", "properties": {
         "kind": {"type": "string", "enum": ["findings", "table", "team", "text"]},
         "title": {"type": "string", "maxLength": 40},
@@ -104,28 +102,26 @@ REPORT = {
 
 
 DEFINITIONS = {
-    CONNECT_MESSAGING: definition("Show the owner a secure bot-token card in this conversation for Telegram, Slack or Discord. Never ask for the token in chat. The current speaker owns the bot; saving validates it and resumes this turn once. If already connected, report its current state and show any waiting pairing card here, without asking for another token. Pairing is approved or rejected in this conversation; the bot's panel row has its switch and details. Ask here for removing an allowed person or disconnecting; owner approval is still required. Never send the owner to a messaging settings page.", {"platform": {"type": "string", "enum": ["telegram", "slack", "discord"]}}, ["platform"]),
+    CONNECT_MESSAGING: definition("Show the owner a secure bot-token card here for Telegram, Slack or Discord; never ask for the token in chat. The current speaker owns the bot; saving validates it and resumes this turn once. If already connected, report its state and show any waiting pairing card instead of asking for another token. Pairing is approved or rejected here; the bot's panel row has its switch and details. Removing an allowed person or disconnecting is asked here and still needs the owner's approval. Never send the owner to a messaging settings page.", {"platform": {"type": "string", "enum": ["telegram", "slack", "discord"]}}, ["platform"]),
     SHARE_TEMPLATE: definition("Offer your member recipe as a snapshot card for the owner to review, save or publish. Describe what you do for strangers in one or two sentences in the owner's language; no names, private facts, credentials, internal URLs or customer data. Members only.", {"description": {"type": "string", "maxLength": 280}}, ["description"]),
     SHOW_PAGE: definition(
         "Show a page inside this conversation: a report the owner asked for (報告, 總覽, 統整, report, overview), or an "
         "operable page such as a product page, form, interactive comparison or small tool. Give exactly one of report or html. "
-        "Prefer plain text or a table for a simple answer. report: the app draws it in its own design and the owner gets a "
-        "link card that opens it over the conversation; the page states the time its data is from and that it only states "
-        "recorded facts, so write only what your tools returned (team_work, team_overview, routine_list) and leave out what "
-        "is unknown. html: an HTML fragment or full document, at most 256 KB in UTF-8; remove all secrets. Scripts run in an "
-        "isolated sandbox: no fetch or forms submitted to servers. window.raphael.send(text) asks the owner's next message to "
-        "be text; window.raphael.open(url) asks to open an HTTPS link. Match the theme with CSS variables --bg, --fg, --muted, "
-        "--line, --accent. External scripts/styles/images may use cdnjs.cloudflare.com, cdn.jsdelivr.net and unpkg.com; "
-        "Google Fonts styles/fonts are allowed. Returns page_id; use update_page to replace it in place.",
+        "Prefer plain text or a table for a simple answer. report: the app draws it, opened from a link card; it shows when "
+        "its data is from and that it states only recorded facts, so write only what your tools returned (team_work, "
+        "team_overview, routine_list), leaving out the unknown. html: a fragment or document, at most 256 KB UTF-8, no secrets, run in a sandbox without fetch or server "
+        "forms. window.raphael.send(text) asks the owner's next message to be text; window.raphael.open(url) asks to open an "
+        "HTTPS link. Theme CSS variables: --bg, --fg, --muted, --line, --accent. External assets: cdnjs.cloudflare.com, "
+        "cdn.jsdelivr.net, unpkg.com, Google Fonts. Returns page_id; update_page replaces it in place.",
         {"title": {"type": "string", "maxLength": 80}, "report": REPORT, "html": {"type": "string"},
          "fallback_text": {"type": "string", "maxLength": 1500},
          "height": {"type": "integer", "minimum": 80, "maximum": 720}}, ["title"]),
     UPDATE_PAGE: definition(
-        "Replace a page in place, keeping its page_id and increasing its revision: give report or html as show_page does. "
-        "Only a page in this member's current conversation may be updated. At most 256 KB UTF-8; remove secrets. "
-        "window.raphael.send(text) asks for the owner's next message; window.raphael.open(url) asks to open HTTPS. "
-        "Theme variables: --bg, --fg, --muted, --line, --accent. The sandbox has no fetch or server forms.",
-        {"page_id": {"type": "string"}, "report": REPORT, "html": {"type": "string"}, "title": {"type": "string", "maxLength": 80}},
+        "Replace a page of this member's current conversation in place, keeping its page_id and increasing its revision. "
+        "Give report or html under show_page's rules (size, secrets, sandbox, theme).",
+        # The report is checked as show_page's is (report_page.py); repeating its schema here cost ~800 tokens a turn.
+        {"page_id": {"type": "string"}, "report": {"type": "object", "description": "The same shape as show_page's report."},
+         "html": {"type": "string"}, "title": {"type": "string", "maxLength": 80}},
         ["page_id"]),
     SET_MY_JOB: definition(
         "Save the job the owner has just given you, so that it stays yours in every later conversation and your colleagues "

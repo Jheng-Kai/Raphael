@@ -39,8 +39,9 @@ def test_page_tools_are_t0_and_shared_by_brains():
     definitions = dict(definitions_for(RAPHAEL))
     for name in ("show_page", "update_page"):
         assert tool(name).tier == Tier.T0
-        description = definitions[name]["description"]
-        assert "window.raphael.send" in description and "--accent" in description
+    # show_page carries the page's rules; update_page, always offered beside it, points to them instead of repeating them.
+    assert "window.raphael.send" in definitions["show_page"]["description"] and "--accent" in definitions["show_page"]["description"]
+    assert "show_page's rules" in definitions["update_page"]["description"]
 
 
 async def test_harness_stores_page_on_turn_updates_in_place_and_notifies(make_rig, client):
