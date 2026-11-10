@@ -41,7 +41,8 @@ export function checkRendered(name, context = {}) {
     }
     if (name === "template-review-context") {
       const fields = [...body.querySelectorAll('.tpr-field > h4')].map(h => h.textContent);
-      require(fields[0] === '指示' && body.querySelector('.tpr-box').textContent.includes(template.instructions.trim().slice(0, 12)), `instructions first, in full: ${fields}`);
+      const field = label => [...body.querySelectorAll('.tpr-field')].find(section => section.querySelector('h4').textContent === label)?.textContent ?? '';
+      require(fields.join() === '角色,指示,個性,回覆風格,技能' && field('指示').includes(template.instructions.trim().slice(0, 12)) && field('角色').includes(template.role), `who it is, then its instructions in full: ${fields}`);
       require(body.textContent.includes(template.personality.trim().slice(0, 12)), "the personality in full");
       require(body.querySelectorAll('[data-tpl-go^="skill:"]').length === template.skills.length, "one row per skill, each opening its page");
     }
@@ -5793,6 +5794,8 @@ export function checkRendered(name, context = {}) {
   if (name === "conversation-share-menu") {
     const item = document.querySelector('#app-popover .menu-action');
     require(visible(item) && item.textContent.trim().length > 0, "share opens one plain choice that says what it does");
+    // Sharing saves a file or prepares a publish request on GitHub; there is no link to share (owner, 2026-11-11).
+    require(/檔案/.test(item.textContent) && /GitHub/.test(item.textContent) && !/連結|link/i.test(item.textContent), `the choice says a file is saved or a request is prepared, and promises no link: ${item.textContent.trim()}`);
     return { check: name };
   }
   if (name === "store-n8n") {

@@ -2214,7 +2214,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       case "search":
       case "search-close":
         break;
-      // As Grok Bot's: one choice, 建立副本 · 分享範本連結, and only that asks the member to package itself (owner, 2026-11-07).
+      // As Grok Bot's: one choice, 建立副本 with a line saying what follows (a file saved, or a publish request prepared on GitHub; never a link), and only that asks the member to package itself (owner, 2026-11-07).
       case "share-member": {
         const member = memberId();
         openMenu(act, [], "", () => {}, undefined, [{ label: t("template.copyTitle"), desc: t("template.copyHint"), icon: "copy", run() { closeMenu(); askInChat(member, "share-template"); } }]);
