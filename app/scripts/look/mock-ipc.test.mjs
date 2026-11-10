@@ -157,7 +157,7 @@ describe("shared look IPC boundary", () => {
     const url = 'https://example.com/research';
     const preview = await target.__TAURI_INTERNALS__.invoke('core_call', { method: 'links.preview', params: { url } });
     // example.com stands for a page that has a title, so a bare link's chip can say it (link-chips).
-    expect(preview).toEqual({ url, site: 'example.com', title: '範例網頁標題', description: '這一頁的一句摘要。', thumbnail: null });
+    expect(preview).toEqual({ url, site: 'example.com', title: '範例網頁標題', description: '這一頁的摘要很長：從產品的來歷、每一種尺寸與顏色、材質與保養方式，一路說到配送、退換貨與保固的每一條細節，沒有人會在預覽裡讀完它。', thumbnail: null });
     const other = await target.__TAURI_INTERNALS__.invoke('core_call', { method: 'links.preview', params: { url: 'https://x.com/a' } });
     expect(other).toEqual({ url: 'https://x.com/a', site: 'x.com', title: '', description: '', thumbnail: null });
     expect(state.errors).toEqual([]);

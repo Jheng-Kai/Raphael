@@ -445,7 +445,7 @@ Appearance uses the shared theme/language dropdown rows; dictionary entries reta
 Representative main-page acceptance (all consumers of the shared layout):
 
 ```powershell
-npm run look -- home home-empty home-trend-tip home-many home-motion chat details details-routines sidebar sidebar-folders dictation-overview dictation-history dictation-heat-press dictation-dictionary dictation-keyboard profile appearance models dictation agent messaging about plugins-installed plugins-store usage automations-calendar automations-day automation-weekly --theme both --width 1120,720,1920x1080
+npm run look -- home home-empty home-trend-tip home-many home-motion chat details details-routines sidebar sidebar-folders dictation-overview dictation-history dictation-heat-press dictation-dictionary dictation-keyboard profile appearance models dictation agent messaging about plugins-installed plugins-store usage automations-calendar automations-day --theme both --width 1120,720,1920x1080
 ```
 
 The dictionary scene uses twelve words to expose column count and wrapping; the
@@ -685,7 +685,7 @@ and the single participant row. No new page, setting, RPC or migration.
 
 Selected look scenes: all existing sidebar.mjs scenes; busy-team-typing;
 daily-footer-hover, daily-footer-marks, daily-footer-home, daily-press-feedback,
-daily-press-surfaces, daily-press-event, daily-press-card, daily-press-desktop, daily-newest,
+daily-press-surfaces, daily-press-card, daily-press-desktop, daily-newest,
 daily-folder-heading, daily-copy-chief, daily-copy-member, daily-copy-room, daily-copy-setup, daily-copy-webhook,
 daily-draft-member, daily-draft-room, daily-paste-chief, daily-paste-room,
 daily-long-draft, daily-faces-2, daily-faces-3, daily-faces-4,

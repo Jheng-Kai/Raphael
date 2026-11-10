@@ -544,9 +544,14 @@ function joinControl(s: StoreService, v: ConnectionsView, deferIcon = false): st
   return btn(`${deferIcon ? '<span class="i" aria-hidden="true"></span>' : ico("plus")}${esc(t("conn.join"))}`, "sm", ` data-conn="join" data-id="${esc(s.id)}" aria-label="${esc(t("conn.joinAria", { p0: s.name }))}"${v.login ? " disabled" : ""}`);
 }
 
-/** What adding the entry asks of the owner, in words, for the row and the page to show before anything is pressed. */
-const needWords = (s: StoreService): string =>
-  s.needs === "key" ? t("setup.needsKey") : s.needs === "own_app" ? t("setup.needsOwnApp") : PRESET_FORMS[s.id] && !s.server_id ? t("store.needsOwnServer") : "";
+/** An app set up in the conversation rather than here: a server of the owner's own, or a developer app of theirs. */
+const inChat = (s: StoreService): boolean => !!PRESET_FORMS[s.id] || s.needs === "own_app";
+
+/**
+ * What adding the entry asks of the owner, in words, for the row and the page to show before anything is pressed: only a key.
+ * What an app set up in the conversation needs is said there, so its row shows nothing it would have to explain.
+ */
+const needWords = (s: StoreService): string => (s.needs === "key" && !inChat(s) ? t("setup.needsKey") : "");
 const needHTML = (text: string): string => `<b class="need">${esc(text)}</b>`;
 
 /**
@@ -690,8 +695,7 @@ function storePageHTML(s: StoreService, v: ConnectionsView): string {
       : btn(`${ico("plus")}${esc(t("conn.join"))}`, "pri", ` data-conn="join" data-id="${esc(s.id)}"${v.login ? " disabled" : ""}`);
   const failed = loginErrorHTML(v, s.id);
   const need = s.server_id ? "" : needWords(s);
-  const lead = s.needs === "own_app" ? "setup.leadOwnApp" : PRESET_FORMS[s.id] ? "store.leadOwnServer" : "setup.leadKey";
-  const needs = need ? `<p class="cs-needs"><b>${esc(need)}</b> · ${esc(t(lead, { p0: s.name }))}</p>` : "";
+  const needs = need ? `<p class="cs-needs"><b>${esc(need)}</b> · ${esc(t("setup.leadKey", { p0: s.name }))}</p>` : "";
   const examples = (s.examples[getLocale()] ?? s.examples.en ?? []).map((text) => `<li>${ico("chat")}<span>${esc(text)}</span></li>`).join("");
   return (
     backHTML() +
@@ -1465,17 +1469,11 @@ export function createConnections(host: ConnectionsHost): Connections {
       case "join": {
         const entry = entryById(id);
         if (!entry || entry.server_id) break;
-        const preset = PRESET_FORMS[entry.id];
-        if (preset) {
-          if (form?.busy) break;
-          open = null;
-          form = { ...emptyForm(), ...preset };
-          redraw();
-          focusOn("#conn-url");
-          break;
-        }
-        // An app that asks for the owner's own key or developer app asks in its form first; the rest sign in at once.
-        if (entry.needs === "key" || entry.needs === "own_app") void addWithForm(entry, entry.needs);
+        // A sign-in, or one key, is done here at once. Anything more (a server of the owner's own, a developer app) is set
+        // up in the conversation, where the member says what it needs and explains it (owner, 2026-11-09: 「一律全部都在對話中
+        // 進行…除非真的是登入就結束 或是輸入金鑰匙就結束」).
+        if (inChat(entry)) { host.tryPrompt(t("store.setUpInChat", { p0: entry.name })); break; }
+        if (entry.needs === "key") void addWithForm(entry, entry.needs);
         else void signIn({ catalog_id: entry.id }, entry.name, false);
         break;
       }

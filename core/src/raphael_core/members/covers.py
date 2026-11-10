@@ -2,6 +2,7 @@
 
 import json
 import logging
+import math
 import re
 
 from ..protocol import INVALID_PARAMS, RpcError
@@ -17,6 +18,12 @@ def selection(value):
     if isinstance(value, str) and value.startswith('pattern:') and PATTERN.fullmatch(value[8:]):
         return {'kind': 'pattern', 'id': value[8:]}
     raise RpcError(INVALID_PARAMS, 'Invalid params: cover', {'kind': 'cover'})
+
+
+def position(value):
+    if type(value) not in (int, float) or not 0 <= value <= 100 or not math.isfinite(value):
+        raise RpcError(INVALID_PARAMS, 'Invalid params: cover position', {'kind': 'cover'})
+    return round(value, 1)
 
 
 class Covers:
@@ -40,7 +47,13 @@ class Covers:
             return {'kind': 'pattern', 'id': value['id']}
         name = value.get('file')
         if value.get('kind') == 'image' and isinstance(name, str) and re.fullmatch(rf'{member_id}-[a-f0-9]{{12}}\.(?:png|jpg|webp|gif)', name):
-            return {'kind': 'image', 'file': name}
+            image = {'kind': 'image', 'file': name}
+            if 'position' in value:
+                try:
+                    image['position'] = position(value['position'])
+                except RpcError:
+                    pass
+            return image
         return None
 
     def view(self, member_id):
@@ -53,8 +66,16 @@ class Covers:
             except (OSError, ValueError):
                 return None
             url = self._data_url(path)
-            return {'kind': 'image', 'url': url} if url else None
+            return {'kind': 'image', 'url': url, **({'position': value['position']} if 'position' in value else {})} if url else None
         return value
+
+    def reposition(self, member_id, value):
+        percent = position(value)
+        image = self.reference(member_id)
+        shown = self.view(member_id)
+        if not image or image['kind'] != 'image' or not shown or shown['kind'] != 'image':
+            raise RpcError(INVALID_PARAMS, 'Invalid params: a cover picture is required', {'kind': 'cover'})
+        return {**image, 'position': percent}
 
     def remove_image(self, name):
         path = self.folder / name
@@ -77,7 +98,7 @@ class Covers:
                 part.replace(path)
         finally:
             part.unlink(missing_ok=True)
-        if previous and previous['kind'] == 'image' and previous != value:
+        if previous and previous['kind'] == 'image' and (not value or value.get('file') != previous['file']):
             self.remove_image(previous['file'])
 
     def stage(self, name, raw):

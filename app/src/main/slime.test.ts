@@ -5,7 +5,9 @@ import { afterEach, expect, test, vi } from "vitest";
 import { faceHTML } from "./members";
 import { GAZE_ROWS, PROP_ROWS, celCount } from "./slime-motion";
 import { crownedId, crownPrimary } from "./crown";
-import { followSlimeRoster, handOver, isSlimeAvatar, parseSlime, pickSlime, seasonalHat, setSlimeState, slimeFaceHTML, slimePickerHTML, slimeSVG, type SlimeState } from "./slime";
+import { catalogs } from "./i18n";
+import { defaultSlimeAvatar, followSlimeRoster, handOver, isSlimeAvatar, parseSlime, pickSlime, seasonalHat, setSlimeState, slimeCharactersHTML, slimeColorOf, slimeFaceHTML, slimePickerHTML, slimeSVG, type SlimeState } from "./slime";
+import type { SlimeCharacter, SlimeColor } from "./slime";
 
 const css = readFileSync(resolve(__dirname, "slime.css"), "utf8");
 const keyframes = css.split("@keyframes ").slice(1).map(chunk => {
@@ -20,6 +22,141 @@ const keyframes = css.split("@keyframes ").slice(1).map(chunk => {
 const stateIn = (el: Element): string | undefined => el.querySelector<SVGElement>("svg.slime")?.dataset.state;
 const plain = { now: new Date(2026, 5, 1) }, witch = { now: new Date(2026, 9, 31) };
 const same = (text: string): string => text;
+
+const catalogPicker = document.createElement("div");
+catalogPicker.className = "menu";
+catalogPicker.innerHTML = slimePickerHTML(null, same);
+const catalogButtons = [...catalogPicker.querySelectorAll<HTMLElement>("[data-slime-character]")];
+const catalogIds = catalogButtons.map(button => button.dataset.slimeCharacter as SlimeCharacter);
+const originalIds = ["rimuru", "shion", "diablo", "benimaru", "shuna", "souei", "hakurou", "gobta", "rigur", "rigurd", "milim", "veldora", "ranga", "gabiru", "geld", "treyni", "kurobe", "shizu", "hinata", "guy", "testarossa", "ultima", "carrera", "ramiris"];
+const catalogStates: SlimeState[] = ["idle", "thinking", "working", "searching", "computer", "waiting", "blocked", "done", "error", "sleeping", "arriving"];
+const groupIds = ["characters", "animals", "jobs", "nature", "seasonal", "objects", "colors"] as const;
+const colorButtons = [...catalogPicker.querySelectorAll<HTMLElement>("[data-slime-color]")];
+const colorIds = colorButtons.map(button => button.dataset.slimeColor as SlimeColor);
+
+test("every character belongs to one labeled group, in the owner's order without reordering its slimes", () => {
+  const groups = [...catalogPicker.querySelectorAll<HTMLElement>("[data-slime-group]")];
+  expect(groups.map(group => group.dataset.slimeGroup)).toEqual(groupIds);
+  expect(groups.map(group => group.querySelectorAll('[role="menuitem"]').length)).toEqual([50, 12, 8, 8, 6, 4, colorIds.length]);
+  const ungrouped = document.createElement("div");
+  ungrouped.innerHTML = slimeCharactersHTML(null, same);
+  expect(catalogIds).toEqual([...ungrouped.querySelectorAll<HTMLElement>("[data-slime-character]")].map(button => button.dataset.slimeCharacter));
+  expect(catalogButtons.every(button => groupIds.slice(0, -1).includes(button.closest<HTMLElement>("[data-slime-group]")!.dataset.slimeGroup as typeof groupIds[number]))).toBe(true);
+  for (const [index, group] of groups.entries()) {
+    expect(group.getAttribute("role")).toBe("group");
+    expect(group.getAttribute("aria-label")).toBe(group.querySelector("h3")!.textContent);
+    for (const [locale, messages] of Object.entries(catalogs)) {
+      const label = messages[`slime.group.${groupIds[index]!}`];
+      expect(label.trim(), `${locale}:${groupIds[index]}`).not.toBe("");
+      expect(label).not.toMatch(/\uFFFD|\?{2,}|^slime\./);
+    }
+  }
+  expect(pickSlime(groups[0]!.querySelector<HTMLElement>("h3")!)).toBeNull();
+});
+
+test.each(colorIds)("plain colour %s has a localized name and round-trips through selection and saved avatars", id => {
+  const button = colorButtons.find(button => button.dataset.slimeColor === id)!;
+  for (const [locale, messages] of Object.entries(catalogs)) {
+    const label = messages[`slime.color.${id}`];
+    expect(label.trim(), `${locale}:${id}`).not.toBe("");
+    expect(label).not.toMatch(/\uFFFD|\?{2,}|^slime\./);
+  }
+  expect(button.getAttribute("aria-label")).toContain(button.title);
+  expect(button.closest<HTMLElement>("[data-slime-group]")!.dataset.slimeGroup).toBe("colors");
+  expect(parseSlime(`slime:color:${id}`)).toEqual({ color: id });
+  expect(pickSlime(button)).toBe(`slime:color:${id}`);
+  expect(button.getAttribute("aria-pressed")).toBe("true");
+  expect(catalogPicker.querySelectorAll('[aria-pressed="true"]')).toHaveLength(1);
+  const selected = document.createElement("div");
+  selected.innerHTML = slimePickerHTML(`slime:color:${id}`, same);
+  expect(selected.querySelector<HTMLElement>('[aria-pressed="true"]')!.dataset.slimeColor).toBe(id);
+});
+
+test("the expanded palette preserves the original colours, remains distinct and joins the default rotation except grey", () => {
+  const original = ["sky", "lavender", "coral", "tangerine", "ochre", "leaf", "teal", "ocean", "orchid", "charcoal"];
+  expect(colorIds.slice(0, original.length)).toEqual(original);
+  expect(colorIds.length).toBeGreaterThanOrEqual(20);
+  expect(new Set(colorIds).size).toBe(colorIds.length);
+  const colors = colorIds.map(id => slimeColorOf({ id: 1, avatar: `slime:color:${id}` }));
+  expect(colors.slice(0, original.length)).toEqual(["#1EA7FD", "#905AFB", "#FC2C3E", "#F9670E", "#F69412", "#14C370", "#13B8A3", "#1884FC", "#FB3499", "#777777"]);
+  expect(new Set(colors).size).toBe(colorIds.length);
+  for (const color of colors.slice(original.length)) {
+    const channels = color.slice(1).match(/../g)!.map(channel => parseInt(channel, 16));
+    expect(Math.max(...channels) - Math.min(...channels), color).toBeGreaterThanOrEqual(60);
+    expect(Math.max(...channels), color).toBeGreaterThanOrEqual(120);
+    expect(Math.min(...channels), color).toBeLessThanOrEqual(180);
+  }
+  const expected = colorIds.filter(id => id !== "charcoal").map(id => `slime:color:${id}`);
+  expect(Array.from({ length: expected.length }, (_, id) => defaultSlimeAvatar(id))).toEqual(expected);
+  expect(Array.from({ length: expected.length }, (_, id) => defaultSlimeAvatar(-id))).toEqual(expected);
+  expect(new Set(colors.map((_, id) => slimeColorOf({ id })))).toEqual(new Set(colors.filter((_, index) => colorIds[index] !== "charcoal")));
+});
+
+test.each(Object.entries({ azure: "sky", mint: "teal", sunny: "ochre", coral: "coral", rose: "orchid", lilac: "lavender", slate: "charcoal", fox: "tangerine", sprout: "leaf", crown: "ochre" }))("legacy colour alias %s keeps its original meaning", (alias, color) => {
+  expect(parseSlime(`slime:${alias}`)).toEqual({ color });
+});
+
+test("the expanded catalog preserves the original choices and adds at least sixty descriptive looks", () => {
+  expect(catalogIds.slice(0, originalIds.length)).toEqual(originalIds);
+  expect(catalogIds.length).toBeGreaterThanOrEqual(originalIds.length + 60);
+  expect(new Set(catalogIds).size).toBe(catalogIds.length);
+  for (const id of catalogIds.slice(originalIds.length)) expect(id).toMatch(/^[a-z]+(?:-[a-z]+)*$/);
+});
+
+test.each(catalogIds)("every picker choice has localized labels and a persistent round trip: %s", id => {
+  const button = catalogButtons.find(button => button.dataset.slimeCharacter === id)!;
+  for (const [locale, messages] of Object.entries(catalogs)) {
+    const label = messages[`slime.${id}`];
+    expect(label, `${locale}:slime.${id}`).toBeTypeOf("string");
+    expect(label.trim(), `${locale}:slime.${id}`).not.toBe("");
+    expect(label, `${locale}:slime.${id}`).not.toMatch(/\uFFFD|\?{2,}|^slime\./);
+  }
+  const saved = pickSlime(button);
+  expect(saved).toBe(`slime:${id}`);
+  expect(parseSlime(saved)).toEqual({ character: id });
+  expect(isSlimeAvatar(saved)).toBe(true);
+  expect(button.getAttribute("aria-pressed")).toBe("true");
+  expect(catalogPicker.querySelectorAll('[aria-pressed="true"]')).toHaveLength(1);
+  for (const size of [20, 96]) expect(slimeFaceHTML({ id: 20000, avatar: saved }, size)).toContain(`--av:${size}px`);
+});
+
+test.each(catalogIds)("%s retains valid shared geometry in every state, with a crown and seasonal dates", id => {
+  for (const state of catalogStates) {
+    const markup = slimeSVG({ character: id }, { ...plain, state });
+    expect(markup, `${id}:${state}`).not.toMatch(/NaN|Infinity|undefined|\bd="\s*"/);
+    expect(markup, `${id}:${state}`).toContain('class="slime-body"');
+    expect(markup, `${id}:${state}`).toContain('class="slime-eyes"');
+    expect(markup, `${id}:${state}`).toContain('d="M 8 70 C 8 51 24 28 48 28');
+  }
+  const host = document.createElement("div");
+  host.innerHTML = slimeSVG({ character: id }, plain);
+  const marks = host.querySelector("svg.slime .slime-marks")!.innerHTML;
+  for (const now of [witch.now, new Date(2026, 11, 24)]) {
+    host.innerHTML = slimeSVG({ character: id }, { now });
+    expect(host.querySelector("svg.slime .slime-marks")!.innerHTML).toBe(marks);
+    const crowned = slimeSVG({ character: id }, { now, crown: true, state: "working" });
+    expect(crowned).toContain('fill="#F6C141"');
+    expect(crowned).not.toMatch(/NaN|Infinity|\bd="\s*"/);
+  }
+}, 30000);
+
+test("no two characters share both their colour and their complete costume", () => {
+  const signatures = new Map<string, string>();
+  for (const id of catalogIds) {
+    const host = document.createElement("div");
+    host.innerHTML = slimeSVG({ character: id }, plain);
+    const svg = host.querySelector<SVGElement>("svg.slime")!;
+    const signature = [svg.style.getPropertyValue("--slime-color"), svg.querySelector(".slime-back")?.innerHTML ?? "", svg.querySelector(".slime-marks")!.innerHTML].join("|");
+    expect(signatures.get(signature), id).toBeUndefined();
+    signatures.set(signature, id);
+    if (!originalIds.includes(id)) {
+      for (const mark of svg.querySelectorAll(".slime-marks, .slime-back")) {
+        expect(mark.querySelector("text, image, linearGradient, radialGradient, [stroke]")).toBeNull();
+      }
+      expect(svg.querySelector(".slime-marks path, .slime-back path"), id).not.toBeNull();
+    }
+  }
+});
 
 test("the primary member's slime wears the gold crown on its edge, in place of a season's hat; nobody else's does", () => {
   crownPrimary({ members: [{ id: 3 }, { id: 4 }], team_context: { primary_id: 3 } });

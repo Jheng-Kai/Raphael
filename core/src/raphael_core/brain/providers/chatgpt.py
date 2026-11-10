@@ -9,6 +9,7 @@ import time
 
 import httpx
 
+from ..meter import responses as responses_usage
 from ..model_ref import EFFORTS
 from ..openrouter import (
     ChatTurn, ChatToolCall, Completion, OpenRouterError, TextCompletion, ToolCall, ToolPlan, request_timeout, retry_after_of,
@@ -161,15 +162,19 @@ class ChatGPTProvider:
         return rows
 
     async def chat_tools(self, *, model, messages, tools, timeout_s, max_tokens, fallbacks=(), reasoning_effort="none",
-                         _retain_reasoning=True, _cache_key=None):
+                         _retain_reasoning=True, _cache_key=None, session=None, cache_ttl=None):
+        """One turn of a conversation. `session` names the conversation: as Codex does (core/src/client.rs,
+        requests/headers.rs), it is the prompt cache key and the `session-id` header, from which ChatGPT
+        derives cache affinity, so every turn of it lands where its prefix is cached. The cache's lifetime
+        is the service's own (`cache_ttl` is for Anthropic prompts)."""
         token = await self.auth.access_token()
-        session = self.auth.session()
+        login = self.auth.session()
         items, instructions = _input(messages)
         body = {"model": model, "input": items, "store": False, "stream": True}
         if _retain_reasoning:
             body["include"] = ["reasoning.encrypted_content"]
-        if _cache_key:
-            body["prompt_cache_key"] = _cache_key
+        if _cache_key or session:
+            body["prompt_cache_key"] = _cache_key or session
         if instructions:
             body["instructions"] = instructions
         effort = self._effort(model, reasoning_effort)
@@ -185,7 +190,8 @@ class ChatGPTProvider:
         completed, streamed, cut = None, [], False
         try:
             async with self.auth.http().stream("POST", RESOURCE + "/responses", json=body,
-                    headers={"Authorization": "Bearer " + token}, timeout=request_timeout(timeout_s), follow_redirects=False) as response:
+                    headers={"Authorization": "Bearer " + token, **({"session-id": session} if session else {})},
+                    timeout=request_timeout(timeout_s), follow_redirects=False) as response:
                 if not response.is_success:
                     await response.aread()
                     try:
@@ -214,7 +220,7 @@ class ChatGPTProvider:
             raise OpenRouterError(200, "invalid_request", "Invalid ChatGPT response stream") from None
         if completed is None or completed.get("status") != ("incomplete" if cut else "completed") or not isinstance(completed.get("output"), list):
             raise OpenRouterError(200, "tool_broken", "ChatGPT stream ended without completed inference")
-        self.auth.check_session(session)
+        self.auth.check_session(login)
         # The plan endpoint streams its items and closes with an empty `output`.
         output, text, calls = completed["output"] or streamed, [], []
         for item in output:
@@ -252,7 +258,7 @@ class ChatGPTProvider:
         return ChatTurn("".join(text), calls, completed.get("model", model), 0.0,
             int(usage.get("input_tokens", 0)), int(usage.get("output_tokens", 0)),
             int((time.perf_counter() - started) * 1000), usage_known=True, responses_output=output,
-            finish_reason="length" if cut else "")
+            finish_reason="length" if cut else "", usage=responses_usage(usage))
 
     async def chat_text(self, *, model, system, user, timeout_s, max_tokens, fallbacks=(), plugins=(), reasoning_effort="none",
                         _cache_key="raphael-text"):
@@ -263,7 +269,7 @@ class ChatGPTProvider:
             max_tokens=max_tokens, reasoning_effort=reasoning_effort,
             _retain_reasoning=False, _cache_key=_cache_key)
         return TextCompletion(result.content, result.model, 0.0, result.prompt_tokens,
-                              result.completion_tokens, result.latency_ms, [], usage_known=True)
+                              result.completion_tokens, result.latency_ms, [], usage_known=True, usage=result.usage)
 
     async def complete_json(self, *, schema, schema_name, system, user, **kwargs):
         import jsonschema
@@ -278,7 +284,8 @@ class ChatGPTProvider:
                 raise ValueError
         except (ValueError, jsonschema.ValidationError):
             raise OpenRouterError(200, "invalid_request", "ChatGPT returned invalid structured output") from None
-        return Completion(data, result.model, 0.0, result.prompt_tokens, result.completion_tokens, result.latency_ms)
+        return Completion(data, result.model, 0.0, result.prompt_tokens, result.completion_tokens, result.latency_ms,
+                          usage=result.usage)
 
     async def plan_tools(self, *, system, user, **kwargs):
         result = await self.chat_tools(messages=[{"role": "system", "content": system},

@@ -1872,6 +1872,33 @@ PRAGMA user_version = 74;
 COMMIT;
 """
 
+# A work hand-off's reply to whoever handed it over (background/handback.py), kept apart from the
+# report the owner reads in the worker's own conversation. Existing rows have none.
+_MIGRATIONS[75] = """
+BEGIN;
+ALTER TABLE worker_tasks ADD COLUMN handback TEXT;
+PRAGMA user_version = 75;
+COMMIT;
+"""
+
+# Every model call's exact usage (brain/meter.py), internal only: what kind of work it was, whether it was billed
+# to an API key or a subscription, the input the provider's cache read and wrote (five-minute and one-hour
+# writes apart), the reasoning part of the output, the cost the provider reported, and the member. Rows written
+# before have zeros and nulls: their split was never known.
+_MIGRATIONS[76] = """
+BEGIN;
+ALTER TABLE spend ADD COLUMN job TEXT;
+ALTER TABLE spend ADD COLUMN billing TEXT;
+ALTER TABLE spend ADD COLUMN cache_read_tokens INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE spend ADD COLUMN cache_write_tokens INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE spend ADD COLUMN cache_write_long_tokens INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE spend ADD COLUMN reasoning_tokens INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE spend ADD COLUMN reported_cost_usd REAL;
+ALTER TABLE spend ADD COLUMN member_id INTEGER;
+PRAGMA user_version = 76;
+COMMIT;
+"""
+
 LATEST_VERSION = max(_MIGRATIONS)
 
 

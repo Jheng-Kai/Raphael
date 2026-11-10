@@ -119,6 +119,8 @@ class Task:
     requires_artifact: bool = False
     report_room_id: int | None = None
     report_thread_id: int | None = None
+    # A work hand-off's words to whoever handed it over (background/handback.py); None before it ends.
+    handback: str | None = None
 
     @property
     def full_report(self) -> str:
@@ -181,7 +183,7 @@ _TASK_COLUMNS = (
     " announced, rerun_of, member_id, routine_id, scope, room_id, thread_id,"
     " parent_task_id, root_task_id, stage_id, from_member_id, source_turn_id, model_ref, mode,"
     " done_when, idempotency_key, ready_at_ms, dispatch_policy, schedule_provenance, continuation, generation, requires_artifact,"
-    " report_room_id, report_thread_id"
+    " report_room_id, report_thread_id, handback"
 )
 _STEP_COLUMNS = "n, at_ms, kind, tool, server, tier, outcome, cost_usd, ms, reason, detail"
 
@@ -491,6 +493,7 @@ class TaskStore:
         detail: str | None,
         reason: str | None,
         publish=None,
+        handback: str | None = None,
     ) -> None:
         if state not in FINAL_STATES:
             raise ValueError(f"{state!r} is not a state a task ends in")
@@ -498,8 +501,8 @@ class TaskStore:
         with self._conn:
             self._conn.execute(
                 "UPDATE worker_tasks SET state = ?, finished_at_ms = ?, report_prefix = ?,"
-                " report_text = ?, report_detail = ?, reason = ? WHERE id = ?",
-                (state, self._now_ms(), prefix, text, detail, reason, task_id),
+                " report_text = ?, report_detail = ?, reason = ?, handback = ? WHERE id = ?",
+                (state, self._now_ms(), prefix, text, detail, reason, handback, task_id),
             )
             stage_state = 'done' if state == 'done' else 'cancelled' if state == 'cancelled' else 'incomplete' if reason in (
                 'missing_artifact','artifact_changed','work_without_action','missing_terminal','dangling_mention','child_work_incomplete') else 'blocked'

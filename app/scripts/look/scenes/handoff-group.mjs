@@ -7,5 +7,5 @@ export default [
   scene("handoff-group-long", "Long and unbroken names wrap inside the centred column", [wait('[data-handoff-group]'), check("handoff-group-long")], { handoffGroup: "long" }),
   scene("handoff-group-open", "The members' conversation stays open through work storms and arriving receipts", [wait('[data-handoff-group]'), click('[data-handoff-group]'),
     wait('.peer-chat'), { action: "handoff-arrival" }, check("handoff-group-open")], { handoffGroup: "mixed" }),
-  scene("handoff-group-room", "A room message separates consecutive groups", [room(1), wait('.au-room-thread [data-handoff-group]'), check("handoff-group-room")], { handoffGroup: "room" }),
+  scene("handoff-group-room", "A room names both members of each pair, keeps own work apart, and a message separates groups", [room(1), wait('.au-room-thread [data-handoff-group]'), check("handoff-group-room")], { handoffGroup: "room" }),
 ];

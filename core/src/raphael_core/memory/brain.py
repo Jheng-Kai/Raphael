@@ -48,7 +48,7 @@ class MemoryBrain:
             result = await client.complete_json(**kwargs)
             if self.ledger is not None:
                 self.ledger.add(model=result.model, cost_usd=result.cost_usd,
-                                prompt_tokens=result.prompt_tokens, completion_tokens=result.completion_tokens,
+                                usage=getattr(result, "usage", None), prompt_tokens=result.prompt_tokens, completion_tokens=result.completion_tokens,
                                 ms=result.latency_ms,
                                 billing_source="subscription" if model.startswith("@chatgpt:") else None)
             return result

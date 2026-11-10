@@ -12,6 +12,7 @@ from collections.abc import Awaitable, Callable, Sequence
 
 from ..brain.model_ref import short_name
 from ..brain.openrouter import OpenRouterError
+from ..brain.prompt_cache import cache_options
 from ..brain.providers.base import ModelProvider
 from ..brain.textnorm import public_line
 from ..background.run import estimate_cost, summary_reply
@@ -111,6 +112,11 @@ def _public_text(value: object, limit: int, *, sentences: int | None = None) -> 
 
 
 class NarratedLoop:
+    # The conversation's name for its provider's cache, and how long Anthropic keeps it ("1h" or "5m";
+    # brain/prompt_cache.py). None leaves the provider to choose.
+    cache_session: str | None = None
+    cache_ttl: str | None = None
+
     def __init__(
         self, *, client: ModelProvider, model: str, ledger: Ledger,
         language: str, plain: bool, system: str, user: str, tools: Sequence[dict],
@@ -167,6 +173,7 @@ class NarratedLoop:
                         model=self.model, fallbacks=self.fallbacks,
                         messages=list(messages), tools=list(tools), timeout_s=MODEL_SILENCE_S,
                         max_tokens=self.max_tokens * room, reasoning_effort=self.reasoning_effort,
+                        **cache_options(self.cache_session, self.cache_ttl),
                     )
                     self.last_failure = None
                     break
@@ -202,7 +209,7 @@ class NarratedLoop:
             model=answer.model, cost_usd=answer.cost_usd if answer.usage_known else max(
                 answer.cost_usd, estimate_cost(self.model, len(str(messages)))
             ),
-            prompt_tokens=answer.prompt_tokens, completion_tokens=answer.completion_tokens,
+            usage=getattr(answer, "usage", None), prompt_tokens=answer.prompt_tokens, completion_tokens=answer.completion_tokens,
             ms=int((time.perf_counter() - began) * 1000),
         )
         if answer.content.strip():
@@ -229,7 +236,7 @@ class NarratedLoop:
 
     async def summarize(self, system: str, user: str, max_tokens: int) -> str:
         reply = await summary_reply(self.client, self.model, system=system, user=user, max_tokens=max_tokens)
-        self.ledger.add(model=reply.model, cost_usd=reply.cost_usd, prompt_tokens=reply.prompt_tokens,
+        self.ledger.add(model=reply.model, cost_usd=reply.cost_usd, usage=getattr(reply, "usage", None), prompt_tokens=reply.prompt_tokens,
                         completion_tokens=reply.completion_tokens)
         return reply.text
 

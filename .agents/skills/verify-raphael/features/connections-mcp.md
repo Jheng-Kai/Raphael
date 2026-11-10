@@ -4,6 +4,19 @@ Owner decision 2026-10-30: Settings > Connections is the only connected-app entr
 The sidebar has no app entry or badge. The installed tab retains the shared inventory
 count and its unknown/loading state; connection and permission behavior is unchanged.
 
+## Setup in the conversation (owner, 2026-11-09)
+
+Owner: 「這種設定不管是 composio 還是甚麼的 一律全部都在對話中進行…除非真的是登入就結束 或是輸入金鑰匙就結束」. In the
+store, a sign-in or one key is still done at once; 加入 on anything more (a server of the owner's own such as n8n, a
+developer app of theirs) puts the owner's words 「幫我連接 <name>」 in the conversation's composer (`store.setUpInChat`)
+and its row says nothing it would have to explain. The member answers with a connect card (`connect_app`): a server
+card has `needs: "own_server"` and carries its own `fields` (n8n: `url`, `token`), which the card's inline form shows
+with no catalog read; `integrations.card_connect {id, fields}` takes them, the token field is emptied on submit, and
+the member explains each field in its reply. Scenes: store-n8n and plugins-setup-own-app (`store-in-chat`).
+
+```powershell
+npm run look -- store-n8n plugins-setup-own-app plugins-store-needs --theme both --width 1120,720,1920x1080
+```
 ## The store is only what is not added yet; n8n is a preset (owner, 2026-11-08)
 
 The store is one list, 「全部」 (or the chosen chip's name), of the apps not added yet: no 已連結 and no 常用
@@ -604,6 +617,15 @@ npm run look -- plugins-store-needs plugins-store-needs-page plugins-setup-key p
 `plugins-store-needs` requires the words on each row and no disabled 加入; the `setup-*` checks require masked
 fields, the guide or its fallback, the redirect address for a developer app, a key that is in no page text and no call
 but the one that adds the app, and an emptied masked field after a refusal; `card-*` checks require the same for the chat.
+
+An app on the owner's own server (n8n) is set up in the conversation (owner, 2026-11-09: setup happens in the chat
+unless it ends at a sign-in or a key). Its card (`needs: "own_server"`) says 需要自己的伺服器 and carries the fields
+the core declared: the address plain, the token masked, one 安全儲存, no modal and no catalog guide. Both values leave
+in the card's one `integrations.card_connect` call and in no page text.
+
+```powershell
+npm run look -- connector-server connector-server-sent --theme both --width 1120,720,1920x1080
+```
 
 ## Executable round 10 matrix
 

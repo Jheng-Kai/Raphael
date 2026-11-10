@@ -4,7 +4,7 @@
 
 import { noticeHTML } from "./missing";
 import "./messaging.css";
-import { openRoutineDialog } from "./routine-dialog";
+import { openRoutineView } from "./routine-view";
 import { mountConversationList } from "./conversation-list";
 import * as api from "./api";
 import "./member-panel.css";
@@ -141,7 +141,7 @@ export function createDetails(host: DetailsHost): DetailsPanel {
   }
 
   // A routine is its title and when it runs, with its own switch on the right as Grok Bot's Upcoming rows have
-  // (owner, 2026-11-07); the row opens the editor.
+  // (owner, 2026-11-07); the row opens it to read (routine-view.ts).
   function routineRowHTML(routine: Routine): string {
     return (
       `<div class="mb-routine-row" data-k="routine-row:${routine.id}"><button type="button" class="btn mb-rt${routine.when ? " is-event" : ""}" data-det="routine-open" data-id="${routine.id}" data-routine="${routine.id}" data-k="routine:${routine.id}">` +
@@ -151,10 +151,8 @@ export function createDetails(host: DetailsHost): DetailsPanel {
   }
 
   function routinesHTML(): string {
-    const head =
-      `<div class="mb-dh"><span>${esc(t("members.routines"))}</span>` +
-      iconButton("plus", t("members.routineAdd"), ` data-det="routine-add" data-k="routine-add"`, "row mb-tool") +
-      `</div>`;
+    // No plus: a routine is made by asking the member in the conversation, as the empty line says (owner, 2026-11-09).
+    const head = `<div class="mb-dh"><span>${esc(t("members.routines"))}</span></div>`;
     if (routines === "loading") return head + `<span class="spin" role="status" aria-label="${esc(t("common.loading"))}"></span>`;
     if (routines === "failed") return head + noticeHTML("routines");
     // An empty list is one quiet line outside the tinted list, in Grok Bot's words (Ask in chat to set a routine).
@@ -289,12 +287,10 @@ export function createDetails(host: DetailsHost): DetailsPanel {
       case "tab":
         if (['details', 'library', 'computer'].includes(act.dataset.tab!)) select(act.dataset.tab as DetailsTab);
         break;
-      case "routine-add":
-        openRoutineDialog({ members: host.list()?.members ?? [host.member()], memberId: member.id, onSaved: () => void loadRoutines() });
-        break;
+      // A routine is read here and changed by its member in the conversation (owner, 2026-11-09).
       case "routine-open": {
         const routine = Array.isArray(routines) ? routines.find(row => row.id === Number(act.dataset.id)) : undefined;
-        if (routine) openRoutineDialog({ members: host.list()?.members ?? [member], routine, onSaved: () => void loadRoutines(), onDeleted: () => void loadRoutines() });
+        if (routine) openRoutineView(routine, host.list()?.members ?? [member]);
         break;
       }
       case "routine-toggle": {

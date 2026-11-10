@@ -15,7 +15,7 @@ import { currentAvatar } from "./avatar";
 import { MEMORY_MAX, memoryError, type MemoryDocument } from "./memory-view";
 import type { Member, MemberGroup, MemberPatch, Routine } from "./types";
 import { btn, esc, openMenu, sel, tabs, tg, toaster } from "./ui";
-import { openRoutineDialog } from "./routine-dialog";
+import { openRoutineView } from "./routine-view";
 import "./member-profile.css";
 
 export type ProfileTab = "identity" | "soul" | "skills" | "memory" | "routines" | "permissions" | "voice";
@@ -215,11 +215,9 @@ export function openEditMemberDialog(host: MemberProfileHost, member: Member, in
       list.innerHTML = routines.length ? routines.map(r => `<div class="mp-resource"><button type="button" class="btn mp-routine-open" data-dlg="routine-edit" data-id="${r.id}"><b>${esc(r.title)}</b><p>${routineSentenceHTML(r)}</p>${r.when ? `<p>${esc(routineStatus(r))}</p>` : ""}</button>${tg(r.enabled, t("members.routineSwitch", { p0: r.title }), ` data-dlg="routine-toggle" data-id="${r.id}"`)}</div>`).join("") : `<p class="mp-empty">${esc(t("members.profile.noRoutines"))}</p>`;
     } catch (error) { if (alive) { list.innerHTML = btn(esc(t("members.profile.retry")), "sm", ' data-dlg="routine-retry"'); toaster.info(describeError(error)); } }
   }
+  // A routine is read here and made or changed by its member in the conversation (owner, 2026-11-09).
   function routineForm(existing?: Routine): void {
-    openRoutineDialog({
-      members: [member], memberId: member.id, routine: existing,
-      onSaved: () => void loadRoutines(), onDeleted: () => void loadRoutines(),
-    });
+    if (existing) openRoutineView(existing, [member]);
   }
   async function save(): Promise<void> {
     if (busy) return;

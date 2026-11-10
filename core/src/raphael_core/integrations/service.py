@@ -474,6 +474,9 @@ class IntegrationsService:
                 return {"ok": True, "tools": [tool.name for tool in tools]}
             except McpFailure as failure:
                 return {"ok": False, "error": failure.kind, "tools": []}
+            except Exception:
+                # Unexpected connector errors may contain the server address or a header value.
+                raise RpcError(INTERNAL_ERROR, "Could not test the MCP server") from None
         new, _ = self._draft(params)
         server, stored = new.config, []
         try:
@@ -583,6 +586,8 @@ class IntegrationsService:
                 tools = await self._connector.list_tools(server)
             except McpFailure as failure:
                 self._fail(server.id, failure.kind)
+            except Exception:
+                raise RpcError(INTERNAL_ERROR, "Could not refresh the MCP server") from None
             else:
                 self._failure.pop(server.id, None)
                 if self._config.get(server.id) is server:  # not removed while it was away

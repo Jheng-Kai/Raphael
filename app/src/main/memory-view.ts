@@ -1,7 +1,7 @@
-// A memory is one living document, not a list of rows. 「共同記憶」 is the owner's USER.md, the same in each
-// agent's panel, and 「<name> 的記憶」 the agent's own MEMORY.md; Raphael's tab of Settings and every agent's 記憶
-// tab show the two, shared first. Each reads as the document it is, and 編輯 opens all of it in one box that
-// grows with its text. What clears waits in the ⋯ of its row (R-UI-56), behind a second press.
+// A memory is one living document. 「共同記憶」 is the owner's USER.md, shown in Settings alone, and 「<name> 的記憶」
+// the agent's own MEMORY.md, on the agent's settings page (owner, 2026-11-09: 「個別角色不用顯示共同記憶」). Its
+// entries are cards of one line that open when pressed, and the pencil opens all of it in one box that grows with its
+// text. What clears waits in the ⋯ of its row (R-UI-56), behind a second press.
 //
 // `memoryHTML` draws it from a snapshot (pure, so its rules can be tested without a browser);
 // `createMemory` holds the state and does what the buttons say, through the core's `memory.*`
@@ -11,7 +11,7 @@ import { core } from "./api";
 import { describeError, formatDate } from "./format";
 import { t } from "./i18n";
 import type { MessageKey } from "./i18n/zh-TW";
-import { actionRow, btn, esc, iconButton, note, openConfirmMenu, row, st, toaster } from "./ui";
+import { actionRow, btn, esc, ico, iconButton, note, openConfirmMenu, row, st, toaster } from "./ui";
 
 /** A memory file as `memory.get` gives it. */
 export interface MemoryDocument {
@@ -42,10 +42,12 @@ export interface MemoryView {
   title: string;
   editing: MemoryEditor | null;
   busy: boolean;
+  /** The entries opened to be read whole, by their text; every other one is a card of one line. */
+  open: readonly string[];
 }
 
 export const emptyMemoryView = (): MemoryView => ({
-  status: "loading", space: "own", title: t("mem.title"), editing: null, busy: false,
+  status: "loading", space: "own", title: t("mem.title"), editing: null, busy: false, open: [],
 });
 
 const tr = t as unknown as (key: MessageKey) => string;
@@ -70,18 +72,22 @@ export function memoryError(err: unknown): string {
   return describeError(err);
 }
 
-/** One entry: its words (a tag first when nobody confirmed it), and under them, quietly, whom it was told and when. */
-function entryHTML(entry: string): string {
+/**
+ * One entry as a card of its own (owner, 2026-11-09: 「記憶不要全部都列出來 設計一個個 card 需要點擊才會展開」): closed, its
+ * words on one line (a tag first when nobody confirmed it); a press opens it to its whole text, with whom it was told and
+ * when under it. A native disclosure, so Enter and Space open it too.
+ */
+function entryHTML(entry: string, at: number, open: boolean): string {
   const mark = UNCONFIRMED.exec(entry)?.[0];
   let text = mark ? entry.slice(mark.length) : entry;
   const told = TOLD.exec(text);
   if (told) text = text.slice(0, told.index);
   return (
-    `<div class="mem-entry"><p class="mem-text">` +
+    `<details class="mem-entry" data-mem-entry="${at}"${open ? " open" : ""}><summary class="mem-sum"><span class="mem-text">` +
     (mark ? `<span class="mem-tag">${esc(t("mem.unconfirmed"))}</span> ` : "") +
-    esc(text) + `</p>` +
+    esc(text) + `</span>${ico("down")}</summary>` +
     (told ? `<span class="mem-from">${esc(`${told[1]} · ${formatDate(told[2]!)}`)}</span>` : "") +
-    `</div>`
+    `</details>`
   );
 }
 
@@ -126,7 +132,7 @@ export function memoryHTML(v: MemoryView): string {
   const menu = entries.length ? iconButton("more", t("mem.more", { p0: v.title }), ` data-mem="section-more" aria-haspopup="menu" aria-expanded="false"${off}`) : "";
   const body = v.editing
     ? `<div class="mem-doc is-editing">${editorHTML(v, doc)}</div>`
-    : `<div class="mem-doc">${entries.length ? entries.map(entryHTML).join("") : `<p class="mem-none">${esc(t("mem.empty"))}</p>`}</div>`;
+    : `<div class="mem-doc mem-cards">${entries.length ? entries.map((entry, at) => entryHTML(entry, at, v.open.includes(entry))).join("") : `<p class="mem-none">${esc(t("mem.empty"))}</p>`}</div>`;
   const summary = doc.summary
     ? `<div class="mem-doc mem-summary-card">${row(esc(t("mem.summary")), "", iconButton("more", t("mem.more", { p0: t("mem.summary") }), ` data-mem="summary-more" aria-haspopup="menu" aria-expanded="false"${off}`), { cls: "mem-summary" })}</div>`
     : "";
@@ -165,12 +171,14 @@ export function createMemory(host: MemoryHost): MemoryPanel {
   let editing: MemoryEditor | null = null;
   let busy = false;
   let loads = 0;
+  /** The entries opened to be read whole: a drawing keeps them open. */
+  const opened = new Set<string>();
 
   const redraw = (): void => {
     if (host.visible()) host.redraw();
   };
   const view = (): MemoryView => ({
-    status, editing, busy, space,
+    status, editing, busy, space, open: [...opened],
     title: space === "shared" ? t("mem.shared") : t("mem.own", { p0: host.ownerName?.() ?? t("agent.title") }),
   });
   const bodyId = memoryFieldId(space);
@@ -180,6 +188,8 @@ export function createMemory(host: MemoryHost): MemoryPanel {
     try {
       const next = await call<MemoryDocument>("memory.get");
       if (mine !== loads) return;
+      // Something that is not a document reads as a failed read, never as a page that cannot be drawn.
+      if (typeof next?.text !== "string") throw new Error("memory.get");
       status = next;
     } catch {
       if (mine !== loads) return;
@@ -243,6 +253,14 @@ export function createMemory(host: MemoryHost): MemoryPanel {
   }
 
   function click(target: Element): boolean {
+    // A card's own press: the browser opens or closes it after this click, so what it will be is remembered now.
+    const card = target.closest("summary")?.parentElement;
+    if (card?.matches("details[data-mem-entry]") && card.closest<HTMLElement>("[data-mem-section]")?.dataset.memSpace === space) {
+      const entries = typeof status === "object" ? entriesOf(status.text) : [];
+      const entry = entries[Number(card.getAttribute("data-mem-entry"))];
+      if (entry !== undefined) { if ((card as HTMLDetailsElement).open) opened.delete(entry); else opened.add(entry); }
+      return true;
+    }
     const button = target.closest<HTMLElement>("[data-mem]");
     if (!button) return false;
     // two documents on one page: each hears the clicks of its own section only
@@ -312,6 +330,7 @@ export function createMemory(host: MemoryHost): MemoryPanel {
     loads++; // A pending read belongs to the member or tab that was left.
     status = "loading";
     editing = null;
+    opened.clear();
   }
 
   return { view, load, click, input, key, reset };

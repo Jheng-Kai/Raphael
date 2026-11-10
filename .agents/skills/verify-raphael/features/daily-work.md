@@ -59,7 +59,7 @@ full-size review. Run after the shared heavy waiter says clear, or after its
 timeout under the follow-up's explicit exception. Native/live remain deferred.
 
 ```powershell
-npm run look -- command-palette command-palette-filter command-palette-member shortcut-find-chief shortcut-find-member shortcut-find-room shortcut-search owner-output-folder routine-guard-reason chat sidebar-rail sidebar-drawer automation-edit --theme both --width 1120,720,1920x1080
+npm run look -- command-palette command-palette-filter command-palette-member shortcut-find-chief shortcut-find-member shortcut-find-room shortcut-search owner-output-folder routine-guard-reason chat sidebar-rail sidebar-drawer --theme both --width 1120,720,1920x1080
 ```
 
 Inspect every contact sheet and full-size palette, compact search/finder,

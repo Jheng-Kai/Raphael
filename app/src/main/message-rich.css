@@ -1,5 +1,11 @@
-/* Rich reply cards share the message column and existing surface/control tokens. */
-.chat-message:has(> .rich-block) { width: 100%; grid-template-columns: minmax(0, 1fr) auto; gap: var(--sp-3); }
+/* Rich reply cards share the message column and existing surface/control tokens. Every part of a reply has one measure,
+   the reading column: plain words grow up to it and a part holding a table or code fills it, so a long reply's parts stand
+   equally wide, as Grok Bot's do, instead of words beside a code block running the thread's whole width (owner,
+   2026-11-09: 「為甚麼 bubble 的寬度不一樣寬啊? 可以都幫我保持跟 grok bot 設計一樣 寬度一樣」). */
+.chat-message[data-reply] { grid-template-columns: fit-content(var(--layout-reading-max)) auto; }
+/* The message stays as wide as its parts and actions (R-UI-104): the card itself takes the reading measure. */
+.chat-message[data-reply]:has(> .rich-block), .chat-message:has(> .rich-block) { width: fit-content; grid-template-columns: minmax(0, max-content) auto; gap: var(--sp-3); }
+.chat-message:has(> .rich-block) > .rich-block { width: var(--layout-reading-max); max-width: 100%; }
 .chat-message > .ans { max-width: 100%; }
 .rich-block { box-sizing: border-box; width: 100%; min-width: 0; max-width: 100%; margin: 0; overflow: hidden; border: 1px solid var(--edge); border-radius: var(--r-md); background: var(--panel); color: var(--text); font: var(--fs-sm)/1.6 var(--ui); white-space: normal; }
 .rich-head { display: flex; justify-content: space-between; align-items: center; gap: var(--sp-2); min-height: 38px; padding: var(--sp-1) var(--sp-3); border-bottom: 1px solid var(--edge); color: var(--text-2); font-size: var(--fs-xs); }

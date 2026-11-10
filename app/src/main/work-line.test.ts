@@ -57,8 +57,7 @@ test("completed actions are plain sentences and an icon opens them", () => {
   const state = emptyTimelineState(); state.thinkingOpen.set(71, true);
   const root = dom(turnHTML({...base, text: "Sample reply", status: "done", messages: [action("done")], model: "sample/model"}, state, false, look));
   expect(root.querySelector(".work-body")?.textContent).toContain("Read sample.md");
-  expect(root.querySelector(".message-work")?.textContent).toBe("");
-  expect(root.querySelector(".message-work")?.getAttribute("data-tooltip")).toContain("查看過程");
+  expect(root.querySelector(".message-work")).toBeNull();
   expect(root.querySelector(".step-mark, .step-ms")).toBeNull();
   expect(root.querySelector(".conversation-event-line")).toBeNull();
 });

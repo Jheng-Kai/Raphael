@@ -42,7 +42,7 @@ import { carryTyped } from "./secret-card";
 import { carryMail } from "./mail-card";
 import { plainLine, primaryFirst, primaryIdOf, memberRole, faceHTML, memberOf } from "./members";
 import { NAME, eventLineHTML } from "./event-line";
-import { handoffGroupHTML } from "./handoff-line";
+import { handoffRun, roomHandoffHTML } from "./handoff-line";
 import { memberColor, nameAccent } from "./owner-bubble";
 import { openPeerChat, type PeerChatView } from "./peer-chat";
 import type { WireAttachment, HandoffView } from "./types";
@@ -446,11 +446,15 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
     const entryKey = (entry: typeof entries[number]): string => "message" in entry ? `message:${entry.message.id}` : "task" in entry ? `task:${entry.task.task_id ?? entry.task.work_turn_id}` : `intent:${entry.intent.id}`;
     const mounted = roomWindow.select(entries, entryKey, follows && !finder.isOpen());
     windowMount.sync();
+    // Hand-offs in a row are one line per pair of members, and each piece of a member's own work is a line of its own
+    // (handoff-line.ts): a line never mixes exchanges between different members.
+    const runOf = (item: typeof mounted[number] | undefined): string | undefined => item && "task" in item ? handoffRun(item.task) : undefined;
     const grouped = mounted.flatMap<{ entry: typeof entries[number]; tasks: HandoffView[] }>((entry, index) => {
       if (!("task" in entry)) return [{ entry, tasks: [] as HandoffView[] }];
-      if (index && "task" in mounted[index - 1]) return [];
+      const run = handoffRun(entry.task);
+      if (runOf(mounted[index - 1]) === run) return [];
       const tasks: HandoffView[] = [];
-      for (let i = index; i < mounted.length && "task" in mounted[i]; i++) tasks.push((mounted[i] as { task: HandoffView }).task);
+      for (let i = index; runOf(mounted[i]) === run; i++) tasks.push((mounted[i] as { task: HandoffView }).task);
       return [{ entry, tasks }];
     });
     preserveRichScroll(scroll, () => { const wanted = entries.length ? grouped.map(({ entry, tasks }) => ({
@@ -465,7 +469,7 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
         return `<li class="tn room-intent-blocked" role="status">${eventLineHTML(t("rooms.intentBlocked",{p0:NAME,p1:t(BLOCKED[intent.reason as keyof typeof BLOCKED]??"rooms.blockedWorker")}),faceOf(intent.recipient_id,name),name)}</li>`;
       }
       if("task" in entry){
-        return `<li class="tn handoff-row">${handoffGroupHTML(tasks.map(task => ({ task, face: faceOf(task.member_id,task.member_name), name: person(task.member_id)?.name })))}</li>`;
+        return `<li class="tn handoff-row">${roomHandoffHTML(tasks, (id, fallback) => { const member = person(id) ?? { id, name: id === 0 ? t("agent.title") : fallback }; return { name: member.name || fallback, face: faceHTML(member, 20) }; })}</li>`;
       }
       const m=entry.message;
       if (m.kind === "report" && m.report) return `<li class="tn" data-room-message="${m.id}">${roomReportHTML(m)}</li>`;

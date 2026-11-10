@@ -233,6 +233,7 @@ class RoomExchanges:
                     # in its own bounded speech turn and decides to speak or pass.
                     themselves.append(speaker.id)
         ledger = Ledger(self.spend)
+        ledger.job = "listen"
         heard = await asyncio.gather(*(self._heard(speaker, model,
             [{"name":s.name or 'Raphael', "role":s.role} for s in people if s.id != speaker.id], transcript, ledger, unanswered)
             for speaker, model in asked))

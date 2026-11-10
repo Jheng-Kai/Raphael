@@ -333,7 +333,7 @@ class Tools:
         ledger.add(
             model=found.model,
             cost_usd=found.cost_usd,
-            prompt_tokens=found.prompt_tokens,
+            usage=getattr(found, "usage", None), prompt_tokens=found.prompt_tokens,
             completion_tokens=found.completion_tokens,
             ms=found.latency_ms,
         )

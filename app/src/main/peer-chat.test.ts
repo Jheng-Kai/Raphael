@@ -35,6 +35,16 @@ test("the view takes every exchange between the same members, oldest first, and 
   expect(peerTasks("9", all)).toBeNull();
 });
 
+test("work a member handed itself is never a conversation between members", () => {
+  const own = task(6, { member_id: 1, member_name: "First", from_member_id: 1, mode: "work", own_work: true } as Partial<HandoffView>);
+  expect(peerLines([own])).toEqual([]);
+  expect(peerTasks("6", [own, task(3)])).toBeNull();
+  expect(peerTasks("3", [own, task(3)])!.tasks.map(view => view.task_id)).toEqual([3]);
+  // Nor does it have a line in its own conversation, where the work itself goes on.
+  expect(handoffGroupHTML([{ task: own, face: "" }])).toBe("");
+  expect(handoffGroupHTML([{ task: own, face: "" }, { task: task(3), face: "" }])).toContain('data-peer-keys="3"');
+});
+
 test("a line opens the conversation in place: the pill, faces and coloured names, day dividers and Close chat", () => {
   const all = [task(3), task(1, { created_at_ms: NOW - 2 * DAY, finished_at_ms: NOW - 2 * DAY })];
   const { column, line } = mount(() => all);

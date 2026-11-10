@@ -193,7 +193,34 @@ def test_terminal_echo_deduplication_keeps_order_and_intentional_repetition():
 
 
 @pytest.mark.parametrize("brain", ["codex", "claude", "gemini"])
-async def test_explicit_cli_separator_is_live_and_a_literal_code_marker_stays_whole(make_rig, monkeypatch, brain):
+async def test_only_a_short_opening_reaches_the_owner_while_the_cli_works(make_rig, monkeypatch, brain):
+    # Owner, 2026-11-09, beside Grok Bot's replies: 「不會太多不重要的思考文字 然後重點都有說到」. The owner's DB had
+    # Claude Code turns with up to 13 messages said between steps; only the opening before the first step stays one.
+    rig = make_rig()
+    rig.settings.set("agent_model", f"cli:{brain}:fake")
+    monkeypatch.setattr(rig.service._cli_brains, "command", lambda name: ["fake"])
+    monkeypatch.setattr(rig.service._cli_brains, "available", lambda *args, **kwargs: True)
+    said = ["I will read each source, then write the summary.", "The first source is read.", "Two sources agree."]
+    async def run(driver, **kwargs):
+        for index, text in enumerate(said):
+            yield Event("text_delta", text + "\n<<<next message>>>\n")
+            assert bodies(rig) == said[:1] * (index > 0)
+            yield Event("message", text + "\n<<<next message>>>\n")
+            yield Event("tool_start", data={"id": str(index), "name": "local_time"})
+            assert bodies(rig) == said[:1]
+            yield Event("tool_end", data={"id": str(index), "ok": True})
+        yield Event("message", "The summary is ready: both sources agree.", data={"id": "answer", "final": True})
+        assert bodies(rig) == [said[0], "The summary is ready: both sources agree."]
+        yield Event("final", "The summary is ready: both sources agree.")
+    monkeypatch.setattr(cli.Driver, "run", run)
+    await typed(rig)
+    assert bodies(rig) == [said[0], "The summary is ready: both sources agree."]
+    progress = [row[0] for row in rig.conn.execute("SELECT text FROM agent_messages WHERE kind='progress' ORDER BY seq")]
+    assert any("first source" in line for line in progress) and any("agree" in line for line in progress)
+
+
+@pytest.mark.parametrize("brain", ["codex", "claude", "gemini"])
+async def test_explicit_cli_separator_splits_the_answer_and_a_literal_code_marker_stays_whole(make_rig, monkeypatch, brain):
     rig = make_rig()
     rig.settings.set("agent_model", f"cli:{brain}:fake")
     monkeypatch.setattr(rig.service._cli_brains, "command", lambda name: ["fake"])
@@ -203,10 +230,11 @@ async def test_explicit_cli_separator_is_live_and_a_literal_code_marker_stays_wh
     async def run(driver, **kwargs):
         yield Event("text_delta", first + "\n")
         assert bodies(rig) == []
+        # A completed part waits until the CLI says whether work or the answer's end follows it.
         yield Event("text_delta", "<<<next message>>>\n")
-        assert bodies(rig) == [first]
+        assert bodies(rig) == []
         yield Event("text_delta", "Second.")
-        assert bodies(rig) == [first]
+        assert bodies(rig) == []
         yield Event("message", combined, data={"id": "complete", "final": True})
         assert bodies(rig) == [first, "Second."]
         yield Event("final", combined)

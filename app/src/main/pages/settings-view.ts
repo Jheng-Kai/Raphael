@@ -80,10 +80,11 @@ export const PANES: { id: SettingsPane; icon: IconName; title: () => string }[] 
   { id: "general", icon: "gear", title: () => t("settings.paneGeneral") },
   // What every member remembers of the owner, a tab of its own (owner, 2026-11-08: memory out of 一般).
   { id: "memory", icon: "memory", title: () => t("mem.title") },
-  { id: "dictation", icon: "mic", title: () => t("settings.paneDictation") },
   { id: "tools", icon: "steps", title: () => t("settings.paneTools") },
   { id: "safety", icon: "lock", title: () => t("settings.paneSafety") },
   { id: "models", icon: "bot", title: () => t("settings.paneUsage") },
+  // Dictation and its keys are not what most people come here for: under the models (owner, 2026-11-10).
+  { id: "dictation", icon: "mic", title: () => t("settings.paneDictation") },
   { id: "about", icon: "info", title: () => t("common.about") },
   // Not a tab: the sidebar's 連結應用程式 opens it as a dialog of its own, its only way in (owner, 2026-11-06; R-UI-111).
   { id: "connections", icon: "plug", title: () => t("nav.apps") },

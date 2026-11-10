@@ -4,6 +4,7 @@ import hashlib
 import json
 from difflib import SequenceMatcher
 
+from ...brain.meter import context_size
 from ...memory.compression import FRESH_CONTEXT_CHARS, recent_turns
 
 
@@ -74,7 +75,10 @@ def fresh_user(owner_text, attachments, additions, note, records, *, turns=(), s
 
 
 def context_tokens(usage):
-    """Input usage includes native cached history, unlike newly submitted prompt bytes."""
+    """Input usage includes native cached history, unlike newly submitted prompt bytes. Claude Code's `usage`
+    adds up every call of the run, so its last iteration is the conversation's length (brain/meter.py)."""
+    if (measured := context_size(usage)) is not None:
+        return measured
     def number(key):
         value = usage.get(key, 0)
         return value if type(value) is int and value >= 0 else 0

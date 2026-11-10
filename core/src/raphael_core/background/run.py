@@ -64,6 +64,7 @@ from ..agent.gate import ToolGate
 from ..agent.harness_tools import CALENDAR_LIST, CALENDAR_TOOLS, CALENDAR_WRITES, DEFINITIONS as HARNESS_DEFINITIONS
 from ..agent.ledger import Ledger
 from ..agent.plugins import MAX_ARGUMENT_CHARS, PluginResult
+from ..brain.prompt_cache import cache_options
 from ..agent.steps import reason_of
 from ..agent.policy import Action, Approval, NotApproved, Tier, UnknownTool
 from ..agent.safety import ASK, DENY, PASS, Proposed, Screening, narrow_scope, needs_yes, summarize
@@ -113,6 +114,16 @@ UNKNOWN_COST_FLOOR_USD = 0.02
 # A character is counted as a third of a token in the estimate, which is more than the usual
 # quarter: the estimate is meant to be too high rather than too low.
 _CHARS_PER_TOKEN = 3.0
+
+
+def task_cache_session(task) -> str | None:
+    """The name a task's calls give their provider's cache (brain/prompt_cache.py): a member speaking in one
+    group thread is one conversation, as is a task with everything it handed on."""
+    if task is None:
+        return None
+    if task.scope == "room" and task.room_id is not None:
+        return f"raphael-room-{task.room_id}-{task.thread_id}-{task.member_id}"
+    return f"raphael-task-{task.root_task_id or task.id}"
 
 
 def estimate_cost(model: str, request_chars: int) -> float:
@@ -513,7 +524,7 @@ class TaskRun:
             began = time.perf_counter()
             reply = await self._guarded(summary_reply(self._client, self.model, system=system, user=user, max_tokens=max_tokens))
             self.touch()
-            self.ledger.add(model=reply.model, cost_usd=reply.cost_usd, prompt_tokens=reply.prompt_tokens,
+            self.ledger.add(model=reply.model, cost_usd=reply.cost_usd, usage=getattr(reply, "usage", None), prompt_tokens=reply.prompt_tokens,
                             completion_tokens=reply.completion_tokens, ms=_ms(began))
             return {"text": reply.text}
 
@@ -554,6 +565,8 @@ class TaskRun:
                         timeout_s=min(MODEL_SILENCE_S, remaining),
                         max_tokens=self._max_tokens * room,
                         reasoning_effort="none",
+                        # Work that calls every few seconds and is done: one place, five minutes (decisions 1, 4).
+                        **cache_options(task_cache_session(task), "5m"),
                     ), remaining))
                     break
                 except RpcError:
@@ -613,7 +626,7 @@ class TaskRun:
         self.ledger.add(
             model=turn.model,
             cost_usd=cost,
-            prompt_tokens=turn.prompt_tokens,
+            usage=getattr(turn, "usage", None), prompt_tokens=turn.prompt_tokens,
             completion_tokens=turn.completion_tokens,
             ms=_ms(began),
         )

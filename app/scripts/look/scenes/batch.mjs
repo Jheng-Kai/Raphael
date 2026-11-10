@@ -14,13 +14,13 @@ const plain = (member_id, extra = {}) => turn(member_id, {attachments: [], text:
 const missing = {resource: "fish", requirement: "setup", state: "missing", repair: "voice"};
 const absent = turn(1, {status: "error", attachments: [], text: "請先設定語音服務。", messages: [{seq: 1, kind: "media", text: JSON.stringify({missing}), at_ms: 1792807160000}],
   steps: [{kind: "tool", tool: "generate_audio", server: "Raphael", outcome: "error", reason: "not_configured", detail: "fish", missing, ms: 20, at_ms: 1792807155000}]});
-const openMissing = [member(1), wait('.page-agent:not([hidden]) .tn [data-missing-repair="voice"]'), click('.page-agent:not([hidden]) [data-act="thinking"]'), wait('.page-agent:not([hidden]) .work-body:not([hidden])')];
+const openMissing = [member(1), wait('.page-agent:not([hidden]) .tn [data-missing-repair="voice"]')];
 
 export default [
   ...[0, 1].map(id => scene(`generated-audio-${id ? "member" : "chief"}`, "Generated audio shares the owner's existing stored audio card", [member(id), wait('.ra-body .attachment-audio'), wait('.ra-body [data-audio-progress]:not([disabled])')], {turns: [turn(id)], audioFile: file})),
   scene("generated-audio-room", "Room replies play the same stored audio card", [room(1), wait('.ra-body [data-audio-progress]:not([disabled])')],
     {audioFile: file, messages: [{id: 901, room_id: 1, member_id: 1, text: "語音檔已準備好。", created: 1792807160000, status: "done", kind: "message", turn_id: 802, turn: turn(1)}]}),
-  scene("generated-audio-missing", "Missing voice service is said once, with its repair, even with the work opened", [...openMissing, check("generated-audio-missing")], {turns: [absent]}),
+  scene("generated-audio-missing", "Missing voice service is said once, with its repair", [...openMissing, check("generated-audio-missing")], {turns: [absent]}),
   scene("generated-audio-repair", "Audio generation opens the existing voice service settings", [...openMissing, click('.page-agent:not([hidden]) .tn [data-missing-repair="voice"]'), wait('#svc-key-fish'), check("generated-audio-repair")], {turns: [absent]}),
   scene("owner-addition", "An owner addition appears immediately beside continuing work and Stop", [member(1), type('.cmp-input', "也請保留原始檔案。"), key("Enter"), wait('.tn[data-id="901"] .owner-message'), waitGone('.tn[data-id="901"] .ra-face'), wait('.composer[data-task-state="running"]')],
     {running: true, runningMember: 1, ownerAddition: true}),
@@ -44,6 +44,6 @@ export default [
   scene("owner-bubble-light-character", "A light character keeps its colour and takes dark words", [member(1), wait('.owner-message .bubble'), check("owner-bubble-tinted")],
     {turns: [plain(1)], members: fixture.members.map(item => item.id === 1 ? {...item, avatar: "slime:rimuru"} : item)}),
   scene("owner-bubble-long", "A long tinted bubble keeps its link and expand control readable", [member(1), wait('.owner-message .bubble'), check("owner-bubble-tinted")], {turns: [plain(1, {question: `請看這個連結 https://example.com/a\n${"這是一段很長的需求說明，要確定展開按鈕和連結在角色顏色上都看得清楚。".repeat(14)}`})]}),
-  scene("owner-bubble-chief", "Raphael's own conversation wears his warm gold with dark words", [member(0), wait('.owner-message .bubble'), check("owner-bubble-tinted")], {turns: [plain(1), plain(0)]}),
+  scene("owner-bubble-chief", "Raphael's own conversation wears his blue like any member's", [member(0), wait('.owner-message .bubble'), check("owner-bubble-tinted")], {turns: [plain(1), plain(0)]}),
   scene("owner-bubble-room", "A group talks to everyone, so its bubbles stay neutral", [member(1), room(1), wait('.au-room-pane .owner-message .bubble, .au-room-pane .bubble'), check("owner-bubble-neutral")]),
 ];

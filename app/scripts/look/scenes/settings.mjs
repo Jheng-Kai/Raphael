@@ -66,9 +66,9 @@ export default [
   scene("appearance-keyboard", "Theme choices retain visible keyboard focus in every palette", [...settings("appearance"), click('[data-k="appearance"]'), key('Tab'), {...key('Tab'),shift:true}, key('ArrowDown'), check('appearance-settings'), check('appearance-focus')]),
   scene("plugins-installed", "Unified managed, private Google and custom MCP plugins", [...connections, wait('[data-conn="open"][data-id="composio:notion"]')]),
   scene("plugins-detail", "Managed tools grouped by write and read", [...connections, click('[data-conn="open"][data-id="composio:notion"]'), click('[data-conn="tool-list"]'), wait('[data-conn="tool"][data-tool="NOTION_SEARCH"]')]),
-  scene("store-n8n", "n8n is in the store as the owner's own server, and adding it opens the form filled in (owner, 2026-11-08)", [
+  scene("store-n8n", "n8n is in the store, and 加入 leaves for the conversation with the owner's words, where the member sets it up (owner, 2026-11-09)", [
     ...store, type('#conn-search', 'n8n'), wait('[data-conn="open-store"][data-id="n8n"]'), check("store-n8n"),
-    click('[data-conn="join"][data-id="n8n"]'), wait('#conn-url'), check("store-n8n-form"),
+    click('[data-conn="join"][data-id="n8n"]'), wait('.page-agent:not([hidden]) .composer textarea'), check("store-in-chat"),
   ]),
   scene("plugins-store", "Search-first catalog of the apps not added yet, in bounded pages", [
     ...store, check("plugins-store"), check("plugins-store-rows"), check("plugins-store-groups"),
@@ -122,9 +122,8 @@ export default [
   scene("plugins-setup-noguide", "When the catalog has no guide the form says so and offers the service's own page", [
     ...store, click('[data-conn="join"][data-id="parcel-desk"]'), wait('.cn-setup-dialog [data-setup-field]'), check("setup-noguide"),
   ]),
-  scene("plugins-setup-own-app", "An app that needs its own developer app shows the redirect address to register and asks for its id and secret", [
-    ...store, click('[data-conn="join"][data-id="orbit-ads"]'), wait('.cn-setup-dialog [data-setup-field]'),
-    type('.cn-setup-dialog [data-setup-field="client_id"]', "look-client-id"), type('.cn-setup-dialog [data-setup-field="client_secret"]', setupKey), check("setup-own-app"),
+  scene("plugins-setup-own-app", "An app that needs a developer app of the owner's own is set up in the conversation: 加入 leaves with the owner's words", [
+    ...store, click('[data-conn="join"][data-id="orbit-ads"]'), wait('.page-agent:not([hidden]) .composer textarea'), check("store-in-chat"),
   ]),
   scene("plugins-setup-added", "The key goes to the core in one call; the dialog closes and the app is among the connected ones", [
     ...store, click('[data-conn="join"][data-id="acme-ledger"]'), wait('.cn-setup-dialog [data-setup-field]'), type('.cn-setup-dialog [data-setup-field]', setupKey),

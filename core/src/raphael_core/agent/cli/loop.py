@@ -18,6 +18,7 @@ from ...worker.tool_guardrails import ToolGuardrails
 from ..answers import MESSAGE_RULES, MESSAGE_BREAK, message_parts, parse_reply, public_reply, pending_replies
 from ..conversations import Conversations
 from ..mcp_server import RaphaelMcp
+from ...brain.meter import Usage, claude_code_model, claude_code_rows, codex as codex_usage, gemini as gemini_usage
 from ...brain.textnorm import public_line
 from ..narration import PUBLIC_PROGRESS_RULES
 from ..policy import CONFIRM_TIMEOUT_S
@@ -178,6 +179,10 @@ class CliLoop:
         self.context_summary_through = context_summary_through
         self._context_state = {}
         self._context_window = None
+        # Claude Code's per-model running totals after each session's latest run, and whether a run reported any
+        # usage (brain/meter.py).
+        self._usage_marks: dict[str, dict] = {}
+        self._metered = False
         self._submitted_user = user
         self._turn_user = user
         self.tools = [] if no_tools else list(tools) + ([APPROVE] if structured is None and (brain_ref(model) or ("",))[0] == "claude" else [])
@@ -199,6 +204,8 @@ class CliLoop:
         self._buffer = ""
         self._publish_reply, self._published, self._message_ids = reply, [], set()
         self._completed_buffer, self._separated = False, []
+        # Speech not yet shown (`_release_held`), whether the one opening was shown, and whether a step has started.
+        self._held, self._opened, self._worked = [], False, False
         self._thought = ""
         self._final_nudged = False
         self._calls = 0
@@ -231,7 +238,9 @@ class CliLoop:
         effort = brain_effort(self.model)
         return f"cli:{brain_ref(self.model)[0]}:{self.actual_model}" + (f"?effort={effort}" if effort else "")
 
-    def _publish(self, text, *, final=False, previous=()):
+    def _publish(self, text, *, final=False, previous=(), settled=False):
+        """Show public speech. A message the CLI marks as its answer (`settled`) or the terminal result
+        (`final`) is shown at once, after anything held; other speech waits for the next event."""
         if self._publish_reply is None:
             return
         reply = (self._written_reply(text)
@@ -241,10 +250,34 @@ class CliLoop:
             return
         lines = reply.messages or [reply.text]
         lines = pending_replies(self._published if final else previous, lines)
-        if lines:
-            self._publish_reply(replace(reply, messages=lines, text="\n\n".join(lines)))
-            self._published.extend(lines)
+        if lines and not (final or settled):
+            # Speech before the outcome waits for the CLI's next event: work after it makes it progress.
+            self._held.append((reply, lines))
+        elif lines:
+            self._release_held(answer=True)
+            self._show(reply, lines)
         return lines
+
+    def _show(self, reply, lines):
+        self._publish_reply(replace(reply, messages=lines, text="\n\n".join(lines)))
+        self._published.extend(lines)
+
+    def _release_held(self, *, answer):
+        """What the model said since its last step. Followed by the end of its turn (`answer`), it stands as
+        said. Followed by more work, it was said while working: only one short opening before the first step
+        reaches the owner, as Grok Bot's 「可以，我先…」, and the rest is progress in the folded work (owner,
+        2026-11-09: 「不會太多不重要的思考文字 然後重點都有說到」)."""
+        held, self._held = self._held, []
+        for reply, lines in held:
+            if answer:
+                self._show(reply, lines)
+                continue
+            for line in lines:
+                if not self._worked and not self._opened:
+                    self._opened = True
+                    self._show(reply, [line])
+                elif text := public_line(line, "auto"):
+                    self.progress(text[:400])
 
     def _progress(self):
         if line := public_line(self._buffer, "auto"):
@@ -552,6 +585,9 @@ class CliLoop:
                  "tokens": context_tokens(self._usage),
                  "estimated_tokens": self._context_state.get("estimated_tokens", 0) + len(self._submitted_user.encode("utf-8")),
                  "window": self._usage.get("context_window") or self._context_state.get("window") or self._context_window}
+        # What the session has used so far, so that its next run counts only its own calls (brain/meter.py).
+        if marks := self._usage_marks.get(self._session) or self._context_state.get("model_usage"):
+            state["model_usage"] = marks
         self.sessions.put_context(self.member_id, self.model, self._session, state, self.conversation_id)
 
     def _handed_off(self):
@@ -590,7 +626,12 @@ class CliLoop:
             try:
                 # A stable, empty workspace keeps native CLI resume independent of turn temp files.
                 workspace_root = native_directory("workspaces") or self.brains.home / ".raphael" / "cli-workspaces"
-                workspace = workspace_root / str(self.member_id) / str(self.conversation_id) / name
+                # Claude Code shares a cached prefix only within one working directory, which its own system prompt
+                # names: one per member (owner, 2026-11-09, decision 3), so all the member's conversations and tasks
+                # start from the same cached prefix. Codex keys its cache by thread and keeps its login beside its
+                # workspace, and Gemini rewrites its instructions there every turn: one per conversation for them.
+                member_root = workspace_root / str(self.member_id)
+                workspace = member_root / name if name == "claude" else member_root / str(self.conversation_id) / name
                 workspace.mkdir(parents=True, exist_ok=True)
                 await secure_directory(workspace)
                 async with RaphaelMcp(self._mcp_tools, self._tool) as server:
@@ -695,13 +736,9 @@ class CliLoop:
             finally:
                 if self.driver:
                     await self.driver.interrupt()
-                def tokens(*keys):
-                    value = next((self._usage[key] for key in keys if key in self._usage), 0)
-                    return value if type(value) is int and 0 <= value < 10**10 else 0
-                self.ledger.add(model=self.answered_by, cost_usd=0,
-                    ms=int((time.perf_counter() - began) * 1000),
-                    prompt_tokens=tokens("input_tokens", "inputTokens", "promptTokenCount"),
-                    completion_tokens=tokens("output_tokens", "outputTokens", "candidatesTokenCount"))
+                if not self._metered:
+                    # A turn whose CLI never reported usage is still one call of its model, for the history.
+                    self.ledger.add(model=self.answered_by, cost_usd=0, ms=int((time.perf_counter() - began) * 1000))
 
     async def _attempt(self, name, command, model, server, session, workspace, *, recovering=False):
         try:
@@ -721,7 +758,13 @@ class CliLoop:
                 self._submitted_user = user
             with StreamSteps(lambda: self.activity_turn) as steps:
                 self.catalog_changed = False
-                return await self._stream_attempt(name, command, model, server, session, workspace, steps, user=user)
+                began = time.perf_counter()
+                try:
+                    return await self._stream_attempt(name, command, model, server, session, workspace, steps, user=user)
+                finally:
+                    # Speech no step followed when an attempt ends (a failure, a restart, a hand-off) stands as said.
+                    self._release_held(answer=True)
+                    self._meter(name, resumed=session is not None, ms=int((time.perf_counter() - began) * 1000))
         except ValueError as error:
             if str(error) != "context_overflow":
                 raise
@@ -733,6 +776,36 @@ class CliLoop:
             kind = "network" if isinstance(error, ConnectionError) else "cli_stopped"
             self.failure_reason = Failure(kind, type(error).__name__)
             return kind
+
+    def _meter(self, name, *, resumed, ms):
+        """Write down what one run of the CLI used, a row for each model (brain/meter.py): Claude Code's per-model
+        totals less what the session had used before, a Codex turn's growth of its thread's total, Gemini's own
+        counts. Every input token is counted, cached or not; a run that reported nothing writes nothing here."""
+        usage = self._usage if isinstance(self._usage, dict) else {}
+        if not usage:
+            return
+        main = self.answered_by
+        if name == "claude":
+            actual = self.actual_model or ""
+            marks = self._usage_marks.get(self._session) if resumed and self._session else None
+            if marks is None and resumed:
+                marks = self._context_state.get("model_usage") or {}
+            totals = usage.get("model_usage") if isinstance(usage.get("model_usage"), dict) else {}
+            # The CLI names its main model; without a name, the one that wrote the most is it.
+            primary = actual if actual in totals else max(totals, key=lambda key: claude_code_model(totals[key]).output, default=actual)
+            rows, kept = claude_code_rows(usage, totals, marks or {}, main_model=primary, resumed=resumed)
+            if self._session and kept:
+                self._usage_marks[self._session] = kept
+            rows = [(main if model == primary else f"cli:claude:{model}", row) for model, row in rows]
+        elif name == "codex":
+            rows = [(main, Usage.from_dict(usage.get("meter")) or codex_usage(usage))]
+        else:
+            rows = [(main, gemini_usage(usage))]
+        # The main model goes last: the ledger's model is the one the history says answered.
+        rows = sorted(((model, row) for model, row in rows if row), key=lambda item: item[0] == main)
+        for index, (model, row) in enumerate(rows):
+            self.ledger.add(model=model, cost_usd=0, usage=row, ms=ms if index == len(rows) - 1 else 0)
+        self._metered = self._metered or bool(rows)
 
     async def _stream_attempt(self, name, command, model, server, session, workspace, steps, *, user):
         """Run the CLI once for this turn: None once its answer is queued, else why it failed."""
@@ -781,13 +854,15 @@ class CliLoop:
                     public = bool(event.data.get("final") or public_reply(event.text, self.language, plain=self.plain, explicit=True))
                     if not key[1] or key not in self._message_ids:
                         if public:
-                            self._publish(event.text, previous=self._separated)
+                            self._publish(event.text, previous=self._separated, settled=bool(event.data.get("final")))
                         self._message_ids.add(key)
                     self._buffer = "" if public else event.text
                     self._completed_buffer, self._separated = True, []
                 elif event.kind == "thinking":
                     self._thought = (self._thought + event.text)[-240:]
                 elif event.kind in ("tool_start", "permission"):
+                    self._release_held(answer=False)
+                    self._worked = True
                     if event.kind == "tool_start":
                         steps.start(event.data)
                         key = event.data.get("id") or event.data.get("name")
@@ -831,6 +906,7 @@ class CliLoop:
                             self.reload_note = check
                             self.catalog_changed = True
                             return "tools_changed"
+                        self._release_held(answer=True)
                         self._publish(final, final=True)
                         self._save_context()
                         self._buffer = ""
@@ -849,6 +925,7 @@ class CliLoop:
         return "cli_stopped"
 
     def _missing_terminal(self):
+        self._release_held(answer=True)
         if not self._final_nudged:
             self._final_nudged = True
             self.no_tools, self.tools = True, []

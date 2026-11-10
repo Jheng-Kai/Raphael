@@ -149,26 +149,28 @@ const THREE = [
   step({ tool: "create-event", server: "Google Calendar", outcome: "error", reason: "auth", ms: 600, at_ms: T0 + 2_900 }),
 ];
 
-test.each(["zh-TW", "en", "ja"] as const)("completed work preserves the exact missing-service repair in %s", locale => {
+test.each(["zh-TW", "en", "ja"] as const)("a completed turn keeps the exact missing-service repair in sight in %s", locale => {
   setLocale(locale);
   for (const missing of [
     { resource: "searxng", requirement: "url", state: "missing", repair: "search" },
     { resource: "pdf", requirement: "no_text", state: "broken", repair: "vision" },
     { resource: "fish", requirement: "setup", state: "missing", repair: "voice" },
   ] as const) {
-    for (const withActions of [false, true]) {
-      const state = emptyTimelineState(); state.thinkingOpen.set(1, true);
+    for (const [withActions, words] of [[false, ""], [true, ""], [false, "台北現在 24 度。"], [true, "台北現在 24 度。"]] as const) {
       const item = turn(1, {
-        status: "error", steps: [step({ tool: "web_search", outcome: "error", reason: "not_configured", missing })],
+        status: "error", text: words, steps: [step({ tool: "web_search", outcome: "error", reason: "not_configured", missing })],
         messages: withActions ? [{ seq: 1, kind: "event", text: JSON.stringify({ type: "action", id: "search", state: "done", present: "Search", past: "Searched", outcome: "error", reason: "not_configured" }), at_ms: T0 }] : [],
       });
-      const root = document.createElement("div"); root.innerHTML = turnHTML(item, state, false, LOOK);
-      const work = root.querySelector(".work-section.is-open")!;
-      expect(work.querySelectorAll("[data-missing-repair]")).toHaveLength(1);
-      expect(work.querySelector(`[data-missing-resource="${missing.resource}"]`)?.getAttribute("data-missing-repair")).toBe(missing.repair);
-      expect(work.closest(".ra-body")).not.toBeNull();
+      const root = document.createElement("div"); root.innerHTML = turnHTML(item, emptyTimelineState(), false, LOOK);
+      const notes = root.querySelector(".turn-prerequisites")!;
+      expect(notes.closest("[hidden], .work-body")).toBeNull();
+      expect(root.querySelectorAll("[data-missing-repair]")).toHaveLength(1);
+      expect(notes.querySelector(`[data-missing-resource="${missing.resource}"]`)?.getAttribute("data-missing-repair")).toBe(missing.repair);
+      expect(notes.closest(".ra-body")).not.toBeNull();
       expect(root.querySelector(".sys [data-missing-repair],.task-actions [data-missing-repair]")).toBeNull();
-      if (missing.repair === "search") expect(work.textContent).toContain(t("missing.url"));
+      // Words of the member say what is missing, so under them it is only the repair; with none, the note says it.
+      if (words) expect(notes.textContent?.trim()).toBe(t("missing.open"));
+      else if (missing.repair === "search") expect(notes.textContent).toContain(t("missing.url"));
     }
   }
 });
@@ -192,18 +194,20 @@ test("a meeting opened and a skill learned stay one line each in the conversatio
   expect(root.querySelector('[data-routine="7"]')?.closest(".work-body")).not.toBeNull();
 });
 
-test("a prerequisite the reply already states is not repeated in the opened work", () => {
+test("a prerequisite the reply already states is said once", () => {
   setLocale("zh-TW");
   const missing = { resource: "fish", requirement: "setup", state: "missing", repair: "voice" } as const;
-  const state = emptyTimelineState(); state.thinkingOpen.set(1, true);
   const item = turn(1, {
     status: "error", text: "請先設定語音服務。",
     steps: [step({ tool: "generate_audio", server: "Raphael", outcome: "error", reason: "not_configured", missing })],
     messages: [{ seq: 1, kind: "media", text: JSON.stringify({ missing }), at_ms: T0 }],
   });
-  const root = document.createElement("div"); root.innerHTML = turnHTML(item, state, false, LOOK);
+  const root = document.createElement("div"); root.innerHTML = turnHTML(item, emptyTimelineState(), false, LOOK);
   expect(root.querySelectorAll('[data-missing-repair="voice"]')).toHaveLength(1);
-  expect(root.querySelector(".work-section.is-open [data-missing-repair]")).toBeNull();
+  expect(root.textContent).not.toContain(t("missing.voice"));
+  // The repair comes after the reply that says what is missing, never above it.
+  const reply = root.querySelector(".chat-message[data-reply]")!, repair = root.querySelector('.turn-prerequisites [data-missing-repair="voice"]')!;
+  expect(reply.compareDocumentPosition(repair) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 });
 
 test("a reply that failed on ChatGPT's usage limit leads with Manage usage under its words, and nothing else does", () => {
@@ -630,7 +634,7 @@ describe("a turn", () => {
     expect(html).toContain('data-owner-act="edit"');
     expect(html).toContain('<div class="bubble"><div class="message-text">台北天氣如何，順便記到行事曆</div><button');
     expect(html).not.toContain('class="ra-face"');
-    expect(html).toContain('data-tooltip="查看過程 ·');
+    expect(html).not.toContain("查看過程");
     expect(html).toContain('class="work-meta">gpt-6-luna · US$0.0012');
     expect(html).toContain('<div class="ans"><div class="message-text"><p>台北現在 24 度。</p>');
     expect(html).not.toContain("tn-foot"); // nothing more to open
@@ -666,7 +670,7 @@ describe("a turn", () => {
 
   test("a detail shares the reply's collapsed work action", () => {
     const closed = turnHTML(turn(5, { detail: "更多" }), emptyTimelineState(), false, LOOK);
-    expect(closed).toContain('data-act="thinking" aria-expanded="false" aria-controls="work-5"');
+    expect(closed).not.toContain('data-act="thinking"');
     expect(closed).toContain('id="work-5" hidden');
     expect(closed).toContain('<pre class="failure-detail">更多</pre>');
     const state = emptyTimelineState(); state.thinkingOpen.set(5, true);
@@ -752,7 +756,7 @@ describe("a turn", () => {
       LOOK,
     );
     expect(doneHtml.match(/class="work-section think-box/g)).toHaveLength(1);
-    expect(doneHtml).toContain('data-act="thinking" aria-expanded="false"');
+    expect(doneHtml).not.toContain('data-act="thinking"');
     expect(doneHtml).not.toContain("work-toggle");
     expect(doneHtml).toContain('class="work-body think-body" id="work-20" hidden');
     expect(doneHtml).toContain('data-media-type="link"');

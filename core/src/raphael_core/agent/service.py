@@ -1467,6 +1467,7 @@ class AgentService:
         """One request, from the router to the reply. Never raises for a failure of the world."""
         began = time.perf_counter()
         ledger = Ledger(self._spend)
+        ledger.job, ledger.member_id = "chat", ask.speaker.id
         ask.ledger = ledger
         if not ask.text.strip():
             return self._finish(ask, "unclear", "negative", phrase(ask.language, "unclear"), ledger)
@@ -2116,9 +2117,11 @@ class AgentService:
             from ..management import tools_for_request
             management_tools = tools_for_request(ask.text, member_named=bool(
                 self._team and getattr(self._team, "named_in", lambda _: [])(ask.text)))
+            # The system prompt stays the same turn after turn, or the whole conversation is cached again: the
+            # management guidance a request needs goes with that turn's message (owner, 2026-11-09).
+            leadership = self._management_chat(ask) and bool(management_tools)
             if self._management_chat(ask):
-                system += (LEADERSHIP if management_tools else
-                           "\nEvery member has the same owner-private management tools. Find them with find_tools when needed. "
+                system += ("\nEvery member has the same owner-private management tools. Find them with find_tools when needed. "
                            "They manage members, folders, group chats, conversations, connections, models and settings. "
                            "Destructive and permission changes always wait for the owner's approval.")
                 system += "\nGrok template CreateAgent instructions map to member_create (legacy alias: create_member)."
@@ -2136,6 +2139,8 @@ class AgentService:
             native_sections = {}
             if ask.speaker.has_no_job and ask.scope == "private" and ask.exchange_speakers is None:
                 user += NEW_MEMBER_STEP
+            if leadership:
+                user += LEADERSHIP
             from .intents import instruction as intent_instruction
             user += intent_instruction(ask.intent)
             from .self_check import requested as diagnosis_requested
@@ -2452,6 +2457,10 @@ class AgentService:
             else:
                 loop = NarratedLoop(client=self._client, reasoning_effort=self._effort(settings),
                                     context_window=context_window(self._tool_support._catalog() or builtin_catalog(), settings.model), **common)
+                # The owner waits on this conversation and comes back to it: its provider keeps it in one place,
+                # cached for an hour (owner, 2026-11-09, decisions 1 and 4).
+                loop.cache_session = f"raphael-{ask.speaker.id}-{ask.conversation_id}"
+                loop.cache_ttl = "1h"
             def refresh_computer():
                 if not snapshot.refresh_computer(self._plugins, ask.speaker.id):
                     return False
@@ -3425,11 +3434,15 @@ class AgentService:
         ask.owner_card_ids = [card.id]
         self._turn_changed(ask.turn_id, ask.speaker.id)
         needs = self._cards.view(card)["needs"]
+        guide = await self._cards.setup_guide(app)
         asks = {"key": f" {app.name} signs in with the owner's own key, which the card asks for (Composio keeps it; you never see it): say so.",
                 "own_app": f" {app.name} needs a developer app of the owner's own, which the card walks them through: say so."}.get(needs, "")
-        return {"app": app.name, "card": card.state, "needs": needs, "note": (
-            f"A card to connect {app.name} is shown to the owner in this chat.{asks} End this turn now with one short "
-            "sentence. This request resumes by itself, once, after the owner connects; never claim its data now.")}
+        return {"app": app.name, "card": card.state, "needs": needs, "setup": guide, "note": (
+            f"A card to connect {app.name} is shown to the owner in this chat.{asks} Explain what each field means and where "
+            "to find it, in the owner's language, in plain words with no unexplained terms, one step at a time. "
+            "Use the setup guide; answer follow-up questions in this conversation. All values belong only in the card, "
+            "never ask for them in chat. Then end this turn. This request resumes by itself, once, after the owner "
+            "connects; never claim its data now.")}
 
     def _show_messaging(self, ask, args):
         if self._secret_cards is None or not ask.turn_id:

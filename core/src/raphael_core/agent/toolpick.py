@@ -216,7 +216,7 @@ class ToolPicker:
         ledger.add(
             model=plan.model,
             cost_usd=plan.cost_usd,
-            prompt_tokens=plan.prompt_tokens,
+            usage=getattr(plan, "usage", None), prompt_tokens=plan.prompt_tokens,
             completion_tokens=plan.completion_tokens,
             ms=plan.latency_ms,
         )

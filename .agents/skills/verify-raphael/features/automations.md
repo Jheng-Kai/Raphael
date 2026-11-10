@@ -1,18 +1,23 @@
 # Calendar and automations
 
-## The routine editor as rows (owner, 2026-11-08: 「這真的太亂了，還有一些字被隱藏起來」)
+## Routines are read; their members change them (owner, 2026-11-09)
 
-When a scheduled routine runs is one tinted list of rows, the name left and the choice right: 重複 (one dropdown of
-once, daily, weekdays, weekly, monthly and every, never a row of chips that runs out of room), then only the row its
-choice needs (the days of a week as small pills, a day of the month, an interval and its hours), then 開始 or 日期 and
-時間 (no time row while hours are set: they are its times). The sentence under the rows says it in words. The
-instructions box grows with its words (no scroll inside it) and nothing is reserved empty.
+Owner: 「這邊的所有設定都只能透過 Agent 完成 但是我們看的到內容」, and the calendar too. There is no routine editor:
+a routine opens to read (`routine-view.ts`: its name, when it runs, who runs it, its instructions, no field and no
+footer) from the member panel, a conversation's receipt, the calendar and its popover. A routine is made, changed,
+tested, paused for good or deleted by asking its member in the conversation (the routine tools; the member explains
+webhooks, tunnels and event filters there). The calendar's 例行任務 at a time, and a member dropped on a slot, open that
+member's conversation with the owner's words for it in the composer (`auto.askRoutine`); nothing is created by the
+window. The member panel has no plus; a routine row keeps its own switch, inside the row's one lit surface.
 
 ```powershell
-npm run look -- automation-once automation-weekly automation-every automation-long-prompt automation-monthly automation-minutes --theme both --width 1120,720,1920x1080
+npm run look -- automations-detail-routine details-routine-view details-routine-hover automation-drag-asks routine-sentence context-menu-routine panel-routine-row --theme both --width 1120,720,1920x1080
 ```
 
-`moving-routine-rows` checks the dropdown, that every row's words are whole and inside the dialog, and the box.
+`routine-view` checks the dialog holds nothing to change; `routine-asked` that the dropped member's composer holds
+the words and nothing was created; `routine-row-hover` that the switch stands inside the lit row. The sections below
+that describe the editor's rows, menus, test runs, webhook and tunnel cards are history: their scenes were retired with
+it, and the core contracts they cite stay.
 
 ## Calm conversations (owner, 2026-11-05)
 
@@ -28,7 +33,7 @@ See [Daily work](daily-work.md) for limits, receipts and offline/native boundari
 Follow-up 1 authorizes this representative row/editor rendering:
 
 ```powershell
-npm run look -- routine-guard-reason automation-edit --theme both --width 1120,720,1920x1080
+npm run look -- routine-guard-reason --theme both --width 1120,720,1920x1080
 ```
 
 Inspect the full-size paused reason in both themes/all sizes, comparing its
@@ -65,7 +70,7 @@ and report navigation. Edit/off share one row height and text baseline at every 
 both use existing overflow counts. Daily, weekly, once and every 24 hours stay timed.
 
 ```powershell
-npm run look -- calendar-rhythm-week calendar-rhythm-day calendar-rhythm-month calendar-rhythm-popover calendar-rhythm-hidden home-calendar-rhythm automations-google-composio automation-window automation-window-menu automation-window-saved automations-calendar automations-all-day automation-edit details-routines home-own-events --theme both --width 1120,720,1920x1080
+npm run look -- calendar-rhythm-week calendar-rhythm-day calendar-rhythm-month calendar-rhythm-popover calendar-rhythm-hidden home-calendar-rhythm automations-google-composio automations-calendar automations-all-day details-routines home-own-events --theme both --width 1120,720,1920x1080
 ```
 
 Inspect all contact sheets and full-size narrow/wide bars, month lines, exception
@@ -105,22 +110,22 @@ marked as untrusted external data. Polling itself cannot write or send anything.
 A dedicated inbox address needs a mail service and remains out of scope (W21).
 
 ```powershell
-npm run look -- routine-event-row routine-event-edit routine-event-saved routine-event-missing routine-event-reconnect routine-event-profile details-routines automation-edit --theme both --width 1120,720,1920x1080
+npm run look -- routine-event-row routine-event-profile details-routines --theme both --width 1120,720,1920x1080
 ```
 
 Inspect all contact sheets and event full-size images, comparing row switches and
 editor actions with details-routines and automation-edit at the same width/theme.
 Core contracts: core/tests/members/test_events.py,
 core/tests/members/test_event_harness.py (API and CLI create/list/update),
-core/tests/brain/test_db.py (migration 49 schema parity). Frontend edit contract:
-app/src/main/member-profile.test.ts::an event routine edits a readable filter without losing its read tool arguments.
+core/tests/brain/test_db.py (migration 49 schema parity). The frontend edit contract
+(member-profile.test.ts) was retired with the routine editor on 2026-11-09.
 
 ## Sub-features
 
 The app's own calendar, modelled on Google Calendar in the app's own look: week (default),
 day and month; one-time events the owner and every member make and change; routine
 occurrences and Google events read here. Once/daily/weekdays/weekly/every schedules,
-destination/end conditions, edit/delete and calendar drop prefill keep their routine editor.
+destination/end conditions are what the member sets when the owner asks; the window only reads them (2026-11-09).
 
 ## How to get to it (user POV)
 
@@ -132,7 +137,7 @@ From Home click the calendar block, a date or an event. Home remains highlighted
 - **Chips:** time and title, sized by duration, side by side when overlapping (R-UI-65). An own event is ink, a routine its member's slime colour with the member's 20px face, a Google event an outline with Google's mark. Side by side a chip gives up its face to its words. A routine's occurrence has no length and is drawn an hour long. A failed or waiting run's mark stands in a corner (beside the time, or the foot corner under a face), so the title keeps its lines; titles balance their two lines. The event whose panel is open, or that Home opened, lifts with a shadow; a ring stays keyboard focus's (R-UI-31).
 - **Panels:** the form or detail stands beside its slot or event, on the right, else on the left while that stays on the calendar; a slot too wide for either side (the day view) has it centred over it, never over the rail or the sidebar. The notes grow with their words up to six lines, with no drag grip.
 - **Make:** click a slot for the small form beside it, drag over a range to set the time, or 建立 for the same form. It holds the title, start, end, all-day and notes, and 改成例行任務 for what repeats. Enter or 儲存 saves and draws it. A press outside closes a form with nothing typed; one that holds words stays until 取消 or Escape.
-- **Read and change:** click an event for its time, notes and who added it, the pencil and the ⋯ that holds delete, which asks once more. Right click reaches the same menu. Drag moves an own event, its bottom edge resizes it; an all-day bar moves by days and its right edge stretches it; in a month a chip moves to another day. Routine and Google entries are read and say where they come from; a routine opens its existing editor.
+- **Read and change:** click an event for its time, notes and who added it, the pencil and the ⋯ that holds delete, which asks once more. Right click reaches the same menu. Drag moves an own event, its bottom edge resizes it; an all-day bar moves by days and its right edge stretches it; in a month a chip moves to another day. Routine and Google entries are read and say where they come from; a routine opens to read, and its member changes it in the conversation (2026-11-09).
 - **Month:** six weeks of chips, 還有 N 個 for what does not fit, which opens that day. A click on an empty part of a day makes an all-day event there.
 - **Narrow windows:** at 760px of content width and below, a calendar icon in the toolbar opens the rail as a drawer from the left, + makes an event, and a week still shows all seven days whenever its actual calendar content is at least 520px. Below that it shows one to three days from the date in view and names those dates in the title. Tight chips retain readable times. Picking a date or starting a member drag closes the drawer.
 
@@ -147,8 +152,6 @@ npm run look -- automations-calendar automations-day automations-month automatio
 npm run look -- automations-create-slot automations-create-drag automations-create-button automations-create-time-menu automations-create-all-day automations-create-saved automations-detail-own automations-detail-member automations-detail-routine automations-detail-google automations-edit-own automations-delete-own automations-right-click automations-move automations-resize --theme both --width 1120,720,1920x1080
 npm run look -- automations-google-off automations-google-off-closed automations-google-failed automations-google-composio automations-hover --theme both --width 1120,720,1920x1080
 npm run look -- automations-tools automations-tools-month automations-tools-date automations-tools-awake --theme both --width 1120,720,1920x1080
-npm run look -- automation-once automation-daily automation-weekdays automation-weekly automation-every automation-hours-menu --theme both --width 1120,720,1920x1080
-npm run look -- automation-destination automation-end-menu automation-max-runs automation-until automation-edit automation-delete automation-drag-prefill automation-more-bottom --theme both --width 1120,720,1920x1080
 ```
 
 Keep dialog/calendar/menu PNGs; inspect bottom fields at 720, menu placement, labels
@@ -192,9 +195,7 @@ The shared toast stays at the bottom-right on the calendar. The existing
 conversation/member/room and calendar comparisons intentionally differ in vertical
 offset, while retaining the same text pattern, surface, type and spacing.
 
-```powershell
-npm run look -- automation-delete --theme both --width 1120,720,1920x1080
-```
+(Its scenes were retired with the routine editor on 2026-11-09.)
 
 ## Owner round 6 contracts
 
@@ -240,7 +241,7 @@ Additional affected consumers: automation-offer shares the same sentence in a su
 The automation-offer scene uses the existing Ctrl+N new-member shortcut. The offer matrix does not prove the narrow sidebar plus route. The shared key driver releases Control even if dispatch fails (driver.test.mjs).
 
 ```powershell
-npm run look -- automation-monthly automation-minutes automation-event-pick automation-event-none-connected automation-webhook automation-webhook-reveal routine-sentence routine-sentence-event routine-sentence-webhook automation-monthly-calendar automation-minutes-calendar automation-offer --theme both --width 1120,720,1920x1080
+npm run look -- routine-sentence routine-sentence-event routine-sentence-webhook automation-monthly-calendar automation-minutes-calendar automation-offer --theme both --width 1120,720,1920x1080
 ```
 
 
@@ -249,7 +250,7 @@ npm run look -- automation-monthly automation-minutes automation-event-pick auto
 The event-pick scene now selects, reads, creates once, and reopens the saved condition; it no longer pins an empty catalogue. event-undetectable retries without saving. Repository/channel scenes exercise the shared plain-input row. webhook-address-changed explains the working replacement port. The existing no-connected, manual filter, masked/revealed secret and transcript scenes remain representative consumers.
 
 ```powershell
-npm run look -- automation-event-pick automation-event-undetectable automation-event-none-connected automation-event-repository automation-event-channel automation-webhook automation-webhook-address-changed automation-webhook-reveal routine-event-edit routine-event-saved routine-sentence-event --theme both --width 1120,720,1920x1080
+npm run look -- routine-sentence-event --theme both --width 1120,720,1920x1080
 ```
 
 ## Real-account review fixes (2026-11-02)
@@ -258,9 +259,7 @@ R-RT-04/05: Gmail requests twenty items with payload and verbose output off. Cal
 
 The new automation-event-calendar scene uses the same event form as Gmail: pick, create once, then reopen. Its check preserves the ordinary detected path, small arguments and moving window without exposing them in the UI. Selected scope is all six automation-event-* scenes; the UI appearance is unchanged.
 
-```powershell
-npm run look -- automation-event-pick automation-event-calendar automation-event-undetectable automation-event-none-connected automation-event-repository automation-event-channel --theme both --width 1120,720,1920x1080
-```
+(Its scenes were retired with the routine editor on 2026-11-09.)
 
 ## Cold Calendar catalogue review (2026-11-02)
 
@@ -300,7 +299,7 @@ Slack's existing selected-channel read optionally adds a literal text substring
 Selected rendered matrix (synthetic fixtures and IPC, real app entry):
 
 ```powershell
-npm run look -- routine-test-running routine-test-done routine-test-refused routine-test-row-menu routine-test-conversation routine-when-words routine-when-editor routine-empty-words routine-run-history routine-trigger-recipes routine-trigger-pagerduty routine-trigger-slack routine-zone routine-zone-search routine-zone-saved automation-edit details-routines --theme both --width 1120,720,1920x1080
+npm run look -- routine-when-words routine-empty-words routine-zone routine-zone-search routine-zone-saved details-routines --theme both --width 1120,720,1920x1080
 ```
 
 Inspect every contact sheet and relevant full-size editor, row menu, conversation,
@@ -321,8 +320,6 @@ settings-view.test.ts, agent-members.test.ts and look audit/app tests.
 
 R-COLLEAGUE-05: Edit a saved webhook routine > External URL. Choose Tailscale Funnel, Cloudflare Tunnel or ngrok, copy the exact command and run the already-installed tool yourself. Paste its HTTPS URL and Test external URL. The PC-on reminder stays beside auth choices. Explicit key generation rotates the key; copy uses the displayed value and closing clears it. HMAC and Bearer share the existing receiver.
 
-```powershell
-npm run look -- webhook-external webhook-external-tested webhook-external-hmac automation-webhook routine-trigger-recipes --theme both --width 1120,720,1920x1080
-```
+(Its scenes were retired with the routine editor on 2026-11-09.)
 
 The self-post uses a short-lived authenticated nonce and must reach this exact hook without executing its work or consuming admission. Private addresses, redirects, credentials and unrelated endpoints fail. Fakes prove these boundaries; no tunnel, public network or live form service is started during offline checks.

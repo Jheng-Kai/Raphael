@@ -1,15 +1,17 @@
 import { visibilityGate, windowVisible } from "../window-visibility";
 // The app's own calendar, modelled on Google Calendar: the month, what it shows and 建立 in a rail on the left; a day, week
 // or month on the right. Own events are made and changed here by click and drag; routines and Google events are read
-// here and say where they come from. Home opens it.
+// here and say where they come from. A routine is made or changed by its member in the conversation (owner, 2026-11-09:
+// 「這邊的所有設定都只能透過 Agent 完成 但是我們看的到內容」): a routine opens to read, and 例行任務 at a time puts the
+// owner's words for it in the member's composer. Home opens it.
 import * as api from "../api";
 import { closePanel, openEventDetail, openEventEditor, panelOpen, type EventDraft } from "../calendar-popover";
 import { allDayBars, chipClock, chipColor, chipHTML, dayLayout, dismissOffer, entryOfItem, googleMark, googleNoticeHTML, GOOGLE_SOURCE, isAllDayRow, isRunException, memberSource, monthEntries, OWN_SOURCE, routineEntries, type CalendarEntry, type Segment } from "../calendar-view";
-import { describeError, formatClock } from "../format";
+import { describeError, formatClock, formatDate } from "../format";
 import { getLocale, onLocaleChange, t } from "../i18n";
 import { dayName, faceHTML, primaryFirst, primaryIdOf } from "../members";
 import { openMemberThread } from "../team-navigation";
-import { openRoutineDialog } from "../routine-dialog";
+import { openRoutineView } from "../routine-view";
 import { dateKey, localDay, monthDays, monthGrid, monthLabel, shiftDay } from "../schedule-picker";
 import type { AppContext, Member, Page, Routine, RoutineRun } from "../types";
 import type { GoogleCalendarState, HomeItem } from "../home-types";
@@ -65,8 +67,10 @@ export function createAutomationsPage(app: AppContext): Page {
     try { localStorage.setItem(VIEW_KEY,value); } catch { /* The choice still holds for this window. */ }
   };
   const hourHeight = (): number => parseFloat(el.style.getPropertyValue("--au-hour")) || 48;
+  /** A routine is read; a new one at a day and time is asked of a member in its conversation, Raphael by default. */
   const edit = (routine?: Routine, memberId?: number, day?: string, time?: string): void => {
-    openRoutineDialog({ members, routine, memberId, date: day, time, onSaved: () => void load(), onDeleted: () => void load() });
+    if (routine) { openRoutineView(routine, members); return; }
+    openMemberThread(app, memberId ?? 0, undefined, t("auto.askRoutine", { p0: day ? formatDate(day) : "", p1: time ?? "" }));
   };
 
   let readStamp = "";

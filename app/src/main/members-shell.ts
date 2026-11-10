@@ -595,8 +595,6 @@ export function createMembers(host: MembersHost): MembersShell {
         settings.refresh();
       } else if (event.type === "RoutinesChanged" && event.member_id === current) {
         details.refreshRoutines();
-      } else if (event.type === "SettingsChanged" || event.type === "BrainsChanged" || event.type === "ProvidersChanged") {
-        settings.refreshModel();
       } else if (event.type === "MemoryChanged") {
         settings.refreshMemory(event.member_id, event.space);
       } else if (event.type === "MemberActivity") {

@@ -48,7 +48,6 @@ export function mountConversationFind(o: { button: HTMLElement; bar: HTMLElement
         const section = work.closest<HTMLElement>('[data-thinking-turn]')!;
         o.revealWork?.(Number(section.dataset.thinkingTurn));
         work.hidden = false; section.classList.add('is-open');
-        section.closest('.tn')?.querySelectorAll('[data-act="thinking"]').forEach(button => button.setAttribute('aria-expanded', 'true'));
       }
       for (let group = mark.closest('details'); group; group = group.parentElement?.closest('details') ?? null) {
         if (!group.open && !group.querySelector(':scope > summary')?.contains(mark)) group.open = true;

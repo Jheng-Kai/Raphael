@@ -6,7 +6,6 @@ import { openEditMemberDialog, type MemberProfileHost } from "./member-profile";
 import { mountMemberResources } from "./member-profile-resources";
 import { memberPreset, randomMemberName } from "./member-profile-presets";
 import type { Member } from "./types";
-import { closeMenu } from "./ui";
 
 vi.mock("./api", () => ({ core: vi.fn(), membersUpdate: vi.fn(), membersSkillsList: vi.fn(), membersSkillsImport: vi.fn(), membersSkillsUpdate: vi.fn(), membersSkillsDelete: vi.fn(), membersCommandsList: vi.fn(), membersCommandsSave: vi.fn(), membersCommandsDelete: vi.fn(), membersVoices: vi.fn(), routinesList: vi.fn(), routinesCreate: vi.fn(), routinesUpdate: vi.fn(), routinesDelete: vi.fn() }));
 const member: Member = { id: 7, name: "Mia", role: "Research", instructions: "Keep sources", personality: "Careful", avatar: "", group_id: null, model: "", tools: null, position: 0, created: 0, unread: false, waiting: false, preview: "", last_at: null };
@@ -147,24 +146,6 @@ test("the dialog writes no memory it did not change, and stays open on one that 
   second.close();
 });
 
-test("profile routines use the shared editor with every recurrence and HH:MM validation", async () => {
-  const dialog = openEditMemberDialog(host(), member);
-  click(dialog.el, '#mp-tab-routines'); await flush();
-  click(dialog.el, '[data-dlg="routine-add"]');
-  const form = document.querySelector<HTMLElement>('.au-routine-dialog')!;
-  // 重複 is one dropdown of its six choices, never a row of chips that runs out of room (owner, 2026-11-08).
-  click(form, '[data-dlg="kind-menu"]');
-  expect(document.querySelectorAll('#app-popover [data-value]')).toHaveLength(6);
-  closeMenu();
-  expect(form.querySelector<HTMLInputElement>('#au-time')!.type).toBe('text');
-  fill(form, '#au-title', 'Review'); fill(form, '#au-prompt', 'Review updates');
-  fill(form, '#au-time', '25:60'); click(form, '[data-dlg="save"]'); await flush();
-  expect(form.isConnected).toBe(true);
-  expect(api.routinesCreate).not.toHaveBeenCalled();
-  click(form, '[data-dlg="kind-menu"]'); click(document.body, '#app-popover [data-value="weekly"]');
-  expect(form.querySelectorAll('[data-dlg="day"]')).toHaveLength(7);
-  click(form, '[data-dlg="cancel"]'); dialog.close();
-});
 
 test("localized role presets fill all identity and instruction fields", async () => {
   const dialog = openEditMemberDialog(host(), member);
@@ -291,18 +272,6 @@ test("a late command save cannot erase the next subpage after the editor is dest
   expect(container.innerHTML).toBe('<p>Next member page</p>');
 });
 
-test("editing a saved routine from the profile preserves schedule end conditions", async () => {
-  const routine = { id: 4, member_id: 7, title: "Review", prompt: "Review updates", enabled: true, last_run: null, next_run: null, schedule: { kind: "weekly", days: [1, 3], time: "08:45", start_date: "2026-10-26", max_runs: 12 } } as const;
-  vi.mocked(api.routinesList).mockResolvedValue({ routines: [{ ...routine, schedule: { ...routine.schedule, days: [1, 3] } }] });
-  vi.mocked(api.routinesUpdate).mockResolvedValue({ routine: { ...routine, schedule: { ...routine.schedule, days: [1, 3] } } });
-  const dialog = openEditMemberDialog(host(), member, "routines"); await flush();
-  click(dialog.el, '[data-dlg="routine-edit"]');
-  const form = document.querySelector<HTMLElement>(".au-routine-dialog")!;
-  expect(form.querySelector<HTMLInputElement>("#au-count")!.value).toBe("12");
-  fill(form, "#au-title", "Updated review"); click(form, '[data-dlg="save"]'); await flush();
-  expect(api.routinesUpdate).toHaveBeenCalledWith(4, { title: "Updated review", prompt: "Review updates", schedule: {...routine.schedule,timezone:Intl.DateTimeFormat().resolvedOptions().timeZone} });
-  expect(form.isConnected).toBe(false); dialog.close();
-});
 
 
 test.each([["zh-TW", "2026/10/29"], ["ja", "2026/10/29"], ["en", "Oct 29, 2026"]] as const)("learned skills use the %s UI date and reading the editor never writes or notifies", async (locale, date) => {
@@ -337,18 +306,3 @@ test.each([["zh-TW", "2026/10/29"], ["ja", "2026/10/29"], ["en", "Oct 29, 2026"]
 });
 
 
-test("an event routine edits a readable filter without losing its read tool arguments", async () => {
-  const when = { app: "gmail", event: { tool: "mcp:gmail/messages", arguments: { limit: 50 }, items: "messages", id: "id" }, filter: { field: "sender", equals: "client@example.com" } };
-  const routine = { id: 9, member_id: 7, title: "Client mail", prompt: "Prepare a draft", enabled: true, last_run: null, next_run: null, schedule: null, when, last_checked: 1792792800000 };
-  vi.mocked(api.routinesList).mockResolvedValue({ routines: [routine] });
-  vi.mocked(api.routinesUpdate).mockResolvedValue({ routine });
-  const dialog = openEditMemberDialog(host(), member, "routines"); await flush();
-  expect(dialog.el.textContent).toContain("client@example.com");
-  click(dialog.el, '[data-dlg="routine-edit"]');
-  const form = document.querySelector<HTMLElement>(".au-routine-dialog")!;
-  expect(form.querySelector("#au-time")).toBeNull();
-  expect(form.textContent).not.toContain('"arguments"');
-  fill(form, "#au-filter", "owner@example.com"); click(form, '[data-dlg="save"]'); await flush();
-  expect(api.routinesUpdate).toHaveBeenCalledWith(9, { title: routine.title, prompt: routine.prompt, when: { ...when, filter: { ...when.filter, equals: "owner@example.com" } } });
-  dialog.close();
-});

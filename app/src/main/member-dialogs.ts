@@ -21,8 +21,7 @@ import {
   sourceLabel,
 } from "./members";
 import type { MemberGroup, MemberSource, RoutineOffer, WireAttachment } from "./types";
-import { type ActionRowOptions, actionRow, btn, closeMenu, esc, ico, iconButton, openPopover, placeMenu, row, tabs, tg, toaster } from "./ui";
-import { mountGenerate, type GenerateOptions } from "./avatar-generate";
+import { type ActionRowOptions, actionRow, btn, closeMenu, esc, ico, iconButton, openPopover, row, tg, toaster } from "./ui";
 
 // ---------- the dialog ----------
 
@@ -357,56 +356,29 @@ export interface AvatarPickerOptions {
   slimes?: boolean;
   /** The picture it has now, which the slimes start from. */
   current?: string | null;
-  /** A member's 生成 tab beside its slimes (Grok Bot's picker): the image model draws a picture to use. */
-  generate?: Omit<GenerateOptions, "resized" | "done" | "leave"> & { leave?(): void };
 }
 
-/** The small popover of a picture: the slimes (and, for a member, 生成 beside them) and, for the owner and Raphael, 「從電腦選…」. */
+/**
+ * The small popover of a picture: the slimes and, for the owner and Raphael, 「從電腦選…」. A member's face is a slime:
+ * there is no picture drawn by an image model (owner, 2026-11-09: 「生成拿掉…把史萊姆的種類與造型大幅擴增」).
+ */
 export function openAvatarPicker(anchor: HTMLElement, o: AvatarPickerOptions): void {
   const actions = [...(o.onComputer ? [{ label: t("members.fromPc"), run: o.onComputer }] : []), ...(o.more ?? [])];
   const slimes = (o.slimes ? slimePickerHTML(o.current, esc) : "") +
     actions
       .map((action, i) => `<button type="button" role="menuitem" tabindex="-1" class="menu-action" data-pick="${i}"><span class="mt">${esc(action.label)}</span></button>`)
       .join("");
-  const bar = o.generate ? tabs([{ id: "slime", label: t("avatarGen.slimes"), attrs: ' data-avp-tab="slime"' }, { id: "generate", label: t("avatarGen.tab"), attrs: ' data-avp-tab="generate"' }],
-    // The panel's own small pills, centred (owner, 2026-11-08: not two wide buttons across the picker).
-    "slime", { label: t("settings.avatar"), kind: "nav", plain: true }) : "";
-  const el = openPopover(
-    anchor,
-    o.generate ? `${bar}<div class="avp-pane" data-avp-pane="slime">${slimes}</div><div class="avp-pane" data-avp-pane="generate" hidden></div>` : slimes,
-    { className: `menu mb-avpop${o.generate ? " has-tabs" : ""}`, role: "menu", label: t("settings.avatar"), placement: "center" },
-  );
-  let generator: { focus(): void } | null = null;
-  // The picker keeps the slimes' width whichever tab is open, so its tabs never move under the pointer.
-  if (o.generate) el.style.width = `${Math.ceil(el.getBoundingClientRect().width)}px`;
-  const show = (tab: string): void => {
-    for (const button of el.querySelectorAll<HTMLElement>("[data-avp-tab]")) button.setAttribute("aria-selected", String(button.dataset.avpTab === tab));
-    for (const pane of el.querySelectorAll<HTMLElement>("[data-avp-pane]")) pane.hidden = pane.dataset.avpPane !== tab;
-    // The 生成 tab holds a field and buttons: a dialog keeps Tab inside it instead of closing as a menu does.
-    el.setAttribute("role", tab === "generate" ? "dialog" : "menu");
-    if (tab === "generate" && o.generate) {
-      const pane = el.querySelector<HTMLElement>('[data-avp-pane="generate"]')!;
-      const leave = o.generate.leave;
-      generator ??= mountGenerate(pane, { ...o.generate, resized: placeMenu, done: () => { closeMenu(); anchor.focus({ preventScroll: true }); },
-        leave: () => { closeMenu(); leave?.(); } });
-      generator.focus();
-    } else el.querySelector<HTMLElement>('[data-avp-pane="slime"] button')?.focus();
-    placeMenu();
-  };
+  const el = openPopover(anchor, slimes, { className: "menu mb-avpop", role: "menu", label: t("settings.avatar"), placement: "center" });
   el.addEventListener("click", (e) => {
     const target = (e.target as Element).closest<HTMLElement>("button");
     if (!target) return;
-    if (target.dataset.avpTab) { show(target.dataset.avpTab); return; }
-    // The 生成 tab answers its own presses and may have drawn itself again already, taking the button out of the page:
-    // where the press happened is read from the event's path, which still holds the tab.
-    if (e.composedPath().some(node => node instanceof HTMLElement && node.dataset.avpPane === "generate")) return;
     // Trying slimes is the point of this menu, so a press on one leaves it where it is.
     const slime = pickSlime(target);
     if (slime) { o.onSlime?.(slime); return; }
     closeMenu();
     actions[Number(target.dataset.pick)]?.run();
   });
-  el.querySelector<HTMLElement>(o.generate ? '[data-avp-pane="slime"] button' : "button")?.focus();
+  el.querySelector<HTMLElement>("button")?.focus();
 }
 
 // ---------- the groups' dropdowns ----------

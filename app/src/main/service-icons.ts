@@ -16,7 +16,7 @@ import { esc } from "./ui";
 
 /** Registered logo ids, including reserved provider artwork. `hasLogo` reports installed files. */
 export const LOGO_IDS = [
-  "monday", "jam", "fireflies", "close", "attio", "granola", "klaviyo", "apify", "jotform", "context7", "deepwiki", "mslearn", "aws",
+  "monday", "jam", "fireflies", "close", "attio", "granola", "klaviyo", "apify", "jotform", "context7", "deepwiki", "mobbin", "mslearn", "aws",
   "huggingface", "exa", "tavily", "jina", "firecrawl", "fish",
   "openai", "azure", "litellm", "portkey", "nebius", "bifrost", "groq", "anthropic", "googlegemini", "googlecloud",
   "ollama", "vercel", "lmstudio", "deepseek", "mistral",
@@ -195,6 +195,7 @@ const MATCHERS: Partial<Record<ServiceIconId, readonly (readonly string[])[]>> =
   jotform: [["jotform"]],
   context7: [["context7"]],
   deepwiki: [["deepwiki"]],
+  mobbin: [["mobbin"]],
   openrouter: [["openrouter"]],
   brave: [["brave", "search"], ["bravesearch"]],
   searxng: [["searxng"]],

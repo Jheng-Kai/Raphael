@@ -5,7 +5,7 @@ services apart. The logos are in app/src/main/service-logos/, and where each one
 written in app/src/main/service-logos/sources.json. They are not licensed to Raphael and stay the
 property of their owners.
 
-monday.com, Jam, Fireflies, Close, Attio, Granola, Klaviyo, Apify, Jotform, Context7, DeepWiki,
+monday.com, Jam, Fireflies, Close, Attio, Granola, Klaviyo, Apify, Jotform, Context7, DeepWiki, Mobbin,
 Microsoft Learn (Microsoft), Amazon Web Services, Hugging Face, Exa, Tavily, Jina, Firecrawl and
 Fish Audio (https://fish.audio/apple-touch-icon.png, from https://fish.audio/), and the marks drawn
 from Simple Icons (Notion, GitHub, Google Drive, Gmail, Google Calendar, Linear, Figma, Spotify, Discord, Slack, Todoist,
@@ -15,7 +15,8 @@ trademarks or registered trademarks of their respective owners.
 
 Raphael is not affiliated with, sponsored by or endorsed by any of them. A logo is shown unaltered
 except that a backdrop may be removed and, for a mark that is black in its official form, a white
-version is shown on the dark theme. Tavily's dark-theme tile and arrow fills are inverted.
+version is shown on the dark theme. Tavily's dark-theme tile and arrow fills are inverted. Mobbin's
+mark is its favicon picture traced to one path, unchanged in shape.
 
 The existing Simple Icons paths are from 16.35.0. The added OpenRouter, Brave and SearXNG paths
 are Simple Icons artwork, checked identical to the upstream files (develop branch) on 2026-10-23.

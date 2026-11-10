@@ -44,7 +44,7 @@ import { eventRead } from '../event-read';
 import { cancelGesture } from "../../shared/cancel-gesture";
 import { openActions } from "../member-column";
 import { mountConversationFind } from "../conversation-find";
-import { openRoutineDialog } from "../routine-dialog";
+import { openRoutineView } from "../routine-view";
 import { createAttachmentMedia } from "../attachment-media";
 import { ATTACH_MAX, FILE_MAX_BYTES, TOTAL_MAX_BYTES, attachmentLimit, readComposerFile, attachRefusal, base64Of, bindFilePaste, draftFileHTML, fileMime, fileKind, mountStageDrop } from "../attachments";
 import { closeMediaLightbox, openMediaLightbox } from "../media-lightbox";
@@ -1225,12 +1225,27 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     if (mine !== loads) return;
     if (more || dirtyTurnIds.size) scheduleRefresh();
     finishOpening();
+    greetIfSilent();
     if (targetTurn !== undefined) {
       openingThread = false;
       const target = thread.querySelector<HTMLElement>(`[data-id="${targetTurn}"]`);
       if (target) { target.scrollIntoView?.({ block: "center" }); target.classList.add("is-search-target"); setTimeout(() => target.classList.remove("is-search-target"), 2400); }
       targetTurn = undefined;
     }
+  }
+
+  /** The members asked this session to open their own conversation: once each; the core decides the rest. */
+  const greetAsked = new Set<number>();
+  /**
+   * A member's conversation is never an empty page (owner, 2026-11-10: 「理論上我們不應該會看到這個畫面」): a member made
+   * without its greeting (by a way of making members that did not greet yet) is asked once to write it. The core starts
+   * it only while the owner has written nothing there and no greeting runs (members.greet); it refuses otherwise.
+   */
+  function greetIfSilent(): void {
+    const member = memberId();
+    if (member === RAPHAEL_ID || greetAsked.has(member) || canLoadEarlier || searching || !isEmpty() || turns.some(turn => turn.route === "greeting")) return;
+    greetAsked.add(member);
+    void api.membersGreet(member).then(() => { if (visible && memberId() === member) void load(false); }, () => undefined);
   }
 
   /** The questions in the history now are no longer waited for: a typed one by its words, a spoken one by any new turn of the voice. */
@@ -1762,18 +1777,6 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     rememberLine(button);
   }
 
-  function toggleThinking(button: HTMLElement): void {
-    const box = button.closest<HTMLElement>(".tn")?.querySelector<HTMLElement>(".think-box");
-    const body = box?.querySelector<HTMLElement>(".think-body");
-    if (!box || !body) return;
-    const id = Number(box.dataset.thinkingTurn ?? button.closest<HTMLElement>(".tn")?.dataset.id);
-    const next = Boolean(body.hidden);
-    body.hidden = !next;
-    box.classList.toggle("is-open", next);
-    button.closest(".tn")?.querySelectorAll('[data-act="thinking"]').forEach(control => control.setAttribute("aria-expanded", String(next)));
-    if (!Number.isNaN(id)) state.thinkingOpen.set(id, next);
-    rememberLine(button);
-  }
 
   function togglePdfExpand(button: HTMLElement): void {
     const card = button.closest<HTMLElement>(".media-pdf");
@@ -1859,11 +1862,10 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     if (!source && !pending) return;
     const owner = !source || source.key === "question";
     const message = control.closest<HTMLElement>(".chat-message");
-    const work = message?.querySelector<HTMLElement>('[data-act="thinking"]');
     const items: Parameters<typeof openActions>[1][number][] = [];
     if (source) items.push({ id: "reply", label: t("chat.reply"), icon: "reply" });
     items.push({ id: "copy", label: t("chat.copy"), icon: "copy" });
-    if (work) items.push({ id: "work", label: work.getAttribute("aria-label") ?? t("work.inspect"), icon: "steps" });
+    // No 「查看過程」: how a reply was worked out is not shown (owner, 2026-11-10: 「不用有查看過程」).
     // A greeting that came through stays: only a failed one is written again (its rerun button), never a second.
     if (source && !owner && control.dataset.regenerate === "true" && look().regenerateTurnId === source.turn.id && source.turn.route !== "greeting") items.push({ id: "regenerate", label: t("chat.regenerate"), icon: "refresh" });
     const ownerAct = pending ? "cancel" : control.dataset.ownerAct;
@@ -1873,7 +1875,6 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     openActions(control, items, pick => {
       if (pick === "regenerate") void regenerate(control);
       else if (pick === "reply") replyMessage(control);
-      else if (pick === "work" && work) toggleThinking(work);
       else if (pick === "edit") void editMessage(control);
       else if (pick === "cancel") void cancelMessage(control);
       else void copyMessage(message?.querySelector<HTMLElement>('[data-act="copy-message"]') ?? control);
@@ -2207,7 +2208,8 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       case "open-routine":
         void Promise.all([api.routinesList(Number(act.dataset.routineMember ?? memberId())), api.membersList()]).then(([routines, team]) => {
           const routine = routines.routines.find(r => r.id === Number(act.dataset.routine));
-          if (routine) openRoutineDialog({members:team.members, routine});
+          // To read: its member changes it in the conversation (owner, 2026-11-09).
+          if (routine) openRoutineView(routine, team.members);
           else toaster.info(t("members.profile.noRoutines"));
         }).catch(error => toaster.info(describeError(error)));
         break;
@@ -2231,9 +2233,6 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
         break;
       case "detail":
         toggleDetail(act);
-        break;
-      case "thinking":
-        toggleThinking(act);
         break;
       case "open-url": {
         e.preventDefault();
@@ -2583,10 +2582,12 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     if (!el.isConnected) return;
     if (roomPane.active) roomPane.close();
     const jump = ++memberJump;
-    const { memberId, turnId, files } = (event as CustomEvent<{ memberId: number; turnId?: number; files?: boolean }>).detail;
+    const { memberId, turnId, files, draft } = (event as CustomEvent<{ memberId: number; turnId?: number; files?: boolean; draft?: string }>).detail;
     void members.load().then(async () => {
       members.select(memberId);
       if (files) { desktop.files(); }
+      // Words handed with the member (the calendar's ask for a routine) wait in its composer once it is the open one.
+      if (typeof draft === "string" && jump === memberJump && memberId === members.current()) { putDraft(draft.slice(0, TYPED_MAX_CHARS)); focusComposer(); }
       if (!turnId) return;
       await load(false);
       const generation = loads;

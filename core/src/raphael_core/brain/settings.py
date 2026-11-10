@@ -49,6 +49,8 @@ DEFAULTS: dict[str, Any] = {
     "first_bot_profile": {},
     "chief_pinned": False,
     "raphael_draft_first": True,
+    "raphael_tools": None,
+    "raphael_notify": False,
     "owner_name": "",
     "owner_about": "",
     "owner_output_folder": "",
@@ -345,9 +347,16 @@ def checked(key: str, value: Any) -> tuple[str, Any]:
         if any(not isinstance(text, str) or len(text.strip()) > limits[field] or "\x00" in text
                for field, text in value.items()):
             raise ValueError("Invalid first Bot profile text")
-        if value and not value.get("name", "").strip():
+        if "name" in value and not value["name"].strip():
             raise ValueError("The first Bot needs a name")
         return key, {field: text.strip() for field, text in value.items()}
+    if key == "raphael_tools":
+        from ..members.store import MemberError, clean_tools
+        try:
+            tools = clean_tools(value)
+        except MemberError as error:
+            raise ValueError(str(error)) from None
+        return key, None if tools is None else list(tools)
     if key == "languages":
         return key, checked_languages(key, value)
     if value is None and key in _NULLABLE:

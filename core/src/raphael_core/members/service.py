@@ -387,7 +387,9 @@ class MembersService:
 
     def speaker(self, member_id: int) -> Speaker | None:
         if member_id == 0:
+            tools = self._settings.get("raphael_tools")
             return Speaker(**self.first_bot_profile(), draft_first=self._settings.get("raphael_draft_first"),
+                           tools=None if tools is None else frozenset(tools),
                            capabilities=frozenset({"chief"}) if self.store.is_chief(member_id) else frozenset())
         return self.store.speaker(member_id)
 
@@ -496,7 +498,7 @@ class MembersService:
             turn = self._history.get(turn_id)
             if turn is not None and turn.scope != "private":
                 return
-            if turn is not None and turn.member_id:
+            if turn is not None:
                 self._deliver_turn(turn)
             if turn is None or (turn.source == "voice" and turn.member_id == 0) or turn.member_id == self._viewing:
                 return
@@ -515,18 +517,19 @@ class MembersService:
         # Bound the delivery cache without retaining any message contents.
         if len(self._delivered) > 2000:
             self._delivered = {(turn.id, turn.created_at_ms, kind)}
-        member = self.store.member(turn.member_id)
+        member = self.speaker(0) if turn.member_id == 0 else self.store.member(turn.member_id)
         if member is None:
             return
         self._notice(member, kind)
 
-    def _notice(self, member: Member, kind: str) -> None:
-        if member.notify and self._notify is not None:
-            self._notify("member.notice", {"member_id": member.id, "name": member.name,
+    def _notice(self, member: Member | Speaker, kind: str) -> None:
+        enabled = self._settings.get("raphael_notify") if member.id == 0 else member.notify
+        if enabled and self._notify is not None:
+            self._notify("member.notice", {"member_id": member.id, "name": member.name or RAPHAEL_NAMES[self._language()],
                                           "kind": kind, "notify": True})
 
     def needs_input(self, member_id: int) -> None:
-        member = self.store.member(member_id)
+        member = self.speaker(0) if member_id == 0 else self.store.member(member_id)
         if member is not None:
             self._notice(member, "needs_input")
 
@@ -653,7 +656,7 @@ class MembersService:
         activity, activity_label = self.activity.describe(0, waiting)
         view: dict[str, Any] = {
             "blurb": "", "reply_style": "full", "voice": "",
-            "notify": False, "ask_before_members": False, "pinned": self._chief_pinned(), "hidden": False, "draft_first": self._settings.get("raphael_draft_first"),
+            "notify": self._settings.get("raphael_notify"), "ask_before_members": False, "pinned": self._chief_pinned(), "hidden": False, "draft_first": self._settings.get("raphael_draft_first"),
             "id": 0,
             "chief": self.store.is_chief(0),
             "name": RAPHAEL_NAMES[language],
@@ -663,7 +666,7 @@ class MembersService:
             "avatar": "",
             "group_id": None,
             "model": "",
-            "tools": None,
+            "tools": self._settings.get("raphael_tools"),
             "position": -1,
             "created": 0,
             "unread": 0 in unread,
@@ -1034,20 +1037,50 @@ class MembersService:
         saved = await self._update({"id": member_id, "role": arguments.get("role"), "instructions": arguments.get("instructions")})
         return {"role": saved["member"]["role"], "note": "Saved. The owner can see it in your details."}
 
+    def _updated_cover(self, member_id: int, params: dict):
+        cover = cover_selection(params["cover"]) if "cover" in params else None
+        if "cover_position" in params:
+            if "cover" in params:
+                raise RpcError(INVALID_PARAMS, "Invalid params: a cover picture is required", {"kind": "cover"})
+            cover = self._covers.reposition(member_id, params["cover_position"])
+        return cover
+
+    def _update_raphael(self, params: dict, *, profile_fields=("personality", "instructions")) -> dict:
+        from ..brain.settings import checked
+
+        preferences = {"tools": "raphael_tools", "notify": "raphael_notify", "draft_first": "raphael_draft_first"}
+        if set(params) - {"id", *profile_fields, *preferences, "cover", "cover_position"}:
+            raise RpcError(INVALID_PARAMS, "This field is not editable for the first Bot", {"kind": "raphael"})
+        cover = self._updated_cover(0, params)
+        values = {}
+        changes = {key: params[key] for key in profile_fields if key in params}
+        try:
+            if changes:
+                key, profile = checked("first_bot_profile", {**self.first_bot_profile(), **changes})
+                if profile.get("name") and any(member.name.casefold() == profile["name"].casefold() for member in self.store.members()):
+                    raise invalid_params("duplicate first Bot name")
+                values[key] = profile
+            for field, setting in preferences.items():
+                if field in params:
+                    key, value = checked(setting, params[field])
+                    values[key] = value
+        except (ValueError, TypeError):
+            raise invalid_params("invalid first Bot settings") from None
+        # SettingsStore.set would commit part of this batch prematurely.
+        with self.store.transaction():
+            for key, value in values.items():
+                self._conn.execute("INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                                   (key, json.dumps(value)))
+            if "cover" in params or "cover_position" in params:
+                self._save_cover(0, cover)
+        self._changed()
+        return {"member": self._raphael_view(self._language(), {}, set(), {})}
+
     async def _update(self, params: dict) -> dict:
-        cover = cover_selection(params['cover']) if 'cover' in params else None
-        if type(params.get('id')) is int and params['id'] == 0 and set(params) == {'id', 'cover'}:
-            self._save_cover(0, cover)
-            self._changed()
-            return {'member': self._raphael_view(self._language(), {}, set(), {})}
-        if type(params.get("id")) is int and params["id"] == 0 and set(params) == {"id", "draft_first"}:
-            try:
-                self._settings.set("raphael_draft_first", params["draft_first"])
-            except (ValueError, TypeError):
-                raise invalid_params("draft_first must be a boolean") from None
-            self._changed()
-            return {"member": self._raphael_view(self._language(), {}, set(), {})}
+        if type(params.get("id")) is int and params["id"] == 0:
+            return self._update_raphael(params)
         member_id = self._member_id(params)
+        cover = self._updated_cover(member_id, params)
         fields = {
             name: params[name]
             for name in ("name", "role", "personality", "instructions", "group_id", "avatar", "tools", "model", "position", *PROFILE_FIELDS)
@@ -1065,7 +1098,7 @@ class MembersService:
         try:
             with self.store.transaction():
                 member = self.store.update_member(member_id, **fields)
-                if "cover" in params:
+                if "cover" in params or "cover_position" in params:
                     self._save_cover(member_id, cover)
         except MemberError as error:
             raise _rpc_error(error) from None
@@ -1754,38 +1787,21 @@ class MembersService:
                 model = params.get("model", current.model if current else "") or self._starting_model()
                 params["model"] = model.partition("?effort=")[0] + "?effort=" + params.pop("effort")
             if name == "member_update" and params.get("id") == 0:
-                if set(params) == {"id", "cover"}:
-                    return await self._update(params)
                 from ..brain.settings import checked
 
-                changes = {key: value for key, value in params.items() if key in ("name", "role", "personality", "instructions")}
-                preferences = {"draft_first": "raphael_draft_first", "model": "agent_model", "pinned": "chief_pinned",
-                               "voice": "tts_fish_voice"}
+                preferences = {"model": "agent_model", "pinned": "chief_pinned", "voice": "tts_fish_voice"}
                 # Profile drafts include these empty fields for ordinary members.
                 for field in ("blurb", "group", "avatar_preset"):
                     if params.get(field) == "":
                         params.pop(field)
-                if set(params) - {"id", "name", "role", "personality", "instructions", "cover", *preferences}:
+                if set(params) - {"id", "name", "role", "personality", "instructions", "cover", "cover_position", "tools", "notify", "draft_first", *preferences}:
                     raise invalid_params("This field is not editable for the first Bot")
-                cover = cover_selection(params["cover"]) if "cover" in params else None
                 # Validate the whole request before any profile/preference write.
                 for field, setting in preferences.items():
                     if field in params:
                         checked(setting, params[field])
-                profile = {"name": RAPHAEL_NAMES[self._language()], **self.first_bot_profile(), **changes}
-                try:
-                    key, profile = checked("first_bot_profile", profile)
-                except (ValueError, TypeError):
-                    raise invalid_params("invalid first Bot profile") from None
-                if any(member.name.casefold() == profile["name"].casefold() for member in self.store.members()):
-                    raise invalid_params("duplicate first Bot name")
-                # Join the batch transaction: SettingsStore.set would commit it prematurely.
-                with self.store.transaction():
-                    self._conn.execute("INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
-                                       (key, json.dumps(profile)))
-                    if "cover" in params:
-                        self._save_cover(0, cover)
-                self._changed()
+                self._update_raphael({key: value for key, value in params.items() if key not in preferences},
+                                     profile_fields=("name", "role", "personality", "instructions"))
                 for field, setting in preferences.items():
                     if field in params:
                         await self._management_rpc("settings.set", {"key": setting, "value": params[field]})
@@ -1808,7 +1824,7 @@ class MembersService:
                     created_group = (await self._group_create({"name": group_name}))["group"]
                 params["group_id"] = group.id if group else created_group["id"] if created_group else None
             try:
-                result = await (self._create(params) if name == "member_create" else self._update(params))
+                result = await (self._create({**params, "greet": True}) if name == "member_create" else self._update(params))
                 if name == "member_create":
                     self.member_made(member_id, result["member"]["id"])
                 return result

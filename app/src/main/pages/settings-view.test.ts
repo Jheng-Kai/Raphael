@@ -219,12 +219,12 @@ const described = (html: string): string[] =>
   html.split(/(?=<div class="row[ "])/).filter((r) => r.includes('<div class="d">')).map((r) => /<div class="t">(.*?)<\/div>/.exec(r)![1]);
 
 describe("the tabs", () => {
-  test("are Grok Bot's six and 記憶: General, Memory, Dictation, Tools, Safety, Models & usage and About, in each language", () => {
-    expect(IDS).toEqual(["general", "memory", "dictation", "tools", "safety", "models", "about", "connections"]);
+  test("are Grok Bot's six and 記憶: General, Memory, Tools, Safety, Models & usage, Dictation and About, in each language", () => {
+    expect(IDS).toEqual(["general", "memory", "tools", "safety", "models", "dictation", "about", "connections"]);
     const titles = {
-      "zh-TW": ["一般", "記憶", "聽寫與快捷鍵", "工具", "安全", "模型與用量", "關於", "連結應用程式"],
-      en: ["General", "Memory", "Dictation & shortcuts", "Tools", "Safety", "Models & usage", "About", "Connect apps"],
-      ja: ["一般", "記憶", "音声入力とショートカット", "ツール", "安全", "モデルと使用量", "アプリ情報", "アプリを連携"],
+      "zh-TW": ["一般", "記憶", "工具", "安全", "模型與用量", "聽寫與快捷鍵", "關於", "連結應用程式"],
+      en: ["General", "Memory", "Tools", "Safety", "Models & usage", "Dictation & shortcuts", "About", "Connect apps"],
+      ja: ["一般", "記憶", "ツール", "安全", "モデルと使用量", "音声入力とショートカット", "アプリ情報", "アプリを連携"],
     };
     for (const locale of LOCALES) {
       setLocale(locale);
@@ -235,7 +235,7 @@ describe("the tabs", () => {
   test("sit flat, as Grok Bot's: no group names and no search (owner, 2026-11-07)", () => {
     const list = paneListHTML();
     // 連結應用程式 is no tab: the sidebar opens it as a dialog of its own (R-UI-111).
-    expect([...list.matchAll(/data-pane="(\w+)"/g)].map((m) => m[1])).toEqual(["general", "memory", "dictation", "tools", "safety", "models", "about"]);
+    expect([...list.matchAll(/data-pane="(\w+)"/g)].map((m) => m[1])).toEqual(["general", "memory", "tools", "safety", "models", "dictation", "about"]);
     expect(list).not.toContain("nav-group");
     expect(list).not.toContain("set-search");
   });

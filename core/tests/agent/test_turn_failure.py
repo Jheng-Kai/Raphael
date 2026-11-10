@@ -64,7 +64,8 @@ async def test_cli_usage_limit_keeps_its_provider_and_reset(make_rig, tmp_path, 
     await typed(rig, "Summarize a synthetic project")
     [turn] = await rig.turns()
     assert turn["status"] == "error"
-    assert turn["failure"] == {"kind": "usage_limit", "provider": f"cli:{brain}", "resets_at": reset}
+    # The reset passes through the clock once more on its way to the turn: equal to the millisecond is not the point.
+    assert turn["failure"] == {"kind": "usage_limit", "provider": f"cli:{brain}", "resets_at": pytest.approx(reset, abs=1)}
     assert "PRIVATE" not in json.dumps(turn["failure"])
     terminal = [data for method, data in notes if method == "agent.turn" and not data.get("activity_only")][-1]
     assert terminal["failure"] == turn["failure"]

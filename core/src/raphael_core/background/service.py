@@ -165,6 +165,8 @@ QUESTION_WAIT_MS = round(QUESTION_WAIT_S * 1000)
 AT_THIS_COMPUTER = "app"
 # The assistant's history calls a task by the status of a turn.
 _TURN_STATUS = {"done": "done", "cancelled": "cancelled"}
+# Joins a reply's messages while its hand-back block is taken out; no model writes it.
+_LINE_BREAK = "\x01"
 
 # The states of a task that can be run again: it did not finish. A task that is done is not run
 # again, and one that is not over is still running.
@@ -443,6 +445,8 @@ class BackgroundService:
         # task id -> the words a task's report ends in, whole (not the short line the overlay says),
         # for the messaging app a chat reads them in. Read once by `final_words`.
         self._final_words: dict[int, list[str]] = {}
+        # A work hand-off's words for whoever handed it over, taken out of its replies as they come.
+        self._handbacks: dict[int, str] = {}
         # Raphael's memory, which a task may read and search (`use_memory`); none until it is given.
         self._memory: MemoryReader | None = None
         # The owner's team (`use_team`): who a task's member is, and the team tools, which the
@@ -977,10 +981,40 @@ class BackgroundService:
                         rooms._exchanges.schedule(report_room)
 
     def _work_report(self, task):
-        """A bounded report; the full result belongs only to the owner's work turn."""
-        text = ' '.join(task.full_report.split())
-        first = re.split(r'(?<=[.!?。！？])\s+|(?<=[。！？])', text, maxsplit=1)[0]
-        return first if len(first) <= 240 else first[:237] + '...'
+        """What a work hand-off says back to whoever handed it over: its hand-back (background/handback.py),
+        or, for a report without one, its first sentence without a greeting to the owner. The full result
+        belongs only to the owner's work turn. Neither may open by addressing the owner."""
+        from .handback import fallback, unaddressed
+        owner = self._settings.get("owner_name") or ""
+        return unaddressed(task.handback, owner) if task.handback else fallback(task.full_report, owner)
+
+    def _own_work(self, task):
+        """Whether a work hand-off is the member's own background work (it handed the work to itself, as a
+        room speaker does to start tool work) rather than a colleague's request."""
+        return task.from_member_id is None or task.from_member_id == task.member_id
+
+    def _work_brief(self, task):
+        """Who the work is from and who reads what (owner, 2026-11-09): the work and the owner-facing result
+        stay in the member's own conversation; only the <handback> block goes back, written to the colleague
+        who asked, or for its own background work to the place it came from, never to the owner."""
+        owner = neutralize(self._settings.get("owner_name") or "") or "the owner"
+        common = ('First send a useful short acknowledgment addressed to the owner as an explicit public message; use '
+                  'your own persona and the owner language. Do the work here, in your own private conversation, with its '
+                  'actions, cards, attachments and full result; this is where you speak to the owner. Start the final result '
+                  'with a short report of what you actually accomplished. ')
+        if self._own_work(task):
+            place = 'the group chat' if (task.report_room_id or task.room_id) is not None else 'the conversation it came from'
+            return ('\nThis is your own background work, queued by you from ' + place + '; it is not a request from a '
+                    'colleague. ' + common + 'End your final reply with <handback>...</handback>: one to three sentences '
+                    'for ' + place + ', in your own voice, saying what you did and where the full result is. Only that block '
+                    'goes back there; do not send the full work into it.')
+        asker = self._speaker(task.from_member_id)
+        name = neutralize(asker.name if asker and asker.name else 'Raphael')
+        return ('\nThis work was handed to you by your colleague ' + name + ', another of the owner\'s assistants; the brief '
+                'is from ' + name + ', not a new owner message. ' + common + 'End your final reply with '
+                '<handback>...</handback>: one to three sentences written to ' + name + ' (not to the owner; mention the '
+                'owner only in the third person, as ' + owner + '), saying what you did and where the full result is. '
+                'Only that block goes back to ' + name + '; the owner never sees it, and the full work stays here.')
 
     def _work_location(self, task):
         work = self._history.get(task.turn_id) if task.turn_id else None
@@ -1022,6 +1056,8 @@ class BackgroundService:
                    int(task.id in self._paused and self._paused[task.id].answer is None))) else {}),
                 'member_name':(self._speaker(task.member_id).name if self._speaker(task.member_id) else '') or f'#{task.member_id}',
                 'member_id':task.member_id,'from_member_id':task.from_member_id,'stage_id':task.stage_id,
+                # A member's own background work has no colleague on the other side: no member-to-member view.
+                'own_work':task.mode == 'work' and self._own_work(task),
                 'state':'withheld' if withheld else task.state,'reason':task.reason,'created_at_ms':task.created_at_ms,
                 'started_at_ms':task.started_at_ms,'finished_at_ms':task.finished_at_ms,
                 'conversation_id':self._history.get(task.turn_id).conversation_id if task.turn_id and self._history.get(task.turn_id) else None,
@@ -1440,6 +1476,9 @@ class BackgroundService:
         self._store.start(task.id)
         limits = dataclasses.replace(self._limits,seconds=min(self._limits.seconds,60),model_calls=min(self._limits.model_calls,4),tool_calls=min(self._limits.tool_calls,8)) if task.scope == 'room' else self._limits
         ledger = Ledger(self._spend)
+        # What the spend calls this work (brain/meter.py): speaking in a group, a hand-off's work, a consultation.
+        ledger.job = "room" if task.scope == "room" else task.mode if task.mode in ("work", "consult") else "task"
+        ledger.member_id = task.member_id
         selected_model = self._models.pop(task.id, task.model_ref or self._settings.get("agent_model") or DEFAULTS["agent_model"])
         selected_model = speaker.model or selected_model
         recovered = json.loads(task.continuation) if task.continuation else None
@@ -1577,12 +1616,7 @@ class BackgroundService:
                        '\nNo file artifact is required for completion; a substantive written review or answer can satisfy the task.')
             system += HANDLES_REQUEST
         if task.mode == 'work':
-            system += ('\nThis is owner-facing work in your own private conversation. The brief is from a colleague, '
-                       'not a new owner message. First send a useful short acknowledgment addressed to the owner as an '
-                       'explicit public message; use your own persona and the owner language. Do the work here, with '
-                       'its actions, cards, attachments and full result here. Start the final result with a short '
-                       'report of what you actually accomplished. Only that short report and work location go back '
-                       'to the colleague; do not send the full work into their conversation.')
+            system += self._work_brief(task)
         if task.mode == 'consult':
             asker = self._speaker(task.from_member_id) if task.from_member_id is not None else None
             system += ('\nThe task is a question from your colleague ' + neutralize(asker.name if asker and asker.name else 'Raphael')
@@ -2349,6 +2383,8 @@ class BackgroundService:
             return
         reply = owner_script(reply, chinese_variant(self._settings.get("languages")))
         lines = reply.messages or ([reply.text] if reply.text else [])
+        if task.mode == 'work':
+            lines = self._take_handback(task, lines)
         if final:
             saved = [item["text"] for item in self._history.messages([task.turn_id]).get(task.turn_id, [])
                      if item["kind"] == "reply"]
@@ -2356,6 +2392,16 @@ class BackgroundService:
         for line in lines:
             self._history.add_message(task.turn_id, "reply", compose(reply.prefix if task.member_id == 0 else "", line, None))
             self._notify("agent.turn", {"turn_id": task.turn_id, "member_id": task.member_id})
+
+    def _take_handback(self, task: Task, lines: Sequence[str]) -> list[str]:
+        """Keep a work hand-off's <handback> block out of the owner's conversation and remember its words
+        for whoever handed the work over (background/handback.py)."""
+        from .handback import split
+        # One text, so that a block the model spread over two of its messages is still one block.
+        cleaned, words = split(_LINE_BREAK.join(lines))
+        if words:
+            self._handbacks[task.id] = " ".join(words.replace(_LINE_BREAK, " ").split())
+        return [line.strip() for line in cleaned.split(_LINE_BREAK) if line.strip()]
 
     def _computer_notice(self, task: Task, text: str) -> None:
         if task.id in self._discarded or task.scope != 'private' or not self._has_linked_turn(task):
@@ -2589,6 +2635,12 @@ class BackgroundService:
             from .final import room_reply_text
             terminal_replies = [room_reply_text(line) for line in terminal_replies]
             detail = room_reply_text(detail) if detail else detail
+        handback = None
+        if task.mode == 'work':
+            terminal_replies = self._take_handback(task, terminal_replies)
+            if detail:
+                detail = (self._take_handback(task, [detail]) or [None])[0]
+            handback = self._handbacks.pop(task.id, None)
         text = "\n\n".join(line for line in terminal_replies if line)
         turn_text, turn_detail = text, detail
         if state == 'cancelled' and self._has_linked_turn(task):
@@ -2623,7 +2675,8 @@ class BackgroundService:
                     if task.scope == 'room' and state == 'done':
                         self._metrics_conn.execute('UPDATE room_messages SET text=? WHERE turn_id=? AND room_id=? AND member_id=?',
                             (turn_detail or turn_text, task.turn_id, task.room_id, task.member_id))
-            self._store.finish(task.id, state, prefix=prefix, text=text, detail=detail, reason=reason,publish=publish)
+            self._store.finish(task.id, state, prefix=prefix, text=text, detail=detail, reason=reason,publish=publish,
+                               handback=handback)
             if run is not None:
                 from ..brain.runs import save_metrics
                 save_metrics(self._metrics_conn, "task", task.id, task.started_at_ms or task.created_at_ms,
