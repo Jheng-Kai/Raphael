@@ -586,7 +586,7 @@ menu-settings-redraw also emits SettingsChanged through the fake IPC boundary, w
 npm run look -- menu-hide-control menu-settings-redraw menu-move-hover menu-move-picked menu-move-keyboard menu-move-flip menu-move-diagonal --theme both --width 1120,720,1920x1080
 ```
 
-menu-pointer-return protects a fresh real mouse press on the more button after a right click; its menu returns under that control instead of retaining the pointer rectangle. context-menu.test.ts retains its existing trusted-click assertion.
+menu-pointer-return protects a fresh real mouse press on a drawn ⋯ (a message's: a row's own ⋯ is never drawn, R-UI-44) after a right click; its menu returns under that control instead of retaining the pointer rectangle. context-menu.test.ts retains its existing trusted-click assertion.
 
 ```powershell
 npm run look -- menu-pointer-return --theme both --width 1120,720,1920x1080

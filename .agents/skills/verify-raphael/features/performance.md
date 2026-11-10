@@ -37,7 +37,7 @@ The existing Members, Conversation, Home, Automations, Dictation and Settings
 maps supply these representative consumers. Use both themes and all three sizes:
 
 ```powershell
-npm run look -- slime-states slime-gallery slime-liquid-sheet slime-liquid-still slime-parts slime-motion-idle slime-motion-busy slime-motion-moments slime-motion-change slime-characters-at-rest slime-sizes slime-pointer presence-states-sidebar busy-team-thread busy-team-home busy-team-room busy-team-typing busy-team-follow busy-team-anchor thread-new-divider-stays rich-code rich-diagram conversation-chief-up conversation-member-up conversation-room-up home-empty home-many automations-calendar dictation-overview dictation-notice cli-account-menu messaging overlay-confirm-short-120 overlay-confirm-long-150 --theme both --width 1120,720,1920x1080
+npm run look -- slime-states slime-gallery slime-liquid-sheet slime-liquid-still slime-parts slime-motion-idle slime-motion-busy slime-motion-moments slime-motion-change slime-characters-at-rest slime-sizes slime-pointer presence-states-sidebar busy-team-thread busy-team-home busy-team-room busy-team-typing busy-team-follow busy-team-anchor thread-new-divider-stays rich-code rich-diagram conversation-chief-up conversation-member-up conversation-room-up home-empty home-many automations-calendar dictation-overview dictation-notice cli-account-menu overlay-confirm-short-120 overlay-confirm-long-150 --theme both --width 1120,720,1920x1080
 ```
 
 Run judge against that same selected run. The implementation brief delegates look

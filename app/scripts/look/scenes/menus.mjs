@@ -1,4 +1,4 @@
-import { scene, click, hover, wait, waitGone, check, key, member, scroll, settings } from "./steps.mjs";
+import { scene, click, hover, wait, waitGone, check, key, member, scroll, settings, rightClick } from "./steps.mjs";
 
 const column = { action: "member-column", collapsed: false };
 const open = [column, click('.mb-col [data-member-more="1"]'), wait('#app-popover [data-pick="move"]')];
@@ -9,8 +9,9 @@ export default [
   scene("menu-hide-control", "Hide in the sidebar's menu uses its action icon without a navigation chevron", [{ action: "member-column", collapsed: false }, click('.mb-col [data-member-more="1"]'), wait('#app-popover [data-pick="hide"]'), check("menu-hide-control")]),
   scene("menu-settings-redraw", "Settings replace their keyed control without moving its open menu", [...settings("safety"), scroll('[data-k="local-commands"]'),
     click('[data-k="local-commands"]'), wait('.menu [data-value="never"]'), { action: "menu-settings-redraw" }, check("menu-settings-redraw")]),
-  scene("menu-pointer-return", "A real press on the more button returns a pointer menu to its own control", [column, { action: "menu-edge" },
-    wait('#app-popover'), click('.mb-col [data-member-more="1"]'), check("menu-anchor-return")]),
+  // A row's own ⋯ is never drawn (R-UI-44), so the control that a press returns the menu to is one that is: a message's.
+  scene("menu-pointer-return", "A real press on a message's drawn ⋯ returns a menu a right click opened at the pointer to its own control", [rightClick('.chat-message[data-reply="true"] .message-text'),
+    wait('#app-popover'), click('.chat-message[data-reply="true"] [data-act="more-message"]'), check("menu-anchor-return")]),
   scene("menu-move-hover", "Hover opens beside the row and work redraws leave both menus still", [...hovered, { action: "menu-work-storm" }, check("submenu-placement")]),
   scene("menu-move-picked", "Choosing a group moves the member and closes both menus", [...hovered, click('#app-submenu [data-value="2"]'), waitGone('#app-submenu'), check("menu-move-picked")]),
   scene("menu-move-keyboard", "Right opens, Left and Escape return to the parent row", [...open, key("ArrowDown"), key("ArrowRight"), wait('#app-submenu'),

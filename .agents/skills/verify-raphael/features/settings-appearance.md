@@ -48,13 +48,13 @@ Settings has six flat tabs, as Grok Bot's: 一般, 聽寫與快捷鍵, 工具, �
 group names, no search box and no line under a tab's name. Each tab is its name, then sections: a small name
 over one rounded card (`--panel`) of rows with no lines between them, the name left and the control right.
 一般 holds, in order: 關於你 (the owner's picture, name and about me), 外觀 (theme and language), 拉斐爾 (the
-routines' time zone and the output folder), 訊息平台 (Telegram, Slack, Discord)
-and 啟動 (the guide). Links of before land on their section: `appearance` and `messaging` open 一般
-(messaging scrolled to its section). 連結應用程式 stays a dialog of its own from the sidebar (R-UI-111).
+routines' time zone and the output folder) and 啟動 (the guide). Telegram, Slack and Discord are no section here: each member's panel
+sets them up in its conversation (2026-11-07 evening). Links of before land on 一般: `appearance` scrolls to its section, and
+`messaging` and `memory` open 一般 as it is. 連結應用程式 stays a dialog of its own from the sidebar (R-UI-111).
 This supersedes the About-you grouping and the search notes below.
 
 ```powershell
-npm run look -- profile appearance messaging dictation tools safety models about settings-owner appearance-menu work-messaging-setup --theme both --width 1120,720,1920x1080
+npm run look -- profile appearance dictation tools safety models about settings-owner appearance-menu work-messaging-setup --theme both --width 1120,720,1920x1080
 ```
 
 `settings-shell` refuses group names, the search and a line under a tab's name on every settings scene.
@@ -195,7 +195,7 @@ upload and crop an image; the resulting face appears on the footer and outgoing 
 ## Driving it with look
 
 ```powershell
-npm run look -- profile appearance appearance-menu appearance-keyboard models dictation tools safety messaging about theme-clarity --theme both --width 1120,720
+npm run look -- profile appearance appearance-menu appearance-keyboard models dictation tools safety about theme-clarity --theme both --width 1120,720
 npm run look -- home sidebar sidebar-search sidebar-group-avatar-pair sidebar-group-avatar-four chat appearance appearance-menu appearance-keyboard desktop-takeover-owner home-calendar dictation-dictionary theme-clarity --theme both --width 1120,720,1920x1080
 npm run look -- appearance --theme both --width 1120,720,1920x1080 --locale ja
 npm run look -- chatgpt-signed-out chatgpt-signed-in chooser-chatgpt-signed-out chooser-chatgpt-signed-in cli-account-menu cli-account-disconnected cli-account-reconnected window-hover-minimize window-hover-maximize window-hover-restore window-hover-close window-hover-modal --theme both --width 1120,720,1920x1080
@@ -352,7 +352,7 @@ existing viewer stream is not replaced by changing the setting.
 
 Selected scenes (synthetic zh-TW, both themes, 1120,720,1920x1080):
 profile, settings-owner, appearance, dictation, tools, safety,
-models, connections, messaging, about,
+models, connections, about,
 local-command-settings, local-command-setting-always, local-command-setting-never,
 menu-settings-redraw, missing-vision, missing-search, missing-search-repair,
 speaker-draft-chief, speaker-draft-member, speaker-draft-profile,
