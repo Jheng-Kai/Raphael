@@ -125,6 +125,13 @@ Their named tests run in the ordinary Vitest/pytest suites on every PR, not loca
 From app/, the complete integration offline check is `npm run verify -- --core --rust`.
 Local changes use the affected frontend/core/Rust boundaries described above.
 
+CI deals the Python test files among eight machines by the seconds recorded in
+`core/tests/shard-durations.json` (2026-11-11). When one share runs much longer than the others,
+refresh the record as the header of `core/tests/shard_durations.py` describes: merge the
+`python-durations-*` artifacts of one green CI run. A pull request that touches `core/packaging`,
+`core/pyproject.toml` or `core/uv.lock` also runs the frozen-core smoke test (not a required gate).
+A release workflow run asks for a green CI run on its commit instead of repeating the suites.
+
 For local UI hand-off, capture the selected affected scenes at both themes and all
 three sizes. Full UI integration acceptance uses
 `npm run look -- --all --theme both --width 1120,720,1920x1080`.

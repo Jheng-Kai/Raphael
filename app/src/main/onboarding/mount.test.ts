@@ -25,7 +25,6 @@ const api = vi.hoisted(() => ({
   openExternalUrl: vi.fn(),
 }));
 vi.mock("../api", () => api);
-vi.mock("../stage", () => ({ Stage: class { play(): void {} dispose(): void {} } }));
 
 import { setLocale } from "../i18n";
 import type { AppContext } from "../types";

@@ -31,5 +31,6 @@ need diff/link review rather than application suites. Full integration acceptanc
 `npm run verify -- --core --rust` and `npm run look -- --all --theme both --width 1120,720,1920x1080`.
 Brain/tool changes also require `npm run verify -- --live` in an authorized live environment.
 CI enforces repository contracts and the offline suites on every PR; the rendered matrix,
-judge and live checks run locally and never in CI. Use the [PR contract](.github/pull_request_template.md)
+judge and live checks run locally and never in CI. A Windows release starts only after CI has
+passed on its exact commit (run CI by hand on it when no pull request did). Use the [PR contract](.github/pull_request_template.md)
 for commands, exits, rule IDs, evidence and anything unverified. Details stay in the skill.

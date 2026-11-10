@@ -27,6 +27,32 @@ it("CI enforces the offline layers on every PR, and the rendered matrix stays lo
   expect(nightly).toContain("Live API matrix SKIP");
 });
 
+it("a release asks CI for a green run on its commit and does not repeat the suites", () => {
+  const release = read(".github/workflows/release.yml");
+  expect(release).toContain("ci-gate:");
+  expect(release).toContain("needs: ci-gate");
+  expect(release).toContain("actions: read");
+  expect(release).toContain("Guardian required gates");
+  // A push run on main checks only the Rust dependencies, so it cannot stand for the whole suite.
+  expect(release).toContain('.event != "push"');
+  // The suites take longer than a release job may run; CI runs them.
+  for (const repeated of ["npm test", "pytest", "cargo test", "cargo clippy"]) expect(release).not.toContain(repeated);
+  // Every job has a time limit.
+  expect(release.match(/^ {4}timeout-minutes:/gm)).toHaveLength(4);
+});
+
+it("CI deals the Python shards by recorded seconds and runs the packaging smoke test only when it can matter", () => {
+  const ci = read(".github/workflows/ci.yml");
+  expect(ci).toContain("RAPHAEL_RECORD_DURATIONS:");
+  expect(ci).toContain("python-durations-");
+  expect(existsSync(located("core/tests/shard-durations.json"))).toBe(true);
+  expect(ci).toContain("packaging: ${{ steps.packaging.outputs.packaging }}");
+  expect(ci).toContain("needs.changes.outputs.packaging == 'true'");
+  // The smoke test is informational: the required gates stay the three layers.
+  expect(ci).toContain("needs: [changes, frontend, python, windows-shell]");
+  expect(ci).not.toMatch(/needs: [[^]]*packaging/);
+});
+
 it("portable guard commands use the installed core environment without shell interpolation", () => {
   for (const kind of ["live", "judge"]) {
     const check = coreCheck(kind, kind === "judge" ? ["C:/an evidence path/run"] : []);

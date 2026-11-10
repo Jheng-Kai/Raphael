@@ -22,6 +22,7 @@ import keyring.backend
 import keyring.backends.fail
 import keyring.errors
 import pytest
+import shard_durations
 
 from raphael_core.brain import db
 
@@ -130,10 +131,11 @@ def keep_this_share(config, items) -> None:
     """CI runs the suite on several machines at once: RAPHAEL_TEST_SHARE=3/8 keeps the third of
     eight shares. Unset, as on a developer's machine, every test runs.
 
-    Whole files are dealt, the largest first, each to the share holding the fewest tests so far.
-    Every machine collects the same tests, so all of them agree on the deal and each file lands in
-    exactly one share. A file is never split: its fixtures and the order of its tests stay what
-    they are in a single run."""
+    Whole files are dealt, the heaviest first, each to the share holding the least so far. A file
+    weighs the seconds recorded for it in shard-durations.json (see shard_durations.py), or its
+    number of tests where nothing is recorded. Every machine collects the same tests and reads the
+    same record, so all of them agree on the deal and each file lands in exactly one share. A file
+    is never split: its fixtures and the order of its tests stay what they are in a single run."""
     wanted = os.environ.get("RAPHAEL_TEST_SHARE")
     if not wanted:
         return
@@ -144,7 +146,7 @@ def keep_this_share(config, items) -> None:
     if not 1 <= index <= total:
         raise pytest.UsageError(f"RAPHAEL_TEST_SHARE must name a share from 1 to {total}")
     files = [item.nodeid.split("::", 1)[0] for item in items]
-    share = deal_files(files, total)
+    share = deal_files(files, total, shard_durations.read_record(shard_durations.RECORD))
     kept, dropped = [], []
     for item, file in zip(items, files, strict=True):
         (kept if share[file] == index else dropped).append(item)
@@ -152,18 +154,30 @@ def keep_this_share(config, items) -> None:
     items[:] = kept
 
 
-def deal_files(files: list[str], shares: int) -> dict[str, int]:
-    """The share, counted from 1, of each test file; `files` names a file once per test in it."""
+def deal_files(files: list[str], shares: int, seconds: dict[str, float] | None = None) -> dict[str, int]:
+    """The share, counted from 1, of each test file; `files` names a file once per test in it.
+    `seconds` are the recorded seconds per file; without them every test weighs the same."""
     tests: dict[str, int] = {}
     for file in files:
         tests[file] = tests.get(file, 0) + 1
-    load = [0] * shares
-    share: dict[str, int] = {}
-    for file, count in sorted(tests.items(), key=lambda entry: (-entry[1], entry[0])):
-        lightest = load.index(min(load))
-        share[file] = lightest + 1
-        load[lightest] += count
-    return share
+    return shard_durations.deal(tests, shares, seconds)
+
+
+_RECORDED: dict[str, float] = {}
+
+
+def pytest_runtest_logreport(report) -> None:
+    """With RAPHAEL_RECORD_DURATIONS=<path>, add up the seconds each test file takes (set-up, test
+    and tear-down), for shard_durations.py to deal the files by."""
+    if os.environ.get("RAPHAEL_RECORD_DURATIONS"):
+        file = report.nodeid.split("::", 1)[0]
+        _RECORDED[file] = _RECORDED.get(file, 0.0) + report.duration
+
+
+def pytest_sessionfinish(session) -> None:
+    target = os.environ.get("RAPHAEL_RECORD_DURATIONS")
+    if target and _RECORDED:
+        shard_durations.merge_into(Path(target), _RECORDED)
 
 
 def skip_model_tests(items) -> None:

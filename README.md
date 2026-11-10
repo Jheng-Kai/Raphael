@@ -60,8 +60,10 @@ npm run verify -- --rust   # plus the Rust shell
 ### Windows releases
 
 The manually dispatched Windows release workflow builds and verifies the installer,
-dependency notices, `BUILD-INFO.txt` and `SHA256SUMS.txt`. Publishing requires the
-explicit `publish` input and a main-branch or tag build.
+dependency notices, `BUILD-INFO.txt` and `SHA256SUMS.txt`. It starts only when the CI
+workflow has passed on the same commit (run CI manually on that commit when no pull
+request did), so the test suites run once, in CI. Publishing requires the explicit
+`publish` input and a main-branch or tag build.
 
 With both `TAURI_SIGNING_PRIVATE_KEY` and `RAPHAEL_UPDATER_PUBLIC_KEY` repository
 secrets, it also signs the installer with a version-bound trusted comment and
