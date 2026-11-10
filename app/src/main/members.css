@@ -194,11 +194,7 @@
 .mb-det .slist > .row > .lbl { min-width: 0; }
 .mb-det .slist > .row { flex-wrap: nowrap; }
 .mb-det .row .t { font-size: var(--fs-sm); }
-.mb-det .row .d, .mb-det .mem-tag, .mb-det .mem-from, .mb-det .mem-count { font-size: var(--fs-2xs); }
-.mb-det .mem-body, .mb-det .mem-entry, .mb-det .mem-none { font-size: var(--pa-dfs); }
-.mb-det .mem .ctl { gap: 0; }
-.mb-det .mem-head .ctl { gap: var(--sp-1); }
-.page-agent .mb-det .mem .btn.icon { width: calc(28px + 8 * var(--pa-u)); min-height: calc(28px + 8 * var(--pa-u)); }
+.mb-det .row .d { font-size: var(--fs-2xs); }
 .mb-det .sgroup + .sgroup { margin-top: var(--sp-3); }
 
 /* ---------- dialogs ---------- */

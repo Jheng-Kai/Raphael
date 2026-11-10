@@ -22,23 +22,22 @@ Korean uses a 52-character page budget so a long notice does not accumulate thre
 npm run look -- overlay-locale-ko overlay-locale-th overlay-locale-de --theme both --width 1120,720,1920x1080
 ```
 
-## 記憶 is a tab, and About's controls are icons (owner, 2026-11-08)
+## Memory has no tab, and About's controls are icons (owner, 2026-11-08, 2026-11-11)
 
-Settings has seven flat tabs: 一般, 記憶, 聽寫與快捷鍵, 工具, 安全, 模型與用量 and 關於. 記憶 holds the shared owner
-memory (`data-mem-space="shared"`) and nothing else: there is no import from other assistants (owner, 2026-11-08:
-「匯入記憶不要這樣設計…沒有什麼實際的意義」); the memory lives in Raphael's data folder, and moving to another PC means
-keeping that folder. 一般 keeps 關於你, 外觀, 拉斐爾 and 啟動,
-with no memory. The memory lists load only while 記憶 is open; the memory is drawn as members.md describes (its
-name as a small heading with 編輯 and ⋯, one tinted card of entry blocks, the summary as its own card; owner,
-2026-11-09). 關於's Help is an outward-arrow icon and the
-license a chevron; the shortcuts' and the OpenRouter key's 「變更」 is a pencil. This supersedes the notes below
-that place memory and its import in General.
+Settings has six flat tabs: 一般, 工具, 安全, 模型與用量, 聽寫與快捷鍵 and 關於. For one day (2026-11-08 to
+2026-11-11) a seventh, 記憶, held the shared owner memory; the owner then decided that no memory is shown anywhere
+(R-MEM-10, see [Members](members.md#no-memory-on-screen-owner-decision-2026-11-11)), so the tab, its lists and its
+loading are gone, and an old link or saved pane named `memory` opens 一般. There is no import from other assistants
+either (owner, 2026-11-08: 「匯入記憶不要這樣設計…沒有什麼實際的意義」); the memory lives in Raphael's data folder, and
+moving to another PC means keeping that folder. 一般 keeps 關於你, 外觀, 拉斐爾 and 啟動, with no memory. 關於's Help is
+an outward-arrow icon and the license a chevron; the shortcuts' and the OpenRouter key's 「變更」 is a pencil. This
+supersedes the notes below that place memory and its import in General.
 
 ```powershell
-npm run look -- profile memory about settings-owner settings-memory dictation models --theme both --width 1120,720,1920x1080
+npm run look -- profile about settings-owner dictation models --theme both --width 1120,720,1920x1080
 ```
 
-`settings-memory` requires 記憶 to be the current tab; `settings-owner` refuses memory in 一般.
+`settings-owner` refuses memory in 一般 and a 記憶 tab.
 The core no longer registers an owner memory-import RPC or management boundary row.
 MemoryFile.apply and the four memory document/summary RPCs remain intact. Verify with
 core/tests/memory, the members management suites and architecture/test_boundaries.py.
@@ -49,13 +48,13 @@ Settings has six flat tabs, as Grok Bot's: 一般, 聽寫與快捷鍵, 工具, �
 group names, no search box and no line under a tab's name. Each tab is its name, then sections: a small name
 over one rounded card (`--panel`) of rows with no lines between them, the name left and the control right.
 一般 holds, in order: 關於你 (the owner's picture, name and about me), 外觀 (theme and language), 拉斐爾 (the
-routines' time zone and the output folder), 訊息平台 (Telegram, Slack, Discord), the shared memory and its
-import, and 啟動 (the guide). Links of before land on their section: `appearance` and `messaging` open 一般
+routines' time zone and the output folder), 訊息平台 (Telegram, Slack, Discord)
+and 啟動 (the guide). Links of before land on their section: `appearance` and `messaging` open 一般
 (messaging scrolled to its section). 連結應用程式 stays a dialog of its own from the sidebar (R-UI-111).
 This supersedes the About-you grouping and the search notes below.
 
 ```powershell
-npm run look -- profile appearance messaging dictation tools safety models about settings-owner settings-memory appearance-menu work-messaging-setup --theme both --width 1120,720,1920x1080
+npm run look -- profile appearance messaging dictation tools safety models about settings-owner appearance-menu work-messaging-setup --theme both --width 1120,720,1920x1080
 ```
 
 `settings-shell` refuses group names, the search and a line under a tab's name on every settings scene.
@@ -118,14 +117,14 @@ No private key belongs in source.
 
 ## Settings merge consumers (2026-11-05)
 
-General keeps the owner profile, weather city, output folder and shared memory
+General keeps the owner profile, weather city and output folder
 together in About you. Tools and Safety retain their shared scope; legacy agent
-links resolve to Tools. Raphael's memory remains in member details.
+links resolve to Tools.
 Computer search opens that member's panel. Host checks and copyable repair
 commands use the location popover, never the retired settings pane.
 
 ```powershell
-npm run look -- settings-raphael-memory desktop-host-local desktop-host-error settings-owner --theme both --width 1120,720,1920x1080
+npm run look -- desktop-host-local desktop-host-error settings-owner --theme both --width 1120,720,1920x1080
 ```
 
 ## Owner output folder in General (2026-11-05)
@@ -221,7 +220,7 @@ clipped metadata and overlapping footer actions, reach the last model by scrolli
 and ensure selecting a local model neither downloads it nor saves settings.
 
 Safety-rule editing/deletion and always-allowed app removal use each row's overflow
-menu (R-UI-11). Memory rows use the same policy and retain Undo.
+menu (R-UI-11).
 
 ## Gotchas
 
@@ -329,7 +328,7 @@ Native `appearance` drives all three theme choices at 1120,720,1920x1080, checks
 ## Settings by purpose (2026-11-05)
 
 This owner decision supersedes the former Settings > Raphael pane and its earlier
-scene names. General owns the owner profile, weather city and shared owner memory.
+scene names. General owns the owner profile and weather city.
 Dictation & shortcuts groups dictation, paste, cancel and Ask Raphael shortcuts.
 Tools owns shared search, page reading, images, PDFs and their keys (no voice service since 2026-11-10);
 Safety owns shared safety rules, local command policy and always-allowed apps.
@@ -337,8 +336,8 @@ Navigation groups are Basics, Team, Integrations and Account. Every pane retains
 its localized purpose as explicitly requested by this brief (a scoped R-UI-02
 exception); Tools and Safety explicitly apply to every member.
 Legacy pane `agent` resolves to `tools`; setting keys, RPCs and stored values stay
-unchanged. Raphael owns his memory in his ordinary details panel. Every member's draft
-preference switch is the first row inside the same grouped resource card as Memory,
+unchanged. Every member's draft
+preference switch is the first row inside the same grouped resource card as
 Skills and Commands.
 
 The computer panel header owns one compact shared location control, also available
@@ -352,12 +351,12 @@ computer panel. No host is started or checked by opening the popover, and an
 existing viewer stream is not replaced by changing the setting.
 
 Selected scenes (synthetic zh-TW, both themes, 1120,720,1920x1080):
-profile, settings-owner, settings-memory, appearance, dictation, tools, safety,
+profile, settings-owner, appearance, dictation, tools, safety,
 models, connections, messaging, about,
 local-command-settings, local-command-setting-always, local-command-setting-never,
 menu-settings-redraw, missing-vision, missing-search, missing-search-repair,
 speaker-draft-chief, speaker-draft-member, speaker-draft-profile,
-settings-raphael-memory, desktop-host-local,
+desktop-host-local,
 desktop-host-remote, desktop-host-invalid, desktop-host-error, desktop-install,
 desktop-panel, desktop-viewer, desktop-absent, panel-no-computer.
 

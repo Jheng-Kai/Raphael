@@ -10,8 +10,7 @@
 
 import { pickSlime, slimePickerHTML } from "./slime";
 import { onLocaleChange, t } from "./i18n";
-export { openEditMemberDialog } from "./member-profile";
-export type { MemberProfileHost, ProfileTab } from "./member-profile";
+import "./member-profile.css";
 import { isTopLayer, registerDismissal } from "./dismissals";
 import {
   GROUP_NAME_MAX,

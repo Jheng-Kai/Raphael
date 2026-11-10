@@ -656,13 +656,13 @@ never a pasted transcript or a per-line label. Both ways of asking leave the sam
 member's exchange turn: `ask_member` answers in the asker's turn, a `handoff` in consult mode runs as the
 asked member's task with its own notes and conversation, and a private chat turn that consulted that way
 comes back once with the answer. An entry of the shared file ends with whom the owner told it to and when, in every
-memory panel and in every member's prompt; what the owner told one member stays its own until a colleague asks.
+member's prompt (no page shows it, R-MEM-10); what the owner told one member stays its own until a colleague asks.
 
 ```powershell
-npm run look -- bot-ask-centred bot-message-from-centred bot-exchange-count bot-exchange-expanded global-private-memory --theme both --width 1120,720,1920x1080
+npm run look -- bot-ask-centred bot-message-from-centred bot-exchange-count bot-exchange-expanded --theme both --width 1120,720,1920x1080
 ```
 
-The scenes seed 小森 asking 小晴 through the IPC fixture (`colleagues`, `memoryFiles`); the mock lists
+The scenes seed 小森 asking 小晴 through the IPC fixture (`colleagues`); the mock lists
 a member's exchanges in their recorded delivery conversation as the core does. Model behaviour is covered by Guardian
 S04 and S12: offline with honest fake brains on both brain paths and both ways of asking, live on the API
 brain. Rendered fixtures do not prove a live consult.
@@ -1022,7 +1022,7 @@ provider; offline results never establish live or design acceptance.
 
 ## Owner round 6 contracts
 
-Owner round 6: details/details-closed/raphael-details/details-routines/details-memory assert a visible, hit-testable conversation scrim whenever the panel overlays, and close it with a real pointer click. Inline panels have no scrim. The details scroll container owns the only row inset; routine/memory cards stay within 384px. Keyboard focus remains tested separately before pointer-state capture. no-naming decodes its avatar source and compares source resolution with rendered device pixels; the fixture uses an existing 1024px source, matching avatar_get image data.
+Owner round 6: details/details-closed/raphael-details/details-routines assert a visible, hit-testable conversation scrim whenever the panel overlays, and close it with a real pointer click. Inline panels have no scrim. The details scroll container owns the only row inset; routine cards stay within 384px. Keyboard focus remains tested separately before pointer-state capture. no-naming decodes its avatar source and compares source resolution with rendered device pixels; the fixture uses an existing 1024px source, matching avatar_get image data.
 
 
 ## Growing memory context, phase 2 (2026-10-29)

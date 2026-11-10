@@ -20,8 +20,6 @@ import "../settings-polish.css";
 import "../connections.css";
 import "../services.css";
 import "../providers.css";
-import "../memory.css";
-import { createMemory } from "../memory-view";
 import "../safety-rules.css";
 import { createRules } from "../safety-rules";
 import { createVault } from "../vault";
@@ -242,12 +240,6 @@ export function createSettings(app: AppContext): SettingsPage {
     tryPrompt: (text) => app.go("agent", `draft:${text}`),
   });
   app.onEvent((event) => connections.followEvent(event));
-  const memoryHost = { visible: () => visible && pane === "memory", redraw: () => render() };
-  const memoryShared = createMemory({ ...memoryHost, space: "shared" });
-  const memories = [memoryShared];
-  app.onEvent(event => {
-    if (event.type === "MemoryChanged" && event.space !== "own" && memoryHost.visible()) void memoryShared.load();
-  });
   const rules = createRules({ visible: () => visible && pane === "safety", redraw: () => render(), undo: app.undo });
   const vault = createVault(el, () => { if (visible && pane === "safety") render(); });
   const services = createServices({ root: el, visible: () => visible && pane === "tools", redraw: () => render(), brain: () => brain, changeSetting: (key, value) => changeBrain(key, value) });
@@ -269,7 +261,7 @@ export function createSettings(app: AppContext): SettingsPage {
     update,
     pane, modelsTab, modelsRefresh, device: app.device(), brain, hasKey, openrouter, spend, catalog: typeof catalog === "object" ? catalog : knownCatalog() ?? catalog, checkingOpenrouter, devices, altgr, version,
     replacingKey, keyBusy, keyError, limitDraft, limitError, languageGroups, now: Date.now(),
-    connections: connections.view(), memoryShared: memoryShared.view(), rules: rules.view(), vault: vault.view(), services: services.view(), providers: providers.view(), cliBrains: cliBrains.view(), localModels, localDownload,
+    connections: connections.view(), rules: rules.view(), vault: vault.view(), services: services.view(), providers: providers.view(), cliBrains: cliBrains.view(), localModels, localDownload,
   });
 
   /** The item at the foot of the microphones' menu that looks for them again. */
@@ -509,9 +501,6 @@ export function createSettings(app: AppContext): SettingsPage {
     if (pane === "about") void checkUpdate();
     if (pane === "connections") void connections.load();
     else connections.reset();
-    // Memory is a tab of its own (owner, 2026-11-08); the bots moved to the members' panels.
-    if (pane === "memory") { for (const list of memories) void list.load(); }
-    else { for (const list of memories) list.reset(); }
     if (pane === "safety") { void rules.load(); void vault.load(); }
     else { rules.reset(); vault.reset(); }
     services.reset();
@@ -1110,7 +1099,7 @@ export function createSettings(app: AppContext): SettingsPage {
       return;
     }
 
-    if (connections.click(target) || memories.some((list) => list.click(target)) || rules.click(target) || services.click(target)) return;
+    if (connections.click(target) || rules.click(target) || services.click(target)) return;
 
     if (target.closest('.tg[data-k="autostart"]')) {
       void changeDevice({ autostart: !app.device().autostart });
@@ -1201,7 +1190,7 @@ export function createSettings(app: AppContext): SettingsPage {
   el.addEventListener("input", (e) => {
     const input = e.target as HTMLInputElement;
     providers.input(input);
-    if (connections.input(input) || memories.some((list) => list.input(input)) || rules.input(input)) return;
+    if (connections.input(input) || rules.input(input)) return;
     if (input.id === "limit-input") limitDraft = input.value;
   });
   el.addEventListener("keydown", (e) => {
@@ -1211,7 +1200,7 @@ export function createSettings(app: AppContext): SettingsPage {
       switchModelsTab(e.key === "Home" ? "models" : e.key === "End" ? "usage" : modelsTab === "models" ? "usage" : "models");
       return;
     }
-    void (connections.key(e) || memories.some((list) => list.key(e)) || rules.key(e) || services.key(e) || providers.key(e));
+    void (connections.key(e) || rules.key(e) || services.key(e) || providers.key(e));
   });
   // Menus consume their own Escape; the panel and native window controls share one Tab loop.
   const settingsKey = (e: KeyboardEvent): void => {
@@ -1321,14 +1310,12 @@ export function createSettings(app: AppContext): SettingsPage {
       pane = open && PANES.some((p) => p.id === canonicalPane(open as SettingsPane)) ? canonicalPane(open as SettingsPane) : "general";
       if (open === "usage" || open === "models") modelsTab = open;
       connections.reset();
-      for (const list of memories) list.reset();
       rules.reset();
       vault.reset();
       services.reset();
       providers.reset();
       if (pane === "about") void checkUpdate();
       if (pane === "connections") void connections.load();
-      if (pane === "memory") { for (const list of memories) void list.load(); }
       if (pane === "safety") { void rules.load(); void vault.load(); }
       if (pane === "tools") void services.load();
       if (pane === "models" && modelsTab === "models") void loadProviders();
@@ -1397,7 +1384,6 @@ export function createSettings(app: AppContext): SettingsPage {
       // The usage stays mounted and read: it is read again only by its refresh or a change the core tells of.
       usageHost.remove();
       connections.reset();
-      for (const list of memories) list.reset();
       rules.reset();
       vault.reset();
       services.reset();

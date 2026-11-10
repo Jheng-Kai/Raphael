@@ -1153,11 +1153,11 @@ await page.waitForFunction(role => document.querySelector('.ms-pane #ms-role')?.
     await perform(page, { action: "member", id: colleague.id });
     await details(page);
     await click(page, '.mb-det [data-det="gear"]');
-    await click(page, '.ms-pane [data-ms="memory"]');
-    await page.waitForSelector('.ms-pane [data-mem-space="own"]');
-    result.memoryHeading = await page.$eval('.ms-pane [data-mem-space="own"]', el => el.getAttribute("aria-label"));
-    await capture("memory-heading");
-    if (result.memoryHeading !== `${colleague.name}的記憶`) throw new Error(`Memory heading has unwanted spacing: ${result.memoryHeading}`);
+    // The page holds no memory (owner, 2026-11-11: 「都不要讓我們看到記憶」); the core keeps it.
+    await page.waitForSelector('.ms-pane .ms-nav [data-cat="tools"]');
+    result.memoryShown = await page.$$eval('.ms-pane [data-cat="memory"], .ms-pane [data-mem-space]', elements => elements.length);
+    await capture("member-page");
+    if (result.memoryShown) throw new Error("The member page shows memory");
     await click(page, '.ms-pane [data-ms="back"]');
     await click(page, '.mb-det [data-det="close"]');
     const send = async (text, expected) => {

@@ -910,7 +910,9 @@ export function checkRendered(name, context = {}) {
       }
     } else if (name === 'level-gear') {
       require(visible(document.querySelector('.ms-pane .ms-face')) && visible(document.querySelector('.ms-pane #ms-name')) && visible(document.querySelector('.ms-pane [data-ms="back"]')), 'identity and Back are on the settings page the gear opens');
-      require((innerWidth < 860 || visible(panel)) && panel.querySelector('[data-det="gear"]') && !panel.querySelector('[data-tab="routines"], [data-tab="settings"]'), 'the panel stays beside the page (a window under 860 px closes it first), with its gear and no settings tab');
+      // The page takes the conversation's place and the panel folds away until it is left (R-PANEL-05); this check
+      // still asked for the panel beside the page and had failed since the page became one of its own.
+      require(!visible(panel) && panel.querySelector('[data-det="gear"]') && !panel.querySelector('[data-tab="routines"], [data-tab="settings"]'), 'the panel folds away while the settings page is open; it keeps its gear and has no settings tab');
     } else if (name === 'level-routine') {
       // A routine opens to read; its switch stays on its row and its member changes the rest (owner, 2026-11-09).
     } else if (name === 'level-strip') {
@@ -2415,10 +2417,9 @@ export function checkRendered(name, context = {}) {
     else require(panel.querySelector('input')?.value === 'studio-mini' && visible(panel.querySelector('[role="alert"]')), "remote failure stays in its host popover");
     return {check:name};
   }
-  if (["settings-owner", "settings-tools", "settings-raphael-memory", "settings-draft-grouped"].includes(name)) {
-    if (name === 'settings-owner') require(visible(document.querySelector('[data-owner="owner_name"]')) && !document.querySelector('#agent-city') && !document.querySelector('[data-mem-space]'), "the owner's profile stands without memory (its own tab, owner 2026-11-08), and no weather city is asked for (owner, 2026-11-06)");
+  if (["settings-owner", "settings-tools", "settings-draft-grouped"].includes(name)) {
+    if (name === 'settings-owner') require(visible(document.querySelector('[data-owner="owner_name"]')) && !document.querySelector('#agent-city') && !document.querySelector('[data-mem-space], [data-pane="memory"]'), "the owner's profile stands, no tab of Settings shows memory (owner, 2026-11-11), and no weather city is asked for (owner, 2026-11-06)");
     else if (name === 'settings-tools') require(document.querySelector('[data-pane="tools"]')?.getAttribute('aria-current') === 'page' && !document.querySelector('[data-pane="agent"]'), "legacy agent pane resolves to Tools");
-    else if (name === 'settings-raphael-memory') require(visible(document.querySelector('.ms-pane [data-mem-space="own"]')) && document.querySelector('.ms-pane [data-mem-space="own"]').textContent.includes('拉斐爾'), "Raphael memory belongs to the member settings page");
     else if (name === 'settings-draft-grouped') require(!!document.querySelector('.ms-pane .ms-list [data-ms="draft"]') && document.querySelectorAll('.ms-pane [data-ms="draft"]').length === 1, 'the draft switch is one row of the page, in the list with the group');
     return {check:name};
   }
@@ -2516,20 +2517,8 @@ export function checkRendered(name, context = {}) {
     require(visible(item) && item.classList.contains("danger"), "the ⋯ opens a danger item");
     require(document.querySelector('[data-overflow][aria-expanded="true"]'), "the menu belongs to a ⋯ button");
     require(/^確定/.test(item.textContent.trim()) === (name === "confirm-menu-asks"), `the item says ${item.textContent.trim()}`);
-    const destroying = ["memory.clear", "memory.summary_clear", "secrets.clear_openrouter_key", "history.clear", "agent.history.clear"];
+    const destroying = ["secrets.clear_openrouter_key", "history.clear", "agent.history.clear"];
     require(!window.__look.calls.some(call => destroying.includes(call.method)), "nothing is destroyed before the second press");
-    return { check: name };
-  }
-  if (name === "memory-clear-done") {
-    const clears = window.__look.calls.filter(call => call.method === "memory.clear");
-    require(clears.length === 1 && clears[0].params.space === "own", "one clear, of the member's own section");
-    require(!document.querySelector('.ms-pane [data-mem-space="shared"]'), "the shared memory is Settings', not on the member's page");
-    require(!document.querySelector('.ms-pane [data-mem-space="own"] [data-mem="section-more"]'), "an empty section has nothing to clear");
-    return { check: name };
-  }
-  if (name === "memory-summary-done") {
-    require(window.__look.calls.some(call => call.method === "memory.summary_clear"), "the summary was cleared through the core");
-    require(!window.__look.calls.some(call => call.method === "memory.clear"), "the notes were left alone");
     return { check: name };
   }
   if (name === "usage-key-removed") {
@@ -2549,49 +2538,6 @@ export function checkRendered(name, context = {}) {
   if (name === "local-model-asks") {
     require(visible(document.querySelector('.lm-row[data-name="sensevoice"] .lm-confirm')), "the row asks before anything is deleted");
     require(!window.__look.calls.some(call => call.method === "models.delete"), "nothing is deleted before the answer");
-    return { check: name };
-  }
-  if (name === "memory-document") {
-    const own = document.querySelector('.ms-pane [data-mem-space="own"]');
-    const entries = [...own.querySelectorAll(".mem-doc .mem-entry")];
-    require(entries.length >= 3 && entries.every(visible) && entries.every(entry => entry.tagName === "DETAILS"), "the memory reads as cards, one to an entry, opened when pressed");
-    require(!document.querySelector('.ms-pane .mem-sub, .ms-pane .mem-type, .ms-pane [data-mem="more"]'), "no rows, no type labels, no menu on each line");
-    require(own.querySelector(".mem-tag")?.textContent === "待確認" && !own.textContent.includes("（待確認）"), "what nobody confirmed wears a tag");
-    require(visible(own.querySelector('button.icon[data-mem="edit"]')) && own.querySelector('[data-mem="edit"]').textContent.trim() === '', "編輯 is a pencil, not the word");
-    const body = own.querySelector(".mem-doc");
-    require(!["auto", "scroll"].includes(getComputedStyle(body).overflowY) && body.scrollHeight <= body.clientHeight + 1, "the document has no scroll of its own");
-    require(!window.__look.calls.some(call => call.method === "memory.update"), "reading writes nothing");
-    return { check: name };
-  }
-  if (name === "memory-editor") {
-    const box = document.querySelector('.ms-pane [data-mem-space="own"] textarea.mem-body');
-    require(visible(box) && document.activeElement === box, "the box is open and has the focus");
-    require(box.value.includes("專案每週三檢查原型") && box.value.includes("（待確認）"), "the box holds the whole document, as the file has it");
-    require(box.scrollHeight <= box.clientHeight + 1, "the box grows with its text and never scrolls");
-    const editor = box.closest("[data-mem-editor]");
-    require(visible(editor.querySelector('[data-mem="save"]')) && visible(editor.querySelector('[data-mem="cancel"]')), "取消 and 儲存 are on screen");
-    require(/\/ 2,200/.test(editor.querySelector(".mem-count")?.textContent ?? ""), "the box says how full the file is");
-    return { check: name };
-  }
-  if (name === "member-edit-memory") {
-    const box = document.querySelector('.ms-pane [data-mem-space="own"] textarea.mem-body');
-    require(visible(box) && box.value.includes("專案每週三檢查原型") && box.value.includes("（待確認）"), "the box holds the member's whole document");
-    require(box.scrollHeight <= box.clientHeight + 1, "the box grows with its text and never scrolls");
-    require(document.querySelectorAll('.ms-pane [data-mem="save"]').length === 1 && document.querySelector('.ms-pane .ms-content[data-cat="memory"]'), "one 儲存, in the page's memory kind");
-    return { check: name };
-  }
-  if (name === "settings-memory") {
-    const shared = document.querySelector('[data-mem-space="shared"]');
-    require(visible(shared) && !document.querySelector('[data-mem-space="own"]'), "the 記憶 tab holds only shared owner memory");
-    require(document.querySelector('[data-pane="memory"]')?.getAttribute("aria-current") === "page", "記憶 is a tab of its own (owner, 2026-11-08)");
-    require(shared.querySelector(".mem-from")?.textContent.startsWith("拉斐爾 · "), "a shared entry says whom the owner told");
-    return { check: name };
-  }
-  if (name === "memory-saved") {
-    const saved = window.__look.calls.filter(call => call.method === "memory.update");
-    require(saved.length === 1 && saved[0].params.space === "own" && saved[0].params.member_id === 1 && typeof saved[0].params.revision === "string", "one write, of this member's file, from the copy it was opened on");
-    const own = document.querySelector('.ms-pane [data-mem-space="own"]');
-    require(own.textContent.includes("使用者改過的一段") && !own.textContent.includes("上一輪檢查"), "the document reads as saved");
     return { check: name };
   }
 
@@ -3524,7 +3470,7 @@ export function checkRendered(name, context = {}) {
     for (let node; (node = walker.nextNode());) {
       const element = node.parentElement, text = node.textContent.trim();
       // A file's type badge is its own name's extension (「PDF」), the owner's, not interface copy.
-      if (!text || !visible(element) || element.closest('[hidden], [inert], script, style, input, textarea, .message-text, .mb-preview, .mb-pv, .mem-entry, .attachment-icon')) continue;
+      if (!text || !visible(element) || element.closest('[hidden], [inert], script, style, input, textarea, .message-text, .mb-preview, .mb-pv, .attachment-icon')) continue;
       if (user.has(text)) continue;
       const interfaceText = authored.reduce((copy, value) => copy.split(value).join(""), text);
       if (foreign.has(text) || (locale === "en" && /[\u3400-\u9fff\u3040-\u30ff]/.test(interfaceText))) stale.push(text.slice(0, 90));
@@ -5487,7 +5433,8 @@ export function checkRendered(name, context = {}) {
     // since 記憶 left 一般 for a tab of its own (owner, 2026-11-08).
     const scrim = modal.closest('.modal-scrim');
     if (!scrim.hasAttribute('data-standalone')) {
-      require(scrim.querySelectorAll('.modal-nav [data-pane]').length === 7 && !scrim.querySelector('.nav-group, #set-search'), "seven tabs sit flat, with no group names and no search");
+      // Six since the memory tab went (owner, 2026-11-11: memory is not shown anywhere).
+      require(scrim.querySelectorAll('.modal-nav [data-pane]').length === 6 && !scrim.querySelector('.nav-group, #set-search, [data-pane="memory"]'), "six tabs sit flat, with no group names and no search");
       require(!scrim.querySelector('.set-purpose'), "a tab is its name alone, with no line under it");
     }
     return { check: name, radius: getComputedStyle(modal).borderTopLeftRadius };
@@ -5959,16 +5906,27 @@ export function checkRendered(name, context = {}) {
     const back = pane.querySelector('[data-ms="back"]');
     require(visible(back) && back.classList.contains("icon") && back.textContent.trim() === "" && back.querySelector("svg.i"), "the way back is an arrow icon with no words");
     const cover = pane.querySelector(".ms-cover"), face = pane.querySelector(".ms-face");
-    // The way back is the bare arrow the page's other icons are, just left of the name and off the cover (owner, 2026-11-10).
+    // The way back stands at the page's top left, on the cover: a soft round edge button whose surface is solid, so it is
+    // seen on any picture, at rest and under the pointer (owner, 2026-11-11: 「放回圖片裡面…要有背景。Hover 上去的時候不要消失」).
+    const arrow = back.getBoundingClientRect(), paneBox = pane.getBoundingClientRect();
+    const solid = value => { const parts = value.match(/[\d.]+/g)?.map(Number) ?? []; return /^rgb/.test(value) && parts.length >= 3 && (parts.length === 3 || parts[3] === 1); };
+    require(arrow.left >= paneBox.left + 4 && arrow.left <= paneBox.left + 24 && arrow.top >= paneBox.top && arrow.top <= paneBox.top + 48, `the way back stands at the page's top left (${Math.round(arrow.left - paneBox.left)}, ${Math.round(arrow.top - paneBox.top)})`);
+    require(Math.round(arrow.width) === 36 && Math.round(arrow.height) === 36 && parseFloat(getComputedStyle(back).borderTopLeftRadius) >= 18, `the way back is a round edge button (${Math.round(arrow.width)} x ${Math.round(arrow.height)})`);
+    require(solid(getComputedStyle(back).backgroundColor), `the way back has a solid surface (${getComputedStyle(back).backgroundColor})`);
     if (view === "main") {
-      const named = back.closest(".ms-backed")?.querySelector(".ms-name"), arrow = back.getBoundingClientRect();
-      require(named, "the way back stands beside the member's name");
-      const nameBox = named.getBoundingClientRect(), gap = nameBox.left - arrow.right;
-      require(arrow.top >= cover.getBoundingClientRect().bottom - 1, "the way back is not on the cover");
-      require(gap >= -1 && gap <= 16, `the way back is just left of the name (${Math.round(gap)} px)`);
-      require(Math.abs((arrow.top + arrow.bottom) / 2 - (nameBox.top + nameBox.bottom) / 2) <= 2, "the way back is level with the name");
-      require(arrow.left >= pane.getBoundingClientRect().left + 4, "the way back is whole inside the page");
-      require(/^(transparent|rgba\(0, 0, 0, 0\))$/.test(getComputedStyle(back).backgroundColor), `the way back is a bare icon, as the page's others (${getComputedStyle(back).backgroundColor})`);
+      const edge = cover.getBoundingClientRect(), mark = face.getBoundingClientRect();
+      require(arrow.top >= edge.top && arrow.bottom <= edge.bottom, "the way back is on the cover");
+      require(arrow.bottom <= mark.top || arrow.right <= mark.left, "the way back is clear of the face");
+      const change = cover.querySelector('[data-ms="cover"]');
+      // At rest the two share one surface; under the pointer an edge button is a step lighter, as everywhere.
+      if (change && !back.matches(":hover") && !change.matches(':hover, [aria-expanded="true"]')) require(getComputedStyle(change).backgroundColor === getComputedStyle(back).backgroundColor, "the cover's two icons share one surface");
+    }
+    if (name === "member-settings-back-hover") {
+      // Under the pointer it once went clear and was lost in the picture.
+      require(back.matches(":hover"), "the pointer is on the way back");
+      require(visible(cover.querySelector("img.ms-cover-img")), "the owner's picture is behind it");
+      require(solid(getComputedStyle(back).backgroundColor), `under the pointer the way back keeps a solid surface (${getComputedStyle(back).backgroundColor})`);
+      return { check: name };
     }
     if (name === "member-settings-cover-picture") {
       // The owner's picture fills the cover and stays put: no picture in the app can be dragged out of the window (R-UI-119).
@@ -6017,13 +5975,15 @@ export function checkRendered(name, context = {}) {
       const nav = pane.querySelector(".ms-nav"), content = pane.querySelector(".ms-content");
       const kinds = [...nav.querySelectorAll('[data-ms="cat"]')].filter(visible);
       // The same kinds for every member, Raphael too, in the owner's order (owner, 2026-11-09).
-      const expectedKinds = ["memory", "tools", "skills", "soul", "notify"];
+      const expectedKinds = ["tools", "skills", "soul", "notify"];
       require(kinds.map(item => item.dataset.cat).join() === expectedKinds.join(), `the kinds are ${expectedKinds.join()} (${kinds.map(item => item.dataset.cat).join()})`);
       const chosen = kinds.filter(item => item.getAttribute("aria-current") === "page");
       require(chosen.length === 1, "one kind is chosen");
       const category = chosen[0].dataset.cat;
       require(content.dataset.cat === category, "only the chosen kind is shown beside the column");
       require(!pane.querySelector('.member-msg, [data-cat="routines"], [data-cat="messaging"]'), "what the panel beside the page shows (routines, messaging) is not here");
+      // No memory anywhere (owner, 2026-11-11: 「都不要讓我們看到記憶」): not a kind, not a card, not a word.
+      require(!pane.querySelector('[data-cat="memory"], [data-mem-space], [data-mem-section], .mem-entry, .ms-memory') && !pane.textContent.includes("記憶"), "the page shows no memory");
       const wide = pane.getBoundingClientRect().width > 680;
       const navBox = nav.getBoundingClientRect(), contentBox = content.getBoundingClientRect();
       if (wide) {
@@ -6037,9 +5997,9 @@ export function checkRendered(name, context = {}) {
         require(rows.size <= 3 && rows.size < kinds.length, `a narrow page's kinds are pills that wrap, not a tall list (${rows.size} rows)`);
       }
       for (const item of kinds) require(item.querySelector("span").scrollWidth <= item.querySelector("span").clientWidth + 1, `${item.dataset.cat} shows its whole name`);
-      const expected = { soul: ["ms-personality", "ms-instructions"], skills: ["ms-skills", "ms-commands"], tools: ["ms-tools", "ms-draft"], notify: ["ms-notify"], memory: [] }[category];
+      const expected = { soul: ["ms-personality", "ms-instructions"], skills: ["ms-skills", "ms-commands"], tools: ["ms-tools", "ms-draft"], notify: ["ms-notify"] }[category];
       const sections = [...pane.querySelectorAll(".ms-section[data-k]")].filter(visible).map(section => section.dataset.k);
-      require(sections.join() === expected.join(), `${category} shows ${expected.join() || "the memory"} (${sections.join()})`);
+      require(sections.join() === expected.join(), `${category} shows ${expected.join()} (${sections.join()})`);
       for (const section of pane.querySelectorAll(".ms-section[data-k]")) {
         const list = section.querySelector(".ms-list"), head = section.querySelector(".ms-head");
         require(visible(list) && getComputedStyle(list).backgroundColor !== "rgba(0, 0, 0, 0)", `${section.dataset.k} is a tinted list`);
@@ -6101,27 +6061,6 @@ export function checkRendered(name, context = {}) {
     if (name === "member-settings-command") {
       require(view === "command" && ["#ms-command-name", "#ms-command-description", "#ms-command-template"].every(selector => visible(pane.querySelector(selector))), "the command's three fields");
       require(visible(pane.querySelector('[data-ms="command-save"]')), "the command has its save");
-    }
-    if (name === "member-settings-memory") {
-      // The member's own memory alone, each entry a card of one line that opens when pressed (owner, 2026-11-09).
-      const documents = [...pane.querySelectorAll("[data-mem-section]")].filter(visible);
-      require(documents.length === 1 && documents[0].dataset.memSpace === "own" && documents[0].closest(".ms-content"), "only the member's own memory, beside the column of kinds");
-      require(visible(documents[0].querySelector('[data-mem="edit"].icon')) && ![...pane.querySelectorAll("button")].some(button => visible(button) && button.textContent.trim() === "編輯"), "the memory's edit is a pencil");
-      const cards = [...documents[0].querySelectorAll("details.mem-entry")];
-      require(cards.length > 0 && cards.every(card => !card.open && visible(card.querySelector("summary"))), "each entry is a closed card");
-      for (const card of cards) {
-        const text = card.querySelector(".mem-text"), box = card.getBoundingClientRect();
-        require(getComputedStyle(card).backgroundColor !== "rgba(0, 0, 0, 0)" && text.getBoundingClientRect().height <= parseFloat(getComputedStyle(text).lineHeight) + 1 && box.height < 64, "a closed card is one tinted line");
-      }
-      const gaps = cards.slice(1).map((card, i) => card.getBoundingClientRect().top - cards[i].getBoundingClientRect().bottom);
-      require(gaps.every(gap => gap >= 2), "the cards stand apart from each other");
-    }
-    if (name === "member-settings-memory-open") {
-      const card = pane.querySelector("details.mem-entry[open]");
-      require(card && visible(card.querySelector(".mem-text")), "a pressed card opens to its whole text");
-      const text = card.querySelector(".mem-text");
-      require(text.getBoundingClientRect().height > parseFloat(getComputedStyle(text).lineHeight) * 1.5, "the opened card shows more than one line");
-      require(pane.querySelectorAll("details.mem-entry[open]").length === 1, "only the card pressed opens");
     }
     return { check: name, view };
   }
@@ -6323,13 +6262,6 @@ export function checkRendered(name, context = {}) {
     if (name === "bot-exchange-expanded") require(visible(chat) && [...chat.querySelectorAll('.peer-line')].filter(visible).length >= 1, "it opens the conversation on what was asked");
     else require(!chat, "the conversation opens only from the line");
     return { check: name, words };
-  }
-  if (name === "global-private-memory") {
-    // The member's page shows its own memory alone; the shared one is Settings' (owner, 2026-11-09).
-    const shared = document.querySelector('.ms-pane [data-mem-space="shared"]'), own = document.querySelector('.ms-pane [data-mem-space="own"]');
-    require(!shared && visible(own), "only the member's own memory is on its page");
-    require(own.textContent.includes("專案每週三檢查原型") && !own.textContent.includes("品牌主色是金色"), "the member's own entry stays in its own file, the shared one is not there");
-    return { check: name };
   }
   if (name === "plugins-store-needs") {
     // The store says in words what each app asks for, on its row, before anything is pressed; no 加入 is dead.

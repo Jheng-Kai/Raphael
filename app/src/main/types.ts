@@ -1157,7 +1157,7 @@ export type PageId = "home" | "agent" | "dictation" | "history" | "dictionary" |
 export type MainPageId = Exclude<PageId, "settings" | "history" | "dictionary">;
 export type DictationTab = "overview" | "history" | "dictionary";
 
-/** The tabs of the settings panel. */
+/** The tabs of the settings panel. "memory" is no tab since 2026-11-11 (R-MEM-10): it stays a name only so an old saved or linked pane opens 一般. */
 export type SettingsPane = "general" | "memory" | "appearance" | "dictation" | "agent" | "tools" | "safety" | "connections" | "messaging" | "models" | "usage" | "data" | "about";
 
 /**
