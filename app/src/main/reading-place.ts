@@ -8,6 +8,8 @@ export function keepReadingPlace(scroller: HTMLElement, items: string, slack = 4
   let width = scroller.clientWidth;
   let anchor: HTMLElement | null = null, offset = 0, bottom = true;
   const take = (): void => {
+    // A scroller that is not drawn (the settings page over it) reads as empty, so as "at the bottom": its place is kept.
+    if (!scroller.clientWidth || !scroller.clientHeight) return;
     bottom = scroller.scrollHeight - scroller.clientHeight - scroller.scrollTop <= slack;
     const top = scroller.getBoundingClientRect().top;
     anchor = null;
@@ -19,7 +21,8 @@ export function keepReadingPlace(scroller: HTMLElement, items: string, slack = 4
   let frame = 0;
   const resized = (): void => {
     const now = scroller.clientWidth;
-    if (now === width) return;
+    // Not drawn: the width it had stays the one to compare with when it is drawn again, and the place it had with it.
+    if (!now || now === width) return;
     width = now;
     const keep = anchor, want = offset, atBottom = bottom;
     const place = (): void => {
