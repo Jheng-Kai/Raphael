@@ -1403,6 +1403,11 @@ Offline coverage: `core/tests/agent/test_cli_stall.py` (watchdog, windows, owner
 (reads alone vs a write), `tests/background/test_run_retry.py`, `tests/members/test_cli_brains.py` (a real fake CLI that
 goes silent after a write and after a read), `tests/brain/test_chatgpt.py` and `tests/agent/test_failure_kinds.py`.
 Core-only change: no new visual scene or frontend change.
+
+R-CLI-10: a fresh native session's first message (`agent/cli/context.py` `fresh_user`) follows the model's window, not a
+fixed 16,000 characters. The request, file names, additions, note and records are never cut and overflow only when they
+alone outgrow the window; the rest is filled with memory and team sections, the summary, the owner's own recent words and
+then recent turns, newest first. Covered offline by `core/tests/agent/test_cli_context.py`.
 ## Background app discovery (2026-11-01)
 
 Background API and CLI snapshots offer the same read-only find_app catalog contract
