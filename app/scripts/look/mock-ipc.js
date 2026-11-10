@@ -691,7 +691,7 @@ export function installMock(fixture, config = {}, target = window) {
   }
   if (variant.calendarComposio) {
     data.managedConnectors = data.managedConnectors.filter(c=>c.id!=="google" && c.id!=="composio:googlecalendar");
-    data.managedConnectors.push({id:"composio:googlecalendar",kind:"composio",name:"Google Calendar",status:"ACTIVE",enabled:true,enabled_tools:["GOOGLECALENDAR_EVENTS_LIST"]});
+    data.managedConnectors.push({id:"composio:googlecalendar",kind:"composio",name:"Google Calendar",status:"ACTIVE",enabled:true,enabled_tools:["GOOGLECALENDAR_EVENTS_LIST"],disabled_tools:[]});
     data.home.calendar_google="connected";
   }
   if (variant.homeSparse || variant.homeEmpty) {

@@ -6067,13 +6067,17 @@ export function checkRendered(name, context = {}) {
   if (name.startsWith("member-settings-place-")) {
     const scroller = document.querySelector('.page-agent .mb-chat .ra-scroll');
     const bottom = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight;
+    const markOffset = () => { const mark = scroller.querySelector('.tn[data-id="300035"]'); return mark ? mark.getBoundingClientRect().top - scroller.getBoundingClientRect().top : NaN; };
     if (name === "member-settings-place-before") {
       require(bottom > 200 && scroller.scrollTop > 200, "the thread is read in the middle");
       window.__settingsPlace = scroller.scrollTop;
+      window.__settingsMark = markOffset();
+      window.__settingsHeight = scroller.scrollHeight;
       return { check: name, top: scroller.scrollTop };
     }
     if (name === "member-settings-place-kept") {
-      require(Math.abs(scroller.scrollTop - window.__settingsPlace) <= 2 && bottom > 100, `the thread is where it was (${Math.round(window.__settingsPlace)} -> ${Math.round(scroller.scrollTop)})`);
+      // The turn that was read stands where it stood: turns mounted above it move scrollTop, not the view.
+      require(Math.abs(markOffset() - window.__settingsMark) <= 2 && bottom > 100, `the turn read is where it was (offset ${Math.round(window.__settingsMark)} -> ${Math.round(markOffset())}; top ${Math.round(window.__settingsPlace)} -> ${Math.round(scroller.scrollTop)}; height ${window.__settingsHeight} -> ${scroller.scrollHeight})`);
       return { check: name, top: scroller.scrollTop };
     }
     require(bottom <= 2 && scroller.scrollTop > 200, "the thread is back at its bottom, and it scrolls");
