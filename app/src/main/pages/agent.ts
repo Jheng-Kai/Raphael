@@ -657,9 +657,9 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     const shared = { greetingOpen: !turns.some(turn => !!turn.question.trim()) && !outgoing.some(belongs), regenerateTurnId: busy ? undefined : latest, revealing: (id: number) => pacing.waiting(id), waitingForOwner: desktop.waitingForOwner, memberName: members.nameOf, memberFace: (id: number, size = 18) => members.faceOf(id, size), mentions: members.mentionTargets(),
       // A permission card in the thread can be answered while the window holds its question and is not answering it.
       answerable: (cardId: string) => question?.id === cardId && !answering };
-    if (inRaphael()) return { ...shared, face: () => faceHTML(members.member(), 26), liveFace: () => faceHTML(members.member(), 28), activityLabel: members.member().activity_label };
+    if (inRaphael()) return { ...shared, face: moving => faceHTML(members.member(), 26, { moving }), liveFace: () => faceHTML(members.member(), 28, { moving: true }), activityLabel: members.member().activity_label };
     const member = members.member();
-    return { ...shared, face: () => faceHTML(member, 26), liveFace: () => faceHTML(member, 28), activityLabel: member.activity_label };
+    return { ...shared, face: moving => faceHTML(member, 26, { moving }), liveFace: () => faceHTML(member, 28, { moving: true }), activityLabel: member.activity_label };
   };
   /**
    * The question that waits now (null: none), and whose thread it is in: the member a typed or

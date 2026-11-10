@@ -158,8 +158,8 @@ async function makeStill(url: string): Promise<string> {
  * The address to show the person's picture with: itself, or under reduced motion the still of one
  * that may move (null until it is made; every listener draws again then).
  */
-function shownUrl(url: string): string | null {
-  if (!reduced || !MAY_MOVE.test(url)) return url;
+function shownUrl(url: string, picture = false): string | null {
+  if (!(reduced || picture) || !MAY_MOVE.test(url)) return url;
   if (still?.url === url) return still.frame;
   const mine = { url, frame: null as string | null };
   still = mine;
@@ -207,6 +207,8 @@ export interface AvatarOptions {
   cls?: string;
   /** The picture of the person's own, if any (by default the one in force now). */
   avatar?: CustomAvatar | null;
+  /** A picture that may move (a GIF, a WebP) shows its first frame: Raphael's face stands still wherever it is not the member list or the thinking line (owner, 2026-11-11). */
+  still?: boolean;
 }
 
 /**
@@ -220,7 +222,7 @@ export function avatarHTML(o: AvatarOptions): string {
   const cls = `av${chosen ? " av-custom" : ""}${o.cls ? " " + o.cls : ""}`;
   const box = `style="--av:${Math.round(o.size)}px"`;
   if (chosen) {
-    const url = shownUrl(chosen.url);
+    const url = shownUrl(chosen.url, o.still);
     const img = url === null ? "" : `<img src="${esc(url)}" alt="" draggable="false" style="${cropStyle(chosen.crop)}">`;
     return `<span class="${cls}" ${box} aria-hidden="true">${img}</span>`;
   }

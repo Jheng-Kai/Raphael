@@ -13,7 +13,7 @@ import { openMemberAvatarMenu } from "./member-avatar-menu";
 import {
   RAPHAEL_ID,
   faceHTML,
-  routineSentenceHTML, routineStatus,
+  routineSentenceHTML, routineStatus, stableMember,
 } from "./members";
 import type { AppContext, Member, MemberPatch, MembersList, Routine } from "./types";
 import { esc, ico, iconButton, patchHTML, tg, toaster } from "./ui";
@@ -187,7 +187,7 @@ export function createDetails(host: DetailsHost): DetailsPanel {
     const sameMember = drawnFor === member.id;
     const focused = document.activeElement as HTMLElement | null;
     const face = faceHTML(member, 64).replace(/--slime-(?:delay|since):[^;"\s]+;?| data-slime-mounted="[\d.]+"/g, "");
-    const signature = JSON.stringify([member, face, host.list()?.groups, routines, work, workFailed, tab, libraryFilter, getLocale(), !!host.openConversation, host.conversationOf?.(member.id),
+    const signature = JSON.stringify([stableMember(member), face, host.list()?.groups, routines, work, workFailed, tab, libraryFilter, getLocale(), !!host.openConversation, host.conversationOf?.(member.id),
       // The bot cards redraw on their own state.
       tab === "details" ? channelViews(member.id).map(([kind, view]) => [kind, { ...view, token: "" }]) : null,
       (["setup-telegram", "setup-slack", "setup-discord"] as const).map((intent) => askPending(member.id, intent))]);

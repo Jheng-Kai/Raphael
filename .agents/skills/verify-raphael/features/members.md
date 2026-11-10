@@ -129,6 +129,7 @@ npm run look -- member-delete member-conversation-sections --theme both --width 
 npm run look -- member-maker member-maker-chosen member-maker-greeting member-maker-made --theme both --width 1120,720,1920x1080
 npm run look -- slime-states slime-picker slime-sizes slime-gallery slime-motion-idle slime-motion-busy slime-motion-moments slime-motion-change slime-sharp slime-pointer slime-cost --theme both --width 1120,720,1920x1080
 npm run look -- member-face-hover slime-picker --theme both --width 1120,720,1920x1080
+npm run look -- slime-places slime-places-settings busy-team-calm --theme both --width 1120,720,1920x1080
 ```
 
 These walk the owner's flows to their end: `member-delete`
@@ -169,6 +170,10 @@ Fixture member 1 is 小晴 with conversation 11; Raphael has special avatar beha
 Skills/commands/voices have empty fixture collections. Seed resources before claiming
 populated-resource flows. Native avatar picking/cropping, files, audio output and
 provider behavior need native evidence. A dialog screenshot does not prove saving.
+
+## Where a slime moves (R-SLIME-01, R-SLIME-02)
+
+A slime moves in two places only (owner, 2026-11-11: 「只有左邊成員列表工作中、對話框思考那一行要有動畫，其他地方放史萊姆的樣子就可以了」): a member's row or tile in the left list while that member works, and the thinking or waiting line of the open conversation. Every other slime is a picture (`data-slime-still`: its resting pose with its colour, hat, crown and accessories; no strips, no animation, no transition, no clock). `faceHTML` and `slimeFaceHTML` take `moving` for the two places; the default is a picture. `slime-places` opens a working member's conversation with the panel and fails on any slime outside those two places that is not a picture or has anything running on it (`slime-places.mjs`); `slime-places-settings` does the same on the member settings page. `busy-team-calm` is the event storm for the owner's "the screen flashes when it updates": a member's steps and words arrive for five seconds while a MutationObserver over the list, header, thread and panel fails on any replaced element, any text emptied or blank at a frame, any scroller that moved and any slime moving outside the two places. Judge the contact sheets at both themes and three sizes: the header, panel and cards show the slime at rest, and the list row and the thinking line show it moving.
 
 ## How a slime moves, and why it stays sharp
 

@@ -52,8 +52,8 @@ export function preparationHTML(state: DesktopState, face = ""): string {
   const identity = character.content.querySelector('[data-presence-member]')?.getAttribute('data-presence-member') ?? '';
   for (const node of character.content.querySelectorAll<HTMLElement>('.av')) node.style.removeProperty('--av');
   for (const node of character.content.querySelectorAll('[data-presence-member], [data-tooltip]')) { node.removeAttribute('data-presence-member'); node.removeAttribute('data-tooltip'); }
-  // Boot has its own working motion, independent of the member's conversation activity.
-  for (const node of character.content.querySelectorAll('.slime-surface, svg.slime')) { node.setAttribute('data-state', 'working'); node.removeAttribute('data-slime-member'); }
+  // The computer's boot face is a picture of the slime like every face outside the member list and the thinking line
+  // (owner, 2026-11-11); it no longer works while the computer starts.
   const label = esc(t(STATUS_KEY[stages[Math.max(0, at)]]));
   return `<div class="desktop-preparation" role="status"><div class="desktop-boot-face" data-k="desktop-face-${esc(identity)}" aria-hidden="true">${character.innerHTML}</div>` +
     `<p class="desktop-stage">${esc(computerStateText(state))}</p>` +

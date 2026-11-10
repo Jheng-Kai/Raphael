@@ -18,7 +18,7 @@ export const esc = (s: unknown): string => String(s).replace(/[&<>"']/g, (c) => 
 
 /** Whose a generated face is. The same member's new colour or character keeps its face (slime.ts makes its clock again). */
 function faceIdentity(surface: Element): string {
-  return surface.querySelector("svg.slime")?.getAttribute("data-slime-member") ?? "";
+  return surface.querySelector("svg.slime")?.getAttribute("data-slime-member") ?? surface.getAttribute("data-slime-still") ?? "";
 }
 
 /** Update generated markup without discarding its live controls. */

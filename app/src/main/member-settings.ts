@@ -17,7 +17,7 @@ import { onLocaleChange, getLocale, t } from "./i18n";
 import { openMemberAvatarMenu } from "./member-avatar-menu";
 import type { MessageKey } from "./i18n/zh-TW";
 import { pickPicture, readPicture } from "./member-dialogs";
-import { INSTRUCTIONS_MAX, NAME_MAX, PERSONALITY_MAX, RAPHAEL_ID, ROLE_MAX, cleanName, faceHTML, isMemberNameTaken } from "./members";
+import { INSTRUCTIONS_MAX, NAME_MAX, PERSONALITY_MAX, RAPHAEL_ID, ROLE_MAX, cleanName, faceHTML, isMemberNameTaken, stableMember } from "./members";
 import { type MemorySpace, createMemory, memoryHTML } from "./memory-view";
 import { entryIcon } from "./service-mark";
 import { skillOriginLabel } from "./skill-source";
@@ -383,7 +383,7 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
     // Another member, or the picture taken off, ends a move of the cover that was under way.
     if (reposition && (!sameMember || member.cover?.kind !== "image")) { reposition = null; delete cover.dataset.repositioning; }
     const face = faceHTML(member, 96).replace(/--slime-(?:delay|since):[^;"\s]+;?| data-slime-mounted="[\d.]+"/g, "");
-    const signature = JSON.stringify([member, face, view, category, [...editing], adding, skills, undo, commands, toolChoices, skillText, skillBusy, command, getLocale(),
+    const signature = JSON.stringify([stableMember(member), face, view, category, [...editing], adding, skills, undo, commands, toolChoices, skillText, skillBusy, command, getLocale(),
       reposition ? reposition.from : null, category === "memory" ? memory.view() : null]);
     if (drawn === signature) return;
     drawn = signature;

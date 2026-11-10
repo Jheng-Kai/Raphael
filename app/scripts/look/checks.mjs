@@ -835,8 +835,15 @@ export function checkRendered(name, context = {}) {
         require(getComputedStyle(control).borderColor === 'rgba(0, 0, 0, 0)' && getComputedStyle(control).boxShadow === 'none', "pointer hover adds no ring-like border or shadow");
       }
     }
-    if (name === "presence-blocked-stays") require(document.querySelector('.mb-pill-face .slime')?.dataset.state === "blocked", "owner waiting remains blocked after refresh");
-    if (name === "presence-waiting-colleague") require(document.querySelector('.mb-pill-face .slime')?.dataset.state === "waiting", "a colleague wait keeps its own silhouette");
+    // The header's face is a picture since 2026-11-11 (R-SLIME-01): the wait shows on the member's row, the only place it moves.
+    if (name === "presence-blocked-stays") {
+      require(document.querySelector('.mb-list [data-member="1"] .slime')?.dataset.state === "blocked", "owner waiting remains blocked after refresh");
+      require(document.querySelector('.mb-pill-face .slime-surface')?.hasAttribute('data-slime-still'), "the header's face stands still while the member waits");
+    }
+    if (name === "presence-waiting-colleague") {
+      require(document.querySelector('.mb-list [data-member="1"] .slime')?.dataset.state === "waiting", "a colleague wait keeps its own silhouette");
+      require(document.querySelector('.mb-pill-face .slime-surface')?.hasAttribute('data-slime-still'), "the header's face stands still while the member waits");
+    }
     if (name === "transcript-working") {
       const live = turn.querySelector('.live-presence');
       require(visible(live) && live.querySelector('.av, .avatar').getBoundingClientRect().width === 28, "the live avatar is 28px");

@@ -198,7 +198,7 @@ test("room identity uses the participants' own faces and caps the cluster at fou
   const el = document.createElement("div");
   el.innerHTML = roomAvatarHTML({ member_ids: [2, 1, 3, 4, 5] }, list);
   expect(el.querySelector(".room-avatar")?.getAttribute("data-faces")).toBe("4");
-  expect([...el.querySelectorAll("svg.slime")].map(face => (face as SVGElement).dataset.slimeMember)).toEqual(["2", "1", "3", "4"]);
+  expect([...el.querySelectorAll(".slime-surface")].map(face => (face as HTMLElement).dataset.slimeStill)).toEqual(["2", "1", "3", "4"]);
 });
 
 test("owner profile updates the existing outgoing face as well as the footer identity", () => {

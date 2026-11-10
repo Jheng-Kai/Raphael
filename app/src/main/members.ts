@@ -17,6 +17,17 @@ import type { MessageKey } from "./i18n/zh-TW";
 import type { Member, MemberGroup, MemberSource, MembersList, Routine, RoutineSchedule } from "./types";
 import { findsName } from "./find-match";
 
+/**
+ * A member as a page about it draws it: without what changes with each word it says or step it takes (its last line,
+ * its time, its unread mark, its activity and the words for it). The panel and the settings page compare this, not the
+ * whole row, so a reply that streams in or a worker that moves on does not draw them again (owner, 2026-11-11: 「更新…
+ * 就會閃現」). Its face carries the rest of it (a long silence, a wait) in its own markup.
+ */
+export function stableMember<T extends Partial<Member>>(member: T): Omit<T, "preview" | "last_at" | "unread" | "unread_from" | "waiting" | "activity" | "activity_label"> {
+  const { preview: _preview, last_at: _lastAt, unread: _unread, unread_from: _unreadFrom, waiting: _waiting, activity: _activity, activity_label: _label, ...rest } = member;
+  return rest;
+}
+
 /** Raphael's id among the members: member 0 everywhere in the core's API. */
 export const RAPHAEL_ID = 0;
 
@@ -167,17 +178,21 @@ export const RAPHAEL_SLIME = "slime:rimuru";
  * A face at `size` px: a member's slime; for Raphael the owner's own picture when one is chosen (avatar.ts), else the
  * first blue slime. His emblem shows only in voice (the voice screen and its button, avatar.ts). Decorative: whoever
  * shows it names it.
+ *
+ * A face is a picture of the slime unless `moving`. Exactly two places move (owner, 2026-11-11: 「工作的時候，只要有左邊的…讓它有動畫就可以了。
+ * 還有…在對話框思考那個，也要有動畫。其他…都不用有動畫」): a member's row in the left list, and the conversation's thinking line.
+ * They pass `moving`; nothing else does.
  */
-export function faceHTML(member: { id: number; name: string; avatar?: string | null; avatar_url?: string | null }, size: number, o: { loop?: boolean; cls?: string } = {}): string {
+export function faceHTML(member: { id: number; name: string; avatar?: string | null; avatar_url?: string | null }, size: number, o: { moving?: boolean; cls?: string } = {}): string {
   if (member.id === RAPHAEL_ID) {
-    if (currentAvatar()) return avatarHTML({ size, cls: o.cls }).replace("<span", `<span${presenceAttrs(member.id)}`);
-    return slimeFaceHTML({ ...member, avatar: RAPHAEL_SLIME }, size, o.cls);
+    if (currentAvatar()) return avatarHTML({ size, cls: o.cls, still: !o.moving }).replace("<span", `<span${presenceAttrs(member.id)}`);
+    return slimeFaceHTML({ ...member, avatar: RAPHAEL_SLIME }, size, o.cls, o.moving);
   }
   // A picture the owner generated for it (the face picker's 生成, 2026-11-07 night) stands in the slime's place.
   if (member.avatar?.startsWith("file:") && member.avatar_url?.startsWith("data:image/"))
     return `<span class="av mb-av mb-av-pic${o.cls ? ` ${o.cls}` : ""}" data-presence-member="${member.id}" style="--av:${Math.round(size)}px" aria-hidden="true">` +
       `<img src="${member.avatar_url.replace(/"/g, "%22")}" alt="" draggable="false"></span>`;
-  return slimeFaceHTML(member, size, o.cls);
+  return slimeFaceHTML(member, size, o.cls, o.moving);
 }
 
 // ---------- routines ----------

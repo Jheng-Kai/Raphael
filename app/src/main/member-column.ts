@@ -44,7 +44,7 @@ function pinnedTileHTML(member: Member, v: ColumnView, top: boolean): string {
   return (
     `<div class="mb-item" data-member-item="${member.id}"${member.id ? ' draggable="true"' : ""}>` +
     `<button type="button" class="nav mb-row mb-tile${top ? " mb-chief" : ""}" data-member="${member.id}" aria-current="${v.active !== false && member.id === v.current}" data-k="member:${member.id}" aria-label="${esc(role ? `${member.name} · ${role}` : member.name)}">` +
-    faceHTML(member, 64) + `<b>${esc(member.name)}</b>${memberDot(member)}</button>` +
+    faceHTML(member, 64, { moving: true }) + `<b>${esc(member.name)}</b>${memberDot(member)}</button>` +
     iconButton("more", t("members.more", { p0: member.name }), ` data-member-more="${member.id}" aria-haspopup="menu" aria-expanded="false" data-k="member-more:${member.id}"`, "mb-more") +
     `</div>`
   );
@@ -58,7 +58,7 @@ export function memberRowHTML(member: Member, v: Pick<ColumnView, "current" | "a
   return (
     `<div class="mb-item${v.fresh.has(member.id) ? " is-new" : ""}" data-member-item="${member.id}"${member.id ? ' draggable="true"' : ""}>` +
     `<button type="button" class="nav mb-row" data-member="${member.id}" aria-current="${v.active !== false && member.id === v.current}" data-k="member:${member.id}">` +
-    faceHTML(member, 40) +
+    faceHTML(member, 40, { moving: true }) +
     `<span class="mb-row-main"><span class="mb-row-t"><b>${esc(member.name)}</b></span>` +
     (preview.text ? `<span class="mb-row-p${preview.waiting ? " is-wait" : ""}">${esc(preview.text)}</span>` : "") +
     `</span>${dot}</button>` +

@@ -21,6 +21,7 @@ import {
   scheduleText,
   sourceLabel,
   plainLine,
+  stableMember,
 } from "./members";
 import type { Member, MembersList } from "./types";
 
@@ -195,4 +196,11 @@ describe("a group's places", () => {
     expect(sourceLabel({ kind: "notion", ref: "https://www.notion.so/My-Roadmap-0123456789abcdef0123456789abcdef" })).toBe("My Roadmap");
     expect(sourceLabel({ kind: "notion", ref: "0123456789abcdef0123456789abcdef" })).toBe("Notion");
   });
+});
+
+test("a page about a member does not compare what changes with each word it says", () => {
+  const base = { id: 4, name: "Ada", role: "QA", avatar: "slime:shion", preview: "one", last_at: 1, unread: false, waiting: false, activity: "idle", activity_label: "" };
+  const spoke = { ...base, preview: "two", last_at: 2, unread: true, waiting: true, activity: "working", activity_label: "Reading" };
+  expect(JSON.stringify(stableMember(spoke))).toBe(JSON.stringify(stableMember(base)));
+  expect(JSON.stringify(stableMember({ ...base, name: "Bea" }))).not.toBe(JSON.stringify(stableMember(base)));
 });
