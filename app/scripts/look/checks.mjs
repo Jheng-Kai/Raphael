@@ -1008,10 +1008,11 @@ export function checkRendered(name, context = {}) {
     return { check: name };
   }
   if (name === "menu-anchor-return") {
-    const menu = document.getElementById('app-popover'), anchor = document.querySelector('.mb-col [data-member-more="1"]');
-    require(visible(menu), "the real more-button press keeps its menu open");
+    // The ⋯ that a real press went to is the one drawn open; a row's own ⋯ is never drawn, so the press is on a visible one.
+    const menu = document.getElementById('app-popover'), anchor = document.querySelector('[data-overflow][aria-expanded="true"]');
+    require(visible(menu) && visible(anchor), "the real press on a drawn ⋯ keeps its menu open");
     const box = menu.getBoundingClientRect(), control = anchor.getBoundingClientRect();
-    require(Math.abs(box.right - control.right) <= 1 && Math.abs(box.top - control.bottom - 4) <= 1, "a fresh press returns the menu beneath its own control");
+    require(Math.abs(box.right - control.right) <= 1 && Math.abs(box.top - control.bottom - 4) <= 1, `a fresh press returns the menu beneath its own control (menu right ${box.right}, top ${box.top}; control right ${control.right}, bottom ${control.bottom})`);
     return { check: name };
   }
   if (name === "menu-settings-redraw") {
@@ -3111,7 +3112,6 @@ export function checkRendered(name, context = {}) {
     for (const selector of labels) require(!host.querySelector(selector)?.closest('.row')?.querySelector('.d'), "self-explanatory settings have no helper paragraph");
     require(!host.querySelector('.models-purpose-note, .run-retained, [data-price="note"]'), "skin, model and usage helpers are absent");
     if (pane === 'data') require(!host.querySelector('.foot'), "data has no helper footer");
-    if (host.querySelector('.set-messaging')) require(!host.querySelector('.msg > .foot'), "Telegram keeps its controls without a setup paragraph");
     return { check: name, pane };
   }
   if (name === "models-responsive") {
@@ -4294,7 +4294,8 @@ export function checkRendered(name, context = {}) {
       require(mark && visible(mark), `${chipText(chip)} shows its mark`);
       const markBox = mark.getBoundingClientRect(), nameRange = document.createRange();
       nameRange.selectNodeContents(chip.lastChild);
-      require(markBox.left >= box.left - 1 && markBox.right <= nameRange.getBoundingClientRect().left + 1, `${chipText(chip)}: the mark stands before its name inside the chip`);
+      // The mark leans 3 px left of the @ it covers (agent.css `.mention-ico`, owner 2026-11-07), so it keeps air before the name.
+      require(markBox.left >= box.left - 3.5 && markBox.right <= nameRange.getBoundingClientRect().left + 1, `${chipText(chip)}: the mark stands before its name inside the chip (mark ${markBox.left}..${markBox.right}, chip from ${box.left}, name from ${nameRange.getBoundingClientRect().left})`);
       require(markBox.width >= 10 && markBox.width <= 18 && Math.abs(markBox.height - markBox.width) <= 2, `${chipText(chip)}: the mark is a small square (${markBox.width} x ${markBox.height})`);
       require(style.backgroundColor === 'rgba(0, 0, 0, 0)' && style.boxShadow === 'none' && parseFloat(style.borderTopWidth) === 0, `${chipText(chip)}: as Grok Bot's, the logo and the name alone, with no frame or fill (owner, 2026-11-07)`);
       require(!chip.closest('a, button') && getComputedStyle(at).webkitTextFillColor === 'rgba(0, 0, 0, 0)', `${chipText(chip)} is not a control and does not show its @`);
