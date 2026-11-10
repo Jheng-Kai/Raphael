@@ -1012,7 +1012,8 @@ export async function perform(page, step, evidenceDirectory) {
     case "member": await click(`.mb-col [data-member="${step.id}"]`); break;
     case "room": await click(`[data-room="${step.id}"]`); break;
     case "new-room": await click('[data-col="add"]'); await click('#app-popover [data-pick="group-chat"]'); break;
-    case "room-row-menu": { const more = await visible(`[data-room-more="${step.id}"]`); try { await more.hover(); await more.click(); } finally { await more.dispose(); } break; }
+    // A room's row draws no ⋯ (owner, 2026-11-06, R-UI-44): its menu opens the way the owner opens it, with a right click on the row.
+    case "room-row-menu": await click(`[data-room-more="${step.id}"]`); break;
     case "rooms-menu": await visible(".mb-col [data-room]"); break;
     case "search":
       if (!(await page.$("#app-popover .side-search-input"))) await click('[data-col="search"]');
