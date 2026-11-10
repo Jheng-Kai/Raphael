@@ -24,7 +24,7 @@ export function cardStatusHTML(status: CardStatus, text?: string): string {
 }
 
 /** The × at a card's top right that puts a failed card away (owner, 2026-11-08: a ×, never a 「關閉」 under it). */
-const failedClose = (): string => iconBtn("x", t("common.close"), " data-card-failed-close", "card-close");
+export const failedClose = (): string => iconBtn("x", t("common.close"), " data-card-failed-close", "card-close");
 
 export function cardHTML(card: CardOptions): string {
   const actions = card.actions ?? "";

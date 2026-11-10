@@ -1695,10 +1695,12 @@ export function checkRendered(name, context = {}) {
         require(!pill, 'a template and its unconnected requests have no invented status');
       } else {
         require(pill && pill.textContent.trim(), 'status always has a word');
-        // A failed card's × closes the head at the right (owner, 2026-11-08); otherwise the status does. The × of a
-        // card that has not failed is in the head but not shown (a page card's `.pg-close`), so it does not count.
+        // A failed card's × closes the head at the right (owner, 2026-11-08); otherwise the status does. A × in the head
+        // is always shown: a page card's hidden one (until 2026-11-10) was taken by the shared failure of a link the page
+        // could not open, which was then left with no × to put it away.
         const close = card.querySelector(':scope > .card-head > .card-close');
-        const end = close && visible(close) ? close : pill;
+        if (close) require(visible(close), "a × in the card's head is shown");
+        const end = close ?? pill;
         require(Math.abs(end.getBoundingClientRect().right - (box.right - parseFloat(style.paddingRight) - parseFloat(style.borderRightWidth))) < 1.5, 'the head ends at the right padding');
         if (end !== pill) require(pill.getBoundingClientRect().right <= end.getBoundingClientRect().left + 1, 'the status stands just before the ×');
       }
@@ -4858,16 +4860,28 @@ export function checkRendered(name, context = {}) {
   }
   if (name === "page-gone") {
     const failed = document.querySelector(".pg-failed");
-    require(failed && !failed.hidden && failed.textContent.includes("NT$ 1,280"), "it says what it knows of the page");
+    require(failed && !failed.hidden, "the page that failed shows it");
+    // What failed comes first, in the card's body line, then what it knows of the page in a well where the page stood
+    // (the judge read the page's words alone, beside 未能完成, as a success, 2026-11-10).
+    const said = failed.firstElementChild, well = failed.querySelector(".card-well");
+    require(said?.matches('.card-body[role="alert"]') && said.textContent.includes("這個頁面打不開"), "it says first that the page cannot open");
+    require(well && visible(well) && well.textContent.includes("NT$ 1,280"), "then what it knows of the page, in a well");
     require(failed.querySelector('[data-page-act="retry"]'), "and offers to try again");
     require(document.querySelector(".pg-body").hidden, "no empty box is left");
-    // Its words start where the title does, and nothing blank stands under 再試一次 (the judge, 2026-11-10).
-    const card = failed.closest(".pg-card"), title = card.querySelector(".card-title").getBoundingClientRect();
-    const words = failed.querySelector("p").getBoundingClientRect(), retry = failed.querySelector('[data-page-act="retry"]').getBoundingClientRect();
-    require(Math.abs(words.left - title.left) <= 1, `the words start where the title does (${Math.round(words.left - title.left)} px)`);
-    const bottom = card.getBoundingClientRect().bottom - parseFloat(getComputedStyle(card).paddingBottom) - parseFloat(getComputedStyle(card).borderBottomWidth);
+    // One left edge with the title, 再試一次 at the card's right (R-CARD-01) and nothing blank under it (the judge, 2026-11-10).
+    const card = failed.closest(".pg-card"), box = card.getBoundingClientRect(), style = getComputedStyle(card), title = card.querySelector(".card-title").getBoundingClientRect();
+    for (const [what, node] of [["words", said], ["well", well]]) {
+      const left = node.getBoundingClientRect().left;
+      require(Math.abs(left - title.left) <= 1, `the ${what} start where the title does (${Math.round(left - title.left)} px)`);
+    }
+    const retry = failed.querySelector('[data-page-act="retry"]').getBoundingClientRect();
+    const right = box.right - parseFloat(style.paddingRight) - parseFloat(style.borderRightWidth), bottom = box.bottom - parseFloat(style.paddingBottom) - parseFloat(style.borderBottomWidth);
+    require(Math.abs(right - retry.right) <= 1, `the retry stands at the card's right (${Math.round(right - retry.right)} px)`);
     require(bottom - retry.bottom <= 1, `nothing blank stands under the retry (${Math.round(bottom - retry.bottom)} px)`);
     require(![...card.querySelectorAll(":scope > .card-actions")].some(visible), "the failed page has no expand row");
+    // R-UI-117: a failed card is put away by the × in its heading.
+    const close = card.querySelector(":scope > .card-head > [data-card-failed-close]");
+    require(close && visible(close), "the × that puts it away is in its heading");
     return { check: name };
   }
   if (name.startsWith("model-sync-")) {

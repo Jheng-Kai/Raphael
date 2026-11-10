@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import * as api from "./api";
+import { t } from "./i18n";
 import { mountPages, pageCardsHTML } from "./page-card";
 import type { AgentTurn, PageCard } from "./types";
 
@@ -65,18 +66,64 @@ test("a page runs sandboxed with an opaque origin, from the address the core giv
   expect(api.pagesOpen).toHaveBeenCalledWith("p1", "light");
 });
 
-test("a page that cannot open says what it knows and offers to try again, never a blank box", async () => {
+test("a page that cannot open says so, then what it knows, and offers to try again, never a blank box", async () => {
   vi.mocked(api.pagesOpen).mockRejectedValueOnce(new Error("gone"));
   const { thread } = mount();
   await flush();
   const failed = thread.querySelector<HTMLElement>(".pg-failed")!;
   expect(failed.hidden).toBe(false);
-  expect(failed.textContent).toContain("背包 1,200 元");
+  // What failed comes first, as the card's own body line (the judge read the page's words alone as a success).
+  expect(failed.firstElementChild!.matches('.card-body[role="alert"]')).toBe(true);
+  expect(failed.firstElementChild!.textContent).toBe(t("page.failed"));
+  expect(failed.querySelector(".card-well")!.textContent).toBe("背包 1,200 元");
   expect(thread.querySelector<HTMLElement>(".pg-body")!.hidden).toBe(true);
   thread.querySelector<HTMLElement>('[data-page-act="retry"]')!.click();
   await flush();
   expect(failed.hidden).toBe(true);
   expect(api.pagesOpen).toHaveBeenCalledTimes(2);
+});
+
+test("a page with no words of its own only says it cannot open", async () => {
+  vi.mocked(api.pagesOpen).mockRejectedValueOnce(new Error("gone"));
+  const { thread } = mount([{ ...card, fallback: "" }]);
+  await flush();
+  const failed = thread.querySelector<HTMLElement>(".pg-failed")!;
+  expect(failed.textContent).toContain(t("page.failed"));
+  expect(failed.querySelector(".card-well")).toBeNull();
+});
+
+test("a page carries its × only while it failed, so a link that fails keeps its own ×", async () => {
+  const { thread, frame } = mount();
+  await flush();
+  const head = thread.querySelector<HTMLElement>(".pg-card > .card-head")!;
+  expect(head.querySelector(".card-close")).toBeNull();
+  // A link the page could not open: the shared failure, whose × puts only that notice away and keeps the page.
+  vi.spyOn(api, "openExternalUrl").mockRejectedValueOnce(new Error("Unavailable"));
+  window.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab" }));
+  fromFrame(frame, { raphaelPage: 1, type: "open", url: "https://example.invalid/guide" });
+  await vi.waitFor(() => expect(thread.querySelector(".card-failure")).not.toBeNull());
+  expect([...head.querySelectorAll("[data-card-failed-close], [data-card-dismiss]")].map(close => close.hasAttribute("data-card-dismiss"))).toEqual([true]);
+  head.querySelector<HTMLButtonElement>("[data-card-dismiss]")!.click();
+  expect(thread.querySelector(".card-failure")).toBeNull();
+  expect(thread.querySelector<HTMLElement>(".pg-card")!.hidden).toBe(false);
+  expect(head.querySelector(".card-close")).toBeNull();
+});
+
+test("a failed page keeps its words and × when its line is drawn again, and retrying takes the × away", async () => {
+  vi.mocked(api.pagesOpen).mockRejectedValueOnce(new Error("gone"));
+  const { thread, pages } = mount();
+  await flush();
+  thread.innerHTML = pageCardsHTML(turn([card]));
+  pages.sync();
+  expect(thread.querySelector<HTMLElement>(".pg-failed")!.hidden).toBe(false);
+  expect(thread.querySelector<HTMLElement>(".pg-body")!.hidden).toBe(true);
+  expect(thread.querySelectorAll(".pg-card > .card-head [data-card-failed-close]")).toHaveLength(1);
+  expect(thread.querySelector(".card-status.is-failed")).not.toBeNull();
+  expect(api.pagesOpen).toHaveBeenCalledTimes(1);
+  thread.querySelector<HTMLElement>('[data-page-act="retry"]')!.click();
+  expect(thread.querySelector(".pg-card > .card-head .card-close")).toBeNull();
+  await flush();
+  expect(thread.querySelector<HTMLElement>(".pg-failed")!.hidden).toBe(true);
 });
 
 test("an external link failure retries in its originating page card", async () => {

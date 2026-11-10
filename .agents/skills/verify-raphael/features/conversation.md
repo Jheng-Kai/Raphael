@@ -1867,16 +1867,27 @@ pages/agent-page.test.ts, group-chats.test.ts and owner-questions.test.ts.
 Compare page-buy and page-room-draft at matching theme/width: identical note
 component, wording, typography, spacing and state. The blank page-product scene
 proves the note has no reserved space before a page requests placement.
-A page that failed (page-gone) shows only what it knows and 再試一次: its words start where the card's title does
-and nothing blank stands under the retry (the expand row is gone while it failed; the judge gave 3/5 for both,
-2026-11-10); the card-shell check counts a card's × only when it is shown.
+A page that failed (page-gone) reads as a failed mail card (card-mail-failed): 「這個頁面打不開。」 in the card's
+body line first, then what the page said (its fallback text, the member's plain words) in a well where the page
+stood, and 再試一次 at the card's right (R-CARD-01). The words and the well start where the title does, nothing blank
+stands under the retry, and the expand row is gone while it failed (the judge gave 3/5 for the blank, the indent and
+the page's words alone beside 未能完成 reading as a success, 2026-11-10). The × that puts it away (R-UI-117) joins
+the heading only while the page failed: the hidden × it used to carry was taken by the shared failure of a link the
+page could not open (`cardFailure`), which was then left with no × to put it away. A failed page keeps its words and
+× when its line is drawn again, and 再試一次 takes the × away while it opens. The card-shell check requires every ×
+in a card's heading to be shown; card-page-close presses the × in the heading, so its image is taken after the card
+was put away: the member's reply ends the thread and nothing opens again (the judge read that as a missing card,
+3/5 in dark, 2026-11-10).
 
 The follow-up explicitly selects both themes at 1120 and 720 once. The maintained
 matrix below also includes the standard 1920x1080 size for later acceptance:
 
 ```powershell
-npm run look -- page-product page-buy page-send page-expand page-expand-place page-gone page-room-draft owner-card-room-page --theme both --width 1120,720,1920x1080
+npm run look -- page-product page-buy page-send page-expand page-expand-place page-gone page-room-draft owner-card-room-page card-page-close --theme both --width 1120,720,1920x1080
 ```
+
+Compare page-gone with card-mail-failed (body line over a well) and card-connect-failed (body line, retry) at the
+same theme and width: the same status, ×, body line, well and retry button, at the same places.
 
 Use judge on this same run when its prerequisites and network are authorized.
 Offline fixture/browser evidence does not prove native MCP/provider transport.

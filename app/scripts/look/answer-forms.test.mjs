@@ -50,6 +50,24 @@ it.each(['data-member-template', 'data-template-connection="gmail" data-connecte
   } finally {vi.unstubAllGlobals(); browser.happyDOM.abort();}
 });
 
+it("a × in a card's head is always shown and ends the head at the right padding", () => {
+  // A page card's hidden × (until 2026-11-10) was taken by the shared failure of a link the page could not open.
+  const browser = new Window(), doc = browser.document;
+  doc.body.innerHTML = '<section class="conversation-card"><header class="card-head"><b>Page</b><span class="card-status">Failed</span><button class="card-close"></button></header></section>';
+  const places = { "card-status": { left: 400, right: 450 }, "card-close": { left: 456, right: 480 } };
+  for (const element of doc.querySelectorAll('*')) {
+    element.checkVisibility = () => true;
+    element.getBoundingClientRect = () => ({ left: 0, right: 480, width: 480, height: 50, ...places[element.className] });
+  }
+  vi.stubGlobal("document", doc);
+  vi.stubGlobal("getComputedStyle", () => ({ paddingRight: "0", borderRightWidth: "0", overflowY: "visible" }));
+  try {
+    expect(() => checkRendered("card-shell")).not.toThrow();
+    doc.querySelector('.card-close').checkVisibility = () => false;
+    expect(() => checkRendered("card-shell")).toThrow("a × in the card's head is shown");
+  } finally { vi.unstubAllGlobals(); browser.happyDOM.abort(); }
+});
+
 it("form checks count the active conversation without hidden private replies", () => {
   const browser = new Window(), doc = browser.document;
   const card = kind => `<section class="message-${kind}"><button data-rich-act="copy-source"></button>${kind === "chart" ? `<svg>${'<circle><title>Value: 3</title></circle>'.repeat(6)}</svg>` : ""}</section>`;
