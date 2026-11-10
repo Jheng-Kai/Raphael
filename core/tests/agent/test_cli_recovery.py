@@ -15,6 +15,7 @@ from raphael_core.worker.loop import Stop, ToolOutcome, WAITING
 def recovery_rig(monkeypatch, tmp_path, play, *, brain="codex", **options):
     calls, effects, lines, events, interrupted = [], [], [], [], []
     loops = []
+    made = []
 
     class Driver:
         def __init__(self, name, command, **kwargs):
@@ -30,6 +31,8 @@ def recovery_rig(monkeypatch, tmp_path, play, *, brain="codex", **options):
 
     async def execute(identifier, name, arguments):
         effects.append((name, arguments))
+        if not name.endswith("_look"):  # a tool that ends in _look only reads; any other changes something
+            made.append(name)
         return ToolOutcome(True, content="Saved receipt 17; file draft.txt exists.")
 
     monkeypatch.setattr(cli, "Driver", Driver)
@@ -42,7 +45,7 @@ def recovery_rig(monkeypatch, tmp_path, play, *, brain="codex", **options):
         ledger=SimpleNamespace(add=lambda **kwargs: None), language="en", plain=True,
         system="Keep the owner's scope.", user="Save a draft, then check it.", tools=[],
         progress=lines.append, thinking=lambda text: None, event=events.append,
-        execute=execute, **options)
+        execute=execute, acted=lambda: bool(made), **options)
     loops.append(loop)
     return SimpleNamespace(loop=loop, calls=calls, effects=effects, lines=lines,
                            events=events, interrupted=interrupted)
@@ -308,6 +311,30 @@ async def test_recovery_uses_api_waits_and_preserves_provider_delay(monkeypatch,
     assert len(rig.lines) == 7
 
 
+async def test_after_reads_alone_a_failing_cli_has_done_nothing_and_gets_only_the_quick_waits(monkeypatch, tmp_path):
+    async def play(loop, attempt):
+        await loop._tool("look", "notes_look", {"topic": "tea"})
+        yield Event("error", "network")
+
+    rig = recovery_rig(monkeypatch, tmp_path, play)
+    monkeypatch.setattr(cli, "RATE_LIMIT_WAITS_S", (0., 0., 0.))
+    monkeypatch.setattr(cli, "PATIENT_WAITS", (0., 0., 0., 0.))
+    result = await rig.loop.run()
+    # The first try and the three of a question that has done nothing; what it read goes with each of them.
+    assert len(rig.calls) == 4 and not rig.loop.acted and rig.loop.failure == "network"
+    assert "notes_look" in rig.calls[3]["user"] and "Recorded steps: 4 completed" in result.final
+
+    async def writes(loop, attempt):
+        await loop._tool("save", "save_draft", {})
+        yield Event("error", "network")
+
+    rig = recovery_rig(monkeypatch, tmp_path, writes)
+    monkeypatch.setattr(cli, "RATE_LIMIT_WAITS_S", (0., 0., 0.))
+    monkeypatch.setattr(cli, "PATIENT_WAITS", (0., 0., 0., 0.))
+    await rig.loop.run()
+    assert len(rig.calls) == 8 and rig.loop.acted  # the quick waits, then the patient ones
+
+
 async def test_original_answer_is_published_and_unread_addition_stays_ticketed(monkeypatch, tmp_path):
     async def play(loop, attempt):
         await loop._tool("save", "save_draft", {})
@@ -416,7 +443,7 @@ async def test_large_recovery_context_is_bounded_and_preserves_uncertain_steps(m
                 "status": "unknown" if index == 0 else "failed" if index < uncertain_count else "completed",
                 "arguments": {"draft": payload}, "result": payload,
             } for index in range(200))
-            loop._acted = True
+            loop._worked = True
             yield Event("error", "network")
         else:
             yield Event("final", "Checked the uncertain actions and finished.")

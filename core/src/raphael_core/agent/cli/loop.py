@@ -31,7 +31,7 @@ from .context import (CONTEXT_HEADROOM, KNOWN_CONTEXT_TOKENS, context_tokens, fr
 from .process import secure_directory
 from .native_diagnostics import capture as native_capture, directory as native_directory
 from ...failures import Failure, KINDS, TRANSIENT, RETRY_WAITS, PATIENT_WAITS, classify, tool_failure
-from ...retry_utils import Outage
+from ...retry_utils import MODEL_SILENCE_S, Outage
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +39,16 @@ logger = logging.getLogger(__name__)
 RATE_LIMIT_WAITS_S = RETRY_WAITS
 # A room or background turn has no one sitting on it: it rides out a throttle of minutes (live, 429s lasted several).
 ROOM_RATE_LIMIT_WAITS_S = (30.0, 60.0, 120.0, 240.0)
+# A private turn has someone reading it, and no one else watching for it to stall (a task has `TaskRun.watch`). A CLI that
+# says nothing and has no call out for this long is hung: the longest silence a person would call thinking, as for an API
+# model. A call in flight has its own, longer window (an `ask_member` takes the colleague's whole turn; a command runs),
+# the way `TaskRun.tool_seconds` gives a room's reply one. A call that waits for the owner's yes has the owner's clock.
+CLI_SILENCE_S = MODEL_SILENCE_S
+CLI_TOOL_S = 7200.0
+# What the CLIs' own tools do without changing anything. Any other tool a CLI starts that Raphael's server never saw is
+# taken to have acted (Codex names its own commandExecution and fileChange).
+NATIVE_READS = frozenset(("Read", "Glob", "Grep", "LS", "Skill", "ToolSearch", "WebSearch", "WebFetch", "TodoWrite",
+                          "webSearch"))
 RECOVERY_RECORD_CHARS = 2000
 RECOVERY_BLOCK_CHARS = 40000
 
@@ -158,11 +168,18 @@ class CliLoop:
                  conversation_id=None, quota=None, attachments=(), wait_timeout_s=None, resume_session=True,
                  rate_limit_waits=None, structured=None, alive=lambda waiting=0.0: None, skills=(), no_tools=False, reply=None,
                  owner_text=None, resume_user=None, context_sections=None, context_turns=(), context_summary="",
-                 context_summary_through=0, turn_id=None, tool_conversation=(), steps=()):
+                 context_summary_through=0, turn_id=None, tool_conversation=(), steps=(),
+                 acted=None, stall_s=None, tool_s=None):
         self.brains, self.sessions, self.member_id, self.model = brains, sessions, member_id, model
         # Told whenever the CLI does anything (a word, a tool): whoever watches for a stalled turn hears it. Told too before
         # a wait the loop chooses (`waiting`, in seconds), which is no stall.
         self.alive = alive
+        # Whether the turn has done something outside, by the owner's tools (a call that succeeded and was not a read:
+        # the conversation's `made`, a task's `acted`). A CLI's own commands and file changes count too (`acted`).
+        self._made = acted if acted is not None else (lambda: False)
+        # The silence this loop ends a turn at (None: someone else watches, as for a task) and the longer window of a
+        # call in flight (`CLI_SILENCE_S`, `CLI_TOOL_S`).
+        self.stall_s, self.tool_s = stall_s, tool_s
         self.conversation_id = sessions.conversations.resolve(member_id, conversation_id) if sessions else conversation_id
         self.quota = quota
         self.resume_session = resume_session
@@ -236,7 +253,14 @@ class CliLoop:
         self._thought = ""
         self._final_nudged = False
         self._calls = 0
-        self._acted = False
+        # Hearing the CLI (an event, a call back) starts the stall window again. Calls out, and those that wait for the
+        # owner, stretch or stop it; a stalled attempt says so.
+        self._heard_at = 0.0
+        self._flights = 0
+        self._open_calls = set()
+        self._owner_waits = 0
+        self._stalled = False
+        self._stalled_in_flight = False
         self._session = None
         self._attempts = 0
         self._receipts = list(self.steps)
@@ -372,6 +396,8 @@ class CliLoop:
     async def _execute(self, identifier, name, args):
         self.batch_calls = [Call(identifier, name, args)]
         self.approval_wait_s = None
+        # A call out is no silence: the stall window watches the CLI, and a call in flight has its own (`_window`).
+        self._flights += 1
         try:
             return await self.execute(identifier, name, args)
         except Stop as stop:
@@ -380,6 +406,8 @@ class CliLoop:
                 return ToolOutcome(False, "stopped")
             self._resume = asyncio.get_running_loop().create_future()
             self._queue.put_nowait(Outcome("stopped", kind=WAITING))
+            # The owner's yes takes as long as the owner takes (`wait_timeout_s` ends the wait): no stall meanwhile.
+            self._owner_waits += 1
             try:
                 wait_s = self.wait_timeout_s if self.approval_wait_s is None else self.approval_wait_s
                 return await asyncio.wait_for(self._resume, wait_s + .1)
@@ -387,9 +415,14 @@ class CliLoop:
                 if self.expire:
                     self.expire()
                 return ToolOutcome(False, "expired", phrase(self.language, "expired"))
+            finally:
+                self._owner_waits -= 1
         except Exception as exc:
             failure = classify(exc)
             return ToolOutcome(False, failure.kind, json.dumps(failure.wire()))
+        finally:
+            self._flights -= 1
+            self._heard()
 
     async def _permission(self, args):
         self._progress()
@@ -524,7 +557,7 @@ class CliLoop:
         self._queue.put_nowait(Outcome("done", final=message))
 
     def _unfinished(self):
-        if not (self._acted or self._calls):
+        if not (self._worked or self._calls):
             return ""
         completed = sum(item["status"] in ("completed", "answered") for item in self._receipts)
         failed = sum(item["status"] == "failed" for item in self._receipts)
@@ -630,6 +663,49 @@ class CliLoop:
             state["model_usage"] = marks
         self.sessions.put_context(self.member_id, self.model, self._session, state, self.conversation_id)
 
+    @property
+    def acted(self):
+        """Whether the turn has done something outside: a call of the owner's tools that succeeded and was not a read
+        (`_made`), or something the CLI started that none of those calls accounts for (its own command or file change, a
+        call that never arrived): that may have changed something whether or not it ended well. A turn that only read has
+        done nothing yet."""
+        return bool(self._made()) or any(item["name"] not in NATIVE_READS for item in self._native_records())
+
+    def _heard(self):
+        self._heard_at = asyncio.get_running_loop().time()
+
+    def _window(self):
+        """How long the CLI may now stay silent: a call out has the longer window."""
+        return (self.tool_s or self.stall_s) if self._flights or self._open_calls else self.stall_s
+
+    async def _events(self, stream):
+        """The CLI's events, as they come, until it stalls: with `stall_s`, silence for the window ends them (`_stalled`),
+        and `Driver.run` stops the child as the abandoned read is cancelled. Hearing anything starts the window again."""
+        events = stream.__aiter__()
+        clock = asyncio.get_running_loop().time
+        self._heard()
+        pending = None
+        try:
+            while True:
+                pending = asyncio.ensure_future(events.__anext__())
+                while not pending.done():
+                    # An owner's yes is waited for without a clock; look again soon, since it may have come.
+                    left = 1.0 if self._owner_waits else self._heard_at + self._window() - clock()
+                    if left <= 0:
+                        self._stalled, self._stalled_in_flight = True, bool(self._flights or self._open_calls)
+                        return
+                    await asyncio.wait({pending}, timeout=min(left, 1.0) if self._owner_waits else left)
+                try:
+                    event = pending.result()
+                except StopAsyncIteration:
+                    return
+                self._heard()
+                yield event
+        finally:
+            if pending is not None and not pending.done():
+                pending.cancel()
+                await asyncio.gather(pending, return_exceptions=True)
+
     def _handed_off(self):
         """Whether the turn handed work off. If so, the task now waits for that work, however the turn ended:
         live, a turn cut at its first hand-off could start only one of a meeting's action items."""
@@ -703,6 +779,7 @@ class CliLoop:
                     recovery_outage = None
                     told = False
                     recovering = False
+                    stalls = 0
                     fresh_context = getattr(self, "_fresh_context", False)
                     while True:
                         resumed = self._session is not None
@@ -743,16 +820,26 @@ class CliLoop:
                                 self.user = (FINAL_REPORT + "\n" + self._recovery_user() if self._final_nudged else
                                     self.reload_note + "\n" + (RECOVER + "\n" + self._recovery_block() if self._session else self.user))
                             continue
+                        if self._stalled and failure == "timeout":
+                            # A CLI that went silent is asked again once, and only while nothing outside was done: after
+                            # an action, or with a call out that may have been made, it is never run again. The turn ends
+                            # and says what was done (`_unfinished`) and that it stopped.
+                            stalls += 1
+                            if stalls > 1 or self.acted or self._stalled_in_flight:
+                                break
                         if failure not in TRANSIENT:
                             break
-                        recovering = bool(self._acted or self._calls)
-                        if recovering and recovery_outage is None:
+                        # What was done goes with the next attempt (receipts, the owner's answers); how long to go on asking
+                        # depends on whether something was done outside: after reads alone it is a question's 3 tries.
+                        recovering = bool(self._worked or self._calls)
+                        patient = self.acted
+                        if patient and recovery_outage is None:
                             # Use the API's patient waits once each, never its unbounded post-action tail.
                             recovery_outage = Outage(tuple(RATE_LIMIT_WAITS_S) + tuple(PATIENT_WAITS) if quick else (), (), patient_ok=False)
-                        wait = (recovery_outage if recovering else outage).wait(self.failure_reason.retry_after if self.failure_reason else None)
+                        wait = (recovery_outage if patient else outage).wait(self.failure_reason.retry_after if self.failure_reason else None)
                         if wait is None:
                             break
-                        if recovering:
+                        if patient:
                             self.progress((self.failure_reason or Failure(failure, failure)).waiting(NAMES[name], self.language, wait))
                         elif not told:
                             told = True
@@ -788,6 +875,7 @@ class CliLoop:
 
     async def _attempt(self, name, command, model, server, session, workspace, *, recovering=False):
         try:
+            self._stalled = False
             # A child may die while an MCP request is still returning. Settle it before building the next prompt.
             async with self._serial:
                 self._attempts += 1
@@ -858,6 +946,8 @@ class CliLoop:
         self._buffer = self._thought = ""
         self._completed_buffer, self._separated = False, []
         self._usage = {}
+        self._stalled = self._stalled_in_flight = False
+        self._open_calls.clear()
         if getattr(self,"speech_only",False) and name == "claude":
             command = [*command,"--max-turns",str(getattr(self,"speech_max_turns",4))]
         self.driver = Driver(name, command, model=model, effort=brain_effort(self.model), environ=self.brains.environ, quota=self.quota, home=self.brains.home)
@@ -869,8 +959,9 @@ class CliLoop:
                 **({"no_tools": True} if self.no_tools else {}),
                 token=server.token, session=session, permission=self._native_permission,
                 **({"computer_endpoint": server.computer_url} if server.computer_url else {}),
-                cwd=str(workspace), images=self.images if name in ("codex", "claude") else ())) as stream:
-            async for event in stream:
+                cwd=str(workspace), images=self.images if name in ("codex", "claude") else ())) as stream, \
+                aclosing(self._events(stream) if self.stall_s else stream) as events:
+            async for event in events:
                 self.alive()
                 if self.catalog_changed and event.kind in ("tool_end", "text_delta", "final"):
                     await self.driver.interrupt()
@@ -912,6 +1003,7 @@ class CliLoop:
                     if event.kind == "tool_start":
                         steps.start(event.data)
                         key = event.data.get("id") or event.data.get("name")
+                        self._open_calls.add(key)
                         if key not in stream_records:
                             tool_name = event.data.get("name", "tool")
                             if event.data.get("server") == "computer" and not tool_name.startswith("computer__"):
@@ -919,7 +1011,6 @@ class CliLoop:
                             record = {"attempt": self._attempts, "name": tool_name, "status": "unknown"}
                             stream_records[key] = record
                             self._stream_records.append(record)
-                    self._acted = True
                     self._progress()
                     if line := public_line(self._thought, "auto"):
                         self.thinking(line[:240])
@@ -934,6 +1025,7 @@ class CliLoop:
                 elif event.kind == "tool_end":
                     steps.end(event.data)
                     key = event.data.get("id") or event.data.get("name")
+                    self._open_calls.discard(key)
                     if key in stream_records:
                         stream_records[key]["status"] = "completed" if event.data.get("ok") else "failed"
                     if event.data.get("effect") and event.data.get("ok"):
@@ -968,6 +1060,10 @@ class CliLoop:
                     return self._missing_terminal()
         if self._handed_off():
             return None
+        if self._stalled:
+            # Said nothing for the whole window, with no call out that it could be waiting for: the child is stopped.
+            self.failure_reason = Failure("timeout", "CLI stalled")
+            return "timeout"
         if self.catalog_changed:
             return "tools_changed"
         if self._final_nudged:

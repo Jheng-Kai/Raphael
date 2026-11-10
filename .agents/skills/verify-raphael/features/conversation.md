@@ -1387,6 +1387,22 @@ Existing room cancellation and card-expiry tests remain affected consumers.
 
 Core-only change: no new visual scene or frontend change. Run the selected core
 agent/background/members/worker/integrations suites.
+
+### Acting, stalls and failure kinds (2026-11-11)
+
+R-CLI-08: a turn has acted when a call succeeded and was not a read (the plugin server's read hint, Raphael's tier T0;
+`ask.made` in a conversation, `TaskRun.acted` in a task) or its CLI ran a command or file change of its own. Reads alone
+leave a CLI turn or a task with a question's three waits; the conversation's API loop still counts any tool for its patient
+mode (owner's open decision, `test_long_turn.py` pins it). R-CLI-09: a private CLI turn is stopped after 1,800 s of silence
+(7,200 s with a call out, no clock while the owner's yes is awaited); it is asked again once if nothing outside was done and
+no call was out, otherwise it ends naming the receipts. `Driver._read` gives up after 3 h. R-MODEL-03: a ChatGPT 503 is
+`server`, a ChatGPT in-stream error is its code's kind (`server` when unnamed), an early clean end of stream is `network`,
+and a 429 with a short stated wait is `rate_limit` on every route.
+
+Offline coverage: `core/tests/agent/test_cli_stall.py` (watchdog, windows, owner wait, receipts), `test_cli_recovery.py`
+(reads alone vs a write), `tests/background/test_run_retry.py`, `tests/members/test_cli_brains.py` (a real fake CLI that
+goes silent after a write and after a read), `tests/brain/test_chatgpt.py` and `tests/agent/test_failure_kinds.py`.
+Core-only change: no new visual scene or frontend change.
 ## Background app discovery (2026-11-01)
 
 Background API and CLI snapshots offer the same read-only find_app catalog contract
