@@ -3,7 +3,7 @@
 import json
 import re
 from contextlib import nullcontext
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from ..bots.homes import HomeError, digest
 
@@ -50,7 +50,42 @@ def slash_skills(skills, commands):
     return result
 
 
+# At most this many NEW learned skills a member gets in this window (owner, 2026-11-11: "他現在一直建立 skills").
+# Changes to an existing skill are not counted.
+NEW_SKILL_CAP = 1
+NEW_SKILL_WINDOW = timedelta(hours=24)
+
+
 class GrowingSkills:
+    def new_skills_in_window(self, member_id):
+        """How many skills this member learned (not imported, not the owner's) within `NEW_SKILL_WINDOW`."""
+        since = datetime.now() - NEW_SKILL_WINDOW
+        count = 0
+        for skill in self.owned_skills(member_id):
+            if skill.get("provenance") != "learned" or not skill.get("learned_at"):
+                continue
+            try:
+                count += datetime.fromisoformat(skill["learned_at"]) >= since
+            except ValueError:
+                continue
+        return count
+
+    def check_new_learned_skill(self, member_id, text):
+        """Before a learned skill is created: refuse one near an existing skill (it is a change to that one) and a second
+        new one in a day. The refusal reaches a model as an instruction, so it says what to do instead."""
+        from .capabilities import skill_metadata
+        from .skill_names import similar_skill
+        from ..bots.homes import redact_secrets
+        if not isinstance(text, str):
+            raise HomeError("skill requires text")
+        name, description = skill_metadata(redact_secrets(text), writing=True)
+        near = similar_skill(name, description, self.owned_skills(member_id))
+        if near is not None:
+            raise HomeError(f"a similar skill already exists: '{near['name']}' (id {near['id']}). Read it with skill_read "
+                            "and update that skill with its id and expected_hash instead of creating another")
+        if self.new_skills_in_window(member_id) >= NEW_SKILL_CAP:
+            raise HomeError("a new skill was already learned in the last day; update an existing skill, or wait")
+
     def skill_details(self, member_id, skill):
         path = self._path(member_id, skill["id"])
         relative = f"skills/{skill['id']}/SKILL.md"

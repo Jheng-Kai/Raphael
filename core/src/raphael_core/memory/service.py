@@ -437,7 +437,7 @@ class MemoryService(Growth):
         self._turn_clears += 1
         with self._conn:
             self._conn.execute(
-                "DELETE FROM memory_state WHERE key = ? OR key LIKE ?",
+                "DELETE FROM memory_state WHERE key = ? OR key LIKE ? OR key LIKE 'skills:%:through'",
                 (_REFLECTED, f"{_REFLECTED}:%"),
             )
 

@@ -134,7 +134,9 @@ class Screening:
     none did; `unchecked` is a judge that failed (the verdict is then ASK); `allowed` is an action
     an `allow` rule matched; `narrow` is one that a narrow rule of its own kind allows, with no rule
     asking or forbidding it (`needs_yes` lets it past the questions of T2 and of the global switch);
-    `switch` is a question that only the owner's global 先詢問 switch asks (no rule did)."""
+    `switch` is a question that only the owner's global 先詢問 switch asks (no rule did); `protected` is
+    a refusal by the data floor (`agent.data_floor`), which is no rule of the owner's: `rule` then holds the
+    instruction meant for the model, and the owner is told in the words of `protected_data`."""
 
     verdict: str = RUN
     rule: str | None = None
@@ -142,6 +144,7 @@ class Screening:
     allowed: bool = False
     narrow: bool = False
     switch: bool = False
+    protected: bool = False
 
 
 PASS = Screening()
@@ -219,7 +222,9 @@ def asked_with(language: str, screening: Screening, question: str) -> str:
 
 
 def forbidden(language: str, screening: Screening) -> str:
-    """What Raphael says of an action a rule of `deny` refused."""
+    """What Raphael says of an action a rule of `deny` refused, or the data floor did."""
+    if screening.protected:
+        return phrase(language, "protected_data")
     return phrase(language, "rule_forbids", rule=screening.rule or "")
 
 

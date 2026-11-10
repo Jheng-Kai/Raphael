@@ -716,14 +716,19 @@ class MembersService:
     def native_skills(self, member_id: int) -> list[dict]:
         return self.capabilities.native_skills(member_id)
 
-    def learn_skill(self, member_id, args, turn_id=None):
+    def learn_skill(self, member_id, args, turn_id=None, *, source="tool"):
+        """A skill the member writes itself. Logged with its name and source only, so the app's log can count them."""
         cap = self.capabilities
         identifier = args.get("id")
+        if identifier is None and args.get("provenance", "learned") == "learned":
+            cap.check_new_learned_skill(member_id, args.get("text"))
         # Compare stored text and references, not timestamps or newline-only revisions.
         before = None if identifier is None else (
             cap.document(member_id, identifier)[1], cap.reference_hashes(member_id, identifier))
         skill = cap.manage_skill(member_id, args)
         after = (cap.document(member_id, skill["id"])[1], cap.reference_hashes(member_id, skill["id"]))
+        logger.info("Skill %s: member=%d skill=%s source=%s changed=%s", "updated" if before is not None else "created",
+                    member_id, skill["name"], source, before != after)
         self.skill_learned(member_id, skill, turn_id, existed=before is not None, changed=before != after)
         return skill
 
