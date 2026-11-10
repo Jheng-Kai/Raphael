@@ -343,7 +343,8 @@ export function createMembers(host: MembersHost): MembersShell {
     // Another member (or the same one, from the sidebar) leaves the settings page for the conversation.
     panelBeforeSettings = null;
     settings.close();
-    if (!host.visible()) host.app.go("agent");
+    // Another member is switched to before the page shows (host.onSelect), so the page reads only its thread.
+    if (id === current && !host.visible()) host.app.go("agent");
     if (id === current) {
       if (currentRoomId() !== null) { host.onSelect(id, true); drawAll(); void readThread(); }
       // Reopening the same conversation preserves its details state.

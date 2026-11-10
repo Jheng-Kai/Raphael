@@ -5,6 +5,49 @@ import { eventStorm } from "./event-storm.mjs";
 import { sendProbe } from "./send-probe.mjs";
 import { animationAudit, motionCost, motionDetails } from "./motion-cost.mjs";
 
+/**
+ * Opening a conversation as the owner does, by its row in the sidebar (owner, 2026-11-10: 「開啟對話…太慢」): the
+ * time until its newest turn is drawn and painted, and the main thread's long tasks meanwhile, `rounds` times
+ * (the first open is cold, the others come back to it). `limits` fails the step past `coldMs`, `warmMs` or
+ * `longTaskMs`.
+ */
+async function openCost(page, { from, to, newest, rounds = 3, limits = {}, first = [], once = [], never = [] }) {
+  const samples = [];
+  for (let round = 0; round < rounds; round++) {
+    await page.evaluate(id => document.querySelector(`.mb-col [data-member="${id}"]`).click(), from);
+    await page.waitForFunction(id => !document.querySelector(`.page-agent:not([hidden]) .tn[data-id="${id}"]`), {}, newest);
+    await new Promise(resolve => setTimeout(resolve, 300));
+    samples.push(await page.evaluate(async ({ to, newest }) => {
+      const long = [], watch = new PerformanceObserver(list => { for (const entry of list.getEntries()) long.push(entry.duration); });
+      watch.observe({ type: "longtask" });
+      const started = performance.now(), before = window.__look.calls.length;
+      document.querySelector(`.mb-col [data-member="${to}"]`).click();
+      while (!document.querySelector(`.page-agent:not([hidden]) .tn[data-id="${newest}"]`)) await new Promise(resolve => setTimeout(resolve, 4));
+      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      const ms = performance.now() - started;
+      watch.disconnect();
+      // The core requests the open made, in order: each is a round trip to a core that may be busy.
+      const calls = window.__look.calls.slice(before).map(call => (call.method ?? call.command) + (call.from ? ` [${call.from}]` : "")).filter(Boolean);
+      return { ms: Math.round(ms), longTaskMs: Math.round(long.reduce((sum, value) => sum + value, 0)), turns: document.querySelectorAll(".page-agent:not([hidden]) .tn").length, calls };
+    }, { to, newest }));
+  }
+  const result = { check: "open-cost", samples, coldMs: samples[0].ms, warmMs: Math.max(0, ...samples.slice(1).map(sample => sample.ms)),
+    longTaskMs: Math.max(...samples.map(sample => sample.longTaskMs)) };
+  for (const [key, limit] of Object.entries(limits)) {
+    if (result[key] > limit) throw Object.assign(new Error(`Opening a conversation: ${key} ${result[key]} ms is over ${limit} ms`), { assertion: result });
+  }
+  // The core answers in order: the thread is asked for first (its conversations on a first open), once, and nothing
+  // the open does not need is asked for at all (owner, 2026-11-10).
+  for (const [round, sample] of samples.entries()) {
+    const methods = sample.calls.map(call => call.split(" [")[0]);
+    const problem = first.length && !first.includes(methods[0]) ? `the first request is ${methods[0]}, not ${first.join(" or ")}`
+      : once.find(method => methods.filter(name => name === method).length > 1) ? `${once.find(method => methods.filter(name => name === method).length > 1)} is asked for twice`
+      : never.find(method => methods.includes(method)) ? `${never.find(method => methods.includes(method))} is asked for` : "";
+    if (problem) throw Object.assign(new Error(`Opening a conversation (round ${round + 1}): ${problem}: ${methods.join(" > ")}`), { assertion: result });
+  }
+  return result;
+}
+
 export function finiteMotionSettled() {
   return document.getAnimations().every(animation => animation.playState !== "running" || animation.effect?.getTiming().iterations === Infinity ||
     // This is the notification's lifetime, not its entrance; capture the success while it is visible.
@@ -532,6 +575,7 @@ export async function perform(page, step, evidenceDirectory) {
       return result;
     }
     case "event-storm": return await eventStorm(page, step);
+    case "open-cost": return await openCost(page, step);
     // The composer's voice button pressed and held, as the owner starts speaking to Raphael.
     case "press-voice":
       await page.evaluate(() => { const button = document.querySelector(".page-agent:not([hidden]) .composer .cmp-voice"); button?.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0, pointerId: 1 })); });

@@ -121,6 +121,18 @@ function mountWindowChrome(): void {
 
 let startupHasSettings = false;
 
+/** How long after launch the window waits before reading ahead for pages the owner has not opened. */
+const READ_AHEAD_AFTER_MS = 4000;
+const launchedAt = performance.now();
+/** Runs `read` once the window has been up a few seconds and is idle; at once if that time is past. */
+function readAheadLater(read: () => void): void {
+  const wait = Math.max(0, READ_AHEAD_AFTER_MS - (performance.now() - launchedAt));
+  setTimeout(() => {
+    if (typeof requestIdleCallback === "function") requestIdleCallback(read, { timeout: 2000 });
+    else read();
+  }, wait);
+}
+
 async function start(): Promise<void> {
   applyTheme();
   // Focus rings only while Tab moves the focus (focus-keys.ts); a click or the caret shows the rest.
@@ -196,7 +208,9 @@ watchChipRows(document.body);
     try {
       const { settings: value } = await api.settingsGet();
       setOwnerProfile(value);
-      void settings.preload();
+      // Settings and Connect apps read ahead once the first page has what it needs: the core answers in order, so a
+      // read ahead at start-up keeps the owner waiting for the page in front of them (owner, 2026-11-10).
+      readAheadLater(() => void settings.preload());
     } catch {
       // The core can be restarting: keep asking, or the owner's face and name stay blank.
       setTimeout(() => void refreshOwner(), 1000);

@@ -319,6 +319,10 @@ export default [
     key("Escape"), click('.ra .chat-message[data-reply] [data-act="react-message"]'), { ...click('#app-popover [data-quick="+"]'), measure: { name: "emoji-picker-reopen", budgetMs: 120, maxLongTaskMs: 50, readySelector: "#app-popover.emoji-picker .emoji-cell" } }, wait("#app-popover.emoji-picker .emoji-cell")]),
   scene("emoji-search","Search filters the grid in place to emoji whose names match, with no section labels", [hover(".ra .chat-message[data-reply]"), click('.ra .chat-message[data-reply] [data-act="react-message"]'), click('#app-popover [data-quick="+"]'), wait("#app-popover.emoji-picker .emoji-cell"), type("#app-popover.emoji-picker input", "愛心"), check("emoji-search")]),
   scene("reply", "Quote a reply into the composer", [hover(".ra .chat-message[data-reply]"), click('.ra .chat-message[data-reply] [data-act="reply-message"]')]),
+  // Opening a long conversation from the sidebar, cold and coming back (owner, 2026-11-10: 開啟對話太慢).
+  scene("conversation-open-cost", "Opening a long conversation from the sidebar draws its newest turn within the budget, cold and coming back", [member(2), { action: "open-cost", from: 2, to: 1, newest: 300050, rounds: 3,
+    limits: { coldMs: 1500, warmMs: 1000 }, first: ["conversations.list", "agent.history.list"], once: ["agent.history.list"], never: ["members.list"] }],
+    { heavyThread: { member: 1, count: 50, newest: 300050 } }),
   scene("search", "Search conversation messages", [search("研究"), wait("[data-message-result]")]),
   scene("search-target", "Navigate to a message search match", [search("研究"), click("[data-message-result]"), wait(".is-search-target")]),
   scene("tooltip", "Answer timestamp tooltip", [hover(".ra .chat-message[data-reply] .message-actions time")]),

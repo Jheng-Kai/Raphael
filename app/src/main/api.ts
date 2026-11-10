@@ -60,8 +60,32 @@ import type {
 } from "./types";
 
 /** Calls `method` of the core. Only the methods of the main window go through (commands.rs). */
+/**
+ * Reads that only look, and that several parts of the window ask for at once (start-up asked for the roster five
+ * times, owner 2026-11-10: 開啟 app 的速度太慢). The same read asked for again while it is under way shares its answer
+ * (each caller gets its own copy), unless the core was asked to change something since: it answers in order, so a
+ * read asked after a change must see it. A conversation's turns and questions are never shared.
+ */
+const SHARED_READS = new Set(["members.list", "settings.get", "rooms.list", "home.overview", "status.get", "secrets.status",
+  "integrations.inventory", "integrations.catalog", "integrations.audit", "connectors.catalog", "connectors.status",
+  "models.catalog", "brains.cli", "languages.list", "toolsets.list", "background.waiting.list", "audio.devices"]);
+let changes = 0;
+const reading = new Map<string, { answer: Promise<unknown>; changes: number }>();
+
 export function core<T>(method: string, params: object = {}): Promise<T> {
-  return invoke<T>("core_call", { method, params });
+  if (!SHARED_READS.has(method)) {
+    changes++;
+    return invoke<T>("core_call", { method, params });
+  }
+  const key = `${method} ${JSON.stringify(params)}`;
+  const under = reading.get(key);
+  if (under && under.changes === changes) return under.answer.then(answer => structuredClone(answer) as T);
+  const answer = invoke<T>("core_call", { method, params });
+  const entry = { answer, changes };
+  reading.set(key, entry);
+  const done = (): void => { if (reading.get(key) === entry) reading.delete(key); };
+  answer.then(done, done);
+  return answer;
 }
 
 export const ownerQuestionAnswer = (id: string, answer: string | null): Promise<{ status: string }> =>

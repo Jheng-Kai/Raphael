@@ -308,9 +308,11 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     focusHeader: () => conversationButton.focus({ preventScroll: true }),
     onDetailsChange: open => { conversationButton.setAttribute("aria-expanded", String(open)); queueMicrotask(() => open && visible && !roomPane.active ? desktop.show() : desktop.sync()); },
     onSelect: (_id, sameThread) => {
+      // Another member's thread is switched to before the page is shown, so the page asks for that thread once,
+      // before anything else (owner, 2026-11-10: 開啟對話太慢); show() then joins the read under way.
+      if (!sameThread) { switchThread(); app.go("agent"); return; }
       app.go("agent");
-      if (sameThread) { roomPane.close(); void load(false); focusComposer(); }
-      else switchThread();
+      roomPane.close(); void load(false); focusComposer();
     },
     onUpdate: () => {
       composerBrain?.draw();
@@ -387,6 +389,8 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   }
 
   const conversationsDirty = new Set<number>();
+  /** The member changed while the page was not on screen: its commands and skills are read when it shows. */
+  let slashStale = false;
   async function readConversations(member: number, fromEvent = false): Promise<void> {
     conversationsDirty.delete(member);
     try {
@@ -1695,10 +1699,8 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     unreadCaptured = true;
     openingThread = true;
     if (composerKey !== "deleted") saveComposerDraft();
-    desktop.refresh();
     drawConversation();
     if (roomPane.active) roomPane.close();
-    void slashMenu.refresh();
     hideTooltip();
     hideSelection();
     pacing.flush();
@@ -1735,7 +1737,8 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     hi.textContent = emptyLine();
     // the card of another thread's question goes, and this thread's comes
     delete askCard.dataset.id;
-    drawBackgroundQuestions();
+    // The thread is asked for first: the core answers in order, and the rest of the page can wait for it (owner,
+    // 2026-11-10: 開啟對話太慢). A page that is not on screen reads it, and the rest, as it shows (show()).
     render();
     if (listening && voiceMember === memberId() && !question) drawComposerTask();
     if (visible) {
@@ -1743,8 +1746,11 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       void load(false).then(() => {
         if (generation === loads && visible && !scroller.hidden && !thread.querySelector(".is-search-target")) finishOpening();
       });
+      desktop.refresh();
+      void slashMenu.refresh();
+      drawBackgroundQuestions();
       focusComposer();
-    }
+    } else slashStale = true;
   }
 
   function toggleDraftDone(button: HTMLElement): void {
@@ -2617,6 +2623,21 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       if (!wasVisible) { unreadFrom = null; unreadCaptured = false; openingThread = true; }
       visible = true;
       if (arg === "computer") { if (roomPane.active) roomPane.close(); members.computer(); }
+      // The thread is asked for before anything else on the page: the core answers in order (owner, 2026-11-10).
+      const draft = draftText(arg);
+      const refocus = (): void => {
+        if (!members.settings.isOpen() && (!wasVisible || draft !== null)) focusComposer();
+      };
+      // The page opens at the newest turn, and with the question that waits, if one does.
+      void load(false).then(() => {
+        if (visible && !scroller.hidden && (!wasVisible || draft !== null)) {
+          if (unreadFrom !== null) finishOpening();
+          else scroller.scrollTop = scroller.scrollHeight;
+        }
+        if (visible && listening && voiceMember === memberId() && !question) drawComposerTask();
+        refocus();
+      });
+      if (slashStale) { slashStale = false; void slashMenu.refresh(); }
       if (!wasVisible) members.show();
       if (!roomPane.active) desktop.show();
       else void roomPane.refresh();
@@ -2626,17 +2647,13 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       dropResize?.observe(composer);
       dropResize?.observe(askCard);
       dropResize?.observe(draftPanel.el);
-      void members.load();
+      // The roster is read as the page comes on screen; while it stays there, the core's events keep it current.
+      if (!wasVisible) void members.load();
       void readQuotas();
       // A draft goes into the field at once; the composer may then move (the empty page has it
       // under Raphael, the thread under the turns) or give way to a question, which takes the
       // focus away: it is given back once each of those is known.
-      const draft = draftText(arg);
       if (draft !== null) putDraft(draft);
-      const refocus = (): void => {
-        if (!members.settings.isOpen() && (!wasVisible || draft !== null)) focusComposer();
-      };
-      // The page opens at the newest turn, and with the question that waits, if one does.
       void api
         .agentQuestionOpen()
         .then((open) => {
@@ -2645,14 +2662,6 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
           refocus();
         })
         .catch(() => {});
-      void load(false).then(() => {
-        if (visible && !scroller.hidden && (!wasVisible || draft !== null)) {
-          if (unreadFrom !== null) finishOpening();
-          else scroller.scrollTop = scroller.scrollHeight;
-        }
-        if (visible && listening && voiceMember === memberId() && !question) drawComposerTask();
-        refocus();
-      });
       drawBackgroundQuestions();
       if (settingsFor !== null && settingsFor === members.current()) { if (roomPane.active) roomPane.close(); members.openSettings(); }
     },

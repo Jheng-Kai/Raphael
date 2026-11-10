@@ -1,5 +1,22 @@
 # Conversation
 
+## Opening a conversation fast (owner, 2026-11-10)
+
+Owner: 「開啟對話的也是（太慢），想辦法幫我最佳化」. The core answers requests in order on one loop, so what is asked
+first is answered first. A press on a member in the sidebar switches the thread before the page shows, and the page
+asks for that thread before anything else (its conversations first on the first open of that member), once; the
+page's other reads (computer, commands, questions, status, quotas) follow, and the roster is read only when the page
+comes on screen, never on every switch. Measured on a copy of the owner's database, one open had sent the thread's
+request 17th, read it twice and read the roster each time (history 0.2-0.8 s, roster 0.2-0.35 s in the core).
+Scene: `conversation-open-cost` opens a 50-turn conversation from the sidebar three times (the first cold) and fails
+past 1.5 s cold / 1 s coming back, if the first request is not the thread's (or its conversations'), if the thread is
+read twice, or if `members.list` is read. Repeated identical reads at start-up share one answer (`api.ts`
+`SHARED_READS`, never a conversation's turns), and Settings / Connect apps read ahead only after start-up.
+
+```
+npm run look -- conversation-open-cost --theme both --width 1120,720,1920x1080
+```
+
 ## No 查看過程 (owner, 2026-11-10)
 
 Owner: 「查看過程那個可以拿掉 不用有查看過程」. A reply offers no way to view how it was worked out: no work control,

@@ -87,6 +87,23 @@ export function installMock(fixture, config = {}, target = window) {
     data.commands.push({ id: 41, member_id: 1, name: "weekly", description: "每週整理", template: "整理本週：{input}" });
     data.settings.tts_fish_voice = "voice-calm";
   }
+  // A long conversation as the owner's are (2026-11-10: pages of 100-440 KB): `count` answered turns of written words,
+  // a list, a table and a code card each, the newest with the id `heavyThread.newest`.
+  if (variant.heavyThread) {
+    const { member = 1, count = 50, newest = 300050 } = variant.heavyThread;
+    const conversation = data.conversations.find(item => item.member_id === member && item.is_default) ?? data.conversations.find(item => item.member_id === member);
+    const reply = n => [`## 第 ${n} 份整理`, "這一段是較長的回覆，像成員整理資料之後寫給主人的完整答案。".repeat(6), "",
+      "- 第一點：重點摘要與後續步驟。\n- 第二點：需要主人確認的地方。\n- 第三點：參考資料與來源。", "",
+      "| 項目 | 狀態 | 備註 |\n| --- | --- | --- |\n" + Array.from({ length: 6 }, (_, row) => `| 項目 ${row + 1} | 進行中 | 第 ${row + 1} 列的說明文字 |`).join("\n"), "",
+      "```js\n" + Array.from({ length: 12 }, (_, row) => `const value${row} = compute(${row});`).join("\n") + "\n```", "",
+      "最後是結論，再補幾句說明，讓這則回覆接近實際的長度。".repeat(4)].join("\n");
+    for (let at = 0; at < count; at++) {
+      const id = newest - count + 1 + at, n = at + 1, created = data.now - (count - at) * 60_000;
+      data.turns.push({ id, member_id: member, conversation_id: conversation?.id, session_id: `heavy-${id}`, created_at_ms: created, created_at: new Date(created).toISOString(),
+        question: `請整理第 ${n} 份資料`, route: "answer", source: "app", prefix: "", text: reply(n), detail: null, status: "done", cost_usd: 0, model: null,
+        messages: [{ seq: 1, kind: "reply", text: reply(n), at_ms: created + 30_000 }], steps: [], attachments: [] });
+    }
+  }
   // The owner's own picture as the member's cover (members.set_cover): a drawn landscape, so no photo is needed.
   if (variant.coverPicture) data.members.find(member => member.id === 1).cover = { kind: "image", url: "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='960' height='240'><rect width='960' height='240' fill='%233a6f5c'/><circle cx='760' cy='70' r='90' fill='%2396c8b0'/><rect y='170' width='960' height='70' fill='%23264d40'/></svg>" };
   if (variant.computerHost) data.settings.computer_ssh_alias = variant.computerHost;
@@ -1718,7 +1735,8 @@ export function installMock(fixture, config = {}, target = window) {
     convertFileSrc(path) { return path; },
     async invoke(command, args = {}) {
       const recorded = command === "core_call" && args.method === "integrations.card_save" && args.params?.id === "card-login" ? {...args,params:{...args.params,value:"[private login]"}} : args;
-      state.calls.push({ command, ...copy(command === "main_events" ? {} : recorded) });
+      // `traceCalls` keeps where in the app each call came from, to find who asks for what.
+      state.calls.push({ command, ...copy(command === "main_events" ? {} : recorded), ...(variant.traceCalls ? { from: new Error().stack.split("\n").slice(2, 9).map(line => line.trim().replace(/\s*\(?https?:\/\/[^/]+\/src\/main\//, " ").replace(/\?[^:]*/, "")).join(" < ") } : {}) });
       // Native Channel instances contain callbacks; do not serialize them before registration.
       if (command === "overlay_subscribe") {
         state.overlayChannel = args.channel;
