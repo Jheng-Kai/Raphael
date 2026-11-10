@@ -58,6 +58,7 @@ import type {
   WireAttachment,
   PageOpened,
   ReportOpened,
+  ReportSaved,
 } from "./types";
 
 /** Calls `method` of the core. Only the methods of the main window go through (commands.rs). */
@@ -522,6 +523,11 @@ export const mainWindowForward = (): Promise<void> => invoke("main_window_forwar
 export const pagesOpen = (id: string, theme: "dark" | "light"): Promise<PageOpened> => core("pages.open", { id, theme });
 /** A report page's checked content: the app draws it (report-page.ts), in whichever theme, with no frame. */
 export const reportOpen = (id: string): Promise<ReportOpened> => core("pages.open", { id, theme: "light" });
+/**
+ * Saves a report as the file the window drew of it (report-page.ts `reportFile`) and shows it selected in its folder.
+ * The shell and the core choose the folder and the name (`report_save`, `pages.export`): no path goes from here.
+ */
+export const reportSave = (id: string, html: string): Promise<ReportSaved> => invoke("report_save", { id, html });
 export const pagesToolCall = (id: string, tool: string, args: object): Promise<{ status: string; ok?: boolean; tool_result?: object | null; error?: string | null }> => core("pages.tool_call", { id, tool, arguments: args });
 
 

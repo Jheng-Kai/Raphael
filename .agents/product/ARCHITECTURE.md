@@ -1,5 +1,16 @@
 # Raphael architecture and checked boundaries
 
+## A report shared as a file (2026-11-10)
+
+The window draws the file (report-page.ts `reportFile`: the same escaping drawing, the theme's
+words read from its stylesheet, its policy first) and hands it with the page id to the shell's
+`report_save`. The shell adds its Downloads folder and calls the core's `pages.export`, which the
+window's allowlist does not name, so no folder or path comes from the window. The core takes only
+a report page and only the drawing's elements and attributes (links within the page, one style
+with no tag in it), names the file after the stored title, writes it exclusively in
+owner_output_folder or else Downloads, and returns where; the shell selects it in File Explorer.
+No page host, frame, migration or model tool is added (R-PAGE-01; core/tests/agent/test_pages.py).
+
 ## No voice output (2026-11-10)
 
 The app speaks nothing: no text-to-speech service, spoken Alt+Space answer, generated

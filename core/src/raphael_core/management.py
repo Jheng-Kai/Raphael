@@ -329,6 +329,7 @@ OWNER_ONLY = {
                    "Only the owner reviews, saves and publishes member recipe snapshot cards."),
     "messaging.pairing.answer": "Only the owner approves or rejects a messaging pairing card.",
     "connectors.label": "The owner names a connected account after sign-in.",
+    "pages.export": "Only the owner's press saves a report as a file, through the shell, which names no folder the window gives.",
     **dict.fromkeys(("vault.list", "vault.add", "vault.update", "vault.remove", "vault.preview", "vault.cancel", "vault.import"),
                    "Owner-only vault metadata, private value writes, sharing and transient CSV import; no private value read or export RPC exists."),
     **dict.fromkeys(("owner_questions.answer", "owner_questions.bring", "background.answer", "pages.tool_call",

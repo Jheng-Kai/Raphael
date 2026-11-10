@@ -1,8 +1,10 @@
 // @vitest-environment happy-dom
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import * as api from "./api";
 import { mountPages, pageCardsHTML } from "./page-card";
-import { layoutTeam, mountReportView, reportHTML, type TeamLayout } from "./report-page";
+import { FILE_POLICY, fileStyle, layoutTeam, mountReportView, reportFile, reportHTML, themeWords, type TeamLayout } from "./report-page";
 import type { AgentTurn, PageCard, Report, ReportEdge, ReportNode } from "./types";
 
 const people = { nameOf: (id: number) => ({ 0: "拉斐爾", 1: "小晴", 2: "小森" } as Record<number, string>)[id] ?? "", colorOf: (id: number) => `var(--m${id})` };
@@ -236,6 +238,112 @@ test("a report that cannot open says so and leaves the thread where it is", asyn
   await flush();
   expect(stage.classList.contains("is-report")).toBe(false);
   expect(document.querySelector(".toast")?.textContent ?? "").toContain("這個頁面打不開。");
+});
+
+// ---------- shared as a file ----------
+
+const look = { style: "body{margin:0}", font: "12px sans-serif" };
+const lastToast = (): string => [...document.querySelectorAll(".toast")].pop()?.textContent ?? "";
+
+test("shared, a report is one file of the same drawing: its policy first, every word escaped, no tabs, the team drawn for each width", () => {
+  const file = reportFile("報告 <img src=x>", report, people, look);
+  expect(file.startsWith(`<!doctype html><html lang="zh-TW"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${FILE_POLICY}">` +
+    `<meta name="viewport" content="width=device-width, initial-scale=1"><title>報告 &lt;img src=x&gt;</title><style>body{margin:0}</style></head>`)).toBe(true);
+  expect(FILE_POLICY).toBe("default-src 'none'; style-src 'unsafe-inline'; form-action 'none'; base-uri 'none'");
+  const doc = new DOMParser().parseFromString(file, "text/html");
+  expect(doc.querySelector("article.rp-doc h1")!.textContent).toBe("報告 <img src=x>");
+  expect(doc.querySelectorAll("script, img, i, iframe, button, [data-report-tab]")).toHaveLength(0);
+  // Every row, as 「全部」 shows them, and the contents as links within the page.
+  expect(doc.querySelectorAll(".rp-table tbody tr")).toHaveLength(3);
+  expect([...doc.querySelectorAll("a")].map(link => link.getAttribute("href"))).toEqual(["#rp-s0", "#rp-s1", "#rp-s2"]);
+  // The team drawn three times, widest first, each no wider than the column that shows it.
+  const drawings = [...doc.querySelectorAll<HTMLElement>(".rp-team > .rp-team-at")];
+  expect(drawings.map(drawing => drawing.dataset.at)).toEqual(["0", "1", "2"]);
+  const widths = drawings.map(drawing => Number.parseFloat(drawing.querySelector<HTMLElement>(".rp-team-draw")!.style.width));
+  [704, 480, 300].forEach((most, index) => expect(widths[index]).toBeLessThanOrEqual(most));
+  for (const drawing of drawings) expect(drawing.querySelectorAll(".rp-node")).toHaveLength(3);
+  expect(new Set(drawings.map(drawing => drawing.querySelector("marker")!.id)).size).toBe(3);
+  expect(doc.querySelector(".rp-notes dd")!.textContent).toBe("客戶來信 <i>沒有人負責</i>");
+});
+
+test("every element and attribute of a file is one the core takes, under the same policy", () => {
+  // The core writes a file only of this drawing (agent/report_page.py `checked_file`): a tag it does not know would
+  // fail every share, so its lists are read here from its source.
+  const core = readFileSync(resolve(import.meta.dirname, "../../../core/src/raphael_core/agent/report_page.py"), "utf8");
+  const listed = (name: string): Set<string> => new Set(core.match(new RegExp(`${name} = frozenset\\(([\\s\\S]*?)\\.split\\(\\)\\)`))![1]!
+    .match(/"[^"]*"/g)!.flatMap(part => part.slice(1, -1).split(/\s+/).filter(Boolean)));
+  const tags = listed("_FILE_TAGS"), attributes = listed("_FILE_ATTRIBUTES");
+  expect(tags.has("svg") && attributes.has("viewbox")).toBe(true);
+  expect(core).toContain(`FILE_POLICY = "${FILE_POLICY}"`);
+  const file = reportFile("報告", report, people, look);
+  expect(core).toContain(file.match(/<meta name="viewport"[^>]*>/)![0]);
+  const drawn = [...new DOMParser().parseFromString(file, "text/html").body.querySelectorAll("*")];
+  expect(drawn.map(element => element.tagName.toLowerCase()).filter(tag => !tags.has(tag))).toEqual([]);
+  expect(drawn.flatMap(element => [...element.attributes].map(attribute => attribute.name.toLowerCase()))
+    .filter(name => !attributes.has(name) && !/^data-[a-z0-9-]+$/.test(name))).toEqual([]);
+  expect(drawn.flatMap(element => (element.hasAttribute("href") ? [element.getAttribute("href")!] : [])).every(href => href.startsWith("#"))).toBe(true);
+});
+
+test("a file's style holds the theme's words its rules use, the dark ones on a dark screen alone, and never a tag", () => {
+  const style = fileStyle({
+    light: new Map([["--content", "#ffffff"], ["--ok", "var(--green)"], ["--green", "#15703f"], ["--never-used", "1px"]]),
+    dark: new Map([["--content", "#0a0a0a"], ["--green", "#9fd7b5"]]),
+  });
+  expect(style.startsWith(":root{--content:#ffffff;--green:#15703f;--ok:var(--green);color-scheme:light}")).toBe(true);
+  expect(style).toContain("@media screen and (prefers-color-scheme: dark){:root{--content:#0a0a0a;--green:#9fd7b5;color-scheme:dark}}");
+  expect(style).not.toContain("--never-used");
+  // The page's own rules come along, with one drawing of the team for each width, and the core refuses `<` in a style.
+  expect(style).toContain('.rp-st[data-tone="ok"]');
+  expect(style).toContain('@container (max-width: 703.98px){.rp-team-at[data-at="0"]{display:none}.rp-team-at[data-at="1"]{display:block}}');
+  // A file has no conversation around it: its page takes a conversation's column itself.
+  expect(style).toContain("--pa-colw:var(--layout-thread-max)");
+  expect(style).not.toMatch(/[<]|\/\*/);
+});
+
+test("the theme's words are read from the window's own stylesheet: light, and what the dark theme changes", () => {
+  const sheet = document.createElement("style");
+  sheet.textContent = `:root { --content: #ffffff; --ui: "Inter", sans-serif; } :root[data-theme="dark"] { --content: #0a0a0a; } .rp-doc { --content: red; }`;
+  document.head.append(sheet);
+  try {
+    const words = themeWords([sheet.sheet!]);
+    expect(words.light.get("--content")).toBe("#ffffff");
+    expect(words.light.get("--ui")).toContain("Inter");
+    expect(words.dark.get("--content")).toBe("#0a0a0a");
+    expect(words.dark.has("--ui")).toBe(false);
+  } finally {
+    sheet.remove();
+  }
+});
+
+test("share saves the report on screen as a file, once a press, says where it went, and leaves the report open", async () => {
+  const save = vi.spyOn(api, "reportSave").mockResolvedValue({ place: "downloads", folder: "Downloads" });
+  const { stage, thread } = conversation();
+  thread.querySelector<HTMLButtonElement>("button.pg-link")!.click();
+  await flush();
+  const view = stage.querySelector<HTMLElement>(".rp-view")!;
+  // Share before the way back, at the top right; its name is its only word, so its tooltip repeats nothing on screen.
+  const buttons = [...view.querySelectorAll<HTMLButtonElement>(".rp-top > button.btn.icon")];
+  expect(buttons.map(button => [button.dataset.reportAct, button.getAttribute("aria-label"), button.textContent])).toEqual([["share", "分享", ""], ["close", "回到對話", ""]]);
+  buttons[0]!.click();
+  buttons[0]!.click();
+  await flush();
+  expect(save).toHaveBeenCalledTimes(1);
+  const [id, file] = save.mock.calls[0]!;
+  expect(id).toBe("r1");
+  expect(file).toContain("<title>團隊總覽報告</title>");
+  expect(file).toContain('class="rp-team-at"');
+  expect(lastToast()).toBe("已存到「下載」");
+  expect(stage.classList.contains("is-report") && !view.hidden).toBe(true);
+
+  save.mockResolvedValue({ place: "output", folder: "Raphael 輸出" });
+  buttons[0]!.click();
+  await flush();
+  expect(lastToast()).toBe("已存到「Raphael 輸出」");
+  save.mockRejectedValue(new Error("[1005] The page is gone"));
+  buttons[0]!.click();
+  await flush();
+  expect(lastToast()).toBe("檔案沒有存成，請再試一次。");
+  expect(save).toHaveBeenCalledTimes(3);
 });
 
 test("the view works as a plain stage too, with nothing of the thread's own", async () => {

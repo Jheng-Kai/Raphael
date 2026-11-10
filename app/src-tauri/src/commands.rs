@@ -1977,6 +1977,49 @@ pub async fn open_library_file(
     launch_link(found)
 }
 
+/// The largest file a report is saved as (`FILE_BYTES` of the core's agent/report_page.py).
+const REPORT_FILE_MAX: usize = 2 * 1024 * 1024;
+
+/// Saves a report the owner shares as one HTML file (owner, 2026-11-10: 存成檔案) and shows it selected in its folder.
+/// The window gives the page's id and the document it drew of it; the core checks both, names the file after the page
+/// and writes it in the owner's output folder, or in Downloads (`pages.export`), so no path comes from the window.
+/// The file is saved even where its folder cannot be shown.
+#[tauri::command]
+pub async fn report_save(
+    app: AppHandle,
+    webview: Webview,
+    id: String,
+    html: String,
+) -> Result<Value, String> {
+    require_main(&webview)?;
+    if id.is_empty() || id.len() > 128 || html.len() > REPORT_FILE_MAX {
+        return Err("invalid report file".to_owned());
+    }
+    let core = app
+        .try_state::<Arc<CoreProcess>>()
+        .ok_or(CORE_NOT_RUNNING)?;
+    let downloads = app
+        .path()
+        .download_dir()
+        .ok()
+        .map(|dir| dir.to_string_lossy().into_owned());
+    let saved = core
+        .call(
+            "pages.export",
+            json!({"id": id, "html": html, "downloads": downloads}),
+        )
+        .await
+        .map_err(|err| err.to_string())?;
+    let path = saved
+        .get("path")
+        .and_then(Value::as_str)
+        .ok_or("report file unavailable")?;
+    if let Err(error) = show_in_folder(path) {
+        log::warn!("the saved report could not be shown in its folder: {error}");
+    }
+    Ok(json!({"place": saved.get("place"), "folder": saved.get("folder")}))
+}
+
 fn show_in_folder(path: &str) -> Result<(), String> {
     #[cfg(windows)]
     {
@@ -2382,11 +2425,20 @@ mod tests {
                 "open_link",
                 "open_team_file",
                 "pick_output_folder",
+                "report_save",
                 "schedule_keep_awake_get",
                 "schedule_keep_awake_set",
                 "window_hotkey",
             ]
         );
+    }
+
+    #[test]
+    fn a_report_is_saved_through_its_own_command_alone() {
+        // `report_save` gives the core the shell's Downloads folder: the window may not call `pages.export` with a
+        // folder of its own.
+        assert!(!is_allowed_method("pages.export"));
+        assert!(is_allowed_method("pages.open"));
     }
 
     // ---- the window's own way to Raphael ----

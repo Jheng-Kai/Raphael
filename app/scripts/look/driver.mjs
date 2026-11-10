@@ -1,3 +1,4 @@
+import { writeFile } from "node:fs/promises";
 import { assertStableClick, stableSnapshot, stableControls } from "./stable-click.mjs";
 import { checkRendered } from "./checks.mjs";
 import { idleCost, paintedSlime, slimeBoard, slimeParts, slimePointer, slimeSharp } from "./slime-board.mjs";
@@ -315,6 +316,18 @@ export async function perform(page, step, evidenceDirectory) {
       await page.reload({waitUntil:"networkidle0",timeout:20000});
       await page.waitForSelector('.page-home:not([hidden]) .ho-hero',{visible:true,timeout:10000});
       break;
+    case "saved-file": {
+      // The file a report was saved as (report_save), opened as a browser opens it: on its own, with nothing of the app.
+      // The scene is marked `file`: the boundary's errors are read here, before the app's page is gone.
+      const { html, errors } = await page.evaluate(() => ({ html: window.__look.calls.findLast(call => call.command === "report_save")?.html ?? null, errors: window.__look.errors }));
+      if (errors.length) throw new Error(`Before the file: ${errors.join("; ")}`);
+      if (!html) throw new Error("Nothing was saved as a file");
+      if (evidenceDirectory) await writeFile(`${evidenceDirectory}/saved-report.html`, html);
+      // A blank page, not a data: address: a top frame may not go to one, so the file's own contents links would not move.
+      await page.goto("about:blank", { timeout: 20000 });
+      await page.setContent(html, { waitUntil: "load", timeout: 20000 });
+      break;
+    }
     case 'polish-caption': {
       const dialog = await page.$('.mb-dialog') ?? await page.$('.modal-scrim:not([hidden]) .modal');
       const before = await page.evaluate(() => window.__look.calls.length);

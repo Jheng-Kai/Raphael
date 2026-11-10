@@ -408,6 +408,8 @@ export type ReportSection =
   | { kind: "text"; title?: string; text: string };
 export interface Report { as_of: string; sections: ReportSection[] }
 export interface ReportOpened { kind: "report"; title: string; rev: number; report: Report }
+/** Where a report's file went (`report_save`): the owner's output folder, by its name, or Downloads. */
+export interface ReportSaved { place: "output" | "downloads"; folder: string }
 
 export interface PageOpened {
   url: string;

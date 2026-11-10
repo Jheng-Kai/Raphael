@@ -8,6 +8,7 @@ facts, for the revision history and anything that reads a page as HTML.
 The owner's request (2026-11-09, after Grok Bot's Page): a title, the date the data is as of and the promise that it only
 states recorded facts, a table of contents, findings with coloured status words under a summary box, an overview table
 with tabs, and a team diagram: members as boxes with their colour, labelled arrows between them, notes under it.
+Shared, a report is a file of the app's own drawing (2026-11-10): see `checked_file` below.
 """
 
 import html as html_lib
@@ -236,3 +237,89 @@ def report_fallback(title, report):
             lines.extend(item["title"] for item in section["items"])
     text = "\n".join(lines)
     return text if len(text) <= 1500 else text[:1499] + "…"
+
+
+# ---------- the file a report is shared as ----------
+
+# The owner shares a report as a file (2026-11-10, 存成檔案): the app's own drawing of the page and its style, as one HTML
+# document any browser opens (app/src/main/report-page.ts `reportFile`). Nothing in it may run or load: its policy stands
+# first in its head, and the rest is held to the elements and attributes that drawing makes, its links within the page.
+FILE_BYTES = 2 * 1024 * 1024
+FILE_POLICY = "default-src 'none'; style-src 'unsafe-inline'; form-action 'none'; base-uri 'none'"
+_FILE_HEAD = re.compile(
+    r'<!doctype html><html lang="[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*"><head><meta charset="utf-8">'
+    + re.escape(f'<meta http-equiv="Content-Security-Policy" content="{FILE_POLICY}">'
+                '<meta name="viewport" content="width=device-width, initial-scale=1">'))
+# The page's own elements, then the drawing's: the team's arrows and the app's line icons (icon-set.ts).
+_FILE_TAGS = frozenset("html head title body article header h1 h2 p nav a span div section ul li b small "
+                       "table thead tbody tr th td dl dt dd svg defs marker path circle ellipse line rect".split())
+_FILE_ATTRIBUTES = frozenset("lang class id href style role aria-label aria-hidden scope width height viewbox d "
+                             "marker-end refx refy markerwidth markerheight orient cx cy r rx ry x y x1 y1 x2 y2".split())
+_VALUE = r"(?:\"[^\"]*\"|'[^']*'|[^\s\"'=<>`]+)"
+_TAG = re.compile(rf"<(/?)([A-Za-z][A-Za-z0-9]*)((?:\s+[^\s\"'=<>/]+(?:\s*=\s*{_VALUE})?)*)\s*/?>")
+_ATTRIBUTE = re.compile(rf"([^\s\"'=<>/]+)(?:\s*=\s*({_VALUE}))?")
+# Names Windows keeps for its devices, with any extension.
+_RESERVED = re.compile(r"(?i)(?:con|prn|aux|nul|com[0-9¹²³]|lpt[0-9¹²³])(?:\..*)?")
+
+
+def checked_file(text):
+    """The file as the app drew it, or why it is refused: its policy first, one style with no markup in it, then only
+    the drawing's elements and attributes."""
+    if not isinstance(text, str) or not text:
+        raise PageError("bad_arguments", "html must be the report's file")
+    if len(text.encode("utf-8")) > FILE_BYTES:
+        raise PageError("too_large", f"the file exceeds {FILE_BYTES} UTF-8 bytes")
+    head = _FILE_HEAD.match(text)
+    if head is None:
+        raise PageError("bad_arguments", "the file must begin with its policy")
+    rest, styles = re.subn(r"<style>[^<]*</style>", "", text[head.end():])
+    if styles != 1:
+        raise PageError("bad_arguments", "the file holds one style, with no markup in it")
+    end = 0
+    for tag in _TAG.finditer(rest):
+        if "<" in rest[end:tag.start()] or tag[2].lower() not in _FILE_TAGS:
+            raise PageError("bad_arguments", "the file holds only the report's own drawing")
+        for attribute in _ATTRIBUTE.finditer(tag[3]):
+            name, value = attribute[1].lower(), (attribute[2] or "").strip("\"'")
+            if name not in _FILE_ATTRIBUTES and not re.fullmatch(r"data-[a-z0-9-]+", name):
+                raise PageError("bad_arguments", f"the file may not hold the attribute {name[:24]}")
+            if name == "href" and not value.startswith("#"):
+                raise PageError("bad_arguments", "a link in the file goes within the page")
+        end = tag.end()
+    if "<" in rest[end:]:
+        raise PageError("bad_arguments", "the file holds only the report's own drawing")
+    return text
+
+
+def file_name(title):
+    """The file's name: the page's title as Windows takes a name (no reserved character, no dot or space at its end, no
+    device's name), or `report`."""
+    name = " ".join(re.sub(r'[<>:"/\\|?*\x00-\x1f]', " ", title).split())[:80].rstrip(". ")
+    if not name:
+        return "report"
+    return f"{name}_" if _RESERVED.fullmatch(name) else name
+
+
+def save_file(text, name, folders):
+    """Writes the file into the first of `folders` ((place, folder) pairs) that takes it, as `name.html` or, where a
+    file has that name, `name (2).html` and on: never over another file. Returns the place and the path."""
+    data = text.encode("utf-8")
+    for place, folder in folders:
+        try:
+            folder.mkdir(parents=True, exist_ok=True)
+            for number in range(1, 100):
+                path = folder / (f"{name}.html" if number == 1 else f"{name} ({number}).html")
+                try:
+                    out = open(path, "xb")
+                except FileExistsError:
+                    continue
+                try:
+                    with out:
+                        out.write(data)
+                except OSError:
+                    path.unlink(missing_ok=True)
+                    raise
+                return place, path
+        except OSError:
+            continue
+    raise PageError("unwritable", "the file could not be written")

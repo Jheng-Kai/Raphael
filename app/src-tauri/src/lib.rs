@@ -208,6 +208,7 @@ pub fn run() {
             updates::update_control,
             commands::open_team_file,
             commands::open_library_file,
+            commands::report_save,
             commands::hotkeys_pause,
             commands::window_hotkey,
             commands::main_window_forward,
