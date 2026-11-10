@@ -32,6 +32,20 @@ def _turn_reason(conn, turn_id):
     return (failure.get("reason") or failure.get("kind") or "") if isinstance(failure, dict) else row["detail"] or ""
 
 
+_TITLES = {
+    "routine_run": "SELECT m.title FROM routine_runs r JOIN routines m ON m.id=r.routine_id WHERE r.id=?",
+    "task": "SELECT COALESCE(NULLIF(text,''), report_text) FROM worker_tasks WHERE id=?",
+    "turn": "SELECT COALESCE(NULLIF(question,''), text) FROM agent_turns WHERE id=?",
+}
+
+
+def _title(conn, ended_id):
+    """What an ended piece of work was, read only for the few a report shows (Home's count never needs it)."""
+    source, identifier = ended_id.split(":", 1)
+    row = conn.execute(_TITLES[source], (identifier,)).fetchone()
+    return row[0] if row else ""
+
+
 def read(conn, roster, zone, now_ms, member_id=None, days=14):
     """Read history in the last `days` local days; pending work and routines are current.
 
@@ -74,7 +88,7 @@ def read(conn, roster, zone, now_ms, member_id=None, days=14):
             bucket["count"] += 1
             if len(bucket["recent"]) >= 6:
                 continue
-            value = {"title": _text(row["title"]), "at": at(row["at_ms"]), "kind": row["kind"]}
+            value = {"title": _text(_title(conn, row["id"])), "at": at(row["at_ms"]), "kind": row["kind"]}
             if not ok:
                 source, identifier = row["id"].split(":", 1)
                 if source == "task":

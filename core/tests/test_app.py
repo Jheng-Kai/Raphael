@@ -1973,6 +1973,8 @@ async def test_home_overview_is_wired_without_waiting_for_speech(make_app, monke
     assert app.vm.timezone() is None
     value = await app.call("home.overview", {"tz": "Asia/Taipei", "ui_language": "en"})
     assert app.vm.timezone() == "Asia/Taipei"
+    # Home answers before the desktops follow; each sync reads the zone as it then is.
+    await app.home._timezone_task
     with pytest.raises(RpcError):
         await app.call("home.overview", {"tz": "invalid/timezone"})
     assert app.vm.timezone() == "Asia/Taipei"
