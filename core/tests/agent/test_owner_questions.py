@@ -375,6 +375,23 @@ async def test_background_page_uses_existing_store_and_foreign_routines_stay_clo
     await background.service._cancel({"task_id": task_id})
 
 
+async def test_a_background_report_shows_its_card_without_waiting_for_the_owner(wired):
+    agent, background = wired
+    origin = agent.history.add(session_id="job", question="Report", route="delegate", prefix="", text="",
+                               status="running", conversation_id=agent.service.conversations.main())
+    task_id = background.submit()
+    background.service.attach_turn(task_id, origin)
+    task = background.task(task_id)
+    report = {"sections": [{"kind": "text", "title": "Week", "text": "Three tasks finished."}]}
+    shown = await agent.service.background_owner_tool(task, "show_page", {"title": "Weekly report", "report": report})
+    assert shown.ok and "owner_card" not in shown.data
+    [card] = agent.service.pages.store.shown_in([origin])[origin]
+    assert card["id"] == shown.data["page_id"] and card["kind"] == "report"
+    page = await agent.service.background_owner_tool(task, "show_page", {"title": "Choose", "html": "<button>Pick</button>"})
+    assert page.data["owner_card"]["kind"] == "show_page"
+    await background.service._cancel({"task_id": task_id})
+
+
 @pytest.mark.parametrize("name", ["connect_app", "request_secret", "email_draft", "show_page"])
 @pytest.mark.parametrize("cancel", [False, True])
 @pytest.mark.parametrize("scope", ["private", "room"])

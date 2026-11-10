@@ -1707,20 +1707,22 @@ class MembersService:
 
     def authorize_management(self, member_id, name, arguments, *, interactive=False, approval=None):
         """Recheck live authority and the consumed exact-action gate token before a write."""
-        from ..agent.team_admin import DEFINITIONS
+        from ..agent.team_admin import DEFINITIONS, TEAM_READS
         from ..management import REGISTRY, destructive, BACKGROUND_MEMBER_TOOLS, background_actor, background_requires_approval
         from ..agent.policy import Approval, action_digest
 
         if not self.store.exists(member_id) or name not in DEFINITIONS and name not in REGISTRY:
             raise invalid_params("unknown team administration tool")
         background = background_actor() == member_id and name in BACKGROUND_MEMBER_TOOLS
-        if name != "team_overview" and not (background or interactive):
+        if name == "team_work" and not interactive:
+            raise invalid_params("team_work is only available in the owner's private chat")
+        if name not in TEAM_READS and not (background or interactive):
             raise invalid_params("Team management requires the owner's interactive private chat or an approved background member action")
         schema = DEFINITIONS[name]["parameters"] if name in DEFINITIONS else REGISTRY[name].schema
         if (set(arguments) - set(schema["properties"]) or
                 any(field not in arguments for field in schema["required"])):
             raise invalid_params("invalid team administration fields")
-        if name != "team_overview":
+        if name not in TEAM_READS:
             from ..management import validate, resolve
             validate(arguments, schema)
             item, values = resolve(name, arguments)
@@ -1741,6 +1743,17 @@ class MembersService:
         """Run the same services as the UI after live authorization."""
         from ..management import REGISTRY, resolve
         self.authorize_management(member_id, name, arguments, interactive=interactive, approval=approval)
+        if name == "team_work":
+            from zoneinfo import ZoneInfo
+            from .team_work import read
+
+            if "member_id" in arguments and type(arguments["member_id"]) is not int:
+                raise invalid_params("member_id must identify an existing member")
+            # The owner's own time zone (General), else the device's, as routines read their times.
+            zone_name = self._settings.get("routine_timezone") or self._settings.get("routine_detected_timezone")
+            zone = ZoneInfo(zone_name) if zone_name else self._tz
+            return read(self._conn, await self._list({}), zone, self._now_ms(),
+                        arguments.get("member_id"), arguments.get("days", 14))
         if name == "team_overview":
             from ..computer.grants import ComputerGrants
             roster = await self._list({})

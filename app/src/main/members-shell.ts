@@ -40,7 +40,7 @@ import {
 } from "./member-dialogs";
 import { openMemberCreator } from "./member-creator";
 import { RAPHAEL_ID, faceHTML, memberOf, orderedMembers, memberRole, raphaelOf } from "./members";
-import { nameAccent } from "./owner-bubble";
+import { memberColor, nameAccent } from "./owner-bubble";
 import { followSlimeRoster, setSlimeState } from "./slime";
 import type { AppContext, MainEvent, Member, MemberGroup, MemberPatch, MembersList } from "./types";
 import { type Choice, closeMenu, esc, ico, leave, openMenu, patchHTML, toaster } from "./ui";
@@ -90,6 +90,8 @@ export interface MembersShell {
   faceOf(id: number, size: number): string;
   /** The colour member `id`'s name takes where members talk (owner-bubble.ts `nameAccent`). */
   accentOf(id: number): string;
+  /** Member `id`'s own colour, its slime's (Raphael's blue for 0): what stands for it on a report. */
+  colorOf(id: number): string;
   /** The open member, as the list has it. */
   member(): Member;
   /** Existing groups sorted by position. */
@@ -572,6 +574,7 @@ export function createMembers(host: MembersHost): MembersShell {
       return found ? faceHTML(found, size, { cls: "sys-face" }) : "";
     },
     accentOf: id => nameAccent(memberOf(list, id) ?? { id }),
+    colorOf: id => memberColor(memberOf(list, id) ?? { id }),
     member,
     select,
     load,

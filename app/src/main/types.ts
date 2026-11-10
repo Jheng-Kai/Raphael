@@ -394,7 +394,23 @@ export interface PageCard {
   source: "html" | "mcp";
   server: string | null;
   fallback: string;
+  /** A report is drawn by the app from checked content (report-page.ts) and shows as a link card; a page runs in a frame. */
+  kind?: "page" | "report";
 }
+
+/** A report page's content as the core keeps it (core agent/report_page.py): every value is plain text. */
+export type ReportStatus = "running" | "done" | "pending" | "waiting" | "blocked" | "paused" | "failed";
+export interface ReportItem { title: string; text?: string; status?: ReportStatus; label?: string }
+export interface ReportRow { cells: string[]; group?: string; member_id?: number; status?: ReportStatus; label?: string }
+export interface ReportNode { id: string; member_id?: number; owner?: true; name?: string; note?: string }
+export interface ReportEdge { from: string; to: string; label?: string }
+export type ReportSection =
+  | { kind: "findings"; title?: string; callout?: string; items: ReportItem[] }
+  | { kind: "table"; title?: string; columns: string[]; rows: ReportRow[]; status_title?: string }
+  | { kind: "team"; title?: string; nodes: ReportNode[]; edges: ReportEdge[]; notes?: { label: string; text: string }[] }
+  | { kind: "text"; title?: string; text: string };
+export interface Report { as_of: string; sections: ReportSection[] }
+export interface ReportOpened { kind: "report"; title: string; rev: number; report: Report }
 
 export interface PageOpened {
   url: string;

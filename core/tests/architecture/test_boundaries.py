@@ -6,6 +6,7 @@ from pathlib import Path
 
 from raphael_core.agent.harness_tools import DEFINITIONS, definitions_for
 from raphael_core.agent.team_admin import DEFINITIONS as ADMIN
+from raphael_core.agent.team_admin import TEAM_READS
 
 ROOT = Path(__file__).resolve().parents[3]
 SRC = ROOT / "core/src/raphael_core"
@@ -45,7 +46,7 @@ def test_every_owner_private_speaker_has_the_same_management_and_work_tools():
             speaker = Speaker(id=identifier, capabilities=frozenset({"chief"}) if chief else frozenset(), role="r")
             tools = dict(definitions_for(speaker))
             assert set(ADMIN) <= tools.keys()
-            assert set(ADMIN) - {"team_overview"} == set(tools) & MANAGEMENT_TOOLS
+            assert set(ADMIN) - TEAM_READS == set(tools) & MANAGEMENT_TOOLS
             for name in MEMBER_ONLY_TOOLS:
                 assert (name in tools) == (identifier > 0)
             assert "member_id" not in tools["routine_create"]["parameters"]["properties"]

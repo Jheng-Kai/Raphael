@@ -181,7 +181,9 @@ class PageStore:
             self._revision(page_id)
         return self.get(page_id)
 
-    def update(self, page_id, html, title=None):
+    def update(self, page_id, html, title=None, tool_input=None):
+        """Replace a page's HTML; `tool_input` replaces what it was made from too (a report's content, or {} once it
+        becomes plain HTML)."""
         page = self.get(page_id)
         if page is None:
             raise PageError("gone", "The page is gone; use show_page to create another")
@@ -189,9 +191,11 @@ class PageStore:
         title = page["title"] if title is None else checked_text(title, "title", 320, required=True)
         if len(title) > 80:
             raise PageError("too_large", "title exceeds 80 characters; shorten it and try again")
+        inputs = json.dumps(page["tool_input"] if tool_input is None else tool_input, ensure_ascii=False)
+        checked_text(inputs, "tool_input", 64 * 1024)
         with self.conn:
-            self.conn.execute("UPDATE pages SET html=?, title=?, rev=rev+1, updated_at_ms=? WHERE id=?",
-                              (html, title, self.now_ms(), page_id))
+            self.conn.execute("UPDATE pages SET html=?, title=?, tool_input=?, rev=rev+1, updated_at_ms=? WHERE id=?",
+                              (html, title, inputs, self.now_ms(), page_id))
             self._revision(page_id)
         return self.get(page_id)
 
@@ -212,8 +216,14 @@ class PageStore:
         return found
 
 
+def is_report(page):
+    """A report page (agent/report_page.py): its content is structured, kept as its tool_input, and the app draws it."""
+    return page["source"] == "html" and isinstance(page["tool_input"], dict) and "report" in page["tool_input"]
+
+
 def card(page):
-    return {key: page[key] for key in ("id", "title", "rev", "height", "source", "server", "fallback")}
+    return {**{key: page[key] for key in ("id", "title", "rev", "height", "source", "server", "fallback")},
+            "kind": "report" if is_report(page) else "page"}
 
 
 class PageHost:
@@ -311,6 +321,9 @@ class Pages:
         result = card(page)
         result.pop("fallback")
         result.pop("id")
+        if result["kind"] == "report":
+            # The app draws a report itself from its checked content: no frame, so the host is not started for it.
+            return {**result, "report": page["tool_input"]["report"]}
         result["url"] = await self.host.url(page["id"], theme)
         if page["source"] == "mcp":
             result.update(tool_input=page["tool_input"], tool_result=page["tool_result"], tool=page["tool"])

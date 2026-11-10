@@ -4831,6 +4831,80 @@ export function checkRendered(name, context = {}) {
     require(!document.querySelector(".pg-card .pg-body iframe"), "there is one frame, moved, not a second one");
     return { check: name };
   }
+  if (name.startsWith("page-report")) {
+    const overlaps = (a, b) => a.left < b.right - 0.5 && b.left < a.right - 0.5 && a.top < b.bottom - 0.5 && b.top < a.bottom - 0.5;
+    const view = document.querySelector(".page-agent .rp-view"), stage = document.querySelector(".page-agent .ra-stage");
+    const scroller = stage.querySelector(":scope > .ra-scroll"), link = document.querySelector(".page-agent .pg-link");
+    if (name === "page-report-card") {
+      require(link?.tagName === "BUTTON" && link.classList.contains("attachment-file"), "the report is the reply's file card, a real button");
+      require(link.querySelector(".me-file-t")?.textContent === "團隊總覽報告" && link.querySelector("small")?.textContent === "頁面", "its title and 「頁面」");
+      require(link.querySelector("svg.i"), "with the page's icon");
+      require(!document.querySelector(".page-agent .pg-card") && !(view && !view.hidden), "no frame, and nothing opens until it is pressed");
+      const line = link.closest(".tn, [data-key]").getBoundingClientRect(), box = link.getBoundingClientRect();
+      require(box.left >= line.left && box.right <= line.right + 1, "the card stays inside the reply");
+      // The file card's own measure: at least 56 px, as tall as its two lines of words.
+      require(getComputedStyle(link).minHeight === "56px" && box.height >= 56 && box.height <= 60, `the file card's height: ${box.height}`);
+      return { check: name, width: Math.round(box.width) };
+    }
+    require(view, "the report view exists");
+    if (name === "page-report-closed") {
+      require(view.hidden && !stage.classList.contains("is-report"), "the report is put away");
+      require(getComputedStyle(scroller).visibility === "visible", "the thread is in sight again");
+      require(document.activeElement === link, "the focus is back on the card that opened it");
+      const box = link.getBoundingClientRect(), area = scroller.getBoundingClientRect();
+      require(box.top >= area.top && box.bottom <= area.bottom, "the card is where it was, in sight");
+      return { check: name };
+    }
+    require(!view.hidden && stage.classList.contains("is-report"), "the report is open in the conversation's place");
+    require(getComputedStyle(scroller).visibility === "hidden", "the thread is out of sight under it");
+    const dock = stage.querySelector(":scope > .ra-dock"), composer = dock.querySelector(".composer");
+    require(composer && visible(composer), "the member's composer stays below the report");
+    require(view.getBoundingClientRect().bottom <= dock.getBoundingClientRect().top + 1, "the report ends where the composer begins");
+    const page = view.querySelector(":scope > .rp-scroll");
+    require(page.scrollWidth <= page.clientWidth + 1, "nothing runs out sideways");
+    require(getComputedStyle(page).maskImage.includes("gradient"), "what scrolls away fades before the header, as the thread does");
+    if (name === "page-report-open") {
+      require(document.querySelector(".rp-title")?.textContent === "團隊總覽報告", "its title");
+      const sub = document.querySelector(".rp-sub")?.textContent ?? "";
+      require(/^資料截至 \d{4}\/\d\d\/\d\d \d\d:\d\d · 只寫有紀錄的事實$/.test(sub), `the time its data is from, and that it states recorded facts only: ${sub}`);
+      const toc = [...document.querySelectorAll(".rp-toc a")].map(entry => entry.textContent);
+      require(toc.join("|") === "重點發現|總覽表|分工與協作", `its contents: ${toc}`);
+      require(visible(document.querySelector(".rp-callout")), "the summary box above the findings");
+      const words = [...document.querySelectorAll(".rp-items .rp-st")].map(word => getComputedStyle(word).color);
+      require(words.length === 4 && new Set(words).size === 4, "four status words, each in its own colour");
+      const close = view.querySelector(".rp-close").getBoundingClientRect(), title = document.querySelector(".rp-title").getBoundingClientRect();
+      require(Math.round(close.width) === 36 && Math.round(close.height) === 36, "the × is the window edge's soft round button");
+      require(!overlaps(close, title), "the title clears the ×");
+      return { check: name, toc };
+    }
+    if (name === "page-report-team") {
+      const team = document.querySelector(".rp-sec[data-kind=team]"), top = team.getBoundingClientRect().top, from = page.getBoundingClientRect().top;
+      require(top >= from + 32 && top <= from + 48 || page.scrollTop + page.clientHeight >= page.scrollHeight - 1, "the contents brought the team to where the title stands, clear of the fade");
+      const draw = team.querySelector(".rp-team-draw"), box = draw.getBoundingClientRect(), column = team.getBoundingClientRect();
+      require(box.left >= column.left - 1 && box.right <= column.right + 1, "the diagram fits its column");
+      const nodes = [...draw.querySelectorAll(".rp-node")].map(node => ({ node, box: node.getBoundingClientRect() }));
+      require(nodes.length === 5, "one box for each of the five");
+      nodes.forEach((a, index) => nodes.slice(index + 1).forEach(b => require(!overlaps(a.box, b.box), "no box over another")));
+      const labels = [...draw.querySelectorAll(".rp-lab")].map(label => label.getBoundingClientRect());
+      require(labels.length === 6 && draw.querySelectorAll(".rp-lines > path").length === 6, "six arrows, each saying what passes along it");
+      labels.forEach((label, index) => {
+        nodes.forEach(({ box: node }) => require(!overlaps(label, node), "no label over a box"));
+        labels.slice(index + 1).forEach(other => require(!overlaps(label, other), "no label over another"));
+      });
+      require(new Set(nodes.map(({ node }) => getComputedStyle(node, "::before").backgroundColor)).size === 5, "each one's own colour down the left of its box");
+      require([...draw.querySelectorAll(".rp-node b")].map(name => name.textContent).join("|") === "Sam|拉斐爾|紫苑|小晴|小森", "the owner and the members by their names");
+      require([...team.querySelectorAll(".rp-notes dt")].map(term => term.textContent).join("|") === "重複|缺口", "overlaps and gaps under the diagram");
+      return { check: name, width: Math.round(box.width), height: Math.round(box.height) };
+    }
+    if (name === "page-report-tab") {
+      const rows = [...document.querySelectorAll(".rp-table tbody tr")];
+      require(rows.map(row => row.hidden).join() === "true,true,false,true", "only 語言學習's row is shown");
+      require(document.querySelector('.rp-table-box [data-report-tab="g1"]').getAttribute("aria-selected") === "true", "its tab is the chosen one");
+      const tabs = [...document.querySelectorAll(".rp-table-box [data-report-tab]")].map(tab => tab.textContent.replace(/\d+$/, ""));
+      require(tabs.join("|") === "全部|專案工作|語言學習|其他", `the groups as tabs: ${tabs}`);
+      return { check: name };
+    }
+  }
   if (name === "page-gone") {
     const failed = document.querySelector(".pg-failed");
     require(failed && !failed.hidden && failed.textContent.includes("NT$ 1,280"), "it says what it knows of the page");
