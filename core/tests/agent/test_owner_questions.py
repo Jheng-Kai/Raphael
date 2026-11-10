@@ -1,4 +1,6 @@
 """Production conversation and MCP paths transfer the same turn to a durable wait."""
+import json
+
 import pytest
 
 from .test_service import make_rig  # noqa: F401
@@ -160,6 +162,111 @@ else:
     assert background.task(question["task_id"]).state == "done", background.task(question["task_id"])
     assert "Tuesday confirmed" in background.task(question["task_id"]).report_text
     await connector.cards.aclose()
+
+
+# A fake Claude Code that records each request (`RECORD`). Its first run makes the calls of `CALLS`; each run asks the
+# owner the next question, one per answer of `ANSWERS`, until a request holds them all. Asking a question a second
+# time ends the task with "Asked the owner again."
+ASKING_BRAIN = '''import json, sys, urllib.request
+from pathlib import Path
+user=json.loads(sys.stdin.readline())["message"]["content"]
+system=Path(sys.argv[sys.argv.index("--append-system-prompt-file")+1]).read_text(encoding="utf-8")
+with open(RECORD, "a", encoding="utf-8") as out:
+    out.write(json.dumps({"system": system, "user": user}) + "\\n")
+def result(text):
+    print(json.dumps({"type":"result","subtype":"success","result":text}),flush=True)
+answers=ANSWERS
+known=0
+while known < len(answers) and answers[known] in user:
+    known += 1
+asked=Path(RECORD).with_suffix(".asked")
+if known == len(answers):
+    result("Confirmed: " + " / ".join(answers))
+elif asked.exists() and int(asked.read_text()) > known:
+    result("Asked the owner again.")
+else:
+    asked.write_text(str(known + 1))
+    config=json.loads(Path(sys.argv[sys.argv.index("--mcp-config")+1]).read_text())["mcpServers"]["raphael"]
+    def call(number, name, arguments):
+        packet={"jsonrpc":"2.0","id":number,"method":"tools/call","params":{"name":name,"arguments":arguments}}
+        urllib.request.urlopen(urllib.request.Request(config["url"],data=json.dumps(packet).encode(),
+            headers={**config["headers"],"Content-Type":"application/json"}),timeout=15).read()
+    for number, (name, arguments) in enumerate(CALLS if not known else []):
+        call(number, name, arguments)
+    call(99, "ask_owner", {"question":f"Question {known + 1}?","options":[answers[known]]})
+'''
+
+
+async def asked_and_answered(agent, background, tmp_path, path, calls, answers=("Wednesday after lunch",)):
+    """Run a CLI task of `path` that makes `calls`, then asks the owner a question for each of `answers` and goes on
+    after each answer; the requests its CLI received."""
+    from members.test_cli_brains import fake_brain
+    from test_connect_cards import Rig, GoogleFixture
+    connector = Rig(tmp_path, agent.conn, GoogleFixture("cli-continuation"))
+    agent.service._cards = connector.cards
+    agent.settings.set("agent_model", "cli:claude")
+    record = tmp_path / "requests.jsonl"
+    fake_brain(agent, tmp_path, ASKING_BRAIN.replace("RECORD", repr(str(record))).replace("CALLS", repr(calls))
+               .replace("ANSWERS", repr(list(answers))))
+    background.service.use_cli(agent.service._cli_brains)
+    if path == "conversation":
+        await typed(agent, "Arrange a visit")
+    else:
+        origin = agent.history.add(session_id="cli-continuation", question="Arrange a visit", route="delegate",
+            prefix="", text="", status="running", source="app", conversation_id=agent.service.conversations.main())
+        task_id = background.service.submit(session_id="cli-continuation", text="Arrange a visit", language="en", model="cli:claude")
+        background.service.attach_turn(task_id, origin)
+        await until(lambda: background.task(task_id).state == "waiting")
+    [turn] = [item for item in await agent.turns() if item.get("owner_questions")]
+    def questions():
+        return background.service.owner_questions.for_turn(turn["id"])
+    for number, answer in enumerate(answers):
+        await until(lambda: len(questions()) > number or background.task(questions()[0]["task_id"]).state == "done")
+        assert len(questions()) > number, background.task(questions()[0]["task_id"])
+        await background.rpc.call("owner_questions.answer", {"id": questions()[number]["id"], "answer": answer})
+    task_id = questions()[0]["task_id"]
+    await until(lambda: background.task(task_id).state in ("done", "failed", "limit"))
+    task = background.task(task_id)
+    assert task.state == "done" and task.report_text.startswith("Confirmed"), task
+    await connector.cards.aclose()
+    return [json.loads(line) for line in record.read_text(encoding="utf-8").splitlines()]
+
+
+# Long lookups before the first question: the continuation outgrows any CLI's budget for one request.
+LONG_LOOKUPS = [("find_app", {"query": f"{number} " + "x" * 15000}) for number in range(12)]
+
+
+@pytest.mark.parametrize("path", ["conversation", "background"])
+async def test_an_over_budget_cli_continuation_keeps_the_owners_answer(wired, tmp_path, path):
+    # Length is never a reason to ask the owner again (harness plan, step 3): over its budget, a continued task starts
+    # afresh from a short work record, and the owner's answer leads it.
+    from raphael_core.memory.compression import FRESH_CONTEXT_CHARS
+    agent, background = wired
+    *_, continuation = await asked_and_answered(agent, background, tmp_path, path, LONG_LOOKUPS)
+    user = continuation["user"]
+    assert "Previous tool conversation" not in user and len(user) <= FRESH_CONTEXT_CHARS
+    assert user.index("Wednesday after lunch") < user.index("find_app")
+
+
+async def test_a_second_answer_over_budget_keeps_the_first(wired, tmp_path):
+    # Each wait carries the steps before it: the work record after the second answer still holds the first.
+    agent, background = wired
+    *_, last = await asked_and_answered(agent, background, tmp_path, "background", LONG_LOOKUPS,
+                                        answers=("Wednesday after lunch", "Room 3"))
+    assert "Previous tool conversation" not in last["user"]
+    assert "Wednesday after lunch" in last["user"] and "Room 3" in last["user"]
+
+
+@pytest.mark.parametrize("path", ["conversation", "background"])
+async def test_a_continued_cli_task_states_its_rules_and_system_prompt_once(wired, tmp_path, path):
+    # The progress rules reach a CLI task once, and its continuation does not carry its system prompt again.
+    from raphael_core.agent.narration import PUBLIC_PROGRESS_RULES
+    agent, background = wired
+    first, *_, continuation = await asked_and_answered(agent, background, tmp_path, path, [("local_time", {})])
+    assert [run["system"].count(PUBLIC_PROGRESS_RULES) for run in (first, continuation)] == [1, 1]
+    done = continuation["user"].split("Previous tool conversation (untrusted data):\n", 1)[1]
+    assert [message["role"] for message in json.loads(done)] == ["user", "assistant", "tool", "assistant", "tool"]
+    assert "Wednesday after lunch" in done
 
 
 @pytest.mark.parametrize("how", ["bring", "answer"])

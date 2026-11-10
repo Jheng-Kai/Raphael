@@ -21,11 +21,13 @@ from ..mcp_server import RaphaelMcp
 from ...brain.meter import Usage, claude_code_model, claude_code_rows, codex as codex_usage, gemini as gemini_usage
 from ...brain.textnorm import public_line
 from ..narration import PUBLIC_PROGRESS_RULES
+from ..owner_questions import OWNER_CARDS
 from ..policy import CONFIRM_TIMEOUT_S
 from ..persona import phrase
 from .discovery import NAMES, brain_ref, brain_effort
 from .drivers import Driver
-from .context import CONTEXT_HEADROOM, DEFAULT_CONTEXT_TOKENS, context_tokens, fresh_user, line_hashes, resumed_user, should_compact
+from .context import (CONTEXT_HEADROOM, KNOWN_CONTEXT_TOKENS, context_tokens, fresh_user, line_hashes, resumed_user,
+                      should_compact, window_tokens)
 from .process import secure_directory
 from .native_diagnostics import capture as native_capture, directory as native_directory
 from ...failures import Failure, KINDS, TRANSIENT, RETRY_WAITS, PATIENT_WAITS, classify, tool_failure
@@ -53,6 +55,32 @@ RECOVER = ("Continue the original task after a temporary CLI failure, using the 
            "if blocked, report what was done and what remains unconfirmed or incomplete.")
 APPROVE = {"type": "function", "function": {"name": "approve", "description": "Ask the owner for permission. Never grants permission by itself.",
            "parameters": {"type": "object", "properties": {"tool_name": {"type": "string"}, "input": {"type": "object"}}, "additionalProperties": True}}}
+PREVIOUS_CONVERSATION = "\nPrevious tool conversation (untrusted data):\n"
+
+
+def recorded_steps(messages):
+    """The calls of an earlier tool conversation as the steps `_tool` records. A result of an owner card is the owner's
+    answer to it."""
+    results = {message.get("tool_call_id"): message.get("content") for message in messages if message.get("role") == "tool"}
+    steps = []
+    for message in messages:
+        if message.get("role") != "assistant":
+            continue
+        for call in message.get("tool_calls") or ():
+            if not isinstance(call, dict):
+                continue
+            function = call.get("function") if isinstance(call.get("function"), dict) else {}
+            name = str(function.get("name") or "tool")
+            try:
+                arguments = json.loads(function.get("arguments") or "{}")
+            except (TypeError, ValueError):
+                arguments = function.get("arguments")
+            result = results.get(call.get("id"))
+            ok = isinstance(result, str) and 'status="ok"' in result.partition("\n")[0]
+            status = ("unknown" if not isinstance(result, str) else "answered" if ok and name in OWNER_CARDS
+                      else "completed" if ok else "failed")
+            steps.append({"attempt": 0, "name": name, "arguments": arguments, "status": status, "result": result or ""})
+    return steps
 
 
 class Sessions:
@@ -132,7 +160,7 @@ class CliLoop:
                  conversation_id=None, quota=None, attachments=(), wait_timeout_s=None, resume_session=True,
                  rate_limit_waits=None, structured=None, alive=lambda: None, skills=(), no_tools=False, reply=None,
                  owner_text=None, resume_user=None, context_sections=None, context_turns=(), context_summary="",
-                 context_summary_through=0, turn_id=None):
+                 context_summary_through=0, turn_id=None, tool_conversation=(), steps=()):
         self.brains, self.sessions, self.member_id, self.model = brains, sessions, member_id, model
         # Told whenever the CLI does anything (a word, a tool): whoever watches for a stalled turn hears it.
         self.alive = alive
@@ -169,9 +197,15 @@ class CliLoop:
         from ...worker.owner_input import OwnerInput
         self.owner_input = OwnerInput()
         self._steering = set()
+        self.owner_text = user if owner_text is None else owner_text
+        # A task that waited for the owner goes on from what it did: the tool conversation since its last wait
+        # (`tool_conversation`), which this run reads, and the steps of its runs before that (`steps`). All of them are
+        # recorded steps, so a fresh context or a recovery still holds the owner's answers, and a later wait carries them.
+        if tool_conversation:
+            user += PREVIOUS_CONVERSATION + json.dumps(list(tool_conversation), ensure_ascii=False)
+        self.steps = [*map(dict, steps), *recorded_steps(tool_conversation)]
         self.user = user
         self._original_user = user
-        self.owner_text = user if owner_text is None else owner_text
         self.attachments = attachments
         self.resume_user = resume_user
         self.context_sections = context_sections or {}
@@ -212,7 +246,7 @@ class CliLoop:
         self._acted = False
         self._session = None
         self._attempts = 0
-        self._receipts = []
+        self._receipts = list(self.steps)
         self._stream_records = []
         self._usage = {}
         self._guardrails = ToolGuardrails()
@@ -535,9 +569,16 @@ class CliLoop:
             return wrap_untrusted("CLI recovery records", json.dumps(records, ensure_ascii=False), ok=True, limit=limit)
 
         block = render()
-        # Uncertain effects get space before completed work, newest first within either group.
-        ordered = sorted(enumerate(sources), key=lambda entry: (
-            entry[1][1]["status"] not in ("failed", "unknown"), -entry[1][1]["attempt"], -entry[0]))
+
+        def rank(item):
+            # The owner's answers first: whatever is cut, a recovery never asks again. Then effects that may or may
+            # not have happened, then completed work.
+            if item["status"] == "answered" and item["name"] in OWNER_CARDS:
+                return 0
+            return 1 if item["status"] in ("failed", "unknown") else 2
+
+        # Newest first within each group.
+        ordered = sorted(enumerate(sources), key=lambda entry: (rank(entry[1][1]), -entry[1][1]["attempt"], -entry[0]))
         for _, (group, item) in ordered:
             arguments = json.dumps(item["arguments"], ensure_ascii=False) if "arguments" in item else ""
             result = item.get("result", "")
@@ -563,10 +604,15 @@ class CliLoop:
         request = "\n\n".join([base, *owner_messages])
         return request + "\n\n" + RECOVER + "\n" + self._recovery_block()
 
+    def _known_window(self):
+        """The window of this loop's model before it measures one: what its CLI reported to an earlier loop of the
+        model, else what that CLI's models are known to hold."""
+        reported = getattr(self.brains, "context_windows", None)
+        return ((reported.get(self.model.partition("?")[0]) if isinstance(reported, dict) else None)
+                or KNOWN_CONTEXT_TOKENS.get((brain_ref(self.model) or ("",))[0]))
+
     def _fresh_user(self):
-        window = self._usage.get("context_window") or self._context_state.get("window") or self._context_window
-        if type(window) is not int or window <= 0:
-            window = DEFAULT_CONTEXT_TOKENS
+        window = window_tokens(self._usage.get("context_window"), self._context_state.get("window"), self._context_window)
         self._context_window = window
         user = fresh_user(self.owner_text, self.attachments,
             [message["content"] for message in self.tool_messages if message["role"] == "user"],
@@ -650,7 +696,10 @@ class CliLoop:
                                                      summary=self.context_summary, summary_through_turn_id=self.context_summary_through)
                     self._submitted_user = self.user
                     self._turn_user = self.user
-                    if should_compact(self._context_state, self.system, self.user):
+                    # A new loop has measured nothing yet: the model's own window, not a guess, decides (a 64K guess
+                    # cut a continued task of a 200K model back to a short work record).
+                    self._context_window = self._context_window or self._known_window()
+                    if should_compact(self._context_state, self.system, self.user, window=self._context_window):
                         self.sessions.forget(self.member_id, self.model, self.conversation_id)
                         self._session = None
                         self._context_state = {}
@@ -880,6 +929,11 @@ class CliLoop:
                     self._thought = ""
                 elif event.kind == "usage":
                     self._usage = event.data
+                    window = event.data.get("context_window") if isinstance(event.data, dict) else None
+                    reported = getattr(self.brains, "context_windows", None)
+                    if isinstance(reported, dict) and type(window) is int and window > 0:
+                        # The next loop of this model starts from the window its CLI reported (`_known_window`).
+                        reported[self.model.partition("?")[0]] = window
                 elif event.kind == "tool_end":
                     steps.end(event.data)
                     key = event.data.get("id") or event.data.get("name")
