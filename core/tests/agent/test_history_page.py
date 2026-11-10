@@ -65,7 +65,7 @@ async def test_history_page_projection_profile(tmp_path, size, loaded):
             'response_kib': len(json.dumps(views).encode()) / 1024, 'median_ms': statistics.median(samples),
             'selects': sum(tables.values()), 'selects_by_table': dict(tables), 'top_cumulative_ms': top}))
         assert len(views) == size and all(len(view['messages']) == 4 for view in views)
-        assert sum(tables.values()) == 20
+        assert sum(tables.values()) == 18
         assert tables['WORKER_TASKS'] == 2
         assert tables['MESSAGE_REACTIONS'] == tables['OWNER_QUESTIONS'] == 1
     finally:

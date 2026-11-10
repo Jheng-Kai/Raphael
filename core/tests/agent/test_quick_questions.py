@@ -137,38 +137,19 @@ async def test_overlay_retains_full_quick_history_below_half_window(make_rig, cl
     assert client.chat_calls[-1]["reasoning_effort"] == "low"
 
 
-async def test_latency_logs_only_timings_and_waits_for_actual_sound(make_rig, client, caplog):
-    class DelayedVoice:
-        on_state = None
-
-        def speaks(self):
-            return True
-
-        def stop(self):
-            pass
-
-        async def say(self, *args, **kwargs):
-            self.turn = kwargs["turn_id"]
-            # The speech service can return before playback when its wait expires.
-
-    voice = DelayedVoice()
-    rig = make_rig(speaker=voice)
+async def test_latency_logs_only_timings(make_rig, client, caplog):
+    rig = make_rig()
     client.decisions.append(decision("unclear"))
-    client.chats.append(chat('{"progress":"Public step","prefix":"Answer","text":"PRIVATE_WORD_SENTINEL","say_ja":"はい"}'))
+    client.chats.append(chat('{"progress":"Public step","prefix":"Answer","text":"PRIVATE_WORD_SENTINEL"}'))
     caplog.set_level("INFO", logger="raphael_core.agent.service")
-    result = await rig.call("agent.ask", {"session_id": "timed", "text": "QUESTION_SENTINEL", "ui_language": "en", "transcript_ms": 25,
-                                          "destination": "quick"})
+    await rig.call("agent.ask", {"session_id": "timed", "text": "QUESTION_SENTINEL", "ui_language": "en", "transcript_ms": 25,
+                                 "destination": "quick"})
     records = [r for r in caplog.records if r.msg == "Quick latency ms: %s"]
     trace = json.loads(records[-1].args[0])
-    assert trace["speech_start"] is None
+    assert "speech_start" not in trace
     assert 25 <= trace["routing"] <= trace["first_step"] <= trace["final_answer"]
-    await asyncio.sleep(0)
-    voice.on_state(result["turn_id"], "playing")
-    voice.on_state(result["turn_id"], "done")
-    records = [r for r in caplog.records if r.msg == "Quick latency ms: %s"]
-    assert json.loads(records[-1].args[0])["speech_start"] >= trace["final_answer"]
     assert "SENTINEL" not in " ".join(r.getMessage() for r in records)
-    assert not rig.service._speech_traces
+    assert not rig.service._latency_traces
 
 
 @pytest.mark.parametrize("source", ["voice", "app"])

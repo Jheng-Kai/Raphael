@@ -412,23 +412,6 @@ class Tools:
         data = {"file": number, "kind": kind, **found}
         return ToolResult("read_attachment", True, data, untrusted=True, detail=found.get("limitation_kind", kind))
 
-    async def generate_audio(self, arguments: dict, store) -> ToolResult:
-        from ..services.tts import MAX_TEXT_CHARS
-        text, voice = arguments.get("text"), arguments.get("voice")
-        if (not isinstance(text, str) or not text.strip() or len(text) > MAX_TEXT_CHARS
-                or (voice is not None and (not isinstance(voice, str) or not voice.strip() or len(voice) > 200))):
-            return self._failed("generate_audio", "bad_arguments")
-        if self.services is None or store is None:
-            return self._failed("generate_audio", "not_configured")
-        try:
-            file = await asyncio.wait_for(self.services.audio_file(text, voice=voice), 120)
-            saved = await asyncio.to_thread(store.save, file)
-        except TimeoutError:
-            return self._failed("generate_audio", "timeout", self.services.tts_service())
-        except ServiceError as error:
-            return self._failed("generate_audio", error.kind, self.services.tts_service())
-        return ToolResult("generate_audio", True, {"attachment": saved.metadata()}, detail=self.services.tts_service())
-
     async def look(
         self,
         images: list[Attachment],

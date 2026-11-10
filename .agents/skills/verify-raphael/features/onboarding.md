@@ -62,7 +62,7 @@ Rigurd — owner 2026-11-08; gone below 640px wide), the choice, one wide black 
    when the login never answers; lists the core does not answer within 15 s turn into 重試 (owner,
    2026-11-08: the step spun on after a cancelled Slack sign-in).
 3. **Abilities** (`onboarding-abilities`, `onboarding-abilities-choice`): the shared abilities
-   of Settings > Tools (web search, reading web pages, images, PDFs, speech) as the very rows and
+   of Settings > Tools (web search, reading web pages, images and PDFs; no speech since 2026-11-10) as the very rows and
    dialogs of that pane (`createServices`): each says which service it uses, keeps its switch and
    opens, inside the card, the choice of service with its key, and for images the model picker.
 

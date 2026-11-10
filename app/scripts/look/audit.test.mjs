@@ -43,28 +43,6 @@ describe("rendered look checks", () => {
     } finally { vi.unstubAllGlobals(); browser.happyDOM.abort(); }
   });
 
-  it("returns the voice call check result without falling through and rejects unknown call checks", () => {
-    const browser = new Window();
-    browser.document.body.innerHTML = '<div class="page-agent"><div data-mount="background-questions"></div><form class="composer"><div class="vc-failure" hidden></div><button class="cmp-voice" data-voice-call-start="true" data-tooltip="按住說話；點一下開始語音對話" aria-label="按住說話；點一下開始語音對話"></button></form><div class="message-tooltip">按住說話；點一下開始語音對話</div></div>';
-    const entry = browser.document.querySelector("button");
-    for (const element of [entry, browser.document.querySelector('.message-tooltip')]) {
-      element.checkVisibility = () => true;
-      element.getBoundingClientRect = () => ({width:32,height:32});
-    }
-    browser.__look = {calls:[]};
-    vi.stubGlobal("window", browser);
-    vi.stubGlobal("document", browser.document);
-    try {
-      expect(checkRendered("voice-call-idle")).toEqual({check:"voice-call-idle"});
-      const composer = browser.document.querySelector('.composer'), failure = browser.document.querySelector('.vc-failure');
-      composer.before(failure);
-      expect(() => checkRendered("voice-call-idle")).toThrow("background questions remain directly above");
-      composer.prepend(failure);
-      entry.dataset.tooltip = "Start voice chat";
-      expect(() => checkRendered("voice-call-idle")).toThrow("explains both gestures");
-      expect(() => checkRendered("voice-call-unknown")).toThrow("known voice call check");
-    } finally { vi.unstubAllGlobals(); browser.happyDOM.abort(); }
-  });
   it("rejects split text edges, mismatched controls and centered location values", () => {
     const browser = new Window();
     browser.document.body.innerHTML = '<div class="computer-location-popover"><p class="computer-location-purpose">Shared scope</p><div class="lbl"><div class="t">Computer location</div></div><button class="sel"><span>Local</span></button><label class="field"><input></label></div>';

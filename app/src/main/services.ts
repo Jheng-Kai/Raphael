@@ -1,8 +1,7 @@
-// Shared search, reading, vision, PDF and speech services are configured in Settings > Tools.
+// Shared search, reading, vision and PDF services are configured in Settings > Tools.
 // Each capability uses the existing connection rows and service dialog. Keys are sent once to
 // services.set_key and never retained in view state. The core returns configuration status only.
-// Raphael's voice model and preview live in his member details, using the same controller and
-// existing tts_fish_voice setting. servicesHTML draws snapshots; createServices owns actions.
+// servicesHTML draws snapshots; createServices owns actions.
 
 import { noticeHTML } from "./missing";
 import * as api from "./api";
@@ -21,7 +20,6 @@ export const CAPABILITIES = [
   { kind: "read", icon: "globe", enabled: "web_read_enabled", setting: "web_read_service", on: true, label: () => t("services.read"), about: () => t("services.readAbout") },
   { kind: "vision", icon: "image", enabled: "vision_enabled", setting: "vision_model", on: true, label: () => t("services.vision"), about: () => t("services.visionAbout") },
   { kind: "pdf", icon: "file", enabled: "pdf_enabled", setting: "pdf_service", on: true, label: () => t("services.pdf"), about: () => t("services.pdfAbout") },
-  { kind: "voice", icon: "voice", enabled: "tts_enabled", setting: "tts_service", on: false, label: () => t("services.voice"), about: () => t("services.voiceAbout") },
 ] as const satisfies readonly {
   kind: keyof ServicesStatus;
   icon: IconName;
@@ -51,13 +49,12 @@ const NAMES: Record<string, string> = {
   searxng: "SearXNG",
   jina: "Jina",
   firecrawl: "Firecrawl",
-  fish: "Fish Audio",
 };
 
 /** Each named service uses its own brand mark from service-icons.ts. */
 const MARKS: Record<string, ServiceIconId> = {
   openrouter: "openrouter", brave: "brave", tavily: "tavily", exa: "exa",
-  searxng: "searxng", jina: "jina", firecrawl: "firecrawl", fish: "fish",
+  searxng: "searxng", jina: "jina", firecrawl: "firecrawl",
 };
 
 /** App-owned pictures for local reading and the two model choices. */
@@ -72,7 +69,6 @@ const WHY: Record<string, MessageKey> = {
   "search.exa": "services.why.searchExa", "search.searxng": "services.why.searchSearxng",
   "read.builtin": "services.why.readBuiltin", "read.jina": "services.why.readJina", "read.firecrawl": "services.why.readFirecrawl", "read.tavily": "services.why.readTavily",
   "pdf.builtin": "services.why.pdfBuiltin", "pdf.openrouter": "services.why.pdfOpenrouter",
-  "voice.fish": "services.why.voiceFish",
   "vision.same": "services.why.visionSame", "vision.model": "services.why.visionModel",
 };
 const tr = t as unknown as (key: MessageKey) => string;
@@ -101,13 +97,6 @@ export const emptyServicesView = (): ServicesView => ({ status: "loading", busy:
 export const keyInputId = (service: string): string => `svc-key-${service}`;
 /** The id of SearXNG's address field. */
 export const URL_INPUT_ID = "svc-url";
-/** The id of the field of the Fish Audio voice model. */
-export const VOICE_INPUT_ID = "svc-voice-id";
-/** A Fish Audio voice model is 32 hexadecimal characters (the core checks the same). */
-const VOICE_ID = /^[0-9a-f]{32}$/i;
-
-/** Whether `text` may be the id of a voice model: blank (none yet) or 32 hexadecimal characters. */
-export const isVoiceId = (text: string): boolean => text.trim() === "" || VOICE_ID.test(text.trim());
 
 /** Whether `text` may be SearXNG's address: blank (none), or an http(s) URL. */
 export function isServiceUrl(text: string): boolean {
@@ -131,7 +120,7 @@ const shortModel = (id: string): string => id.slice(id.lastIndexOf("/") + 1);
 /**
  * Whether the owner has `kind` on. The settings the window holds are the freshest (they change the
  * moment a switch is turned, while the status is read again a moment later); the core's status
- * says it when the settings are not there yet, and the default (on, but the voice) before that.
+ * says it when the settings are not there yet, and the default (on) before that.
  */
 export function isOn(kind: Capability, status: ServicesStatus | null, brain: BrainSettings | null): boolean {
   const entry = capability(kind)!;
@@ -155,30 +144,26 @@ export interface ServiceRow {
   note: string;
   /** In use: the one the capability stands on. */
   chosen: boolean;
-  /** It can be used now: it has what it needs (a key, an address, a voice model). */
+  /** It can be used now: it has what it needs (a key, an address). */
   usable: boolean;
   /** It has a mark of its own in the app. */
   mark: ServiceIconId | null;
 }
 
 /** What a service says of itself under its name. */
-function noteOf(kind: Capability, option: ServiceOption, status: ServicesStatus): string {
+function noteOf(option: ServiceOption): string {
   if (option.id === "searxng") return t(option.url_set ? "services.keySet" : "services.needUrl");
-  if (option.needs_key) {
-    if (!option.has_key) return t("services.needKey");
-    return kind === "voice" && !status.voice.fish_voice_set ? t("services.needVoice") : t("services.keySet");
-  }
+  if (option.needs_key) return t(option.has_key ? "services.keySet" : "services.needKey");
   if (option.key_optional) return t(option.has_key ? "services.keySet" : "services.noKey");
   if (option.id === "builtin") return t("services.local");
   if (option.id === "openrouter") return t("services.shared");
   return "";
 }
 
-/** Whether `option` can be used now: its key is stored (when it needs one), SearXNG's address is set, the voice has its model. */
-export function usableOption(kind: Capability, option: ServiceOption, status: ServicesStatus): boolean {
+/** Whether `option` can be used now: its key is stored (when it needs one), SearXNG's address is set. */
+export function usableOption(option: ServiceOption): boolean {
   if (option.needs_key && !option.has_key) return false;
   if (option.id === "searxng" && !option.url_set) return false;
-  if (kind === "voice" && !status.voice.fish_voice_set) return false;
   return true;
 }
 
@@ -199,9 +184,9 @@ export function serviceRows(kind: Capability, status: ServicesStatus | null, bra
   return status[kind].options.map((option) => ({
     id: option.id,
     name: serviceName(option.id),
-    note: noteOf(kind, option, status),
+    note: noteOf(option),
     chosen: option.id === chosen,
-    usable: usableOption(kind, option, status),
+    usable: usableOption(option),
     mark: MARKS[option.id] ?? null,
   }));
 }
@@ -274,17 +259,6 @@ function urlLineHTML(option: ServiceOption, v: ServicesView, url: string): strin
     `<div class="svc-line" data-svc-line="${esc(option.id)}">` +
     fieldHTML("https://…", url, { id: URL_INPUT_ID, label: t("services.url", { p0: name }), disabled: v.busy === option.id }) +
     actionRow({ primary: { label: esc(t("services.save")), attrs: ` data-svc="url" data-service="${esc(option.id)}"${off}` } }) +
-    `</div>`
-  );
-}
-
-/** The id of the voice model (the setting, no secret), saved with its own 「儲存」. */
-export function voiceLineHTML(v: ServicesView, voice: string): string {
-  const off = v.busy === "voice" ? " disabled" : "";
-  return (
-    `<div class="svc-line" data-svc-line="voice">` +
-    fieldHTML(t("services.voiceId"), voice, { id: VOICE_INPUT_ID, label: t("services.voiceId"), disabled: v.busy === "voice" }) +
-    actionRow({ secondary: btn(esc(t("conn.tryIt")), "", ` data-svc="try" data-service="fish"${off}`), primary: { label: esc(t("services.save")), attrs: ` data-svc="voice" data-service="fish"${off}` } }) +
     `</div>`
   );
 }
@@ -510,7 +484,7 @@ export function createServices(host: ServicesHost): ServicesPanel {
 
   /**
    * The switch of `kind`: off turns it off; on turns it on when the service in use can be used, and
-   * otherwise opens that service's settings (there is a key, an address or a voice model to give).
+   * otherwise opens that service's settings (there is a key or an address to give).
    */
   async function toggle(kind: Capability): Promise<void> {
     const entry = capability(kind);
@@ -557,7 +531,7 @@ export function createServices(host: ServicesHost): ServicesPanel {
     await load();
   }
 
-  // ----- keys, the address and the voice -----
+  // ----- keys and the address -----
 
   /**
    * Sends the key typed for `service` to the vault. The field is emptied first, so that the key is
@@ -594,51 +568,6 @@ export function createServices(host: ServicesHost): ServicesPanel {
     }
     busy = null;
     await load();
-  }
-
-  /** Saves the id typed for the voice model (`tts_fish_voice`); the core says the rest. Whether it was saved. */
-  async function saveVoice(): Promise<boolean> {
-    if (busy !== null || typeof document === "undefined") return false;
-    const input = document.getElementById(VOICE_INPUT_ID) as HTMLInputElement | null;
-    if (!input) return false;
-    const id = input.value.trim();
-    if (!isVoiceId(id)) {
-      toaster.info(t("services.voiceInvalid"));
-      return false;
-    }
-    busy = "voice";
-    redraw();
-    try {
-      await host.changeSetting("tts_fish_voice", id);
-      return true;
-    } catch (error) {
-      toaster.info(describeError(error));
-      return false;
-    } finally {
-      busy = null;
-      await load();
-    }
-  }
-
-  /** 「Try it」: saves the id as typed, then has Raphael say the sample line; a refusal is told in a few words. */
-  async function tryVoice(): Promise<void> {
-    if (busy !== null) return;
-    if (!(await saveVoice())) return;
-    try {
-      const done = await api.ttsPreview(t("services.voiceSample"));
-      if (done.ok) return;
-      toaster.info(
-        done.kind === "not_configured"
-          ? t("services.voiceNeedId")
-          : done.kind === "missing_secret"
-            ? t("services.voiceNeedKey")
-            : done.kind === "auth"
-              ? t("services.voiceAuth")
-              : t("services.voiceFailed"),
-      );
-    } catch (err) {
-      toaster.info(describeError(err));
-    }
   }
 
   async function saveUrl(): Promise<void> {
@@ -696,17 +625,11 @@ export function createServices(host: ServicesHost): ServicesPanel {
       case "url":
         void saveUrl();
         return true;
-      case "voice":
-        void saveVoice();
-        return true;
-      case "try":
-        void tryVoice();
-        return true;
     }
     return false;
   }
 
-  /** Esc closes the dialog; Enter in a key's field sends it, as 「儲存」 does; Enter in the address or the voice id saves it. */
+  /** Esc closes the dialog; Enter in a key's field sends it, as 「儲存」 does; Enter in the address saves it. */
   function key(e: KeyboardEvent): boolean {
     const panel = typeof document !== "undefined" ? (host.root ?? document).querySelector<HTMLElement>("#svc-dialog") : null;
     if (e.key === "Escape" && panel && !isTopLayer(panel)) return false;
@@ -720,11 +643,6 @@ export function createServices(host: ServicesHost): ServicesPanel {
     if (input.id === URL_INPUT_ID) {
       e.preventDefault();
       void saveUrl();
-      return true;
-    }
-    if (input.id === VOICE_INPUT_ID) {
-      e.preventDefault();
-      void saveVoice();
       return true;
     }
     if (!input.id.startsWith("svc-key-")) return false;

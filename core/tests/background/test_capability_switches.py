@@ -72,5 +72,5 @@ async def test_what_the_owner_turned_off_is_not_offered_to_a_task_at_all(web_rig
 
 def test_the_snapshot_leaves_out_what_it_is_told_is_off_whoever_the_speaker():
     snapshot = take_snapshot(None, attachments=True, turned_off={"web_search", "read_attachment"})
-    assert names(snapshot) == ["weather", "local_time", "web_read", "generate_audio", "self_check", "raphael_help",
+    assert names(snapshot) == ["weather", "local_time", "web_read", "self_check", "raphael_help",
                                "calendar_list", "calendar_add", "calendar_update", "calendar_delete", "connections_list", "ask_owner", "connect_app", "connect_messaging", "email_draft", "find_app", "request_secret", "show_page", "update_page", "routine_create", "routine_delete", "routine_list", "routine_update", "find_tools"]

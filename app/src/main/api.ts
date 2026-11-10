@@ -177,13 +177,6 @@ export interface AgentHistoryQuery {
 }
 
 /** The turns of the conversations, newest first. */
-export const voiceCallStart = (member_id: number, conversation_id: number, ui_language: string): Promise<{call?: import("./voice-chat").VoiceCall; busy?: import("./voice-chat").VoiceCall; failure?: string}> => core("voice_chat.start", {member_id, conversation_id, ui_language});
-export const voiceCallStatus = (): Promise<{call: import("./voice-chat").VoiceCall | null; ended?: import("./voice-chat").VoiceCall | null}> => core("voice_chat.status");
-export const voiceCallEnd = (call_id: string): Promise<{summary_id?: number}> => core("voice_chat.end", {call_id});
-export const voiceCallMute = (call_id: string, muted: boolean): Promise<{call: import("./voice-chat").VoiceCall}> => core("voice_chat.mute", {call_id, muted});
-export const voiceCallSettings = (call_id: string, settings: {voice?: string; speed?: number; language?: string}): Promise<{call: import("./voice-chat").VoiceCall}> => core("voice_chat.settings", {call_id, ...settings});
-export const voiceCallFeedback = (call_id: string, rating: "good" | "bad"): Promise<{ok: boolean}> => core("voice_chat.feedback", {call_id, rating});
-
 export const agentHistoryList = (q: AgentHistoryQuery = {}): Promise<{ turns: AgentTurn[]; pending_questions?: OwnerQuestion[]; delta?: boolean; removed_ids?: number[]; has_more?: boolean; next_after_id?: number }> => core("agent.history.list", q);
 /** What the owner typed into a composer, newest first, whichever conversation or room it went to (the arrow keys of a composer walk it). */
 export const agentSent = async (limit = 50): Promise<string[]> => (await core<{ texts: string[] }>("agent.history.sent", { limit })).texts;
@@ -362,9 +355,6 @@ export const servicesStatus = (): Promise<ServicesStatus> => core("services.stat
 export const servicesSetKey = (service: string, key: string): Promise<{ ok: boolean }> => core("services.set_key", { service, key });
 /** Deletes the key of `service` from the vault. */
 export const servicesClearKey = (service: string): Promise<{ ok: boolean }> => core("services.clear_key", { service });
-
-/** Speaks `text` (a short line, at most 200 characters) in the voice that is set up; `kind` says why it could not. */
-export const ttsPreview = (text: string): Promise<{ ok: boolean; kind?: string }> => core("tts.preview", { text });
 
 // ---------- connections (the plugins and the store) ----------
 
@@ -598,4 +588,3 @@ export const membersSkillsDelete = (memberId: number, id: number): Promise<unkno
 export const membersCommandsList = (memberId: number): Promise<{ commands: import("./types").MemberCommand[] }> => core("members.commands.list", { member_id: memberId });
 export const membersCommandsSave = (memberId: number, command: Omit<import("./types").MemberCommand, "id"> & { id?: number }): Promise<unknown> => core("members.commands.save", { member_id: memberId, ...command });
 export const membersCommandsDelete = (memberId: number, id: number): Promise<unknown> => core("members.commands.delete", { member_id: memberId, id });
-export const membersVoices = (): Promise<{ voices: import("./types").MemberVoice[]; configured: boolean }> => core("members.voices");

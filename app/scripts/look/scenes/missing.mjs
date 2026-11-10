@@ -8,7 +8,6 @@ const turn = {id: 502, session_id: "look-missing", member_id: 1, conversation_id
   steps: [{kind: "tool", tool: "web_search", server: "Raphael", outcome: "error", reason: "not_configured", detail: "searxng", ms: 20, at_ms: 1792807155000, missing: prerequisite}]};
 // What a step was missing stands in sight with its repair: the work it was part of is never opened (owner, 2026-11-10).
 const search = [member(1), wait('.page-agent:not([hidden]) .turn-prerequisites .missing-note')];
-const voice = {action: "main-event", event: {type: "SetupMissing", missing: {resource: "fish", requirement: "setup", state: "missing", repair: "voice"}}};
 const cause = (reason, detail, missing, outcome = "error") => ({...turn, steps: [{kind: missing.requirement === "provider" ? "model" : "tool", tool: missing.resource === "openrouter" ? "provider" : "read_attachment", server: "Raphael", reason, detail, outcome, missing, ms: 20}]});
 const provider = {resource: "openrouter", requirement: "provider", state: "broken", repair: "models"};
 export default [
@@ -26,8 +25,6 @@ export default [
   scene("missing-mail", "A mail draft with no sender links to the existing store", [member(1), wait('.mail-card .missing-note'), check("missing-mail")], {mailDraft: "draft", missingMail: true}),
   scene("missing-search", "A persisted step keeps a missing SearXNG address visible with its one exact repair", [...search, check("missing-search")], {turns: [turn], missingSearch: true}),
   scene("missing-search-repair", "The step opens the existing SearXNG URL field", [...search, click('[data-missing-repair="search"]'), wait('#svc-url'), check("missing-search-repair")], {turns: [turn], missingSearch: true}),
-  scene("missing-voice", "A failed ordinary read-aloud offers Fish Audio setup in the shared notice", [member(1), voice, wait('.toast .missing-note'), check("missing-voice")]),
-  scene("missing-voice-repair", "The read-aloud notice opens the shared Fish Audio key form", [member(1), voice, wait('.toast .missing-note'), click('.toast [data-missing-repair="voice"]'), wait('#svc-key-fish'), check("missing-voice-repair")]),
   scene("missing-vision", "Same-as-answer says why an incompatible image model cannot be used", [...settings("tools"), click('button[data-svc="open"][data-id="vision"]'), wait('#svc-dialog'), click('[data-svc="service"][data-service="same"]'), wait('#svc-dialog .missing-note'), check("missing-vision")], {missingVision: true}),
   scene("missing-model-list", "A signed-in account with no models offers reload and account settings", [...settings("models"), click('.modal-scrim [data-row="quick-model"] .mp-trigger'), wait('.model-chooser'), click('[data-source="cli:codex"]'), wait('[data-dlg="reload"]'), check("missing-model-list")], {missingModelList: true}),
 ];

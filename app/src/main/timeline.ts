@@ -58,7 +58,6 @@ const BUILTIN_TITLES: Record<string, MessageKey> = {
   local_time: "agent.tool.time",
   find_tools: "agent.tool.findTools",
   ask_member: "agent.tool.askMember",
-  generate_audio: "agent.tool.generateAudio",
 };
 const COMMAND_TITLES: Record<string, MessageKey> = {
   open: "agent.cmd.open",

@@ -23,7 +23,7 @@ const api = vi.hoisted(() => ({ statusGet: vi.fn(async () => ({ openrouter: { st
   membersRead: vi.fn(),
   membersViewing: vi.fn(),
   membersToolChoices: vi.fn(),
-  membersSkillsList: vi.fn(), membersCommandsList: vi.fn(), membersVoices: vi.fn(),
+  membersSkillsList: vi.fn(), membersCommandsList: vi.fn(),
   membersUpdate: vi.fn(),
   membersCreate: vi.fn(),
   membersGreet: vi.fn(async () => ({ turn_id: 99 })),
@@ -593,7 +593,7 @@ beforeEach(() => { localStorage.clear();
   api.membersRead.mockResolvedValue({});
   api.membersViewing.mockResolvedValue({});
   api.membersToolChoices.mockResolvedValue({ tools: ["web_search", "weather"], connections: [] });
-  api.membersSkillsList.mockResolvedValue({ skills: [], undo: null }); api.membersCommandsList.mockResolvedValue({ commands: [] }); api.membersVoices.mockResolvedValue({ voices: [], configured: false });
+  api.membersSkillsList.mockResolvedValue({ skills: [], undo: null }); api.membersCommandsList.mockResolvedValue({ commands: [] });
   api.toolsetsList.mockResolvedValue({ groups: [] });
   api.routinesList.mockResolvedValue({ routines: [] });
   api.modelsCatalog.mockResolvedValue(null);

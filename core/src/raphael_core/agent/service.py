@@ -208,7 +208,6 @@ from .persona import (
     phrase,
     monthly_budget_notice,
     member_system_prompt,
-    spoken_line,
     system_prompt,
 )
 from .plugins import (
@@ -273,7 +272,6 @@ if TYPE_CHECKING:
     from .drafts import EmailDrafts
     from .permissions import PermissionCards
     from ..services.hub import ServiceHub
-    from ..services.speaker import Speaking
     from ..memory.reflection import Applied
     from ..memory.service import MemoryService
 
@@ -306,8 +304,8 @@ _OWNER_CHAT_SOURCES = _AT_THIS_COMPUTER | {"telegram", "slack", "discord", RESUM
 # Routing and answering share this deadline while the voice overlay waits. A turn said into a conversation is not
 # waited on there, and has the time a typed one has: a brain thinking hard takes minutes, and the composer can stop it.
 VOICE_TURN_TIMEOUT_S = 180.0
-# The statuses of a turn that ended with a denial or a question that ran out: Raphael does not say
-# these aloud, as the owner knows (a "no", an Esc) or was not there.
+# The statuses of a turn that ended with a denial or a question that ran out: they are not answered back,
+# as the owner knows (a "no", an Esc) or was not there.
 _UNSPOKEN = ("denied", "expired", "cancelled")
 # Route classification retained for callers; all routes now share the full-history
 # and selected half-window context policy.
@@ -336,8 +334,8 @@ _QUOTES = (
 
 
 class _Silent(dict):
-    """The reply of `agent.ask` or `agent.confirm` that Raphael does not speak: the owner's own
-    "no" or Esc answered back, a question that ran out, a run that was stopped. It is an ordinary
+    """The reply of `agent.ask` or `agent.confirm` that is not answered back: the owner's own
+    "no" or Esc, a question that ran out, a run that was stopped. It is an ordinary
     dict on the wire; empty completed replies carry a silent marker for the native controller."""
 
     def __init__(self, *args, **kwargs):
@@ -463,11 +461,6 @@ class _Ask:
     recorded_steps: int = 0
     replies: list[str] = field(default_factory=list)
     ledger: Ledger | None = None
-    # Whether Raphael will say the answer aloud (`AgentService._voiced`): then the model is asked
-    # for its Japanese rendering too; completion waits for the voice, while public messages remain live.
-    voiced: bool = False
-    # The turn whose terminal announcement is held until the voice is ready (`_turn_changed`).
-    held: int | None = None
     member_creates: int = 0
     quick: bool = False
     latency: dict[str, float | None] = field(default_factory=dict)
@@ -673,16 +666,6 @@ class AgentService:
     conversation is read without a summary (its last turns, within the same limits). `services` is
     the hub of the services the owner chose for the tools (`services.hub`); without it the search is
     OpenRouter's, and no page or file is read (a file handed over is answered as unreadable).
-    `speaker` is Raphael's voice (`services.speaker.Speaking`): the answer of every request made to
-    Raphael himself at this computer (spoken or typed) is said aloud, with its prefix, in Japanese
-    (the voice speaks nothing else: the line itself on a Japanese screen, else a fixed phrase's
-    Japanese wording or the Japanese the answer model wrote in the same call), and the reply is
-    returned, and its terminal status announced to the app, when the voice is ready to begin (at most
-    `speaker.FIRST_AUDIO_WAIT_S` later; with no voice that can be heard nothing waits). Complete public
-    messages are stored and announced as they arrive, before speech readiness. A member's
-    reply, an exchange between members, a routine's result, a cancel, a denial, a question that ran out, a request from a messaging app, a report of the background
-    worker and a question waiting for a yes are not. Any new request at this computer
-    and `agent.cancel` stop what is being said.
     """
 
     def __init__(
@@ -707,7 +690,6 @@ class AgentService:
         memory: "MemoryService | None" = None,
         services: "ServiceHub | None" = None,
         team: Team | None = None,
-        speaker: "Speaking | None" = None,
         cli_brains: CliBrains | None = None,
         attachment_store: AttachmentStore | None = None,
         tool_observer: Callable[..., None] | None = None,
@@ -758,14 +740,9 @@ class AgentService:
             self._connection_proposals.resume = self.resume_turn
             secret_cards.defer_resume = lambda turn: self._connection_proposals.pending(turn) and not self._gate.full_permission
         self._keys = keys
-        # Raphael's voice (`services.speaker`): says the answers of the owner's own requests to
-        # Raphael, and is stopped by a new request and by agent.cancel. None: the answers are
-        # silent. (Not `_speaker`: that is the lookup of who answers a `member_id`.)
-        self._speaking = speaker
         self._client = client
-        self._speech_traces: dict[int, _Ask] = {}
-        if speaker is not None and hasattr(speaker, "on_state"):
-            speaker.on_state = self._speech_state
+        # turn id -> the quick request whose latency is logged (`_traced`).
+        self._latency_traces: dict[int, _Ask] = {}
         # The owner's team (raphael_core.members): who a `member_id` is, and the team tools. Without
         # one there is only Raphael.
         self._team = team
@@ -855,12 +832,6 @@ class AgentService:
         self._owner_language = owner_language or (lambda: None)
         if background is not None:
             background.owner_language = lambda: self._owner_language()
-        # turn id -> the member whose thread it is in (None: not known yet): the turns that were
-        # written but are not announced to the app (`agent.turn`) until the voice is ready.
-        self._held: dict[int, int | None] = {}
-        # turn id -> the Japanese rendering of its line, made by the model in the same call, for
-        # the voice. In memory only, until the turn is said: never logged or stored.
-        self._japanese: dict[int, str] = {}
         self._pruned_at_ms: int | None = None
         self._prune_if_due()
         # A question waits in this process only: one that was left by the last is long past.
@@ -896,7 +867,6 @@ class AgentService:
             "agent.history.delete": self._history_delete,
             "conversations.list": self._conversations_list,
             "quota.list": self._quota_list,
-            "agent.speech.status": self._speech_status,
             "agent.react": self._react,
             "messages.search": self._messages_search,
             "conversations.clear": self._conversations_clear,
@@ -1171,7 +1141,7 @@ class AgentService:
             ask.steps.extend(resumption.report.steps)
         if ask.quick:
             elapsed = float(transcript_ms) if type(transcript_ms) in (int, float) and 0 <= transcript_ms < 3_600_000 else 0.0
-            ask.latency = dict(hotkey_end=0.0, transcript=elapsed, routing=None, first_step=None, final_answer=None, speech_start=None)
+            ask.latency = dict(hotkey_end=0.0, transcript=elapsed, routing=None, first_step=None, final_answer=None)
         if source is not None:
             if not isinstance(source, str) or not _SOURCE.fullmatch(source):
                 raise invalid_params("source must be a short lower-case word")
@@ -1390,12 +1360,10 @@ class AgentService:
                 return self._finish(ask, "greeting", "understood", phrase(ask.language, "denied"),
                                     Ledger(self._spend), status="cancelled")
             return self._done(0, ask.language, "understood", phrase(ask.language, "denied"), silent=True)
-        ask.voiced = self._voiced(ask.source, ask.speaker.id, quick=ask.quick)
         # The questions that ran out are expired, and a new request replaces those that still wait
         # in its conversation: a quick question leaves a formal one waiting, and the other way round.
         self._expire(self._confirmations.sweep())
         if ask.source in _AT_THIS_COMPUTER:
-            self._stop_speaking()  # a new request ends what Raphael was saying
             self._deny(self._confirmations.cancel_where(
                 lambda pending: (getattr(self.turn(pending.turn_id), "member_id", None),
                                  getattr(self.turn(pending.turn_id), "conversation_id", None)) == (ask.speaker.id, ask.conversation_id)))
@@ -1419,13 +1387,10 @@ class AgentService:
             if ask.quick and result.get("status") == "confirm":
                 result["conversation_id"] = ask.conversation_id
             if ask.quick and ask.turn_id and result.get("status") in ("done", "confirm"):
-                self._speech_traces[ask.turn_id] = ask
-                while len(self._speech_traces) > 64:
-                    self._speech_traces.pop(next(iter(self._speech_traces)))
-            result = await self._said(result, ask.source, ask.speaker.id, ask.language, quick=ask.quick)
-            if result.get("status") == "done" and not result.get("voiced"):
-                self._speech_traces.pop(ask.turn_id, None)
-            return result
+                self._latency_traces[ask.turn_id] = ask
+                while len(self._latency_traces) > 64:
+                    self._latency_traces.pop(next(iter(self._latency_traces)))
+            return self._traced(result)
         except asyncio.CancelledError:
             current = asyncio.current_task()
             if task.cancelled() and (current is None or not current.cancelling()):
@@ -1445,7 +1410,6 @@ class AgentService:
             if ask.quick:
                 logger.info("Quick latency ms: %s", json.dumps(ask.latency, sort_keys=True))
                 ask.trace_logged = True
-            self._release(ask.held)  # a turn announced late must never be left unannounced
             if ask.resumption is not None:
                 ask.resumption.made.extend(ask.made)
             self._start_drain((ask.speaker.id, ask.conversation_id))
@@ -1608,7 +1572,6 @@ class AgentService:
                 memory_snapshot=memory,
                 looked_up=looked_up,
                 speaker=ask.speaker,
-                say_ja=ask.voiced,
                 roster=roster_prompt(self._team, ask.speaker, ask.language) + owner_context(self._settings),
                 reasoning_effort=self._effort(settings),
                 recall=self._recall(ask, context), source=ask.source, messaging=self._messaging_context(ask.speaker.id),
@@ -1728,8 +1691,6 @@ class AgentService:
         self._publish_reply(ask, reply, final=True)
         ask.replies = reply.messages
         result = self._finish(ask, route, which, text, ledger, detail=reply.detail)
-        if text == reply.text:  # not a fixed phrase in its place: the model's own line
-            self._keep_japanese(result["turn_id"], reply.say_ja)
         if notice is not None:
             result["notice"] = notice
         return result
@@ -2012,15 +1973,6 @@ class AgentService:
         if ask.quick and ask.latency.get(stage) is None:
             ask.latency[stage] = round(float(ask.latency.get("transcript") or 0) + (time.perf_counter() - ask.began) * 1000, 3)
 
-    def _speech_state(self, turn_id: int | None, state: str) -> None:
-        ask = self._speech_traces.get(turn_id)
-        if ask is not None and state == "playing":
-            self._mark_latency(ask, "speech_start")
-            if ask.trace_logged:
-                logger.info("Quick latency ms: %s", json.dumps(ask.latency, sort_keys=True))
-        if state == "done":
-            self._speech_traces.pop(turn_id, None)
-
     def _publish_reply(self, ask: _Ask, reply: Reply, *, final: bool = False) -> None:
         """Commit each complete authored message before any subsequent tool or terminal state."""
         from .answers import pending_replies
@@ -2059,9 +2011,7 @@ class AgentService:
             if self._notify and ask.quick:
                 self._notify("agent.progress", {"session_id": ask.session_id, "turn_id": ask.turn_id,
                     "member_id": ask.speaker.id, "text": line, "language": ask.language})
-        # Complete public messages remain live; the terminal status may still wait for speech.
-        self._turn_changed(ask.turn_id, ask.speaker.id,
-                           hold=kind == "reply" and ask.held == ask.turn_id)
+        self._turn_changed(ask.turn_id, ask.speaker.id)
 
     @staticmethod
     def _loop_result(result: ToolResult) -> ToolOutcome:
@@ -2088,14 +2038,13 @@ class AgentService:
                 await prepare(ask.speaker.id)
             context = self._memory_context(ask.speaker, ask.conversation_id)
             memory = None if self._memory is None else self._memory.snapshot(ask.speaker.id)
-            say_ja = ask.voiced
             if brain_ref(settings.model):
                 system = cli_system_prompt(ask.language,
                     name=None if ask.speaker.is_raphael else ask.speaker.name,
                     role=ask.speaker.role, instructions=ask.speaker.instructions,
                     personality=ask.speaker.personality, memory=memory is not None, speaker=ask.speaker)
             elif ask.speaker.is_raphael:
-                system = system_prompt(ask.language, "answer", memory, say_ja=say_ja, narrated=True, speaker=ask.speaker)
+                system = system_prompt(ask.language, "answer", memory, narrated=True, speaker=ask.speaker)
             else:
                 system = member_system_prompt(
                     ask.language, "answer", name=ask.speaker.name, role=ask.speaker.role,
@@ -2127,7 +2076,7 @@ class AgentService:
             message_args = dict(
                 question=labelled_lines(ask.exchange_speakers[0], ask.text) if ask.exchange_speakers else ask.text,
                 moment=self._moment(), context=context.turns, tools=[], language=ask.language,
-                background=background_block(self._briefs(ask.speaker.id)), summary=context.summary, say_ja=say_ja, narrated=True,
+                background=background_block(self._briefs(ask.speaker.id)), summary=context.summary, narrated=True,
                 quote=ask.quote,
                 recall=self._recall(ask, context), source=ask.source, messaging=self._messaging_context(ask.speaker.id),
             )
@@ -2350,8 +2299,6 @@ class AgentService:
                         result = await self._tool(ask, operation, name)
                         if name == "show" and result.ok:
                             self._message(ask, "media", json.dumps(result.data, ensure_ascii=False))
-                    elif name == "generate_audio":
-                        result = await self._tool(ask, self._tools.generate_audio(args, self._attachment_store), name)
                     elif name == "read_attachment":
                         number = args.get("index")
                         if type(number) is not int or not 1 <= number <= len(ask.attachments) + len(earlier):
@@ -2400,14 +2347,14 @@ class AgentService:
                 record_tool_event(self._conn, ask.turn_id, call_id, name, args, result.content,
                                   ok=result.ok, kind=result.kind, external=bool(ask.memory_untrusted or ref and
                                       (ref.kind == MCP or ref.name in ("web_read", "web_search", "read_attachment"))))
-                if result.ok and (name == "generate_audio" or ref is not None and (ref.server == "media" or ref.server == "computer" and ref.name in ("attach_file", "dataset"))):
+                if result.ok and (ref is not None and (ref.server == "media" or ref.server == "computer" and ref.name in ("attach_file", "dataset"))):
                     from ..services.artifacts import artifact_payload
                     payload = artifact_payload(result.content, self._attachment_store)
                     if payload:
                         self._message(ask, "media", json.dumps(payload, ensure_ascii=False))
-                elif name == "generate_audio" or ref is not None and ref.server == "media":
+                elif ref is not None and ref.server == "media":
                     from ..failures import missing_for
-                    missing = missing_for(result.kind, ref.name if ref is not None and ref.server == "media" else name)
+                    missing = missing_for(result.kind, ref.name)
                     if missing:
                         self._message(ask, "media", json.dumps({"missing": missing.wire()}, ensure_ascii=False))
                 if ref is not None and ref.server == "computer" and loop.refresh_computer():
@@ -2450,7 +2397,7 @@ class AgentService:
                     rate_limit_waits=() if ask.quick else None,
                     conversation_id=ask.conversation_id, quota=self.quotas.record,
                     member_id=ask.speaker.id, event=lambda text: self._message(ask, "event", text),
-                    expire=lambda: self._expire(self._confirmations.sweep()), spoken=ask.voiced, **common)
+                    expire=lambda: self._expire(self._confirmations.sweep()), **common)
                 self._cli_loops.add(loop)
                 loop.on_done = self._cli_loops.discard
             else:
@@ -4369,7 +4316,6 @@ class AgentService:
         except AgentFailure:
             # It was done, and Raphael cannot say more than that.
             return self._outcome(pending, "understood", "", "done", cost_usd=ledger.total)
-        self._keep_japanese(pending.turn_id, reply.say_ja)
         return self._outcome(
             pending,
             reply.prefix,
@@ -4600,16 +4546,11 @@ class AgentService:
         return {"status": "confirm", "turn_id": turn_id, "confirm": confirm}
 
     async def _confirm(self, params: dict) -> dict:
-        """Resolve a question; only a quick voice turn may speak its answer."""
+        """Resolve a question."""
         reply = await self._resolve(params)
         if reply.get("status") == "done" and isinstance(reply.get("text"), str) and not reply["text"].strip():
             reply["silent"] = True
-        turn = self._history.get(reply.get("turn_id"))
-        return await self._said(
-            reply, source=turn.source if turn else None,
-            member_id=turn.member_id if turn else None, language=self._last_language,
-            quick=self._quick_turn(turn),
-        )
+        return self._traced(reply)
 
     def _member_of_turn(self, turn_id: object) -> int | None:
         """Whose thread the turn is in (0 is Raphael), or None if that cannot be told."""
@@ -4862,11 +4803,7 @@ class AgentService:
             self._write(lambda: self._forget_cli_thread(turn.conversation_id))
         # The owner's own "no", and a question nobody answered, are not said back.
         silent = status in _UNSPOKEN
-        # An answer that will be said is announced to the app when the voice is ready (`_said`).
-        self._turn_changed(
-            pending.turn_id,
-            hold=not silent and turn is not None and self._voiced(turn.source, turn.member_id, quick=self._quick_turn(turn)),
-        )
+        self._turn_changed(pending.turn_id)
         result = {"status": "done", "turn_id": pending.turn_id, "prefix": prefix, "text": text}
         return _Silent(result) if silent else result
 
@@ -4955,7 +4892,6 @@ class AgentService:
         session_id = _str(params, "session_id")
         if hasattr(self._plugins, "stop_session"):
             self._plugins.stop_session(session_id)
-        self._stop_speaking()
         self._forget_old_cancels()
         self._cancelled[session_id] = self._clock()
         for row in self._conn.execute("SELECT turn_id,member_id,conversation_id FROM agent_inbox WHERE request_id=? AND state IN ('queued','steering')", (session_id,)).fetchall():
@@ -5016,9 +4952,6 @@ class AgentService:
         set_reaction(self._conn, params, turn_id=turn.id)
         self._turn_changed(turn.id, member)
         return {"ok": True}
-
-    async def _speech_status(self, params: dict) -> dict:
-        return {"ready": bool(self._speaking and self._speaking.speaks())}
 
     async def _messages_search(self, params: dict) -> dict:
         query = _str(params, "query").strip()
@@ -5234,8 +5167,6 @@ class AgentService:
         messaging = getattr(self._secret_cards, "messaging", None)
         pairings = messaging.cards.views(ids) if messaging and messaging.cards else {}
         pages = self.pages.store.shown_in(ids)
-        from ..voice_chat import call_views
-        call_links, call_summaries = call_views(self._conn, ids)
         reactions = private_reactions_for_turns(self._conn, ids)
         questions = self._background.owner_questions.for_turns(ids) if hasattr(self._background, "owner_questions") else {}
         handoffs_by_turn = self._background.handoff_views_for_turns(ids)
@@ -5262,8 +5193,6 @@ class AgentService:
             views.append(
                 {
                     "id": turn.id,
-                    **({"voice_call_id": call_links[turn.id]["id"], "voice_call_summary_id": call_links[turn.id]["summary_id"]} if turn.id in call_links else {}),
-                    **({"voice_call": call_summaries[turn.id]} if turn.id in call_summaries else {}),
                     "created_at_ms": turn.created_at_ms,
                     **self._exchange_order(turn, works=works, messages=messages.get(turn.id, [])),
                     "session_id": turn.session_id,
@@ -5575,7 +5504,8 @@ class AgentService:
 
     @staticmethod
     def _done(turn_id: int, language: str, which: str, text: str, *, silent: bool = False) -> dict:
-        """The reply of a request that is over. `silent`: Raphael does not say it aloud."""
+        """The reply of a request that is over. `silent`: one the owner already knows, a "no", an Esc or a
+        question that ran out (`_Silent`)."""
         reply = {
             "status": "done",
             "turn_id": turn_id,
@@ -5584,110 +5514,18 @@ class AgentService:
         }
         return _Silent(reply) if silent else reply
 
-    def _stop_speaking(self) -> None:
-        if self._speaking is not None:
-            self._speaking.stop()
-
-    def _quick_turn(self, turn: Turn | None) -> bool:
-        return bool(turn and turn.conversation_id and self.conversations.get(turn.conversation_id)["kind"] == QUICK)
-
-    def _voiced(self, source: str | None, member_id: int | None, *, quick: bool = False) -> bool:
-        """Only the Alt+Space quick voice path requests spoken wording and playback."""
-        if self._speaking is None or member_id != 0 or not quick or source not in _QUICK_SOURCES:
-            return False
-        try:
-            return self._speaking.speaks()
-        except Exception as exc:  # the voice must not cost the answer
-            logger.warning("Could not tell whether Raphael can speak: %s", type(exc).__name__)
-            return False
-
-    def _voice_language(self) -> str:
-        """The language the voice speaks (the setting `tts_language`: Japanese for now)."""
-        try:
-            language = self._settings.get("tts_language")
-        except sqlite3.Error as exc:
-            logger.warning("Could not read the setting tts_language: %s", type(exc).__name__)
-            return "ja"
-        return language if language in PREFIXES else "ja"
-
-    def _keep_japanese(self, turn_id: int, line: str) -> None:
-        """Keep the Japanese rendering of a turn's line until the turn is said (`_said`). In memory
-        only, a few at a time: one that was never said is forgotten when others come."""
-        if not line:
-            return
-        self._japanese[turn_id] = line
-        while len(self._japanese) > 8:
-            del self._japanese[next(iter(self._japanese))]
-
-    def _release(self, turn_id: object) -> None:
-        """Announce a turn that was held back until the voice was ready (`_turn_changed`)."""
-        if type(turn_id) is int and turn_id in self._held:
-            self._turn_changed(turn_id, self._held.pop(turn_id))
-
-    async def _said(
-        self,
-        reply: dict,
-        source: str | None = None,
-        member_id: int | None = 0,
-        language: str = DEFAULT_LANGUAGE,
-        *,
-        quick: bool = False,
-    ) -> dict:
-        """`reply`, once Raphael's voice is ready to say it aloud: only a reply that is an answer
-        (`status: "done"`, not a `_Silent` one) with words in it, for which `_voiced` holds. It
-        starts the voice and waits for its first sound, at most a couple of seconds
-        (`Speaking.say`), so that the line is shown (the reply returned, the turn announced to the
-        app) when the sound begins, not before it; a voice that is slow or fails never costs the
-        answer, and a voice that fails is the voice's to log. What is spoken is not the shown line
-        but its rendering in the language of the voice (`persona.spoken_line`): the line itself in
-        Japanese, a fixed phrase in its Japanese wording, any other line in the Japanese the model
-        wrote with it; a line with none is not spoken. The longer `detail` and the `notice` are
-        not spoken. A turn held back for the voice is announced at the end, whatever happened."""
+    def _traced(self, reply: dict) -> dict:
+        """`reply`, with the latency of a quick turn that is answered logged (`Quick latency ms`)."""
         turn_id = reply.get("turn_id")
-        trace = self._speech_traces.get(turn_id) if type(turn_id) is int else None
-        report_trace = trace is not None and trace.trace_logged and reply.get("status") == "done"
+        trace = self._latency_traces.get(turn_id) if type(turn_id) is int else None
         if trace is not None and reply.get("status") == "done":
+            report = trace.trace_logged
             trace.trace_logged = False
             self._mark_latency(trace, "final_answer")
-        try:
-            if (
-                self._voiced(source, member_id, quick=quick)
-                and not isinstance(reply, _Silent)
-                and reply.get("status") == "done"
-            ):
-                prefix, text = reply.get("prefix"), reply.get("text")
-                if isinstance(prefix, str) and isinstance(text, str) and text.strip():
-                    spoken = spoken_line(
-                        language,
-                        prefix,
-                        text,
-                        self._japanese.get(turn_id, "") if type(turn_id) is int else "",
-                        voice_language=self._voice_language(),
-                    )
-                    if spoken is None:
-                        logger.info("A line was not spoken: it has no rendering in the voice's language")
-                    else:
-                        assert self._speaking is not None
-                        try:
-                            reply["voiced"] = True
-                            await self._speaking.say(
-                                *spoken, turn_id=turn_id if type(turn_id) is int else None
-                            )
-                        except Exception as exc:  # the voice must not cost the answer
-                            reply.pop("voiced", None)
-                            logger.warning(
-                                "Raphael could not start to speak: %s", type(exc).__name__
-                            )
-        finally:
-            if trace is not None and reply.get("status") == "done":
-                if report_trace:
-                    logger.info("Quick latency ms: %s", json.dumps(trace.latency, sort_keys=True))
-                    trace.trace_logged = True
-                if not reply.get("voiced"):
-                    self._speech_traces.pop(turn_id, None)
-            if type(turn_id) is int:
-                self._japanese.pop(turn_id, None)
-            self._release(turn_id)
+            if report:
+                logger.info("Quick latency ms: %s", json.dumps(trace.latency, sort_keys=True))
+                trace.trace_logged = True
+            self._latency_traces.pop(turn_id, None)
         return reply
 
     def _record(
@@ -5766,12 +5604,7 @@ class AgentService:
         except sqlite3.Error as exc:
             logger.warning("Could not write the turn to the history: %s", type(exc).__name__)
             return 0
-        # A turn that will be said aloud is announced to the app when the voice is ready, with the
-        # reply (`_said`), so that the conversation shows the line as the overlay does.
-        hold = ask.voiced and status not in ("running", "confirm", *_UNSPOKEN)
-        self._turn_changed(turn_id, member_id, hold=hold)
-        if hold and turn_id:
-            ask.held = turn_id
+        self._turn_changed(turn_id, member_id)
         if turn_id in self._consulting and status not in ("running", "confirm"):
             self._consulting.discard(turn_id)
             self._background.settle_asker(turn_id, answered=status == "done")
@@ -5796,14 +5629,10 @@ class AgentService:
         if self._notify and ask.turn_id:
             self._notify("agent.turn", {"turn_id": ask.turn_id, "member_id": ask.speaker.id, "activity_only": True})
 
-    def _turn_changed(self, turn_id: int, member_id: int | None = None, *, hold: bool = False) -> None:
+    def _turn_changed(self, turn_id: int, member_id: int | None = None) -> None:
         """Tell the app a turn was written or completed, so that a conversation on screen follows:
-        its id and whose thread it is in. With `hold`, the turn is announced later, by `_release`,
-        when the voice that says it is ready."""
+        its id and whose thread it is in."""
         if self._notify is None or not turn_id:
-            return
-        if hold:
-            self._held[turn_id] = member_id
             return
         if member_id is None:
             turn = self.turn(turn_id)

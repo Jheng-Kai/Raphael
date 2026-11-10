@@ -5,8 +5,7 @@
 assistant's (`agent.*`, raphael_core.agent), the background worker's (`worker.*`,
 raphael_core.background), the plugins' (`integrations.*` and `toolsets.list`,
 raphael_core.integrations), the messaging apps' (`messaging.<app>.*`, raphael_core.messaging), the
-services of the tools' (`services.*`, raphael_core.services), Raphael's voice (`tts.*`,
-raphael_core.services.speaker), the owner's team's (`members.*`, `groups.*`, `routines.*`,
+services of the tools' (`services.*`, raphael_core.services), the owner's team's (`members.*`, `groups.*`, `routines.*`,
 raphael_core.members) and the few that belong to none of them (`core.*`, `models.*`, `audio.*`).
 `__main__` serves it on stdio.
 
@@ -26,7 +25,7 @@ in a read on the stdin pipe: the loader asks Windows about the stdin handle, and
 that handle for the pending read. The reader of stdio_server is such a thread from its first
 moment to the end of the process, so a numpy imported after it started would load only when the
 app closed stdin. The import takes a fraction of a second when the files are cached. Anything
-else heavy imported at run time (PyTorch for TTS, say) is exposed to the same trap.
+else heavy imported at run time (PyTorch, say) is exposed to the same trap.
 
 Speech-to-text. The `stt_engine` setting, read at each `dictation.start`, picks the engine for that
 dictation: "local" is the engine on this computer; "cloud" sends each stretch of speech to the
@@ -121,7 +120,6 @@ from .services.attachments import Attachment
 from .services.attachment_store import AttachmentStore
 from .services.hub import ServiceHub, offline_transport
 from .services.keys import ServiceKeys, credential_keys, memory_keys
-from .services.speaker import Speaker
 
 logger = logging.getLogger(__name__)
 
@@ -837,9 +835,6 @@ class App(Router):
             transport=offline_transport() if fake_llm else None,
         )
         self.services.register(self)
-        # Raphael's voice (`tts.*`): his answers aloud, through the service the owner chose.
-        self.speaker = Speaker(self.services)
-        self.speaker.register(self)
         if agent_actions is None:
             agent_actions = NullActions() if fake_llm else WindowsActions()
         # The plugins: servers the user connected, and the hub the assistant reaches their tools by.
@@ -962,7 +957,6 @@ class App(Router):
                                   notify=self.notify, transcribe=self._transcribe_room,
                                   attachment_store=self.attachment_store)
         self.rooms.register(self)
-        self.members.use_speech(self.speaker)
         self.memory.member_exists = self.members.member_exists
         self.memory.language = lambda: self.agent.language
         from .agent.owner_language import configured_language
@@ -981,7 +975,6 @@ class App(Router):
             services=self.services,
             attachment_store=self.attachment_store,
             team=self.members,
-            speaker=self.speaker,
             tool_observer=agent_tool_observer,
             model_observer=agent_model_observer,
             cards=self.cards,
@@ -1074,10 +1067,6 @@ class App(Router):
         self._startup_handle: asyncio.TimerHandle | None = None
         self._deferred_started = False
         self._shutdown_requested = asyncio.Event()
-
-        from .voice_chat import VoiceChat
-        self.voice_chat = VoiceChat(self._conn, self, self.agent, self.members.store, self.speaker, self.services)
-        self.voice_chat.register()
 
         methods = {
             "core.hello": self._hello,
@@ -1189,7 +1178,6 @@ class App(Router):
             segmenter_factory=self._dictation_segmenter,
             engine_provider=self._dictation_engine,
             on_idle=self._on_dictation_idle,
-            on_voice_activity=self.voice_chat.activity,
         )
         service.register(self._inner)
         self._service.set_result(service)
@@ -1245,7 +1233,6 @@ class App(Router):
             ("stop Home narratives", self.home.aclose),
             ("stop the calendar refresh", self.home.calendar_events.aclose),
             ("end room routing calls", self.rooms.aclose),
-            ("end the voice call", self.voice_chat.aclose),
             ("cancel the dictation", close_dictation),
             ("close the level meter", close_meter),
             ("stop the account usage refresh", self.brain.aclose),
@@ -1260,7 +1247,6 @@ class App(Router):
             ("close the computers' driver connections", self.vm_tools.aclose),
             ("close desktop viewers", self.desktop_viewer.aclose),
             ("stop the computer idle monitor", self.vm.aclose),
-            ("end Raphael's voice", self.speaker.aclose),
             ("end the memory's background pass", self.memory.aclose),
             ("close the services' HTTP client", self.services.aclose),
             ("close the HTTP client", self.client.aclose),
@@ -1491,10 +1477,6 @@ class App(Router):
         if method == "agent.turn" and type(params.get("turn_id")) is int and not params.get("activity_only"):
             if hasattr(self, "agent"):
                 asyncio.get_running_loop().call_soon(self.agent.sync_owner_cards)
-                call = getattr(self, "voice_chat", None)
-                if call and call.current and call.current.request:
-                    call._link(call.current, call.current.request)
-                    call.turn_changed()
             self.members.turn_arrived(params["turn_id"])
             self.rooms.turn_arrived(params["turn_id"])
         self.notify(method, params)
@@ -1857,10 +1839,6 @@ class App(Router):
         way the meter stays suspended, so a stop that ends meanwhile cannot reopen it beside the
         new dictation.
         """
-        if method == "dictation.start" and params.get("purpose") != "voice_chat":
-            if self.voice_chat.current:
-                raise RpcError(BUSY, "A voice call owns the microphone")
-            self.speaker.stop()  # a new recording ends what Raphael was saying
         service = await self._wait_for(self._service)
         if method != "dictation.start":
             try:

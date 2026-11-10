@@ -25,7 +25,7 @@ the closed work body stays only so a search that finds words in it can open it. 
 sight under the reply with its one repair (`.turn-prerequisites`), said once (R-UI-120). Under a reply that speaks it
 is only the 開啟設定 button, after the reply (the judge flagged the sentence as said twice, R-UI-02); a turn with no
 words keeps the note's sentence, its button following the sentence.
-Scenes: missing-search, missing-provider, missing-pdf, generated-audio-missing, generated-image-missing.
+Scenes: missing-search, missing-provider, missing-pdf, generated-image-missing.
 
 ## One column with the composer (2026-11-10)
 
@@ -37,7 +37,7 @@ face at the column's left. `thread-edges` checks every main-entry scene. The sel
 group, side-thread and members' conversations, the search field, and the empty and details states:
 
 ```powershell
-npm run look -- chat member-text missing-search generated-audio-missing long-owner quick-conversation search shortcut-find-member shortcut-find-room conversation-member-up room-text conversation-room-up room-composer-learn room-thread-open peer-chat empty details --theme both --width 1120,720,1920x1080
+npm run look -- chat member-text missing-search long-owner quick-conversation search shortcut-find-member shortcut-find-room conversation-member-up room-text conversation-room-up room-composer-learn room-thread-open peer-chat empty details --theme both --width 1120,720,1920x1080
 npm run look -- chat shortcut-find-member room-thread-open peer-chat --theme both --width 1120,720,1920x1080,1280x800
 ```
 
@@ -63,64 +63,14 @@ The panel's left tool is the settings gear.
 npm run look -- conversation-share chat search --theme both --width 1120,720,1920x1080
 ```
 
-## Private member voice chat (2026-11-05)
+## No voice (owner decision, 2026-11-10)
 
-An empty member composer keeps both gestures in its existing right-hand slot:
-a pointer held for 300 ms records a voice message through the existing down/up
-path, while a shorter click starts voice chat. The destination is captured at press
-time and retained across navigation. Enter/Space starts voice chat; the existing
-dictation hotkey is unchanged. The tooltip explains both gestures in one localized
-line. Typed words/files retain Send, Raphael retains dictation, and rooms retain
-their existing recording path without offering calls. The background questions
-slot stays directly above the composer; transient call failures live inside the
-composer and durable failures keep their existing receipt repair entry.
-Not released yet (owner, 2026-11-06, R-UI-106); its scenes return with it.
-One call owns the microphone across navigation. Another start opens the shared
-confirmation dialog; only End and start ends the previous call. The panel replaces
-the composer and exposes Mute, Hang up, a transcript disclosure and shared Voice /
-Speed / Language dropdowns (Auto-detect by default). The existing character's
-working and waiting motion projects speaking and listening without a second mascot.
-During a call the empty-thread hero yields to that single panel character.
-
-The same dictation recorder, device, selected engine and VAD cut a call turn after
-0.8 seconds of pause. Ordinary dictation still waits for its key. VAD speech onset
-sets the existing speaker stop event synchronously; PCM playback checks it before
-each audio block. AgentService keeps the owner question and member reply as ordinary
-private turns. The call uses the member voice and existing streamed PCM service;
-speed changes its playback sample rate. No new speech vendor/model loop is added.
-
-Hang-up writes one durable voice-call receipt, with duration, expandable literal
-transcript and local Good/Bad feedback. Call message rows fold under that receipt
-to preserve R-UI-101. Owner questions and pending permission/setup/draft cards remain
-actionable through the ordinary turn renderer until settled; folding never removes
-a required decision. Microphone/model/voice failures use the existing Settings repair
-entry; network failure ends the call and retains its already admitted turns.
-Migration 67 stores call metadata and links to existing turns, with scoped cascading
-deletion. Restart closes interrupted calls and retains their transcript.
-
-Voice chat is not released yet (owner, 2026-11-06, R-UI-106): the voice button records voice messages only, and the call scenes come back with the feature.
-
-Inspect every contact sheet and each new scene at light 720 and dark 1120. Compare
-the busy dialog with dialog-caption-confirm, the settings controls with details-notify, the
-receipt shell with card-mcp-done, and the
-repair note with the existing missing-service note. A call receipt is a standalone
-history card.
-The call confirmation uses the shared compact `mb-confirm` shell because it has one
-decision, rather than the member chooser's list. Settings put the existing `sel`
-controls in shared menu rows because these choices apply only to the current call;
-the member's persistent voice remains in Details. The receipt's disclosure includes
-the duration and both speakers, so its summary adds a time and uses a trailing
-chevron. A failed call keeps its shared missing-service note inside the durable
-receipt instead of the transient read-aloud toast; there is only one repair action.
-Fake recognizer / streamed TTS / player tests are in tests/services/test_voice_chat.py;
-the VAD test uses the real DictationService with fake recorder/segmenter/engine.
-The existing native runner's `npm run native -- voice-call` journey checks the real
-shell admission, empty-member/draft guard and missing-voice Settings repair with an
-isolated profile and no paid speech. It does not exercise a successful audio call.
-Rendered fixtures establish UI/IPC behavior only. Native microphone permissions,
-headset echo isolation, installed STT/model/device, actual audio-chunk interruption,
-live model/provider/network and native restart persistence require separate acceptance.
-
+The app speaks nothing. There are no voice calls, no spoken Alt+Space answers, no audio files a member makes, no voice
+service in Settings > Tools and no Fish Audio. The composer's voice button records a voice message on a click, a hold or
+a key (R-UI-106), and dictation is unchanged. An audio file the owner or a connection sends still plays in the shared
+audio card. Migrations keep their voice columns and voice_calls tables, and saved tts_* settings rows stay where they
+are, unread (core/tests/test_no_voice.py, R-BATCH-03). The Tools list and the onboarding abilities step show search,
+reading, vision and PDF only.
 
 ## Message metadata and side threads (2026-11-05)
 
@@ -147,8 +97,8 @@ with a recording Slack connector: editable card, discard without sending, old
 digest refusal and one version-bound send. It maps slack_draft in the tool registry;
 offline API/CLI fakes prove the driver, separately from authorized live acceptance.
 
-Voice memos and manual read-aloud are removed (owner, 2026-11-07): replies carry no
-Play/Pause control or transcript, and only the Alt+Space quick ask and voice calls speak.
+Voice memos and manual read-aloud were removed on 2026-11-07 and every other voice output on 2026-11-10 (No voice,
+above): no reply carries a Play/Pause control or transcript, and nothing speaks.
 
 ```powershell
 npm run look -- message-hugs-bubble reaction-picker reaction-row reaction-not-approval room-thread-open room-thread-chip slack-draft calm-thread --theme both --width 1120,720,1920x1080
@@ -157,7 +107,7 @@ npm run look -- message-hugs-bubble reaction-picker reaction-row reaction-not-ap
 Synthetic zh-TW fixtures replace only native IPC. Inspect all contact sheets and every
 new scene at light 720 and dark 1120, then judge this same selected run. Compare the
 Slack card with email, reaction/thread chips with shared compact controls and memo
-actions with adjacent reply/copy controls. Tests use fake Slack and TTS only. Native
+actions with adjacent reply/copy controls. Tests use fake Slack only. Native
 persistence/playback, live Slack/provider behavior and design judge remain separate.
 
 Attribution: Interaction reference: Grok Bot, Message and collaborate, local research snapshot 2026-11-05; no external code or assets copied.
@@ -376,12 +326,12 @@ npm run look -- dataset-table dataset-chart --theme both --width 1120,720,1920x1
 ```
 
 ```powershell
-npm run look -- media-models-unset media-models-set media-models-menu generated-image generated-video generated-image-missing generated-video-missing generated-image-repair generated-video-repair generated-video-running generated-video-cancelled quick-model-menu generated-audio-member running generated-audio-missing --theme both --width 1120,720,1920x1080
+npm run look -- media-models-unset media-models-set media-models-menu generated-image generated-video generated-image-missing generated-video-missing generated-image-repair generated-video-repair generated-video-running generated-video-cancelled quick-model-menu running --theme both --width 1120,720,1920x1080
 ```
 
 Inspect all sheets and full-size controls at both themes and all selected viewports.
-Compare media rows/pickers with quick-model-menu, stored media with generated-audio-member,
-running video with running, and inline repairs with generated-audio-missing. Fixture
+Compare media rows/pickers with quick-model-menu, stored image and video with each other,
+running video with running, and inline repairs with each other. Fixture
 prices and media do not prove live billing, provider compatibility, native playback or
 external design acceptance.
 
@@ -474,8 +424,8 @@ member and says 快速提問 under it when those are open.
 
 A message's ⋯ and a right click open one menu (R-UI-104): a colleague's message has its
 reactions above 回覆 and 複製, and 重新產生 on the latest answer; the owner's has 回覆 and 複製.
-The jump-to-latest button sits centred just above the composer (R-UI-105). Voice chat waits for
-a later release (R-UI-106): the voice button records voice messages only.
+The jump-to-latest button sits centred just above the composer (R-UI-105). There are no voice
+calls (R-UI-106): the voice button records voice messages only.
 
 Reactions are Grok Bot's (R-UI-108): the reaction row of the menu, and the pill a message's react
 button opens, hold 👍 😂 👎 ❤️ 🎉 and a last slot (a smiley with a plus) that opens every emoji in
@@ -1294,13 +1244,13 @@ form. Installation dependencies and file repair steps without an app setting hav
 no settings button. Local services remain in Settings > Raphael > Services.
 A store card opens the Composio form; the native Google client needs an administrator.
 
-npm run look -- missing-card missing-card-repair missing-onboarding-repair missing-store-repair missing-search missing-search-repair missing-voice missing-voice-repair missing-vision missing-model-list missing-provider missing-provider-repair missing-routines missing-learned missing-pdf missing-media missing-expired missing-mail --theme both --width 1120,720,1920x1080
+npm run look -- missing-card missing-card-repair missing-onboarding-repair missing-store-repair missing-search missing-search-repair missing-vision missing-model-list missing-provider missing-provider-repair missing-routines missing-learned missing-pdf missing-media missing-expired missing-mail --theme both --width 1120,720,1920x1080
 
 Run both themes at 1120,720,1920x1080. Also cover desktop-absent,
 desktop-unavailable, desktop-install, model-choices-answer, plugins-store-key,
 messaging, connections-empty and email-draft-edit as affected existing consumers.
-Inspect all contact sheets and relevant full-size images. Offline tests cover the
-sanitized TTS event and dictation prerequisite routing; Rust/native acceptance,
+Inspect all contact sheets and relevant full-size images. Offline tests cover
+dictation prerequisite routing; Rust/native acceptance,
 real microphone/audio, provider/login and judge are separate checks.
 
 ## Durable owner questions and background cards (2026-11-01)
@@ -1334,10 +1284,10 @@ core/tests/agent/test_owner_questions.py. The shell allowlist and its existing
 allowlist test include owner_questions.answer.
 
 
-## Owner input and deliverable audio (2026-11-01)
+## Owner input (2026-11-01)
 
 ```powershell
-npm run look -- generated-audio-chief generated-audio-member generated-audio-room generated-audio-missing generated-audio-repair owner-addition missing-voice --theme both --width 1120,720,1920x1080
+npm run look -- owner-addition --theme both --width 1120,720,1920x1080
 ```
 
 An owner message in an active private conversation is an ordinary owner bubble and
@@ -1352,13 +1302,8 @@ Room messages use that inbox for a single active recipient in the same room and
 thread. Several addressees, files or a sealed inbox start a new room turn without
 cancelling running tools. Only rooms.stop cancels room work.
 
-generate_audio is offered by the shared snapshot to API/CLI conversations,
-background work and routines. It consumes ServiceHub.speech and the configured
-voice, key, model and enabled state. It stores bounded mono PCM as a WAV attachment,
-using the existing audio card; it does not claim MP3 encoding. A missing voice
-service yields the existing localized missing notice and voice settings repair.
-Tool receipts from attach_file and generate_audio are checked against AttachmentStore
-before publishing media messages. Room cards share the same attachment renderer.
+Tool receipts from attach_file are checked against AttachmentStore before publishing
+media messages. Room cards share the same attachment renderer.
 
 Telegram returns only attachments from the completed turn's stored tool receipts
 to the paired chat. PNG/JPEG up to 10 MiB use sendPhoto; MP3/M4A use sendAudio;
@@ -1369,14 +1314,9 @@ before delivery. Paths supplied by a model are never uploaded.
 Offline contracts: core/tests/agent/test_steering.py,
 core/tests/agent/test_cli_steering.py, core/tests/worker/test_owner_input.py,
 core/tests/background/test_steering.py, core/tests/messaging/test_outgoing_files.py,
-core/tests/services/test_audio_file.py, core/tests/agent/test_audio_file.py,
-core/tests/background/test_audio_file.py, core/tests/agent/test_scrub.py,
-app/src/main/generated-audio.test.ts.
-Selected real-entry scenes: generated-audio-chief, generated-audio-member,
-generated-audio-room, generated-audio-missing, generated-audio-repair and owner-addition. Both themes,
-1120, 720 and 1920x1080. Compare the incoming and generated audio cards in each
-audio scene and compare the repair notice with the existing missing-voice scene.
-Fake Telegram, fake CLI and fixture audio are not live or native acceptance.
+core/tests/agent/test_scrub.py.
+Selected real-entry scene: owner-addition, both themes, 1120, 720 and 1920x1080.
+Fake Telegram and fake CLI are not live or native acceptance.
 
 
 ## CLI recovery after recorded work (2026-11-01)
@@ -1971,7 +1911,7 @@ worker prompts retain their JSON contract. Regression evidence and commands are 
 app/.look/briefs/room-cli-json-envelope-report.md; core/tests/agent/test_reply_envelopes.py
 and core/tests/background/test_room_cli.py exercise real foreground and room storage boundaries.
 Offline coverage: core/tests/agent/test_full_replies.py, tests/background/test_full_results.py,
-tests/messaging/test_wiring.py, tests/members/test_events.py and tests/services/test_voice_chat.py.
+tests/messaging/test_wiring.py and tests/members/test_events.py.
 Window integration must verify full reply bubbles and the selected reply-split-bubbles,
 handoff-group-done and bot-exchange-expanded scenes in both themes at 1120,720,1920x1080,
 then judge that same run. No visual/native acceptance is claimed by the core-only brief.

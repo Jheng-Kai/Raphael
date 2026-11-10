@@ -30,8 +30,8 @@ R-PERF-11 extends the native window boundary. with_webview owns every controller
 operation. Hide/minimize orders invisible, Low, TrySuspend; resume orders Resume,
 Normal, visible. The callback resumes again when a show raced a pending suspend.
 The initial hidden page requests the same policy after subscribing. Learned is
-always Low. Overlay lifecycle completion/hide/release requests Low and live
-recording, held speech and question events request Normal; the overlay is never
+always Low. Overlay lifecycle completion/hide and answers request Low and live
+recording and question events request Normal; the overlay is never
 suspended. Finite captions/notices use Low throughout, because page-only expiry
 has no native callback. Low is a memory target and does not pause animation/input.
 

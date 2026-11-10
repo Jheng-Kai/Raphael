@@ -84,63 +84,11 @@ Run targeted tests without the waiter. Full verify/core suites belong to the int
 at merge under the resource override. No UI boundary changed, so no look/native matrix.
 No new real model, provider, microphone/paste or release acceptance is claimed.
 
-## Private member voice chat (2026-11-05)
+## No voice output (owner decision, 2026-11-10)
 
-An empty member composer keeps both gestures in its existing right-hand slot:
-a pointer held for 300 ms records a voice message through the existing down/up
-path, while a shorter click starts voice chat. The destination is captured at press
-time and retained across navigation. Enter/Space starts voice chat; the existing
-dictation hotkey is unchanged. The tooltip explains both gestures in one localized
-line. Typed words/files retain Send, Raphael retains dictation, and rooms retain
-their existing recording path without offering calls. The background questions
-slot stays directly above the composer; transient call failures live inside the
-composer and durable failures keep their existing receipt repair entry.
-Not released yet (owner, 2026-11-06, R-UI-106); its scenes return with it.
-One call owns the microphone across navigation. Another start opens the shared
-confirmation dialog; only End and start ends the previous call. The panel replaces
-the composer and exposes Mute, Hang up, a transcript disclosure and shared Voice /
-Speed / Language dropdowns (Auto-detect by default). The existing character's
-working and waiting motion projects speaking and listening without a second mascot.
-During a call the empty-thread hero yields to that single panel character.
-
-The same dictation recorder, device, selected engine and VAD cut a call turn after
-0.8 seconds of pause. Ordinary dictation still waits for its key. VAD speech onset
-sets the existing speaker stop event synchronously; PCM playback checks it before
-each audio block. AgentService keeps the owner question and member reply as ordinary
-private turns. The call uses the member voice and existing streamed PCM service;
-speed changes its playback sample rate. No new speech vendor/model loop is added.
-
-Hang-up writes one durable voice-call receipt, with duration, expandable literal
-transcript and local Good/Bad feedback. Call message rows fold under that receipt
-to preserve R-UI-101. Owner questions and pending permission/setup/draft cards remain
-actionable through the ordinary turn renderer until settled; folding never removes
-a required decision. Microphone/model/voice failures use the existing Settings repair
-entry; network failure ends the call and retains its already admitted turns.
-Migration 67 stores call metadata and links to existing turns, with scoped cascading
-deletion. Restart closes interrupted calls and retains their transcript.
-
-Voice chat is not released yet (owner, 2026-11-06, R-UI-106): the voice button records voice messages only, and the call scenes come back with the feature.
-
-Inspect every contact sheet and each new scene at light 720 and dark 1120. Compare
-the busy dialog with dialog-caption-confirm, the settings controls with details-notify, the
-receipt shell with card-mcp-done, and the
-repair note with the existing missing-service note. A call receipt is a standalone
-history card.
-The call confirmation uses the shared compact `mb-confirm` shell because it has one
-decision, rather than the member chooser's list. Settings put the existing `sel`
-controls in shared menu rows because these choices apply only to the current call;
-the member's persistent voice remains in Details. The receipt's disclosure includes
-the duration and both speakers, so its summary adds a time and uses a trailing
-chevron. A failed call keeps its shared missing-service note inside the durable
-receipt instead of the transient read-aloud toast; there is only one repair action.
-Fake recognizer / streamed TTS / player tests are in tests/services/test_voice_chat.py;
-the VAD test uses the real DictationService with fake recorder/segmenter/engine.
-The existing native runner's `npm run native -- voice-call` journey checks the real
-shell admission, empty-member/draft guard and missing-voice Settings repair with an
-isolated profile and no paid speech. It does not exercise a successful audio call.
-Rendered fixtures establish UI/IPC behavior only. Native microphone permissions,
-headset echo isolation, installed STT/model/device, actual audio-chunk interruption,
-live model/provider/network and native restart persistence require separate acceptance.
+Dictation is unchanged, but nothing speaks: no voice calls, no spoken Alt+Space answer and no voice service (see
+[Conversation](conversation.md#no-voice-owner-decision-2026-11-10)). The composer's voice button records a voice message
+on a click, a hold or a key (R-UI-106).
 
 
 ## Owner round 10 contracts (supersedes round 9 message previews)
@@ -186,8 +134,8 @@ comes from the same stored turn stream as the conversation, newest line only, in
 existing 14px caption position. No rotating placeholder status is sent. The API fast
 router remains available; CLI quick questions skip auxiliary routing and native session
 resume, consuming only the recent quick context and that conversation's own summary.
-Native acceptance must check stale-session rejection, foreground suppression,
-hotkey/transcript timing and actual first audio.
+Native acceptance must check stale-session rejection, foreground suppression and
+hotkey/transcript timing.
 
 ```powershell
 npm run look -- overlay-step overlay-long-answer --theme both --width 1120,720,1920x1080
@@ -196,17 +144,14 @@ npm run look -- overlay-step overlay-long-answer --theme both --width 1120,720,1
 The corner never writes an address and never more than about two lines at a time (owner,
 2026-10-27: 「右下角的時候並不需要有 URL」, 「要記得要做一些切分」). `overlay/caption.ts` takes
 addresses and link syntax out and cuts a long line into pages at sentence ends and before
-each item of a numbered list; a voiced answer holds only its last page, and pages still
-waiting when the voice ends run on their own time. `overlay-long-answer` replays the answer
+each item of a numbered list; each page runs on its own time. `overlay-long-answer` replays the answer
 the owner saw run out of the window and checks that the first page is up to two lines, has
 no address and stays inside the real window (the canvas and 40 px, `overlay.rs` `place`).
-The voice is apart: it reads the Japanese rendering, already without addresses
-(`speaker.speakable`).
 
 Offline latency plumbing: `uv run python -m raphael_core.tools.quick_latency --fake --count 9` from core/.
 Fake timings do not establish live speed. The owner runs without `--fake` for model
-timings using recording execution and silent first-audio simulation, then compares
-real hotkey/STT/audio logs. Only native logs prove actual transcription/playback speed.
+timings using recording execution, then compares real hotkey/STT logs. Only native logs
+prove actual transcription speed.
 
 ## Keys with the app in front (owner reports 2026-10-31)
 

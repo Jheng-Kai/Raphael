@@ -60,7 +60,6 @@ def test_locale_reaches_all_brain_paths_without_overriding_owner_language(langua
 def test_new_locales_have_translated_fixed_copy_and_natural_prefixes(language):
     assert fixed_language(language) == language
     assert persona.phrase(language, "offline") != persona.phrase("en", "offline")
-    assert persona.fixed_line(language, persona.phrase(language, "copied"), "ja") == persona.phrase("ja", "copied")
     assert answers(language) != answers("en")
     assert target(language, "") != "this item"
     assert step_line(language, "click", target="Test").startswith("《" + persona.PREFIXES[language].notice)

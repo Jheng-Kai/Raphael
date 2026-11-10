@@ -7,7 +7,7 @@ const api = vi.hoisted(() => Object.fromEntries([
   "agentHistoryList", "agentQuestionOpen", "agentAskText", "agentVoice", "agentStop", "cancelSession", "workerCancel",
   "membersList", "membersPresets", "membersRead", "membersViewing", "membersToolChoices", "toolsetsList",
   "routinesList", "modelsCatalog", "providersList", "brainsCli", "core", "roomsList", "statusGet",
-  "voiceCallStart", "voiceCallStatus", "voiceCallEnd", "membersGreet",
+  "membersGreet",
 ].map(name => [name, vi.fn()])));
 vi.mock("../api", () => api);
 import { Cleared } from "../cleared";
@@ -88,7 +88,6 @@ test.each([[0, 1], [3, 31]])("the composer voice press stays in member %s conver
   await choose(0, 4);
   pointer(button, "pointerup"); pointerClick(button); await flush();
   expect(api.agentVoice.mock.calls).toEqual([["down", member, conversation], ["up", member, conversation]]);
-  expect(api.voiceCallStart).not.toHaveBeenCalled();
   emit({ type: "Dictation", phase: "processing", agent: true, member_id: member });
   expect(document.querySelector('[data-key="hearing"]')).toBeNull();
   await choose(member, conversation); expectStop("ack");
@@ -98,7 +97,7 @@ test.each([[0, 1], [3, 31]])("the composer voice press stays in member %s conver
   expect(document.body.textContent).toContain("Report ready");
 });
 
-test("voice chat is not released: a member's voice button records a voice message on a click, a hold and a key", async () => {
+test("a member's voice button records a voice message on a click, a hold and a key", async () => {
   mount(); await flush(); await choose(3, 31);
   const button = $(".cmp-voice");
   pointer(button, "pointerdown");
@@ -109,7 +108,6 @@ test("voice chat is not released: a member's voice button records a voice messag
   button.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })); await flush();
   document.body.dispatchEvent(new KeyboardEvent("keyup", { key: "Enter", bubbles: true })); await flush();
   expect(api.agentVoice.mock.calls).toEqual([["down", 3, 31], ["up", 3, 31], ["down", 3, 31], ["up", 3, 31], ["down", 3, 31], ["up", 3, 31]]);
-  expect(api.voiceCallStart).not.toHaveBeenCalled();
 });
 
 test.each(["pointercancel", "lostpointercapture"])("%s ends a member's voice message once", async event => {
@@ -117,7 +115,6 @@ test.each(["pointercancel", "lostpointercapture"])("%s ends a member's voice mes
   const button = $(".cmp-voice"); pointer(button, "pointerdown");
   pointer(button, event); pointer(button, "pointerup"); pointerClick(button); await flush();
   expect(api.agentVoice.mock.calls).toEqual([["down", 3, 31], ["up", 3, 31]]);
-  expect(api.voiceCallStart).not.toHaveBeenCalled();
 });
 
 beforeEach(() => {
@@ -132,7 +129,6 @@ beforeEach(() => {
   api.routinesList.mockResolvedValue({ routines: [] }); api.roomsList.mockResolvedValue({ rooms: [] }); api.membersGreet.mockResolvedValue({ turn_id: 1 });
   api.brainsCli.mockResolvedValue({ clis: [] }); api.providersList.mockResolvedValue({ providers: [] });
   api.agentVoice.mockResolvedValue(undefined); api.cancelSession.mockResolvedValue(undefined);
-  api.voiceCallStatus.mockResolvedValue({ call: null }); api.voiceCallStart.mockResolvedValue({ failure: "microphone" });
   api.core.mockImplementation(async (method: string, params: { member_id?: number } = {}) => method === "conversations.list"
     ? { conversations: conversations.filter(c => c.member_id === params.member_id) } : { questions: [] });
   api.agentHistoryList.mockImplementation(async (q: { member_id?: number; conversation_id?: number }) => ({ turns: turns.filter(turn =>

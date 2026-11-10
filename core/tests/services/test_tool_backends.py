@@ -9,16 +9,15 @@ import wave
 from types import SimpleNamespace
 
 import httpx
-import numpy as np
 import pytest
 
-from raphael_core.services import backends, browser_sessions, tts, web
+from raphael_core.services import backends, browser_sessions, web
 from raphael_core.services.attachment_store import AttachmentStore
 from raphael_core.services.common import ServiceError
 from raphael_core.services.generation import Generation
 from raphael_core.services.hub import ServiceHub
 from raphael_core.services.keys import KEYED_SERVICES, memory_keys
-from raphael_core.services.speech_backends import STT_IDS, TTS_IDS, transcribe
+from raphael_core.services.speech_backends import STT_IDS, transcribe
 
 KEY = "fake-service-secret"
 URL = "https://example.com/article"
@@ -57,8 +56,6 @@ async def test_extended_rpc_is_opt_in_and_never_hides_unconfigured_backends(conn
     assert KEY not in encoded
     for service in KEYED_SERVICES:
         assert await rpc.call("services.clear_key", {"service": service}) == {"ok": True}
-    assert (await rpc.call("services.status"))["voice"]["options"] == [
-        {"id": "fish", "needs_key": True, "has_key": False, "key_optional": False}]
     await hub.aclose()
 
 
@@ -160,98 +157,6 @@ async def test_unsupported_identity_never_borrows_an_api_key(service):
         with pytest.raises(ServiceError) as error:
             await web.search(service, "needle", http=http, key=KEY)
     assert error.value.service == service and error.value.kind == "not_configured"
-
-
-REMOTE_TTS = [service for service in TTS_IDS if service not in ("edge", "piper", "kittentts")]
-
-
-@pytest.mark.parametrize("service", REMOTE_TTS)
-async def test_remote_speech_uses_provider_protocol_and_normalizes_pcm(service):
-    seen = []
-    def respond(req):
-        seen.append(req)
-        body = json.loads(req.content)
-        assert "hello" in (body.get("input") or body.get("text") or body.get("contents")[0]["parts"][0]["text"])
-        if service == "gemini":
-            assert req.headers["x-goog-api-key"] == KEY and "voiceName" in str(body)
-            return httpx.Response(200, json={"candidates": [{"content": {"parts": [{"inlineData": {"data": base64.b64encode(bytes(480)).decode(), "mimeType": "audio/L16;codec=pcm;rate=24000"}}]}}]})
-        if service == "elevenlabs":
-            assert req.headers["xi-api-key"] == KEY and req.url.params["output_format"] == "pcm_44100"
-            assert req.url.path == "/v1/text-to-speech/voice/stream"
-            return httpx.Response(200, content=bytes(882))
-        assert req.headers["authorization"] == f"Bearer {KEY}"
-        if service == "xai":
-            assert req.url.path == "/v1/tts" and body["voice_id"] == "voice"
-        else:
-            assert req.url.path.endswith("/audio/speech") and body["model"] == "owner-model"
-        if service == "mistral":
-            assert body["voice_id"] == "voice"
-            return httpx.Response(200, json={"audio_data": base64.b64encode(wav()).decode()})
-        return httpx.Response(200, content=wav())
-    async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as http:
-        chunks = [chunk async for chunk in tts.stream(service, "hello", http=http, key=KEY, model="owner-model", voice="voice")]
-    assert len(b"".join(chunks)) == 882 and len(seen) == 1
-    assert not b"".join(chunks).startswith(b"RIFF")
-
-
-@pytest.mark.parametrize("service", REMOTE_TTS)
-@pytest.mark.parametrize("failure", ("missing", "auth", "malformed"))
-async def test_speech_failure_names_its_provider_without_fallback(service, failure):
-    seen = []
-    def respond(req):
-        seen.append(req)
-        return httpx.Response(401 if failure == "auth" else 200, content=b"bad", headers={"content-type": "audio/wav"})
-    async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as http:
-        with pytest.raises(ServiceError) as error:
-            _ = [chunk async for chunk in tts.stream(service, "hello", http=http, key=None if failure == "missing" else KEY, model="owner-model")]
-    assert error.value.service == service
-    assert error.value.kind == {"missing": "missing_secret", "auth": "auth", "malformed": "bad_response"}[failure]
-    assert len(seen) == (0 if failure == "missing" else 1)
-
-
-@pytest.mark.parametrize("service", ("edge", "piper", "kittentts"))
-async def test_free_speech_engines_are_chosen_without_downloading(service, monkeypatch, tmp_path):
-    calls = []
-    class Edge:
-        def __init__(self, text, voice):
-            calls.append((text, voice))
-        async def stream(self):
-            yield {"type": "audio", "data": wav()}
-    class Piper:
-        @classmethod
-        def load(cls, path):
-            calls.append(path)
-            return cls()
-        def synthesize_wav(self, text, audio):
-            audio.setnchannels(1)
-            audio.setsampwidth(2)
-            audio.setframerate(24000)
-            audio.writeframes(bytes(480))
-    class Kitten:
-        def __init__(self, path):
-            calls.append(path)
-        def generate(self, text, **kwargs):
-            return np.zeros(240)
-    monkeypatch.setitem(sys.modules, "edge_tts", SimpleNamespace(Communicate=Edge))
-    monkeypatch.setitem(sys.modules, "piper", SimpleNamespace(PiperVoice=Piper))
-    monkeypatch.setitem(sys.modules, "kittentts", SimpleNamespace(KittenTTS=Kitten))
-    model = tmp_path / "voice.onnx"
-    model.write_bytes(b"fake")
-    model.with_suffix(".onnx.json").write_text("{}")
-    (tmp_path / "config.json").write_text("{}")
-    async with httpx.AsyncClient(transport=httpx.MockTransport(lambda req: pytest.fail("SDK is faked"))) as http:
-        chunks = [chunk async for chunk in tts.stream(service, "hello", http=http, model=str(tmp_path if service == "kittentts" else model))]
-    assert len(b"".join(chunks)) == 882 and calls
-
-
-@pytest.mark.parametrize("service", ("edge", "piper", "kittentts"))
-async def test_missing_optional_speech_packages_are_provider_errors(service, monkeypatch, tmp_path):
-    module = "edge_tts" if service == "edge" else service
-    monkeypatch.setitem(sys.modules, module, None)
-    async with httpx.AsyncClient() as http:
-        with pytest.raises(ServiceError) as error:
-            _ = [chunk async for chunk in tts.stream(service, "hello", http=http, model=str(tmp_path))]
-    assert error.value.service == service and error.value.kind == "needs_install"
 
 
 @pytest.mark.parametrize("service", [service for service in STT_IDS if service != "whisper"])

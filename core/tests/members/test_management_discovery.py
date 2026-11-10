@@ -27,7 +27,7 @@ def snapshot(question="", **kwargs):
 def test_default_primary_offer_fits_the_measured_pre_unit_budget():
     # feat/members at 5933b60f: 60 native tools with the same widest fixture.
     offered = snapshot("Explain your abilities.")
-    assert len(offered.definitions) == 52
+    assert len(offered.definitions) == 51
     assert len(offered.definitions) <= 60
     assert not set(offered.refs) & MANAGEMENT_TOOLS
     assert set(offered.management) == set(DEFINITIONS)
@@ -132,7 +132,7 @@ async def test_default_production_prompt_stays_below_the_measured_pre_unit_budge
         call = client.chat_calls[0]
         captured.append((call["messages"][0]["content"], call["tools"]))
     system, tools = captured[0]
-    assert len(tools) == 50  # feat/members has 58 for this same production fixture.
+    assert len(tools) == 49  # feat/members has 58 for this same production fixture.
     assert estimate_tokens(system + json.dumps(tools, ensure_ascii=False, separators=(",", ":"))) <= budget
 
 

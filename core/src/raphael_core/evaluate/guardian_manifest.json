@@ -265,10 +265,6 @@
       "scenario_ids": ["S21.settings-quick.ask-owner"],
       "expected_assertions": ["production_state"]
     },
-    "raphael/core/generate_audio": {
-      "scenario_ids": ["S21.files.create-audio"],
-      "expected_assertions": ["production_state"]
-    },
     "raphael/core/memory_log": {
       "scenario_ids": ["S21.memory.log"],
       "expected_assertions": ["production_state"]

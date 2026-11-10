@@ -131,12 +131,12 @@
       "license": "Trademarks of their owners (no licence granted)",
       "repository": "https://github.com/Jheng-Kai/Raphael",
       "source": "https://github.com/Jheng-Kai/Raphael/tree/main/app/src/main/service-logos",
-      "usage": "The full-colour logos of the services and model providers (including Tavily, Jina, Firecrawl, Fish Audio, OpenAI, Azure, Groq, xAI and the other providers named in the notice), in app/src/main/service-logos/, each taken from its owner's own site or press kit (the address of each is in sources.json there). They are trademarks of their owners, who do not sponsor or endorse Raphael; they are shown only to tell a service apart.",
+      "usage": "The full-colour logos of the services and model providers (including Tavily, Jina, Firecrawl, OpenAI, Azure, Groq, xAI and the other providers named in the notice), in app/src/main/service-logos/, each taken from its owner's own site or press kit (the address of each is in sources.json there). They are trademarks of their owners, who do not sponsor or endorse Raphael; they are shown only to tell a service apart.",
       "files": [
         {
           "file": "brand-logos-NOTICE.txt",
           "sourceUrl": "https://github.com/Jheng-Kai/Raphael/blob/main/app/scripts/release-licenses/brand-logos-NOTICE.txt",
-          "sha256": "4baa8589f7a93617f1bd7f5131402b476ac99f22462c4c389916132e44bcba9b"
+          "sha256": "4c7842b986d8f2f69e18107ce4227ab48762d2a24ccff6eb16541cef851f0b5e"
         }
       ]
     },

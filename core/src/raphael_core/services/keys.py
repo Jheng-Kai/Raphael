@@ -1,5 +1,4 @@
-"""The owner's own keys for the services that take one: Brave, Tavily, Exa, Firecrawl and Jina, and
-Fish Audio (Raphael's voice).
+"""The owner's own keys for the services that take one: Brave, Tavily, Exa, Firecrawl and Jina.
 
 Each key is a credential of its own in Windows Credential Manager, through the same store as the
 OpenRouter key (`brain.secrets.CredentialKeyStore`), with its own target name ("Raphael service
@@ -21,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 # The services that take a key of the owner's. Jina works without one, with lower limits.
 KEYED_SERVICES = (
-    "brave", "tavily", "exa", "firecrawl", "jina", "fish", "parallel", "keenable",
+    "brave", "tavily", "exa", "firecrawl", "jina", "parallel", "keenable",
     "perplexity", "openai", "openrouter-media", "xai", "elevenlabs", "mistral", "gemini",
     "deepinfra", "groq", "fal", "krea", "meta-ai", "firecrawl-selfhosted", "browserbase", "browserbase-project",
     "browser-use", "modal-token-id", "modal-token-secret", "daytona", "vercel",

@@ -5,7 +5,7 @@ from raphael_core.agent.history import AgentHistory
 
 from agent.conftest import decision, tool_plan
 from agent.test_narration import chat
-from .test_answering import client, setup, voiced, member, typed, raphael_said, live_said  # noqa: F401
+from .test_answering import client, setup, member, typed, raphael_said, live_said  # noqa: F401
 
 
 @pytest.mark.parametrize("source", ["app", "telegram"])
@@ -183,25 +183,6 @@ async def test_authored_public_updates_use_owner_script_and_preserve_japanese(se
     messages = turns[0]["messages"]
     assert next(m["text"] for m in messages if m["kind"] == "thinking") == "這句話需要檢查。"
     assert next(m["text"] for m in messages if m["kind"] == "progress") == "我來確認。"
-
-
-async def test_voice_fetches_the_lesson_and_speaks_the_actual_japanese_sentences(voiced, client):
-    rig, team, voice = voiced
-    teacher = member(team, name="紫苑", role="日文老師", personality="STRICT-ONLY")
-    sentence = "雨が降りそうです。"
-    client.decisions.append(decision("chat"))
-    client.plans.append(tool_plan(("Raphael__ask_member", {"member": "紫苑", "request": "剛才教的句子是什麼？"})))
-    client.chats.append(live_said(sentence))
-    client.replies.append(raphael_said(f"紫苑教的句子是：{sentence}", say_ja=sentence))
-    result = await rig.ask("我剛剛在跟紫苑聊天，她在教我幾句日文，你可以看一下嗎？因為我想聽一下語音")
-    assert sentence in result["text"] and "我無法讀取" not in result["text"]
-    assert voice.said == [("解", sentence)]
-    assert "Raphael__ask_member" in {t["function"]["name"] for t in client.plan_calls[0]["tools"]}
-    prompt = client.json_calls[0]["system"]
-    assert "<team_roster>" in prompt and teacher.name in prompt and teacher.role in prompt
-    assert teacher.personality not in prompt
-    assert "include the actual sentences" in prompt
-    assert "Preserve those sentences in" in prompt
 
 
 async def test_team_creation_keeps_personality_separate_from_work_instructions(setup, client):

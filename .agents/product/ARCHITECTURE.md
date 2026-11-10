@@ -1,18 +1,12 @@
 # Raphael architecture and checked boundaries
 
-## Member voice-call boundary (2026-11-05)
+## No voice output (2026-11-10)
 
-VoiceChat orchestrates existing DictationService, AgentService and Speaker; it owns
-one call across the owner window. Dictation's call-only VAD callback signals speech
-and pause on the loop; ordinary hotkey recording semantics are unchanged. Speaker's
-existing PCM stop event handles barge-in before its next block. Calls never enter
-room routing or add a model/provider loop (A-01/03/04). Frontend RPCs stay in api.ts
-and six literal voice_chat methods have explicit shell allowlist entries (A-06/10).
-Migration 67 adds call metadata and links to ordinary history turns; the history
-projection folds them under one receipt, with local feedback (A-11, R-UI-101).
-Settings reuse shared dropdowns and the existing repair navigation, without another
-settings registry (A-07/08). Fake audio tests do not prove native/live acceptance.
-
+The app speaks nothing: no text-to-speech service, spoken Alt+Space answer, generated
+audio file or voice call, in the core, the shell or the window. Dictation (speech to
+text) is unchanged. Migrations 22, 64 and 67 keep their voice columns and voice_calls
+tables, and saved tts_* settings rows and a stored Fish Audio key stay where they are,
+unread (core/tests/test_no_voice.py).
 
 ## Conversation metadata boundary (2026-11-05)
 
@@ -27,8 +21,7 @@ reuses room_threads/thread_id, the existing worker and its isolated transcript.
 slack_draft shares EmailDrafts, its version digest, send claim and ToolGate. It refuses
 room origins at both tool and service boundaries. Discovered Slack sends obey the
 same draft-first/full-permission policy as mail. No second draft engine is added.
-Member voice_memo is a profile boolean; agent.speak uses Speaker.say_member and the
-existing PCM player with a pause event. All frontend IPC stays in api.ts and the
+All frontend IPC stays in api.ts and the
 literal owner-window RPCs use explicit Rust allowlist entries. No worker, provider,
 model loop or settings registry is added (A-01/03/04/06/08).
 

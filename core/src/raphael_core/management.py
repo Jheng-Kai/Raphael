@@ -50,7 +50,7 @@ IDS = {"type": "array", "items": MEMBER_ID}
 NULL_ID = {"type": ["integer", "null"], "minimum": 1}
 PROFILE = {
     "tools": {"type": ["array", "null"], "items": TEXT},
-    **{key: TEXT for key in ("name", "role", "blurb", "personality", "instructions", "group", "avatar_preset", "model", "voice")},
+    **{key: TEXT for key in ("name", "role", "blurb", "personality", "instructions", "group", "avatar_preset", "model")},
     **{key: BOOL for key in ("notify", "ask_before_members", "draft_first", "pinned", "hidden")},
     "reply_style": {"type": "string", "enum": ["full", "conversational"]},
     "effort": {"type": "string", "enum": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]},
@@ -162,14 +162,12 @@ ACTIONS = (
           ("first_bot_profile", obj({key: TEXT for key in ("name", "role", "personality", "instructions")}), "Edit the first Bot's profile."),
           ("raphael_draft_first", BOOL, "Set the first Bot's mail draft preference."),
           ("chief_pinned", BOOL, "Pin/unpin the primary contact."),
-          ("tts_enabled", BOOL, "Enable/disable speech for quick questions, voice calls and requested audio files."),
-          ("tts_fish_voice", TEXT, "Set the default voice ID for quick questions, voice calls and audio files."),
           *((key, TEXT, "Choose this model only when the owner explicitly requests it; never recover a failure by changing it.")
             for key in ("cleanup_model", "stt_cloud_model", "assistant_model", "router_model", "memory_model", "pdf_model", "vision_model")),
           *((key, STRINGS, "Edit the model fallback list only when explicitly requested by the owner.")
             for key in ("agent_fallbacks", "cleanup_fallbacks", "router_fallbacks", "vision_fallbacks", "pdf_fallbacks", "stt_fallbacks", "memory_fallbacks")),
           *((key, TEXT, "Choose the service used by this capability.")
-            for key in ("web_search_service", "web_read_service", "pdf_service", "searxng_url", "tts_service", "tts_fish_model", "tts_language")),
+            for key in ("web_search_service", "web_read_service", "pdf_service", "searxng_url")),
           *((key, BOOL, "Enable or disable this shared work capability.")
             for key in ("web_search_enabled", "web_read_enabled", "vision_enabled", "pdf_enabled")),
       )),
@@ -361,11 +359,8 @@ INTERACTION_RPCS = {
     **dict.fromkeys(("attachments.info", "attachments.upload"),
                    "Owner composer file selection and bounded upload; not model management tools."),
     "routines.run": "Only the owner's explicit routine test starts a manual run through the existing worker.",
-    **dict.fromkeys(("voice_chat.start", "voice_chat.end", "voice_chat.mute", "voice_chat.settings",
-                     "voice_chat.feedback", "voice_chat.status"),
-                   "The owner's own voice call controls with one member; never a model tool."),
     **dict.fromkeys(("members.viewing", "members.greet", "rooms.send", "rooms.transcribe", "agent.history.stop", "agent.history.retract",
-                     "worker.cancel", "worker.rerun", "tts.preview", "tts.stop", "pages.open"),
+                     "worker.cancel", "worker.rerun", "pages.open"),
                    "Existing owner conversation, work or presentation entry; not team administration."),
     **dict.fromkeys(("calendar.add", "calendar.update", "calendar.delete"), "Shared calendar work tools retain their existing gate for every member."),
 }
@@ -393,13 +388,13 @@ OWNER_ONLY_SETTINGS = {
 # Explicit reads, not a suffix heuristic: a newly named RPC is unclassified until
 # reviewed. routines.webhook is owner-only because it can reveal a secret.
 READ_ONLY_RPCS = frozenset("""
-agent.history.list agent.history.search agent.history.sent agent.speech.status
+agent.history.list agent.history.search agent.history.sent
 attachments.get audio.devices background.questions.list background.waiting.list
 brains.cli chatgpt.models chatgpt.status computer.viewer_status computer.wallpaper
 connectors.catalog connectors.categories connectors.status connectors.toolkit connectors.tools
 history.list home.overview integrations.audit integrations.catalog integrations.discover
 integrations.inventory integrations.preview languages.list links.preview members.list members.library members.library_file
-members.tool_choices members.unread members.voices messages.search messaging.discord.status
+members.tool_choices members.unread messages.search messaging.discord.status
 messaging.slack.status messaging.telegram.status messaging.member.status messaging.accounts models.catalog models.local models.status
 providers.kinds providers.list providers.models quota.list rooms.list rooms.messages
 routines.runs routines.template safety.rules.list secrets.status services.status stats.summary
@@ -413,8 +408,7 @@ SELF_ACTIONS = frozenset({
     "member_skill_delete", "member_skill_read", "member_command_save", "member_command_delete",
     "memory_document_read", "memory_document_update", "member_skills_list", "member_commands_list",
 })
-SELF_PROFILE_FIELDS = frozenset({"id", "name", "role", "personality", "instructions", "voice", "cover"})
-VOICE_SETTINGS = frozenset({"tts_enabled", "tts_fish_voice", "tts_service", "tts_fish_model", "tts_language"})
+SELF_PROFILE_FIELDS = frozenset({"id", "name", "role", "personality", "instructions", "cover"})
 
 
 def self_action(member_id, name, arguments):
@@ -423,7 +417,7 @@ def self_action(member_id, name, arguments):
     if item is None:
         return False
     if item.setting:
-        return member_id == 0 and item.setting in VOICE_SETTINGS
+        return False
     if item.name not in SELF_ACTIONS or values.get("shared") or values.get("space", "own") != "own":
         return False
     target = values.get("id") if item.name in {"member_update", "member_avatar", "member_cover"} else values.get("member_id", 0)
@@ -445,10 +439,6 @@ def self_definitions(member_id):
             definition["parameters"]["properties"]["action"]["enum"] = [item.name for item in items]
             definition["description"] = "Manage only your own skills, commands, picture and cover. Deletions require the owner's yes.\n" + "\n".join(
                 item.name + ": " + item.description + " Schema: " + json.dumps(item.schema) for item in items)
-        elif name == "settings_update" and member_id == 0:
-            definition = deepcopy(definition)
-            definition["parameters"]["properties"]["key"]["enum"] = sorted(VOICE_SETTINGS)
-            definition["description"] = "Change your own voice preferences only."
         elif name in SELF_ACTIONS:
             definition = deepcopy(definition)
             if name == "member_update":

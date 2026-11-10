@@ -7,7 +7,7 @@ const missing: Missing = { resource: "searxng", requirement: "url", state: "miss
 test("moved recovery copy names Tools, Safety and the member computer panel in every language", () => {
   for (const [locale, panel] of [["zh-TW", "成員電腦面板"], ["en", "member computer panel"], ["ja", "メンバーの PC パネル"]] as const) {
     setLocale(locale);
-    for (const key of ["missing.url", "missing.search", "missing.read", "missing.vision", "missing.pdf", "missing.voice", "missing.no_text", "services.loadFailed"] as const) {
+    for (const key of ["missing.url", "missing.search", "missing.read", "missing.vision", "missing.pdf", "missing.no_text", "services.loadFailed"] as const) {
       expect(t(key)).toContain(t("settings.paneTools"));
       expect(t(key)).not.toMatch(/設定 › 拉斐爾|Settings > Raphael|設定 › ラファエル/);
     }
@@ -95,4 +95,12 @@ test("early startup failure names unavailable settings and recovery without a de
     expect(root.querySelector("button")).toBeNull();
   }
   setLocale("zh-TW");
+});
+
+test("a dictionary notice that could not be delivered names the dictionary and offers no repair", () => {
+  setLocale("en");
+  const root = document.createElement("div");
+  root.innerHTML = missingHTML({ resource: "dictionary", requirement: "learned", state: "broken", repair: null });
+  expect(root.querySelector(".missing-note")?.textContent).toContain(t("missing.learned"));
+  expect(root.querySelector("[data-missing-repair]")).toBeNull();
 });

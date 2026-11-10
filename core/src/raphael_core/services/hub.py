@@ -2,9 +2,8 @@
 and the `services.*` methods of the settings page.
 
 `ServiceHub` reads the choices from the settings at each call (`web_search_service`,
-`web_read_service`, `pdf_service`, `vision_model`, `searxng_url`, `tts_service`, `tts_fish_voice`,
-`tts_fish_model`) and whether each capability is on at all (`web_search_enabled`,
-`web_read_enabled`, `vision_enabled`, `pdf_enabled`, `tts_enabled`: `enabled`), so a change the
+`web_read_service`, `pdf_service`, `vision_model`, `searxng_url`) and whether each capability is on
+at all (`web_search_enabled`, `web_read_enabled`, `vision_enabled`, `pdf_enabled`: `enabled`), so a change the
 owner makes takes effect with the next request, and it holds the keys (`keys.ServiceKeys`), the HTTP client the
 services are called with, the safe fetch of the built-in page reader (`fetch.PageFetcher`) and the
 model that sees (`vision.Vision`). The fast tier (`agent.tools.Tools`) and the background worker's
@@ -19,17 +18,14 @@ RPC methods (the choice itself is `settings.set`, like any other setting):
   `selection_supported`. This is metadata, not permission to execute a tool.
   Existing calls without this opt-in retain their original response contract.
 
-- `services.status` -> `{search, read, pdf, vision, voice}`. `search`, `read` and `pdf` are each
+- `services.status` -> `{search, read, pdf, vision}`. `search`, `read` and `pdf` are each
   `{enabled, service, options: [{id, needs_key, has_key, key_optional}]}`: whether the capability
   is on (a capability that is off is not used at all), the service chosen, and each one
   that could be, with whether it needs a key of the owner's, whether one is stored and whether a key
   is optional (Jina's: it works without one, with lower limits). SearXNG's option also has
   `url_set`, whether its address is set. `vision` is `{enabled, model, resolved_model, supports_images}`:
   the setting ("" for the answer model), the model that reads images in the end, and whether
-  OpenRouter's list says it reads them (null when the list does not say). `voice` is Raphael's
-  voice: `{enabled, service, options, fish_voice_set}`, with `enabled`, `service` and `options` as
-  above (only "fish", which needs a key) and whether the owner has filled in the Fish Audio voice id (the id
-  itself is a setting, `tts_fish_voice`). A key is never in it.
+  OpenRouter's list says it reads them (null when the list does not say). A key is never in it.
 - `services.set_key {service, key}` -> `{ok: true}`: the key of a keyed service, without the
   spaces around it, 1 to 512 characters with no space or control character inside, stored in the
   vault. The key is never echoed back, and a key that is refused is refused by a kind.
@@ -43,7 +39,7 @@ Nothing here logs a key, a query, an address, a file's name or a result.
 
 import logging
 import sqlite3
-from collections.abc import AsyncIterator, Callable, Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -55,7 +51,7 @@ from ..brain.providers.base import ModelProvider
 from ..brain.settings import DEFAULTS, SettingsStore, api_model, hosted_providers
 from ..protocol import INTERNAL_ERROR, INVALID_PARAMS, RpcError, invalid_params
 from ..router import Router
-from . import pdf, tts, web
+from . import pdf, web
 from . import backends
 from .attachments import Attachment
 from .file_reader import read_file, Transcribe
@@ -94,7 +90,6 @@ READ_OPTIONS = (
     *(Option(row.id, bool(row.key_service), row.key_optional) for row in backends.READ if row.id != "firecrawl"),
 )
 PDF_OPTIONS = (Option("builtin"), Option("openrouter"))
-TTS_OPTIONS = (Option("fish", needs_key=True), *(Option(row.id, bool(row.key_service)) for row in backends.VOICE))
 
 # The capabilities that can be turned off, and the setting that holds the switch of each.
 CAPABILITIES = {
@@ -102,7 +97,6 @@ CAPABILITIES = {
     "read": "web_read_enabled",
     "vision": "vision_enabled",
     "pdf": "pdf_enabled",
-    "voice": "tts_enabled",
 }
 
 
@@ -183,12 +177,8 @@ class ServiceHub:
     def pdf_service(self) -> str:
         return _setting(self._settings, "pdf_service", PDF_OPTIONS)
 
-    def tts_service(self) -> str:
-        """The selected speaker; settings owns which choices can be persisted."""
-        return _setting(self._settings, "tts_service", TTS_OPTIONS)
-
     def enabled(self, capability: str) -> bool:
-        """Whether the owner has `capability` ("search", "read", "vision", "pdf" or "voice") on. A
+        """Whether the owner has `capability` ("search", "read", "vision" or "pdf") on. A
         capability that is off is not used at all, whatever service is chosen for it. A setting
         that cannot be read is its default."""
         key = CAPABILITIES[capability]
@@ -249,57 +239,6 @@ class ServiceHub:
             firecrawl_url=self._optional_text("firecrawl_url"),
         )
         return service, page
-
-    def tts_ready(self, *, voice: str = "") -> bool:
-        """Whether Raphael can be heard: a voice service is chosen and has what it needs (for
-        Fish Audio, a key and the owner's voice id). Nothing is requested to tell."""
-        if not self.enabled("voice"):
-            return False
-        service = self.tts_service()
-        if service in KEYED_SERVICES and not self._keys.has(service):
-            return False
-        return service != "fish" or bool(voice or self._text("tts_fish_voice"))
-
-    def speech(self, text: str, *, voice: str | None = None) -> AsyncIterator[bytes]:
-        """The speech of `text` by the voice service chosen (`tts.stream`) as chunks of PCM
-        (`tts.PCM_RATE`, mono, 16-bit), with its key, voice and model as the settings and the vault
-        hold them now. Close it (`contextlib.aclosing`) unless it is read to its end. ServiceError
-        of a kind, among them "not_configured" (no service, or no voice id) and "missing_secret"
-        (no key), raised when it is first read."""
-        service = self.tts_service()
-        key = self._keys.get(service) if service in KEYED_SERVICES else None
-        return tts.stream(
-            service,
-            text,
-            http=self._client(),
-            key=key,
-            voice=(self._text("tts_fish_voice") if service == "fish" else self._optional_text("tts_voice")) if voice is None else voice,
-            model=self._text("tts_fish_model") if service == "fish" else self._optional_text("tts_model"),
-        )
-
-    async def audio_file(self, text: str, *, voice: str | None = None) -> Attachment:
-        import io
-        import wave
-        from contextlib import aclosing
-        from .attachments import MAX_FILE_BYTES
-
-        if not self.enabled("voice"):
-            raise ServiceError("disabled")
-        pcm = bytearray()
-        async with aclosing(self.speech(text, voice=voice)) as stream:
-            async for chunk in stream:
-                pcm.extend(chunk)
-                if len(pcm) > MAX_FILE_BYTES - 44:
-                    raise ServiceError("size")
-        if not pcm or len(pcm) % 2:
-            raise ServiceError("bad_response")
-        output = io.BytesIO()
-        with wave.open(output, "wb") as audio:
-            audio.setnchannels(1)
-            audio.setsampwidth(2)
-            audio.setframerate(tts.PCM_RATE)
-            audio.writeframes(pcm)
-        return Attachment("speech.wav", "audio/wav", output.getvalue())
 
     async def read_attachment(
         self, attachment: Attachment, question: str, ledger: Ledger
@@ -389,16 +328,10 @@ class ServiceHub:
                 "resolved_model": model,
                 "supports_images": sees,
             },
-            "voice": {
-                "enabled": self.enabled("voice"),
-                "service": self.tts_service(),
-                "options": self._options(TTS_OPTIONS if include_backends else TTS_OPTIONS[:1]),
-                "fish_voice_set": bool(self._text("tts_fish_voice")),
-            },
         }
         if include_backends:
-            from ..brain.settings import WEB_SEARCH_SERVICES, WEB_READ_SERVICES, TTS_SERVICES
-            choices = {"search": WEB_SEARCH_SERVICES, "read": WEB_READ_SERVICES, "voice": TTS_SERVICES}
+            from ..brain.settings import WEB_SEARCH_SERVICES, WEB_READ_SERVICES
+            choices = {"search": WEB_SEARCH_SERVICES, "read": WEB_READ_SERVICES}
             result["backend_schema"] = 1
             for category, rows in backends.GROUPS.items():
                 group = result.setdefault(category, {"enabled": False, "service": "", "options": []})
@@ -420,15 +353,13 @@ class ServiceHub:
                         view["model_reference_prefix"] = f"@service:{row.id}/" if row.integration == "ready" else None
                         view["model_required"] = True
                         view["configuration_fields"] = [category + "_model"]
-                    elif category == "voice":
-                        view["configuration_fields"] = ["tts_voice", "tts_model"]
                     elif category == "transcription":
                         view["configuration_fields"] = ["stt_service", "stt_model"]
                     if row.id == "firecrawl-selfhosted":
                         view["configuration_fields"] = ["firecrawl_url"]
                         view["url_set"] = bool(self._optional_text("firecrawl_url"))
-                    package = {"edge": "edge_tts", "piper": "piper", "kittentts": "kittentts", "whisper": "faster_whisper"}.get(row.id)
-                    if package and category in ("voice", "transcription"):
+                    package = {"whisper": "faster_whisper"}.get(row.id)
+                    if package and category == "transcription":
                         from importlib.util import find_spec
                         view["runtime_dependency"] = package
                         view["runtime_available"] = find_spec(package) is not None
@@ -437,11 +368,11 @@ class ServiceHub:
                     elif row.id == "modal":
                         view["credential_services"] = ["modal-token-id", "modal-token-secret"]
                 for view in options:
-                    view.setdefault("name", {"openrouter": "OpenRouter", "brave": "Brave Search", "tavily": "Tavily", "exa": "Exa", "searxng": "SearXNG", "builtin": "Built-in Reader", "jina": "Jina Reader", "fish": "Fish Audio"}.get(view["id"], view["id"]))
+                    view.setdefault("name", {"openrouter": "OpenRouter", "brave": "Brave Search", "tavily": "Tavily", "exa": "Exa", "searxng": "SearXNG", "builtin": "Built-in Reader", "jina": "Jina Reader"}.get(view["id"], view["id"]))
                     view.setdefault("description_id", f"tool_backend.{category}.{view['id']}")
                     view.setdefault("integration", "ready")
                     view.setdefault("selection_supported", True)
-                    view.setdefault("billing", {"openrouter": "model", "brave": "free_tier", "tavily": "metered", "exa": "metered", "searxng": "self_hosted", "builtin": "local", "jina": "free_tier", "fish": "metered"}.get(view["id"], "unknown"))
+                    view.setdefault("billing", {"openrouter": "model", "brave": "free_tier", "tavily": "metered", "exa": "metered", "searxng": "self_hosted", "builtin": "local", "jina": "free_tier"}.get(view["id"], "unknown"))
             result["transcription"]["service"] = self._optional_text("stt_service")
             result["transcription"]["enabled"] = bool(result["transcription"]["service"])
             for kind in ("image", "video"):

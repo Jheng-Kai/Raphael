@@ -35,9 +35,9 @@ def test_indented_markdown_code_keeps_chinese_literals():
     assert authored_chinese(text, "zh-TW") == text.replace("软件资料", "軟體資料", 1)
 
 
-def test_reply_script_does_not_rewrite_memory_or_japanese_voice():
-    original = Reply("Answer", "软件", "资料", messages=["软件", "資料を読みます。"], say_ja="資料を読みます。")
+def test_reply_script_does_not_rewrite_memory_or_japanese():
+    original = Reply("Answer", "软件", "资料", messages=["软件", "資料を読みます。"])
     converted = owner_script(original, "zh-TW")
     assert (converted.text, converted.detail, converted.messages) == ("軟體", "資料", ["軟體", "資料を読みます。"])
-    assert converted.say_ja == original.say_ja and converted.memory is original.memory
+    assert converted.memory is original.memory
     assert original.text == "软件" and original.messages[0] == "软件"
