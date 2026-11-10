@@ -395,7 +395,7 @@ brains.cli chatgpt.models chatgpt.status computer.viewer_status computer.wallpap
 connectors.catalog connectors.categories connectors.status connectors.toolkit connectors.tools
 history.list home.overview integrations.audit integrations.catalog integrations.discover
 integrations.inventory integrations.preview languages.list links.preview members.list members.library members.library_file
-members.tool_choices members.unread messages.search messaging.discord.status
+members.picture members.tool_choices members.unread messages.search messaging.discord.status
 messaging.slack.status messaging.telegram.status messaging.member.status messaging.accounts models.catalog models.local models.status
 providers.kinds providers.list providers.models quota.list rooms.list rooms.messages
 routines.runs routines.template safety.rules.list secrets.status services.status stats.summary

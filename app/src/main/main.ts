@@ -42,6 +42,7 @@ import type { PageArgument, AppContext, DeviceSettings, MainEvent, MainPageId, P
 import { Undoable } from "./undo";
 import { Cleared } from "./cleared";
 import { leave, toaster } from "./ui";
+import { firstViewShown, holdOptionalReads, optionalRead } from "./startup-reads";
 import { bindMissing, missingHTML, noticeHTML } from "./missing";
 import { warnQuota } from "./quota-warning";
 import "./styles.css";
@@ -122,19 +123,8 @@ function mountWindowChrome(): void {
 
 let startupHasSettings = false;
 
-/** How long after launch the window waits before reading ahead for pages the owner has not opened. */
-const READ_AHEAD_AFTER_MS = 4000;
-const launchedAt = performance.now();
-/** Runs `read` once the window has been up a few seconds and is idle; at once if that time is past. */
-function readAheadLater(read: () => void): void {
-  const wait = Math.max(0, READ_AHEAD_AFTER_MS - (performance.now() - launchedAt));
-  setTimeout(() => {
-    if (typeof requestIdleCallback === "function") requestIdleCallback(read, { timeout: 2000 });
-    else read();
-  }, wait);
-}
-
 async function start(): Promise<void> {
+  holdOptionalReads();
   applyTheme();
   // Focus rings only while Tab moves the focus (focus-keys.ts); a click or the caret shows the rest.
   installFocusKeys(document);
@@ -209,9 +199,10 @@ watchChipRows(document.body);
     try {
       const { settings: value } = await api.settingsGet();
       setOwnerProfile(value);
-      // Settings and Connect apps read ahead once the first page has what it needs: the core answers in order, so a
-      // read ahead at start-up keeps the owner waiting for the page in front of them (owner, 2026-11-10).
-      readAheadLater(() => void settings.preload());
+      // Settings and Connect apps read ahead once the first view is shown and answered, one read at a time: the core
+      // answers on one loop, so a read ahead at start-up keeps the owner waiting for the page in front of them
+      // (owner, 2026-11-10 and 2026-11-11). The time since launch plays no part: a slow core start used to let it pass.
+      void optionalRead(() => settings.preload());
     } catch {
       // The core can be restarting: keep asking, or the owner's face and name stay blank.
       setTimeout(() => void refreshOwner(), 1000);
@@ -411,6 +402,7 @@ watchChipRows(document.body);
           showPages();
           tellAgentPage();
           if (mode === "first" || !current) go(START_PAGE);
+          firstViewShown();
           // The speech models that the guide did not wait for come on in the background.
           void resumeModels({ status: api.modelsStatus, ensure: api.modelsEnsure }, (message) => console.warn("main:", message));
         },
@@ -429,6 +421,7 @@ watchChipRows(document.body);
   } else {
     showPages();
     go(START_PAGE);
+    firstViewShown();
     // A guide that was left before the speech models were all there: fetch what is missing.
     void resumeModels({ status: api.modelsStatus, ensure: api.modelsEnsure }, (message) => console.warn("main:", message));
   }
@@ -446,6 +439,7 @@ function showPages(): void {
 mountWindowChrome();
 start().catch((err) => {
   console.error("main: could not start", err);
+  firstViewShown();
   // Whatever went wrong, the window must not stay blank.
   document.getElementById("ob")!.hidden = true;
   showPages();

@@ -23,6 +23,7 @@ import { RAPHAEL_ID } from "./members";
 import type { BrainSettings, CatalogModel, CliBrain, MainEvent, Member, ModelCatalog } from "./types";
 import { closeMenu, esc, ico, iconButton, openPopover, placeMenu, toaster } from "./ui";
 import { describeError } from "./format";
+import { optionalRead } from "./startup-reads";
 import { findsName } from "./find-match";
 
 /** A source's models fold past this many, under a button that says how many there are. */
@@ -294,11 +295,14 @@ export function mountComposerBrain(slot: HTMLElement, member: () => Member, host
     paintMenu();
   }
 
-  async function reload(): Promise<void> {
+  /** `quietly`: a read of the app's own accord (start-up, a change); the owner opening the menu reads at once. */
+  async function reload(quietly = false): Promise<void> {
     const mine = ++generation;
+    // The two lists wait for the first view and for each other at start-up (startup-reads.ts); the settings are small.
+    const optional = <T>(method: string): Promise<T> => quietly ? optionalRead(() => api.core<T>(method)) : api.core<T>(method);
     const [catalogResult, cliResult, settingsResult] = await Promise.allSettled([
-      api.core<ModelCatalog>("models.catalog"),
-      api.core<{ clis: CliBrain[] }>("brains.cli"),
+      optional<ModelCatalog>("models.catalog"),
+      optional<{ clis: CliBrain[] }>("brains.cli"),
       api.core<{ settings: BrainSettings }>("settings.get"),
     ]);
     if (mine !== generation) return;
@@ -313,7 +317,7 @@ export function mountComposerBrain(slot: HTMLElement, member: () => Member, host
     }
     draw();
   }
-  host.onEvent?.(event => { if (CHANGES.includes(event.type)) void reload(); });
-  draw(); void reload();
+  host.onEvent?.(event => { if (CHANGES.includes(event.type)) void reload(true); });
+  draw(); void reload(true);
   return { draw, reload: () => void reload() };
 }

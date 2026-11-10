@@ -63,6 +63,7 @@ import {
   toaster,
 } from "../ui";
 import { AUTO_MICROPHONE } from "../microphone";
+import { optionalRead } from "../startup-reads";
 import {
   APPEARANCES,
   LOCAL_COMMAND_MODES,
@@ -1287,7 +1288,8 @@ export function createSettings(app: AppContext): SettingsPage {
       // is idle after launch, not when the owner first asks for them (owner, 2026-11-07). Opening reads them again quietly.
       if (!connectionsWarmed) {
         connectionsWarmed = true;
-        const warm = (): void => { if (!(visible && pane === "connections")) void connections.load(); };
+        // After the first view, and one read at a time with the other optional reads (startup-reads.ts).
+        const warm = (): void => { if (!(visible && pane === "connections")) void optionalRead(() => connections.load()); };
         if (typeof requestIdleCallback === "function") requestIdleCallback(warm, { timeout: 3000 }); else setTimeout(warm, 1500);
       }
     },

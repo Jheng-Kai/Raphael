@@ -31,14 +31,17 @@ async def test_upload_replacement_pattern_and_clear_preserve_original_bytes(rig,
     assert all('cover' not in item for item in (await rig.call('members.list'))['members'])
     raw = wide_picture()
     shown = (await rig.call('members.set_cover', upload(identifier, raw)))['member']
-    assert shown['id'] == identifier and shown['cover'] == {'kind': 'image', 'url': 'data:image/png;base64,' + base64.b64encode(raw).decode('ascii')}
+    picture = await rig.call('members.picture', {'id': identifier, 'kind': 'cover'})
+    assert picture['url'] == 'data:image/png;base64,' + base64.b64encode(raw).decode('ascii')
+    assert shown['id'] == identifier and shown['cover'] == {'kind': 'image', 'rev': picture['rev']}
     folder = rig.local / 'avatars' / 'covers'
     [first] = list(folder.glob('*.png'))
     assert first.read_bytes() == raw and 'Owner' not in first.name
     assert struct.unpack('>II', first.read_bytes()[16:24]) == (4, 1)
     again = (await rig.call('members.set_cover', upload(identifier, WEBP, 'image/webp', 'new.webp')))['member']
     assert not first.exists() and len(list(folder.glob('*.webp'))) == 1
-    assert again['avatar'] == shown['avatar'] and again['cover']['url'].startswith('data:image/webp;base64,')
+    assert again['avatar'] == shown['avatar'] and again['cover']['rev'] != shown['cover']['rev']
+    assert (await rig.call('members.picture', {'id': identifier, 'kind': 'cover'}))['url'].startswith('data:image/webp;base64,')
     pattern = (await rig.call('members.update', {'id': identifier, 'cover': 'pattern:unknown-future-pattern'}))['member']
     assert pattern['cover'] == {'kind': 'pattern', 'id': 'unknown-future-pattern'}
     assert not list(folder.glob('*.webp'))
@@ -99,7 +102,7 @@ async def test_cover_survives_reload_and_a_missing_picture_is_unset(rig):
     from raphael_core.members.covers import Covers
     member = (await rig.call('members.create', {'name': 'Persistent'}))['member']['id']
     expected = (await rig.call('members.set_cover', upload(member)))['member']['cover']
-    rig.service._covers = Covers(rig.local / 'avatars' / 'covers', rig.service._data_url, rig.service._pictures.pop)
+    rig.service._covers = Covers(rig.local / 'avatars' / 'covers', rig.service._picture, rig.service._pictures.pop)
     assert rig.service.view_of(rig.service.store.member(member))['cover'] == expected
     next((rig.local / 'avatars' / 'covers').glob('*.png')).unlink()
     assert 'cover' not in rig.service.view_of(rig.service.store.member(member))

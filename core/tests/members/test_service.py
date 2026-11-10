@@ -13,7 +13,7 @@ from raphael_core.protocol import INVALID_PARAMS, RpcError
 PNG = b"\x89PNG\r\n\x1a\n" + b"\0" * 32
 WEBP = b"RIFF\x10\0\0\0WEBPVP8 " + b"\0" * 16
 METHODS = {
-    "members.list", "members.create", "members.update", "members.delete", "members.set_avatar", "members.set_cover",
+    "members.list", "members.create", "members.update", "members.delete", "members.set_avatar", "members.set_cover", "members.picture",
     "members.read", "members.viewing", "members.tool_choices",
     "groups.create", "groups.update", "groups.delete",
     "routines.list", "routines.create", "routines.update", "routines.delete", "routines.template",
@@ -80,7 +80,9 @@ async def test_raphaels_own_picture_is_read_from_the_shells_copy(rig):
     (folder / "picture").write_bytes(PNG)
     (folder / "picture.json").write_text(json.dumps({"mime": "image/png", "crop": {"x": 0.5, "y": 0.4, "zoom": 1.5}}))
     raphael = (await rig.call("members.list"))["members"][0]
-    assert raphael["avatar_url"] == "data:image/png;base64," + base64.b64encode(PNG).decode()
+    assert "avatar_url" not in raphael and raphael["avatar_rev"]
+    assert await rig.call("members.picture", {"id": 0, "kind": "avatar"}) == {
+        "rev": raphael["avatar_rev"], "url": "data:image/png;base64," + base64.b64encode(PNG).decode()}
     assert raphael["avatar_crop"] == {"x": 0.5, "y": 0.4, "zoom": 1.5}
 
 
@@ -151,7 +153,9 @@ async def test_a_picture_of_the_owners_is_copied_in_and_shown_and_the_old_one_go
     data = base64.b64encode(PNG).decode()
     shown = (await rig.call("members.set_avatar", {"id": member["id"], "name": "C:/Users/me/a.png", "mime": "image/png", "data": data}))["member"]
     assert shown["avatar"].startswith(f"file:{member['id']}-") and shown["avatar"].endswith(".png")
-    assert shown["avatar_url"] == f"data:image/png;base64,{data}"
+    assert "avatar_url" not in shown and shown["avatar_rev"]
+    assert await rig.call("members.picture", {"id": member["id"], "kind": "avatar"}) == {"rev": shown["avatar_rev"], "url": f"data:image/png;base64,{data}"}
+    assert (await rig.call("members.list"))["members"][1]["avatar_rev"] == shown["avatar_rev"]
     folder = rig.local / "avatars" / "members"
     (first,) = folder.iterdir()
     assert first.read_bytes() == PNG and "Users" not in first.name  # the path it came from is never kept
@@ -180,7 +184,8 @@ async def test_a_picture_from_an_older_build_has_no_url_left(rig):
     folder.mkdir(parents=True)
     (folder / "old.png").write_bytes(PNG)
     member = (await rig.call("members.create", {"name": "A", "avatar": "preset:old"}))["member"]
-    assert "avatar_url" not in member  # the app shows its slime
+    assert "avatar_url" not in member and "avatar_rev" not in member  # the app shows its slime
+    assert await rig.call("members.picture", {"id": member["id"], "kind": "avatar"}) == {"rev": None, "url": None}
 
 
 # --- unread and waiting ----------------------------------------------------------------------------

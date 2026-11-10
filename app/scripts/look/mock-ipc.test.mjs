@@ -358,6 +358,16 @@ describe("shared look IPC boundary", () => {
     await new Promise(resolve => setTimeout(resolve, 10));
     expect(events[0].settings.appearance).toBe("dark");
   });
+  it("stamps when a core call began and was answered, after the core's latency, without changing the trace", async () => {
+    const target = {};
+    const state = installMock(fixture, { fixture: { coreLatencyMs: 30 } }, target);
+    const asked = target.__TAURI_INTERNALS__.invoke("core_call", { method: "settings.get" });
+    expect(state.calls.at(-1).t1).toBeUndefined();
+    await asked;
+    const call = state.calls.at(-1);
+    expect(call.t1 - call.t0).toBeGreaterThanOrEqual(25);
+    expect(Object.keys(call)).toEqual(["command", "method", "params"].filter(key => key in call));
+  });
   it("fails unsupported IPC even if the app catches the rejection", async () => {
     const target = {};
     const state = installMock(fixture, {}, target);

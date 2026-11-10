@@ -116,7 +116,8 @@ async def test_raphael_can_change_own_picture_after_primary_moves(setup):
     team.members.store.set_primary(peer.id)
     image = base64.b64encode(b"\x89PNG\r\n\x1a\n" + b"\x00" * 16).decode()
     result = await team.members.admin_tool(0, "member_avatar", {"id": 0, "name": "fixture.png", "mime": "image/png", "data": image}, interactive=True)
-    assert result["member"]["avatar_url"].startswith("data:image/png;base64,")
+    assert result["member"]["avatar_rev"] and "avatar_url" not in result["member"]
+    assert (await team.members._picture_of({"id": 0, "kind": "avatar"}))["url"].startswith("data:image/png;base64,")
     assert team.members._raphael_picture()[1] == {"x": .5, "y": .5, "zoom": 1}
 
 

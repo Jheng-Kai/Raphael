@@ -5,6 +5,9 @@ import { scene, click, wait, check, hover } from "./steps.mjs";
 const ready = [wait(".page-home:not([hidden]) .ho-hero"), check("home-hero"), check("home-overview")];
 export default [
   scene("home", "Raphael greets the owner with his line, then four figures, today's band and table, and the last two weeks as a chart", [...ready, check("home-figures"), check("home-band"), check("home-trend")]),
+  // Start-up reads (owner, 2026-11-11): the first view's reads are answered before any optional read starts, and the optional ones run one at a time.
+  scene("startup-order", "At start-up the Home overview and the roster are answered before the model, app and settings reads start, and those never overlap", [...ready, { action: "startup-order",
+    firstView: ["home.overview", "members.list", "rooms.list"], heavy: ["models.catalog", "brains.cli"] }], { coreLatencyMs: 60 }),
   scene("home-trend-tip", "A day's bar shows its figures under the pointer, beside the bar and inside the window", [...ready, hover(".ho-col.is-today"), check("home-trend-tip")]),
   scene("home-empty", "Nothing scheduled or finished yet: zeros said plainly, 建立 for today, and the chart's quiet note", [...ready, check("home-empty-day")], { homeEmpty: true }),
   scene("home-many", "Many waiting questions are all counted, the newest named", [...ready, check("home-questions")], { homeManyQuestions: true }),

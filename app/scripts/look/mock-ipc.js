@@ -1725,7 +1725,11 @@ export function installMock(fixture, config = {}, target = window) {
     async invoke(command, args = {}) {
       const recorded = command === "core_call" && args.method === "integrations.card_save" && args.params?.id === "card-login" ? {...args,params:{...args.params,value:"[private login]"}} : args;
       // `traceCalls` keeps where in the app each call came from, to find who asks for what.
-      state.calls.push({ command, ...copy(command === "main_events" ? {} : recorded), ...(variant.traceCalls ? { from: new Error().stack.split("\n").slice(2, 9).map(line => line.trim().replace(/\s*\(?https?:\/\/[^/]+\/src\/main\//, " ").replace(/\?[^:]*/, "")).join(" < ") } : {}) });
+      const entry = { command, ...copy(command === "main_events" ? {} : recorded), ...(variant.traceCalls ? { from: new Error().stack.split("\n").slice(2, 9).map(line => line.trim().replace(/\s*\(?https?:\/\/[^/]+\/src\/main\//, " ").replace(/\?[^:]*/, "")).join(" < ") } : {}) };
+      // Not enumerable: the stamps stay out of every comparison and copy of the trace.
+      Object.defineProperty(entry, "t0", { value: performance.now(), writable: true });
+      Object.defineProperty(entry, "t1", { value: undefined, writable: true });
+      state.calls.push(entry);
       // Native Channel instances contain callbacks; do not serialize them before registration.
       if (command === "overlay_subscribe") {
         state.overlayChannel = args.channel;
@@ -1789,7 +1793,11 @@ export function installMock(fixture, config = {}, target = window) {
         if (variant.askUntilAnswered) return new Promise(resolve => { window.__look.answerAsk = () => resolve(null); });
         return null;
       }
-      if (command === "core_call") return copy(await core(args.method, args.params));
+      if (command === "core_call") {
+        // A core that takes a moment to answer, as the real one does; the order of reads then shows in the trace.
+        if (variant.coreLatencyMs) await new Promise(resolve => setTimeout(resolve, variant.coreLatencyMs));
+        try { return copy(await core(args.method, args.params)); } finally { entry.t1 = performance.now(); }
+      }
       if (command === "update_control") {
         if (variant.appUpdate === "not_configured") return { state: "error", version: "", notes: "", error: "not_configured" };
         const sample = data.appUpdateSample;

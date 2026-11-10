@@ -952,3 +952,17 @@ opening stores. Legacy migration's existing backup path records created-file ide
 mtime and digest in a local ledger; only unchanged tracked versions beyond five per
 source are removed. Existing untracked copies and revision/undo journals are retained.
 Shell/browser privilege separation remains a separate hardening unit (D03 in report).
+
+First start-up (2026-11-11, owner: 「第一次開 app 的速度還是非常慢，就只有第一次而已」). The core is spawned
+before any window (lib.rs); the windows are created and shown without waiting for it, and the window's calls queue
+in the core's pipe until `core.hello` is answered. `__main__` starts a thread that imports the speech libraries
+while the main thread imports the application and builds it, and joins that thread before the stdin reader starts
+(numpy hangs if it first loads while stdin is being read; app.py). The window (`startup-reads.ts`) holds optional
+reads until the first view is asked for and answered; `models.catalog`, `brains.cli`, the Connect apps lists and
+the Settings read-ahead then run one at a time. `api.ts` reuses a shared read answered in the last 1.5 s while the
+window starts up. `connectors.catalog` keeps its last list in `connectors-catalog.json` beside `connectors.json`;
+`models.catalog` answers from the providers' saved lists (registry `_models`) and renews them in the background,
+telling the window with `providers.changed`. Members carry pictures by revision: views have `avatar_rev` and
+`cover.rev`, `members.picture` returns the data URL, `member-pictures.ts` caches by revision and `api.ts` puts
+`avatar_url` and `cover.url` into every members answer, so pages read the same fields as before. The shell's
+`members.picture` is in the main window's method list (commands.rs).
