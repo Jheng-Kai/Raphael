@@ -1786,6 +1786,11 @@ export function checkRendered(name, context = {}) {
         if (pri) {
           require(buttons[0] === pri, 'primary button is first');
           require(getComputedStyle(pri).backgroundColor === 'rgb(255, 255, 255)', 'primary button is white in both themes');
+          // The row stands at the card's right with the primary rightmost (owner, 2026-11-10: 卡片的按鈕盡量放在右側).
+          if (row.matches('.card-actions')) {
+            const end = row.getBoundingClientRect().right, right = pri.getBoundingClientRect().right;
+            require(Math.abs(right - end) <= 1 && buttons.every(button => button.getBoundingClientRect().right <= right + 0.5), `the card's buttons stand at its right, the primary rightmost (${Math.round(end - right)} px)`);
+          }
         }
       }
       require(card.scrollWidth <= card.clientWidth + 1, 'card never scrolls sideways');
@@ -4040,14 +4045,20 @@ export function checkRendered(name, context = {}) {
     require(document.activeElement === buttons[0], "Cancel receives initial focus");
     require(visible(document.getElementById(dialog.getAttribute('aria-describedby'))), "the irreversible-action description is announced");
     require(buttons[1].classList.contains('pri'), "Delete uses the skin's primary accent");
-    require(getComputedStyle(dialog.querySelector('.mb-dlg-act')).borderTopWidth === '0px', "no divider separates the compact footer");
+    // As Grok Bot's dialogs (owner, 2026-11-10): a compact head over a hairline, a footer over a hairline with Cancel
+    // then Delete at the right, and no × beside a Cancel.
+    const head = dialog.querySelector('.mb-dlg-head'), act = dialog.querySelector('.mb-dlg-act');
+    require(parseFloat(getComputedStyle(head).borderBottomWidth) > 0 && parseFloat(getComputedStyle(act).borderTopWidth) > 0, "hairlines part the head and the footer");
+    require(parseFloat(getComputedStyle(head.querySelector('h2')).fontSize) <= parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--fs-sm')) + 0.5, "the question is a compact heading");
+    require(!visible(dialog.querySelector('[data-dlg="close"]')), "no × stands beside Cancel");
+    const end = act.getBoundingClientRect().right - parseFloat(getComputedStyle(act).paddingRight);
+    const [cancel, remove] = buttons.map(button => button.getBoundingClientRect());
+    require(Math.abs(remove.right - end) <= 1 && cancel.right <= remove.left, "Cancel then Delete stand at the right");
     // Since 2026-11-03 the dialog's text buttons share the app's small radius, like every other text button.
     const small = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--r-sm'));
     require(buttons.every(button => parseFloat(getComputedStyle(button).borderRadius) === small), "actions share the app's small button radius");
     const box = dialog.getBoundingClientRect();
-    const close = dialog.querySelector('[data-dlg="close"]').getBoundingClientRect();
-    require(box.width <= 482 && box.left >= 0 && box.right <= innerWidth, "the compact panel fits the window");
-    require(close.width >= 32 && close.height >= 32, "the close control retains its hit target");
+    require(box.width <= 442 && box.left >= 0 && box.right <= innerWidth, "the compact panel fits the window");
     return { check: name, width: box.width, height: box.height };
   }
   if (name.startsWith("cli-account-")) {
@@ -6344,7 +6355,8 @@ export function checkRendered(name, context = {}) {
     // An app the catalog has no logo for draws the generic plug, never another brand's mark (R-UI-28).
     require(visible(mark) && mark.querySelector('svg.logo path, img.logo, svg.i'), "R-UI-34: the app's own catalog or bundled mark, or the generic plug");
     if (name === 'connector-key' || name === 'connector-app') require(!mark.querySelector('img.logo'), "an app without a catalog logo draws the generic plug");
-    if (name.startsWith('connector-slack')) require(mark.querySelector('img.logo')?.getAttribute('src') === window.__look.data.pluginCatalog.find(app => app.slug === 'slack').logo, "the card uses exactly the store's catalog logo");
+    // Since 2026-11-08 a known app draws its bundled mark first (service-mark.ts entryIcon); either is Slack's own.
+    if (name.startsWith('connector-slack')) require(mark.querySelector('svg.logo path') || mark.querySelector('img.logo')?.getAttribute('src') === window.__look.data.pluginCatalog.find(app => app.slug === 'slack').logo, "the card shows Slack's own mark: the bundled drawing or exactly the store's catalog logo");
     if (mark) require(markStyle.backgroundColor === 'rgba(0, 0, 0, 0)' && parseFloat(markStyle.borderTopWidth) === 0, "R-UI-34: the mark is bare, on no tile");
     const reply = [...card.closest('.tn').querySelectorAll('.ra .chat-message')].filter(visible).at(-1);
     require(reply && reply.getBoundingClientRect().bottom <= box.top + 1, "the card sits below the reply that asked for it");

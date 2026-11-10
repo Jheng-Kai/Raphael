@@ -8,7 +8,7 @@ import { backgroundQuestionHTML } from "./background-questions";
 import { mountOwnerQuestions } from "./owner-questions";
 import { setLocale } from "./i18n";
 import type { OwnerQuestion } from "./types";
-import { cardHTML, cardDisclosureHTML } from "./card";
+import { cardHTML, cardDisclosureHTML, cardFailure } from "./card";
 
 vi.mock("./api", () => ({ ownerQuestionAnswer: vi.fn(async () => ({ status: "answered" })) }));
 afterEach(() => { document.body.replaceChildren(); vi.clearAllMocks(); setLocale("zh-TW"); });
@@ -101,4 +101,16 @@ test("a failed card can be closed locally without changing the saved action", ()
   close!.click();
   expect(card.hidden).toBe(true);
   expect(card.querySelector(".pri")?.textContent).toBe("Retry");
+});
+
+test("a card drawn as failed keeps one × when its failure is shown, and that × puts it away", () => {
+  // A message that could not be sent is drawn failed and then given its retry (agent.ts, chat-composer.ts): it once had two ×.
+  document.body.innerHTML = `<div class="composer-failure">${cardHTML({ title: "Not sent", status: "failed" })}</div>`;
+  const card = document.querySelector<HTMLElement>(".conversation-card")!;
+  let dismissed = 0;
+  expect(cardFailure(card, () => undefined, () => { dismissed++; })).toBe(true);
+  const closes = card.querySelectorAll<HTMLButtonElement>(".card-head .card-close");
+  expect(closes).toHaveLength(1);
+  closes[0]!.click();
+  expect(dismissed).toBe(1);
 });

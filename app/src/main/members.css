@@ -225,13 +225,19 @@
 .mb-offer-t { display: grid; grid-template-columns: minmax(0, 1fr); min-width: 0; }
 .mb-offer-t b { font-size: var(--pa-dfs); font-weight: var(--weight-semibold); overflow-wrap: anywhere; }
 .mb-offer-t > .routine-sentence { font-size: var(--pa-rt-s); overflow-wrap: anywhere; }
-.mb-dialog.mb-confirm { width: min(480px, 100%); gap: var(--sp-2); padding: var(--sp-4); border: 1px solid var(--edge); border-radius: var(--r-lg); }
-.mb-confirm .mb-dlg-head { align-items: flex-start; }
-.mb-confirm .mb-dlg-head h2 { padding-top: 4px; font-size: var(--fs-lg); }
+/* A confirmation, as Grok Bot's dialogs (owner, 2026-11-10: 「刪除的 dialog 可以參考 grok bot 的 UI」): a 440 px panel, its
+   question in a compact semibold head over a hairline, what it does in secondary words, and a footer over a hairline with
+   Cancel then the action at the right. With a Cancel there is no × as well: Escape and the scrim still close it. */
+.mb-dialog.mb-confirm { width: min(440px, 100%); gap: 0; padding: 0; border: 1px solid var(--edge); border-radius: var(--r-lg); }
+.mb-confirm .mb-dlg-head { align-items: center; min-height: 48px; padding: var(--sp-2) var(--sp-4); border-bottom: 1px solid var(--line); }
+.mb-confirm .mb-dlg-head h2 { font-size: var(--fs-sm); font-weight: var(--weight-semibold); }
 .mb-confirm .mb-dlg-head .btn.icon { flex: none; width: 32px; min-height: 32px; }
-.mb-confirm .mb-dlg-body { font-size: var(--fs-sm); line-height: 1.55; color: var(--text-2); overflow-wrap: anywhere; }
+.mb-confirm:has(.mb-dlg-act [data-dlg="cancel"]) .mb-dlg-head [data-dlg="close"] { display: none; }
+.mb-confirm .mb-dlg-body { padding: var(--sp-4); font-size: var(--fs-sm); line-height: 1.55; color: var(--text-2); overflow-wrap: anywhere; }
 .mb-confirm .mb-dlg-body p { margin: 0; }
-.mb-confirm .mb-dlg-act { padding-top: var(--sp-1); border-top: 0; }
+.mb-confirm .mb-dlg-act { padding: var(--sp-3) var(--sp-4); border-top: 1px solid var(--line); }
+/* With nothing to say under the question, one hairline parts it from the buttons, not two. */
+.mb-confirm:has(.mb-dlg-body:empty) .mb-dlg-act { border-top: 0; }
 .mb-confirm .mb-dlg-act .btn { padding-inline: var(--sp-4); }
 .mb-addrow { display: flex; gap: var(--sp-2); }
 .mb-addrow .mb-fin { flex: 1; }

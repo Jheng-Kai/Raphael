@@ -1,5 +1,19 @@
 # Conversation
 
+## Card buttons at the right; confirmations as Grok Bot's (owner, 2026-11-10)
+
+Owner: 「那個卡片的按鈕盡量放在右側 然後你可以看一下刪除的 dialog 可以參考 grok bot 的 UI」. A conversation card's
+`.card-actions` stands at its right (`row-reverse`): the primary rightmost, the others and the quiet exit to its left,
+the primary still first in the markup (R-CARD-01). A confirmation (`.mb-confirm`: delete, clear, restore, reset) is
+Grok Bot's dialog: 440 px, a compact semibold question over a hairline, the consequence in secondary words, a footer
+over a hairline with Cancel then the action at the right, and no × beside a Cancel (R-UI-27). A card drawn failed keeps
+one ×: `cardFailure` reuses it instead of adding a second (it had two on a message that could not be sent). Checks:
+the card shell (`the card's buttons stand at its right`), `delete-confirmation`, card-send-failed.
+
+```
+npm run look -- room-delete quick-clear-confirm computer-file-confirm computer-maintenance-reset card-question-waiting card-permission-waiting card-mail-ready card-connect-waiting card-key-waiting card-send-failed card-page-failed card-mcp-draft connector-key email-draft-handed-off chat-secret-masked card-send-retry card-mail-failed card-key-failed --theme both --width 1120,720,1920x1080
+```
+
 ## Opening a conversation fast (owner, 2026-11-10)
 
 Owner: 「開啟對話的也是（太慢），想辦法幫我最佳化」. The core answers requests in order on one loop, so what is asked

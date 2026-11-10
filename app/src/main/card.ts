@@ -67,8 +67,10 @@ export function cardFailure(card: Element | null, retry: () => void, dismiss?: (
   const prior = status?.outerHTML;
   // 重試 below what went wrong; putting it away is the × at the card's top right, not a 「關閉」 beside 重試 (owner, 2026-11-08).
   const head = card.querySelector<HTMLElement>(":scope > .card-head");
-  let dismissButton = head?.querySelector<HTMLElement>("[data-card-dismiss]") ?? null;
-  const clear = (): void => { failure!.remove(); dismissButton?.remove(); original.forEach(footer => { footer.hidden = false; }); if (prior) { const pill = card.querySelector(".card-status"); if (pill) pill.outerHTML = prior; } };
+  // A card drawn as failed already has its × (cardHTML's failedClose): that one puts it away too, never a second beside it.
+  let dismissButton = head?.querySelector<HTMLElement>("[data-card-dismiss], [data-card-failed-close]") ?? null;
+  const added = !dismissButton;
+  const clear = (): void => { failure!.remove(); if (added) dismissButton?.remove(); original.forEach(footer => { footer.hidden = false; }); if (prior) { const pill = card.querySelector(".card-status"); if (pill) pill.outerHTML = prior; } };
   if (status) status.outerHTML = cardStatusHTML("failed", t("cards.failed"));
   failure.innerHTML = `<p role="alert">${esc(t("cards.retained"))}</p><div class="card-actions">${btn(esc(t("cards.retry")), "sm pri", " data-card-retry")}</div>`;
   if (head && !dismissButton) {

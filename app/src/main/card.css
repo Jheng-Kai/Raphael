@@ -19,10 +19,13 @@
 .card-well { min-width: 0; border-radius: var(--r-sm); background: var(--surface-2); overflow: clip; }
 :root[data-theme="dark"] .card-well { background: var(--content); }
 .card-well > :not(:last-child) { border-bottom: 1px solid var(--edge); }
-.conversation-card .card-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-start; gap: 8px; margin: 0; grid-column: auto; }
+/* A card's buttons stand at its right, the primary rightmost and the others to its left, as Grok Bot's dialogs (owner,
+   2026-11-10: 「卡片的按鈕盡量放在右側」). The primary stays first in the markup, so it is still the first one Tab reaches. */
+.conversation-card .card-actions { display: flex; flex-direction: row-reverse; flex-wrap: wrap; align-items: center; justify-content: flex-start; gap: 8px; margin: 0; grid-column: auto; }
 .conversation-card .btn { transform: none; }
 .conversation-card .card-actions .pri, .conversation-card .sc-form .pri, .conversation-card .question-submit .pri { background: var(--card-primary); color: var(--card-primary-ink); border: 1px solid var(--card-primary-edge); }
-.conversation-card .card-actions > .card-quiet { margin-left: auto; background: transparent; border-color: transparent; color: var(--text-2); }
+/* The quiet way out stands left of the others, as Cancel does beside a dialog's action. */
+.conversation-card .card-actions > .card-quiet { background: transparent; border-color: transparent; color: var(--text-2); }
 .card-disclosure-toggle.btn { display: flex; align-items: center; gap: 6px; padding: 1px 8px; margin-inline: -8px; border: 0; background: transparent; color: var(--text-2); font-size: var(--fs-xs); min-height: var(--h-ctl-sm); }
 .card-disclosure-toggle > svg { width: 16px; height: 16px; }
 .card-disclosure-toggle[aria-expanded=true] > svg { rotate: 90deg; }
