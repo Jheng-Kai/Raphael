@@ -52,7 +52,7 @@ Development builds keep their data in `Raphael Dev` folders, apart from an insta
 Run the checks from `app/`:
 
 ```powershell
-npm run verify             # TypeScript, unit tests, contrast
+npm run verify             # TypeScript, unit tests, contrast, Rust formatting
 npm run verify -- --core   # plus the Python core
 npm run verify -- --rust   # plus the Rust shell
 ```
