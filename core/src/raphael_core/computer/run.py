@@ -90,6 +90,7 @@ from ..agent.policy import (
 from ..agent.steps import Step, reason_of
 from ..background.run import estimate_cost
 from ..brain.openrouter import ChatTurn, OpenRouterError
+from ..brain.prompt_cache import ONE_HOUR, cache_options
 from ..brain.providers.base import ModelProvider
 from ..clock import wall_clock_ms
 from ..memory.conversation import turn_text
@@ -390,6 +391,10 @@ class ComputerRun:
     `run_id` names the run to the shell: every request and every state says it, and the shell
     takes no step for a run that has ended (its `end` revokes the id at once, before any job that
     was asked for earlier reaches the desktop).
+
+    `cache_session` and `cache_ttl` are where the model's provider keeps the run's prefix, and how
+    long (`brain.prompt_cache`): every model call of the run gives the same, so each step reads what
+    the step before it wrote.
     """
 
     def __init__(
@@ -417,6 +422,13 @@ class ComputerRun:
         self.member_id = member_id
         self.conversation_id = conversation_id
         self.run_id = uuid.uuid4().hex
+        # One name for the member's conversation the run began in (the run's own when it began in none), so the
+        # next run there goes to the same place too.
+        self.cache_session = f"raphael-computer-{member_id}-{self.run_id if conversation_id is None else conversation_id}"
+        # A run begins with a request made at this computer, which the owner waits on (its tools need their
+        # presence: background work never starts one), and it may wait for them in turn, half an hour for a
+        # sign-in: an hour, as their conversation (owner, 2026-11-09, decision 1). Work nobody waits on takes "5m".
+        self.cache_ttl: str | None = ONE_HOUR
         self.language = language
         self.request = request
         # What came before the request (`conversation_block`): "" when nothing did.
@@ -678,6 +690,7 @@ class ComputerRun:
                     timeout_s=timeout,
                     max_tokens=CHAT_MAX_TOKENS,
                     reasoning_effort="none",
+                    **cache_options(self.cache_session, self.cache_ttl),
                 ),
                 timeout,
             )
