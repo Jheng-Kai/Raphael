@@ -11,6 +11,7 @@ from raphael_core.agent.cli.drivers import Event
 from raphael_core.brain.openrouter import ChatToolCall, ChatTurn
 from raphael_core.connectors import cards
 from raphael_core.connectors.cards import CardStore
+from raphael_core.connectors.google import GoogleClient
 from raphael_core.evaluate.google_fixture import GoogleFixture
 from raphael_core.evaluate.guardian import Budget
 from raphael_core.evaluate.guardian_driver import RpcDriver
@@ -151,16 +152,22 @@ async def test_a_brain_that_claims_the_mail_without_a_card_fails(tmp_path, monke
 
 
 async def test_a_forged_callback_never_connects_and_fails(tmp_path, monkeypatch):
-    browser = GoogleFixture.browser
+    browser, connect = GoogleFixture.browser, GoogleClient.connect
 
     async def forged(self, url):
         if self.mode == "approve":
             self.mode = "forged"
         await browser(self, url)
+
+    async def impatient(self, scopes, open_browser):
+        # A forged callback leaves the sign-in waiting for a true one until it gives up. The owner gets two
+        # minutes for that; here the forged one has already been turned away, so a second is as good.
+        return await connect(self, scopes, open_browser, timeout=1)
     monkeypatch.setattr(GoogleFixture, "browser", forged)
+    monkeypatch.setattr(GoogleClient, "connect", impatient)
     reasons, driver = await run_s14(tmp_path, monkeypatch)
     assert "auth_callback" in reasons and "resume_once" in reasons
-    assert not driver.google.reads()
+    assert len(driver.google.sign_ins) > 1 and not driver.google.reads()
 
 
 async def test_a_task_resumed_twice_fails(tmp_path, monkeypatch):
