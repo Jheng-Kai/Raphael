@@ -492,6 +492,9 @@ class _Ask:
     # What the owner said no to in this request: (tool key, the rule that had it asked). Nothing else that
     # needs their yes is asked after it, and the tool is not tried again, whichever other tool is tried.
     declined: list[tuple[str, str | None]] = field(default_factory=list)
+    # How many calls of this request the data floor has refused. The first is told to the model, which can
+    # go on with the right tool; a second ends the request in the owner's words (`protected_data`).
+    floor_refusals: int = 0
 
     @property
     def nested(self) -> bool:
@@ -2941,6 +2944,20 @@ class AgentService:
         # made: one that a rule forbids ends the turn with Raphael saying so, and no call is made.
         if screenings is None:
             screenings = await asyncio.gather(*(self._screen_call(ask, c, ledger) for c in calls))
+        if ask.floor_refusals == 0 and any(s.verdict == DENY and s.protected for s in screenings):
+            # The data floor is not a rule of the owner's. The first refusal is a tool result: the model is told
+            # to use its own tools (skill_manage, the management tools) and goes on. Nothing is written.
+            blocked = [i for i, s in enumerate(screenings) if s.verdict == DENY and s.protected]
+            ask.floor_refusals += 1
+            for index in blocked:
+                call = calls[index]
+                ask.steps.append(self._step("tool", call.tool.name, call.tool.server, "blocked", time.perf_counter(), "protected_data"))
+                results.append(ToolResult(_label(call), False, None, "protected_data", instruction=screenings[index].rule))
+            kept = [i for i in range(len(calls)) if i not in blocked]
+            calls = [calls[i] for i in kept]
+            screenings = [screenings[i] for i in kept]
+            if not calls:
+                return results
         for call, screening in zip(calls, screenings):
             if screening.verdict == DENY:
                 ask.steps.append(
@@ -3016,7 +3033,7 @@ class AgentService:
         from .data_floor import WRITE_REFUSAL
         access = self._gate.data_floor.access(tool.key, call.arguments)
         if access == "write":
-            return Screening(DENY, WRITE_REFUSAL)
+            return Screening(DENY, WRITE_REFUSAL, protected=True)
         if access == "read":
             return Screening(ASK)
         if is_local(tool.key):

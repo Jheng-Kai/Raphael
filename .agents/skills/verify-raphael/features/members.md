@@ -525,11 +525,18 @@ Verification sections, name/description frontmatter, <=128 KiB and <=8 reference
 change enable switches or another member's skills.
 
 The existing memory background scheduler serializes tool-less review with capture/tidy.
-Each private conversation has its own watermark and persisted failure count. At >=10 tool
-steps since review, the selected member brain proposes <=3 reusable class-level changes,
-preferring updates. Three consecutive failures stop that thread's review across restarts.
-Cleared/deleted work and stale document revisions are rechecked after the brain returns.
-No tools, provider fallback or normal CLI resume session are used for review.
+Skill review follows Hermes Agent's nudge (owner, 2026-11-11, R-SKILL-09..11). Each member has one
+count and a persisted failure count. Steps of real work (not reads of skills, memory, the time or
+the team) since the last review or `skill_manage` reach `NUDGE_INTERVAL` = 10, decided at the end of
+a normally finished owner turn (never a routine's, an exchange's, a stopped or failed one); then the
+selected member brain, shown every skill's name and description, proposes <=3 changes. Nothing
+saved is the usual answer. Limits: one new learned skill per member per 24 hours, six hours between
+reviews, a near-duplicate becomes an update (`skill_names.similar_skill`). Every creation and update
+is logged (member, skill name, created/updated, source) without content. Three consecutive failures
+pause that member's review across restarts. Cleared/deleted work and stale document revisions are
+rechecked after the brain returns. No tools, provider fallback or normal CLI resume session are
+used for review. `skill_manage` is offered for a request about skills and on the CLI brains' and
+workers' fixed tool set, not merely because a skill is enabled.
 
 The existing member Skills pane shows provenance and learning date, opens an editable
 document, deletes and undoes the latest change (including deletion) through existing RPCs.

@@ -9,9 +9,11 @@ from pathlib import Path
 from urllib.parse import unquote, urlparse
 
 
+# What the model is told. The owner reads other words (`persona.PHRASES.protected_data`), never this sentence.
 WRITE_REFUSAL = (
     "Commands, scripts and file tools cannot write Raphael's own data, database, credentials or core files. "
-    "Use the member, connection or settings management tools instead; ask the owner to approve their card."
+    "To change a skill use skill_manage; to change members, connections or settings use the member, connection or "
+    "settings management tools instead (the owner approves their card). Do not try another command or path."
 )
 READ_CONSENT = "Reading Raphael's own data requires the owner's consent for this call. Use management tools when possible."
 _ENV = re.compile(r"%([^%]+)%|\$\{(?:env:)?([\w]+)\}|\$(?:env:)?([\w]+)", re.I)

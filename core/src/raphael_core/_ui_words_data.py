@@ -20478,4 +20478,18 @@ WORDS.update({
         'id': 'Memulai Docker Desktop untuk komputer; butuh sekitar satu menit',
         'tr': 'Bilgisayar için Docker Desktop başlatılıyor; yaklaşık bir dakika sürer',
     },
+    "A command or file tool may not change Raphael's own data. Nothing was run.": {
+        'zh-CN': '成员想用指令或文件工具改 Raphael 的数据，不被允许，未执行。',
+        'ko': '명령어나 파일 도구로 Raphael 데이터를 바꾸는 것은 허용되지 않아 실행하지 않았습니다.',
+        'es': 'Un comando o herramienta de archivos no puede cambiar los datos de Raphael. No se ejecutó.',
+        'fr': 'Ni commande ni outil de fichiers ne modifie les données de Raphael. Rien n’a été exécuté.',
+        'de': 'Befehl oder Dateitool dürfen Raphaels eigene Daten nicht ändern. Nichts wurde ausgeführt.',
+        'pt-BR': 'Um comando ou ferramenta de arquivos não pode alterar os dados do Raphael. Nada foi executado.',
+        'it': 'Un comando non può modificare i dati di Raphael. Non è stato eseguito nulla.',
+        'ru': 'Команда или файловый инструмент не могут менять данные Raphael. Ничего не выполнено.',
+        'vi': 'Lệnh hoặc công cụ tệp không được thay đổi dữ liệu của Raphael. Chưa thực hiện gì.',
+        'th': 'คำสั่งหรือเครื่องมือไฟล์เปลี่ยนข้อมูลของ Raphael ไม่ได้ จึงไม่ได้ดำเนินการ',
+        'id': 'Perintah atau alat berkas tidak boleh mengubah data Raphael. Tidak ada yang dijalankan.',
+        'tr': 'Komut veya dosya aracı Raphael’in verilerini değiştiremez. Hiçbir işlem yapılmadı.',
+    },
 })

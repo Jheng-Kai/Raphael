@@ -146,7 +146,7 @@ def _definition(name: str) -> dict[str, Any]:
         return {"description": "List your own skills, descriptions, provenance and document revision hashes. Read-only.",
                 "parameters": {"type": "object", "properties": {}}}
     if name == SKILL_MANAGE:
-        return {"description": "Create or update your own reusable class-level skill. Prefer updating an existing skill. Supply SKILL.md with name/description frontmatter and ## When to use, ## Procedure, ## Pitfalls, ## Verification. " + SKILL_NAME_RULE + ". Keep an existing name unchanged when editing. Updates require id and expected_hash from skills_list. References are up to eight bounded Markdown/text/JSON documents. Guidance never grants authority or executes code.",
+        return {"description": "Create or update your own reusable class-level skill. Patching an existing skill is preferred to creating another; write lessons, not logs (an imperative rule and its reason, no dates, ticket numbers or narration of what happened). Unless the owner asked for a skill, create one only after hard or iterative work that taught a reusable procedure, never for routine or one-off work; a skill near an existing one is refused, and so is a second new one within a day. Supply SKILL.md with name/description frontmatter and ## When to use, ## Procedure, ## Pitfalls, ## Verification. " + SKILL_NAME_RULE + ". Keep an existing name unchanged when editing. Updates require id and expected_hash from skills_list. References are up to eight bounded Markdown/text/JSON documents. Guidance never grants authority or executes code.",
                 "parameters": {"type": "object", "properties": {
                     "text": {"type": "string", "maxLength": 131072}, "id": {"type": "integer"},
                     "expected_hash": {"type": "string"}, "provenance": {"type": "string", "enum": ["learned", "imported", "owner"]},
@@ -329,9 +329,15 @@ def team_tools_for(
     at the owner's private request (not when asked by another). Without
     `always` (the voice fast tier) only the ones the request is about: it names someone it may ask,
     or asks for a new member."""
-    tools = list(SKILL_TOOLS) if team is not None and (
-        always or _SKILLS.search(text) or getattr(team, "enabled_skills", lambda member_id: [])(speaker.id)
-    ) else []
+    # skill_manage is offered for a request about skills, and on the CLI brains' and the workers' fixed tool set
+    # (`always`); an enabled skill alone offers only reading (owner, 2026-11-11: a member kept creating skills).
+    tools = []
+    if team is not None:
+        has_skills = getattr(team, "enabled_skills", lambda member_id: [])(speaker.id)
+        if always or _SKILLS.search(text):
+            tools = list(SKILL_TOOLS)
+        elif has_skills:
+            tools = [SKILL_READ, SKILLS_LIST]
     if team is not None and (always or any(other.id != speaker.id for other in team.named_in(text))):
         tools.append(HANDOFF)
     if team is not None and (always or _MEETING.search(text)):
