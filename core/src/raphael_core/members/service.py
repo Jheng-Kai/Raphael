@@ -1811,7 +1811,7 @@ class MembersService:
                     created_group = (await self._group_create({"name": group_name}))["group"]
                 params["group_id"] = group.id if group else created_group["id"] if created_group else None
             try:
-                result = await (self._create(params) if name == "member_create" else self._update(params))
+                result = await (self._create({**params, "greet": True}) if name == "member_create" else self._update(params))
                 if name == "member_create":
                     self.member_made(member_id, result["member"]["id"])
                 return result

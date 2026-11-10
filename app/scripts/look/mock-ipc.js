@@ -81,6 +81,8 @@ export function installMock(fixture, config = {}, target = window) {
     data.voices = { configured: true, voices: [{ id: "voice-clear", name: "清澈女聲" }, { id: "voice-calm", name: "沉穩男聲" }] };
     data.servers.forEach(server => { server.enabled = true; });
     data.servers.push({ ...structuredClone(data.servers[0]), id: "calendar", name: "行事曆" });
+    // An app named as Claude's connectors name it, drawn with its own mark (owner, 2026-11-10).
+    data.servers.push({ ...structuredClone(data.servers[0]), id: "mobbin", name: "Mobbin MCP" });
     data.members.find(member => member.id === 1).voice = "voice-clear";
     data.commands.push({ id: 41, member_id: 1, name: "weekly", description: "每週整理", template: "整理本週：{input}" });
     data.settings.tts_fish_voice = "voice-calm";
@@ -797,6 +799,18 @@ export function installMock(fixture, config = {}, target = window) {
     if (latest) latest.is_default = true;
     else data.conversations.push({ id: nextId(data.conversations), member_id: member, title: "", is_default: true, kind: "standard", created_at_ms: data.now, updated_at_ms: data.now });
   };
+  // As the core does since 2026-11-06: the member types while its own model writes the greeting, with no choices.
+  const greet = member => {
+    mainConversation(member.id);
+    const conversation = data.conversations.find(item => item.member_id === member.id && item.is_default);
+    const greeting = { id: nextId(data.turns), session_id: `greeting-${member.id}`, question: "", route: "greeting", prefix: "", text: "", detail: null, status: "running", cost_usd: 0, source: "greeting", model: null, steps: [], messages: [], attachments: [], member_id: member.id, conversation_id: conversation.id, created_at_ms: data.now, created_at: new Date(data.now).toISOString() };
+    data.turns.push(greeting);
+    if (!variant.greetingPending) setTimeout(() => {
+      Object.assign(greeting, { status: "done", text: `嗨，我是${member.name} 👋 想讓我先幫你分擔哪件事？可以是手上的專案，或其他成員還沒顧到的事。` });
+      notify("AgentTurn", { turn_id: greeting.id, member_id: member.id });
+    }, 600);
+    return greeting;
+  };
   const update = (items, id, patch) => {
     const item = items.find(item => item.id === id);
     if (!item) throw new Error(`Fixture item not found: ${id}`);
@@ -1097,19 +1111,19 @@ export function installMock(fixture, config = {}, target = window) {
       case "members.create": {
         const member = { ...data.members[1], role: "", blurb: "", ...p, id: nextId(data.members) };
         data.members.push(member);
-        if (p.greet) {
-          // As the core does since 2026-11-06: the member types while its own model writes the greeting, with no choices.
-          mainConversation(member.id);
-          const conversation = data.conversations.find(item => item.member_id === member.id);
-          const greeting = { id: nextId(data.turns), session_id: `greeting-${member.id}`, question: "", route: "greeting", prefix: "", text: "", detail: null, status: "running", cost_usd: 0, source: "greeting", model: null, steps: [], messages: [], attachments: [], member_id: member.id, conversation_id: conversation.id, created_at_ms: data.now, created_at: new Date(data.now).toISOString() };
-          data.turns.push(greeting);
-          if (!variant.greetingPending) setTimeout(() => {
-            Object.assign(greeting, { status: "done", text: `嗨，我是${member.name} 👋 想讓我先幫你分擔哪件事？可以是手上的專案，或其他成員還沒顧到的事。` });
-            notify("AgentTurn", { turn_id: greeting.id, member_id: member.id });
-          }, 600);
-        }
+        if (p.greet) greet(member);
         notify("MembersChanged", { member_id: member.id });
         return { member, routine_offer: variant.routineOffer ? {title:"範例摘要",prompt:"整理範例資料。",schedule:{kind:"daily",time:"09:00"}} : null };
+      }
+      case "members.greet": {
+        // As the core: only while the owner has written nothing to the member and no greeting runs.
+        const member = data.members.find(item => item.id === p.id);
+        if (!member || p.id === 0) throw new Error("Invalid params: no such member");
+        const own = data.turns.filter(turn => turn.member_id === p.id);
+        if (own.some(turn => turn.route === "greeting" && turn.status === "running") || own.some(turn => (turn.question ?? "").trim() && !["greeting", "member", "routine", "resumed"].includes(turn.source)))
+          throw new Error("Invalid params: greeting requires a conversation without an owner message or running greeting");
+        for (let at = data.turns.length - 1; at >= 0; at--) if (data.turns[at].member_id === p.id && data.turns[at].route === "greeting" && data.turns[at].status === "error") data.turns.splice(at, 1);
+        return { turn_id: greet(member).id };
       }
       case "members.delete": data.members = data.members.filter(item => item.id !== p.id); if (p.id === data.primaryId) data.primaryId = 0; notify("MembersChanged", { member_id: p.id }); return { deleted: true };
       case "members.skills.list": {
@@ -1829,6 +1843,8 @@ export function installMock(fixture, config = {}, target = window) {
                 position: data.members.length,
               });
               data.conversations.push({ id: 80 + id, member_id: id, title: "", is_default: true, created_at_ms: data.now, updated_at_ms: data.now });
+              // As the core's member_create tool since 2026-11-10: a member made by a member greets the owner too.
+              greet(data.members.find(member => member.id === id));
             }
             notify("MembersChanged", { member_id: 8 });
             const names = args.drafts.map(d => d.name).join("、");
@@ -1853,6 +1869,7 @@ export function installMock(fixture, config = {}, target = window) {
           data.groups.push(copy(data.adminGroup));
           data.members.push({ ...data.members[1], ...data.adminMember });
           data.conversations.push({ id: 80, member_id: data.adminMember.id, title: "", is_default: true, created_at_ms: data.now, updated_at_ms: data.now });
+          greet(data.members.find(member => member.id === data.adminMember.id));
           notify("MembersChanged", { member_id: data.adminMember.id });
         }
         adminTurn.status = args.approved ? "done" : "denied";

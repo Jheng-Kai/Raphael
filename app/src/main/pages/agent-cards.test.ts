@@ -7,6 +7,7 @@ import type { AgentTurn, AppContext, MailDraftCard, MainEvent, PermissionCard } 
 
 const api = vi.hoisted(() => ({
   agentHistoryList: vi.fn(),
+  membersGreet: vi.fn(async () => ({ turn_id: 1 })),
   agentHistoryClear: vi.fn(),
   agentHistorySearch: vi.fn(),
   agentAskText: vi.fn(),

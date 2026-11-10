@@ -7,7 +7,7 @@ const api = vi.hoisted(() => Object.fromEntries([
   "agentHistoryList", "agentQuestionOpen", "agentAskText", "agentVoice", "agentStop", "cancelSession", "workerCancel",
   "membersList", "membersPresets", "membersRead", "membersViewing", "membersToolChoices", "toolsetsList",
   "routinesList", "modelsCatalog", "providersList", "brainsCli", "core", "roomsList", "statusGet",
-  "voiceCallStart", "voiceCallStatus", "voiceCallEnd",
+  "voiceCallStart", "voiceCallStatus", "voiceCallEnd", "membersGreet",
 ].map(name => [name, vi.fn()])));
 vi.mock("../api", () => api);
 import { Cleared } from "../cleared";
@@ -129,7 +129,7 @@ beforeEach(() => {
     group_id: null, instructions: "", model: "", tools: null, created: 0, unread: false, waiting: false, preview: "", last_at: null } as Member)) });
   api.membersPresets.mockResolvedValue({ presets: [] }); api.membersRead.mockResolvedValue({}); api.membersViewing.mockResolvedValue({});
   api.membersToolChoices.mockResolvedValue({ tools: [], connections: [] }); api.toolsetsList.mockResolvedValue({ groups: [] });
-  api.routinesList.mockResolvedValue({ routines: [] }); api.roomsList.mockResolvedValue({ rooms: [] });
+  api.routinesList.mockResolvedValue({ routines: [] }); api.roomsList.mockResolvedValue({ rooms: [] }); api.membersGreet.mockResolvedValue({ turn_id: 1 });
   api.brainsCli.mockResolvedValue({ clis: [] }); api.providersList.mockResolvedValue({ providers: [] });
   api.agentVoice.mockResolvedValue(undefined); api.cancelSession.mockResolvedValue(undefined);
   api.voiceCallStatus.mockResolvedValue({ call: null }); api.voiceCallStart.mockResolvedValue({ failure: "microphone" });

@@ -117,6 +117,9 @@ describe("the marks of well-known programs", () => {
     expect(serviceIconOf({ name: "x", url: "https://mcp.monday.com/mcp" })).toBe("monday");
     expect(serviceIconOf({ name: "x", url: "https://huggingface.co/mcp" })).toBe("huggingface");
     expect(serviceIconOf({ name: "x", url: "https://mcp.webflow.com/mcp" })).toBe("webflow");
+    // The owner's own connector, named as Claude's connectors name it (2026-11-10).
+    expect(serviceIconOf({ name: "Mobbin MCP" })).toBe("mobbin");
+    expect(hasLogo("mobbin")).toBe(true);
   });
 
   test("plain words that are also a brand do not pick a picture for a program of the user's own", () => {

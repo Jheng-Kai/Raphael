@@ -1,5 +1,5 @@
 // The settings of one member, as a page of its own in the main area where the conversation is (owner, 2026-11-08): the gear
-// of the member's panel opens it, the arrow at its top left (and Escape) goes back to the conversation. It reads like a
+// of the member's panel opens it, the arrow left of its name (and Escape) goes back to the conversation. It reads like a
 // Notion page: a cover the owner can change (a pattern in the member's own slime colour, or a picture), the face large
 // across the cover's lower edge, the name and the role in place. Under them the settings are kinds in a column on the left,
 // as Settings' own (owner, 2026-11-08: 「左側會有一些分區…不要就這樣子長長一條」), and only the chosen kind is shown, as
@@ -88,9 +88,7 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
   el.tabIndex = -1;
   el.dataset.memberSettings = "";
   el.innerHTML =
-    `<div class="ms-bar">${iconButton("left", t("chooser.back"), ' data-ms="back" data-k="ms-back"', "ms-back")}</div>` +
     `<div class="ms-scroll"><div class="ms-cover"></div><div class="ms-body"><div class="ms-id"></div><div class="ms-main"></div></div></div>`;
-  const backButton = el.querySelector<HTMLElement>('[data-ms="back"]')!;
   const scroll = el.querySelector<HTMLElement>(".ms-scroll")!;
   const cover = el.querySelector<HTMLElement>(".ms-cover")!;
   const idSlot = el.querySelector<HTMLElement>(".ms-id")!;
@@ -153,13 +151,20 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
   const row = (label: string, control: string, key = ""): string =>
     `<div class="ms-row"${key ? ` data-k="${key}"` : ""}><span class="ms-label">${esc(label)}</span>${control}</div>`;
 
+  /**
+   * The way back, the bare arrow the page's other icons are, just left of the page's name or a view's title (owner,
+   * 2026-11-10: not on the cover's picture). From a view it goes back to the page, from the page to the conversation.
+   */
+  const backed = (title: string): string =>
+    `<div class="ms-backed">${iconButton("left", t("chooser.back"), ' data-ms="back" data-k="ms-back"', "ms-back")}${title}</div>`;
+
   function idHTML(member: Member): string {
     // A press on the face opens the picker (slimes, 生成) at once, as the panel's does; under the pointer a pencil shows on it.
     const face = `<button type="button" class="btn mb-face-edit ms-face" data-ms="avatar" data-k="ms-face" aria-haspopup="menu" aria-expanded="false" aria-label="${esc(t("members.changeAvatar"))}">${faceHTML(member, 96)}<span class="mb-face-pencil" aria-hidden="true">${ico("pencil")}</span></button>`;
     // Raphael's name is not the owner's to change here, nor has he a role.
-    if (member.id === RAPHAEL_ID) return face + `<b class="ms-name ms-static">${esc(member.name)}</b>`;
+    if (member.id === RAPHAEL_ID) return face + backed(`<b class="ms-name ms-static">${esc(member.name)}</b>`);
     return face +
-      `<input class="mb-edit ms-name" id="ms-name" data-member="${member.id}" type="text" maxlength="${NAME_MAX}" value="${esc(member.name)}" aria-label="${esc(t("members.name"))}" autocomplete="off" spellcheck="false">` +
+      backed(`<input class="mb-edit ms-name" id="ms-name" data-member="${member.id}" type="text" maxlength="${NAME_MAX}" value="${esc(member.name)}" aria-label="${esc(t("members.name"))}" autocomplete="off" spellcheck="false">`) +
       `<input class="mb-edit ms-role" id="ms-role" data-member="${member.id}" type="text" maxlength="${ROLE_MAX}" value="${esc(member.role)}" placeholder="${esc(t("members.role"))}" aria-label="${esc(t("members.role"))}" autocomplete="off" spellcheck="false">`;
   }
 
@@ -341,8 +346,8 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
     });
   }
 
-  /** A view of its own (a skill, a command, the memory): its arrow goes back to the page, not to the conversation. */
-  const subHead = (title: string, more = ""): string => `<div class="ms-subhead"><h2 class="ms-title">${esc(title)}</h2>${more}</div>`;
+  /** A view of its own (a skill, a command): its arrow goes back to the page, not to the conversation. */
+  const subHead = (title: string, more = ""): string => `<div class="ms-subhead">${backed(`<h2 class="ms-title">${esc(title)}</h2>`)}${more}</div>`;
 
   function skillHTML(id: number): string {
     const known = Array.isArray(skills) ? skills.find(skill => skill.id === id) : undefined;
@@ -387,7 +392,6 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
     el.style.setProperty("--ms-tint", member.id === RAPHAEL_ID ? "var(--raphael-color)" : slimeColorOf(member));
     cover.dataset.pattern = coverPattern(member);
     patchHTML(cover, coverHTML(member));
-    backButton.title = t("chooser.back"); backButton.setAttribute("aria-label", backButton.title);
     const focused = document.activeElement as HTMLElement | null;
     const inside = !!focused && el.contains(focused);
     const typingIn = inside && focused!.matches("input, textarea") ? focused!.id : "";
@@ -396,7 +400,8 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
     const selection = textField && typeof textField.selectionStart === "number" ? [textField.selectionStart, textField.selectionEnd!, textField.selectionDirection] as const : null;
     const top = scroll.scrollTop;
     // The name and the role are drawn afresh for another member, and left alone while they are typed in.
-    if (!sameMember || !(typingIn === "ms-name" || typingIn === "ms-role")) patchHTML(idSlot, idHTML(member));
+    // A view of its own has its own way back by its title, so the page's name and its arrow are not kept behind it.
+    if (!sameMember || !(typingIn === "ms-name" || typingIn === "ms-role")) patchHTML(idSlot, view.kind === "main" ? idHTML(member) : "");
     else patchHTML(idSlot.querySelector<HTMLElement>(".ms-face")!, faceHTML(member, 96) + `<span class="mb-face-pencil" aria-hidden="true">${ico("pencil")}</span>`);
     for (const [id, value] of [["ms-name", member.name], ["ms-role", member.role]]) {
       const input = idSlot.querySelector<HTMLInputElement>(`#${id}`);

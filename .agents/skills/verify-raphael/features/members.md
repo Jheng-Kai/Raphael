@@ -6,8 +6,10 @@ Owner request: a member's settings are a page of their own, where the conversati
 The panel keeps Details / Library / Computer and its bots; its head is the gear on the left and the
 close on the right, apart. The gear opens `member-settings.ts` over the conversation (the panel folds
 away at every width while the page is open, owner 2026-11-09, and comes back as it was when the page is left
-for the conversation; member-settings and member-settings-back check both); the arrow at the page's top left
-and Escape go back to the conversation (a skill or a command first back to the page), and
+for the conversation; member-settings and member-settings-back check both); the arrow just left of the
+member's name (a view's title in a skill or a command), a bare icon as the page's others and never on the
+cover's picture (owner, 2026-11-10; the member-settings checks place it), and Escape go back to the conversation
+(a skill or a command first back to the page), and
 the page is a place of the navigation history (`Place.member`, `member-settings:<id>`). It supersedes
 every older paragraph below that puts memory, skills, commands, voice, the edit dialog, hide or share
 inside the panel: share belongs to the conversation's header, hide to the sidebar's menu.
@@ -191,7 +193,12 @@ people's bots will come from a library later). It asks only for a name; the
 member opens and speaks first, typing while its own model writes the greeting (since
 2026-11-06, R-COLLEAGUE-02: no tools, at most two sentences, only known owner context; a
 failed one is an ordinary failure line whose 重新產生 calls `members.greet`), and the
-owner's answer becomes its job through `set_my_job`, offered only while it has none. Conversations are
+owner's answer becomes its job through `set_my_job`, offered only while it has none. Whoever makes a
+member greets the same way (owner, 2026-11-10: 「不管是誰創建的，應該都會自己傳訊息給我們」): the
+`member_create` tool Raphael or a member uses starts the greeting (core tests
+members/test_model_greeting.py, test_management.py; look admin-approved), and a member's conversation that is
+still empty when it opens (one made before) asks `members.greet` once (agent.ts `greetIfSilent`;
+agent-members.test.ts), so a member never shows the empty page; Raphael's empty page stays. Conversations are
 never deleted; only Raphael's quick questions can be cleared (`quick-clear-confirm`,
 `quick-cleared`).
 

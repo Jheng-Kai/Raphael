@@ -15,6 +15,73 @@ def members_rpc(setup):
     team.members.register(rig.rpc)
 
 
+@pytest.mark.parametrize('language', ['en', 'zh-TW', 'ja', 'fr'])
+@pytest.mark.parametrize('as_member', [False, True])
+async def test_tool_created_member_starts_one_own_greeting_in_owner_ui_language(setup, client, language, as_member):
+    rig, team = setup
+    creator = team.members.store.create_member(name='Planner').id if as_member else 0
+    team.members._language = lambda: language
+    started = []
+    greeting = team.members.greeting
+
+    def start(identifier, ui_language):
+        started.append((identifier, ui_language))
+        return greeting(identifier, ui_language)
+
+    team.members.greeting = start
+    entered, release = asyncio.Event(), asyncio.Event()
+
+    async def answer(**kwargs):
+        entered.set()
+        await release.wait()
+        return live_said('Hello, I am Mia. What would you like me to do?')
+
+    client.chats = [answer]
+    new = (await team.members.admin_tool(creator, 'member_create', {
+        'name': 'Mia', 'role': 'Researcher', 'personality': 'Curious and patient.',
+        'instructions': 'Find clear answers and ask what to research next.',
+    }, interactive=True))['member']
+    assert started == [(new['id'], language)]
+    [turn] = await rig.turns(member_id=new['id'])
+    assert (turn['source'], turn['route'], turn['status'], turn['question'], turn['text']) == (
+        'greeting', 'greeting', 'running', '', '',
+    )
+    assert turn['conversation_id'] == rig.service.conversations.main(new['id'])
+    assert not await rig.turns(member_id=creator)
+    await asyncio.wait_for(entered.wait(), 1)
+    assert len(client.chat_calls) == 1
+    assert 'Curious and patient.' in json.dumps(client.chat_calls[0]['messages'])
+    release.set()
+    await until(lambda: rig.history.get(turn['id']).status == 'done')
+    assert len(await rig.turns(member_id=new['id'])) == 1
+    assert not team.background.submitted
+
+
+@pytest.mark.parametrize('options', [{}, {'greet': False}])
+async def test_rpc_create_without_explicit_greeting_starts_no_turn_or_model_call(setup, client, options):
+    rig, team = setup
+    new = (await rig.call('members.create', {'name': 'Mia', **options}))['member']
+    await asyncio.sleep(0)
+    assert not await rig.turns(member_id=new['id'])
+    assert not client.chat_calls and not rig.service._greeting_tasks
+
+
+@pytest.mark.parametrize('arguments', [
+    {'name': 'Mia', 'role': 'Researcher', 'group': 'Unused'},
+    {'name': 'New', 'role': 'Researcher', 'greet': False},
+])
+async def test_failed_tool_create_starts_no_greeting(setup, client, arguments):
+    rig, team = setup
+    team.members.store.create_member(name='Mia')
+    before = await rig.call('members.list', {})
+    with pytest.raises(RpcError):
+        await team.members.admin_tool(0, 'member_create', arguments, interactive=True)
+    await asyncio.sleep(0)
+    assert await rig.call('members.list', {}) == before
+    assert not rig.conn.execute("SELECT 1 FROM agent_turns WHERE source='greeting'").fetchone()
+    assert not client.chat_calls and not rig.service._greeting_tasks
+
+
 @pytest.mark.parametrize('language', ['en', 'zh-TW', 'ja'])
 async def test_creation_returns_while_its_own_brain_writes_hidden_greeting(setup, client, language):
     rig, team = setup

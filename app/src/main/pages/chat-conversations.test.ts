@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, expect, test, vi } from "vitest";
-const api = vi.hoisted(() => ({ statusGet: vi.fn(async () => ({ openrouter: { state: "ok" }, spend: { month_usd: 0, limit_usd: 10 } })), core: vi.fn(), agentHistoryList: vi.fn(), agentQuestionOpen: vi.fn(), agentAskText: vi.fn(), membersList: vi.fn(), roomsList: vi.fn(), roomMessages: vi.fn(), membersCommandsList: vi.fn(), membersRead: vi.fn(), roomSend: vi.fn(), desktopStatus: vi.fn(), desktopOpen: vi.fn(), desktopClose: vi.fn() }));
+const api = vi.hoisted(() => ({ statusGet: vi.fn(async () => ({ openrouter: { state: "ok" }, spend: { month_usd: 0, limit_usd: 10 } })), core: vi.fn(), agentHistoryList: vi.fn(), membersGreet: vi.fn(async () => ({ turn_id: 1 })), agentQuestionOpen: vi.fn(), agentAskText: vi.fn(), membersList: vi.fn(), roomsList: vi.fn(), roomMessages: vi.fn(), membersCommandsList: vi.fn(), membersRead: vi.fn(), roomSend: vi.fn(), desktopStatus: vi.fn(), desktopOpen: vi.fn(), desktopClose: vi.fn() }));
 vi.mock("../api", () => api);
 import { createAgent } from "./agent";
 import { Cleared } from "../cleared";

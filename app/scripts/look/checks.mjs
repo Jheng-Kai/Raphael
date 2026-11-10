@@ -5702,6 +5702,17 @@ export function checkRendered(name, context = {}) {
     const back = pane.querySelector('[data-ms="back"]');
     require(visible(back) && back.classList.contains("icon") && back.textContent.trim() === "" && back.querySelector("svg.i"), "the way back is an arrow icon with no words");
     const cover = pane.querySelector(".ms-cover"), face = pane.querySelector(".ms-face");
+    // The way back is the bare arrow the page's other icons are, just left of the name and off the cover (owner, 2026-11-10).
+    if (view === "main") {
+      const named = back.closest(".ms-backed")?.querySelector(".ms-name"), arrow = back.getBoundingClientRect();
+      require(named, "the way back stands beside the member's name");
+      const nameBox = named.getBoundingClientRect(), gap = nameBox.left - arrow.right;
+      require(arrow.top >= cover.getBoundingClientRect().bottom - 1, "the way back is not on the cover");
+      require(gap >= -1 && gap <= 16, `the way back is just left of the name (${Math.round(gap)} px)`);
+      require(Math.abs((arrow.top + arrow.bottom) / 2 - (nameBox.top + nameBox.bottom) / 2) <= 2, "the way back is level with the name");
+      require(arrow.left >= pane.getBoundingClientRect().left + 4, "the way back is whole inside the page");
+      require(/^(transparent|rgba\(0, 0, 0, 0\))$/.test(getComputedStyle(back).backgroundColor), `the way back is a bare icon, as the page's others (${getComputedStyle(back).backgroundColor})`);
+    }
     if (name === "member-settings-cover-picture") {
       // The owner's picture fills the cover and stays put: no picture in the app can be dragged out of the window (R-UI-119).
       const img = cover.querySelector("img.ms-cover-img"), box = img?.getBoundingClientRect(), edge = cover.getBoundingClientRect();
@@ -5713,9 +5724,8 @@ export function checkRendered(name, context = {}) {
       require(visible(face) && face.getBoundingClientRect().bottom > edge.bottom + 8, "the face still crosses the cover's lower edge");
       // Every icon on the picture keeps its own soft surface, so it reads on any photo in either theme (owner, 2026-11-09).
       const bare = value => /^(transparent|rgba\(0, 0, 0, 0\))$/.test(value);
-      const change = cover.querySelector('[data-ms="cover"]'), back = pane.querySelector('[data-ms="back"]');
+      const change = cover.querySelector('[data-ms="cover"]');
       require(visible(change) && !bare(getComputedStyle(change).backgroundColor), `the cover's icon has its round surface on the picture (${getComputedStyle(change).backgroundColor})`);
-      require(visible(back) && !bare(getComputedStyle(back).backgroundColor), "the way back has its round surface on the picture");
       const controls = document.querySelector(".window-controls");
       if (controls && visible(controls)) require(!bare(getComputedStyle(controls).backgroundColor), "the window's own buttons have a surface on the picture");
       return { check: name };
@@ -5794,6 +5804,12 @@ export function checkRendered(name, context = {}) {
         for (const row of apps) {
           const mark = row.querySelector(".mono").getBoundingClientRect(), label = row.querySelector(".ms-label").getBoundingClientRect();
           require(mark.right <= label.left && Math.abs((mark.top + mark.bottom) / 2 - (label.top + label.bottom) / 2) < 4, `${row.textContent.trim()}: its mark stands before its name, centred with it`);
+        }
+        // A known app shows its own logo, never the plug: Mobbin's M, white on the dark theme (owner, 2026-11-10).
+        const mobbin = apps.find(row => row.textContent.includes("Mobbin"));
+        if (mobbin) {
+          const logo = [...mobbin.querySelectorAll(".mono img.logo")].find(visible);
+          require(logo && /^data:image\/svg/.test(logo.src) && logo.complete && logo.naturalWidth > 0, "Mobbin shows its own mark, not the plug");
         }
         const draft = pane.querySelector('[data-k="ms-draft"] [data-ms="draft"]');
         require(visible(draft) && draft.getAttribute("role") === "switch", "the drafts switch stands under the apps");

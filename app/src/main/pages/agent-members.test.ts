@@ -793,6 +793,20 @@ test("rerunning an older failed reply asks its original question in the same mem
   agent.hide();
 });
 
+test("a member whose conversation is empty is asked once to greet; Raphael and a member with words are not", async () => {
+  api.agentHistoryList.mockResolvedValue({ turns: [] });
+  const agent = mount(); await flush();
+  expect(api.membersGreet).not.toHaveBeenCalled();
+  await pick(3);
+  expect(api.membersGreet).toHaveBeenCalledExactlyOnceWith(3);
+  await pick(0); await pick(3);
+  expect(api.membersGreet).toHaveBeenCalledTimes(1);
+  api.agentHistoryList.mockResolvedValue({ turns: [turn(35, { member_id: 4 })] });
+  await pick(4);
+  expect(api.membersGreet).toHaveBeenCalledTimes(1);
+  agent.hide();
+});
+
 test("a failed greeting is written again by the member's own model, and a greeting that came through is never written twice", async () => {
   const greeting = (status: string, text: string) => turn(34, { member_id: 3, question: "", route: "greeting", source: "greeting", prefix: "", status, text });
   api.agentHistoryList.mockResolvedValue({ turns: [greeting("error", "CLI stopped")] });

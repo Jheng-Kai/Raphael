@@ -160,11 +160,14 @@ def test_retention_uses_the_real_forever_and_immediate_delete_semantics():
 
 
 async def test_management_uses_the_same_profile_folder_and_command_services(rig):
+    greetings = []
+    rig.service.greeting = lambda identifier, language: greetings.append((identifier, language))
     async def run(tool_name, **args):
         return await rig.service.admin_tool(0, tool_name, args, interactive=True)
     group = (await run("group_create", name="Team"))["group"]
     await run("group_update", id=group["id"], position=2, sources=[{"kind": "github", "ref": "owner/repo"}])
     person = (await run("member_create", name="Writer", role="Write", group_id=group["id"]))["member"]
+    assert greetings == [(person["id"], rig.language)]
     updated = (await run("member_update", id=person["id"], reply_style="conversational", pinned=True, hidden=True,
                          notify=True, draft_first=False, ask_before_members=True, effort="high"))["member"]
     assert updated["reply_style"] == "conversational" and updated["hidden"] and updated["notify"]

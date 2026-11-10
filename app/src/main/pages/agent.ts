@@ -1225,12 +1225,27 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     if (mine !== loads) return;
     if (more || dirtyTurnIds.size) scheduleRefresh();
     finishOpening();
+    greetIfSilent();
     if (targetTurn !== undefined) {
       openingThread = false;
       const target = thread.querySelector<HTMLElement>(`[data-id="${targetTurn}"]`);
       if (target) { target.scrollIntoView?.({ block: "center" }); target.classList.add("is-search-target"); setTimeout(() => target.classList.remove("is-search-target"), 2400); }
       targetTurn = undefined;
     }
+  }
+
+  /** The members asked this session to open their own conversation: once each; the core decides the rest. */
+  const greetAsked = new Set<number>();
+  /**
+   * A member's conversation is never an empty page (owner, 2026-11-10: 「理論上我們不應該會看到這個畫面」): a member made
+   * without its greeting (by a way of making members that did not greet yet) is asked once to write it. The core starts
+   * it only while the owner has written nothing there and no greeting runs (members.greet); it refuses otherwise.
+   */
+  function greetIfSilent(): void {
+    const member = memberId();
+    if (member === RAPHAEL_ID || greetAsked.has(member) || canLoadEarlier || searching || !isEmpty() || turns.some(turn => turn.route === "greeting")) return;
+    greetAsked.add(member);
+    void api.membersGreet(member).then(() => { if (visible && memberId() === member) void load(false); }, () => undefined);
   }
 
   /** The questions in the history now are no longer waited for: a typed one by its words, a spoken one by any new turn of the voice. */

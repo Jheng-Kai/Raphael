@@ -6,15 +6,17 @@
 .page-agent:has(> .ms-pane:not([hidden])) > .mb-chat { display: none; }
 .ms-pane:focus { outline: 0; }
 
-/* The way back stays in sight at the top left, over the cover and over a view's heading. */
-.ms-bar { position: absolute; z-index: 2; inset: 0 0 auto 0; display: flex; align-items: flex-end; box-sizing: border-box; height: calc(var(--window-controls-height) + var(--h-ctl) + var(--sp-3)); padding: 0 var(--sp-4) var(--sp-1); pointer-events: none; }
-.ms-bar > .btn { pointer-events: auto; }
-/* Once the page has scrolled, the arrow stands on a band of the page's own ground, so no row slides under it. */
-.ms-pane[data-scrolled] .ms-bar { background: var(--content); box-shadow: 0 1px 0 var(--line); }
-.ms-bar .btn.icon .i { width: 20px; height: 20px; }
+/* The way back is the bare arrow the page's other icons are, hung just left of the page's name or a view's title, in the
+   body's left gutter (owner, 2026-11-10: 「不要放在圖片裡面…放在拉菲爾這個字的左邊一點點」). It scrolls with the page;
+   Escape goes back from anywhere. */
+.ms-backed { position: relative; width: 100%; min-width: 0; }
+.ms-backed > .btn.icon.ms-back { position: absolute; top: 50%; right: 100%; translate: 0 -50%; }
+.ms-backed > .btn.icon.ms-back .i { width: 20px; height: 20px; }
+.ms-subhead > .ms-backed { flex: 1; }
+/* A view's title starts at the column's edge, with none of the name field's inner space before it. */
+.ms-subhead > .ms-backed > .btn.icon.ms-back { margin-right: var(--sp-1); }
 /* Every icon on the cover has its own soft round surface, or a picture swallows it (owner, 2026-11-09: 「那個 Icon 要記得都
-   要有背景 不然根本看不到」): the way back as the cover's change icon, and the window's own buttons on a picture. */
-.ms-bar > .btn.icon.ms-back { border-radius: var(--r-pill); background: color-mix(in srgb, var(--content) 72%, transparent); color: var(--text); }
+   要有背景 不然根本看不到」): the cover's change icon, and the window's own buttons on a picture. */
 :root:has(.ms-pane:not([hidden]):not([data-scrolled]) .ms-cover[data-pattern="image"]) .window-controls { border-bottom-left-radius: var(--r-lg); background: color-mix(in srgb, var(--content) 72%, transparent); }
 
 .ms-scroll { min-width: 0; min-height: 0; overflow-x: hidden; overflow-y: auto; }
@@ -43,11 +45,12 @@
 :root[data-keys] .ms-swatch:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 .ms-main { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-5); min-width: 0; }
-.ms-body { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-5); width: 100%; max-width: calc(var(--layout-reading-max) + 200px); margin-inline: auto; padding: 0 var(--sp-5) var(--sp-6); box-sizing: border-box; }
+/* Its left gutter holds the way back beside the name at every width: the arrow and a little air. */
+.ms-body { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-5); width: 100%; max-width: calc(var(--layout-reading-max) + 200px); margin-inline: auto; padding: 0 var(--sp-5) var(--sp-6) calc(var(--h-ctl) + var(--sp-3)); box-sizing: border-box; }
 /* The kinds in a column on the left, as Settings' own; the chosen kind beside them. The column stays in sight as the page
-   scrolls, under the band of the way back. A narrow page puts the kinds in a row above. */
+   scrolls, clear of the window's own buttons. A narrow page puts the kinds in a row above. */
 .ms-layout { display: grid; grid-template-columns: 176px minmax(0, 1fr); align-items: start; gap: var(--sp-6); min-width: 0; }
-.ms-nav { position: sticky; top: calc(var(--window-controls-height) + var(--h-ctl) + var(--sp-5)); display: flex; flex-direction: column; gap: var(--sp-1); min-width: 0; }
+.ms-nav { position: sticky; top: calc(var(--window-controls-height) + var(--sp-3)); display: flex; flex-direction: column; gap: var(--sp-1); min-width: 0; }
 .ms-nav > .nav { min-height: 34px; padding: var(--sp-1) var(--sp-2); font-size: var(--fs-sm); }
 .ms-nav > .nav > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ms-content { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-5); min-width: 0; }
@@ -59,13 +62,13 @@
   .ms-nav > .nav { flex: none; width: auto; min-height: var(--h-ctl); padding: 0 var(--sp-3); border-radius: var(--r-pill); }
   .ms-nav > .nav > .i { display: none; }
 }
-.ms-pane:not([data-view="main"]) .ms-body { padding-top: calc(var(--window-controls-height) + var(--sp-6) + var(--sp-4)); }
+.ms-pane:not([data-view="main"]) .ms-body { padding-top: calc(var(--window-controls-height) + var(--sp-5)); }
 
 /* The face crosses the cover's lower edge; the name and the role are in place under it, as the owner's profile in Settings. */
 .ms-id { display: grid; grid-template-columns: minmax(0, 1fr); justify-items: start; gap: var(--sp-1); margin-top: calc(-48px - var(--sp-2)); }
 .ms-name { width: 100%; font-size: var(--fs-h1); font-weight: var(--weight-semibold); line-height: 1.3; text-align: left; }
 .ms-role { width: 100%; font-size: var(--fs-md); color: var(--text-2); text-align: left; }
-.ms-id > :is(.ms-name, .ms-role) { padding-inline: calc(var(--sp-3) - 1px); }
+.ms-id :is(.ms-name, .ms-role) { padding-inline: calc(var(--sp-3) - 1px); }
 .ms-static { overflow-wrap: anywhere; }
 
 /* A section: its name over one tinted list. */
@@ -120,7 +123,7 @@
 .ms-pane .sgroup .slist { --slist-pad: 0px; }
 
 @media (max-width: 720px) {
-  .ms-body { padding-inline: var(--sp-4); }
+  .ms-body { padding-right: var(--sp-4); }
   .ms-cover { height: 136px; }
 }
 @media (prefers-reduced-motion: no-preference) {
