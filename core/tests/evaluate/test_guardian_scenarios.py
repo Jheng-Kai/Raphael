@@ -4,7 +4,8 @@ import json
 import asyncio
 from dataclasses import replace
 
-import httpx
+from urllib.parse import urlsplit
+
 import pytest
 
 from raphael_core.agent.cli.drivers import Event
@@ -22,6 +23,23 @@ from test_guardian import FakeBrains, FakeClient as GuardianFakeClient
 
 # Hang guard on a slow CI runner, not a speed assertion.
 HANG_GUARD_S = 60
+
+
+async def mcp_call(endpoint, token, name, arguments, *, request_id=1):
+    """A fake CLI's tools/call to the turn's MCP, on a connection closed whatever happens. With httpx, a turn the
+    scenario cancelled while connecting left a socket open: anyio's connect_tcp drops one cancelled at that moment."""
+    address = urlsplit(endpoint)
+    body = json.dumps({"jsonrpc": "2.0", "id": request_id, "method": "tools/call",
+                       "params": {"name": name, "arguments": arguments}}, ensure_ascii=False).encode()
+    reader, writer = await asyncio.open_connection(address.hostname, address.port)
+    try:
+        writer.write((f"POST {address.path} HTTP/1.1\r\nHost: {address.netloc}\r\nAuthorization: Bearer {token}\r\n"
+                      f"Content-Type: application/json\r\nContent-Length: {len(body)}\r\n\r\n").encode() + body)
+        await writer.drain()
+        _, _, payload = (await reader.read()).partition(b"\r\n\r\n")
+    finally:
+        writer.close()
+    return json.loads(payload)
 
 
 class FakeClient(GuardianFakeClient):
@@ -93,11 +111,9 @@ async def test_p03_immediate_start_uses_production_rpc_worker_and_mcp(tmp_path,m
                 yield Event('final','已核對目前狀態。')
                 return
             if child or ('Delegated work results' not in user and 'where this has landed' not in user and not already_assigned(user)):
-                async with httpx.AsyncClient() as http:
-                    response=await http.post(endpoint,headers={'Authorization':'Bearer '+token},json={
-                        'jsonrpc':'2.0','id':1,'method':'tools/call','params':{
-                            'name':'use_tool' if child else 'handoff','arguments':{'name':'Guardian__read','arguments':{}} if child else arguments()}})
-                    assert not response.json()['result']['isError'],response.text
+                result=await mcp_call(endpoint,token,'use_tool' if child else 'handoff',
+                    {'name':'Guardian__read','arguments':{}} if child else arguments())
+                assert not result['result']['isError'],result
             yield Event('final','已讀取信件。'+driver.nonce)
         async def interrupt(self):
             pass
@@ -186,12 +202,15 @@ async def test_s01_edits_cancels_and_applies_once_on_both_production_brains(tmp_
         from raphael_core.agent.cli.drivers import Driver
 
         async def run(driver, **kwargs):
+            # A new member's greeting is offered no tools, as the real CLI is.
+            if kwargs.get("no_tools"):
+                yield Event("model", "test-model")
+                yield Event("final", "你好，我準備好了。")
+                return
             if "team_changes" not in kwargs["user"]:
-                async with httpx.AsyncClient(headers={"Authorization": "Bearer " + kwargs["token"]}, trust_env=False) as http:
-                    for index, (name, arguments) in enumerate(calls):
-                        response = await http.post(kwargs["endpoint"], json={"jsonrpc": "2.0", "id": index,
-                            "method": "tools/call", "params": {"name": name, "arguments": arguments}})
-                        assert not response.json()["result"]["isError"]
+                for index, (name, arguments) in enumerate(calls):
+                    result = await mcp_call(kwargs["endpoint"], kwargs["token"], name, arguments, request_id=index)
+                    assert not result["result"]["isError"]
             yield Event("model", "test-model")
             yield Event("final", "團隊已建立。" if "team_changes" in kwargs["user"] else "等待確認。")
         monkeypatch.setattr(Driver, "run", run)
@@ -541,12 +560,9 @@ async def test_rpc_cli_brain_reaches_the_production_authenticated_mcp(tmp_path, 
 
         async def run(self, *, endpoint, token, **kwargs):
             yield Event("model", "owner-model")
-            async with httpx.AsyncClient() as http:
-                response = await http.post(endpoint, headers={"Authorization": "Bearer " + token},
-                    json={"jsonrpc": "2.0", "id": 1, "method": "tools/call",
-                          "params": {"name": "routine_create", "arguments": {
-                              "title": title, "prompt": "練習寫作", "schedule": {"kind": "daily", "time": "08:00"}}}})
-                assert not response.json()["result"]["isError"]
+            result = await mcp_call(endpoint, token, "routine_create", {
+                "title": title, "prompt": "練習寫作", "schedule": {"kind": "daily", "time": "08:00"}})
+            assert not result["result"]["isError"]
             yield Event("final", "已建立例行任務。")
 
         async def interrupt(self):
@@ -596,11 +612,9 @@ async def test_the_real_app_wires_the_calendar_to_a_cli_brain_and_to_home(tmp_pa
 
         async def run(self, *, endpoint, token, **kwargs):
             yield Event("model", "owner-model")
-            async with httpx.AsyncClient() as http:
-                response = await http.post(endpoint, headers={"Authorization": "Bearer " + token},
-                    json={"jsonrpc": "2.0", "id": 1, "method": "tools/call",
-                          "params": {"name": "calendar_add", "arguments": {"title": title, "start": datetime.now().strftime("%Y-%m-%dT15:00")}}})
-                assert not response.json()["result"]["isError"]
+            result = await mcp_call(endpoint, token, "calendar_add",
+                                    {"title": title, "start": datetime.now().strftime("%Y-%m-%dT15:00")})
+            assert not result["result"]["isError"]
             yield Event("final", "已加到今天的行程。")
 
         async def interrupt(self):
@@ -683,13 +697,10 @@ async def test_p04_short_wrapup_and_stop_through_production_paths(tmp_path,monke
                     yield Event('final','收到。')
                     return
                 stage = 'second-read' if 'stage_id=second-read' in user else 'first-read'
-                async with httpx.AsyncClient() as http:
-                    response = await http.post(endpoint,headers={'Authorization':'Bearer '+token},json={
-                        'jsonrpc':'2.0','id':1,'method':'tools/call',
-                        'params':{'name':'handoff' if speech else 'use_tool','arguments':
-                            {'member_id':2,'stage_id':stage,'request':'Read Guardian once.','done_when':'Read the test mail.'} if speech
-                            else {'name':'Guardian__read','arguments':{}}}})
-                    assert not response.json()['result']['isError'], response.text
+                result = await mcp_call(endpoint,token,'handoff' if speech else 'use_tool',
+                    {'member_id':2,'stage_id':stage,'request':'Read Guardian once.','done_when':'Read the test mail.'} if speech
+                    else {'name':'Guardian__read','arguments':{}})
+                assert not result['result']['isError'], result
             yield Event('final','已核對目前沒有交付成果。')
         async def interrupt(self):
             pass
