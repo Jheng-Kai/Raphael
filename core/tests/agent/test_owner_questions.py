@@ -197,6 +197,10 @@ else:
 '''
 
 
+# Each wait below spans a run of the fake CLI, a Python process of its own: on a busy machine one takes seconds.
+CLI_RUN_S = 30
+
+
 async def asked_and_answered(agent, background, tmp_path, path, calls, answers=("Wednesday after lunch",)):
     """Run a CLI task of `path` that makes `calls`, then asks the owner a question for each of `answers` and goes on
     after each answer; the requests its CLI received."""
@@ -216,16 +220,17 @@ async def asked_and_answered(agent, background, tmp_path, path, calls, answers=(
             prefix="", text="", status="running", source="app", conversation_id=agent.service.conversations.main())
         task_id = background.service.submit(session_id="cli-continuation", text="Arrange a visit", language="en", model="cli:claude")
         background.service.attach_turn(task_id, origin)
-        await until(lambda: background.task(task_id).state == "waiting")
+        await until(lambda: background.task(task_id).state == "waiting", timeout=CLI_RUN_S)
     [turn] = [item for item in await agent.turns() if item.get("owner_questions")]
     def questions():
         return background.service.owner_questions.for_turn(turn["id"])
     for number, answer in enumerate(answers):
-        await until(lambda: len(questions()) > number or background.task(questions()[0]["task_id"]).state == "done")
+        await until(lambda: len(questions()) > number or background.task(questions()[0]["task_id"]).state == "done",
+                    timeout=CLI_RUN_S)
         assert len(questions()) > number, background.task(questions()[0]["task_id"])
         await background.rpc.call("owner_questions.answer", {"id": questions()[number]["id"], "answer": answer})
     task_id = questions()[0]["task_id"]
-    await until(lambda: background.task(task_id).state in ("done", "failed", "limit"))
+    await until(lambda: background.task(task_id).state in ("done", "failed", "limit"), timeout=CLI_RUN_S)
     task = background.task(task_id)
     assert task.state == "done" and task.report_text.startswith("Confirmed"), task
     await connector.cards.aclose()

@@ -61,6 +61,8 @@ class CliBrains:
         self.commands = commands
         self.notify = notify
         self.settings = settings
+        # The window of each model (`cli:<brain>:<model>`) its CLI last reported, for the next loop of it (loop.py).
+        self.context_windows = {}
         self._disconnected = set()
         self._previous = None
         self._lock = asyncio.Lock()
@@ -69,8 +71,6 @@ class CliBrains:
         self._models = {}
         self._model_refresh = None
         self._models_at = {}
-        # The window of each model (`cli:<brain>:<model>`) its CLI last reported, for the next loop of it (loop.py).
-        self.context_windows = {}
 
     def command(self, name):
         if self.commands is not None:
