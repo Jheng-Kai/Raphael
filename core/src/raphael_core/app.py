@@ -181,6 +181,23 @@ def _scripted_delegate(text: str) -> bool:
     return text.lstrip().startswith(_DELEGATE_MARK)
 
 
+# The harness's line when the request comes with files (now or earlier in the conversation): the
+# fake model reads one only then, as read_attachment is listed every turn (decision 2).
+_READ_FILES = "Use read_attachment by index"
+
+
+def _found(searches: list[str]) -> set[str]:
+    """The names of the tools find_tools returned: one definition per line, as JSON."""
+    names = set()
+    for line in (line for search in searches for line in search.splitlines()):
+        if line.startswith("{"):
+            try:
+                names.add(json.loads(line)["name"])
+            except (ValueError, KeyError, TypeError):
+                continue
+    return names
+
+
 class EchoClient:
     """Stands in for the OpenRouter client when RAPHAEL_FAKE_LLM=1: the "cleaned" text is the
     transcript as it was said, at no cost, with no network. The end-to-end runs use it.
@@ -189,10 +206,12 @@ class EchoClient:
     question as it was asked.
 
     One scripted exception, for the tests of the background worker: a request that begins with
-    `[delegate]` is routed to the worker, and `chat_tools` then plays a fixed task. It calls the
-    tool named `look` of a connected service twice (topics "alpha" and "beta"; or the time, when the
-    service is not there), a tool named `slow` once if the request says "slow", and then reports in
-    one sentence with the number of results it had seen. No network, no cost."""
+    `[delegate]` is routed to the worker, and `chat_tools` then plays a fixed task. A connection's
+    tools are found, never listed (owner, 2026-11-09, decision 2), so a task that says "look" or
+    "slow" first finds them with find_tools. It then calls the tool named `look` of a connected
+    service twice (topics "alpha" and "beta"; or the time, when the service is not there), a tool
+    named `slow` once if the request says "slow", each found one through use_tool, and reports in
+    one sentence with the number of results it had seen (a search is none). No network, no cost."""
 
     def __init__(self) -> None:
         self.warmed_up = False
@@ -316,21 +335,33 @@ class EchoClient:
         if "routine_create" in offered and seen == 0:
             # Exercise the interactive harness offline, including its explicit input tools.
             from .services.urls import urls_in
-            if "read_attachment" in offered:
+            if "read_attachment" in offered and _READ_FILES in task:
                 return calling("read_attachment", {"index": 1})
             addresses = urls_in(task)
             if addresses:
                 return calling("web_read", {"url": addresses[0]})
 
-        look = next((name for name in sorted(offered) if name.endswith("__look")), None)
-        slow = next((name for name in sorted(offered) if name.endswith("__slow")), None)
-        if slow is not None and "slow" in task and seen == 0:
-            return calling(slow, {})
-        if look is not None and seen < len(_SCRIPT_TOPICS):
-            return calling(look, {"topic": _SCRIPT_TOPICS[seen]})
-        if look is None and "local_time" in offered and seen == 0:
+        answers = [str(message.get("content")) for message in messages if message.get("role") == "tool"]
+        searches = [answer for answer in answers if 'tool="find_tools"' in answer]
+        results = len(answers) - len(searches)  # what the task's tools returned: a search is no result
+        reachable = sorted(offered | _found(searches))
+        look = next((name for name in reachable if name.endswith("__look")), None)
+        slow = next((name for name in reachable if name.endswith("__slow")), None)
+        if (look is None and slow is None and not searches and "find_tools" in offered
+                and _DELEGATE_MARK in task and ("look" in task or "slow" in task)):
+            return calling("find_tools", {"query": "look slow"})
+
+        def using(name: str, arguments: dict) -> ChatTurn:
+            # A listed tool is called by its name, a found one through use_tool.
+            return calling(name, arguments) if name in offered else calling("use_tool", {"name": name, "arguments": arguments})
+
+        if slow is not None and "slow" in task and results == 0:
+            return using(slow, {})
+        if look is not None and results < len(_SCRIPT_TOPICS):
+            return using(look, {"topic": _SCRIPT_TOPICS[results]})
+        if look is None and "local_time" in offered and results == 0:
             return calling("local_time", {})
-        report = {"prefix": "告", "text": f"The scripted task saw {seen} results.", "detail": ""}
+        report = {"prefix": "告", "text": f"The scripted task saw {results} results.", "detail": ""}
         return ChatTurn(json.dumps(report), [], "fake/echo", 0.0, 0, 0, 0)
 
     async def chat_text(self, **kwargs: Any) -> TextCompletion:

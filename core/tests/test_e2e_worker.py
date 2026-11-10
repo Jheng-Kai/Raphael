@@ -83,9 +83,11 @@ def reports(core):
 def tool_call_under_way(core):
     """Whether the task has sent a tool call to its plugin. The task is "running" from the moment
     the core takes it, before its worker has started (which takes a while on a busy machine), so
-    the running state alone says neither that a worker exists nor that the slow tool was called."""
+    the running state alone says neither that a worker exists nor that the slow tool was called.
+    Its first call is the search that finds the plugin's tools (a connection's tools are found,
+    never listed: decision 2), its second the plugin's."""
     return any(
-        n["params"]["state"] == "running" and n["params"]["tool_calls"] >= 1
+        n["params"]["state"] == "running" and n["params"]["tool_calls"] >= 2
         for n in core.notifications
         if n["method"] == "worker.changed"
     )
@@ -139,12 +141,14 @@ def test_a_task_is_handed_over_carried_out_by_the_worker_and_reported(spawn):
     assert report["state"] == "done" and report["prefix"] == "Notice", core.log()
     assert report["text"] == "The scripted task saw 2 results."
 
-    # The conversation shows the report where the handoff was, with the worker's steps; nothing
-    # was spent.
+    # The conversation shows the report where the handoff was, with the worker's steps: the search
+    # that found the plugin's tool (decision 2), then the tool by its own name; nothing was spent.
     quick = next(c["id"] for c in result(core, "conversations.list")["conversations"] if c["kind"] == "quick")
     [turn] = result(core, "agent.history.list", {"conversation_id": quick})["turns"]
     assert (turn["route"], turn["prefix"], turn["text"]) == ("delegate", "Notice", report["text"])
     assert [(s["kind"], s["tool"], s["server"], s["outcome"]) for s in turn["steps"]] == [
+        ("model", None, None, "ok"),
+        ("tool", "find_tools", "Raphael", "ok"),
         ("model", None, None, "ok"),
         ("tool", "look", "Notes", "ok"),
         ("model", None, None, "ok"),
@@ -152,7 +156,7 @@ def test_a_task_is_handed_over_carried_out_by_the_worker_and_reported(spawn):
         ("model", None, None, "ok"),
     ]
     task = turn["task"]
-    assert (task["id"], task["cost_usd"], task["tool_calls"]) == (report["task_id"], 0, 2)
+    assert (task["id"], task["cost_usd"], task["tool_calls"]) == (report["task_id"], 0, 3)
     # Two audit rows, both the worker's, none with an argument or a result.
     audit = result(core, "integrations.audit", {})["entries"]
     assert [(e["tool"], e["tier"], e["approver"], e["outcome"], e["task_id"]) for e in audit] == [
@@ -201,8 +205,8 @@ def test_a_task_the_user_stops_is_reported_as_stopped_and_the_worker_stays_for_t
     wait_for(core, lambda: reports(core))
     [stopped] = reports(core)
     assert stopped["state"] == "cancelled"
-    assert stopped["text"] == (
-        "Task stopped after 1 tool calls. One was cut off; whether it ran is unknown."
+    assert stopped["text"] == (  # the search, then the slow tool
+        "Task stopped after 2 tool calls. One was cut off; whether it ran is unknown."
     )
     # The next task is carried out as usual.
     ask(core, "[delegate] now look something up")
