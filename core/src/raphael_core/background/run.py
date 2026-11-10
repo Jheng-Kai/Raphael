@@ -346,6 +346,11 @@ class TaskRun:
         # limits only when its turn comes.
         self._turn = asyncio.Lock()
         self.room_budget = None
+        # A reply in a room: each of its model attempts has the whole stall time, and one that hears nothing for all of
+        # it has stalled and ends the reply rather than being tried again. A reply is no work to ride an outage out for.
+        self.room_speech = False
+        # The task's stall time ran out (`limit_time`).
+        self.stalled = False
 
     # --- cancelling -----------------------------------------------------------------------------
 
@@ -382,6 +387,7 @@ class TaskRun:
         if final:
             return
         if self._clock() >= self.deadline:
+            self.stalled = True
             raise stopped("limit_time")
         if (model or paid) and self._cost_cap is not None and self.ledger.total >= self._cost_cap():
             raise stopped("limit_cost")
@@ -402,19 +408,24 @@ class TaskRun:
         """How long the task may still stay silent before it counts as stalled."""
         return self._remaining_s()
 
-    def touch(self) -> None:
-        """The task did something (a model replied, a tool came back): the stall time starts again."""
-        self.deadline = self._clock() + self.limits.seconds
+    def touch(self, waiting: float = 0.0) -> None:
+        """The task did something (a model replied, a tool came back): the stall time starts again. `waiting` is a wait
+        the task chose before its next attempt, which is no stall either: the stall time starts after it."""
+        self.deadline = self._clock() + self.limits.seconds + waiting
 
-    async def watch(self, work: Awaitable[T], *, extra: float = 0.0) -> T:
+    async def watch(self, work: Awaitable[T], *, extra: float = 0.0, stalled: Callable[[], Any] | None = None) -> T:
         """Await `work` for as long as the task is not stalled: `TimeoutError` once `seconds` (and
         `extra`, for what `work` does before the task can speak: a worker that is started first) have
-        passed with nothing heard. `work` is given up on then."""
+        passed with nothing heard. `work` is given up on then; with `stalled`, which is told first, it
+        is left to end itself."""
         task = asyncio.ensure_future(work)
         try:
             while True:
                 wait = self.deadline + extra - self._clock()
                 if wait <= 0:
+                    if stalled is not None:
+                        stalled()
+                        await asyncio.gather(task, return_exceptions=True)
                     raise TimeoutError
                 done, _ = await asyncio.wait({task}, timeout=wait)
                 if done:
@@ -429,7 +440,7 @@ class TaskRun:
         stall time starts again; it has a new pool of connections (the old one was closed when it
         paused), and no call waits."""
         self.touch()
-        self.timed_out = False
+        self.timed_out = self.stalled = False
         self.waiting = None
         self.pool = McpPool()
 
@@ -534,6 +545,9 @@ class TaskRun:
         self._check(final=True)
         if self._wrapped_up:
             raise stopped("limit_model")
+        if self.room_speech and self.stalled:
+            # A room shows a reply that stalled as a status line, so its last word would only take another stall time.
+            raise stopped("limit_time")
         self._wrapped_up = True
         self.touch()
         return await self._chat(messages, request_chars, wrap_up=True)
@@ -548,7 +562,7 @@ class TaskRun:
             from ..failures import PATIENT_WAITS, RETRY_WAITS, classify
             # Asking again repeats nothing, since the tools run only after a reply: a task that has done something rides
             # a failed call out for as long as its time lasts. Before that it fails in seconds, as a question does.
-            outage = Outage(RETRY_WAITS, PATIENT_WAITS, patient_ok=bool(self.tool_calls))
+            outage = Outage(RETRY_WAITS, PATIENT_WAITS, patient_ok=bool(self.tool_calls) and not self.room_speech)
             while True:
                 remaining = self._remaining_s()
                 try:
@@ -579,13 +593,19 @@ class TaskRun:
                         raise
                     failure = classify(error)
                     wait = outage.wait(failure.retry_after) if failure.transient else None
-                    if wait is None or wait >= self._remaining_s():
+                    # A room reply's attempt that heard nothing for its whole stall time has stalled, and ends the
+                    # reply; any other failure is tried again with all of its own time (Hermes's delegate heartbeat).
+                    if wait is None or (failure.kind == "timeout" if self.room_speech else wait >= self._remaining_s()):
                         raise
                     if failure.kind == "timeout":
                         self._charge_estimate(request_chars)  # the provider may bill what was given up on
                     if outage.announce(wait):
                         self._progress(failure.waiting(short_name(self.model), self.language, wait))
+                    if self.room_speech:
+                        self.touch(waiting=wait)
                     await self._guarded(asyncio.sleep(wait))
+                    if self.room_speech:
+                        self.touch()
         except OpenRouterError as error:
             if is_context_overflow(error):  # refused unread: no cost and no failed step, as the worker sends it again
                 raise stopped("failed", CONTEXT_OVERFLOW, window=provider_window(error)) from None
@@ -607,6 +627,7 @@ class TaskRun:
             raise stopped("failed", detail) from None
         except TimeoutError:
             logger.warning("The task's model timed out")
+            self.stalled = True
             self._charge_estimate(request_chars)  # the provider may bill what was given up on
             self._step(kind="model", outcome="timeout", ms=_ms(began), reason="timeout")
             # The only clock a call has is the task's time: not the monotonic clock, which a timer that fires a
@@ -696,7 +717,7 @@ class TaskRun:
             self._step(kind="tool", outcome="blocked", ms=_ms(began), reason="blocked")
             if ref is None and name in self.snapshot._aliases:
                 return {**_refused(), "content": "This tool is no longer enabled or connected. Read connections_list for current access; do not retry its old alias."}
-            if getattr(self,'room_speech',False):
+            if self.room_speech:
                 return {**_refused(),'instruction':'Start this as private work with handoff.','content':'This room is for speech only.'}
             if ref is None:
                 return {**_refused(), "content": "This tool is not available to this member. The owner may have disabled its connection in the member's tool list; use find_tools for currently allowed tools."}

@@ -3701,6 +3701,18 @@ export function checkRendered(name, context = {}) {
       require(blocked[0] === at('[data-room-message="2"]') + 1 && blocked[1] === at('[data-room-message="7"]') + 1 && blocked[2] === blocked[1] + 1, "each blocked reply stands where its exchange stopped");
       require(lines[0].textContent === "小森 未能回覆：請求太頻繁而被限流" && lines[1].textContent === "小晴 未能回覆：已停止", "blocked replies name the member and why in the window language");
     }
+    // A reply that does not finish is a status line, never words in a member's or the chief's mouth (2026-11-10).
+    if (name === "p02-reply-status") {
+      const lines = eventLines(2), rows = [...document.querySelectorAll('.au-room-thread > li')];
+      require(lines.every(line => line.closest('.au-room-thread > li.room-intent-blocked')), "unfinished replies are lines of the thread");
+      require(lines[0].textContent === "小森 未能回覆：太久沒有進展" && lines[1].textContent === "小晴 未能回覆：沒有給出回答",
+        "each line says why in words, never 「發生錯誤」");
+      const at = selector => rows.indexOf(document.querySelector(selector)?.closest('li'));
+      const blocked = rows.filter(row => row.matches('.room-intent-blocked')).map(row => rows.indexOf(row));
+      require(blocked[0] === at('[data-room-message="2"]') + 1 && blocked[1] === at('[data-room-message="7"]') + 1, "each line stands where its exchange stopped");
+      require(rows.filter(row => row.querySelector('.ra')).length === 1, "only the reply that came is a member's bubble");
+      require(!document.querySelector('.au-room-wrapup'), "no one sums the failures up in the chief's name");
+    }
     if (name === "p02-meeting-event") {
       // The day divider is no longer an event line; the meeting stays one line (an exchange, 2026-11-05).
       const line = eventLines(1).at(-1);

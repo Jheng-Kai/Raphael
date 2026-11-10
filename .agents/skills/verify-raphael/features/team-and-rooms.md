@@ -1,5 +1,43 @@
 # Group chats and folders
 
+## No listener; a reply that does not finish is a status line (core, 2026-11-10)
+
+Harness step 4 of the backend design (「群組與交辦」「失敗與可靠性」), after Hermes
+`gateway/hosted_room_discussion.py` and `tools/delegate_tool.py`. R-ROOM-02.
+
+- Nothing asks a member beforehand whether it will speak: `members/exchanges.py` has no `listen`, and
+  `Router.room_listener` and the CLI listener are gone. An @ or a reply to a member's message goes to
+  whoever it names. A message that names no one goes to the room's default responder first (the chief,
+  a saved member, or everyone at once), and every other member then reads that answer in a speech turn
+  of its own and speaks or replies exactly `(pass)`. Each member costs one model call per message;
+  before, every member was asked first and the speakers then spoke.
+- A member the owner names may not pass: its turn says so, and a pass that started no work is the
+  blocked reason `no_reply` (「小晴 未能回覆：沒有給出回答」). A colleague's @ may still be passed.
+- A pass in any usual form (`(pass)`, `（pass）`, `Pass.`, bold, code) leaves nothing: no bubble,
+  preview, side-thread count or line in a colleague's transcript. Words before a trailing pass stay.
+- A reply has no total clock. `ROOM_STALL_S` (180 s, `background/service.py`) is its no-progress window:
+  every CLI event, model reply or tool result starts it again, each model attempt has all of it, and a
+  chosen wait before the next attempt is no stall. An attempt that hears nothing for the whole window
+  ends the reply (`limit_time`, shown as `stalled`, 「太久沒有進展」) with no retry and no wrap-up call. A
+  room reply rides no outage out (no patient waits), and the worker keeps only its default net for it.
+- A reply that does not finish is its status line (the blocked intent) and nothing else:
+  `rooms.messages` lists no bubble for a failed, cut-off or incomplete reply, and an exchange a failure
+  stopped gets no close-out in the chief's name (the owner's Stop and the reply budget keep theirs). A
+  message whose speakers were never chosen still names the default responder that did not answer (a
+  budget stop, say), and speech a restart cut off is a `restart` line that does not run again. The
+  provider's or the CLI's own words stay in the task's private record; the exchange logs only the kind.
+
+Offline evidence, written first: `core/tests/members/test_room_turns.py` (all 24 failed on the old code)
+and `core/tests/background/test_room_attempts.py` (2 of 5 failed; the other 3 guard what already held),
+then `app/src/main/group-chats.test.ts`. Scenes:
+
+```powershell
+npm run look -- room-reply-status room-mention-blocked room-discussion room-concurrent-replies room-routing-fallback --theme both --width 1120,720,1920x1080
+```
+
+Not shown offline: a live room on the installed Claude Code or Codex where a reply takes longer than
+60 s; only a live run on the owner's brains shows it.
+
 ## Room CLI permission callback (core, 2026-11-09)
 
 R-ROOM-01 / R-CLI-07: Claude Code's permission-prompt callback `approve` remains mounted
@@ -64,10 +102,10 @@ a pressed state for a reader; in 房內角色 each row carries its role as a bar
 No separate list of picked names. Scenes: `primary-room-members`, `room-role-assignment`, `new-room`,
 `plus-create-room`, `room-replies`.
 
-Everyone in a room reads each message and decides for themselves, on their own model, through
-one small question (`room_listener`); a CLI or local brain reads an owner's message in a real turn
-and may pass. An address is always answered. Nothing hands out the floor or sums up unasked, and no
-turn is given a template: a meeting closes and finished work reports back in plain words (R-AG-02).
+Everyone in a room reads each message and decides for themselves, on their own model, in a speech
+turn of their own: no one is asked beforehand (see "No listener" below). An address is always
+answered. Nothing hands out the floor or sums up unasked, and no turn is given a template: a meeting
+closes and finished work reports back in plain words (R-AG-02).
 A member's question waits above the room's composer, the room's row says so, and
 `question-reminder.ts` says it once when the owner is elsewhere (R-AG-34).
 
@@ -159,12 +197,8 @@ members pass. The agenda author also receives a review turn. Owner corrections r
 that ordered queue; an explicitly addressed follow-up schedules only its recipients.
 Serial meeting rounds use the existing turn budget, including follow-up mentions,
 so the smaller parallel-round cap cannot truncate a normal meeting. Ordinary room chats
-retain their independent speak/pass listeners. A failed listener records only its
-exception kind, retries once, and retains routing evidence; persistent failure
-creates a blocked intent and a public unavailable reason rather than being heard.
-CLI structured listeners allow three Claude turns and read structured_output.
-Listeners use nonpersistent native sessions; persistent turns sharing a member and
-conversation serialize through the existing session lock. An early CLI exit retains
+no longer have listeners (superseded 2026-11-10, "No listener" below). Persistent turns
+sharing a member and conversation serialize through the existing session lock. An early CLI exit retains
 bounded, scrubbed stderr in private failure details; normal logs retain only the kind.
 A missing resume session gets one fresh attempt
 with bounded recovery receipts, without replaying completed tool effects.

@@ -129,7 +129,7 @@ def test_damaged_failure_does_not_break_history_or_publish_private_fields(conn, 
     assert history.get(turn_id).failure is None
 
 
-async def test_room_message_turn_uses_the_same_public_failure_view(make_rig, tmp_path):
+async def test_a_failed_room_turn_keeps_the_same_public_failure_view_but_is_no_bubble(make_rig, tmp_path):
     from raphael_core.members.rooms import RoomsService
     from raphael_core.members.service import MembersService
 
@@ -148,7 +148,10 @@ async def test_room_message_turn_uses_the_same_public_failure_view(make_rig, tmp
             rig.conn.execute("INSERT INTO room_messages(room_id,thread_id,member_id,turn_id,text,created) VALUES(?,?,0,?,'Failed',1)",
                              (room["id"], thread, turn_id))
         messages = (await rooms._messages({"room_id": room["id"]}))["messages"]
-        assert next(message for message in messages if message.get("turn_id") == turn_id)["turn"]["failure"] == failure
+        # A reply that failed is no bubble in the room (its blocked intent is its status line); the turn keeps the same
+        # public failure view for its private record.
+        assert not [message for message in messages if message.get("turn_id") == turn_id]
+        assert rooms.turn_view(rig.history.get(turn_id))["failure"] == failure
         rig.history.resolve(turn_id, prefix="", text="Recovered", status="done")
         messages = (await rooms._messages({"room_id": room["id"]}))["messages"]
         assert next(message for message in messages if message.get("turn_id") == turn_id)["turn"]["failure"] is None

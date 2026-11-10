@@ -67,7 +67,6 @@ from .agent.device import DeviceActions, NullActions, WindowsActions
 from .agent.gate import ToolGate
 from .agent.safety import SafetyGuard, SafetyJudge, SafetyRules
 from .agent.service import AgentService
-from .agent.routing import Router as DecisionRouter
 from .agent.tools import Tools
 from .background.service import BackgroundService
 from .background.tasks import FINAL_STATES
@@ -961,7 +960,7 @@ class App(Router):
         self.desktop_viewer.teaching.register(self)
         self.rooms = RoomsService(self._conn, members=self.members, background=self.background,
                                   notify=self.notify, transcribe=self._transcribe_room,
-                                  attachment_store=self.attachment_store, decision=DecisionRouter(self.client))
+                                  attachment_store=self.attachment_store)
         self.rooms.register(self)
         self.members.use_speech(self.speaker)
         self.memory.member_exists = self.members.member_exists

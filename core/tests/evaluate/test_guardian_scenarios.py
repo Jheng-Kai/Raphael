@@ -87,9 +87,6 @@ async def test_p03_immediate_start_uses_production_rpc_worker_and_mcp(tmp_path,m
             pass
         async def run(self,*,endpoint,token,system,user,**kwargs):
             yield Event('model','owner-model')
-            if 'Return only your speak choice' in system:
-                yield Event('final','{"speak":false,"urgency":0}')
-                return
             from test_p14_scenarios import asked
             child='Acceptance criteria' in system
             if 'You are speaking in a meeting' in system and 'handoff 立即交給' not in asked(user):
@@ -679,9 +676,6 @@ async def test_p04_short_wrapup_and_stop_through_production_paths(tmp_path,monke
         def __init__(self,*args,**kwargs):
             pass
         async def run(self,*,endpoint,token,system,user,**kwargs):
-            if 'Return only your speak choice' in system:
-                yield Event('final','{"speak":false,"urgency":0}')
-                return
             if stopping:
                 speech = 'You are speaking in a meeting' in system
                 if speech and 'stage_id=' not in user:

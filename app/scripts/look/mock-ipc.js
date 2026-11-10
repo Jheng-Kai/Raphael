@@ -570,13 +570,14 @@ export function installMock(fixture, config = {}, target = window) {
     data.turns.push(data.colleagueTurn, ...data.colleagueExchanges.slice(0, variant.colleagues));
   }
   if (variant.p02Roles) data.rooms[0].roles = data.p02Roles;
-  if (variant.p02Blocked || variant.p02Fallback || variant.p02LongExchange) {
+  if (variant.p02Blocked || variant.p02Fallback || variant.p02LongExchange || variant.roomReplyStatus) {
     const exchange = { ...data.roomActiveExchange, state: "stopped", active_turn: null };
-    if (variant.p02Blocked) {
-      // 小森's first reply hit the CLI rate limit; the owner then stopped a second request.
+    if (variant.p02Blocked || variant.roomReplyStatus) {
+      // p02Blocked: 小森's first reply hit the CLI rate limit; the owner then stopped a second request.
+      // roomReplyStatus: 小森's reply went silent for the room's whole stall time; 小晴, named next, passed anyway.
       data.messages = [data.messages[0], data.messages[1], data.p02BlockedMessage];
       exchange.origin_message_id = data.p02BlockedMessage.id;
-      exchange.reply_intents = data.p02BlockedIntents;
+      exchange.reply_intents = variant.roomReplyStatus ? data.roomReplyStatusIntents : data.p02BlockedIntents;
     }
     if (variant.p02Fallback) exchange.routing = { fallback: "timeout", model: "fixture/router" };
     if (variant.p02LongExchange) { exchange.turns_taken = 8; exchange.hops = 5; exchange.state = "done"; exchange.reply_intents = [{ id: 100, recipient_id: 1, recipient_name: data.members[1].name, state: "done", reason: "" }]; }

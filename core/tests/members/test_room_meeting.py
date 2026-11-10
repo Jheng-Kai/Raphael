@@ -1,7 +1,7 @@
 """Meeting cursors, attributed posts and restart close-out on synthetic data."""
 from raphael_core.agent.history import AgentHistory
 from raphael_core.members.rooms import RoomsService
-from .test_exchanges import exchange, team, send, finish, history, Decision, meeting_source  # noqa: F401
+from .test_exchanges import exchange, team, send, finish, history, meeting_source  # noqa: F401
 
 
 async def test_speech_cursor_sends_only_new_messages_with_the_board(rig,exchange):
@@ -41,7 +41,8 @@ async def test_startup_closes_interrupted_speech_and_reoffers_its_address_once(r
     restored=RoomsService(rig.conn,members=rig.service,background=rig.background)
     restored.start()
     await restored.wait_idle()
-    assert rig.conn.execute("SELECT COUNT(*) FROM room_messages WHERE kind='wrapup'").fetchone()[0]==1
+    # A restart is no one's words: the interrupted reply is offered again, and no close-out is written for it.
+    assert rig.conn.execute("SELECT COUNT(*) FROM room_messages WHERE kind='wrapup'").fetchone()[0]==0
     assert len(rig.background.submitted)==2
     assert rig.conn.execute('SELECT restart_count FROM room_reply_intents').fetchone()[0]==1
     task,turn=rig.background.attached[-1]
@@ -58,7 +59,6 @@ async def test_startup_closes_interrupted_speech_and_reoffers_its_address_once(r
 
 async def test_a_digest_cannot_extend_itself_by_reposting(rig,exchange):
     room,ids=await team(rig)
-    exchange._exchanges.decision=Decision('Alice')
     source=exchange._history.add(session_id='private-review',question='Review',route='answer',prefix='',text='',status='running')
     exchange.post(0,{'room_id':room['id'],'text':'A new finding.'},source)
     await exchange.wait_idle()
@@ -96,13 +96,13 @@ def test_room_context_preserves_the_source_and_unicode_messages_without_partial_
     assert huge in messages and messages[-1]["text"] == huge["text"]
 
 
-async def test_listener_overflow_uses_the_shared_sentence_in_the_requested_language(rig, exchange):
+async def test_overflow_uses_the_shared_sentence_in_the_requested_language(rig, exchange):
     from raphael_core.failures import Failure
     room, ids = await team(rig)
     rig.service.store.update_member(ids[0], model="cli:claude")
     await send(rig, room, "@Alice Review the next step")
     origin = exchange._exchanges.latest(room["id"])["origin_message_id"]
     with rig.conn:
-        rig.conn.execute("UPDATE room_reply_intents SET state='blocked',reason='listener_context_overflow' WHERE origin_message_id=?", (origin,))
+        rig.conn.execute("UPDATE room_reply_intents SET state='blocked',reason='cli_context_overflow' WHERE origin_message_id=?", (origin,))
     for language in ("zh-TW", "en", "ja", "fr"):
         assert exchange._unfinished(origin, language) == [("Alice", Failure("context_overflow", "context_overflow").sentence("Claude Code", language))]

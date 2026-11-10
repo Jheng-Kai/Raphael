@@ -127,13 +127,11 @@ async def test_legacy_creation_alias_keeps_permission_changes_behind_exact_yes(s
 @pytest.mark.parametrize("brain", ["api", "cli"])
 async def test_nonprimary_can_start_a_meeting_from_the_owner_private_chat(setup, client, monkeypatch, brain):
     from raphael_core.members.rooms import RoomsService
-    from .test_exchanges import Decision
     rig, team = setup
     actor = team.members.store.create_member(name="Coordinator", role="Coordinate")
     reviewer = team.members.store.create_member(name="Reviewer", role="Review")
     rooms = RoomsService(rig.conn, members=team.members, background=team.background, now_ms=rig.wall)
     team.members.rooms = rooms
-    rooms._exchanges.decision = Decision("Reviewer")
     rig.settings.set("action_mode", "direct")
     args = {"name": "Review", "member_ids": [0, actor.id, reviewer.id], "agenda": "Review the release"}
     if brain == "api":

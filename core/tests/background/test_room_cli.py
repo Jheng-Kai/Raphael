@@ -15,7 +15,7 @@ from .conftest import Clock, until
 from .test_room_meeting import meeting  # noqa: F401
 
 
-def submit_room(rig):
+def submit_room(rig, model="cli:codex:gpt-5.6-terra"):
     history = AgentHistory(rig.conn)
     with rig.conn:
         room = rig.conn.execute("INSERT INTO rooms(name,created) VALUES ('Room',1)").lastrowid
@@ -23,7 +23,7 @@ def submit_room(rig):
     turn = history.add(session_id="room:1:1:0", question="Plan", route="room", prefix="",
                        text="", status="running", source="room", scope="room", room_id=room, thread_id=thread)
     rig.service.use_cli(object())
-    task = rig.service.submit(session_id="room:1:1:0", text="Plan", language="en", model="cli:codex:gpt-5.6-terra")
+    task = rig.service.submit(session_id="room:1:1:0", text="Plan", language="en", model=model)
     rig.service.attach_turn(task, turn)
     return task, turn
 
@@ -172,18 +172,22 @@ async def test_room_usage_limit_commits_safe_failure_and_emits_it(meeting, monke
         error = OpenRouterError(429, "usage_limit", "Usage limit reached PRIVATE_PROVIDER_PACKET")
         error.retry_after = 7200
         rig.client.replies = [error]
-    rooms.turn_view = lambda turn: {"id": turn.id, "failure": turn.failure}
     await rooms._send({"room_id": room["id"], "text": "@Alice summarize the synthetic project", "request_id": "limit", "ui_language": "en"})
     await until(lambda: rig.conn.execute("SELECT 1 FROM worker_tasks WHERE room_id=? AND state='failed'", (room["id"],)).fetchone())
-    messages = (await rooms._messages({"room_id": room["id"]}))["messages"]
-    [failed] = [message for message in messages if message.get("turn", {}).get("failure")]
-    failure = failed["turn"]["failure"]
+    await rooms.wait_idle()
+    turn_id = rig.conn.execute("SELECT turn_id FROM room_messages WHERE room_id=? AND member_id=?", (room["id"], alice.id)).fetchone()[0]
+    failure = AgentHistory(rig.conn).get(turn_id).failure
     assert failure["kind"] == "usage_limit" and failure["provider"] == provider
     assert reset - 1 <= failure["resets_at"] <= reset + 1
     assert "PRIVATE" not in json.dumps(failure)
-    assert AgentHistory(rig.conn).get(failed["turn_id"]).failure == failure
     terminal = [data for method, data in rig.notifications if method == "agent.turn" and data.get("failure")]
     assert terminal[-1]["failure"] == failure
+    # The room shows it as Alice's status line, never as words in her name, and nothing private.
+    result = await rooms._messages({"room_id": room["id"]})
+    assert not [message for message in result["messages"] if message["turn_id"] == turn_id]
+    [intent] = [item for item in result["exchange"]["reply_intents"] if item["recipient_id"] == alice.id]
+    assert (intent["state"], intent["reason"]) == ("blocked", "cli_quota" if model.startswith("cli:") else "usage_limit")
+    assert "PRIVATE" not in json.dumps(result)
 
 
 async def test_private_member_task_uses_its_cli_brain_without_api_fallback(make_rig, monkeypatch, tmp_path):
@@ -513,34 +517,12 @@ async def test_one_oversized_room_message_reports_overflow_and_does_not_poison_n
     assert not rig.conn.execute("SELECT 1 FROM room_member_cursor WHERE room_id=? AND member_id=?", (room["id"], alice.id)).fetchone()
     expected = classify("context_overflow").sentence("Claude Code", "en")
     assert rooms._unfinished(source, "en") == [("Alice", expected)]
-    assert rig.conn.execute("SELECT COUNT(*) FROM room_messages WHERE origin_message_id=? AND kind='wrapup'", (source,)).fetchone()[0] == 1
+    # The overflow is Alice's status line, with no close-out in the chief's name.
+    assert rig.conn.execute("SELECT reason FROM room_reply_intents WHERE origin_message_id=?", (source,)).fetchone()[0] == "cli_context_overflow"
+    assert rig.conn.execute("SELECT COUNT(*) FROM room_messages WHERE origin_message_id=? AND kind='wrapup'", (source,)).fetchone()[0] == 0
     await rooms._send({"room_id": room["id"], "text": "@Alice A smaller request", "request_id": "after-overflow", "ui_language": "en"})
     await until(lambda: rooms._exchanges.latest(room["id"])["state"] in ("done", "stopped"))
     assert played and list(rig.conn.execute("SELECT state FROM worker_tasks ORDER BY id"))[-1][0] == "done"
     assert not rig.client.chat_calls
-
-
-async def test_cli_room_listener_also_receives_a_bounded_public_snapshot(meeting, monkeypatch, tmp_path):
-    rig, members, rooms, room, alice = meeting
-    members.store.update_member(alice.id, model="cli:claude")
-    rig.service.use_cli(Brains(tmp_path))
-    old = []
-    with rig.conn:
-        for index in range(40):
-            text = f"RECORD-{index} " + "合成記錄" * 200 + f" END-{index}"
-            old.append(text)
-            rig.conn.execute("INSERT INTO room_messages(room_id,member_id,text,created) VALUES (?,NULL,?,1)", (room["id"], text))
-    listening = []
-    async def run(driver, **kwargs):
-        if kwargs.get("no_tools"):
-            listening.append(json.loads(kwargs["user"]))
-            yield Event("final", '{"speak":true,"urgency":0.5}')
-        else:
-            yield Event("final", "(pass)")
-    monkeypatch.setattr("raphael_core.agent.cli.loop.Driver.run", run)
-    await rooms._send({"room_id": room["id"], "text": "Review the next step", "request_id": "long-listening", "ui_language": "en"})
-    await until(lambda: rooms._exchanges.latest(room["id"])["state"] in ("done", "stopped"))
-    assert listening and len(json.dumps(listening[0], ensure_ascii=False).encode("utf-8")) < 10000
-    assert any(item["text"] == old[-1] for item in listening[0]["messages"])
     assert not rooms._unfinished(rooms._exchanges.latest(room["id"])["origin_message_id"], "en")
     assert not rig.client.chat_calls

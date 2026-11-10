@@ -469,6 +469,16 @@ test("a blocked reply is a line of the thread after its exchange, with its reaso
  expect(document.querySelector('.au-room-controls')!.textContent).toBe('');
 });
 
+test("a named member that passed, a stalled reply and an API brain's limits each say so, not that something went wrong",async()=>{
+ const intent=(id:number,reason:string)=>({id,origin_message_id:1,source_message_id:1,recipient_id:1,recipient_name:'Alice',state:'blocked',reason});
+ api.roomMessages.mockResolvedValue({messages:[{id:1,member_id:null,text:'@Alice check',created:1,status:'done'}],exchange:{state:'stopped',stop_requested:0,
+   reply_intents:[intent(7,'no_reply'),intent(8,'stalled'),intent(9,'usage_limit'),intent(10,'rate_limit'),intent(11,'cli_context_overflow')]}});
+ await pane();
+ expect([...document.querySelectorAll('.room-intent-blocked')].map(row=>row.textContent)).toEqual(["Alice couldn't reply: Gave no answer",
+   "Alice couldn't reply: No progress for too long","Alice couldn't reply: Subscription quota used up",
+   "Alice couldn't reply: Rate limited for too many requests","Alice couldn't reply: Too much text to read at once"]);
+});
+
 test("a hand-off line names its assignee and opens their conversation with the request, result and files, never its number",async()=>{
  api.roomMessages.mockResolvedValue({messages:[{id:1,member_id:0,text:'Alice, write the report.',created:1,status:'done',turn_id:5}],exchange:null,handoffs:[{task_id:42,source_turn_id:5,work_turn_id:6,member_id:1,member_name:'Alice',from_member_id:0,stage_id:'stage-xyz',mode:'work',state:'done',reason:null,created_at_ms:2,ready_at_ms:2,dispatch_policy:'immediate',request:'Write the report.',result:'Report ready.',evidence:[{kind:'artifact',uri:'out/report.html',mime:'text/html',digest:'abc',verdict:'verified'}]}]});
  const view=await pane();

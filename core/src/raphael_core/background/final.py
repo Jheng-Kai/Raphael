@@ -3,9 +3,22 @@ import re
 from dataclasses import dataclass
 
 
+# A pass as models write it: (pass), （pass）, Pass., in bold or as code, in any case.
+_PASS = re.compile(r'[*_`~\s]*[(（]?\s*pass\s*[)）]?[.。!！]?[*_`~\s]*', re.I)
+# The same pass after the words it ends: in brackets, so that the word "pass" is never taken from a sentence.
+_TRAILING_PASS = re.compile(r'(\S[\s\S]*?)\s*[*_`~]*[(（]\s*pass\s*[)）][.。]?[*_`~]*\s*', re.I)
+
+
+def is_pass(text):
+    """Whether a reply says nothing: empty, or only a pass."""
+    return not text.strip() or bool(_PASS.fullmatch(text.strip()))
+
+
 def room_reply_text(text):
     """Remove only a trailing protocol suffix; an exact pass remains an exact pass."""
-    match = re.fullmatch(r'(\S[\s\S]*?)\s*[(（]\s*pass\s*[)）][.。]?\s*', text.strip(), re.I)
+    if is_pass(text):
+        return text
+    match = _TRAILING_PASS.fullmatch(text.strip())
     return match.group(1).rstrip() if match else text
 
 

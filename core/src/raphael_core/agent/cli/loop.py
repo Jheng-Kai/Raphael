@@ -130,11 +130,12 @@ class CliLoop:
     def __init__(self, *, brains, sessions, member_id, model, ledger, language, plain,
                  system, user, tools, progress, thinking, event, execute, expire=None, spoken=False,
                  conversation_id=None, quota=None, attachments=(), wait_timeout_s=None, resume_session=True,
-                 rate_limit_waits=None, structured=None, alive=lambda: None, skills=(), no_tools=False, reply=None,
+                 rate_limit_waits=None, structured=None, alive=lambda waiting=0.0: None, skills=(), no_tools=False, reply=None,
                  owner_text=None, resume_user=None, context_sections=None, context_turns=(), context_summary="",
                  context_summary_through=0, turn_id=None):
         self.brains, self.sessions, self.member_id, self.model = brains, sessions, member_id, model
-        # Told whenever the CLI does anything (a word, a tool): whoever watches for a stalled turn hears it.
+        # Told whenever the CLI does anything (a word, a tool): whoever watches for a stalled turn hears it. Told too before
+        # a wait the loop chooses (`waiting`, in seconds), which is no stall.
         self.alive = alive
         self.conversation_id = sessions.conversations.resolve(member_id, conversation_id) if sessions else conversation_id
         self.quota = quota
@@ -716,6 +717,8 @@ class CliLoop:
                             self.progress(self._rate_limit_wait(NAMES[name], wait) if failure == "rate_limit" else
                                           self.failure_reason.waiting(NAMES[name], self.language, wait) if failure == "cli_stopped" and self.failure_reason else
                                           Failure(failure, self.failure_reason.reason if self.failure_reason else failure).sentence(NAMES[name], self.language))
+                        # The next attempt has all of its own time, after a wait that is no stall (Hermes's delegate heartbeat).
+                        self.alive(wait)
                         await asyncio.sleep(wait)
                         self.alive()
                 if failure:

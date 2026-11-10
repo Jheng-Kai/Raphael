@@ -37,7 +37,9 @@ def _role_part(role):
 _OWNER_STOPS = ('owner', 'interjection')
 # An unfinished reply in words, by the reason its intent was blocked for; any other reason is an error.
 _UNFINISHED = {'cli_rate_limited':'rate_limit', 'cli_quota':'quota', 'cli_login':'login', 'cli_missing':'login',
-               'cli_context_overflow':'context_overflow', 'listener_context_overflow':'context_overflow', 'cost':'budget', 'reply_budget':'budget', 'revoked':'removed', 'restart':'restart'}
+               'cli_context_overflow':'context_overflow', 'cost':'budget', 'reply_budget':'budget', 'revoked':'removed', 'restart':'restart',
+               'stalled':'unavailable', 'no_reply':'unavailable', 'rate_limit':'rate_limit', 'usage_limit':'quota',
+               'context_overflow':'context_overflow'}
 _UNFINISHED_WORDS = with_ui_words({
     'zh-TW':{'rate_limit':'請求太頻繁而被限流', 'quota':'訂閱額度已用完', 'login':'需要登入 CLI', 'budget':'預算已用完',
              'removed':'已不在房間', 'restart':'重新啟動後中斷', 'error':'發生錯誤', 'unavailable':'暫時無法回應'},
@@ -49,7 +51,7 @@ _UNFINISHED_WORDS = with_ui_words({
 
 
 class RoomsService:
-    def __init__(self, conn, *, members, background, notify=None, now_ms=wall_clock_ms, transcribe=None, attachment_store=None, decision=None):
+    def __init__(self, conn, *, members, background, notify=None, now_ms=wall_clock_ms, transcribe=None, attachment_store=None):
         self._transcribe_audio = transcribe
         self._attachment_store = attachment_store
         self._conn = conn
@@ -60,7 +62,7 @@ class RoomsService:
         self._history = AgentHistory(conn, now_ms)
         self.turn_view = None
         self._settings = SettingsStore(conn)
-        self._exchanges = RoomExchanges(self, decision)
+        self._exchanges = RoomExchanges(self)
         members.rooms = self
 
     def start(self):
@@ -368,6 +370,13 @@ class RoomsService:
                 continue
             if any(m['kind']=='wrapup' and m['turn_status']=='done' and (m['text'] or m['turn_detail'] or m['turn_text']) for m in messages):
                 continue
+            if exchange['reason'] not in (*_OWNER_STOPS, 'reply_budget'):
+                # A failure is its status lines (the blocked replies): no one sums it up in the chief's name.
+                if not exchange['wrapup_sent']:
+                    with self._conn:
+                        self._conn.execute('UPDATE room_exchanges SET wrapup_sent=1,active_turn=NULL WHERE origin_message_id=?',(origin,))
+                    self._changed(room_id)
+                continue
             owner = self._conn.execute('SELECT thread_id FROM room_messages WHERE id=?', (origin,)).fetchone()
             if owner is None:
                 continue
@@ -422,7 +431,7 @@ class RoomsService:
                 model = (task[0] if task else None) or (speaker.model if speaker else None) or self._settings.get('agent_model')
                 name = cli_name(model) or 'CLI'
                 return Failure(kind, kind).sentence(name, language)
-            return (words['unavailable'] + ' (' + row['reason'][9:] + ')' if row['reason'].startswith('listener_') else words[kind])
+            return words[kind]
         return list(dict.fromkeys((row['recipient_name'], sentence(row)) for row in rows if row['reason'] not in _OWNER_STOPS))
 
     async def wait_idle(self):
@@ -474,7 +483,11 @@ class RoomsService:
         side = self._conn.execute('SELECT id FROM room_threads WHERE room_id=? AND parent_message_id=?', (row['room_id'], row['id'])).fetchone()
         if side:
             message['reply_thread_id'] = side[0]
-            message['reply_count'] = self._conn.execute("SELECT COUNT(*) FROM room_messages m LEFT JOIN agent_turns t ON t.id=m.turn_id WHERE m.thread_id=? AND (m.member_id IS NULL OR (t.status='done' AND trim(COALESCE(t.detail,t.text,m.text)) NOT IN ('','(pass)')))", (side[0],)).fetchone()[0]
+            from ..background.final import room_reply_text
+            # A pass is no reply, in whatever form it was written.
+            message['reply_count'] = sum(reply['member_id'] is None or (reply['status'] == 'done' and not is_pass(room_reply_text(reply['words'] or '')))
+                for reply in self._conn.execute("SELECT m.member_id, t.status, COALESCE(t.detail,t.text,m.text) AS words FROM room_messages m "
+                                                "LEFT JOIN agent_turns t ON t.id=m.turn_id WHERE m.thread_id=?", (side[0],)))
         message["author_kind"] = "owner" if message["member_id"] is None else "member"
         message["author_member_id"] = message["member_id"]
         message["reply_reference"] = None
@@ -555,7 +568,10 @@ class RoomsService:
             ).fetchall()
             for row in rows:
                 m = self._message(row)
-                if m["member_id"] is None or m["status"] != "done" or not is_pass(m["text"]):
+                # A reply that did not finish is the room's status line for it (its blocked intent), not a bubble in
+                # its member's name; a pass is nothing at all.
+                if m["member_id"] is None or m.get("kind") == "report" or m["status"] == "running" or \
+                        m["status"] == "done" and not is_pass(m["text"]):
                     messages.append(m)
                     if len(messages) == 100:
                         break
@@ -682,17 +698,26 @@ class RoomsService:
                                     (room['id'],thread_id,member_id)).fetchone()
         transcript = self._exchanges.transcript(room,thread_id,since=cursor[0] if cursor else 0,through=seen)
         roster = [{"id":s.id,"name":s.name,"role":s.role} for s in self._members.roster() if s.id in self._ids(room)]
-        prompt = ("You are in a group chat with the owner and your colleagues. Everyone reads every message, and you decided to say "
-            "something now, so read the new messages and say it the way you would to people you work with, in your own "
-            "voice and the owner's language. Answer what is actually being discussed: disagree when you disagree, ask when "
+        prompt = ("You are in a group chat with the owner and your colleagues. Everyone reads every message and decides for "
+            "themselves whether to say something. Read the new messages; when you speak, say it the way you would to people "
+            "you work with, in your own voice and the owner's language. Answer what is actually being discussed: disagree when you disagree, ask when "
             "you want to know, @mention a colleague when you want them in particular. Nothing here has a set shape or length, "
             "and no headings or templates. There are no fixed rounds and no automatic conclusion. Leave out what others have already said. A mention is not work: use the handoff tool "
             "to yourself or a colleague for a concrete assignment in that member's private conversation. "
             "This room is a meeting for discussion, checking process and synchronizing data. Never do tool work here. "
             "Check the status board for the existing stage owner before starting work; use the same stage_id for that action. "
             "After handoff, say briefly what you started. Work runs privately and reports back as a short card. "
-            "Approval and sign-in cards stay private. Source document dates are never schedule authorization. "
-            "Say exactly (pass) if by now you have nothing to add. ")
+            "Approval and sign-in cards stay private. Source document dates are never schedule authorization. ")
+        # Whether this turn may pass, as Hermes's hosted_room_discussion tells each turn: never when the owner named you.
+        if target.get('required'):
+            prompt += ("The owner addressed you directly: reply with your answer, your result or what blocks you. Do not reply "
+                       "(pass); if you cannot do it, say why and what you need from the owner. ")
+        elif target.get('lead'):
+            prompt += ("The owner's message names no one, and this room has you answer such messages first: answer it, or hand "
+                       "it on. Reply with exactly (pass) only when it needs no reply at all, such as thanks or an acknowledgement. ")
+        elif kind != "wrapup":
+            prompt += ("Speak only when you have something new to add: your own part, a correction, a disagreement or a "
+                       "question. Otherwise reply with exactly (pass). ")
         if speaker.is_chief:
             prompt += ("You are the chief of staff, which gives you no floor the others lack: you do not open, frame, moderate or "
                        "sum up the discussion. You speak when you have something to add or when something would otherwise fall "
@@ -700,8 +725,6 @@ class RoomsService:
                        # Live, about half the time Raphael did work himself that the owner told him to hand off.
                        "When the owner asks you to give work to a colleague, call handoff for it now and leave that "
                        "work to them instead of doing it yourself. ")
-        if target.get('unanswered'):
-            prompt += "No one else took the owner's last message, so it falls to you: answer it or hand it on, or (pass) if it needs no reply. "
         if kind == "wrapup":
             prompt += ("Tell the owner in your own words where this has landed, in whatever shape suits it, and anything they have to "
                 "settle. Do not hand off again. Recurring work may be proposed only through the existing routine approval flow; "

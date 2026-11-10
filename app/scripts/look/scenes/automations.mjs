@@ -58,6 +58,7 @@ export default [
   scene("room-mention-after-hop-limit", "Completed explicit mentions survive four handoffs", [room(1), check("p02-long-exchange")], { p02LongExchange: true, roomDiscussion: true }),
   scene("room-mention-after-turn-limit", "Replies survive the seventh turn", [room(1), check("p02-long-exchange")], { p02LongExchange: true, roomDiscussion: true }),
   scene("room-mention-blocked", "Rate-limited and stopped replies stand in the thread where their exchange stopped", [room(1), check("p02-blocked")], { p02Blocked: true }),
+  scene("room-reply-status", "A stalled reply and a named member that passed are status lines saying why, never bubbles", [room(1), check("p02-reply-status")], { roomReplyStatus: true }),
   scene("room-wrapup-after-replies", "Chief conclusion follows completed reply intents", [room(1), check("room-wrapup"), check("p02-long-exchange")], { p02LongExchange: true, roomWrapup: true }),
   scene("automations-hover", "Calendar chip hover", [...calendar, hover('.au-occurrence')]),
   scene("automations-empty", "An empty week stays calm and offers 建立", [...auto, check("calendar-shell"), check("calendar-empty")], { routines: [], homeEmpty: true }),

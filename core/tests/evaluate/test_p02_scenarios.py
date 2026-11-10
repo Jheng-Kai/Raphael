@@ -97,8 +97,6 @@ class P02Brain(FakeClient):
         return '已開啟會議。', []
 
     async def complete_json(self, **kwargs):
-        if kwargs.get('schema_name') == 'raphael_room_listener':
-            return Completion({'speak':False,'urgency':0,'reason':'fixture silence'}, kwargs['model'], 0, 0, 0, 0)
         if kwargs.get('schema_name') != 'raphael_room_route':
             raise RuntimeError('fixture has no auxiliary response')
         request = json.loads(kwargs['user'])
@@ -155,9 +153,6 @@ def cli_brain(monkeypatch, client, scenario, limited=()):
 
         async def run(self, *, system, user, endpoint, token, session=None, **kwargs):
             yield Event('model','owner-model')
-            if 'Return only your speak choice' in system:
-                yield Event('final','{"speak":false,"urgency":0}')
-                return
             native, effective = context.receive(system, user, session)
             yield Event('session', native)
             if scenario=='S07.meeting' and 'You are in a group chat' not in user:
@@ -256,10 +251,8 @@ async def test_s07_meeting_goes_on_when_one_cli_member_is_rate_limited(tmp_path,
         # Every participant, including the agenda author, gets a review turn.
         assert {row[0] for row in spoken} == {1, 3, 4}
         assert conn.execute('SELECT member_id FROM room_messages WHERE id=?', (origin,)).fetchone()[0] == 3
-        [notice] = conn.execute("SELECT t.question,t.text,t.model,t.cost_usd FROM room_messages m "
-            "JOIN agent_turns t ON t.id=m.turn_id WHERE m.origin_message_id=? AND m.kind='wrapup'", (origin,)).fetchall()
-        assert notice['question'] == '' and notice['model'] is None and notice['cost_usd'] == 0
-        assert 'RD' in notice['text'] and '限流' in notice['text']
+        # RD's rate limit is its status line (the blocked intent above): no close-out speaks for it in the chief's name.
+        assert not conn.execute("SELECT 1 FROM room_messages WHERE origin_message_id=? AND kind='wrapup'", (origin,)).fetchone()
         assert 'meeting_pending_or_blocked_intents' in reasons
     finally:
         await driver.aclose()
