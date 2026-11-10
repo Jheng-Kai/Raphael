@@ -52,7 +52,7 @@ async def web_rig(conn, plugins):
         rig = Rig(
             conn,
             plugins,
-            snapshot=take_snapshot(plugins.hub, attachments=bool(files)),
+            snapshot=take_snapshot(plugins.hub),
             request=REQUEST,
             attachments=list(files),
         )
@@ -153,6 +153,9 @@ async def test_a_task_handed_over_with_files_is_told_of_them_and_offered_the_too
     assert "receipt" not in repr(tuple(row))
 
 
-def test_a_task_without_files_is_not_offered_the_tool_that_reads_them():
-    names = [d["function"]["name"] for d in take_snapshot(None).definitions]
-    assert "read_attachment" not in names and "web_read" in names
+async def test_a_task_without_files_is_listed_the_same_tools_and_refused_the_read(web_rig):
+    # The list does not follow the task's files (owner, 2026-11-09, decision 2): it is the same with or without them.
+    rig, with_files = web_rig(), web_rig([checked("photo.png", "image/png", PNG)])
+    assert rig.run.snapshot.definitions == with_files.run.snapshot.definitions
+    assert {"read_attachment", "web_read"} <= {d["function"]["name"] for d in rig.run.snapshot.definitions}
+    assert (await rig.tool("read_attachment", {"index": 1}))["kind"] == "bad_arguments"

@@ -2,7 +2,7 @@
 
 import pytest
 
-from agent.test_narration import chat
+from agent.test_narration import chat, use
 from .test_answering import client, setup, member, typed, live_said  # noqa: F401
 from raphael_core.agent.harness_tools import definitions_for
 from raphael_core.agent.policy import Action, Confirmations, NotApproved
@@ -17,19 +17,21 @@ from raphael_core.protocol import RpcError
     "Disconnect Sample", "Reconnect Sample", "Manage the MCP connection",
 ])
 @pytest.mark.parametrize("primary", [0, 7])
-def test_connection_intent_offers_management_to_every_owner_private_member(prompt, primary):
+def test_connection_management_is_found_by_every_owner_private_member(prompt, primary):
     from raphael_core.agent.speaker import Speaker
     from raphael_core.background.snapshot import take_snapshot
 
     for identifier in (0, 7):
         speaker = Speaker(id=identifier, capabilities=frozenset({"chief"}) if identifier == primary else frozenset())
         for interactive, owner_management in ((True, True), (True, False), (False, True)):
-            snapshot = take_snapshot(None, prompt, speaker=speaker, interactive=interactive,
-                                     owner_management=owner_management)
+            snapshot = take_snapshot(None, speaker=speaker, interactive=interactive, owner_management=owner_management)
             allowed = interactive and owner_management
-            assert ({"manage_connection", "add_mcp_server"} <= snapshot.refs.keys()) == allowed
-            snapshot.find("manage_connection")
-            assert ("manage_connection" in snapshot.refs) == allowed
+            # The list never follows the request (decision 2): the request's words only rank what find_tools returns.
+            assert not {"manage_connection", "add_mcp_server"} & snapshot.listed()
+            found = {item["function"]["name"] for item in snapshot.find(prompt)[0]}
+            assert bool(found & set(snapshot.management)) == allowed
+            assert ("manage_connection" in {item["function"]["name"] for item in snapshot.find("manage_connection")[0]}) == allowed
+            assert (snapshot.reveal("manage_connection") is not None) == allowed
 
 
 def test_default_primary_offer_stays_bounded_and_management_requires_discovery():
@@ -37,14 +39,13 @@ def test_default_primary_offer_stays_bounded_and_management_requires_discovery()
     from raphael_core.background.snapshot import take_snapshot
 
     speaker = Speaker(id=0, capabilities=frozenset({"chief"}))
-    snapshot = take_snapshot(None, "Read my report", speaker=speaker, interactive=True,
-                             memory=True, attachments=True)
+    snapshot = take_snapshot(None, speaker=speaker, interactive=True, memory=True)
     assert len(snapshot.definitions) <= 49
     assert not MANAGEMENT_TOOLS & snapshot.refs.keys()
-    assert "find_tools" in snapshot.refs
+    assert {"find_tools", "use_tool"} <= snapshot.refs.keys()
     added, _ = snapshot.find("manage_connection")
     assert "manage_connection" in {item["function"]["name"] for item in added}
-    assert "manage_connection" in snapshot.refs
+    assert snapshot.reveal("manage_connection") is not None and "manage_connection" not in snapshot.listed()
 
 
 def sample(schema):
@@ -92,7 +93,7 @@ async def test_every_destructive_row_shows_a_card_and_waits_for_the_exact_yes(se
     rig.service._connection_tool = connection
     public_name, _ = publish(name, args)
     client.chats = [chat("Find the requested action.", ("find_tools", {"query": public_name})),
-                    chat("Requested change.", publish(name, args)), live_said("Finished.")]
+                    chat("Requested change.", use(*publish(name, args))), live_said("Finished.")]
     asked = await typed(rig, "Apply this requested change", 0, language="en")
     assert asked["status"] == "confirm", (name, asked)
     assert asked["confirm"]["tier"] == "T3"
@@ -254,7 +255,7 @@ async def test_production_model_change_requires_the_owners_request(setup, client
             loop._queue.put_nowait(Outcome("done", final=json.dumps({"prefix": "Answer", "text": "Finished.", "detail": ""})))
         monkeypatch.setattr(CliLoop, "_work", work)
     else:
-        client.chats = [chat("Change effort.", ("settings_update", args)), live_said("Finished.")]
+        client.chats = [chat("Change effort.", use("settings_update", args)), live_said("Finished.")]
     text = "Set the quick model reasoning effort to high" if requested else "The model failed; finish my report"
     assert (await typed(rig, text, 0, language="en"))["status"] == "done"
     assert rig.settings.get("quick_effort") == ("high" if requested else "low")
@@ -291,7 +292,7 @@ async def test_deleting_the_requesting_chat_finishes_without_cancelling_itself(s
     rig, team = setup
     team.members.register(rig.rpc)
     args = {"member_id": 0} if tool == "member_history_clear" else {"id": rig.service.conversations.main(0)}
-    client.chats = [chat("Removing the records.", publish(tool, args)), live_said("Records removed.")]
+    client.chats = [chat("Removing the records.", use(*publish(tool, args))), live_said("Records removed.")]
     asked = await typed(rig, "Remove this conversation's records", 0, language="en")
     assert asked["status"] == "confirm"
     import asyncio
@@ -307,7 +308,7 @@ async def test_primary_can_approve_its_own_deletion_and_leave_a_receipt_with_the
     primary = member(team, name="Coordinator")
     team.members.store.set_primary(primary.id)
     rig.settings.set("action_mode", "bypass")
-    client.chats = [chat("Delete this member.", ("member_delete", {"id": primary.id})), live_said("Deleted.")]
+    client.chats = [chat("Delete this member.", use("member_delete", {"id": primary.id})), live_said("Deleted.")]
     asked = await typed(rig, "Delete Coordinator", primary.id, language="en")
     assert asked["status"] == "confirm" and "Coordinator" in asked["confirm"]["text"]
     done = await rig.confirm(asked["confirm"]["id"])

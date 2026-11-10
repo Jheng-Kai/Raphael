@@ -4,7 +4,7 @@ import pytest
 from raphael_core.agent.history import AgentHistory
 
 from agent.conftest import decision, tool_plan
-from agent.test_narration import chat
+from agent.test_narration import chat, use
 from .test_answering import client, setup, voiced, member, typed, raphael_said, live_said  # noqa: F401
 
 
@@ -208,7 +208,7 @@ async def test_team_creation_keeps_personality_separate_from_work_instructions(s
     rig, team = setup
     rig.settings.set("action_mode", "ask")
     client.chats = [
-        chat("", ("member_create", {"name": "Teacher", "role": "Japanese", "personality": "Strict, patient.", "instructions": "Teach N1."})),
+        chat("", use("member_create", {"name": "Teacher", "role": "Japanese", "personality": "Strict, patient.", "instructions": "Teach N1."})),
         live_said("Draft ready."), live_said("Added."),
     ]
     asked = await typed(rig, "Add a member who is a strict but patient Japanese teacher.", 0)
@@ -217,5 +217,7 @@ async def test_team_creation_keeps_personality_separate_from_work_instructions(s
     created = team.members.find("Teacher")
     assert created is not None and created.personality == "Strict, patient."
     assert created.instructions == "Teach N1."
-    definition = next(t for t in client.chat_calls[0]["tools"] if t["function"]["name"] == "member_create")
-    assert "personality" in definition["function"]["parameters"]["properties"]
+    # member_create is found, not listed (decision 2): find_tools returns this schema with its personality field.
+    from raphael_core.management import DEFINITIONS
+    assert "member_create" not in {t["function"]["name"] for t in client.chat_calls[0]["tools"]}
+    assert "personality" in DEFINITIONS["member_create"]["parameters"]["properties"]

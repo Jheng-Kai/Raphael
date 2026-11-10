@@ -18,6 +18,39 @@ def question_of(user):
     return user.split("<question>", 1)[1].split("</question>", 1)[0] if "<question>" in user else user
 
 
+def searched(results):
+    """Whether the brain has looked for a tool with find_tools already."""
+    return any('tool="find_tools"' in result for result in results)
+
+
+def worked(results):
+    """What the tools returned, less what find_tools said about other tools."""
+    return [result for result in results if 'tool="find_tools"' not in result]
+
+
+def found(tools, results, suffix):
+    """The name of the tool ending with `suffix`: listed, or among the definitions find_tools returned (a connection's
+    tools are found, never listed: owner, 2026-11-09, decision 2)."""
+    for name in tools:
+        if name.endswith(suffix):
+            return name
+    for result in results:
+        for line in result.splitlines():
+            if line.startswith("{"):
+                try:
+                    name = json.loads(line)["name"]
+                except (ValueError, KeyError, TypeError):
+                    continue
+                if name.endswith(suffix):
+                    return name
+    return None
+
+
+def call(tools, name, arguments):
+    """The call of `name`: by its own name when it is listed, through use_tool when it was found."""
+    return (name, arguments) if name in tools else ("use_tool", {"name": name, "arguments": arguments})
+
+
 class Brain(FakeClient):
     """The model of the API brain. `act(user, tools, results, **behaviour)` is what an honest brain does with one prompt."""
 

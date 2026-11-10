@@ -23,14 +23,15 @@ from raphael_core.brain.openrouter import OpenRouterError
 from raphael_core.brain.settings import SettingsStore
 from raphael_core.protocol import INVALID_PARAMS, RpcError
 
-from .conftest import ARGUMENT, RESULT, TASK_TEXT, Links, call, report, turn, until
+from .conftest import ARGUMENT, RESULT, TASK_TEXT, Links, call, report, turn, until, use
+from .test_snapshot import BARE
 
 
 async def look_twice_then_report(rig):
     """The model asks for `look` once and reports; the plugin is connected at T0."""
     await rig.plugins.connect(look="T0")
     rig.client.replies = [
-        turn("Looking.", [call("Notes__look", {"topic": ARGUMENT}, "c1")], cost=0.002),
+        turn("Looking.", [use("Notes__look", {"topic": ARGUMENT}, "c1")], cost=0.002),
         report("All looked up.", detail="Two things were found.", cost=0.003),
     ]
 
@@ -82,13 +83,12 @@ async def test_the_model_is_given_the_task_the_tools_of_the_snapshot_and_the_res
     assert "2026-10-21 14:05" in user["content"]
     assert "The interface language never selects your speaking language" in user["content"]
     assert "English only." not in user["content"]
-    assert [t["function"]["name"] for t in first["tools"]] == [
-        "weather", "web_search", "local_time", "web_read", "generate_audio", "self_check", "raphael_help",
-        "calendar_list", "calendar_add", "calendar_update", "calendar_delete", "connections_list", "ask_owner", "connect_app", "connect_messaging", "email_draft", "find_app", "request_secret", "show_page", "update_page", "routine_create", "routine_delete", "routine_list", "routine_update", "find_tools", "Notes__look",
-    ]  # fmt: skip
+    # The fixed list, sorted by name: the connection's tool is found and called through use_tool.
+    assert [t["function"]["name"] for t in first["tools"]] == BARE
+    assert second["tools"] == first["tools"]
     result = second["messages"][-1]
     assert result["role"] == "tool" and result["tool_call_id"] == "c1"
-    assert result["content"].startswith('<tool_result untrusted="true" tool="Notes__look"')
+    assert result["content"].startswith('<tool_result untrusted="true" tool="use_tool"')
     assert RESULT in result["content"]
 
 
@@ -492,8 +492,8 @@ async def test_a_task_the_user_stops_ends_at_once_with_what_was_done(make_rig, c
     rig = make_rig()
     await rig.plugins.connect(look="T0", slow="T0")
     rig.client.replies = [
-        turn("", [call("Notes__look", {"topic": "a"}, "c1")]),
-        turn("", [call("Notes__slow", {}, "c2")]),
+        turn("", [use("Notes__look", {"topic": "a"}, "c1")]),
+        turn("", [use("Notes__slow", {}, "c2")]),
         report("never"),
     ]
     task_id = rig.submit()
@@ -824,8 +824,8 @@ async def test_a_task_carried_out_by_a_real_worker_process(make_rig, plugins, ca
     rig = make_rig(host=WorkerHost(grace_s=1.0))
     await plugins.connect(look="T0")
     rig.client.replies = [
-        turn("", [call("Notes__look", {"topic": "alpha"}, "c1")]),
-        turn("", [call("Notes__look", {"topic": "beta"}, "c2")]),
+        turn("", [use("Notes__look", {"topic": "alpha"}, "c1")]),
+        turn("", [use("Notes__look", {"topic": "beta"}, "c2")]),
         report("Both looked up."),
     ]
     task_id = rig.submit()
@@ -846,7 +846,7 @@ async def test_nothing_of_a_task_is_logged_whichever_way_it_ends(make_rig, caplo
     secret_text = "PRIVATE-TASK-TEXT window title: Secret Plans - Notepad"
     scripts = [
         # done
-        [turn("PRIVATE-THOUGHT", [call("Notes__look", {"topic": ARGUMENT}, "c1"), call("Notes__broken", {}, "c2")]),
+        [turn("PRIVATE-THOUGHT", [use("Notes__look", {"topic": ARGUMENT}, "c1"), use("Notes__broken", {}, "c2")]),
          report("PRIVATE-REPORT", detail="PRIVATE-DETAIL")],
         # a model that fails
         [OpenRouterError(500, "server", "Service unavailable")] * 4,
@@ -880,7 +880,7 @@ async def test_closing_the_service_interrupts_the_task_that_runs_and_the_ones_th
 ):
     rig = make_rig()
     await rig.plugins.connect(slow="T0")
-    rig.client.replies = [turn("", [call("Notes__slow", {}, "c1")])]
+    rig.client.replies = [turn("", [use("Notes__slow", {}, "c1")])]
     running, waiting = rig.submit(), rig.submit()
     await until(lambda: "slow" in calls)
     await asyncio.wait_for(rig.service.aclose(), 10)

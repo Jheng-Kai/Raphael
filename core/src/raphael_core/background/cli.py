@@ -5,8 +5,8 @@ from ..agent.cli import loop as cli_loop
 from ..agent.cli.loop import CliLoop
 from ..protocol import RpcError
 from ..worker.loop import WRAP_UP, Stop, ToolOutcome
-from ..worker.guards import wrap_untrusted
 from ..computer.local_tools import is_local, BACKGROUND_WAIT_S
+from .snapshot import USE_TOOL
 
 # How many calls a task that reached a ceiling may make after being asked to report, before it is ended.
 CEILING_PATIENCE = 3
@@ -70,22 +70,20 @@ def member_loop(brains, quota, task, run, spec, *, wait_s, progress):
                 run.ceiling = stop
                 return ToolOutcome(False, "limit", instruction=WRAP_UP)
             if stop:
-                ref = run.snapshot.refs.get(name)
+                called = arguments.get("name") if name == USE_TOOL and isinstance(arguments, dict) else name
+                ref = run.snapshot.refs.get(called) if isinstance(called, str) else None
                 if ref is not None and is_local(ref.key):
                     loop.approval_wait_s = BACKGROUND_WAIT_S
                 raise Stop(stop, data.get("detail")) from None
             raise
         outcome = tool_outcome(result)
         if outcome.replace_tools:
-            loop.tools[:] = [item for item in loop.tools if not item["function"]["name"].startswith("computer__")]
-            loop.tools.extend(item for item in outcome.tools if item["function"]["name"].startswith("computer__"))
+            # The member's computer changed (a grant, the driver's own catalog): the one change of the list a
+            # task takes, and the CLI starts again in its own session to read it. What find_tools finds is
+            # called with use_tool and changes nothing.
+            listed()
             outcome.tools = list(loop.tools)
             loop.reload_note, loop.catalog_changed = cli_loop.COMPUTER_CHANGED, True
-        elif outcome.tools:
-            # Tools find_tools showed: the loop lists them, and the CLI starts again to read its list.
-            loop.tools.extend(outcome.tools)
-            loop.reload_note = cli_loop.TOOLS_FOUND + '\n' + wrap_untrusted('find_tools', outcome.content, ok=outcome.ok)
-            loop.catalog_changed = True
         return outcome
 
     loop = CliLoop(brains=brains, sessions=RoomCliSessions(), member_id=task.member_id,
@@ -95,11 +93,14 @@ def member_loop(brains, quota, task, run, spec, *, wait_s, progress):
         tools=spec["tools"], skills=spec.get("skills", ()), attachments=run.attachments, progress=progress,
         thinking=lambda text: None, event=progress, reply=getattr(run, "_reply", None), execute=execute, quota=quota, wait_timeout_s=wait_s,
         rate_limit_waits=cli_loop.ROOM_RATE_LIMIT_WAITS_S, alive=run.touch)
-    def refresh_tools():
-        run.snapshot.refresh_plugins(run._gate.plugins, task.member_id)
+    def listed():
         extra = [item for item in loop.tools if item["function"]["name"] in ("cli_permission", "approve")]
         loop.tools[:] = [*run.snapshot.definitions, *extra]
         return loop.tools
+
+    def refresh_tools():
+        run.snapshot.refresh_plugins(run._gate.plugins, task.member_id)
+        return listed()
     if task.scope == 'room':
         loop.speech_only = True
     loop.refresh_tools = refresh_tools

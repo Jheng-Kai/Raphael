@@ -51,9 +51,11 @@ async def rig(conn, plugins, memory):
 def test_a_private_task_gets_growth_tools_but_not_legacy_write_aliases():
     names = [d["function"]["name"] for d in take_snapshot(None, memory=True).definitions]
     assert names == [
-        "weather", "web_search", "local_time", "web_read", "history_search", "generate_audio", "self_check", "raphael_help",
-        "calendar_list", "calendar_add", "calendar_update", "calendar_delete", "connections_list", "ask_owner", "connect_app", "connect_messaging", "email_draft", "find_app", "request_secret", "show_page", "update_page", "routine_create", "routine_delete", "routine_list", "routine_update",
-        "memory_update", "memory_log", "session_search", "session_read", "find_tools",
+        "ask_owner", "calendar_add", "calendar_delete", "calendar_list", "calendar_update", "connect_app", "connect_messaging",
+        "connections_list", "email_draft", "find_app", "find_tools", "history_search", "local_time", "memory_log", "memory_update",
+        "raphael_help", "read_attachment", "request_secret", "routine_create", "routine_delete", "routine_list", "routine_update",
+        "self_check", "session_read", "session_search", "show_page", "update_page", "use_tool", "weather", "web_read",
+        "web_search",
     ]  # fmt: skip
     assert not {"memory_read", "memory_write", "memory_delete"} & set(names)
     assert "history_search" not in [d["function"]["name"] for d in take_snapshot(None).definitions]

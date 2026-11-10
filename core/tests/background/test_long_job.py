@@ -7,7 +7,7 @@ from raphael_core.brain.openrouter import OpenRouterError
 from raphael_core.memory.conversation import DEFAULT_CONTEXT_WINDOW
 from raphael_core.worker.context import DEFAULT_WINDOW
 
-from .conftest import ARGUMENT, call, report, turn
+from .conftest import ARGUMENT, call, report, turn, use
 
 
 def test_a_model_of_unknown_window_is_taken_for_the_same_small_one_everywhere():
@@ -20,7 +20,7 @@ def with_window(tokens):
 
 
 def looking(n, prompt_tokens, detail=""):
-    answer = turn("Looking.", [call("Notes__look", {"topic": f"{ARGUMENT} {n}{detail}"}, f"c{n}")])
+    answer = turn("Looking.", [use("Notes__look", {"topic": f"{ARGUMENT} {n}{detail}"}, f"c{n}")])
     answer.prompt_tokens = prompt_tokens
     return answer
 
@@ -59,7 +59,7 @@ async def test_an_overflow_through_the_worker_is_sent_again_and_never_told_as_a_
     rig = make_rig()
     await rig.plugins.connect(look="T0")
     too_long = OpenRouterError(400, "bad_request", "This endpoint's maximum context length is 20000 tokens. Please reduce the length.")
-    long_looks = [turn("Looking.", [call("Notes__look", {"topic": f"{n} " + "t" * 5000}, f"c{n}")]) for n in range(3)]
+    long_looks = [turn("Looking.", [use("Notes__look", {"topic": f"{n} " + "t" * 5000}, f"c{n}")]) for n in range(3)]
     rig.client.replies = [*long_looks, too_long, report("All looked up.")]
     rig.submit()
     [done] = await rig.wait_for_reports()

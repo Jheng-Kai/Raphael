@@ -30,7 +30,7 @@ from ..agent.persona import cli_system_prompt, member_system_prompt, system_prom
 from ..agent.policy import Action, Confirmations, NotApproved, Tier, ToolRegistry
 from ..agent.speaker import Speaker
 from ..agent.team_admin import LEADERSHIP
-from ..background.snapshot import take_snapshot
+from ..background.snapshot import FIND_TOOLS, NOTHING_FITS, USE_REFUSALS, USE_TOOL, take_snapshot
 from ..brain import db
 from ..brain.openrouter import OpenRouterClient
 from ..brain.settings import DEFAULTS
@@ -98,8 +98,12 @@ def attachments(kind):
 
 
 class Recorder:
-    def __init__(self, tools):
-        self.offered = {tool["function"]["name"]: tool["function"]["parameters"] for tool in tools}
+    """Synthetic outcomes for the tools of `snapshot`: the listed ones by their names, the found ones
+    through find_tools (the snapshot's own answer) and use_tool (recorded as the tool it names)."""
+
+    def __init__(self, snapshot):
+        self.snapshot = snapshot
+        self.offered = {name: item["function"]["parameters"] for name, item in snapshot.catalog().items()}
         self.calls, self.cards = [], []
         self.errors = []
         self.confirmations = Confirmations()
@@ -107,6 +111,17 @@ class Recorder:
         self.pending = None
 
     async def __call__(self, identifier, name, args):
+        if name == FIND_TOOLS:
+            self.calls.append(name)
+            _, lines = self.snapshot.find(str(args.get("query", "")) if isinstance(args, dict) else "")
+            return ToolOutcome(True, content="\n".join(lines) or NOTHING_FITS)
+        if name == USE_TOOL:
+            used = self.snapshot.use(args)
+            if isinstance(used, str):
+                self.calls.append(name)
+                self.errors.append("invalid_use_tool")
+                return ToolOutcome(False, used, instruction=USE_REFUSALS[used])
+            name, args = used
         self.calls.append(name)
         if name not in self.offered:
             self.errors.append("unoffered_tool")
@@ -245,8 +260,9 @@ async def cell(model, member, scenario, *, brains, client, sessions, conn, budge
     speaker = Speaker(id=member, name="測試員", role="助理",
                       capabilities=frozenset({"chief"}) if member == 0 else frozenset())
     files = attachments(scenario.attachment)
-    tools = take_snapshot(None, scenario.prompt, memory=True, attachments=bool(files), speaker=speaker, interactive=True, max_tier=Tier.T3).definitions
-    recorder = Recorder(tools)
+    snapshot = take_snapshot(None, memory=True, speaker=speaker, interactive=True, max_tier=Tier.T3)
+    tools = snapshot.definitions
+    recorder = Recorder(snapshot)
     ledger = Ledger(SpendTracker(conn))
     user = scenario.prompt + text_context(files)
     if files:

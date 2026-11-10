@@ -68,11 +68,17 @@ async def test_background_discovers_app_then_owner_signs_in_and_same_task_resume
         [view] = agent.service._turn_views([agent.history.get(origin)])
         assert view["connectors"][0]["id"] == card.id
         assert view["scope"] == "private"
+        def find_mail(**request):
+            # The app's tools are found, not listed (decision 2), before and after the sign-in alike.
+            assert not any(item["function"]["name"].endswith("gmail_search") for item in request["tools"])
+            return turn("", [call("find_tools", {"query": "gmail search"}, "find-after-sign-in")])
+
         def read_mail(**request):
-            tools = {item["function"]["name"] for item in request["tools"]}
-            alias = next(name for name in tools if name.endswith("gmail_search"))
-            return turn("", [call(alias, {"q": "background-discovery"}, "read-after-sign-in")])
-        background.client.replies = [read_mail, report("Mail read after sign-in.")]
+            found = request["messages"][-1]["content"]
+            alias = next(json.loads(line)["name"] for line in found.splitlines()
+                         if line.startswith("{") and json.loads(line)["name"].endswith("gmail_search"))
+            return turn("", [call("use_tool", {"name": alias, "arguments": {"q": "background-discovery"}}, "read-after-sign-in")])
+        background.client.replies = [find_mail, read_mail, report("Mail read after sign-in.")]
         await connector.connect(card)
         await until(lambda: background.task(task_id).state in ("done", "failed", "limit"))
         task = background.task(task_id)
@@ -86,7 +92,7 @@ async def test_background_discovers_app_then_owner_signs_in_and_same_task_resume
         assert "connected" in resumed and "discovery" in resumed
         assert not any(secret in resumed for secret in connector.fixture.secrets)
         await connector.connect(connector.cards.store.get(card.id))
-        assert len(background.client.chat_calls) == 4
+        assert len(background.client.chat_calls) == 5
     finally:
         await connector.cards.aclose()
 

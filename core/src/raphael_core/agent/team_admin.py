@@ -100,8 +100,8 @@ def delegated_management(request):
                 or re.search(operation + r'.{0,40}(?:model|instructions|personality|模型|指令|性格).{0,20}(?:\bto\b|為|为|成)', request, re.I))
 
 LEADERSHIP = (
-    "\nEvery member has the same management tools in the owner's private chat. Use team_overview and your team administration tools to create "
-    "and change members, groups, routines, skills and commands. Use returned IDs. "
+    "\nEvery member has the same management tools in the owner's private chat. Use team_overview and your team administration tools "
+    "(find_tools finds them, use_tool calls them) to create and change members, groups, routines, skills and commands. Use returned IDs. "
     "You decide how many members the work needs. When the owner's approval setting asks first, member creates, "
     "updates and groups are proposals staged until the turn ends: collect every requested change before your final "
     "reply; pending_approval is not success and has no new ID. Once the owner approves, you go on in the same "

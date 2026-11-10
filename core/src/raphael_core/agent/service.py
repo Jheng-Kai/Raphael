@@ -138,7 +138,7 @@ import httpx
 
 from ..background.brief import background_block, background_line
 from ..background.tasks import Refused
-from ..background.snapshot import FIND, MCP, take_snapshot
+from ..background.snapshot import FIND, MCP, NOTHING_FITS, USE, USE_REFUSALS, USE_TOOL, take_snapshot
 from ..brain.catalog import CatalogEntry, LLM, context_window, find
 from ..brain.pricing import builtin_catalog
 from ..brain.model_ref import split_api_ref
@@ -173,7 +173,7 @@ from .narration import NarratedLoop
 from ..members.activity import Activity, member_turn, step as activity_step, tool_step
 from .actions import action_call
 from .cli.discovery import CliBrains, brain_ref
-from .cli.loop import COMPUTER_CHANGED, TOOLS_FOUND, CliLoop, Sessions as CliSessions
+from .cli.loop import COMPUTER_CHANGED, CliLoop, Sessions as CliSessions
 from .persona import cli_system_prompt
 from .persona import FULL_PERMISSION, NEW_MEMBER, NEW_MEMBER_STEP, PLAN_MODE
 from ..brain.owner import owner_context
@@ -2121,7 +2121,8 @@ class AgentService:
             # management guidance a request needs goes with that turn's message (owner, 2026-11-09).
             leadership = self._management_chat(ask) and bool(management_tools)
             if self._management_chat(ask):
-                system += ("\nEvery member has the same owner-private management tools. Find them with find_tools when needed. "
+                system += ("\nEvery member has the same owner-private management tools. Find them with find_tools when needed "
+                           "and call them with use_tool. "
                            "They manage members, folders, group chats, conversations, connections, models and settings. "
                            "Destructive and permission changes always wait for the owner's approval.")
                 system += "\nGrok template CreateAgent instructions map to member_create (legacy alias: create_member)."
@@ -2184,20 +2185,12 @@ class AgentService:
                         user += "\n" + wrap_untrusted("read_attachment", json.dumps(
                             result.data if result.ok else {"error": result.error}, ensure_ascii=False,
                         ), ok=result.ok)
+            # The same tools every turn of the conversation, whatever it asks (owner, 2026-11-09, decision 2).
             snapshot = take_snapshot(
-                self._plugins, ask.text, memory=self._memory is not None,
-                attachments=bool(ask.attachments or earlier), speaker=ask.speaker,
+                self._plugins, memory=self._memory is not None, speaker=ask.speaker,
                 team=team_tools_for(self._team, ask.speaker, always=True), max_tier=Tier.T3,
-                interactive=True,
-                owner_management=self._management_chat(ask),
-                management_tools=management_tools,
+                interactive=True, owner_management=self._management_chat(ask),
             )
-            from ..management import MANAGEMENT_TOOLS
-            if not self._management_chat(ask):
-                for name in MANAGEMENT_TOOLS:
-                    snapshot.refs.pop(name, None)
-                snapshot.definitions[:] = [item for item in snapshot.definitions
-                                           if item["function"]["name"] not in MANAGEMENT_TOOLS]
             urls = SeenUrls([ask.text, context.summary, *[
                 "\n".join([turn.question, turn.text, turn.detail or "", *turn.messages])
                 for turn in context.turns
@@ -2208,7 +2201,12 @@ class AgentService:
             snapshot.tool_allowed = lambda key: bool((current := self._speaker(ask.speaker.id)) and current.uses_plugin(key))
 
             def plan(name: str, args: dict) -> PlannedCall | None:
-                if name not in snapshot.refs:
+                if name == USE_TOOL:  # a batch's own screening judges the tool a use_tool call names
+                    used = snapshot.use(args)
+                    if isinstance(used, str):
+                        return None
+                    name, args = used
+                if snapshot.ref(name) is None:
                     return None
                 if snapshot.pool is not None and name in snapshot.pool.by_alias:
                     return PlannedCall(snapshot.pool.by_alias[name], args)
@@ -2224,7 +2222,7 @@ class AgentService:
                 snapshot.refresh_plugins(self._plugins, ask.speaker.id)
                 if isinstance(loop, CliLoop) and name == "cli_permission":
                     return await self._cli_permission(ask, args, ledger, loop)
-                ref = snapshot.refs.get(name)
+                ref = snapshot.ref(name)
                 if ref is None:
                     return ToolOutcome(False, "unavailable", instruction="This tool is no longer enabled or connected. Read connections_list for current access; do not retry its old alias.")
                 if name == "ask_owner":
@@ -2288,12 +2286,11 @@ class AgentService:
                             "result now.")}))
                     return self._computer_result(loop, result)
                 if ref is not None and ref.kind == FIND:
-                    definitions, lines = snapshot.find(str(args.get("query", "")))
-                    loop.tools.extend(definitions)
-                    if definitions and isinstance(loop, CliLoop) and loop.resume_session:
-                        # Only a turn that can start again in its own thread: a fresh start would not know what was done.
-                        loop.reload_note, loop.catalog_changed = TOOLS_FOUND, True
-                    return ToolOutcome(True, content="\n".join(lines) or "No other tool fits that.", tools=definitions)
+                    # What it finds is called with use_tool: the list, and the provider's cache, stay as they are.
+                    _, lines = snapshot.find(str(args.get("query", "")))
+                    return ToolOutcome(True, content="\n".join(lines) or NOTHING_FITS)
+                if ref.kind == USE:  # unwrapped before it gets here (`unwrap`), unless it names nothing callable
+                    return ToolOutcome(False, "unknown_tool", instruction=USE_REFUSALS["unknown_tool"])
                 planned = plan(name, args)
                 screened = [screenings[call_id]] if call_id in screenings else None
                 if name in BATCH_TOOLS and ask.nested:
@@ -2390,7 +2387,7 @@ class AgentService:
                 waiting = "apps" if ask.waiting_apps else "secrets" if ask.waiting_secrets else "computer" if ask.waiting_computer else None
                 if waiting is not None and {CONNECT_APP: "apps", REQUEST_SECRET: "secrets", CONNECT_MESSAGING: "secrets"}.get(name) != waiting:
                     return ToolOutcome(False, "waiting_for_connection", instruction=_WAITING_NOTES[waiting])
-                ref = snapshot.refs.get(name)
+                ref = snapshot.ref(name)
                 key = ref.key if ref is not None else name
                 digest = hashlib.sha256(canonical(args).encode()).hexdigest() if isinstance(args, dict) else ""
                 if ask.resumption is not None and (key, digest) in ask.resumption.done:
@@ -2418,12 +2415,29 @@ class AgentService:
                 if result.ok and digest and not reads:
                     ask.made.append((key, digest))
                 if self._tool_observer is not None and plan(name, args) is None:
-                    schema = next((item["function"]["parameters"] for item in loop.tools
+                    schema = next((item["function"]["parameters"] for item in [*loop.tools, *snapshot.catalog().values()]
                                    if item["function"]["name"] == name), None)
                     self._tool_observer(name, args, result, ask.speaker.id, ask.conversation_id, schema)
                 return result
 
+            def unwrap(name: str, args: dict) -> tuple[str, dict] | ToolOutcome:
+                """The tool a use_tool call names and its arguments, or why it is refused. A found tool is called
+                down the same path as a listed one: the steps, the history and the gate name the tool it runs."""
+                if name != USE_TOOL:
+                    return name, args
+                snapshot.refresh_plugins(self._plugins, ask.speaker.id)
+                used = snapshot.use(args)
+                return ToolOutcome(False, used, instruction=USE_REFUSALS[used]) if isinstance(used, str) else used
+
+            async def bridged_execute(call_id: str, name: str, args: dict) -> ToolOutcome:
+                called = unwrap(name, args)
+                return called if isinstance(called, ToolOutcome) else await observed_execute(call_id, *called)
+
             async def cli_execute(call_id: str, name: str, args: dict) -> ToolOutcome:
+                called = unwrap(name, args)
+                if isinstance(called, ToolOutcome):
+                    return called
+                name, args = called
                 began, before = time.perf_counter(), len(ask.steps)
                 result = await observed_execute(call_id, name, args)
                 if len(ask.steps) == before:
@@ -2436,7 +2450,7 @@ class AgentService:
                 progress=lambda text: self._message(ask, "progress", text, PREFIXES[ask.language].notice),
                 thinking=lambda text: self._message(ask, "thinking", text),
                 reply=lambda value: self._publish_reply(ask, value),
-                execute=observed_execute,
+                execute=bridged_execute,
             )
             if brain_ref(settings.model):
                 common["execute"] = cli_execute
@@ -2461,20 +2475,21 @@ class AgentService:
                 # cached for an hour (owner, 2026-11-09, decisions 1 and 4).
                 loop.cache_session = f"raphael-{ask.speaker.id}-{ask.conversation_id}"
                 loop.cache_ttl = "1h"
+            def listed():
+                extra = [item for item in loop.tools if item["function"]["name"] in ("cli_permission", "approve")]
+                loop.tools[:] = [*snapshot.definitions, *extra]
+                return loop.tools
             def refresh_computer():
                 if not snapshot.refresh_computer(self._plugins, ask.speaker.id):
                     return False
-                loop.tools[:] = [item for item in loop.tools if not item["function"]["name"].startswith("computer__")]
-                loop.tools.extend(item for item in snapshot.definitions if item["function"]["name"].startswith("computer__"))
+                listed()
                 if isinstance(loop, CliLoop):
                     loop.reload_note, loop.catalog_changed = COMPUTER_CHANGED, True
                 return True
             loop.refresh_computer = refresh_computer
             def refresh_tools():
                 snapshot.refresh_plugins(self._plugins, ask.speaker.id)
-                extra = [item for item in loop.tools if item["function"]["name"] in ("cli_permission", "approve")]
-                loop.tools[:] = [*snapshot.definitions, *extra]
-                return loop.tools
+                return listed()
             loop.refresh_tools = refresh_tools
             loop.owner_seen_urls = urls
         scope = (ask.speaker.id, ask.conversation_id)

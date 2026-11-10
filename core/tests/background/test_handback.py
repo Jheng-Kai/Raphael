@@ -16,7 +16,7 @@ from raphael_core.agent.speaker import RAPHAEL
 from raphael_core.background.handback import fallback, split, unaddressed
 from raphael_core.brain.settings import SettingsStore
 from raphael_core.worker.loop import Outcome
-from .conftest import call, report, turn, until
+from .conftest import call, report, turn, until, use
 from .test_handoff import args, setup, team_of
 
 HANDBACK = "Raphael, the source is checked and the report is ready; the whole of it is in my conversation with Jack."
@@ -63,7 +63,7 @@ async def test_the_handback_reaches_the_asker_and_stays_out_of_the_owner_thread(
     if brain == "api":
         def first(**kwargs):
             captured.append(str(kwargs["messages"]))
-            return turn(json.dumps({"messages": ["I received the brief."]}), [call("Notes__look", {"topic": "source"})])
+            return turn(json.dumps({"messages": ["I received the brief."]}), [use("Notes__look", {"topic": "source"})])
         rig.client.replies.extend([first, report(full)])
     else:
         rig.service.use_cli(object())

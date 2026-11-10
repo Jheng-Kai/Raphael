@@ -415,11 +415,12 @@ reads are T1 and run without a permission card; any write is T2 and requires one
 Production agent/gate/MCP flow is exercised with a fake MCP and synthetic email.
 
 Owner report 2026-10-31 (a member could not read Gmail): the three Composio router tools are
-core-pinned, so a turn's narrowing by the words of the request (`take_snapshot`, more than 40
-plugin tools) never hides the executing tool; a CLI brain, which reads its tool list when it
-starts, starts again in the same native thread when `find_tools` shows it more tools
-(`CliLoop.catalog_changed`, also for a background task). Raphael and every member are offered
-the same tools on the API and the CLI path: core/tests/members/test_plugins_everywhere.py.
+core-pinned, so they are listed while Composio is connected (the executing tool shares no word
+with any request).
+Since the fixed tool list (2026-11-10, owner-management.md) a connection's other tools are found
+with `find_tools` and called with `use_tool`, and no search restarts a CLI brain. Raphael and
+every member are offered the same tools on the API and the CLI path:
+core/tests/members/test_plugins_everywhere.py.
 A step of the app's own tools (server "Raphael") reads 「讀取」, 「修改」 or 「詢問同事」 and
 never names Raphael, on a member's turn or his; a connected service keeps its name
 (timeline.test.ts; the work itself is no longer shown, R-UI-120).

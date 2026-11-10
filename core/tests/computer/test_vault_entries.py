@@ -192,10 +192,13 @@ async def test_worker_pauses_for_card_even_when_all_actions_are_allowed(desktop,
     rig = Rig(conn, SimpleNamespace(hub=hub), can_wait=True)
     try:
         found = await rig.tool("find_tools", {"query": "fill_card"})
-        assert found["ok"] and "computer__fill_card" in rig.run.snapshot.refs
+        # Found, and called through use_tool: it is never listed (decision 2).
+        assert found["ok"] and "computer__fill_card" in found["content"] and "computer__fill_card" not in rig.run.snapshot.listed()
         with vm_scope(("turn", 0, 7), turn_id=7, private=True):
             with pytest.raises(RpcError):
-                await rig.tool("computer__fill_card", {"reference": identifier, "label": "Company", "site": "https://shop.example", "target_id": "tab", "amount": "NT$ 1,280", "fields": {"number": "n"}})
+                await rig.tool("use_tool", {"name": "computer__fill_card", "arguments": {
+                    "reference": identifier, "label": "Company", "site": "https://shop.example", "target_id": "tab",
+                    "amount": "NT$ 1,280", "fields": {"number": "n"}}})
         assert rig.run.waiting is not None and rig.run.waiting.ref.name == "fill_card"
         assert not hub.connections
     finally:

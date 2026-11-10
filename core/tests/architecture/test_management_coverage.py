@@ -86,12 +86,12 @@ def test_primary_native_offer_stays_bounded_with_all_management_areas():
     from raphael_core.agent.team import TEAM_TOOLS
     from raphael_core.background.snapshot import take_snapshot
 
-    snapshot = take_snapshot(None, "members folders group chats conversations connections models settings", speaker=Speaker(capabilities=frozenset({"chief"})), team=TEAM_TOOLS,
-                             memory=True, attachments=True, interactive=True)
+    snapshot = take_snapshot(None, speaker=Speaker(capabilities=frozenset({"chief"})), team=TEAM_TOOLS,
+                             memory=True, interactive=True)
     from raphael_core.agent.plugins import MAX_OFFERED
-    assert "member_create" in snapshot.refs
+    # Every management area is found and called through use_tool; none is listed (decision 2).
+    assert "member_create" in snapshot.management and "member_create" not in snapshot.refs
     assert "create_member" not in snapshot.refs
     assert "slack_draft" not in snapshot.refs
-    snapshot.find("slack_draft")
-    assert "slack_draft" in snapshot.refs
-    assert len(snapshot.definitions) + MAX_OFFERED + 1 <= 128  # Reserve plugins and Claude's approval tool.
+    assert "slack_draft" in {item["function"]["name"] for item in snapshot.find("slack_draft")[0]}
+    assert len(snapshot.definitions) + MAX_OFFERED + 1 <= 128  # Reserve the core's plugins and Claude's approval tool.

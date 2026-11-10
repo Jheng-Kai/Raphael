@@ -30,8 +30,7 @@ def test_every_speaker_gets_the_same_tools_and_capabilities(path, primary):
     prompts = []
     for speaker in people:
         tools = team_tools_for(team, speaker, always=True)
-        offered = take_snapshot(None, speaker=speaker, team=tools, memory=True,
-                                attachments=True, interactive=path != "worker")
+        offered = take_snapshot(None, speaker=speaker, team=tools, memory=True, interactive=path != "worker")
         offers.append({item["function"]["name"]: item["function"] for item in offered.definitions
                        if item["function"]["name"] not in COORDINATION_TOOLS | MEMBER_ONLY_TOOLS and item["function"]["name"] not in MANAGEMENT_TOOLS | {"find_tools"}})
         assert "owner_management" not in PARITY_EXCEPTIONS

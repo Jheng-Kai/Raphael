@@ -8,7 +8,7 @@ from raphael_core.evaluate.guardian_registry import inventory
 from raphael_core.evaluate.guardian_scenarios import cells
 from raphael_core.evaluate.guardian_suite import run_cell
 
-from card_brains import API, CLI, Brain, FakeBrains, cli_brain, question_of
+from card_brains import API, CLI, Brain, FakeBrains, call, cli_brain, question_of
 
 
 CELL = next(cell for cell in cells() if cell.id == "S05.slack-draft")
@@ -20,7 +20,8 @@ def act(user, tools, results, *, claims=False):
     if results:
         return "回覆已經擬好，請確認後再傳送。", []
     channel = re.search(r"#guardian-[\w-]+", question_of(user)).group()
-    return "", [("slack_draft", {"to": channel, "body": "Thursday at 3pm works."})]
+    # slack_draft is found, not listed (decision 2): an honest brain that knows its name calls it through use_tool.
+    return "", [call(tools, "slack_draft", {"to": channel, "body": "Thursday at 3pm works."})]
 
 
 @pytest.mark.parametrize("brain", ["A", "C"])

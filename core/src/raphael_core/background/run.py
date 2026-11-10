@@ -89,7 +89,7 @@ from ..worker.context import CONTEXT_OVERFLOW, is_context_overflow, provider_win
 from ..worker.loop import MORE_ROOM, REPLY_TOKENS, WAITING, WRAP_UP, FINAL_REPORT, ToolOutcome, result_text
 from ..members.activity import current, tool_step
 from ..own_calendar import CalendarError
-from .snapshot import BUILTIN, FIND, MCP, Snapshot, ToolRef
+from .snapshot import BUILTIN, FIND, MCP, NOTHING_FITS, USE, USE_REFUSALS, USE_TOOL, Snapshot, ToolRef
 from .tasks import TaskStore
 
 logger = logging.getLogger(__name__)
@@ -679,10 +679,20 @@ class TaskRun:
 
     # --- host.tool ------------------------------------------------------------------------------
 
+    async def tool(self, params: dict) -> dict:
+        """The result of a call of a tool of the snapshot. A use_tool call is the call of the tool it names,
+        listed or found: the same limits, gate, steps and audit, under that tool's name."""
+        if params.get("name") == USE_TOOL:
+            task = self._store.get(self.task_id)
+            self.snapshot.refresh_plugins(self._gate.plugins, task.member_id if task else 0)
+            used = self.snapshot.use(params.get("arguments"))
+            if not isinstance(used, str):
+                params = {**params, "name": used[0], "arguments": used[1]}
+        return await self._call(params)
+
     @tool_step(lambda self, params: params.get("name", ""), scope=lambda self, params: self.activity)
     @command_context(lambda self, *args, **kwargs: run_context(self))
-    async def tool(self, params: dict) -> dict:
-        """The result of a call of a tool of the snapshot."""
+    async def _call(self, params: dict) -> dict:
         name, arguments = params.get("name"), params.get("arguments")
         if not isinstance(name, str) or not isinstance(arguments, dict):
             raise invalid_params("name must be a string and arguments an object")
@@ -707,7 +717,7 @@ class TaskRun:
                 self.touch()
 
     async def _tool(self, name: str, arguments: dict, call_id: str = "") -> dict:
-        ref = self.snapshot.refs.get(name)
+        ref = self.snapshot.ref(name)
         paying = ref is not None and (ref.kind == BUILTIN and ref.name in _PAID_TOOLS or ref.server == "media")
         self._check(tool=True, paid=paying)
         self.tool_calls += 1
@@ -732,6 +742,8 @@ class TaskRun:
             self._memory_untrusted = True
         elif ref.kind == FIND:
             reply, outcome, tier = self._find(arguments)
+        elif ref.kind == USE:
+            reply, outcome, tier = self._refused_use(arguments)
         else:
             reply, outcome, tier, detail = await self._builtin(ref, arguments, name, call_id)
         self._check()
@@ -744,8 +756,10 @@ class TaskRun:
             import hashlib
             self._store.record_evidence(self.task_id,call_id or str(self.tool_calls),kind='tool_receipt',
                 uri=ref.key,digest=hashlib.sha256(reply.get('content','').encode()).hexdigest(),mime='text/plain')
+        named = arguments.get("name") if ref.kind == USE else None
         fields = {
-            "tool": ref.name,
+            # A refused use_tool call is the step of the tool it named: the owner never reads "use_tool".
+            "tool": named if isinstance(named, str) and named else ref.name,
             "server": ref.server,
             "tier": tier,
             "outcome": outcome,
@@ -1003,17 +1017,21 @@ class TaskRun:
         return result_text(waiting.alias, shown)
 
     def _find(self, arguments: dict) -> tuple[dict, str, str | None]:
-        """Show the task more of the snapshot's tools, by what it says it wants to do. It makes no
-        call to a service and no model call: only the snapshot's own list is read."""
+        """The snapshot's tools that fit what the task says it wants to do, with what calling one takes.
+        It makes no call to a service and no model call, and lists nothing: the task calls what it
+        found with use_tool, and its list (the provider's cache) stays as it is."""
         query = arguments.get("query")
         if not isinstance(query, str) or not query.strip():
             return {"ok": False, "kind": "bad_arguments", "content": "", "truncated": False}, "error", "T0"
-        added, lines = self.snapshot.find(query)
-        text = "\n".join(lines) if lines else "No other tool fits that."
-        reply: dict = {"ok": True, "kind": None, "content": text, "truncated": False}
-        if added:
-            reply["tools"] = added
-        return reply, "ok", "T0"
+        _, lines = self.snapshot.find(query)
+        return {"ok": True, "kind": None, "content": "\n".join(lines) or NOTHING_FITS, "truncated": False}, "ok", "T0"
+
+    def _refused_use(self, arguments: dict) -> tuple[dict, str, str | None]:
+        """A use_tool call that names no tool of the task, or gives it no object of arguments: `tool` makes
+        every other as the call of the tool it names."""
+        kind = self.snapshot.use(arguments)
+        kind = kind if isinstance(kind, str) else "unknown_tool"
+        return {"ok": False, "kind": kind, "content": "", "instruction": USE_REFUSALS[kind], "truncated": False}, "blocked", "T0"
 
     async def _builtin(
         self, ref: ToolRef, arguments: dict, alias: str = "", call_id: str = ""

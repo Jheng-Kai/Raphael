@@ -273,7 +273,7 @@ async def test_background_cli_recovers_from_receipt_without_reopening_card(make_
     rig = make_rig()
     await rig.plugins.connect(look="T2")
     monkeypatch.setattr("raphael_core.agent.cli.loop.ROOM_RATE_LIMIT_WAITS_S", (0.0,))
-    record = recovering_mcp(rig, tmp_path, [("Notes__look", {"topic": "draft"})], failure=failure)
+    record = recovering_mcp(rig, tmp_path, [("use_tool", {"name": "Notes__look", "arguments": {"topic": "draft"}})], failure=failure)
     task = rig.submit("Review the draft", model="cli:claude")
     turn = AgentHistory(rig.conn).add(session_id="s1", question="Review the draft", route="answer",
                                      prefix="", text="", status="running", source="app")
@@ -386,10 +386,12 @@ async def test_background_claude_mcp_permission_still_uses_the_tool_owner_card(m
                     response = await http.post(endpoint, json={'jsonrpc': '2.0', 'id': name,
                         'method': 'tools/call', 'params': {'name': name, 'arguments': arguments}})
                     return response.json()['result']
-                result = await call('approve', {'tool_name': 'mcp__raphael__Notes__look', 'input': {'topic': 'draft'}})
+                # A connection's tool is found, not listed (decision 2): Claude asks for and calls use_tool.
+                found = {'name': 'Notes__look', 'arguments': {'topic': 'draft'}}
+                result = await call('approve', {'tool_name': 'mcp__raphael__use_tool', 'input': found})
                 assert not result['isError'] and json.loads(result['content'][0]['text'])['behavior'] == 'allow'
                 assert not rig.service.waiting_questions() and not calls
-                result = await call('Notes__look', {'topic': 'draft'})
+                result = await call('use_tool', found)
                 assert result['isError'] is not approved
                 decisions.append(result)
             yield Event('final', 'The owner decision was respected.')

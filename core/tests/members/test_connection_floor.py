@@ -38,21 +38,29 @@ async def test_actual_brain_offers_filter_connections_without_removing_harness(s
     tools = [PluginTool(f"mcp:{name}/read", name.title(), "read", "Read", {}, Tier.T0)
              for name in ("gmail", "notion")]
     rig.service._plugins = SimpleNamespace(offered=lambda: tools)
-    captured = []
+    captured, found = [], []
     if brain == "cli":
         rig.settings.set("agent_model", "cli:codex:test")
         async def work(loop):
             captured.extend(loop.tools)
+            found.append((await loop._tool("find", "find_tools", {"query": "read"})).content)
             loop._queue.put_nowait(Outcome("done", final='{"text":"Done"}'))
         monkeypatch.setattr(CliLoop, "_work", work)
     else:
-        client.chats.append(live_said("Done"))
+        from agent.test_narration import chat
+
+        def answer(**kwargs):
+            found.append(kwargs["messages"][-1]["content"])
+            return live_said("Done")
+        client.chats += [chat("Finding it.", ("find_tools", {"query": "read"})), answer]
     await typed(rig, "Read my mail", member.id)
     if brain == "api":
-        captured = client.chat_calls[-1]["tools"]
+        captured = client.chat_calls[0]["tools"]
     names = {item["function"]["name"] for item in captured}
-    assert "Gmail__read" in names and "Notion__read" not in names
-    assert {"weather", "find_tools", "ask_owner"} <= names
+    # A connection's tools are found, not listed (decision 2); the member's allowlist filters what is found.
+    assert not {"Gmail__read", "Notion__read"} & names
+    assert {"weather", "find_tools", "use_tool", "ask_owner"} <= names
+    assert "Gmail__read" in found[0] and "Notion__read" not in found[0]
 
 
 async def test_native_cli_read_still_opens_a_card_in_allow_all(setup, client, monkeypatch):
@@ -83,12 +91,12 @@ async def test_native_cli_read_still_opens_a_card_in_allow_all(setup, client, mo
 
 @pytest.mark.parametrize("mode", ["ask", "plan", "direct", "bypass"])
 async def test_owner_approval_is_required_to_change_a_member_connection_list_in_every_mode(setup, client, mode):
-    from agent.test_narration import chat
+    from agent.test_narration import chat, use
     rig, team = setup
     team.members.register(rig.rpc)
     member = team.members.store.create_member(name="Writer", role="Write", tools=["gmail"])
     rig.settings.set("action_mode", mode)
-    client.chats = [chat("", ("member_update", {"id": member.id, "tools": ["gmail", "notion"]})), live_said("Updated.")]
+    client.chats = [chat("", use("member_update", {"id": member.id, "tools": ["gmail", "notion"]})), live_said("Updated.")]
     result = await typed(rig, "Change the Writer member tools", 0, language="en")
     assert result["status"] == "confirm" and result["confirm"]["tier"] == "T3"
     assert team.members.store.member(member.id).tools == ("gmail",)

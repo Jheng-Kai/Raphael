@@ -14,7 +14,7 @@ from raphael_core.services.attachment_store import AttachmentStore
 from computer.test_vm import desktop, CatalogBridge, EmptyHub  # noqa: F401
 from computer.test_login_vault import Vault
 from .test_service import make_rig  # noqa: F401
-from .test_narration import chat, typed
+from .test_narration import chat, typed, use
 
 
 @pytest.mark.parametrize("deny", [False, True])
@@ -77,7 +77,7 @@ async def test_contact_values_never_reach_model_history_notifications_or_logs(de
     gate = ToolGate(hub, conn=conn)
     rig = make_rig(plugins=hub, gate=gate, notify=lambda *event: events.append(event))
     client.chats = [chat("", ("find_tools", {"query": "vault_entries fill_contact"})),
-        chat("", ("computer__vault_entries", {})), chat("", ("computer__fill_contact", {"site": "https://example.com", "reference": identifier,
+        chat("", use("computer__vault_entries", {})), chat("", use("computer__fill_contact", {"site": "https://example.com", "reference": identifier,
         "label": "Company", "target_id": "tab", "fields": {key: key + "-ref" for key in private}})),
         chat("", ("computer__get_browser_state", {"target_id": "tab"})), chat('{"text":"Finished."}')]
     try:
@@ -110,7 +110,7 @@ async def test_card_in_the_real_loop_asks_even_with_allow_all(desktop, conn, tmp
     permissions = PermissionCards(conn)
     rig = make_rig(plugins=hub, gate=gate, permissions=permissions)
     client.chats = [chat("", ("find_tools", {"query": "fill_card"})),
-        chat("", ("computer__fill_card", {"reference": identifier, "label": "Company travel", "site": "https://shop.example",
+        chat("", use("computer__fill_card", {"reference": identifier, "label": "Company travel", "site": "https://shop.example",
         "amount": "NT$ 1,280", "target_id": "tab", "fields": {"number": "n"}}))]
     try:
         result = await typed(rig, "Fill the card for my hotel")

@@ -184,10 +184,13 @@ async def test_requests_and_history_reject_an_unknown_member(setup):
 async def test_a_member_has_the_same_desktop_tools(setup, client):
     rig, team = setup
     one = member(team)
-    client.chats.append(live_said("我來打開計算機。"))
+    client.chats += [chat("先找工具。", ("find_tools", {"query": "operate the computer"})), live_said("我來打開計算機。")]
     result = await typed(rig, "打開小算盤算 12 乘 34", one.id)
     assert (result["prefix"], result["text"]) == ("", "我來打開計算機。")
-    assert {"computer", "open"} <= {t["function"]["name"] for t in client.chat_calls[0]["tools"]}
+    listed = {t["function"]["name"] for t in client.chat_calls[0]["tools"]}
+    # For a member as for Raphael: `open` is listed, the desktop is found (decision 2).
+    assert "open" in listed and "computer" not in listed and {"find_tools", "use_tool"} <= listed
+    assert '"name": "computer"' in client.chat_calls[1]["messages"][-1]["content"]
     assert rig.actions.calls == []
 
 

@@ -19,7 +19,7 @@ from raphael_core.background.run import OWNER_SAID_NO, OWNER_SAID_NO_BEFORE
 from raphael_core.background.service import QUESTION_WAIT_S, continued
 from raphael_core.protocol import INVALID_PARAMS, RpcError
 
-from .conftest import ARGUMENT, TASK_TEXT, Clock, call, report, turn, until
+from .conftest import ARGUMENT, TASK_TEXT, Clock, call, report, turn, until, use
 
 
 class ScriptedJudge:
@@ -62,7 +62,7 @@ async def paused(rig, task_id):
 
 def note_then_report(rig, text="Noted."):
     rig.client.replies = [
-        turn("Noting.", [call("Notes__note", {"text": ARGUMENT}, "c1")], cost=0.002),
+        turn("Noting.", [use("Notes__note", {"text": ARGUMENT}, "c1")], cost=0.002),
         report(text, cost=0.003),
     ]
 
@@ -191,10 +191,10 @@ async def test_after_a_no_the_task_gets_round_it_with_no_other_tool_and_asks_not
     rig = make_rig(clock=clock)
     await plugins.connect(look="T0", note="T2", wipe="T2")
     rig.client.replies = [
-        turn("Noting.", [call("Notes__note", {"text": ARGUMENT}, "c1")], cost=0.002),
+        turn("Noting.", [use("Notes__note", {"text": ARGUMENT}, "c1")], cost=0.002),
         # Another way to the same end: the tool again, a synonym that also changes something, and a lookup.
-        turn("Another way.", [call("Notes__note", {"text": ARGUMENT}, "c2"), call("Notes__wipe", {}, "c3"),
-                              call("Notes__look", {"topic": "milk"}, "c4")], cost=0.002),
+        turn("Another way.", [use("Notes__note", {"text": ARGUMENT}, "c2"), use("Notes__wipe", {}, "c3"),
+                              use("Notes__look", {"topic": "milk"}, "c4")], cost=0.002),
         report("Did not note it.", cost=0.003),
     ]
     task_id = rig.submit()
@@ -245,7 +245,7 @@ async def test_a_question_that_ran_out_while_another_was_answered_still_ends_its
     note_then_report(rig)
     first = rig.submit()
     await paused(rig, first)
-    rig.client.replies = [turn("", [call("Notes__note", {"text": "x"}, "c9")])]
+    rig.client.replies = [turn("", [use("Notes__note", {"text": "x"}, "c9")])]
     second = rig.submit("another task")
     await paused(rig, second)
     clock.now += QUESTION_WAIT_S + 1
@@ -381,7 +381,7 @@ async def test_a_tool_that_only_reads_is_not_judged_in_the_background(make_rig, 
     judge = ScriptedJudge({1})
     rig = make_rig(clock=clock, safety=SafetyGuard(rules, judge))
     await plugins.connect(look="T0")
-    rig.client.replies = [turn("", [call("Notes__look", {"topic": "x"}, "c1")]), report("Found.")]
+    rig.client.replies = [turn("", [use("Notes__look", {"topic": "x"}, "c1")]), report("Found.")]
     rig.submit()
     await rig.wait_for_reports()
     assert calls == ["look"] and judge.shown == []

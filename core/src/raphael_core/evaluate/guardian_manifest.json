@@ -153,6 +153,14 @@
         "complete_catalog"
       ]
     },
+    "raphael/core/use_tool": {
+      "scenario_ids": [
+        "S18.catalog-unavailable"
+      ],
+      "expected_assertions": [
+        "complete_catalog"
+      ]
+    },
     "raphael/core/group_create": {
       "scenario_ids": [
         "S21.members-groups.draft-confirm"

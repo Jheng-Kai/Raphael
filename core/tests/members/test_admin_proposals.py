@@ -3,7 +3,7 @@
 import httpx
 import pytest
 
-from agent.test_narration import chat
+from agent.test_narration import chat, use
 from .test_answering import client, setup, typed, live_said, member  # noqa: F401
 from .test_admin import member_rpc  # noqa: F401
 
@@ -38,8 +38,9 @@ def brain(request, setup, client, tmp_path, monkeypatch):
             proposing = rig.settings.get("action_mode") != "direct"
             async with httpx.AsyncClient(headers={"Authorization": "Bearer " + kwargs["token"]}, trust_env=False) as http:
                 for index, (name, args) in enumerate(operations):
+                    # Management is found, not listed (decision 2): the CLI calls it through use_tool.
                     response = await http.post(kwargs["endpoint"], json={"jsonrpc": "2.0", "id": index,
-                        "method": "tools/call", "params": {"name": name, "arguments": args}})
+                        "method": "tools/call", "params": {"name": "use_tool", "arguments": {"name": name, "arguments": args}}})
                     result = response.json()["result"]
                     assert not result["isError"]
                     assert ("pending_approval" in str(result)) == proposing
@@ -53,9 +54,10 @@ def brain(request, setup, client, tmp_path, monkeypatch):
         operations[:] = calls
         prepare.then = then
         if request.param == "api":
-            replies = [chat("Preparing proposals.", *calls), live_said("草稿已準備好，等待確認。"), live_said(then)]
+            used = [use(*call) for call in calls]
+            replies = [chat("Preparing proposals.", *used), live_said("草稿已準備好，等待確認。"), live_said(then)]
             if rig.settings.get("action_mode") == "direct":
-                replies = [chat("Preparing proposals.", *calls), live_said(then)]
+                replies = [chat("Preparing proposals.", *used), live_said(then)]
             # A member made in the turn greets the owner in its own conversation: a call without tools, beside the turn's.
             def answer(**kwargs):
                 return replies.pop(0) if kwargs["tools"] else live_said("Hello, I am ready to help.")

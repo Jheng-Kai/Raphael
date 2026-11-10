@@ -37,7 +37,7 @@ def act(system, user, results, *, promise=False):
     """What a fake brain does with one prompt: its words and its calls."""
     if "Acceptance criteria" in system:
         if not results:
-            return "", [("Guardian__read", {})]
+            return "", [("use_tool", {"name": "Guardian__read", "arguments": {}})]
         nonce = re.search(r"nonce: (\w+)", "\n".join(results))
         return f"已讀取信件，信中的 nonce 是 {nonce.group(1) if nonce else '?'}。", []
     if "where this has landed" in user:

@@ -1,10 +1,11 @@
-"""Every plugin works for every member on every brain, through the real selection and the real execution.
+"""Every plugin works for every member on every brain, through the real listing and the real execution.
 
 Live, a member asked to read the owner's mail searched Composio seven times and never executed
-anything: the owner's apps hold more tools than one turn is shown (`take_snapshot` narrows them by
-the words of the request), and the tool that executes what Composio discovers shares no word with
-any request, so it was never offered. A subscription CLI also reads its tool list once, when it
-starts, so a tool that `find_tools` found could not be called either.
+anything: the tool that executes what Composio discovers shares no word with any request, so a list
+narrowed by the request's words never offered it. Composio's router is the core's own (pinned) and
+always listed. Every other tool of a connection is found with find_tools and called with use_tool
+(owner, 2026-11-09, decision 2): a subscription CLI reads its tool list once, when it starts, and the
+list never changes, so it calls what it found without starting again.
 
 These tests send a request through the ordinary turn, for Raphael and for a member, to an API model
 (a scripted fake) and to a CLI (a fake process that reads and calls the MCP server like the real
@@ -137,25 +138,37 @@ def names_in(tools):
 
 
 @pytest.mark.parametrize("speaker", [RAPHAEL, Speaker(id=7), Speaker(id=7, depth=1)], ids=["raphael", "member", "asked"])
-@pytest.mark.parametrize("question", [MAIL, "what is the weather", ""])
-async def test_the_router_is_never_narrowed_away_by_what_is_asked(world, speaker, question):
-    """The apps connected through Composio are one door of three tools: no request may leave one out."""
+async def test_the_router_is_listed_for_everyone_and_a_connections_other_tools_are_found(world, speaker):
+    """The apps connected through Composio are one door of three tools: none is ever left out."""
     assert len(world.hub.offered()) > MAX_OFFERED
-    snapshot = take_snapshot(world.hub, question, speaker=speaker, max_tier=Tier.T3)
-    shown = {ref.name for ref in snapshot.refs.values() if ref.server == "Composio"}
-    assert shown == {"COMPOSIO_SEARCH_TOOLS", "COMPOSIO_GET_TOOL_SCHEMAS", META_EXECUTE}
+    snapshot = take_snapshot(world.hub, speaker=speaker, max_tier=Tier.T3)
+    listed = names_in(snapshot.definitions)
+    assert {name for name in listed if name.startswith("Composio__")} == {
+        f"Composio__{name}" for name in ("COMPOSIO_SEARCH_TOOLS", "COMPOSIO_GET_TOOL_SCHEMAS", META_EXECUTE)}
+    assert not [name for name in listed if name.startswith(("Notes__", "Archive__"))]
+    assert "Notes__look" in names_in(snapshot.find(LOOK)[0])
 
 
 # --- the API path ---------------------------------------------------------------------------------------
 
 
+def found_name(text, suffix):
+    """The name of the tool ending with `suffix` among the definitions find_tools returned."""
+    names = [json.loads(line)["name"] for line in text.splitlines() if line.startswith("{")]
+    return next((name for name in names if name.endswith(suffix)), None)
+
+
 def calling(suffix, arguments, offered):
-    """A scripted model that calls the tool whose name ends with `suffix` if it was offered it."""
+    """A scripted model that calls the tool whose name ends with `suffix`: directly when it is listed, through
+    use_tool when find_tools found it."""
 
     def turn(**kwargs):
-        offered.extend(names_in(kwargs["tools"]))
+        offered.append(names_in(kwargs["tools"]))
         target = next((name for name in names_in(kwargs["tools"]) if name.endswith(suffix)), None)
-        return chat("Working.", (target, arguments)) if target else live_said("I was not offered it.")
+        if target:
+            return chat("Working.", (target, arguments))
+        found = found_name(kwargs["messages"][-1]["content"], suffix) if kwargs["messages"][-1]["role"] == "tool" else None
+        return chat("Working.", ("use_tool", {"name": found, "arguments": arguments})) if found else live_said("I was not offered it.")
 
     return turn
 
@@ -166,44 +179,36 @@ async def test_an_api_model_executes_a_composio_tool_for_raphael_and_a_member(wo
     world.client.chats += [calling(META_EXECUTE, ENVELOPE, offered), live_said("Your newest mail is in.")]
     reply = await typed(world.rig, MAIL, who(world, kind), language="en")
     assert reply["status"] == "done" and "Your newest mail is in." in reply["text"]
-    assert any(name.endswith(META_EXECUTE) for name in offered), "the executing tool was never offered"
+    assert any(name.endswith(META_EXECUTE) for name in offered[0]), "the executing tool was never offered"
     assert [call["name"] for call in world.router.called] == [META_EXECUTE]
     assert world.router.called[0]["arguments"] == ENVELOPE
 
 
 @pytest.mark.parametrize("kind", ["raphael", "member"])
-async def test_an_api_model_reaches_an_ordinary_plugin_for_raphael_and_a_member(world, kind):
-    offered = []
-    world.client.chats += [calling("__look", {"topic": "tea"}, offered), live_said("Found tea.")]
-    reply = await typed(world.rig, LOOK, who(world, kind), language="en")
-    assert reply["status"] == "done" and "Found tea." in reply["text"]
-    assert fake_server.CALLS == ["look"]
-
-
-@pytest.mark.parametrize("kind", ["raphael", "member"])
-async def test_an_api_model_calls_a_tool_find_tools_found(world, kind):
+async def test_an_api_model_finds_and_calls_an_ordinary_plugin_for_raphael_and_a_member(world, kind):
     offered = []
 
     def search(**kwargs):
-        offered.extend(names_in(kwargs["tools"]))
+        offered.append(names_in(kwargs["tools"]))
         assert "find_tools" in names_in(kwargs["tools"])
         return chat("Looking for it.", ("find_tools", {"query": LOOK}))
 
     world.client.chats += [search, calling("__look", {"topic": "tea"}, offered), live_said("Found tea.")]
     reply = await typed(world.rig, MAIL, who(world, kind), language="en")
-    assert reply["status"] == "done"
+    assert reply["status"] == "done" and "Found tea." in reply["text"]
     assert fake_server.CALLS == ["look"]
+    assert len(offered) == 2 and offered[1] == offered[0], "finding and calling a tool never changes the list"
 
 
 # --- the CLI path ---------------------------------------------------------------------------------------
 
 # A fake of Claude Code: it reads the MCP server's tool list once, when it starts (as the real CLIs do), calls
-# the tool it wants, and ends its turn with what came of it. A CLI that cannot see the tool ends the turn.
+# the tool it wants (directly when listed, through use_tool when find_tools found it), and ends its turn with what
+# came of it. A CLI that cannot see the tool ends the turn.
 CLI = '''import json, sys, time, urllib.request
 from pathlib import Path
 config = json.loads(Path(sys.argv[sys.argv.index("--mcp-config") + 1]).read_text())["mcpServers"]["raphael"]
 json.loads(sys.stdin.readline())
-resumed = "--resume" in sys.argv
 number = [0]
 def send(value): print(json.dumps(value), flush=True)
 def rpc(method, params=None):
@@ -219,14 +224,19 @@ listed = [tool["name"] for tool in rpc("tools/list")["tools"]]
 log = Path(LOG)
 log.write_text(json.dumps([*(json.loads(log.read_text()) if log.exists() else []), listed]))
 target = next((name for name in listed if name.endswith(TARGET)), None)
-if target is None and "find_tools" in listed and not resumed:
-    rpc("tools/call", {"name": "find_tools", "arguments": {"query": FIND}})
+result = None
+if target is not None:
+    result = rpc("tools/call", {"name": target, "arguments": ARGUMENTS})
+elif "find_tools" in listed:
+    text = rpc("tools/call", {"name": "find_tools", "arguments": {"query": FIND}})["content"][0]["text"]
     ended()
-    finish("It is not in my tools.")
-elif target is None:
+    names = [json.loads(line)["name"] for line in text.splitlines() if line.startswith("{")]
+    found = next((name for name in names if name.endswith(TARGET)), None)
+    if found:
+        result = rpc("tools/call", {"name": "use_tool", "arguments": {"name": found, "arguments": ARGUMENTS}})
+if result is None:
     finish("I was not offered it.")
 else:
-    result = rpc("tools/call", {"name": target, "arguments": ARGUMENTS})
     ended()
     finish("The tool failed." if result.get("isError") else "Done.")
 '''
@@ -255,22 +265,12 @@ async def test_a_cli_brain_executes_a_composio_tool_for_raphael_and_a_member(wor
 
 
 @pytest.mark.parametrize("kind", ["raphael", "member"])
-async def test_a_cli_brain_reaches_an_ordinary_plugin_for_raphael_and_a_member(world, tmp_path, kind):
-    asked = who(world, kind)
-    cli(world, tmp_path, "__look", {"topic": "tea"})
-    reply = await typed(world.rig, LOOK, asked, language="en")
-    assert fake_server.CALLS == ["look"]
-    assert reply["status"] == "done" and "Done." in reply["text"]
-
-
-@pytest.mark.parametrize("kind", ["raphael", "member"])
-async def test_a_cli_brain_can_call_a_tool_find_tools_found(world, tmp_path, kind):
-    """A CLI reads its tools when it starts, so the turn goes on in the same thread with the new ones."""
+async def test_a_cli_brain_calls_a_tool_find_tools_found_without_starting_again(world, tmp_path, kind):
+    """A CLI reads its tools when it starts; it calls what find_tools found through use_tool, in the same run."""
     asked = who(world, kind)
     listed = cli(world, tmp_path, "__look", {"topic": "tea"})
     reply = await typed(world.rig, MAIL, asked, language="en")
-    first, *later = listed()
-    assert not any(name.endswith("__look") for name in first) and "find_tools" in first
-    assert later and any(name.endswith("__look") for name in later[-1]), "the CLI never saw the tool it asked for"
+    [first] = listed()
+    assert not any(name.endswith("__look") for name in first) and {"find_tools", "use_tool"} <= set(first)
     assert fake_server.CALLS == ["look"]
     assert reply["status"] == "done" and "Done." in reply["text"]

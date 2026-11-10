@@ -14,7 +14,7 @@ from raphael_core.brain.settings import SettingsStore
 from raphael_core.integrations.client import CallOutcome
 from raphael_core.worker import loop as worker_loop
 
-from .conftest import call, report, turn, until
+from .conftest import call, report, turn, until, use
 from .test_handoff import args, setup, team_of, unused
 from .test_run import MESSAGES
 from .test_run import Rig as RunRig
@@ -247,7 +247,7 @@ def workspace_writing(rig, monkeypatch, directory, *, writes=True):
 
 async def make_office(rig, source, target, done_when="office.html exists in the workspace and opens", *, requires_artifact=True):
     await rig.plugins.connect(look="T1")
-    rig.client.replies.extend([turn(calls=[call("Notes__look", {"topic": "office"})]), report("office.html is written")])
+    rig.client.replies.extend([turn(calls=[use("Notes__look", {"topic": "office"})]), report("office.html is written")])
     receipt = rig.service.handoff(RAPHAEL, args(target, request="Build office.html", done_when=done_when, requires_artifact=requires_artifact),
                                   source_turn_id=source.id, language="en")
     task_id = receipt.data["task_id"]

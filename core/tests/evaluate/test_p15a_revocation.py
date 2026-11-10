@@ -1,7 +1,8 @@
-"""A tool the owner switched off, or an app they uninstalled, is never offered to a brain and never called by one
+"""A tool the owner switched off, or an app they uninstalled, is never found by a brain and never called by one
 again, through the production loops of both brains (the API loop and the authenticated MCP of a CLI), and
 whatever the owner said before: their 一律允許 on that tool waives its questions and nothing more. The brains here
-are stubborn: they remember the tool from earlier in the conversation and call it by name, offered or not."""
+are stubborn: they remember the tool from earlier in the conversation and call it by its name through use_tool,
+findable or not. A connection's tools are never listed (owner, 2026-11-09, decision 2)."""
 import pytest
 
 from raphael_core.brain.settings import SettingsStore
@@ -21,7 +22,7 @@ def act(user, tools, results):
     if "寄出測試信" not in question_of(user):
         return "我不確定要怎麼做。", []
     if not results:
-        return "", [(WRITE, {})]
+        return "", [("use_tool", {"name": WRITE, "arguments": {}})]
     return (SENT if "test_mode" in results[-1] else REFUSED), []
 
 
@@ -71,7 +72,7 @@ async def test_a_tool_switched_off_while_the_model_thinks_is_refused_after_alway
         result = await owner.driver.ask(PROMPT, session="in-flight")
         # The tool was on when the brain was told what it may use, and off when it called it: the call was refused,
         # with no question to the owner (Always waives questions, never a switch) and no send.
-        assert WRITE in owner.offered[first_round]
+        assert WRITE not in owner.offered[first_round] and "use_tool" in owner.offered[first_round]
         assert result.get("status") == "done" and REFUSED in result["text"]
         assert owner.sends() == ["write", "write"]
     finally:
@@ -88,14 +89,14 @@ async def test_a_tool_switched_off_is_not_offered_to_the_next_turn_and_a_remembe
         await owner.always()
         await owner.switch_off()
         result = await owner.driver.ask(PROMPT, session="next")
-        # Offered: the other tool of the connection, not this one. The brain called this one anyway, by name.
+        # The list is the same; the brain called this one anyway, by name through use_tool, and reached nothing.
         assert owner.offered[-1] and not any(name.endswith("__write") for name in owner.offered[-1])
-        assert any(name.endswith("__send_copy") for name in owner.offered[-1])
+        assert "use_tool" in owner.offered[-1]
         assert result.get("status") == "done" and SENT not in result["text"] and owner.sends() == ["write", "write"]
-        # Switched on again, it is offered again (the owner's switch is the only thing that decides).
+        # Switched on again, it is called again (the owner's switch is the only thing that decides).
         await owner.app.call("integrations.set_tool_enabled", {"id": "guardian-mail", "tool": "write", "enabled": True})
-        await owner.driver.ask(PROMPT, session="again")
-        assert WRITE in owner.offered[-1]
+        again = await owner.driver.ask(PROMPT, session="again")
+        assert again.get("status") == "done" and owner.sends() == ["write", "write", "write"]
     finally:
         await owner.aclose()
 
@@ -122,6 +123,6 @@ async def test_an_uninstalled_app_is_not_offered_not_called_not_counted_and_not_
         owner.after_listing(owner.uninstall)
         first_round = len(owner.offered)
         in_flight = await owner.driver.ask(PROMPT, session="gone-in-flight")
-        assert WRITE in owner.offered[first_round] and REFUSED in in_flight["text"] and owner.sends() == ["write", "write"]
+        assert "use_tool" in owner.offered[first_round] and REFUSED in in_flight["text"] and owner.sends() == ["write", "write"]
     finally:
         await owner.aclose()
