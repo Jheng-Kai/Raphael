@@ -2,6 +2,8 @@
 
 import asyncio
 import json
+import logging
+import os
 import re
 import time
 from dataclasses import asdict
@@ -28,7 +30,11 @@ _TOOL = re.compile(r"[A-Za-z0-9_.-]{1,128}")
 COMPOSIO_SERVER = "connectors_composio"
 GOOGLE_SERVER = "connectors_google"
 _CALENDAR_READ = ContextVar("calendar_read", default=None)
+logger = logging.getLogger(__name__)
 RPC_TIMEOUT_S = 30.0
+# How long the app store's list of apps counts as fresh, and the file that keeps the last good one between runs.
+CATALOG_TTL_S = 3600
+CATALOG_FILE = "connectors-catalog.json"
 
 
 def _text(params: dict, key: str, *, optional=False) -> str:
@@ -82,8 +88,12 @@ def _kind(tool: dict, toolkit: str) -> str:
 
 class ConnectorsService:
     def __init__(self, directory, vault, integrations, *, transport=None, open_browser=open_in_browser,
-                 sleep=asyncio.sleep, now=time.monotonic, poll_timeout=600, google_listener=None) -> None:
+                 sleep=asyncio.sleep, now=time.monotonic, poll_timeout=600, google_listener=None, wall=time.time) -> None:
         self.store = ConnectorStore(directory)
+        # The list of apps outlives a run: `now` is monotonic and means nothing next time, so the file holds `wall` time.
+        self._catalog_path, self._wall = directory / CATALOG_FILE, wall
+        self._catalog_read = False  # whether the file was looked at since the key last changed
+        self._catalog_renewal: asyncio.Task | None = None
         self.vault = vault
         self.hub = integrations
         self.composio = ComposioClient(lambda: vault.get(KEY), transport=transport, now=now)
@@ -211,8 +221,24 @@ class ConnectorsService:
         if not self.vault.get(KEY):
             raise ConnectorFailure("missing_key")
         before = self._store_catalog
-        if before and self.now() - before[0] < 3600:
+        if before is None and not self._catalog_read:
+            # A new run starts from the last good list on disk, which answers at once; an old one is renewed after.
+            self._catalog_read = True
+            saved = await asyncio.to_thread(self._read_saved_catalog)
+            if saved is not None and self._store_catalog is None:  # a fetch that finished meanwhile is newer
+                before = self._store_catalog = saved
+                if self.now() - saved[0] >= CATALOG_TTL_S:
+                    self._renew_catalog()
+                return saved[1]
+            before = self._store_catalog
+        renewing = self._catalog_renewal
+        if before and renewing is not None and not renewing.done():
             return before[1]
+        if before and self.now() - before[0] < CATALOG_TTL_S:
+            return before[1]
+        return await self._fetch_catalog(before)
+
+    async def _fetch_catalog(self, before):
         try:
             items, slugs, cursors = [], set(), set()
             cursor, count, truncated = None, 0, False
@@ -253,11 +279,58 @@ class ConnectorsService:
                       "total_items": len(items), "truncated": truncated, "stale": False,
                       "stores_tool_payloads": True, "payload_retention_days": 365}
             self._store_catalog = (self.now(), result)
+            await asyncio.to_thread(self._save_catalog, result)
             return result
         except ConnectorFailure:
             if before:
                 return {**before[1], "stale": True}
             raise
+
+    def _read_saved_catalog(self):
+        """The last good list from an earlier run as (monotonic time it was fetched, list), or None; the file is a cache."""
+        try:
+            raw = json.loads(self._catalog_path.read_text(encoding="utf-8"))
+            result, fetched = raw["result"], raw["fetched_at"]
+            if (raw.get("version") != 1 or type(fetched) not in (int, float) or not isinstance(result, dict)
+                    or not isinstance(result.get("items"), list) or not isinstance(result.get("categories"), list)
+                    or not all(isinstance(item, dict) and isinstance(item.get("slug"), str) for item in result["items"])):
+                return None
+        except (OSError, ValueError, KeyError, TypeError):
+            return None
+        # A clock that went back counts the list as old.
+        age = self._wall() - fetched
+        return self.now() - (age if 0 <= age < CATALOG_TTL_S else CATALOG_TTL_S), {**result, "stale": False}
+
+    def _save_catalog(self, result) -> None:
+        try:
+            temporary = self._catalog_path.with_suffix(".json.tmp")
+            temporary.write_text(json.dumps({"version": 1, "fetched_at": self._wall(), "result": result},
+                                            separators=(",", ":")), encoding="utf-8")
+            os.replace(temporary, self._catalog_path)
+        except OSError as exc:
+            logger.warning("Could not save the list of apps: %s", type(exc).__name__)
+
+    def _renew_catalog(self) -> None:
+        if self._catalog_renewal is None or self._catalog_renewal.done():
+            self._catalog_renewal = asyncio.get_running_loop().create_task(self._renew_catalog_now())
+
+    async def _renew_catalog_now(self) -> None:
+        before = self._store_catalog
+        try:
+            async with asyncio.timeout(120):
+                result = await self._fetch_catalog(before)
+        except (ConnectorFailure, TimeoutError, OSError) as exc:
+            # The old list stays, and the next ask tries again and says what went wrong (`stale`).
+            logger.info("The list of apps was not renewed: %s", type(exc).__name__)
+            return
+        if before is None or (result["items"], result["categories"]) != (before[1]["items"], before[1]["categories"]):
+            self._notify()
+
+    async def aclose(self) -> None:
+        task, self._catalog_renewal = self._catalog_renewal, None
+        if task is not None and not task.done():
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
 
     async def categories(self, params):
         return await self.composio.page("/toolkits/categories", cache=True)
@@ -287,6 +360,8 @@ class ConnectorsService:
                 self.vault.delete(KEY)
             self.composio._cache.clear()
             self._store_catalog = None
+            self._catalog_read = False
+            self._catalog_path.unlink(missing_ok=True)
             self._tool_catalog.clear()
             self._important.clear()
         self._save()

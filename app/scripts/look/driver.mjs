@@ -49,6 +49,38 @@ async function openCost(page, { from, to, newest, rounds = 3, limits = {}, first
   return result;
 }
 
+/**
+ * Start-up asks for the first view before anything optional (owner, 2026-11-11: 「第一次開 app 的速度還是非常慢，就只有第一次而已」).
+ * The core answers on one loop, so a model-catalog read that arrives with the Home overview slows the overview
+ * several times over. Waits until every `heavy` read has been asked for (the window reads them ahead on its own), then
+ * fails if one of them began before the `firstView` reads that began earlier were answered, if the heavy reads
+ * overlapped, or if a first-view read is missing. `calls` come from the mock core, which stamps start (`t0`) and answer (`t1`).
+ */
+export function startupOrderProblem(calls, { firstView, heavy }) {
+  const core = calls.filter(call => call.command === "core_call");
+  const of = names => core.filter(call => names.includes(call.method));
+  const missing = [...firstView, ...heavy].find(method => !core.some(call => call.method === method));
+  if (missing) return `${missing} was never asked for`;
+  const unanswered = of([...firstView, ...heavy]).find(call => call.t1 === undefined);
+  if (unanswered) return `${unanswered.method} was never answered`;
+  const reads = of(heavy).sort((a, b) => a.t0 - b.t0);
+  const begin = reads[0].t0;
+  const late = of(firstView).filter(call => call.t0 < begin && call.t1 > begin)[0];
+  if (late) return `${reads[0].method} began while ${late.method} was still waiting for its answer`;
+  const overlapping = reads.find((call, index) => index > 0 && call.t0 < reads[index - 1].t1);
+  if (overlapping) return `${overlapping.method} began before ${reads[reads.indexOf(overlapping) - 1].method} was answered`;
+  return "";
+}
+
+async function startupOrder(page, step) {
+  await page.waitForFunction(heavy => heavy.every(method => window.__look.calls.some(call => call.method === method && call.t1 !== undefined)), { timeout: 30000 }, step.heavy);
+  const calls = await page.evaluate(() => window.__look.calls.filter(call => call.command === "core_call").map(({ method, t0, t1 }) => ({ command: "core_call", method, t0, t1 })));
+  const result = { check: "startup-order", order: calls.map(call => `${call.method}@${Math.round(call.t0)}${call.t1 === undefined ? "" : `-${Math.round(call.t1)}`}`) };
+  const problem = startupOrderProblem(calls, step);
+  if (problem) throw Object.assign(new Error(`Start-up order: ${problem}: ${result.order.join(" > ")}`), { assertion: result });
+  return result;
+}
+
 export function finiteMotionSettled() {
   return document.getAnimations().every(animation => animation.playState !== "running" || animation.effect?.getTiming().iterations === Infinity ||
     // This is the notification's lifetime, not its entrance; capture the success while it is visible.
@@ -589,6 +621,7 @@ export async function perform(page, step, evidenceDirectory) {
     }
     case "event-storm": return await eventStorm(page, step);
     case "open-cost": return await openCost(page, step);
+    case "startup-order": return await startupOrder(page, step);
     // The composer's voice button pressed and held, as the owner starts speaking to Raphael.
     case "press-voice":
       await page.evaluate(() => { const button = document.querySelector(".page-agent:not([hidden]) .composer .cmp-voice"); button?.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0, pointerId: 1 })); });

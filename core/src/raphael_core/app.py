@@ -1270,6 +1270,7 @@ class App(Router):
             ("end the messaging connections", self.messaging.aclose),
             ("stop the routines' scheduler", self.members.aclose),
             ("end the background tasks", self.background.aclose),
+            ("stop the list of apps' renewal", self.connectors.aclose),
             ("end the connector cards' sign-ins", self.cards.aclose),
             ("end the secret cards' resumes", self.secret_cards.aclose),
             ("end the computer cards' runs", self.handbacks.aclose),

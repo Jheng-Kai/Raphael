@@ -5,6 +5,8 @@
 import { Channel, convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { withWindowHotkeyPause } from "./window-hotkeys";
 import { crownPrimary } from "./crown";
+import { fillPictures } from "./member-pictures";
+import { optionalReadsOpen, trackCoreCall } from "./startup-reads";
 import type { DesktopState, DesktopSession } from "./desktop-viewer";
 import type { LanguageGroup } from "./languages";
 import type { TelegramStatus } from "./messaging";
@@ -73,20 +75,40 @@ const SHARED_READS = new Set(["members.list", "settings.get", "rooms.list", "hom
   "models.catalog", "brains.cli", "languages.list", "toolsets.list", "background.waiting.list", "audio.devices"]);
 let changes = 0;
 const reading = new Map<string, { answer: Promise<unknown>; changes: number }>();
+/** Events that say something may have changed; the microphone's loudness and the like do not. */
+const NOISE = new Set<string>(["Level", "VoiceLevel", "ModelProgress", "Dictation", "Hotkey"]);
+let heard = 0;
+/** While the window starts up, a read answered a moment ago is the answer to the same read now. */
+const RECENT_MS = 1500;
+const recent = new Map<string, { value: unknown; at: number; changes: number; heard: number }>();
+
+/** A call to the core; a member comes back with its picture put in (member-pictures.ts), not carried by the core. */
+function ask<T>(method: string, params: object): Promise<T> {
+  const call = invoke<T>("core_call", { method, params });
+  trackCoreCall(call);
+  if (!method.startsWith("members.") || method === "members.picture") return call;
+  return call.then(async answer => {
+    await fillPictures((name, args) => invoke("core_call", { method: name, params: args }), answer);
+    return answer;
+  });
+}
 
 export function core<T>(method: string, params: object = {}): Promise<T> {
   if (!SHARED_READS.has(method)) {
     changes++;
-    return invoke<T>("core_call", { method, params });
+    return ask<T>(method, params);
   }
   const key = `${method} ${JSON.stringify(params)}`;
   const under = reading.get(key);
   if (under && under.changes === changes) return under.answer.then(answer => structuredClone(answer) as T);
-  const answer = invoke<T>("core_call", { method, params });
-  const entry = { answer, changes };
+  const before = recent.get(key);
+  if (before && !optionalReadsOpen() && before.changes === changes && before.heard === heard && performance.now() - before.at < RECENT_MS)
+    return Promise.resolve(structuredClone(before.value) as T);
+  const answer = ask<T>(method, params);
+  const entry = { answer, changes }, askedAt = heard;
   reading.set(key, entry);
   const done = (): void => { if (reading.get(key) === entry) reading.delete(key); };
-  answer.then(done, done);
+  answer.then(value => { if (reading.get(key) === entry && !optionalReadsOpen()) recent.set(key, { value, at: performance.now(), changes: entry.changes, heard: askedAt }); done(); }, done);
   return answer;
 }
 
@@ -555,7 +577,10 @@ export const micAccess = (): Promise<MicAccess> => invoke("mic_access");
 
 /** Starts hearing the events of the core. Call once; a page that calls again replaces the first. */
 export async function subscribeMainEvents(handler: (event: MainEvent) => void): Promise<void> {
-  const channel = new Channel<MainEvent>(handler);
+  const channel = new Channel<MainEvent>(event => {
+    if (!NOISE.has(event.type)) heard++;
+    handler(event);
+  });
   await invoke("main_events", { channel });
 }
 

@@ -561,6 +561,8 @@ const ALLOWED_METHODS: &[&str] = &[
     "members.set_primary",
     "members.set_avatar",
     "members.set_cover",
+    // A member's picture by its revision: the roster names it and does not carry it.
+    "members.picture",
     // One picture candidate from the owner's image model, and what a member delivered (its Library and a file of it).
     "members.avatar_generate",
     "members.library",
@@ -2612,6 +2614,7 @@ mod tests {
             "members.set_primary",
             "members.set_avatar",
             "members.set_cover",
+            "members.picture",
             "members.read",
             "members.viewing",
             "members.tool_choices",

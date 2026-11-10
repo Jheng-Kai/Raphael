@@ -60,7 +60,7 @@ first.
 ## Driving it with look
 
 ```powershell
-npm run look -- home home-trend-tip home-empty home-many home-problem home-calendar-rhythm home-own-events home-calendar home-more home-event-chip home-create home-google-off home-google-closed home-google-failed home-row-hover home-motion busy-team-home daily-press-surfaces --theme both --width 1120,720,1920x1080
+npm run look -- home startup-order home-trend-tip home-empty home-many home-problem home-calendar-rhythm home-own-events home-calendar home-more home-event-chip home-create home-google-off home-google-closed home-google-failed home-row-hover home-motion busy-team-home daily-press-surfaces --theme both --width 1120,720,1920x1080
 ```
 
 home-hero measures the emblem's canvas at the left with the date, greeting and his line beside
@@ -107,3 +107,13 @@ isolated fake-brain native journeys prove the desktop path. Neither proves live
 calendar/OAuth/provider scheduling or a real narrative.
 Follow the shared [content-width contract](README.md#content-width). The schedule is a table:
 its rows follow the panel's width, not the reading measure; his line keeps the reading measure.
+
+## First start-up (owner, 2026-11-11)
+
+Owner: 「第一次開 app 的速度還是非常慢，就只有第一次而已」. The first view (Home, the roster, the rooms) is asked
+for first; the model, app and Settings read-ahead (`models.catalog`, `brains.cli`, Connect apps, Settings) wait until
+the first view is answered and then run one at a time (`app/src/main/startup-reads.ts`, R-START-02). Scene:
+`startup-order` gives the mock core a 60 ms answer time and fails if `models.catalog` or `brains.cli` began while
+`home.overview`, `members.list` or `rooms.list` was still waiting for its answer, if those two overlapped, or if a
+first-view read was never asked for. The roster carries no pictures (`members.picture`, R-START-06): the look mock
+still inlines `avatar_url`, so the picture path is covered by vitest, not by look.

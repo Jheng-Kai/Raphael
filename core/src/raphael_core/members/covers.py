@@ -27,8 +27,9 @@ def position(value):
 
 
 class Covers:
-    def __init__(self, folder, data_url, evict):
-        self.folder, self._data_url, self._evict = folder, data_url, evict
+    def __init__(self, folder, picture, evict):
+        # `picture(path)` is the checked picture at a path (members/service.py `_picture`): its data URL and `rev`.
+        self.folder, self._picture, self._evict = folder, picture, evict
 
     def _metadata(self, member_id):
         return self.folder / f'{member_id}.json'
@@ -56,17 +57,25 @@ class Covers:
             return image
         return None
 
+    def picture(self, member_id):
+        """The cover picture of a member; None for a pattern, none, or an image that is not one any more."""
+        value = self.reference(member_id)
+        if not value or value['kind'] != 'image':
+            return None
+        path = self.folder / value['file']
+        try:
+            if path.resolve().parent != self.folder.resolve():
+                return None
+        except (OSError, ValueError):
+            return None
+        return self._picture(path)
+
     def view(self, member_id):
+        """What a roster says of the cover. An image is named by its `rev`; its bytes are `members.picture`."""
         value = self.reference(member_id)
         if value and value['kind'] == 'image':
-            path = self.folder / value['file']
-            try:
-                if path.resolve().parent != self.folder.resolve():
-                    return None
-            except (OSError, ValueError):
-                return None
-            url = self._data_url(path)
-            return {'kind': 'image', 'url': url, **({'position': value['position']} if 'position' in value else {})} if url else None
+            picture = self.picture(member_id)
+            return {'kind': 'image', 'rev': picture.rev, **({'position': value['position']} if 'position' in value else {})} if picture else None
         return value
 
     def reposition(self, member_id, value):

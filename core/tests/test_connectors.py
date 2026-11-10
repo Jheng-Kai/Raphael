@@ -995,6 +995,101 @@ async def test_store_catalog_pages_cache_expiry_and_failed_refresh_are_atomic(tm
     assert (await router.call("connectors.catalog"))["error"] == "missing_key"
 
 
+def _catalog_responder(listed, mode, requests, gate=None):
+    async def response(request):
+        requests.append(request.url.path)
+        if gate is not None:
+            await gate.wait()
+        if mode[0] == "down":
+            return httpx.Response(503)
+        if request.url.path.endswith("/categories"):
+            return httpx.Response(200, json={"items": [{"id": "docs", "name": "Documents"}]})
+        return httpx.Response(200, json={"items": [{"slug": slug, "meta": {"categories": ["docs"]}} for slug in listed]})
+    return response
+
+
+async def test_store_catalog_survives_a_restart_on_disk_and_answers_before_any_request(tmp_path, conn):
+    import json
+    requests, listed, mode = [], ["first", "second"], ["good"]
+    wall = [1_000_000.0]
+    router, service, hub, vault = setup_service(tmp_path, conn, _catalog_responder(listed, mode, requests), wall=lambda: wall[0])
+    vault.set("connectors:composio:key", "private")
+    fetched = await router.call("connectors.catalog")
+    saved = tmp_path / "connectors-catalog.json"
+    assert saved.is_file() and not (tmp_path / "connectors-catalog.json.tmp").exists()
+    assert json.loads(saved.read_text(encoding="utf-8"))["result"]["items"] == fetched["items"]
+    assert "private" not in saved.read_text(encoding="utf-8")
+
+    # A new run (a new service on the same folder, a monotonic clock that restarted) answers from the file at once.
+    requests.clear()
+    wall[0] += 600
+    router, service, hub, vault = setup_service(tmp_path, conn, _catalog_responder(listed, mode, requests), wall=lambda: wall[0])
+    vault.set("connectors:composio:key", "private")
+    again = await router.call("connectors.catalog")
+    assert again == fetched and requests == []
+    assert await router.call("connectors.catalog") == fetched and requests == []
+
+    # Without the key nothing is answered from the file: the old error stays.
+    vault.delete("connectors:composio:key")
+    assert (await router.call("connectors.catalog"))["error"] == "missing_key"
+
+
+async def test_an_old_saved_store_catalog_answers_at_once_and_is_renewed_after_it(tmp_path, conn):
+    requests, listed, mode, notices = [], ["first"], ["good"], []
+    wall, gate = [1_000_000.0], asyncio.Event()
+    router, service, hub, vault = setup_service(tmp_path, conn, _catalog_responder(listed, mode, requests), wall=lambda: wall[0])
+    vault.set("connectors:composio:key", "private")
+    old = await router.call("connectors.catalog")
+    wall[0] += 7200  # two hours later, in a new run
+    listed[:] = ["first", "second"]
+    requests.clear()
+    router, service, hub, vault = setup_service(tmp_path, conn, _catalog_responder(listed, mode, requests, gate), wall=lambda: wall[0])
+    router.set_notifier(lambda method, params: notices.append(method))
+    vault.set("connectors:composio:key", "private")
+    answer = await asyncio.wait_for(router.call("connectors.catalog"), 2)  # the provider holds its reply
+    assert answer == old
+    assert await asyncio.wait_for(router.call("connectors.catalog"), 2) == old  # no second fetch meanwhile
+    await asyncio.sleep(0.05)
+    assert len(requests) == 1 and notices == []
+    gate.set()
+    await service._catalog_renewal
+    assert notices == ["connectors.changed"]
+    renewed = await router.call("connectors.catalog")
+    assert [item["slug"] for item in renewed["items"]] == ["first", "second"]
+    await service.aclose()
+
+
+async def test_an_old_saved_store_catalog_that_cannot_be_renewed_says_so_on_the_next_ask(tmp_path, conn):
+    requests, listed, mode, notices = [], ["first"], ["good"], []
+    wall = [1_000_000.0]
+    router, service, hub, vault = setup_service(tmp_path, conn, _catalog_responder(listed, mode, requests), wall=lambda: wall[0])
+    vault.set("connectors:composio:key", "private")
+    old = await router.call("connectors.catalog")
+    wall[0] += 7200
+    mode[0] = "down"
+    router, service, hub, vault = setup_service(tmp_path, conn, _catalog_responder(listed, mode, requests), wall=lambda: wall[0])
+    router.set_notifier(lambda method, params: notices.append(method))
+    vault.set("connectors:composio:key", "private")
+    assert await router.call("connectors.catalog") == old
+    await service._catalog_renewal
+    assert notices == []  # nothing changed, and nothing is hidden: the next ask tries again and reports it
+    assert await router.call("connectors.catalog") == {**old, "stale": True}
+    await service.aclose()
+
+
+@pytest.mark.parametrize("damage", ["not json", '{"version":1,"fetched_at":1,"result":{"items":"no","categories":[]}}', '{"version":2}'])
+async def test_a_damaged_saved_store_catalog_is_ignored_and_a_new_key_removes_it(tmp_path, conn, damage):
+    requests, listed, mode = [], ["first"], ["good"]
+    (tmp_path / "connectors-catalog.json").write_text(damage, encoding="utf-8")
+    router, service, hub, vault = setup_service(tmp_path, conn, _catalog_responder(listed, mode, requests))
+    vault.set("connectors:composio:key", "private")
+    result = await router.call("connectors.catalog")
+    assert [item["slug"] for item in result["items"]] == ["first"] and len(requests) == 2
+    assert (tmp_path / "connectors-catalog.json").is_file()
+    await router.call("connectors.set_key", {"key": ""})
+    assert not (tmp_path / "connectors-catalog.json").exists()
+
+
 @pytest.mark.parametrize("mode", ["cap", "repeated", "categories"])
 async def test_store_catalog_bounds_and_first_load_failure(tmp_path, conn, mode):
     requests = []

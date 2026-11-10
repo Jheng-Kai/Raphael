@@ -943,11 +943,13 @@ export interface Member {
   /** `""`, `"preset:<stem>"` or `"file:<stored name>"`. */
   avatar: string;
   avatar_url?: string;
+  /** What the picture is named by; the roster carries no picture, and `api.ts` fills `avatar_url` from `members.picture` (member-pictures.ts). */
+  avatar_rev?: string;
   /** Raphael's only: the cut of the owner's picture of him (avatar.ts `AvatarCrop`). */
   avatar_crop?: { x: number; y: number; zoom: number };
   /** The cover of the member settings page: one of the window's patterns or the owner's picture; none is the dotted band. */
   /** A picture's `position` is how far down it is shown, in percent (50 when the owner never moved it). */
-  cover?: { kind: "pattern"; id: string } | { kind: "image"; url: string; position?: number };
+  cover?: { kind: "pattern"; id: string } | { kind: "image"; url: string; rev?: string; position?: number };
   /** Null: 未分組. */
   group_id: number | null;
   /** The chief capability is independent of the member's identity. */

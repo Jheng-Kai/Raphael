@@ -4,9 +4,9 @@ the team as the assistant sees it.
 The RPC methods (the main window only, through the shell's allow-list):
 
 - `members.list {ui_language?}` -> `{members, groups}`. `members` is Raphael first (`id` 0, his name
-  in the language, his picture when the owner chose one: `avatar_url`, a data URL, and
-  `avatar_crop`), then every member in its place: `{id, name, role, personality, instructions, avatar,
-  avatar_url?, cover?, group_id, model, tools, position, created, unread, unread_from, waiting, preview, last_at}`.
+  in the language, his picture when the owner chose one: `avatar_rev` and `avatar_crop`), then every member
+  in its place: `{id, name, role, personality, instructions, avatar,
+  avatar_rev?, cover?, group_id, model, tools, position, created, unread, unread_from, waiting, preview, last_at}`.
   `preview` is the last line of its thread (one line, cut) and `last_at` when it was said; `unread`
   says the thread has news the owner has not seen (`members.read` clears it), `unread_from` names
   its first unseen turn when known, and `waiting` that a
@@ -33,7 +33,9 @@ The RPC methods (the main window only, through the shell's allow-list):
 - `members.set_cover {id, name, mime, data}` -> `{member}`: the same checked image upload, kept
   unchanged in `<local>/avatars/covers/`. `members.update {id, cover: "pattern:<id>" | null}`
   selects a built-in pattern or clears it. Views omit an unset cover; otherwise return
-  `{kind:"pattern", id}` or `{kind:"image", url}`. Both support Raphael (id 0).
+  `{kind:"pattern", id}` or `{kind:"image", rev, position?}`. Both support Raphael (id 0).
+- `members.picture {id, kind: "avatar" | "cover"}` -> `{rev, url}`: the picture as a data URL, with the revision
+  (a hash of its bytes) the views name it by; no view carries a picture (a roster with them was ten megabytes).
 - `members.read {id}` -> `{}`; `members.viewing {id | null}` -> `{}`: which thread is on screen now
   (null for none), so that what arrives there is not news.
 - `members.tool_choices {}` -> `{tools, connections}`: Raphael's own tools a member may be given, by
@@ -73,6 +75,7 @@ from raphael_core.ui_words import ui_word, with_ui_words
 import asyncio
 import base64
 import binascii
+import hashlib
 import logging
 import re
 import json
@@ -234,6 +237,7 @@ def routine_template(sources: Sequence[Source], language: str) -> dict[str, Any]
 class _Picture:
     key: tuple[int, int]  # the file's mtime and size when it was read
     url: str
+    rev: str  # what the bytes hash to: the window keeps a picture by it and asks again only when it changes
 
 
 def soul_document(speaker: Speaker) -> str:
@@ -305,7 +309,7 @@ class MembersService:
         self._avatars = local_dir / AVATARS_DIR
         self._raphael_avatar = local_dir / RAPHAEL_AVATAR_DIR
         self._pictures: dict[Path, _Picture] = {}
-        self._covers = Covers(self._avatars / "covers", self._data_url, self._pictures.pop)
+        self._covers = Covers(self._avatars / "covers", self._picture, self._pictures.pop)
         self._viewing: int | None = None
         self.activity.viewing = lambda: self._viewing
         self._waiting_sources: list[Callable[[], Iterable[int]]] = []
@@ -363,6 +367,7 @@ class MembersService:
             "members.set_primary": self._set_primary,
             "members.set_avatar": self._set_avatar,
             "members.set_cover": self._set_cover,
+            "members.picture": self._picture_of,
             "members.read": self._read,
             "members.unread": self._unread,
             "members.viewing": self._viewing_now,
@@ -554,9 +559,9 @@ class MembersService:
 
     # --- the pictures --------------------------------------------------------------------------------
 
-    def _data_url(self, path: Path) -> str | None:
-        """The picture at `path` as a data URL, if it is one of the four kinds and not too large.
-        Read again only when the file changed."""
+    def _picture(self, path: Path) -> _Picture | None:
+        """The picture at `path`, if it is one of the four kinds and not too large. Read again only when
+        the file changed."""
         try:
             stat = path.stat()
         except OSError:
@@ -564,7 +569,7 @@ class MembersService:
         key = (stat.st_mtime_ns, stat.st_size)
         known = self._pictures.get(path)
         if known is not None and known.key == key:
-            return known.url
+            return known
         if stat.st_size > MAX_IMAGE_BYTES:
             return None
         try:
@@ -575,29 +580,27 @@ class MembersService:
         if mime is None:
             return None
         url = f"data:{mime};base64,{base64.b64encode(data).decode('ascii')}"
-        self._pictures[path] = _Picture(key, url)
-        return url
+        picture = self._pictures[path] = _Picture(key, url, hashlib.sha1(data).hexdigest()[:12])
+        return picture
 
-    def _avatar_url(self, avatar: str) -> str | None:
-        """The picture a member's `avatar` names, as a data URL; None for none, or one that is
-        gone (the app shows the default silhouette)."""
+    def _avatar_picture(self, avatar: str) -> _Picture | None:
+        """The picture a member's `avatar` names; None for none, or one that is gone (the app shows the
+        default silhouette)."""
         kind, _, name = avatar.partition(":")
-        if kind == "file" and name:
-            return self._data_url(self._avatars / MEMBERS_DIR / name)
-        return None
+        return self._picture(self._avatars / MEMBERS_DIR / name) if kind == "file" and name else None
 
-    def _raphael_picture(self) -> tuple[str, dict] | None:
+    def _raphael_picture(self) -> tuple[_Picture, dict] | None:
         """Raphael's picture of the owner's own and its crop, as the shell keeps them; None while he
         is his emblem."""
         try:
             meta = json.loads((self._raphael_avatar / "picture.json").read_text(encoding="utf-8"))
         except (OSError, ValueError):
             return None
-        url = self._data_url(self._raphael_avatar / "picture")
+        picture = self._picture(self._raphael_avatar / "picture")
         crop = meta.get("crop") if isinstance(meta, dict) else None
-        if url is None or not isinstance(crop, dict):
+        if picture is None or not isinstance(crop, dict):
             return None
-        return url, {key: crop.get(key) for key in ("x", "y", "zoom")}
+        return picture, {key: crop.get(key) for key in ("x", "y", "zoom")}
 
     def _remove_picture(self, avatar: str) -> None:
         kind, _, name = avatar.partition(":")
@@ -641,9 +644,10 @@ class MembersService:
             "preview": "" if last is None else _preview(last),
             "last_at": None if last is None else last.created_at_ms,
         }
-        url = self._avatar_url(member.avatar) if member.avatar else None
-        if url is not None:
-            view["avatar_url"] = url
+        # The picture itself is `members.picture`: a roster with the pictures in it was ten megabytes.
+        picture = self._avatar_picture(member.avatar) if member.avatar else None
+        if picture is not None:
+            view["avatar_rev"] = picture.rev
         if cover := self._covers.view(member.id):
             view["cover"] = cover
         return view
@@ -681,7 +685,7 @@ class MembersService:
         view.update(profile)
         view["profile_ready"] = bool(profile)
         if picture is not None:
-            view["avatar_url"], view["avatar_crop"] = picture
+            view["avatar_rev"], view["avatar_crop"] = picture[0].rev, picture[1]
         if cover := self._covers.view(0):
             view["cover"] = cover
         return view
@@ -1157,6 +1161,25 @@ class MembersService:
             self._covers.save(member_id, value)
         except OSError:
             raise RpcError(INVALID_PARAMS, "Invalid params: cover (io)", {"kind": "io"}) from None
+
+    async def _picture_of(self, params: dict) -> dict:
+        """`members.picture {id, kind: "avatar" | "cover"}` -> `{rev, url}`: the picture as a data URL, with the
+        `avatar_rev` or `cover.rev` the roster names it by; both null when the member has none (any more)."""
+        member_id = _whole(params, "id")
+        kind = params.get("kind")
+        if kind not in ("avatar", "cover"):
+            raise invalid_params("kind must be avatar or cover")
+        member = self.store.member(member_id) if member_id else None
+        if member_id and member is None:
+            raise invalid_params("no such member")
+        if kind == "cover":
+            picture = self._covers.picture(member_id)
+        elif member is None:
+            found = self._raphael_picture()
+            picture = None if found is None else found[0]
+        else:
+            picture = self._avatar_picture(member.avatar)
+        return {"rev": None, "url": None} if picture is None else {"rev": picture.rev, "url": picture.url}
 
     async def _set_cover(self, params: dict) -> dict:
         member_id = _whole(params, 'id')

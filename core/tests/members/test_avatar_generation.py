@@ -82,7 +82,8 @@ async def test_candidate_uses_owner_model_profile_and_words_without_applying_it(
     assert rig.service.store.member(member['id']).avatar == ''
     assert not rig.service._avatars.exists()
     applied = await rig.call('members.set_avatar', {'id': member['id'], **{k: result['candidate'][k] for k in ('name', 'mime', 'data')}})
-    assert applied['member']['avatar_url'].endswith(result['candidate']['data'])
+    picture = await rig.call('members.picture', {'id': member['id'], 'kind': 'avatar'})
+    assert picture['url'].endswith(result['candidate']['data']) and applied['member']['avatar_rev'] == picture['rev']
 
 
 @pytest.mark.parametrize('state', ['unset', 'unavailable', 'disabled', 'no-service'])
@@ -197,7 +198,9 @@ async def test_non_square_and_jpeg_candidates_use_the_existing_save_path(rig, mi
     assert rig.service.store.member(member['id']).avatar == ''
     saved = await rig.call('members.set_avatar', {'id': member['id'], **{
         key: result['candidate'][key] for key in ('name', 'mime', 'data')}})
-    assert saved['member']['avatar_url'] == f'data:{mime};base64,' + base64.b64encode(raw).decode()
+    picture = await rig.call('members.picture', {'id': member['id'], 'kind': 'avatar'})
+    assert picture['url'] == f'data:{mime};base64,' + base64.b64encode(raw).decode()
+    assert saved['member']['avatar_rev'] == picture['rev'] and 'avatar_url' not in saved['member']
     service.make.assert_awaited_once()
 
 

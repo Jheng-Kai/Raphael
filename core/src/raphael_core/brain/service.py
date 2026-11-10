@@ -250,6 +250,7 @@ class Brain:
         self._key_check_revision = 0
         self._key_checked_at_ms: int | None = None
         self._key_refresh_task: asyncio.Task[None] | None = None
+        self._provider_refresh: asyncio.Task[None] | None = None
         self._closed = False
         # The dictations whose text is being cleaned, by session; True once one was cancelled.
         self._cleaning: dict[str, bool] = {}
@@ -300,6 +301,11 @@ class Brain:
             task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await task
+        renewal = self._provider_refresh
+        if renewal is not None:
+            renewal.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await renewal
 
     def register(self, router: Router) -> None:
         """Put every method of the brain on `router`."""
@@ -1015,7 +1021,12 @@ class Brain:
         else:
             entries, fetched_at_ms, source = await self._pricing.catalog()
         if self._providers:
-            await self._providers.refresh_catalog()
+            # The saved lists answer at once (the window asks at every start); they are renewed after the answer
+            # and the window is told if that changed them. A provider with no list yet is waited for, as before.
+            if self._providers.uncached():
+                await self._providers.refresh_catalog()
+            else:
+                self._renew_providers_later()
             entries = [*entries, *self._providers.catalog_entries()]
         replaced = [] if source == "builtin" else self._replace_vanished(entries)
         view = catalog_view(entries, fetched_at_ms, source, replaced)
@@ -1043,6 +1054,25 @@ class Brain:
                     if subscription:
                         view[kind][-1]["billing_source"] = "subscription"
         return view
+
+    def _renew_providers_later(self) -> None:
+        task = self._provider_refresh
+        if self._closed or (task is not None and not task.done()):
+            return
+        self._provider_refresh = asyncio.get_running_loop().create_task(self._renew_providers())
+
+    async def _renew_providers(self) -> None:
+        before = self._providers.catalog_signature()
+        try:
+            await self._providers.refresh_catalog()
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            # A failed renewal keeps the lists the window has; the next `models.catalog` tries again.
+            logger.info("The providers' model lists were not renewed: %s", type(exc).__name__)
+            return
+        if self._providers.catalog_signature() != before:
+            self._notify_providers()
 
     def _replace_vanished(self, entries: list[CatalogEntry]) -> list[dict[str, str]]:
         """Set each chosen OpenRouter model that is not on its list (`entries`) back to its role's
