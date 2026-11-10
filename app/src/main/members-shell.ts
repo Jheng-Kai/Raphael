@@ -104,6 +104,8 @@ export interface MembersShell {
   select(id: number): void;
   /** Reads the list (and what the column and the panel need with it) again. */
   load(): Promise<void>;
+  /** Whether the list has been read at least once: the open member's unread boundary is known only then. */
+  loaded(): boolean;
   /** Local navigation changed which destination is selected. */
   show(): void;
   /** A turn was written or a task moved: the list is read again a moment later. */
@@ -311,7 +313,8 @@ export function createMembers(host: MembersHost): MembersShell {
     if (!host.visible() || !m.unread) return;
     if (list) list = { ...list, members: list.members.map((other) => (other.id === m.id ? { ...other, unread: false, unread_from: null } : other)) };
     column.draw();
-    if (m.id === RAPHAEL_ID) return;
+    // Raphael's thread is told read as every member's is: the core also clears it when the viewing is told, but that is
+    // sent once per visit and only after a roster read succeeded, so his boundary could outlive the visit it was shown in.
     try {
       await api.membersRead(m.id);
     } catch {
@@ -578,6 +581,7 @@ export function createMembers(host: MembersHost): MembersShell {
     member,
     select,
     load,
+    loaded: () => list !== null,
     show: () => column.draw(),
     changed,
     detailsOpen: () => open,

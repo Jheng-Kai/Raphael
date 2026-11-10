@@ -48,7 +48,7 @@ import { openRoutineView } from "../routine-view";
 import { createAttachmentMedia } from "../attachment-media";
 import { ATTACH_MAX, FILE_MAX_BYTES, TOTAL_MAX_BYTES, attachmentLimit, readComposerFile, attachRefusal, base64Of, bindFilePaste, draftFileHTML, fileMime, fileKind, mountStageDrop } from "../attachments";
 import { closeMediaLightbox, openMediaLightbox } from "../media-lightbox";
-import { keepReadingPlace } from "../reading-place";
+import { keepBottomOnResize, keepReadingPlace } from "../reading-place";
 import { wholeLinks } from "../composer-links";
 import { mountSlashMenu } from "../slash-menu";
 import { getLocale, onLocaleChange, t } from "../i18n";
@@ -59,7 +59,7 @@ import { createLinkPreviews, type LinkPreview } from "../link-previews";
 import { messagePlainText } from "../message-content";
 import { mountRichContent, preserveRichScroll, richScrollFollows, followRichScroll, releaseRichScroll } from "../message-rich";
 import { mountConversationScroll } from "../conversation-scroll";
-import { openUnread, unreadLine } from "../unread-divider";
+import { openUnread, unreadInTail, unreadLine } from "../unread-divider";
 import { measureMessagePreviews, messagePreviewMeasure } from "../message-preview";
 import { messageTooltip } from "../message-tooltip";
 import { quoteHTML, selectionQuote } from "../message-quote";
@@ -264,8 +264,9 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   const scroller = el.querySelector<HTMLElement>(".ra-scroll")!;
   const older = el.querySelector<HTMLElement>(".ra-older")!;
   const thread = el.querySelector<HTMLOListElement>(".thread")!;
-  // A panel dragged wider or narrower leaves the reading place where it was (reading-place.ts).
+  // A panel dragged wider or narrower, or a dock that grows under it, leaves the reading place where it was (reading-place.ts).
   keepReadingPlace(scroller, ".thread > li");
+  keepBottomOnResize(scroller, () => followRichScroll(scroller));
   const none = el.querySelector<HTMLElement>(".ra-none")!;
   const wait = el.querySelector<HTMLElement>(".ra-wait")!;
   const empty = el.querySelector<HTMLElement>(".ra-empty")!;
@@ -303,6 +304,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
         }
         finishOpening();
       }
+      holdOpening();
     },
     focusHeader: () => conversationButton.focus({ preventScroll: true }),
     onDetailsChange: open => { conversationButton.setAttribute("aria-expanded", String(open)); queueMicrotask(() => open && visible && !roomPane.active ? desktop.show() : desktop.sync()); },
@@ -311,6 +313,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       // before anything else (owner, 2026-11-10: 開啟對話太慢); show() then joins the read under way.
       if (!sameThread) { switchThread(); app.go("agent"); return; }
       app.go("agent");
+      if (openingThread) openedAt = Date.now();
       roomPane.close(); void load(false); focusComposer();
     },
     onUpdate: () => {
@@ -887,7 +890,9 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     const additions = sentHere.length > 1 || active && (sentHere.length > 0 || turns.some(turn => turn.id > active.id && (turn.route === "owner_input" || turn.status === "queued")));
     const turnLook = additions ? { ...shape, deferPresence: true } : shape;
     const chronological = [...turns].sort((a, b) => a.created_at_ms - b.created_at_ms || a.id - b.id);
-    const openingTarget = targetTurn ?? (openingThread && unreadFrom !== null ? chronological.find(turn => turn.id >= unreadFrom!)?.id : undefined);
+    // A first unseen turn inside the newest window leaves that window alone (unreadInTail); a farther one centres it.
+    const unseen = openingThread && unreadFrom !== null ? chronological.findIndex(turn => turn.id >= unreadFrom!) : -1;
+    const openingTarget = targetTurn ?? (unseen >= 0 && !unreadInTail(unseen, chronological.length) ? chronological[unseen]!.id : undefined);
     if (openingTarget !== undefined && openingTarget !== openingWindowTarget && chronological.some(turn => turn.id === openingTarget)) {
       turnWindow.focus(String(openingTarget), chronological.map(turn => String(turn.id))); openingWindowTarget = openingTarget;
     }
@@ -1049,6 +1054,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     if (keepUp && (follow || wasEmpty)) followRichScroll(scroller);
     if (thread.querySelector(".work-section.is-live")) startTicker();
     else stopTicker();
+    holdOpening();
     // A first page that does not fill the window has no scrolling to bring the earlier ones.
     if (wasEmpty && canLoadEarlier && !turnWindow.before && !loadingEarlier && !searching && scroller.scrollHeight <= scroller.clientHeight) void load(true);
   }
@@ -1085,11 +1091,53 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   let readAgain = false;
   const needsUnreadHistory = (): boolean => openingThread && unreadFrom !== null && canLoadEarlier && (oldestId(turns) ?? 0) > unreadFrom;
   function finishOpening(): void {
-    if (!openingThread || !unreadCaptured || pending || needsUnreadHistory() || !visible || scroller.hidden || targetTurn !== undefined) return;
+    // The member settings page hides the conversation, so there is no geometry to place by; the way back places it.
+    if (!openingThread || !unreadCaptured || pending || needsUnreadHistory() || !visible || scroller.hidden || targetTurn !== undefined || members.settings.isOpen()) return;
     openingThread = false;
     // Opening at the first unread line is navigation: the first draw's follow must not pull it to the bottom.
     releaseRichScroll(scroller);
     if (!openUnread(scroller)) followRichScroll(scroller);
+    holdOpening();
+  }
+  /**
+   * The first placement is the final one (owner, 2026-11-11: the conversation opened and then jumped up). While the
+   * unread boundary is not known (a roster still on its way) or its history pages are still coming, the thread is drawn
+   * but not shown, so it is never seen at the bottom and then moved to the line. It shows after OPEN_HOLD_MS at the latest.
+   */
+  const OPEN_HOLD_MS = 1500;
+  let openedAt = 0;
+  let holdTimer: ReturnType<typeof setTimeout> | undefined;
+  function holdOpening(): void {
+    const waiting = visible && openingThread && (!unreadCaptured || needsUnreadHistory()) && Date.now() - openedAt < OPEN_HOLD_MS;
+    scroller.classList.toggle("is-opening", waiting);
+    clearTimeout(holdTimer);
+    holdTimer = undefined;
+    if (waiting) holdTimer = setTimeout(() => {
+      holdTimer = undefined;
+      if (!unreadCaptured) { unreadCaptured = true; unreadFrom = null; }
+      holdOpening();
+      finishOpening();
+    }, OPEN_HOLD_MS - (Date.now() - openedAt) + 1);
+  }
+  /** Where the thread stood when the member settings page took its place: at the bottom, or at `top`. */
+  let chatPlace: { bottom: boolean; top: number } | null = null;
+  function restoreChatPlace(): void {
+    const place = chatPlace;
+    chatPlace = null;
+    if (!place || scroller.hidden) return;
+    if (openingThread) { finishOpening(); return; }
+    if (place.bottom) { followRichScroll(scroller); scroller.scrollTop = scroller.scrollHeight; }
+    else { releaseRichScroll(scroller); scroller.scrollTop = place.top; }
+  }
+  /** A visit begins: its boundary is the one of the roster already loaded, else of the one on its way (onReadThread). */
+  function beginOpening(): void {
+    const known = members.loaded();
+    unreadFrom = known ? members.member().unread_from ?? null : null;
+    unreadCaptured = known;
+    openingThread = true;
+    openingWindowTarget = undefined;
+    turnWindow.latest();
+    openedAt = Date.now();
   }
   async function load(earlier: boolean, fromEvent = false): Promise<void> {
     if (earlier) return readPage(true);
@@ -1220,6 +1268,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     greetIfSilent();
     if (targetTurn !== undefined) {
       openingThread = false;
+      holdOpening();
       const target = thread.querySelector<HTMLElement>(`[data-id="${targetTurn}"]`);
       if (target) { target.scrollIntoView?.({ block: "center" }); target.classList.add("is-search-target"); setTimeout(() => target.classList.remove("is-search-target"), 2400); }
       targetTurn = undefined;
@@ -1690,6 +1739,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     unreadFrom = members.member().unread_from ?? null;
     unreadCaptured = true;
     openingThread = true;
+    openedAt = Date.now();
     if (composerKey !== "deleted") saveComposerDraft();
     drawConversation();
     if (roomPane.active) roomPane.close();
@@ -2595,8 +2645,13 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       const wasVisible = visible;
       // The member settings page (member-settings.ts) is asked for by the gear; any other way here is the conversation.
       const settingsFor = typeof arg === "string" && arg.startsWith("member-settings:") ? Number(arg.slice("member-settings:".length)) : null;
+      // The settings page hides the conversation, and a hidden scroller forgets its place: it is remembered as the page
+      // opens and put back as the page is left (owner, 2026-11-11: back from the settings the thread was not at the bottom).
+      if (settingsFor !== null && !members.settings.isOpen() && !roomPane.active) chatPlace = wasVisible && !scroller.hidden ? { bottom: atBottom(), top: scroller.scrollTop } : { bottom: true, top: 0 };
+      const leavingSettings = settingsFor === null && members.settings.isOpen();
       if (settingsFor === null) members.closeSettings();
-      if (!wasVisible) { unreadFrom = null; unreadCaptured = false; openingThread = true; }
+      if (leavingSettings) restoreChatPlace();
+      if (!wasVisible) beginOpening();
       visible = true;
       if (arg === "computer") { if (roomPane.active) roomPane.close(); members.computer(); }
       // The thread is asked for before anything else on the page: the core answers in order (owner, 2026-11-10).
@@ -2607,8 +2662,9 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       // The page opens at the newest turn, and with the question that waits, if one does.
       void load(false).then(() => {
         if (visible && !scroller.hidden && (!wasVisible || draft !== null)) {
-          if (unreadFrom !== null) finishOpening();
-          else scroller.scrollTop = scroller.scrollHeight;
+          // A page just opened is placed once, by finishOpening, when its thread and its boundary are both known.
+          if (openingThread) finishOpening();
+          else if (unreadFrom === null) scroller.scrollTop = scroller.scrollHeight;
         }
         if (visible && listening && voiceMember === memberId() && !question) drawComposerTask();
         refocus();
@@ -2662,6 +2718,8 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       members.hide();
       input.dispatchEvent(new Event("blur"));
       clearTimeout(listenTimer);
+      clearTimeout(holdTimer);
+      scroller.classList.remove("is-opening");
       loads++;
       loadingEarlier = false;
       stopTicker();

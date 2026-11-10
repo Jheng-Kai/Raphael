@@ -8,7 +8,7 @@ import { handoffGroupHTML } from "./handoff-line";
 import { reactionControlHTML, reactionRowHTML } from "./message-metadata";
 import { mailCardsHTML, mailHandedLinesHTML } from "./mail-card";
 import { pageCardsHTML } from "./page-card";
-import { ownerQuestionsHTML, permissionCardsHTML } from "./permission-card";
+import { ownerQuestionsHTML, permissionCardsHTML, settledQuestions } from "./permission-card";
 import { chatCardsHTML } from "./chat-cards";
 import { secretCardsHTML, secretResumedLineHTML } from "./secret-card";
 import { mcpProposalsHTML } from "./mcp-proposal";
@@ -906,6 +906,8 @@ function turnMessagesHTML(turn: AgentTurn, state: TimelineState, query: string, 
   const lastReply = [...replies].reverse().find(m => said.get(m.seq))?.seq;
   const work = workSectionHTML(turn, state, query, revealing, waitingForOwner);
   const settledDraft = isSettledDraftTurn(turn);
+  // A question the owner has settled stands where it was asked, among the replies (permission-card.ts settledQuestions).
+  const asked = settledQuestions(turn);
   return settled + ordered.filter(message => (message.kind === "reply" && !(settledDraft && said.get(message.seq) === turn.text.trim())) || message.kind === "media").map(message => {
     const text = message.kind === "reply" ? said.get(message.seq) ?? "" : message.text.trim();
     if (!text) return "";
@@ -917,8 +919,8 @@ function turnMessagesHTML(turn: AgentTurn, state: TimelineState, query: string, 
       const media = parseMediaPayload(text);
       return media ? `<div class="chat-message" data-message="${message.seq}">${mediaCardHTML(media, query, message.seq)}</div>` : "";
     }
-    return `<div data-seq="${message.seq}">${messageBlockHTML(turn, String(message.seq), text, message.at_ms, query, state, true, regenerate && message.seq === lastReply, message.seq === replies.find(reply => said.get(reply.seq))?.seq, message.seq === lastReply)}</div>`;
-  }).join("") + (replies.length ? "" : fallback) + work;
+    return asked(message.at_ms) + `<div data-seq="${message.seq}">${messageBlockHTML(turn, String(message.seq), text, message.at_ms, query, state, true, regenerate && message.seq === lastReply, message.seq === replies.find(reply => said.get(reply.seq))?.seq, message.seq === lastReply)}</div>`;
+  }).join("") + asked(Infinity) + (replies.length ? "" : fallback) + work;
 }
 
 /**
@@ -998,8 +1000,8 @@ export function turnHTML(turn: AgentTurn, state: TimelineState, detailOpen: bool
   // the request and the answer are read there, not under the line. Only a card that waits for the owner stays here.
   if (handed) {
     const name = turn.member_id ? look.memberName?.(turn.member_id) : t("agent.title");
-    const cards = permissionCardsHTML(turn, look.answerable, true, name) + connectorCardsHTML(turn) + secretCardsHTML(turn) + chatCardsHTML(turn) + computerCardsHTML(turn) +
-      permissionCardsHTML(turn, look.answerable, false, name) + ownerQuestionsHTML(turn);
+    const cards = permissionCardsHTML(turn, look.answerable, true, name) + ownerQuestionsHTML(turn, true) + connectorCardsHTML(turn) + secretCardsHTML(turn) + chatCardsHTML(turn) + computerCardsHTML(turn) +
+      permissionCardsHTML(turn, look.answerable, false, name) + ownerQuestionsHTML(turn, false);
     return `<li class="tn" data-id="${id}" data-status="${esc(turn.status)}"${live ? ' data-live="true"' : ""}>` + receivedLineHTML(turn, look) +
       (cards ? `<div class="ra"><div class="ra-body">${cards}</div></div>` : "") + `</li>`;
   }
@@ -1024,12 +1026,12 @@ export function turnHTML(turn: AgentTurn, state: TimelineState, detailOpen: bool
     // A question already answered came before the answer: it reads in that order, under the work and above the reply.
     (hasMsgs
       ? turnMessagesHTML(turn, state, query, regenerate, revealing, permissionCardsHTML(turn, look.answerable, true, turn.member_id ? look.memberName?.(turn.member_id) : t("agent.title")), textAnswer, waitingForOwner)
-      : permissionCardsHTML(turn, look.answerable, true, turn.member_id ? look.memberName?.(turn.member_id) : t("agent.title")) + textAnswer + workSectionHTML(turn, state, query, revealing, waitingForOwner)) +
+      : permissionCardsHTML(turn, look.answerable, true, turn.member_id ? look.memberName?.(turn.member_id) : t("agent.title")) + ownerQuestionsHTML(turn, true) + textAnswer + workSectionHTML(turn, state, query, revealing, waitingForOwner)) +
     (settledDraft ? settledDraftHTML(turn, detailOpen, query) : "") +
     connectorCardsHTML(turn) + mcpProposalsHTML(turn) + secretCardsHTML(turn) + chatCardsHTML(turn) + computerCardsHTML(turn) +
     `<div data-desktop-slot="${id}"></div>` +
     permissionCardsHTML(turn, look.answerable, false, turn.member_id ? look.memberName?.(turn.member_id) : t("agent.title")) + mailCardsHTML(turn, look) + pageCardsHTML(turn) +
-    ownerQuestionsHTML(turn) + greetingHTML(turn, look.greetingOpen ?? true) +
+    ownerQuestionsHTML(turn, false) + greetingHTML(turn, look.greetingOpen ?? true) +
     (turn.status === "confirm" ? `<div class="turn-question" data-question-turn="${id}"></div>` : "") +
     (turn.task?.state === "done" ? `<div data-task-result-slot="${id}" data-task-member="${turn.member_id ?? 0}"></div>` : "") +
     (!look.deferPresence && (live || waitingForOwner || waitsAtCard(turn) || revealing || turn.task?.state === "waiting" || turn.status === "confirm") ? livePresenceHTML(look, latestProgress(turn), live || revealing) : "") +

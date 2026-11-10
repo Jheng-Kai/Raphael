@@ -37,3 +37,26 @@ export function keepReadingPlace(scroller: HTMLElement, items: string, slack = 4
   take();
   return () => { scroller.removeEventListener("scroll", take); observer?.disconnect(); };
 }
+
+/**
+ * A view at the bottom stays at the bottom when its scroller gets shorter or taller because what stands under it changed
+ * (the composer with typed or placed text, a question card or a notice in the dock, a quota chip), so the last message or
+ * card is whole above the composer; a view scrolled up stays where it is (the design judge's R-UI-21 and R-CARD-11 findings: a
+ * page card placed text, the composer grew and covered the last card's foot). `followed` tells the thread's own follow state.
+ */
+export function keepBottomOnResize(scroller: HTMLElement, followed: () => void, slack = 6): () => void {
+  let height = scroller.clientHeight;
+  const observer = typeof ResizeObserver === "function" ? new ResizeObserver(() => {
+    const before = height;
+    height = scroller.clientHeight;
+    // A scroller that was or is not drawn (the page hidden, the settings page over it) has no place to keep.
+    if (!before || !height || before === height) return;
+    // A shorter scroller leaves scrollTop where it was, so the old height measures where the view stood; a taller one
+    // clamps scrollTop to the new end itself, which only looks away from the old height by what it grew.
+    if (scroller.scrollHeight - scroller.scrollTop - before > slack) return;
+    followed();
+    scroller.scrollTop = scroller.scrollHeight;
+  }) : null;
+  observer?.observe(scroller);
+  return () => observer?.disconnect();
+}

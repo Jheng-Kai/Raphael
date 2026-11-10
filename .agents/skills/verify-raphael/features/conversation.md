@@ -886,7 +886,7 @@ existing retract-and-restore behavior after the second Escape.
 ```powershell
 npm run look -- esc-main-armed esc-member-armed esc-recording-cancel composer-stop-pending-result composer-stop-background-result composer-stop-voice-result composer-stop-navigation composer-stop-roster chat --theme both --width 1120,720,1920x1080
 npm run look -- member-delete --theme both --width 1120,720,1920x1080
-npm run look -- page-product page-buy page-expand page-gone --theme both --width 1120,720,1920x1080
+npm run look -- page-product page-buy page-expand page-gone page-composer-grows --theme both --width 1120,720,1920x1080
 npm run look -- composer-model-small composer-model-favorites composer-model-sources composer-model-same composer-model-fold composer-model-unfolded composer-quick-model composer-model-menu model-sync model-sync-member settings-chatgpt-row composer-model-arrives member-brain-saved --theme both --width 1120,720,1920x1080
 ```
 
@@ -1304,8 +1304,10 @@ Run both themes at 1120,720,1920x1080. Inspect every sheet and relevant full-siz
 card and compare its spacing and controls with the existing permission card.
 
 ```powershell
-npm run look -- owner-question-asked owner-question-answered owner-question-cancelled owner-question-background owner-question-text owner-question-room owner-card-room-connect owner-card-room-secret owner-card-room-mail owner-card-room-page local-permission-card page-product chat-connect-gmail chat-secret-masked email-draft-edit member-text room-text --theme both --width 1120,720,1920x1080
+npm run look -- owner-question-order-asked owner-question-order-answered owner-question-asked owner-question-answered owner-question-cancelled owner-question-background owner-question-text owner-question-room owner-card-room-connect owner-card-room-secret owner-card-room-mail owner-card-room-page local-permission-card page-product chat-connect-gmail chat-secret-masked email-draft-edit member-text room-text --theme both --width 1120,720,1920x1080
 ```
+
+Where a question card stands (owner, 2026-11-11): a question card is the last part of its turn only while it waits for the owner. Answered, cancelled or expired it is part of the conversation and stands among the replies (permission-card.ts `settledQuestions`, used by timeline.ts `turnMessagesHTML`), by the time it was asked when the turn's data carries one (`OwnerQuestion.created_at_ms`) and before the replies it led to when it does not: the core keeps `owner_questions.created_at_ms` but `agent/owner_questions.py` `view` does not send it yet. `owner-question-order-asked` and `owner-question-order-answered` hold the order against two replies and the computer's card.
 
 Core contracts: core/tests/background/test_owner_cards.py and
 core/tests/agent/test_owner_questions.py. The shell allowlist and its existing
@@ -1670,10 +1672,12 @@ The page snapshots the boundary before the existing read/viewing calls clear it,
 Selected matrix, both themes and widths 1120,720,1920x1080:
 
 ```powershell
-npm run look -- thread-new-divider thread-new-divider-short thread-new-divider-stays thread-new-divider-return thread-new-divider-latest chat busy-team-thread busy-team-follow send-prompt --theme both --width 1120,720,1920x1080
+npm run look -- thread-new-divider thread-new-divider-short thread-new-divider-stays thread-new-divider-return thread-new-divider-latest chat busy-team-thread busy-team-follow send-prompt thread-new-divider-raphael-short thread-new-divider-raphael-medium thread-new-divider-raphael-long --theme both --width 1120,720,1920x1080
 ```
 
 The long fixture covers more than one history page. The short fixture follows a long seen reply, so its scroller must overflow while the unread run fits. The short, arrival, leave/return and latest scenes assert scroll geometry, independent line identity, retained message HTML and no additional members.read on arrivals. Existing busy-team and send-prompt limits remain unchanged. Compare the muted label with adjacent time separators at matching theme/width. Core members and schema tests cover persistence and upgrade; agent-members.test.ts covers visit lifetime and scroll decisions. Existing regenerate tests now exercise the visible menu: eligibility is validated on menu open, so new replies no longer replace an older reply just to change hidden metadata.
+
+Opening places the thread once (owner, 2026-11-11: Raphael's conversation opened and then jumped up). A page shown again takes the boundary from the roster already loaded (agent.ts `beginOpening`); when none is loaded the thread is drawn but held back (`.ra-scroll.is-opening`, at most 1.5 s) until the roster and any history pages it needs are in, so the first place seen is the place it stays at. A first unseen turn inside the newest 25 leaves the newest window alone (`unreadInTail`), so a run of up to 25 turns never cuts the newest turn off or shows the latest button at the bottom. Raphael's thread is told read with `members.read` as every member's is. The member settings page hides the conversation, so the place is remembered as it opens and put back as it closes. The scroller keeps its bottom when what stands under it grows or shrinks (`keepBottomOnResize`: the composer with typed or placed text, a question card, a notice, a chip); a thread read higher up stays where it is. Look: `thread-new-divider-raphael-short`, `-medium` and `-long` record every place the thread was seen (`scrollTimeline`) with a late roster (`rosterDelay`, the `late-roster` step), `member-settings-back-bottom` and `member-settings-back-kept` the way back from the settings page, and `page-buy`, `page-expand-place`, `page-send` and `page-composer-grows` the last card whole above a grown composer (R-UI-21, R-CARD-11).
 
 ## Durable owner inbox (2026-11-03)
 

@@ -370,6 +370,11 @@ export interface OwnerQuestion {
   id: string; task_id: number; turn_id: number; member_id: number; kind: string; card_id: string;
   question: string; options: string[]; free_text: boolean; state: "asked" | "answered" | "cancelled";
   result: { state: string; answer?: string } | null;
+  /**
+   * When it was asked. The core keeps it (`owner_questions.created_at_ms`, which orders a turn's questions) but `view` in
+   * agent/owner_questions.py does not send it yet, so a card without it stands before the turn's replies (settledQuestions).
+   */
+  created_at_ms?: number;
 }
 
 export interface ConnectionProposal {

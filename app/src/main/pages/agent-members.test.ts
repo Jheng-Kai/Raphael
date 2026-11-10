@@ -188,6 +188,41 @@ test("a delayed initial roster still opens at news before the newest history pag
   agent.hide();
 });
 
+test("a thread whose boundary is still on its way is drawn but not shown, then shown at its place once", async () => {
+  // The first place is the last (owner, 2026-11-11): a thread seen at the bottom and then moved to the line jumped up.
+  let deliver!: (list: MembersList) => void;
+  const roster = structuredClone(LIST);
+  Object.assign(roster.members[0], { unread: true, unread_from: 2 });
+  api.membersList.mockImplementation(() => new Promise(resolve => { deliver = resolve; }));
+  const agent = mount(); await flush();
+  expect($('.mb-chat .tn[data-id="1"]')).not.toBeNull();
+  expect($('.mb-chat .ra-scroll').classList.contains("is-opening")).toBe(true);
+  deliver(roster); await flush();
+  expect($('.mb-chat .ra-scroll').classList.contains("is-opening")).toBe(false);
+  expect($('.thread-new').nextElementSibling).toBe($('.tn[data-id="2"]'));
+  agent.hide();
+});
+
+test("a page shown again takes its boundary from the roster it has, so a late roster moves nothing", async () => {
+  const roster = structuredClone(LIST);
+  api.membersList.mockImplementation(async () => structuredClone(roster));
+  const agent = mount(); await flush();
+  agent.hide();
+  // News came while the page was away; the roster that carries it is read again late when the page is shown.
+  Object.assign(roster.members[0], { unread: true, unread_from: 2 });
+  send({ type: "MembersChanged" } as MainEvent);
+  await new Promise(resolve => setTimeout(resolve, 400)); await flush();
+  let deliver!: (list: MembersList) => void;
+  api.membersList.mockImplementation(() => new Promise(resolve => { deliver = resolve; }));
+  agent.show(); await flush();
+  const divider = document.querySelector('.thread-new');
+  expect(divider).not.toBeNull();
+  expect($('.mb-chat .ra-scroll').classList.contains("is-opening")).toBe(false);
+  deliver(structuredClone(roster)); await flush();
+  expect($('.thread-new')).toBe(divider);
+  agent.hide();
+});
+
 test.each([false, true])("opening unread content follows its length (long: %s)", async long => {
   // Without an end observer the reading anchor decides following from the real scroll position.
   vi.stubGlobal("IntersectionObserver", undefined);

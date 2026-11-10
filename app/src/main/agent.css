@@ -134,6 +134,8 @@
    composer's (`.ra-dock`), so the messages start and end where the composer does at every size (R-UI-45; the judge on
    2d5e3cf8: at 720 the thread began at 20 px and the composer at 32). */
 .ra-scroll { position: relative; flex: 1; min-height: 0; overflow-x: hidden; overflow-y: auto; scrollbar-width: none; overflow-anchor: none; padding: var(--sp-1) var(--pa-dock-x) var(--sp-4); }
+/* A thread whose unread boundary is still on its way is drawn but not shown, so it is placed once, where it will stay (agent.ts holdOpening). */
+.ra-scroll.is-opening { visibility: hidden; }
 .thread-window-sentinel { height: 1px; pointer-events: none; }
 .ra-col { max-width: var(--pa-colw); margin: 0 auto; }
 .ra-older { display: flex; justify-content: center; padding: var(--sp-1) 0 var(--sp-1); }

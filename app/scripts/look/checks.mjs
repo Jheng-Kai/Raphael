@@ -737,6 +737,48 @@ export function checkRendered(name, context = {}) {
     }
     return { check: name, cards: cards.length };
   }
+  if (name.startsWith("raphael-open-")) {
+    const scroller = document.querySelector('.page-agent .mb-chat .ra-scroll'), divider = scroller.querySelector('.thread-new');
+    const timeline = window.__look.timeline, run = name.slice("raphael-open-".length);
+    const bottom = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight;
+    const latest = document.querySelector('.page-agent .mb-chat .conversation-latest');
+    require(divider && timeline.length, "the unread line is drawn and the thread was seen");
+    require(window.__look.calls.some(call => call.method === "members.list") && !window.__look.errors.length, "the roster was read and nothing failed");
+    // The first place seen is the one it stays at: no sample after the first is higher up (a scroll position that only clamps
+    // as the thread gets shorter keeps its distance from the bottom).
+    require(timeline.every((place, index) => index === 0 || !(place.top < timeline[index - 1].top - 1 && place.bottom > timeline[index - 1].bottom + 1)), `the view never moved up after it was first seen (${JSON.stringify(timeline.slice(0, 6))})`);
+    if (run === "long") {
+      const top = divider.getBoundingClientRect().top - scroller.getBoundingClientRect().top;
+      require(top >= 0 && top <= 40 && bottom > 80, "a run longer than one viewport starts at its line");
+      require(timeline.every(place => place.bottom > 80), "the bottom was never shown on the way to the line");
+      return { check: name, top, bottom, places: timeline.length };
+    }
+    const newest = run === "short" ? "7001" : "7035";
+    require(scroller.querySelector(`.tn[data-id="${newest}"]`) && Number(scroller.dataset.windowLater) === 0, "the newest turn is mounted: the tail of the thread is not cut off");
+    if (run === "short") {
+      require(timeline[0].bottom <= 2 && bottom <= 2, "a short run opens at the bottom, and was never seen anywhere else");
+      require(!visible(latest), "the latest button does not show at the bottom");
+    } else if (bottom <= 2) require(!visible(latest), "the latest button does not show at the bottom");
+    return { check: name, bottom, places: timeline.length };
+  }
+  if (name === "owner-question-order") {
+    const thread = document.querySelector('.page-agent .mb-chat .thread'), card = thread.querySelector('[data-owner-question]');
+    const replies = [...thread.querySelectorAll('[data-seq]')], computer = thread.querySelector('[data-computer-card]');
+    require(card && replies.length === 2 && computer, "a turn with two replies, the computer's card and a question");
+    const before = (a, b) => !!(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+    if (card.dataset.cardState === "asked") {
+      require(replies.every(reply => before(reply, card)) && before(computer, card), "a question that waits stands after the replies and the computer's card");
+      const last = thread.lastElementChild.getBoundingClientRect();
+      require(card.getBoundingClientRect().bottom <= last.bottom + 1, "it is the last thing of the thread");
+    } else {
+      require(card.dataset.cardState === "answered", "the question is answered");
+      require(before(card, replies[0]) && before(card, computer), "an answered question stands where it was asked, before the replies it led to and the computer's card");
+      require(!replies.some(reply => before(reply, card)), "no reply stands before it");
+      const boxes = [card, replies[0], replies[1]].map(node => node.getBoundingClientRect());
+      require(boxes[0].bottom <= boxes[1].top + 1 && boxes[1].bottom <= boxes[2].top + 1, "the card and the replies read down the thread in that order");
+    }
+    return { check: name, state: card.dataset.cardState };
+  }
   if (name.startsWith("thread-new-divider")) {
     const scroller = document.querySelector('.mb-chat .ra-scroll');
     const divider = scroller.querySelector('.thread-new');
@@ -4801,8 +4843,28 @@ export function checkRendered(name, context = {}) {
     require(visible(note) && note.textContent === "這段文字來自頁面，確認後再送出", "one localized note identifies page text before sending");
     require(note.getBoundingClientRect().height <= parseFloat(getComputedStyle(note).lineHeight) * 1.2, "the note stays on one line");
     require(!document.querySelector('.pg-view'), "placing from an expanded page returns to the conversation");
+    // What stands under the thread grew with the placed text: the thread was at its bottom and stays there, so the last card is
+    // whole above the composer (R-UI-21, R-CARD-11; the judge on page-buy dark and page-expand-place light).
+    const thread = [...document.querySelectorAll('.page-agent .mb-chat .ra-scroll')].find(visible), cards = thread ? [...thread.querySelectorAll('.pg-card')] : [];
+    if (cards.length) {
+      const card = cards.at(-1).getBoundingClientRect(), field = input.closest('.composer').getBoundingClientRect(), port = thread.getBoundingClientRect();
+      require(card.bottom <= field.top - 4, `the last card ends above the composer with its gap (${Math.round(card.bottom)} against ${Math.round(field.top)})`);
+      require(card.bottom <= port.bottom + 0.5 && thread.scrollHeight - thread.scrollTop - thread.clientHeight <= 2, "the thread stays at its bottom as the composer grows");
+    }
     require(!window.__look.calls.some(call => call.command === "agent_ask_text" || ["rooms.send", "owner_questions.answer"].includes(call.method)), "a page never sends an owner message or answers a question");
     return { check: name, text: input.value, note: note.textContent };
+  }
+  if (name === "composer-grows-before" || name === "composer-grows-keeps-bottom") {
+    // The composer grows under a thread whose last item is a card: the thread stays at its bottom and the card stays whole.
+    const field = [...document.querySelectorAll('.page-agent .mb-chat .composer')].find(visible), thread = [...document.querySelectorAll('.page-agent .mb-chat .ra-scroll')].find(visible);
+    const card = [...thread.querySelectorAll('.pg-card')].at(-1);
+    require(field && thread && card, "a thread with a card and its composer");
+    if (name === "composer-grows-before") { window.__composerGrows = field.getBoundingClientRect().height; return { check: name, height: window.__composerGrows }; }
+    const grown = field.getBoundingClientRect().height - window.__composerGrows;
+    require(grown >= 40, `the typed lines made the composer taller (${Math.round(grown)} px)`);
+    require(card.getBoundingClientRect().bottom <= field.getBoundingClientRect().top - 4, "the last card ends above the grown composer with its gap");
+    require(thread.scrollHeight - thread.scrollTop - thread.clientHeight <= 2, "the thread stays at its bottom");
+    return { check: name, grown };
   }
   if (name === "page-spoke") {
     const asked = window.__look.calls.filter(call => call.command === "agent_ask_text");
@@ -5886,6 +5948,22 @@ export function checkRendered(name, context = {}) {
     require(Number(caption.textContent.match(/\d+/)[0]) > 0, "native progress advances beyond the initial zero");
     require(!document.body.textContent.includes("Transcribing") && !document.body.textContent.includes("\u8f49\u9304\u4e2d"), "elapsed-time captions are absent");
     return { check: name, caption: caption.textContent };
+  }
+  if (name.startsWith("member-settings-place-")) {
+    const scroller = document.querySelector('.page-agent .mb-chat .ra-scroll');
+    const bottom = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight;
+    if (name === "member-settings-place-before") {
+      require(bottom > 200 && scroller.scrollTop > 200, "the thread is read in the middle");
+      window.__settingsPlace = scroller.scrollTop;
+      return { check: name, top: scroller.scrollTop };
+    }
+    if (name === "member-settings-place-kept") {
+      require(Math.abs(scroller.scrollTop - window.__settingsPlace) <= 2 && bottom > 100, `the thread is where it was (${Math.round(window.__settingsPlace)} -> ${Math.round(scroller.scrollTop)})`);
+      return { check: name, top: scroller.scrollTop };
+    }
+    require(bottom <= 2 && scroller.scrollTop > 200, "the thread is back at its bottom, and it scrolls");
+    require(!visible(document.querySelector('.page-agent .mb-chat .conversation-latest')), "the latest button does not show");
+    return { check: name, bottom };
   }
   if (name.startsWith("member-settings")) {
     const pane = document.querySelector(".ms-pane");
