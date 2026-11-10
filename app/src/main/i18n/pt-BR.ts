@@ -343,6 +343,7 @@ export const ptBR = {
   "cards.skip": "Pular",
   "local.skip": "Pular",
   "cards.sendFailed": "Não foi possível enviar",
+  "cards.yourMessage": "Sua mensagem",
   "cards.files": "{p0} arquivos alterados",
   "cards.view": "Ver",
   "settings.081": "Ver",

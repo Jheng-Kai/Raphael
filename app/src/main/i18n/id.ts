@@ -343,6 +343,7 @@ export const id = {
   "cards.skip": "Lewati",
   "local.skip": "Lewati",
   "cards.sendFailed": "Tidak dapat mengirim",
+  "cards.yourMessage": "Pesan Anda",
   "cards.files": "{p0} berkas diubah",
   "cards.view": "Lihat",
   "settings.081": "Lihat",

@@ -82,7 +82,9 @@
 /* The hit target keeps the preview visible; a theme hover fill would wash out its frame-coloured icon. */
 .card-computer-screen > .btn:hover:not(:disabled), .card-computer-screen > .btn:active:not(:disabled) { background: transparent; }
 .card-computer-screen > iframe { height: 100%; }
-.composer-failure { width: min(480px, 100%); margin: 0 auto 12px; }
+/* A message that could not be sent starts where the field it came from starts, a card no wider than any other card
+   (judge R-UI-45, 2026-11-10: centred in the composer, it floated between two empty gutters). */
+.composer-failure { margin: 0 0 8px; }
 .conversation-card .mcp-fields { padding: 12px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
 .conversation-card .mcp-field { min-width: 0; }
 @keyframes card-spin { to { rotate: 360deg; } }

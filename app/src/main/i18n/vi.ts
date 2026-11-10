@@ -343,6 +343,7 @@ export const vi = {
   "cards.skip": "Bỏ qua",
   "local.skip": "Bỏ qua",
   "cards.sendFailed": "Không gửi được",
+  "cards.yourMessage": "Tin nhắn của bạn",
   "cards.files": "{p0} tệp đã thay đổi",
   "cards.view": "Xem",
   "settings.081": "Xem",

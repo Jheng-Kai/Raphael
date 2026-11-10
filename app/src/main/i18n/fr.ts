@@ -343,6 +343,7 @@ export const fr = {
   "cards.skip": "Passer",
   "local.skip": "Passer",
   "cards.sendFailed": "Envoi impossible",
+  "cards.yourMessage": "Votre message",
   "cards.files": "{p0} fichiers modifiés",
   "cards.view": "Voir",
   "settings.081": "Voir",

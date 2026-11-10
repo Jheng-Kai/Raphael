@@ -406,7 +406,11 @@ test("a failed typed send restores the exact draft and clears the failure on suc
  const input = $<HTMLTextAreaElement>(".cmp-input"); input.value = "Please review the note";
  input.dispatchEvent(new Event("input", {bubbles:true}));
  $(".composer").dispatchEvent(new Event("submit", {bubbles:true,cancelable:true})); await flush();
- expect(input.value).toBe("Please review the note"); expect(document.querySelector(".composer-failure .card-status.is-failed")).not.toBeNull();
+ expect(input.value).toBe("Please review the note"); expect(document.querySelector(".composer-failure [data-card-retry]")).not.toBeNull();
+ // Said once: the title names the message, its status says it was not sent, no sentence repeats it; the words are back in the field.
+ const failed = $(".composer-failure");
+ expect(failed.getAttribute("role")).toBe("alert"); expect(failed.querySelector(".card-title")!.textContent).toBe("你的訊息");
+ expect(failed.querySelector(".card-status.is-failed")!.textContent).toBe("未能傳送"); expect(failed.querySelector(".card-failure p")).toBeNull();
  input.dispatchEvent(new Event("input", {bubbles:true}));
  $(".cmp-send").click(); await flush();
  expect(api.agentAskText).toHaveBeenCalledTimes(2); expect(document.querySelector(".composer-failure")).toBeNull();

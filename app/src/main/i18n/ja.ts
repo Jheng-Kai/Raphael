@@ -284,6 +284,7 @@ export const ja = {
   "cards.takeover": "引き継ぐ",
   "cards.skip": "スキップ",
   "cards.sendFailed": "送信できませんでした",
+  "cards.yourMessage": "メッセージ",
   "cards.files": "{p0} ファイルを変更",
   "cards.view": "表示",
   "cards.task": "作業結果",

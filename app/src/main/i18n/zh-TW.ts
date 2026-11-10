@@ -283,6 +283,7 @@ export const zhTW = {
   "cards.takeover": "接手",
   "cards.skip": "略過",
   "cards.sendFailed": "未能傳送",
+  "cards.yourMessage": "你的訊息",
   "cards.files": "{p0} 個檔案變更",
   "cards.view": "查看",
   "cards.task": "工作結果",

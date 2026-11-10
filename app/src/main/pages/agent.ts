@@ -1363,10 +1363,12 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       if (memberId() === member && conversationId() === sentConversation && input.value === "" && !files.length) restoreDraft(draft);
       else restored.set(draftKey(member, sentConversation), draft);
       if (memberId() === member && conversationId() === sentConversation) {
-        const failed = document.createElement("div"); failed.className = "composer-failure";
-        failed.innerHTML = cardHTML({ title: t("cards.sendFailed"), status: "failed" });
+        // Said once: the title names the message, its status says it was not sent, and no sentence repeats either; the
+        // words themselves are back in the field below.
+        const failed = document.createElement("div"); failed.className = "composer-failure"; failed.setAttribute("role", "alert");
+        failed.innerHTML = cardHTML({ title: t("cards.yourMessage"), status: "failed", statusText: t("cards.sendFailed") });
         composer.querySelector(".composer-failure")?.remove(); composer.prepend(failed);
-        cardFailure(failed.firstElementChild, () => { failed.remove(); void send(); }, () => failed.remove());
+        cardFailure(failed.firstElementChild, () => { failed.remove(); void send(); }, () => failed.remove(), null);
       }
       render();
       return;

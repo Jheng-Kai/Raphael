@@ -343,6 +343,7 @@ export const zhCN = {
   "cards.skip": "略过",
   "local.skip": "略过",
   "cards.sendFailed": "未能发送",
+  "cards.yourMessage": "你的消息",
   "cards.files": "{p0} 个文件变更",
   "cards.view": "查看",
   "settings.081": "查看",

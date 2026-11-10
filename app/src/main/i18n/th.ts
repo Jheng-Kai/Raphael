@@ -343,6 +343,7 @@ export const th = {
   "cards.skip": "ข้าม",
   "local.skip": "ข้าม",
   "cards.sendFailed": "ส่งไม่สำเร็จ",
+  "cards.yourMessage": "ข้อความของคุณ",
   "cards.files": "เปลี่ยน {p0} ไฟล์",
   "cards.view": "ดู",
   "settings.081": "ดู",

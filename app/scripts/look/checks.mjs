@@ -1632,7 +1632,13 @@ export function checkRendered(name, context = {}) {
     if (name.startsWith('card-send-')) {
       const sends=calls.filter(call=>call.command==='agent_ask_text');
       require(sends.length===(name.endsWith('retry')?2:1) && sends.every(call=>call.text==='Please review the project note.'), 'the exact restored words cross only the send boundary');
-      if (name.endsWith('failed')) require(document.querySelector('.cmp-input').value==='Please review the project note.' && visible(document.querySelector('.composer-failure .card-status.is-failed')), 'failure keeps the draft and retry beside the composer');
+      if (name.endsWith('failed')) {
+        require(document.querySelector('.cmp-input').value==='Please review the project note.' && visible(document.querySelector('.composer-failure [data-card-retry]')), 'failure keeps the draft and retry beside the composer');
+        const failed=document.querySelector('.composer-failure'), card=failed.querySelector('.conversation-card'), field=document.querySelector('.cmp-field')??document.querySelector('.cmp-input');
+        require(failed.querySelectorAll('.card-status.is-failed').length===1 && !failed.querySelector('.card-failure p'), 'the failure is said once, in the status: no sentence repeats it');
+        const box=card.getBoundingClientRect(), row=field.getBoundingClientRect();
+        require(Math.abs(box.left-row.left)<=8, `the failed card starts where the field starts, never centred between gutters (card ${Math.round(box.left)}, field ${Math.round(row.left)})`);
+      }
       else require(document.querySelector('.cmp-input').value==='' && !document.querySelector('.composer-failure'), 'successful retry clears the draft and failure');
     }
     if (name.startsWith('card-mail-')) {

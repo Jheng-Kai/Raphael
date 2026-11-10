@@ -343,6 +343,7 @@ export const ko = {
   "cards.skip": "건너뛰기",
   "local.skip": "건너뛰기",
   "cards.sendFailed": "보내지 못했습니다",
+  "cards.yourMessage": "내 메시지",
   "cards.files": "파일 {p0}개 변경됨",
   "cards.view": "보기",
   "settings.081": "보기",

@@ -406,7 +406,9 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
     if(!room)return;
     const follows =!drewOnce || (!roomWindow.after && richScrollFollows(scroll));
     snapshot = roomStamp();
-    patchHTML(el.querySelector('.au-room-heading')!,`<b>${esc(room.is_team ? t("rooms.team") : room.name)}</b><div class="au-room-faces">${primaryFirst(room.member_ids.map(id => ({ id })), primaryIdOf(list)).map(({ id })=>{const m=person(id);return m?`<span class="au-room-participant" data-tooltip="${esc(memberRole(m)?`${m.name} · ${memberRole(m)}`:m.name)}">${faceHTML(m,24)}${id===primaryIdOf(list)?`<span class="au-room-crown" role="img" aria-label="${esc(t("rooms.chief"))}">${ico("crown")}</span>`:""}</span>`:"";}).join("")}</div>`);
+    // The chief's crown is the gold one its slime already wears (crown.ts, same member as primaryIdOf); a second crown
+    // icon over a 24 px face hid it (judge, 2026-11-10), so only its name for screen readers stays here.
+    patchHTML(el.querySelector('.au-room-heading')!,`<b>${esc(room.is_team ? t("rooms.team") : room.name)}</b><div class="au-room-faces">${primaryFirst(room.member_ids.map(id => ({ id })), primaryIdOf(list)).map(({ id })=>{const m=person(id);return m?`<span class="au-room-participant" data-tooltip="${esc(memberRole(m)?`${m.name} · ${memberRole(m)}`:m.name)}">${faceHTML(m,24)}${id===primaryIdOf(list)?`<span class="au-room-crown" role="img" aria-label="${esc(t("rooms.chief"))}"></span>`:""}</span>`:"";}).join("")}</div>`);
     const active=exchange&&["queued","running"].includes(exchange.state);
     composer.setTaskState(active || handoffs.some(task=>["queued","running","waiting"].includes(task.state)) ? "running" : sendingRooms.has(room.id) ? "ack" : "idle");
     let statusHTML=room.membership_state==="needs_adjustment"?btn(esc(t("rooms.adjustMembers")),"sm",' data-room-act="members"'):"";

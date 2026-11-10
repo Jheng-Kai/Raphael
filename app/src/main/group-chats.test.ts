@@ -454,6 +454,8 @@ test("active exchanges expose stop, and Raphael's wrap-up is his ordinary messag
  expect(wrapup.textContent).not.toContain('Wrap-up');
  expect(wrapup.querySelector('h3')).toBeNull();
  expect(document.querySelector('.au-room-crown')!.getAttribute('aria-label')).toBe('Chief of staff');
+ // The crown seen is the one the chief's slime wears; no second crown icon covers the 24 px face.
+ expect(document.querySelector('.au-room-crown')!.childElementCount).toBe(0);
  document.querySelector<HTMLElement>('.au-room-pane .composer[data-task-state="running"] .cmp-voice')!.click();await flush();expect(api.roomStop).toHaveBeenCalledWith(1);
  api.roomMessages.mockResolvedValue({messages:[],exchange:{state:'stopped',stop_requested:1}});event({type:'RoomsChanged',room_id:1});await flush();
  expect(document.querySelector('.au-room-pane .composer[data-task-state="running"] .cmp-voice')).toBeNull();

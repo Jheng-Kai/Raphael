@@ -169,9 +169,10 @@ export function createChatComposer(options: { placeholder(): string; transcriptT
       pageDraft.restore(sourcePage ?? pageDraft.pageId);
       files = [...files, ...snapshot];
       let failed = el.querySelector<HTMLElement>(".composer-failure");
-      if (!failed) { failed = document.createElement("div"); failed.className = "composer-failure"; el.prepend(failed); }
-      failed.innerHTML = cardHTML({title: t("cards.sendFailed"), status: "failed"});
-      cardFailure(failed.firstElementChild, () => el.requestSubmit(), () => failed?.remove());
+      if (!failed) { failed = document.createElement("div"); failed.className = "composer-failure"; failed.setAttribute("role", "alert"); el.prepend(failed); }
+      // Said once: the title names the message, its status says it was not sent, and no sentence repeats either.
+      failed.innerHTML = cardHTML({title: t("cards.yourMessage"), status: "failed", statusText: t("cards.sendFailed")});
+      cardFailure(failed.firstElementChild, () => el.requestSubmit(), () => failed?.remove(), null);
     }).finally(() => { if (submitted === revision) { fit(); input.focus(); } });
   });
   input.addEventListener("input",fit);input.addEventListener("keydown",e=>{if(e.key==="Enter"&&!e.shiftKey&&!e.isComposing&&e.keyCode!==229){e.preventDefault();el.requestSubmit();}});

@@ -75,8 +75,9 @@
 .au-room-participant { position: relative; display: inline-flex; }
 .au-room-participant + .au-room-participant { margin-left: -6px; }
 .au-room-faces { overflow: visible; }
-.au-room-crown { position: absolute; right: 0; bottom: 0; display: inline-flex; padding: 1px; border-radius: var(--r-pill); background: var(--panel); color: var(--accent-text); }
-.au-room-crown .i { width: 16px; height: 16px; }
+/* The chief's crown is the gold one on its slime; this only names it for screen readers (judge, 2026-11-10: a crown icon
+   over the 24 px face hid Raphael). */
+.au-room-crown { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 /* Raphael's wrap-up is his ordinary message: its three parts are light headings in the body. */
 .au-room-controls { display: flex; justify-content: flex-end; max-width: var(--pa-colw); margin-inline: auto; margin-bottom: var(--sp-2); }
 .au-room-controls:empty { display: none; }

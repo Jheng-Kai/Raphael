@@ -284,6 +284,7 @@ export const en = {
   "cards.takeover": "Take over",
   "cards.skip": "Skip",
   "cards.sendFailed": "Could not send",
+  "cards.yourMessage": "Your message",
   "cards.files": "{p0} files changed",
   "cards.view": "View",
   "cards.task": "Task result",

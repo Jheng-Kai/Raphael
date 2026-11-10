@@ -343,6 +343,7 @@ export const de = {
   "cards.skip": "Überspringen",
   "local.skip": "Überspringen",
   "cards.sendFailed": "Senden fehlgeschlagen",
+  "cards.yourMessage": "Ihre Nachricht",
   "cards.files": "{p0} Dateien geändert",
   "cards.view": "Anzeigen",
   "settings.081": "Anzeigen",

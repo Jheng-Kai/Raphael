@@ -343,6 +343,7 @@ export const ru = {
   "cards.skip": "Пропустить",
   "local.skip": "Пропустить",
   "cards.sendFailed": "Не удалось отправить",
+  "cards.yourMessage": "Ваше сообщение",
   "cards.files": "Изменено файлов: {p0}",
   "cards.view": "Просмотреть",
   "settings.081": "Просмотреть",

@@ -343,6 +343,7 @@ export const tr = {
   "cards.skip": "Atla",
   "local.skip": "Atla",
   "cards.sendFailed": "Gönderilemedi",
+  "cards.yourMessage": "İletiniz",
   "cards.files": "{p0} dosya değiştirildi",
   "cards.view": "Görüntüle",
   "settings.081": "Görüntüle",

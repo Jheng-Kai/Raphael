@@ -114,3 +114,12 @@ test("a card drawn as failed keeps one × when its failure is shown, and that ×
   closes[0]!.click();
   expect(dismissed).toBe(1);
 });
+
+test("a card drawn as failed keeps its own status word, and a null message adds no sentence beside 重試", () => {
+  document.body.innerHTML = cardHTML({ title: "Your message", status: "failed", statusText: "Could not send" });
+  const card = document.querySelector<HTMLElement>(".conversation-card")!;
+  cardFailure(card, () => undefined, undefined, null);
+  expect(card.querySelector(".card-status")!.textContent).toBe("Could not send");
+  expect(card.querySelector(".card-failure p")).toBeNull();
+  expect(card.querySelector(".card-failure [data-card-retry]")).not.toBeNull();
+});

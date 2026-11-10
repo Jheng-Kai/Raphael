@@ -343,6 +343,7 @@ export const it = {
   "cards.skip": "Salta",
   "local.skip": "Salta",
   "cards.sendFailed": "Invio non riuscito",
+  "cards.yourMessage": "Il tuo messaggio",
   "cards.files": "{p0} file modificati",
   "cards.view": "Visualizza",
   "settings.081": "Visualizza",
