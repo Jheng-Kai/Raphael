@@ -51,6 +51,11 @@
 /* Each message keeps its hover actions' row under it, which already parts it from the next. */
 .au-room-thread { padding: var(--sp-3) 0; gap: var(--sp-2); }
 .au-room-thread > .handoff-row, .au-room-thread > .room-intent-blocked { margin-block: var(--sp-2); }
+/* A member that could not answer is something the owner needs to see: its line is a size larger and a step darker
+   than the quiet event lines, its name in the text's own colour (owner, 2026-11-10; the judge read it as small and
+   faint). It stays one centred line, never a bubble. */
+.room-intent-blocked > .sys { font-size: var(--fs-sm); color: var(--text-2); }
+.room-intent-blocked > .sys b { color: var(--text); }
 /* A member's face is small and stands at the lower left of its words, as Grok Bot's group (owner, 2026-11-10: 「每一個 bots
    都是比較小一個，然後是放在對話的左下角」). A private conversation draws no face and lays its replies in one column, so a room
    sets its own. */

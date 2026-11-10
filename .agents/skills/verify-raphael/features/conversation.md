@@ -1910,6 +1910,9 @@ pages/agent-page.test.ts, group-chats.test.ts and owner-questions.test.ts.
 Compare page-buy and page-room-draft at matching theme/width: identical note
 component, wording, typography, spacing and state. The blank page-product scene
 proves the note has no reserved space before a page requests placement.
+A page that failed (page-gone) shows only what it knows and 再試一次: its words start where the card's title does
+and nothing blank stands under the retry (the expand row is gone while it failed; the judge gave 3/5 for both,
+2026-11-10); the card-shell check counts a card's × only when it is shown.
 
 The follow-up explicitly selects both themes at 1120 and 720 once. The maintained
 matrix below also includes the standard 1920x1080 size for later acceptance:

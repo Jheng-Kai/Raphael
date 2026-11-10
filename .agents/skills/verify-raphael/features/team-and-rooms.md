@@ -26,6 +26,9 @@ Harness step 4 of the backend design (「群組與交辦」「失敗與可靠性
   message whose speakers were never chosen still names the default responder that did not answer (a
   budget stop, say), and speech a restart cut off is a `restart` line that does not run again. The
   provider's or the CLI's own words stay in the task's private record; the exchange logs only the kind.
+  The line is a size larger (`--fs-sm`) and a step darker (`--text-2`, the name in `--text`) than the quiet event
+  lines, still one centred line: the owner needs to see it (owner, 2026-11-10, after the judge read it as small
+  and faint).
 
 Offline evidence, written first: `core/tests/members/test_room_turns.py` (all 24 failed on the old code)
 and `core/tests/background/test_room_attempts.py` (2 of 5 failed; the other 3 guard what already held),

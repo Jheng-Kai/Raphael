@@ -1754,8 +1754,10 @@ export function checkRendered(name, context = {}) {
         require(!pill, 'a template and its unconnected requests have no invented status');
       } else {
         require(pill && pill.textContent.trim(), 'status always has a word');
-        // A failed card's × closes the head at the right (owner, 2026-11-08); otherwise the status does.
-        const end = card.querySelector(':scope > .card-head > .card-close') ?? pill;
+        // A failed card's × closes the head at the right (owner, 2026-11-08); otherwise the status does. The × of a
+        // card that has not failed is in the head but not shown (a page card's `.pg-close`), so it does not count.
+        const close = card.querySelector(':scope > .card-head > .card-close');
+        const end = close && visible(close) ? close : pill;
         require(Math.abs(end.getBoundingClientRect().right - (box.right - parseFloat(style.paddingRight) - parseFloat(style.borderRightWidth))) < 1.5, 'the head ends at the right padding');
         if (end !== pill) require(pill.getBoundingClientRect().right <= end.getBoundingClientRect().left + 1, 'the status stands just before the ×');
       }
@@ -4834,6 +4836,13 @@ export function checkRendered(name, context = {}) {
     require(failed && !failed.hidden && failed.textContent.includes("NT$ 1,280"), "it says what it knows of the page");
     require(failed.querySelector('[data-page-act="retry"]'), "and offers to try again");
     require(document.querySelector(".pg-body").hidden, "no empty box is left");
+    // Its words start where the title does, and nothing blank stands under 再試一次 (the judge, 2026-11-10).
+    const card = failed.closest(".pg-card"), title = card.querySelector(".card-title").getBoundingClientRect();
+    const words = failed.querySelector("p").getBoundingClientRect(), retry = failed.querySelector('[data-page-act="retry"]').getBoundingClientRect();
+    require(Math.abs(words.left - title.left) <= 1, `the words start where the title does (${Math.round(words.left - title.left)} px)`);
+    const bottom = card.getBoundingClientRect().bottom - parseFloat(getComputedStyle(card).paddingBottom) - parseFloat(getComputedStyle(card).borderBottomWidth);
+    require(bottom - retry.bottom <= 1, `nothing blank stands under the retry (${Math.round(bottom - retry.bottom)} px)`);
+    require(![...card.querySelectorAll(":scope > .card-actions")].some(visible), "the failed page has no expand row");
     return { check: name };
   }
   if (name.startsWith("model-sync-")) {
@@ -6098,7 +6107,10 @@ export function checkRendered(name, context = {}) {
   if (name === "bot-message-from" || name === "bot-exchange-count" || name === "bot-exchange-expanded") {
     // What a colleague handed over: one centred line 「與 小森 的 N 則訊息」 where the owner's words would be, the
     // same line the asker's side shows; it opens the two members' conversation, never a box under it (2026-11-07).
-    const event = document.querySelector('.exchange-event[data-exchange="71"]'), words = event.textContent.trim();
+    // Two exchanges with the same colleague in a row are that one line, its count covering both.
+    const lines = [...document.querySelectorAll('.exchange-event')].filter(visible);
+    require(lines.length === 1, `the colleague's two exchanges are one line (${lines.length})`);
+    const event = lines[0], words = event.textContent.trim();
     require(event.matches('button[data-act="peer-chat"]'), "the line is a button that opens their conversation");
     require(/^與 小森 的 \d+ 則訊息/.test(words), `the line names the colleague and counts the messages: ${words}`);
     require(visible(event.querySelector('.av')), "the line carries the asker's face");

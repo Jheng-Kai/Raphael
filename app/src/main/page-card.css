@@ -20,6 +20,10 @@
 @media (prefers-reduced-motion: reduce) {
   .pg-body[data-state="loading"] { animation: none; }
 }
-.pg-card:has(.pg-failed:not([hidden])) .pg-expand { visibility: hidden; }
+/* A page that failed shows what happened and 再試一次, nothing more: the expand row goes (its hidden button had left a
+   blank row under the retry), and the words start where the title does, in the card's own padding (the judge on
+   page-gone, 3/5, 2026-11-10). */
+.pg-card:has(.pg-failed:not([hidden])) > .card-actions { display: none; }
+.conversation-card .pg-failed { padding: 0; }
 /* The × that puts a failed page away shows only while it failed. */
 .pg-card:not(:has(.pg-failed:not([hidden]))) .pg-close { display: none; }

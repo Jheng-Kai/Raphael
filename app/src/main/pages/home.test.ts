@@ -110,7 +110,9 @@ async function mount() {
   return { page, app, emit: (event: MainEvent) => heard.forEach((handler) => handler(event)) };
 }
 
-describe("Home's hero", () => {
+// Each test imports Home afresh (vi.resetModules), with every catalogue behind it: on a loaded machine the first ones
+// passed their assertions only after the default 5 s, twice in full runs (2026-11-10).
+describe("Home's hero", { timeout: 15_000 }, () => {
   test("greets the owner by the time of day, with the date and his live emblem, and no figures of spend or dictation", async () => {
     const { homeHTML } = await load();
     const page = parse(homeHTML({ ...overview(5), activity: activity() }));
