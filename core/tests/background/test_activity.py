@@ -49,3 +49,26 @@ async def test_public_waiting_label_follows_the_real_dependency_task(make_rig):
     assert rig.service.activity.state(colleague.id) == "waiting"
     assert rig.service.activity.label(0) == "Waiting for Sample colleague’s result"
     assert rig.notifications[-2] == ("member.activity", {"member_id": 0, "state": "waiting", "label": "Waiting for Sample colleague’s result"})
+
+
+async def test_batched_activity_preserves_owner_waits_and_colleague_labels(make_rig):
+    from raphael_core.members.store import MemberStore
+
+    rig = make_rig()
+    colleague = MemberStore(rig.conn).create_member(name='Colleague', role='Research')
+    store = rig.service._store
+    parent = store.create(session_id='parent', language='en', text='Parent')
+    child = store.create(session_id='child', language='en', text='Child', member_id=colleague.id)
+    with rig.conn:
+        rig.conn.execute("UPDATE worker_tasks SET state='waiting' WHERE id=?", (parent,))
+        rig.conn.execute('UPDATE worker_tasks SET parent_task_id=? WHERE id=?', (parent, child))
+    expected = {member: rig.service._activity_tasks(member) for member in (0, colleague.id, 999)}
+    actual = rig.service._activity_tasks_by_member([0, colleague.id, 999])
+    assert {member: actual.get(member, []) for member in expected} == expected
+    assert actual[0][0]['waiting_for'] == colleague.name
+    for member, tasks in expected.items():
+        assert rig.service.activity.describe(member, tasks=actual.get(member, [])) == rig.service.activity.describe(member)
+    store.attach_turn(child, 1)
+    question = rig.service.owner_questions.open(store.get(child), 'ask_owner', {'question': 'Synthetic choice'})
+    assert question['state'] == 'asked'
+    assert rig.service._activity_tasks_by_member([colleague.id])[colleague.id][0]['waiting_owner'] == 1

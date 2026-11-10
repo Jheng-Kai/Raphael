@@ -821,3 +821,35 @@ async def test_failed_terminal_transaction_never_emits_a_success_event(make_rig,
     assert store.get(task_id).state=='queued'
     assert not rig.notifications[before:]
     assert not rig.conn.execute("SELECT 1 FROM task_outbox WHERE task_id=? AND type='result'",(task_id,)).fetchone()
+
+
+async def test_batched_handoffs_preserve_literal_views_order_and_room_scoping(make_rig):
+    rig = make_rig()
+    target, room = setup(rig, room=True)
+    history = AgentHistory(rig.conn, rig.wall)
+    private = history.get(history.add(session_id='synthetic-private', question='Synthetic private request',
+        route='answer', source='app', prefix='', text='', status='done'))
+    store = rig.service._store
+    for source in (private, room):
+        for index, mode in enumerate(('work', 'consult', 'consult')):
+            task_id, _ = store.accept_handoff(source=source, parent=None, assignee=target.id,
+                model='fake/model', request=f'Synthetic request {index}', stage=f'batch-{index}',
+                mode=mode, done_when='Verified report', language='en')
+            with rig.conn:
+                rig.conn.execute("UPDATE worker_tasks SET state='done',report_text=?,handback=? WHERE id=?",
+                    ('Synthetic report. ' * 80, 'Short handback.', task_id))
+    expected = {source.id: rig.service.handoff_views(source_turn_id=source.id) for source in (private, room)}
+    statements = []
+    rig.conn.set_trace_callback(statements.append)
+    try:
+        actual = rig.service.handoff_views_for_turns([room.id, private.id, room.id])
+    finally:
+        rig.conn.set_trace_callback(None)
+    assert json.dumps(actual, sort_keys=True) == json.dumps(expected, sort_keys=True)
+    assert len([sql for sql in statements if 'mode IS NOT NULL AND source_turn_id IN' in sql]) == 1
+    scoped = rig.service.handoff_views(room_id=room.room_id, thread_id=room.thread_id)
+    assert [view['task_id'] for view in scoped] == [view['task_id'] for view in expected[room.id]]
+    assert all(len(view['result']) <= 600 for view in scoped if view['mode'] == 'consult')
+    both = rig.service.handoff_views(room_id=room.room_id, source_turn_id=private.id)
+    assert [view['task_id'] for view in both] == sorted(view['task_id'] for views in expected.values() for view in views)
+    assert rig.service.handoff_views() == []

@@ -10,6 +10,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from .clock import wall_clock_ms
 from .agent.history import UNFINISHED
+from .agent.speaker import RAPHAEL_NAMES
 from .agent.owner_questions import OwnerQuestions
 from .home_digest import DailyNarratives, activity, health
 from .connectors.http import ConnectorFailure
@@ -355,10 +356,20 @@ class HomeOverview:
             (routine.id, start, end))]
         return sorted(set(at))
 
+    async def _people(self, params):
+        """Only the identity and unread fields Home consumes, without private profiles or activity."""
+        language = self.members._ui_language(params)
+        unread = self.members.store.unread_from()
+        profile = self.members.first_bot_profile()
+        people = {0: {"id": 0, "name": profile.get("name", RAPHAEL_NAMES[language]), "avatar": "", "unread": 0 in unread}}
+        for row in self.conn.execute("SELECT id,name,avatar FROM members ORDER BY pinned DESC,position,id"):
+            people[row["id"]] = {**dict(row), "unread": row["id"] in unread}
+        return people
+
     async def between(self, start: int, end: int, zone: tzinfo | None) -> list[HomeItem]:
         """Everything the calendar shows in a period, for a member who reads it (`calendar_list`): own events,
         routine occurrences and, when connected, Google events read now. An unavailable connection adds none."""
-        people = {m["id"]: m for m in (await self.router.call("members.list", {}))["members"]}
+        people = await self._people({})
         items = self._own_items(start, end, zone, people)
         for routine in self.members.store.routines():
             if routine.enabled and routine.next_run_ms is not None and routine.member_id in people:
@@ -408,8 +419,7 @@ class HomeOverview:
                 raise invalid_params("month must use YYYY-MM") from None
         grid_start = first - timedelta(days=first.weekday())
         month_start, month_end = [int((grid_start + timedelta(days=n)).timestamp() * 1000) for n in (0, 42)]
-        roster = (await self.router.call("members.list", {k: params[k] for k in ("ui_language",) if k in params}))["members"]
-        people = {m["id"]: m for m in roster}
+        people = await self._people(params)
 
         def item(kind, key, mid, title, at, *, summary="", turn=None, conversation=None, routine=None) -> HomeItem:
             member = people[mid]
@@ -421,9 +431,10 @@ class HomeOverview:
         reports = []
         # Rank completed reports, rather than the latest turn, which can still be a question.
         rows = self.conn.execute(
-            "SELECT * FROM (SELECT *, ROW_NUMBER() OVER (PARTITION BY member_id ORDER BY created_at_ms DESC, id DESC) AS rank"
-            " FROM agent_turns WHERE status = 'done' AND (text != '' OR detail IS NOT NULL)) WHERE rank = 1"
-            " ORDER BY created_at_ms DESC, id DESC")
+            "SELECT t.id,t.member_id,t.question,t.text,t.detail,t.created_at_ms,t.conversation_id FROM agent_turns t JOIN"
+            " (SELECT id,ROW_NUMBER() OVER (PARTITION BY member_id ORDER BY created_at_ms DESC,id DESC) AS rank"
+            " FROM agent_turns WHERE status='done' AND (text!='' OR detail IS NOT NULL)) latest ON latest.id=t.id"
+            " WHERE latest.rank=1 ORDER BY t.created_at_ms DESC,t.id DESC")
         for row in rows:
             mid = row["member_id"]
             if mid not in people or not people[mid]["unread"]:
@@ -431,7 +442,7 @@ class HomeOverview:
             reports.append(item("report", row["id"], mid, row["question"], row["created_at_ms"],
                                 summary=row["text"] or row["detail"] or "", turn=row["id"], conversation=row["conversation_id"]))
         today = []
-        for row in self.conn.execute("SELECT * FROM agent_turns WHERE status='confirm' ORDER BY created_at_ms, id"):
+        for row in self.conn.execute("SELECT id,member_id,text,question,created_at_ms,conversation_id FROM agent_turns WHERE status='confirm' ORDER BY created_at_ms,id"):
             if row["member_id"] in people:
                 today.append(item("question", row["id"], row["member_id"], row["text"] or row["question"], row["created_at_ms"],
                                   turn=row["id"], conversation=row["conversation_id"]))
@@ -530,7 +541,12 @@ class HomeOverview:
                         value = item("routine", f"{routine.id}:{run['at']}", routine.member_id, routine.title, run["at"], routine=routine.id, turn=run["turn_id"])
                         value["run_status"] = run["current_status"]
                         month_item(value)
-        events, allowances = await asyncio.gather(self._events(month_start, month_end, refresh), self._allowances(refresh))
+        if refresh:
+            events, allowances = await asyncio.gather(self._events(month_start, month_end, refresh), self._allowances(refresh))
+        else:
+            # Cached local projections do not need two scheduled tasks and a coroutine resumption.
+            events = await self._events(month_start, month_end, False)
+            allowances = await self._allowances(False)
         events = [*self._own_items(month_start, month_end, zone, people), *events]
         for event in events:
             month_item(event)
@@ -552,7 +568,7 @@ class HomeOverview:
         unfinished += [{"id": f"turn:{row['id']}", "kind": "unfinished", "member_id": row["member_id"],
                         "title": " ".join(row["question"].split())[:240], "state": row["status"], "at_ms": row["created_at_ms"]}
                        for row in self.conn.execute(
-                           "SELECT t.* FROM agent_turns t WHERE t.status IN (?,?,?,?) AND t.source NOT IN ('routine','member')"
+                           "SELECT t.id,t.member_id,t.question,t.status,t.created_at_ms FROM agent_turns t WHERE t.status IN (?,?,?,?) AND t.source NOT IN ('routine','member')"
                            " AND t.route NOT IN ('routine','exchange') AND NOT EXISTS (SELECT 1 FROM worker_tasks w WHERE w.turn_id=t.id)"
                            " ORDER BY t.created_at_ms,t.id", UNFINISHED) if row["member_id"] in people]
         google = await self.google_state()

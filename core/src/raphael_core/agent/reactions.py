@@ -33,9 +33,14 @@ def set_reaction(conn, params, *, turn_id=None, message_id=None):
 
 
 def private_reactions(conn, turn_id):
+    return private_reactions_for_turns(conn, [turn_id]).get(turn_id, {})
+
+
+def private_reactions_for_turns(conn, turn_ids):
+    from ..brain.db import rows_for_turns
     result = {}
-    for key, emoji in conn.execute('SELECT message_key,emoji FROM message_reactions WHERE turn_id=? ORDER BY emoji', (turn_id,)):
-        result.setdefault(key, []).append(emoji)
+    for row in rows_for_turns(conn, 'message_reactions', turn_ids, order='emoji'):
+        result.setdefault(row['turn_id'], {}).setdefault(row['message_key'], []).append(row['emoji'])
     return result
 
 

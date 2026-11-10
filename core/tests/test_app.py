@@ -2090,11 +2090,13 @@ async def test_the_real_core_gets_windows_actions_unless_it_is_given_others(make
     assert make_app(fake_llm=False, agent_actions=actions).agent._actions is actions
 
 
-async def test_the_apps_of_the_start_menu_are_read_when_the_app_says_hello(make_app):
+async def test_the_apps_of_the_start_menu_are_read_after_the_hello_grace(make_app, monkeypatch):
+    monkeypatch.setattr(app_module, "STARTUP_GRACE_S", 0.01)
     actions = RecordingActions()
     app = make_app(fake_llm=False, agent_actions=actions)
     assert actions.listed == 0
     await app.call("core.hello")
+    assert actions.listed == 0
     for _ in range(100):
         if actions.listed:
             break

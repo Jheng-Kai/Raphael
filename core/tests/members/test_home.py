@@ -50,6 +50,20 @@ async def test_empty_overview_preserves_service_numbers_and_has_no_connector(hom
     assert rig.conn.total_changes == before
 
 
+async def test_home_projection_matches_the_full_member_view_without_reading_it(home, rig, monkeypatch):
+    member = (await rig.call("members.create", {"name": "Research", "avatar": "slime:blue"}))["member"]["id"]
+    rig.service._settings.set("first_bot_profile", {"name": "Morning"})
+    add(rig, member)
+    rig.service.store.mark_unread(member)
+    actual = await rig.call("home.overview", {"ui_language": "ja"})
+
+    async def full(params):
+        return {row["id"]: row for row in (await rig.call("members.list", params))["members"]}
+
+    monkeypatch.setattr(home, "_people", full)
+    assert await rig.call("home.overview", {"ui_language": "ja"}) == actual
+
+
 @pytest.mark.parametrize("kind", ["routine", "calendar", "meeting", "skill_learned"])
 @pytest.mark.parametrize("action", ["created", "updated"])
 async def test_home_and_sidebar_do_not_read_receipt_transport_as_a_report(home, rig, kind, action):

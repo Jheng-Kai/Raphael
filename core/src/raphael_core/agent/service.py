@@ -188,7 +188,7 @@ from .conversations import QUICK, Conversations
 from .quota import Quotas
 from .quotes import quote_from_wire
 from .ledger import Ledger
-from .reactions import private_reactions
+from .reactions import private_reactions_for_turns
 from .drafts import DraftError, clean_field, is_mail_sender, is_slack_sender
 from .pages import Pages, PageError
 from .public_events import event_record
@@ -5236,13 +5236,20 @@ class AgentService:
         pages = self.pages.store.shown_in(ids)
         from ..voice_chat import call_views
         call_links, call_summaries = call_views(self._conn, ids)
+        reactions = private_reactions_for_turns(self._conn, ids)
+        questions = self._background.owner_questions.for_turns(ids) if hasattr(self._background, "owner_questions") else {}
+        handoffs_by_turn = self._background.handoff_views_for_turns(ids)
+        work_ids = {int(turn.session_id.removeprefix("handoff:")) for turn in turns
+                    if turn.scope == "exchange" and turn.session_id.startswith("handoff:")
+                    and turn.session_id.removeprefix("handoff:").isdigit()}
+        works = self._history.get_many(work_ids)
         views = []
         for turn in turns:
             task, task_steps = tasks.get(turn.id or 0, (None, []))
             # Routine worker steps are also mirrored in history; prefer the complete task audit.
             turn_steps = task_steps if turn.route == "routine" and task else (
                 [_step_view(step) for step in steps.get(turn.id or 0, [])] + task_steps)
-            handoffs = self._colleague_events(turn, asked.get(turn.id or 0, []))
+            handoffs = self._colleague_events(turn, asked.get(turn.id or 0, []), handoffs_by_turn.get(turn.id, []))
             shown = cards.get(turn.id or 0)
             successful_resume = turn.source == RESUMED and not turn.session_id.startswith("failure-")
             waited = [card for card in cards.get(turn.source_turn_id or 0, [])
@@ -5258,7 +5265,7 @@ class AgentService:
                     **({"voice_call_id": call_links[turn.id]["id"], "voice_call_summary_id": call_links[turn.id]["summary_id"]} if turn.id in call_links else {}),
                     **({"voice_call": call_summaries[turn.id]} if turn.id in call_summaries else {}),
                     "created_at_ms": turn.created_at_ms,
-                    **self._exchange_order(turn),
+                    **self._exchange_order(turn, works=works, messages=messages.get(turn.id, [])),
                     "session_id": turn.session_id,
                     "source": turn.source,
                     "question": turn.question,
@@ -5277,7 +5284,7 @@ class AgentService:
                     "scope": turn.scope,
                     "room_id": turn.room_id,
                     "thread_id": turn.thread_id,
-                    "reactions": private_reactions(self._conn, turn.id),
+                    "reactions": reactions.get(turn.id, {}),
                     "peer_id": turn.peer_id,
                     # The files handed with the request: their names and types, never more.
                     "attachments": list(turn.attachments or []),
@@ -5300,32 +5307,31 @@ class AgentService:
                     "pages": pages.get(turn.id or 0, []),
                     **({"templates": templates[turn.id]} if templates.get(turn.id) else {}),
                     **({"pairings": pairings[turn.id]} if pairings.get(turn.id) else {}),
-                    **({"owner_questions": owner_questions} if (owner_questions := self._background.owner_questions.for_turn(turn.id)
-                        if hasattr(self._background, "owner_questions") else []) else {}),
+                    **({"owner_questions": questions[turn.id]} if questions.get(turn.id) else {}),
                     "messages": messages.get(turn.id or 0, []),
                 }
             )
         return views
 
-    def _exchange_order(self, turn):
+    def _exchange_order(self, turn, *, works=None, messages=None):
         if turn.scope != "exchange" or not turn.session_id.startswith("handoff:"):
             return {}
         work_id = turn.session_id.removeprefix("handoff:")
         if not work_id.isdigit():
             return {}
-        work = self._history.get(int(work_id))
+        work = self._history.get(int(work_id)) if works is None else works.get(int(work_id))
         if work is not None and (work.scope != "private" or work.source != "worker"
                 or work.member_id != turn.member_id or work.source_turn_id != turn.source_turn_id):
             work = None
-        messages = self._history.messages([turn.id]).get(turn.id, [])
+        messages = self._history.messages([turn.id]).get(turn.id, []) if messages is None else messages
         return {"brief_at_ms":turn.created_at_ms,"work_turn_id":work.id if work else None,
                 "work_created_at_ms":work.created_at_ms if work else None,
                 "report_at_ms":max((m["at_ms"] for m in messages if m["kind"] == "reply"), default=None)}
 
-    def _colleague_events(self, turn: Turn, asked: list[Turn]) -> list[dict]:
+    def _colleague_events(self, turn: Turn, asked: list[Turn], handoffs=None) -> list[dict]:
         """What a turn asked or handed colleagues, as its centred lines: its durable hand-offs, and
         each quick question (`ask_member`), which has no task, read from the colleague's record."""
-        views = self._background.handoff_views(source_turn_id=turn.id)
+        views = self._background.handoff_views(source_turn_id=turn.id) if handoffs is None else list(handoffs)
         tasked = {view[key] for view in views for key in ("work_turn_id", "exchange_turn_id") if view.get(key)}
         for exchange in asked:
             if exchange.id in tasked:

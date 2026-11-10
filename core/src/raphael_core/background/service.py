@@ -424,6 +424,7 @@ class BackgroundService:
         self._settings = SettingsStore(conn)
         self._metrics_conn = conn
         self.activity.task_source = self._activity_tasks
+        self.activity.task_batch_source = self._activity_tasks_by_member
         self._spend = SpendTracker(conn, now_ms, tz)
         self._room_slots = asyncio.Semaphore(ROOM_PARALLEL)
         self._queue: deque[int] = deque()
@@ -1044,9 +1045,31 @@ class BackgroundService:
             status=_TURN_STATUS.get(task.state,'error') if allowed else 'denied',cost_usd=0,replies=[text] if text else [],model=task.model_ref)
 
     def handoff_views(self, *, room_id=None, thread_id=None, source_turn_id=None):
-        rows = self._metrics_conn.execute("SELECT id FROM worker_tasks WHERE mode IS NOT NULL AND "
-            "((? IS NOT NULL AND COALESCE(report_room_id,room_id)=? AND (? IS NULL OR COALESCE(report_thread_id,thread_id)=?)) OR (? IS NOT NULL AND source_turn_id=?)) ORDER BY id",
-            (room_id,room_id,thread_id,thread_id,source_turn_id,source_turn_id))
+        branches, params = [], []
+        if room_id is not None:
+            branches.append("SELECT id FROM worker_tasks WHERE mode IS NOT NULL AND COALESCE(report_room_id,room_id)=?" +
+                            (" AND COALESCE(report_thread_id,thread_id)=?" if thread_id is not None else ""))
+            params.extend([room_id, thread_id] if thread_id is not None else [room_id])
+        if source_turn_id is not None:
+            branches.append("SELECT id FROM worker_tasks WHERE mode IS NOT NULL AND source_turn_id=?")
+            params.append(source_turn_id)
+        if not branches:
+            return []
+        rows = self._metrics_conn.execute(" UNION ".join(branches) + " ORDER BY id", params)
+        return self._handoff_views(rows, room_id=room_id)
+
+    def handoff_views_for_turns(self, turn_ids):
+        ids = sorted(set(turn_ids))
+        found = {}
+        for start in range(0, len(ids), 500):
+            chunk = ids[start:start + 500]
+            rows = self._metrics_conn.execute(
+                f"SELECT id FROM worker_tasks WHERE mode IS NOT NULL AND source_turn_id IN ({','.join('?' for _ in chunk)}) ORDER BY id", chunk)
+            for view in self._handoff_views(rows):
+                found.setdefault(view['source_turn_id'], []).append(view)
+        return found
+
+    def _handoff_views(self, rows, *, room_id=None):
         result = []
         for row in rows:
             task = self._store.get(row[0])
@@ -2719,16 +2742,24 @@ class BackgroundService:
         self._deliver_handoffs()
 
     def _activity_tasks(self, member_id: int) -> list[dict]:
-        tasks = [dict(row) for row in self._metrics_conn.execute(
-            "SELECT id, state, (EXISTS (SELECT 1 FROM worker_questions q WHERE q.task_id=worker_tasks.id AND q.state='waiting') "
-            "OR EXISTS (SELECT 1 FROM owner_questions q WHERE q.task_id=worker_tasks.id AND q.result IS NULL)) AS waiting_owner "
-            "FROM worker_tasks WHERE member_id=? AND state IN ('queued','running','waiting')", (member_id,))]
-        for task in tasks:
-            child = self._metrics_conn.execute(
-                "SELECT members.name FROM worker_tasks JOIN members ON members.id=worker_tasks.member_id WHERE parent_task_id=? AND state IN ('queued','running','waiting') ORDER BY worker_tasks.id LIMIT 1", (task["id"],)).fetchone()
-            if child:
-                task["waiting_for"] = child[0]
-        return tasks
+        return self._activity_tasks_by_member([member_id]).get(member_id, [])
+
+    def _activity_tasks_by_member(self, member_ids) -> dict[int, list[dict]]:
+        ids = sorted(set(member_ids))
+        found = {}
+        for start in range(0, len(ids), 500):
+            chunk = ids[start:start + 500]
+            tasks = [dict(row) for row in self._metrics_conn.execute(
+            "SELECT id, member_id, state, (EXISTS (SELECT 1 FROM worker_questions q WHERE q.task_id=worker_tasks.id AND q.state='waiting') "
+            "OR EXISTS (SELECT 1 FROM owner_questions q WHERE q.task_id=worker_tasks.id AND q.result IS NULL)) AS waiting_owner, "
+            "(SELECT members.name FROM worker_tasks child JOIN members ON members.id=child.member_id "
+            "WHERE child.parent_task_id=worker_tasks.id AND child.state IN ('queued','running','waiting') ORDER BY child.id LIMIT 1) AS waiting_for "
+            f"FROM worker_tasks WHERE member_id IN ({','.join('?' for _ in chunk)}) AND state IN ('queued','running','waiting') ORDER BY id", chunk)]
+            for task in tasks:
+                if task['waiting_for'] is None:
+                    task.pop('waiting_for')
+                found.setdefault(task.pop("member_id"), []).append(task)
+        return found
 
     def _changed(self, task_id: int, state: str, *, ending: bool = False) -> None:
         """Tell the app a task moved on. `running` is whether any task is under way once this change

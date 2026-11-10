@@ -46,10 +46,10 @@ class ConnectionProposals:
                 "first_local": not self.settings.get("local_commands_seen")}
 
     def views(self, turns):
-        found = {}
-        for turn in set(turns):
-            rows = self.conn.execute("SELECT * FROM connection_proposals WHERE turn_id=? ORDER BY rowid", (turn,))
-            found[turn] = [self.view(dict(row)) for row in rows]
+        from ..brain.db import rows_for_turns
+        found = {turn: [] for turn in turns}
+        for row in rows_for_turns(self.conn, "connection_proposals", found):
+            found[row["turn_id"]].append(self.view(dict(row)))
         return found
 
     def pending(self, turn):

@@ -15,6 +15,8 @@ import logging
 import os
 import sys
 import threading
+import time
+from dataclasses import dataclass
 from collections.abc import AsyncIterator, Awaitable, Callable, Iterator
 from typing import BinaryIO
 
@@ -32,6 +34,32 @@ from .router import Router
 logger = logging.getLogger(__name__)
 
 _STD_OUTPUT_HANDLE = 0xFFFFFFF5  # (DWORD)-11, for SetStdHandle
+SLOW_REQUEST_S = 0.250
+LAG_INTERVAL_S = 0.250
+LAG_WARNING_S = 0.250
+LAG_LOG_INTERVAL_S = 5.0
+
+
+@dataclass(frozen=True)
+class _ReadLine:
+    text: str
+    received_at: float
+
+
+async def _watch_loop_lag(expected: float) -> None:
+    loop = asyncio.get_running_loop()
+    last_warning, skipped = None, 0
+    while True:
+        await asyncio.sleep(max(0.0, expected - loop.time()))
+        now = loop.time()
+        lag = now - expected
+        if lag > LAG_WARNING_S:
+            if last_warning is None or now - last_warning >= LAG_LOG_INTERVAL_S:
+                logger.warning("Event loop lag lag_ms=%.1f skipped=%d", lag * 1000, skipped)
+                last_warning, skipped = now, 0
+            else:
+                skipped += 1
+        expected = now + LAG_INTERVAL_S
 
 
 def _encode(message: dict) -> str:
@@ -58,7 +86,7 @@ def _encode_message(message: dict) -> str:
         )
 
 
-async def serve(router: Router, lines: AsyncIterator[str], write: Callable[[str], None]) -> None:
+async def serve(router: Router, lines: AsyncIterator[str | _ReadLine], write: Callable[[str], None]) -> None:
     """Answer the JSON-RPC requests in `lines` through `write` until `lines` ends.
 
     `lines` yields one message per item. `write` receives one compact JSON document per call, with
@@ -69,32 +97,47 @@ async def serve(router: Router, lines: AsyncIterator[str], write: Callable[[str]
     incoming response is ignored: the core makes no requests of its own.
     """
 
-    def send(message: dict) -> None:
+    def send(message: dict) -> int:
         try:
-            write(_encode_message(message))
+            encoded = _encode_message(message)
+            write(encoded)
+            return len(encoded)  # The wire encoding is ASCII, so characters are bytes.
         except Exception:
             logger.exception("Could not write a message")
+            return 0
 
     def forward(method: str, params: dict) -> None:
         send(notification(method, params))
 
-    async def handle(msg: dict) -> None:
+    async def handle(msg: dict, received_at: float) -> None:
         method = msg["method"]
+        began = time.perf_counter()
+        size = 0
         try:
-            result = await router.call(method, msg.get("params"))
-        except RpcError as err:
+            try:
+                result = await router.call(method, msg.get("params"))
+            except RpcError as err:
+                if "id" in msg:
+                    size = send(error_response(msg["id"], err))
+                else:
+                    logger.warning("Notification %s failed: %s", method, err)
+                return
             if "id" in msg:
-                send(error_response(msg["id"], err))
-            else:
-                logger.warning("Notification %s failed: %s", method, err)
-            return
-        if "id" in msg:
-            send(response(msg["id"], result))
+                size = send(response(msg["id"], result))
+        finally:
+            ended = time.perf_counter()
+            if "id" in msg and ended - received_at > SLOW_REQUEST_S:
+                logger.info("Slow JSON-RPC method=%s wait_ms=%.1f run_ms=%.1f response_kb=%.2f",
+                            method.encode("unicode_escape").decode("ascii")[:160],
+                            (began - received_at) * 1000, (ended - began) * 1000, size / 1024)
 
     router.set_notifier(forward)
     tasks: set[asyncio.Task[None]] = set()
+    watcher = asyncio.create_task(_watch_loop_lag(asyncio.get_running_loop().time() + LAG_INTERVAL_S))
     try:
-        async for line in lines:
+        async for incoming in lines:
+            received_at = incoming.received_at if isinstance(incoming, _ReadLine) else time.perf_counter()
+            line = incoming.text if isinstance(incoming, _ReadLine) else incoming
             if not line.strip():
                 continue
             try:
@@ -104,13 +147,15 @@ async def serve(router: Router, lines: AsyncIterator[str], write: Callable[[str]
                 continue
             if "method" not in msg:
                 continue
-            task = asyncio.create_task(handle(msg))
+            task = asyncio.create_task(handle(msg, received_at))
             tasks.add(task)
             task.add_done_callback(tasks.discard)
         await asyncio.gather(*tasks)
     finally:
+        watcher.cancel()
         for task in tasks:  # still running only if we were cancelled or `lines` failed
             task.cancel()
+        await asyncio.gather(watcher, *tasks, return_exceptions=True)
         router.set_notifier(None)
 
 
@@ -192,9 +237,9 @@ async def _serve_stdio(
     stop: Callable[[], Awaitable[None]] | None = None,
 ) -> None:
     loop = asyncio.get_running_loop()
-    inbox: asyncio.Queue[str | None] = asyncio.Queue()
+    inbox: asyncio.Queue[_ReadLine | None] = asyncio.Queue()
 
-    def post(item: str | None) -> None:
+    def post(item: _ReadLine | None) -> None:
         with contextlib.suppress(RuntimeError):  # the loop is closed: the server stopped first
             loop.call_soon_threadsafe(inbox.put_nowait, item)
 
@@ -206,11 +251,11 @@ async def _serve_stdio(
         stdin = sys.stdin.buffer
         try:
             for line in _decoded_lines(getattr(stdin, "raw", stdin).read):
-                post(line)
+                post(_ReadLine(line, time.perf_counter()))
         finally:
             post(None)  # end of input, or reading failed: either way, stop serving
 
-    async def lines() -> AsyncIterator[str]:
+    async def lines() -> AsyncIterator[_ReadLine]:
         while (line := await inbox.get()) is not None:
             yield line
 
@@ -231,7 +276,8 @@ async def _serve_stdio(
 
     threading.Thread(target=read_stdin, name="stdin-reader", daemon=True).start()
     stopper = None if stop is None else asyncio.create_task(stop_when_asked(stop))
-    logger.info("Serving JSON-RPC on stdio")
+    from .startup import elapsed_ms
+    logger.info("Serving JSON-RPC on stdio since_process_start_ms=%.1f", elapsed_ms())
     try:
         await serve(router, lines(), write)
     finally:

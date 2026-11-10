@@ -28,6 +28,9 @@ class FakeBackground:
     def handoff_views(self, **scope):
         return []
 
+    def handoff_views_for_turns(self, turn_ids):
+        return {turn: self.handoff_views(source_turn_id=turn) for turn in turn_ids}
+
     def __init__(self):
         self.submitted = []
         self.attached = []

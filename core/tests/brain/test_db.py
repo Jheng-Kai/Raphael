@@ -1,4 +1,5 @@
 import json
+import logging
 import sqlite3
 
 import pytest
@@ -9,6 +10,45 @@ from raphael_core.brain.history import HistoryStore
 from raphael_core.brain.settings import SettingsStore
 
 from .conftest import item
+
+
+def test_startup_migration_logging_only_records_executed_steps(caplog, tmp_path):
+    path = tmp_path / 'startup.db'
+    with caplog.at_level(logging.INFO, logger=db.__name__):
+        conn = db.connect(path)
+        conn.close()
+        logs = [record for record in caplog.records if record.msg.startswith('Startup migration=')]
+        assert [record.args[0] for record in logs] == sorted(db._MIGRATIONS)
+        assert all(record.args[1] >= 0 for record in logs)
+        caplog.clear()
+        conn = db.connect(path)
+        conn.close()
+        assert not caplog.records
+
+
+@pytest.mark.parametrize('query,params', [
+    ("SELECT id FROM worker_tasks WHERE mode IS NOT NULL AND source_turn_id IN (?,?) ORDER BY id", (1, 2)),
+    ("SELECT id FROM worker_tasks WHERE mode IS NOT NULL AND source_turn_id=? ORDER BY id", (1,)),
+    ("SELECT id FROM worker_tasks WHERE member_id=? AND state IN ('queued','running','waiting')", (1,)),
+    ("SELECT id FROM worker_tasks WHERE member_id IN (?,?) AND state IN ('queued','running','waiting') ORDER BY id", (0, 1)),
+    ("SELECT id FROM worker_tasks WHERE mode IS NOT NULL AND COALESCE(report_room_id,room_id)=? ORDER BY id", (1,)),
+    ("SELECT id FROM worker_tasks WHERE mode IS NOT NULL AND COALESCE(report_room_id,room_id)=? AND COALESCE(report_thread_id,thread_id)=? ORDER BY id", (1, 2)),
+    ("SELECT id FROM worker_tasks WHERE turn_id IN (?,?)", (1, 2)),
+])
+def test_startup_task_lookups_use_indexes_after_upgrade(monkeypatch, query, params):
+    with monkeypatch.context() as old:
+        old.setattr(db, 'LATEST_VERSION', 76)
+        conn = db.connect(':memory:')
+    with conn:
+        conn.execute("INSERT INTO worker_tasks(created_at_ms,state,session_id,language,text) VALUES (1,'done','synthetic','en','untouched')")
+    db.migrate(conn)
+    try:
+        plan = [row['detail'] for row in conn.execute('EXPLAIN QUERY PLAN ' + query, params)]
+        assert any('SEARCH worker_tasks USING' in detail for detail in plan), plan
+        assert not any('SCAN worker_tasks' in detail for detail in plan), plan
+        assert conn.execute('SELECT text FROM worker_tasks').fetchone()[0] == 'untouched'
+    finally:
+        conn.close()
 
 
 def test_unread_boundary_migration_preserves_existing_unread_members(monkeypatch, tmp_path):
@@ -361,7 +401,7 @@ SCHEMA_V27 = {
         "stop_requested INTEGER NOT NULL DEFAULT 0", "wrapup_sent INTEGER NOT NULL DEFAULT 0", "reason TEXT NOT NULL DEFAULT ''",
     ],
 }
-LATEST = 76
+LATEST = 78
 
 
 def test_v59_existing_tasks_default_to_no_artifact_and_keep_their_reports(monkeypatch, tmp_path):
@@ -653,7 +693,7 @@ SCHEMA_V74 = {**SCHEMA_V73, "agent_turns": [*SCHEMA_V73["agent_turns"], "failure
 SCHEMA_V75 = {**SCHEMA_V74, "worker_tasks": [*SCHEMA_V74["worker_tasks"], "handback TEXT"]}
 SCHEMA_V76 = {**SCHEMA_V75, "spend": [*SCHEMA_V75["spend"], "job TEXT", "billing TEXT", "cache_read_tokens INTEGER NOT NULL DEFAULT 0", "cache_write_tokens INTEGER NOT NULL DEFAULT 0", "cache_write_long_tokens INTEGER NOT NULL DEFAULT 0", "reasoning_tokens INTEGER NOT NULL DEFAULT 0", "reported_cost_usd REAL", "member_id INTEGER"]}
 
-@pytest.mark.parametrize("start_version, expected_steps", [(version, [step for step in (63, 64, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76) if step > version]) for version in (62, 63, 64, 67, 68, 69, 70, 71, 72, 73, 74, 75)])
+@pytest.mark.parametrize("start_version, expected_steps", [(version, [step for step in (63, 64, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78) if step > version]) for version in (62, 63, 64, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77)])
 def test_latest_upgrade_runs_only_pending_migrations_and_preserves_vault_entries(monkeypatch, tmp_path, start_version, expected_steps):
     path = tmp_path / f"v{start_version}-to-latest.db"
     with monkeypatch.context() as old:

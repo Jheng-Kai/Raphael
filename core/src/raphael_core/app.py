@@ -160,6 +160,7 @@ PROGRESS_INTERVAL_S = 0.1
 # How long closing the app waits for the start-up threads. A thread inside ONNX Runtime cannot be
 # stopped, so after this the process leaves without it.
 SHUTDOWN_PATIENCE_S = 3.0
+STARTUP_GRACE_S = 8
 
 # The key the fake LLM's in-memory key store holds: any key makes the cleanup run.
 _FAKE_KEY = "fake-llm-key"
@@ -791,7 +792,10 @@ class App(Router):
         self.manager = manager
 
         # The database is opened here, on the thread that runs the loop, and used there only.
+        began = time.perf_counter()
         self._conn = connect(paths.db_path(data_dir))
+        logger.info("Startup phase=database elapsed_ms=%.1f", (time.perf_counter() - began) * 1000)
+        began = time.perf_counter()
         try:
             self.keys: KeyStore
             self.client: Any
@@ -1068,6 +1072,8 @@ class App(Router):
         self._threads: list[threading.Thread] = []
         self._closing = threading.Event()
         self._closed = False
+        self._startup_handle: asyncio.TimerHandle | None = None
+        self._deferred_started = False
         self._shutdown_requested = asyncio.Event()
 
         from .voice_chat import VoiceChat
@@ -1092,6 +1098,8 @@ class App(Router):
         }
         for method, handler in methods.items():
             self.register(method, handler)
+
+        logger.info("Startup phase=services elapsed_ms=%.1f", (time.perf_counter() - began) * 1000)
 
     # --- start-up and shutdown ------------------------------------------------------------------
 
@@ -1211,6 +1219,9 @@ class App(Router):
         if self._closed:
             return
         self._closed = True
+        if self._startup_handle is not None:
+            self._startup_handle.cancel()
+            self._startup_handle = None
         self._closing.set()
 
         async def close_dictation() -> None:
@@ -1547,14 +1558,24 @@ class App(Router):
         sent.add_done_callback(lambda t: t.cancelled() or t.exception())
 
     async def _hello(self, params: dict) -> dict:
-        self.vm.start_monitor()
-        self.messaging.start()  # a Telegram bot that was left on polls again
-        self.agent.start()
-        self.agent.prewarm()  # the app is up: read the Start menu now, not at the first "open"
-        self.memory.start()  # and look for turns the reflection pass has not read, soon
-        self.members.start()  # the routines: one missed while the core was not running runs now
-        self.rooms.start()
+        if not self._closed:
+            self.messaging.start()  # Receiving and persistent inbox recovery cannot wait.
+            self.agent.start()
+            self.members.start_ingress()  # Signed webhook deliveries must not wait for routine maintenance.
+            if self._startup_handle is None and not self._deferred_started:
+                self._startup_handle = asyncio.get_running_loop().call_later(STARTUP_GRACE_S, self._start_deferred)
         return {"protocol": PROTOCOL_VERSION, "version": __version__}
+
+    def _start_deferred(self) -> None:
+        self._startup_handle = None
+        if self._closed or self._deferred_started:
+            return
+        self._deferred_started = True
+        for start in (self.vm.start_monitor, self.agent.prewarm, self.memory.start, self.members.start, self.rooms.start):
+            try:
+                start()
+            except Exception:
+                logger.exception("Could not start deferred service %s", start.__qualname__)
 
     async def _shutdown(self, params: dict) -> dict:
         """Close what the app opened, then end the process: the server stops once this is

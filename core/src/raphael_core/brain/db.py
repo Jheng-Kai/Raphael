@@ -6,12 +6,24 @@ use it, so open it on the thread that runs the brain's handlers.
 
 import json
 import sqlite3
+import logging
+import time
 from collections.abc import Callable
 from pathlib import Path
 
 from .mishearing import may_become_rule
 from .room_scope import migrate as _migrate_room_scope
 from .textnorm import replacement_key
+
+logger = logging.getLogger(__name__)
+
+
+def rows_for_turns(conn, table, turn_ids, *, order="rowid"):
+    """Read a projection's rows in bounded batches; identifiers are internal SQL constants."""
+    ids = sorted({int(identifier) for identifier in turn_ids if identifier is not None})
+    for start in range(0, len(ids), 500):
+        chunk = ids[start:start + 500]
+        yield from conn.execute(f"SELECT * FROM {table} WHERE turn_id IN ({','.join('?' for _ in chunk)}) ORDER BY {order}", chunk)
 
 # A migration is one transaction that also sets user_version, so a failure cannot leave half a
 # schema behind with the version still saying "empty". One that has to look at the data is a
@@ -1899,6 +1911,28 @@ PRAGMA user_version = 76;
 COMMIT;
 """
 
+# History and member activity must not read every task's large report on each lookup.
+_MIGRATIONS[77] = """
+BEGIN;
+CREATE INDEX worker_tasks_source_handoff ON worker_tasks(source_turn_id) WHERE mode IS NOT NULL;
+CREATE INDEX worker_tasks_member_state ON worker_tasks(member_id, state);
+CREATE INDEX worker_tasks_turn ON worker_tasks(turn_id);
+CREATE INDEX worker_tasks_room_handoff ON worker_tasks(COALESCE(report_room_id,room_id), COALESCE(report_thread_id,thread_id)) WHERE mode IS NOT NULL;
+PRAGMA user_version = 77;
+COMMIT;
+"""
+
+# Home counts completion metadata without visiting large task/turn report pages.
+_MIGRATIONS[78] = """
+BEGIN;
+CREATE INDEX routine_runs_turn ON routine_runs(turn_id);
+CREATE INDEX routine_runs_home_finished ON routine_runs(status,finished,turn_id,routine_id);
+CREATE INDEX worker_tasks_home_finished ON worker_tasks(state,finished_at_ms,member_id,turn_id);
+CREATE INDEX agent_turns_home_status ON agent_turns(status,source,created_at_ms,member_id);
+PRAGMA user_version = 78;
+COMMIT;
+"""
+
 LATEST_VERSION = max(_MIGRATIONS)
 
 
@@ -1930,6 +1964,7 @@ def migrate(conn: sqlite3.Connection) -> None:
     (version,) = conn.execute("PRAGMA user_version").fetchone()
     for target in sorted(target for target in _MIGRATIONS if version < target <= LATEST_VERSION):
         step = _MIGRATIONS[target]
+        began = time.perf_counter()
         try:
             if callable(step):
                 step(conn)
@@ -1938,3 +1973,4 @@ def migrate(conn: sqlite3.Connection) -> None:
         except BaseException:
             conn.rollback()  # a failed statement leaves the script's transaction open
             raise
+        logger.info("Startup migration=%d elapsed_ms=%.1f", target, (time.perf_counter() - began) * 1000)

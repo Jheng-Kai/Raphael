@@ -15,6 +15,23 @@ def members_rpc(setup):
     team.members.register(rig.rpc)
 
 
+@pytest.mark.parametrize('entry', ['rpc', 'tool', 'batch'])
+async def test_create_without_a_bound_greeting_succeeds_without_a_turn(setup, client, entry):
+    rig, team = setup
+    team.members.greeting = None
+    arguments = {'name': 'Mia', 'role': 'Researcher'}
+    if entry == 'rpc':
+        result = await rig.call('members.create', {**arguments, 'greet': True})
+    elif entry == 'tool':
+        result = await team.members.admin_tool(0, 'member_create', arguments, interactive=True)
+    else:
+        [result] = await team.members.admin_batch(0, [{'name': 'member_create', 'arguments': arguments}], interactive=True)
+    assert result['member']['name'] == 'Mia'
+    assert team.members.greeting is None
+    assert not await rig.turns(member_id=result['member']['id'])
+    assert not client.chat_calls and not rig.service._greeting_tasks
+
+
 @pytest.mark.parametrize('language', ['en', 'zh-TW', 'ja', 'fr'])
 @pytest.mark.parametrize('as_member', [False, True])
 async def test_tool_created_member_starts_one_own_greeting_in_owner_ui_language(setup, client, language, as_member):

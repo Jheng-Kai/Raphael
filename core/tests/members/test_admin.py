@@ -5,8 +5,66 @@ import httpx
 import pytest
 
 from agent.test_narration import chat
+from agent.test_service import until
 from raphael_core.management import publish
 from .test_answering import client, setup, member, typed, live_said  # noqa: F401
+
+
+async def test_failed_batch_rolls_back_members_and_never_starts_a_greeting(setup):
+    from raphael_core.protocol import RpcError
+
+    rig, team = setup
+    notes, greetings = [], []
+    greeting = team.members.greeting
+    def start(identifier, language):
+        greetings.append((identifier, language))
+        return greeting(identifier, language)
+    team.members.greeting = start
+    notify = lambda method, data: notes.append((method, data))
+    team.members._notify = notify
+    remove_picture = team.members._remove_picture
+    before = await rig.call('members.list', {})
+    with pytest.raises(RpcError):
+        await team.members.admin_batch(0, [
+            {'name': 'member_create', 'arguments': {'name': 'FirstOk', 'role': 'Research', 'group': 'Company'}},
+            {'name': 'member_create', 'arguments': {'name': 'X' * 17, 'role': 'Research', 'group': 'Company'}},
+        ], interactive=True)
+    assert await rig.call('members.list', {}) == before
+    assert greetings == notes == []
+    assert not rig.conn.execute("SELECT 1 FROM agent_turns WHERE source='greeting'").fetchone()
+    assert not rig.service._greeting_tasks
+    assert team.members.greeting is start and team.members._notify is notify
+    assert team.members._remove_picture == remove_picture
+    assert not rig.conn.in_transaction
+
+
+async def test_two_created_members_greet_only_after_commit_and_all_notifications(setup, client):
+    rig, team = setup
+    team.members._language = lambda: 'fr'
+    notes, greetings = [], []
+    notify = lambda method, data: notes.append((method, data))
+    team.members._notify = notify
+    greeting = team.members.greeting
+    def start(identifier, language):
+        assert not rig.conn.in_transaction and team.members.store._transaction_depth == 0
+        assert [person.name for person in team.members.store.members()] == ['First', 'Second']
+        assert notes[:2] == [('members.changed', {}), ('members.changed', {})]
+        if not greetings:
+            assert len(notes) == 2  # Later greeting turns may announce their own unread state.
+        assert team.members.greeting is start and team.members._notify is notify
+        greetings.append((identifier, language))
+        return greeting(identifier, language)
+    team.members.greeting = start
+    client.chats = [live_said('Bonjour.'), live_said('Bonjour.')]
+    created = await team.members.admin_batch(0, [
+        {'name': 'member_create', 'arguments': {'name': 'First', 'role': 'Research'}},
+        {'name': 'member_create', 'arguments': {'name': 'Second', 'role': 'Research'}},
+    ], interactive=True)
+    assert greetings == [(result['member']['id'], 'fr') for result in created]
+    turns = rig.conn.execute("SELECT member_id,source FROM agent_turns WHERE source='greeting' ORDER BY id").fetchall()
+    assert [tuple(turn) for turn in turns] == [(identifier, 'greeting') for identifier, _ in greetings]
+    await until(lambda: not rig.service._greeting_tasks)
+    assert len(client.chat_calls) == 2
 
 
 @pytest.fixture(autouse=True)
@@ -49,9 +107,14 @@ async def test_cli_turn_applies_or_denies_the_whole_batch_through_http_mcp(setup
     roles = ("COO", "PM", "RD", "CEO", "CTO", "Marketing", "Finance", "Design")
     existing = {role: member(team, name=role, role="Original") for role in roles} if operation == "member_update" else {}
 
-    runs = []
+    runs, greetings = [], []
 
     async def run(driver, **kwargs):
+        if kwargs.get("no_tools"):
+            greetings.append(kwargs)
+            assert kwargs["session"] is None
+            yield Event("final", "Hello, I am ready to help.")
+            return
         runs.append(kwargs["user"])
         if len(runs) > 1:  # the turn goes on after the owner's yes, told what exists now
             assert approved and "team_changes" in kwargs["user"]
@@ -95,6 +158,10 @@ async def test_cli_turn_applies_or_denies_the_whole_batch_through_http_mcp(setup
     result = await rig.confirm(result["confirm"]["id"], approved)
     assert result["status"] == "done"
     assert len(runs) == (2 if approved else 1)
+    expected_greetings = len(roles) if approved and operation == "member_create" else 0
+    if expected_greetings:
+        await until(lambda: len(greetings) == expected_greetings and not rig.service._greeting_tasks)
+    assert len(greetings) == expected_greetings
     roster = await rig.call("members.list", {})
     assert [item["role"] for item in roster["members"][1:]] == (list(roles) if approved else ["Original"] * len(existing))
     assert len(roster["groups"]) == int(approved)
@@ -176,7 +243,10 @@ async def test_admin_turn_enforces_ten_creates_and_leaves_faces_to_the_app(setup
     rig, team = setup
     rig.settings.set("action_mode", mode)
     calls = chat("Creating the team.", *(("member_create", {"name": f"Member {i}", "role": "RD"}) for i in range(11)))
-    client.chats = [calls, live_said("Draft ready."), live_said("Created ten members.")] if mode == "ask" else [calls, live_said("Created ten members.")]
+    replies = [calls, live_said("Draft ready."), live_said("Created ten members.")] if mode == "ask" else [calls, live_said("Created ten members.")]
+    def answer(**kwargs):
+        return replies.pop(0) if kwargs["tools"] else live_said("Hello, I am ready to help.")
+    client.chats = [answer] * (len(replies) + 10)
     asked = await typed(rig, "Create eleven members", 0, language="en")
     if mode == "ask":
         assert len(asked["confirm"]["drafts"]) == 10
@@ -184,7 +254,11 @@ async def test_admin_turn_enforces_ten_creates_and_leaves_faces_to_the_app(setup
     roster = (await rig.call("members.list", {}))["members"][1:]
     assert len(roster) == 10
     assert all(item["avatar"] == "" for item in roster)
-    assert "member_create_limit" in client.chat_calls[1]["messages"][-1]["content"]
+    await until(lambda: not rig.service._greeting_tasks)
+    management_calls = [call for call in client.chat_calls if call["tools"]]
+    greeting_calls = [call for call in client.chat_calls if not call["tools"]]
+    assert "member_create_limit" in management_calls[1]["messages"][-1]["content"]
+    assert len(greeting_calls) == 10
 
 
 async def test_member_create_reports_invalid_fields_without_failing_the_turn(setup, client):

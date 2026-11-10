@@ -125,11 +125,11 @@ class MessagingCards:
         return {key: row[key] for key in ("id", "platform", "member_id", "code", "who", "expires_at_ms", "state")}
 
     def views(self, ids):
+        from ..brain.db import rows_for_turns
         self.sweep()
         result = {}
-        for identifier in ids:
-            for row in self.conn.execute("SELECT * FROM messaging_pairing_cards WHERE turn_id=? ORDER BY rowid", (identifier,)):
-                result.setdefault(identifier, []).append(self.view(row))
+        for row in rows_for_turns(self.conn, "messaging_pairing_cards", ids):
+            result.setdefault(row["turn_id"], []).append(self.view(row))
         return result
 
     def close(self):

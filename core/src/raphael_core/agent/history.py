@@ -390,6 +390,17 @@ class AgentHistory:
         ).fetchone()
         return None if row is None else _to_turn(row)
 
+    def get_many(self, turn_ids) -> dict[int, Turn]:
+        ids = sorted(set(turn_ids))
+        found = {}
+        for start in range(0, len(ids), 500):
+            chunk = ids[start:start + 500]
+            for row in self._conn.execute(
+                f"SELECT {_COLUMNS} FROM agent_turns WHERE id IN ({','.join('?' for _ in chunk)})", chunk):
+                turn = _to_turn(row)
+                found[turn.id] = turn
+        return found
+
     def add_message(self, turn_id: int, kind: str, text: str) -> None:
         """Commit one visible line immediately; cleared turns are never resurrected."""
         if kind not in ("progress", "reply", "event", "thinking", "media"):

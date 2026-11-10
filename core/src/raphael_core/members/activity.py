@@ -48,6 +48,7 @@ class Activity:
         self.published = {}
         self.task_states = {}
         self.task_source = None
+        self.task_batch_source = None
         self.owner_waiting = lambda: set()
         self.viewing = lambda: None
         self.language = lambda: "zh-TW"
@@ -63,8 +64,8 @@ class Activity:
     def task_list(self, member_id):
         return self.task_source(member_id) if self.task_source else self.task_states.get(member_id, ())
 
-    def describe(self, member_id, waiting=None):
-        tasks = self.task_list(member_id)
+    def describe(self, member_id, waiting=None, *, tasks=None):
+        tasks = self.task_list(member_id) if tasks is None else tasks
         state = self.state(member_id, tasks=tasks, waiting=waiting)
         return state, self.label(member_id, state, tasks=tasks)
 

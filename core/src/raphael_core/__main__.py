@@ -22,6 +22,8 @@ module brings in OpenCC, and its start-up thread ONNX Runtime and PortAudio. Wha
 fd 1 goes to stderr, with the log.
 """
 
+from raphael_core.startup import elapsed_ms
+
 import logging
 import faulthandler
 import os
@@ -57,6 +59,7 @@ def main() -> None:
         logging.info("Native startup core delay_ms=%s", delay_ms)
         time.sleep(delay_ms / 1000)
     from raphael_core import app as app_module  # native libraries: only after the claim
+    logging.info("Startup phase=app_import since_process_start_ms=%.1f", elapsed_ms())
 
     data_dir = os.environ.get("RAPHAEL_DATA_DIR")
     fake_audio = os.environ.get("RAPHAEL_FAKE_AUDIO")

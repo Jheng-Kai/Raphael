@@ -82,11 +82,11 @@ class TemplateCards:
         return result
 
     def views(self, ids):
+        from ..brain.db import rows_for_turns
         result = {}
-        for identifier in ids:
-            for row in self.conn.execute("SELECT * FROM member_template_cards WHERE turn_id=? ORDER BY rowid", (identifier,)):
-                value = json.loads(row["template"])
-                result.setdefault(identifier, []).append({"id": row["id"], "state": row["state"], "name": value["name"], "avatar": row["avatar"],
-                    "description": value.get("description", ""), "counts": {"skills": len(value["skills"]), "routines": len(value["routines"])},
-                    "connections": value["connections"], "findings": json.loads(row["findings"]), **({"url": row["url"]} if row["url"] else {})})
+        for row in rows_for_turns(self.conn, "member_template_cards", ids):
+            value = json.loads(row["template"])
+            result.setdefault(row["turn_id"], []).append({"id": row["id"], "state": row["state"], "name": value["name"], "avatar": row["avatar"],
+                "description": value.get("description", ""), "counts": {"skills": len(value["skills"]), "routines": len(value["routines"])},
+                "connections": value["connections"], "findings": json.loads(row["findings"]), **({"url": row["url"]} if row["url"] else {})})
         return result

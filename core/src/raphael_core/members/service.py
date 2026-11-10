@@ -313,6 +313,7 @@ class MembersService:
         self._events = None
         self._event_poll_task: asyncio.Task | None = None
         self._ticking: asyncio.Task[None] | None = None
+        self._ingress_start: asyncio.Task[None] | None = None
         from .webhooks import Webhooks
         from ..integrations.vault import MemoryVault
         self.webhooks = Webhooks(self, vault if vault is not None else MemoryVault())
@@ -616,10 +617,10 @@ class MembersService:
     # --- views ---------------------------------------------------------------------------------------
 
     def _member_view(
-        self, member: Member, unread: dict[int, int | None], waiting: set[int], latest: dict[int, Turn]
+        self, member: Member, unread: dict[int, int | None], waiting: set[int], latest: dict[int, Turn], *, tasks=None
     ) -> dict[str, Any]:
         last = latest.get(member.id)
-        activity, activity_label = self.activity.describe(member.id, waiting)
+        activity, activity_label = self.activity.describe(member.id, waiting, tasks=tasks)
         view: dict[str, Any] = {
             **{field: getattr(member, field) for field in PROFILE_FIELDS},
             "id": member.id,
@@ -650,10 +651,10 @@ class MembersService:
         return view
 
     def _raphael_view(
-        self, language: str, unread: dict[int, int | None], waiting: set[int], latest: dict[int, Turn]
+        self, language: str, unread: dict[int, int | None], waiting: set[int], latest: dict[int, Turn], *, tasks=None
     ) -> dict[str, Any]:
         last = latest.get(0)
-        activity, activity_label = self.activity.describe(0, waiting)
+        activity, activity_label = self.activity.describe(0, waiting, tasks=tasks)
         view: dict[str, Any] = {
             "blurb": "", "reply_style": "full", "voice": "",
             "notify": self._settings.get("raphael_notify"), "ask_before_members": False, "pinned": self._chief_pinned(), "hidden": False, "draft_first": self._settings.get("raphael_draft_first"),
@@ -924,8 +925,11 @@ class MembersService:
         unread = self.store.unread_from()
         waiting = self.waiting_members()
         latest = self._history.latest_by_member()
-        members = [self._raphael_view(language, unread, waiting, latest)]
-        members += [self._member_view(m, unread, waiting, latest) for m in self.store.members()]
+        roster = self.store.members()
+        task_source = self.activity.task_batch_source
+        tasks = task_source([0, *(m.id for m in roster)]) if task_source else None
+        members = [self._raphael_view(language, unread, waiting, latest, tasks=tasks.get(0, []) if tasks is not None else None)]
+        members += [self._member_view(m, unread, waiting, latest, tasks=tasks.get(m.id, []) if tasks is not None else None) for m in roster]
         return {"members": members, "groups": [group_view(g) for g in self.store.groups()],
                 "team_context": self.team_context(0, language)}
 
@@ -993,7 +997,7 @@ class MembersService:
         group = None if member.group_id is None else self.store.group(member.group_id)
         language = self._ui_language(params)
         offer = routine_template(group.sources if group else (), language)
-        if params.get("greet") is True:
+        if params.get("greet") is True and self.greeting is not None:
             self.greeting(member.id, language)
         self._changed()
         return {"member": self.view_of(member), "routine_offer": offer}
@@ -1589,21 +1593,25 @@ class MembersService:
             raise invalid_params("edited drafts exceed the proposed scope")
         if not planned:
             return []
-        notifications, pictures = [], []
-        notify, remove_picture = self._notify, self._remove_picture
+        notifications, pictures, greetings = [], [], []
+        notify, remove_picture, greeting = self._notify, self._remove_picture, self.greeting
         self._notify = lambda method, data: notifications.append((method, data))
         self._remove_picture = pictures.append
+        self.greeting = (lambda identifier, language: greetings.append((identifier, language))) if greeting is not None else None
         try:
             with self.store.transaction():
                 results = [await self.admin_tool(member_id, "member_create" if op["name"] == "create_member" else op["name"], op["arguments"], interactive=True)
                            for op in planned]
         finally:
-            self._notify, self._remove_picture = notify, remove_picture
+            self._notify, self._remove_picture, self.greeting = notify, remove_picture, greeting
         for picture in pictures:
             remove_picture(picture)
         if notify is not None:
             for method, data in notifications:
                 notify(method, data)
+        if greeting is not None:
+            for identifier, language in greetings:
+                greeting(identifier, language)
         return results
 
     @staticmethod
@@ -1989,6 +1997,17 @@ class MembersService:
             except Exception as exc:
                 logger.warning("The event routines could not be checked: %s", type(exc).__name__)
 
+    def start_ingress(self) -> None:
+        """Listen for signed webhook deliveries without starting scheduled or model work."""
+        if self._ingress_start is None:
+            self._ingress_start = asyncio.get_running_loop().create_task(self._start_ingress())
+
+    async def _start_ingress(self) -> None:
+        try:
+            await self.webhooks.sync()
+        except Exception as exc:
+            logger.warning("The webhook receiver could not be started: %s", type(exc).__name__)
+
     def start(self) -> None:
         """Tick from now on, every TICK_S, the first time at once (a routine that was missed while
         the core was not running). Needs the running loop; does nothing without one, or twice."""
@@ -2148,6 +2167,10 @@ class MembersService:
         return task_id
 
     async def aclose(self) -> None:
+        ingress, self._ingress_start = self._ingress_start, None
+        if ingress is not None:
+            ingress.cancel()
+            await asyncio.gather(ingress, return_exceptions=True)
         ticking, self._ticking = self._ticking, None
         if ticking is not None and not ticking.done():
             ticking.cancel()
