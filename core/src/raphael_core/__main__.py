@@ -25,7 +25,6 @@ fd 1 goes to stderr, with the log.
 from raphael_core.startup import elapsed_ms
 
 import faulthandler
-import importlib
 import logging
 import os
 import sys
@@ -46,8 +45,11 @@ def import_speech_libraries() -> None:
 
 
 def load_application() -> object:
-    """The application module: the slow part of start-up besides the speech libraries."""
-    return importlib.import_module("raphael_core.app")
+    """The application module: the slow part of start-up besides the speech libraries. A plain import
+    statement, not a name looked up at run time: the frozen build bundles only the modules its analysis can see."""
+    from raphael_core import app
+
+    return app
 
 
 def main() -> None:
