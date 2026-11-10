@@ -3,12 +3,15 @@ import { join, resolve } from "node:path";
 import { coreCheck } from "./guardian.mjs";
 
 const app = resolve(import.meta.dirname, ".."), root = resolve(app, "..");
+// A developer's machine runs two Vitest workers (it is shared with other work). A hosted CI runner (4 cores
+// are expected; one CI run confirms it) has them to itself, so it runs three.
+const CI_WORKERS = 3;
 
 /** The checks one verify run makes, in order. `directory` is the run's own folder, `judge` a look run to review. */
 export function verifyChecks({ args, directory, judge, environment = process.env }) {
   const checks = [
     { name: "tsc", command: process.execPath, args: [join(app, "node_modules/typescript/bin/tsc"), "--noEmit"], cwd: app },
-    { name: "vitest", command: process.execPath, args: [join(app, "node_modules/vitest/vitest.mjs"), "run", "--configLoader", "runner", "--maxWorkers=2", "--no-cache", "--fsModuleCachePath", join(directory, "vitest-cache")], cwd: app },
+    { name: "vitest", command: process.execPath, args: [join(app, "node_modules/vitest/vitest.mjs"), "run", "--configLoader", "runner", `--maxWorkers=${environment.CI ? CI_WORKERS : 2}`, "--no-cache", "--fsModuleCachePath", join(directory, "vitest-cache")], cwd: app },
   ];
   if (!args.includes("--quick")) checks.push({ name: "contrast", command: process.execPath, args: [join(app, "scripts/check-palette.mjs")], cwd: app });
   if (args.includes("--core")) {

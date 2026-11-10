@@ -14,6 +14,6 @@ export default defineConfig({
     css: { include: [/report-page\.css/] },
     // Bound process startup and native locale initialization on shared CI runners.
     // Keep per-file isolation and the default test deadline intact.
-    maxWorkers: process.env.CI ? 2 : undefined,
+    maxWorkers: process.env.CI ? 3 : undefined,
   },
 });

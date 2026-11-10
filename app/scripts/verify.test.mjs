@@ -9,6 +9,11 @@ describe("the checks of a verify run", () => {
   it("checks Rust formatting on every run of a developer's machine, where it costs a second", () => {
     expect(names([])).toEqual(["tsc", "vitest", "contrast", "rustfmt"]);
   });
+  it("runs more Vitest workers in CI than on a developer's shared machine", () => {
+    const workers = environment => verifyChecks({ args: [], directory: "run", environment }).find(check => check.name === "vitest").args.find(arg => arg.startsWith("--maxWorkers="));
+    expect(workers({})).toBe("--maxWorkers=2");
+    expect(workers({ CI: "true" })).toBe("--maxWorkers=3");
+  });
   it("leaves formatting to CI's Rust job, which pins the toolchain", () => {
     expect(names([], { CI: "true" })).toEqual(["tsc", "vitest", "contrast"]);
     expect(names(["--rust"], { CI: "true" })).toEqual(["tsc", "vitest", "contrast", "rustfmt", "cargo", "listener", "clippy"]);

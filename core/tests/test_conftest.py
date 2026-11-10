@@ -6,6 +6,7 @@ from pathlib import Path
 
 import conftest
 import pytest
+import shard_durations
 
 
 @pytest.fixture(autouse=True)
@@ -149,3 +150,88 @@ def test_a_share_that_cannot_exist_stops_the_run(monkeypatch, wanted):
     monkeypatch.setenv("RAPHAEL_TEST_SHARE", wanted)
     with pytest.raises(pytest.UsageError):
         conftest.keep_this_share(Deselections(), collected_suite())
+
+
+def test_a_slow_file_is_dealt_by_its_seconds_not_its_tests():
+    files = ["slow.py"] * 2 + ["a.py"] * 5 + ["b.py"] * 5 + ["c.py"] * 5
+    # By tests, slow.py is the smallest and shares a machine with a 5-test file; by seconds it
+    # weighs as much as the other three together, so it stands alone.
+    by_tests = conftest.deal_files(files, 2)
+    by_seconds = conftest.deal_files(files, 2, {"slow.py": 30.0, "a.py": 10.0, "b.py": 10.0, "c.py": 10.0})
+    assert by_tests["slow.py"] == by_tests["b.py"]
+    assert len({by_seconds[name] for name in ("a.py", "b.py", "c.py")}) == 1
+    assert by_seconds["slow.py"] != by_seconds["a.py"]
+
+
+def test_a_file_without_a_record_weighs_its_tests_at_the_average_rate():
+    # known.py took 10 s for 5 tests: 2 s a test. new.py has 3 tests and no record, so it weighs 6 s,
+    # more than solo.py's 5 s, and is dealt before it.
+    weights = shard_durations.weights({"known.py": 5, "new.py": 3, "solo.py": 1}, {"known.py": 10.0, "solo.py": 5.0})
+    assert weights == {"known.py": 10.0, "new.py": 3 * (15.0 / 6), "solo.py": 5.0}
+
+
+def test_without_any_record_every_test_weighs_the_same():
+    assert shard_durations.weights({"a.py": 4, "b.py": 1}, {}) == {"a.py": 4.0, "b.py": 1.0}
+    assert shard_durations.weights({"a.py": 4}, {"other.py": 9.0}) == {"a.py": 4.0}
+
+
+def test_every_machine_deals_the_same_way(monkeypatch):
+    seconds = {"tests/a/test_three.py": 40.0, "tests/test_two.py": 1.0}
+    monkeypatch.setattr(shard_durations, "read_record", lambda path: seconds)
+    suite = collected_suite()
+    ran: list[str] = []
+    for index in (1, 2, 3):
+        kept, left_out = share_of(suite, f"{index}/3", monkeypatch)
+        assert sorted(kept + left_out) == sorted(ids(suite))
+        ran += kept
+    assert sorted(ran) == sorted(ids(suite))
+
+
+def test_the_record_in_the_repository_is_well_formed():
+    seconds = shard_durations.read_record(shard_durations.RECORD)
+    assert all(file.startswith("tests/") and file.endswith(".py") for file in seconds)
+    # Every file in it still exists; a renamed or deleted file is a stale entry to drop on refresh.
+    root = shard_durations.RECORD.parent.parent
+    assert [file for file in seconds if not (root / file).is_file()] == []
+
+
+def test_a_malformed_record_stops_the_run(tmp_path):
+    for body in ("not json", "[1]", '{"a.py": "slow"}', '{"a.py": -1}', '{"a.py": true}'):
+        path = tmp_path / "record.json"
+        path.write_text(body, encoding="utf-8")
+        with pytest.raises(ValueError, match="not a duration record"):
+            shard_durations.read_record(path)
+    assert shard_durations.read_record(tmp_path / "missing.json") == {}
+
+
+def test_recording_adds_up_each_file_and_keeps_what_a_run_did_not_touch(tmp_path, monkeypatch):
+    target = tmp_path / "record.json"
+    shard_durations.write_record(target, {"tests/old.py": 3.0, "tests/again.py": 9.0})
+    monkeypatch.setenv("RAPHAEL_RECORD_DURATIONS", str(target))
+    monkeypatch.setattr(conftest, "_RECORDED", {})
+
+    class Report:
+        def __init__(self, nodeid: str, duration: float) -> None:
+            self.nodeid, self.duration = nodeid, duration
+
+    for nodeid, duration in [("tests/again.py::test_a[1]", 0.5), ("tests/again.py::test_b", 1.25), ("tests/new.py::test_c", 2.0)]:
+        conftest.pytest_runtest_logreport(Report(nodeid, duration))
+    conftest.pytest_sessionfinish(None)
+    assert shard_durations.read_record(target) == {"tests/old.py": 3.0, "tests/again.py": 1.75, "tests/new.py": 2.0}
+
+
+def test_nothing_is_recorded_unless_asked_for(tmp_path, monkeypatch):
+    monkeypatch.delenv("RAPHAEL_RECORD_DURATIONS", raising=False)
+    monkeypatch.setattr(conftest, "_RECORDED", {})
+    conftest.pytest_runtest_logreport(type("Report", (), {"nodeid": "tests/x.py::t", "duration": 1.0})())
+    assert conftest._RECORDED == {}
+
+
+def test_the_merge_command_joins_the_machines_records(tmp_path, capsys):
+    first, second, target = tmp_path / "1.json", tmp_path / "2.json", tmp_path / "record.json"
+    shard_durations.write_record(first, {"tests/a.py": 1.0})
+    shard_durations.write_record(second, {"tests/b.py": 2.0})
+    assert shard_durations.main(["shard_durations.py", "merge", str(target), str(first), str(second)]) == 0
+    assert shard_durations.read_record(target) == {"tests/a.py": 1.0, "tests/b.py": 2.0}
+    assert "2 files" in capsys.readouterr().out
+    assert shard_durations.main(["shard_durations.py"]) == 2
