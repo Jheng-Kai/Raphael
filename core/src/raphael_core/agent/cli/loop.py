@@ -756,9 +756,10 @@ class CliLoop:
                             self.progress((self.failure_reason or Failure(failure, failure)).waiting(NAMES[name], self.language, wait))
                         elif not told:
                             told = True
+                            # While it still asks again it says that it waits. A busy or unreachable CLI used to get
+                            # the sentence of a turn that has failed ("choose another model") for a call about to be repeated.
                             self.progress(self._rate_limit_wait(NAMES[name], wait) if failure == "rate_limit" else
-                                          self.failure_reason.waiting(NAMES[name], self.language, wait) if failure == "cli_stopped" and self.failure_reason else
-                                          Failure(failure, self.failure_reason.reason if self.failure_reason else failure).sentence(NAMES[name], self.language))
+                                          (self.failure_reason or Failure(failure, failure)).waiting(NAMES[name], self.language, wait))
                         # The next attempt has all of its own time, after a wait that is no stall (Hermes's delegate heartbeat).
                         self.alive(wait)
                         await asyncio.sleep(wait)

@@ -608,34 +608,6 @@ class Driver:
                 return
 
 
-_STATUS_KEYS = frozenset({"httpStatusCode", "http_status_code", "statusCode", "status_code", "status"})
-
-
-def too_many_requests(error):
-    """Whether a CLI's error object carries HTTP 429 or "Too Many Requests" at any depth."""
-    if isinstance(error, dict):
-        return any(key in _STATUS_KEYS and value in (429, "429") or too_many_requests(value) for key, value in error.items())
-    if isinstance(error, list):
-        return any(too_many_requests(value) for value in error)
-    return isinstance(error, str) and "too many requests" in error.lower()
-
-
-def server_overloaded(error):
-    """Whether a CLI's error object says the model is at capacity for now (Codex's `serverOverloaded`)."""
-    if isinstance(error, dict):
-        return any(server_overloaded(key) or server_overloaded(value) for key, value in error.items())
-    if isinstance(error, list):
-        return any(server_overloaded(value) for value in error)
-    return isinstance(error, str) and (error.replace("_", "").casefold() == "serveroverloaded"
-                                       or "at capacity" in error.casefold())
-
-
-def passing_limit(error):
-    """A limit that passes if the turn waits: HTTP 429, or a model at capacity. Live, a Codex turn that resumed a
-    task got "Selected model is at capacity", and the owner was told to check the CLI's login."""
-    return too_many_requests(error) or server_overloaded(error)
-
-
 async def codex_home(workspace, environ, *, owner=None):
     """Private persistent state outside the workspace; borrow login without refresh authority.
 

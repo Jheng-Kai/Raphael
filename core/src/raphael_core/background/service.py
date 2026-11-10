@@ -1554,6 +1554,8 @@ class BackgroundService:
         run.tool_allowed = lambda key: bool((current := self._speaker(task.member_id)) and current.uses_plugin(key))
         snapshot.tool_allowed = run.tool_allowed
         run.room_speech = task.scope == "room"
+        # A reply's short window is for the model's silence: a tool it waits on has a task's own (`TaskRun._call`).
+        run.tool_seconds = self._limits.seconds
         run.action = lambda name, arguments: action_scope(self._history, task.turn_id, language,
             snapshot.refs[name].name if name in snapshot.refs else name, arguments,
             server=snapshot.refs[name].server if name in snapshot.refs else None,
