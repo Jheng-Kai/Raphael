@@ -81,8 +81,9 @@ export default [
     ...Array.from({ length: 9 }, () => key("Tab")), key("Enter"), check("store-group-end"),
     click('[data-conn="store-group"][data-id="productivity"]'), check("plugins-store-category"), check("plugins-store-rows"),
   ], { pluginsMany: true }),
-  scene("plugins-store-wheel", "The mouse wheel and the arrows move the category chips sideways", [
-    ...store, check("plugins-store-groups"), { action: "wheel", selector: ".cs-store-groups", deltaY: 300 }, check("store-groups-wheel"), check("plugins-store-groups"),
+  // The ten category chips fit the sheet from 1120 px up (nothing to scroll, no arrows), so this scene measures the sheet at 720 px, the width where they overflow.
+  scene("plugins-store-wheel", "At 720 px, where the categories overflow their row, the mouse wheel and the arrows move the chips sideways", [
+    { action: "viewport", width: 720, height: 900 }, ...store, check("plugins-store-groups"), { action: "wheel", selector: ".cs-store-groups", deltaY: 300 }, check("store-groups-wheel"), check("plugins-store-groups"),
     click('[data-chip-step="-1"]'), wait('[data-chip-row]:not([data-more-before])'), check("store-groups-start"), check("plugins-store-groups"),
   ], { pluginsMany: true }),
   scene("plugins-store-search", "Search reaches a late catalog result by keyboard", [

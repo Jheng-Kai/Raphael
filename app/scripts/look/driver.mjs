@@ -369,8 +369,9 @@ export async function perform(page, step, evidenceDirectory) {
         if (!await page.$eval(selector, el => { const r=el.getBoundingClientRect(); return el.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)); })) throw new Error('caption is covered');
         await click(selector);
       }
-      if (!await page.$eval('[data-window-drag]', el => { const r=el.getBoundingClientRect(); return el.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)); })) throw new Error('caption drag area is covered');
-      await click('[data-window-drag]');
+      // The caption's own strip (index.html) stands above every dialog. The sidebar's top row is a second drag area (owner, 2026-11-08), which a modal dialog rightly covers.
+      if (!await page.$eval('.window-chrome [data-window-drag]', el => { const r=el.getBoundingClientRect(); return el.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)); })) throw new Error('caption drag area is covered');
+      await click('.window-chrome [data-window-drag]');
       await page.evaluate(() => new Promise(resolve => setTimeout(resolve, 50)));
       const result = await page.evaluate(before => {
         const calls = window.__look.calls.slice(before).map(c=>c.command);
@@ -383,7 +384,7 @@ export async function perform(page, step, evidenceDirectory) {
       await page.waitForFunction(el => !el.isConnected || !!el.closest('[hidden]'), {timeout:2000}, dialog);
       await dialog.dispose();
       if (step.kind === 'settings') await click('#nav [data-go="settings"]');
-      else if (step.kind === 'member') { await perform(page, {action:'open-details'}, evidenceDirectory); await click('.mb-det [data-det="routine-add"]'); }
+      else if (step.kind === 'member') { await perform(page, {action:'open-details'}, evidenceDirectory); await click('.mb-det [data-det="routine-open"]'); }
       else { await click('[data-room-menu]'); await click('[data-pick="delete"]'); }
       await page.evaluate(() => { window.__polishCaptionOutside = true; });
       break;
