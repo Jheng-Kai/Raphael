@@ -323,7 +323,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       drawDock();
       drawFaces();
       drawConversation();
-      hi.textContent = emptyLine();
+      sayHi(emptyLine());
       draftPanel.redraw();
       if (visible && !scroller.hidden) drawThread();
     },
@@ -462,10 +462,10 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     const names: Record<string, string> = { codex: "Codex", claude: "Claude", gemini: "Antigravity" };
     const time = (ms: number): string => new Intl.DateTimeFormat(getLocale(), { hour: "numeric", minute: "2-digit" })
       .formatToParts(new Date(ms)).map(part => part.type === "dayPeriod" ? `${part.value} ` : part.value).join("").trim();
-    quotaHost.innerHTML = quotas.map(q => `<span class="quota-chip" role="status">${ico("clock")}<span>${esc(t("chat.quota", { p0: names[q.provider] ?? q.provider }))}${q.reset_at_ms ? esc(t("chat.quotaReset", { p0: time(q.reset_at_ms) })) : ""}</span></span>`).join("");
+    patchHTML(quotaHost, quotas.map(q => `<span class="quota-chip" role="status">${ico("clock")}<span>${esc(t("chat.quota", { p0: names[q.provider] ?? q.provider }))}${q.reset_at_ms ? esc(t("chat.quotaReset", { p0: time(q.reset_at_ms) })) : ""}</span></span>`).join(""));
     quotaHost.hidden = quotas.length === 0;
     if (quotaHost.hidden) quotaHost.remove();
-    else composer.before(quotaHost);
+    else if (quotaHost.nextElementSibling !== composer) composer.before(quotaHost);
     const next = Math.min(...quotas.map(q => q.reset_at_ms ?? Infinity));
     if (Number.isFinite(next)) quotaTimer = setTimeout(drawQuotas, Math.min(2_147_483_647, Math.max(1, next - now)));
   }
@@ -734,6 +734,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
 
   /** The words of the empty page: Raphael's greeting, or the member's name. */
   const emptyLine = (): string => (inRaphael() ? greetingLine() : members.member().name);
+  const sayHi = (words: string): void => { if (hi.textContent !== words) hi.textContent = words; };
 
   /** The words of the composer, the card and the search, in the language of the window. */
   function drawWords(): void {
@@ -749,7 +750,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       button.setAttribute("aria-label", label);
       button.title = label;
     }
-    hi.textContent = emptyLine();
+    sayHi(emptyLine());
     drawAskLabels();
     drawConversation();
     askCard.setAttribute("aria-label", t("agent.asking"));
@@ -924,7 +925,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
           return renderedTurns.line(item.key, historyRevisions.get(turn) ?? turn, [presentationVersion, getLocale(), turn.route === "greeting" ? shape.greetingOpen : false, shape.mentions, turnLook.query ?? "", details.has(turn.id),
             state.open.get(turn.id), state.thinkingOpen.get(turn.id), expanded, task !== undefined && state.stopping.has(task), task !== undefined && state.rerunning.has(task),
             state.workStartedAt.get(turn.id), view.messages?.length, pacing.waiting(turn.id), desktop.waitingForOwner(turn.id),
-            live ? turnLook.deferPresence : false, live ? shape.activityLabel : "", turn.permissions?.some(card => shape.answerable?.(card.id)), turn.id === latestFailedTurnId,
+            live ? turnLook.deferPresence : false, live ? shape.activityLabel : "", live ? members.member().activity ?? "" : "", turn.permissions?.some(card => shape.answerable?.(card.id)), turn.id === latestFailedTurnId,
             item.together?.map(earlier => `${earlier.id}:${earlier.status}:${earlier.messages?.length ?? 0}`).join(",") ?? ""],
             () => turnHTML(view, state, details.has(turn.id), { ...turnLook, regenerateTurnId: turn.id, latestFailedTurnId, exchangeTogether: item.together }));
         })(), turnId: item.turn.id },
@@ -1041,7 +1042,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       scroller.hidden = dock.hidden = true;
       empty.hidden = false;
       empty.classList.toggle("is-failed", failure !== null);
-      hi.textContent = failure ? `${t("agent.loadFailed")} ${failure()}` : emptyLine();
+      sayHi(failure ? `${t("agent.loadFailed")} ${failure()}` : emptyLine());
       drawDock();
       stopTicker();
       return;
@@ -1063,8 +1064,11 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     markSeen(shown, state);
     none.hidden = true;
     finder.refresh();
-    older.hidden = !loadingEarlier;
-    older.innerHTML = loadingEarlier ? loadingHTML() : "";
+    // Written only when loading starts or stops: a draw that changes nothing touches nothing (R-SLIME-02).
+    if (older.hidden === loadingEarlier) {
+      older.hidden = !loadingEarlier;
+      older.innerHTML = loadingEarlier ? loadingHTML() : "";
+    }
     if (keepUp && (follow || wasEmpty)) followRichScroll(scroller);
     if (thread.querySelector(".work-section.is-live")) startTicker();
     else stopTicker();
@@ -1790,7 +1794,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     fit();
     drawComposer();
     drawFaces();
-    hi.textContent = emptyLine();
+    sayHi(emptyLine());
     // the card of another thread's question goes, and this thread's comes
     delete askCard.dataset.id;
     // The thread is asked for first: the core answers in order, and the rest of the page can wait for it (owner,

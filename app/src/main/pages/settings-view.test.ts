@@ -730,14 +730,20 @@ describe("電腦操作", () => {
   });
 
   test('host health separates states and offers an exact copyable repair where it must be run', () => {
-    const html = computerHostHealthHTML({host:'studio-mini',ok:false,checks:[{kind:'docker_path',ok:false}]});
+    // The core names the class and sends the one command; the panel pastes it as it stands and says where to run it.
+    const command = `ssh studio-mini "echo 'export PATH=\\$PATH:/Applications/Docker.app/Contents/Resources/bin' >> ~/.zshenv"`;
+    const html = computerHostHealthHTML({host:'studio-mini',ok:false,checks:[{kind:'docker_path',ok:false,command}]});
     expect(html).toContain('data-computer-host-health');
     expect(html).not.toContain('非互動 SSH PATH');
     expect(html).toContain('遠端登入時找不到 Docker');
-    expect(html).toContain('那台 Mac 的終端機');
+    expect(html).toContain('在這台電腦的終端機');
+    expect(html).not.toContain('那台 Mac 的終端機');
+    expect(html).toContain('data-computer-host-repair');
     expect(html).toContain('data-act="copy-code"');
     expect(html).toContain('~/.zshenv');
     expect(html).toContain('/Applications/Docker.app/Contents/Resources/bin');
+    // The panel never invents a command: a failure the core sent none for shows no repair.
+    expect(computerHostHealthHTML({host:'studio-mini',ok:false,checks:[{kind:'docker_path',ok:false}]})).not.toContain('data-computer-host-repair');
   });
 
 });
