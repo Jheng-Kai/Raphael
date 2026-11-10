@@ -144,3 +144,31 @@ test('commands and enabled skills share grouped completion, plugin attribution a
   expect(document.querySelector('#app-popover')).toBeNull();
   menu.destroy();
 });
+
+test('a member change reads nothing for a closed menu, and the next slash reads the skills it may have added', async () => {
+  const { input, menu } = setup(); type(input, '/'); await flush();
+  type(input, ''); input.dispatchEvent(new Event('blur'));
+  vi.mocked(membersCommandsList).mockClear(); vi.mocked(membersSkillsList).mockClear();
+  // A busy team announces its members many times a second.
+  for (let i = 0; i < 20; i++) menu.invalidate();
+  await flush();
+  expect(membersCommandsList).not.toHaveBeenCalled(); expect(membersSkillsList).not.toHaveBeenCalled();
+  vi.mocked(membersSkillsList).mockResolvedValue({ skills: [{ id: 10, name: 'brand-new', description: 'Added a moment ago', source: 'owner', enabled: true, slash_name: 'brand-new' }] });
+  input.focus(); type(input, '/'); await flush();
+  expect(membersSkillsList).toHaveBeenCalledTimes(1);
+  expect(document.querySelector('.slash-menu')!.textContent).toContain('brand-new');
+  // Read, it is fresh: typing on does not read again.
+  type(input, '/b'); await flush();
+  expect(membersSkillsList).toHaveBeenCalledTimes(1);
+  menu.destroy();
+});
+
+test('a member change while the menu is open reads again at once', async () => {
+  const { input, menu } = setup(); type(input, '/'); await flush();
+  vi.mocked(membersSkillsList).mockClear();
+  vi.mocked(membersSkillsList).mockResolvedValue({ skills: [{ id: 10, name: 'just-added', description: 'x', source: 'owner', enabled: true, slash_name: 'just-added' }] });
+  menu.invalidate(); await flush();
+  expect(membersSkillsList).toHaveBeenCalledTimes(1);
+  expect(document.querySelector('.slash-menu')!.textContent).toContain('just-added');
+  menu.destroy();
+});

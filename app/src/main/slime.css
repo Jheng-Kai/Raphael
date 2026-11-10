@@ -84,7 +84,6 @@ html[data-window-hidden] *, html[data-window-hidden] *::before, html[data-window
 .slime-cel-eye { stroke-width: var(--eye-w); }
 
 @keyframes slime-idle-hide { from { visibility: visible; } to { visibility: hidden; } }
-@keyframes slime-idle-show { from { visibility: hidden; } to { visibility: visible; } }
 
 /* Eyes dart and rest; they never drift like a sine wave. */
 /* The lid falls fast, rests, and lifts slower with a small overshoot; every second one comes in a pair. */
@@ -399,9 +398,13 @@ html[data-window-hidden] *, html[data-window-hidden] *::before, html[data-window
 @container (width <= 72px) {
   .slime-loop { display: block; }
   .slime-surface:has(> .slime-loop) > .slime { visibility: hidden; }
-  .slime-surface:has(> .slime[data-transitioning]) > .slime-loop { animation: slime-idle-show 320ms steps(1, end) both; }
+  /* Strips still going in (slime.ts mountStrips) are styled out of sight and show together; the vector stands meanwhile.
+     Their showing is the strip's opacity, not its visibility: that is inherited, and flipping it styled every cel again (150 ms and more). */
+  .slime-loop[data-slime-loading] { opacity: 0 !important; animation: none !important; }
+  .slime-surface:has(> .slime-loop[data-slime-loading]) > .slime { visibility: visible !important; }
+  .slime-surface:has(> .slime[data-transitioning]) > .slime-loop { animation: slime-loop-show 320ms steps(1, end) both; }
   .slime[data-transitioning]:is([data-state="thinking"], [data-state="working"], [data-state="searching"], [data-state="computer"], [data-state="waiting"], [data-state="blocked"]) { animation: slime-idle-hide 320ms steps(1, end) both; }
-  .slime-surface[data-state="error"] > .slime-loop { animation: slime-idle-show 1.6s steps(1, end) both; }
+  .slime-surface[data-state="error"] > .slime-loop { animation: slime-loop-show 1.6s steps(1, end) both; }
   .slime[data-state="error"] { animation: slime-idle-hide 1.6s steps(1, end) both; }
 }
 @container (width <= 48px) {
@@ -415,6 +418,10 @@ html[data-window-hidden] *, html[data-window-hidden] *::before, html[data-window
   .slime-surface > .slime, .slime .slime-body, .slime .slime-eyes, .slime .slime-back, .slime .slime-marks { visibility: visible !important; }
 }
 /* Two keyframes and a steps() count slide a strip through its cels on the compositor, whatever their number. */
+@keyframes slime-loop-show {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
 @keyframes slime-loop-x {
   from { transform: translateX(0%); }
   to { transform: translateX(-100%); }
