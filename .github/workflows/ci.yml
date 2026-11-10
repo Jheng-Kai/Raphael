@@ -89,12 +89,19 @@ jobs:
           include-hidden-files: true
           retention-days: 14
 
+  # One machine took 42 minutes over the suite, so eight share it. conftest deals whole test files
+  # to the shares (keep_this_share); the required gate passes only when every share does.
   python:
-    name: Python tests
+    name: Python tests (${{ matrix.share }} of 8)
     needs: changes
     if: needs.changes.outputs.python == 'true'
     runs-on: windows-2025
-    timeout-minutes: 45
+    timeout-minutes: 25
+    strategy:
+      # Every share reports, so one red run names all the failures.
+      fail-fast: false
+      matrix:
+        share: [1, 2, 3, 4, 5, 6, 7, 8]
     defaults:
       run:
         shell: pwsh
@@ -103,6 +110,7 @@ jobs:
       RAPHAEL_TEST_MODELS: "0"
       # Subprocesses also fail closed; conftest installs a fresh memory keyring per test.
       PYTHON_KEYRING_BACKEND: keyring.backends.fail.Keyring
+      RAPHAEL_TEST_SHARE: ${{ matrix.share }}/8
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -126,8 +134,9 @@ jobs:
       - name: Install locked Python dependencies
         run: uv sync --locked --dev
 
+      # The slowest tests are listed so the next thing to speed up is named in the log.
       - name: Run Python tests with warnings denied
-        run: uv run --locked --no-sync pytest -q -ra -W error
+        run: uv run --locked --no-sync pytest -q -ra -W error --durations=25 --durations-min=2
 
   windows-shell:
     name: Windows Rust and Tauri shell

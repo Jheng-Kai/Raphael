@@ -117,11 +117,53 @@ _EVAL_FILE_MARKERS = ("case_named(", "all_cases(", "HELD_OUT", "REGRESSION", 'RE
 
 
 def pytest_collection_modifyitems(config, items):
-    """Skip what cannot run here: the tests marked `models` unless RAPHAEL_TEST_MODELS=1, and the
-    tests that read the evaluation sets when the ../eval folder is not checked out. A module keeps
-    only the last function of a name, so both skips must go through this one hook."""
+    """Keep this machine's share of the suite, then skip what cannot run here: the tests marked
+    `models` unless RAPHAEL_TEST_MODELS=1, and the tests that read the evaluation sets when the
+    ../eval folder is not checked out. A module keeps only the last function of a name, so all
+    three must go through this one hook."""
+    keep_this_share(config, items)
     skip_model_tests(items)
     skip_eval_file_tests(items)
+
+
+def keep_this_share(config, items) -> None:
+    """CI runs the suite on several machines at once: RAPHAEL_TEST_SHARE=3/8 keeps the third of
+    eight shares. Unset, as on a developer's machine, every test runs.
+
+    Whole files are dealt, the largest first, each to the share holding the fewest tests so far.
+    Every machine collects the same tests, so all of them agree on the deal and each file lands in
+    exactly one share. A file is never split: its fixtures and the order of its tests stay what
+    they are in a single run."""
+    wanted = os.environ.get("RAPHAEL_TEST_SHARE")
+    if not wanted:
+        return
+    try:
+        index, total = (int(part) for part in wanted.split("/"))
+    except ValueError:
+        raise pytest.UsageError(f"RAPHAEL_TEST_SHARE must look like 3/8, not {wanted!r}") from None
+    if not 1 <= index <= total:
+        raise pytest.UsageError(f"RAPHAEL_TEST_SHARE must name a share from 1 to {total}")
+    files = [item.nodeid.split("::", 1)[0] for item in items]
+    share = deal_files(files, total)
+    kept, dropped = [], []
+    for item, file in zip(items, files, strict=True):
+        (kept if share[file] == index else dropped).append(item)
+    config.hook.pytest_deselected(items=dropped)
+    items[:] = kept
+
+
+def deal_files(files: list[str], shares: int) -> dict[str, int]:
+    """The share, counted from 1, of each test file; `files` names a file once per test in it."""
+    tests: dict[str, int] = {}
+    for file in files:
+        tests[file] = tests.get(file, 0) + 1
+    load = [0] * shares
+    share: dict[str, int] = {}
+    for file, count in sorted(tests.items(), key=lambda entry: (-entry[1], entry[0])):
+        lightest = load.index(min(load))
+        share[file] = lightest + 1
+        load[lightest] += count
+    return share
 
 
 def skip_model_tests(items) -> None:
