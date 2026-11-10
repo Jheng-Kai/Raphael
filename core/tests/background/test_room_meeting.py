@@ -4,7 +4,6 @@ import json
 
 import pytest
 
-from members.test_exchanges import Decision
 from raphael_core.agent.history import AgentHistory
 from raphael_core.agent.speaker import RAPHAEL
 from raphael_core.agent.tools import ToolResult
@@ -20,7 +19,7 @@ async def meeting(make_rig, conn, tmp_path):
     rig = make_rig()
     members = MembersService(conn,tmp_path,background=rig.service,now_ms=rig.wall)
     alice = members.store.create_member(name='Alice',role='Engineer')
-    rooms = RoomsService(conn,members=members,background=rig.service,decision=Decision())
+    rooms = RoomsService(conn,members=members,background=rig.service)
     rooms.register(rig.rpc)
     async def team_tool(speaker,name,arguments,**kwargs):
         if name == 'room_post':
@@ -242,13 +241,17 @@ async def test_cli_members_choose_silence_on_their_own_brain(meeting,monkeypatch
     observed=[]
     async def choose(loop):
         observed.append(loop)
-        assert loop.tools==[] and loop.structured and loop.speech_max_turns==3
-        loop._queue.put_nowait(Outcome('done',final=json.dumps({'speak':False,'urgency':0})))
+        loop._queue.put_nowait(Outcome('done',final='(pass)'))
     monkeypatch.setattr(CliLoop,'_work',choose)
+    # Raphael, the room's default responder, passes on thanks; Alice then reads that in a speech turn of her own.
+    rig.client.replies.append(report('(pass)'))
     await rooms._send({'room_id':room['id'],'text':'Thanks','request_id':'quiet'})
+    await until(lambda:rooms._exchanges.latest(room['id'])['state'] in ('done','stopped'))
     assert len(observed)==1 and observed[0].model=='cli:claude:fixture'
-    assert not rig.client.chat_calls
-    assert not rig.conn.execute('SELECT 1 FROM worker_tasks').fetchone()
+    assert observed[0].speech_only and observed[0].structured is None
+    assert len(rig.client.chat_calls)==1
+    assert rooms._exchanges.latest(room['id'])['state']=='done'
+    assert not [m for m in (await rooms._messages({'room_id':room['id']}))['messages'] if m['member_id'] is not None]
 
 
 async def test_a_reply_with_pass_suffix_is_saved_as_words_in_the_room_and_turn(meeting):
@@ -262,20 +265,3 @@ async def test_a_reply_with_pass_suffix_is_saved_as_words_in_the_room_and_turn(m
     assert row['text'] == saved.text == 'The source confirms the release date.'
     assert (await rooms._messages({'room_id':room['id']}))['messages'][-1]['text'] == saved.text
 
-
-@pytest.mark.parametrize('brain', ['claude','codex','gemini'])
-async def test_structured_listener_reads_each_cli_result_without_an_api_fallback(meeting, monkeypatch, brain):
-    from raphael_core.agent.cli.loop import CliLoop
-    from raphael_core.worker.loop import Outcome
-    from raphael_core.agent.ledger import Ledger
-    rig, members, rooms, room, alice = meeting
-    rig.service.use_cli(object())
-    async def choose(loop):
-        assert loop.speech_max_turns >= 2 and loop.model == f'cli:{brain}:fixture'
-        assert loop.resume_session is False
-        payload = json.dumps({'speak':True,'urgency':.7})
-        loop._queue.put_nowait(Outcome('done', final='```json\n' + payload + '\n```' if brain == 'gemini' else payload))
-    monkeypatch.setattr(CliLoop,'_work',choose)
-    result = await rig.service.room_listener(member={'id':alice.id}, colleagues=[], transcript=[],
-        model=f'cli:{brain}:fixture', ledger=Ledger(None))
-    assert result == {'speak':True,'urgency':.7} and not rig.client.chat_calls

@@ -1308,6 +1308,10 @@
     { "id": 101, "origin_message_id": 7, "source_message_id": 7, "recipient_id": 1, "recipient_name": "小堇", "state": "blocked", "reason": "owner" },
     { "id": 102, "origin_message_id": 7, "source_message_id": 7, "recipient_id": 2, "recipient_name": "研究員", "state": "blocked", "reason": "cost" }
   ],
+  "roomReplyStatusIntents": [
+    { "id": 110, "origin_message_id": 1, "source_message_id": 1, "recipient_id": 2, "recipient_name": "小森", "state": "blocked", "reason": "stalled" },
+    { "id": 111, "origin_message_id": 7, "source_message_id": 7, "recipient_id": 1, "recipient_name": "小晴", "state": "blocked", "reason": "no_reply" }
+  ],
   "p02BlockedMessage": {
     "id": 7, "room_id": 1, "member_id": null, "text": "@小晴 @小森 請補上文案檢查結果。",
     "created": 1792807200000, "status": "done", "request_id": null, "reply_to": null,

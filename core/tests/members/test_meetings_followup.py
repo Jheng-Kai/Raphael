@@ -1,61 +1,7 @@
-"""Owner meeting corrections, listener failures and publication retain every member's words."""
+"""Owner meeting corrections and publication retain every member's words."""
 import json
 
-from .test_exchanges import exchange, team, send, finish, history, meeting_source, Decision  # noqa: F401
-
-
-async def test_a_failed_cli_listener_is_logged_retried_and_reported_without_being_heard(rig, exchange, caplog):
-    room, ids = await team(rig)
-    await rig.call('members.update', {'id':ids[0], 'model':'cli:claude:fixture?effort=high'})
-    attempts = []
-    async def broken(**kwargs):
-        attempts.append(kwargs)
-        raise ValueError('private diagnostic must never appear')
-    rig.background.room_listener = broken
-    exchange._exchanges.decision = Decision('Bob')
-    await send(rig, room, 'Review the release', ui_language='en')
-    assert len(attempts) == 2 and all(item['model'].endswith('?effort=high') for item in attempts)
-    assert [row['member_id'] for row in rig.background.submitted] == [ids[1]]
-    routing = (await history(rig, room))['exchange']['routing']
-    failed = next(one for one in routing['listened'] if one['member'] == ids[0])
-    assert not failed['speak'] and failed['failure'] == 'ValueError'
-    assert failed['failures'] == ['ValueError', 'ValueError']
-    assert caplog.text.count('kind=ValueError') == 2 and 'private diagnostic' not in caplog.text
-    await finish(rig, exchange, 'Reviewed.')
-    result = await history(rig, room)
-    assert result['exchange']['state'] == 'stopped'
-    assert 'Alice: unavailable (ValueError)' in result['messages'][-1]['text']
-
-
-async def test_all_failed_listeners_are_not_counted_as_heard_or_given_fallback_speech(rig, exchange):
-    room, _ = await team(rig)
-    class Broken(Decision):
-        async def room_listener(self, **kwargs):
-            self.calls.append(kwargs)
-            raise ConnectionError('private endpoint')
-    decision = exchange._exchanges.decision = Broken()
-    await send(rig, room, 'Review this', ui_language='en')
-    assert len(decision.calls) == 6 and not rig.background.submitted
-    result = await history(rig, room)
-    assert result['exchange']['routing']['fallback'] == 'unavailable'
-    assert result['exchange']['state'] == 'stopped'
-    assert 'unavailable (ConnectionError)' in result['messages'][-1]['text']
-
-
-async def test_a_listener_retries_once_and_keeps_the_failure_on_success(rig, exchange):
-    room, ids = await team(rig)
-    await rig.call('members.update', {'id':ids[0], 'model':'cli:codex:fixture'})
-    calls = []
-    async def flaky(**kwargs):
-        calls.append(kwargs)
-        if len(calls) == 1:
-            raise TimeoutError()
-        return {'speak':True,'urgency':1}
-    rig.background.room_listener = flaky
-    await send(rig, room, 'Review this')
-    heard = next(one for one in (await history(rig, room))['exchange']['routing']['listened'] if one['member'] == ids[0])
-    assert heard['failure'] == '' and heard['failures'] == ['timeout'] and len(calls) == 2
-    assert rig.background.submitted[-1]['member_id'] == ids[0]
+from .test_exchanges import exchange, team, send, finish, history, meeting_source  # noqa: F401
 
 
 async def test_every_meeting_participant_gets_a_turn_and_corrections_wake_them_again(rig, exchange):
@@ -91,7 +37,7 @@ async def test_an_addressed_meeting_followup_only_schedules_its_recipient(rig, e
     before = len(rig.background.submitted)
     await send(rig, room, '@Alice Execute your assigned work now', key='execute')
     assert [row['member_id'] for row in rig.background.submitted[before:]] == [ids[0]]
-    await finish(rig, exchange, '(pass)')
+    await finish(rig, exchange, 'Started it in my own conversation.')
     assert len(rig.background.submitted) == before + 1
     assert (await history(rig, room))['exchange']['state'] == 'done'
 

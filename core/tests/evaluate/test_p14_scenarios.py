@@ -103,9 +103,6 @@ def cli_brain(monkeypatch, tool):
 
         async def run(self, *, system, user, endpoint, token, session=None, **kwargs):
             yield Event("model", "owner-model")
-            if "Return only your speak choice" in system:
-                yield Event("final", '{"speak":false,"urgency":0}')
-                return
             native, effective = context.receive(system, user, session)
             yield Event("session", native)
 

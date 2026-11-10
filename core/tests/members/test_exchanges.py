@@ -5,7 +5,8 @@ from raphael_core.members.rooms import RoomsService
 
 
 class Decision:
-    """The members' own decisions: each name given speaks the next time it reads the room, by the urgency given or 0.5."""
+    """A listener asked before a member's turn whether it would speak, as rooms once did: it records every question, so a
+    test can show that nothing asks any more (members decide in their own turns)."""
 
     def __init__(self, *speakers, **urgency):
         self.speakers = list(speakers)
@@ -26,22 +27,18 @@ class Decision:
 
 @pytest.fixture
 def exchange(rig):
-    service = RoomsService(rig.conn, members=rig.service, background=rig.background, decision=Decision())
+    service = RoomsService(rig.conn, members=rig.service, background=rig.background)
     service.register(rig.rpc)
     return service
 
 
-async def test_routing_cost_counts_toward_exchange_cap_and_deleted_rooms_leave_no_queue(rig, exchange):
+async def test_speech_cost_counts_toward_exchange_cap_and_deleted_rooms_leave_no_queue(rig, exchange):
     room, ids = await team(rig)
-    class CostlyDecision(Decision):
-        async def room_listener(self, **kwargs):
-            kwargs["ledger"].add(model="fake/router", cost_usd=10)
-            return await super().room_listener(**kwargs)
-    exchange._exchanges.decision = CostlyDecision("Alice")
     await send(rig, room, "Choose a lead")
+    await finish(rig, exchange, "Alice should lead it.", cost=30)
     result = await history(rig, room)
     assert result["exchange"]["cost"] == 30 and result["exchange"]["reason"] == "cost"
-    assert not rig.background.submitted
+    assert len(rig.background.submitted) == 1
     await rig.call("rooms.delete", {"room_id":room["id"]})
     assert not rig.conn.execute("SELECT 1 FROM room_exchanges").fetchone()
     assert not exchange._exchanges.attachments
@@ -89,27 +86,19 @@ async def test_mention_and_reply_target_do_not_force_a_discussion(rig, exchange)
     assert (await history(rig, room))["messages"][-1]["reply_reference"]["author_kind"] == "owner"
 
 
-async def test_a_saved_default_responder_speaks_without_anyone_being_asked(rig, exchange):
-    room, ids = await team(rig, default_responder="member:2")
-    await send(rig, room, "Hello")
-    assert rig.background.submitted[-1]["member_id"] == ids[1]
-    assert not exchange._exchanges.decision.calls
-
-
-async def test_decider_and_worker_read_only_the_origin_thread(rig, exchange):
+async def test_speech_reads_only_the_origin_thread(rig, exchange):
     room, ids = await team(rig)
     with rig.conn:
         rig.conn.execute("INSERT INTO room_messages(room_id,text,created) VALUES (?,'Other thread secret',1)", (room['id'],))
         thread = rig.conn.execute("INSERT INTO room_threads(room_id,created) VALUES (?,1)", (room['id'],)).lastrowid
-    decision = Decision("Alice")
-    exchange._exchanges.decision = decision
     await send(rig, room, "Current thread question", thread_id=thread)
-    assert [m['text'] for m in decision.calls[0]['transcript']] == ['Current thread question']
-    assert 'Other thread secret' not in rig.background.submitted[-1]['text']
-    assert 'Current thread question' in rig.background.submitted[-1]['text']
+    await finish(rig, exchange, "The answer for this thread.")
+    assert len(rig.background.submitted) == 3
+    assert all('Other thread secret' not in row['text'] for row in rig.background.submitted)
+    assert all('Current thread question' in row['text'] for row in rig.background.submitted)
 
 
-async def test_everyone_speaks_on_one_snapshot_and_a_pass_is_hidden(rig, exchange):
+async def test_everyone_speaks_on_one_snapshot_and_an_addressed_pass_is_a_status_line(rig, exchange):
     room, ids = await team(rig)
     await send(rig, room, "@everyone report")
     assert [row['member_id'] for row in rig.background.submitted] == [0,*ids]
@@ -122,7 +111,9 @@ async def test_everyone_speaks_on_one_snapshot_and_a_pass_is_hidden(rig, exchang
     result = await history(rig, room)
     assert all(m['text'] != '(pass)' for m in result['messages'])
     assert all(m['kind'] != 'wrapup' for m in result['messages'])
-    assert result['exchange']['state'] == 'done' and result['exchange']['turns_taken'] == 3
+    assert result['exchange']['turns_taken'] == 3
+    assert [(i['recipient_id'], i['state'], i['reason']) for i in result['exchange']['reply_intents']] == [
+        (0, 'done', ''), (ids[0], 'blocked', 'no_reply'), (ids[1], 'done', '')]
 
 async def test_a_removed_default_responder_is_presented_as_auto_for_room_editing(rig, exchange):
     room, ids = await team(rig, default_responder="member:1")
@@ -211,17 +202,18 @@ async def test_six_explicit_recipients_all_answer(rig, exchange):
     assert {i['recipient_id'] for i in result['exchange']['reply_intents'] if i['state']=='done'} == {0,*ids,*extra}
 
 
-async def test_a_cli_brain_reads_the_room_in_a_real_turn_and_others_are_asked(rig, exchange):
+async def test_every_brain_reads_the_room_in_a_real_turn_on_its_own_model(rig, exchange):
     room, ids = await team(rig)
     from raphael_core.protocol import RpcError
     with pytest.raises(RpcError):
         await rig.call("rooms.update", {"room_id":room["id"], "member_ids":ids})
     exchange._settings.set("agent_model", "cli:codex:gpt-5.6-terra")
+    await rig.call("members.update", {"id":ids[0], "model":"cli:claude:fixture"})
+    await rig.call("members.update", {"id":ids[1], "model":"fake/api"})
     await send(rig, room, "Status")
-    assert rig.background.submitted[-1]["member_id"] == 0
-    decision = exchange._exchanges.decision
-    assert sorted(call["member"]["name"] for call in decision.calls) == ["Alice", "Bob"]
-    assert not any(call["model"].startswith("cli:") for call in decision.calls)
+    await finish(rig, exchange, "All green.")
+    assert [(row["member_id"], row["model"]) for row in rig.background.submitted] == [
+        (0, "cli:codex:gpt-5.6-terra"), (ids[0], "cli:claude:fixture"), (ids[1], "fake/api")]
     for responder in ("member:999", "wrong", True):
         with pytest.raises(RpcError):
             await rig.call("rooms.update", {"room_id":room["id"], "default_responder":responder})

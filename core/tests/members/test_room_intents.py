@@ -1,5 +1,4 @@
 """Durable source/recipient contracts, admission slices and visible failure states."""
-import asyncio
 import json
 import sqlite3
 
@@ -7,25 +6,22 @@ import pytest
 
 from raphael_core.agent.history import AgentHistory
 from raphael_core.members.rooms import RoomsService
-from .test_exchanges import exchange, team, send, finish, history, Decision, meeting_source  # noqa: F401
+from .test_exchanges import exchange, team, send, finish, history, meeting_source  # noqa: F401
 
 
-async def test_each_member_decides_on_its_own_model_and_an_address_asks_no_one(rig, exchange):
+async def test_each_member_decides_on_its_own_model_and_an_address_asks_no_one_else(rig, exchange):
     room, ids = await team(rig)
     await rig.call('members.update', {'id':ids[0], 'model':'@chatgpt:gpt-x?effort=high'})
     await rig.call('members.update', {'id':ids[1], 'model':'fake/api'})
     exchange._settings.set('agent_model', 'cli:codex:fixture')
-    decision = Decision('Bob')
-    exchange._exchanges.decision = decision
     await send(rig, room, 'Review the sources')
-    assert {call['member']['name']: call['model'] for call in decision.calls} == {'Alice':'@chatgpt:gpt-x', 'Bob':'fake/api'}
-    assert rig.background.submitted[0]['member_id'] == ids[1]
-    assert (await history(rig, room))['exchange']['routing']['fallback'] == ''
     await finish(rig, exchange, 'Reviewed')
+    assert [(s['member_id'], s['model']) for s in rig.background.submitted] == [
+        (0, 'cli:codex:fixture'), (ids[0], '@chatgpt:gpt-x?effort=high'), (ids[1], 'fake/api')]
     await finish(rig, exchange, '(pass)')
-    decision.calls.clear()
+    await finish(rig, exchange, '(pass)')
     await send(rig, room, '@Alice inspect', 'two')
-    assert not decision.calls
+    assert [s['member_id'] for s in rig.background.submitted[3:]] == [ids[0]]
 
 
 async def test_a_spaced_address_still_hands_the_turn_to_that_colleague(rig, exchange):
@@ -77,20 +73,6 @@ async def test_a_trailing_pass_is_not_shown(rig, exchange):
     assert alice['text'] == '看起來沒問題。'
 
 
-async def test_when_no_one_can_be_heard_the_room_reports_failures_without_default_speech(rig, exchange, monkeypatch):
-    room, ids = await team(rig)
-    class Slow(Decision):
-        async def room_listener(self, **kwargs):
-            await asyncio.sleep(10)
-    monkeypatch.setattr('raphael_core.members.exchanges.LISTEN_TIMEOUT_S', .001)
-    exchange._exchanges.decision = Slow()
-    await send(rig, room, 'Choose')
-    routing = (await history(rig, room))['exchange']['routing']
-    assert routing['fallback'] == 'unavailable' and {one['failure'] for one in routing['listened']} == {'timeout'}
-    assert not rig.background.submitted
-    assert (await history(rig,room))['exchange']['state'] == 'stopped'
-
-
 async def test_source_replay_and_rename_cannot_extend_the_reply_budget(rig, exchange):
     room, ids = await team(rig)
     await send(rig, room, '@Alice start')
@@ -127,13 +109,14 @@ async def test_accepted_intents_become_named_blocks(rig, exchange, action, reaso
     assert [(i['recipient_id'],i['reason']) for i in blocked] == ([(member,reason) for member in ids] if action=='stop' else [(ids[1],reason)] if action=='remove' else [])
     assert result['exchange']['state'] == 'stopped'
     summaries=[m for m in result['messages'] if m['kind']=='wrapup']
-    assert len(summaries)==1 and summaries[0]['member_id']==0
-    assert result['messages'][-1]['kind']=='wrapup'
-    named = {'owner':[], 'cost':[], 'revoked':['Bob：已不在房間']}[reason]
-    first = '已停止本次工作，已完成的動作保留。' if reason=='owner' else '本次討論沒有全部完成。'
-    assert summaries[0]['text'].split('\n')[:1+len(named)] == [first, *named]
+    if reason == 'owner':
+        # The owner's Stop is closed in words; a failure is only its status lines.
+        assert len(summaries)==1 and summaries[0]['member_id']==0 and result['messages'][-1]['kind']=='wrapup'
+        assert summaries[0]['text'].split('\n')[0] == '已停止本次工作，已完成的動作保留。'
+    else:
+        assert not summaries
     await exchange._exchanges.drive(room['id'])
-    assert len([m for m in (await history(rig,room))['messages'] if m['kind']=='wrapup'])==1
+    assert len([m for m in (await history(rig,room))['messages'] if m['kind']=='wrapup'])==len(summaries)
 
 
 LIMITED = 'Codex CLI 目前請求太頻繁而被限流，請稍後再試。'
@@ -158,10 +141,11 @@ async def test_a_failed_reply_blocks_only_its_intent_and_the_room_says_who_did_n
     assert [s['member_id'] for s in rig.background.submitted] == ids
     await finish(rig, exchange, 'Ready')
     result = await history(rig, room)
+    # The blocked intent is the room's line for Alice; no one speaks for her and nothing sums it up.
     assert [(i['recipient_id'], i['state'], i['reason']) for i in result['exchange']['reply_intents']] == [
         (ids[0], 'blocked', 'cli_rate_limited'), (ids[1], 'done', '')]
-    [text] = wrapups(result)
-    assert 'Alice：請求太頻繁而被限流' in text and '###' not in text
+    assert not wrapups(result)
+    assert [(m['member_id'], m['text']) for m in result['messages'] if m['member_id'] is not None] == [(ids[1], 'Ready')]
 
 
 async def test_a_failed_meeting_turn_is_named_and_owner_stop_still_stops_everyone(rig, exchange):
@@ -201,9 +185,9 @@ async def test_a_failed_exchange_names_a_rate_limit_without_claiming_an_owner_st
     await fail(rig, exchange)
     await finish(rig, exchange, 'Ready')
     result = await history(rig, room)
-    [text] = wrapups(result)
-    assert text.split('\n')[:2] == ['本次討論沒有全部完成。', 'Alice：請求太頻繁而被限流']
-    assert '已停止本次工作' not in text
+    assert (result['exchange']['state'], result['exchange']['reason']) == ('stopped', 'blocked_intents')
+    assert [i['reason'] for i in result['exchange']['reply_intents'] if i['state'] == 'blocked'] == ['cli_rate_limited']
+    assert not wrapups(result) and '已停止本次工作' not in json.dumps(result, ensure_ascii=False)
 
 
 async def test_restart_settles_completed_source_once_and_preserves_queued_intents(rig, exchange):
@@ -212,7 +196,7 @@ async def test_restart_settles_completed_source_once_and_preserves_queued_intent
     turn = rig.background.attached[-1][1]
     AgentHistory(rig.conn).resolve(turn, prefix='', text='@Bob check', status='done')
     await exchange.aclose()
-    restored = RoomsService(rig.conn, members=rig.service, background=rig.background, decision=Decision())
+    restored = RoomsService(rig.conn, members=rig.service, background=rig.background)
     restored.start()
     await restored.wait_idle()
     assert [s['member_id'] for s in rig.background.submitted] == ids
@@ -225,8 +209,9 @@ async def test_blocked_wrapup_publication_is_atomic_and_retriable(rig, exchange)
     room, ids = await team(rig)
     await send(rig,room,'@Alice inspect')
     rig.conn.execute("CREATE TRIGGER fail_wrapup BEFORE INSERT ON room_messages WHEN NEW.kind='wrapup' BEGIN SELECT RAISE(ABORT,'fixture publication failure'); END")
+    await rig.call('rooms.stop', {'room_id':room['id']})
     with pytest.raises(sqlite3.IntegrityError,match='fixture publication failure'):
-        await finish(rig,exchange,'No result',cost=10)
+        await finish(rig,exchange,'No result')
     assert not rig.conn.execute("SELECT 1 FROM agent_turns WHERE session_id LIKE 'room-stop:%'").fetchone()
     rig.conn.execute('DROP TRIGGER fail_wrapup')
     await exchange._exchanges.drive(room['id'])
@@ -271,7 +256,7 @@ async def test_restart_names_interrupted_speech_and_reoffers_each_intent_once(ri
     result = await restored._messages({'room_id':room['id']})
     assert all(i['state']=='running' and i['restart_count']==1 for i in result['exchange']['reply_intents'])
     assert len(rig.background.submitted) == 4
-    assert len(wrapups(result)) == 1
+    assert not wrapups(result)
     await restored.aclose()
 
 
@@ -298,12 +283,16 @@ async def test_a_missing_worker_turn_blocks_its_accepted_intent(rig, exchange, f
 async def test_a_named_moderator_has_no_scheduled_turns_or_conclusion(rig, exchange):
     room, ids = await team(rig)
     await rig.call('rooms.update', {'room_id':room['id'], 'roles':{str(ids[0]):'moderator',str(ids[1]):'con'}})
-    exchange._exchanges.decision = Decision('Bob')
     await send(rig, room, 'Discuss the evidence')
-    assert [s['member_id'] for s in rig.background.submitted] == [ids[1]]
+    # The room's default responder answers first, not the moderator; the moderator then reads it like anyone else.
+    assert [s['member_id'] for s in rig.background.submitted] == [0]
+    await finish(rig, exchange, 'The evidence holds.')
+    assert 'Otherwise reply with exactly (pass)' in rig.background.submitted[1]['text']
+    await finish(rig, exchange, '(pass)')
     await finish(rig, exchange, 'Evidence reviewed')
-    assert (await history(rig, room))['exchange']['state'] == 'done'
-    assert len(rig.background.submitted) == 1
+    result = await history(rig, room)
+    assert result['exchange']['state'] == 'done' and not [m for m in result['messages'] if m['kind'] == 'wrapup']
+    assert len(rig.background.submitted) == 3
     assert rig.service.speaker(ids[0]).role == 'PM'
 
 
@@ -399,22 +388,16 @@ async def test_quotes_code_and_plain_names_do_not_create_intents(rig, exchange):
 
 
 @pytest.mark.parametrize('action', ['stop','interjection'])
-async def test_late_routing_cannot_submit_a_stale_generation(rig, exchange, action):
+async def test_a_newer_owner_message_or_stop_leaves_no_one_still_to_read_the_old_one(rig, exchange, action):
     room, ids = await team(rig)
-    entered, release = asyncio.Event(), asyncio.Event()
-    class HeldDecision(Decision):
-        async def room_listener(self, **kwargs):
-            entered.set()
-            await release.wait()
-            return await super().room_listener(**kwargs)
-    exchange._exchanges.decision = HeldDecision('Alice')
-    old = asyncio.create_task(send(rig, room, 'Choose a lead'))
-    await entered.wait()
-    new = asyncio.create_task(rig.call('rooms.stop', {'room_id':room['id']}) if action=='stop' else send(rig, room, '@Bob latest question', 'two'))
-    await asyncio.sleep(0)
-    release.set()
-    await asyncio.gather(old, new)
-    assert [s['member_id'] for s in rig.background.submitted] == ([] if action=='stop' else [ids[1]])
+    await send(rig, room, 'Choose a lead')
+    assert [s['member_id'] for s in rig.background.submitted] == [0]
+    if action == 'stop':
+        await rig.call('rooms.stop', {'room_id':room['id']})
+    else:
+        await send(rig, room, '@Bob latest question', 'two')
+    await finish(rig, exchange, 'Alice should lead.')
+    assert [s['member_id'] for s in rig.background.submitted] == ([0] if action=='stop' else [0, ids[1]])
 
 
 async def test_reply_target_and_other_explicit_mentions_are_both_accepted(rig, exchange):

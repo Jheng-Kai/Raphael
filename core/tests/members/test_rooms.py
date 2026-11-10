@@ -241,8 +241,12 @@ async def test_team_room_reused_and_new_members_join_live(rig, rooms):
 async def test_existing_worker_refusal_is_a_visible_error_not_a_lost_message(rig, rooms):
     room = await create(rig,[0]); rig.background.refuse = "worker_busy"
     await rig.call("rooms.send", {"room_id":room["id"], "request_id":"busy", "text":"Hi"})
-    messages = (await rig.call("rooms.messages", {"room_id":room["id"]}))["messages"]
-    assert messages[0]["text"] == "Hi" and messages[1]["status"] == "error" and messages[1]["text"]
+    await rooms.wait_idle()
+    result = await rig.call("rooms.messages", {"room_id":room["id"]})
+    # The owner's words stay, and each reply that could not start (Raphael's first, then the peer's after it) is the
+    # room's status line, not a bubble.
+    assert [m["text"] for m in result["messages"]] == ["Hi"]
+    assert [(i["recipient_id"], i["state"]) for i in result["exchange"]["reply_intents"]] == [(0, "blocked"), (room["member_ids"][1], "blocked")]
 
 async def test_validates_room_members_payload_and_pagination(rig, rooms):
     for ids in ([],[True],[999]):

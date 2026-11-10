@@ -56,6 +56,11 @@ const BLOCKED = {
   worker: "rooms.blockedWorker", source_unavailable: "rooms.blockedSource", cli_rate_limited: "rooms.blockedRateLimited",
   cli_quota: "rooms.blockedQuota", cli_login: "rooms.blockedLogin", cli_missing: "rooms.blockedLogin", cli_busy: "rooms.blockedBusy",
   cli_error: "rooms.blockedWorker",
+  // A member the owner named that passed anyway, and a reply that went silent for the room's whole stall time.
+  no_reply: "rooms.blockedNoReply", stalled: "rooms.blockedStalled",
+  // The same reasons from an API brain, and a request too long to read: the line is all the room shows of a failure.
+  rate_limit: "rooms.blockedRateLimited", usage_limit: "rooms.blockedQuota",
+  cli_context_overflow: "rooms.blockedTooLong", context_overflow: "rooms.blockedTooLong",
 } as const;
 
 let context: AppContext | undefined;
