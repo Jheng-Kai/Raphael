@@ -138,8 +138,7 @@ from ..worker.loop import WAITING as PAUSED_KIND
 from .brief import BRIEF_WINDOW_MS, TaskBrief, ToolUse
 from .host import WorkerCrashed, WorkerHost, WorkerStopped, WorkerUnavailable
 from .run import NOT_MADE_WHILE_WAITING, MemoryReader, RunLimits, TaskRun, Waiting
-from ..agent.toolpick import ToolPicker
-from .snapshot import BUILTIN_SERVER, SNAPSHOT_MAX_TIER, Snapshot, refine, take_snapshot
+from .snapshot import BUILTIN_SERVER, SNAPSHOT_MAX_TIER, Snapshot, take_snapshot
 from .outcomes import named_files, worker_trace
 from .tasks import FILE_NAMES, FINAL_STATES, QUEUED, RUNNING, WAITING, Question, Refused, Step, Task, TaskStore
 
@@ -414,7 +413,6 @@ class BackgroundService:
         self._client = client
         self._known_models = known_models  # the catalog, for the window of a task's model
         self._model_observer = model_observer  # told each CLI turn's actual model (Guardian verifies it)
-        self._picker = ToolPicker(client)
         self._gate = gate
         self._tools = tools
         self._notify = notify
@@ -1510,18 +1508,17 @@ class BackgroundService:
             if self._metrics_conn.execute("SELECT 1 FROM room_messages WHERE turn_id=? AND kind='wrapup'",(task.turn_id,)).fetchone():
                 team = []
             snapshot = Snapshot({name:ToolRef(BUILTIN,name,BUILTIN_SERVER,name,Tier.T1) for name in team},
-                                [worker_definition(name) for name in team],sealed=True)
+                                sorted((worker_definition(name) for name in team), key=lambda item: item["function"]["name"]),
+                                sealed=True)
         else:
             prepare = getattr(self._gate.plugins, 'prepare', None)
             if prepare is not None:
                 await prepare(speaker.id)
-            snapshot = take_snapshot(self._gate.plugins,task.text,memory=memory is not None,history=private,
-                attachments=bool(files),speaker=speaker,team=team,turned_off=self._tools.turned_off(),
+            # The same tools for every task of this kind, whatever it asks (owner, 2026-11-09, decision 2).
+            snapshot = take_snapshot(self._gate.plugins,memory=memory is not None,history=private,
+                speaker=speaker,team=team,turned_off=self._tools.turned_off(),
                 max_tier=Tier.T3 if self._gate.full_permission else SNAPSHOT_MAX_TIER,
                 background_management=task.scope == "private")
-        # With more tools than fit, the task is shown the ones it needs, not the first few.
-        if not room_cli and task.scope != "room":
-            await refine(snapshot, self._picker, task.text, context, model=model, ledger=ledger)
         run = TaskRun(
             task_id=task.id,
             language=language,
@@ -1604,7 +1601,7 @@ class BackgroundService:
         if self._gate.full_permission and task.scope != 'room':
             system += FULL_PERMISSION
         if task.scope == "private":
-            system += ("\nMember management tools are available through find_tools. Use member_create, member_update and "
+            system += ("\nMember management tools are found with find_tools and called with use_tool. Use member_create, member_update and "
                        "member_routine tools instead of reading or changing Raphael's database or core files. "
                        "Changes to members wait for the owner's approval card, even in allow-all mode.")
         if task.mode:

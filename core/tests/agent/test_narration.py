@@ -16,6 +16,12 @@ def chat(text, *calls):
     return ChatTurn(text, [ChatToolCall(str(n), name, args, json.dumps(args)) for n, (name, args) in enumerate(calls)], "fake/model", 0.3, 10, 10, 1)
 
 
+def use(name, arguments):
+    """A call of a tool that is found, not listed (a connection's, management, the seldom ones): the list is
+    fixed (owner, 2026-11-09, decision 2), so the model calls it through use_tool."""
+    return ("use_tool", {"name": name, "arguments": arguments})
+
+
 async def typed(rig, text="Check the time", member_id=0):
     rig.typed_count = getattr(rig, "typed_count", 0) + 1
     session = "live" if rig.typed_count == 1 else f"live-{rig.typed_count}"
@@ -56,7 +62,7 @@ async def test_a_permission_pauses_the_sequence_and_yes_continues_the_same_turn(
     await plugins.connect(note="T2", look="T1")
     rig = make_rig(plugins=plugins.hub)
     client.decisions.append(decision("answer"))
-    client.chats = [chat("I will save your example.", ("Notes__look", {"topic": "example"}), ("Notes__note", {"text": "example"})),
+    client.chats = [chat("I will save your example.", use("Notes__look", {"topic": "example"}), use("Notes__note", {"text": "example"})),
                     chat("I will check the saved example.", ("local_time", {})),
                     chat(json.dumps({"prefix": "Answer", "text": "Saved.", "detail": ""}))]
     asked = await typed(rig, "Save an example")
@@ -76,7 +82,7 @@ async def test_a_no_finishes_the_sequence_without_making_the_tool_call(make_rig,
     await plugins.connect(note="T2")
     rig = make_rig(plugins=plugins.hub)
     client.decisions.append(decision("answer"))
-    client.chats = [chat("I will save your example.", ("Notes__note", {"text": "example"}))]
+    client.chats = [chat("I will save your example.", use("Notes__note", {"text": "example"}))]
     asked = await typed(rig, "Save an example")
     await rig.confirm(asked["confirm"]["id"], approved=False)
     [turn] = await rig.turns()
@@ -115,7 +121,7 @@ async def test_a_resumed_turn_can_be_cancelled(make_rig, plugins, client):
         await asyncio.Event().wait()
 
     client.decisions.append(decision("answer"))
-    client.chats = [chat("I will save the example.", ("Notes__note", {"text": "example"})), slow]
+    client.chats = [chat("I will save the example.", use("Notes__note", {"text": "example"})), slow]
     asked = await typed(rig)
     task = asyncio.create_task(rig.confirm(asked["confirm"]["id"]))
     await asyncio.wait_for(waiting.wait(), 2)
@@ -141,7 +147,7 @@ async def test_a_confirmed_result_can_supply_the_address_for_the_next_round(make
 
     monkeypatch.setattr(rig.service._tools, "web_read", read)
     client.decisions.append(decision("answer"))
-    client.chats = [chat("I will find the reference.", ("Notes__look", {"topic": address})),
+    client.chats = [chat("I will find the reference.", use("Notes__look", {"topic": address})),
                     chat("I will open that reference.", ("web_read", {"url": address})),
                     chat(json.dumps({"text": "Found.", "detail": ""}))]
     asked = await typed(rig, "Find and read the reference")

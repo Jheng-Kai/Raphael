@@ -2,7 +2,7 @@
 
 import pytest
 
-from agent.test_narration import chat
+from agent.test_narration import chat, use
 from raphael_core.agent.cli.loop import CliLoop
 from raphael_core.agent.history import AgentHistory
 from raphael_core.agent.speaker import RAPHAEL
@@ -34,17 +34,18 @@ async def test_template_createagent_creates_members_and_same_events_for_both_con
                 return chat("", ("find_tools", {"query": "CreateAgent"}))
             def create(**kwargs):
                 names = {tool["function"]["name"] for tool in kwargs["tools"]}
-                assert "member_create" in names
-                return chat("", ("member_create", arguments))
+                assert "member_create" not in names and '"name": "member_create"' in kwargs["messages"][-1]["content"]
+                return chat("", use("member_create", arguments))
             client.chats = [find, create, live_said("The helper is ready.")]
         else:
             rig.settings.set("agent_model", "cli:codex:test")
             async def work(loop):
                 seen.append(loop.system)
                 assert "CreateAgent instructions map to member_create" in loop.system
-                assert (await loop._tool("find", "find_tools", {"query": "CreateAgent"})).ok
-                assert "member_create" in {tool["function"]["name"] for tool in loop.tools}
-                assert (await loop._tool("create", "member_create", arguments)).ok
+                found = await loop._tool("find", "find_tools", {"query": "CreateAgent"})
+                assert found.ok and '"name": "member_create"' in found.content
+                assert "member_create" not in {tool["function"]["name"] for tool in loop.tools}
+                assert (await loop._tool("create", "use_tool", {"name": "member_create", "arguments": arguments})).ok
                 loop._queue.put_nowait(Outcome("done", final="The helper is ready."))
             monkeypatch.setattr(CliLoop, "_work", work)
         result = await typed(rig, "Create the helper described in your template.", member_id, language="en")
@@ -71,7 +72,7 @@ async def test_nonprimary_delete_waits_for_exact_owner_yes(setup, client, monkey
     rig.settings.set("action_mode", mode)
     args = {"id": target.id}
     if brain == "api":
-        client.chats = [chat("", ("member_delete", args)), live_said("Deletion settled.")]
+        client.chats = [chat("", use("member_delete", args)), live_said("Deletion settled.")]
     else:
         rig.settings.set("agent_model", "cli:codex:test")
         async def work(loop):
@@ -90,8 +91,7 @@ async def test_colleague_exchange_has_no_management_catalog_and_cannot_create_ev
     actor = team.members.store.create_member(name="Writer", role="Write")
     asked = team.members.speaker(actor.id).asked_by(RAPHAEL)
     tools = team_tools_for(team, asked, always=True)
-    snapshot = take_snapshot(None, "Create a member", speaker=asked, team=tools,
-                             interactive=True, owner_management=False)
+    snapshot = take_snapshot(None, speaker=asked, team=tools, interactive=True, owner_management=False)
     assert not snapshot.management and not snapshot.refs.keys() & MANAGEMENT_TOOLS
     assert not snapshot.find("CreateAgent")[0]
     result = await rig.service.team_tool(asked, "create_member", {"name": "Forbidden", "role": "Write"},

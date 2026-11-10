@@ -3,13 +3,13 @@ tool calls of every earlier attempt of a rerun, and telling the app after it is 
 
 from raphael_core.agent.persona import phrase
 
-from .conftest import TASK_TEXT, call, report, turn, until
+from .conftest import TASK_TEXT, call, report, turn, until, use
 
 
 async def test_a_plugin_call_is_a_step_from_the_moment_it_is_sent(make_rig, calls):
     rig = make_rig()
     await rig.plugins.connect(slow="T0")
-    rig.client.replies = [turn("", [call("Notes__slow", {}, "c1")])]
+    rig.client.replies = [turn("", [use("Notes__slow", {}, "c1")])]
     task_id = rig.submit()
     await until(lambda: "slow" in calls)
     tools = [s for s in rig.steps(task_id) if s.kind == "tool"]
@@ -27,7 +27,7 @@ async def test_a_plugin_call_is_a_step_from_the_moment_it_is_sent(make_rig, call
 async def test_a_call_that_ends_updates_its_step(make_rig):
     rig = make_rig()
     await rig.plugins.connect(look="T0")
-    rig.client.replies = [turn("", [call("Notes__look", {"topic": "a"}, "c1")]), report("ok")]
+    rig.client.replies = [turn("", [use("Notes__look", {"topic": "a"}, "c1")]), report("ok")]
     task_id = rig.submit()
     await rig.wait_for_reports()
     tools = [s for s in rig.steps(task_id) if s.kind == "tool"]

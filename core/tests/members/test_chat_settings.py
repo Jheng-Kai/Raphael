@@ -2,7 +2,7 @@
 
 import pytest
 
-from agent.test_narration import chat
+from agent.test_narration import chat, use
 from .test_answering import client, setup, member, typed, live_said  # noqa: F401
 from raphael_core.management import publish, self_action, self_definitions
 from raphael_core.protocol import RpcError
@@ -49,7 +49,7 @@ async def test_nonprimary_can_change_itself_or_peers_in_the_owner_private_chat(s
     rig.settings.set("action_mode", "direct")
     public, values = publish(action, args)
     client.chats = [chat("Find my tool", ("find_tools", {"query": public})),
-                    chat("Make the requested change", (public, values)), live_said("Changed.")]
+                    chat("Make the requested change", use(public, values)), live_said("Changed.")]
     result = await typed(rig, "Change the requested member skills, commands or voice", own.id, language="en")
     assert result["status"] == "done"
     assert writes == [args]
@@ -103,7 +103,7 @@ async def test_nonprimary_self_delete_still_shows_yes_card_in_bypass_mode(setup,
     rig.settings.set("action_mode", "bypass")
     args = {"member_id": own.id, "id": command["command"]["id"]}
     client.chats = [chat("Find my tools", ("find_tools", {"query": "member_manage"})),
-                    chat("Delete the command", publish("member_command_delete", args)), live_said("Deleted.")]
+                    chat("Delete the command", use(*publish("member_command_delete", args))), live_said("Deleted.")]
     result = await typed(rig, "Delete your draft command", own.id, language="en")
     assert result["status"] == "confirm" and result["confirm"]["tier"] == "T3"
     assert len(team.members.capabilities.commands(own.id)) == 1

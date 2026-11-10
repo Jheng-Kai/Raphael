@@ -338,8 +338,8 @@ async def test_a_tool_the_server_describes_differently_after_the_snapshot_is_sti
 async def test_a_tool_that_needs_a_yes_is_not_called_by_a_run_that_cannot_wait(rig, calls):
     server = await rig.plugins.connect(look="T0", note="T2")
     rig.resnap()
-    # The snapshot holds `note` (a task of the background service asks through its question) ...
-    assert "Notes__note" in rig.run.snapshot.refs
+    # The snapshot holds `note`, to be found (a task of the background service asks through its question) ...
+    assert "Notes__note" in rig.run.snapshot.pool.by_alias
     assert rig.run.can_wait is False
     reply = await rig.tool("Notes__note", {"text": "x"})
     # ... but a run that cannot wait for the owner is refused it by the gate itself.

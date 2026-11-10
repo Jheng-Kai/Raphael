@@ -5,6 +5,7 @@ from raphael_core.agent.history import AgentHistory
 from raphael_core.memory.conversation import turn_text
 from raphael_core.protocol import RpcError
 from .test_draft_tool import office, typed, chat, finished  # noqa: F401
+from .test_narration import use
 from .test_drafts import sent, SENT, Judge  # noqa: F401
 from .test_plugins import plugins, calls  # noqa: F401
 from .test_service import make_rig  # noqa: F401
@@ -33,7 +34,7 @@ async def slack(plugins):
 
 async def test_reactions_persist_as_context_and_never_resolve_a_draft(office, client):
     client.decisions.append(decision('answer'))
-    client.chats = [chat('Drafting.', ('slack_draft', {'to': 'C012345', 'body': 'Synthetic update.'})), finished()]
+    client.chats = [chat('Drafting.', use('slack_draft', {'to': 'C012345', 'body': 'Synthetic update.'})), finished()]
     await typed(office.rig, "Draft a Slack reply")
     turn = await office.turn()
     card = turn['drafts'][0]
@@ -69,7 +70,7 @@ async def test_reactions_persist_as_context_and_never_resolve_a_draft(office, cl
 async def test_slack_draft_edit_send_once_uses_existing_gate(office, client, slack):
     office.drafts.register(office.rig.rpc)
     client.decisions.append(decision('answer'))
-    client.chats = [chat('Drafting.', ('slack_draft', {'to':'C012345','body':'Synthetic update.'})), finished()]
+    client.chats = [chat('Drafting.', use('slack_draft', {'to':'C012345','body':'Synthetic update.'})), finished()]
     await typed(office.rig, "Draft a Slack reply")
     card = (await office.turn())['drafts'][0]
     assert card['kind'] == 'slack' and card['from']['name'] == 'Slack' and slack == []
@@ -90,7 +91,7 @@ async def test_slack_direct_send_obeys_the_same_draft_first_preference(office, c
     from raphael_core.agent.speaker import RAPHAEL
     monkeypatch.setattr(office.rig.service, '_speaker', lambda member_id: replace(RAPHAEL, draft_first=draft_first))
     client.decisions.append(decision('answer'))
-    client.chats = [chat('Sending.', ('Slack__send_message', {'channel':'C012345','text':'Synthetic message'})), finished()]
+    client.chats = [chat('Sending.', use('Slack__send_message', {'channel':'C012345','text':'Synthetic message'})), finished()]
     await typed(office.rig)
     assert slack == ([] if draft_first else [('C012345','Synthetic message')])
     if draft_first:
@@ -107,7 +108,7 @@ async def test_slack_without_draft_first_still_asks_and_a_no_sends_nothing(offic
     asking = next(rule for rule in office.rules.rules() if rule.action == 'Send an email or a message to someone else')
     office.judge.decisions.append(lambda **kwargs: Decision(answers={key:noul(0.93 if key == f'rule_{asking.id}' else 0.0) for key in kwargs['questions']}, cost_usd=0, latency_ms=1))
     client.decisions.append(decision('answer'))
-    client.chats = [chat('Sending.', ('Slack__send_message', {'channel':'C012345','text':'Synthetic message'}))]
+    client.chats = [chat('Sending.', use('Slack__send_message', {'channel':'C012345','text':'Synthetic message'}))]
     asked = await typed(office.rig)
     assert asked['status'] == 'confirm' and slack == []
     await office.rig.call('agent.confirm', {'id':asked['confirm']['id'],'approved':False})
@@ -125,7 +126,7 @@ async def test_slack_draft_is_refused_in_a_room_even_for_background(office):
 async def test_slack_full_permission_uses_the_existing_direct_send_mode(office, client, slack):
     office.rig.settings.set('action_mode', 'bypass')
     client.decisions.append(decision('answer'))
-    client.chats = [chat('Sending.', ('Slack__send_message', {'channel':'C012345','text':'Synthetic message'})), finished()]
+    client.chats = [chat('Sending.', use('Slack__send_message', {'channel':'C012345','text':'Synthetic message'})), finished()]
     await typed(office.rig)
     assert slack == [('C012345','Synthetic message')]
 

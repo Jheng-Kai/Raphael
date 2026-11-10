@@ -20,7 +20,7 @@ from raphael_core.agent.speaker import RAPHAEL
 from raphael_core.brain.db import connect
 from raphael_core.protocol import RpcError
 
-from .test_narration import chat, typed
+from .test_narration import chat, typed, use
 from .test_plugins import plugins, calls  # noqa: F401
 from .test_service import make_rig  # noqa: F401
 
@@ -55,7 +55,7 @@ async def test_harness_stores_page_on_turn_updates_in_place_and_notifies(make_ri
                     "source": "html", "server": None, "fallback": "Enter a number", "kind": "page"}
     assert ("agent.turn", {"turn_id": turn["id"], "member_id": 0}) in notices
     assert any(page["id"] in message.get("content", "") for message in client.chat_calls[-1]["messages"] if message["role"] == "tool")
-    client.chats = [chat("Updating.", ("update_page", {"page_id": page["id"], "html": "<button>Done</button>", "title": "Done"})),
+    client.chats = [chat("Updating.", use("update_page", {"page_id": page["id"], "html": "<button>Done</button>", "title": "Done"})),
                     chat('{"text":"Updated."}')]
     await rig.call("agent.ask", {"session_id": "update", "text": "Change it", "ui_language": "en", "source": "app"})
     rows = await rig.turns()
@@ -208,7 +208,7 @@ async def test_mcp_resource_yields_page_and_calls_use_permission_card_gate_and_a
     server_id, bought, _server = await app_server(plugins)
     permissions = PermissionCards(conn)
     rig = make_rig(plugins=plugins.hub, permissions=permissions)
-    client.chats = [chat("Finding.", ("Shop__product", {"query": "Tea"})), chat('{"text":"Choose an item."}')]
+    client.chats = [chat("Finding.", use("Shop__product", {"query": "Tea"})), chat('{"text":"Choose an item."}')]
     await typed(rig, "Find tea")
     [turn] = await rig.turns()
     [page] = turn["pages"]
@@ -269,7 +269,7 @@ async def test_update_cannot_replace_a_page_from_another_conversation(make_rig, 
     rig = make_rig()
     page = stored(rig.conn, conversation_id=rig.service.conversations.quick())
     other = rig.service.conversations.main()
-    client.chats = [chat("Updating.", ("update_page", {"page_id": page["id"], "html": "Changed"})),
+    client.chats = [chat("Updating.", use("update_page", {"page_id": page["id"], "html": "Changed"})),
                     chat('{"text":"Please choose a page in this conversation."}')]
     await rig.call("agent.ask", {"session_id": "foreign", "text": "Change the page", "source": "app",
                                 "ui_language": "en", "conversation_id": other})

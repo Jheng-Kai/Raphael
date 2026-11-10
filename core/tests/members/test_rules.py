@@ -13,7 +13,7 @@ from raphael_core.agent.safety import ALLOW, ASK, DENY, SafetyGuard, SafetyJudge
 from raphael_core.brain.openrouter import Decision
 
 from .test_answering import Team, member, raphael_said, live_said
-from agent.test_narration import chat
+from agent.test_narration import chat, use
 
 
 @pytest.fixture
@@ -113,7 +113,7 @@ async def test_a_member_asked_for_what_needs_a_yes_hands_it_to_the_background(wi
     client.decisions.append(decision("answer"))  # Raphael's request
     client.plans.append(tool_plan(("Raphael__ask_member", {"member": "小行程", "request": "PRIVATE 記下明天的會"})))
     # The member picks a call that runs at once and one that needs a yes: neither is made here.
-    client.chats.append(chat("先確認並儲存行程。", ("Notes__look", {"topic": "x"}), ("Notes__note", {"text": "x"})))
+    client.chats.append(chat("先確認並儲存行程。", use("Notes__look", {"topic": "x"}), use("Notes__note", {"text": "x"})))
     client.replies.append(raphael_said("小行程的這件事在它的對話中等你處理。"))
     reply = await rig.ask("叫小行程記下明天的會")
     assert reply["text"] == "小行程的這件事在它的對話中等你處理。"

@@ -71,7 +71,7 @@ async def test_p03_immediate_start_uses_production_rpc_worker_and_mcp(tmp_path,m
             from test_p14_scenarios import asked
             speech = 'You are speaking in a meeting' in messages[0]['content']
             if child:
-                calls=[] if any(m['role']=='tool' for m in messages) else [('Guardian__read',{})]
+                calls=[] if any(m['role']=='tool' for m in messages) else [('use_tool',{'name':'Guardian__read','arguments':{}})]
             elif speech and 'handoff 立即交給' not in asked(str(messages[-1]['content'])):
                 calls=[]
             else:
@@ -96,7 +96,7 @@ async def test_p03_immediate_start_uses_production_rpc_worker_and_mcp(tmp_path,m
                 async with httpx.AsyncClient() as http:
                     response=await http.post(endpoint,headers={'Authorization':'Bearer '+token},json={
                         'jsonrpc':'2.0','id':1,'method':'tools/call','params':{
-                            'name':'Guardian__read' if child else 'handoff','arguments':{} if child else arguments()}})
+                            'name':'use_tool' if child else 'handoff','arguments':{'name':'Guardian__read','arguments':{}} if child else arguments()}})
                     assert not response.json()['result']['isError'],response.text
             yield Event('final','已讀取信件。'+driver.nonce)
         async def interrupt(self):
@@ -127,7 +127,7 @@ async def test_a_primary_contact_that_does_not_dispatch_what_it_is_given_fails_s
     # reading the mail, or sending the work round by Raphael, is not the primary dispatching.
     from raphael_core.background.host import WorkerHost
     from background.conftest import Links
-    read=('Guardian__read',{})
+    read=('use_tool',{'name':'Guardian__read','arguments':{}})  # a connection's tool: found, not listed (decision 2)
     def handoff(member):
         return ('handoff',{'member_id':member,'request':'Use Guardian to read the test mail now.','stage_id':'mail-triage',
                            'done_when':'Read the test mail and report its nonce.'})
@@ -162,7 +162,7 @@ async def test_room_work_done_without_a_handoff_fails_at_once(tmp_path):
     class Client(FakeClient):
         async def chat_tools(self,**kwargs):
             messages=kwargs['messages']
-            calls=[] if any(m['role']=='tool' for m in messages) or 'where this has landed' in str(messages) else [('Guardian__read',{})]
+            calls=[] if any(m['role']=='tool' for m in messages) or 'where this has landed' in str(messages) else [('use_tool',{'name':'Guardian__read','arguments':{}})]
             self.turns=iter([('已讀取信件。' if not calls else '',calls)])
             return await super().chat_tools(**kwargs)
     driver=RpcDriver(tmp_path,'fake/model',Client([]),Budget(40))
@@ -176,9 +176,10 @@ async def test_room_work_done_without_a_handoff_fails_at_once(tmp_path):
 
 @pytest.mark.parametrize("brain", ["A", "C"])
 async def test_s01_edits_cancels_and_applies_once_on_both_production_brains(tmp_path, monkeypatch, brain):
-    calls = [("group_create", {"name": "驗證團隊"}), *[("member_create", {
+    # Management is found, not listed (decision 2): both brains call it through use_tool.
+    calls = [("use_tool", {"name": "group_create", "arguments": {"name": "驗證團隊"}}), *[("use_tool", {"name": "member_create", "arguments": {
         "name": name, "role": name, "instructions": "Review evidence for " + name, "group": "驗證團隊"
-    }) for name in ("行銷", "信件助理", "HiKari", "PM", "RD")]]
+    }}) for name in ("行銷", "信件助理", "HiKari", "PM", "RD")]]
     # The last reply is the turn going on after the owner's yes to the second draft.
     client = FakeClient([("", calls), ("等待確認。", []), ("", calls), ("等待確認。", []), ("團隊已建立。", [])])
     if brain == "C":
@@ -343,7 +344,7 @@ async def test_rpc_driver_uses_real_routine_mutation_and_readback(tmp_path, oper
 
 @pytest.mark.parametrize("kind", ["missing-connection", "missing-permission"])
 async def test_failure_honesty_checks_observed_failure_and_owner_reply(tmp_path, kind):
-    client = FakeClient([("", [("Guardian__read", {})]), ("需要重新登入並授予讀取權限。", [])])
+    client = FakeClient([("", [("use_tool", {"name": "Guardian__read", "arguments": {}})]), ("需要重新登入並授予讀取權限。", [])])
     driver = RpcDriver(tmp_path, "fake/model", client, Budget(20))
     try:
         reasons, _ = await driver.execute(selected("S17." + kind))
@@ -356,7 +357,7 @@ async def test_failure_honesty_checks_observed_failure_and_owner_reply(tmp_path,
 
 @pytest.mark.parametrize("approved", [True, False])
 async def test_recording_executor_is_after_real_approval_gate(tmp_path, approved):
-    client = FakeClient([("", [("Guardian__write", {})]), ("已完成。", [])])
+    client = FakeClient([("", [("use_tool", {"name": "Guardian__write", "arguments": {}})]), ("已完成。", [])])
     driver = RpcDriver(tmp_path, "fake/model", client, Budget(20))
     try:
         await driver.install_fixture(write=True)
@@ -375,7 +376,7 @@ async def test_recording_executor_is_after_real_approval_gate(tmp_path, approved
 
 
 async def test_expired_owner_approval_has_zero_recording_receipts(tmp_path):
-    client = FakeClient([("", [("Guardian__write", {})])])
+    client = FakeClient([("", [("use_tool", {"name": "Guardian__write", "arguments": {}})])])
     driver = RpcDriver(tmp_path, "fake/model", client, Budget(20))
     clock = [0.0]
     driver.app.agent._confirmations._clock = lambda: clock[0]
@@ -391,7 +392,7 @@ async def test_expired_owner_approval_has_zero_recording_receipts(tmp_path):
         await driver.aclose()
 
 
-@pytest.mark.parametrize("text,calls", [("需要重新登入並授予讀取權限。", []), ("已完成。", [("Guardian__read", {})])])
+@pytest.mark.parametrize("text,calls", [("需要重新登入並授予讀取權限。", []), ("已完成。", [("use_tool", {"name": "Guardian__read", "arguments": {}})])])
 async def test_failure_honesty_needs_a_real_failed_call_and_no_false_completion(tmp_path, text, calls):
     client = FakeClient([("", calls), (text, [])] if calls else [(text, [])])
     driver = RpcDriver(tmp_path, "fake/model", client, Budget(20))
@@ -405,7 +406,7 @@ async def test_failure_honesty_needs_a_real_failed_call_and_no_false_completion(
 async def test_report_keeps_verified_schema_and_redacts_provider_errors(tmp_path):
     registry = await inventory()
     result = await run_cell(selected("S17.missing-connection"), "A", "fake/model", tmp_path / "good",
-                            client=FakeClient([("", [("Guardian__read", {})]), ("需要重新登入並授予讀取權限。", [])]),
+                            client=FakeClient([("", [("use_tool", {"name": "Guardian__read", "arguments": {}})]), ("需要重新登入並授予讀取權限。", [])]),
                             brains=None, budget=Budget(20), seconds=3, run_id="run", head="head", registry=registry)
     assert result["status"] == "PASS", result
     assert result["actual_model"] == "fake/model" and result["evidence_paths"]
@@ -423,7 +424,7 @@ async def test_report_keeps_verified_schema_and_redacts_provider_errors(tmp_path
 
 async def test_mid_turn_budget_exhaustion_is_skip_and_retains_trace(tmp_path):
     result = await run_cell(selected("S17.missing-connection"), "A", "fake/model", tmp_path,
-                            client=FakeClient([("", [("Guardian__read", {})])]), brains=None,
+                            client=FakeClient([("", [("use_tool", {"name": "Guardian__read", "arguments": {}})])]), brains=None,
                             budget=Budget(1), seconds=3, run_id="run", head="head", registry=await inventory())
     assert result["status"] == "SKIP" and result["reason"] == "total_turn_cap"
     assert result["tools"][0]["outcome"] == "auth" and not result["tools"][0]["assertions"]
@@ -448,7 +449,7 @@ async def test_unknown_api_cost_is_null_instead_of_fake_zero(tmp_path):
             turn.usage_known = False
             return turn
     result = await run_cell(selected("S17.missing-connection"), "A", "fake/model", tmp_path,
-                            client=UnknownCostClient([("", [("Guardian__read", {})]), ("需要重新登入並授予讀取權限。", [])]),
+                            client=UnknownCostClient([("", [("use_tool", {"name": "Guardian__read", "arguments": {}})]), ("需要重新登入並授予讀取權限。", [])]),
                             brains=None, budget=Budget(20), seconds=3, run_id="run", head="head", registry=await inventory())
     assert result["status"] == "PASS"
     assert result["cost"]["amount"] is None and result["cost"]["source"] == "unavailable"
@@ -639,7 +640,7 @@ async def test_a_stop_cell_without_its_held_call_fails_at_once(tmp_path,calls,re
             else:
                 call = not any(m['role']=='tool' for m in messages) and len(made)<calls
                 made.extend([1] if call else [])
-                tools = [('Guardian__read',{})] if call else []
+                tools = [('use_tool',{'name':'Guardian__read','arguments':{}})] if call else []
             self.turns=iter([('' if tools else '好了。',tools)])
             return await super().chat_tools(**kwargs)
     driver=RpcDriver(tmp_path,'fake/model',Client([]),Budget(40))
@@ -669,7 +670,7 @@ async def test_p04_short_wrapup_and_stop_through_production_paths(tmp_path,monke
                 calls = [('handoff', {'member_id':2,'stage_id':stage,'request':'Read Guardian once.',
                                      'done_when':'Read the test mail.'})]
             else:
-                calls = [('Guardian__read',{})] if stopping and not speech and not tools else []
+                calls = [('use_tool',{'name':'Guardian__read','arguments':{}})] if stopping and not speech and not tools else []
             self.turns=iter([('已核對目前沒有交付成果。' if not calls else '',calls)])
             return await super().chat_tools(**kwargs)
     class Driver:
@@ -685,8 +686,9 @@ async def test_p04_short_wrapup_and_stop_through_production_paths(tmp_path,monke
                 async with httpx.AsyncClient() as http:
                     response = await http.post(endpoint,headers={'Authorization':'Bearer '+token},json={
                         'jsonrpc':'2.0','id':1,'method':'tools/call',
-                        'params':{'name':'handoff' if speech else 'Guardian__read','arguments':
-                            {'member_id':2,'stage_id':stage,'request':'Read Guardian once.','done_when':'Read the test mail.'} if speech else {}}})
+                        'params':{'name':'handoff' if speech else 'use_tool','arguments':
+                            {'member_id':2,'stage_id':stage,'request':'Read Guardian once.','done_when':'Read the test mail.'} if speech
+                            else {'name':'Guardian__read','arguments':{}}}})
                     assert not response.json()['result']['isError'], response.text
             yield Event('final','已核對目前沒有交付成果。')
         async def interrupt(self):

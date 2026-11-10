@@ -670,8 +670,9 @@ Core fakes prove persistence and projection. IPC fixtures never prove OAuth or p
 Connection management is offered only to the current primary in an interactive
 owner private chat. Connect, enable/disable and turn on/off requests select the
 connection area, alongside disconnect/reconnect and explicit connection/MCP terms.
-Other requests keep management hidden until find_tools; the default primary
-snapshot remains at most 49 tools. Discovery never widens nonprimary or worker
+Since the fixed tool list (2026-11-10, owner-management.md) every request keeps
+management out of the list: find_tools returns it and use_tool calls it, and the
+words above only rank what find_tools returns. The default primary snapshot lists 43. Discovery never widens nonprimary or worker
 access, and execution rechecks the live primary and exact-action owner approval.
 Disconnect asks even under bypass. Local reconnect still requires proposal testing
 and the existing local-command consent before launching a server; ask mode also

@@ -25,6 +25,8 @@ from raphael_core.brain.db import connect
 from raphael_core.brain.openrouter import ChatToolCall, ChatTurn, Decision, OpenRouterClient
 from raphael_core.brain.secrets import MemoryKeyStore
 from raphael_core.evaluate.credentials import key_provider
+from raphael_core.agent.policy import Tier
+from raphael_core.background.snapshot import take_snapshot
 from raphael_core.evaluate.guardian import Recorder
 
 QUESTIONS = ("Open YouTube.", "What is two plus two?", "What is on my calendar today?")
@@ -97,11 +99,16 @@ class FakeProvider:
         return ChatTurn(content, calls, kwargs["model"], 0.0, 10, 5, 0)
 
 
+def owner_tools():
+    """The tools of the owner's own chat with Raphael, listed and found."""
+    return take_snapshot(None, memory=True, interactive=True, max_tier=Tier.T3)
+
+
 class RecordingLoop(NarratedLoop):
     recorders = []
 
     def __init__(self, **kwargs):
-        self.recorder = Recorder(kwargs["tools"])
+        self.recorder = Recorder(owner_tools())
         self.recorders.append(self.recorder)
         super().__init__(**{**kwargs, "execute": self.recorder})
 
@@ -110,7 +117,7 @@ class RecordingCliLoop(CliLoop):
     recorders = []
 
     def __init__(self, **kwargs):
-        self.recorder = Recorder(kwargs["tools"])
+        self.recorder = Recorder(owner_tools())
         self.recorders.append(self.recorder)
         super().__init__(**{**kwargs, "execute": self.recorder})
 

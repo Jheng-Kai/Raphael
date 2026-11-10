@@ -2,8 +2,8 @@
 
 Owner follow-up (2026-11-08): ask_member and handoff refuse operational delegated
 member management before another member turn/task starts, with guidance to use
-the caller's own owner-private management tools. Background CLI find_tools results
-are retained as untrusted data in the reload note across catalog restarts.
+the caller's own owner-private management tools. Since the fixed tool list (2026-11-10,
+below) a find_tools result is an ordinary tool result: the CLI never restarts for it.
 team_overview defaults to a compact complete roster with role, selected model and
 skill/command/routine counts; optional member_id returns one full detail record.
 DataFloor protects both Windows Raphael and Raphael Dev data roots, configured
@@ -53,17 +53,37 @@ Live/provider checks require separate authorization and prove a different bounda
 ## Management discovery follow-up
 
 The primary's default turn hides all 35 management definitions in Snapshot.management.
-The existing find_tools exposes matching native definitions; request-intent matching
-also adds the relevant areas before either the API or CLI turn starts. CLI MCP lists
-the same selected tools. Non-primary speakers discover only the narrowed self-management catalog; non-owner
-scopes have none. Exact target/field checks and the existing approval checks remain authoritative.
+find_tools returns the matching definitions (name, description, input schema) and the
+model calls one with use_tool; the request's words only rank what find_tools returns
+and never list a tool (fixed tool list, below). Non-primary speakers discover only the
+narrowed self-management catalog; non-owner scopes have none. Exact target/field checks
+and the existing approval checks remain authoritative.
 
 tests/members/test_management_discovery.py pins the default widest native offer at
-51 (the feat/members baseline is 60), pins API/CLI default prompt budgets, discovers
-every management tool, and exercises folder deletion, room renaming and member-model
-changes with production API and authenticated loopback MCP paths. It also covers
-same-turn discovery/execution and non-owner refusal. Token figures use the existing
+43 (52 before the fixed list; the feat/members baseline is 60), pins API/CLI default
+prompt budgets, discovers every management tool, and exercises folder deletion, room
+renaming and member-model changes through use_tool with production API and
+authenticated loopback MCP paths, the list unchanged. It also covers same-turn
+discovery/execution and non-owner refusal. Token figures use the existing
 memory.terms.estimate_tokens estimator, not provider billing or latency measurements.
+
+## Fixed tool list (owner, 2026-11-09, decision 2; built 2026-11-10)
+
+Every member is listed one set of tools, sorted by name, byte for byte the same through a
+conversation and from task to task of one kind (core/src/raphael_core/background/snapshot.py).
+What is listed follows the member and the path (owner's private chat, background, room), never
+the request, its files, a find_tools search or a connection that comes or goes. A connection's
+tools, management, the commands for this PC except `open`, the desktop `computer`,
+`generate_audio` and `slack_draft` are found with find_tools and called with use_tool, down the
+same gate, steps, audit and guardrails as a direct call. `open` and `update_page` stay listed: a
+model picks a listed look-alike (`show`, `show_page`) over searching for a hidden tool. The core's
+pinned tools (local commands, the member's computer, media models, Composio's router) stay listed.
+The member's computer catalog (a grant, the driver's own catalog) is the one change a task's list
+can still take. Offline: core/tests/members/test_fixed_tools.py (three turns, API and CLI MCP,
+identical lists; find and use in one turn) and core/tests/background/test_fixed_tools.py (worker,
+TaskRun, CLI member loop, connections changing mid-task). Live (Codex subscription, 2026-11-10):
+Guardian cells members, approval-yes, approval-no (find_tools then use_tool), open and
+routine-create pass on cli:codex:gpt-6-luna?effort=low.
 
 ## Settings panel intent (2026-11-07)
 

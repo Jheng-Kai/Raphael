@@ -13,7 +13,7 @@ from raphael_core.background.service import _prompts
 from raphael_core.brain.settings import SettingsStore
 from raphael_core.protocol import INVALID_PARAMS, NOT_FOUND, RpcError
 
-from .conftest import ARGUMENT, TASK_TEXT, call, report, turn, until
+from .conftest import ARGUMENT, TASK_TEXT, call, report, turn, until, use
 
 
 def hand_over(rig, conn, *, language="en", source="voice", text=TASK_TEXT):
@@ -106,7 +106,7 @@ async def test_closing_the_core_tells_the_task_that_ran_and_the_one_that_waited(
 ):
     rig = make_rig()
     await rig.plugins.connect(slow="T0")
-    rig.client.replies = [turn("", [call("Notes__slow", {}, "c1")])]
+    rig.client.replies = [turn("", [use("Notes__slow", {}, "c1")])]
     running, running_turn, history = hand_over(rig, conn, language="ja")
     waiting, waiting_turn, _ = hand_over(rig, conn, language="ja")
     await until(lambda: "slow" in calls)
@@ -186,8 +186,8 @@ async def test_the_second_attempt_is_told_what_was_done_without_any_argument(mak
     rig = make_rig()
     await rig.plugins.connect(look="T0", slow="T0")
     rig.client.replies = [
-        turn("", [call("Notes__look", {"topic": ARGUMENT}, "c1")]),
-        turn("", [call("Notes__slow", {}, "c2")]),
+        turn("", [use("Notes__look", {"topic": ARGUMENT}, "c1")]),
+        turn("", [use("Notes__slow", {}, "c2")]),
     ]
     old, _, _ = hand_over(rig, conn)
     await until(lambda: "slow" in calls)

@@ -1,6 +1,6 @@
 """Activity follows real worker RPC callbacks, including a reused worker peer."""
 
-from .conftest import call, report, turn, until
+from .conftest import call, report, turn, until, use
 
 
 def states(rig, member=0):
@@ -21,7 +21,7 @@ async def test_worker_reports_activity_on_every_task_in_a_reused_peer(make_rig):
 async def test_background_approval_is_blocked_then_tracks_approved_tool(make_rig):
     rig = make_rig()
     await rig.plugins.connect(look="T2")
-    rig.client.replies = [turn("Checking", [call("Notes__look", {"topic": "test"}, "look")]), report("Finished.")]
+    rig.client.replies = [turn("Checking", [use("Notes__look", {"topic": "test"}, "look")]), report("Finished.")]
     task = rig.submit()
     await until(lambda: rig.task(task).state == "waiting")
     await until(lambda: not rig.service.activity.running)

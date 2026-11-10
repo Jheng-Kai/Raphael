@@ -80,6 +80,17 @@ MORE_ROOM = 2
 
 # What the model is told for a call that was not made.
 UNKNOWN_TOOL = "There is no such tool. Use only the tools you are offered."
+# With find_tools and use_tool offered, a tool that is not listed may still be the task's.
+NOT_LISTED = ("That tool is not in your list. Find it with find_tools, then call it with use_tool: "
+              '{"name": "<name>", "arguments": {...}}.')
+
+
+def called(name: str, arguments: Any) -> tuple[str, Any]:
+    """The tool a call runs and its arguments: the one a use_tool call names (`background.snapshot`), else
+    the call's own. What watches calls by their tool (the guardrails, the computer's check) sees that tool."""
+    if name == "use_tool" and isinstance(arguments, dict) and isinstance(arguments.get("name"), str):
+        return arguments["name"], arguments.get("arguments", {})
+    return name, arguments
 BAD_ARGUMENTS = "The arguments are not a JSON object. Call the tool again with a JSON object."
 CUT_OFF = (
     "Your reply reached the output limit while you wrote this call, so it was cut off and not made. "
@@ -412,7 +423,8 @@ async def _run_task(
                             messages=list(messages), waiting_call=call.id,
                         )  # fmt: skip
                     content = result_text(call.name, outcome, keeper.window)
-                    computer_check.after(call.name, call.arguments, outcome.ok, outcome.kind)
+                    tool, arguments = called(call.name, call.arguments)
+                    computer_check.after(tool, arguments, outcome.ok, outcome.kind)
                     images.extend(image_parts(outcome))
                     if not outcome.ok:
                         last_failed = True
@@ -420,7 +432,7 @@ async def _run_task(
                             "denied", "declined", "cancelled", "owner_denied", "forbidden",
                             "presence_required", "private_chat_only", "member_create_limit")
                         tool_failure(outcome.kind, outcome.content)  # noted for self_check
-                    verdict = guardrails.after_call(call.name, call.arguments, outcome)
+                    verdict = guardrails.after_call(tool, arguments, outcome)
                     if verdict.halt:
                         raise Stop("failed", "tool_loop")
                     if verdict.note:  # after the result, outside the wrapper that marks it as data
@@ -522,7 +534,7 @@ def _refusal(call: Call, offered: set[str], *, cut: bool) -> str | None:
     """Why a call is not made, in the words the model is told, or None when it may be. `cut` is
     whether the reply it came in ended at the output limit."""
     if call.name not in offered:
-        return UNKNOWN_TOOL
+        return NOT_LISTED if "use_tool" in offered else UNKNOWN_TOOL
     if not isinstance(call.arguments, dict):
         return CUT_OFF if cut else BAD_ARGUMENTS
     if len(canonical(call.arguments)) > MAX_ARGUMENT_CHARS:

@@ -121,7 +121,7 @@ async def test_private_lane_approval_never_projects_a_card_into_the_meeting(meet
     await rig.plugins.connect(look='T2')
     request={'member_id':0,'stage_id':'private-approval','request':'Check the connected source privately.',
              'done_when':'A tool receipt and written check.'}
-    rig.client.replies.extend([turn(calls=[call('handoff',request)]),turn(calls=[call('Notes__look',{'topic':'review'})])])
+    rig.client.replies.extend([turn(calls=[call('handoff',request)]),turn(calls=[call('use_tool',{'name':'Notes__look','arguments':{'topic':'review'}})])])
     await rooms._send({'room_id':room['id'],'text':'@Raphael check the source','request_id':'approval'})
     await until(lambda:bool(rig.service.waiting_questions()))
     [question]=rig.service.waiting_questions()

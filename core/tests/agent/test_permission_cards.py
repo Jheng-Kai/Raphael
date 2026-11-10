@@ -20,6 +20,7 @@ from raphael_core.brain.openrouter import ChatToolCall, ChatTurn, Decision
 from raphael_core.brain.settings import SettingsStore
 
 from .conftest import FakeOpenRouter, decision, noul, tool_plan
+from .test_narration import use
 from .test_plugins import calls, plugins  # noqa: F401
 from .test_service import make_rig  # noqa: F401
 
@@ -83,7 +84,7 @@ def owner(conn, plugins, make_rig):
 
 def script(client, text="記下牛奶", tool="Notes__note", arguments=None):
     client.decisions.append(decision("answer"))
-    client.chats = [chat("I will do it.", (tool, arguments or {"text": text})), finished()]
+    client.chats = [chat("I will do it.", use(tool, arguments or {"text": text})), finished()]
 
 
 def test_message_preview_contains_only_typed_delivery_fields():

@@ -376,7 +376,7 @@ def test_find_tools_finds_the_calendar_by_the_plain_words_the_owner_would_use(wo
         def offered(self):
             return [PluginTool(f"mcp:s:t{n}", "Service", f"tool_{n}", "Something else entirely", {"type": "object"}, Tier.T1) for n in range(60)]
 
-    snapshot = take_snapshot(Many(), "something", interactive=True, max_tier=Tier.T3)
+    snapshot = take_snapshot(Many(), interactive=True, max_tier=Tier.T3)
     assert "find_tools" in snapshot.refs and snapshot.hidden()
     _, lines = snapshot.find(words)
     assert [line for line in lines if line.startswith("calendar_")], (words, lines)

@@ -11,7 +11,7 @@ from raphael_core.agent.service import AgentService
 from raphael_core.agent.speaker import RAPHAEL
 from raphael_core.brain.settings import SettingsStore
 from raphael_core.worker.loop import Outcome
-from .conftest import call, report, turn, until
+from .conftest import call, report, turn, until, use
 from .test_handoff import args, setup, team_of
 
 
@@ -35,7 +35,7 @@ async def test_work_has_private_replies_steps_and_a_separate_ordered_exchange(ma
     if brain == "api":
         def first(**kwargs):
             captured.append(str(kwargs["messages"]))
-            return turn(json.dumps({"messages": [opening]}), [call("Notes__look", {"topic": "source"})])
+            return turn(json.dumps({"messages": [opening]}), [use("Notes__look", {"topic": "source"})])
         rig.client.replies.extend([first, report(full)])
     else:
         rig.service.use_cli(object())

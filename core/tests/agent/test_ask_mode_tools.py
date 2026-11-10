@@ -9,7 +9,7 @@ import pytest
 
 from raphael_core.agent.policy import Tier
 
-from .test_narration import chat, typed
+from .test_narration import chat, typed, use
 from .test_plugins import calls, plugins  # noqa: F401
 from .test_service import make_rig  # noqa: F401
 from .conftest import decision
@@ -21,7 +21,7 @@ async def test_api_brain_in_ask_mode_makes_a_t1_call_after_a_yes(make_rig, plugi
     rig = make_rig(plugins=plugins.hub)
     rig.settings.set("action_mode", "ask")
     client.decisions.append(decision("answer"))
-    client.chats = [chat("On it.", (tool, arguments)),
+    client.chats = [chat("On it.", use(tool, arguments)),
                     chat(json.dumps({"prefix": "Answer", "text": "Done.", "detail": ""}))]
     asked = await typed(rig, "Look it up")
     assert asked["status"] == "confirm", asked
@@ -39,7 +39,7 @@ async def test_a_yes_to_a_call_the_plugin_tiers_by_its_arguments_makes_the_call(
     monkeypatch.setattr(plugins.hub, "tier_for_call", lambda key, arguments: Tier.T3 if arguments.get("text") == "wire" else Tier.T2)
     rig = make_rig(plugins=plugins.hub)
     client.decisions.append(decision("answer"))
-    client.chats = [chat("On it.", ("Notes__note", {"text": "wire"})),
+    client.chats = [chat("On it.", use("Notes__note", {"text": "wire"})),
                     chat(json.dumps({"prefix": "Answer", "text": "Done.", "detail": ""}))]
     asked = await typed(rig, "Send it")
     assert asked["status"] == "confirm" and asked["confirm"]["tier"] == "T3", asked
@@ -54,7 +54,7 @@ async def test_a_yes_still_does_not_cover_a_call_whose_tier_rose_after_the_quest
     monkeypatch.setattr(plugins.hub, "tier_for_call", lambda key, arguments: tiers["now"])
     rig = make_rig(plugins=plugins.hub)
     client.decisions.append(decision("answer"))
-    client.chats = [chat("On it.", ("Notes__note", {"text": "wire"}))]
+    client.chats = [chat("On it.", use("Notes__note", {"text": "wire"}))]
     asked = await typed(rig, "Send it")
     assert asked["status"] == "confirm"
     tiers["now"] = Tier.T3

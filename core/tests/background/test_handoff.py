@@ -263,7 +263,7 @@ async def test_parent_releases_slot_real_file_result_and_resume_once(make_rig,tm
     rig.service.attach_turn(parent,source.id)
     if brain=='api':
         rig.client.replies.extend([turn(calls=[call('handoff',args(target,request='Produce the file. '+deadline))]),
-            turn(calls=[call('Notes__look',{'topic':nonce})]),report('已產生驗收檔 '+nonce),report('已核對成果 '+nonce)])
+            turn(calls=[call('use_tool',{'name':'Notes__look','arguments':{'topic':nonce}})]),report('已產生驗收檔 '+nonce),report('已核對成果 '+nonce)])
     else:
         rig.service.use_cli(object())
         async def work(loop):
@@ -274,7 +274,7 @@ async def test_parent_releases_slot_real_file_result_and_resume_once(make_rig,tm
                 assert not unmade.ok and unmade.kind=='waiting_for_handoff'
                 assert loop._handed_off()
             elif loop.member_id==target.id:
-                assert (await loop._tool('file','Notes__look',{'topic':nonce})).ok
+                assert (await loop._tool('file','use_tool',{'name':'Notes__look','arguments':{'topic':nonce}})).ok
                 loop._queue.put_nowait(Outcome('done',final='已產生驗收檔 '+nonce))
             else:
                 assert nonce in loop.user

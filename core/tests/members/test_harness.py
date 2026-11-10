@@ -5,7 +5,7 @@ from dataclasses import fields
 
 import pytest
 
-from agent.test_narration import chat
+from agent.test_narration import chat, use
 from raphael_core.agent.harness_tools import DEFINITIONS
 from raphael_core.agent.actions import is_action
 from raphael_core.agent.tools import ToolResult
@@ -75,7 +75,8 @@ async def test_a_member_with_an_old_empty_tool_list_can_search_and_create_a_rout
     assert receipt["text"] == "已建立例行任務 · 每天 08:00 日文練習"
     assert receipt["type"] == "routine" and receipt["id"] == routine.id and receipt["name"] == routine.title
     offered = {t["function"]["name"] for t in client.chat_calls[0]["tools"]}
-    assert {"computer", "open", "web_search", "routine_create"} <= offered  # the same tools as Raphael's
+    # The same tools as Raphael's: `open` is listed, the desktop is found with find_tools (decision 2).
+    assert {"open", "web_search", "routine_create", "find_tools", "use_tool"} <= offered and "computer" not in offered
 
 
 async def test_a_member_can_open_an_app_with_the_same_presence_guard(setup, client):
@@ -197,7 +198,7 @@ async def test_a_member_uses_the_guarded_computer_loop_in_its_own_thread(setup, 
     teacher = member(team, name="紫苑", tools=[])
     rig.service._computer = ComputerRuns(shell.bridge)
     note = {"target": "user", "action": "add", "content": "Untrusted screen data", "old_text": ""}
-    client.chats = [chat("確認計算機。", ("computer", {"request": "按七"})), *PRESS_SEVEN, live_said("完成了，接著練習日文數字。", memory=[note])]
+    client.chats = [chat("確認計算機。", use("computer", {"request": "按七"})), *PRESS_SEVEN, live_said("完成了，接著練習日文數字。", memory=[note])]
     asked = await typed(rig, "在計算機按七", teacher.id)
     assert asked["status"] == "confirm"
     done = await rig.confirm(asked["confirm"]["id"])

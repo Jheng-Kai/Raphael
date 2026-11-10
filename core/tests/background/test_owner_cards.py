@@ -11,9 +11,10 @@ from .conftest import call, report, turn, until
 
 
 def test_background_offers_owner_cards_without_desktop_tools():
-    names = set(take_snapshot(None, "help").refs)
+    snapshot = take_snapshot(None)
+    names = set(snapshot.refs)
     assert {"find_app", "ask_owner", "connect_app", "connect_messaging", "request_secret", "email_draft", "show_page", "update_page", "routine_list", "routine_create"} <= names
-    assert not names & {"computer", "open", "copy_text", "launch_app"}
+    assert not (names | set(snapshot.work)) & {"computer", "open", "copy_text", "launch_app"}
 
 
 @pytest.mark.parametrize("member", [False, True])

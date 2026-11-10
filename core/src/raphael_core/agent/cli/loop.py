@@ -11,7 +11,7 @@ from collections import Counter
 from contextlib import aclosing
 from dataclasses import replace
 
-from ...worker.loop import Call, Outcome, Stop, ToolOutcome, WAITING, FINAL_REPORT
+from ...worker.loop import Call, Outcome, Stop, ToolOutcome, WAITING, FINAL_REPORT, called
 from ...members.activity import StreamSteps, current, tool_step
 from ...worker.guards import wrap_untrusted
 from ...worker.tool_guardrails import ToolGuardrails
@@ -44,8 +44,6 @@ RECOVERY_BLOCK_CHARS = 40000
 
 COMPUTER_CHANGED = ("The computer tool catalog changed. Reload the computer MCP catalog and continue "
                     "the original task. Do not repeat completed actions.")
-TOOLS_FOUND = ("The tools you asked find_tools for are in your tool list now. Continue the original task "
-               "with them. Do not repeat completed actions.")
 RECOVER = ("Continue the original task after a temporary CLI failure, using the recorded steps below. "
            "Do not repeat completed actions. Before repeating any action, first check whether it took effect, "
            "especially where the result is unknown or failed: an error does not prove no side effect occurred. "
@@ -355,7 +353,8 @@ class CliLoop:
                 return ToolOutcome(True, content=json.dumps(answer))
             previous_tools = list(self.tools)
             result = await self._execute(identifier, name, args)
-            self._computer_check.after(name, args, result.ok, result.kind)
+            tool, arguments = called(name, args)  # what a use_tool call ran, for what watches tools by name
+            self._computer_check.after(tool, arguments, result.ok, result.kind)
             refresh = getattr(self, "refresh_tools", None)
             if refresh is not None and previous_tools != refresh() and not self.catalog_changed:
                 self.reload_note = ("The connected tools changed. Read the current tool list and continue the original task "
@@ -363,7 +362,7 @@ class CliLoop:
                 self.catalog_changed = True
             if not result.ok:
                 result.content = json.dumps(tool_failure(result.kind, result.content).wire(), ensure_ascii=False)
-            note = self._guardrails.after_call(name, args, result).note
+            note = self._guardrails.after_call(tool, arguments, result).note
             if result.ok and result.kind == 'handoff':
                 self._handoff_pending = True
             shown = wrap_untrusted(name, result.instruction or result.content or result.kind or "", ok=result.ok)
