@@ -7,7 +7,8 @@
 import { showSlime } from "./slime";
 
 const MARGIN = "0px";
-const SURFACE = ".slime-surface";
+// A picture (`data-slime-still`) has nothing to pause: it is not watched at all (owner, 2026-11-11).
+const SURFACE = ".slime-surface:not([data-slime-still])";
 
 /** Watches every slime under `root`, now and as lines are drawn, and marks the far ones `data-offscreen`. Returns the way to stop. */
 export function stopOffscreenSlimes(root: ParentNode & Node = document.body): () => void {

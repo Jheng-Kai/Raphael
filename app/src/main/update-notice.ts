@@ -4,7 +4,7 @@
 // minutes and whenever the window comes back to the front, and is hidden while there is nothing new.
 import * as api from "./api";
 import { onLocaleChange, t } from "./i18n";
-import { esc, ico } from "./ui";
+import { esc, ico, patchHTML } from "./ui";
 
 const EVERY_MS = 10 * 60_000;
 
@@ -20,7 +20,9 @@ export function mountUpdateNotice(slot: HTMLElement): () => void {
   const draw = (): void => {
     const html = updateNoticeHTML(view, busy);
     slot.hidden = !html;
-    if (slot.innerHTML !== html) slot.innerHTML = html;
+    // Read again whenever the window returns to the front: the button on screen is patched, never swapped for an equal one
+    // (an innerHTML compare never matched, since the browser writes the markup back differently).
+    patchHTML(slot, html);
   };
   const read = async (): Promise<void> => {
     try { view = await api.updateControl("status"); } catch { view = null; }

@@ -59,3 +59,26 @@ test("quick history clears only after the shared confirmation and keeps its row;
     expect(host.querySelector('[data-conversation-open="9"]')).not.toBeNull();
   } finally { stop(); list.destroy(); }
 });
+
+test("a refresh patches the rows already on screen and a failed read keeps them", async () => {
+  core.mockResolvedValue({ conversations: RAPHAEL });
+  const host = document.createElement("div"); document.body.append(host);
+  const list = mountConversationList(host, { memberId: 0, onOpen() {}, current: () => 2 }); await flush();
+  const row = host.querySelector('[data-conversation-open="2"]')!, quick = host.querySelector('[data-conversation-open="9"]')!;
+  const changes: string[] = [];
+  const watch = new MutationObserver(records => records.forEach(record => record.removedNodes.forEach(node => changes.push((node as Element).outerHTML ?? node.textContent ?? ""))));
+  watch.observe(host, { childList: true, subtree: true });
+  core.mockResolvedValue({ conversations: [{ ...RAPHAEL[0]!, updated_at_ms: Date.now() + 61_000 }, RAPHAEL[1]!] });
+  await list.refresh(); await flush();
+  expect(host.querySelector('[data-conversation-open="2"]')).toBe(row);
+  expect(host.querySelector('[data-conversation-open="9"]')).toBe(quick);
+  // A read that fails leaves the rows, and says nothing over them.
+  core.mockRejectedValue(new Error("offline"));
+  await list.refresh(); await flush();
+  await Promise.resolve();
+  expect(host.querySelector('[data-conversation-open="2"]')).toBe(row);
+  expect(host.querySelector(".conversation-row")).not.toBeNull();
+  watch.disconnect();
+  expect(changes.filter(html => html.includes("conversation-open"))).toEqual([]);
+  list.destroy();
+});

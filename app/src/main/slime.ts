@@ -271,10 +271,17 @@ function strips(state: SlimeState, drawing: {back: string; worn: string}): [stri
   return loopState(state) ? motionStrips(state,BODY,EYES,FACE_SCALE,drawing.back,drawing.worn) : ['',''];
 }
 
-export interface SlimeDrawing { now?: Date; state?: SlimeState; delay?: number; tempo?: number; since?: number; member?: number; crown?: boolean }
+/**
+ * `moving` is the one switch of motion (owner, 2026-11-11: 「只有左邊成員列表工作中、對話框思考那一行要有動畫，其他地方放史萊姆的樣子就可以了」).
+ * A slime drawn without it is a picture: the resting pose of its drawing (idle, or sleeping for a member that has been
+ * silent for a day) with no strips, no clock, no motion variables and no state a handover could change, so it costs the
+ * page nothing: nothing observes it and no event reaches it. Only the member list's rows and the conversation's thinking
+ * line pass `moving`.
+ */
+export interface SlimeDrawing { now?: Date; state?: SlimeState; delay?: number; tempo?: number; since?: number; member?: number; crown?: boolean; moving?: boolean }
 
 /** The shared vector surface; `slimeFaceHTML` supplies the member's fixed avatar box. */
-export function slimeSVG(slime: Slime, { now = new Date(), state = "idle", delay = 0, tempo = 1, since, member, crown = false }: SlimeDrawing = {}): string {
+export function slimeSVG(slime: Slime, { now = new Date(), state = "idle", delay = 0, tempo = 1, since, member, crown = false, moving = false }: SlimeDrawing = {}): string {
   hearThePointer();
   const look: { color: string; back?: string; marks?: string } = "character" in slime ? CHARACTERS[slime.character] : { color: COLORS[slime.color] };
   // The primary member wears the crown in any season: a plain slime's hat gives way to it.
@@ -283,14 +290,19 @@ export function slimeSVG(slime: Slime, { now = new Date(), state = "idle", delay
   const key = `${look.back ?? ''}|${worn}`;
   let drawingId = drawingIds.get(key);
   if (!drawingId) { drawingId=String(drawings.size);drawingIds.set(key,drawingId);drawings.set(drawingId,{back:look.back ?? '',worn}); }
-  const [bodyStrip,eyeStrip] = strips(state,drawings.get(drawingId)!);
+  // The picture of a slime keeps only the pose a state gives without moving: asleep, or at rest.
+  if (!moving) state = state === "sleeping" ? "sleeping" : "idle";
+  const [bodyStrip,eyeStrip] = moving ? strips(state,drawings.get(drawingId)!) : ['',''];
   // Each member glances to its own side at rest; neighbours in a list look different ways.
   const aside = member !== undefined && Math.abs(member) % 2 === 1 ? 3 : -3;
-  return `<span class="slime-surface" data-slime-drawing="${drawingId}" data-slime-reuse="${drawingId}:${look.color}:${tempo}:${member ?? ''}" data-state="${state}" aria-hidden="true" style="--slime-color:${look.color};--slime-delay:${delay}ms;--slime-tempo:${tempo}">${bodyStrip}<svg class="slime" viewBox="4 11 92 92" data-slime-mounted="${performance.now()}" data-state="${state}"${member === undefined ? "" : ` data-slime-member="${member}"`} aria-hidden="true" focusable="false" style="--slime-color:${look.color};--slime-delay:${delay}ms;--slime-tempo:${tempo};--slime-aside:${aside}px${since === undefined ? "" : `;--slime-since:${since}ms`}">` +
-    `<g class="slime-press"><g class="slime-settle"><g class="slime-counterturn"><g class="slime-motion">` +
+  const body = `<g class="slime-press"><g class="slime-settle"><g class="slime-counterturn"><g class="slime-motion">` +
     (look.back ? `<g class="slime-back">${look.back}</g>` : "") + correction(`<path d="${BODY}" fill="var(--slime-color)" class="slime-body"/>`) + `<g class="slime-marks">${worn}</g>` +
     `<g class="slime-face" transform="${FACE_SCALE}"><g class="slime-follow"><g class="slime-look"><g class="slime-counterturn"><g class="slime-gaze" fill="none" stroke="#fff" stroke-linecap="round"><path class="slime-eyes" d="${EYES}"/></g></g></g></g></g>` +
-    `</g></g></g></g></svg>${eyeStrip}</span>`;
+    `</g></g></g></g>`;
+  // A picture has no clock, no member to hand over to and no motion variables; `data-slime-still` names whose it is for patchHTML.
+  if (!moving) return `<span class="slime-surface" data-slime-still="${member ?? ''}" data-slime-drawing="${drawingId}" data-slime-reuse="${drawingId}:${look.color}:still:${member ?? ''}" data-state="${state}" aria-hidden="true" style="--slime-color:${look.color}"><svg class="slime" viewBox="4 11 92 92" data-state="${state}" aria-hidden="true" focusable="false" style="--slime-color:${look.color};--slime-aside:${aside}px">${body}</svg></span>`;
+  return `<span class="slime-surface" data-slime-drawing="${drawingId}" data-slime-reuse="${drawingId}:${look.color}:${tempo}:${member ?? ''}" data-state="${state}" aria-hidden="true" style="--slime-color:${look.color};--slime-delay:${delay}ms;--slime-tempo:${tempo}">${bodyStrip}<svg class="slime" viewBox="4 11 92 92" data-slime-mounted="${performance.now()}" data-state="${state}"${member === undefined ? "" : ` data-slime-member="${member}"`} aria-hidden="true" focusable="false" style="--slime-color:${look.color};--slime-delay:${delay}ms;--slime-tempo:${tempo};--slime-aside:${aside}px${since === undefined ? "" : `;--slime-since:${since}ms`}">` +
+    body + `</svg>${eyeStrip}</span>`;
 }
 
 // ---------- under the pointer ----------
@@ -569,15 +581,20 @@ const paint = (id: number, state: SlimeState): void => {
   handOverTogether([...document.querySelectorAll<SVGElement>(`svg.slime[data-slime-member="${id}"]`)], state);
 };
 
-/** The list the core just read says what each member is doing, for a window that opened late. A moment plays out first. */
-export function followSlimeRoster(members: readonly { id: number; activity?: string; activity_label?: string }[]): void {
-  for (const { id, activity: state, activity_label: label } of members) {
+/**
+ * The list the core just read says what each member is doing, for a window that opened late. A moment plays out first.
+ * A face already on screen is handed over to it here, with the bridge every change of state has, so that the redraw
+ * which follows finds it as it should be and keeps it (patchHTML) instead of drawing a new one in its place.
+ */
+export function followSlimeRoster(members: readonly { id: number; activity?: string; activity_label?: string; waiting?: boolean }[]): void {
+  for (const { id, activity: state, activity_label: label, waiting } of members) {
     if (label !== undefined) labels.set(id, label);
     if (fleeting.has(id)) continue;
     if (state && LIVE_STATES.includes(state)) {
       if (activity.get(id) !== state) began.set(id, performance.now());
       activity.set(id, state as SlimeState);
     } else activity.delete(id);
+    paint(id, waiting ? "blocked" : activity.get(id) ?? resting.get(id) ?? "idle");
   }
 }
 
@@ -612,15 +629,22 @@ const delayOf = (seed: number, now: number): number => -Math.round(now + (Math.a
 /** Each member keeps its own pace, a few hundredths either way, so that a list never falls into step for long. */
 const tempoOf = (seed: number): number => Number((0.94 + (Math.abs(seed * 37) % 13) * 0.01).toFixed(2));
 
-/** The slime a member shows: its own choice, or a colour from its id. */
-export function slimeFaceHTML(member: SlimeFacts & { avatar?: string | null }, size: number, cls = ""): string {
+/**
+ * The slime a member shows: its own choice, or a colour from its id. A picture unless `moving` (the member list's rows and
+ * the conversation's thinking line): then it follows what the member is doing (owner, 2026-11-11).
+ */
+export function slimeFaceHTML(member: SlimeFacts & { avatar?: string | null }, size: number, cls = "", moving = false): string {
   const slime = parseSlime(member.avatar) ?? { color: defaultColor(member.id) };
   const rest = restingState(member, Date.now());
   resting.set(member.id, rest);
-  const state = member.waiting ? "blocked" : activity.get(member.id) ?? rest, now = performance.now(), start = began.get(member.id);
   const label = labels.get(member.id) ?? "";
-  return `<span class="av mb-av mb-av-slime${cls ? ` ${cls}` : ""}" data-presence-member="${member.id}"${label ? ` data-tooltip="${label.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;")}"` : ""} style="--av:${Math.round(size)}px" aria-hidden="true">` +
-    slimeSVG(slime, { state, member: member.id, crown: member.id === crownedId(), delay: delayOf(member.id, now), tempo: tempoOf(member.id), since: start === undefined ? undefined : -Math.round(now - start) }) + `</span>`;
+  const frame = `<span class="av mb-av mb-av-slime${cls ? ` ${cls}` : ""}" data-presence-member="${member.id}"${label ? ` data-tooltip="${label.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;")}"` : ""} style="--av:${Math.round(size)}px" aria-hidden="true">`;
+  // A picture shows no activity: whatever the member is doing, its drawing does not change, so a redraw that carries
+  // a new state touches nothing.
+  if (!moving) return frame + slimeSVG(slime, { state: rest, member: member.id, crown: member.id === crownedId() }) + `</span>`;
+  const state = member.waiting ? "blocked" : activity.get(member.id) ?? rest, now = performance.now(), start = began.get(member.id);
+  return frame +
+    slimeSVG(slime, { state, member: member.id, crown: member.id === crownedId(), delay: delayOf(member.id, now), tempo: tempoOf(member.id), since: start === undefined ? undefined : -Math.round(now - start), moving: true }) + `</span>`;
 }
 
 // ---------- the picture menu ----------

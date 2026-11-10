@@ -482,7 +482,7 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
       if (m.kind === "report" && m.report) return `<li class="tn" data-room-message="${m.id}">${roomReportHTML(m)}</li>`;
       if(m.member_id!==null&&m.status==="running"&&!m.text.trim()&&(!m.turn||!waitsAtCard(m.turn))) {
         const member=person(m.member_id);
-        return `<li class="tn au-room-thinking" data-room-message="${m.id}" role="status"><div class="ra-body"><b class="au-room-author">${esc(member?.name??t("members.title"))}</b>${livePresenceHTML({face:()=>member?faceHTML(member,28):"",activityLabel:member?.activity_label},m.turn?latestProgress(m.turn):undefined)}</div></li>`;
+        return `<li class="tn au-room-thinking" data-room-message="${m.id}" role="status"><div class="ra-body"><b class="au-room-author">${esc(member?.name??t("members.title"))}</b>${livePresenceHTML({face:()=>member?faceHTML(member,28,{moving:true}):"",activityLabel:member?.activity_label},m.turn?latestProgress(m.turn):undefined)}</div></li>`;
       }
       const member=person(m.member_id),owner=m.member_id===null,parts=owner?[m.text]:plainReplies(replyMessages(m.text)).map(text=>composioText(text,composioAction(m.turn))),words=parts.join("\n\n")||(owner?"":t(m.status==="error"?"auto.error":"auto.running"));
       const source=m.reply_reference;

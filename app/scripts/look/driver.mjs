@@ -3,6 +3,7 @@ import { assertStableClick, stableSnapshot, stableControls } from "./stable-clic
 import { checkRendered } from "./checks.mjs";
 import { idleCost, paintedSlime, slimeBoard, slimeParts, slimePointer, slimeSharp } from "./slime-board.mjs";
 import { eventStorm } from "./event-storm.mjs";
+import { placesProblems, slimePlaces } from "./slime-places.mjs";
 import { sendProbe } from "./send-probe.mjs";
 import { animationAudit, motionCost, motionDetails } from "./motion-cost.mjs";
 
@@ -586,6 +587,12 @@ export async function perform(page, step, evidenceDirectory) {
       const result = {check:'motion-audit',...await page.evaluate(animationAudit)};
       if(result.failures.length) throw Object.assign(new Error(`Non-compositable endless motion: ${JSON.stringify(result)}`),{assertion:result});
       return result;
+    }
+    // Slimes move in two places only (R-SLIME-01): the member list's rows and the thinking line; everywhere else they are pictures.
+    case "slime-places": {
+      const result = await page.evaluate(slimePlaces), problems = placesProblems(result, step.expect);
+      if (problems.length) throw Object.assign(new Error(`Slimes move in the wrong places: ${problems.join("; ")} | ${JSON.stringify(result)}`), { assertion: result });
+      return { check: "slime-places", ...result };
     }
     case "event-storm": return await eventStorm(page, step);
     case "open-cost": return await openCost(page, step);

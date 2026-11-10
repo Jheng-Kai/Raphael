@@ -90,9 +90,9 @@ test("thinking, blocked and working keep their own-colour slime and liquid props
 
 test("owner waiting overrides running while colleague waiting remains a separate state", () => {
   followSlimeRoster([{ id: 91, activity: "working" }]);
-  expect(dom(slimeFaceHTML({ id: 91, waiting: true }, 28)).querySelector(".slime")?.getAttribute("data-state")).toBe("blocked");
+  expect(dom(slimeFaceHTML({ id: 91, waiting: true }, 28, "", true)).querySelector(".slime")?.getAttribute("data-state")).toBe("blocked");
   followSlimeRoster([{ id: 92, activity: "waiting" }]);
-  expect(dom(slimeFaceHTML({ id: 92 }, 28)).querySelector(".slime")?.getAttribute("data-state")).toBe("waiting");
+  expect(dom(slimeFaceHTML({ id: 92 }, 28, "", true)).querySelector(".slime")?.getAttribute("data-state")).toBe("waiting");
 });
 
 test("private bubbles have no faces and completed work opens from the message hover actions", () => {
@@ -158,9 +158,13 @@ test("an open shared hover updates its public action without pointer movement", 
 
 test("Raphael's blue slime shares the public action hover and moves with his work", () => {
   followSlimeRoster([{id: RAPHAEL_ID, activity: "thinking", activity_label: "Checking a sample"}]);
-  const root = dom(faceHTML({id: RAPHAEL_ID, name: "Raphael"}, 28));
+  const root = dom(faceHTML({id: RAPHAEL_ID, name: "Raphael"}, 28, {moving: true}));
   expect(root.querySelector(`[data-presence-member="${RAPHAEL_ID}"]`)?.getAttribute("data-tooltip")).toBe("Checking a sample");
   expect(root.querySelector(".slime")?.getAttribute("data-state")).toBe("thinking");
+  // Elsewhere his slime is a picture that keeps the hover (owner, 2026-11-11).
+  const picture = dom(faceHTML({id: RAPHAEL_ID, name: "Raphael"}, 28));
+  expect(picture.querySelector(`[data-presence-member="${RAPHAEL_ID}"]`)?.getAttribute("data-tooltip")).toBe("Checking a sample");
+  expect(picture.querySelector(".slime")?.getAttribute("data-state")).toBe("idle");
 });
 
 test("a blocked task keeps its live presence until the owner acts", () => {

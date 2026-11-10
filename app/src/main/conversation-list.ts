@@ -6,7 +6,7 @@ import { onLocaleChange, t } from "./i18n";
 import { describeError } from "./format";
 import { confirmDelete } from "./member-dialogs";
 import { openActions } from "./member-column";
-import { btn, closeMenu, esc, iconButton, toaster } from "./ui";
+import { btn, closeMenu, esc, iconButton, patchHTML, toaster } from "./ui";
 import "./conversations.css";
 
 export interface ConversationInfo {
@@ -48,9 +48,11 @@ export function mountConversationList(host: HTMLElement, options: { memberId: nu
     const open = options.current?.() ?? newestConversation(conversations)?.id;
     const main = newestConversation(conversations.filter(c => c.kind !== "quick"));
     const quick = conversations.find(c => c.kind === "quick");
-    rows.innerHTML = [main, quick].filter((c): c is ConversationInfo => !!c).map(c => `<div class="conversation-row">` +
+    // Every turn of the member says the conversations changed: the rows already on screen are patched, never drawn anew,
+    // so a title and its time do not flash and a row under the pointer stays (owner, 2026-11-11: 「亂跳一通」).
+    patchHTML(rows, [main, quick].filter((c): c is ConversationInfo => !!c).map(c => `<div class="conversation-row" data-k="conversation:${c.id}">` +
       btn(`<span>${esc(conversationTitle(c))}</span><small>${esc(relativeTime(c.updated_at_ms))}</small>`, "conversation-open", ` data-conversation-open="${c.id}" aria-current="${c.id === open}"`) +
-      (c.kind === "quick" ? iconButton("more", t("chat.more"), ` data-conversation-more="${c.id}" aria-haspopup="menu"`, "conversation-more") : "") + `</div>`).join("");
+      (c.kind === "quick" ? iconButton("more", t("chat.more"), ` data-conversation-more="${c.id}" aria-haspopup="menu"`, "conversation-more") : "") + `</div>`).join(""));
   }
 
   async function refresh(fromEvent=false): Promise<void> {
@@ -61,7 +63,8 @@ export function mountConversationList(host: HTMLElement, options: { memberId: nu
       const result = await (fromEvent ? eventRead(`conversations.list:${options.memberId}`,read,options.scope ?? host) : read());
       if (!destroyed && mine === epoch) { conversations = Array.isArray(result?.conversations) ? result.conversations : []; draw(); }
     } catch (error) {
-      if (!destroyed && mine === epoch) rows.textContent = describeError(error);
+      // A read that fails keeps the rows on screen; only an empty list says why (a refresh never swaps what is shown for an error).
+      if (!destroyed && mine === epoch && !rows.childElementCount) rows.textContent = describeError(error);
     }
   }
 
