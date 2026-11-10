@@ -29,6 +29,7 @@ mod updates;
 mod webview_power;
 
 use std::path::PathBuf;
+use std::time::Instant;
 use tauri::{AppHandle, Manager, Runtime, WindowEvent, plugin::TauriPlugin};
 use tauri_plugin_log::{RotationStrategy, Target, TargetKind, TimezoneStrategy};
 use tauri_plugin_window_state::StateFlags;
@@ -83,6 +84,7 @@ fn panic_report(thread: Option<&str>, location: Option<&std::panic::Location<'_>
 }
 
 pub fn run() {
+    let launched_at = Instant::now();
     log_panics();
     // A restricted runner can terminate its spawn handle without enumerating processes. Keep
     // every native-test descendant in the same kill-on-close Job before any webview is created.
@@ -234,6 +236,33 @@ pub fn run() {
             // What the move of files from earlier builds did (it ran before the log existed), and
             // the copy of the speech models when they could not be renamed.
             let migration = take_migration(app.handle());
+
+            // ---- Python core ----
+            // Start before creating any webviews so that Python initializes alongside them.
+            // The app does not need it to run (tray, settings), so a core that cannot be started
+            // is logged and the app carries on without dictation.
+            match core_process::resolve_app_core_command(app.handle())
+                .map(|mut command| {
+                    // Models that could not be moved yet stay usable where they are.
+                    if let Some(dir) = &migration.models_dir {
+                        command
+                            .env
+                            .push(("RAPHAEL_MODELS_DIR".to_owned(), dir.display().to_string()));
+                    }
+                    command
+                })
+                .and_then(core_process::CoreProcess::start)
+            {
+                Ok(core) => {
+                    app.manage(core);
+                    log::info!(
+                        "start-up: core spawned {} ms after launch",
+                        launched_at.elapsed().as_millis()
+                    );
+                }
+                Err(err) => log::error!("the Python core is not running: {err}"),
+            }
+
             for (level, message) in &migration.notes {
                 log::log!(*level, "data folders: {message}");
             }
@@ -245,6 +274,10 @@ pub fn run() {
             // Created here rather than from the config so that it gets the webview data folder
             // like the overlay does, after the migration has put the old data there.
             create_main_window(app.handle())?;
+            log::info!(
+                "start-up: main window created {} ms after launch",
+                launched_at.elapsed().as_millis()
+            );
 
             if let Some(window) = app.get_webview_window(MAIN_WINDOW) {
                 match window.is_decorated() {
@@ -276,6 +309,10 @@ pub fn run() {
                 match overlay::Overlay::create(app.handle(), 150, "on", "zh-TW") {
                     Ok(overlay) => {
                         app.manage(overlay);
+                        log::info!(
+                            "start-up: overlay created {} ms after launch",
+                            launched_at.elapsed().as_millis()
+                        );
                     }
                     Err(err) => log::error!("could not create the overlay window: {err}"),
                 }
@@ -285,28 +322,6 @@ pub fn run() {
             // Learned corrections have their own passive window, including isolated native tests.
             if let Err(err) = learned::start(app.handle()) {
                 log::error!("could not create the learned word window: {err}");
-            }
-
-            // ---- Python core ----
-            // Started in the background and kept in Tauri state for the dictation controller. The
-            // app does not need it to run (tray, settings), so a core that cannot be started is
-            // logged and the app carries on without dictation.
-            match core_process::resolve_app_core_command(app.handle())
-                .map(|mut command| {
-                    // Models that could not be moved yet stay usable where they are.
-                    if let Some(dir) = &migration.models_dir {
-                        command
-                            .env
-                            .push(("RAPHAEL_MODELS_DIR".to_owned(), dir.display().to_string()));
-                    }
-                    command
-                })
-                .and_then(core_process::CoreProcess::start)
-            {
-                Ok(core) => {
-                    app.manage(core);
-                }
-                Err(err) => log::error!("the Python core is not running: {err}"),
             }
 
             // ---- Hotkeys ----
