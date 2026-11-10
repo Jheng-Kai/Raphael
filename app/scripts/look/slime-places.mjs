@@ -34,16 +34,24 @@ export function slimePlaces() {
       if (style.transitionDuration && !/^(?:0s,?\s*)+$/.test(style.transitionDuration)) { offenders.push({ at: here(surface), reason: `${name(node)} has a transition (${style.transitionDuration})` }); break; }
     }
   }
-  return { surfaces: surfaces.length, found, offenders: offenders.slice(0, 20) };
+  // Whether the list is on screen at all: a compact window keeps it in a drawer that is closed (hidden and off to the left)
+  // while a conversation is open, and a list nobody can see has no slime to move.
+  const listShown = [...document.querySelectorAll(".mb-list .mb-row, .mb-list .mb-tile")].some(row => {
+    const rect = row.getBoundingClientRect();
+    return getComputedStyle(row).visibility !== "hidden" && rect.width > 0 && rect.height > 0 && rect.right > 0 && rect.left < innerWidth && rect.bottom > 0 && rect.top < innerHeight;
+  });
+  return { surfaces: surfaces.length, found, listShown, offenders: offenders.slice(0, 20) };
 }
 
 /**
  * What a scene may ask of the places: a member working is moving in the list (`list`) and in the thinking line (`line`),
- * and nothing else is moving, ever. Returns the problems in words; an empty list is a pass.
+ * and nothing else is moving, ever. The list is asked to move only while it is on screen (`listShown`): at a compact width it
+ * is a drawer, closed once a conversation is open, and no slime is drawn there to move. Returns the problems in words; an
+ * empty list is a pass.
  */
 export function placesProblems(result, expect = {}) {
   const problems = result.offenders.map(offender => `a slime moves or could move at ${offender.at}: ${offender.reason}`);
-  if (expect.list && result.found.list === 0) problems.push("no slime moves in the member list while a member works");
+  if (expect.list && result.listShown !== false && result.found.list === 0) problems.push("no slime moves in the member list while a member works");
   if (expect.line && result.found.line === 0) problems.push("no slime moves in the thinking line while a member works");
   if (expect.picturesOnly && (result.found.list || result.found.line)) problems.push("a slime moves where only pictures were expected");
   return problems;

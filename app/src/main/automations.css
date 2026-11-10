@@ -62,15 +62,24 @@
 :is(.page-agent, body) .room-side-thread .tn > .ra { --pa-ra-face: 24px; grid-template-columns: var(--pa-ra-face) minmax(0, 1fr); align-items: end; column-gap: var(--sp-2); }
 .room-side-thread .tn > .ra > .ra-face { margin: 0 0 var(--sp-1); }
 /* In the room itself the faces hang beside the column, in its gutter, so the words and cards begin and end where the composer
-   does (R-UI-45; the judge on 6e2ca315: a face's slot made every message start 32 px inside the composer). The scroll holds
-   the pane's own side padding too, so the gutter is `--room-pad` plus the composer's inset (32 px at 720 wide, 43 at 1120)
-   and the face, which is smaller under 860 px, fits inside it with a gap on each side. */
+   does (R-UI-45; the judge on 6e2ca315: a face's slot made every message start 32 px inside the composer). The gutter is
+   `--room-pad` (the pane's own side padding) plus the composer's inset (32 px at 720 wide, 43 at 1120), and the face, which is
+   smaller under 860 px, fits inside it with a gap on each side. The pane gives its side padding to its children, so the stage,
+   its scroll and its dock span the pane and nothing is wider than the box it stands in: no sideways overflow. */
 .au-room-pane { --room-pad: var(--pa-chat-pad); --room-face: 24px; }
 @media (max-width: 859px) { .au-room-pane { --room-pad: var(--sp-4); --room-face: 20px; } }
-.au-room-pane > .ra-stage > .ra-scroll { margin-inline: calc(-1 * var(--room-pad)); padding-inline: calc(var(--room-pad) + var(--pa-dock-x)); }
-.au-room-thread .tn > :is(.ra, .me) { position: relative; }
-.au-room-thread .tn > .ra > .ra-face { --pa-ra-face: var(--room-face); position: absolute; left: calc(-1 * (var(--room-face) + var(--sp-1))); bottom: var(--sp-1); margin: 0; }
-.au-room-thread .tn > .me > .owner-face { position: absolute; right: calc(-1 * (var(--room-face) + var(--sp-1))); bottom: 0; width: var(--room-face); height: var(--room-face); margin: 0; }
+.au-room-pane { --room-gutter: calc(var(--room-face) + var(--sp-1)); }
+.au-room-pane.mb-chat { padding-inline: 0; }
+.au-room-pane.mb-chat > .mb-head { margin-inline: var(--room-pad); }
+.au-room-pane > .ra-find { width: calc(100% - 2 * (var(--room-pad) + var(--pa-dock-x))); }
+@media (min-width: 1100px) { .au-room-pane.has-side-thread.mb-chat > .page-head { margin-right: calc(440px + var(--room-pad)); } }
+.au-room-pane > .ra-stage > .ra-scroll, .au-room-pane .ra-dock { padding-inline: calc(var(--room-pad) + var(--pa-dock-x)); }
+/* A member's face hangs from its row, to the left, which no box counts as overflow. The owner's face is out of flow too, but
+   its box is the scroll: it keeps its static place at the end of the row and is pushed into the right gutter by its margin, so
+   no row, thread or column is wider than what it holds. */
+.au-room-thread .tn > .ra { position: relative; }
+.au-room-thread .tn > .ra > .ra-face { --pa-ra-face: var(--room-face); position: absolute; left: calc(-1 * var(--room-gutter)); bottom: var(--sp-1); margin: 0; }
+.au-room-thread .tn > .me > .owner-face { position: absolute; width: var(--room-face); height: var(--room-face); margin: 0 calc(-1 * var(--room-gutter)) 0 0; }
 .au-room-thread .room-turn { white-space: nowrap; }
 .au-room-row [aria-current="true"] { background: var(--accent-soft) !important; color: var(--text); }
 .au-rooms-section { border-top: 1px solid var(--line); margin-top: var(--sp-4); padding: var(--sp-2) 0; }
