@@ -113,18 +113,21 @@ export function installMock(fixture, config = {}, target = window) {
     }
   }
   if (variant.unreadDivider) {
+    // The unread run is the member's `unreadMember` (1 by default; 0 is Raphael, whose main conversation is 1) and is "long",
+    // "short", or "medium": 20 seen short turns, then 16 unseen ones, which a window centred on the line used to cut the tail off.
+    const owner = variant.unreadMember ?? 1, conversation = owner === 0 ? 1 : 11;
     const base = structuredClone(data.turns.find(turn => turn.member_id === 1 && turn.conversation_id === 11));
     const sample = data.unreadSample;
-    const make = (id, text) => ({ ...base, id, created_at_ms: data.now - (7100 - id) * 1000,
+    const make = (id, text) => ({ ...base, id, member_id: owner, conversation_id: conversation, created_at_ms: data.now - (7100 - id) * 1000,
       session_id: `sample-unread-${id}`, source: "routine", route: "routine", question: sample.question,
       text, detail: null, status: "done", task: null, steps: [], messages: [], attachments: [], handoffs: [],
       permissions: [], drafts: [], computers: [], connectors: [], secrets: [], pages: [] });
-    data.turns = data.turns.filter(turn => turn.member_id !== 1);
-    const long = variant.unreadDivider === "long";
-    for (let id = 7000; id <= (long ? 7060 : 7001); id++) data.turns.push(make(id, id === 7000 && variant.unreadSeenLong
+    data.turns = data.turns.filter(turn => turn.member_id !== owner);
+    const long = variant.unreadDivider === "long", medium = variant.unreadDivider === "medium";
+    for (let id = 7000; id <= (long ? 7060 : medium ? 7035 : 7001); id++) data.turns.push(make(id, id === 7000 && variant.unreadSeenLong
       ? Array(24).fill(sample.paragraph).join("\n\n") : long && id > 7000
         ? `${sample.answer}\n\n${Array(5).fill(sample.paragraph).join("\n\n")}` : sample.answer));
-    Object.assign(data.members.find(member => member.id === 1), { unread: true, unread_from: 7001 });
+    Object.assign(data.members.find(member => member.id === owner), { unread: true, unread_from: medium ? 7020 : 7001 });
   }
   if (variant.presence) {
     const sample = data.presenceSample;
@@ -454,6 +457,17 @@ export function installMock(fixture, config = {}, target = window) {
     if (variant.latePairing) data.turns.push(turn(143, "", "", { route: "pairing", source: "messaging", session_id: "pairing-late", created_at_ms: data.now + 1000,
       pairings: [{ id: "pair-late", platform: "slack", member_id: 1, code: "SL9X4M", who: "Sam", expires_at_ms: data.now + 600000, state: "pending" }] }));
   }
+  // A turn with two replies, the computer's card and one question (owner, 2026-11-11): it stands at the end only while it waits
+  // ("asked"); "answered" it stands where it was asked, before the replies it led to. The core does not send its time yet.
+  if (variant.ownerQuestionOrder) {
+    const question = structuredClone(data.ownerQuestionCard), waiting = variant.ownerQuestionOrder === "asked";
+    const base = structuredClone(data.turns.find(turn => turn.member_id === 1 && turn.conversation_id === 11));
+    if (!waiting) Object.assign(question, { state: "answered", result: { state: "answered", answer: "星期二" } });
+    data.turns = [{ ...base, id: question.turn_id, session_id: "owner-question-order", question: "請幫我整理並寄出報告。", route: "delegate", source: "app",
+      text: "報告已經寄出。", detail: null, status: "done", steps: [], handoffs: [], permissions: [], drafts: [], connectors: [], secrets: [], pages: [], task: null,
+      messages: [{ seq: 1, kind: "reply", text: "已經整理好報告，寄出前想先問你日期。", at_ms: data.now - 60000 }, { seq: 2, kind: "reply", text: "報告已經寄出。", at_ms: data.now - 20000 }],
+      computers: [{ id: "order-computer", seq: 3, reason: "other", app: "", state: "done", error: null, note: null, expires_at_ms: data.now }], owner_questions: [question] }];
+  }
   if (variant.ownerQuestion) {
     const question = structuredClone(data.ownerQuestionCard);
     const turn = { ...structuredClone(data.turns.find(turn => turn.member_id === 1 && turn.conversation_id === 11)),
@@ -779,6 +793,23 @@ export function installMock(fixture, config = {}, target = window) {
   } };
   let maximized = false;
   target.__look = state;
+  // What the owner could see of the open conversation's place, frame by frame (`scrollTimeline`): a place seen once is the
+  // place the thread opens at, so a bottom followed by the line (or the other way) shows as two samples.
+  if (variant.scrollTimeline) {
+    state.timeline = [];
+    const sample = () => {
+      const scroller = target.document.querySelector(".page-agent:not([hidden]) .mb-chat .ra-scroll");
+      if (scroller && scroller.clientHeight > 0 && scroller.querySelector(".tn") && target.getComputedStyle(scroller).visibility !== "hidden") {
+        const place = { top: Math.round(scroller.scrollTop), bottom: Math.round(scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight) };
+        const last = state.timeline.at(-1);
+        if (!last || last.top !== place.top || last.bottom !== place.bottom) state.timeline.push(place);
+      }
+      target.requestAnimationFrame(sample);
+    };
+    target.requestAnimationFrame(sample);
+  }
+  // The roster read answers late (`rosterDelay`, or the `late-roster` step), as a busy core does.
+  state.rosterDelay = variant.rosterDelay ?? 0;
   const copy = value => value === undefined ? undefined : structuredClone(value);
   if (variant.colleague === "greeting" || variant.colleague === "handoff") {
     const base = structuredClone(data.turns.find(turn => turn.member_id === 1));
@@ -1017,6 +1048,7 @@ export function installMock(fixture, config = {}, target = window) {
         return { files: items.slice(0, limit), has_more: items.length > limit };
       }
       case "members.list": {
+        if (state.rosterDelay && !('panel_member_id' in p)) await new Promise(resolve => setTimeout(resolve, state.rosterDelay));
         if ('panel_member_id' in p) {
           const sample = data.memberPanelSample, now = Date.now();
           const files = variant.memberPanelFiles ? Array.from({length:15}, (_,index) => ({id:`sample-${index}`,name:index===1?sample.page:sample.files[index%3],path:`/home/cua/team/sample-${index}.md`,kind:index===1?'page':'file',turn_id:2,conversation_id:11,at_ms:index<7?now:now-10*86400000})) : [];

@@ -1,4 +1,4 @@
-import { scene, member, click, wait, check, key, scroll } from './steps.mjs';
+import { scene, member, click, wait, check, key, scroll, waitScrollEnd } from './steps.mjs';
 import { learnedSkill, sharedSourceSkill } from './chat.mjs';
 
 // The member settings page (member-settings.ts): the panel's gear opens it where the conversation is.
@@ -8,6 +8,9 @@ const page = [member(1), ...gear];
 const kind = (id, ready) => [click(`.ms-pane .ms-nav [data-cat="${id}"]`), wait(`.ms-pane .ms-nav [data-cat="${id}"][aria-current="page"]`), wait(ready)];
 const filled = { memberSettings: true, skills: [learnedSkill(1), sharedSourceSkill] };
 export const memberSettingsPage = page;
+// A long conversation of the member's, so that the thread scrolls and its place can be told.
+const longThread = { ...filled, heavyThread: { member: 1, count: 30, newest: 300050 } };
+const back = [{ action: 'open-details' }, click('.mb-det [data-det="gear"]'), wait('.ms-pane:not([hidden]) .ms-name'), key('Escape'), wait('.page-agent:not([hidden]) .mb-chat .composer')];
 export default [
   scene('member-settings', 'The gear opens the member as a page: a cover it can change, the face across it, name and role in place, the kinds of settings on the left and only the chosen one beside them', [...page, check('member-settings')], filled),
   scene('member-settings-raphael', 'Raphael has the same page and the same kinds as every member: memory, tools, skills and commands, personality and instructions, notifications', [{ action: 'open-details' }, click('.mb-det [data-det="gear"]'), wait('.ms-pane:not([hidden]) .ms-name'), wait('.ms-pane .ms-nav [data-cat="memory"][aria-current="page"]'), check('member-settings'), check('member-settings-raphael')], filled),
@@ -21,5 +24,8 @@ export default [
   scene('member-settings-memory-open', 'A memory card pressed opens to its whole text; the others stay one line', [...page, wait('.ms-pane [data-mem-space="own"] details.mem-entry'), click('.ms-pane details.mem-entry[data-mem-entry="1"] > summary'), wait('.ms-pane details.mem-entry[open]'), check('member-settings'), check('member-settings-memory-open')], { ...filled, memoryFiles: { 1: '專案每週三檢查原型，週五彙整結果。\n\n上一輪檢查發現註冊流程少一步驗證，已經寫進下次的檢查清單；這次也要一起確認忘記密碼、換手機登入和第三方帳號綁定這三條路，每一條都要截圖附在報告裡，並註明是哪一個版本、哪一台裝置測的。\n\n報告控制在一頁以內，圖表用黑白兩色。\n' } }),
   scene('member-settings-cover', 'The cover\'s round button opens its patterns as small covers and a picture from this PC', [...page, click('.ms-pane [data-ms="cover"]'), wait('#app-popover .ms-swatch'), check('member-settings-cover')], filled),
   scene('member-settings-cover-picture', 'The owner\'s picture as the cover fills it and cannot be dragged out of the window', [...page, wait('.ms-pane .ms-cover-img'), check('member-settings-cover-picture')], { ...filled, coverPicture: true }),
+  // The page hides the conversation, and a hidden scroller forgets its place: the way back puts it where it was (owner, 2026-11-11).
+  scene('member-settings-back-bottom', 'Back from the settings page a thread that was at its bottom is at its bottom', [member(1), wait('.tn[data-id="300050"]'), waitScrollEnd('.mb-chat .ra-scroll'), ...back, waitScrollEnd('.mb-chat .ra-scroll'), check('member-settings-place-bottom')], longThread),
+  scene('member-settings-back-kept', 'Back from the settings page a thread read higher up stays where it was', [member(1), wait('.tn[data-id="300035"]'), { ...scroll('.tn[data-id="300035"]'), block: 'center' }, check('member-settings-place-before'), ...back, check('member-settings-place-kept')], longThread),
   scene('member-settings-back', 'Escape and the arrow return to the member\'s conversation, and the panel is as it was', [...page, key('Escape'), wait('.page-agent:not([hidden]) .mb-chat .composer'), check('member-settings-back')], filled),
 ];

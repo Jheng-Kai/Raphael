@@ -113,6 +113,23 @@ export function permissionCardsHTML(turn: AgentTurn, answerable: (id: string) =>
 }
 
 /** Owner questions share the conversation card, with choices instead of permission controls. */
+/**
+ * The cards of the questions a turn's owner has settled, in the order they were asked, as a function from a time to the
+ * cards due by then: the replies of a turn are drawn in turn, and before each one the cards asked before it. A card
+ * whose time is not known (the core does not send it yet, see OwnerQuestion.created_at_ms) was asked before the replies it led
+ * to, the way a settled permission card is; the call with `Infinity` gives the cards asked after the last reply.
+ */
+export function settledQuestions(turn: AgentTurn): (until: number) => string {
+  const pending = (turn.owner_questions ?? []).filter(question => question.state !== "asked" && (question.kind === "ask_owner" || question.kind === "show_page"))
+    .map((question, index) => ({ question, index, at: question.created_at_ms ?? -Infinity }))
+    .sort((a, b) => (a.at === b.at ? a.index - b.index : a.at < b.at ? -1 : 1));
+  return until => {
+    const due: string[] = [];
+    while (pending.length && pending[0]!.at <= until) due.push(ownerQuestionHTML(pending.shift()!.question));
+    return due.join("");
+  };
+}
+
 export function ownerQuestionHTML(question: OwnerQuestion): string {
   const waiting = question.state === "asked", id = esc(question.id);
   const choices = question.options.map((option, index) => btn(`<span data-choice-letter>${String.fromCharCode(65 + index)}</span><span>${esc(option)}</span>`, "question-choice", ` data-owner-option="${esc(option)}"`)).join("");
@@ -129,7 +146,14 @@ export function ownerQuestionHTML(question: OwnerQuestion): string {
   });
 }
 
-export const ownerQuestionsHTML = (turn: AgentTurn): string => (turn.owner_questions ?? []).map(question =>
+/**
+ * A question card stands at the end of the thread only while it waits for the owner (owner, 2026-11-11: 「它那個回答的卡片
+ * 不是永遠都會在最下面，它會跑到下面的情況就只有我還沒有回答的時候。如果已回答的話，就會跟正常的對話一模一樣」). Once answered,
+ * cancelled or expired it is part of the conversation and stands where it was asked (settledQuestions).
+ * `settled` picks the cards that no longer wait (true), the ones that wait (false) or all of them (undefined).
+ */
+export const ownerQuestionsHTML = (turn: AgentTurn, settled?: boolean): string => (turn.owner_questions ?? [])
+  .filter(question => settled === undefined || (question.state !== "asked") === settled).map(question =>
   question.kind === "ask_owner" || question.kind === "show_page" ? ownerQuestionHTML(question) :
     question.state === "asked" ? `<div class="cc-actions" data-owner-question="${esc(question.id)}">` +
       btn(esc(t("common.cancel")), "sm", ' data-owner-answer="cancel"') + `<div role="alert" hidden></div></div>` : "").join("");

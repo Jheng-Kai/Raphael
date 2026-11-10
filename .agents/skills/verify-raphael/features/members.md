@@ -47,7 +47,7 @@ member-edit, member-edit-memory, settings-raphael-memory, speaker-draft-member,
 speaker-draft-chief, member-draft-switch, global-private-memory and primary-contact-set.
 
 ```powershell
-npm run look -- member-settings member-settings-raphael member-settings-skills member-settings-tools member-settings-notify member-settings-field member-settings-skill member-settings-command member-settings-memory member-settings-memory-open member-settings-cover member-settings-cover-picture member-settings-back details member-panel-library member-face-hover --theme both --width 1120,720,1920x1080
+npm run look -- member-settings member-settings-raphael member-settings-skills member-settings-tools member-settings-notify member-settings-field member-settings-skill member-settings-command member-settings-memory member-settings-memory-open member-settings-cover member-settings-cover-picture member-settings-back details member-panel-library member-face-hover member-settings-back-bottom member-settings-back-kept --theme both --width 1120,720,1920x1080
 ```
 
 ## No member voices (owner decision, 2026-11-10)
