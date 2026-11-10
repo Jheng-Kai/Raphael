@@ -942,7 +942,7 @@ test("a memory change reads nothing and shows nothing on the member's page", asy
 });
 
 
-test("a roster that moves only a last line, a step or an unread mark starts no Library read and leaves the panel alone; a renamed member reads and shows", async () => {
+test("a roster that moves only a last line, a step or an unread mark starts no Library read and leaves the panel alone, and a renamed member reads and shows", async () => {
   vi.useFakeTimers();
   const agent = mount(); await flush(); await pick(3); await openDetails();
   await vi.advanceTimersByTimeAsync(1000); await flush();

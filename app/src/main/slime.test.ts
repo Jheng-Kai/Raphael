@@ -606,7 +606,7 @@ test("a simultaneous presence burst mounts at most one visible strip per frame",
   for (const id of [91,92,93]) setSlimeState(id,'idle');
 });
 
-test("a heavy state's strips go in a slice a frame, out of sight, and show together; a newer state drops the rest", () => {
+test("a heavy state's strips go in a slice a frame, out of sight, and show together, and a newer state drops the rest", () => {
   const frames: FrameRequestCallback[] = [];
   let time = 5000;
   vi.spyOn(performance, 'now').mockImplementation(() => time);
