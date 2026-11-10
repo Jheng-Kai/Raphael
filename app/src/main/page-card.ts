@@ -3,14 +3,14 @@
 // core: it can only post messages to the frame's parent, and everything it asks for is checked here. A thread redraw
 // moves the live frame to the new card, so a page does not reload and lose what the owner did in it.
 import "./page-card.css";
-import { cardFailure, cardHTML, cardStatusHTML } from "./card";
+import { cardFailure, cardHTML, cardStatusHTML, failedClose } from "./card";
 import * as api from "./api";
 import { describeError } from "./format";
 import { t } from "./i18n";
 import { openDialog } from "./member-dialogs";
 import { mountReportView, type ReportPeople, type ReportView } from "./report-page";
 import type { AgentTurn, PageCard, PageOpened } from "./types";
-import { btn, esc, ico, iconBtn, iconButton } from "./ui";
+import { btn, esc, ico, iconButton } from "./ui";
 
 const MIN_HEIGHT = 80, MAX_HEIGHT = 2400;
 const SEND_LIMIT = 4000, SEND_GAP_MS = 1000;
@@ -21,12 +21,19 @@ const reportLinkHTML = (page: PageCard): string =>
   `<button type="button" class="btn attachment-file pg-link" data-page-act="report" data-page="${esc(page.id)}" data-page-rev="${page.rev}">` +
   `${ico("report")}<span class="attachment-name"><span class="me-file-t">${esc(page.title)}</span><small>${esc(t("page.kind"))}</small></span></button>`;
 
+/** A page that failed reads as a failed mail card: what failed in the card's body line, then what it knows of the page
+ *  (the member's plain words) in a well where the page stood, then 再試一次 below (the judge on page-gone, 2026-11-10). */
+function failedHTML(page: PageCard): string {
+  const words = page.fallback?.trim();
+  return `<div class="pg-failed" hidden><p class="card-body cc-state" role="alert">${esc(t("page.failed"))}</p>` +
+    (words ? `<p class="card-well pg-fallback">${esc(words)}</p>` : "") +
+    `<div class="card-actions">${btn(esc(t("page.retry")), "sm pri", ' data-page-act="retry"')}</div></div>`;
+}
+
 /** The cards a turn shows, below what it said. A card holds no frame: `mountPages` brings it. A report is a link card. */
 export function pageCardsHTML(turn: AgentTurn): string {
   return (turn.pages ?? []).map(page => page.kind === "report" ? reportLinkHTML(page) : cardHTML({ title: page.title, status: "ready",
-    // A page that failed offers 重試 under what happened; the × at the card's top right puts it away (owner, 2026-11-08).
-    content: `<div class="pg-body" data-state="loading"></div><div class="pg-failed" hidden><p>${esc(page.fallback || t("page.failed"))}</p><div class="card-actions">${btn(esc(t("page.retry")), "sm pri", ' data-page-act="retry"')}</div></div>`,
-    close: iconBtn("x", t("common.close"), " data-card-failed-close", "card-close pg-close"),
+    content: `<div class="pg-body" data-state="loading"></div>${failedHTML(page)}`,
     actions: iconButton("expand", t("page.expand"), ' data-page-act="expand"', "pg-expand"), cls: "pg-card",
     attrs: ` data-page="${esc(page.id)}" data-page-rev="${page.rev}" style="--pg-h:${clampHeight(page.height)}px"`,
   })).join("");
@@ -75,6 +82,8 @@ interface Live {
   height: number | null;
   opened: PageOpened | null;
   ready: boolean;
+  /** It could not open: a redraw of its line shows that again, not an empty box that never loads. */
+  failed: boolean;
   expanded: boolean;
   closeExpanded?: () => void;
   /** A declined external link asks no more without a sure press. */
@@ -116,14 +125,22 @@ export function mountPages(thread: HTMLElement, o: { place(pageId: string, text:
     card.querySelector<HTMLElement>(".pg-body")!.dataset.state = state;
     card.querySelector<HTMLElement>(".pg-body")!.hidden = state === "failed";
     card.querySelector<HTMLElement>(".pg-failed")!.hidden = state !== "failed";
+    // The × that puts a failed page away (R-UI-117) is in the heading only while it failed: a hidden one was taken by the
+    // shared failure of a link the page could not open, which was then left with no × to put it away.
+    const head = card.querySelector<HTMLElement>(":scope > .card-head")!, close = head.querySelector(":scope > [data-card-failed-close]");
+    if (state === "failed" && !close) head.insertAdjacentHTML("beforeend", failedClose());
+    else if (state !== "failed") close?.remove();
   }
 
+  /** A page is as tall as it says. Made larger, it says again once it is wider, and only its dialog follows: the card
+   *  keeps its own height behind it until the page is back and says so there. */
   function applyHeight(live: Live): void {
-    if (live.height !== null) cardOf(live)?.style.setProperty("--pg-h", `${live.height}px`);
+    if (live.height !== null) (live.frame.closest<HTMLElement>(".pg-view") ?? cardOf(live))?.style.setProperty("--pg-h", `${live.height}px`);
   }
 
   async function open(live: Live): Promise<void> {
     live.ready = false;
+    live.failed = false;
     setBodyState(live, "loading");
     try {
       const opened = await api.pagesOpen(live.id, themeNow());
@@ -132,7 +149,9 @@ export function mountPages(thread: HTMLElement, o: { place(pageId: string, text:
       live.frame.title = opened.title;
       live.frame.src = opened.url;
     } catch {
-      if (frames.get(live.id) === live) setBodyState(live, "failed");
+      if (frames.get(live.id) !== live) return;
+      live.failed = true;
+      setBodyState(live, "failed");
     }
   }
 
@@ -141,7 +160,7 @@ export function mountPages(thread: HTMLElement, o: { place(pageId: string, text:
     frame.setAttribute("sandbox", "allow-scripts allow-forms");
     frame.setAttribute("referrerpolicy", "no-referrer");
     frame.className = "pg-frame";
-    const live: Live = { id, rev, frame, height: null, opened: null, ready: false, expanded: false, refused: false };
+    const live: Live = { id, rev, frame, height: null, opened: null, ready: false, failed: false, expanded: false, refused: false };
     frame.addEventListener("load", () => { if (live.opened) setBodyState(live, "ready"); });
     frames.set(id, live);
     return live;
@@ -162,7 +181,8 @@ export function mountPages(thread: HTMLElement, o: { place(pageId: string, text:
       }
       if (!live.expanded && live.frame.parentElement !== body) body.append(live.frame);
       applyHeight(live);
-      if (live.ready || live.opened) setBodyState(live, "ready");
+      if (live.failed) setBodyState(live, "failed");
+      else if (live.ready || live.opened) setBodyState(live, "ready");
       if (live.rev !== rev) { live.rev = rev; void open(live); }
     }
     for (const id of [...frames.keys()]) if (!seen.has(id)) frames.delete(id);
@@ -285,11 +305,12 @@ export function mountPages(thread: HTMLElement, o: { place(pageId: string, text:
     else if (data.type === "open") openLink(live, data.url);
   });
 
-  /** Larger in the shared dialog, the frame moved there and back, so nothing the owner did in it is lost. */
+  /** Larger in the shared dialog, the frame moved there and back, so nothing the owner did in it is lost. The dialog is
+   *  as tall as the card until the page, now wider, says how tall it is there (applyHeight). */
   function expand(live: Live, card: HTMLElement): void {
-    const title = card.getAttribute("aria-label") ?? "";
     const dialog = openDialog({
-      title: esc(title), body: `<div class="pg-view"></div>`, cls: "rich-view-dialog pg-view-dialog",
+      // openDialog escapes the title itself: escaping it here too showed a title's & or < as an entity.
+      title: card.getAttribute("aria-label") ?? "", body: `<div class="pg-view"></div>`, cls: "pg-view-dialog",
       // Its × closes it, with no 「關閉」 under it (owner, 2026-11-08).
       actions: {},
       onAct(_act, _target, shown) { shown.close(); },
@@ -300,9 +321,11 @@ export function mountPages(thread: HTMLElement, o: { place(pageId: string, text:
         if (home) moveFrame(live.frame, home);
       },
     });
+    const view = dialog.el.querySelector<HTMLElement>(".pg-view")!;
+    view.style.setProperty("--pg-h", card.style.getPropertyValue("--pg-h") || "320px");
     live.expanded = true;
     live.closeExpanded = () => dialog.close();
-    moveFrame(live.frame, dialog.el.querySelector<HTMLElement>(".pg-view")!);
+    moveFrame(live.frame, view);
   }
 
   thread.addEventListener("click", event => {

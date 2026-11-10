@@ -1,29 +1,30 @@
 .pg-ask-words { margin: 0; overflow-wrap: anywhere; color: var(--text); }
 /* A page in the conversation is as tall as its content, so there is never a scrollbar inside the reply. */
 .pg-card { display: grid; grid-template-columns: minmax(0, 1fr); justify-self: start; width: min(calc(560px + 200 * var(--pa-u)), 100%); overflow: hidden; border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--content); }
-.pg-head { display: flex; align-items: center; gap: var(--sp-2); min-height: 40px; padding: 0 var(--sp-2) 0 var(--sp-3); border-bottom: 1px solid var(--line); background: var(--panel); }
-.pg-head b { min-width: 0; overflow: hidden; font-size: var(--fs-sm); font-weight: var(--weight-semibold); text-overflow: ellipsis; white-space: nowrap; }
-.pg-head small { flex: none; color: var(--text-3); font-size: var(--fs-xs); }
-.pg-head .sp { flex: 1; }
 .pg-body { position: relative; height: var(--pg-h, 320px); background: var(--content); }
 .pg-body[data-state="loading"] { background: var(--panel); animation: pg-loading 1.6s ease-in-out infinite; }
 .pg-frame { display: block; width: 100%; height: 100%; border: 0; background: transparent; }
 .pg-body[data-state="loading"] .pg-frame { visibility: hidden; }
-.pg-failed { display: grid; grid-template-columns: minmax(0, 1fr); justify-items: start; gap: var(--sp-2); padding: var(--sp-3); }
+/* A page that failed reads as a failed mail card does (card.css): what failed in the card's body line, what it knows of
+   the page in a well where the page stood, and 再試一次 at the card's right. Everything starts where the title does,
+   nothing blank stands under the retry, and the expand row goes (the judge on page-gone, 3/5, 2026-11-10). */
+.pg-failed { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
 .pg-failed[hidden], .pg-body[hidden] { display: none; }
-.pg-failed p { margin: 0; color: var(--text-2); font-size: var(--fs-sm); overflow-wrap: anywhere; }
+.pg-fallback { margin: 0; padding: 10px 12px; color: var(--text); font-size: var(--fs-sm); white-space: pre-wrap; overflow-wrap: anywhere; }
+.pg-card:has(.pg-failed:not([hidden])) > .card-actions { display: none; }
 @keyframes pg-loading { 50% { opacity: 0.6; } }
 
+/* A page made larger is the page alone, as a picture made larger (the lightbox) and a report are: its card's title,
+   which the page's own heading says again, stays only as the dialog's name, and its × is the soft round edge button
+   at the top right, where a report's is. It is as tall as the page says it is there, up to three quarters of the
+   window, so a short page leaves no blank box, and at most the conversation's 960 px column (R-UI-45; the judge on
+   page-expand, 3/5, 2026-11-10: a dialog three quarters of the window tall around a short page, its title twice). */
+.mb-dialog.pg-view-dialog { position: relative; width: min(960px, calc(100vw - 48px)); gap: 0; padding: 0; }
+.pg-view-dialog .mb-dlg-head { position: absolute; top: var(--sp-3); right: var(--sp-4); z-index: 1; }
+.pg-view-dialog .mb-dlg-head h2 { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .mb-dialog.pg-view-dialog .mb-dlg-body { padding: 0; overflow: hidden; }
-.pg-view { height: 75vh; }
+.pg-view { height: min(var(--pg-h, 320px), 75vh); background: var(--content); }
 
 @media (prefers-reduced-motion: reduce) {
   .pg-body[data-state="loading"] { animation: none; }
 }
-/* A page that failed shows what happened and 再試一次, nothing more: the expand row goes (its hidden button had left a
-   blank row under the retry), and the words start where the title does, in the card's own padding (the judge on
-   page-gone, 3/5, 2026-11-10). */
-.pg-card:has(.pg-failed:not([hidden])) > .card-actions { display: none; }
-.conversation-card .pg-failed { padding: 0; }
-/* The × that puts a failed page away shows only while it failed. */
-.pg-card:not(:has(.pg-failed:not([hidden]))) .pg-close { display: none; }

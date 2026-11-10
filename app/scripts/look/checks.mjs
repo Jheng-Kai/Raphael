@@ -1701,10 +1701,12 @@ export function checkRendered(name, context = {}) {
         require(!pill, 'a template and its unconnected requests have no invented status');
       } else {
         require(pill && pill.textContent.trim(), 'status always has a word');
-        // A failed card's × closes the head at the right (owner, 2026-11-08); otherwise the status does. The × of a
-        // card that has not failed is in the head but not shown (a page card's `.pg-close`), so it does not count.
+        // A failed card's × closes the head at the right (owner, 2026-11-08); otherwise the status does. A × in the head
+        // is always shown: a page card's hidden one (until 2026-11-10) was taken by the shared failure of a link the page
+        // could not open, which was then left with no × to put it away.
         const close = card.querySelector(':scope > .card-head > .card-close');
-        const end = close && visible(close) ? close : pill;
+        if (close) require(visible(close), "a × in the card's head is shown");
+        const end = close ?? pill;
         require(Math.abs(end.getBoundingClientRect().right - (box.right - parseFloat(style.paddingRight) - parseFloat(style.borderRightWidth))) < 1.5, 'the head ends at the right padding');
         if (end !== pill) require(pill.getBoundingClientRect().right <= end.getBoundingClientRect().left + 1, 'the status stands just before the ×');
       }
@@ -1733,9 +1735,11 @@ export function checkRendered(name, context = {}) {
         if (pri) {
           require(buttons[0] === pri, 'primary button is first');
           require(getComputedStyle(pri).backgroundColor === 'rgb(255, 255, 255)', 'primary button is white in both themes');
-          // The row stands at the card's right with the primary rightmost (owner, 2026-11-10: 卡片的按鈕盡量放在右側).
+          // The row stands at the card's right with the primary rightmost (owner, 2026-11-10: 卡片的按鈕盡量放在右側), measured
+          // against the card's own right padding, not the row: a row its parent had shrunk to its buttons left a failed
+          // page's 再試一次 at the card's left and still passed (2026-11-10).
           if (row.matches('.card-actions')) {
-            const end = row.getBoundingClientRect().right, right = pri.getBoundingClientRect().right;
+            const end = box.right - parseFloat(style.paddingRight) - parseFloat(style.borderRightWidth), right = pri.getBoundingClientRect().right;
             require(Math.abs(right - end) <= 1 && buttons.every(button => button.getBoundingClientRect().right <= right + 0.5), `the card's buttons stand at its right, the primary rightmost (${Math.round(end - right)} px)`);
           }
         }
@@ -4673,7 +4677,9 @@ export function checkRendered(name, context = {}) {
     require(visible(yes) && visible(no), "both approval actions remain visible");
     require(yes.textContent.trim() === "允許" && no.textContent.trim() === "拒絕", "approval uses explicit allow and deny words");
     require(yes.getBoundingClientRect().right <= box.right && yes.getBoundingClientRect().bottom <= innerHeight, "approval action fits the card");
-    require(yes.getBoundingClientRect().right <= no.getBoundingClientRect().left, "primary action comes first");
+    // 允許 is the first Tab stop and stands rightmost, 拒絕 to its left, as every card's buttons do (R-CARD-01, owner
+    // 2026-11-10); this asked for 允許 at the left until 2026-11-10.
+    require(yes.compareDocumentPosition(no) & Node.DOCUMENT_POSITION_FOLLOWING && no.getBoundingClientRect().right <= yes.getBoundingClientRect().left, "允許 comes first and stands at the right of 拒絕");
     if (name === "admin-approval-batch") {
       const text = details.textContent;
       for (const member of ["COO", "PM", "RD", "CEO", "CTO", "Marketing", "Finance", "Design"]) {
@@ -4700,7 +4706,8 @@ export function checkRendered(name, context = {}) {
     const confirmBtn = panel.querySelector('[data-draft-act="confirm"]');
     const cancelBtn = panel.querySelector('[data-draft-act="cancel"]');
     require(visible(confirmBtn) && visible(cancelBtn), "confirm and cancel buttons are visible");
-    require(confirmBtn.getBoundingClientRect().right <= cancelBtn.getBoundingClientRect().left, "primary action comes first");
+    // The primary is the first Tab stop and stands rightmost, 取消 to its left (R-CARD-01, owner 2026-11-10).
+    require(confirmBtn.compareDocumentPosition(cancelBtn) & Node.DOCUMENT_POSITION_FOLLOWING && cancelBtn.getBoundingClientRect().right <= confirmBtn.getBoundingClientRect().left, "the primary comes first and stands at the right of 取消");
     for (const card of cards) {
       const roleInput = card.querySelector('[data-draft-field="role"]');
       const nameInput = card.querySelector('[data-draft-field="name"]');
@@ -4801,10 +4808,23 @@ export function checkRendered(name, context = {}) {
     return { check: name };
   }
   if (name === "page-expanded") {
-    const frame = document.querySelector(".pg-view iframe")?.getBoundingClientRect();
-    require(frame && frame.width >= Math.min(1100, innerWidth * 0.6) && frame.height > innerHeight * 0.6, "the same page fills the large dialog");
-    require(!document.querySelector(".pg-card .pg-body iframe"), "there is one frame, moved, not a second one");
-    return { check: name };
+    const view = document.querySelector(".pg-view"), frame = view?.querySelector("iframe")?.getBoundingClientRect();
+    require(frame && !document.querySelector(".pg-card .pg-body iframe"), "the same page moved to the dialog: one frame, not a second one");
+    // The page alone: past its card, within the conversation's 960 px column (R-UI-45), and as tall as it says it is there,
+    // so a short page makes a short dialog (the judge on page-expand, 3/5, 2026-11-10: blank below the page).
+    const dialog = view.closest(".mb-dialog"), box = dialog.getBoundingClientRect(), card = document.querySelector(".pg-card").getBoundingClientRect();
+    require(box.width <= 960.5 && frame.width > card.width, `wider than its card, within the conversation's column (${Math.round(box.width)} px)`);
+    const said = parseFloat(view.style.getPropertyValue("--pg-h"));
+    require(Math.abs(frame.height - Math.min(said, innerHeight * 0.75)) <= 1, `as tall as the page says (${Math.round(frame.height)} of ${said} px)`);
+    require(frame.height < innerHeight * 0.5, `a short page makes a short dialog (${Math.round(frame.height)} px)`);
+    require(["left", "top", "right", "bottom"].every(side => Math.abs(frame[side] - box[side]) <= 1.5), "the page fills the dialog");
+    // No title over the page, whose own heading says it (the judge, R-UI-02): the card's title only names the dialog, and
+    // the × is the soft round edge button at the top right, where a report's stands (.rp-top).
+    const label = document.getElementById(dialog.getAttribute("aria-labelledby")), close = dialog.querySelector('[data-dlg="close"]').getBoundingClientRect();
+    require(label?.textContent === document.querySelector(".pg-card .card-title").textContent && label.getBoundingClientRect().width <= 1, "the card's title names the dialog without standing over the page");
+    const token = side => parseFloat(getComputedStyle(document.documentElement).getPropertyValue(side));
+    require(Math.abs(box.right - close.right - token("--sp-4")) <= 1.5 && Math.abs(close.top - box.top - token("--sp-3")) <= 1.5 && Math.abs(close.width - 36) <= 0.5, `the × stands at the top right, as a report's (${Math.round(box.right - close.right)}, ${Math.round(close.top - box.top)})`);
+    return { check: name, width: box.width, height: frame.height };
   }
   if (name.startsWith("page-report-file")) {
     // A report's saved file opened on its own (the `saved-file` step): the app's drawing in its reader's theme, nothing of the app.
@@ -4947,16 +4967,28 @@ export function checkRendered(name, context = {}) {
   }
   if (name === "page-gone") {
     const failed = document.querySelector(".pg-failed");
-    require(failed && !failed.hidden && failed.textContent.includes("NT$ 1,280"), "it says what it knows of the page");
+    require(failed && !failed.hidden, "the page that failed shows it");
+    // What failed comes first, in the card's body line, then what it knows of the page in a well where the page stood
+    // (the judge read the page's words alone, beside 未能完成, as a success, 2026-11-10).
+    const said = failed.firstElementChild, well = failed.querySelector(".card-well");
+    require(said?.matches('.card-body[role="alert"]') && said.textContent.includes("這個頁面打不開"), "it says first that the page cannot open");
+    require(well && visible(well) && well.textContent.includes("NT$ 1,280"), "then what it knows of the page, in a well");
     require(failed.querySelector('[data-page-act="retry"]'), "and offers to try again");
     require(document.querySelector(".pg-body").hidden, "no empty box is left");
-    // Its words start where the title does, and nothing blank stands under 再試一次 (the judge, 2026-11-10).
-    const card = failed.closest(".pg-card"), title = card.querySelector(".card-title").getBoundingClientRect();
-    const words = failed.querySelector("p").getBoundingClientRect(), retry = failed.querySelector('[data-page-act="retry"]').getBoundingClientRect();
-    require(Math.abs(words.left - title.left) <= 1, `the words start where the title does (${Math.round(words.left - title.left)} px)`);
-    const bottom = card.getBoundingClientRect().bottom - parseFloat(getComputedStyle(card).paddingBottom) - parseFloat(getComputedStyle(card).borderBottomWidth);
+    // One left edge with the title, 再試一次 at the card's right (R-CARD-01) and nothing blank under it (the judge, 2026-11-10).
+    const card = failed.closest(".pg-card"), box = card.getBoundingClientRect(), style = getComputedStyle(card), title = card.querySelector(".card-title").getBoundingClientRect();
+    for (const [what, node] of [["words", said], ["well", well]]) {
+      const left = node.getBoundingClientRect().left;
+      require(Math.abs(left - title.left) <= 1, `the ${what} start where the title does (${Math.round(left - title.left)} px)`);
+    }
+    const retry = failed.querySelector('[data-page-act="retry"]').getBoundingClientRect();
+    const right = box.right - parseFloat(style.paddingRight) - parseFloat(style.borderRightWidth), bottom = box.bottom - parseFloat(style.paddingBottom) - parseFloat(style.borderBottomWidth);
+    require(Math.abs(right - retry.right) <= 1, `the retry stands at the card's right (${Math.round(right - retry.right)} px)`);
     require(bottom - retry.bottom <= 1, `nothing blank stands under the retry (${Math.round(bottom - retry.bottom)} px)`);
     require(![...card.querySelectorAll(":scope > .card-actions")].some(visible), "the failed page has no expand row");
+    // R-UI-117: a failed card is put away by the × in its heading.
+    const close = card.querySelector(":scope > .card-head > [data-card-failed-close]");
+    require(close && visible(close), "the × that puts it away is in its heading");
     return { check: name };
   }
   if (name.startsWith("model-sync-")) {
@@ -6475,7 +6507,9 @@ export function checkRendered(name, context = {}) {
     if (name === "secret-saved-not-resumed") {
       require(card.dataset.cardState === "saved" && card.dataset.cardError === "resume_failed", `saved, and the task did not continue (${card.dataset.cardState}/${card.dataset.cardError})`);
       require(state === "金鑰已儲存，這項工作沒有繼續", `the card says both things: "${state}"`);
-      require(!card.querySelector('input') && buttons.some(button => button.dataset.act === "card-resume" && button.textContent.trim() === "再試一次") && buttons[0].classList.contains('pri'), "no field is asked again: one primary 再試一次");
+      // The × in its heading puts the failed card away (R-UI-117); it is no action of the card's, so it is not counted.
+      const actions = buttons.filter(button => !button.closest('.card-head'));
+      require(!card.querySelector('input') && actions.some(button => button.dataset.act === "card-resume" && button.textContent.trim() === "再試一次") && actions[0].classList.contains('pri'), "no field is asked again: one primary 再試一次");
       require(visible(card.querySelector('.cc-name')) && !card.querySelector('.cc-done'), "the check is the resumed task's, not the saved key's");
       const sent = calls.filter(carrying);
       require(sent.length === 1 && sent[0].method === "integrations.card_save", "the key crossed one call, integrations.card_save, and no other");

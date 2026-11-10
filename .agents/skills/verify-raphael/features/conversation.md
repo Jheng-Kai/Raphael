@@ -12,6 +12,17 @@ the card shell (`the card's buttons stand at its right`), `delete-confirmation`,
 confirmation's text buttons stand at the field height (`--h-field`), not the compact one (owner, 2026-11-10:
 「button 上下寬度太窄 不用到這麼極限 上下寬度可以再胖一點」).
 
+The card shell measures the primary against the card's own right padding, not against the end of its row: a row its
+parent had shrunk to its button left a failed page's 再試一次 at the card's left and still passed (2026-11-10). Over
+the 152 scenes that show a conversation card (dark, 1120) the new measure found no other card. admin-approval,
+member-draft and secret-saved-not-resumed still asked for the old order (允許 or the primary at the left; the head's ×
+taken for the first action) and failed on every run since; they now ask for this one. template-skill-expanded fails
+on its own (`.template-skill [data-card-disclosure]` is gone), unrelated to the buttons.
+
+```
+npm run look -- admin-approval admin-approval-batch admin-approval-long admin-delete-approval member-draft member-draft-edit admin-cli-draft-edit admin-draft-apply-result chat-secret-saved-not-resumed card-approval card-team card-secret-failed page-gone page-product --theme both --width 1120,720,1920x1080
+```
+
 ```
 npm run look -- room-delete quick-clear-confirm computer-file-confirm computer-maintenance-reset card-question-waiting card-permission-waiting card-mail-ready card-connect-waiting card-key-waiting card-send-failed card-page-failed card-mcp-draft connector-key email-draft-handed-off chat-secret-masked card-send-retry card-mail-failed card-key-failed --theme both --width 1120,720,1920x1080
 ```
@@ -1867,16 +1878,38 @@ pages/agent-page.test.ts, group-chats.test.ts and owner-questions.test.ts.
 Compare page-buy and page-room-draft at matching theme/width: identical note
 component, wording, typography, spacing and state. The blank page-product scene
 proves the note has no reserved space before a page requests placement.
-A page that failed (page-gone) shows only what it knows and 再試一次: its words start where the card's title does
-and nothing blank stands under the retry (the expand row is gone while it failed; the judge gave 3/5 for both,
-2026-11-10); the card-shell check counts a card's × only when it is shown.
+A page that failed (page-gone) reads as a failed mail card (card-mail-failed): 「這個頁面打不開。」 in the card's
+body line first, then what the page said (its fallback text, the member's plain words) in a well where the page
+stood, and 再試一次 at the card's right (R-CARD-01). The words and the well start where the title does, nothing blank
+stands under the retry, and the expand row is gone while it failed (the judge gave 3/5 for the blank, the indent and
+the page's words alone beside 未能完成 reading as a success, 2026-11-10). The × that puts it away (R-UI-117) joins
+the heading only while the page failed: the hidden × it used to carry was taken by the shared failure of a link the
+page could not open (`cardFailure`), which was then left with no × to put it away. A failed page keeps its words and
+× when its line is drawn again, and 再試一次 takes the × away while it opens. The card-shell check requires every ×
+in a card's heading to be shown; card-page-close presses the × in the heading, so its image is taken after the card
+was put away: the member's reply ends the thread and nothing opens again (the judge read that as a missing card,
+3/5 in dark, 2026-11-10).
+
+A page made larger (page-expand) is the page alone, as a picture made larger (the media lightbox) and a report are:
+it fills the dialog edge to edge, as tall as it says it is there, up to three quarters of the window, at most the
+conversation's 960 px column (R-UI-45). Its card's title, which the page's own heading says again, only names the
+dialog for a screen reader, and the × is the soft round edge button at the top right, where a report's stands
+(`.rp-top`). Wider, the page says again how tall it is; only the dialog follows, and the card keeps its own height
+behind it until the page is back. The judge gave 3/5 for a dialog three quarters of the window tall around a short
+page, then for the title twice, in the dialog's head and the page's heading (2026-11-10); the dialog's title was also
+escaped twice (a title's & or < showed as an entity). The look fixture's page now reports its height as the core's
+helper does (`agent/pages.py`); it had added 32 px, a blank band under every fixture page. page-expanded checks the
+width, the height the page says, the page filling the dialog, the hidden name and the ×'s place.
 
 The follow-up explicitly selects both themes at 1120 and 720 once. The maintained
 matrix below also includes the standard 1920x1080 size for later acceptance:
 
 ```powershell
-npm run look -- page-product page-buy page-send page-expand page-expand-place page-gone page-room-draft owner-card-room-page --theme both --width 1120,720,1920x1080
+npm run look -- page-product page-buy page-send page-expand page-expand-place page-gone page-room-draft owner-card-room-page card-page-close --theme both --width 1120,720,1920x1080
 ```
+
+Compare page-gone with card-mail-failed (body line over a well) and card-connect-failed (body line, retry) at the
+same theme and width: the same status, ×, body line, well and retry button, at the same places.
 
 Use judge on this same run when its prerequisites and network are authorized.
 Offline fixture/browser evidence does not prove native MCP/provider transport.
