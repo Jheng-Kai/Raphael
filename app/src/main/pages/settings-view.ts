@@ -8,8 +8,10 @@
 // line under a row's name only where the setting would otherwise be set wrong. Each tab opens with
 // its name, then its rows in a few named sections, each a rounded card (Grok Bot's settings, owner 2026-11-07).
 //
-// Six tabs sit flat on the left, as Grok Bot's: 一般 (account, appearance, the bot's timezone and folder, messaging,
-// memory), 聽寫與快捷鍵, 工具, 安全, 模型與用量 and 關於. No group names, no search, no line under a tab's name.
+// Six tabs sit flat on the left, as Grok Bot's: 一般 (account, appearance, the bot's timezone and folder, messaging),
+// 工具, 安全, 模型與用量, 聽寫與快捷鍵 and 關於. No group names, no search, no line under a tab's name. No tab shows
+// memory (owner, 2026-11-11: 「可以像 Hermes Agent 一樣，都不要讓我們看到記憶好了…」); the core keeps it.
+
 
 import { LOCALES, t } from "../i18n";
 import { updateHTML } from "../updates";
@@ -22,7 +24,6 @@ import { DICTATION_MODES } from "../dictation";
 import { KEEP_FOREVER_DAYS, formatClock, formatRetention, formatUsd } from "../format";
 import { type LanguageGroup, languageSelectHTML, normalizeLanguages } from "../languages";
 import { bindingLabels } from "../keys";
-import { type MemoryView, memoryHTML } from "../memory-view";
 import { type RulesView, rulesHTML } from "../safety-rules";
 import { type VaultView, emptyVaultView, vaultHTML } from "../vault";
 import { AUTO_MICROPHONE, microphoneChoices } from "../microphone";
@@ -78,8 +79,6 @@ const PRICES_LOADING = () => t("settings.026");
  */
 export const PANES: { id: SettingsPane; icon: IconName; title: () => string }[] = [
   { id: "general", icon: "gear", title: () => t("settings.paneGeneral") },
-  // What every member remembers of the owner, a tab of its own (owner, 2026-11-08: memory out of 一般).
-  { id: "memory", icon: "memory", title: () => t("mem.title") },
   { id: "tools", icon: "steps", title: () => t("settings.paneTools") },
   { id: "safety", icon: "lock", title: () => t("settings.paneSafety") },
   { id: "models", icon: "bot", title: () => t("settings.paneUsage") },
@@ -100,9 +99,9 @@ const paneButton = (p: (typeof PANES)[number]): string =>
 /** The tabs, flat, as Grok Bot's list. */
 export const paneListHTML = (): string => PANES.filter((p) => p.id !== STANDALONE_PANE).map(paneButton).join("");
 
-/** Where a link to a tab of before lands: Models for usage, Tools for the agent, 聽寫 for data, 一般 for appearance and messaging. */
+/** Where a link to a tab of before lands: Models for usage, Tools for the agent, 聽寫 for data, 一般 for appearance, messaging and the memory tab that is gone. */
 export const canonicalPane = (id: SettingsPane): SettingsPane =>
-  id === "usage" ? "models" : id === "agent" ? "tools" : id === "data" ? "dictation" : id === "appearance" || id === "messaging" ? "general" : id;
+  id === "usage" ? "models" : id === "agent" ? "tools" : id === "data" ? "dictation" : id === "appearance" || id === "messaging" || id === "memory" ? "general" : id;
 /** The name of a tab, in the language of the window. */
 export const paneTitle = (id: SettingsPane): string => PANES.find((p) => p.id === canonicalPane(id))!.title();
 export type ModelsTab = "models" | "usage";
@@ -144,8 +143,6 @@ export interface SettingsView {
   /** The shared safety rules, in Safety (none: not drawn). */
   rules?: RulesView;
   vault?: VaultView;
-  /** Shared owner memory, in General (none: not drawn). */
-  memoryShared?: MemoryView;
   /** Shared services, in Tools: who searches, reads pages and PDFs, and looks at images (none: not drawn). */
   services?: ServicesView;
   providers?: ProvidersView;
@@ -573,14 +570,6 @@ function modelsHTML(v: SettingsView): string {
     (["models", "usage"] as const).map((id) => `<div class="models-content" id="models-panel-${id}" role="tabpanel" aria-labelledby="models-tab-${id}"${id === selected ? "" : " hidden"}>${id === selected ? content : ""}</div>`).join("") + `</div>`;
 }
 
-/**
- * 記憶: what every member remembers of the owner. It lives in Raphael's own data folder; there is no import from other
- * assistants (owner, 2026-11-08: 「匯入記憶不要這樣設計…沒有什麼實際的意義」), and moving to another PC means keeping that folder.
- */
-function memoryPaneHTML(v: SettingsView): string {
-  return headingHTML(v) + coreNote(v) + (v.memoryShared ? memoryHTML(v.memoryShared) : "");
-}
-
 /** 關於: the version, the license and the fan-project statement. */
 function aboutHTML(v: SettingsView): string {
   return (
@@ -603,10 +592,10 @@ export function paneHTML(v: SettingsView): string {
   switch (v.pane) {
     case "appearance":
     case "messaging":
+    // The old memory tab is gone: a link to it lands here (canonicalPane), so nothing draws memory.
+    case "memory":
     case "general":
       return generalHTML(v);
-    case "memory":
-      return memoryPaneHTML(v);
     case "data":
     case "dictation":
       return dictationHTML(v);

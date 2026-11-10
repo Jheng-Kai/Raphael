@@ -4,12 +4,13 @@
 // across the cover's lower edge, the name and the role in place. Under them the settings are kinds in a column on the left,
 // as Settings' own (owner, 2026-11-08: 「左側會有一些分區…不要就這樣子長長一條」), and only the chosen kind is shown, as
 // compact sections, each a name over one tinted list of rows (Grok Bot's panel). Every member has the same kinds, Raphael
-// too: memory, tools, skills and commands, personality and instructions, notifications (owner, 2026-11-09). The model is
-// chosen at the composer alone, and members have no voice. What the panel beside it already shows (routines, messaging)
-// is not here. A long text (the personality, the instructions, a skill) is one line and opens in place, or in a view of
-// its own, when it is pressed; no row has a text button where an icon says it.
+// too: tools, skills and commands, personality and instructions, notifications (owner, 2026-11-09). There is no memory
+// here, nor anywhere in the app (owner, 2026-11-11: 「可以像 Hermes Agent 一樣，都不要讓我們看到記憶好了，所以記憶是在背後
+// 管理的…如果使用者在使用的情況下遇到記憶有錯誤的時候，再跟他說一下，他自己去改就好了」): the core keeps it, the member
+// corrects it when told. The model is chosen at the composer alone, and members have no voice. What the panel beside it
+// already shows (routines, messaging) is not here. A long text (the personality, the instructions, a skill) is one line
+// and opens in place, or in a view of its own, when it is pressed; no row has a text button where an icon says it.
 import "./member-panel.css";
-import "./memory.css";
 import "./member-settings.css";
 import * as api from "./api";
 import { describeError } from "./format";
@@ -18,7 +19,6 @@ import { openMemberAvatarMenu } from "./member-avatar-menu";
 import type { MessageKey } from "./i18n/zh-TW";
 import { pickPicture, readPicture } from "./member-dialogs";
 import { INSTRUCTIONS_MAX, NAME_MAX, PERSONALITY_MAX, RAPHAEL_ID, ROLE_MAX, cleanName, faceHTML, isMemberNameTaken } from "./members";
-import { type MemorySpace, createMemory, memoryHTML } from "./memory-view";
 import { entryIcon } from "./service-mark";
 import { skillOriginLabel } from "./skill-source";
 import { slimeColorOf } from "./slime";
@@ -46,9 +46,8 @@ export interface MemberSettings {
   close(): void;
   /** The list changed, or the language: the page is drawn again if it is open. */
   draw(): void;
-  /** What the member has (skills, commands, tools, the count of notes) is read again. */
+  /** What the member has (skills, commands, tools) is read again. */
   refresh(): void;
-  refreshMemory(memberId: number, space?: MemorySpace): void;
 }
 
 type View = { kind: "main" } | { kind: "skill"; id: number } | { kind: "command"; id: number | null };
@@ -57,9 +56,8 @@ type Loaded<T> = T | "loading" | "failed";
 interface ToolChoices { tools: string[]; connections: { id: string; name: string; enabled: boolean }[] }
 
 /** The kinds of settings in the page's left column, in the owner's order, the same for every member (owner, 2026-11-09). */
-type Category = "memory" | "tools" | "skills" | "soul" | "notify";
+type Category = "tools" | "skills" | "soul" | "notify";
 const CATEGORIES: readonly { id: Category; icon: IconName; label: MessageKey }[] = [
-  { id: "memory", icon: "memory", label: "members.profile.memory" },
   { id: "tools", icon: "plug", label: "settings.paneTools" },
   { id: "skills", icon: "sparkle", label: "members.profile.skills" },
   { id: "soul", icon: "smile", label: "members.profile.soul" },
@@ -87,8 +85,11 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
   el.hidden = true;
   el.tabIndex = -1;
   el.dataset.memberSettings = "";
+  // The way back stays at the page's top left, on the cover and over a view's heading (owner, 2026-11-11).
   el.innerHTML =
+    `<div class="ms-bar">${iconButton("left", t("chooser.back"), ' data-ms="back" data-k="ms-back"', "ms-back")}</div>` +
     `<div class="ms-scroll"><div class="ms-cover"></div><div class="ms-body"><div class="ms-id"></div><div class="ms-main"></div></div></div>`;
+  const backButton = el.querySelector<HTMLElement>('[data-ms="back"]')!;
   const scroll = el.querySelector<HTMLElement>(".ms-scroll")!;
   const cover = el.querySelector<HTMLElement>(".ms-cover")!;
   const idSlot = el.querySelector<HTMLElement>(".ms-id")!;
@@ -112,15 +113,6 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
   let epoch = 0;
   let drawn = "";
   let drawnFor: number | null = null;
-
-  const memberHost = {
-    visible: () => !el.hidden && view.kind === "main" && category === "memory",
-    redraw: () => draw(),
-    memberId: () => host.member().id,
-    ownerName: () => host.member().name,
-  };
-  // Only the member's own memory: the one everyone shares is Settings' (owner, 2026-11-09: 「個別角色不用顯示共同記憶」).
-  const memory = createMemory({ ...memberHost, space: "own" });
 
   // ---------- reading ----------
 
@@ -151,20 +143,13 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
   const row = (label: string, control: string, key = ""): string =>
     `<div class="ms-row"${key ? ` data-k="${key}"` : ""}><span class="ms-label">${esc(label)}</span>${control}</div>`;
 
-  /**
-   * The way back, the bare arrow the page's other icons are, just left of the page's name or a view's title (owner,
-   * 2026-11-10: not on the cover's picture). From a view it goes back to the page, from the page to the conversation.
-   */
-  const backed = (title: string): string =>
-    `<div class="ms-backed">${iconButton("left", t("chooser.back"), ' data-ms="back" data-k="ms-back"', "ms-back")}${title}</div>`;
-
   function idHTML(member: Member): string {
     // A press on the face opens the picker (slimes, 生成) at once, as the panel's does; under the pointer a pencil shows on it.
     const face = `<button type="button" class="btn mb-face-edit ms-face" data-ms="avatar" data-k="ms-face" aria-haspopup="menu" aria-expanded="false" aria-label="${esc(t("members.changeAvatar"))}">${faceHTML(member, 96)}<span class="mb-face-pencil" aria-hidden="true">${ico("pencil")}</span></button>`;
     // Raphael's name is not the owner's to change here, nor has he a role.
-    if (member.id === RAPHAEL_ID) return face + backed(`<b class="ms-name ms-static">${esc(member.name)}</b>`);
+    if (member.id === RAPHAEL_ID) return face + `<b class="ms-name ms-static">${esc(member.name)}</b>`;
     return face +
-      backed(`<input class="mb-edit ms-name" id="ms-name" data-member="${member.id}" type="text" maxlength="${NAME_MAX}" value="${esc(member.name)}" aria-label="${esc(t("members.name"))}" autocomplete="off" spellcheck="false">`) +
+      `<input class="mb-edit ms-name" id="ms-name" data-member="${member.id}" type="text" maxlength="${NAME_MAX}" value="${esc(member.name)}" aria-label="${esc(t("members.name"))}" autocomplete="off" spellcheck="false">` +
       `<input class="mb-edit ms-role" id="ms-role" data-member="${member.id}" type="text" maxlength="${ROLE_MAX}" value="${esc(member.role)}" placeholder="${esc(t("members.role"))}" aria-label="${esc(t("members.role"))}" autocomplete="off" spellcheck="false">`;
   }
 
@@ -231,8 +216,6 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
   /** What the chosen kind holds. */
   function categoryHTML(member: Member): string {
     switch (category) {
-      case "memory":
-        return `<div class="ms-memory" data-k="ms-memory">${memoryHTML(memory.view())}</div>`;
       case "tools":
         return toolsHTML(member);
       case "skills":
@@ -346,8 +329,8 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
     });
   }
 
-  /** A view of its own (a skill, a command): its arrow goes back to the page, not to the conversation. */
-  const subHead = (title: string, more = ""): string => `<div class="ms-subhead">${backed(`<h2 class="ms-title">${esc(title)}</h2>`)}${more}</div>`;
+  /** A view of its own (a skill, a command): the page's arrow goes back to the page from it, not to the conversation. */
+  const subHead = (title: string, more = ""): string => `<div class="ms-subhead"><h2 class="ms-title">${esc(title)}</h2>${more}</div>`;
 
   function skillHTML(id: number): string {
     const known = Array.isArray(skills) ? skills.find(skill => skill.id === id) : undefined;
@@ -384,11 +367,12 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
     if (reposition && (!sameMember || member.cover?.kind !== "image")) { reposition = null; delete cover.dataset.repositioning; }
     const face = faceHTML(member, 96).replace(/--slime-(?:delay|since):[^;"\s]+;?| data-slime-mounted="[\d.]+"/g, "");
     const signature = JSON.stringify([member, face, view, category, [...editing], adding, skills, undo, commands, toolChoices, skillText, skillBusy, command, getLocale(),
-      reposition ? reposition.from : null, category === "memory" ? memory.view() : null]);
+      reposition ? reposition.from : null]);
     if (drawn === signature) return;
     drawn = signature;
     el.dataset.view = view.kind;
     el.setAttribute("aria-label", t("computer.settings"));
+    backButton.title = t("chooser.back"); backButton.setAttribute("aria-label", backButton.title);
     el.style.setProperty("--ms-tint", member.id === RAPHAEL_ID ? "var(--raphael-color)" : slimeColorOf(member));
     cover.dataset.pattern = coverPattern(member);
     patchHTML(cover, coverHTML(member));
@@ -400,7 +384,6 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
     const selection = textField && typeof textField.selectionStart === "number" ? [textField.selectionStart, textField.selectionEnd!, textField.selectionDirection] as const : null;
     const top = scroll.scrollTop;
     // The name and the role are drawn afresh for another member, and left alone while they are typed in.
-    // A view of its own has its own way back by its title, so the page's name and its arrow are not kept behind it.
     if (!sameMember || !(typingIn === "ms-name" || typingIn === "ms-role")) patchHTML(idSlot, view.kind === "main" ? idHTML(member) : "");
     else patchHTML(idSlot.querySelector<HTMLElement>(".ms-face")!, faceHTML(member, 96) + `<span class="mb-face-pencil" aria-hidden="true">${ico("pencil")}</span>`);
     for (const [id, value] of [["ms-name", member.name], ["ms-role", member.role]]) {
@@ -532,7 +515,6 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
 
   el.addEventListener("click", (event) => {
     const target = event.target as Element;
-    if (memory.click(target)) return;
     const act = target.closest<HTMLElement>("[data-ms]");
     if (!act || (act as HTMLButtonElement).disabled) return;
     const member = host.member();
@@ -572,7 +554,6 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
       }
       case "cat": {
         category = act.dataset.cat as Category;
-        if (category === "memory") void memory.load();
         draw();
         break;
       }
@@ -587,7 +568,6 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
 
   el.addEventListener("input", (event) => {
     const target = event.target as HTMLInputElement | HTMLTextAreaElement;
-    if (memory.input(target)) return;
     if (target.id === "ms-skill-source") source = target.value;
     else if (target.id === "ms-skill-text" && skillText && skillText !== "loading") skillText.text = target.value;
     else if (target.id === "ms-command-name") command.name = target.value;
@@ -596,7 +576,6 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
   });
 
   el.addEventListener("keydown", (event) => {
-    if (memory.key(event)) return;
     const target = event.target as HTMLElement;
     const field = target instanceof HTMLInputElement && (target.id === "ms-name" || target.id === "ms-role") || target instanceof HTMLTextAreaElement && !!target.dataset.field;
     if (event.key === "Enter" && !event.isComposing && target instanceof HTMLInputElement && (target.id === "ms-name" || target.id === "ms-role")) {
@@ -641,30 +620,19 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
       el.hidden = false;
       view = { kind: "main" }; category = CATEGORIES[0].id; editing.clear(); adding = false; source = ""; skillText = null; skillBusy = false;
       skills = "loading"; commands = "loading"; toolChoices = "loading"; reposition = null; delete cover.dataset.repositioning;
-      memory.reset();
       drawn = ""; drawnFor = null;
       draw();
       scroll.scrollTop = 0; el.removeAttribute("data-scrolled");
       el.focus({ preventScroll: true });
       void load();
-      // The first kind is the memory: it is read as the page opens.
-      if (category === "memory") void memory.load();
     },
     close() {
       if (el.hidden) return;
       el.hidden = true;
       epoch++;
       reposition = null; delete cover.dataset.repositioning;
-      memory.reset();
     },
     draw,
     refresh() { void load(); },
-    refreshMemory(memberId, space) {
-      if (el.hidden) return;
-      const mine = memberId === host.member().id;
-      if (mine) void load();
-      // Only the open member's own memory is on the page.
-      if (view.kind === "main" && category === "memory" && space !== "shared" && mine) void memory.load();
-    },
   };
 }

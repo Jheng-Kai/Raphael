@@ -102,7 +102,7 @@ The explicit remote host check and copyable repairs move from the retired settin
 pane into the location popover using the existing viewer_status owner RPC.
 
 ```powershell
-npm run look -- settings-owner settings-memory safety desktop-host-local desktop-host-remote desktop-panel computer-maintenance-menu computer-state-sleeping owner-output-folder --theme both --width 1120,720,1920x1080
+npm run look -- settings-owner safety desktop-host-local desktop-host-remote desktop-panel computer-maintenance-menu computer-state-sleeping owner-output-folder --theme both --width 1120,720,1920x1080
 ```
 
 ## Computer lifecycle in words (2026-11-05)
@@ -409,7 +409,7 @@ connects. The draft scene returns to the screen and reopens the same unsaved
 editor. Stopped renewals after a running stream preserve the no-write contract.
 Additional consumers cover context-menu-routine, automation-event-pick,
 automation-webhook, routine-event-missing/profile, missing-routines,
-memory-editing/saved and polish-caption-member.
+polish-caption-member.
 
 Selected scene matrix, both themes at 1120,720,1920x1080:
 

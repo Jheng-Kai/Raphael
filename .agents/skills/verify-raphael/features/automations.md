@@ -312,7 +312,7 @@ fake acceptance does not prove native, live brain or provider delivery.
 Targeted contracts: test_routine_test_run.py, test_schedule.py, test_routine_guards.py,
 test_events.py, test_event_catalog.py, test_event_harness.py, test_webhooks.py,
 test_settings.py; routine-run.test.ts, timezones.test.ts, automations.test.ts,
-member-profile.test.ts, member-details.test.ts, routine-sentence.test.ts,
+member-details.test.ts, routine-sentence.test.ts,
 settings-view.test.ts, agent-members.test.ts and look audit/app tests.
 
 

@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 // The member settings page (member-settings.ts): a cover, the face across it, the name and role in place, and one tinted
-// list per section. Every member has the same kinds, Raphael too: memory, tools, skills and commands, personality and
+// list per section. Every member has the same kinds, Raphael too: tools, skills and commands, personality and
 // instructions, notifications (owner, 2026-11-09). Long texts are one line until pressed, and every change is a call the
 // panel and the old dialog already made.
 import { type Mock, beforeEach, describe, expect, test, vi } from "vitest";
@@ -84,13 +84,7 @@ beforeEach(() => {
   api.membersCommandsSave.mockResolvedValue({});
   api.membersCommandsDelete.mockResolvedValue({});
   api.membersToolChoices.mockResolvedValue({ tools: ["read_file"], connections: [{ id: "gmail", name: "Gmail", enabled: true }, { id: "notion", name: "Notion", enabled: true }, { id: "slack", name: "Slack", enabled: false }] });
-  api.core.mockImplementation(async (method: string, params: { space?: string }) => {
-    if (method === "memory.get" || method === "memory.update") {
-      const shared = params?.space === "shared";
-      return { text: shared ? "主人住台北\n" : "在背單字\n\n每週三複習\n", revision: "r1", chars: 9, entries: shared ? 1 : 2, limit: shared ? 1375 : 2200, summary: null };
-    }
-    return {};
-  });
+  api.core.mockResolvedValue({});
 });
 
 describe("the page of a member", () => {
@@ -108,8 +102,8 @@ describe("the page of a member", () => {
     expect($<HTMLInputElement>("#ms-name").value).toBe("日文老師");
     expect($<HTMLInputElement>("#ms-role").value).toBe("N2 嚴格版");
     // The kinds stand in a column on the left, in the owner's order (owner, 2026-11-09); the first is shown, and only it.
-    expect(kinds()).toEqual(["memory", "tools", "skills", "soul", "notify"]);
-    expect($('[data-cat="memory"]').getAttribute("aria-current")).toBe("page");
+    expect(kinds()).toEqual(["tools", "skills", "soul", "notify"]);
+    expect($('[data-cat="tools"]').getAttribute("aria-current")).toBe("page");
     await cat("soul");
     expect(sections()).toEqual(["ms-personality", "ms-instructions"]);
     for (const section of page.el.querySelectorAll(".ms-section[data-k]")) expect(section.querySelector(":scope > .ms-head > h2")!.textContent!.length, section.getAttribute("data-k")!).toBeGreaterThan(0);
@@ -123,7 +117,7 @@ describe("the page of a member", () => {
     expect(page.el.querySelector("#ms-name, #ms-role")).toBeNull();
     expect($(".ms-name").textContent).toBe("拉斐爾");
     expect(page.el.style.getPropertyValue("--ms-tint")).toBe("var(--raphael-color)");
-    expect(kinds()).toEqual(["memory", "tools", "skills", "soul", "notify"]);
+    expect(kinds()).toEqual(["tools", "skills", "soul", "notify"]);
     expect(api.membersToolChoices).toHaveBeenCalled();
     expect(api.membersSkillsList).toHaveBeenCalledWith(0);
     expect(api.membersCommandsList).toHaveBeenCalledWith(0);
@@ -289,36 +283,18 @@ describe("the page of a member", () => {
   });
 });
 
-describe("the memory", () => {
-  // Owner, 2026-11-09: 「個別角色不用顯示共同記憶 共同記憶只需要顯示在設定即可」.
-  test("is the first kind, read as the page opens, and shows the member's own memory alone, as cards", async () => {
-    await open();
-    expect(page.el.dataset.view).toBe("main");
-    expect(api.core).toHaveBeenCalledWith("memory.get", { space: "own", member_id: 3 });
-    expect(api.core).not.toHaveBeenCalledWith("memory.get", { space: "shared" });
-    const documents = [...page.el.querySelectorAll<HTMLElement>("[data-mem-section]")];
-    expect(documents.map((s) => [s.dataset.memSpace, s.getAttribute("aria-label")])).toEqual([["own", "日文老師的記憶"]]);
-    expect(documents[0]!.querySelectorAll("details.mem-entry")).toHaveLength(2);
-    expect(documents[0]!.textContent).toContain("在背單字");
-    // The edit is a pencil here too.
-    const edit = documents[0]!.querySelector<HTMLElement>('[data-mem="edit"]')!;
-    expect(edit.classList.contains("icon")).toBe(true);
-    expect(edit.textContent).toBe("");
-    edit.click();
-    const box = $<HTMLTextAreaElement>('[data-mem-space="own"] textarea.mem-body');
-    expect(box.value).toBe("在背單字\n\n每週三複習");
-    box.value = "在背單字";
-    box.dispatchEvent(new Event("input", { bubbles: true }));
-    $<HTMLElement>('[data-mem-space="own"] [data-mem="save"]').click();
-    await flush();
-    expect(api.core).toHaveBeenCalledWith("memory.update", { space: "own", member_id: 3, text: "在背單字", revision: "r1" });
-    expect($('[data-cat="memory"]').getAttribute("aria-current")).toBe("page");
-  });
-
-  test("Raphael's own memory is his, and only it", async () => {
-    await open(0);
-    expect(api.core).toHaveBeenCalledWith("memory.get", { space: "own", member_id: 0 });
-    expect([...page.el.querySelectorAll("[data-mem-section]")].map((s) => s.getAttribute("aria-label"))).toEqual(["拉斐爾的記憶"]);
+describe("no memory", () => {
+  // Owner, 2026-11-11: 「可以像 Hermes Agent 一樣，都不要讓我們看到記憶好了，所以記憶是在背後管理的…如果使用者在使用的情況下遇到記憶有錯誤的時候，再跟他說一下，他自己去改就好了」.
+  test("the page draws no memory in any kind, for a member or for Raphael, and reads none", async () => {
+    for (const id of [3, 0]) {
+      await open(id);
+      for (const kind of kinds()) {
+        await cat(kind);
+        expect(page.el.querySelector('[data-mem-section], [data-mem-space], [data-mem], .mem-entry, .ms-memory, [data-k="ms-memory"]'), `${id} ${kind}`).toBeNull();
+        expect(page.el.textContent, `${id} ${kind}`).not.toContain("記憶");
+      }
+      expect(api.core.mock.calls.map((call) => String(call[0])).filter((method) => method.startsWith("memory."))).toEqual([]);
+    }
   });
 });
 
@@ -481,7 +457,7 @@ describe("going back", () => {
     current = 4;
     page.open(); await flush();
     expect(page.el.dataset.view).toBe("main");
-    expect($('[data-cat="memory"]').getAttribute("aria-current")).toBe("page");
+    expect($('[data-cat="tools"]').getAttribute("aria-current")).toBe("page");
     expect($<HTMLInputElement>("#ms-name").value).toBe("行程管家");
     expect(host.back).not.toHaveBeenCalled();
   });
@@ -503,8 +479,6 @@ describe("words", () => {
     list = { groups: [{ id: 20, name: "Study", position: 0, sources: [] }], members: LIST.members.map(m => m.id === 3 ? { ...m, name: "Teacher", role: "Strict", personality: "", instructions: "" } : m) };
     api.membersSkillsList.mockResolvedValue({ skills: [{ id: 1, member_id: 3, name: "summary", description: "", enabled: true, source: "owner" }], undo: null });
     api.membersCommandsList.mockResolvedValue({ commands: [] });
-    // The memory documents are the owner's own words: English ones here.
-    api.core.mockResolvedValue({ text: "Lives in Taipei\n", revision: "r1", chars: 16, entries: 1, limit: 2200, summary: null });
     await open();
     for (const kind of kinds()) {
       await cat(kind);

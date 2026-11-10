@@ -402,12 +402,12 @@ test("a closed details panel reads nothing while work runs, and the settings pag
   const read = (): string[] => api.core.mock.calls.map(([method]) => method as string);
   expect(read()).not.toContain("memory.get");
   expect(api.membersSkillsList).not.toHaveBeenCalled(); expect(api.membersCommandsList).not.toHaveBeenCalled();
-  // The panel no longer counts skills, commands or notes: those are the settings page's.
+  // The panel no longer counts skills or commands: those are the settings page's.
   await openDetails();
   expect(read()).not.toContain("memory.get"); expect(api.membersSkillsList).not.toHaveBeenCalled();
   agent.showSettings(3); await flush();
-  // The memory is the page's first kind, read as the page opens (owner, 2026-11-09).
-  expect(read()).toContain("memory.get");
+  // The page holds no memory to read (owner, 2026-11-11), only what the member has.
+  expect(read()).not.toContain("memory.get");
   expect(api.membersSkillsList).toHaveBeenCalledWith(3); expect(api.membersCommandsList).toHaveBeenCalledWith(3);
   agent.hide();
 });
@@ -889,31 +889,21 @@ test("member notifications refresh names, groups, unread dots and the open heade
   expect($('.mb-col [data-member="4"] .mb-dot')).not.toBeNull();
 });
 
-test("memory notifications refresh the member's own memory on its page, and the shared one is not there", async () => {
-  const document = (text: string) => ({ text, revision: "r", chars: text.length, entries: text ? 1 : 0, limit: 2200, summary: null });
-  api.core.mockImplementation(async (method: string) => method === "memory.get" ? document("") : { questions: [] });
+test("a memory change reads nothing and shows nothing on the member's page", async () => {
+  api.core.mockImplementation(async () => ({ questions: [] }));
   const agent = mount();
   await flush();
   await pick(3);
   $(".conversation-trigger").click();
   agent.showSettings(3); await flush();
-  $('[data-ms="cat"][data-cat="memory"]').click();
-  await flush();
-  api.core.mockClear();
-  send({ type: "MemoryChanged", member_id: 4, space: "own" });
-  await flush();
+  api.core.mockClear(); api.membersSkillsList.mockClear();
+  for (const event of [{ member_id: 4, space: "own" }, { member_id: 3, space: "own" }, { member_id: 0, space: "shared" }] as const) {
+    send({ type: "MemoryChanged", ...event });
+    await flush();
+  }
   expect(api.core).not.toHaveBeenCalled();
-  api.core.mockImplementation(async (method: string) => method === "memory.get" ? document("Fresh note") : { questions: [] });
-  send({ type: "MemoryChanged", member_id: 3, space: "own" });
-  await flush();
-  expect(api.core).toHaveBeenLastCalledWith("memory.get", { member_id: 3, space: "own" });
-  expect($('[data-mem-space="own"]').textContent).toContain("Fresh note");
-  // The memory everyone shares is Settings' alone (owner, 2026-11-09): its change reads nothing here.
-  api.core.mockClear();
-  send({ type: "MemoryChanged", member_id: 0, space: "shared" });
-  await flush();
-  expect(api.core).not.toHaveBeenCalledWith("memory.get", { space: "shared" });
-  expect(globalThis.document.querySelector('.ms-pane [data-mem-space="shared"]')).toBeNull();
+  expect(api.membersSkillsList).not.toHaveBeenCalled();
+  expect(globalThis.document.querySelector('.ms-pane [data-mem-space], .ms-pane [data-mem-section], .ms-pane [data-cat="memory"]')).toBeNull();
 });
 
 describe("Raphael's thread", () => {

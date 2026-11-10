@@ -596,15 +596,13 @@ export function createMembers(host: MembersHost): MembersShell {
         settings.refresh();
       } else if (event.type === "RoutinesChanged" && event.member_id === current) {
         details.refreshRoutines();
-      } else if (event.type === "MemoryChanged") {
-        settings.refreshMemory(event.member_id, event.space);
       } else if (event.type === "MemberActivity") {
         setSlimeState(event.member_id, event.state, event.label);
         // A press of a panel button ends when the member stops; the bot it set up shows at once (owner, 2026-11-07).
         settleAsks(event.member_id, event.state);
         if (event.member_id === current && open && ["idle", "done", "error", "waiting", "blocked"].includes(event.state)) details.refreshChannels();
       } else if (event.type === 'AgentTurn' && (event.member_id ?? 0) === current && open) {
-        // Skills, commands and memory change through their own events; a streaming turn can only add files.
+        // Skills and commands change through their own events; a streaming turn can only add files.
         details.refreshWork('turn');
       } else if (event.type === 'WorkerChanged' && open) {
         details.refreshWork('task');

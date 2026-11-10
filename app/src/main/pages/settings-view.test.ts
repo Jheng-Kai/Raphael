@@ -4,7 +4,6 @@ import { Window } from "happy-dom";
 import path from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
 import { emptyConnectionsView } from "../connections";
-import { emptyMemoryView } from "../memory-view";
 import { emptyRulesView } from "../safety-rules";
 import { emptyServicesView } from "../services";
 import { emptyProvidersView } from "../providers";
@@ -126,19 +125,18 @@ test("no bot is set in Settings: Telegram, Slack and Discord live in each member
   expect(canonicalPane("messaging")).toBe("general");
 });
 
-test("shared owner memory is the 記憶 tab of its own, while own memory stays out of Settings (owner, 2026-11-08)", () => {
-  const memoryShared = { ...emptyMemoryView(), status: { text: "Owner document", revision: "r", chars: 14, entries: 1, limit: 2200, summary: null }, space: "shared" as const, title: "共同記憶" };
-  const html = tab("memory", { memoryShared });
-  expect(html).toContain('data-mem-space="shared"');
-  const document = new Window().document;
-  document.body.innerHTML = html;
-  expect(document.querySelector("#set-title")?.textContent).toBe("記憶");
-  // No import from other assistants: the memory lives in the data folder (owner, 2026-11-08).
-  expect(html).not.toMatch(/data-import|data-memory-import|匯入記憶/);
-  expect(html).not.toContain('data-mem-space="own"');
-  for (const pane of ["general", "tools", "safety", "dictation"] as const) {
-    expect(tab(pane, { memoryShared })).not.toContain("data-mem-section");
+test("no tab of Settings shows memory, and an old link to the memory tab lands on General", () => {
+  expect(PANES.map((p) => p.id as string)).not.toContain("memory");
+  expect(paneListHTML()).not.toContain("memory");
+  expect(canonicalPane("memory")).toBe("general");
+  const general = tab("general");
+  for (const pane of [...PANES.map((p) => p.id), "memory" as const]) {
+    const html = tab(pane);
+    expect(html).not.toMatch(/data-mem|mem-entry|共同記憶/);
+    expect(html).not.toMatch(/data-import|data-memory-import|匯入記憶/);
   }
+  // A saved or deep-linked "memory" pane draws General, not an empty tab.
+  expect(tab("memory")).toBe(general);
 });
 
 test("shared safety rules and local permissions live in Safety", () => {
@@ -158,11 +156,10 @@ test.each(["zh-TW", "en", "ja"] as const)("shared safety and connection wording 
   }
 });
 
-test("Tools contains five shared service rows and leaves memory in the owner pane", () => {
+test("Tools contains five shared service rows", () => {
   const agent = tab("tools", { services: emptyServicesView() });
   expect(agent).toContain("<h2>服務</h2>");
   expect(agent.indexOf("data-svc-section")).toBeGreaterThan(agent.indexOf('data-k="worker-cap"'));
-  expect(agent).not.toContain("data-mem-section");
   expect(agent.match(/data-k="svc-open:/g)).toHaveLength(4);
   // Service choices and fields belong to their dialog rather than the shared list.
   expect(agent).not.toContain("data-model-picker");
@@ -219,12 +216,12 @@ const described = (html: string): string[] =>
   html.split(/(?=<div class="row[ "])/).filter((r) => r.includes('<div class="d">')).map((r) => /<div class="t">(.*?)<\/div>/.exec(r)![1]);
 
 describe("the tabs", () => {
-  test("are Grok Bot's six and 記憶: General, Memory, Tools, Safety, Models & usage, Dictation and About, in each language", () => {
-    expect(IDS).toEqual(["general", "memory", "tools", "safety", "models", "dictation", "about", "connections"]);
+  test("are Grok Bot's six: General, Tools, Safety, Models & usage, Dictation and About, in each language", () => {
+    expect(IDS).toEqual(["general", "tools", "safety", "models", "dictation", "about", "connections"]);
     const titles = {
-      "zh-TW": ["一般", "記憶", "工具", "安全", "模型與用量", "聽寫與快捷鍵", "關於", "連結應用程式"],
-      en: ["General", "Memory", "Tools", "Safety", "Models & usage", "Dictation & shortcuts", "About", "Connect apps"],
-      ja: ["一般", "記憶", "ツール", "安全", "モデルと使用量", "音声入力とショートカット", "アプリ情報", "アプリを連携"],
+      "zh-TW": ["一般", "工具", "安全", "模型與用量", "聽寫與快捷鍵", "關於", "連結應用程式"],
+      en: ["General", "Tools", "Safety", "Models & usage", "Dictation & shortcuts", "About", "Connect apps"],
+      ja: ["一般", "ツール", "安全", "モデルと使用量", "音声入力とショートカット", "アプリ情報", "アプリを連携"],
     };
     for (const locale of LOCALES) {
       setLocale(locale);
@@ -235,13 +232,13 @@ describe("the tabs", () => {
   test("sit flat, as Grok Bot's: no group names and no search (owner, 2026-11-07)", () => {
     const list = paneListHTML();
     // 連結應用程式 is no tab: the sidebar opens it as a dialog of its own (R-UI-111).
-    expect([...list.matchAll(/data-pane="(\w+)"/g)].map((m) => m[1])).toEqual(["general", "memory", "tools", "safety", "models", "dictation", "about"]);
+    expect([...list.matchAll(/data-pane="(\w+)"/g)].map((m) => m[1])).toEqual(["general", "tools", "safety", "models", "dictation", "about"]);
     expect(list).not.toContain("nav-group");
     expect(list).not.toContain("set-search");
   });
 
   test("every tab is a real button and links of before land on their new tab", () => {
-    expect(paneListHTML().match(/<button type="button" class="nav" data-pane="\w+" aria-current="false">/g)).toHaveLength(7);
+    expect(paneListHTML().match(/<button type="button" class="nav" data-pane="\w+" aria-current="false">/g)).toHaveLength(6);
     expect(paneListHTML()).not.toContain('data-pane="agent"');
     expect(canonicalPane("agent")).toBe("tools");
     expect(canonicalPane("appearance")).toBe("general");
@@ -327,15 +324,13 @@ describe("一般", () => {
     expect(buttons(chosen)).toHaveLength(1);
     expect(chosen).not.toMatch(/title="/);
   });
-  test("General is Grok Bot's sections: you, appearance, Raphael and the guide; memory and the bots live elsewhere", () => {
+  test("General is Grok Bot's sections: you, appearance, Raphael and the guide; the bots live elsewhere", () => {
     const html = tab("general");
     expect(html).not.toContain("data-msg-section");
     expect(groups(html)).toEqual(["關於你", t("skin.title"), t("agent.title"), "啟動"]);
     // The tour is one button, named for what it does, with no row repeating the name (owner, 2026-11-07).
     expect(html).toMatch(/<button[^>]*data-act="rerun-guide"[^>]*>導覽<\/button>/);
     expect(names(html).slice(0, 4)).toEqual([t("settings.067"), t("settings.059"), "時區", "輸出資料夾"]);
-    // The 記憶 tab has no import (owner, 2026-11-08).
-    expect(tab("memory")).not.toContain("匯入記憶");
   });
 
   test("starts the guide again with a real bordered button, not a switch or a link", () => {

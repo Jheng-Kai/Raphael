@@ -26,8 +26,7 @@ column on the left, as Settings' own, each an icon and a name, and only the chos
 it (owner, 2026-11-08: 「左側會有一些分區…不要就這樣子長長一條」); a page narrower than 680 px puts the
 kinds in a row of small pills that wrap above it. What the panel beside the page shows (routines,
 messaging) is not here. The kinds are the same for every member and for Raphael, in the owner's order
-(owner, 2026-11-09): 記憶 (the member's own memory alone, read as the page opens; each entry a tinted card of one
-line that opens to its whole text when pressed; the memory everyone shares is in Settings alone), 工具 (each
+(owner, 2026-11-09, memory out of them since 2026-11-11, see [No memory on screen](#no-memory-on-screen-owner-decision-2026-11-11)): 工具 (each
 connected app with its own mark and a switch over the member's `tools` list, then the drafts switch under them),
 技能與指令 (skills as names with switches, a press opens the skill's own view, a plus adds one from a link, delete
 waits in a ⋯ behind a second press; commands), 個性與指示 (personality and instructions, one line each, a press
@@ -39,15 +38,14 @@ role are not typed. A kind with one section has no name over its list. There is 
 pencils, adds are pluses.
 
 Inspect every contact sheet and, at light 720 and dark 1120, the full images of member-settings,
-member-settings-skills, member-settings-memory, member-settings-memory-open, member-settings-tools and member-settings-cover-picture. Compare the dropdowns with
+member-settings-skills, member-settings-tools, member-settings-cover-picture and member-settings-back-hover. Compare the dropdowns with
 Settings' rows (words and a chevron, no box), the tinted lists with the panel's routine list and the
-face edit with the panel's. The old scene names are kept and now drive the page: details-memory,
-details-skills, details-commands, details-notify, raphael-skills, memory-editing, memory-saved,
-member-edit, member-edit-memory, settings-raphael-memory, speaker-draft-member,
-speaker-draft-chief, member-draft-switch, global-private-memory and primary-contact-set.
+face edit with the panel's. The old scene names are kept and now drive the page: details-skills,
+details-commands, details-notify, raphael-skills, member-edit, speaker-draft-member,
+speaker-draft-chief, member-draft-switch and primary-contact-set.
 
 ```powershell
-npm run look -- member-settings member-settings-raphael member-settings-skills member-settings-tools member-settings-notify member-settings-field member-settings-skill member-settings-command member-settings-memory member-settings-memory-open member-settings-cover member-settings-cover-picture member-settings-back details member-panel-library member-face-hover --theme both --width 1120,720,1920x1080
+npm run look -- member-settings member-settings-raphael member-settings-skills member-settings-tools member-settings-notify member-settings-field member-settings-skill member-settings-command member-settings-cover member-settings-cover-picture member-settings-back-hover member-settings-back details member-panel-library member-face-hover --theme both --width 1120,720,1920x1080
 ```
 
 ## No member voices (owner decision, 2026-11-10)
@@ -123,7 +121,7 @@ pencil in its middle (owner, 2026-11-08). Scenes: member-face-hover, slime-picke
 
 ```powershell
 npm run look -- members-expanded sidebar-folders --theme both --width 1120,720,1920x1080
-npm run look -- details member-avatar member-edit details-memory details-routines details-routine-view details-routine-hover details-skills details-commands details-notify --theme both --width 1120,720,1920x1080
+npm run look -- details member-avatar member-edit details-routines details-routine-view details-routine-hover details-skills details-commands details-notify --theme both --width 1120,720,1920x1080
 npm run look -- sidebar-folders member-text --theme both --width 1120,720,1920x1080
 npm run look -- member-delete member-conversation-sections --theme both --width 1120,720,1920x1080
 npm run look -- member-maker member-maker-chosen member-maker-greeting member-maker-made --theme both --width 1120,720,1920x1080
@@ -160,7 +158,7 @@ selection. Native proof must also relaunch the isolated dev instance and confirm
 persistence, then remove test data.
 
 Routine, skill and command rows put edit/delete in their overflow menus
-(R-UI-11). A memory is a document with one 編輯, and a shared entry ends with whom the owner told it to and when (`global-private-memory`). Routine switches remain on their rows. Existing edit, approval and undo
+(R-UI-11). Routine switches remain on their rows. Existing edit, approval and undo
 behavior remains in the shared editors and controllers.
 
 ## Gotchas
@@ -313,7 +311,7 @@ prove rendered interactions only; live brains and native persistence remain sepa
 Every row, card or item that has a ⋯ opens that button's menu when it is right-clicked anywhere on it, at the pointer (the owner, 2026-10-27, about every
 overflow menu and the conversation list of a member's details): member rows and group headers in the column, conversations and routines in a member's details,
 the notes, routines, skills and commands of a member's profile, rooms (the sidebar's rows and the room's header), the sidebar board's group headers, a custom
-server's header and a subscription account's card in Settings, memory notes, safety rules, computer apps, History rows, dictionary words and Raphael's answers.
+server's header and a subscription account's card in Settings, safety rules, computer apps, History rows, dictionary words and Raphael's answers.
 The menu is the very one the ⋯ opens, because the button is pressed and its own handler runs, so a menu that replaces the first from the same button
 (「移到分組」) stands at the pointer too. Shift+F10 and the Menu key open it under the ⋯ of the focused row. A right button dragged more than a few pixels opens
 nothing, so that a drag (the sidebar board's pan, later) is not a click. Anywhere else there is no browser menu, and a text field keeps its own. A left click on a conversation row
@@ -329,7 +327,7 @@ npm run look -- context-menu-member context-menu-conversation context-menu-routi
 ## What destroys waits in the ⋯ (R-UI-56)
 
 Clear, clear all, delete and remove never stand open on a page (the owner, 2026-10-31, about the memory tab). They wait in the ⋯ of the row or section title they
-act on, and its right click: 全部清除 in the title of each memory document, 清除 in the conversation summary's row, the clears of Settings › 資料 in their rows (所有聽寫紀錄,
+act on, and its right click: the clears of Settings › 資料 in their rows (所有聽寫紀錄,
 所有對話紀錄), 移除金鑰 in the key's row of Settings › 模型 › 用量, a person's removal in their Telegram row and a downloaded local model's deletion in its row of the chooser.
 `openConfirmMenu` (app/src/main/ui.ts) keeps the second press the buttons had: the first press asks in the item's place for five seconds, and closing the menu forgets
 it. A local model still asks in its row, and a clear of 資料 still gives its ten seconds of 復原.
@@ -339,7 +337,6 @@ dialog about that one thing (`.mb-dialog`, `.cs-dialog`), in a local model's inl
 not excepted. Telegram's 中斷連線, a pending person's reject and a mail draft's 捨棄 use other words and stay where they are.
 
 ```powershell
-npm run look -- memory-clear-menu memory-clear-done memory-summary-menu memory-summary-done context-menu-memory-title context-menu-memory-summary details-memory global-private-memory --theme both --width 1120,720,1920x1080
 npm run look -- dictation usage-key-menu usage-key-removed context-menu-api-key messaging-paired-aligned messaging-user-menu messaging-user-removed model-choices-local-menu context-menu-local-model --theme both --width 1120,720,1920x1080
 ```
 
@@ -401,7 +398,7 @@ in Settings. Raphael now has the ordinary Skills tab. Native CLI memory/skills s
 disabled; the host provides the member's own memory/skill context and tools.
 
 ```powershell
-npm run look -- details raphael-details details-memory details-skills raphael-skills member-brain-saved primary-contact-column primary-contact-set sidebar-folders primary-room-picker primary-room-members primary-room-chief quick-model-menu --theme both --width 1120,720,1920x1080
+npm run look -- details raphael-details details-skills raphael-skills member-brain-saved primary-contact-column primary-contact-set sidebar-folders primary-room-picker primary-room-members primary-room-chief quick-model-menu --theme both --width 1120,720,1920x1080
 npm run native -- bot-homes
 ```
 
@@ -415,7 +412,7 @@ no provider calls. Fixture/native/real-provider/judge evidence remain separate.
 Phase 2 adds automatic capture, recall/folding and owner pending review below. Learned skills remain phase 3.
 
 
-## Memory as living files (owner decision 2026-10-31, supersedes phase 2's notes)
+## Memory as living files (owner decision 2026-10-31, supersedes phase 2's notes; not shown anywhere since 2026-11-11)
 
 The owner, about rows of 待確認 notes that could repeat each other: memory is a file that keeps being edited,
 as in Hermes. Each member has `bots/<id>/MEMORY.md` (the pane's 「<name> 的記憶」), which no other member
@@ -478,28 +475,31 @@ At every start `memory/legacy.py` moves what the old store left (note files, the
 into the files, merging exact and near duplicates, after copying everything to `bot-state/<id>/notes-backup/`. What
 waited in the queue enters marked; a note past its date keeps it in its words; a file over its limit stays whole.
 
-The pane (`memory-view.ts`) shows each file as paragraphs, one 編輯 opens all of it in one box that grows with its
-text, and 儲存 sends the copy's revision: an edit from an old copy is refused, what was typed stays, and the next
-儲存 is made knowing it. 全部清除 and the summary's 清除 wait in their ⋯ (R-UI-56). Since 2026-11-09 (owner: the
-memory pages looked messy) each memory is a section of its page: its name as a small heading with 編輯 and ⋯ on
-its right, then one tinted card (`.mem-doc`) whose entries are blocks of their own, the text over whom it was told
-(`.mem-from`, quiet), the 待確認 tag at the text's start; the summary is a card of its own under it. The same
-section serves the member's 記憶 kind and Settings › 記憶.
-
-```powershell
-npm run verify -- --core
-npm run look -- details-memory memory-editing memory-saved global-private-memory member-edit-memory settings-memory --theme both --width 1120,720,1920x1080
-npm run native -- memory-growth
-```
-
-`memory-document` checks paragraphs, no rows or type labels, the 待確認 tag, a real 編輯 and no scroll of its own.
-`memory-editor` checks the whole file in a focused box that does not scroll. `memory-saved` checks one write of this
-member's file with its revision. `global-private-memory` checks shared provenance and private separation.
-`member-edit-memory` and `settings-memory` cover the edit dialog's box and Raphael's tab of Settings.
+Since 2026-11-11 the app shows none of these files (see [No memory on screen](#no-memory-on-screen-owner-decision-2026-11-11) below).
 `core/tests/memory/test_files.py` covers every contract above, `test_reflection.py` the pass, `test_growth.py` silent
 reads and bounded recall, `members/test_cli_brains.py` a resumed session and MCP edits. The native fake-brain journey
 sends 25 real app turns and checks the member-written file and zero spend. It proves host plumbing, not real-provider
 inference or design-judge acceptance. Learned skills remain phase 3.
+
+## No memory on screen (owner decision, 2026-11-11)
+
+The owner, after looking at the member page's 記憶 kind (cards, some marked 待確認) and Settings' 記憶 tab:
+「可以像 Hermes Agent 一樣，都不要讓我們看到記憶好了，所以記憶是在背後管理的…如果使用者在使用的情況下遇到記憶有錯誤的時候，再跟他說一下，他自己去改就好了」.
+No page, tab, card or count shows a member's memory or the shared memory (R-MEM-10). The core keeps both files, the
+memory tools and the `MemoryChanged` event as before; the app neither reads nor draws them. When a memory is wrong the
+owner tells the member in the conversation and the member corrects its own file with its memory tool. The member page's
+kinds are 工具, 技能與指令, 個性與指示 and 通知; Settings' tabs are 一般, 工具, 安全, 模型與用量, 聽寫與快捷鍵 and 關於; an old link to the 記憶 tab
+lands on 一般. `memory-view.ts`, its styles and the scenes that opened it are gone.
+
+```powershell
+npm run verify -- --core
+npm run look -- member-settings member-settings-raphael settings-owner --theme both --width 1120,720,1920x1080
+npm run native -- memory-growth
+```
+
+`member-settings` (also run for `member-settings-raphael`) refuses a memory kind, card or word on the page; `settings-owner`
+refuses a 記憶 tab and any memory element in Settings. `member-settings.test.ts`, `settings-view.test.ts` and
+`pages/agent-members.test.ts` (a `MemoryChanged` event reads nothing and draws nothing) hold the same in vitest.
 
 
 ## Skills that grow, phase 3 (2026-10-29)
@@ -529,7 +529,7 @@ join the member name directly to the possessive particle.
 
 ```powershell
 npm run verify -- --core
-npm run look -- details-skills raphael-skills member-text details-memory global-private-memory details-commands --theme both --width 1120,720,1920x1080
+npm run look -- details-skills raphael-skills member-text details-commands --theme both --width 1120,720,1920x1080
 npm run native -- skill-growth
 ```
 
@@ -796,7 +796,7 @@ room and background paths retain their shared production engines.
 Offline tests: core/tests/members/test_skill_library.py,
 core/tests/agent/test_cli_skill_packages.py,
 core/tests/agent/test_local_commands.py::test_imported_skill_script_uses_ordinary_local_command_approval,
-app/src/main/connections.test.ts (connectors only since 2026-11-07), member-profile.test.ts and member-details.test.ts.
+app/src/main/connections.test.ts (connectors only since 2026-11-07), member-profile-resources.test.ts and member-details.test.ts.
 The existing app/scripts/look/mock-ipc boundary also models shared scope, local
 source selection/import and individual grants; mock-ipc.test.mjs covers that contract.
 All package/credential fixtures use temporary synthetic homes. Installed CLIs are
@@ -838,7 +838,7 @@ npm run look -- raphael-skills details-skills details-commands completion-slash 
 ```
 
 Inspect every contact sheet and every full-size image for the member-panel scenes.
-Vitest: connections.test.ts, member-profile.test.ts and
+Vitest: connections.test.ts, member-profile-resources.test.ts and
 app/scripts/look/mock-ipc.test.mjs (scene fixture source propagation).
 
 ### One shared package row and readable sources (review follow-up 4)
@@ -871,7 +871,7 @@ size inside 28px row and 40px header slots, aligned with the existing member fac
 
 Named regressions in connection-skills.test.ts cover one shared row with Raphael,
 changed shared skill reimport and readable source labels. connections.test.ts covers
-the real dialog/grant refresh and preserved private rows. member-profile.test.ts
+the real dialog/grant refresh and preserved private rows. member-profile-resources.test.ts
 covers Raphael's existing shared switch with readable source copy. Run those files
 plus i18n/i18n.test.ts, the mapped look command and one final npm run verify.
 
@@ -940,7 +940,7 @@ the shared source guard checks source labels and row paragraphs, including title
 Run the twenty-scene skill matrix above in both themes and all three sizes, inspect
 every contact sheet and relevant full-size member/detail/source views. Unit evidence
 is the three localized learned-origin cases in
-member-profile.test.ts. This presentation change adds no migration or RPC.
+member-profile-resources.test.ts. This presentation change adds no migration or RPC.
 
 
 ## Colleague recipes and goal-first greeting (2026-11-05)

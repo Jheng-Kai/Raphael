@@ -358,7 +358,7 @@ No brain, tool, core or Rust behavior changed.
 
 ```powershell
 npm run verify
-npm run look -- details member-conversation-sections connector-reconnected home-empty home-many dictation-overview quick-cleared member-text details-skills raphael-skills details-memory global-private-memory centred-system-events composer-learn conversation-delete-main member-delete --theme both --width 1120,720,1920x1080
+npm run look -- details member-conversation-sections connector-reconnected home-empty home-many dictation-overview quick-cleared member-text details-skills raphael-skills centred-system-events composer-learn conversation-delete-main member-delete --theme both --width 1120,720,1920x1080
 npm run look -- home-many quick-cleared --theme both --width 1280x800
 $env:RAPHAEL_MODELS_DIR = '<a folder holding the local speech models>'
 npm run native -- skill-growth readable-layout locale-sweep voice-conversation delete-conversation
@@ -541,8 +541,8 @@ Owner round 6 keeps the existing 330 scenes. Affected-scene acceptance adds 1280
 ## Memory growth native acceptance (phase 2, 2026-10-29)
 
 `memory-growth` sends 25 turns in the real isolated app with the fake brain,
-checks turn-one recall on turn 25 and an entry in only that member's MEMORY.md. Its implementation and selected memory-pane scenes are mapped in
-[Members](members.md). This is separate from live provider and design-judge acceptance.
+checks turn-one recall on turn 25 and an entry in only that member's MEMORY.md. Its implementation is mapped in
+[Members](members.md); no memory page exists since 2026-11-11 (R-MEM-10). This is separate from live provider and design-judge acceptance.
 
 ## Owner round 7 contracts
 
