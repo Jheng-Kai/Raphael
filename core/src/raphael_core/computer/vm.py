@@ -10,16 +10,21 @@ import csv
 import hashlib
 import io
 import json
+import logging
 import math
 import os
 import re
 import secrets
 import time
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import httpx
+
+logger = logging.getLogger(__name__)
 
 BASE = "docker.io/trycua/xfce-cua@sha256:274eb636f5cf3fc58f705916ee72b7a701270b3877369d08533a385c5325be9b"
 VERSION = "0.37.0"
@@ -42,6 +47,13 @@ WALLPAPER_SETUP_S = 5
 OWN_WALLPAPER = "computer-wallpaper.jpg"
 OWN_WALLPAPER_BYTES = 8_000_000
 GUEST_OWN_WALLPAPER = "/opt/raphael-desktop/wallpapers/own.jpg"
+# How long a member's own use of its computer waits for a Docker Desktop it had to start, and how often it asks.
+# Docker Desktop on Windows starts WSL first, so a cold start takes the better part of a minute.
+ENGINE_WAIT_S = 120
+ENGINE_POLL_S = 1.0
+# Set only while a granted member's tool call prepares its computer. (owner, 2026-11-11: 「理論上就算我沒有開 Docker，
+# 它也會自動自己打開才對」) A viewer opening or any other read never starts the engine, so the contextvar defaults off.
+_MAY_START_ENGINE = ContextVar("computer_may_start_engine", default=False)
 # shutil.which walks PATH on the event loop, and one status poll asks many times.
 DOCKER_LOOKUP_S = 30.0
 _docker_cli = None
@@ -54,6 +66,16 @@ def docker_cli():
         from .desktop_host import DockerDesktop
         _docker_cli = (now, str(DockerDesktop().cli() or "docker"))
     return _docker_cli[1]
+
+
+@contextmanager
+def engine_start_allowed():
+    """A granted member's own tool call may start Docker Desktop on this PC while it prepares the computer."""
+    token = _MAY_START_ENGINE.set(True)
+    try:
+        yield
+    finally:
+        _MAY_START_ENGINE.reset(token)
 
 
 class VmError(Exception):
@@ -248,6 +270,7 @@ class LocalVm:
         self.remote_sessions = {}
         self.real_transport = runner is None
         self.rebuild_notice = lambda target: None
+        self.engine_notice = lambda target: None
         self.maintenance, self.lifecycle = {}, {}
         self.disk_checked, self.disk_warned = {}, set()
         async def disconnect_driver(key):
@@ -323,16 +346,22 @@ class LocalVm:
             if not start_desktop:
                 raise VmError("docker_stopped")
             self._progress(target, "starting")
+            began = time.monotonic()
+            logger.info("Docker Desktop is not running; launching it for a computer")
+            self.engine_notice(target)
             try:
                 await self.desktop.start()
-            except (OSError, AttributeError):
+            except (OSError, AttributeError) as error:
+                logger.warning("Docker Desktop could not be launched (%s) after %.1f s", type(error).__name__, time.monotonic() - began)
                 raise VmError("docker_start_failed") from None
             try:
-                async with asyncio.timeout(120):
+                async with asyncio.timeout(ENGINE_WAIT_S):
                     while not await self.available(target):
-                        await asyncio.sleep(1)
+                        await asyncio.sleep(ENGINE_POLL_S)
             except TimeoutError:
+                logger.warning("Docker Desktop did not answer after %.1f s", time.monotonic() - began)
                 raise VmError("docker_start_timeout") from None
+            logger.info("Docker Desktop answered %.1f s after it was launched", time.monotonic() - began)
 
     def launch(self, target):
         """Viewer opens immediately; preparation belongs to the shared VM lifecycle."""
@@ -364,6 +393,10 @@ class LocalVm:
             return False
         try:
             target = target or self.target()
+            if self.real_transport and not target.remote:
+                from .desktop_host import engine_pipe_missing
+                if engine_pipe_missing():
+                    return False
             result = await self.run_for(target, ["info", "--format", "{{.OSType}}"], timeout=5)
             return result.code == 0 and result.stdout.strip() == "linux"
         except (OSError, TimeoutError):
@@ -545,7 +578,7 @@ class LocalVm:
         async with self.locks.setdefault(target.key, asyncio.Lock()):
             self.changes += 1
             try:
-                await self.ensure_engine(target)
+                await self.ensure_engine(target, start_desktop=_MAY_START_ENGINE.get())
                 async with self.build_lock:
                     if not await self.image(target):
                         self._progress(target, "building")

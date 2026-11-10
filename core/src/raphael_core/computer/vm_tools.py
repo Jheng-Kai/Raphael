@@ -21,7 +21,7 @@ from ..agent.plugins import PluginResult, PluginTool, tool_key
 from ..agent.policy import Tier
 from ..integrations.audit import AuditLog
 from ..services.attachments import Attachment, MAX_FILE_BYTES, sniff_ok
-from .vm import VmError
+from .vm import VmError, engine_start_allowed
 from .vm_bridge import CuaBridge
 from .vm_catalog import DRIVER_TOOLS, FRESH_READS, NOTICES, PAGE_TOOLS, READS, SCREEN_READS, offline_catalog, without_session
 from .takeover import TAKEOVER
@@ -51,6 +51,25 @@ WAITING_FOR = with_ui_words({
     "ja": "{who} がコンピューターを使い終わるのを待っています",
     "en": "Waiting for {who} to finish with the computer",
 })
+
+
+# The line a member shows while Docker Desktop is being started for it (owner, 2026-11-11: 「理論上就算我沒有開 Docker，
+# 它也會自動自己打開才對」); one line per start, the wait itself polls silently.
+ENGINE_STARTING = with_ui_words({
+    "zh-TW": "正在啟動 Docker Desktop 來準備電腦，大約需要一分鐘",
+    "ja": "コンピューター用に Docker Desktop を起動しています。1分ほどかかります",
+    "en": "Starting Docker Desktop for the computer; this takes about a minute",
+})
+
+# What the model is told when Docker Desktop cannot be had, so it never meets a bare kind with nothing to do next.
+ENGINE_FAILURES = {
+    "docker_stopped": "Docker Desktop is not running, so the computer could not start. Tell the owner plainly that Docker Desktop "
+                      "is not running, and that opening it (or pressing the computer's screen) lets you try again.",
+    "docker_start_failed": "Raphael tried to start Docker Desktop and it could not be launched. Tell the owner plainly that "
+                           "Docker Desktop did not start and ask them to open it themselves. Do not retry in a loop.",
+    "docker_start_timeout": "Docker Desktop is still starting. Try this tool again once after about 30 seconds. If it fails "
+                            "again, tell the owner plainly that Docker Desktop did not start.",
+}
 
 
 @contextmanager
@@ -163,6 +182,7 @@ class VmTools:
         self.refreshes = {}
         self.step_gate = None
         self.vm.rebuild_notice = self._rebuild_notice
+        self.vm.engine_notice = self._engine_notice
         self.vm.disconnect_driver = self._disconnect
         self.vm.repair_notice = self._repair_notice
         self.vm.repair_admit = self._repair_admit
@@ -175,6 +195,11 @@ class VmTools:
             return False
         attempts.add(target)
         return True
+
+    def _engine_notice(self, target):
+        progress, language = _NOTE.get()
+        if progress:
+            progress(ENGINE_STARTING.get(language, ENGINE_STARTING["en"]))
 
     def _repair_notice(self, target):
         progress, language = _NOTE.get()
@@ -681,7 +706,9 @@ class VmTools:
             if command:
                 self.commands[target.key] = self.commands.get(target.key, 0) + 1
             try:
-                await self.vm.start(target)
+                # Only this granted member call may start Docker Desktop; a read or a viewer never does (R-PANEL-04).
+                with engine_start_allowed():
+                    await self.vm.start(target)
                 await self._disk_notice(target)
                 if not self.vm.grants.allowed(member) or target != self.vm.target(member):
                     return PluginResult(False, "computer_permission_required")
@@ -826,7 +853,7 @@ class VmTools:
             return result
         except VmError as error:
             self.vm.invalidate(target)
-            result = PluginResult(False, str(error))
+            result = PluginResult(False, str(error), ENGINE_FAILURES.get(str(error), ""))
             return result
         except ConnectionError:
             self.vm.invalidate(target)

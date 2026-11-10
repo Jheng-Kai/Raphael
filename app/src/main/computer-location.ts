@@ -7,18 +7,23 @@ import { btn, closeMenu, copyButton, esc, fieldHTML, ico, note, openMenu, openMe
 
 export const validComputerAlias = (value: string): boolean => /^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/.test(value);
 
+// What each failed check says. The core names the class and the one command that fixes it (owner, 2026-11-11), so the
+// panel never invents a command: a command is shown only when the core sent one, and it is pasted as it stands.
+const HEALTH_WORDS = {
+  ssh: 'desktop.health.ssh', docker: 'desktop.health.docker', ssh_unreachable: 'desktop.health.ssh_unreachable', ssh_key: 'desktop.health.ssh_key',
+  ssh_hostkey: 'desktop.health.ssh_hostkey', ssh_hostkey_changed: 'desktop.health.ssh_hostkey_changed', ssh_alias_unknown: 'desktop.health.ssh_alias_unknown',
+  docker_path: 'desktop.health.docker_path', docker_missing: 'desktop.health.docker_missing', docker_stopped: 'desktop.health.docker_stopped',
+  docker_access: 'desktop.health.docker_access', architecture: 'desktop.health.architecture', image_pending: 'desktop.health.image_pending',
+} as const;
+
 export function computerHostHealthHTML(health: api.ComputerHostHealth): string {
   return `<div class="slist">` + health.checks.flatMap(check => {
-    const words = { ssh: 'desktop.health.ssh', docker: 'desktop.health.docker', ssh_unreachable: 'desktop.health.ssh_unreachable', ssh_key: 'desktop.health.ssh_key', docker_path: 'desktop.health.docker_path', docker_missing: 'desktop.health.docker_missing', docker_stopped: 'desktop.health.docker_stopped', architecture: 'desktop.health.architecture', image_missing: 'desktop.health.image_missing' } as const;
-    const label = t(check.kind.startsWith('ssh') ? 'desktop.health.connection' : check.kind === 'architecture' || check.kind === 'image_missing' ? 'desktop.health.image' : 'desktop.health.runtime');
-    const state = check.ok ? t('desktop.health.ok') : check.kind === 'ssh_key' && check.user ? t('desktop.health.ssh_key_user', { p0: check.user }) : t(words[check.kind as keyof typeof words] ?? 'desktop.health.ssh_unreachable');
-    const repair: { where: 'desktop.health.macTerminal' | 'desktop.health.projectTerminal' | 'desktop.health.localTerminal'; command: string } = check.kind === 'docker_path' ? { where: 'desktop.health.macTerminal', command: `echo 'export PATH="/usr/local/bin:/opt/homebrew/bin:$HOME/.docker/bin:/Applications/Docker.app/Contents/Resources/bin:$PATH"' >> ~/.zshenv` } :
-      check.kind === 'docker_stopped' ? { where: 'desktop.health.macTerminal', command: 'open -a Docker' } :
-      check.kind === 'docker_missing' ? { where: 'desktop.health.macTerminal', command: 'open https://www.docker.com/products/docker-desktop/' } :
-      check.kind === 'architecture' || check.kind === 'image_missing' ? { where: 'desktop.health.projectTerminal', command: 'docker build --tag raphael/cua-local-vm:driver-0.37.0-v4 core/src/raphael_core/computer/image' } :
-      { where: 'desktop.health.localTerminal', command: `ssh ${health.host}` };
+    const label = t(check.kind.startsWith('ssh') ? 'desktop.health.connection' : check.kind === 'architecture' || check.kind === 'image_pending' ? 'desktop.health.image' : 'desktop.health.runtime');
+    // A host with no image yet is healthy: its first start prepares the image there, and the row says so.
+    const state = check.ok ? t(check.kind === 'image_pending' ? 'desktop.health.image_pending' : 'desktop.health.ok') : check.kind === 'ssh_key' && check.user ? t('desktop.health.ssh_key_user', { p0: check.user }) : t(HEALTH_WORDS[check.kind as keyof typeof HEALTH_WORDS] ?? 'desktop.health.ssh_unreachable');
+    const lead = check.kind === 'ssh_unreachable' ? 'desktop.health.localTerminal' : check.kind === 'ssh_alias_unknown' ? 'desktop.health.editConfig' : 'desktop.health.runHere';
     return [row(esc(label), '', st(check.ok ? 'ok' : 'err', state), { attrs: ` data-computer-host-health="${esc(check.kind)}" role="status"` }),
-      ...(!check.ok ? [note(`<p>${esc(t(repair.where))}</p>` + messageHTML('```sh\n' + repair.command + '\n```', '', true), ' data-computer-host-repair')] : [])];
+      ...(!check.ok && check.command ? [note(`<p>${esc(t(lead))}</p>` + messageHTML('```sh\n' + check.command + '\n```', '', true), ' data-computer-host-repair')] : [])];
   }).join('') + `</div>`;
 }
 
@@ -75,7 +80,7 @@ export function mountComputerLocation(host: HTMLElement, changed: () => void) {
         const selected = draft, mine = ++healthEpoch;
         checking = true; health = undefined; draw();
         void api.desktopHostCheck(selected).then(result => { if (mine === healthEpoch && selected === draft) health = result; })
-          .catch(() => { if (mine === healthEpoch && selected === draft) health = {host:selected,ok:false,checks:[{kind:'ssh_unreachable',ok:false}]}; })
+          .catch(() => { if (mine === healthEpoch && selected === draft) health = {host:selected,ok:false,checks:[{kind:'ssh_unreachable',ok:false,command:`ssh ${selected}`}]}; })
           .finally(() => { if (mine === healthEpoch) { checking = false; draw(); } });
         return;
       }

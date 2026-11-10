@@ -610,7 +610,8 @@ class CatalogBridge(Bridge):
         return await super().request(method, params)
 
 
-async def test_first_screen_requires_owner_engine_start_then_reuses_catalog(desktop, tmp_path):
+async def test_first_screen_starts_docker_for_the_granted_member_then_reuses_catalog(desktop, tmp_path):
+    # (owner, 2026-11-11: 「理論上就算我沒有開 Docker，它也會自動自己打開才對」) supersedes the owner-press-only start.
     from unittest.mock import AsyncMock
     vm, target, runtime = desktop
     runtime.up = False
@@ -624,9 +625,6 @@ async def test_first_screen_requires_owner_engine_start_then_reuses_catalog(desk
     await hub.prepare()
     assert runtime.calls == []
     shot = next(tool for tool in hub.offered() if tool.name == "get_desktop_state")
-    assert (await hub.call(shot.key, {}, approver="auto")).kind == 'docker_stopped'
-    vm.desktop.start.assert_not_awaited()
-    await vm.ensure_engine(target, start_desktop=True)
     result = await hub.call(shot.key, {}, approver="auto")
     assert result.ok and result.blocks
     vm.desktop.start.assert_awaited_once()
@@ -640,6 +638,87 @@ async def test_first_screen_requires_owner_engine_start_then_reuses_catalog(desk
     assert sum(method == "tools/list" for method, _ in RecordingBridge.calls) == 1
 
 
+async def _stopped_engine(desktop, tmp_path, *, starts=True):
+    """A stopped engine whose Docker Desktop launcher is a fake; `starts` says whether the engine then comes up."""
+    from unittest.mock import AsyncMock
+    vm, target, runtime = desktop
+    runtime.up = False
+    runtime.raw["State"]["Running"] = False
+    async def launch():
+        await asyncio.sleep(0)
+        runtime.up = starts
+    vm.desktop = SimpleNamespace(installed=lambda: True, start=AsyncMock(side_effect=launch))
+    hub = VmTools(EmptyHub(), vm, attachments=AttachmentStore(tmp_path), bridge=Bridge)
+    await hub.prepare()
+    return vm, target, runtime, hub, next(tool for tool in hub.offered() if tool.name == "get_desktop_state")
+
+
+async def test_member_call_says_it_is_starting_docker_while_it_waits(desktop, tmp_path):
+    vm, target, runtime, hub, shot = await _stopped_engine(desktop, tmp_path)
+    said = []
+    with vm_scope(("turn", 0, 7), turn_id=7, progress=said.append, language="zh-TW"):
+        assert (await hub.call(shot.key, {}, approver="auto")).ok
+    # The restart of the stopped container may add its own repair line after it.
+    assert said[0] == "正在啟動 Docker Desktop 來準備電腦，大約需要一分鐘" and said.count(said[0]) == 1
+
+
+async def test_a_start_timeout_tells_the_model_to_try_once_more_later(desktop, tmp_path, monkeypatch):
+    monkeypatch.setattr("raphael_core.computer.vm.ENGINE_WAIT_S", 0.05)
+    monkeypatch.setattr("raphael_core.computer.vm.ENGINE_POLL_S", 0.01)
+    vm, target, runtime, hub, shot = await _stopped_engine(desktop, tmp_path, starts=False)
+    result = await hub.call(shot.key, {}, approver="auto")
+    assert (result.ok, result.kind) == (False, "docker_start_timeout")
+    assert "Try this tool again once after about 30 seconds" in result.text
+    assert "tell the owner plainly that Docker Desktop did not start" in result.text
+    assert target.key not in vm.preparation and vm.active[target.key] == 0
+    from raphael_core.failures import classify
+    failure = classify({"kind": result.kind, "message": result.text}, record=False)
+    assert failure.kind == "timeout"
+    for kind in ("docker_stopped", "docker_start_failed"):
+        assert classify({"kind": kind, "message": "x"}, record=False).kind == "tool_broken"
+
+
+async def test_two_concurrent_member_calls_start_docker_once(desktop, tmp_path):
+    vm, target, runtime, hub, shot = await _stopped_engine(desktop, tmp_path)
+    first, second = await asyncio.gather(hub.call(shot.key, {}, approver="auto"), hub.call(shot.key, {}, approver="auto"))
+    assert first.ok or second.ok
+    assert all(result.ok or result.kind == "computer_busy" for result in (first, second))
+    vm.desktop.start.assert_awaited_once()
+    assert sum(args[0] == "start" for args, _ in runtime.calls) == 1
+
+
+async def test_concurrent_computers_share_one_docker_start(tmp_path, conn):
+    from unittest.mock import AsyncMock
+    from raphael_core.computer.vm import engine_start_allowed
+    settings = SettingsStore(conn)
+    settings.set("computer_vm_mode", "per-bot")
+    runtime = Runtime()
+    runtime.up = False
+    vm = LocalVm(tmp_path, settings=settings, runner=runtime, clock=lambda: 0)
+    async def launch():
+        await asyncio.sleep(0.01)
+        runtime.up = True
+    vm.desktop = SimpleNamespace(installed=lambda: True, start=AsyncMock(side_effect=launch))
+    async def member(number):
+        with engine_start_allowed():
+            await vm.ensure_engine(vm.target(number), start_desktop=True)
+    await asyncio.gather(member(1), member(2), member(3))
+    vm.desktop.start.assert_awaited_once()
+
+
+async def test_status_reads_and_the_viewer_never_start_docker_for_a_granted_member(desktop, tmp_path):
+    from raphael_core.computer.viewer import DesktopViewer
+    vm, target, runtime, hub, shot = await _stopped_engine(desktop, tmp_path)
+    assert (await vm.status(target, probe=False))["error"] == "docker_stopped"
+    viewer = DesktopViewer(vm)
+    try:
+        assert (await viewer.status({"member_id": 0}))["error"] == "docker_stopped"
+    finally:
+        await viewer.aclose()
+    vm.desktop.start.assert_not_awaited()
+    assert not any(args[0] == "start" for args, _ in runtime.calls)
+
+
 async def test_start_failure_is_reported_on_use_and_releases_action_lock(desktop, tmp_path):
     from unittest.mock import AsyncMock
     vm, target, runtime = desktop
@@ -648,7 +727,8 @@ async def test_start_failure_is_reported_on_use_and_releases_action_lock(desktop
     await hub.prepare()
     vm.start.assert_not_awaited()
     shot = next(tool for tool in hub.offered() if tool.name == "get_desktop_state")
-    assert (await hub.call(shot.key, {}, approver="auto")).kind == "docker_start_failed"
+    failed = await hub.call(shot.key, {}, approver="auto")
+    assert failed.kind == "docker_start_failed" and "did not start" in failed.text
     assert not hub.actions[target.key].locked() and vm.active[target.key] == 0
 
 

@@ -104,30 +104,82 @@ def test_restored_completion_evidence_uses_only_the_result_header(read_ok):
     assert check.required is not read_ok
 
 
-@pytest.mark.parametrize("code,out,err,kind", [
-    (255, "", "Permission denied (publickey)", "ssh_key"),
-    (255, "", "Host not found", "ssh_unreachable"),
-    (42, "", "", "docker_path"), (43, "", "", "docker_missing"), (1, "", "", "docker_stopped"),
-    (0, "aarch64\namd64\n", "", "architecture"),
-])
-async def test_remote_health_has_classified_fixes_and_no_lifecycle_commands(code, out, err, kind):
+IMAGE_NAME = "raphael/cua-local-vm:driver-0.37.0-v4"
+
+
+def answer(code, out="", err="", config="host studio\nuser jack2\nhostname 192.168.8.178\n"):
     calls = []
+
     async def fake(args):
         calls.append(args)
-        return code, out, err
+        return (0, config, "") if args[:2] == ["ssh", "-G"] else (code, out, err)
+    return fake, calls
+
+
+@pytest.mark.parametrize("code,out,err,kind,command", [
+    (255, "", "Permission denied (publickey)", "ssh_key", "ssh-keygen -t ed25519\nssh-copy-id studio-mini"),
+    (255, "", "ssh: Could not resolve hostname studio-mini: No such host is known.", "ssh_alias_unknown",
+     "Host studio-mini\n  HostName HOST_ADDRESS\n  User ACCOUNT_ON_HOST\n  IdentityFile ~/.ssh/id_ed25519"),
+    (255, "", "Host key verification failed.", "ssh_hostkey", "ssh studio-mini"),
+    (255, "", "@@@ WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED! @@@\nHost key verification failed.", "ssh_hostkey_changed",
+     "ssh-keygen -R 192.168.8.178"),
+    (255, "", "ssh: connect to host studio-mini port 22: Connection timed out", "ssh_unreachable", "ssh studio-mini"),
+    (255, "", "Host not found", "ssh_unreachable", "ssh studio-mini"),
+    (42, "Darwin\n", "", "docker_path", "ssh studio-mini \"echo 'export PATH=/usr/local/bin:/opt/homebrew/bin:/Applications/Docker.app/Contents/Resources/bin:/usr/bin:/bin:/usr/sbin:/sbin' >> ~/.zshenv\""),
+    (42, "Linux\n", "", "docker_path", "ssh -t studio-mini \"sudo ln -s /usr/local/bin/docker /usr/bin/docker\""),
+    (43, "Linux\n", "", "docker_missing", "ssh -t studio-mini \"curl -fsSL https://get.docker.com | sh\""),
+    (43, "Darwin\n", "", "docker_missing", None),
+    (44, "Linux\n", "Cannot connect to the Docker daemon", "docker_stopped", "ssh -t studio-mini \"sudo systemctl start docker\""),
+    (44, "Darwin\n", "Cannot connect to the Docker daemon", "docker_stopped", "ssh studio-mini \"open -a Docker\""),
+    (44, "Linux\n", "permission denied while trying to connect to the Docker daemon socket", "docker_access",
+     "ssh -t studio-mini \"sudo usermod -aG docker jack2\""),
+    (0, "Linux\naarch64\namd64\n", "", "architecture", f"ssh studio-mini \"docker image rm {IMAGE_NAME}\""),
+])
+async def test_remote_health_classifies_each_failure_with_the_command_that_fixes_it(monkeypatch, code, out, err, kind, command):
+    monkeypatch.setattr("raphael_core.computer.remote_host.sys.platform", "linux")
+    fake, calls = answer(code, out, err)
     health = await host_health("studio-mini", run=fake)
-    assert not health["ok"] and health["checks"][-1]["kind"] == kind
+    assert not health["ok"] and health["checks"][-1]["kind"] == kind and health["checks"][-1]["ok"] is False
+    assert health["checks"][-1].get("command") == command
     assert "Permission denied" not in json.dumps(health)
     assert all(word not in calls[0][-1] for word in ("docker start", "docker run", "docker pull", "docker stop"))
+
+
+@pytest.mark.parametrize("platform,first", [("win32", "Get-Content $env:USERPROFILE\\.ssh\\id_ed25519.pub | ssh studio-mini \"mkdir -p ~/.ssh && cat >> ~/.ssh/authorized_keys\""),
+                                            ("linux", "ssh-copy-id studio-mini"), ("darwin", "ssh-copy-id studio-mini")])
+async def test_a_refused_key_gets_the_key_setup_for_this_computers_system(monkeypatch, platform, first):
+    monkeypatch.setattr("raphael_core.computer.remote_host.sys.platform", platform)
+    fake, _ = answer(255, "", "Permission denied (publickey)")
+    check = (await host_health("studio-mini", run=fake))["checks"][0]
+    assert check["command"].splitlines() == ["ssh-keygen -t ed25519", first]
+
+
+async def test_a_reachable_host_without_an_image_is_healthy_and_asks_for_no_build():
+    # A real start pulls and builds the image on the host's own engine (vm.py `build`), so this is a note, not a failure.
+    fake, _ = answer(45, "Linux\naarch64\n")
+    health = await host_health("studio-mini", run=fake)
+    assert health["ok"] and health["checks"][-1] == {"kind": "image_pending", "ok": True}
+    assert "command" not in json.dumps(health) and "core/src" not in json.dumps(health)
+
+
+async def test_every_command_shown_reaches_the_host_or_sets_up_this_computers_ssh():
+    from raphael_core.computer.remote_host import repair_command
+    kinds = ("ssh_unreachable", "ssh_hostkey", "ssh_hostkey_changed", "ssh_alias_unknown", "ssh_key", "docker_path",
+             "docker_missing", "docker_stopped", "docker_access", "architecture")
+    for os_name in ("linux", "darwin", ""):
+        for kind in kinds:
+            command = repair_command(kind, "studio-mini", os_name=os_name, user="jack2", hostname="192.168.8.178")
+            for line in command.splitlines():
+                assert line.startswith(("ssh ", "ssh-", "Host ", "  ", "Get-Content")), (kind, line)
+                assert "core/src" not in line and "docker build" not in line
+            if kind.startswith("docker") or kind == "architecture":
+                assert command == "" or command.startswith("ssh ") and "studio-mini" in command, (kind, os_name)
 
 
 async def test_a_matching_arm64_mac_reads_only_the_two_architectures_and_passes():
     # Docker Desktop's full `docker info` JSON (13 KB on the owner's Mac mini) plus the image's passed the
     # 16 KiB read, so the image line was cut and a matching host read as unsupported.
-    calls = []
-    async def fake(args):
-        calls.append(args)
-        return 0, "aarch64\narm64\n", ""
+    fake, calls = answer(0, "Darwin\naarch64\narm64\n")
     health = await host_health("mac-mini", run=fake)
     assert health["ok"] and health["checks"][-1] == {"kind": "architecture", "ok": True, "architecture": "arm64"}
     assert calls[0][-1].count("{{.Architecture}}") == 2 and "json" not in calls[0][-1]
@@ -139,7 +191,7 @@ async def test_a_refused_key_login_names_the_user_ssh_logged_in_as():
             return 0, "host 192.168.8.178\nuser jack2\nhostname 192.168.8.178\n", ""
         return 255, "", "jack2@192.168.8.178: Permission denied (publickey,password)."
     health = await host_health("192.168.8.178", run=fake)
-    assert health["checks"] == [{"kind": "ssh_key", "ok": False, "user": "jack2"}]
+    assert health["checks"][0]["user"] == "jack2" and set(health["checks"][0]) == {"kind", "ok", "user", "command"}
     assert "Permission denied" not in json.dumps(health)
 
 

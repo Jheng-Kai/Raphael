@@ -7,7 +7,8 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from raphael_core.computer.desktop_host import DockerDesktop
+from raphael_core.computer import desktop_host
+from raphael_core.computer.desktop_host import DockerDesktop, engine_pipe_missing
 
 
 @pytest.fixture
@@ -101,3 +102,53 @@ async def test_macos_owner_launch_uses_installed_docker_app(host, monkeypatch):
     assert spawn.call_args.args == ('/usr/bin/open', '-a', '/Applications/Docker.app')
     assert 'creationflags' not in spawn.call_args.kwargs
     await asyncio.sleep(0)
+
+
+@pytest.fixture
+def docker_config(tmp_path, monkeypatch):
+    """A Windows PC whose docker CLI uses Docker Desktop's own context; the pipe list is a fake."""
+    (tmp_path / "config.json").write_text('{"currentContext": "desktop-linux"}', encoding="utf-8")
+    monkeypatch.setattr(desktop_host.sys, "platform", "win32")
+    monkeypatch.setenv("DOCKER_CONFIG", str(tmp_path))
+    monkeypatch.delenv("DOCKER_HOST", raising=False)
+    monkeypatch.delenv("DOCKER_CONTEXT", raising=False)
+    return tmp_path
+
+
+def test_a_missing_docker_desktop_pipe_answers_down_without_asking_docker(docker_config, monkeypatch):
+    monkeypatch.setattr(desktop_host.os, "listdir", lambda path: ["mojo.1", "docker_cli"])
+    assert engine_pipe_missing() is True
+    monkeypatch.setattr(desktop_host.os, "listdir", lambda path: ["mojo.1", "dockerDesktopLinuxEngine"])
+    assert engine_pipe_missing() is False
+
+
+@pytest.mark.parametrize("doubt", ["host", "context", "other_context", "no_config", "list_fails", "not_windows"])
+def test_any_doubt_leaves_the_decision_to_docker_info(docker_config, monkeypatch, doubt):
+    monkeypatch.setattr(desktop_host.os, "listdir", lambda path: ["mojo.1"])
+    if doubt == "host":
+        monkeypatch.setenv("DOCKER_HOST", "tcp://sample-host:2375")
+    elif doubt == "context":
+        monkeypatch.setenv("DOCKER_CONTEXT", "sample")
+    elif doubt == "other_context":
+        (docker_config / "config.json").write_text('{"currentContext": "default"}', encoding="utf-8")
+    elif doubt == "no_config":
+        (docker_config / "config.json").unlink()
+    elif doubt == "list_fails":
+        def fail(path):
+            raise OSError()
+        monkeypatch.setattr(desktop_host.os, "listdir", fail)
+    else:
+        monkeypatch.setattr(desktop_host.sys, "platform", "linux")
+    assert engine_pipe_missing() is False
+
+
+async def test_the_engine_check_skips_the_docker_call_when_the_pipe_is_missing(tmp_path, monkeypatch):
+    from raphael_core.computer.vm import LocalVm
+    vm = LocalVm(tmp_path)  # No injected runner: the real transport, whose Docker call must not be made.
+    called = []
+    async def run(args, **kwargs):
+        called.append(args)
+        raise AssertionError("docker must not be asked")
+    vm.run = run
+    monkeypatch.setattr(desktop_host, "engine_pipe_missing", lambda: True)
+    assert await vm.available() is False and called == []
