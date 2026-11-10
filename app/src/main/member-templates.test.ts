@@ -73,6 +73,16 @@ test.each(["\n", "\r\n"])("skill preview separates quoted and folded metadata fr
   expect(template.skills[0].text).toBe(text);
 });
 
+test("a skill row is [data-tpl-skill] and holds the one disclosure that opens its full text (the look scene template-skill-expanded presses it)", () => {
+  // The scene pressed `.template-skill [data-card-disclosure]`, a class the rows lost when they became Grok Bot's cards of rows,
+  // and failed on every run since; the row is now named by its own attribute.
+  document.body.innerHTML = templateContents({...starterTemplate(0),skills:[{text:["---", "name: Check sources", "description: Check", "---", "Keep this body."].join("\n")}]});
+  expect(document.querySelector('.template-skill')).toBeNull();
+  const disclosures = document.querySelectorAll('[data-tpl-skill] [data-card-disclosure]');
+  expect(disclosures).toHaveLength(1);
+  expect(disclosures[0]!.closest('[data-tpl-skill]')!.querySelector<HTMLElement>('.card-detail')!.hidden).toBe(true);
+});
+
 test("skill text without a complete frontmatter block stays intact", () => {
   for (const text of ["# Plain method\nname: body example", "---\nname: Unclosed\nKeep every line."]) {
     document.body.innerHTML = templateContents({...starterTemplate(0),skills:[{text}]});

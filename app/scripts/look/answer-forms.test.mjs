@@ -87,6 +87,53 @@ it("a card's buttons stand at the card's right padding, not only at the end of t
   } finally { vi.unstubAllGlobals(); browser.happyDOM.abort(); }
 });
 
+it("a question's answer button stands at the field height and shares the field's row (R-UI-17)", () => {
+  // The judge on 6e2ca315: 送出回答 was 22 px tall beside a 30 px field, and 28 px was read for both card buttons.
+  const browser = new Window(), doc = browser.document;
+  doc.body.innerHTML = '<section class="conversation-card" data-owner-question="q" data-card-state="asked"><header class="card-head"><h3>Question</h3><button data-owner-answer="cancel"></button></header>' +
+    '<div class="question-submit"><input class="mb-fin"><button class="btn sm pri">Send</button></div></section>';
+  const places = { INPUT: { top: 0, bottom: 30, height: 30 }, BUTTON: { top: 0, bottom: 22, height: 22 } };
+  for (const element of doc.querySelectorAll('*')) {
+    element.checkVisibility = () => true;
+    element.getBoundingClientRect = () => ({ left: 0, right: 480, width: 480, top: 0, bottom: 50, height: 50, ...(element.matches('.question-submit *') ? places[element.tagName] : {}) });
+  }
+  vi.stubGlobal('document', doc);
+  vi.stubGlobal('getComputedStyle', () => ({ paddingRight: '0', borderRightWidth: '0', overflowY: 'visible', backgroundColor: 'rgb(255, 255, 255)', getPropertyValue: () => '30px' }));
+  try {
+    expect(() => checkRendered('card-shell')).toThrow(/a card's text button stands at the field height: Send is 22 px against 30/);
+    places.BUTTON = { top: 0, bottom: 30, height: 30 };
+    expect(() => checkRendered('card-shell')).not.toThrow();
+    places.BUTTON = { top: 4, bottom: 36, height: 32 };
+    expect(() => checkRendered('card-shell')).toThrow(/share one height and centre/);
+  } finally { vi.unstubAllGlobals(); browser.happyDOM.abort(); }
+});
+
+it("a page made larger keeps its × outside the page, above its top right corner (2026-11-11)", () => {
+  // The × once lay over the page's own top right corner (8 px in), so whatever a page drew there was covered.
+  const browser = new Window(), doc = browser.document;
+  doc.body.innerHTML = '<section class="pg-card"><b class="card-title">Page</b></section><div class="mb-scrim"><div class="mb-dialog pg-view-dialog" aria-labelledby="t">' +
+    '<div class="mb-dlg-head"><h2 id="t">Page</h2><button data-dlg="close"></button></div><div class="mb-dlg-body"><div class="pg-view" style="--pg-h:300px"><iframe></iframe></div></div></div></div>';
+  const rect = (left, top, right, bottom) => ({ left, top, right, bottom, width: right - left, height: bottom - top });
+  const places = { "pg-card": rect(20, 20, 420, 200), "mb-dialog pg-view-dialog": rect(100, 200, 700, 500), "pg-view": rect(100, 200, 700, 500), h2: rect(100, 200, 101, 201), button: rect(664, 156, 700, 192) };
+  for (const element of doc.querySelectorAll('*')) {
+    element.checkVisibility = () => true;
+    element.getBoundingClientRect = () => places[element.className || element.tagName.toLowerCase()] ?? (element.tagName === "IFRAME" ? rect(100, 200, 700, 500) : rect(0, 0, 10, 10));
+  }
+  const tokens = { "--sp-2": "8px", "--window-controls-height": "32px" };
+  vi.stubGlobal('document', doc);
+  vi.stubGlobal('innerHeight', 900); vi.stubGlobal('innerWidth', 1000);
+  vi.stubGlobal('getComputedStyle', () => ({ borderRadius: '999px', backgroundColor: 'rgb(31, 31, 31)', getPropertyValue: name => tokens[name] ?? '' }));
+  try {
+    expect(checkRendered('page-expanded').height).toBe(300);
+    places.button = rect(664, 208, 700, 244);
+    expect(() => checkRendered('page-expanded')).toThrow(/the × stands above the page's top edge/);
+    places.button = rect(656, 156, 692, 192);
+    expect(() => checkRendered('page-expanded')).toThrow(/right-aligned with the page/);
+    places.button = rect(664, 16, 700, 52); places["mb-dialog pg-view-dialog"] = rect(100, 60, 700, 360); places["pg-view"] = rect(100, 60, 700, 360); places.iframe = rect(100, 60, 700, 360);
+    expect(() => checkRendered('page-expanded')).toThrow(/inside the window, under its caption strip/);
+  } finally { vi.unstubAllGlobals(); browser.happyDOM.abort(); }
+});
+
 it("form checks count the active conversation without hidden private replies", () => {
   const browser = new Window(), doc = browser.document;
   const card = kind => `<section class="message-${kind}"><button data-rich-act="copy-source"></button>${kind === "chart" ? `<svg>${'<circle><title>Value: 3</title></circle>'.repeat(6)}</svg>` : ""}</section>`;
