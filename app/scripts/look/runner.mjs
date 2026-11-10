@@ -230,7 +230,7 @@ export async function run(options) {
         result.viewport=page.viewport();
         Object.assign(result, await page.evaluate(auditDocument, undefined, result.viewport, namespaces, latinFor(scene, actualLocale), englishUI, unreached));
         if (!scene.entry) {
-          for (const name of ["content-width", "message-no-inner-scroll", "message-no-raw-envelope"]) {
+          for (const name of ["content-width", "thread-edges", "message-no-inner-scroll", "message-no-raw-envelope"]) {
             try { (result.assertions ??= []).push(await page.evaluate(checkRendered, name)); }
             catch (value) { error("layout", value.message); }
           }

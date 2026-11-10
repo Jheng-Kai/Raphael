@@ -55,6 +55,38 @@ it("rejects the owner's stretched dictionary geometry on 97fa61bd", () => {
   } finally { vi.unstubAllGlobals(); browser.happyDOM.abort(); }
 });
 
+it("rejects the judge's 720 thread inset on 2d5e3cf8: the column starts and ends where its composer does", () => {
+  const browser = new Window(), doc = browser.document;
+  doc.body.innerHTML = '<section class="mb-chat"><div class="ra-find" hidden></div><div class="ra-stage"><div class="ra-scroll"><div class="ra-col"><ol class="thread">' +
+    '<li class="tn"><div class="me"><div class="chat-message owner-message"><div class="bubble"></div></div></div></li><li class="tn"><div class="ra"></div></li>' +
+    '</ol></div></div><div class="ra-dock"><form class="composer"></form></div></div><div class="peer-chat"><div class="peer-scroll"><ol class="peer-thread"><li class="tn peer-line"><div class="ra"></div></li></ol></div></div></section>' +
+    '<aside class="room-side-thread"><div class="room-side-scroll"><div class="room-thread-origin"><div class="ra"></div></div><ol class="thread"></ol></div><div class="room-thread-dock"><form class="composer"></form></div></aside>';
+  const measure = (element, left, right) => { element.getBoundingClientRect = () => ({ left, right, width: right - left, top: 0, bottom: 40, height: 40 }); };
+  const $ = selector => doc.querySelector(selector);
+  measure($('.ra-stage'), 0, 720); measure($('.ra-dock .composer'), 32, 688);
+  // What the judge saw: the messages at 20 px, the composer at 32.
+  measure($('.ra-col'), 20, 700); measure($('.bubble'), 500, 700); measure($('.thread .ra'), 20, 300);
+  measure($('.peer-chat'), 0, 720); measure($('.peer-thread'), 32, 688); measure($('.peer-line .ra'), 32, 400);
+  measure($('.room-side-thread'), 720, 1160); measure($('.room-side-scroll'), 720, 1160); measure($('.room-thread-origin'), 744, 1136); measure($('.room-thread-origin .ra'), 744, 900); measure($('.room-thread-dock .composer'), 744, 1136);
+  vi.stubGlobal('document', doc);
+  vi.stubGlobal('getComputedStyle', browser.getComputedStyle.bind(browser));
+  try {
+    expect(() => checkRendered('thread-edges')).toThrow(/the thread spans the composer's edges: 20-700 against 32-688/);
+    measure($('.ra-col'), 32, 688);
+    expect(() => checkRendered('thread-edges')).toThrow(/owner's messages end at the composer's right edge \(700 against 688\)/);
+    measure($('.bubble'), 488, 688);
+    expect(() => checkRendered('thread-edges')).toThrow(/replies begin at the composer's left edge \(20 against 32\)/);
+    measure($('.thread .ra'), 32, 300);
+    measure($('.peer-thread'), 28, 692);
+    expect(() => checkRendered('thread-edges')).toThrow(/the members' conversation spans/);
+    measure($('.peer-thread'), 32, 688);
+    measure($('.room-thread-dock .composer'), 732, 1148);
+    expect(() => checkRendered('thread-edges')).toThrow(/the side thread spans/);
+    measure($('.room-thread-dock .composer'), 744, 1136);
+    expect(checkRendered('thread-edges').edges.map(edge => [edge.where, edge.owner, edge.replies])).toEqual([["the thread", 1, 1], ["the members' conversation", 0, 1], ["the side thread", 0, 1]]);
+  } finally { vi.unstubAllGlobals(); browser.happyDOM.abort(); }
+});
+
 it("keeps Home's lead across the page and its two panels side by side at one width", () => {
   const browser = new Window();
   const doc = browser.document;

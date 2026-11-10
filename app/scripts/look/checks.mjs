@@ -3287,6 +3287,39 @@ export function checkRendered(name, context = {}) {
     if(innerWidth<1440) require(!document.querySelector('.page-agent[data-det="open"]'),"details start collapsed before they crowd the thread");
     return {check:name,width:composer.getBoundingClientRect().width,cap};
   }
+  if (name === "thread-edges") {
+    // R-UI-45: a conversation's column starts and ends where its composer does, at every window size (the judge on
+    // 2d5e3cf8: at 720 the messages began at 20 px and the composer at 32). The column is the thread, the search field over
+    // it and the members' conversation laid over it; the owner's last mark (a bubble, or the owner's face in a group) ends
+    // at the composer's right edge and a reply begins at its left. A group's side thread keeps the same rule.
+    const shown = element => visible(element) && !element.closest('[hidden]');
+    const round = value => Math.round(value * 10) / 10;
+    const edges = [];
+    const align = (where, composer, column, scope = column) => {
+      const dock = composer.getBoundingClientRect(), box = column.getBoundingClientRect();
+      require(Math.abs(box.left - dock.left) <= 1 && Math.abs(box.right - dock.right) <= 1, `${where} spans the composer's edges: ${round(box.left)}-${round(box.right)} against ${round(dock.left)}-${round(dock.right)}`);
+      const owner = [...scope.querySelectorAll('.me .bubble, .me > .owner-face')].filter(shown).map(element => element.getBoundingClientRect().right);
+      const replies = [...scope.querySelectorAll('.ra')].filter(shown).map(element => element.getBoundingClientRect().left);
+      if (owner.length) require(Math.abs(Math.max(...owner) - dock.right) <= 1, `${where}: the owner's messages end at the composer's right edge (${round(Math.max(...owner))} against ${round(dock.right)})`);
+      if (replies.length) require(Math.abs(Math.min(...replies) - dock.left) <= 1, `${where}: replies begin at the composer's left edge (${round(Math.min(...replies))} against ${round(dock.left)})`);
+      edges.push({ where, left: round(box.left), right: round(box.right), composer: [round(dock.left), round(dock.right)], owner: owner.length, replies: replies.length });
+    };
+    for (const stage of document.querySelectorAll('.ra-stage')) {
+      const composer = stage.querySelector(':scope > .ra-dock > .composer');
+      if (!shown(stage) || !shown(composer)) continue;
+      const chat = stage.parentElement, thread = stage.querySelector(':scope > .ra-scroll > .ra-col');
+      const find = chat.querySelector(':scope > .ra-find'), peer = chat.querySelector(':scope > .peer-chat .peer-thread');
+      if (shown(thread)) align("the thread", composer, thread);
+      if (shown(find)) align("the search field", composer, find);
+      if (shown(peer)) align("the members' conversation", composer, peer);
+    }
+    for (const pane of document.querySelectorAll('.room-side-thread')) {
+      const composer = pane.querySelector(':scope > .room-thread-dock > .composer'), scroll = pane.querySelector(':scope > .room-side-scroll');
+      const column = [...(scroll?.children ?? [])].find(shown);
+      if (shown(composer) && column) align("the side thread", composer, column, scroll);
+    }
+    return { check: name, edges };
+  }
   if(name === "no-naming") {
     require(!document.querySelector('.first-bot'),"no first Bot setup exists for an unconfigured empty thread");
     require(visible(document.querySelector('.page-agent .composer:not([hidden])')),"the ordinary composer is available immediately");
