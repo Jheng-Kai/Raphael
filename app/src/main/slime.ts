@@ -399,7 +399,8 @@ function statePose(clock: SlimeClock, kind: 'body' | 'eyes' | 'mark', now: numbe
     const sampled = clock.sampled && now >= clock.transitionUntil ? Math.floor(((phase % 1) + 1) % 1 * cels) / cels : phase;
     pose = sample(`slime-${state}-${kind === 'eyes' ? 'gaze' : kind}`, sampled, kind === 'eyes' ? loop.gaze : loop.ease);
     if (state === 'blocked' && kind === 'eyes') pose.translate = [0, -6];
-    if (state === 'error' && kind === 'body') pose.scale = [1.08, .62];
+    // The deflate of slime.css (`slime-error-body`: scale 1 to 1.08 .62 over 1.6s, ease-out): a slime that has only just failed is still whole.
+    if (state === 'error' && kind === 'body') { const deflated = easing('ease-out', Math.min(1, Math.max(0, (elapsed - clock.since) / 1600))); pose.scale = [1 + .08 * deflated, 1 - .38 * deflated]; }
   } else if (state === 'done' || state === 'arriving') {
     const duration = state === 'done' ? 1900 : 1200;
     const lag = kind === 'mark' ? state === 'done' ? 60 : 50 : 0;

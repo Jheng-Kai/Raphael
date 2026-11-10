@@ -52,6 +52,9 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
     const dataHeading = button.matches('.modal-body .data-section > .data-heading > button[data-act="data-clear"]:is([data-what="dictation"], [data-what="conversation"])');
     return name.length <= 24 && destroyWords.test(name) && !button.closest(destroyMayStand) && !dataHeading;
   };
+  // An IANA time-zone id ("Asia/Taipei") is an identifier, like a file name or a URL: the Chinese row names the city and
+  // then shows the id the setting stores (zoneLabel in timezones.ts, 2026-11-05), so the id is not English copy.
+  const IANA_ZONE_ID = /\b(?:Africa|America|Antarctica|Arctic|Asia|Atlantic|Australia|Europe|Indian|Pacific)\/[A-Za-z0-9_+-]+(?:\/[A-Za-z0-9_+-]+)?/g;
   const outsideViewport = [], horizontalOverflow = [], missingI18nKeys = [], nativeControls = [], invalidDurations = [], mixedLanguage = [], rawMarkdown = [], productRules = [];
   const markdownPattern = /(?:^|\r?\n)[\t ]*(?:#{1,6}(?:[\t ]|$)|-\s+\[[ xX]\])|\*\*[^*\r\n]+\*\*|`{3,}/;
   // A textarea holds the document its owner is editing (a private skill's SKILL.md), so Markdown there is data, not unrendered copy.
@@ -242,7 +245,7 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
     // The literal command-template token is syntax in every locale, not English copy.
     if (allowed && !element.closest('.message-link, .url-chip, .local-command, .message-code pre code, .msg .note code, .bot-scopes code, .mb-row-p, .rich-language, .message-diagram .diagram-view svg, .rich-view-dialog .diagram-view svg')) for (const value of strings) {
       const copy = productPattern ? value.replace(productPattern, "") : value;
-      for (const [word] of copy.replace(/\{input\}/g, "").replace(keyPattern, "").replace(/https?:\/\/\S+|\S+\.(?:pdf|png|jpe?g|txt|md|csv|exe|com|dev|io)\b/gi, "").matchAll(/[A-Za-z]{2,}/g)) {
+      for (const [word] of copy.replace(/\{input\}/g, "").replace(keyPattern, "").replace(IANA_ZONE_ID, "").replace(/https?:\/\/\S+|\S+\.(?:pdf|png|jpe?g|txt|md|csv|exe|com|dev|io)\b/gi, "").matchAll(/[A-Za-z]{2,}/g)) {
         if (allowed.has(word.toLowerCase()) || seenWords.has(word)) continue;
         seenWords.add(word); mixedLanguage.push({ ...description, word });
       }

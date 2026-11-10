@@ -853,6 +853,20 @@ export function checkRendered(name, context = {}) {
     require(row.querySelector('.av').getBoundingClientRect().width === 28, 'the group shares the 28px live face');
     return {check:name};
   }
+  if (name === "message-action-tooltip") {
+    // Beside a reply only icons stay in sight (reply, react, ⋯), and the time lives in the thread's dividers (timeline.ts messageActionsHTML, 2026-11-06),
+    // so the tip under the pointer names an icon and never repeats a word that is already on screen.
+    const control = document.querySelector('.ra .chat-message[data-reply] .message-actions [data-act="reply-message"]');
+    const tips = [...document.querySelectorAll('[role="tooltip"]')].filter(visible);
+    require(control?.matches(':hover'), "the pointer is on the reply icon");
+    require(tips.length === 1 && tips[0].textContent === control.dataset.tooltip && control.dataset.tooltip.length > 0, `one tooltip names the icon: ${tips.map(tip => tip.textContent)}`);
+    require(!control.hasAttribute('title') && control.innerText.trim() === '', "the icon shows no word of its own and keeps no native title beside the tip");
+    require(!document.querySelector('.ra .chat-message[data-reply] .message-actions time'), "a message's actions hold no time");
+    const box = tips[0].getBoundingClientRect(), anchor = control.getBoundingClientRect();
+    require(box.left >= 8 && box.right <= innerWidth - 8 && box.top >= 0 && box.bottom <= innerHeight - 8, "the tooltip stays inside the viewport");
+    require(box.bottom <= anchor.top + 2 || box.top >= anchor.bottom - 2, "the tooltip does not cover its icon");
+    return { check: name, tip: tips[0].textContent };
+  }
   if (name.startsWith("presence-") || name.startsWith("transcript-") || name.startsWith("event-routine-") || name.startsWith("event-calendar-") || name === "sidebar-row-time" || name === "sidebar-group-author") {
     const turn = document.querySelector('[data-id="651"]');
     if (name.startsWith("transcript-")) {
@@ -3961,9 +3975,14 @@ export function checkRendered(name, context = {}) {
     return { check: name };
   }
   if (name === "quick-conversation-list") {
-    const first = document.querySelector('.mb-det [data-conversation-open]');
-    require(first?.dataset.conversationOpen === "4", "quick questions are pinned first");
-    require(first?.textContent.includes("快速提問"), "the kind uses the window-language title");
+    // Each member has one conversation (2026-11-06, 3cd7fa91, R-UI-86 retired): Raphael's main one is the first row and the one a window opens,
+    // and his quick questions wait in the second, named only when the owner picks it.
+    const rows = [...document.querySelectorAll('.mb-det [data-conversation-open]')];
+    require(rows.length === 2, `Raphael's details list his main conversation and his quick questions: ${rows.length}`);
+    const [main, quick] = rows;
+    require(main.dataset.conversationOpen !== "4" && main.textContent.includes("主要對話"), "the main conversation is the first row");
+    require(main.getAttribute('aria-current') === "true" && quick.getAttribute('aria-current') === "false", "the window has the main conversation open, never the quick questions");
+    require(quick.dataset.conversationOpen === "4" && quick.textContent.includes("快速提問"), "the quick questions follow, with the window-language title");
     return { check: name, conversation: 4 };
   }
   if (name === "quick-conversation") {

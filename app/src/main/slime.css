@@ -29,7 +29,9 @@
 .slime-look { --slime-settle-time: 200ms; }
 /* At rest a slime glances aside (its own side, --slime-aside, in the drawing's units); with the pointer on it or its
    row it looks back at you, as Grok Bot's bots do (owner, 2026-11-07). No wiggle. */
-.slime[data-state="idle"] .slime-follow { translate: var(--slime-aside, -3px) -0.5px; transition: translate 220ms cubic-bezier(0.25, 0.8, 0.3, 1); }
+/* The glance is eased in every state, so a change of state leaves it over 220ms instead of taking the eyes 3 units sideways in one frame (look: slime-motion-change). */
+.slime-follow { transition: translate 220ms cubic-bezier(0.25, 0.8, 0.3, 1); }
+.slime[data-state="idle"] .slime-follow { translate: var(--slime-aside, -3px) -0.5px; }
 :is(.mb-row, .mb-avbtn, .mb-preset, .mb-av-slime, .slime-surface):hover .slime[data-state="idle"] .slime-follow { translate: 0 0; }
 /* A slime that is not moving is a picture (owner, 2026-11-11: 「有些地方就是放照片，就是史萊姆的樣子就可以了」): no animation,
    no transition, no glance back under the pointer, no squish under a press. It is drawn without motion in the first place

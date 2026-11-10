@@ -72,3 +72,14 @@ test("Escape closes it", () => {
   document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
   expect(document.querySelector(".mb-scrim")).toBeNull();
 });
+
+test("choosing a tab hands the focus over without scrolling the page, so the tab row stays where it was clicked", () => {
+  const { dialog, $ } = open({ store: true });
+  const focus = vi.spyOn(HTMLElement.prototype, "focus");
+  try {
+    $<HTMLElement>('[data-tab="maker"]').click();
+    expect(document.activeElement?.id).toBe("mb-new-name");
+    expect(focus).toHaveBeenCalledWith({ preventScroll: true });
+    expect(focus.mock.calls.every(call => (call[0] as FocusOptions | undefined)?.preventScroll === true)).toBe(true);
+  } finally { focus.mockRestore(); dialog.close(); }
+});
