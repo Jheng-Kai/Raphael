@@ -804,6 +804,7 @@ export const ru = {
   "chat.workingFor": "· {p0}с",
   "chat.quota": "{p0}: лимит достигнут",
   "chat.quotaReset": ", сброс {p0}",
+  "chat.quotaLow": "{p0} ({p1}): осталось всего {p2}",
   "chat.searchAll": "Поиск участников и сообщений",
   "chat.noMessages": "Подходящих сообщений нет",
   "chooser.title": "Выбрать модель",

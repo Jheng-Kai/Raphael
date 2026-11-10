@@ -804,6 +804,7 @@ export const de = {
   "chat.workingFor": "· {p0}s",
   "chat.quota": "{p0} am Limit",
   "chat.quotaReset": ", Rücksetzung {p0}",
+  "chat.quotaLow": "{p0} ({p1}): nur noch {p2}",
   "chat.searchAll": "Mitglieder und Nachrichten suchen",
   "chat.noMessages": "Keine passenden Nachrichten",
   "chooser.title": "Modell wählen",

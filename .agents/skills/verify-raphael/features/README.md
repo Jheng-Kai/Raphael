@@ -1,5 +1,12 @@
 # Raphael feature map
 
+## Subscription quota warning (2026-11-10)
+
+See [Usage](usage.md) for R-QUOTA-01: a subscription window with 10% or less left is told once per
+provider, window and reset (core `quota_warned` setting, `MainEvent::QuotaWarning`), as one toast in
+the main window that changes no model. Selected scenes: quota-warning and quota-warning-weekly, both
+themes at 1120,720,1920x1080.
+
 ## External-input security boundaries (2026-11-05)
 
 See [Agent and external-input security boundaries](security-boundaries.md) for current allowlist checks, bounded messaging/webhook/MCP ingress, nonce-bound tunnel probes, OAuth callback admission and the offline verification limits.
@@ -380,7 +387,7 @@ behavior the fixture cannot prove.
 | [Dictation](dictation.md) | Overview, history, dictionary, shortcuts, microphone and paste |
 | [Settings and appearance](settings-appearance.md) | Profile/preferences, black and white themes, languages, models and app information |
 | [Connections and MCP](connections-mcp.md) | Connected apps and their count, Settings-only connected-app entry, an app's accounts and tools, members' private skills, managed store, MCP setup/discovery and Home's private Google calendar read |
-| [Usage](usage.md) | Spend overview, grouping, CSV and CLI allowances |
+| [Usage](usage.md) | Spend overview, grouping, CSV, CLI allowances and the once-per-window 90% warning |
 | [Onboarding](onboarding.md) | Welcome, optional setup and immediate conversation |
 
 Keep entry points, prerequisites and observable end states current. If data is

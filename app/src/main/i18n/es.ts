@@ -804,6 +804,7 @@ export const es = {
   "chat.workingFor": "· {p0}s",
   "chat.quota": "{p0} llegó al límite",
   "chat.quotaReset": ", se restablece {p0}",
+  "chat.quotaLow": "A {p0} ({p1}) solo le queda un {p2}",
   "chat.searchAll": "Buscar miembros y mensajes",
   "chat.noMessages": "No hay mensajes coincidentes",
   "chooser.title": "Elegir un modelo",

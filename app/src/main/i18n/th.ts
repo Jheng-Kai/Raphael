@@ -804,6 +804,7 @@ export const th = {
   "chat.workingFor": "· {p0} วินาที",
   "chat.quota": "{p0} ถึงขีดจำกัด",
   "chat.quotaReset": ", รีเซ็ต {p0}",
+  "chat.quotaLow": "{p0} ({p1}) เหลือเพียง {p2}",
   "chat.searchAll": "ค้นหาสมาชิกและข้อความ",
   "chat.noMessages": "ไม่พบข้อความที่ตรงกัน",
   "chooser.title": "เลือกโมเดล",

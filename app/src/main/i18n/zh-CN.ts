@@ -804,6 +804,7 @@ export const zhCN = {
   "chat.workingFor": "· {p0} 秒",
   "chat.quota": "{p0} 额度已满",
   "chat.quotaReset": "，{p0} 重设",
+  "chat.quotaLow": "{p0}（{p1}）额度只剩 {p2}",
   "chat.searchAll": "搜索成员与消息",
   "chat.noMessages": "没有符合的消息",
   "chooser.title": "选择模型",

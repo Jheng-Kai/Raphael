@@ -26,13 +26,17 @@ export interface UsageAnalyticsMount {
   destroy(): void;
 }
 
-const PERIODS = { fiveHour: "runs.fiveHour", weekly: "runs.weekly", weeklyOpus: "runs.weeklyOpus", weeklySonnet: "runs.weeklySonnet" } as const;
+/** The words of each window a subscription reports. */
+export const PERIODS = { fiveHour: "runs.fiveHour", weekly: "runs.weekly", weeklyOpus: "runs.weeklyOpus", weeklySonnet: "runs.weeklySonnet" } as const;
 const time = (ms: number): string => new Date(ms).toLocaleString(getLocale(), { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+
+/** A subscription by the name its card has: the plan (Claude), not the program (Claude Code). */
+export const subscriptionName = (id: string, fallback = id): string => id === "claude" ? "Claude" : CLIS.find((c) => c.id === id)?.name ?? fallback;
 
 /** One card per subscription brain: each window's share left as a bar, and when it resets. */
 export function allowanceCardsHTML(allowance: CliAllowances): string {
   return allowance.brains.map((brain) => {
-    const cli = CLIS.find((c) => c.id === brain.id), name = brain.id === "claude" ? "Claude" : cli?.name ?? brain.name;
+    const cli = CLIS.find((c) => c.id === brain.id), name = subscriptionName(brain.id, brain.name);
     const quota = allowance.quotas?.find((q) => q.provider === brain.id);
     const reported = brain.source === "reported";
     // A number from the last run says when it was read, on its own line; a live one needs no word.

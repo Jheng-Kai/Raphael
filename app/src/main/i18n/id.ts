@@ -804,6 +804,7 @@ export const id = {
   "chat.workingFor": "· {p0}d",
   "chat.quota": "{p0} mencapai batas",
   "chat.quotaReset": ", reset {p0}",
+  "chat.quotaLow": "{p0} ({p1}) tinggal {p2}",
   "chat.searchAll": "Cari anggota dan pesan",
   "chat.noMessages": "Tidak ada pesan yang cocok",
   "chooser.title": "Pilih model",
