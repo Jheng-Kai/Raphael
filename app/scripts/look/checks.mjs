@@ -1318,7 +1318,18 @@ export function checkRendered(name, context = {}) {
     if (name === 'polish-search') {
       const pane = [...document.querySelectorAll('.ra-find')].find(el => visible(el));
       const proof = window.__polishSearch;
-      if (proof?.total === 210) require(Math.abs(document.querySelector('[data-room-search]').getBoundingClientRect().y-document.querySelector('[data-room-menu]').getBoundingClientRect().y)<1, 'group search and menu stay in the shared header tool row');
+      if (proof?.total === 210) {
+        // The group's ⋯ is not drawn (a right click on the row opens its menu: owner, 2026-11-06), so its header tool row is the search button alone.
+        // The head keeps the pane's side inset on both sides (the room gives its padding to its children), so the button ends the head
+        // on the heading's line; while the column fills the window it stands on the composer's right edge, as a conversation's edge button does.
+        const room = document.querySelector('.au-room-pane'), head = room.querySelector(':scope > .page-head').getBoundingClientRect(), pane = room.getBoundingClientRect();
+        const search = document.querySelector('[data-room-search]'), menu = document.querySelector('[data-room-menu]');
+        const box = search.getBoundingClientRect(), composer = room.querySelector('.composer').getBoundingClientRect(), heading = room.querySelector('.au-room-heading').getBoundingClientRect();
+        require(visible(search) && search.closest('.page-head .ra-tools') && getComputedStyle(menu).display === 'none', 'group search stands alone in the shared header tool row; the menu is the row\'s right click');
+        require(Math.abs(box.right - head.right) <= 1 && Math.abs((head.left - pane.left) - (pane.right - head.right)) <= 1, `the head keeps one inset on both sides and its tool ends it (${head.left - pane.left} / ${pane.right - head.right}, tool ${head.right - box.right} short)`);
+        require(Math.abs(box.top + box.height / 2 - (heading.top + heading.height / 2)) <= 2, 'group search shares the heading\'s line');
+        if (composer.left - head.left <= 24) require(Math.abs(box.left + box.width / 2 - composer.right) <= 2, `group search stands on the composer's right edge while the column fills the window (${box.left + box.width / 2} vs ${composer.right})`);
+      }
       require(proof?.wrap && proof.stable && proof.noMatch && proof.closedInPlace, 'keyboard and icon navigation wrap, typing stays put, no-match and both close paths work');
       require(pane.querySelector('.ra-find-count').textContent === `${proof.total}/${proof.total}`, 'the full paginated history starts at its newest exact word');
       require(document.querySelectorAll('mark.is-current').length === 1, 'one exact word is the current target');
@@ -6522,7 +6533,7 @@ export function checkRendered(name, context = {}) {
     require(!document.body.textContent.includes(key) && !seen.includes(key), "the key is on no page text and in no call but the one that adds the app");
     if (["setup-key", "card-setup-form"].includes(name)) {
       require(dialog.querySelector('.mb-dlg-head h2').textContent.includes("Acme Ledger"), "the form is named for the app");
-      require(dialog.querySelector('.cn-lead').textContent.includes("API key") && dialog.querySelector('.cn-keep').textContent.includes("Composio"), "it says what is needed and that Composio keeps it");
+      require(dialog.querySelector('.cn-lead').textContent.includes("API 金鑰") && dialog.querySelector('.cn-keep').textContent.includes("Composio"), "it says what is needed and that Composio keeps it");
       const fields = [...dialog.querySelectorAll('[data-setup-field]')];
       require(fields.length === 1 && fields[0].type === "password" && fields[0].dataset.setupField === "generic_api_key" && fields[0].value === key, "exactly the key the app asks for, in a masked field");
       require(visible(dialog.querySelector('[data-dlg="guide"]')) && dialog.querySelectorAll('.cn-steps li').length === 3, "it says where to get it, in plain steps");

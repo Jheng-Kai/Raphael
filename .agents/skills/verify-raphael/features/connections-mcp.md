@@ -460,7 +460,8 @@ search and fully visible chips while results scroll independently.
 
 The mouse wheel scrolls the chip row sideways and hands the page back at either
 end. An arrow button and a fade stand only at an end with more chips behind it
-(`chip-scroll.ts`, shared by any `[data-chip-row]`). `plugins-store-wheel` turns
+(`chip-scroll.ts`, shared by any `[data-chip-row]`). The ten chips fit the sheet
+from 1120 px up, so `plugins-store-wheel` measures it at 720 px, where they overflow. It turns
 a real wheel over the chips, checks the left arrow can be pressed and the page
 did not scroll, then presses it and checks the row is back at its start with
 only the right arrow.
