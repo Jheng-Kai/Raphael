@@ -51,7 +51,7 @@ enigo = "0.6"
 windows-core = "0.62"
 # The asynchronous operations of the Windows Runtime (`IAsyncOperation`), which the media controls
 # answer with. It is the version the `windows` crate below already uses.
-windows-future = "0.3"
+windows-future = "0.100"
 # The overlay's webview: whether its WebView2 controller shows it and fills the window, and the
 # failures of its processes. The version Tauri and wry use, so the controller they hand over is
 # this crate's type.
