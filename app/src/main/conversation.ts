@@ -31,6 +31,18 @@ const bareExchange = (turn: AgentTurn): boolean => exchangeTurn(turn) && turn.st
 export const exchangeTurn = (turn: AgentTurn): boolean =>
   turn.scope === "exchange" || turn.route === "exchange" || sourceOf(turn) === "member";
 
+/**
+ * Whether another member handed this turn's words to the member that answers it: a brief the member works on in its own
+ * conversation (`route` "worker" or "delegate", `peer_id` the member who handed it over). Those words are that member's, never
+ * the owner's: no owner bubble (owner, 2026-11-11: Raphael's brief stood in a member's conversation as the owner's message).
+ */
+export const delegatedTurn = (turn: AgentTurn): boolean =>
+  (turn.route === "worker" || turn.route === "delegate") && turn.peer_id != null && turn.peer_id !== turn.member_id;
+
+/** Whether the owner wrote the words of a turn: not a routine's, a colleague's or a hand-off's. */
+export const ownerTurn = (turn: AgentTurn): boolean =>
+  sourceOf(turn) !== "routine" && sourceOf(turn) !== "member" && turn.route !== "exchange" && !delegatedTurn(turn);
+
 /** Empty historical records have nothing to say, including under their date heading. */
 export function visibleTurn(turn: AgentTurn): boolean {
   if (turn.scope === "room" || turn.scope === "quarantine") return false;

@@ -1137,6 +1137,8 @@ export interface Routine {
   app_name?: string;
   last_checked?: number | null;
   last_error?: string;
+  /** The latest run that ended did not work: `last_error` says why (the core writes it in the owner's words). */
+  last_failed?: boolean;
   enabled: boolean;
   last_run: number | null;
   next_run: number | null;

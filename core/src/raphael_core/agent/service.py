@@ -171,6 +171,7 @@ from .answers import Reply, Voice, build_user_message, owner_script, turn_text
 from .attribution import labelled_lines, owner_lines, owner_words, relayed_answer
 from .narration import NarratedLoop
 from ..members.activity import Activity, member_turn, step as activity_step, tool_step
+from ..members.store import MemberError
 from .actions import action_call
 from .cli.discovery import CliBrains, brain_ref
 from .cli.loop import CLI_SILENCE_S, CLI_TOOL_S, COMPUTER_CHANGED, CliLoop, Sessions as CliSessions
@@ -198,7 +199,7 @@ from .harness_tools import (
     tool as harness_tool,
 )
 from ..own_calendar import CalendarError, OwnCalendar, means_own_calendar
-from .team_admin import DEFINITIONS as ADMIN_TOOLS, ADMIN_CARD_TOOLS, CONFIRM_TOOLS, LEADERSHIP, BATCH_TOOLS, STAGED_TOOLS
+from .team_admin import DEFINITIONS as ADMIN_TOOLS, ADMIN_CARD_TOOLS, CONFIRM_TOOLS, LEADERSHIP, BATCH_TOOLS, STAGED_TOOLS, TEAM_READS
 from .local import extract_target, match_command
 from .opening import Opening, clean_target, match_settings, parse_domain, validate_url
 from .persona import (
@@ -3263,7 +3264,7 @@ class AgentService:
                     raise HarnessToolError("member_create_limit")
                 from ..management import REGISTRY
                 current = self._speaker(ask.speaker.id)
-                if name != "team_overview" and (not self._can_manage(ask, name, args)):
+                if name not in TEAM_READS and (not self._can_manage(ask, name, args)):
                     raise HarnessToolError("owner_private_chat_only")
                 if self._changes_model(name, args) and not self._owner_requested_model(ask.text):
                     raise HarnessToolError("owner_model_request_required")
@@ -3379,13 +3380,13 @@ class AgentService:
         return result
 
     def _can_manage(self, ask, name, arguments):
-        from ..management import BACKGROUND_MEMBER_TOOLS, background_actor
+        from ..management import BACKGROUND_MEMBER_TOOLS, BACKGROUND_READS, background_actor
         current = self._speaker(ask.speaker.id)
         if current is None:
             return False
         if self._management_chat(ask):
             return True
-        return (ask.background_owner and ask.scope == "private" and name in BACKGROUND_MEMBER_TOOLS
+        return (ask.background_owner and ask.scope == "private" and (name in BACKGROUND_MEMBER_TOOLS or name in BACKGROUND_READS)
                 and background_actor() == current.id)
 
     @staticmethod
@@ -3732,8 +3733,10 @@ class AgentService:
     async def background_owner_tool(self, task, name, arguments, *, approval=None, action=None):
         """Use read-only app discovery and existing card services without granting desktop presence."""
         from .owner_questions import BACKGROUND_TOOLS
-        from ..management import BACKGROUND_MEMBER_TOOLS, background_management
-        if name not in BACKGROUND_TOOLS | ROUTINE_TOOLS | CONNECTION_TOOLS | BACKGROUND_MEMBER_TOOLS or not task.turn_id:
+        from ..management import BACKGROUND_MEMBER_TOOLS, BACKGROUND_READS, background_management
+        if name not in BACKGROUND_TOOLS | ROUTINE_TOOLS | CONNECTION_TOOLS | BACKGROUND_MEMBER_TOOLS | TEAM_READS | BACKGROUND_READS or not task.turn_id:
+            return ToolResult(name, False, None, "blocked")
+        if name in TEAM_READS | BACKGROUND_READS and (task.scope != "private" or task.room_id is not None):
             return ToolResult(name, False, None, "blocked")
         if name in BACKGROUND_MEMBER_TOOLS and task.scope != "private":
             return ToolResult(name, False, None, "blocked")
@@ -4229,6 +4232,14 @@ class AgentService:
                 return ToolResult(name, True, {"skill": skill})
             except (ValueError, OSError) as exc:
                 return ToolResult(name, False, None, "bad_arguments", instruction=str(exc))
+        if name == SKILL_READ and arguments.get("reference") is not None:
+            file = getattr(team, "skill_file", None)
+            try:
+                text = file(speaker.id, arguments.get("name"), arguments.get("reference")) if file else None
+            except MemberError as error:
+                return ToolResult(name, False, None, "not_found" if error.kind == "not_found" else "bad_arguments", instruction=str(error))
+            return ToolResult(name, text is not None, {"text": text} if text is not None else None,
+                              None if text is not None else "not_found", untrusted=True)
         if name == SKILL_READ:
             read = getattr(team, "skill_read", None)
             text = None if read is None else read(speaker.id, arguments.get("name"))

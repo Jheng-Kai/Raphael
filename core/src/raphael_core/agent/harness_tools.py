@@ -43,7 +43,7 @@ WHEN = {
         "filter": {"type": "object", "properties": {"field": {"type": "string"}, "equals": {"type": "string"}, "operator": {"type": "string", "enum": ["equals", "contains"], "description": "Default equals. Use contains on Slack text for a literal phrase or <@USER_ID> mention."}}, "required": ["field", "equals"]}},
     "required": ["app", "event", "filter"],
 }
-ROUTINE_FIELDS = {"title": {"type": "string"}, "prompt": {"type": "string", "description": "What to do when due, with the learning goal."}, "schedule": SCHEDULE, "when": {"oneOf": [WHEN, {"type":"object", "properties":{"webhook":{"type":"boolean", "const":True}}, "required":["webhook"], "additionalProperties":False}]}, "enabled": {"type": "boolean"}}
+ROUTINE_FIELDS = {"title": {"type": "string"}, "prompt": {"type": "string", "description": "What to do when due, with the learning goal. The run has no owner at the keyboard: name only tools a routine's run has (find_tools finds them; self_check reads the app's own state and recent failures, skill_read with reference reads a skill's template), or none. A name it will not have is refused."}, "schedule": SCHEDULE, "when": {"oneOf": [WHEN, {"type":"object", "properties":{"webhook":{"type":"boolean", "const":True}}, "required":["webhook"], "additionalProperties":False}]}, "enabled": {"type": "boolean"}}
 
 
 def definition(description, properties=None, required=()):

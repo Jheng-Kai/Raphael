@@ -6426,6 +6426,28 @@ export function checkRendered(name, context = {}) {
     require(!document.querySelector('.mb-det [data-det="routine-add"]'), "the panel has no plus: a routine is made in the conversation");
     return { check: name };
   }
+  if (name === "routine-view-failed") {
+    // A run that did not work is said as one beside its reason, and the dialog stays a thing to read.
+    const dialog = document.querySelector(".mb-dialog.rv-dialog");
+    const status = dialog?.querySelector(".rv-status.is-failed");
+    require(visible(status) && status.textContent.trim().length > 4, "the failed run is told in words");
+    require(visible(status.querySelector(".st.err .dot.err")), "the failed state has its dot, not colour alone");
+    require(!dialog.querySelector('input, textarea, select, [role="switch"], .mb-dlg-act'), "nothing in it is a field or a switch");
+    const box = status.getBoundingClientRect(), outer = dialog.getBoundingClientRect();
+    require(box.left >= outer.left && box.right <= outer.right + 1, "the reason stays inside the dialog");
+    return { check: name };
+  }
+  if (name === "routine-running") {
+    // A routine's run shows the same working line as a turn the owner asked, and its instructions are no message of the owner's.
+    const line = document.querySelector('.tn[data-live="true"]');
+    require(visible(line), "the running routine is a live line of the thread");
+    const action = line.querySelector(".live-presence .live-action");
+    require(visible(action) && action.textContent.trim(), "the working line says what it is doing");
+    require(!line.querySelector(".owner-message"), "a routine's instructions are not drawn as the owner's message");
+    const box = line.getBoundingClientRect();
+    require(box.left >= 0 && box.right <= innerWidth, "the line stays in the window");
+    return { check: name };
+  }
   if (name === "reply-measure") {
     // Every part of a reply has one measure, the reading column (owner, 2026-11-09: 「寬度一樣」): a part holding a table
     // or code fills it, plain words grow up to it, and none runs past it.

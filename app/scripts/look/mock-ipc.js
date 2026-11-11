@@ -218,6 +218,14 @@ export function installMock(fixture, config = {}, target = window) {
     data.turns.push({...structuredClone(template),id:990,member_id:1,source:'routine',route:'routine',question:routine.title,
       session_id:`routine:${routine.id}`,routine:structuredClone(routine),status:'error',text:'範例工作未完成，可開啟例行任務檢查。',messages:[],steps:[],task:null});
   }
+  if (variant.routineRunning) {
+    // A routine that is running now: its run is a live turn of the member's conversation, with its task under way.
+    const routine = data.routines.find(r => r.member_id === 1);
+    const template = data.turns.find(t => t.member_id === 1);
+    data.turns.push({...structuredClone(template),id:991,member_id:1,source:'routine',route:'routine',question:routine.title,
+      session_id:`routine:${routine.id}`,routine:structuredClone(routine),status:'running',text:'',detail:null,messages:[],steps:[],
+      created_at_ms:data.now-20000,task:{id:7101,state:'running',started_at_ms:data.now-20000,created_at_ms:data.now-20000,finished_at_ms:null,progress:'正在整理今天的新聞'}});
+  }
   if (variant.fullPermission) data.settings.action_mode = "bypass";
   if (variant.mediaModels) {
     const media = { ...data.catalog.llm[0], id: "google/gemini-image", name: "Gemini Image", provider: "Google", provider_id: "openrouter", provider_name: "OpenRouter",

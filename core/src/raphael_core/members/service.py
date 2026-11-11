@@ -753,6 +753,11 @@ class MembersService:
         except (OSError, MemberError):
             return None
 
+    def skill_file(self, member_id: int, name: object, reference: object) -> str:
+        """A file of an enabled skill's own folder, by its path there (`MemberCapabilities.read_skill_file`); MemberError
+        says why it cannot be read."""
+        return self.capabilities.read_skill_file(member_id, name, reference)
+
     def _cap(self, method, *args):
         from ..bots.homes import HomeError
         try:
@@ -1765,13 +1770,14 @@ class MembersService:
     def authorize_management(self, member_id, name, arguments, *, interactive=False, approval=None):
         """Recheck live authority and the consumed exact-action gate token before a write."""
         from ..agent.team_admin import DEFINITIONS, TEAM_READS
-        from ..management import REGISTRY, destructive, BACKGROUND_MEMBER_TOOLS, background_actor, background_requires_approval
+        from ..management import REGISTRY, destructive, BACKGROUND_MEMBER_TOOLS, BACKGROUND_READS, background_actor, background_requires_approval
         from ..agent.policy import Approval, action_digest
 
         if not self.store.exists(member_id) or name not in DEFINITIONS and name not in REGISTRY:
             raise invalid_params("unknown team administration tool")
-        background = background_actor() == member_id and name in BACKGROUND_MEMBER_TOOLS
-        if name == "team_work" and not interactive:
+        background = background_actor() == member_id and (name in BACKGROUND_MEMBER_TOOLS or name in BACKGROUND_READS)
+        # A routine's run of the member reads the team's work as the member does in the owner's private chat.
+        if name == "team_work" and not interactive and background_actor() != member_id:
             raise invalid_params("team_work is only available in the owner's private chat")
         if name not in TEAM_READS and not (background or interactive):
             raise invalid_params("Team management requires the owner's interactive private chat or an approved background member action")
@@ -1914,7 +1920,12 @@ class MembersService:
         member_id = self._routine_member(params) if "member_id" in params else None
         from .event_catalog import available_events, connected_apps, pick_event
         connections = self._connections()
-        result = {"routines": [routine_view(r) for r in self.store.routines(member_id)], "events": available_events(connections, self._language()),
+        routines = self.store.routines(member_id)
+        # `last_failed` stands only on a routine whose latest ended run did not work: its view says so beside the reason (`last_error`).
+        failed = {row[0] for row in self._conn.execute(
+            "SELECT routine_id FROM routine_runs r WHERE finished IS NOT NULL AND status IN ('error','expired') AND id="
+            "(SELECT MAX(id) FROM routine_runs x WHERE x.routine_id=r.routine_id AND x.finished IS NOT NULL)")}
+        result = {"routines": [{**routine_view(r), **({"last_failed": True} if r.id in failed else {})} for r in routines], "events": available_events(connections, self._language()),
                   "event_apps": [c.get("name", c["id"]) for c in connected_apps(connections)]}
         if "event" in params:
             result.update(await pick_event(self, self._routine_member(params), params["event"], params.get("value", ""), params.get("contains", "")))
@@ -1947,6 +1958,10 @@ class MembersService:
                 "UPDATE routine_runs SET finished = ?, status = ?, summary = ?, cost = ? WHERE id = ?",
                 (self._now_ms(), turn.status, _line(turn.text or turn.detail or ""), turn.cost_usd, run["id"]),
             )
+            if turn.status in ("error", "expired"):
+                # The routine says its last run did not work, and why in a sentence: its view shows it (owner, 2026-11-11).
+                self._conn.execute("UPDATE routines SET last_error=? WHERE id=?",
+                                   (_line((turn.text or turn.detail or "").strip().split("\n\n")[0]), run["routine_id"]))
         routine = self.store.routine(run["routine_id"])
         if routine is not None:
             self._changed("routines.changed", routine.member_id)
@@ -1988,8 +2003,20 @@ class MembersService:
         app = when.get("app") if isinstance(when, dict) else None
         return next((c.get("name", app) for c in self._connections() if c["id"] == app), app or "")
 
+    def _check_routine_tools(self, member_id: int, prompt: object) -> None:
+        """A routine's instructions name only tools its run has (`routine_tools`): a name that it will not have is
+        refused to the model, with the tools that exist, when the instructions are written."""
+        names = getattr(self._background, "routine_tool_names", None)
+        available = names(member_id) if names is not None and isinstance(prompt, str) else None
+        if available is None:
+            return
+        from .routine_tools import refusal, unknown_in
+        if unknown := unknown_in(prompt, available):
+            raise invalid_params(refusal(unknown, available))
+
     async def _routine_create(self, params: dict) -> dict:
         member_id = self._routine_member(params)
+        self._check_routine_tools(member_id, params.get("prompt"))
         if params.get("schedule") is not None and params.get("when") is not None:
             raise invalid_params("Choose either a schedule or when")
         params = {**params, "schedule": self._saved_schedule(params.get("schedule"))}
@@ -2014,6 +2041,7 @@ class MembersService:
     async def _routine_update(self, params: dict) -> dict:
         routine_id = self._routine_id(params)
         existing = self.store.routine(routine_id)
+        self._check_routine_tools(existing.member_id, params.get("prompt"))
         params = {**params, "schedule": self._saved_schedule(params.get("schedule"), existing)}
         was_webhook = existing.when == {"webhook": True}
         try:
