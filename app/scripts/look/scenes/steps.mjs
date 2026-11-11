@@ -13,6 +13,11 @@ export const focus = selector => ({ action: "focus", selector });
 export const key = value => ({ action: "key", key: value });
 // What an input method hands the page, in order: `{ compose }` is a composition in progress, `{ commit }` the text it finishes with.
 export const ime = (selector, sequence) => ({ action: "ime", selector, sequence });
+// What the mock's core does while the scene waits (`window.__look[name](...args)`): `lookCall("updatePage", "page-news")`.
+export const lookCall = (name, ...args) => ({ action: "look-call", name, args });
+// A page open in the conversation's place: wheel over it, and what it must show once it has (frame-expect: its words, how far down it is).
+export const frameScroll = deltaY => ({ action: "frame-scroll", deltaY });
+export const frameExpect = (text, scrollAtLeast) => ({ action: "frame-expect", ...(text ? { text } : {}), ...(scrollAtLeast !== undefined ? { scrollAtLeast } : {}) });
 export const scroll = selector => ({ action: "scroll", selector });
 export const waitScrollEnd = selector => ({ action: "wait-scroll-end", selector });
 export const rightClick = selector => ({ action: "right-click", selector });

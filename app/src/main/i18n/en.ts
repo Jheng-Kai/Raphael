@@ -1463,7 +1463,6 @@ export const en = {
   "page.report.contents": "On this page",
   "page.report.all": "All",
   "page.report.status": "Status",
-  "page.report.back": "Back to the conversation",
   "page.report.gone": "Former member",
   "page.report.share": "Share",
   "page.report.saved": "Saved to {p0}",

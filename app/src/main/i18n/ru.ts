@@ -289,7 +289,6 @@ export const ru = {
   "page.report.contents": "На этой странице",
   "page.report.all": "Все",
   "page.report.status": "Статус",
-  "page.report.back": "Назад к разговору",
   "page.report.gone": "Бывший участник",
   "page.report.share": "Поделиться",
   "page.report.saved": "Сохранено в папке «{p0}»",

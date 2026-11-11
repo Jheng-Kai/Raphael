@@ -55,6 +55,7 @@ METHODS = [
     "pages.export",
     "pages.open",
     "pages.tool_call",
+    "pages.viewing",
     "quota.list",
     "usage.allowances",
 ]

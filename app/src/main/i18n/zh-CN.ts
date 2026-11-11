@@ -289,7 +289,6 @@ export const zhCN = {
   "page.report.contents": "本页内容",
   "page.report.all": "全部",
   "page.report.status": "状态",
-  "page.report.back": "回到对话",
   "page.report.gone": "已不在团队的成员",
   "page.report.share": "分享",
   "page.report.saved": "已存到「{p0}」",

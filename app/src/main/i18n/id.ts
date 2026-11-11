@@ -289,7 +289,6 @@ export const id = {
   "page.report.contents": "Di halaman ini",
   "page.report.all": "Semua",
   "page.report.status": "Status",
-  "page.report.back": "Kembali ke percakapan",
   "page.report.gone": "Mantan anggota",
   "page.report.share": "Bagikan",
   "page.report.saved": "Disimpan di {p0}",

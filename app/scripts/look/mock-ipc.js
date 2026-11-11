@@ -572,10 +572,12 @@ export function installMock(fixture, config = {}, target = window) {
   // `pageNews`: a page far taller than its card (a day's Japanese news, 900 px), alone ("only") or after the product page ("both").
   if (variant.pageTurn) {
     const base = data.turns.find(turn => turn.member_id === 1);
-    if (variant.pageNews !== "only") data.turns.push({ ...structuredClone(base), id: 801, question: "幫我找一個輕量後背包。", text: "這款符合你的需求,可以直接在下面操作。", status: "done", route: "answer", steps: [],
+    // Older than a long thread's turns (`longThread`), so the page's card stands high up in it, not at its bottom.
+    const created = variant.longThread ? base.created_at_ms - 13 * 60000 : base.created_at_ms;
+    if (variant.pageNews !== "only") data.turns.push({ ...structuredClone(base), id: 801, created_at_ms: created, question: "幫我找一個輕量後背包。", text: "這款符合你的需求,可以直接在下面操作。", status: "done", route: "answer", steps: [],
       messages: [{ seq: 1, kind: "reply", text: "這款符合你的需求,可以直接在下面操作。", at_ms: data.now }], attachments: [],
       pages: [{ id: "page-product", title: "輕量後背包", rev: 1, height: 320, source: "html", server: null, fallback: "輕量後背包 NT$ 1,280,防潑水、重量 480 公克。" }] });
-    if (variant.pageNews) data.turns.push({ ...structuredClone(base), id: 803, question: "幫我整理今天的日文新聞。", text: "整理好了，點開就能讀。", status: "done", route: "answer", steps: [],
+    if (variant.pageNews) data.turns.push({ ...structuredClone(base), id: 803, created_at_ms: created, question: "幫我整理今天的日文新聞。", text: "整理好了，點開就能讀。", status: "done", route: "answer", steps: [],
       messages: [{ seq: 1, kind: "reply", text: "整理好了，點開就能讀。", at_ms: data.now }], attachments: [],
       pages: [{ id: "page-news", title: "每日新聞日文學習 2026-11-11", rev: 1, height: 900, source: "html", server: null, fallback: "三則新聞、今日單字與練習問題。" }] });
   }
@@ -829,6 +831,17 @@ export function installMock(fixture, config = {}, target = window) {
   target.__look = state;
   // The late CLI models (`codexLate`) come now, and the window is told as the core tells it.
   state.codexArrives = () => { codexArrived = true; notify("BrainsChanged", {}); };
+  // A member changes a page it showed (core `update_page`): the page keeps its id, its revision goes up in every turn that holds
+  // its card (a member's, or a room message's), and the window is told as the core tells it.
+  state.pageRevs = {};
+  state.viewing = [];
+  state.updatePage = id => {
+    const rev = state.pageRevs[id] = (state.pageRevs[id] ?? 1) + 1;
+    const turns = [...data.turns, ...data.messages.flatMap(message => (message.turn ? [message.turn] : []))];
+    for (const turn of turns) for (const page of turn.pages ?? []) if (page.id === id) page.rev = rev;
+    for (const turn of data.turns) if ((turn.pages ?? []).some(page => page.id === id)) notify("AgentTurn", { turn_id: turn.id, member_id: turn.member_id });
+    notify("RoomsChanged", { room_id: 1 });
+  };
   // What the owner could see of the open conversation's place, frame by frame (`scrollTimeline`): a place seen once is the
   // place the thread opens at, so a bottom followed by the line (or the other way) shows as two samples.
   if (variant.scrollTimeline) {
@@ -957,11 +970,14 @@ export function installMock(fixture, config = {}, target = window) {
         // A report has no frame: its checked content, which the app draws, and the time its data is from.
         if (p.id === "page-report") {
           const { title, sections } = data.pageReport;
-          return { kind: "report", title, rev: 1, height: 320, source: "html", server: null, report: { as_of: new Date(data.now - 30 * 60000).toISOString().replace(/\.\d+Z$/, "Z"), sections: structuredClone(sections) } };
+          return { kind: "report", title, rev: state.pageRevs["page-report"] ?? 1, height: 320, source: "html", server: null, report: { as_of: new Date(data.now - 30 * 60000).toISOString().replace(/\.\d+Z$/, "Z"), sections: structuredClone(sections) } };
         }
         // Not a file of the dev server, which would write its own client into the page.
-        if (p.id === "page-news") return { url: `data:text/html;charset=utf-8,${encodeURIComponent(data.pageNewsHtml.replace("__THEME__", p.theme === "dark" ? "dark" : ""))}`, title: "每日新聞日文學習 2026-11-11", rev: 1, height: 900, source: "html", server: null };
-        return { url: `data:text/html;charset=utf-8,${encodeURIComponent(data.pageProductHtml.replace("__THEME__", p.theme === "dark" ? "dark" : ""))}`, title: "輕量後背包", rev: 1, height: 320, source: "html", server: null };
+        // A page its member changed (`state.updatePage`) is another page: the news page's last heading, the product's price.
+        if (p.id === "page-news") return { url: `data:text/html;charset=utf-8,${encodeURIComponent(data.pageNewsHtml.replace("__THEME__", p.theme === "dark" ? "dark" : "").replace("練習問題", (state.pageRevs[p.id] ?? 1) > 1 ? "練習問題（已更新）" : "練習問題"))}`, title: "每日新聞日文學習 2026-11-11", rev: state.pageRevs[p.id] ?? 1, height: 900, source: "html", server: null };
+        return { url: `data:text/html;charset=utf-8,${encodeURIComponent(data.pageProductHtml.replace("__THEME__", p.theme === "dark" ? "dark" : "").replace("NT$ 1,280", (state.pageRevs[p.id] ?? 1) > 1 ? "NT$ 990（已降價）" : "NT$ 1,280"))}`, title: "輕量後背包", rev: state.pageRevs[p.id] ?? 1, height: 320, source: "html", server: null };
+      // The page that stands open beside the composer, told before a message is sent (what the member is then told "here" means).
+      case "pages.viewing": state.viewing.push(p.id ?? null); return { viewing: p.id ?? null };
       case "computer.wallpaper": return variant.ownWallpaper ? { image: variant.ownWallpaper } : {};
       case "computer.lifecycle": {
         if (p.target !== data.desktop.target || p.host !== data.desktop.host || p.action === 'reset' && p.confirmed !== true) throw new Error('Maintenance confirmation or target missing');
@@ -1845,6 +1861,20 @@ export function installMock(fixture, config = {}, target = window) {
           data.turns.push({...active, id: addition, session_id: args.requestId, question: args.text, route: variant.queuedOwner ? "answer" : "owner_input", text: "", status: variant.queuedOwner ? "queued" : "done", attachments: [], task: null, steps: [], messages: [], created_at_ms: data.now});
           notify("AgentTurn", {turn_id: addition, member_id: active.member_id});
           return null;
+        }
+        // A member answering what was written under an open page (`pageAsk`): its turn is running until the scene lets it say its reply.
+        if (variant.pageAsk) {
+          const base = data.turns.find(turn => turn.member_id === args.memberId);
+          const turn = { ...structuredClone(base), id: nextId(data.turns), session_id: args.requestId, route: "answer", source: "app", question: args.text, text: "", detail: null, status: "running", prefix: "", messages: [], steps: [], attachments: [], pages: [], task: null, created_at_ms: data.now };
+          data.turns.push(turn);
+          notify("AgentTurn", { turn_id: turn.id, member_id: turn.member_id });
+          return new Promise(resolve => {
+            state.answerPageAsk = text => {
+              Object.assign(turn, { status: "done", prefix: "答", text, messages: [{ seq: 1, kind: "reply", text, at_ms: data.now }] });
+              notify("AgentTurn", { turn_id: turn.id, member_id: turn.member_id });
+              resolve(null);
+            };
+          });
         }
         // The native call stays pending until the reply ends, including before the first agent.turn.
         if (variant.stopPending) return new Promise(resolve => pendingReplies.set(args.requestId, resolve));

@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import * as api from "./api";
 import { mountPages, pageCardsHTML } from "./page-card";
+import { mountPageView } from "./page-view";
 import { FILE_POLICY, fileStyle, layoutTeam, mountReportView, reportFile, reportHTML, themeWords, type TeamLayout } from "./report-page";
 import type { AgentTurn, PageCard, Report, ReportEdge, ReportNode } from "./types";
 
@@ -163,11 +164,14 @@ test("boxes nobody is joined to wait on the last row, and a team with no arrows 
 
 // ---------- the page in the conversation's place ----------
 
+/** A conversation pane as the app draws it: its header with the search at the top left, and its stage. */
 function conversation() {
-  const stage = document.createElement("div");
-  stage.className = "ra-stage";
-  stage.innerHTML = `<div class="ra-scroll"><ol class="thread"></ol></div><div class="ra-dock"><textarea></textarea></div>`;
-  document.body.append(stage);
+  const pane = document.createElement("section");
+  pane.className = "mb-chat";
+  pane.innerHTML = `<div class="page-head mb-head"><span class="mb-head-l"><button type="button" class="btn icon" data-act="search"></button></span></div>` +
+    `<div class="ra-stage"><div class="ra-scroll"><ol class="thread"></ol></div><div class="ra-dock"><textarea></textarea></div></div>`;
+  document.body.append(pane);
+  const stage = pane.querySelector<HTMLElement>(".ra-stage")!;
   const thread = stage.querySelector<HTMLElement>(".thread")!;
   thread.innerHTML = `<li>${pageCardsHTML({ pages: [page] } as unknown as AgentTurn)}</li>`;
   const pages = mountPages(thread, { place: () => true, people: () => people });
@@ -185,18 +189,22 @@ test("a report is a link card in the reply, with its icon, its title and 「頁�
   expect(thread.querySelector("iframe, .pg-card")).toBeNull();
 });
 
-test("the link opens the report in the thread's place with the composer below, and the × brings the thread back", async () => {
+test("the link opens the report in the thread's place with the composer below, and the header's arrow brings the thread back", async () => {
   const { stage, thread } = conversation();
   const link = thread.querySelector<HTMLButtonElement>("button.pg-link")!;
   link.click();
   await flush();
-  const view = stage.querySelector<HTMLElement>(".rp-view")!;
+  const view = stage.querySelector<HTMLElement>(".pgv")!;
   expect(api.reportOpen).toHaveBeenCalledWith("r1");
-  expect(stage.classList.contains("is-report") && !view.hidden).toBe(true);
+  expect(stage.classList.contains("is-page") && stage.dataset.pageKind === "report" && !view.hidden).toBe(true);
   expect(view.nextElementSibling!.classList.contains("ra-dock")).toBe(true);
   expect(view.querySelector("h1")!.textContent).toBe("團隊總覽報告");
-  view.querySelector<HTMLButtonElement>("[data-report-act=close]")!.click();
-  expect(stage.classList.contains("is-report") || !view.hidden).toBe(false);
+  // The way back is the conversation header's, at its top left: no × over the page.
+  const back = document.querySelector<HTMLButtonElement>(".mb-head-l > [data-page-back]")!;
+  expect(back.hidden).toBe(false);
+  expect(view.querySelector("[data-report-act=close], .rp-close")).toBeNull();
+  back.click();
+  expect(stage.classList.contains("is-page") || !view.hidden || !back.hidden).toBe(false);
   expect(document.activeElement).toBe(link);
 });
 
@@ -212,12 +220,16 @@ test("a tab shows only its group's rows", async () => {
   expect([...view.querySelectorAll<HTMLTableRowElement>(".rp-table tbody tr")].some(row => row.hidden)).toBe(false);
 });
 
-test("sending closes the report, a card that leaves the thread closes it, and a changed report is drawn again", async () => {
+test("sending keeps the report open, a card that leaves the thread closes it, and a changed report is drawn again", async () => {
   const first = conversation();
   first.thread.querySelector<HTMLButtonElement>("button.pg-link")!.click();
   await flush();
-  first.pages.closeReport();
-  expect(first.stage.classList.contains("is-report")).toBe(false);
+  vi.spyOn(api, "pagesViewing").mockResolvedValue({ viewing: "r1" });
+  await first.pages.sent();
+  expect(api.pagesViewing).toHaveBeenCalledWith("r1");
+  expect(first.stage.classList.contains("is-page")).toBe(true);
+  first.pages.close();
+  expect(first.stage.classList.contains("is-page")).toBe(false);
 
   first.thread.querySelector<HTMLButtonElement>("button.pg-link")!.click();
   await flush();
@@ -228,7 +240,7 @@ test("sending closes the report, a card that leaves the thread closes it, and a 
   expect(first.stage.querySelector(".rp-view h1")!.textContent).toBe("團隊總覽報告（更新）");
   first.thread.replaceChildren();
   await flush();
-  expect(first.stage.classList.contains("is-report")).toBe(false);
+  expect(first.stage.classList.contains("is-page")).toBe(false);
 });
 
 test("a report that cannot open says so and leaves the thread where it is", async () => {
@@ -236,7 +248,7 @@ test("a report that cannot open says so and leaves the thread where it is", asyn
   const { stage, thread } = conversation();
   thread.querySelector<HTMLButtonElement>("button.pg-link")!.click();
   await flush();
-  expect(stage.classList.contains("is-report")).toBe(false);
+  expect(stage.classList.contains("is-page")).toBe(false);
   expect(document.querySelector(".toast")?.textContent ?? "").toContain("這個頁面打不開。");
 });
 
@@ -321,9 +333,9 @@ test("share saves the report on screen as a file, once a press, says where it we
   thread.querySelector<HTMLButtonElement>("button.pg-link")!.click();
   await flush();
   const view = stage.querySelector<HTMLElement>(".rp-view")!;
-  // Share before the way back, at the top right; its name is its only word, so its tooltip repeats nothing on screen.
+  // Share alone at the top right (the way back is the header's arrow); its name is its only word, so its tooltip repeats nothing on screen.
   const buttons = [...view.querySelectorAll<HTMLButtonElement>(".rp-top > button.btn.icon")];
-  expect(buttons.map(button => [button.dataset.reportAct, button.getAttribute("aria-label"), button.textContent])).toEqual([["share", "分享", ""], ["close", "回到對話", ""]]);
+  expect(buttons.map(button => [button.dataset.reportAct, button.getAttribute("aria-label"), button.textContent])).toEqual([["share", "分享", ""]]);
   buttons[0]!.click();
   buttons[0]!.click();
   await flush();
@@ -333,7 +345,7 @@ test("share saves the report on screen as a file, once a press, says where it we
   expect(file).toContain("<title>團隊總覽報告</title>");
   expect(file).toContain('class="rp-team-at"');
   expect(lastToast()).toBe("已存到「下載」");
-  expect(stage.classList.contains("is-report") && !view.hidden).toBe(true);
+  expect(stage.classList.contains("is-page") && view.isConnected && !stage.querySelector<HTMLElement>(".pgv")!.hidden).toBe(true);
 
   save.mockResolvedValue({ place: "output", folder: "Raphael 輸出" });
   buttons[0]!.click();
@@ -350,7 +362,7 @@ test("the view works as a plain stage too, with nothing of the thread's own", as
   const stage = document.createElement("div");
   stage.innerHTML = `<div class="ra-dock"></div>`;
   document.body.append(stage);
-  const view = mountReportView(stage, () => people);
+  const view = mountReportView(mountPageView(stage), () => people);
   await view.open("r1");
   expect(view.shown()).toEqual({ id: "r1", rev: 1 });
   view.close();

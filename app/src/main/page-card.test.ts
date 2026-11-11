@@ -2,6 +2,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { cancelGesture } from "../shared/cancel-gesture";
 import * as api from "./api";
 import { t } from "./i18n";
 import { mountPages, pageCardsHTML } from "./page-card";
@@ -19,10 +20,16 @@ const focusOn = (element: Element): void => {
 /** Where the app last heard the pointer; a frame in the test window stands at 0,0. */
 const pointerAt = (x: number, y: number): void => { window.dispatchEvent(new MouseEvent("pointermove", { clientX: x, clientY: y })); };
 
+/** A conversation pane as the app draws it: the header with its top-left slot, the stage with the thread and the composer's dock. */
 function mount(cards: PageCard[] = [card]) {
-  const thread = document.createElement("div");
+  const pane = document.createElement("section");
+  pane.className = "mb-chat";
+  pane.innerHTML = `<div class="page-head mb-head"><span class="mb-head-l"><button type="button" class="btn icon" data-act="search"></button></span></div>` +
+    `<div class="ra-stage"><div class="ra-scroll"><ol class="thread"></ol></div><div class="ra-dock"><textarea></textarea></div></div>`;
+  document.body.append(pane);
+  const stage = pane.querySelector<HTMLElement>(".ra-stage")!;
+  const thread = stage.querySelector<HTMLElement>(".thread")!;
   thread.innerHTML = pageCardsHTML(turn(cards));
-  document.body.append(thread);
   const place = vi.fn(() => true);
   const pages = mountPages(thread, { place });
   pages.sync();
@@ -31,7 +38,7 @@ function mount(cards: PageCard[] = [card]) {
   Object.defineProperty(frame, "contentWindow", { value: { postMessage: vi.fn() }, configurable: true });
   focusOn(frame);
   pointerAt(10, 10);
-  return { thread, place, pages, frame };
+  return { thread, place, pages, frame, stage };
 }
 
 /** A message from the frame, as `window` would deliver it. */
@@ -284,58 +291,238 @@ test("a new revision opens again in the same frame", async () => {
   expect(thread.querySelector("iframe")).toBe(frame);
 });
 
-test("expand takes the same frame to the large dialog and closing brings it back", async () => {
-  const { thread, frame, pages } = mount();
+const back = (): HTMLButtonElement => document.querySelector<HTMLButtonElement>(".mb-head-l > [data-page-back]")!;
+
+test("pressing the card takes the same frame to the conversation's place, with no dialog, and the header's arrow brings it back", async () => {
+  const { thread, frame, pages, stage } = mount();
   await flush();
   loaded(frame);
   thread.querySelector<HTMLElement>('[data-page-act="expand"]')!.click();
-  expect(document.querySelector(".pg-view iframe")).toBe(frame);
+  const view = stage.querySelector<HTMLElement>(".pgv")!;
+  expect(stage.classList.contains("is-page") && stage.dataset.pageKind === "page" && !view.hidden).toBe(true);
+  expect(view.querySelector(".pgv-frame-box > iframe")).toBe(frame);
+  // The composer stays under it, and nothing stands over it: no dialog, no scrim, no ×.
+  expect(view.nextElementSibling!.classList.contains("ra-dock")).toBe(true);
+  expect(document.querySelector(".mb-scrim, .mb-dialog, .pg-view-dialog, [data-dlg=close]")).toBeNull();
+  expect(view.querySelector(".btn, [data-dlg], .modal-x")).toBeNull();
   pages.sync();
-  expect(document.querySelector(".pg-view iframe")).toBe(frame);
-  document.querySelector<HTMLElement>('.pg-view-dialog [data-dlg="close"]')!.click();
-  expect(document.querySelector(".pg-view")).toBeNull();
+  expect(view.querySelector("iframe")).toBe(frame);
+  back().click();
+  expect(stage.classList.contains("is-page") || !view.hidden).toBe(false);
   expect(thread.querySelector(".pg-body iframe")).toBe(frame);
   expect(api.pagesOpen).toHaveBeenCalledTimes(1);
 });
 
-test("a page made larger keeps its × outside the page: above its top right corner, on the scrim", async () => {
-  // The × once lay over the page's top right corner (top: 12px; right: 16px), so whatever a page drew there was covered (2026-11-11).
+test("the way back is the round arrow at the header's top left, named 返回, where the search stood", async () => {
   const { thread, frame } = mount();
   await flush();
   loaded(frame);
+  const slot = document.querySelector<HTMLElement>(".mb-head-l")!;
   thread.querySelector<HTMLElement>('[data-page-act="expand"]')!.click();
-  const dialog = document.querySelector<HTMLElement>(".pg-view-dialog")!;
-  const close = dialog.querySelector<HTMLElement>('[data-dlg="close"]')!;
-  expect(close.closest(".mb-dlg-head")!.parentElement).toBe(dialog);
-  expect(dialog.querySelector(".pg-view")!.contains(close)).toBe(false);
-  const css = readFileSync(join(__dirname, "page-card.css"), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
-  const rule = (selector: string): string => { const at = css.indexOf(`\n${selector} {`); return at < 0 ? "" : css.slice(at, css.indexOf("}", at)); };
-  // Just outside the page's top right corner (the dialog is the page's box), right-aligned with it, the standard small gap above it.
-  expect(rule(".pg-view-dialog .mb-dlg-head")).toContain("position: absolute; bottom: calc(100% + var(--sp-2)); right: 0;");
-  // So the dialog must not clip what stands outside it, nor leave its page's corners to it; the scrim keeps the room above.
-  expect(rule(".mb-dialog.pg-view-dialog")).toContain("overflow: visible");
-  expect(rule(".mb-dialog.pg-view-dialog .mb-dlg-body")).toContain("overflow: hidden; border-radius: var(--r-lg)");
-  expect(rule(".mb-scrim:has(> .pg-view-dialog)")).toContain("padding-top: calc(var(--window-controls-height) + var(--sp-2) + 36px + var(--sp-2))");
-  close.click();
+  const arrow = back();
+  expect(slot.firstElementChild).toBe(arrow);
+  expect(arrow.hidden).toBe(false);
+  expect(arrow.classList.contains("icon") && arrow.getAttribute("aria-label") === "返回" && arrow.textContent === "").toBe(true);
+  expect(arrow.querySelector("svg")).not.toBeNull();
+  // The search is the thread's, and the thread is not in sight: the css puts it away, and the page's title is in sight.
+  const css = readFileSync(join(__dirname, "page-view.css"), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+  expect(css).toContain('.mb-chat:has(> .ra-stage.is-page) .mb-head [data-act="search"] { display: none; }');
+  expect(document.querySelector(".pgv .pgv-title")!.textContent).toBe("藍色背包 <b>");
+  expect(document.querySelector(".pgv")!.getAttribute("aria-label")).toBe("藍色背包 <b>");
+  arrow.click();
+  expect(arrow.hidden).toBe(true);
 });
 
-test("a page made larger is as tall in its dialog as it says it is there, under its card's title", async () => {
-  const { thread, frame } = mount();
+test("a page in the conversation's place has no dialog: its css has no scrim, no × and no dialog box", () => {
+  const css = readFileSync(join(__dirname, "page-card.css"), "utf8") + readFileSync(join(__dirname, "page-view.css"), "utf8");
+  expect(css).not.toMatch(/pg-view|mb-scrim|mb-dialog|mb-dlg|modal-x/);
+  const source = readFileSync(join(__dirname, "page-card.ts"), "utf8");
+  // A dialog is still the owner's to confirm a link a page asks to open, and nothing else: a page itself is never in one.
+  expect(source.match(/openDialog\(/g)).toHaveLength(1);
+});
+
+test("a page is as tall in its place as the place is: what it says changes nothing there, and the card follows once it is back", async () => {
+  const { thread, frame, stage } = mount();
   await flush();
   const card = thread.querySelector<HTMLElement>(".pg-card")!;
   loaded(frame);
   thread.querySelector<HTMLElement>('[data-page-act="expand"]')!.click();
-  // The title once, as the card has it (it was escaped twice and showed 「&lt;b&gt;」).
-  expect(document.querySelector(".pg-view-dialog .mb-dlg-head h2")!.textContent).toBe("藍色背包 <b>");
-  const view = document.querySelector<HTMLElement>(".pg-view")!;
-  expect(view.style.getPropertyValue("--pg-h")).toBe("400px");
-  // Wider, the page says again how tall it is: only the dialog follows, the card keeps its height behind it.
   fromFrame(frame, { raphaelPage: 1, type: "height", height: 243.4 });
-  expect(view.style.getPropertyValue("--pg-h")).toBe("244px");
   expect(card.style.getPropertyValue("--pg-h")).toBe("400px");
-  document.querySelector<HTMLElement>('.pg-view-dialog [data-dlg="close"]')!.click();
+  expect(stage.querySelector<HTMLElement>(".pgv-frame-box")!.style.height).toBe("");
+  back().click();
   fromFrame(frame, { raphaelPage: 1, type: "height", height: 300 });
   expect(card.style.getPropertyValue("--pg-h")).toBe("300px");
+});
+
+test("going back puts the card's preview at the top of the page and keeps where the owner was reading for the next time", async () => {
+  const { thread, frame } = mount();
+  await flush();
+  loaded(frame);
+  const posted = vi.mocked(frame.contentWindow!.postMessage);
+  thread.querySelector<HTMLElement>('[data-page-act="expand"]')!.click();
+  fromFrame(frame, { raphaelPage: 1, type: "scroll", y: 520 });
+  back().click();
+  expect(posted).toHaveBeenLastCalledWith({ raphaelPage: 1, type: "scroll-to", y: 0 }, "*");
+  // The page's own answer to that scroll is not where the owner was reading.
+  fromFrame(frame, { raphaelPage: 1, type: "scroll", y: 0 });
+  thread.querySelector<HTMLElement>('[data-page-act="expand"]')!.click();
+  expect(posted).toHaveBeenLastCalledWith({ raphaelPage: 1, type: "scroll-to", y: 520 }, "*");
+  back().click();
+});
+
+test("a page changed while it stands in the conversation's place loads beside it, goes back to where it was read and takes its place: one card, one frame, nothing closes", async () => {
+  const { thread, frame, pages, stage } = mount();
+  await flush();
+  loaded(frame);
+  thread.querySelector<HTMLElement>('[data-page-act="expand"]')!.click();
+  fromFrame(frame, { raphaelPage: 1, type: "scroll", y: 420 });
+  vi.mocked(api.pagesOpen).mockResolvedValueOnce({ ...opened, url: "http://127.0.0.1:9/p/changed?theme=light", rev: 1 });
+  thread.querySelector<HTMLElement>(".pg-card")!.dataset.pageRev = "1";
+  pages.sync();
+  await flush();
+  const frames = [...stage.querySelectorAll<HTMLIFrameElement>(".pgv iframe")];
+  // The changed page is a second frame, unseen until it has drawn; the page on screen stays as it is.
+  expect(frames).toHaveLength(2);
+  const next = frames[1]!;
+  expect(frames[0]).toBe(frame);
+  expect(next.getAttribute("src")).toBe("http://127.0.0.1:9/p/changed?theme=light");
+  expect(next.style.visibility).toBe("hidden");
+  expect(next.hasAttribute("inert")).toBe(false);
+  Object.defineProperty(next, "contentWindow", { value: { postMessage: vi.fn() }, configurable: true });
+  next.dispatchEvent(new Event("load"));
+  expect(next.contentWindow!.postMessage).toHaveBeenCalledExactlyOnceWith({ raphaelPage: 1, type: "scroll-to", y: 420 }, "*");
+  expect(frame.isConnected).toBe(true);
+  fromFrame(next, { raphaelPage: 1, type: "scroll", y: 420 });
+  expect([...stage.querySelectorAll(".pgv iframe")]).toEqual([next]);
+  expect(next.style.visibility).toBe("");
+  expect(stage.classList.contains("is-page") && !stage.querySelector<HTMLElement>(".pgv")!.hidden).toBe(true);
+  expect(thread.querySelectorAll(".pg-card")).toHaveLength(1);
+  // Going back, the card holds the changed page.
+  back().click();
+  expect(thread.querySelector(".pg-body iframe")).toBe(next);
+  expect(api.pagesOpen).toHaveBeenCalledTimes(2);
+});
+
+test("a changed page that was not being read shows the moment it has drawn, and one that cannot be read stays as it was", async () => {
+  const { thread, frame, pages, stage } = mount();
+  await flush();
+  loaded(frame);
+  thread.querySelector<HTMLElement>('[data-page-act="expand"]')!.click();
+  vi.mocked(api.pagesOpen).mockRejectedValueOnce(new Error("gone"));
+  thread.querySelector<HTMLElement>(".pg-card")!.dataset.pageRev = "1";
+  pages.sync();
+  await flush();
+  expect([...stage.querySelectorAll(".pgv iframe")]).toEqual([frame]);
+  thread.querySelector<HTMLElement>(".pg-card")!.dataset.pageRev = "2";
+  pages.sync();
+  await flush();
+  const next = stage.querySelectorAll<HTMLIFrameElement>(".pgv iframe")[1]!;
+  Object.defineProperty(next, "contentWindow", { value: { postMessage: vi.fn() }, configurable: true });
+  next.dispatchEvent(new Event("load"));
+  expect([...stage.querySelectorAll(".pgv iframe")]).toEqual([next]);
+  expect(next.contentWindow!.postMessage).not.toHaveBeenCalled();
+});
+
+test("Escape goes back and leaves the composer's draft alone, except where a task's Stop has the Escape first", async () => {
+  const { thread, frame, stage } = mount();
+  await flush();
+  loaded(frame);
+  const field = stage.querySelector<HTMLTextAreaElement>("textarea")!;
+  field.value = "還沒送出的草稿";
+  thread.querySelector<HTMLElement>('[data-page-act="expand"]')!.click();
+  const escape = (): KeyboardEvent => { const event = new KeyboardEvent("keydown", { key: "Escape", cancelable: true }); window.dispatchEvent(event); return event; };
+  // A task is running: its Stop is armed first (R-UI-46), and the page stays.
+  const stop = document.createElement("button");
+  document.body.append(stop);
+  const cancel = vi.fn();
+  const unregister = cancelGesture().register(() => ({ key: "task", button: stop, hint: "stop", cancel }));
+  escape();
+  expect(stage.classList.contains("is-page")).toBe(true);
+  expect(stop.dataset.cancelArmed).toBe("true");
+  unregister();
+  cancelGesture().clear();
+  // A menu has its own Escape.
+  const menu = document.createElement("div");
+  menu.setAttribute("role", "menu");
+  document.body.append(menu);
+  expect(escape().defaultPrevented).toBe(false);
+  expect(stage.classList.contains("is-page")).toBe(true);
+  menu.remove();
+  expect(escape().defaultPrevented).toBe(true);
+  expect(stage.classList.contains("is-page")).toBe(false);
+  expect(field.value).toBe("還沒送出的草稿");
+  expect(cancel).not.toHaveBeenCalled();
+  // Nothing open: Escape is nobody's here.
+  expect(escape().defaultPrevented).toBe(false);
+});
+
+test("Escape pressed in the page goes back too, but only from a press in it and never over a task's Stop", async () => {
+  const { thread, frame, stage } = mount();
+  await flush();
+  loaded(frame);
+  thread.querySelector<HTMLElement>('[data-page-act="expand"]')!.click();
+  setActivation(false);
+  fromFrame(frame, { raphaelPage: 1, type: "escape" });
+  expect(stage.classList.contains("is-page")).toBe(true);
+  setActivation(true);
+  const stop = document.createElement("button");
+  document.body.append(stop);
+  const unregister = cancelGesture().register(() => ({ key: "task", button: stop, hint: "stop", cancel: vi.fn() }));
+  fromFrame(frame, { raphaelPage: 1, type: "escape" });
+  expect(stage.classList.contains("is-page")).toBe(true);
+  unregister();
+  fromFrame(frame, { raphaelPage: 1, type: "escape" });
+  expect(stage.classList.contains("is-page")).toBe(false);
+});
+
+test("a page places the owner's text in the composer under it and stays open: the owner alone sends it", async () => {
+  const { thread, frame, place, stage } = mount();
+  await flush();
+  loaded(frame);
+  thread.querySelector<HTMLElement>('[data-page-act="expand"]')!.click();
+  fromFrame(frame, { raphaelPage: 1, type: "send", text: "買兩個" });
+  expect(place).toHaveBeenCalledExactlyOnceWith("p1", "買兩個");
+  expect(stage.classList.contains("is-page")).toBe(true);
+});
+
+test("sending with a page open tells the core which page it is, keeps the page, and shows under it what the member does, then its reply", async () => {
+  const viewing = vi.spyOn(api, "pagesViewing").mockResolvedValue({ viewing: "p1" });
+  const { thread, frame, pages, stage } = mount();
+  await flush();
+  loaded(frame);
+  thread.querySelector<HTMLElement>('[data-page-act="expand"]')!.click();
+  const line = document.createElement("li");
+  line.className = "tn";
+  line.innerHTML = `<div class="me"><div class="owner-message"><div class="message-text">把價格改低一點</div></div></div><div class="ra"><div class="live-presence" data-tooltip="改頁面中"><span class="live-action">改頁面中</span></div></div>`;
+  thread.append(line);
+  // The view draws on the frame after the thread changed: one frame to see the change, one for the line.
+  const frames = (): Promise<void> => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+  await pages.sent();
+  expect(viewing).toHaveBeenCalledExactlyOnceWith("p1");
+  await frames();
+  const status = stage.querySelector<HTMLElement>(".pgv-status")!;
+  expect(status.hidden).toBe(false);
+  expect(status.querySelector(".live-action")!.textContent).toBe("改頁面中");
+  expect(stage.classList.contains("is-page")).toBe(true);
+  // The member answers: its first words stay under the page, and the arrow brings the whole reply.
+  line.querySelector(".ra")!.innerHTML = `<div class="chat-message"><div class="message-text">好了，價格改成 NT$ 990，標題沒有動。</div></div>`;
+  await frames();
+  expect(status.querySelector(".live-action")).toBeNull();
+  expect(status.querySelector(".pgv-reply")!.textContent).toBe("好了，價格改成 NT$ 990，標題沒有動。");
+  // Put away, and said again to the core at the next send: no page is open then.
+  back().click();
+  expect(status.hidden).toBe(true);
+  await pages.sent();
+  expect(viewing).toHaveBeenLastCalledWith(null);
+});
+
+test("a send with no page ever open asks the core nothing", async () => {
+  const viewing = vi.spyOn(api, "pagesViewing").mockResolvedValue({ viewing: null });
+  const { pages } = mount();
+  await pages.sent();
+  await pages.sent();
+  expect(viewing.mock.calls.length).toBeLessThanOrEqual(1);
 });
 
 test("a plugin's page gets the MCP Apps handshake and its tools go through the core; a member's page gets neither", async () => {
@@ -421,15 +608,15 @@ test("the preview shows only the top of the page: the frame keeps the page's hei
   expect(pageRule('.pg-body[data-state="ready"]::after')).toContain("linear-gradient(to bottom, transparent, var(--panel))");
 });
 
-test("a page in a card is inert: it cannot be pressed, focused or scrolled, and works again only when made larger", async () => {
-  const { thread, frame } = mount();
+test("a page in a card is inert: it cannot be pressed, focused or scrolled, and works again only when it stands in the conversation's place", async () => {
+  const { thread, frame, stage } = mount();
   await flush();
   loaded(frame);
   expect(frame.hasAttribute("inert")).toBe(true);
   thread.querySelector<HTMLElement>(".pg-body")!.click();
   expect(frame.hasAttribute("inert")).toBe(false);
-  expect(document.querySelector(".pg-view iframe")).toBe(frame);
-  document.querySelector<HTMLElement>('.pg-view-dialog [data-dlg="close"]')!.click();
+  expect(stage.querySelector(".pgv iframe")).toBe(frame);
+  back().click();
   expect(frame.hasAttribute("inert")).toBe(true);
 });
 
@@ -437,8 +624,8 @@ test("pressing the preview, its title row, or Enter or Space on it opens the pag
   const { thread, frame } = mount();
   const body = thread.querySelector<HTMLElement>(".pg-body")!;
   const press = (key: string): void => { body.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true })); };
-  const shown = (): boolean => document.querySelector(".pg-view") !== null;
-  const close = (): void => { document.querySelector<HTMLElement>('.pg-view-dialog [data-dlg="close"]')!.click(); };
+  const shown = (): boolean => document.querySelector(".ra-stage.is-page") !== null;
+  const close = (): void => { back().click(); };
   // Loading: a placeholder, not a control.
   expect(body.hasAttribute("tabindex")).toBe(false);
   expect(body.getAttribute("aria-disabled")).toBe("true");
@@ -466,6 +653,6 @@ test("a failed page has no preview to press, and its card keeps 再試一次 and
   const body = thread.querySelector<HTMLElement>(".pg-body")!;
   expect(body.hidden).toBe(true);
   thread.querySelector<HTMLElement>(".pg-card > .card-head")!.click();
-  expect(document.querySelector(".pg-view")).toBeNull();
+  expect(document.querySelector(".ra-stage.is-page")).toBeNull();
   expect(thread.querySelector('[data-page-act="retry"]')).not.toBeNull();
 });
