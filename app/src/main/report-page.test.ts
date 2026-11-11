@@ -165,11 +165,12 @@ test("boxes nobody is joined to wait on the last row, and a team with no arrows 
 
 // ---------- the page in the conversation's place ----------
 
-/** A conversation pane as the app draws it: its header with the search at the top left, and its stage. */
+/** A conversation pane as the app draws it: its header with the search at the top left and the member's share at the top right, and its stage. */
 function conversation() {
   const pane = document.createElement("section");
   pane.className = "mb-chat";
-  pane.innerHTML = `<div class="page-head mb-head"><span class="mb-head-l"><button type="button" class="btn icon" data-act="search"></button></span></div>` +
+  pane.innerHTML = `<div class="page-head mb-head"><span class="mb-head-l"><button type="button" class="btn icon" data-act="search"></button></span>` +
+    `<div class="ra-tools"><button type="button" class="btn icon" data-act="share-member"></button></div></div>` +
     `<div class="ra-stage"><div class="ra-scroll"><ol class="thread"></ol></div><div class="ra-dock"><textarea></textarea></div></div>`;
   document.body.append(pane);
   const stage = pane.querySelector<HTMLElement>(".ra-stage")!;
@@ -334,13 +335,17 @@ test("share saves the report on screen as a file, once a press, says where it we
   thread.querySelector<HTMLButtonElement>("button.pg-link")!.click();
   await flush();
   const view = stage.querySelector<HTMLElement>(".rp-view")!;
-  // Share alone at the top right (the way back is the header's arrow); its name is its only word, so its tooltip repeats nothing on screen.
-  const buttons = [...view.querySelectorAll<HTMLButtonElement>(".rp-top > button.btn.icon")];
-  expect(buttons.map(button => [button.dataset.reportAct, button.getAttribute("aria-label"), button.textContent])).toEqual([["share", "存成檔案", ""]]);
-  // It saves a file, so it is drawn as that (an arrow into a tray), never as the header's Share of the member (owner, 2026-11-11).
+  // Nothing floats over the report (owner, 2026-11-12: its place as Grok Bot's share): its one button stands first in the header's
+  // tools at the top right, where the thread's share stands; its name is its only word, so its tooltip repeats nothing on screen.
+  expect(view.querySelector("button.btn.icon, .rp-top, [data-report-act]")).toBeNull();
+  const tools = document.querySelector<HTMLElement>(".mb-head > .ra-tools")!;
+  const buttons = [...tools.querySelectorAll<HTMLButtonElement>(":scope > button.btn.icon[data-page-act]")];
+  expect(buttons.map(button => [button.getAttribute("aria-label"), button.textContent])).toEqual([["存成檔案", ""]]);
+  expect(tools.firstElementChild).toBe(buttons[0]);
+  // It saves a file, so it is drawn as one with an arrow into it, never as the arrow out of a box that shares a member (owner, 2026-11-11).
   const drawn = (html: string): string[] => [...html.matchAll(/ d="([^"]+)"/g)].map(found => found[1]!);
-  expect(drawn(buttons[0]!.innerHTML)).toEqual(drawn(ico("download")));
-  expect(drawn(ico("download"))).not.toEqual(drawn(ico("share")));
+  expect(drawn(buttons[0]!.innerHTML)).toEqual(drawn(ico("fileDown")));
+  expect(drawn(ico("fileDown"))).not.toEqual(drawn(ico("share")));
   buttons[0]!.click();
   buttons[0]!.click();
   await flush();
@@ -361,6 +366,10 @@ test("share saves the report on screen as a file, once a press, says where it we
   await flush();
   expect(lastToast()).toBe("檔案沒有存成，請再試一次。");
   expect(save).toHaveBeenCalledTimes(3);
+  // Back on the thread the place is the thread's again: the report's button is gone, not hidden.
+  document.querySelector<HTMLButtonElement>(".mb-head-l > [data-page-back]")!.click();
+  expect(tools.querySelector("[data-page-act]")).toBeNull();
+  expect([...tools.children].map(tool => (tool as HTMLElement).dataset.act)).toEqual(["share-member"]);
 });
 
 test("the view works as a plain stage too, with nothing of the thread's own", async () => {

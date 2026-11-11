@@ -20,9 +20,11 @@
 .mb-chat:has(> .ra-stage.is-page) .mb-head [data-act="search"] { display: none; }
 .mb-chat:has(> .ra-stage.is-page) .mb-head [data-room-search] { visibility: hidden; }
 .mb-head [data-page-back][hidden] { display: none; }
-/* While a report is open its Share is the one share in sight, as a Grok Bot Page's: the member's own share in the
-   conversation header above it, the same icon for another thing, waits in its place until the report closes. */
-.page-agent:has(.ra-stage.is-page[data-page-kind="report"]) .mb-head [data-act="share-member"] { visibility: hidden; }
+/* The header's top right is one place for what is on screen (as Grok Bot's share): the member's share on its thread, and on
+   an open page that page's own button (a report's 存成檔案) or nothing. The member's share waits until the thread is back. A
+   room's search gives its place to the page's button, and keeps it empty when the page has none, so the ⋯ beside it never moves. */
+.mb-chat:has(> .ra-stage.is-page) .mb-head [data-act="share-member"] { display: none; }
+.mb-chat:has(> .ra-stage.is-page) .mb-head .ra-tools:has(> [data-page-act]) [data-room-search] { display: none; }
 
 /* An HTML page: its title in sight, then the page itself, as wide as the composer (the thread's column), its corners
    rounded and nothing around it. It fills what the thread filled and scrolls inside, as the page was made to. */
@@ -35,7 +37,6 @@
 /* A room's thread and composer are inset by the room's own padding too (automations.css), so its page, its report and
    the line under them are: all start and end where the room's composer does. */
 .au-room-pane :is(.pgv-page, .pgv-status, .rp-scroll) { padding-inline: calc(var(--room-pad) + var(--pa-dock-x)); }
-.au-room-pane .rp-top { right: max(calc(var(--room-pad) + var(--pa-dock-x)), calc((100% - var(--pa-colw)) / 2)); }
 
 /* What the member does with a message written under the page: the same line as in the thread while it works, then the first
    words of its reply (the arrow brings it in full). */
