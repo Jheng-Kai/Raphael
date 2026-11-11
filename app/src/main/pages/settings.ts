@@ -85,7 +85,6 @@ import {
   loadingHTML,
   settingsMicrophones,
   modelPickerLook,
-  modelsRefreshHTML,
   visionPickerLook,
   paneHTML,
   paneListHTML,
@@ -178,8 +177,6 @@ export function createSettings(app: AppContext): SettingsPage {
   const usageHost = document.createElement("div");
   usageHost.dataset.usageHost = "";
   let usage: UsageAnalyticsMount | null = null;
-  /** What the one refresh of 模型與用量 is doing (`refreshModels`). */
-  let modelsRefresh: "idle" | "busy" | "done" = "idle";
   let usageRefresh: Promise<void> | null = null;
   let usageAgain = false;
 
@@ -260,7 +257,7 @@ export function createSettings(app: AppContext): SettingsPage {
   /** What the tabs are drawn from, as the panel knows it now. */
   const view = (): SettingsView => ({
     update,
-    pane, modelsTab, modelsRefresh, device: app.device(), brain, hasKey, openrouter, spend, catalog: typeof catalog === "object" ? catalog : knownCatalog() ?? catalog, checkingOpenrouter, devices, altgr, version,
+    pane, modelsTab, device: app.device(), brain, hasKey, openrouter, spend, catalog: typeof catalog === "object" ? catalog : knownCatalog() ?? catalog, checkingOpenrouter, devices, altgr, version,
     replacingKey, keyBusy, keyError, limitDraft, limitError, languageGroups, now: Date.now(),
     connections: connections.view(), rules: rules.view(), vault: vault.view(), services: services.view(), providers: providers.view(), cliBrains: cliBrains.view(), localModels, localDownload,
   });
@@ -363,44 +360,38 @@ export function createSettings(app: AppContext): SettingsPage {
     return anchor?.dataset.k;
   }
 
-  // 模型與用量 is read once while the app runs and kept: its providers, the models' catalogue, this computer's speech
-  // models and the usage. A change the core tells of (a provider added) still reads again; the refresh at the tab's top
-  // right reads everything again.
-  let providersRead = false, catalogRead = false, localRead = false;
+  // 模型與用量 is kept between openings: its providers, the models' catalogue, this computer's speech models and the
+  // usage. A change the core tells of (a provider added) reads again at once, and each opening of Settings reads it all
+  // again (`refreshInBackground`).
+  let providersRead = false;
   async function loadProviders(force = false): Promise<void> {
     if (providersRead && !force) return;
     await providers.load();
     providersRead = providers.view().state === "ready";
   }
+  const usageMount = (): UsageAnalyticsMount =>
+    usage ??= mountUsageAnalytics(usageHost, { usageAllowances: api.usageAllowances, chatgptStatus: api.chatgptStatus, openExternalUrl: api.openExternalUrl });
+  /** Opening Settings again within this long of a good reading shows that reading. */
+  const REFRESH_REUSE_MS = 30_000;
+  let backgroundRead: Promise<void> | null = null, backgroundReadAt = -Infinity;
   /**
-   * The one refresh of 模型與用量: it turns while everything is
-   * read again, shows a check for a moment when it is done, and a failure is said in a toast.
+   * Every opening of Settings, on whatever tab, reads 模型與用量 again at once and unseen, so that the allowances are
+   * current when they are reached: what was last known stays on the page, and a new value replaces it in place (the
+   * pieces draw only what changed). No spinner, no toast; a reading that fails leaves what is shown. An opening while
+   * one is under way joins it, and one soon after a good reading reuses it. No model turn is spent: `usage.allowances`
+   * asks Codex's app-server for its windows, and has Claude's and Antigravity's from what their turns reported.
    */
-  let refreshDone: ReturnType<typeof setTimeout> | undefined;
-  /** The button is kept (and its focus with it); only its icon, words and state change. */
-  function paintModelsRefresh(): void {
-    const button = el.querySelector<HTMLButtonElement>('[data-act="models-refresh"]');
-    if (!button) return;
-    const next = document.createElement("template");
-    next.innerHTML = modelsRefreshHTML(modelsRefresh);
-    const drawn = next.content.firstElementChild!;
-    button.innerHTML = drawn.innerHTML;
-    for (const name of ["aria-label", "title", "data-state", "aria-busy", "aria-disabled"]) {
-      const value = drawn.getAttribute(name);
-      if (value === null) button.removeAttribute(name); else button.setAttribute(name, value);
-    }
-  }
-  async function refreshModels(): Promise<void> {
-    if (modelsRefresh === "busy") return;
-    clearTimeout(refreshDone);
-    modelsRefresh = "busy";
-    paintModelsRefresh();
-    const results = await Promise.allSettled([loadCatalog(true), loadLocalModels(), usage?.refresh() ?? Promise.resolve()]);
-    const failedRead = catalog === "failed" || providers.view().state === "failed" || results.some(result => result.status === "rejected");
-    if (failedRead) toaster.info(t("runs.refreshFailed"));
-    modelsRefresh = failedRead ? "idle" : "done";
-    paintModelsRefresh();
-    if (!failedRead) refreshDone = setTimeout(() => { modelsRefresh = "idle"; paintModelsRefresh(); }, 1600);
+  function refreshInBackground(): Promise<void> {
+    if (backgroundRead) return backgroundRead;
+    if (Date.now() - backgroundReadAt < REFRESH_REUSE_MS) return Promise.resolve();
+    // The first mount reads for itself; later ones are read again.
+    const first = usage === null, mount = usageMount();
+    const reading = (async () => {
+      const results = await Promise.allSettled([loadCatalog(true), loadLocalModels(), first ? mount.ready : mount.refresh()]);
+      if (catalog !== "failed" && providers.view().state !== "failed" && results.every(result => result.status === "fulfilled")) backgroundReadAt = Date.now();
+    })().finally(() => { backgroundRead = null; });
+    backgroundRead = reading;
+    return reading;
   }
 
   /** Coalesce activity bursts and wait for the first reading before refreshing it. */
@@ -442,7 +433,6 @@ export function createSettings(app: AppContext): SettingsPage {
     const slot = body.querySelector<HTMLElement>("[data-usage-host]");
     if (slot) {
       slot.replaceWith(usageHost);
-      usage ??= mountUsageAnalytics(usageHost, { usageAllowances: api.usageAllowances, chatgptStatus: api.chatgptStatus, openExternalUrl: api.openExternalUrl });
       if (usageFocus?.isConnected) usageFocus.focus({ preventScroll: true });
     }
     // Before the focus goes back by `data-k`, which the pickers' buttons have too.
@@ -685,7 +675,7 @@ export function createSettings(app: AppContext): SettingsPage {
       // keep a catalog read earlier; else say that the prices cannot be had
       next = typeof catalog === "object" ? catalog : "failed";
     }
-    if (typeof next === "object") { rememberCatalog(next); catalogRead = true; }
+    if (typeof next === "object") rememberCatalog(next);
     if (mine !== loads || request !== catalogLoads || !visible) return;
     catalog = next;
     if (typeof next === "object" && next.replaced.length > 0) {
@@ -721,7 +711,6 @@ export function createSettings(app: AppContext): SettingsPage {
     }
     if (mine !== loads || !visible) return;
     localModels = next;
-    localRead = Array.isArray(next);
     paintLocal();
   }
 
@@ -1125,9 +1114,6 @@ export function createSettings(app: AppContext): SettingsPage {
       case "close":
         app.closeSettings();
         break;
-      case "models-refresh":
-        void refreshModels();
-        break;
       case "rerun-guide":
         app.rerunGuide();
         break;
@@ -1320,6 +1306,8 @@ export function createSettings(app: AppContext): SettingsPage {
       if (pane === "safety") { void rules.load(); void vault.load(); }
       if (pane === "tools") void services.load();
       if (pane === "models" && modelsTab === "models") void loadProviders();
+      // At once, whatever the tab: the allowances are current by the time they are reached.
+      void refreshInBackground();
       body.scrollTop = 0;
       closeMenu();
       render();
@@ -1357,8 +1345,6 @@ export function createSettings(app: AppContext): SettingsPage {
         }
       }
       if (!el.contains(document.activeElement)) el.querySelector<HTMLElement>("#set-title")?.focus();
-      if (!catalogRead) void loadCatalog();
-      if (!localRead) void loadLocalModels();
 
       stopEvents?.();
       const stopLevels = app.onEvent((event) => {
@@ -1375,14 +1361,15 @@ export function createSettings(app: AppContext): SettingsPage {
         document.removeEventListener("visibilitychange", onVisibility);
       };
       syncMonitor();
-      await usage?.ready;
+      // On the allowances' own tab the opening waits for their first reading; elsewhere it never waits for them.
+      if (pane === "models" && modelsTab === "usage") await usage?.ready;
     },
     hide() {
       visible = false;
      stopOutside();
       for (const picker of pickers.values()) picker.close();
       cliBrains.stop();
-      // The usage stays mounted and read: it is read again only by its refresh or a change the core tells of.
+      // The usage stays mounted with what it last read: the next opening reads it again, unseen (`refreshInBackground`).
       usageHost.remove();
       connections.reset();
       rules.reset();
