@@ -507,6 +507,28 @@ export async function perform(page, step, evidenceDirectory) {
       await element.dispose();
       break;
     }
+    // The page's own scroll, which the app cannot read (its frame is another origin): the wheel over it, then what it shows.
+    case "frame-scroll": {
+      const at = await page.evaluate(() => { const box = document.querySelector(".pgv-frame-box")?.getBoundingClientRect(); return box && { x: box.x + box.width / 2, y: box.y + box.height / 2 }; });
+      if (!at) throw new Error("No page in the conversation's place to scroll");
+      await page.mouse.move(at.x, at.y);
+      await page.mouse.wheel({ deltaY: step.deltaY });
+      await new Promise(resolve => setTimeout(resolve, 500));
+      break;
+    }
+    case "frame-expect": {
+      const deadline = Date.now() + 8000;
+      for (;;) {
+        const frames = page.frames().filter(item => item !== page.mainFrame() && item.url().startsWith("data:text/html"));
+        const seen = frames.length === 1 ? await frames[0].evaluate(() => ({ text: document.body.innerText, y: Math.round(scrollY), room: Math.max(0, document.documentElement.scrollHeight - innerHeight) })).catch(() => null) : null;
+        // A page that fits its place cannot be read lower down: it is asked to be only as far down as it can be.
+        const least = seen && step.scrollAtLeast !== undefined ? Math.min(step.scrollAtLeast, seen.room) : 0;
+        const problem = !seen ? `${frames.length} page frames, not one` : step.text && !seen.text.includes(step.text) ? `the page does not show 「${step.text}」` : seen.y < least ? `the page is at ${seen.y}, not at ${least} or lower down` : "";
+        if (!problem) return { action: "frame-expect", scrolled: seen.y };
+        if (Date.now() > deadline) throw new Error(`frame-expect: ${problem}`);
+        await new Promise(resolve => setTimeout(resolve, 150));
+      }
+    }
     case "press-feedback": {
       const evidence = [];
       for (const target of step.selectors) {
@@ -649,6 +671,12 @@ export async function perform(page, step, evidenceDirectory) {
       await page.evaluate(events => { for (const event of events) window.__look.emit(event); }, step.events);
       await new Promise(resolve => setTimeout(resolve, step.wait ?? 300));
       return { action: "emit", events: step.events.map(event => event.type) };
+    // What the core does on its own while the scene waits, as the mock names it (`window.__look[name]`): a member changes
+    // a page (`updatePage(id)`), or says its reply to a message written under an open page (`answerPageAsk(text)`).
+    case "look-call":
+      await page.evaluate(({ name, args }) => { window.__look[name](...args); }, { name: step.name, args: step.args ?? [] });
+      await new Promise(resolve => setTimeout(resolve, step.wait ?? 500));
+      return { action: "look-call", name: step.name };
     // The models of the CLI held back by the mock (`codexLate`) arrive now.
     case "codex-arrives": await page.evaluate(() => { window.__look.codexArrives(); }); break;
     // From now on the roster answers after `ms` (the mock's rosterDelay): the thread is asked for first and the roster comes late.

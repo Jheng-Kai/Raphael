@@ -448,6 +448,7 @@ const ALLOWED_METHODS: &[&str] = &[
     "computer.lifecycle",
     "computer.wallpaper",
     "pages.open",
+    "pages.viewing",
     "owner_questions.answer",
     "owner_questions.bring",
     "pages.tool_call",
@@ -2470,6 +2471,8 @@ mod tests {
         // folder of its own.
         assert!(!is_allowed_method("pages.export"));
         assert!(is_allowed_method("pages.open"));
+        // The window tells the core which page stands open beside the composer before it sends (a page the member may then change).
+        assert!(is_allowed_method("pages.viewing"));
     }
 
     // ---- the window's own way to Raphael ----

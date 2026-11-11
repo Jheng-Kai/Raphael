@@ -351,8 +351,8 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
   const sendingRooms=new Set<number>(),pendingStops=new Set<number>();
   const composer=createChatComposer({stopTask:stopRoom,placeholder:()=>t("rooms.message"),answerPage:(id,text)=>!replyTo && answerOwnerPage(thread,id,text,()=>{void refresh();}),transcriptTarget(){const id=roomId;return text=>{if(roomId===id){composer.input.value+=(composer.input.value?" ":"")+text;composer.seedDictation(text);}else if(id){const draft=drafts.get(id)??{text:"",files:[]};draft.text+=(draft.text?" ":"")+text;drafts.set(id,draft);writeDraftWords(`room:${id}`,{text:draft.text,quote:draft.quote,pageId:draft.pageId});}};},async send(text,files){
     if (!roomId) return;
-    // What is sent shows in the thread, so a report open in its place goes away.
-    pagesHost.closeReport();
+    // A page open in the thread's place stays; what the room answers shows under it while it works.
+    void pagesHost.sent();
     const id = roomId, sentQuote = replyTo?.id, key = JSON.stringify([id,text,files,sentQuote]);
     const requestId = failedRequests.get(key) ?? crypto.randomUUID();
     failedRequests.delete(key);

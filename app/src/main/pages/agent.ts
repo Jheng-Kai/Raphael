@@ -1396,8 +1396,9 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       return;
     }
     composer.querySelector(".composer-failure")?.remove();
-    // What is sent shows in the thread, so a report open in its place goes away.
-    pagesHost.closeReport();
+    // A page open in the thread's place stays: the member that answers is told which page it is (before the message goes),
+    // and what it says shows under the page while it works.
+    const pageTold = pagesHost.sent();
     const sending = files;
     const dictation = correctionLearning.snapshot();
     const corrections = correctionLearning.take(input.value);
@@ -1422,6 +1423,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     drawDock();
     askingMember = member;
     try {
+      if (pageTold) await pageTold;
       await api.agentAskText(text, wireAttachments(sending), member, { requestId, ...destinationOf(member, sentConversation), ...(draft.replacing !== undefined ? { replaceTurnId: draft.replacing } : {}), ...(draft.quote ? { quote: draft.quote } : {}) });
       void learnComposerCorrections(corrections);
     } catch (err) {

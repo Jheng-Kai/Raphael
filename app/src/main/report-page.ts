@@ -12,6 +12,7 @@ import { formatClock, formatDate } from "./format";
 import { t } from "./i18n";
 import { ownerName } from "./owner-avatar";
 import type { Report, ReportEdge, ReportItem, ReportNode, ReportRow, ReportSection, ReportStatus } from "./types";
+import type { PageView } from "./page-view";
 import { esc, ico, iconButton, tabs, toaster } from "./ui";
 
 /** Who a member is on a report: its name and its colour, as the conversation's own roster has them now. */
@@ -525,10 +526,11 @@ export interface ReportView {
 }
 
 /**
- * The report view of one conversation (a member's or a group's): it takes the thread's place in `stage` (the thread
- * keeps its place and scroll under it) and leaves the composer where it is, so the owner can ask for changes.
+ * The report view of one conversation (a member's or a group's): it takes the thread's place in the conversation's page
+ * view (`page-view.ts`, which keeps the thread's place and scroll under it and the composer where it is, so the owner can
+ * ask for changes) and goes back with the header's arrow. Its Share stays at the page's top right.
  */
-export function mountReportView(stage: HTMLElement, people: () => ReportPeople): ReportView {
+export function mountReportView(pages: PageView, people: () => ReportPeople): ReportView {
   let view: HTMLElement | null = null;
   let current: { id: string; rev: number; title: string; report: Report } | null = null;
   let opener: HTMLElement | null = null;
@@ -569,19 +571,15 @@ export function mountReportView(stage: HTMLElement, people: () => ReportPeople):
     }
   }
 
-  /** What scrolls: the page under the × (`.rp-scroll`), never the view around it. */
+  /** What scrolls: the page under Share (`.rp-scroll`), never the view around it. */
   const scroller = (): HTMLElement | null => view?.querySelector<HTMLElement>(":scope > .rp-scroll") ?? null;
 
   function element(): HTMLElement {
     if (view) return view;
     view = document.createElement("div");
     view.className = "rp-view";
-    view.setAttribute("role", "region");
-    view.hidden = true;
-    stage.insertBefore(view, stage.querySelector(":scope > .ra-dock"));
     view.addEventListener("click", event => {
       const target = event.target as Element;
-      if (target.closest("[data-report-act=close]")) { close(); return; }
       if (target.closest("[data-report-act=share]")) { void share(); return; }
       const goto = target.closest<HTMLAnchorElement>("[data-report-goto]");
       if (goto) {
@@ -602,6 +600,15 @@ export function mountReportView(stage: HTMLElement, people: () => ReportPeople):
     return view;
   }
 
+  /** The report is put away: the view is already closed (the arrow, Escape, or its card leaving the thread). */
+  function leave(): void {
+    generation++;
+    view?.replaceChildren();
+    current = null;
+    drawnWidth = 0;
+    opener = null;
+  }
+
   async function show(id: string, keep: boolean): Promise<void> {
     const mine = ++generation;
     let opened;
@@ -614,13 +621,11 @@ export function mountReportView(stage: HTMLElement, people: () => ReportPeople):
     if (mine !== generation || opened?.kind !== "report") return;
     const host = element(), place = keep ? scroller()?.scrollTop ?? 0 : 0;
     current = { id, rev: opened.rev, title: opened.title, report: opened.report };
-    host.setAttribute("aria-label", opened.title);
-    // Share before the way back, as Grok Bot's Page has them at its top right.
+    // Only Share is the report's own: the way back is the conversation header's.
     host.innerHTML = `<div class="rp-scroll" tabindex="-1"><article class="rp-doc">${reportHTML(opened.title, opened.report, people())}</article></div>` +
-      `<div class="rp-top">${iconButton("share", t("page.report.share"), ' data-report-act="share"', "rp-share")}` +
-      `${iconButton("x", t("page.report.back"), ' data-report-act="close"', "rp-close")}</div>`;
-    host.hidden = false;
-    stage.classList.add("is-report");
+      `<div class="rp-top">${iconButton("share", t("page.report.share"), ' data-report-act="share"', "rp-share")}</div>`;
+    if (!host.isConnected) pages.body.replaceChildren(host);
+    pages.open({ id, title: opened.title, kind: "report", opener, leave });
     layout(true);
     const page = scroller()!;
     page.scrollTop = place;
@@ -628,22 +633,9 @@ export function mountReportView(stage: HTMLElement, people: () => ReportPeople):
     if (!keep) page.focus({ preventScroll: true });
   }
 
-  function close(): void {
-    generation++;
-    if (!view || view.hidden) return;
-    view.hidden = true;
-    view.replaceChildren();
-    stage.classList.remove("is-report");
-    current = null;
-    drawnWidth = 0;
-    const back = opener;
-    opener = null;
-    if (back?.isConnected) back.focus({ preventScroll: true });
-  }
-
   return {
     async open(pageId, from) { opener = from ?? null; await show(pageId, false); },
-    close,
+    close() { generation++; if (pages.shown()?.kind === "report") pages.close(); },
     shown: () => (current ? { id: current.id, rev: current.rev } : null),
     async refresh() { if (current) await show(current.id, true); },
   };

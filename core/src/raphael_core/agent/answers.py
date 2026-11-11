@@ -168,6 +168,7 @@ def build_user_message(
     recall: str = "",
     source: str = "",
     messaging: str = "",
+    viewing: str = "",
     standing: str = "",
 ) -> str:
     """What the model is shown: the summary of the earlier conversation, the latest turns
@@ -208,7 +209,7 @@ def build_user_message(
     if source in {"telegram", "slack", "discord", "connector", "member"}:
         from .owner_language import reply_context
         parts.append(reply_context(language))
-    if current := source_text(source) + messaging:
+    if current := source_text(source) + messaging + viewing:
         parts.append(current)
     parts.append(f"<question>\n{question}\n</question>")
     if looked_up:
@@ -532,6 +533,7 @@ class Voice:
         recall: str = "",
         source: str = "",
         messaging: str = "",
+        viewing: str = "",
     ) -> Reply:
         """What Raphael says to `question` on `route` ("answer", "discuss" or "chat"), in
         `language`. `summary` is the summary of the earlier conversation and `context` its latest
@@ -546,7 +548,7 @@ class Voice:
         standing = [roster.strip(), memory_files(memory_snapshot) if memory_snapshot is not None else ""]
         user = build_user_message(
             question, moment, context, tools, language, background,
-            summary=summary, looked_up=looked_up, member=plain, recall=recall, source=source, messaging=messaging,
+            summary=summary, looked_up=looked_up, member=plain, recall=recall, source=source, messaging=messaging, viewing=viewing,
             standing="\n\n".join(part for part in standing if part),
         )  # fmt: skip
         if plain:

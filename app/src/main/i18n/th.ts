@@ -289,7 +289,6 @@ export const th = {
   "page.report.contents": "ในหน้านี้",
   "page.report.all": "ทั้งหมด",
   "page.report.status": "สถานะ",
-  "page.report.back": "กลับไปที่บทสนทนา",
   "page.report.gone": "อดีตสมาชิก",
   "page.report.share": "แชร์",
   "page.report.saved": "บันทึกไว้ใน {p0} แล้ว",

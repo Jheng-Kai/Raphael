@@ -289,7 +289,6 @@ export const tr = {
   "page.report.contents": "Bu sayfada",
   "page.report.all": "Tümü",
   "page.report.status": "Durum",
-  "page.report.back": "Sohbete dön",
   "page.report.gone": "Eski üye",
   "page.report.share": "Paylaş",
   "page.report.saved": "{p0} klasörüne kaydedildi",

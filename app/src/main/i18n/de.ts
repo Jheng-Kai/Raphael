@@ -289,7 +289,6 @@ export const de = {
   "page.report.contents": "Auf dieser Seite",
   "page.report.all": "Alle",
   "page.report.status": "Status",
-  "page.report.back": "Zurück zum Gespräch",
   "page.report.gone": "Ehemaliges Mitglied",
   "page.report.share": "Teilen",
   "page.report.saved": "In „{p0}“ gespeichert",

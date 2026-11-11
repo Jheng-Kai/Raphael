@@ -546,6 +546,11 @@ export const openExternalUrl = (url: string): Promise<void> => invoke("open_exte
 /** A sign-in in the browser has finished: the owner's way back is this window coming to the front. */
 export const mainWindowForward = (): Promise<void> => invoke("main_window_forward");
 export const pagesOpen = (id: string, theme: "dark" | "light"): Promise<PageOpened> => core("pages.open", { id, theme });
+/**
+ * Which page stands open beside the composer (null: none), told to the core just before a message is sent, so the member
+ * that answers knows what "here" and "this" mean and changes that page in place (core agent/pages.py `viewing`).
+ */
+export const pagesViewing = (id: string | null): Promise<{ viewing: string | null }> => core("pages.viewing", { id });
 /** A report page's checked content: the app draws it (report-page.ts), in whichever theme, with no frame. */
 export const reportOpen = (id: string): Promise<ReportOpened> => core("pages.open", { id, theme: "light" });
 /**

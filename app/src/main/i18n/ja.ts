@@ -1463,7 +1463,6 @@ export const ja = {
   "page.report.contents": "このページの内容",
   "page.report.all": "すべて",
   "page.report.status": "状態",
-  "page.report.back": "会話に戻る",
   "page.report.gone": "元メンバー",
   "page.report.share": "共有",
   "page.report.saved": "「{p0}」に保存しました",

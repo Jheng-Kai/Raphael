@@ -289,7 +289,6 @@ export const ko = {
   "page.report.contents": "이 페이지 내용",
   "page.report.all": "전체",
   "page.report.status": "상태",
-  "page.report.back": "대화로 돌아가기",
   "page.report.gone": "이전 멤버",
   "page.report.share": "공유",
   "page.report.saved": "“{p0}”에 저장했습니다",

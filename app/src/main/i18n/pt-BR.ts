@@ -289,7 +289,6 @@ export const ptBR = {
   "page.report.contents": "Nesta página",
   "page.report.all": "Tudo",
   "page.report.status": "Status",
-  "page.report.back": "Voltar à conversa",
   "page.report.gone": "Ex-membro",
   "page.report.share": "Compartilhar",
   "page.report.saved": "Salvo em {p0}",

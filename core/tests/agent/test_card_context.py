@@ -137,6 +137,8 @@ def test_every_window_card_has_a_safe_projection_and_owner_answers_are_untrusted
                    "Owner question", "Connection setup", "template export/publish", "Page card", "Synthetic answer", "handoff declined"):
         assert phrase in text
     assert "PRIVATE" not in text and "SYNTHETIC-PAIRING-CODE" not in text
+    # A page's card names its id, which is what update_page takes; its html and tool data stay out.
+    assert 'Page card for "Synthetic page" (page_id=page): shown (mcp, revision 2).' in text
     assert text.count("</tool_result>") == 1 and "<question>" not in text
 
 

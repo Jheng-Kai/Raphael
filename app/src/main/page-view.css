@@ -1,0 +1,45 @@
+/* A page in the conversation's place (page-view.ts; owner, 2026-11-11: 「直接顯示在對話裡…就是內部顯示器的感覺，它不會再打開一個
+   dialog，然後可能左上角會變成返回上頁」). The thread stays laid out under it, hidden, so its place and its scroll are as they
+   were when the owner goes back; the composer stays below, so a change can be asked for where the page is read. There is no
+   scrim and no ×: the way back is the round arrow in the conversation header (members.css, styles.css `.pgv-back`). */
+.ra-stage.is-page { display: grid; grid-template-rows: minmax(0, 1fr) auto; grid-template-columns: minmax(0, 1fr); }
+.ra-stage.is-page > :not(.ra-scroll, .pgv, .ra-dock) { display: none; }
+.ra-stage.is-page > .ra-scroll { grid-area: 1 / 1; visibility: hidden; }
+/* The member's face while it works is drawn apart from its line (as slimes are), so it would show through the hidden thread: its line is
+   the one under the page. */
+.ra-stage.is-page > .ra-scroll .live-presence { display: none; }
+.ra-stage.is-page > .pgv { grid-area: 1 / 1; }
+.ra-stage.is-page > .ra-dock { grid-area: 2 / 1; }
+.pgv { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; min-height: 0; background: var(--content); }
+.pgv[hidden] { display: none; }
+.pgv-body { position: relative; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); min-height: 0; }
+
+/* While a page stands there the thread's own tools wait: the arrow stands where the search did (a room's search, at the
+   right, keeps its place so nothing moves), and the search bar the thread would have under the header is put away. */
+.mb-chat:has(> .ra-stage.is-page) > .ra-find { display: none; }
+.mb-chat:has(> .ra-stage.is-page) .mb-head [data-act="search"] { display: none; }
+.mb-chat:has(> .ra-stage.is-page) .mb-head [data-room-search] { visibility: hidden; }
+.mb-head [data-page-back][hidden] { display: none; }
+/* While a report is open its Share is the one share in sight, as a Grok Bot Page's: the member's own share in the
+   conversation header above it, the same icon for another thing, waits in its place until the report closes. */
+.page-agent:has(.ra-stage.is-page[data-page-kind="report"]) .mb-head [data-act="share-member"] { visibility: hidden; }
+
+/* An HTML page: its title in sight, then the page itself, as wide as the composer (the thread's column), its corners
+   rounded and nothing around it. It fills what the thread filled and scrolls inside, as the page was made to. */
+.pgv-page { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); min-height: 0; padding: 0 var(--pa-dock-x) var(--sp-2); }
+.pgv-page > * { width: 100%; max-width: var(--pa-colw); margin-inline: auto; }
+.pgv-title { margin: 0 auto; padding: var(--sp-2) 0 var(--sp-3); overflow: hidden; font: var(--weight-medium) var(--fs-md)/1.4 var(--ui); text-overflow: ellipsis; white-space: nowrap; }
+.pgv-frame-box { position: relative; min-height: 0; overflow: hidden; border-radius: var(--r-lg); background: var(--content); }
+.pgv-frame-box > .pg-frame { position: absolute; inset: 0; width: 100%; height: 100%; }
+
+/* A room's thread and composer are inset by the room's own padding too (automations.css), so its page, its report and
+   the line under them are: all start and end where the room's composer does. */
+.au-room-pane :is(.pgv-page, .pgv-status, .rp-scroll) { padding-inline: calc(var(--room-pad) + var(--pa-dock-x)); }
+.au-room-pane .rp-top { right: max(calc(var(--room-pad) + var(--pa-dock-x)), calc((100% - var(--pa-colw)) / 2)); }
+
+/* What the member does with a message written under the page: the same line as in the thread while it works, then the first
+   words of its reply (the arrow brings it in full). */
+.pgv-status { padding: 0 var(--pa-dock-x); }
+.pgv-status > :is(.live-presence, .pgv-reply) { max-width: var(--pa-colw); margin-inline: auto; }
+.pgv-status > .live-presence { margin-top: var(--sp-1); }
+.pgv-reply { margin-top: var(--sp-1); overflow: hidden; color: var(--text-3); font-size: var(--fs-sm); line-height: 28px; text-overflow: ellipsis; white-space: nowrap; }

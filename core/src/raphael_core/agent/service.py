@@ -191,6 +191,7 @@ from .quotes import quote_from_wire
 from .ledger import Ledger
 from .reactions import private_reactions_for_turns
 from .drafts import DraftError, clean_field, is_mail_sender, is_slack_sender
+from .card_context import viewing_text
 from .pages import Pages, PageError, checked_text, is_report
 from .report_page import checked_report, report_fallback, report_html
 from .public_events import event_record
@@ -448,6 +449,8 @@ class _Ask:
     # The files handed with the request, in memory only.
     attachments: list[Attachment] = field(default_factory=list)
     quote: dict[str, str] | None = None
+    # The page the owner had open beside this request when they typed it (`Pages.viewed_by`).
+    viewing: dict | None = None
     intent: str | None = None
     # Who answers: Raphael, or a member of the team (`speaker`), in whose thread the turn is.
     speaker: Speaker = RAPHAEL
@@ -1171,6 +1174,9 @@ class AgentService:
             if not isinstance(source, str) or not _SOURCE.fullmatch(source):
                 raise invalid_params("source must be a short lower-case word")
             ask.source = source
+        if ask.source == TYPED and not quick:
+            # Read now, not when the model runs: a request that waits behind another is still about the page that was open.
+            ask.viewing = self.pages.viewed_by(speaker.id, conversation_id)
         if ask.source in {"telegram", "slack", "discord", RESUMED} and (configured := self._owner_language()):
             ask.language = normalize_language(configured)
         if len(ask.attachments) > MAX_ATTACHMENTS:
@@ -1600,6 +1606,7 @@ class AgentService:
                 roster=roster_prompt(self._team, ask.speaker, ask.language), owner=owner_context(self._settings),
                 reasoning_effort=self._effort(settings),
                 recall=self._recall(ask, context), source=ask.source, messaging=self._messaging_context(ask.speaker.id),
+                viewing=viewing_text(ask.viewing),
             )
             return owner_script(reply, chinese_variant(self._settings.get("languages")))
 
@@ -2111,6 +2118,7 @@ class AgentService:
                 background=background_block(self._briefs(ask.speaker.id)), summary=context.summary, narrated=True,
                 quote=ask.quote,
                 recall=self._recall(ask, context), source=ask.source, messaging=self._messaging_context(ask.speaker.id),
+                viewing=viewing_text(ask.viewing),
                 standing="\n\n".join(part for part in standing if part),
             )
             user = build_user_message(**message_args)
@@ -3430,7 +3438,11 @@ class AgentService:
             page_id = args.get("page_id")
             page = self.pages.store.get(page_id) if isinstance(page_id, str) else None
             if page is None or page["member_id"] != ask.speaker.id or page["conversation_id"] != ask.conversation_id:
-                raise PageError("gone", "There is no page with that id in this conversation; use show_page")
+                here = [item for item in self.pages.store.listed(ask.speaker.id, ask.conversation_id) if item["source"] == "html"]
+                named = "; ".join(f"page_id={item['id']} {json.dumps(item['title'], ensure_ascii=False)}" for item in here)
+                raise PageError("gone", "There is no page with that id in this conversation. " + (
+                    f"Its pages: {named}. Use update_page with one of these ids, show_page only for a new page." if here
+                    else "It has no page yet; use show_page."))
             if page["source"] != "html":
                 raise PageError("not_html", "Plugin pages cannot be replaced; use show_page for your own page")
             title = args.get("title")

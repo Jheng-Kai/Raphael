@@ -1462,7 +1462,6 @@ export const zhTW = {
   "page.report.contents": "本頁內容",
   "page.report.all": "全部",
   "page.report.status": "狀態",
-  "page.report.back": "回到對話",
   "page.report.gone": "已不在團隊的成員",
   "page.report.share": "分享",
   "page.report.saved": "已存到「{p0}」",
