@@ -320,10 +320,17 @@ function hearThePointer(): void {
     if (event.animationName === 'slime-idle-hide') {
       const svg=(event.target as Element).closest<SVGElement>('svg.slime');
       if(!svg)return;
-      delete svg.dataset.transitioning;
-      for(const part of svg.querySelectorAll<SVGElement>('[style]'))part.style.removeProperty('animation-delay');
+      const clock=clockOf(svg);
+      // The vector keeps its moving pose until the strips it makes way for are in and shown (mountSlice ends the moment then).
+      if(!clock.mounting && !clock.pending)endTransition(svg);
     }
   });
+}
+
+/** The vector stops standing in for the strips: its animations and their delays go, and the strips (shown by then) are what is seen. */
+function endTransition(svg: SVGElement): void {
+  delete svg.dataset.transitioning;
+  for (const part of svg.querySelectorAll<SVGElement>('[style]')) part.style.removeProperty('animation-delay');
 }
 
 type Bridge = { values: number[]; started: number; duration: number; animations: Animation[] };
@@ -531,7 +538,13 @@ function mountSlice(job: Mounting): void {
   for (const part of surface.querySelectorAll<HTMLElement>('.slime-cels, .slime-eye-cels, .slime-blink-cels')) part.style.animationDelay = `${delay}ms`;
   const lag = state === 'thinking' ? 140 : state === 'searching' ? 120 : 0;
   for (const part of surface.querySelectorAll<HTMLElement>('.slime-prop-cels')) part.style.animationDelay = `${delay + lag}ms`;
-  holdVector(svg, clock, state === 'error' ? 1600 : 320);
+  if (svg.dataset.transitioning) {
+    // A change of state: the vector has stood in since the change, on the clock these strips now join (the delay above), and its
+    // moment (320ms, or 1.6s for an error) ends by itself. The strips are shown when it does, however many frames they took to
+    // mount: their show animation is given the time already gone, so that a mount which outlived the moment shows them at once.
+    for (const part of job.parts) (part.root as HTMLElement).style.animationDelay = `${-elapsed}ms`;
+    if (!clock.reveal) endTransition(svg);
+  } else holdVector(svg, clock, state === 'error' ? 1600 : 320);
 }
 
 /** The next slice of the mount under way, if any: a frame does one slice, or admits one more face, never both. */
@@ -556,8 +569,8 @@ function holdVector(svg: SVGElement, clock: SlimeClock, duration: number): void 
   void reveal.finished.catch(() => { /* A newer state or deferred admission owns visibility. */ });
   reveal.onfinish = () => {
     if (clock.reveal !== reveal) return;
-    clock.reveal = undefined; delete svg.dataset.transitioning;
-    for (const part of [clock.motion,clock.gaze,...clock.marks.map(mark=>mark.part)]) part.style.removeProperty('animation-delay');
+    clock.reveal = undefined;
+    if (!clock.mounting && !clock.pending) endTransition(svg);
   };
 }
 
