@@ -4078,6 +4078,13 @@ export function checkRendered(name, context = {}) {
     require(innerHeight - box.top <= canvas + 40, "the page stays inside the overlay window");
     return { check: name, text };
   }
+  if (name === "overlay-held-answer") {
+    const line = document.querySelector(".subs.on .sub-line");
+    require(visible(line) && line.textContent === "《答。台北現在二十四度。》", "the held answer is the line in the corner");
+    require(!visible(document.querySelector("#progress")) || !/\d+ %/.test(document.querySelector("#progress").textContent), "the dictation's percentage is gone before the answer");
+    require(!visible(document.querySelector("#ask")) && !visible(document.querySelector("#overlay-stop")), "an answer to read has no buttons");
+    return { check: name, text: line.textContent };
+  }
   if (name === "overlay-step") {
     require(document.getElementById('progress')?.textContent === "《告。正在查看今天下午的行程。》", "the latest shared turn narration is the subtitle");
     return { check: name, text: document.getElementById('progress').textContent };
