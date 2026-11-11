@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, expect, test, vi } from "vitest";
-import { chooserPrice, chooserSources, mountModelPicker, type ModelPicker } from "./model-picker";
+import { chooserPrice, chooserSources, mountModelPicker, priceText, type ModelPicker } from "./model-picker";
 import type { CatalogModel, ModelCatalog, ModelProvider } from "./types";
 const model = (id: string, provider_id = "openrouter", provider = "OpenAI"): CatalogModel => ({
   id, provider_id, provider_name: provider_id === "openrouter" ? "OpenRouter" : provider_id, name: id, provider,
@@ -56,7 +56,7 @@ test("API rows show maker logos and escaped names; a saved recent model leads wi
 });
 test("Codex's drawing model wears OpenAI's mark as the source, its head and its row, never the plug or the robot", async () => {
   const { providerMark } = await import("./provider-marks");
-  const codex: CatalogModel = { ...model("@codex:gpt-image-2", "codex", "Codex"), provider_name: "Codex", name: "Codex (subscription)", roles: {} };
+  const codex: CatalogModel = { ...model("@codex:gpt-image-2", "codex", "Codex"), provider_name: "Codex", name: "Codex (subscription)", roles: {}, billing_source: "subscription" };
   const router: CatalogModel = { ...model("openai/gpt-image-1"), name: "GPT Image" };
   const slot = document.createElement("div"); document.body.append(slot);
   picker = mountModelPicker(slot, { role: "image", current: "", catalog: { ...catalog([]), image: [router, codex] }, label: "Image", onChoose: vi.fn() });
@@ -75,6 +75,24 @@ test("Codex's drawing model wears OpenAI's mark as the source, its head and its 
   expect(document.querySelector(".mc-pane-head h3")!.textContent).toBe("Codex");
   // The core's English name is said in the window's language: one language on the row.
   expect(document.querySelector('.mc-row[data-model="@codex:gpt-image-2"] strong')!.textContent).toBe("Codex 訂閱");
+});
+test("a subscription's drawing model stands under the subscriptions with no price per token", () => {
+  const codex: CatalogModel = { ...model("@codex:gpt-image-2", "codex", "Codex"), provider_name: "Codex", name: "Codex (subscription)", roles: {}, billing_source: "subscription" };
+  const router: CatalogModel = { ...model("openai/gpt-image-1"), name: "GPT Image" };
+  const slot = document.createElement("div"); document.body.append(slot);
+  picker = mountModelPicker(slot, { role: "image", current: "", catalog: { ...catalog([]), image: [router, codex] }, label: "Image", onChoose: vi.fn() });
+  picker.open();
+  const headings = [...document.querySelectorAll(".mc-source-list h3")].map((h) => h.textContent);
+  expect(headings).toEqual(["訂閱", "API"]);
+  expect(document.querySelector('.mc-source-list section:first-child [data-source="codex"]')).not.toBeNull();
+  expect(document.querySelector('.mc-source-list section:last-child [data-source="openrouter"]')).not.toBeNull();
+  document.querySelector<HTMLButtonElement>('[data-source="codex"]')!.click();
+  expect(document.querySelector(".mc-pane-head p")!.textContent).toBe("使用你的訂閱額度，不另計費");
+  const row = document.querySelector('.mc-row[data-model="@codex:gpt-image-2"]')!;
+  expect(row.querySelector(".mc-price")).toBeNull();
+  expect(row.textContent).not.toContain("價格未知");
+  expect(document.querySelector(".mc-pane")!.textContent).not.toContain("每百萬 token");
+  expect(priceText(codex, "image")).toBe("訂閱");
 });
 test("every subscription tool has its maker's mark wherever it stands as a source", async () => {
   const { providerMark } = await import("./provider-marks");

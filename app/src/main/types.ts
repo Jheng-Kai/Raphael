@@ -190,6 +190,8 @@ export interface CatalogModel {
   input_modalities?: string[];
   /** The roles of its kind. */
   roles: Partial<Record<ModelRole, RoleFit>>;
+  /** `subscription`: the owner's own plan serves it (Codex's drawing model), so it has no price per token. */
+  billing_source?: string;
 }
 
 /** A chosen model that OpenRouter no longer lists, whose setting went back to its default. */

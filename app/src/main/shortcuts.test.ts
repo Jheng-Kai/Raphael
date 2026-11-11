@@ -10,15 +10,35 @@ function press(target: HTMLElement, key: string, options: KeyboardEventInit = {}
   target.dispatchEvent(event); return shortcut(event);
 }
 
-test.each(["input", "textarea", "select", "div[contenteditable]", "div[role=textbox]"])("typing in %s only permits the palette shortcut", selector => {
+test.each(["input", "textarea", "select", "div[contenteditable]", "div[role=textbox]"])("typing in %s permits the palette and the Ctrl navigation shortcuts but keeps what the text uses", selector => {
   const field = document.createElement(selector.split("[")[0]);
   if (selector.includes("contenteditable")) field.setAttribute("contenteditable", "");
   if (selector.includes("role=")) field.setAttribute("role", "textbox");
   document.body.append(field);
   expect(press(field, "k")).toBe("palette");
-  for (const key of ["f", "b", "n", "1"]) expect(press(field, key)).toBeNull();
-  expect(press(field, "F", { shiftKey: true })).toBeNull();
+  expect(press(field, "n")).toBe("new");
+  expect(press(field, "b")).toBe("sidebar");
+  expect(press(field, "f")).toBe("find");
+  expect(press(field, "F", { shiftKey: true })).toBe("search");
+  for (const digit of ["1", "5", "9"]) expect(press(field, digit)).toBe(`member:${digit}`);
+  // What a field uses itself, Alt+arrows and a combination with another modifier stay with the text.
+  for (const key of ["a", "c", "v", "x", "z", "y", "Enter", "ArrowLeft", "ArrowRight", "Backspace", "0"]) expect(press(field, key)).toBeNull();
+  for (const key of ["z", "Z"]) expect(press(field, key, { shiftKey: true })).toBeNull();
+  expect(press(field, "n", { shiftKey: true })).toBeNull();
+  expect(press(field, "n", { altKey: true })).toBeNull();
   expect(press(field, "ArrowDown", { ctrlKey: false, altKey: true })).toBeNull();
+  expect(press(field, "ArrowUp", { ctrlKey: false, altKey: true })).toBeNull();
+});
+
+test("a field takes no navigation shortcut while an IME composes or a dialog is open", () => {
+  const field = document.createElement("textarea");
+  document.body.append(field);
+  expect(press(field, "n", { isComposing: true })).toBeNull();
+  expect(press(field, "b", { keyCode: 229 })).toBeNull();
+  expect(press(field, "1", { repeat: true })).toBeNull();
+  document.body.insertAdjacentHTML("beforeend", '<div role="dialog"></div>');
+  expect(press(field, "n")).toBeNull();
+  expect(press(field, "k")).toBeNull();
 });
 
 test("shortcut modifiers, IME, repeats and modal ownership are respected", () => {

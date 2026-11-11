@@ -19,13 +19,15 @@
 .pg-more { position: absolute; right: var(--sp-2); bottom: var(--sp-2); z-index: 2; display: none; color: var(--text-3); pointer-events: none; }
 .pg-body[data-state="ready"] > .pg-more { display: block; }
 .pg-more .i { display: block; width: 16px; height: 16px; }
-/* A page that failed reads as a failed mail card does (card.css): what failed in the card's body line, what it knows of
-   the page in a well where the page stood, and 再試一次 at the card's right. Everything starts where the title does,
-   nothing blank stands under the retry (the judge on page-gone, 3/5, 2026-11-10). It stands as tall as the preview it replaces, 再試一次 at the foot. */
-.pg-failed { display: flex; flex-direction: column; gap: 12px; height: var(--h-page-peek); }
+/* A page that failed is an empty state of the card, in the place of the preview and as tall as it (--h-page-peek), so a
+   card that fails moves nothing: what failed, what the member knows of the page and 再試一次 stand together, centred in
+   that area on the same surface the preview has (owner, 2026-11-11: 再試一次 at the foot left a blank gap under the
+   title row). The × stays in the card's heading (R-UI-117). */
+.pg-failed { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--sp-2); height: var(--h-page-peek); padding: 0 var(--sp-3); border-radius: var(--r-sm); background: var(--panel); text-align: center; }
 .pg-failed[hidden], .pg-body[hidden] { display: none; }
-.pg-failed > .card-actions { margin-top: auto; }
-.pg-fallback { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; margin: 0; padding: 10px 12px; color: var(--text); font-size: var(--fs-sm); white-space: pre-wrap; overflow-wrap: anywhere; overflow: hidden; }
+.pg-failed > .card-body { max-width: 100%; }
+.pg-card .pg-failed > .card-actions { justify-content: center; }
+.pg-fallback { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; max-width: 100%; margin: 0; padding: var(--sp-2) var(--sp-3); color: var(--text); font-size: var(--fs-sm); white-space: pre-wrap; overflow-wrap: anywhere; overflow: hidden; }
 @keyframes pg-loading { 50% { opacity: 0.6; } }
 
 /* A page made larger is the page alone, as a picture made larger (the lightbox) and a report are: its card's title,

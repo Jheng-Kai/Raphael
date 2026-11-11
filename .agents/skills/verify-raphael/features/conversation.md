@@ -224,14 +224,15 @@ npm run look -- attachment-limits attachment-too-large --theme both --width 1120
 ## Commands and conversation shortcuts (2026-11-05)
 
 R-NAV-01 reuses the shared popover, cross-conversation search and the existing
-chief/member/room finders. Ctrl+K works while typing; other shortcuts leave
-editable fields and IME alone. The palette filters names and shortcut labels,
+chief/member/room finders. The Ctrl shortcuts (K, F, Shift+F, B, N, 1..9) work
+while typing, so they work from the composer the moment a conversation opens
+(2026-11-11); Alt+Up/Down, the combinations a field uses itself and IME are left alone. The palette filters names and shortcut labels,
 restores focus on dismissal and routes selection through the existing shell.
 See [Daily work](daily-work.md) for the full behavior and native limits.
 Follow-up 1 authorizes this selected rendered matrix; native/live remain deferred.
 
 ```powershell
-npm run look -- command-palette command-palette-filter command-palette-member shortcut-find-chief shortcut-find-member shortcut-find-room shortcut-search chat sidebar-rail sidebar-drawer --theme both --width 1120,720,1920x1080
+npm run look -- shortcut-new-in-composer shortcut-sidebar-in-composer shortcut-member-in-composer command-palette command-palette-filter command-palette-member shortcut-find-chief shortcut-find-member shortcut-find-room shortcut-search chat sidebar-rail sidebar-drawer --theme both --width 1120,720,1920x1080
 ```
 
 Compare palette rows with the existing cross-conversation search popover at
@@ -1925,11 +1926,11 @@ pages/agent-page.test.ts, group-chats.test.ts and owner-questions.test.ts.
 Compare page-buy and page-room-draft at matching theme/width: identical note
 component, wording, typography, spacing and state. The blank page-product scene
 proves the note has no reserved space before a page requests placement.
-A page that failed (page-gone) reads as a failed mail card (card-mail-failed): 「這個頁面打不開。」 in the card's
-body line first, then what the page said (its fallback text, the member's plain words) in a well where the page
-stood, and 再試一次 at the card's right (R-CARD-01). The words and the well start where the title does, nothing blank
-stands under the retry, and it is as tall as the preview it stands for (R-PAGE-02; the judge gave 3/5 for the blank, the indent and
-the page's words alone beside 未能完成 reading as a success, 2026-11-10). The × that puts it away (R-UI-117) joins
+A page that failed (page-gone) is an empty state of the card, in the preview's place and as tall as it (R-PAGE-02):
+「這個頁面打不開。」, what the page said (its fallback text, the member's plain words) in a well, and 再試一次 stand together,
+centred in that area with no blank gap, the one place a card's button is not at its right (R-CARD-01). The check measures the
+centring, the card's height against a ready one and that the × makes it no taller (2026-11-11; the judge gave 3/5 on
+2026-11-10 for the blank gap and the page's words alone beside 未能完成 reading as a success). The × that puts it away (R-UI-117) joins
 the heading only while the page failed: the hidden × it used to carry was taken by the shared failure of a link the
 page could not open (`cardFailure`), which was then left with no × to put it away. A failed page keeps its words and
 × when its line is drawn again, and 再試一次 takes the × away while it opens. The card-shell check requires every ×
@@ -1963,7 +1964,7 @@ page says (`--pg-h`) so the page never scrolls behind it, and it is `inert` with
 or scrolled and the thread scrolls over it. The preview is the card's one control (`role="button"`, one Tab stop once the page is
 ready, named 「打開「標題」」 by `page.open` in all 15 locales); pressing it or the title row, or Enter or Space, opens the page made larger
 (the dialog above), where the same frame is no longer inert, scrolls and its buttons work; closing puts it back. A loading or failed
-card is as tall (a pulsing well; the failed block at the same height with 再試一次 at its foot), so a change of state moves nothing.
+card is as tall (a pulsing well; the failed empty state at the same height, its words and 再試一次 centred), so a change of state moves nothing.
 Since a page in its card takes no press, the scenes that press inside a page (page-buy, page-send, page-expand-place,
 page-room-draft, owner-card-room-page) first press the card (`larger` in scenes/pages.mjs). Scenes: page-collapsed (the owner's
 case: a 900 px page, `pageNews`), page-collapsed-room (the same in a room), page-collapsed-two (two pages in one thread, equal
