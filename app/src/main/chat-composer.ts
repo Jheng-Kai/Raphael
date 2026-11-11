@@ -69,14 +69,16 @@ export function drawTaskSlot(el: HTMLElement, state: ComposerTaskState, stopping
 }
 
 export function composerHTML(): string {
-  return `<div class="cmp-quote" hidden></div><div class="cmp-file" hidden></div><div class="cmp-row">` +
+  // One row, one grid (`.cmp-row`): the + at the left, the words, then the permission, the model and send. What can stand above it (a failure,
+  // a quote, files, the page note) is a row of the box of its own, so the controls stay on the last line of a draft that grows.
+  return `<div class="cmp-quote" hidden></div><div class="cmp-file" hidden></div><p class="cmp-page-note hint" role="status" hidden></p><div class="cmp-row">` +
+    `<button type="button" class="btn cmp-attach" data-act="attach">${ico("plus")}</button>` +
     `<div class="cmp-field"><textarea class="cmp-input" rows="1" autocomplete="off" enterkeyhint="send"></textarea><div class="cmp-mirror" aria-hidden="true"></div></div>` +
-    `<div class="cmp-bar"><button type="button" class="btn cmp-attach" data-act="attach">${ico("plus")}</button>` +
-    `<button type="button" class="btn sm cmp-mode" aria-haspopup="menu" aria-expanded="false">${ico("shield")}<span></span></button>` +
-    `<span class="cmp-bar-fill"></span><span class="cmp-model"></span>` +
+    `<div class="cmp-end"><button type="button" class="btn sm cmp-mode" aria-haspopup="menu" aria-expanded="false">${ico("shield")}<span></span></button>` +
+    `<span class="cmp-model"></span>` +
     `<span class="cmp-pair">` +
     iconButton("send", t("chat.send"), " disabled", "cmp-send task-action").replace('type="button"', 'type="submit"').replace(" title=", " data-tooltip=").replace(ico("send"), sendGlyph()) +
-    `<button type="button" class="btn cmp-voice" data-act="voice"></button></span></div></div><p class="cmp-page-note hint" role="status" hidden></p><input class="cmp-picker" type="file" multiple hidden>`;
+    `<button type="button" class="btn cmp-voice" data-act="voice"></button></span></div></div><input class="cmp-picker" type="file" multiple hidden>`;
 }
 
 const MODE_CHANGED = "raphael:action-mode";

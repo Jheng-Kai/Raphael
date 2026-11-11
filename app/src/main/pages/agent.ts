@@ -58,7 +58,7 @@ import * as api from "../api";
 import { createLinkPreviews, type LinkPreview } from "../link-previews";
 import { messagePlainText } from "../message-content";
 import { mountRichContent, preserveRichScroll, richScrollFollows, followRichScroll, releaseRichScroll } from "../message-rich";
-import { mountConversationScroll } from "../conversation-scroll";
+import { mountConversationScroll, passWheelUnder } from "../conversation-scroll";
 import { openUnread, unreadInTail, unreadLine } from "../unread-divider";
 import { measureMessagePreviews, messagePreviewMeasure } from "../message-preview";
 import { messageTooltip } from "../message-tooltip";
@@ -242,7 +242,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   el.hidden = true;
   el.innerHTML =
     `<section class="mb-chat">` +
-    `<div class="page-head mb-head"><h1 class="mb-h1">${esc(t("agent.title"))}</h1><span class="mb-head-l">` +
+    `<div class="page-head mb-head" data-window-drag><h1 class="mb-h1">${esc(t("agent.title"))}</h1><span class="mb-head-l">` +
     iconButton("search", t("agent.search"), ' data-act="search" aria-expanded="false" hidden', "ra-tool") +
     // Search at the left and share at the right, symmetric.
     `</span><span class="mb-head-c"></span><div class="ra-tools">${iconButton("share", t("template.export"), ' data-act="share-member" aria-haspopup="menu" aria-expanded="false" hidden', "ra-tool")}</div></div>` +
@@ -349,6 +349,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   members.details.addEventListener('member-panel-tab', () => { if (visible && !roomPane.active) desktop.show(); desktop.sync(); });
   const detailsScrim = document.createElement("div");
   detailsScrim.className = "mb-det-scrim";
+  detailsScrim.innerHTML = '<span class="mb-det-scrim-row" data-window-drag></span>';
   detailsScrim.setAttribute("aria-hidden", "true");
   // The press that closes the panel goes on to what it was over (R-UI-121).
   // The header button opened it, and is not pressed again by the press that closes it (R-UI-124).
@@ -656,6 +657,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   /** The thread's own turns: what colleagues asked this member is drawn, never stopped or searched here. */
   const own = (): AgentTurn[] => turns.filter((turn) => !exchangeTurn(turn));
   mountConversationScroll(scroller);
+  passWheelUnder(el.querySelector<HTMLElement>(":scope > .mb-chat > .mb-head")!, scroller.parentElement!);
   const turnWindow = new TranscriptWindow();
   const windowMount = mountTranscriptWindow(scroller, thread, turnWindow, { draw: () => render(), older: () => load(true), canOlder: () => canLoadEarlier && !loadingEarlier && !searching });
   let drawingFollows = false;
