@@ -2138,4 +2138,8 @@ export const fr = {
   "card.google.clientSecret": "Client secret (code secret du client)",
   "store.googleAbout": "Gmail et Google Agenda avec votre propre client Google Cloud. Rien ne passe par Composio.",
   "store.googleSetUp": "Aide-moi à connecter mon propre compte Google",
+  "brains.signinWaiting": "Terminez la connexion dans la fenêtre ouverte",
+  "brains.signinDone": "Connecté. Nouvel envoi en cours",
+  "brains.signinFailed": "La connexion n’a pas abouti",
+  "brains.signinFirst": "Se connecter",
 } satisfies Messages;

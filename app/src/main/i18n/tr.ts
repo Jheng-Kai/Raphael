@@ -2138,4 +2138,8 @@ export const tr = {
   "card.google.clientSecret": "Client secret (istemci sırrı)",
   "store.googleAbout": "Gmail ve Google Takvim, kendi Google Cloud istemciniz üzerinden. Hiçbir şey Composio'dan geçmez.",
   "store.googleSetUp": "Kendi Google hesabımı bağlamama yardım et",
+  "brains.signinWaiting": "Açılan pencerede oturum açmayı tamamlayın",
+  "brains.signinDone": "Oturum açıldı. Yeniden gönderiliyor",
+  "brains.signinFailed": "Oturum açma tamamlanmadı",
+  "brains.signinFirst": "Oturum aç",
 } satisfies Messages;

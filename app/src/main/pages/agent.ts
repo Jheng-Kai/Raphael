@@ -89,6 +89,7 @@ import { openPeerChat, type PeerChatView } from "../peer-chat";
 import { exchangeView } from "../exchange-line";
 import { dayLabel, describeError } from "../format";
 import { CHATGPT_USAGE_URL } from "../cli-brains";
+import { createCliSignin } from "../cli-signin";
 import { loadingHTML } from "../loading";
 import {
   type TimelineState,
@@ -113,7 +114,7 @@ import {
   turnHTML,
   wantsRefresh,
 } from "../timeline";
-import type { PageArgument, AgentQuestion, AgentTurn, AppContext, GroupDraft, MemberDraft, MessageQuote, OwnerQuestion, Page, TurnAttachment, WireAttachment } from "../types";
+import type { PageArgument, AgentQuestion, AgentTurn, AppContext, CliBrainId, GroupDraft, MemberDraft, MessageQuote, OwnerQuestion, Page, TurnAttachment, WireAttachment } from "../types";
 import { closeAndPress } from "../dismissals";
 import { closeMenu, copyButton, esc, ico, iconButton, openMenu, patchHTML, toaster } from "../ui";
 import { askInChat } from "../chat-ask";
@@ -566,6 +567,16 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   const attachmentMedia = createAttachmentMedia(el, id => api.core("attachments.get", { id }));
   const previews = createLinkPreviews(scroller, url => api.core<LinkPreview | null>("links.preview", { url }));
   const regenerating = new Set<number>();
+  // The sign-in button under a failed reply (cli-signin.ts): a finished sign-in sends the question again, once, only while
+  // that reply is still the latest and nothing else is under way.
+  const signin = createCliSignin({
+    phases: state.signin,
+    redraw: () => { if (visible) render(); },
+    retry: async turnId => {
+      const turn = turns.find(item => item.id === turnId);
+      if (turn && turn.status === "error" && look().regenerateTurnId === turnId) await regenerateTurn(turn);
+    },
+  });
   const measureAllMessages = messagePreviewMeasure(thread);
   const messageResize = typeof ResizeObserver === "function" ? new ResizeObserver(measureAllMessages) : null;
   void document.fonts?.ready.then(measureAllMessages);
@@ -657,8 +668,10 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   const isEmpty = (): boolean =>
     !turns.some(visibleTurn) && !outgoing.some(belongs) && !hearingBelongs();
 
+  /** The newest turn the owner asked and was answered in, by this thread's own member: the one a new answer replaces. */
+  const latestAnsweredId = (): number => turns.filter(turn => turn.question.trim() && sourceOf(turn) !== "routine" && sourceOf(turn) !== "member" && turn.route !== "exchange" && !delegatedTurn(turn) && (turn.text.trim() || turn.messages?.some(m => m.kind === "reply"))).reduce((id, turn) => Math.max(id, turn.id), 0);
   const look = (): TurnLook => {
-    const latest = turns.filter(turn => turn.question.trim() && sourceOf(turn) !== "routine" && sourceOf(turn) !== "member" && turn.route !== "exchange" && !delegatedTurn(turn) && (turn.text.trim() || turn.messages?.some(m => m.kind === "reply"))).reduce((id, turn) => Math.max(id, turn.id), 0);
+    const latest = latestAnsweredId();
     const busy = pacing.active || regenerating.size > 0 || outgoing.some(belongs) || own().some(turn => turn.status === "running" || isLive(turn.task));
     const shared = { greetingOpen: !turns.some(turn => !!turn.question.trim()) && !outgoing.some(belongs), regenerateTurnId: busy ? undefined : latest, revealing: (id: number) => pacing.waiting(id), waitingForOwner: desktop.waitingForOwner, memberName: members.nameOf, memberFace: (id: number, size = 18) => members.faceOf(id, size), mentions: members.mentionTargets(),
       // A permission card in the thread can be answered while the window holds its question and is not answering it.
@@ -914,6 +927,8 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     }
     const mounted = turnWindow.select(chronological, turn => String(turn.id), drawingFollows && !searching);
     const latestFailedTurnId = [...chronological].reverse().find(turn => turn.status === "error" || turn.task && ["failed", "interrupted", "cancelled", "limit"].includes(turn.task.state))?.id;
+    // A sign-in button stands only under the failed reply that is also the newest answered one: older failures are history.
+    const signinTurnId = latestAnsweredId();
     windowMount.sync();
     const out = threadItems(mounted, state.nowMs).map((item) =>
       item.kind === "day"
@@ -925,10 +940,10 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
           const live = turn.status === "running" || turn.status === "confirm" || isLive(turn.task) || turn.task?.state === "waiting" || pacing.waiting(turn.id);
           return renderedTurns.line(item.key, historyRevisions.get(turn) ?? turn, [presentationVersion, getLocale(), turn.route === "greeting" ? shape.greetingOpen : false, shape.mentions, turnLook.query ?? "", details.has(turn.id),
             state.open.get(turn.id), state.thinkingOpen.get(turn.id), expanded, task !== undefined && state.stopping.has(task), task !== undefined && state.rerunning.has(task),
-            state.workStartedAt.get(turn.id), view.messages?.length, pacing.waiting(turn.id), desktop.waitingForOwner(turn.id),
-            live ? turnLook.deferPresence : false, live ? shape.activityLabel : "", live ? members.member().activity ?? "" : "", turn.permissions?.some(card => shape.answerable?.(card.id)), turn.id === latestFailedTurnId,
+            state.workStartedAt.get(turn.id), state.signin.get(turn.id), view.messages?.length, pacing.waiting(turn.id), desktop.waitingForOwner(turn.id),
+            live ? turnLook.deferPresence : false, live ? shape.activityLabel : "", live ? members.member().activity ?? "" : "", turn.permissions?.some(card => shape.answerable?.(card.id)), turn.id === latestFailedTurnId, turn.id === signinTurnId,
             item.together?.map(earlier => `${earlier.id}:${earlier.status}:${earlier.messages?.length ?? 0}`).join(",") ?? ""],
-            () => turnHTML(view, state, details.has(turn.id), { ...turnLook, regenerateTurnId: turn.id, latestFailedTurnId, exchangeTogether: item.together }));
+            () => turnHTML(view, state, details.has(turn.id), { ...turnLook, regenerateTurnId: turn.id, latestFailedTurnId, signinTurnId, exchangeTogether: item.together }));
         })(), turnId: item.turn.id },
     );
     renderedTurns.retain(new Set(out.map(line => line.key)));
@@ -1960,7 +1975,12 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     const source = messageSource(control);
     const latest = look().regenerateTurnId;
     if (!source || latest === undefined || latest !== source.turn.id && !(source.turn.status === "error" && control.classList.contains("rerun"))) return;
-    const member = memberId(), turn = source.turn;
+    await regenerateTurn(source.turn);
+  }
+
+  /** Sends a turn's question again as a new answer: the reply's own 重新產生, and what a finished sign-in does once (cli-signin.ts). */
+  async function regenerateTurn(turn: AgentTurn): Promise<void> {
+    const member = memberId();
     // A greeting has no question to send again: the core writes it again with the member's own model.
     if (turn.route === "greeting") {
       if (turn.status !== "error") return;
@@ -2382,6 +2402,16 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       case "manage-usage":
         void api.openExternalUrl(CHATGPT_USAGE_URL).catch((error) => toaster.info(describeError(error)));
         break;
+      case "cli-signin":
+      case "cli-signin-cancel":
+      case "cli-install": {
+        const turnId = Number(act.closest<HTMLElement>(".tn[data-id]")?.dataset.id), cli = act.dataset.cli as CliBrainId;
+        if (!Number.isSafeInteger(turnId) || !["claude", "codex", "gemini"].includes(cli)) break;
+        if (act.dataset.act === "cli-install") void signin.install(cli);
+        else if (act.dataset.act === "cli-signin") void signin.start(turnId, cli);
+        else void signin.cancel(turnId, cli);
+        break;
+      }
       case "attach":
         picker.value = ""; picker.click();
         break;

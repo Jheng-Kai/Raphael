@@ -1908,4 +1908,8 @@ export const en = {
   "card.google.clientSecret": "Client secret",
   "store.googleAbout": "Gmail and Google Calendar through your own Google Cloud client. Nothing goes through Composio.",
   "store.googleSetUp": "Help me connect my own Google account",
+  "brains.signinWaiting": "Finish signing in in the window that opened",
+  "brains.signinDone": "Signed in. Sending again",
+  "brains.signinFailed": "Sign-in was not finished",
+  "brains.signinFirst": "Sign in",
 } satisfies Messages;

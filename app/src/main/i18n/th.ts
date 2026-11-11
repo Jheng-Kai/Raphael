@@ -2138,4 +2138,8 @@ export const th = {
   "card.google.clientSecret": "Client secret (รหัสลับของไคลเอนต์)",
   "store.googleAbout": "ใช้ Gmail และ Google ปฏิทินผ่านไคลเอนต์ Google Cloud ของคุณเอง ไม่ผ่าน Composio",
   "store.googleSetUp": "ช่วยเชื่อมต่อบัญชี Google ของฉันเอง",
+  "brains.signinWaiting": "เข้าสู่ระบบให้เสร็จในหน้าต่างที่เปิดขึ้น",
+  "brains.signinDone": "เข้าสู่ระบบแล้ว กำลังส่งอีกครั้ง",
+  "brains.signinFailed": "เข้าสู่ระบบไม่สำเร็จ",
+  "brains.signinFirst": "เข้าสู่ระบบ",
 } satisfies Messages;

@@ -2138,4 +2138,8 @@ export const id = {
   "card.google.clientSecret": "Client secret (rahasia klien)",
   "store.googleAbout": "Gmail dan Google Kalender lewat klien Google Cloud Anda sendiri. Tidak ada yang melewati Composio.",
   "store.googleSetUp": "Bantu saya menghubungkan akun Google saya sendiri",
+  "brains.signinWaiting": "Selesaikan login di jendela yang terbuka",
+  "brains.signinDone": "Sudah login. Mengirim ulang",
+  "brains.signinFailed": "Login belum selesai",
+  "brains.signinFirst": "Login",
 } satisfies Messages;

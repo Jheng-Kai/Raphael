@@ -181,8 +181,8 @@ from ..brain.owner import owner_context
 from .cities import cities_in
 from .commands import COMMANDS, AppCatalog, run_command
 from .device import DeviceActions
-from .failure import AgentFailure, failure_kind, turn_failure
-from ..failures import Failure, classify
+from .failure import AgentFailure, failure_kind, provider_of, turn_failure
+from ..failures import Failure, Missing, classify
 from .gate import BUILTIN_SERVER, ToolGate
 from .history import VOICE, AgentHistory, Turn
 from .conversations import QUICK, Conversations
@@ -946,7 +946,9 @@ class AgentService:
         if name not in ("claude", "codex", "gemini"):
             raise invalid_params("Unknown CLI")
         try:
-            return self._cli_brains.login(name)
+            if params.get("cancel") is True:
+                return self._cli_brains.cancel_login(name)
+            return self._cli_brains.login(name, again=params.get("again") is True)
         except (OSError, ValueError):
             raise invalid_params("Install the CLI before signing in") from None
 
@@ -5747,6 +5749,10 @@ class AgentService:
         model = kind.model if isinstance(kind, AgentFailure) else None
         diagnostic = kind.diagnostic if isinstance(kind, AgentFailure) else None
         kind = kind.kind if isinstance(kind, AgentFailure) else kind
+        if model and not brain_ref(model) and (diagnostic is None and kind in ("auth", "auth_expired", "no_key")
+                                              or diagnostic is not None and diagnostic.kind == "auth_expired" and diagnostic.missing is None):
+            # The key of an API model was refused: its provider's card is where it is put right (the 開啟設定 button), not "sign in".
+            diagnostic = Failure("auth_expired", "Provider refused the credentials", missing=Missing(provider_of(model), "provider", "broken", "models"))
         failure = turn_failure(kind, model or self._read_settings(ask.speaker, ask.conversation_id).model, diagnostic)
         if diagnostic is not None and diagnostic.missing is not None:
             missing = diagnostic.missing

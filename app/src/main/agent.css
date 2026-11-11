@@ -217,6 +217,10 @@
 .page-agent .btn.quote-pill[hidden], .cmp-quote[hidden] { display: none; }
 /* A reply that failed on a plan's usage limit leads with that plan's Manage usage, under its words. */
 .chat-message > .turn-usage { display: flex; margin-top: var(--sp-2); }
+/* A reply that failed for want of its subscription CLI's sign-in leads with the one button that mends it, under its words;
+   while the CLI's own window is open it says to finish there, beside 取消. */
+.chat-message > .turn-signin { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); margin-top: var(--sp-2); }
+.turn-signin > .signin-note { color: var(--text-2); font: var(--fs-xs)/1.5 var(--ui); }
 .message-quote { display: block; min-width: 0; max-width: 100%; padding: 0; padding-inline-start: 10px; border: 0; border-inline-start: 2px solid var(--accent-text); margin-block-end: 8px; white-space: normal; color: var(--text-2); font: var(--fs-xs)/1.5 var(--ui); }
 button.message-quote { width: 100%; text-align: start; background: none; cursor: pointer; }
 .quote-author { display: block; color: var(--accent-text); font-weight: var(--weight-semibold); }

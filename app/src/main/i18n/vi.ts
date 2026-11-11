@@ -2138,4 +2138,8 @@ export const vi = {
   "card.google.clientSecret": "Client secret (mật khẩu ứng dụng khách)",
   "store.googleAbout": "Gmail và Google Lịch qua ứng dụng khách Google Cloud của chính bạn. Không có gì đi qua Composio.",
   "store.googleSetUp": "Giúp tôi kết nối tài khoản Google của chính tôi",
+  "brains.signinWaiting": "Hoàn tất đăng nhập trong cửa sổ vừa mở",
+  "brains.signinDone": "Đã đăng nhập. Đang gửi lại",
+  "brains.signinFailed": "Chưa hoàn tất đăng nhập",
+  "brains.signinFirst": "Đăng nhập",
 } satisfies Messages;

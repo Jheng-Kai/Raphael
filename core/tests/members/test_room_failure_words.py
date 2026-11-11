@@ -17,7 +17,9 @@ from raphael_core.ui_languages import LANGUAGES
     ("usage_limit", "quota"), ("cli_quota", "quota"),
     ("rate_limit", "rate_limit"), ("cli_rate_limited", "rate_limit"),
     # A CLI signs in on the owner's computer; an API brain needs its sign-in or key in Settings.
-    ("cli_login", "login"), ("cli_missing", "login"), ("cli_auth_expired", "login"),
+    ("cli_login", "login"), ("cli_auth_expired", "login"),
+    # A sign-in that ran out and a CLI that is not on this computer are told from a sign-in that never was (owner, 2026-11-11).
+    ("cli_login_expired", "login_expired"), ("cli_missing", "not_installed"),
     ("auth_expired", "sign_in"), ("chatgpt_scope", "sign_in"), ("chatgpt_plan_unavailable", "sign_in"),
     # What asking again did not mend.
     ("overloaded", "unavailable"), ("server", "unavailable"), ("network", "unavailable"), ("chatgpt_unavailable", "unavailable"),
@@ -40,7 +42,7 @@ def test_every_closed_kind_is_named_or_is_an_error_on_purpose():
 
 def test_the_words_exist_in_every_interface_language():
     keys = set(_UNFINISHED_WORDS["en"])
-    assert {"credits", "sign_in", "refused", "unavailable", "error"} <= keys
+    assert {"credits", "sign_in", "refused", "unavailable", "error", "login_expired", "not_installed"} <= keys
     for language in LANGUAGES:
         assert set(_UNFINISHED_WORDS[language]) == keys and all(_UNFINISHED_WORDS[language].values()), language
     assert _UNFINISHED_WORDS["zh-TW"]["credits"] == "服務點數已用完"

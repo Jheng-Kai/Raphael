@@ -3043,6 +3043,52 @@ export function checkRendered(name, context = {}) {
     require(document.querySelectorAll('[data-act="manage-usage"]').length === 1, "only the failed reply carries it");
     return { check: name };
   }
+  if (name.startsWith("chat-cli-signin")) {
+    // A reply that failed for want of its subscription CLI's sign-in (R-CLI-SIGNIN-01/02): the core's one sentence that names the tool
+    // and the true cause, and under it the one button that mends it, where the owner is. Never the old sentence that named two causes.
+    const reply = document.querySelector('.chat-message[data-reply]'), strip = reply?.querySelector(':scope > .turn-signin');
+    require(visible(reply) && visible(strip), "the failed reply carries its sign-in strip");
+    require(!document.body.textContent.includes("還沒登入或缺少金鑰") && !document.body.textContent.includes("設定 › 連接"), "the generic sentence that named two causes and a page is gone");
+    const words = reply.querySelector(".message-text");
+    const sentence = words.textContent.trim();
+    require(/^(Claude Code|Codex CLI|Antigravity) (的登入已過期|還沒登入|還沒安裝)。$/.test(sentence), `one sentence that names the tool and its cause: ${sentence}`);
+    require(!/[A-Za-z_]+_[a-z]+|\/login|OAuth|401/.test(sentence), "no code and no raw output in the sentence");
+    const buttons = [...strip.querySelectorAll("button")].filter(visible);
+    const box = strip.getBoundingClientRect(), text = reply.querySelector(".ans").getBoundingClientRect();
+    require(box.top >= text.bottom - 1 && Math.abs(box.left - text.left) <= 2, "it stands under the reply's words, at their left edge");
+    require(buttons.every(button => button.classList.contains("btn") && button.classList.contains("sm")), "its buttons are the app's small buttons");
+    require(buttons.every(button => button.getBoundingClientRect().height <= 30 && button.getBoundingClientRect().width <= 140), "each button is sized to its words");
+    require(document.querySelectorAll(".turn-signin").length === 1 && !document.querySelector("[data-missing-repair]"), "one strip, and no second 開啟設定 beside it");
+    const cause = document.querySelector("[data-cause]")?.dataset.cause;
+    const note = strip.querySelector(".signin-note");
+    const phase = strip.dataset.phase ?? "idle";
+    if (name === "chat-cli-signin") {
+      const [button] = buttons;
+      const expected = { expired: "重新登入", signed_out: "登入" }[cause];
+      if (sentence.endsWith("還沒安裝。")) {
+        require(buttons.length === 1 && button.dataset.act === "cli-install" && button.textContent.trim() === "安裝說明", `a CLI that is not there offers its install guide: ${button?.textContent}`);
+      } else {
+        require(buttons.length === 1 && button.dataset.act === "cli-signin" && button.textContent.trim() === expected, `exactly one button, ${expected}: ${buttons.map(b => b.textContent)}`);
+        require(sentence.endsWith(cause === "expired" ? "的登入已過期。" : "還沒登入。"), `the sentence and the button name the same cause (${cause})`);
+      }
+      require(!note && phase === "idle", "nothing but the button until it is pressed");
+    } else if (name === "chat-cli-signin-waiting") {
+      require(note?.textContent.trim() === "請在開啟的視窗完成登入", `the waiting line: ${note?.textContent}`);
+      require(buttons.length === 1 && buttons[0].dataset.act === "cli-signin-cancel" && buttons[0].textContent.trim() === "取消", "only 取消 while the window is open");
+      const started = window.__look.calls.filter(call => call.method === "brains.cli_login" && call.params.again === true);
+      require(started.length >= 1 && started.every(call => call.params.id === "claude"), "the CLI's own sign-in was started for that CLI, again");
+    } else if (name === "chat-cli-signin-stopped") {
+      require(note?.textContent.trim() === "沒有完成登入", `a window closed first says so: ${note?.textContent}`);
+      require(buttons.length === 1 && buttons[0].dataset.act === "cli-signin" && buttons[0].textContent.trim() === "重新登入", "and the button is usable again");
+      require(!window.__look.calls.some(call => call.command === "agent_ask_text"), "nothing was sent again");
+    } else if (name === "chat-cli-signin-done") {
+      require(note?.textContent.trim() === "已登入，正在重新送出", `a finished sign-in says the question goes again: ${note?.textContent}`);
+      require(buttons.length === 0, "no button while it is sent");
+      const asked = window.__look.calls.filter(call => call.command === "agent_ask_text");
+      require(asked.length === 1, `the question went again exactly once (${asked.length})`);
+    }
+    return { check: name, sentence, phase, buttons: buttons.map(button => button.textContent.trim()) };
+  }
   if (name === "onboarding-composio") {
     // Without Composio its card comes first across the step, and the apps under it are the ones that need none.
     const card = document.querySelector('.ob-composio [data-item="composio"]'), grid = document.querySelector('[data-ob-services]');

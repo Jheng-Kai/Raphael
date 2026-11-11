@@ -72,6 +72,20 @@ export function installMock(fixture, config = {}, target = window) {
     Object.assign(latest, { status: "error", text: sentence, model: "@chatgpt:gpt-6-sol", failure: { kind: "usage_limit", provider: "chatgpt", resets_at: null },
       messages: [{ seq: 1, kind: "reply", text: sentence, at_ms: latest.created_at_ms }], task: null });
   }
+  // A member's latest reply failed because its subscription CLI has no usable sign-in, as the core words it
+  // (`failures.py` `_CAUSE_MESSAGES`): the reply carries the one button that mends it (cli-signin.ts).
+  // `cliSignin`: a cause, or { cause, cli }.
+  if (variant.cliSignin) {
+    const { cause = "expired", cli = "claude" } = typeof variant.cliSignin === "object" ? variant.cliSignin : { cause: variant.cliSignin };
+    const latest = data.turns.filter(turn => turn.member_id === 1 && turn.conversation_id === 11).sort((a, b) => b.id - a.id)[0];
+    const name = { claude: "Claude Code", codex: "Codex CLI", gemini: "Antigravity" }[cli];
+    const sentence = { expired: `${name} 的登入已過期。`, signed_out: `${name} 還沒登入。`, not_installed: `${name} 還沒安裝。` }[cause];
+    Object.assign(latest, { status: "error", text: sentence, model: `cli:${cli}`, failure: { kind: cause === "not_installed" ? "unknown" : "auth_expired", provider: `cli:${cli}`, resets_at: null, cause },
+      messages: [{ seq: 1, kind: "reply", text: sentence, at_ms: latest.created_at_ms }], task: null });
+    const row = data.clis.find(item => item.id === cli);
+    // An expired session still has its credentials; a CLI that was never signed in or is not there is not available.
+    Object.assign(row, { installed: cause !== "not_installed", logged_in: cause === "expired", available: cause === "expired" });
+  }
   // The member settings page (member-settings.ts): two connections that are on.
   if (variant.memberSettings) {
     data.servers.forEach(server => { server.enabled = true; });
@@ -842,6 +856,12 @@ export function installMock(fixture, config = {}, target = window) {
     for (const turn of data.turns) if ((turn.pages ?? []).some(page => page.id === id)) notify("AgentTurn", { turn_id: turn.id, member_id: turn.member_id });
     notify("RoomsChanged", { room_id: 1 });
   };
+  // The CLI's sign-in console ended (`done`, or `stopped` when it was closed first), as `brains.cli` then tells.
+  state.cliSigninEnds = (id, outcome) => {
+    const cli = data.clis.find(item => item.id === id);
+    Object.assign(cli, { signing_in: false, login_result: outcome }, outcome === "done" ? { logged_in: true, available: true } : {});
+    notify("BrainsChanged", {});
+  };
   // What the owner could see of the open conversation's place, frame by frame (`scrollTimeline`): a place seen once is the
   // place the thread opens at, so a bottom followed by the line (or the other way) shows as two samples.
   if (variant.scrollTimeline) {
@@ -1495,6 +1515,14 @@ export function installMock(fixture, config = {}, target = window) {
       }
       case "brains.cli_login": {
         const cli = data.clis.find(cli => cli.id === p.id);
+        // As the core does: a sign-in that ran out starts again (`again`), its console stays open until the scene's
+        // `cli-signin-ends` step says how it ended, and a cancel ends it without a failure to tell.
+        if (p.cancel) { Object.assign(cli, { signing_in: false, login_result: null }); notify("BrainsChanged", {}); return { cancelled: true }; }
+        if (p.again) {
+          if (cli.signing_in) return { started: true, running: true };
+          Object.assign(cli, { signing_in: true, login_result: null }); notify("BrainsChanged", {});
+          return { started: true };
+        }
         cli.disconnected = false;
         cli.available = cli.installed && cli.logged_in === true;
         if (cli.available && cli.savedModels) cli.models = cli.savedModels;

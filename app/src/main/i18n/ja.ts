@@ -1908,4 +1908,8 @@ export const ja = {
   "card.google.clientSecret": "Client secret（クライアント シークレット）",
   "store.googleAbout": "自分の Google Cloud クライアントで Gmail とカレンダーを使います。Composio は経由しません。",
   "store.googleSetUp": "自分の Google アカウントを接続して",
+  "brains.signinWaiting": "開いたウィンドウでログインを完了してください",
+  "brains.signinDone": "ログインしました。もう一度送信します",
+  "brains.signinFailed": "ログインが完了しませんでした",
+  "brains.signinFirst": "ログイン",
 } satisfies Messages;

@@ -202,6 +202,25 @@ page. Other kinds, providers and finished turns show nothing.
 npm run look -- chat-usage-limit calm-thread --theme both --width 1120,720,1920x1080
 ```
 
+A reply that failed because its subscription CLI cannot take the turn says its true cause in one sentence that names
+the tool (owner, 2026-11-11, an expired Claude Code sign-in; R-CLI-SIGNIN-01/02) and carries one button under its words.
+The turn's failure has `cause` for a `cli:` provider: `expired` 「Claude Code 的登入已過期。」 with 「重新登入」,
+`signed_out` 「…還沒登入。」 with 「登入」, `not_installed` 「…還沒安裝。」 with the install guide (「安裝說明」, the page Settings
+opens). The button (`cli-signin.ts`) starts the CLI's own sign-in through `brains.cli_login` with `again` (a session that
+ran out keeps its credentials, so the plain call would only reconnect it), then reads `brains.cli` until the console's
+process ended: `signing_in` and `login_result` (`done` or `stopped`) come from the process, never from a credential file.
+While the window is open the reply says to finish there beside 「取消」; a window closed first says 「沒有完成登入」 and keeps
+the button; a finished sign-in says 「已登入，正在重新送出」 and sends the question again once (the reply's own 重新產生
+path), only while that reply is the newest answer. An API model's refused key shows the provider's 開啟設定 and no sign-in
+button; a room or routine run records the same cause (`cli_login_expired`, `cli_login`, `cli_missing`) with no button.
+The mock holds a sign-in console open until the scene's `cli-signin-ends` step, so every state is seen in order.
+Native acceptance with a real expired session is the owner's: close the CLI's own sign-in window to see the stopped state,
+and finish it to see the question go again.
+
+```powershell
+npm run look -- chat-cli-expired chat-cli-signed-out chat-cli-not-installed chat-cli-signin-waiting chat-cli-signin-stopped chat-cli-signin-done chat-cli-signin-flow chat-usage-limit calm-thread --theme both --width 1120,720,1920x1080
+```
+
 ## Streaming composer files (2026-11-05)
 
 Private and room composers share twenty-file admission, 250 MiB document limits and

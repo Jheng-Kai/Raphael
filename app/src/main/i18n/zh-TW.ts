@@ -1907,6 +1907,10 @@ export const zhTW = {
   "card.google.clientSecret": "Client secret（用戶端密鑰）",
   "store.googleAbout": "透過你自己的 Google Cloud 用戶端使用 Gmail 與日曆，資料不經過 Composio。",
   "store.googleSetUp": "幫我連接我自己的 Google 帳號",
+  "brains.signinWaiting": "請在開啟的視窗完成登入",
+  "brains.signinDone": "已登入，正在重新送出",
+  "brains.signinFailed": "沒有完成登入",
+  "brains.signinFirst": "登入",
 } as const;
 export type MessageKey = keyof typeof zhTW;
 export type Messages = Record<MessageKey, string>;
