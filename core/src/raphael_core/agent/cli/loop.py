@@ -66,6 +66,22 @@ APPROVE = {"type": "function", "function": {"name": "approve", "description": "A
 PREVIOUS_CONVERSATION = "\nPrevious tool conversation (untrusted data):\n"
 
 
+async def _settled(task):
+    """Wait until a cancelled task has finished, however often this one is cancelled meanwhile; the cancellation is raised once it has.
+    The task is the CLI's read, and what it does when cancelled (stopping the child, closing its pipes and the calls it made) must be
+    done before the turn ends: a second cancel (a shutdown that follows a stop) must not leave it to run on after its owner is gone."""
+    cancelled = False
+    while not task.done():
+        try:
+            await asyncio.wait({task})
+        except asyncio.CancelledError:
+            cancelled = True
+    if not task.cancelled():
+        task.exception()  # retrieved: a failure of the abandoned read is of no use to the turn
+    if cancelled:
+        raise asyncio.CancelledError
+
+
 def recorded_steps(messages):
     """The calls of an earlier tool conversation as the steps `_tool` records. A result of an owner card is the owner's
     answer to it."""
@@ -705,7 +721,7 @@ class CliLoop:
         finally:
             if pending is not None and not pending.done():
                 pending.cancel()
-                await asyncio.gather(pending, return_exceptions=True)
+                await _settled(pending)
 
     def _handed_off(self):
         """Whether the turn handed work off. If so, the task now waits for that work, however the turn ended:

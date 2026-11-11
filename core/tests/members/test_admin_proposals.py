@@ -30,6 +30,13 @@ def brain(request, setup, client, tmp_path, monkeypatch):
 
         async def run(driver, **kwargs):
             runs.append(kwargs["user"])
+            if kwargs.get("no_tools"):
+                # A member made by the yes greets the owner in its own turn, which has no tools to call: it answers at once. If it
+                # went on to call the proposals, the test could end with six of these still posting; the service then cancels them
+                # in the middle of their HTTP call, and httpx/anyio on Windows leaves a connection they were opening unclosed,
+                # which a later test is blamed for (a ResourceWarning, an error under -W error).
+                yield Event("final", "Hello, I am ready to help.")
+                return
             if "team_changes" in kwargs["user"]:  # the turn going on after the owner's yes
                 yield Event("session", "codex-thread-1")
                 yield Event("final", prepare.then)
