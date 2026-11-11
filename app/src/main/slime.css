@@ -106,19 +106,19 @@ html[data-window-hidden] *, html[data-window-hidden] *::before, html[data-window
   .slime[data-state="thinking"] .slime-motion { animation: slime-thinking-body calc(2.8s * var(--slime-tempo)) cubic-bezier(0.45, 0.05, 0.55, 0.95) var(--slime-delay) infinite both; }
 }
 @container (width <= 72px) {
-  .slime[data-transitioning][data-state="thinking"] .slime-motion { animation: slime-thinking-body calc(2.8s * var(--slime-tempo)) cubic-bezier(0.45, 0.05, 0.55, 0.95) var(--slime-delay) both; }
+  .slime[data-transitioning][data-state="thinking"] .slime-motion { animation: slime-thinking-body calc(2.8s * var(--slime-tempo)) cubic-bezier(0.45, 0.05, 0.55, 0.95) var(--slime-delay) infinite both; }
 }
 @container (width > 72px) {
   .slime[data-state="thinking"] .slime-gaze { animation: slime-thinking-gaze calc(4.3s * var(--slime-tempo)) cubic-bezier(0.25, 0.9, 0.3, 1) var(--slime-delay) infinite both, slime-blink calc(5.3s * var(--slime-tempo)) linear var(--slime-delay) infinite both; }
 }
 @container (width <= 72px) {
-  .slime[data-transitioning][data-state="thinking"] .slime-gaze { animation: slime-thinking-gaze calc(4.3s * var(--slime-tempo)) cubic-bezier(0.25, 0.9, 0.3, 1) var(--slime-delay) both, slime-blink calc(5.3s * var(--slime-tempo)) linear var(--slime-delay) both; }
+  .slime[data-transitioning][data-state="thinking"] .slime-gaze { animation: slime-thinking-gaze calc(4.3s * var(--slime-tempo)) cubic-bezier(0.25, 0.9, 0.3, 1) var(--slime-delay) infinite both, slime-blink calc(5.3s * var(--slime-tempo)) linear var(--slime-delay) infinite both; }
 }
 @container (width > 72px) {
   .slime[data-state="thinking"] .slime-mark { animation: slime-thinking-mark calc(3.6s * var(--slime-tempo)) cubic-bezier(0.45, 0.05, 0.55, 0.95) calc(var(--slime-delay) + 140ms) infinite both; }
 }
 @container (width <= 72px) {
-  .slime[data-transitioning][data-state="thinking"] .slime-mark { animation: slime-thinking-mark calc(3.6s * var(--slime-tempo)) cubic-bezier(0.45, 0.05, 0.55, 0.95) calc(var(--slime-delay) + 140ms) both; }
+  .slime[data-transitioning][data-state="thinking"] .slime-mark { animation: slime-thinking-mark calc(3.6s * var(--slime-tempo)) cubic-bezier(0.45, 0.05, 0.55, 0.95) calc(var(--slime-delay) + 140ms) infinite both; }
 }
 @keyframes slime-thinking-body {
   0%, 100% { translate: -0.6px 0; rotate: -6deg; scale: 1 1; }
@@ -142,7 +142,7 @@ html[data-window-hidden] *, html[data-window-hidden] *::before, html[data-window
   .slime[data-state="working"] .slime-motion { animation: slime-working-body calc(.9s * var(--slime-tempo)) linear var(--slime-delay) infinite both; }
 }
 @container (width <= 72px) {
-  .slime[data-transitioning][data-state="working"] .slime-motion { animation: slime-working-body calc(.9s * var(--slime-tempo)) linear var(--slime-delay) both; }
+  .slime[data-transitioning][data-state="working"] .slime-motion { animation: slime-working-body calc(.9s * var(--slime-tempo)) linear var(--slime-delay) infinite both; }
 }
 @keyframes slime-working-body {
   0%, 100% { scale: 1.14 .82; animation-timing-function: cubic-bezier(.2,.8,.3,1); }
@@ -158,19 +158,19 @@ html[data-window-hidden] *, html[data-window-hidden] *::before, html[data-window
   .slime[data-state="searching"] .slime-motion { animation: slime-searching-body calc(3.2s * var(--slime-tempo)) cubic-bezier(0.4, 0, 0.3, 1) var(--slime-delay) infinite both; }
 }
 @container (width <= 72px) {
-  .slime[data-transitioning][data-state="searching"] .slime-motion { animation: slime-searching-body calc(3.2s * var(--slime-tempo)) cubic-bezier(0.4, 0, 0.3, 1) var(--slime-delay) both; }
+  .slime[data-transitioning][data-state="searching"] .slime-motion { animation: slime-searching-body calc(3.2s * var(--slime-tempo)) cubic-bezier(0.4, 0, 0.3, 1) var(--slime-delay) infinite both; }
 }
 @container (width > 72px) {
   .slime[data-state="searching"] .slime-gaze { animation: slime-searching-gaze calc(3.2s * var(--slime-tempo)) cubic-bezier(0.25, 0.9, 0.3, 1) var(--slime-delay) infinite both, slime-blink calc(5.3s * var(--slime-tempo)) linear var(--slime-delay) infinite both; }
 }
 @container (width <= 72px) {
-  .slime[data-transitioning][data-state="searching"] .slime-gaze { animation: slime-searching-gaze calc(3.2s * var(--slime-tempo)) cubic-bezier(0.25, 0.9, 0.3, 1) var(--slime-delay) both, slime-blink calc(5.3s * var(--slime-tempo)) linear var(--slime-delay) both; }
+  .slime[data-transitioning][data-state="searching"] .slime-gaze { animation: slime-searching-gaze calc(3.2s * var(--slime-tempo)) cubic-bezier(0.25, 0.9, 0.3, 1) var(--slime-delay) infinite both, slime-blink calc(5.3s * var(--slime-tempo)) linear var(--slime-delay) infinite both; }
 }
 @container (width > 72px) {
   .slime[data-state="searching"] .slime-mark { animation: slime-searching-mark calc(3.2s * var(--slime-tempo)) cubic-bezier(0.4, 0, 0.3, 1) calc(var(--slime-delay) + 120ms) infinite both; }
 }
 @container (width <= 72px) {
-  .slime[data-transitioning][data-state="searching"] .slime-mark { animation: slime-searching-mark calc(3.2s * var(--slime-tempo)) cubic-bezier(0.4, 0, 0.3, 1) calc(var(--slime-delay) + 120ms) both; }
+  .slime[data-transitioning][data-state="searching"] .slime-mark { animation: slime-searching-mark calc(3.2s * var(--slime-tempo)) cubic-bezier(0.4, 0, 0.3, 1) calc(var(--slime-delay) + 120ms) infinite both; }
 }
 @keyframes slime-searching-body {
   0%, 100% { translate: -2px 0; rotate: -4deg; scale: 1 1; }
@@ -197,13 +197,13 @@ html[data-window-hidden] *, html[data-window-hidden] *::before, html[data-window
   .slime[data-state="computer"] .slime-motion { animation: slime-computer-body calc(1.7s * var(--slime-tempo)) cubic-bezier(0.3, 0, 0.3, 1) var(--slime-delay) infinite both; }
 }
 @container (width <= 72px) {
-  .slime[data-transitioning][data-state="computer"] .slime-motion { animation: slime-computer-body calc(1.7s * var(--slime-tempo)) cubic-bezier(0.3, 0, 0.3, 1) var(--slime-delay) both; }
+  .slime[data-transitioning][data-state="computer"] .slime-motion { animation: slime-computer-body calc(1.7s * var(--slime-tempo)) cubic-bezier(0.3, 0, 0.3, 1) var(--slime-delay) infinite both; }
 }
 @container (width > 72px) {
   .slime[data-state="computer"] .slime-gaze { animation: slime-computer-gaze calc(3.4s * var(--slime-tempo)) cubic-bezier(0.25, 0.9, 0.3, 1) var(--slime-delay) infinite both; }
 }
 @container (width <= 72px) {
-  .slime[data-transitioning][data-state="computer"] .slime-gaze { animation: slime-computer-gaze calc(3.4s * var(--slime-tempo)) cubic-bezier(0.25, 0.9, 0.3, 1) var(--slime-delay) both; }
+  .slime[data-transitioning][data-state="computer"] .slime-gaze { animation: slime-computer-gaze calc(3.4s * var(--slime-tempo)) cubic-bezier(0.25, 0.9, 0.3, 1) var(--slime-delay) infinite both; }
 }
 @keyframes slime-computer-body {
   0%, 100% { translate: 0 0; rotate: -2deg; scale: 1 1; }
@@ -228,13 +228,13 @@ html[data-window-hidden] *, html[data-window-hidden] *::before, html[data-window
   .slime[data-state="waiting"] .slime-motion { animation: slime-waiting-body calc(6s * var(--slime-tempo)) ease-in-out var(--slime-delay) infinite both; }
 }
 @container (width <= 72px) {
-  .slime[data-transitioning][data-state="waiting"] .slime-motion { animation: slime-waiting-body calc(6s * var(--slime-tempo)) ease-in-out var(--slime-delay) both; }
+  .slime[data-transitioning][data-state="waiting"] .slime-motion { animation: slime-waiting-body calc(6s * var(--slime-tempo)) ease-in-out var(--slime-delay) infinite both; }
 }
 @container (width > 72px) {
   .slime[data-state="waiting"] .slime-gaze { animation: slime-waiting-gaze calc(6s * var(--slime-tempo)) ease-in-out var(--slime-delay) infinite both; }
 }
 @container (width <= 72px) {
-  .slime[data-transitioning][data-state="waiting"] .slime-gaze { animation: slime-waiting-gaze calc(6s * var(--slime-tempo)) ease-in-out var(--slime-delay) both; }
+  .slime[data-transitioning][data-state="waiting"] .slime-gaze { animation: slime-waiting-gaze calc(6s * var(--slime-tempo)) ease-in-out var(--slime-delay) infinite both; }
 }
 @keyframes slime-waiting-body {
   0%, 65%, 100% { scale: 1.05 .88; rotate: 0deg; }
@@ -247,7 +247,7 @@ html[data-window-hidden] *, html[data-window-hidden] *::before, html[data-window
   .slime[data-state="blocked"] .slime-motion { animation: slime-blocked-body calc(1.8s * var(--slime-tempo)) linear var(--slime-delay) infinite both; }
 }
 @container (width <= 72px) {
-  .slime[data-transitioning][data-state="blocked"] .slime-motion { animation: slime-blocked-body calc(1.8s * var(--slime-tempo)) linear var(--slime-delay) both; }
+  .slime[data-transitioning][data-state="blocked"] .slime-motion { animation: slime-blocked-body calc(1.8s * var(--slime-tempo)) linear var(--slime-delay) infinite both; }
 }
 .slime[data-state="blocked"] .slime-gaze { translate: 0 -6px; }
 @keyframes slime-blocked-body {

@@ -594,7 +594,8 @@ test("a simultaneous presence burst mounts at most one visible strip per frame",
     const svg = document.querySelector<SVGElement>(`svg.slime[data-slime-member="${90+count}"]`)!;
     const strip = svg.parentElement!.querySelector<HTMLElement>('.slime-loop-body')!;
     expect(Number.parseFloat(strip.querySelector<HTMLElement>('.slime-cels')!.style.animationDelay)).toBe(Number.parseFloat(svg.style.getPropertyValue('--slime-delay')) - count*16);
-    expect(animated.mock.calls.filter(([frames]) => Array.isArray(frames) && frames[0]?.visibility === 'visible')).toHaveLength(3+count);
+    // The vector's hold is made once, at the change of state: the strips joining it later neither restart nor extend it.
+    expect(animated.mock.calls.filter(([frames]) => Array.isArray(frames) && frames[0]?.visibility === 'visible')).toHaveLength(3);
     expect(observer.takeRecords()).toHaveLength(0);
   }
   expect(created.mock.calls.filter(([tag]) => tag === 'template').length).toBeLessThanOrEqual(1);

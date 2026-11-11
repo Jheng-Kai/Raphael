@@ -7,7 +7,9 @@ export function paintedSlime(svg) {
   const surface=svg.closest('.slime-surface');
   const fallback=()=>({body:svg.querySelector('.slime-body'),eyes:svg.querySelector('.slime-eyes'),marks:[...svg.querySelectorAll('.slime-mark')]});
   const bodyStrip=surface.querySelector('.slime-loop-body .slime-cels');
-  if(bodyStrip && getComputedStyle(bodyStrip.parentElement).display!=='none' && getComputedStyle(bodyStrip.parentElement).visibility!=='hidden'){
+  // A strip still going in, or waiting behind the vector's moment, is shown by its opacity (slime.css `slime-loop-show`) and is not painted yet.
+  const shown=bodyStrip && getComputedStyle(bodyStrip.parentElement).display!=='none' && getComputedStyle(bodyStrip.parentElement).visibility!=='hidden' && getComputedStyle(bodyStrip.parentElement).opacity!=='0';
+  if(shown){
     const frame=bodyStrip.parentElement.clientWidth, index=Math.round(-new DOMMatrix(getComputedStyle(bodyStrip).transform).e/frame);
     const props=bodyStrip.querySelector('.slime-prop-cels');
     const row=props?Math.round(-new DOMMatrix(getComputedStyle(props).transform).f/frame):0;
@@ -69,7 +71,16 @@ export async function slimeBoard(rows, columns = 1) {
   const offSeason = new Date(2000, 5, 1), hats = new Date(2026, 9, 31);
   // A strip admitted some milliseconds after a change of state starts that far into its loop (a negative delay, slime.ts admitStrips), so that it
   // keeps the clock the page reads; held `at` ms after the change, its own time is `at` plus that offset back. A positive delay is a lag by design.
-  const hold = (svg, at) => { for (const running of (svg.closest(".slime-surface") ?? svg).getAnimations({ subtree: true })) { running.pause(); running.currentTime = at + Math.min(0, running.effect?.getTiming().delay ?? 0); } };
+  // A finite animation cannot be held before its own start (a negative time is its "before" phase and draws its first frame), so such a one,
+  // the strips' show (slime.css `slime-loop-show`), has its offset taken out of its delay: it then stands `at` ms into its moment, as it would have.
+  const hold = (svg, at) => {
+    for (const running of (svg.closest(".slime-surface") ?? svg).getAnimations({ subtree: true })) {
+      const { delay = 0, iterations = 1 } = running.effect?.getTiming() ?? {};
+      running.pause();
+      if (delay < 0 && Number.isFinite(iterations)) { running.effect.updateTiming({ delay: 0 }); running.currentTime = at; }
+      else running.currentTime = at + Math.min(0, delay);
+    }
+  };
   const board = document.createElement("div");
   board.className = "look-slime-board";
   board.style.cssText = `position:fixed;inset:0;z-index:100000;overflow:hidden;display:grid;grid-template-columns:repeat(${columns},minmax(0,1fr));align-content:start;gap:6px;padding:8px;background:var(--content);color:var(--text-3);font-size:11px;line-height:12px`;
@@ -99,8 +110,10 @@ export async function slimeBoard(rows, columns = 1) {
       // The strips of a looping state are admitted a little later (slime.ts admitStrips) and would run on in real time, so the cell waits for
       // them and holds again: the change is then seen at exactly `after` ms, whatever the machine was doing meanwhile.
       if (["thinking", "working", "searching", "computer", "waiting", "blocked", "error"].includes(cell.then)) {
-        const surface = svg.closest(".slime-surface"), give = performance.now() + 1500;
-        while (!surface.querySelector(":scope > .slime-loop") && performance.now() < give) await new Promise(requestAnimationFrame);
+        // A heavy strip goes in a slice a frame, out of sight (slime.ts mountStrips); it starts its clocks when the last slice is in.
+        const surface = svg.closest(".slime-surface"), give = performance.now() + 4000;
+        const mounted = () => surface.querySelector(":scope > .slime-loop") && !surface.querySelector(":scope > .slime-loop[data-slime-loading]");
+        while (!mounted() && performance.now() < give) await new Promise(requestAnimationFrame);
         hold(svg, cell.after ?? 0);
       }
     }
