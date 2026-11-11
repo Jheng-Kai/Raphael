@@ -31,13 +31,13 @@ const output = outValue && !outValue.startsWith("--") ? resolve(outValue) : join
 const judgeIndex = args.indexOf("--judge");
 const judgeValue = judgeIndex < 0 ? undefined : args[judgeIndex + 1];
 if (judgeValue && !judgeValue.startsWith("--")) args.splice(judgeIndex, 2);
-const allowed = ["--quick", "--core", "--rust", "--live", "--help"];
+const allowed = ["--quick", "--core", "--contract", "--rust", "--live", "--help"];
 const unknown = args.find(arg => !allowed.includes(arg));
-if (unknown || (args.includes("--quick") && (args.includes("--core") || args.includes("--rust")))) {
-  console.error(unknown ? `Unknown option: ${unknown}` : "--quick cannot be combined with --core or --rust");
+if (unknown || (args.includes("--quick") && (args.includes("--core") || args.includes("--contract") || args.includes("--rust")))) {
+  console.error(unknown ? `Unknown option: ${unknown}` : "--quick cannot be combined with --core, --contract or --rust");
   process.exitCode = 1;
 } else if (args.includes("--help")) {
-  console.log("npm run verify -- [--quick] [--core] [--rust] [--live] [--judge run] [--out dir]\nDefault: tsc, vitest, contrast, and cargo fmt --check outside CI. --quick: tsc + vitest only.\n--core: also run offline core pytest with warnings as errors, as CI does.\n--rust: also run cargo fmt --check, offline cargo test for the app and the vendored listener, and Clippy with warnings denied, as CI does.\n--live: paid brain/tool matrix. --judge run: subscription CLI design review after look (720,1120,1920, both themes).\nLogs and summary: app/.look/verify-*/ (override with --out). Default checks use no network; --live and --judge explicitly opt in. No installs.");
+  console.log("npm run verify -- [--quick] [--contract] [--core] [--rust] [--live] [--judge run] [--out dir]\nDefault: tsc, vitest, contrast, and cargo fmt --check outside CI. --quick: tsc + vitest only.\n--contract: also run the core scenario drivers and the default prompt budget (minutes; before a core change is handed back).\n--core: also run offline core pytest with warnings as errors, as CI does (CI runs it on every push; locally it takes far longer).\n--rust: also run cargo fmt --check, offline cargo test for the app and the vendored listener, and Clippy with warnings denied, as CI does.\n--live: paid brain/tool matrix. --judge run: subscription CLI design review after look (720,1120,1920, both themes).\nLogs and summary: app/.look/verify-*/ (override with --out). Default checks use no network; --live and --judge explicitly opt in. No installs.");
 } else {
   await mkdir(output, { recursive: true });
   const directory = await mkdtemp(join(output, "verify-"));
