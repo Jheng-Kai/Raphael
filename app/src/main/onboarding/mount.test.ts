@@ -118,43 +118,47 @@ describe("the guide", () => {
     expect(root.dataset.step).toBe("services");
   });
 
-  test("the foot is one row, the welcome's pill alone and then on every step a worded back button before the worded pill", async () => {
+  test("the foot is the welcome's pill alone, and then on every step a pair of round buttons, the way back before the way on", async () => {
     await open();
     const foot = (): HTMLElement[] => [...root.querySelectorAll<HTMLElement>(".ob-foot .btn")];
     expect(foot().map((control) => control.dataset.ob)).toEqual(["next"]);
-    // The welcome's row is not the steps' row of two ends.
-    expect(root.querySelector(".ob-foot .ob-actions")!.classList.contains("ob-ends")).toBe(false);
+    // The welcome's row is its one worded pill, not the steps' pair.
+    expect(root.querySelector(".ob-foot .ob-actions")!.classList.contains("ob-pair")).toBe(false);
+    expect(text('[data-ob="next"]')).toBe("Start");
     for (const step of ["tools", "services", "abilities"]) {
       await press('[data-ob="next"]');
       expect(root.dataset.step).toBe(step);
-      // Exactly two controls, the way back first and the primary after it (also the tab order), in the row that puts one
-      // at each end.
+      // Exactly two controls, the way back first and the primary after it (also the tab order), in the row that keeps
+      // them together in the middle.
       const [back, primary, ...more] = foot();
       expect(more).toHaveLength(0);
-      expect(root.querySelector(".ob-foot .ob-actions")!.classList.contains("ob-ends")).toBe(true);
+      expect(root.querySelector(".ob-foot .ob-actions")!.classList.contains("ob-pair")).toBe(true);
       expect(back!.dataset.ob).toBe("back");
       expect(primary!.dataset.ob).toBe("next");
       expect(primary!.classList.contains("pri")).toBe(true);
-      // Both say what they do in words (owner, 2026-11-11): the way back is no icon-only button, so it has no name or
-      // tooltip that would repeat its words.
-      expect(back!.classList.contains("icon")).toBe(false);
-      expect(back!.textContent).toBe("Back");
-      expect(back!.hasAttribute("aria-label") || back!.hasAttribute("title")).toBe(false);
-      // A chevron points where each goes: before the words of the way back, after the words of the way on. The last
-      // step's pill finishes, and has none.
-      expect(back!.firstElementChild!.matches("svg.i")).toBe(true);
-      expect(primary!.lastElementChild!.matches("svg.i")).toBe(step !== "abilities");
-      expect(primary!.querySelectorAll("svg.i")).toHaveLength(step === "abilities" ? 0 : 1);
+      // Neither has words (owner, 2026-11-11 evening): each is a drawing, named for assistive tech and in its tooltip.
+      for (const control of [back!, primary!]) {
+        expect(control.classList.contains("icon")).toBe(true);
+        expect(control.textContent).toBe("");
+        expect(control.querySelectorAll("svg.i")).toHaveLength(1);
+        expect(control.getAttribute("title")).toBe(control.getAttribute("aria-label"));
+      }
+      expect(back!.getAttribute("aria-label")).toBe("Back");
+      expect(primary!.getAttribute("aria-label")).toBe(step === "abilities" ? "Start using Raphael" : "Next");
+      // The same filled triangle on both, turned round for the way back; the last step's way on finishes, and is a
+      // check instead.
+      expect(back!.classList.contains("ob-tri")).toBe(true);
+      expect(primary!.classList.contains("ob-tri")).toBe(step !== "abilities");
+      expect(back!.querySelector("svg.i")!.innerHTML === primary!.querySelector("svg.i")!.innerHTML).toBe(step !== "abilities");
     }
-    expect(text('[data-ob="next"]')).toBe("Start using Raphael");
   });
 
-  test("the back button goes back one step, and the pill keeps its words", async () => {
+  test("the back button goes back one step, and the way on keeps its name", async () => {
     await open();
     await press('[data-ob="next"]');
     await press('[data-ob="next"]');
     expect(root.dataset.step).toBe("services");
-    expect(text('[data-ob="next"]')).toBe("Next");
+    expect(root.querySelector('[data-ob="next"]')!.getAttribute("aria-label")).toBe("Next");
     await press('.ob-foot [data-ob="back"]');
     expect(root.dataset.step).toBe("tools");
     await press('.ob-foot [data-ob="back"]');
@@ -183,7 +187,7 @@ describe("the guide", () => {
     await open();
     for (let i = 0; i < 3; i++) await press('[data-ob="next"]');
     expect(setDevice).not.toHaveBeenCalled();
-    expect(text('[data-ob="next"]')).toBe("Start using Raphael");
+    expect(root.querySelector('[data-ob="next"]')!.getAttribute("aria-label")).toBe("Start using Raphael");
     await press('[data-ob="next"]');
     expect(setDevice).toHaveBeenCalledTimes(1);
     expect(setDevice).toHaveBeenCalledWith({ onboarded: true });

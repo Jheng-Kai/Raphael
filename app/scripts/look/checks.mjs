@@ -2801,7 +2801,7 @@ export function checkRendered(name, context = {}) {
     // The welcome's one pill is 360 px wide, or what a narrow card leaves it; a rerun's × and pill fill the same width.
     const foot = document.querySelector('.ob-foot'), footStyle = getComputedStyle(foot), room = foot.getBoundingClientRect().width - parseFloat(footStyle.paddingLeft) - parseFloat(footStyle.paddingRight);
     require(Math.abs(box.width - Math.min(360, room)) <= 1, `the welcome's pill is 360 px wide, or its room (${Math.round(box.width)} px of ${Math.round(Math.min(360, room))})`);
-    require(!document.querySelector('.ob-foot .ob-ends'), "the welcome's row is its own, not a step's two ends");
+    require(!document.querySelector('.ob-foot .ob-pair'), "the welcome's row is its own, not a step's pair");
     const ink = getComputedStyle(pill).backgroundColor, text = getComputedStyle(document.body).color;
     require(ink !== 'rgba(0, 0, 0, 0)' && ink !== getComputedStyle(document.querySelector('.ob-card')).backgroundColor, `the pill is the solid accent, not the card's colour (${ink} on ${text})`);
     const drawn = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data;
@@ -2810,50 +2810,54 @@ export function checkRendered(name, context = {}) {
     require(inked > 40, `the emblem is drawn on its canvas (${inked} pixels)`);
     return { check: name, inked };
   }
-  // A step's foot (owner, 2026-11-11, of a round arrow beside one wide pill: 「我要的是左右 button」; one row at all since
-  // 「上下堆疊會造成我們畫面有些空間比較緊…感覺左右放」): one row with a button at each end, the way back at the left and the
-  // way on at the right, both with words and a chevron that points where they go.
-  const requireStepEnds = (card, last) => {
-    const rowEl = document.querySelector('.ob-foot .ob-actions'), row = rowEl.getBoundingClientRect();
+  // A step's foot (owner, 2026-11-11 evening, of two worded pills at the row's ends: 「改成集中在中間這邊好不好？然後 icon 改
+  // 一下…不一定要寫字，can 用兩個三角形之類的」; a left and a right button since 「我要的是左右 button」, one row since 「上下堆疊
+  // 會造成我們畫面有些空間比較緊」): two round buttons together in the middle, the way back at the left and the way on at the
+  // right, each a filled triangle that points where it goes. The last step's way on is a check: it finishes.
+  const requireStepPair = (card, last) => {
+    const rowEl = document.querySelector('.ob-foot .ob-actions');
     const buttons = [...rowEl.querySelectorAll(':scope > .btn')].filter(visible);
-    require(rowEl.classList.contains('ob-ends') && buttons.length === 2 && document.querySelectorAll('.ob-foot .btn').length === 2, `the foot holds two buttons and nothing else (${buttons.length})`);
+    require(rowEl.classList.contains('ob-pair') && buttons.length === 2 && document.querySelectorAll('.ob-foot .btn').length === 2, `the foot holds two buttons and nothing else (${buttons.length})`);
     const [back, primary] = buttons, left = back.getBoundingClientRect(), ink = primary.getBoundingClientRect();
-    require(back.dataset.ob === "back" && primary.dataset.ob === "next" && primary.matches('.pri') && !back.matches('.pri, .icon'), "the way back comes first and is the quiet one, the primary after it");
-    // Words on both, in the screen language: no icon-only button, so nothing needs a tooltip to be understood.
-    require(back.textContent.trim() === "上一步" && !back.hasAttribute('title') && !back.hasAttribute('aria-label'), `the way back says 上一步 in words, with no tooltip repeating them (${back.textContent.trim()})`);
-    // The last step's primary finishes: 開始使用 on a first run, 完成 when the guide was opened again.
-    const words = last ? ["開始使用", "完成"] : ["下一步"];
-    require(words.includes(primary.textContent.trim()), `the primary says ${words.join(" or ")} (${primary.textContent.trim()})`);
-    // A chevron points where each goes: before the words on the way back, after them on the way on; finishing has none.
-    const drawn = button => [...button.children].map(child => child.matches('svg.i') ? 'chevron' : 'words').join(' ');
-    require(drawn(back) === 'chevron words', `the way back is a chevron and then its words (${drawn(back)})`);
-    require(drawn(primary) === (last ? 'words' : 'words chevron'), `the primary is its words${last ? " alone" : " and then a chevron"} (${drawn(primary)})`);
-    for (const [button, side] of [[back, 'first'], ...(last ? [] : [[primary, 'last']])]) {
-      const mark = button.querySelector('svg.i').getBoundingClientRect(), text = button.querySelector('span').getBoundingClientRect(), box = button.getBoundingClientRect();
-      require(visible(button.querySelector('svg.i')) && Math.abs(mark.width - mark.height) <= 1 && mark.width >= 16, `the chevron is drawn (${Math.round(mark.width)} px)`);
-      require(side === 'first' ? mark.right <= text.left + 1 && mark.left > box.left : mark.left >= text.right - 1 && mark.right < box.right, "the chevron is on the side it points to, inside the pill");
-      require(Math.abs((mark.top + mark.bottom) / 2 - (text.top + text.bottom) / 2) <= 1.5, "the chevron sits on the words' line");
+    require(back.dataset.ob === "back" && primary.dataset.ob === "next" && primary.matches('.pri') && !back.matches('.pri'), "the way back comes first and is the quiet one, the primary after it");
+    // No words: each is a drawing alone, so each is named for assistive tech and says the same in its tooltip, in the
+    // screen language. The last step's primary finishes: 開始使用 on a first run, 完成 when the guide was opened again.
+    const names = last ? ["開始使用", "完成"] : ["下一步"];
+    for (const [button, wanted] of [[back, ["上一步"]], [primary, names]]) {
+      require(button.matches('.btn.icon') && !button.textContent.trim() && button.querySelectorAll(':scope > svg.i').length === 1, `${wanted[0]} is a drawing alone, with no words`);
+      require(wanted.includes(button.getAttribute('aria-label')) && button.getAttribute('title') === button.getAttribute('aria-label'), `it is named ${wanted.join(" or ")} for assistive tech and in its tooltip (${button.getAttribute('aria-label')})`);
     }
-    // One row: the two at its two ends, on one line, the same height, neither stretched across.
-    require(Math.abs(left.left - row.left) <= 1 && Math.abs(ink.right - row.right) <= 1, `the way back is at the row's left end and the primary at its right end (${Math.round(left.left - row.left)} and ${Math.round(row.right - ink.right)} px in)`);
-    require(Math.abs((left.top + left.bottom) / 2 - (ink.top + ink.bottom) / 2) <= 1 && Math.abs(left.height - ink.height) <= 1, `the two are on one line and one height (${Math.round(left.height)} and ${Math.round(ink.height)})`);
-    require(left.right < ink.left && ink.left - left.right >= 24, `the two stand apart (${Math.round(ink.left - left.right)} px between them)`);
-    for (const [what, box] of [["the way back", left], ["the primary", ink]]) {
-      require(box.width >= 120 && box.width <= Math.max(200, row.width * .34), `${what} is as wide as its words ask, not a strip across the row (${Math.round(box.width)} px of ${Math.round(row.width)})`);
-      require(box.height >= 40, `${what} is a comfortable target (${Math.round(box.height)} px tall)`);
+    // The drawing: one filled triangle on both, the way back's turned round, each pointing away from the other. The last
+    // step's way on is a check, a line and not a filled shape.
+    const drawing = button => button.querySelector(':scope > svg.i'), filled = button => !['none', 'rgba(0, 0, 0, 0)'].includes(getComputedStyle(drawing(button)).fill);
+    const flipped = button => new DOMMatrixReadOnly(getComputedStyle(drawing(button)).transform).a < 0;
+    require(back.matches('.ob-tri') && filled(back) && flipped(back), "the way back is a filled triangle that points left");
+    if (last) require(!primary.matches('.ob-tri') && !filled(primary) && drawing(primary).innerHTML !== drawing(back).innerHTML, "the last step's way on is a check, not a triangle");
+    else require(primary.matches('.ob-tri') && filled(primary) && !flipped(primary) && drawing(primary).innerHTML === drawing(back).innerHTML, "the way on is the same filled triangle, pointing right");
+    for (const button of buttons) {
+      const mark = drawing(button).getBoundingClientRect(), box = button.getBoundingClientRect();
+      require(Math.abs(mark.width - 20) <= .5 && Math.abs(mark.height - 20) <= .5, `the drawing is 20 px (${mark.width} x ${mark.height})`);
+      require(Math.abs((mark.left + mark.right) / 2 - (box.left + box.right) / 2) <= 1 && Math.abs((mark.top + mark.bottom) / 2 - (box.top + box.bottom) / 2) <= 1, "the drawing's box is in the middle of its circle");
+      // A circle: as wide as tall, a comfortable target, round all the way.
+      require(Math.abs(box.width - box.height) <= .5 && box.width >= 44 && box.width <= 56 && parseFloat(getComputedStyle(button).borderTopLeftRadius) >= box.width / 2 - 1, `it is a circle of a comfortable size (${Math.round(box.width)} x ${Math.round(box.height)})`);
     }
-    require(parseFloat(getComputedStyle(primary).borderTopLeftRadius) >= ink.height / 2 - 1 && parseFloat(getComputedStyle(back).borderTopLeftRadius) >= left.height / 2 - 1, "both are pills");
-    // The row is as wide as the widest step's column, whatever the step, so the buttons stand in the same place on
-    // every step; it is centred in the card.
-    const foot = document.querySelector('.ob-foot'), footBox = foot.getBoundingClientRect(), footStyle = getComputedStyle(foot);
-    const room = footBox.width - parseFloat(footStyle.paddingLeft) - parseFloat(footStyle.paddingRight);
-    require(Math.abs(row.width - Math.min(900, room)) <= 1, `the row is the width of the widest step's column (${Math.round(row.width)} px of ${Math.round(Math.min(900, room))})`);
-    require(Math.abs((row.left + row.right) / 2 - (card.left + card.width / 2)) <= 2, "the row is centred in the card");
-    // The colours: the primary is the solid accent; the way back has a quiet surface of its own with no edge to see.
-    const surface = getComputedStyle(back).backgroundColor, cardSurface = getComputedStyle(document.querySelector('.ob-card')).backgroundColor;
-    require(!['rgba(0, 0, 0, 0)', 'transparent'].includes(surface) && surface !== getComputedStyle(primary).backgroundColor && surface !== cardSurface, `the way back keeps a quiet surface of its own (${surface})`);
-    require(getComputedStyle(back).borderTopColor === surface, `the way back's edge is its fill's colour: no edge shows, in the dark theme least of all (${getComputedStyle(back).borderTopColor})`);
+    // Together in the middle: one size, on one line, a small gap between them, and the pair centred in the card. It is
+    // the same on every step, so neither button moves from step to step.
+    require(Math.abs(left.width - ink.width) <= .5 && Math.abs((left.top + left.bottom) / 2 - (ink.top + ink.bottom) / 2) <= 1, `the two are one size on one line (${Math.round(left.width)} and ${Math.round(ink.width)})`);
+    const gap = ink.left - left.right;
+    require(gap >= 8 && gap <= 16, `the two stand together, a small gap between them (${Math.round(gap)} px)`);
+    require(Math.abs((left.left + ink.right) / 2 - (card.left + card.width / 2)) <= 1, `the pair is centred in the card (${Math.round((left.left + ink.right) / 2 - card.left - card.width / 2)} px off)`);
+    // The colours: the way on is a circle of the solid accent with the accent's ink; the way back has a quiet surface of
+    // its own. Neither has an edge to see, in the dark theme least of all.
+    const cardSurface = getComputedStyle(document.querySelector('.ob-card')).backgroundColor;
+    const token = value => { const probe = document.createElement('i'); probe.style.backgroundColor = `var(${value})`; document.body.append(probe); const colour = getComputedStyle(probe).backgroundColor; probe.remove(); return colour; };
+    const quiet = getComputedStyle(back).backgroundColor, solid = getComputedStyle(primary).backgroundColor;
+    // The pointer may still rest on it from the press that brought the step: then it is the accent's own step under the pointer.
+    require([token('--accent'), token('--accent-hover'), token('--accent-pressed')].includes(solid) && getComputedStyle(primary).color === token('--on-accent'), `the way on is the solid accent with its ink (${solid}, ${getComputedStyle(primary).color})`);
+    require(!['rgba(0, 0, 0, 0)', 'transparent'].includes(quiet) && quiet !== solid && quiet !== cardSurface, `the way back keeps a quiet surface of its own (${quiet})`);
+    for (const button of buttons) require(['rgba(0, 0, 0, 0)', 'transparent'].includes(getComputedStyle(button).borderTopColor), "a round button has no edge");
     // The foot is one control and its padding tall, and the content ends where it begins.
+    const foot = document.querySelector('.ob-foot'), footBox = foot.getBoundingClientRect(), footStyle = getComputedStyle(foot);
     const pad = parseFloat(footStyle.paddingTop) + parseFloat(footStyle.paddingBottom);
     require(footBox.height <= ink.height + pad + 1, `the foot is one control plus its padding tall (${Math.round(footBox.height)} px, a control ${Math.round(ink.height)} + ${Math.round(pad)})`);
     require(document.querySelector('.ob-body').getBoundingClientRect().bottom <= footBox.top + 1, "the content area ends where the foot begins");
@@ -2890,23 +2894,23 @@ export function checkRendered(name, context = {}) {
     return { ink, arrow };
   };
   if (name === "onboarding-back-hover" || name === "onboarding-back-focus") {
-    // 上一步 at the left end of a step's foot (owner, 2026-11-11): a quiet pill on a grey of its own, one step lighter
-    // under the pointer, edge and fill alike; the keyboard shows the app's usual ring on it, and it comes before the primary.
+    // The way back of a step's pair (owner, 2026-11-11): a round button on a quiet grey of its own, one step lighter under
+    // the pointer, with no edge; the keyboard shows the app's usual ring on it, and it comes before the primary.
     const back = document.querySelector('.ob-foot [data-ob="back"]');
     const token = value => { const probe = document.createElement('i'); probe.style.backgroundColor = `var(${value})`; document.body.append(probe); const colour = getComputedStyle(probe).backgroundColor; probe.remove(); return colour; };
-    require(visible(back) && back.matches('.btn.ob-prev:not(.icon)') && back.textContent.trim() === "上一步", "the step's foot has 上一步, in words");
+    require(visible(back) && back.matches('.ob-pair > .btn.icon.ob-prev') && back.getAttribute('aria-label') === "上一步", "the step's foot has its round way back, named 上一步");
     if (name === "onboarding-back-hover") {
       const style = getComputedStyle(back);
-      require(back.matches(':hover'), "the pointer is on 上一步");
-      require(style.backgroundColor === token('--pressed') && token('--pressed') !== token('--hover'), `上一步 is one step lighter under the pointer (${style.backgroundColor})`);
-      require(style.borderTopColor === style.backgroundColor, `its edge changes with its fill, so no ring appears under the pointer (${style.borderTopColor})`);
+      require(back.matches(':hover'), "the pointer is on the way back");
+      require(style.backgroundColor === token('--pressed') && token('--pressed') !== token('--hover'), `the way back is one step lighter under the pointer (${style.backgroundColor})`);
+      require(['rgba(0, 0, 0, 0)', 'transparent'].includes(style.borderTopColor) && style.color === token('--text'), `no edge appears under the pointer and its triangle keeps its ink (${style.borderTopColor}, ${style.color})`);
       require(!document.documentElement.hasAttribute('data-keys') && style.outlineStyle === 'none', "the pointer adds no keyboard ring");
     } else {
       const style = getComputedStyle(back);
-      require(document.activeElement === back && document.documentElement.hasAttribute('data-keys'), "Shift+Tab from the primary lands on 上一步, by the keyboard");
-      require(style.outlineStyle !== 'none' && parseFloat(style.outlineWidth) >= 2 && style.outlineColor !== 'rgba(0, 0, 0, 0)', `上一步 shows the app's focus ring (${style.outlineWidth} ${style.outlineStyle} ${style.outlineColor})`);
-      require(style.backgroundColor === token('--hover'), "上一步 rests on its quiet grey");
-      require(parseFloat(style.borderTopLeftRadius) >= back.getBoundingClientRect().height / 2 - 1, "the ring follows the pill");
+      require(document.activeElement === back && document.documentElement.hasAttribute('data-keys'), "Shift+Tab from the primary lands on the way back, by the keyboard");
+      require(style.outlineStyle !== 'none' && parseFloat(style.outlineWidth) >= 2 && style.outlineColor !== 'rgba(0, 0, 0, 0)', `the way back shows the app's focus ring (${style.outlineWidth} ${style.outlineStyle} ${style.outlineColor})`);
+      require(style.backgroundColor === token('--hover'), "the way back rests on its quiet grey");
+      require(parseFloat(style.borderTopLeftRadius) >= back.getBoundingClientRect().height / 2 - 1, "the ring follows the circle");
     }
     return { check: name };
   }
@@ -2915,7 +2919,7 @@ export function checkRendered(name, context = {}) {
     // never a word button; owner, 2026-11-11), then the wide pill. Nothing stacks.
     const card = document.querySelector('.ob-card').getBoundingClientRect();
     require(visible(document.querySelector('.ob-emblem canvas.ob-emb')) && document.querySelector('.ob-col > h2.ob-wordmark'), "the welcome is on screen");
-    require(!document.querySelector('.ob-foot .ob-ends'), "the welcome's row is its own, not a step's two ends");
+    require(!document.querySelector('.ob-foot .ob-pair'), "the welcome's row is its own, not a step's pair");
     const { ink, arrow } = requireWelcomeRow(card);
     const back = document.querySelector('.ob-actions > .btn.ob-back');
     require(back.dataset.ob === "back" && back.querySelector('svg.i') && !back.textContent.trim(), "the way out is a × with no words");
@@ -3019,7 +3023,7 @@ export function checkRendered(name, context = {}) {
       }
       require(document.querySelector('[data-svc="toggle"][data-id="read"]').getAttribute('aria-checked') === 'false', "a switch that was pressed turned off");
     }
-    requireStepEnds(card, name === "onboarding-abilities");
+    requireStepPair(card, name === "onboarding-abilities");
     // Every word of a tile stays inside it, in every language.
     for (const tile of document.querySelectorAll('.ob-tile')) {
       const t = tile.getBoundingClientRect();
