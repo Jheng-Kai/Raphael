@@ -39,7 +39,7 @@ import {
   offerRoutine,
 } from "./member-dialogs";
 import { openMemberCreator } from "./member-creator";
-import { RAPHAEL_ID, faceHTML, memberOf, orderedMembers, memberRole, raphaelOf } from "./members";
+import { RAPHAEL_ID, faceHTML, memberOf, orderedMembers, memberRole, raphaelOf, stableMember } from "./members";
 import { memberColor, nameAccent } from "./owner-bubble";
 import { followSlimeRoster, setSlimeState } from "./slime";
 import type { AppContext, MainEvent, Member, MemberGroup, MemberPatch, MembersList } from "./types";
@@ -128,6 +128,8 @@ export function createMembers(host: MembersHost): MembersShell {
   let fresh = new Set<number>();
   let loads = 0;
   let listJSON = "";
+  /** The part of the list that does not change with each word or step (members.ts `stableMember`). */
+  let stableJSON = "";
   let viewing: number | null | undefined;
   let refreshDue = 0;
   let refreshTimer: ReturnType<typeof setTimeout> | null = null;
@@ -139,6 +141,8 @@ export function createMembers(host: MembersHost): MembersShell {
   let refreshOnShow = false;
 
   const member = (): Member => memberOf(list, current) ?? raphaelOf(list);
+  /** The panel's face as it is drawn, but for the words of its tooltip: those are put on the face where it stands (slime.ts). */
+  const faceKey = (m: Member): string => faceHTML(m, 64).replace(/ data-tooltip="[^"]*"/, "");
 
   // ---------- the parts ----------
 
@@ -245,10 +249,13 @@ export function createMembers(host: MembersHost): MembersShell {
     picker.setAttribute("aria-label", `${t("members.pick")}: ${m.name}`);
   }
 
-  function drawAll(): void {
+  /** `panels` false: what the panel and the settings page draw from is as it was, so they are not asked. */
+  function drawAll(panels = true): void {
     column.draw();
-    details.draw();
-    settings.draw();
+    if (panels) {
+      details.draw();
+      settings.draw();
+    }
     drawHead();
     // The panel joins its page after the shell is made; its width follows it there.
     placePanel();
@@ -284,7 +291,13 @@ export function createMembers(host: MembersHost): MembersShell {
       if (host.visible()) tellViewing(current);
       return;
     }
+    // What the panel and the settings page draw from (stableMember), and whether it moved: a new last line, a step or an
+    // unread mark moves nothing there, so those two are neither drawn again nor given a read of their own.
+    const stable = JSON.stringify([read.members.map(stableMember), read.groups]);
+    const first = listJSON === "", settled = !first && stable === stableJSON;
+    const openMember = current, panelFace = faceKey(member());
     listJSON = json;
+    stableJSON = stable;
     const ids = new Set(read.members.map((m) => m.id));
     fresh = known === null ? new Set() : new Set([...ids].filter((id) => !known!.has(id)));
     followSlimeRoster(read.members);
@@ -300,7 +313,9 @@ export function createMembers(host: MembersHost): MembersShell {
       toaster.info(t("common.deleted"));
       details.showMember();
     }
-    drawAll();
+    // The panel's face is a picture of what the member is (asleep, waiting) and the words for it: those move it too.
+    drawAll(!settled || current !== openMember || faceKey(member()) !== panelFace);
+    if (!first && !settled) details.refreshResources();
     host.onUpdate?.();
     void readThread();
     if (host.visible()) tellViewing(current);
@@ -596,7 +611,8 @@ export function createMembers(host: MembersHost): MembersShell {
         if (refreshTimer !== null) clearTimeout(refreshTimer);
         refreshTimer = null;
         void load(true);
-        details.refreshResources();
+        // A roster that changed in what the panel shows reads the Library itself (load); the others read it here.
+        if (event.type !== "MembersChanged") details.refreshResources();
         settings.refresh();
       } else if (event.type === "RoutinesChanged" && event.member_id === current) {
         details.refreshRoutines();

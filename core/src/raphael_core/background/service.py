@@ -38,9 +38,10 @@ time that was left. The conversation, the call and its arguments stay in memory 
   task goes on from where it paused, with its own time that was left (the time it waited is not
   the task's). A no queues it the same way, with the call not made and the model told so, so that
   it can report what it did do;
-- nobody answering within about ten minutes (`policy.UNATTENDED_WAIT_S`) ends the task politely (state
-  "cancelled", reason "expired"), with nothing more spent and nothing the question was about done; a yes
-  that comes after that finds nothing. A task that waited when the core ended is interrupted, like one that
+- nobody answering within thirty minutes (`policy.UNATTENDED_WAIT_S`, R-AG-MGMT-04) does not end the task: the
+  call is not made, the question is "expired", and the task goes on as after a no, told that nobody answered, that
+  the call can be asked for again and that its report must say what was not done; a yes that comes after that finds
+  nothing. A task that waited when the core ended is interrupted, like one that
   ran, and its question is cancelled.
 
 A paused task does not hold the worker: the tasks behind it run meanwhile.
@@ -160,10 +161,12 @@ CONTEXT_TURNS = 3
 # The core waits this much longer than the task's own time, and the start of the worker
 # (`WorkerHost.start_s`), for the worker to say it is done.
 TIME_NET_S = 20.0
-# A question of the background waits this long for the owner, then the task ends without its call: nobody
-# sits at it, so it is the wait of any unattended question (`policy.UNATTENDED_WAIT_S`, about ten minutes).
+# A question of the background waits this long for the owner, then the task goes on without its call: nobody
+# sits at it, so it is the wait of any unattended question (`policy.UNATTENDED_WAIT_S`, thirty minutes).
 QUESTION_WAIT_S = UNATTENDED_WAIT_S
 QUESTION_WAIT_MS = round(QUESTION_WAIT_S * 1000)
+# A CLI brain holds the call open a little longer than the question lives, so that the question's own end comes first.
+CLI_QUESTION_WAIT_S = QUESTION_WAIT_S + 60
 # Where the only yes to a question of the background may come from: the app at this computer.
 AT_THIS_COMPUTER = "app"
 # The assistant's history calls a task by the status of a turn.
@@ -270,6 +273,8 @@ class _Paused:
     member_id: int
     remaining_s: float
     answer: tuple[bool, Approval | None] | None = None
+    # Nobody answered in time: the call is not made and the task goes on without it (`BackgroundService._expire`).
+    expired: bool = False
 
 
 def continued(messages: Sequence[dict], waiting_call: str, content: str) -> list[dict]:
@@ -1437,7 +1442,7 @@ class BackgroundService:
                 from .cli import member_loop
                 spec = {**spec,'user':spec['user']+'\n'+HANDOFF_RESULTS_NOTE+'\n'+json.dumps(results,ensure_ascii=False)}
                 self._cli_loops[task.id] = member_loop(self._cli_brains,self._cli_quota,task,run,spec,
-                    wait_s=QUESTION_WAIT_S,progress=lambda text:self._progress(task,text))
+                    wait_s=CLI_QUESTION_WAIT_S,progress=lambda text:self._progress(task,text))
                 await self._carry_cli(task,run,spec)
             else:
                 await self._carry(task,run,{**spec,'messages':messages})
@@ -1691,7 +1696,7 @@ class BackgroundService:
                 return
             from .cli import member_loop
             self._cli_loops[task.id] = member_loop(self._cli_brains, self._cli_quota, task, run, spec,
-                wait_s=QUESTION_WAIT_S, progress=lambda text: self._progress(task, text))
+                wait_s=CLI_QUESTION_WAIT_S, progress=lambda text: self._progress(task, text))
             await self._carry_cli(task, run, spec)
             return
         await self._carry(task, run, spec)
@@ -1726,7 +1731,7 @@ class BackgroundService:
         if task.id in self._cli_loops:
             from .cli import tool_outcome
             self._store.set_state(task.id, RUNNING)
-            content = await run.answer_call(paused.waiting, approval, paused.pending.action if approved else None)
+            content = await run.answer_call(paused.waiting, approval, paused.pending.action if approved else None, expired=paused.expired)
             self._cli_loops[task.id].continue_with(tool_outcome(content))
             await self._carry_cli(task, run)
             return
@@ -1744,7 +1749,7 @@ class BackgroundService:
 
         async def prepare() -> list[dict]:
             action = paused.pending.action if approved else None
-            content = await run.answer_call(paused.waiting, approval, action)
+            content = await run.answer_call(paused.waiting, approval, action, expired=paused.expired)
             return continued(paused.messages, paused.waiting.call_id, content)
 
         logger.info("Background task %d goes on: approved=%s", task.id, approved)
@@ -2207,10 +2212,8 @@ class BackgroundService:
         self._arm_expiry()
 
     def _expire(self, paused: _Paused) -> None:
-        """Nobody answered: the task ends politely, without the call and with nothing more spent."""
-        self._paused.pop(paused.task_id, None)
-        if loop := self._cli_loops.pop(paused.task_id, None):
-            loop.cancel()
+        """Nobody answered in time (R-AG-MGMT-04): the call is not made, and the task goes on without it, told that it
+        was not asked again and must say in its report what was not done. What needed no yes is not cancelled with it."""
         try:
             self._store.close_question(paused.pending.id, "expired")
         except sqlite3.Error as exc:
@@ -2219,12 +2222,18 @@ class BackgroundService:
         logger.info("Background task %d: nobody answered its question in time", paused.task_id)
         self._closed(paused, "expired")
         task = self.task(paused.task_id)
-        if task is not None:
-            language = task.language
-            self._conclude(
-                task, paused.run, "cancelled", PREFIXES[language].notice,
-                phrase(language, "worker_expired"), None, "expired",
-            )  # fmt: skip
+        if task is None or task.id in self._discarded:
+            self._drop_paused(paused)
+            return
+        paused.expired, paused.answer = True, (False, None)
+        self._progress(task, phrase(task.language, "worker_expired"))  # said at once; the report says which call it was
+        try:
+            self._store.set_state(task.id, QUEUED)
+        except sqlite3.Error as exc:
+            logger.warning("Could not write down that a task goes on: %s", type(exc).__name__)
+        self._queue.appendleft(task.id)
+        self._ensure_pump()
+        self._changed(task.id, QUEUED)
 
     def _drop_paused(self, paused: _Paused, state: str = "cancelled") -> None:
         """A task that waited is stopped (by the owner, or because the core closes): its question

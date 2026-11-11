@@ -7,7 +7,9 @@ export const drag = (selector, dx, options = {}) => ({ action: "drag", selector,
 export const type = (selector, text) => ({ action: "type", selector, text });
 export const wait = selector => ({ action: "wait", selector });
 export const waitGone = selector => ({ action: "wait-gone", selector });
+export const codexArrives = () => ({ action: "codex-arrives" });
 export const check = name => ({ action: "check", name });
+export const focus = selector => ({ action: "focus", selector });
 export const key = value => ({ action: "key", key: value });
 // What an input method hands the page, in order: `{ compose }` is a composition in progress, `{ commit }` the text it finishes with.
 export const ime = (selector, sequence) => ({ action: "ime", selector, sequence });
@@ -16,7 +18,8 @@ export const waitScrollEnd = selector => ({ action: "wait-scroll-end", selector 
 export const rightClick = selector => ({ action: "right-click", selector });
 export const page = name => click(name === "agent" ? ".mb-chief" : `#nav [data-go="${name}"]`);
 // 連結應用程式 is no tab of Settings: its one way in is the sidebar's button, which opens it as a dialog of its own (R-UI-111).
-// Appearance and messaging are sections of 一般 (the six settings tabs): their scenes open 一般 at that section.
+// Appearance is a section of 一般 (the six settings tabs): its scenes open 一般 at that section. Messaging has no section
+// there any more: the bots are set up in each member's panel and conversation, so no scene opens it in Settings.
 const SECTION_OF = { appearance: ".appearance-settings" };
 export const settings = pane => {
   if (pane === "connections") return [click("#nav .sidebar-apps"), wait(".modal-scrim[data-standalone=\"connections\"] .modal-body .cs"), check("settings-shell")];

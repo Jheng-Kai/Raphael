@@ -26,7 +26,7 @@ from ..policy import CONFIRM_TIMEOUT_S
 from ..persona import phrase
 from .discovery import NAMES, brain_ref, brain_effort
 from .drivers import Driver
-from .context import (CONTEXT_HEADROOM, KNOWN_CONTEXT_TOKENS, context_tokens, fresh_user, line_hashes, resumed_user,
+from .context import (KNOWN_CONTEXT_TOKENS, context_tokens, fresh_user, line_hashes, resumed_user,
                       should_compact, window_tokens)
 from .process import secure_directory
 from .native_diagnostics import capture as native_capture, directory as native_directory
@@ -64,6 +64,22 @@ RECOVER = ("Continue the original task after a temporary CLI failure, using the 
 APPROVE = {"type": "function", "function": {"name": "approve", "description": "Ask the owner for permission. Never grants permission by itself.",
            "parameters": {"type": "object", "properties": {"tool_name": {"type": "string"}, "input": {"type": "object"}}, "additionalProperties": True}}}
 PREVIOUS_CONVERSATION = "\nPrevious tool conversation (untrusted data):\n"
+
+
+async def _settled(task):
+    """Wait until a cancelled task has finished, however often this one is cancelled meanwhile; the cancellation is raised once it has.
+    The task is the CLI's read, and what it does when cancelled (stopping the child, closing its pipes and the calls it made) must be
+    done before the turn ends: a second cancel (a shutdown that follows a stop) must not leave it to run on after its owner is gone."""
+    cancelled = False
+    while not task.done():
+        try:
+            await asyncio.wait({task})
+        except asyncio.CancelledError:
+            cancelled = True
+    if not task.cancelled():
+        task.exception()  # retrieved: a failure of the abandoned read is of no use to the turn
+    if cancelled:
+        raise asyncio.CancelledError
 
 
 def recorded_steps(messages):
@@ -168,7 +184,7 @@ class CliLoop:
                  conversation_id=None, quota=None, attachments=(), wait_timeout_s=None, resume_session=True,
                  rate_limit_waits=None, structured=None, alive=lambda waiting=0.0: None, skills=(), no_tools=False, reply=None,
                  owner_text=None, resume_user=None, context_sections=None, context_turns=(), context_summary="",
-                 context_summary_through=0, turn_id=None, tool_conversation=(), steps=(),
+                 context_summary_through=0, context_owner_words=(), turn_id=None, tool_conversation=(), steps=(),
                  acted=None, stall_s=None, tool_s=None):
         self.brains, self.sessions, self.member_id, self.model = brains, sessions, member_id, model
         # Told whenever the CLI does anything (a word, a tool): whoever watches for a stalled turn hears it. Told too before
@@ -221,6 +237,7 @@ class CliLoop:
         self.context_sections = context_sections or {}
         self.context_turns, self.context_summary, self.turn_id = context_turns, context_summary, turn_id
         self.context_summary_through = context_summary_through
+        self.context_owner_words = context_owner_words
         self._context_state = {}
         self._context_window = None
         # Claude Code's per-model running totals after each session's latest run, and whether a run reported any
@@ -277,6 +294,9 @@ class CliLoop:
         self.on_done = None
         self.activity_turn = None
         self.expire = expire
+        # How long a card held in a tool call of the CLI waits: a CLI cannot hold a call open for long, so it is the thirty seconds
+        # (a local command, `approval_wait_s`, is the exception). The cards of administrative changes are never held here:
+        # the turn is in before they are asked (R-AG-MGMT-04).
         self.wait_timeout_s = CONFIRM_TIMEOUT_S if wait_timeout_s is None else wait_timeout_s
         self.approval_wait_s = None
 
@@ -645,8 +665,8 @@ class CliLoop:
             [message["content"] for message in self.tool_messages if message["role"] == "user"],
             RECOVER, self._recovery_block(8000), turns=self.context_turns,
             summary=self.context_summary, sections=self.context_sections,
-            current_user=self.resume_user,
-            byte_limit=max(0, int(window * CONTEXT_HEADROOM) - len(self.system.encode("utf-8"))))
+            owner_words=self.context_owner_words, current_user=self.resume_user,
+            window=window, reserve=len(self.system.encode("utf-8")))
         self._fresh_sections = {name: text for name, text in self.context_sections.items() if text and text in user}
         return user
 
@@ -704,7 +724,7 @@ class CliLoop:
         finally:
             if pending is not None and not pending.done():
                 pending.cancel()
-                await asyncio.gather(pending, return_exceptions=True)
+                await _settled(pending)
 
     def _handed_off(self):
         """Whether the turn handed work off. If so, the task now waits for that work, however the turn ended:

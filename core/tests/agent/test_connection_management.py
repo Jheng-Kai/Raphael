@@ -162,6 +162,9 @@ async def test_managed_app_changes_use_the_existing_connector_policy(make_rig, c
     team.register(rig.rpc)
     rig.settings.set("action_mode", "bypass")
     client.chats = [chat("Change.", use("manage_connection", {"connection": entry.id, "operation": operation, "tool": "GMAIL_FETCH_EMAILS"})), chat("Changed.")]
+    if operation == "disconnect":
+        # R-AG-MGMT-02: the change is held until the turn is in and asked on one card; the yes then goes on with a model call of its own.
+        client.chats.insert(1, chat("Asked."))
     asked = await typed(rig, "Change sample app access")
     if operation == "disconnect":
         assert asked["status"] == "confirm" and entry.id in asked["confirm"]["text"]

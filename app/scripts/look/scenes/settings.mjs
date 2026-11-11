@@ -1,4 +1,4 @@
-import { scene, click, hover, type, wait, waitGone, page, settings, scroll, key, check, member, rightClick } from "./steps.mjs";
+import { scene, click, hover, type, wait, waitGone, codexArrives, page, settings, scroll, key, check, member, rightClick } from "./steps.mjs";
 
 const connections = settings("connections");
 const add = [...connections, click('[data-k="conn-add"]')];
@@ -34,7 +34,9 @@ export default [
   member(1), click('.composer .cmp-model .mp-trigger'), wait('.cb-menu'), click('.cb-pick'), click('.cb-menu [data-cb-source="cli:codex"]'), click('.cb-menu [data-model="cli:codex:gpt-6.1"]'), wait('.cb-now:not([hidden]) .cb-pick'), check("member-model-own"),
   click('.composer .cmp-model .mp-trigger'), waitGone('.cb-menu'), member(2), check("member-model-others"), member(1), check("member-model-kept"), ...settings("models"), check("member-model-settings")]),
   scene("settings-chatgpt-row", "A model on the ChatGPT plan has its maker's mark and says it is on the plan", [...settings("models"), wait('.modal-scrim [data-row="quick-model"] .mp-trigger'), check("settings-chatgpt-row")], { chatgptSignedIn: true }),
-  scene("composer-model-arrives", "A CLI's models arrive while its menu is open, with no dead end", [click('.composer .cmp-model .mp-trigger'), wait('.cb-menu'), click('.cb-pick'), click('.cb-menu [data-cb-source="cli:codex"]'), check("composer-model-reading"), wait('.cb-menu [data-model="cli:codex:gpt-6.1"]'), check("composer-model-arrived")], { codexLate: 1500 }),
+  // The models are held back by the mock until the `codex-arrives` step, so the menu is seen in both states whatever the speed of the run:
+  // first "being read" (nothing is known of them yet), then the models in its place, and a menu opened again shows them at once (R-START-05).
+  scene("composer-model-arrives", "A CLI's models arrive while its menu is open, with no dead end; once known they are there at once", [click('.composer .cmp-model .mp-trigger'), wait('.cb-menu'), click('.cb-pick'), click('.cb-menu [data-cb-source="cli:codex"]'), check("composer-model-reading"), codexArrives(), wait('.cb-menu [data-model="cli:codex:gpt-6.1"]'), check("composer-model-arrived"), key("Escape"), waitGone('.cb-menu'), click('.composer .cmp-model .mp-trigger'), wait('.cb-menu'), click('.cb-pick'), click('.cb-menu [data-cb-source="cli:codex"]'), check("composer-model-arrived")], { codexLate: true }),
   scene("quick-model-menu", "Quick questions shared model picker in existing model settings", [...settings("models"), click('[data-k="quick-model"]'), wait('.model-chooser'), click('[data-source="openrouter"]'), wait('.model-chooser [data-model="openai/gpt-6-luna"]')]),
   scene("quick-effort-menu", "Quick questions pick their effort inside the shared model list, as the answer model does, starting quick (low)", [
     ...settings("models"), check("quick-model-row"), click('[data-k="quick-model"]'), wait('.model-chooser'), click('.model-chooser [data-source="cli:codex"]'),
@@ -59,7 +61,7 @@ export default [
   scene("window-hover-restore", "Restore caption keeps its centered glyph and transparent hover", [{ action: "window-control", control: "maximize", restore: true }]),
   scene("window-hover-modal", "Caption hover stays usable while settings dim the window", [...settings("models"), { action: "window-control", control: "close", hoverOnly: true }]),
   scene("connections-recommended", "Under the connected apps, a few popular ones not added yet, each addable in place", [...settings("connections"), check("connections-recommended")]),
-  ...["general", "appearance", "connections", "models", "dictation", "tools", "safety", "messaging", "about"].map(pane => scene(pane === "general" ? "profile" : pane, `${pane} settings pane`, [...settings(pane), ...(pane === "appearance" ? [check("appearance-settings")] : [])])),
+  ...["general", "appearance", "connections", "models", "dictation", "tools", "safety", "about"].map(pane => scene(pane === "general" ? "profile" : pane, `${pane} settings pane`, [...settings(pane), ...(pane === "appearance" ? [check("appearance-settings")] : [])])),
   scene("appearance-menu", "One shared theme dropdown without a preview gallery", [...settings("appearance"), click('[data-k="appearance"]'), wait('.menu [data-value="dark"]'), check("appearance-settings")]),
   scene("appearance-keyboard", "Theme choices retain visible keyboard focus in every palette", [...settings("appearance"), click('[data-k="appearance"]'), key('Tab'), {...key('Tab'),shift:true}, key('ArrowDown'), check('appearance-settings'), check('appearance-focus')]),
   scene("plugins-installed", "Unified managed, private Google and custom MCP plugins", [...connections, wait('[data-conn="open"][data-id="composio:notion"]')]),
@@ -79,8 +81,9 @@ export default [
     ...Array.from({ length: 9 }, () => key("Tab")), key("Enter"), check("store-group-end"),
     click('[data-conn="store-group"][data-id="productivity"]'), check("plugins-store-category"), check("plugins-store-rows"),
   ], { pluginsMany: true }),
-  scene("plugins-store-wheel", "The mouse wheel and the arrows move the category chips sideways", [
-    ...store, check("plugins-store-groups"), { action: "wheel", selector: ".cs-store-groups", deltaY: 300 }, check("store-groups-wheel"), check("plugins-store-groups"),
+  // The ten category chips fit the sheet from 1120 px up (nothing to scroll, no arrows), so this scene measures the sheet at 720 px, the width where they overflow.
+  scene("plugins-store-wheel", "At 720 px, where the categories overflow their row, the mouse wheel and the arrows move the chips sideways", [
+    { action: "viewport", width: 720, height: 900 }, ...store, check("plugins-store-groups"), { action: "wheel", selector: ".cs-store-groups", deltaY: 300 }, check("store-groups-wheel"), check("plugins-store-groups"),
     click('[data-chip-step="-1"]'), wait('[data-chip-row]:not([data-more-before])'), check("store-groups-start"), check("plugins-store-groups"),
   ], { pluginsMany: true }),
   scene("plugins-store-search", "Search reaches a late catalog result by keyboard", [

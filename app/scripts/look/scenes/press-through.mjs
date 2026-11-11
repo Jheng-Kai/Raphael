@@ -17,5 +17,6 @@ export default [
     column, click('.mb-col [data-member-more="2"]'), click('#app-popover [data-pick="delete"]'), wait(".mb-dialog"),
     click('.mb-col [data-member="1"]'), check("press-through-delete-dialog")]),
   scene("press-through-model-menu", "With the composer's model menu open, one press on the header's conversation button closes it and opens the details", [
-    member(1), click(".composer .cmp-model .mp-trigger"), wait(".cb-menu .cb-now"), click(".conversation-trigger"), check("press-through-model-menu")]),
+    // From 1440 px wide the details stand open by default, and the header button then closes them; the press is meant to open them.
+    member(1), { action: "close-details-if-open" }, click(".composer .cmp-model .mp-trigger"), wait(".cb-menu .cb-now"), click(".conversation-trigger"), check("press-through-model-menu")]),
 ];

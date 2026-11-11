@@ -209,3 +209,32 @@ async def test_a_child_that_goes_silent_ends_the_run_as_a_timeout(monkeypatch, t
     events = [event async for event in Driver("claude", [sys.executable, str(script)], environ={}).run(
         user="Save the draft", system="Test", endpoint="http://127.0.0.1:1/mcp", token="fake", permission=None)]
     assert events[-1].kind == "error" and events[-1].text == "timeout"
+
+
+async def test_a_second_cancel_does_not_cut_short_what_the_read_does_as_it_stops(monkeypatch, tmp_path):
+    """The read of the child runs as a task of its own (`CliLoop._events`). Stopping a turn cancels it and waits; a shutdown that
+    cancels the turn again meanwhile must not reach the read, whose stopping (the child killed, its pipes closed) is what the
+    wait is for. `gather` passed the second cancel on to the read; the wait does not."""
+    rig = recovery_rig(monkeypatch, tmp_path, None, stall_s=30, tool_s=30)
+    stopping, stopped = asyncio.Event(), []
+
+    async def stream():
+        try:
+            await silent()
+            yield Event("final", "Never.")
+        finally:
+            stopping.set()
+            await asyncio.sleep(0.05)  # killing the child and closing its pipes takes turns of the event loop
+            stopped.append(True)
+
+    async def consume():
+        async for _ in rig.loop._events(stream()):
+            pass
+
+    turn = asyncio.create_task(consume())
+    await asyncio.sleep(0.02)
+    turn.cancel()
+    await asyncio.wait_for(stopping.wait(), 5)
+    turn.cancel()  # the second, while the read is still stopping
+    await asyncio.gather(turn, return_exceptions=True)
+    assert turn.cancelled() and stopped == [True]

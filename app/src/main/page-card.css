@@ -1,17 +1,31 @@
 .pg-ask-words { margin: 0; overflow-wrap: anywhere; color: var(--text); }
-/* A page in the conversation is as tall as its content, so there is never a scrollbar inside the reply. */
+/* A page in the conversation is a card of one height, --h-page-peek (styles.css), whatever the page is and whether it is
+   loading, ready or failed, so a change of state moves nothing and three pages still read as a conversation (owner,
+   2026-11-11: a page shown whole made the conversation one very long block). Under its title row the card shows only the top
+   of the page, clipped, with no scrollbar and nothing in it to press or scroll (the frame is inert and takes no pointer, so
+   the thread scrolls over it); the cut fades into the card's own surface (--panel), in both themes. The preview is one
+   control: pressing it opens the page whole, as a page made larger (below). The frame keeps the height the page says, so
+   the page itself never scrolls behind the clip. */
 .pg-card { display: grid; grid-template-columns: minmax(0, 1fr); justify-self: start; width: min(calc(560px + 200 * var(--pa-u)), 100%); overflow: hidden; border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--content); }
-.pg-body { position: relative; height: var(--pg-h, 320px); background: var(--content); }
-.pg-body[data-state="loading"] { background: var(--panel); animation: pg-loading 1.6s ease-in-out infinite; }
+.pg-body { position: relative; height: var(--h-page-peek); overflow: hidden; border-radius: var(--r-sm); background: var(--panel); cursor: pointer; }
+.pg-body[data-state="loading"] { background: var(--surface-2); animation: pg-loading 1.6s ease-in-out infinite; }
+.pg-body:not([data-state="ready"]) { cursor: default; }
+.pg-card:has(.pg-body[data-state="ready"]) > .card-head { cursor: pointer; }
 .pg-frame { display: block; width: 100%; height: 100%; border: 0; background: transparent; }
+.pg-body > .pg-frame { position: absolute; top: 0; left: 0; height: var(--pg-h, 320px); pointer-events: none; }
 .pg-body[data-state="loading"] .pg-frame { visibility: hidden; }
+.pg-body[data-state="ready"]::after { content: ""; position: absolute; inset: auto 0 0 0; z-index: 1; height: var(--peek-fade, 56px); background: linear-gradient(to bottom, transparent, var(--panel)); pointer-events: none; }
+/* The sign that it opens: the shared expand icon, bare, in the fade's corner (it only shows once there is a page to open). */
+.pg-more { position: absolute; right: var(--sp-2); bottom: var(--sp-2); z-index: 2; display: none; color: var(--text-3); pointer-events: none; }
+.pg-body[data-state="ready"] > .pg-more { display: block; }
+.pg-more .i { display: block; width: 16px; height: 16px; }
 /* A page that failed reads as a failed mail card does (card.css): what failed in the card's body line, what it knows of
    the page in a well where the page stood, and 再試一次 at the card's right. Everything starts where the title does,
-   nothing blank stands under the retry, and the expand row goes (the judge on page-gone, 3/5, 2026-11-10). */
-.pg-failed { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
+   nothing blank stands under the retry (the judge on page-gone, 3/5, 2026-11-10). It stands as tall as the preview it replaces, 再試一次 at the foot. */
+.pg-failed { display: flex; flex-direction: column; gap: 12px; height: var(--h-page-peek); }
 .pg-failed[hidden], .pg-body[hidden] { display: none; }
-.pg-fallback { margin: 0; padding: 10px 12px; color: var(--text); font-size: var(--fs-sm); white-space: pre-wrap; overflow-wrap: anywhere; }
-.pg-card:has(.pg-failed:not([hidden])) > .card-actions { display: none; }
+.pg-failed > .card-actions { margin-top: auto; }
+.pg-fallback { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; margin: 0; padding: 10px 12px; color: var(--text); font-size: var(--fs-sm); white-space: pre-wrap; overflow-wrap: anywhere; overflow: hidden; }
 @keyframes pg-loading { 50% { opacity: 0.6; } }
 
 /* A page made larger is the page alone, as a picture made larger (the lightbox) and a report are: its card's title,

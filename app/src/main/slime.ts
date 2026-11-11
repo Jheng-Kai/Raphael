@@ -318,10 +318,17 @@ function hearThePointer(): void {
     if (event.animationName === 'slime-idle-hide') {
       const svg=(event.target as Element).closest<SVGElement>('svg.slime');
       if(!svg)return;
-      delete svg.dataset.transitioning;
-      for(const part of svg.querySelectorAll<SVGElement>('[style]'))part.style.removeProperty('animation-delay');
+      const clock=clockOf(svg);
+      // The vector keeps its moving pose until the strips it makes way for are in and shown (mountSlice ends the moment then).
+      if(!clock.mounting && !clock.pending)endTransition(svg);
     }
   });
+}
+
+/** The vector stops standing in for the strips: its animations and their delays go, and the strips (shown by then) are what is seen. */
+function endTransition(svg: SVGElement): void {
+  delete svg.dataset.transitioning;
+  for (const part of svg.querySelectorAll<SVGElement>('[style]')) part.style.removeProperty('animation-delay');
 }
 
 type Bridge = { values: number[]; started: number; duration: number; animations: Animation[] };
@@ -331,6 +338,8 @@ interface SlimeClock {
   sampled: boolean; transitionUntil: number;
   reveal?: Animation;
   surface: HTMLElement; drawingKey: string; drawing?: { back: string; worn: string }; pending: boolean;
+  /** The strips being put in, a slice a frame; a newer state or a redraw drops them. */
+  mounting?: Mounting;
   settle: SVGElement; look: SVGElement; motion: SVGElement; gaze: SVGElement;
   marks: { part: SVGElement; bridge: SVGElement; give: number }[];
 }
@@ -395,7 +404,8 @@ function statePose(clock: SlimeClock, kind: 'body' | 'eyes' | 'mark', now: numbe
     const sampled = clock.sampled && now >= clock.transitionUntil ? Math.floor(((phase % 1) + 1) % 1 * cels) / cels : phase;
     pose = sample(`slime-${state}-${kind === 'eyes' ? 'gaze' : kind}`, sampled, kind === 'eyes' ? loop.gaze : loop.ease);
     if (state === 'blocked' && kind === 'eyes') pose.translate = [0, -6];
-    if (state === 'error' && kind === 'body') pose.scale = [1.08, .62];
+    // The deflate of slime.css (`slime-error-body`: scale 1 to 1.08 .62 over 1.6s, ease-out): a slime that has only just failed is still whole.
+    if (state === 'error' && kind === 'body') { const deflated = easing('ease-out', Math.min(1, Math.max(0, (elapsed - clock.since) / 1600))); pose.scale = [1 + .08 * deflated, 1 - .38 * deflated]; }
   } else if (state === 'done' || state === 'arriving') {
     const duration = state === 'done' ? 1900 : 1200;
     const lag = kind === 'mark' ? state === 'done' ? 60 : 50 : 0;
@@ -447,6 +457,7 @@ const CEL_TEMPLATE_LIMIT = 16;
 /** The slime takes `state` and the strips drawn for it. */
 function enter(svg: SVGElement, state: SlimeState, visible = true): void {
   const clock = clockOf(svg), surface = clock.surface;
+  clock.mounting = undefined;
   if (clock.state !== state) {
     svg.dataset.state = svg.dataset.moved = state;
     surface.dataset.state = state;
@@ -466,19 +477,84 @@ function enter(svg: SVGElement, state: SlimeState, visible = true): void {
       if (celTemplates.size >= CEL_TEMPLATE_LIMIT) celTemplates.delete(celTemplates.keys().next().value!);
     } else celTemplates.delete(key);
     celTemplates.set(key, template);
-    const content = template.content.cloneNode(true) as DocumentFragment;
-    if (content.firstElementChild) svg.before(content.firstElementChild);
-    if (content.firstElementChild) svg.after(content.firstElementChild);
-    // Motion retains the original phase. Each admitted surface reveals on its own
-    // frame's finite bridge instead of rasterizing an entire presence burst at once.
-    const elapsed = Math.max(0, performance.now() - clock.mounted);
-    // animation-delay does not inherit into hundreds of static cel paths.
-    const delay = clock.delay - elapsed;
-    for (const part of surface.querySelectorAll<HTMLElement>('.slime-cels, .slime-eye-cels, .slime-blink-cels')) part.style.animationDelay = `${delay}ms`;
-    const lag = state === 'thinking' ? 140 : state === 'searching' ? 120 : 0;
-    for (const part of surface.querySelectorAll<HTMLElement>('.slime-prop-cels')) part.style.animationDelay = `${delay + lag}ms`;
-    holdVector(svg, clock, state === 'error' ? 1600 : 320);
+    mountStrips(svg, clock, template, state);
   }
+}
+
+/**
+ * A strip is some thousands of nodes (a slime that thinks or searches: about 4,000), and styling them in one go held the
+ * window for 100 ms and more at every change of state (owner, 2026-11-11: 「更新…畫面就會閃現」). They go in a slice
+ * of about this many nodes a frame, out of sight (`data-slime-loading`), and show together when the last one is in.
+ */
+const SLICE_NODES = 200;
+interface Mounting { svg: SVGElement; clock: SlimeClock; state: SlimeState; parts: { root: Element; target: Element; cells: ChildNode[]; per: number; at: number }[]; part: number }
+const mounts: Mounting[] = [];
+
+function mountStrips(svg: SVGElement, clock: SlimeClock, template: HTMLTemplateElement, state: SlimeState): void {
+  const parts = [...template.content.children].map(strip => {
+    // The strip's wrappers, empty: its cells are cloned in below, a slice at a time.
+    const source = strip.querySelector('svg')!;
+    const root = strip.cloneNode(false) as Element;
+    let from: Element = strip, target = root;
+    while (from !== source) {
+      const next = [...from.children].find(child => child === source || child.contains(source))!;
+      const copy = next.cloneNode(false) as Element;
+      target.append(copy); target = copy; from = next;
+    }
+    root.setAttribute('data-slime-loading', '');
+    const cells = [...source.childNodes];
+    return { root, target, cells, per: 1 + ((cells[0] as Element | undefined)?.querySelectorAll?.('*').length ?? 0), at: 0 };
+  });
+  const job: Mounting = { svg, clock, state, parts, part: 0 };
+  clock.mounting = job;
+  if (parts[0]) svg.before(parts[0].root);
+  if (parts[1]) svg.after(parts[1].root);
+  mountSlice(job);
+  if (clock.mounting === job) mounts.push(job);
+}
+
+/** Puts in the next slice of a mount; the last one shows the strips and starts their clocks. */
+function mountSlice(job: Mounting): void {
+  let room = SLICE_NODES;
+  while (room > 0 && job.part < job.parts.length) {
+    const part = job.parts[job.part]!;
+    const take = Math.min(part.cells.length - part.at, Math.max(1, Math.floor(room / part.per)));
+    if (take > 0) part.target.append(...part.cells.slice(part.at, part.at + take).map(cell => cell.cloneNode(true)));
+    part.at += take; room -= take * part.per;
+    if (part.at >= part.cells.length) job.part++;
+  }
+  if (job.part < job.parts.length) return;
+  const { svg, clock, state } = job;
+  clock.mounting = undefined;
+  for (const part of job.parts) part.root.removeAttribute('data-slime-loading');
+  const surface = clock.surface;
+  // Motion retains the original phase. Each admitted surface reveals on its own
+  // frame's finite bridge instead of rasterizing an entire presence burst at once.
+  const elapsed = Math.max(0, performance.now() - clock.mounted);
+  // animation-delay does not inherit into hundreds of static cel paths.
+  const delay = clock.delay - elapsed;
+  for (const part of surface.querySelectorAll<HTMLElement>('.slime-cels, .slime-eye-cels, .slime-blink-cels')) part.style.animationDelay = `${delay}ms`;
+  const lag = state === 'thinking' ? 140 : state === 'searching' ? 120 : 0;
+  for (const part of surface.querySelectorAll<HTMLElement>('.slime-prop-cels')) part.style.animationDelay = `${delay + lag}ms`;
+  if (svg.dataset.transitioning) {
+    // A change of state: the vector has stood in since the change, on the clock these strips now join (the delay above), and its
+    // moment (320ms, or 1.6s for an error) ends by itself. The strips are shown when it does, however many frames they took to
+    // mount: their show animation is given the time already gone, so that a mount which outlived the moment shows them at once.
+    for (const part of job.parts) (part.root as HTMLElement).style.animationDelay = `${-elapsed}ms`;
+    if (!clock.reveal) endTransition(svg);
+  } else holdVector(svg, clock, state === 'error' ? 1600 : 320);
+}
+
+/** The next slice of the mount under way, if any: a frame does one slice, or admits one more face, never both. */
+function continueMount(): boolean {
+  while (mounts.length) {
+    const job = mounts[0]!;
+    if (job.clock.mounting !== job || !job.svg.isConnected) { mounts.shift(); continue; }
+    mountSlice(job);
+    if (job.clock.mounting !== job) mounts.shift();
+    return true;
+  }
+  return false;
 }
 
 /** Keep the vector visible until this surface's deferred strips can take over. */
@@ -491,8 +567,8 @@ function holdVector(svg: SVGElement, clock: SlimeClock, duration: number): void 
   void reveal.finished.catch(() => { /* A newer state or deferred admission owns visibility. */ });
   reveal.onfinish = () => {
     if (clock.reveal !== reveal) return;
-    clock.reveal = undefined; delete svg.dataset.transitioning;
-    for (const part of [clock.motion,clock.gaze,...clock.marks.map(mark=>mark.part)]) part.style.removeProperty('animation-delay');
+    clock.reveal = undefined;
+    if (!clock.mounting && !clock.pending) endTransition(svg);
   };
 }
 
@@ -516,14 +592,14 @@ function scheduleStrips(): void {
   stripsQueued = true;
   requestAnimationFrame(() => {
     stripsQueued = false;
-    for (const svg of pendingStrips) {
+    if (!continueMount()) for (const svg of pendingStrips) {
       pendingStrips.delete(svg);
       const clock = clockOf(svg);
       if (!svg.isConnected || !clock.pending || document.visibilityState === 'hidden' || svg.closest('[data-offscreen], [hidden], details:not([open])')) continue;
       enter(svg, clock.state);
       break;
     }
-    if (pendingStrips.size) scheduleStrips();
+    if (pendingStrips.size || mounts.length) scheduleStrips();
   });
 }
 
@@ -586,7 +662,7 @@ const paint = (id: number, state: SlimeState): void => {
  */
 export function followSlimeRoster(members: readonly { id: number; activity?: string; activity_label?: string; waiting?: boolean }[]): void {
   for (const { id, activity: state, activity_label: label, waiting } of members) {
-    if (label !== undefined) labels.set(id, label);
+    if (label !== undefined && label !== (labels.get(id) ?? "")) setLabel(id, label);
     if (fleeting.has(id)) continue;
     if (state && LIVE_STATES.includes(state)) {
       if (activity.get(id) !== state) began.set(id, performance.now());
@@ -596,15 +672,18 @@ export function followSlimeRoster(members: readonly { id: number; activity?: str
   }
 }
 
+/** The words for what a member is doing, on every face of it already drawn: a face is not drawn again for them. */
+function setLabel(id: number, label: string): void {
+  labels.set(id, label);
+  for (const face of document.querySelectorAll<HTMLElement>(`[data-presence-member="${id}"]`)) {
+    if (label) { if (face.dataset.tooltip !== label) face.dataset.tooltip = label; }
+    else face.removeAttribute("data-tooltip");
+  }
+}
+
 /** What the core says a member is doing; `idle` hands it back to what its row says. A moment like `done` passes by itself. */
 export function setSlimeState(id: number, state: SlimeState, label?: string): void {
-  if (label !== undefined) {
-    labels.set(id, label);
-    for (const face of document.querySelectorAll<HTMLElement>(`[data-presence-member="${id}"]`)) {
-      if (label) { if (face.dataset.tooltip !== label) face.dataset.tooltip = label; }
-      else face.removeAttribute("data-tooltip");
-    }
-  }
+  if (label !== undefined) setLabel(id, label);
   if (activity.get(id) === state) return;
   // The core says `idle` right after `done`: the moment plays out, and then the row has its say anyway.
   if (state === "idle" && fleeting.has(id)) return;

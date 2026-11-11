@@ -2545,7 +2545,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     if (event.type === "ConversationsChanged") { conversationsDirty.add(event.member_id); staleHistory.set(event.member_id, (staleHistory.get(event.member_id) ?? 0) + 1); conversationChange(event.member_id); }
     if (event.type === "AgentTurn") { conversationsDirty.add(event.member_id ?? RAPHAEL_ID); conversationChange(event.member_id ?? RAPHAEL_ID); }
     if (event.type === "QuotaChanged") void readQuotas();
-    if (event.type === "MembersChanged") void slashMenu.refresh(true);
+    if (event.type === "MembersChanged") slashMenu.invalidate();
     if (wantsRefresh(event)) {
       // a turn of another thread changes only that member's row
       if (event.type === "WorkerChanged") {

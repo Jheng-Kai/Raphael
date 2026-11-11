@@ -207,6 +207,14 @@ OWNER_SAID_NO_BEFORE = (
     "The owner already said no to a call of this task, so this one was not made either: a way round a no "
     "is not tried. Do the rest of the task without it, and say in the report what was not done."
 )
+NO_ANSWER = (
+    "Nobody answered in time (thirty minutes), so this call was not made; it was not refused. Do the rest without it, "
+    "and say in the report what was not done and that the owner can ask again."
+)
+NO_ANSWER_BEFORE = (
+    "Nobody answered an earlier question about this tool in time, so this call was not made and is not asked again. "
+    "Do the rest without it, and say in the report what was not done."
+)
 NOT_MADE_WHILE_WAITING = (
     "This call was not made: the task paused for the owner's answer to an earlier call of the same "
     "reply. Make it again if it is still needed."
@@ -303,6 +311,9 @@ class TaskRun:
         # The tools the owner said no to in this task: none of them is tried again, and no other tool of a
         # connection that changes something is tried in its place (a synonym is no way round a no).
         self._declined: set[str] = set()
+        # The tools whose question nobody answered in time: they are not asked about again in this task, and nothing
+        # else is held back by it (what needs no yes goes on).
+        self._unanswered: set[str] = set()
         # The files of the task, by number from 1, and the addresses it has seen (see the module).
         self.attachments = list(attachments)
         self.seen_urls = SeenUrls([request])
@@ -812,12 +823,13 @@ class TaskRun:
             self.acted = True
 
     def continuation_state(self):
-        return {"declined": sorted(self._declined), "seen_urls": self.seen_urls.snapshot(), "acted": self.acted,
+        return {"declined": sorted(self._declined), "unanswered": sorted(self._unanswered), "seen_urls": self.seen_urls.snapshot(), "acted": self.acted,
                 "untrusted": self._memory_untrusted, "handoff_receipts": self.handoff_receipts,
                 "conversation_cost": getattr(self, "conversation_cost", 0.0)}
 
     def restore_continuation(self, state):
         self._declined.update(state.get("declined", []))
+        self._unanswered.update(state.get("unanswered", []))
         for url in state.get("seen_urls", []):
             self.seen_urls.add(url)
         self._memory_untrusted = self._memory_untrusted or state.get("untrusted", False)
@@ -873,6 +885,10 @@ class TaskRun:
                 "Ask the owner to grant access in the member's private chat or press Start in its panel."),
                 "truncated": False}, "blocked", "T2", None
         now = self._gate.tier_now(ref.key, arguments)
+        if ref.key in self._unanswered and not self._gate.reads_only(ref.server, ref.name, arguments):
+            self._gate.record_unrun(ref.key, outcome="blocked", task_id=self.task_id)
+            reply = {"ok": False, "kind": "unanswered", "content": NO_ANSWER_BEFORE, "truncated": False}
+            return reply, "blocked", None if now is None else now.name, None
         if self._declined and (ref.key in self._declined or not self._gate.reads_only(ref.server, ref.name, arguments)):
             # The owner said no to something in this task: this tool is not tried again, and no other that changes
             # something is, whatever it is called. Nothing is asked and nothing is made.
@@ -949,32 +965,36 @@ class TaskRun:
                 reply.update(tools=list(self.snapshot.definitions), replace_tools=True)
         return reply, _outcome_of(result), None if now is None else now.name, sent
 
-    @tool_step(lambda self, waiting, approval, action: waiting.alias,
+    @tool_step(lambda self, waiting, approval, action, **kwargs: waiting.alias,
                scope=lambda self, *args, **kwargs: self.activity)
     @command_context(lambda self, *args, **kwargs: run_context(self))
-    async def answer_call(self, waiting: Waiting, approval: Approval | None, action: Action | None) -> str:
+    async def answer_call(self, waiting: Waiting, approval: Approval | None, action: Action | None, *, expired: bool = False) -> str:
         from ..management import background_management
         task = self._store.get(self.task_id)
         with self.action(waiting.alias, waiting.arguments) as status, background_management(task.member_id if task else 0):
-            return await self._answered_call(waiting, approval, action, status)
+            return await self._answered_call(waiting, approval, action, status, expired=expired)
 
-    async def _answered_call(self, waiting: Waiting, approval: Approval | None, action: Action | None, status) -> str:
+    async def _answered_call(self, waiting: Waiting, approval: Approval | None, action: Action | None, status, *, expired: bool = False) -> str:
         """The call the task paused on, now that the owner answered: made with the yes (`approval`,
         for `action`, the very action the question was asked about), or not made after a no
         (`action` None). Either way it is a step of the task, and the audit says what came of it.
         Returns what the model is shown of it, as the worker shows a result."""
         ref = waiting.ref
         if action is None:
+            why = "expired" if expired else "denied"
             if status is not None:
-                status.update(outcome="blocked", reason="denied")
-            if ref.kind == MCP:
-                self._declined.add(ref.key)
-            self._gate.record_unrun(ref.key, outcome="denied", task_id=self.task_id)
+                status.update(outcome="blocked", reason=why)
+            if expired:
+                self._unanswered.add(ref.key)  # the service wrote that it ran out when it did
+            else:
+                if ref.kind == MCP:
+                    self._declined.add(ref.key)
+                self._gate.record_unrun(ref.key, outcome="denied", task_id=self.task_id)
             self._step(
                 kind="tool", tool=ref.name, server=ref.server, tier=waiting.tier.name,
-                outcome="blocked", ms=0, reason="denied",
+                outcome="blocked", ms=0, reason=why,
             )  # fmt: skip
-            return result_text(waiting.alias, ToolOutcome(False, "denied", OWNER_SAID_NO))
+            return result_text(waiting.alias, ToolOutcome(False, why, NO_ANSWER if expired else OWNER_SAID_NO))
         if ref.kind == BUILTIN:
             # Adding a member that a rule asked about (T1: the owner's yes is all it waited for).
             began = time.perf_counter()
@@ -1086,6 +1106,9 @@ class TaskRun:
                 }
                 return reply, "blocked", tier.name, None
             if needs_yes(tier >= Tier.T2, screening, firm=firm) and (firm or not gate.full_permission):
+                if ref.key in self._unanswered:  # an earlier question about this tool ran out: not asked again in this task
+                    gate.record_builtin(ref.name, outcome="blocked", task_id=self.task_id)
+                    return {"ok": False, "kind": "unanswered", "content": NO_ANSWER_BEFORE, "truncated": False}, "blocked", tier.name, None
                 if self.can_wait:
                     self.waiting = Waiting(alias or ref.name, ref, dict(arguments), call_id, tier, screening)
                     raise stopped(WAITING)

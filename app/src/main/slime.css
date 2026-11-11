@@ -29,7 +29,9 @@
 .slime-look { --slime-settle-time: 200ms; }
 /* At rest a slime glances aside (its own side, --slime-aside, in the drawing's units); with the pointer on it or its
    row it looks back at you. No wiggle. */
-.slime[data-state="idle"] .slime-follow { translate: var(--slime-aside, -3px) -0.5px; transition: translate 220ms cubic-bezier(0.25, 0.8, 0.3, 1); }
+/* The glance is eased in every state, so a change of state leaves it over 220ms instead of taking the eyes 3 units sideways in one frame (look: slime-motion-change). */
+.slime-follow { transition: translate 220ms cubic-bezier(0.25, 0.8, 0.3, 1); }
+.slime[data-state="idle"] .slime-follow { translate: var(--slime-aside, -3px) -0.5px; }
 :is(.mb-row, .mb-avbtn, .mb-preset, .mb-av-slime, .slime-surface):hover .slime[data-state="idle"] .slime-follow { translate: 0 0; }
 /* A slime that is not moving is a picture (owner, 2026-11-11: 「有些地方就是放照片，就是史萊姆的樣子就可以了」): no animation,
    no transition, no glance back under the pointer, no squish under a press. It is drawn without motion in the first place
@@ -84,7 +86,6 @@ html[data-window-hidden] *, html[data-window-hidden] *::before, html[data-window
 .slime-cel-eye { stroke-width: var(--eye-w); }
 
 @keyframes slime-idle-hide { from { visibility: visible; } to { visibility: hidden; } }
-@keyframes slime-idle-show { from { visibility: hidden; } to { visibility: visible; } }
 
 /* Eyes dart and rest; they never drift like a sine wave. */
 /* The lid falls fast, rests, and lifts slower with a small overshoot; every second one comes in a pair. */
@@ -105,19 +106,22 @@ html[data-window-hidden] *, html[data-window-hidden] *::before, html[data-window
   .slime[data-state="thinking"] .slime-motion { animation: slime-thinking-body calc(2.8s * var(--slime-tempo)) cubic-bezier(0.45, 0.05, 0.55, 0.95) var(--slime-delay) infinite both; }
 }
 @container (width <= 72px) {
-  .slime[data-transitioning][data-state="thinking"] .slime-motion { animation: slime-thinking-body calc(2.8s * var(--slime-tempo)) cubic-bezier(0.45, 0.05, 0.55, 0.95) var(--slime-delay) both; }
+  /* The drawing bridges to the strips while they are still going in (slime.ts endTransition). It repeats so that a slow mount keeps it
+     in step with the loop it hands over to, but a set number of times, never for ever: an endless loop of the vector is the large
+     avatar's alone (R-PERF-01), and a mount that never ended would otherwise animate on the main thread without end. */
+  .slime[data-transitioning][data-state="thinking"] .slime-motion { animation: slime-thinking-body calc(2.8s * var(--slime-tempo)) cubic-bezier(0.45, 0.05, 0.55, 0.95) var(--slime-delay) 8 both; }
 }
 @container (width > 72px) {
   .slime[data-state="thinking"] .slime-gaze { animation: slime-thinking-gaze calc(4.3s * var(--slime-tempo)) cubic-bezier(0.25, 0.9, 0.3, 1) var(--slime-delay) infinite both, slime-blink calc(5.3s * var(--slime-tempo)) linear var(--slime-delay) infinite both; }
 }
 @container (width <= 72px) {
-  .slime[data-transitioning][data-state="thinking"] .slime-gaze { animation: slime-thinking-gaze calc(4.3s * var(--slime-tempo)) cubic-bezier(0.25, 0.9, 0.3, 1) var(--slime-delay) both, slime-blink calc(5.3s * var(--slime-tempo)) linear var(--slime-delay) both; }
+  .slime[data-transitioning][data-state="thinking"] .slime-gaze { animation: slime-thinking-gaze calc(4.3s * var(--slime-tempo)) cubic-bezier(0.25, 0.9, 0.3, 1) var(--slime-delay) 8 both, slime-blink calc(5.3s * var(--slime-tempo)) linear var(--slime-delay) 8 both; }
 }
 @container (width > 72px) {
   .slime[data-state="thinking"] .slime-mark { animation: slime-thinking-mark calc(3.6s * var(--slime-tempo)) cubic-bezier(0.45, 0.05, 0.55, 0.95) calc(var(--slime-delay) + 140ms) infinite both; }
 }
 @container (width <= 72px) {
-  .slime[data-transitioning][data-state="thinking"] .slime-mark { animation: slime-thinking-mark calc(3.6s * var(--slime-tempo)) cubic-bezier(0.45, 0.05, 0.55, 0.95) calc(var(--slime-delay) + 140ms) both; }
+  .slime[data-transitioning][data-state="thinking"] .slime-mark { animation: slime-thinking-mark calc(3.6s * var(--slime-tempo)) cubic-bezier(0.45, 0.05, 0.55, 0.95) calc(var(--slime-delay) + 140ms) 8 both; }
 }
 @keyframes slime-thinking-body {
   0%, 100% { translate: -0.6px 0; rotate: -6deg; scale: 1 1; }
@@ -141,7 +145,7 @@ html[data-window-hidden] *, html[data-window-hidden] *::before, html[data-window
   .slime[data-state="working"] .slime-motion { animation: slime-working-body calc(.9s * var(--slime-tempo)) linear var(--slime-delay) infinite both; }
 }
 @container (width <= 72px) {
-  .slime[data-transitioning][data-state="working"] .slime-motion { animation: slime-working-body calc(.9s * var(--slime-tempo)) linear var(--slime-delay) both; }
+  .slime[data-transitioning][data-state="working"] .slime-motion { animation: slime-working-body calc(.9s * var(--slime-tempo)) linear var(--slime-delay) 8 both; }
 }
 @keyframes slime-working-body {
   0%, 100% { scale: 1.14 .82; animation-timing-function: cubic-bezier(.2,.8,.3,1); }
@@ -157,19 +161,19 @@ html[data-window-hidden] *, html[data-window-hidden] *::before, html[data-window
   .slime[data-state="searching"] .slime-motion { animation: slime-searching-body calc(3.2s * var(--slime-tempo)) cubic-bezier(0.4, 0, 0.3, 1) var(--slime-delay) infinite both; }
 }
 @container (width <= 72px) {
-  .slime[data-transitioning][data-state="searching"] .slime-motion { animation: slime-searching-body calc(3.2s * var(--slime-tempo)) cubic-bezier(0.4, 0, 0.3, 1) var(--slime-delay) both; }
+  .slime[data-transitioning][data-state="searching"] .slime-motion { animation: slime-searching-body calc(3.2s * var(--slime-tempo)) cubic-bezier(0.4, 0, 0.3, 1) var(--slime-delay) 8 both; }
 }
 @container (width > 72px) {
   .slime[data-state="searching"] .slime-gaze { animation: slime-searching-gaze calc(3.2s * var(--slime-tempo)) cubic-bezier(0.25, 0.9, 0.3, 1) var(--slime-delay) infinite both, slime-blink calc(5.3s * var(--slime-tempo)) linear var(--slime-delay) infinite both; }
 }
 @container (width <= 72px) {
-  .slime[data-transitioning][data-state="searching"] .slime-gaze { animation: slime-searching-gaze calc(3.2s * var(--slime-tempo)) cubic-bezier(0.25, 0.9, 0.3, 1) var(--slime-delay) both, slime-blink calc(5.3s * var(--slime-tempo)) linear var(--slime-delay) both; }
+  .slime[data-transitioning][data-state="searching"] .slime-gaze { animation: slime-searching-gaze calc(3.2s * var(--slime-tempo)) cubic-bezier(0.25, 0.9, 0.3, 1) var(--slime-delay) 8 both, slime-blink calc(5.3s * var(--slime-tempo)) linear var(--slime-delay) 8 both; }
 }
 @container (width > 72px) {
   .slime[data-state="searching"] .slime-mark { animation: slime-searching-mark calc(3.2s * var(--slime-tempo)) cubic-bezier(0.4, 0, 0.3, 1) calc(var(--slime-delay) + 120ms) infinite both; }
 }
 @container (width <= 72px) {
-  .slime[data-transitioning][data-state="searching"] .slime-mark { animation: slime-searching-mark calc(3.2s * var(--slime-tempo)) cubic-bezier(0.4, 0, 0.3, 1) calc(var(--slime-delay) + 120ms) both; }
+  .slime[data-transitioning][data-state="searching"] .slime-mark { animation: slime-searching-mark calc(3.2s * var(--slime-tempo)) cubic-bezier(0.4, 0, 0.3, 1) calc(var(--slime-delay) + 120ms) 8 both; }
 }
 @keyframes slime-searching-body {
   0%, 100% { translate: -2px 0; rotate: -4deg; scale: 1 1; }
@@ -196,13 +200,13 @@ html[data-window-hidden] *, html[data-window-hidden] *::before, html[data-window
   .slime[data-state="computer"] .slime-motion { animation: slime-computer-body calc(1.7s * var(--slime-tempo)) cubic-bezier(0.3, 0, 0.3, 1) var(--slime-delay) infinite both; }
 }
 @container (width <= 72px) {
-  .slime[data-transitioning][data-state="computer"] .slime-motion { animation: slime-computer-body calc(1.7s * var(--slime-tempo)) cubic-bezier(0.3, 0, 0.3, 1) var(--slime-delay) both; }
+  .slime[data-transitioning][data-state="computer"] .slime-motion { animation: slime-computer-body calc(1.7s * var(--slime-tempo)) cubic-bezier(0.3, 0, 0.3, 1) var(--slime-delay) 8 both; }
 }
 @container (width > 72px) {
   .slime[data-state="computer"] .slime-gaze { animation: slime-computer-gaze calc(3.4s * var(--slime-tempo)) cubic-bezier(0.25, 0.9, 0.3, 1) var(--slime-delay) infinite both; }
 }
 @container (width <= 72px) {
-  .slime[data-transitioning][data-state="computer"] .slime-gaze { animation: slime-computer-gaze calc(3.4s * var(--slime-tempo)) cubic-bezier(0.25, 0.9, 0.3, 1) var(--slime-delay) both; }
+  .slime[data-transitioning][data-state="computer"] .slime-gaze { animation: slime-computer-gaze calc(3.4s * var(--slime-tempo)) cubic-bezier(0.25, 0.9, 0.3, 1) var(--slime-delay) 8 both; }
 }
 @keyframes slime-computer-body {
   0%, 100% { translate: 0 0; rotate: -2deg; scale: 1 1; }
@@ -227,13 +231,13 @@ html[data-window-hidden] *, html[data-window-hidden] *::before, html[data-window
   .slime[data-state="waiting"] .slime-motion { animation: slime-waiting-body calc(6s * var(--slime-tempo)) ease-in-out var(--slime-delay) infinite both; }
 }
 @container (width <= 72px) {
-  .slime[data-transitioning][data-state="waiting"] .slime-motion { animation: slime-waiting-body calc(6s * var(--slime-tempo)) ease-in-out var(--slime-delay) both; }
+  .slime[data-transitioning][data-state="waiting"] .slime-motion { animation: slime-waiting-body calc(6s * var(--slime-tempo)) ease-in-out var(--slime-delay) 8 both; }
 }
 @container (width > 72px) {
   .slime[data-state="waiting"] .slime-gaze { animation: slime-waiting-gaze calc(6s * var(--slime-tempo)) ease-in-out var(--slime-delay) infinite both; }
 }
 @container (width <= 72px) {
-  .slime[data-transitioning][data-state="waiting"] .slime-gaze { animation: slime-waiting-gaze calc(6s * var(--slime-tempo)) ease-in-out var(--slime-delay) both; }
+  .slime[data-transitioning][data-state="waiting"] .slime-gaze { animation: slime-waiting-gaze calc(6s * var(--slime-tempo)) ease-in-out var(--slime-delay) 8 both; }
 }
 @keyframes slime-waiting-body {
   0%, 65%, 100% { scale: 1.05 .88; rotate: 0deg; }
@@ -246,7 +250,7 @@ html[data-window-hidden] *, html[data-window-hidden] *::before, html[data-window
   .slime[data-state="blocked"] .slime-motion { animation: slime-blocked-body calc(1.8s * var(--slime-tempo)) linear var(--slime-delay) infinite both; }
 }
 @container (width <= 72px) {
-  .slime[data-transitioning][data-state="blocked"] .slime-motion { animation: slime-blocked-body calc(1.8s * var(--slime-tempo)) linear var(--slime-delay) both; }
+  .slime[data-transitioning][data-state="blocked"] .slime-motion { animation: slime-blocked-body calc(1.8s * var(--slime-tempo)) linear var(--slime-delay) 8 both; }
 }
 .slime[data-state="blocked"] .slime-gaze { translate: 0 -6px; }
 @keyframes slime-blocked-body {
@@ -399,9 +403,13 @@ html[data-window-hidden] *, html[data-window-hidden] *::before, html[data-window
 @container (width <= 72px) {
   .slime-loop { display: block; }
   .slime-surface:has(> .slime-loop) > .slime { visibility: hidden; }
-  .slime-surface:has(> .slime[data-transitioning]) > .slime-loop { animation: slime-idle-show 320ms steps(1, end) both; }
+  /* Strips still going in (slime.ts mountStrips) are styled out of sight and show together; the vector stands meanwhile.
+     Their showing is the strip's opacity, not its visibility: that is inherited, and flipping it styled every cel again (150 ms and more). */
+  .slime-loop[data-slime-loading] { opacity: 0 !important; animation: none !important; }
+  .slime-surface:has(> .slime-loop[data-slime-loading]) > .slime { visibility: visible !important; }
+  .slime-surface:has(> .slime[data-transitioning]) > .slime-loop { animation: slime-loop-show 320ms steps(1, end) both; }
   .slime[data-transitioning]:is([data-state="thinking"], [data-state="working"], [data-state="searching"], [data-state="computer"], [data-state="waiting"], [data-state="blocked"]) { animation: slime-idle-hide 320ms steps(1, end) both; }
-  .slime-surface[data-state="error"] > .slime-loop { animation: slime-idle-show 1.6s steps(1, end) both; }
+  .slime-surface[data-state="error"] > .slime-loop { animation: slime-loop-show 1.6s steps(1, end) both; }
   .slime[data-state="error"] { animation: slime-idle-hide 1.6s steps(1, end) both; }
 }
 @container (width <= 48px) {
@@ -415,6 +423,10 @@ html[data-window-hidden] *, html[data-window-hidden] *::before, html[data-window
   .slime-surface > .slime, .slime .slime-body, .slime .slime-eyes, .slime .slime-back, .slime .slime-marks { visibility: visible !important; }
 }
 /* Two keyframes and a steps() count slide a strip through its cels on the compositor, whatever their number. */
+@keyframes slime-loop-show {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
 @keyframes slime-loop-x {
   from { transform: translateX(0%); }
   to { transform: translateX(-100%); }

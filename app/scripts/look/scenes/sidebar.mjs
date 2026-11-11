@@ -2,6 +2,7 @@ import { scene, click, hover, check, page, room, settings, wait, waitGone, drag,
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 const fixture = JSON.parse(readFileSync(join(import.meta.dirname, "../fixture.json"), "utf8"));
+const pinnedTiles = { sidebarMany: true, pinnedTiles: [0, 3, 1] };
 const cropOpen = [...settings("general"), click('[data-owner-photo]'), { action: "upload", selector: 'input.mb-picker', path: 'public/brand/glyph-ring.png' }, wait('.av-crop-frame:not([hidden])')];
 
 export default [
@@ -14,6 +15,10 @@ export default [
   scene("sidebar-drawer", "Compact menu opens the same full conversation list", [{ action: "member-column", collapsed: false }, check("sidebar-shell")]),
   scene("sidebar-search", "Search beside plus opens a card of members in the middle of the window", [{ action:"member-column",collapsed:false },check('sidebar-search-before'),click('[data-col="search"]'),check('sidebar-search-open'),{ action: "search", text: "小晴" }, check("sidebar-shell")]),
   scene("sidebar-chief-pinned", "Pinning the top member turns its row into a larger centered tile", [{ action: "member-column", collapsed: false }, click('[data-member-more="0"]'), click('#app-popover [data-pick="pin"]'), wait('#nav .mb-pinned .mb-tile'), check("sidebar-tile"), check("sidebar-shell")]),
+  // A pinned tile's menu and 換成其他成員 (owner, 2026-11-11, after Grok Bot's pinned-bot menu): three tiles (Raphael, 3, 1) over a long roster.
+  scene("sidebar-tile-menu", "A right click on a pinned tile opens Grok Bot's pinned-bot menu: 取消釘選, 標為未讀, then 編輯 | 分享為範本 | 隱藏, 刪除 and, after a line, 換成其他成員 last", [{ action: "member-column", collapsed: false }, rightClick('.mb-pinned [data-member-item="3"]'), wait('#app-popover [data-pick="replace-pinned"]'), check("sidebar-tile-menu")], pinnedTiles),
+  scene("sidebar-tile-picker", "換成其他成員 on a tile opens the member picker with the members that are not pinned, as buttons that answer at once", [{ action: "member-column", collapsed: false }, rightClick('.mb-pinned [data-member-item="3"]'), click('#app-popover [data-pick="replace-pinned"]'), wait(".mb-dialog.mb-primary-picker"), check("sidebar-tile-picker")], pinnedTiles),
+  scene("sidebar-tile-replaced", "One press on a member puts it exactly in the tile's place and sends the old member back to its folder", [{ action: "member-column", collapsed: false }, rightClick('.mb-pinned [data-member-item="3"]'), click('#app-popover [data-pick="replace-pinned"]'), wait(".mb-dialog.mb-primary-picker"), click('.mb-primary-picker [data-id="4"]'), wait('.mb-pinned [data-member="4"].mb-tile'), check("sidebar-tile-replaced")], pinnedTiles),
   scene("sidebar-rail", "Dragged narrow by its edge, the list folds to a rail of faces, with the plus above the owner", [{ action: "member-column", collapsed: false }, drag('.side-edge', -240, { wide: true }), check("sidebar-rail"), check("sidebar-selection")]),
   scene("sidebar-rail-dragged-open", "The rail dragged out by its edge opens the list again at the width it was let go", [{ action: "member-column", collapsed: false }, drag('.side-edge', -240, { wide: true }), drag('.side-edge', 260, { wide: true }), check("sidebar-width")]),
   scene("sidebar-dragged-wider", "The list's edge drags it wider: no handle and no button", [{ action: "member-column", collapsed: false }, drag('.side-edge', 90, { wide: true }), check("sidebar-width")]),

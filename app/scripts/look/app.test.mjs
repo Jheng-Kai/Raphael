@@ -43,7 +43,7 @@ describe("real app entry with the shared look fixture", () => {
     document.querySelector('#nav .nav[data-go="settings"]').click();
     await vi.waitFor(() => expect(document.querySelector('.modal-scrim [data-pane="general"]')).not.toBeNull());
     // 連結應用程式 is no tab: the sidebar opens it as a dialog of its own (R-UI-111).
-    // The six settings tabs: appearance and messaging are sections of 一般.
+    // Grok Bot's six tabs (owner, 2026-11-07): appearance is a section of 一般.
     for (const pane of ["general", "dictation", "tools", "safety", "models", "about"]) {
       document.querySelector(`.modal-scrim [data-pane="${pane}"]`).click();
       await vi.waitFor(() => expect(document.querySelector(`.modal-scrim [data-pane="${pane}"][aria-current="page"]`), pane).not.toBeNull());

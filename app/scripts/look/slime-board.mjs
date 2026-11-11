@@ -7,7 +7,9 @@ export function paintedSlime(svg) {
   const surface=svg.closest('.slime-surface');
   const fallback=()=>({body:svg.querySelector('.slime-body'),eyes:svg.querySelector('.slime-eyes'),marks:[...svg.querySelectorAll('.slime-mark')]});
   const bodyStrip=surface.querySelector('.slime-loop-body .slime-cels');
-  if(bodyStrip && getComputedStyle(bodyStrip.parentElement).display!=='none' && getComputedStyle(bodyStrip.parentElement).visibility!=='hidden'){
+  // A strip still going in, or waiting behind the vector's moment, is shown by its opacity (slime.css `slime-loop-show`) and is not painted yet.
+  const shown=bodyStrip && getComputedStyle(bodyStrip.parentElement).display!=='none' && getComputedStyle(bodyStrip.parentElement).visibility!=='hidden' && getComputedStyle(bodyStrip.parentElement).opacity!=='0';
+  if(shown){
     const frame=bodyStrip.parentElement.clientWidth, index=Math.round(-new DOMMatrix(getComputedStyle(bodyStrip).transform).e/frame);
     const props=bodyStrip.querySelector('.slime-prop-cels');
     const row=props?Math.round(-new DOMMatrix(getComputedStyle(props).transform).f/frame):0;
@@ -67,7 +69,18 @@ export async function slimeBoard(rows, columns = 1) {
   const { slimeSVG, handOver } = await import("/src/main/slime.ts");
   const { ico } = await import("/src/main/ui.ts");
   const offSeason = new Date(2000, 5, 1), hats = new Date(2026, 9, 31);
-  const hold = (svg, at) => { for (const running of (svg.closest(".slime-surface") ?? svg).getAnimations({ subtree: true })) { running.pause(); running.currentTime = at; } };
+  // A strip admitted some milliseconds after a change of state starts that far into its loop (a negative delay, slime.ts admitStrips), so that it
+  // keeps the clock the page reads; held `at` ms after the change, its own time is `at` plus that offset back. A positive delay is a lag by design.
+  // A finite animation cannot be held before its own start (a negative time is its "before" phase and draws its first frame), so such a one,
+  // the strips' show (slime.css `slime-loop-show`), has its offset taken out of its delay: it then stands `at` ms into its moment, as it would have.
+  const hold = (svg, at) => {
+    for (const running of (svg.closest(".slime-surface") ?? svg).getAnimations({ subtree: true })) {
+      const { delay = 0, iterations = 1 } = running.effect?.getTiming() ?? {};
+      running.pause();
+      if (delay < 0 && Number.isFinite(iterations)) { running.effect.updateTiming({ delay: 0 }); running.currentTime = at; }
+      else running.currentTime = at + Math.min(0, delay);
+    }
+  };
   const board = document.createElement("div");
   board.className = "look-slime-board";
   board.style.cssText = `position:fixed;inset:0;z-index:100000;overflow:hidden;display:grid;grid-template-columns:repeat(${columns},minmax(0,1fr));align-content:start;gap:6px;padding:8px;background:var(--content);color:var(--text-3);font-size:11px;line-height:12px`;
@@ -75,15 +88,34 @@ export async function slimeBoard(rows, columns = 1) {
     `<span style="display:grid;justify-items:center;gap:2px;flex:none">${cell.icon ? ico("search").replace('<svg ', `<svg style="width:${cell.size}px;height:${cell.size}px" `) : `<span class="av mb-av mb-av-slime" style="--av:${cell.size}px${cell.height ? `;height:${cell.height}px` : ""}">${slimeSVG(cell.slime, { now: cell.hat ? hats : offSeason, state: cell.state, moving: !cell.still })}</span>`}${cell.caption === undefined ? "" : `<small style="height:12px;font-size:10px">${cell.caption}</small>`}</span>`).join("")}</div>`).join("");
   document.body.append(board);
   const svgs = [...board.querySelectorAll("svg.slime")], cells = rows.flatMap(row => row.cells.filter(cell => !cell.icon));
-  for (const [index, svg] of svgs.entries()) {
+  for (const [index, drawn] of svgs.entries()) {
+    let svg = drawn;
     const cell = cells[index];
     svg.dataset.lookAt = String(cell.then ? cell.after ?? 0 : cell.at ?? 700);
     if (cell.at === undefined) continue;
     hold(svg, cell.at);
     if (cell.then) {
+      // The page's own clock (slime.ts clockOf) starts a bridge from the pose its `mounted` time says; a board that holds the animations
+      // at `at` has to say the same, or the new state starts from where a slime stands `at` ms after it was drawn, not `at` ms into its loop.
+      // The page keeps one clock per face from the first time it reads it, so the cell is given a face the page has not read yet.
+      const fresh = svg.cloneNode(true);
+      svg.replaceWith(fresh); svg = fresh;
+      svg.dataset.slimeMounted = String(performance.now() - cell.at);
+      hold(svg, cell.at);
       handOver(svg, cell.then);
+      // Held in the same task: a transition that a busy frame outlived (the eyes' 200ms morph) would be gone by the next one.
+      hold(svg, cell.after ?? 0);
       await new Promise(requestAnimationFrame);
       hold(svg, cell.after ?? 0);
+      // The strips of a looping state are admitted a little later (slime.ts admitStrips) and would run on in real time, so the cell waits for
+      // them and holds again: the change is then seen at exactly `after` ms, whatever the machine was doing meanwhile.
+      if (["thinking", "working", "searching", "computer", "waiting", "blocked", "error"].includes(cell.then)) {
+        // A heavy strip goes in a slice a frame, out of sight (slime.ts mountStrips); it starts its clocks when the last slice is in.
+        const surface = svg.closest(".slime-surface"), give = performance.now() + 4000;
+        const mounted = () => surface.querySelector(":scope > .slime-loop") && !surface.querySelector(":scope > .slime-loop[data-slime-loading]");
+        while (!mounted() && performance.now() < give) await new Promise(requestAnimationFrame);
+        hold(svg, cell.after ?? 0);
+      }
     }
   }
   await new Promise(requestAnimationFrame);
@@ -246,28 +278,35 @@ export async function idleCost(page, seconds, revision) {
   return { check: "idle-cost", revision: revision ?? "working-tree", seconds, slimes: layers, avatarNodes, mainThread: percent("TaskDuration"), style: percent("RecalcStyleDuration"), layout: percent("LayoutDuration"), script: percent("ScriptDuration"), browser: Number(((cpuAfter - cpuBefore) / seconds * 100).toFixed(1)) };
 }
 
-/** A hover wiggles a slime, the wiggle finishes after the pointer has gone, and a press squashes it until it is let go, with the control standing still. */
+/**
+ * A resting member's slime in the list (a moving face, R-SLIME-01) no longer wiggles under the pointer (owner, 2026-11-07, 0c1848d9): it glances aside at rest
+ * and looks back at you while the pointer is on it, and glances aside again when the pointer has gone. A press squashes it until it is let go, with the
+ * control standing still. (A picture does neither: slime.css `:not([data-slime-still])`, proved by slime-places.)
+ */
 export async function slimePointer(page, selector) {
   const row = await page.waitForSelector(selector, { visible: true });
   const box = await row.boundingBox();
   const read = () => row.evaluate(host => {
-    const svg = host.querySelector("svg.slime"), rect = host.getBoundingClientRect();
-    const scale = getComputedStyle(svg.closest(".slime-surface")).scale;
-    return { delighted: svg.classList.contains("is-delighted"), scale, top: rect.top, height: rect.height };
+    const svg = host.querySelector("svg.slime"), rect = host.getBoundingClientRect(), surface = svg.closest(".slime-surface");
+    const glance = getComputedStyle(svg.querySelector(".slime-follow")).translate;
+    return { state: svg.dataset.state, picture: surface.hasAttribute("data-slime-still"), wiggling: svg.classList.contains("is-delighted") || surface.getAnimations({ subtree: true }).some(animation => animation.animationName === "slime-delight"), scale: getComputedStyle(surface).scale, glance, looksBack: glance === "none" || glance.split(" ").every(part => parseFloat(part) === 0), top: rect.top, height: rect.height };
   });
+  const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
   const rest = await read();
+  if (rest.state !== "idle" || rest.picture) throw new Error(`The member's slime is not a resting, moving face in the list: ${JSON.stringify(rest)}`);
+  if (rest.looksBack) throw new Error("A resting slime already looks at you without the pointer");
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
-  await new Promise(resolve => setTimeout(resolve, 80));
+  await pause(400);
   const hovering = await read();
-  if (!hovering.delighted) throw new Error("A slime under the pointer does not react");
+  if (hovering.wiggling) throw new Error("A slime under the pointer wiggles, which the owner took away on 2026-11-07");
+  if (!hovering.looksBack) throw new Error(`A slime under the pointer does not look back: ${hovering.glance}`);
   await page.mouse.move(0, 0);
-  await new Promise(resolve => setTimeout(resolve, 100));
-  if (!(await read()).delighted) throw new Error("The wiggle stops when the pointer leaves, instead of finishing");
-  await new Promise(resolve => setTimeout(resolve, 800));
-  if ((await read()).delighted) throw new Error("The wiggle never ends");
+  await pause(400);
+  const away = await read();
+  if (away.glance !== rest.glance) throw new Error(`A slime does not glance aside again when the pointer has gone: ${rest.glance} -> ${away.glance}`);
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
   await page.mouse.down();
-  await new Promise(resolve => setTimeout(resolve, 200));
+  await pause(200);
   const pressed = await read();
   const squash = pressed.scale.split(" ").map(Number);
   if (!(squash[0] > 1.05 && squash[1] < 0.95)) throw new Error(`A press does not squash the slime: scale ${pressed.scale}`);
@@ -275,9 +314,9 @@ export async function slimePointer(page, selector) {
   await row.evaluate(host => host.addEventListener("click", event => { event.preventDefault(); event.stopPropagation(); }, { capture: true, once: true }));
   await page.mouse.move(0, 0);
   await page.mouse.up();
-  await new Promise(resolve => setTimeout(resolve, 900));
+  await pause(900);
   const released = await read();
   if (!["none", "1", "1 1"].includes(released.scale)) throw new Error(`A released slime does not come back: scale ${released.scale}`);
   await row.dispose();
-  return { check: "slime-pointer", pressed: pressed.scale };
+  return { check: "slime-pointer", glance: rest.glance, looksBack: hovering.glance, pressed: pressed.scale };
 }

@@ -11,7 +11,7 @@
 import { createRoomsSection, openNewGroupChat } from "./group-chats";
 import { t } from "./i18n";
 import { createMessageSearch } from "./message-search";
-import { type MemberSection, faceHTML, memberMatches, memberSections, memberDisplayList, memberRole, previewOf, primaryIdOf, raphaelOf } from "./members";
+import { type MemberSection, faceHTML, memberMatches, memberSections, memberDisplayList, memberRole, pinReplacements, previewOf, primaryIdOf, raphaelOf } from "./members";
 import type { Member, MembersList } from "./types";
 import { closeMenu, esc, ico, iconButton, openPopover } from "./ui";
 
@@ -177,26 +177,34 @@ export function openActions(anchor: HTMLElement, items: readonly (ActionItem | t
 
 /**
  * A row's menu, grouped into sections: 釘選, 移到分組, 標為未讀 | 編輯 | 分享為範本 | 隱藏, 刪除.
- * The primary sits in the top slot instead of a group and is not deleted from here: its menu ends with 換成其他成員.
+ * A pinned tile's menu reads the same way: 取消釘選, 標為未讀 | 編輯 | 分享為範本
+ * | 隱藏, 刪除, then after a line 換成其他成員, which puts a member that is not pinned in this tile's place. The tile has no
+ * 移到分組: its folder is where it goes back to. The primary sits in the top slot instead of a group and is not deleted from here:
+ * its 換成其他成員 hands the primary on.
  */
 export function memberMenu(id: number, anchor: HTMLElement, host: Pick<ColumnHost, "view" | "moveMember" | "deleteMember" | "memberAction">): void {
   const list = host.view().list;
   const member = list?.members.find(m => m.id === id);
-  const primary = primaryIdOf(list) === id;
-  const pin: ActionItem = { id: "pin", label: t(member?.pinned ? "members.sideUnpin" : "members.sidePin"), icon: "pin" };
-  const replace: ActionItem = { id: "primary", label: t("members.sideReplacePrimary"), icon: "up" };
+  const primary = primaryIdOf(list);
+  const isPrimary = primary === id;
+  const pin: ActionItem = { id: "pin", label: t(member?.pinned ? "members.sideUnpin" : "members.sidePin"), icon: member?.pinned ? "pinOff" : "pin" };
+  const replace: ActionItem = { id: "primary", label: t("members.sideReplacePrimary"), icon: "swap" };
   // Raphael is not a member row the owner can edit: pinning is all there is to do to him here, and handing on the primary when it is his.
-  if (id === 0) return openActions(anchor, primary ? [pin, SEP, replace] : [pin], pick => host.memberAction?.(id, pick));
-  const unread: ActionItem = { id: "unread", label: t("members.sideUnread"), icon: "chat" };
+  if (id === 0) return openActions(anchor, isPrimary ? [pin, SEP, replace] : [pin], pick => host.memberAction?.(id, pick));
+  const unread: ActionItem = { id: "unread", label: t("members.sideUnread"), icon: "mail" };
   const tail: (ActionItem | typeof SEP)[] = [
     SEP, { id: "edit", label: t("members.sideEdit"), icon: "pencil" },
     SEP, { id: "export-template", label: t("template.export"), icon: "download" },
     SEP, member?.hidden ? { id: "hide", label: t("members.sideUnhide"), icon: "eye" } : { id: "hide", label: t("members.sideHide"), icon: "eyeOff" },
   ];
-  openActions(anchor, primary ? [pin, unread, ...tail, replace] : [
-    pin, { id: "move", label: t("members.moveTo"), icon: "folder", submenu: true }, unread,
-    ...tail, { id: "delete", label: t("members.sideDelete"), icon: "trash" },
-  ], (pick, row) => {
+  const remove: ActionItem = { id: "delete", label: t("members.sideDelete"), icon: "trash" };
+  const tile = !!member?.pinned && !member.hidden;
+  // Nobody to put in its place: the item would open an empty window, so it is not offered.
+  const swap: ActionItem = { id: "replace-pinned", label: t("members.sideReplacePrimary"), icon: "swap" };
+  const items: (ActionItem | typeof SEP)[] = isPrimary ? [pin, unread, ...tail, SEP, replace]
+    : tile ? [pin, unread, ...tail, remove, ...(pinReplacements(list).length ? [SEP, swap] as const : [])]
+      : [pin, { id: "move", label: t("members.moveTo"), icon: "folder", submenu: true }, unread, ...tail, remove];
+  openActions(anchor, items, (pick, row) => {
     if (pick === "move") host.moveMember(id, null, row);
     else if (pick === "delete") host.deleteMember(id);
     else host.memberAction?.(id, pick);

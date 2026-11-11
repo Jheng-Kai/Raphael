@@ -27,6 +27,8 @@
      words (「上下高度會剛好貼齊文字」), every button and every menu row takes its height from these and nowhere else
      (「全部一致…共用同一個」), and a menu row is short so a menu reads at a glance. A field keeps a little more room to type. */
   --h-ctl: 26px; --h-ctl-sm: 22px; --h-menu: 28px; --h-field: 30px; --h-row: 48px; --h-tab: 26px;
+  /* A page in a conversation shows only its top, this tall, under its title row; the page opens whole when it is pressed (owner, 2026-11-11). */
+  --h-page-peek: 160px;
   /* official brand colours of service logos: the only colours outside the app palette */
   --brand-telegram: #26a5e4;
   /* marks drawn over a photo (the picture crop frame): one set for both themes, as the photo under them is the same */

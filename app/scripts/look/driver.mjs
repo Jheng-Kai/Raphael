@@ -369,8 +369,9 @@ export async function perform(page, step, evidenceDirectory) {
         if (!await page.$eval(selector, el => { const r=el.getBoundingClientRect(); return el.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)); })) throw new Error('caption is covered');
         await click(selector);
       }
-      if (!await page.$eval('[data-window-drag]', el => { const r=el.getBoundingClientRect(); return el.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)); })) throw new Error('caption drag area is covered');
-      await click('[data-window-drag]');
+      // The caption's own strip (index.html) stands above every dialog. The sidebar's top row is a second drag area (owner, 2026-11-08), which a modal dialog rightly covers.
+      if (!await page.$eval('.window-chrome [data-window-drag]', el => { const r=el.getBoundingClientRect(); return el.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)); })) throw new Error('caption drag area is covered');
+      await click('.window-chrome [data-window-drag]');
       await page.evaluate(() => new Promise(resolve => setTimeout(resolve, 50)));
       const result = await page.evaluate(before => {
         const calls = window.__look.calls.slice(before).map(c=>c.command);
@@ -383,7 +384,7 @@ export async function perform(page, step, evidenceDirectory) {
       await page.waitForFunction(el => !el.isConnected || !!el.closest('[hidden]'), {timeout:2000}, dialog);
       await dialog.dispose();
       if (step.kind === 'settings') await click('#nav [data-go="settings"]');
-      else if (step.kind === 'member') { await perform(page, {action:'open-details'}, evidenceDirectory); await click('.mb-det [data-det="routine-add"]'); }
+      else if (step.kind === 'member') { await perform(page, {action:'open-details'}, evidenceDirectory); await click('.mb-det [data-det="routine-open"]'); }
       else { await click('[data-room-menu]'); await click('[data-pick="delete"]'); }
       await page.evaluate(() => { window.__polishCaptionOutside = true; });
       break;
@@ -507,10 +508,10 @@ export async function perform(page, step, evidenceDirectory) {
         try {
           const snapshot = () => element.evaluate(button => {
             const box = button.getBoundingClientRect();
-            return { active: button.matches(':active'), bounds: [box.x, box.y, box.width, box.height], colors: [button.parentElement, button, ...button.querySelectorAll('*')].map(node => {
-              const style = getComputedStyle(node);
-              return [style.color, style.backgroundColor, style.borderColor, style.opacity];
-            }) };
+            // A control may answer on a drawn pseudo-element (a pill's ::before surface), which the owner sees as the control's own colour.
+            const colorsOf = (node, pseudo) => { const style = getComputedStyle(node, pseudo); return [style.color, style.backgroundColor, style.borderColor, style.opacity]; };
+            return { active: button.matches(':active'), bounds: [box.x, box.y, box.width, box.height], colors: [button.parentElement, button, ...button.querySelectorAll('*')].flatMap(node =>
+              [colorsOf(node), ...['::before', '::after'].filter(pseudo => !['none', 'normal'].includes(getComputedStyle(node, pseudo).content)).map(pseudo => colorsOf(node, pseudo))]) };
           });
           await element.hover();
           await new Promise(resolve => setTimeout(resolve, 180));
@@ -639,6 +640,8 @@ export async function perform(page, step, evidenceDirectory) {
       await page.evaluate(events => { for (const event of events) window.__look.emit(event); }, step.events);
       await new Promise(resolve => setTimeout(resolve, step.wait ?? 300));
       return { action: "emit", events: step.events.map(event => event.type) };
+    // The models of the CLI held back by the mock (`codexLate`) arrive now.
+    case "codex-arrives": await page.evaluate(() => { window.__look.codexArrives(); }); break;
     // From now on the roster answers after `ms` (the mock's rosterDelay): the thread is asked for first and the roster comes late.
     case "late-roster": await page.evaluate(ms => { window.__look.rosterDelay = ms; }, step.ms); break;
     case "send-probe": return await sendProbe(page, step);
@@ -1010,7 +1013,8 @@ export async function perform(page, step, evidenceDirectory) {
     case "member": await click(`.mb-col [data-member="${step.id}"]`); break;
     case "room": await click(`[data-room="${step.id}"]`); break;
     case "new-room": await click('[data-col="add"]'); await click('#app-popover [data-pick="group-chat"]'); break;
-    case "room-row-menu": { const more = await visible(`[data-room-more="${step.id}"]`); try { await more.hover(); await more.click(); } finally { await more.dispose(); } break; }
+    // A room's row draws no ⋯ (owner, 2026-11-06, R-UI-44): its menu opens the way the owner opens it, with a right click on the row.
+    case "room-row-menu": await click(`[data-room-more="${step.id}"]`); break;
     case "rooms-menu": await visible(".mb-col [data-room]"); break;
     case "search":
       if (!(await page.$("#app-popover .side-search-input"))) await click('[data-col="search"]');

@@ -30,7 +30,14 @@ def brain(request, setup, client, tmp_path, monkeypatch):
 
         async def run(driver, **kwargs):
             runs.append(kwargs["user"])
-            if "team_changes" in kwargs["user"]:  # the turn going on after the owner's yes
+            if kwargs.get("no_tools"):
+                # A member made by the yes greets the owner in its own turn, which has no tools to call: it answers at once. If it
+                # went on to call the proposals, the test could end with six of these still posting; the service then cancels them
+                # in the middle of their HTTP call, and httpx/anyio on Windows leaves a connection they were opening unclosed,
+                # which a later test is blamed for (a ResourceWarning, an error under -W error).
+                yield Event("final", "Hello, I am ready to help.")
+                return
+            if "team_changes" in kwargs["user"] or "management_changes" in kwargs["user"]:  # the turn going on after the owner's yes
                 yield Event("session", "codex-thread-1")
                 yield Event("final", prepare.then)
                 return
@@ -141,15 +148,13 @@ async def test_every_brain_collects_edits_and_applies_once(setup, brain):
     assert await rig.call("members.list", {}) == before
 
 
-@pytest.mark.parametrize("ending", ["cancel", "expiry", "resend"])
-async def test_cancel_expiry_and_resend_never_revive_a_proposal(setup, brain, ending):
+@pytest.mark.parametrize("ending", ["cancel", "resend"])
+async def test_cancel_and_resend_never_revive_a_proposal(setup, brain, ending):
     rig, team = setup
     brain(("member_create", {"name": "Research", "role": "Research"}))
     asked = await typed(rig, "Create member Research", 0)
     old = asked["confirm"]["id"]
-    if ending == "expiry":
-        rig.clock.now += 31
-    elif ending == "cancel":
+    if ending == "cancel":
         await rig.confirm(old, False)
     else:
         brain(("member_create", {"name": "Research", "role": "Research"}))
@@ -274,3 +279,70 @@ async def test_owner_edits_are_checked_against_current_safety_rules(setup, brain
     await rig.call("agent.confirm", {"id": asked["confirm"]["id"], "approved": True, "drafts": [draft]})
     assert seen
     assert not team.members.store.members()
+
+
+async def test_a_card_answered_after_five_minutes_still_applies(setup, brain):
+    # Owner, 2026-11-11: the card of a change waited thirty seconds and the yes found nothing. In the conversation it has no timer.
+    rig, team = setup
+    brain(("member_create", {"name": "Research", "role": "Research"}))
+    asked = await typed(rig, "Create member Research", 0)
+    assert asked["confirm"]["timeout_ms"] == 0
+    rig.clock.now += 5 * 60
+    done = await rig.call("agent.confirm", {"id": asked["confirm"]["id"], "approved": True, "drafts": asked["confirm"]["drafts"]})
+    assert done["status"] == "done"
+    assert [m["name"] for m in (await rig.call("members.list", {}))["members"][1:]] == ["Research"]
+
+
+async def test_fourteen_readings_of_one_turn_are_one_card_and_the_yes_brings_their_results(setup, brain):
+    # A health check read each member with its own card (14 of them); the mode that asks first asks for a reading too.
+    from raphael_core.management import publish
+
+    rig, team = setup
+    members = [member(team, name=f"Member{n}") for n in range(14)]
+    brain(*[publish("member_skills_list", {"member_id": one.id}) for one in members], then="Checked all fourteen.")
+    asked = await typed(rig, "Check every member", 0)
+    assert asked["status"] == "confirm" and rig.service._confirmations.waiting == 1
+    assert asked["confirm"]["timeout_ms"] == 0
+    lines = asked["confirm"]["text"].split("\n")
+    assert lines[0] == "有 14 項變更需要你同意" and len(lines) == 16
+    assert all(line.startswith("讀取資料（不會變更任何內容）：「Member") for line in lines[1:-1])
+    assert "{" not in asked["confirm"]["text"] and "member_" not in asked["confirm"]["text"]
+    rig.clock.now += 10 * 60
+    done = await rig.confirm(asked["confirm"]["id"])
+    assert done["status"] == "done" and done["text"] == "Checked all fourteen."
+    shown = brain.continued()
+    assert "management_changes" in shown and shown.count("Member") >= 14 and "result" in shown
+
+
+async def test_several_changes_of_one_turn_are_one_card_and_one_yes_makes_them_in_order(setup, brain):
+    from raphael_core.management import publish
+
+    rig, team = setup
+    one, other = member(team, name="Ada"), member(team, name="Bo")
+    schedule = {"kind": "daily", "time": "09:00"}
+    brain(*[publish("member_routine_create", {"member_id": who.id, "title": f"Daily {who.name}", "prompt": "Check the inbox", "schedule": schedule})
+            for who in (one, other)], publish("member_read", {"id": other.id}))
+    asked = await typed(rig, "Set the routines", 0)
+    assert rig.service._confirmations.waiting == 1
+    lines = asked["confirm"]["text"].split("\n")
+    assert lines == ["有 3 項變更需要你同意", "建立例行任務：「Ada」", "建立例行任務：「Bo」", "將對話標為已讀：「Bo」", "允許以上所有變更嗎？"]
+    assert (await rig.call("routines.list", {"member_id": one.id}))["routines"] == []
+    done = await rig.confirm(asked["confirm"]["id"])
+    assert done["status"] == "done"
+    assert len((await rig.call("routines.list", {"member_id": one.id}))["routines"]) == 1
+    assert len((await rig.call("routines.list", {"member_id": other.id}))["routines"]) == 1
+    said = [m["text"] for m in rig.service._history.messages([asked["turn_id"]])[asked["turn_id"]] if m["kind"] == "event"]
+    assert said[-1].split("\n") == ["已完成：建立例行任務：「Ada」", "已完成：建立例行任務：「Bo」", "已完成：將對話標為已讀：「Bo」"]
+
+
+async def test_the_card_names_the_member_that_asks(setup, brain):
+    from raphael_core.management import publish
+
+    if brain.cli:
+        pytest.skip("the api variant covers the words")
+    rig, team = setup
+    asker = member(team, name="Ada")
+    others = [member(team, name=f"Member{n}") for n in range(2)]
+    brain(*[publish("member_skills_list", {"member_id": one.id}) for one in others])
+    asked = await typed(rig, "Check the others", asker.id)
+    assert asked["confirm"]["text"].split("\n")[0] == "「Ada」：有 2 項變更需要你同意"

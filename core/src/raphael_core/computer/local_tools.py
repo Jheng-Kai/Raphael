@@ -12,7 +12,7 @@ from jsonschema import Draft202012Validator
 
 from ..agent.plugins import PluginResult, PluginTool, tool_key
 from ..agent.permissions import qualifies
-from ..agent.policy import Tier
+from ..agent.policy import UNATTENDED_WAIT_S, Tier
 from ..agent.data_floor import DataFloor, WRITE_REFUSAL
 from ..brain.settings import SettingsStore
 from ..integrations.audit import AuditLog
@@ -20,7 +20,7 @@ from .local_host import LocalHost, Output
 from .local_patterns import DANGEROUS_PATTERNS
 
 LOCAL_PREFIX = "mcp:local/"
-BACKGROUND_WAIT_S = 30 * 60
+BACKGROUND_WAIT_S = UNATTENDED_WAIT_S
 FOREGROUND_TIMEOUT_S = 120
 _CONTEXT = ContextVar("local_command_context", default=(None, True, False, ""))
 _DANGEROUS = [re.compile(pattern, re.I | re.S) for pattern, _ in DANGEROUS_PATTERNS]

@@ -198,7 +198,7 @@ export function installMock(fixture, config = {}, target = window) {
       messages: [{ seq: 1, kind: "reply", text: source, at_ms: data.now }], attachments: [] }));
     data.messages = [{ ...structuredClone(data.messages.find(message => message.member_id !== null)), id: 701, member_id: 1, text: source, kind: "message", status: "done", attachments: [] }];
   }
-  let codexArrived = false, codexTimer;
+  let codexArrived = false;
   const desktopSessions = new Map();
   let desktopSequence = 0;
   let teaching;
@@ -225,6 +225,9 @@ export function installMock(fixture, config = {}, target = window) {
     const unit = { ...media, provider: "Example", input_per_mtok: null, output_per_mtok: null, image_output_per_mtok: null };
     data.catalog.image = [media, { ...unit, id: "test/image-unit", name: "圖片單價範例", per_image: .04 },
       { ...unit, id: "test/image-request", name: "請求單價範例", per_request: .025 }];
+    // The core's own drawing model on the owner's Codex subscription (agent/cli/images.py): a source of its own beside OpenRouter.
+    if (variant.mediaCodex) data.catalog.image.push({ ...media, id: "@codex:gpt-image-2", name: "Codex (subscription)", provider: "Codex", provider_id: "codex", provider_name: "Codex",
+      input_per_mtok: null, output_per_mtok: null, image_output_per_mtok: null });
     data.catalog.video = [];
     data.settings.image_model = ""; data.settings.video_model = "";
     if (variant.mediaModels === "set") {
@@ -259,6 +262,9 @@ export function installMock(fixture, config = {}, target = window) {
     data.members[1].last_at = data.now;
     data.messages.push({ ...data.messages.at(-1), id: Math.max(...data.messages.map(message => message.id)) + 1, room_id: data.rooms[0].id, text: "週五計畫已準備完成", created: data.now, status: "done" });
   }
+  // Pinned tiles (`pinnedTiles`: member ids, 0 is Raphael, who is pinned by his own setting): the core lists the pinned first, then by
+  // position, and a `position` written to a member is a place in the order of all of them, numbered again from 0.
+  if (variant.pinnedTiles) for (const id of variant.pinnedTiles) { if (id === 0) data.settings.chief_pinned = true; else data.members.find(member => member.id === id).pinned = true; }
   if (variant.onlyRaphael) data.members = data.members.filter(member => member.id === 0);
   if (variant.chatgptSignedIn) {
     data.chatgpt = { signed_in: true, email: "owner@example.test", plan_scope_granted: true };
@@ -541,11 +547,15 @@ export function installMock(fixture, config = {}, target = window) {
     data.turns.push(mail);
     if (!data.conversations.some(item => item.id === data.colleagueConversation.id)) data.conversations.push(structuredClone(data.colleagueConversation));
   }
+  // `pageNews`: a page far taller than its card (a day's Japanese news, 900 px), alone ("only") or after the product page ("both").
   if (variant.pageTurn) {
     const base = data.turns.find(turn => turn.member_id === 1);
-    data.turns.push({ ...structuredClone(base), id: 801, question: "幫我找一個輕量後背包。", text: "這款符合你的需求,可以直接在下面操作。", status: "done", route: "answer", steps: [],
+    if (variant.pageNews !== "only") data.turns.push({ ...structuredClone(base), id: 801, question: "幫我找一個輕量後背包。", text: "這款符合你的需求,可以直接在下面操作。", status: "done", route: "answer", steps: [],
       messages: [{ seq: 1, kind: "reply", text: "這款符合你的需求,可以直接在下面操作。", at_ms: data.now }], attachments: [],
       pages: [{ id: "page-product", title: "輕量後背包", rev: 1, height: 320, source: "html", server: null, fallback: "輕量後背包 NT$ 1,280,防潑水、重量 480 公克。" }] });
+    if (variant.pageNews) data.turns.push({ ...structuredClone(base), id: 803, question: "幫我整理今天的日文新聞。", text: "整理好了，點開就能讀。", status: "done", route: "answer", steps: [],
+      messages: [{ seq: 1, kind: "reply", text: "整理好了，點開就能讀。", at_ms: data.now }], attachments: [],
+      pages: [{ id: "page-news", title: "每日新聞日文學習 2026-11-11", rev: 1, height: 900, source: "html", server: null, fallback: "三則新聞、今日單字與練習問題。" }] });
   }
   // A member said a word first, then made the report (core agent/report_page.py) and sent it as a link card.
   if (variant.reportTurn) {
@@ -691,7 +701,7 @@ export function installMock(fixture, config = {}, target = window) {
   }
   if (variant.calendarComposio) {
     data.managedConnectors = data.managedConnectors.filter(c=>c.id!=="google" && c.id!=="composio:googlecalendar");
-    data.managedConnectors.push({id:"composio:googlecalendar",kind:"composio",name:"Google Calendar",status:"ACTIVE",enabled:true,enabled_tools:["GOOGLECALENDAR_EVENTS_LIST"]});
+    data.managedConnectors.push({id:"composio:googlecalendar",kind:"composio",name:"Google Calendar",status:"ACTIVE",enabled:true,enabled_tools:["GOOGLECALENDAR_EVENTS_LIST"],disabled_tools:[]});
     data.home.calendar_google="connected";
   }
   if (variant.homeSparse || variant.homeEmpty) {
@@ -793,6 +803,8 @@ export function installMock(fixture, config = {}, target = window) {
   } };
   let maximized = false;
   target.__look = state;
+  // The late CLI models (`codexLate`) come now, and the window is told as the core tells it.
+  state.codexArrives = () => { codexArrived = true; notify("BrainsChanged", {}); };
   // What the owner could see of the open conversation's place, frame by frame (`scrollTimeline`): a place seen once is the
   // place the thread opens at, so a bottom followed by the line (or the other way) shows as two samples.
   if (variant.scrollTimeline) {
@@ -924,7 +936,8 @@ export function installMock(fixture, config = {}, target = window) {
           return { kind: "report", title, rev: 1, height: 320, source: "html", server: null, report: { as_of: new Date(data.now - 30 * 60000).toISOString().replace(/\.\d+Z$/, "Z"), sections: structuredClone(sections) } };
         }
         // Not a file of the dev server, which would write its own client into the page.
-        return { url: `data:text/html;charset=utf-8,${encodeURIComponent(data.pageProductHtml)}`, title: "輕量後背包", rev: 1, height: 320, source: "html", server: null };
+        if (p.id === "page-news") return { url: `data:text/html;charset=utf-8,${encodeURIComponent(data.pageNewsHtml.replace("__THEME__", p.theme === "dark" ? "dark" : ""))}`, title: "每日新聞日文學習 2026-11-11", rev: 1, height: 900, source: "html", server: null };
+        return { url: `data:text/html;charset=utf-8,${encodeURIComponent(data.pageProductHtml.replace("__THEME__", p.theme === "dark" ? "dark" : ""))}`, title: "輕量後背包", rev: 1, height: 320, source: "html", server: null };
       case "computer.wallpaper": return variant.ownWallpaper ? { image: variant.ownWallpaper } : {};
       case "computer.lifecycle": {
         if (p.target !== data.desktop.target || p.host !== data.desktop.host || p.action === 'reset' && p.confirmed !== true) throw new Error('Maintenance confirmation or target missing');
@@ -1056,7 +1069,9 @@ export function installMock(fixture, config = {}, target = window) {
         }
         // the roster of every model carries the same inventory and the same count as the sidebar and the connections page
         const counted = inventory();
-        return { members: data.members.map(m => ({ ...m, chief: m.id === data.primaryId, pinned: m.id === 0 ? !!data.settings.chief_pinned : m.pinned })), groups: data.groups, team_context: {
+        const roster = data.members.map(m => ({ ...m, chief: m.id === data.primaryId, pinned: m.id === 0 ? !!data.settings.chief_pinned : m.pinned }));
+        if (variant.pinnedTiles) roster.sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || a.position - b.position || a.id - b.id);
+        return { members: roster, groups: data.groups, team_context: {
           schema_version: 1, revision: "fixture", self_id: 0, count: data.members.length, primary_id: data.primaryId, chief_id: data.primaryId,
           inventory_state: counted.state, room_member_ids: null,
           members: data.members.map(m => ({ id: m.id, name: m.name, role: m.role, blurb: m.blurb ?? "" })),
@@ -1071,7 +1086,17 @@ export function installMock(fixture, config = {}, target = window) {
         return {};
       }
       case "members.tool_choices": return { tools: [], connections: data.servers };
-      case "members.update": { const member = update(data.members, p.id, p); if (p.hidden && p.id === data.primaryId) data.primaryId = 0; notify("MembersChanged", { member_id: p.id }); return { member }; }
+      case "members.update": {
+        const member = update(data.members, p.id, p);
+        if (variant.pinnedTiles && p.position !== undefined) {
+          const order = data.members.filter(other => other.id !== p.id).sort((a, b) => a.position - b.position || a.id - b.id);
+          order.splice(Math.min(p.position, order.length), 0, member);
+          order.forEach((other, place) => { other.position = place; });
+        }
+        if (p.hidden && p.id === data.primaryId) data.primaryId = 0;
+        notify("MembersChanged", { member_id: p.id });
+        return { member };
+      }
       case "members.avatar_generate": {
         // As the core (brief 10): the owner's chosen image model draws one square candidate, not applied; without a model the
         // window is told so with the place that chooses one. The window reads the kind from the error text (window_error).
@@ -1410,10 +1435,9 @@ export function installMock(fixture, config = {}, target = window) {
       case "rooms.send": { const message = { thread_id:p.thread_id ?? 1, id: nextId(data.messages), room_id: p.room_id, member_id: null, text: p.text, request_id: p.request_id, status: "done", created: data.now, reply_to: p.reply_to ?? null, turn_id: null, reply_to_member: data.messages.find(item => item.id === p.reply_to)?.member_id ?? null, origin_message_id: nextId(data.messages), kind: "message", attachments: (p.attachments ?? []).map((file, index) => { const id = `${"f".repeat(30)}${String(index).padStart(2, "0")}.png`; (data.keptFiles ??= {})[id] = { mime: file.mime, data: file.data }; return { id, name: file.name, mime: file.mime }; }) }; data.messages.push(message); return { message_id: message.id, duplicate: false }; }
       case "computer.revoke": if (data.desktop) data.desktop.granted = false; return { granted: false };
       case "brains.cli":
-        // As the core does: a CLI's models come after the first read, in the background.
+        // As the core does: a CLI's models come after the first read, in the background. With `codexLate` they come when the scene's
+        // `codex-arrives` step says so, not after a wall-clock delay: a slow or busy run must see the same two states in the same order.
         if (variant.codexLate && !codexArrived) {
-          // Counted from the menu opening, so that a slow start of the scene still sees them come.
-          if (!codexTimer && target.document.querySelector(".cb-menu")) codexTimer = setTimeout(() => { codexArrived = true; notify("BrainsChanged", {}); }, variant.codexLate);
           return { clis: data.clis.map(cli => cli.id === "codex" ? { ...cli, models: [] } : cli) };
         }
         return { clis: data.clis };

@@ -362,7 +362,11 @@ async def test_mcp_routine_call_keeps_member_scope_and_safety_approval(setup, tm
     fake_brain(rig, tmp_path, '''import json, sys, urllib.request
 from pathlib import Path
 config=json.loads(Path(sys.argv[sys.argv.index("--mcp-config")+1]).read_text())["mcpServers"]["raphael"]
-json.loads(sys.stdin.readline())
+line=sys.stdin.readline()
+json.loads(line)
+if "management_changes" in line:  # the turn going on after the owner's yes: the routine was made, only the answer is left
+    print(json.dumps({"type":"result","subtype":"success","result":"Lesson ready."}),flush=True)
+    sys.exit(0)
 print(json.dumps({"type":"assistant","message":{"content":[{"type":"text","text":"Preparing the lesson."}]}}),flush=True)
 packet={"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"routine_create","arguments":{"title":"Lesson","prompt":"Teach Japanese","schedule":{"kind":"daily","time":"08:00"}}}}
 request=urllib.request.Request(config["url"],data=json.dumps(packet).encode(),headers={**config["headers"],"Content-Type":"application/json"})

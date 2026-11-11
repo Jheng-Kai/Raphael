@@ -941,6 +941,33 @@ test("a memory change reads nothing and shows nothing on the member's page", asy
   expect(globalThis.document.querySelector('.ms-pane [data-mem-space], .ms-pane [data-mem-section], .ms-pane [data-cat="memory"]')).toBeNull();
 });
 
+
+test("a roster that moves only a last line, a step or an unread mark starts no Library read and leaves the panel alone, and a renamed member reads and shows", async () => {
+  vi.useFakeTimers();
+  const agent = mount(); await flush(); await pick(3); await openDetails();
+  await vi.advanceTimersByTimeAsync(1000); await flush();
+  const panel = $(".mb-det");
+  const library = (): number => api.core.mock.calls.filter(([method]) => method === "members.library").length;
+  const touched: MutationRecord[] = [];
+  const watch = new MutationObserver(records => touched.push(...records));
+  api.core.mockClear(); api.membersSkillsList.mockClear(); api.membersCommandsList.mockClear();
+  watch.observe(panel, { subtree: true, childList: true, attributes: true, characterData: true });
+  for (let step = 1; step <= 5; step++) {
+    api.membersList.mockResolvedValue({ ...LIST, members: LIST.members.map(m => m.id === 3 ? { ...m, preview: `Checking ${step}`, activity: "searching", activity_label: `Step ${step}`, last_at: Date.now() - 1000 + step, unread: step % 2 === 0 } : m) });
+    send({ type: "MembersChanged" }); await vi.advanceTimersByTimeAsync(400); await flush();
+  }
+  expect(library()).toBe(0);
+  expect(api.membersSkillsList).not.toHaveBeenCalled(); expect(api.membersCommandsList).not.toHaveBeenCalled();
+  // Only the words of the face's tooltip follow the step, on the face where it stands.
+  expect(touched.map(record => record.target.nodeName + ":" + record.attributeName)).toEqual(Array(5).fill("SPAN:data-tooltip"));
+  expect($('.mb-col [data-member="3"]').textContent).toContain("Checking 5");
+  // What the panel shows moved: it is drawn and the Library is read once.
+  api.membersList.mockResolvedValue({ ...LIST, members: LIST.members.map(m => m.id === 3 ? { ...m, name: "Renamed" } : m) });
+  send({ type: "MembersChanged" }); await vi.advanceTimersByTimeAsync(400); await flush();
+  expect($(".mb-who b").textContent).toBe("Renamed");
+  expect(library()).toBe(1);
+  watch.disconnect(); agent.hide();
+});
 describe("Raphael's thread", () => {
   test("reads plainly: his answers without 《》, 問拉斐爾, his voice button, asked with no member", async () => {
     mount();

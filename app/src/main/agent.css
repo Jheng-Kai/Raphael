@@ -506,9 +506,9 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
    own metrics, so the caret and a wrapping line fall exactly as for plain words. */
 .cmp-mirror .url-chip { color: var(--link); }
 .mention-at { position: relative; -webkit-text-fill-color: transparent; }
-/* The 16 px mark is wider than the @ it covers, so it leans 3 px left: a little air before the name,
-   without changing the words' metrics. */
-.mention-ico { position: absolute; inset: 0; display: grid; place-items: center; translate: -3px 0; -webkit-text-fill-color: currentColor; }
+/* The 16 px mark is wider than the @ it covers, so it starts 3 px left of it: a little air before the name,
+   without changing the words' metrics. The box is the mark's own width, so that a narrower @ does not make it overflow sideways. */
+.mention-ico { position: absolute; inset-block: 0; inset-inline-start: 0; width: 16px; display: grid; place-items: center; translate: -3px 0; -webkit-text-fill-color: currentColor; }
 .mention-ico .i, .mention-ico .mono { width: 16px; height: 16px; margin: 0; }
 /* One slot: 拉斐爾大師 (voice) while the draft is empty; once there is something to send he turns
    into a bare send icon (a level paper plane, no background), as Telegram does. */

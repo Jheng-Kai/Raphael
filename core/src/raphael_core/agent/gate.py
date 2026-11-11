@@ -256,9 +256,10 @@ class ToolGate:
         self.check(action, approval)
 
     def check_management_batch(self, action: Action, approval: Approval | None) -> None:
-        """One single-use approval covers exactly the listed changes that cannot be undone, as the owner read them on one
-        card (owner, 2026-11-11: 「不要分這麼多卡片，讓我去按同意」). A list that holds anything else is refused."""
-        from ..management import MANAGEMENT_TOOLS
+        """One single-use approval covers exactly the listed administrative changes, as the owner read them on one card
+        (owner, 2026-11-11: 「不要分這麼多卡片，讓我去按同意」). A list that holds anything else is refused, and so is a
+        team proposal (members and folders, `BATCH_TOOLS`) unless it cannot be undone: those keep their editable card."""
+        from .team_admin import BATCH_TOOLS, STAGED_TOOLS
 
         operations = action.args.get("operations")
         if action.tool != "management_batch" or not isinstance(operations, list) or not operations:
@@ -266,7 +267,8 @@ class ToolGate:
         retention = self._settings.get("history_retention_days") if self._settings else None
         from ..management import destructive
         for operation in operations:
-            if operation["name"] not in MANAGEMENT_TOOLS or not destructive(operation["name"], operation["arguments"], retention):
+            if operation["name"] not in STAGED_TOOLS or (
+                    operation["name"] in BATCH_TOOLS and not destructive(operation["name"], operation["arguments"], retention)):
                 raise NotApproved(operation["name"])
         self.check(action, approval)
 

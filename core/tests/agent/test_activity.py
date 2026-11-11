@@ -181,6 +181,6 @@ async def test_confirmed_admin_batch_tracks_the_actual_tool(make_rig, monkeypatc
     ask = SimpleNamespace(speaker=SimpleNamespace(id=0, depth=0), ledger=SimpleNamespace(total=0),
         admin_pending=[], waiting_apps=[], waiting_secrets=[], waiting_computer=False,
         scope="private", nested=False, quick=False, exchange_speakers=None, source="app", background_owner=False)
-    followup = SimpleNamespace(ask=ask, admin_batch=True)
+    followup = SimpleNamespace(ask=ask, admin_batch=True, management_batch=False)
     await rig.service._confirm_plugin(pending, None, followup)
     assert states(notes) == ["thinking", "working", "thinking", "done", "idle"]

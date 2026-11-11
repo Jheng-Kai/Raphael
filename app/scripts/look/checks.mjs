@@ -842,7 +842,7 @@ export function checkRendered(name, context = {}) {
     if (!panel.hasAttribute('data-expanded') && name !== 'desktop-boot-inline') require(Math.abs(box.width / box.height - 1280 / 900) < .02, 'boot retains the running desktop aspect ratio');
     if (name.startsWith('desktop-period-')) require(wallpaper.getAttribute('src') === `/wallpapers/${name.slice('desktop-period-'.length)}.svg`, 'the fixed fixture hour selects its expected period');
     return {check:name};
-  }  if(name === "daily-newest") {require(document.querySelector('.conversation-caption').textContent==='Newest sample','the newest standard conversation opens');return {check:name};}
+  }  if(name === "daily-newest") {const reads=window.__look.calls.filter(call=>call.method==='agent.history.list'&&!call.params?.member_id&&call.params?.conversation_id!==undefined);require(reads.length>0&&reads.every(call=>call.params.conversation_id===77),'the newest standard conversation (not the default one, not the quick questions) is the one read');require(document.querySelector('.conversation-caption').hidden,'the header names only the member while a standard conversation is open (R-UI-103)');return {check:name,reads:reads.map(call=>call.params.conversation_id)};}
   if(name === "daily-copy") {const copied={"zh-TW":"已複製",en:"Copied",ja:"コピーしました"}[document.documentElement.lang];const tick=[...document.querySelectorAll('.thread button, .cn-setup-dialog button, .au-routine-dialog button')].find(el=>el.getAttribute('aria-label')===copied);require(tick&&tick.querySelector('svg'),'the pressed copy control displays its tick and copied name');require(tick.scrollWidth<=tick.clientWidth,'copied words fit in the fixed button width');return {check:name};}
   if(name === "daily-marks") {require(document.querySelectorAll('.sidebar-app-marks .mono').length===3,'three connected known apps show bare marks');return {check:name};}
   if(name === "daily-draft-member" || name === "daily-draft-room") {const input=document.querySelector(name.endsWith('room')?'#room-message':'.page-agent .mb-chat:not([hidden]) .cmp-input');require(input.value==='Unfinished sample draft','navigation restores this composer words');require(input.selectionStart===input.value.length,'caret returns to the end');return {check:name};}
@@ -852,6 +852,20 @@ export function checkRendered(name, context = {}) {
     require(row.querySelector('.live-action').textContent === '正在讀取 sample.md', 'tool words beat public progress in a group');
     require(row.querySelector('.av').getBoundingClientRect().width === 28, 'the group shares the 28px live face');
     return {check:name};
+  }
+  if (name === "message-action-tooltip") {
+    // Beside a reply only icons stay in sight (reply, react, ⋯), and the time lives in the thread's dividers (timeline.ts messageActionsHTML, 2026-11-06),
+    // so the tip under the pointer names an icon and never repeats a word that is already on screen.
+    const control = document.querySelector('.ra .chat-message[data-reply] .message-actions [data-act="reply-message"]');
+    const tips = [...document.querySelectorAll('[role="tooltip"]')].filter(visible);
+    require(control?.matches(':hover'), "the pointer is on the reply icon");
+    require(tips.length === 1 && tips[0].textContent === control.dataset.tooltip && control.dataset.tooltip.length > 0, `one tooltip names the icon: ${tips.map(tip => tip.textContent)}`);
+    require(!control.hasAttribute('title') && control.innerText.trim() === '', "the icon shows no word of its own and keeps no native title beside the tip");
+    require(!document.querySelector('.ra .chat-message[data-reply] .message-actions time'), "a message's actions hold no time");
+    const box = tips[0].getBoundingClientRect(), anchor = control.getBoundingClientRect();
+    require(box.left >= 8 && box.right <= innerWidth - 8 && box.top >= 0 && box.bottom <= innerHeight - 8, "the tooltip stays inside the viewport");
+    require(box.bottom <= anchor.top + 2 || box.top >= anchor.bottom - 2, "the tooltip does not cover its icon");
+    return { check: name, tip: tips[0].textContent };
   }
   if (name.startsWith("presence-") || name.startsWith("transcript-") || name.startsWith("event-routine-") || name.startsWith("event-calendar-") || name === "sidebar-row-time" || name === "sidebar-group-author") {
     const turn = document.querySelector('[data-id="651"]');
@@ -1008,10 +1022,11 @@ export function checkRendered(name, context = {}) {
     return { check: name };
   }
   if (name === "menu-anchor-return") {
-    const menu = document.getElementById('app-popover'), anchor = document.querySelector('.mb-col [data-member-more="1"]');
-    require(visible(menu), "the real more-button press keeps its menu open");
+    // The ⋯ that a real press went to is the one drawn open; a row's own ⋯ is never drawn, so the press is on a visible one.
+    const menu = document.getElementById('app-popover'), anchor = document.querySelector('[data-overflow][aria-expanded="true"]');
+    require(visible(menu) && visible(anchor), "the real press on a drawn ⋯ keeps its menu open");
     const box = menu.getBoundingClientRect(), control = anchor.getBoundingClientRect();
-    require(Math.abs(box.right - control.right) <= 1 && Math.abs(box.top - control.bottom - 4) <= 1, "a fresh press returns the menu beneath its own control");
+    require(Math.abs(box.right - control.right) <= 1 && Math.abs(box.top - control.bottom - 4) <= 1, `a fresh press returns the menu beneath its own control (menu right ${box.right}, top ${box.top}; control right ${control.right}, bottom ${control.bottom})`);
     return { check: name };
   }
   if (name === "menu-settings-redraw") {
@@ -1317,7 +1332,18 @@ export function checkRendered(name, context = {}) {
     if (name === 'polish-search') {
       const pane = [...document.querySelectorAll('.ra-find')].find(el => visible(el));
       const proof = window.__polishSearch;
-      if (proof?.total === 210) require(Math.abs(document.querySelector('[data-room-search]').getBoundingClientRect().y-document.querySelector('[data-room-menu]').getBoundingClientRect().y)<1, 'group search and menu stay in the shared header tool row');
+      if (proof?.total === 210) {
+        // The group's ⋯ is not drawn (a right click on the row opens its menu: owner, 2026-11-06), so its header tool row is the search button alone.
+        // The head keeps the pane's side inset on both sides (the room gives its padding to its children), so the button ends the head
+        // on the heading's line; while the column fills the window it stands on the composer's right edge, as a conversation's edge button does.
+        const room = document.querySelector('.au-room-pane'), head = room.querySelector(':scope > .page-head').getBoundingClientRect(), pane = room.getBoundingClientRect();
+        const search = document.querySelector('[data-room-search]'), menu = document.querySelector('[data-room-menu]');
+        const box = search.getBoundingClientRect(), composer = room.querySelector('.composer').getBoundingClientRect(), heading = room.querySelector('.au-room-heading').getBoundingClientRect();
+        require(visible(search) && search.closest('.page-head .ra-tools') && getComputedStyle(menu).display === 'none', 'group search stands alone in the shared header tool row; the menu is the row\'s right click');
+        require(Math.abs(box.right - head.right) <= 1 && Math.abs((head.left - pane.left) - (pane.right - head.right)) <= 1, `the head keeps one inset on both sides and its tool ends it (${head.left - pane.left} / ${pane.right - head.right}, tool ${head.right - box.right} short)`);
+        require(Math.abs(box.top + box.height / 2 - (heading.top + heading.height / 2)) <= 2, 'group search shares the heading\'s line');
+        if (composer.left - head.left <= 24) require(Math.abs(box.left + box.width / 2 - composer.right) <= 2, `group search stands on the composer's right edge while the column fills the window (${box.left + box.width / 2} vs ${composer.right})`);
+      }
       require(proof?.wrap && proof.stable && proof.noMatch && proof.closedInPlace, 'keyboard and icon navigation wrap, typing stays put, no-match and both close paths work');
       require(pane.querySelector('.ra-find-count').textContent === `${proof.total}/${proof.total}`, 'the full paginated history starts at its newest exact word');
       require(document.querySelectorAll('mark.is-current').length === 1, 'one exact word is the current target');
@@ -1488,6 +1514,27 @@ export function checkRendered(name, context = {}) {
         require(model.getBoundingClientRect().width >= 80 && price.getBoundingClientRect().right <= row.getBoundingClientRect().right,
           'the model name and every price unit remain inside the existing picker row');
       }
+      // A known source wears its mark, never the plug of a source nobody drew (owner, 2026-11-11).
+      const openrouter = menu.querySelector('[data-source="openrouter"] > .mono');
+      require(openrouter && /logo-(art|mono)/.test(openrouter.className) && !openrouter.querySelector('svg.i'), 'OpenRouter has its own mark in the source list');
+    } else if (name === 'media-models-codex') {
+      const menu = document.querySelector('.model-chooser');
+      const marks = {
+        'the source list': menu.querySelector('[data-source="codex"] > .mono'),
+        'the head of its models': menu.querySelector('.mc-pane-head > .mono'),
+        'its row': menu.querySelector('.mc-row[data-model="@codex:gpt-image-2"] .mono'),
+      };
+      for (const [place, mark] of Object.entries(marks)) {
+        require(mark && visible(mark) && /logo-(art|mono)/.test(mark.className), `Codex has a maker's mark in ${place}`);
+        require(!mark.querySelector('svg.i'), `${place} draws no plug and no robot for Codex`);
+        const box = mark.getBoundingClientRect();
+        require(box.width >= 14 && box.height >= 14, `${place} draws the mark at a readable size`);
+      }
+      const drawings = Object.values(marks).map(mark => mark.innerHTML);
+      require(new Set(drawings).size === 1, "all three places draw the same mark");
+      const openrouter = menu.querySelector('[data-source="openrouter"] > .mono');
+      require(openrouter && openrouter.innerHTML !== drawings[0], "it is OpenAI's mark and not OpenRouter's");
+      require(menu.querySelector('.mc-pane-head h3').textContent.trim() === 'Codex', 'the head names Codex');
     } else if (name === 'media-models-repair') {
       require(['image-model', 'video-model'].includes(document.activeElement?.dataset.k), 'repair focuses the exact model control');
     }
@@ -3108,7 +3155,6 @@ export function checkRendered(name, context = {}) {
     for (const selector of labels) require(!host.querySelector(selector)?.closest('.row')?.querySelector('.d'), "self-explanatory settings have no helper paragraph");
     require(!host.querySelector('.models-purpose-note, .run-retained, [data-price="note"]'), "skin, model and usage helpers are absent");
     if (pane === 'data') require(!host.querySelector('.foot'), "data has no helper footer");
-    if (host.querySelector('.set-messaging')) require(!host.querySelector('.msg > .foot'), "Telegram keeps its controls without a setup paragraph");
     return { check: name, pane };
   }
   if (name === "models-responsive") {
@@ -3946,9 +3992,14 @@ export function checkRendered(name, context = {}) {
     return { check: name };
   }
   if (name === "quick-conversation-list") {
-    const first = document.querySelector('.mb-det [data-conversation-open]');
-    require(first?.dataset.conversationOpen === "4", "quick questions are pinned first");
-    require(first?.textContent.includes("快速提問"), "the kind uses the window-language title");
+    // Each member has one conversation (2026-11-06, 3cd7fa91, R-UI-86 retired): Raphael's main one is the first row and the one a window opens,
+    // and his quick questions wait in the second, named only when the owner picks it.
+    const rows = [...document.querySelectorAll('.mb-det [data-conversation-open]')];
+    require(rows.length === 2, `Raphael's details list his main conversation and his quick questions: ${rows.length}`);
+    const [main, quick] = rows;
+    require(main.dataset.conversationOpen !== "4" && main.textContent.includes("主要對話"), "the main conversation is the first row");
+    require(main.getAttribute('aria-current') === "true" && quick.getAttribute('aria-current') === "false", "the window has the main conversation open, never the quick questions");
+    require(quick.dataset.conversationOpen === "4" && quick.textContent.includes("快速提問"), "the quick questions follow, with the window-language title");
     return { check: name, conversation: 4 };
   }
   if (name === "quick-conversation") {
@@ -4290,7 +4341,8 @@ export function checkRendered(name, context = {}) {
       require(mark && visible(mark), `${chipText(chip)} shows its mark`);
       const markBox = mark.getBoundingClientRect(), nameRange = document.createRange();
       nameRange.selectNodeContents(chip.lastChild);
-      require(markBox.left >= box.left - 1 && markBox.right <= nameRange.getBoundingClientRect().left + 1, `${chipText(chip)}: the mark stands before its name inside the chip`);
+      // The mark leans 3 px left of the @ it covers (agent.css `.mention-ico`, owner 2026-11-07), so it keeps air before the name.
+      require(markBox.left >= box.left - 3.5 && markBox.right <= nameRange.getBoundingClientRect().left + 1, `${chipText(chip)}: the mark stands before its name inside the chip (mark ${markBox.left}..${markBox.right}, chip from ${box.left}, name from ${nameRange.getBoundingClientRect().left})`);
       require(markBox.width >= 10 && markBox.width <= 18 && Math.abs(markBox.height - markBox.width) <= 2, `${chipText(chip)}: the mark is a small square (${markBox.width} x ${markBox.height})`);
       require(style.backgroundColor === 'rgba(0, 0, 0, 0)' && style.boxShadow === 'none' && parseFloat(style.borderTopWidth) === 0, `${chipText(chip)}: the logo and the name alone, with no frame or fill`);
       require(!chip.closest('a, button') && getComputedStyle(at).webkitTextFillColor === 'rgba(0, 0, 0, 0)', `${chipText(chip)} is not a control and does not show its @`);
@@ -4888,15 +4940,60 @@ export function checkRendered(name, context = {}) {
     }
     return { check: name, members: members.length };
   }
-  if (name === "page-card") {
-    const card = document.querySelector(".pg-card"), frame = card?.querySelector("iframe");
-    require(frame?.getAttribute("sandbox") === "allow-scripts allow-forms", "the page runs sandboxed with an opaque origin");
-    require(card.querySelector(".pg-body").dataset.state === "ready", "the page has loaded");
-    const height = frame.getBoundingClientRect().height;
-    require(height >= 180 && height !== 320, `the page is as tall as its content, not the reserved height: ${height}`);
-    const line = card.closest(".tn, [data-key]").getBoundingClientRect(), box = card.getBoundingClientRect();
-    require(box.left >= line.left && box.right <= line.right + 1, "the page stays inside the reply");
-    return { check: name, height };
+  if (name === "page-card" || name === "page-collapsed" || name === "page-collapsed-two") {
+    // A page in a conversation is a card of one fixed height: its title row and only the top of the page, clipped, soft at the cut,
+    // nothing in it to press or scroll; the card is one control that opens the page whole (owner, 2026-11-11: a page shown whole
+    // made the conversation one very long block).
+    const cards = [...document.querySelectorAll(".pg-card")].filter(visible);
+    require(cards.length === (name === "page-collapsed-two" ? 2 : 1), `${cards.length} page cards in sight`);
+    const peek = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--h-page-peek"));
+    require(peek >= 120 && peek <= 200, `the preview is a modest height: ${peek}px`);
+    const heights = [];
+    for (const card of cards) {
+      const body = card.querySelector(".pg-body"), frame = body.querySelector("iframe"), clip = body.getBoundingClientRect(), box = card.getBoundingClientRect();
+      require(frame?.getAttribute("sandbox") === "allow-scripts allow-forms", "the page runs sandboxed with an opaque origin");
+      require(body.dataset.state === "ready", "the page has loaded");
+      require(Math.abs(clip.height - peek) <= 0.5 && getComputedStyle(body).overflow === "hidden", `the preview is ${peek}px and clips (${clip.height})`);
+      // Behind the clip the frame is as tall as the page says, from the page's own top, so there is no scrollbar and the cut is the clip.
+      const inner = frame.getBoundingClientRect(), said = parseFloat(card.style.getPropertyValue("--pg-h"));
+      require(Math.abs(inner.top - clip.top) <= 0.5 && Math.abs(inner.height - said) <= 1.5 && inner.width >= clip.width - 1, `the frame shows the top of the page at its own height (${Math.round(inner.height)} of ${said})`);
+      // Nothing in it can be pressed, focused or scrolled: it is inert, takes no pointer, and what is under the pointer is the preview.
+      require(frame.hasAttribute("inert") && getComputedStyle(frame).pointerEvents === "none", "the page in the card is inert and takes no pointer");
+      const x = clip.left + clip.width / 2, y = clip.top + Math.min(clip.height, innerHeight - clip.top) / 2;
+      if (y > clip.top && y < innerHeight) require(document.elementFromPoint(x, y)?.closest(".pg-body") === body, "a press in the preview reaches the card, not the page");
+      // One control with the page's name, reached by Tab; no expand button of its own under the page.
+      const title = card.querySelector(".card-title").textContent;
+      require(body.getAttribute("role") === "button" && body.tabIndex === 0 && body.getAttribute("aria-label")?.includes(title), `the preview is one focusable control named with the page: ${body.getAttribute("aria-label")}`);
+      require(![...card.querySelectorAll(".card-actions, .btn.icon, .pg-expand")].some(visible), "no button under the preview");
+      // The cut fades into the card's own surface, so there is no edge to it, light or dark.
+      const fade = getComputedStyle(body, "::after"), surface = getComputedStyle(card).backgroundColor;
+      require(fade.backgroundImage.startsWith("linear-gradient") && fade.backgroundImage.includes(surface) && fade.backgroundImage.includes("rgba(0, 0, 0, 0)"), `the cut fades into the card's surface ${surface}: ${fade.backgroundImage}`);
+      require(Math.abs(parseFloat(fade.height) - 56) <= 1 && fade.pointerEvents === "none", "the fade is soft and takes no press");
+      // Inside the reply, and the title row as a card's own: its title and the status chip on one line.
+      const line = card.closest(".tn, [data-key]");
+      if (line) { const room = line.getBoundingClientRect(); require(box.left >= room.left && box.right <= room.right + 1, "the page card stays inside the reply"); }
+      const chip = card.querySelector(".card-status").getBoundingClientRect(), head = card.querySelector(".card-title").getBoundingClientRect();
+      require(Math.abs((chip.top + chip.bottom) / 2 - (head.top + head.bottom) / 2) <= 3 && chip.right <= box.right, "the title and its chip stand on one line");
+      heights.push(Math.round(box.height * 10) / 10);
+    }
+    require(new Set(heights).size === 1, `every page card is as tall as the others: ${heights}`);
+    require(document.documentElement.scrollWidth <= innerWidth, "nothing runs out sideways");
+    return { check: name, cards: heights.length, card: heights[0], peek };
+  }
+  if (name === "page-opened-whole") {
+    // Pressing the card opened the page whole: the same frame, no longer inert, as tall as the page says (up to three quarters of the window),
+    // where it scrolls and its buttons work; the card behind it holds no frame.
+    const view = document.querySelector(".pg-view"), frame = view?.querySelector("iframe");
+    require(frame && !document.querySelector(".pg-card .pg-body iframe"), "the same page moved to the dialog: one frame");
+    require(!frame.hasAttribute("inert") && getComputedStyle(frame).pointerEvents !== "none", "the page works again where it is made larger");
+    const said = parseFloat(view.style.getPropertyValue("--pg-h")), peek = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--h-page-peek"));
+    const shown = frame.getBoundingClientRect();
+    require(Math.abs(shown.height - Math.min(said, innerHeight * 0.75)) <= 1, `as tall as the page says, up to three quarters of the window (${Math.round(shown.height)} of ${said})`);
+    require(shown.height > peek * 2, `far more of the page than the preview showed (${Math.round(shown.height)} against ${peek})`);
+    const close = view.closest(".mb-dialog").querySelector('[data-dlg="close"]').getBoundingClientRect();
+    require(close.bottom <= shown.top + 0.5 && close.top >= 0, "the × stands above the page, inside the window");
+    require(document.documentElement.scrollWidth <= innerWidth, "nothing runs out sideways");
+    return { check: name, height: shown.height, said };
   }
   if (name === "page-placed" || name === "page-appended") {
     const input = [...document.querySelectorAll('.composer .cmp-input')].find(visible);
@@ -5122,6 +5219,9 @@ export function checkRendered(name, context = {}) {
     require(Math.abs(right - retry.right) <= 1, `the retry stands at the card's right (${Math.round(right - retry.right)} px)`);
     require(bottom - retry.bottom <= 1, `nothing blank stands under the retry (${Math.round(bottom - retry.bottom)} px)`);
     require(![...card.querySelectorAll(":scope > .card-actions")].some(visible), "the failed page has no expand row");
+    // As tall as the preview it stands for, so a card that fails moves nothing in the thread (owner, 2026-11-11).
+    const peek = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--h-page-peek"));
+    require(Math.abs(failed.getBoundingClientRect().height - peek) <= 0.5, `the failed card is as tall as the preview (${failed.getBoundingClientRect().height} against ${peek})`);
     // R-UI-117: a failed card is put away by the × in its heading.
     const close = card.querySelector(":scope > .card-head > [data-card-failed-close]");
     require(close && visible(close), "the × that puts it away is in its heading");
@@ -5729,6 +5829,58 @@ export function checkRendered(name, context = {}) {
     require(box.left >= 0 && box.right <= innerWidth && box.top >= 0 && box.bottom <= innerHeight, "the menu is inside the viewport");
     return { check: name, shape };
   }
+  if (name === "sidebar-tile-menu") {
+    // A pinned tile's menu reads as Grok Bot's pinned bot (owner, 2026-11-11): unpin and unread, then the rest, then 換成其他成員 last after a line.
+    const menu = document.querySelector('#app-popover');
+    require(visible(menu), "the tile's menu is open");
+    require(document.querySelector('.mb-pinned [data-member-item="3"]'), "the member whose tile it is stands among the tiles");
+    const shape = [...menu.children].map(node => node.matches('[role="separator"]') ? "|" : node.dataset.pick).join(" ");
+    require(shape === "pin unread | edit | export-template | hide delete | replace-pinned", `the tile's menu is grouped as Grok's pinned bot: ${shape}`);
+    const items = [...menu.querySelectorAll('[data-pick]')];
+    require(items.every(item => visible(item.querySelector('.ck svg.i')) && item.querySelector('.mt').textContent.trim() !== ""), "every row has its own icon and a label");
+    require(items.at(-1).dataset.pick === "replace-pinned" && items.at(-1).previousElementSibling.matches('[role="separator"]'), "換成其他成員 is last, after a hairline");
+    require(items.at(-2).classList.contains("danger") && !items.at(-1).classList.contains("danger"), "刪除 stays red and 換成其他成員 is not");
+    for (const line of menu.querySelectorAll('[role="separator"]')) {
+      const box = line.getBoundingClientRect();
+      require(box.height >= 1 && box.height <= 9 && box.width > menu.getBoundingClientRect().width * 0.7, "each hairline spans the menu");
+    }
+    require(!menu.querySelector('[data-pick="move"]') && !/ID/i.test(menu.textContent), "no 移到分組 and no id on a tile's menu");
+    const box = menu.getBoundingClientRect();
+    require(box.left >= 0 && box.right <= innerWidth && box.top >= 0 && box.bottom <= innerHeight, "the menu is inside the viewport");
+    require(window.__look.calls.every(call => call.method !== "members.update"), "opening the menu writes nothing");
+    return { check: name, shape };
+  }
+  if (name === "sidebar-tile-picker" || name === "sidebar-tile-replaced") {
+    const data = window.__look.data, writes = window.__look.calls.filter(call => call.method === "members.update");
+    const tiles = () => [...document.querySelectorAll('.mb-pinned [data-member-item]')].map(item => Number(item.dataset.memberItem));
+    if (name === "sidebar-tile-picker") {
+      const dialog = document.querySelector('.mb-dialog.mb-primary-picker');
+      require(visible(dialog), "the member picker is open");
+      const title = dialog.querySelector('h2').textContent.trim();
+      require(title !== "" && dialog.querySelector('[role="group"]').getAttribute('aria-label') === title, "it is titled by the action and its list is named by the title");
+      const choices = [...dialog.querySelectorAll('.mb-chat-choice')];
+      const ids = choices.map(button => Number(button.dataset.id));
+      require(choices.length >= 3 && choices.every(button => button.tagName === 'BUTTON' && visible(button)), "the members are real buttons");
+      require(ids.every(id => id !== 0 && !data.members.find(member => member.id === id).pinned), "only members that are not pinned are offered, and not Raphael");
+      require(!dialog.querySelector('.mb-dlg-act, [role="radio"], .mb-chat-choice svg.i'), "no 設為主要, no radio and no check: one press answers");
+      require(visible(dialog.querySelector('[data-primary-search]')), "the search is there");
+      const box = dialog.getBoundingClientRect();
+      require(box.left >= 0 && box.right <= innerWidth && box.top >= 0 && box.bottom <= innerHeight, "the window is inside the viewport");
+      for (const button of choices) {
+        const b = button.getBoundingClientRect();
+        require(b.left >= box.left && b.right <= box.right && b.height >= 40, `${button.textContent.trim()} is a whole row inside the window`);
+      }
+      require(writes.length === 0 && tiles().join() === "0,3,1", "nothing is written before a member is pressed");
+      return { check: name, choices: choices.length };
+    }
+    require(!document.querySelector('.mb-primary-picker, .mb-dialog'), "the picker closed on the press, with no question");
+    require(writes.length === 2 && writes[0].params.id === 4 && writes[0].params.pinned === true && writes[1].params.id === 3 && writes[1].params.pinned === false, "the member chosen is pinned, then the old one is unpinned");
+    require(!("group_id" in writes[1].params) && !("position" in writes[1].params), "the old member's folder and place are not touched");
+    require(tiles().join() === "0,4,1", `the member chosen stands exactly in the old tile's place: ${tiles()}`);
+    require(document.querySelector('.mb-sec [data-member="3"]') && !document.querySelector('.mb-pinned [data-member="3"]'), "the old member is back in its folder as a row");
+    require(document.querySelector('.mb-pinned [data-member="4"].mb-tile') && !document.querySelector('.mb-sec [data-member="4"]'), "the new member is a tile and no longer a row");
+    return { check: name, tiles: tiles() };
+  }
   if (name === "primary-menu") {
     const menu = document.querySelector('#app-popover');
     require(visible(menu), "the primary's menu is open");
@@ -5847,9 +5999,11 @@ export function checkRendered(name, context = {}) {
     const grid = document.querySelector('.cs-form .add-grid'), port = grid.getBoundingClientRect();
     const last = document.querySelector('#conn-limit'), edge = last.getBoundingClientRect().right;
     if (name === "connections-form-edges") {
-      const add = document.querySelector('[data-k="conn-add"]'), save = document.querySelector('.add-acts [data-conn="connect"]');
-      const rights = [add, save].map(button => button.getBoundingClientRect().right);
-      require(rights.every(right => Math.abs(right - edge) <= 1), `header and footer actions share the form field right edge: fields ${edge}, actions ${rights.join(', ')}`);
+      // The form is the whole tab (no bar, so no 新增 above it since 2026-11-07): its only actions are the footer's, and the last one ends where the fields end.
+      const actions = [...document.querySelectorAll('.add-acts button')];
+      require(actions.length === 3 && !document.querySelector('[data-k="conn-add"]'), `the form has its three footer actions and no add menu above it: ${actions.length}`);
+      const rights = actions.map(button => button.getBoundingClientRect().right);
+      require(Math.abs(Math.max(...rights) - edge) <= 1, `footer actions end at the form field right edge: fields ${edge}, actions ${rights.join(', ')}`);
       return { check: name, right: edge };
     }
     const footer = document.querySelector('.cs-form > .trust').getBoundingClientRect();
@@ -6061,13 +6215,17 @@ export function checkRendered(name, context = {}) {
   if (name.startsWith("member-settings-place-")) {
     const scroller = document.querySelector('.page-agent .mb-chat .ra-scroll');
     const bottom = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight;
+    const markOffset = () => { const mark = scroller.querySelector('.tn[data-id="300035"]'); return mark ? mark.getBoundingClientRect().top - scroller.getBoundingClientRect().top : NaN; };
     if (name === "member-settings-place-before") {
       require(bottom > 200 && scroller.scrollTop > 200, "the thread is read in the middle");
       window.__settingsPlace = scroller.scrollTop;
+      window.__settingsMark = markOffset();
+      window.__settingsHeight = scroller.scrollHeight;
       return { check: name, top: scroller.scrollTop };
     }
     if (name === "member-settings-place-kept") {
-      require(Math.abs(scroller.scrollTop - window.__settingsPlace) <= 2 && bottom > 100, `the thread is where it was (${Math.round(window.__settingsPlace)} -> ${Math.round(scroller.scrollTop)})`);
+      // The turn that was read stands where it stood: turns mounted above it move scrollTop, not the view.
+      require(Math.abs(markOffset() - window.__settingsMark) <= 2 && bottom > 100, `the turn read is where it was (offset ${Math.round(window.__settingsMark)} -> ${Math.round(markOffset())}; top ${Math.round(window.__settingsPlace)} -> ${Math.round(scroller.scrollTop)}; height ${window.__settingsHeight} -> ${scroller.scrollHeight})`);
       return { check: name, top: scroller.scrollTop };
     }
     require(bottom <= 2 && scroller.scrollTop > 200, "the thread is back at its bottom, and it scrolls");
@@ -6510,7 +6668,7 @@ export function checkRendered(name, context = {}) {
     require(!document.body.textContent.includes(key) && !seen.includes(key), "the key is on no page text and in no call but the one that adds the app");
     if (["setup-key", "card-setup-form"].includes(name)) {
       require(dialog.querySelector('.mb-dlg-head h2').textContent.includes("Acme Ledger"), "the form is named for the app");
-      require(dialog.querySelector('.cn-lead').textContent.includes("API key") && dialog.querySelector('.cn-keep').textContent.includes("Composio"), "it says what is needed and that Composio keeps it");
+      require(dialog.querySelector('.cn-lead').textContent.includes("API 金鑰") && dialog.querySelector('.cn-keep').textContent.includes("Composio"), "it says what is needed and that Composio keeps it");
       const fields = [...dialog.querySelectorAll('[data-setup-field]')];
       require(fields.length === 1 && fields[0].type === "password" && fields[0].dataset.setupField === "generic_api_key" && fields[0].value === key, "exactly the key the app asks for, in a masked field");
       require(visible(dialog.querySelector('[data-dlg="guide"]')) && dialog.querySelectorAll('.cn-steps li').length === 3, "it says where to get it, in plain steps");

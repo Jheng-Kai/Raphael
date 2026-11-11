@@ -1718,7 +1718,7 @@ export const zhCN = {
   "page.composerNote": "这段文字来自页面，确认后再送出",
   "page.askOpen": "这个页面想打开这个链接",
   "page.askYes": "确定",
-  "page.expand": "放大",
+  "page.open": "打开“{title}”",
   "page.failed": "这个页面打不开。",
   "page.waitingYes": "这个动作要先等你同意，请看对话里的确认卡片。",
   "slime.rimuru": "利姆路",

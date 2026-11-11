@@ -9,7 +9,12 @@ import { closeMenu, matchingChoices, menuIsOpenFor, openMenu, placeMenu, type Ch
 import { findsName } from "./find-match";
 
 export interface SlashMenuOptions { memberId(): number; scope?: object }
-export interface SlashMenu { refresh(fromEvent?: boolean): Promise<void>; destroy(): void }
+export interface SlashMenu {
+  refresh(fromEvent?: boolean): Promise<void>;
+  /** The member's skills or commands may have changed: they are read again when the menu is next wanted (at once if it is open). */
+  invalidate(): void;
+  destroy(): void;
+}
 const queryOf = (text: string): string | undefined => /^\/([^\s/]*)$/u.exec(text)?.[1];
 export const matchingCommands = (commands: readonly MemberCommand[], text: string): MemberCommand[] => {
   const query = queryOf(text);
@@ -19,6 +24,7 @@ export const matchingCommands = (commands: readonly MemberCommand[], text: strin
 export function mountSlashMenu(input: HTMLTextAreaElement | HTMLInputElement, options: SlashMenuOptions): SlashMenu {
   let alive = true, generation = 0;
   let loadedFor: number | null = null;
+  let stale = false;
   let commands: MemberCommand[] = [], skills: MemberSkill[] = [];
   function close(): void {
     if (menuIsOpenFor(input) && document.querySelector("#app-popover.slash-menu")) closeMenu();
@@ -47,6 +53,7 @@ export function mountSlashMenu(input: HTMLTextAreaElement | HTMLInputElement, op
   }
   async function refresh(fromEvent=false): Promise<void> {
     const mine = ++generation, memberId = options.memberId();
+    stale = false;
     close();
     try {
       const [commandAnswer, skillAnswer] = await Promise.all(fromEvent ? [eventRead(`members.commands.list:${memberId}`,()=>membersCommandsList(memberId),options.scope ?? input),eventRead(`members.skills.list:${memberId}`,()=>membersSkillsList(memberId),options.scope ?? input)] : [membersCommandsList(memberId), membersSkillsList(memberId)]);
@@ -57,12 +64,19 @@ export function mountSlashMenu(input: HTMLTextAreaElement | HTMLInputElement, op
   }
   const onInput = (event?: Event): void => {
     if ((event as InputEvent | undefined)?.inputType === RECALL || queryOf(input.value) === undefined) { close(); return; }
-    if (loadedFor === options.memberId()) draw(); else void refresh();
+    if (loadedFor === options.memberId() && !stale) draw(); else void refresh();
   };
   const onBlur = (): void => { generation++; close(); };
   input.addEventListener("input", onInput);
   input.addEventListener("focus", onInput);
   input.addEventListener("compositionend", onInput);
   input.addEventListener("blur", onBlur);
-  return { refresh, destroy() { alive = false; generation++; close(); input.removeEventListener("input", onInput); input.removeEventListener("focus", onInput); input.removeEventListener("compositionend", onInput); input.removeEventListener("blur", onBlur); } };
+  return {
+    refresh,
+    invalidate() {
+      // Nothing is read for a menu that is closed: a busy team announces its members many times a second.
+      if (alive && menuIsOpenFor(input) && document.querySelector("#app-popover.slash-menu")) void refresh(true);
+      else stale = true;
+    },
+    destroy() { alive = false; generation++; close(); input.removeEventListener("input", onInput); input.removeEventListener("focus", onInput); input.removeEventListener("compositionend", onInput); input.removeEventListener("blur", onBlur); } };
 }

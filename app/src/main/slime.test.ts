@@ -594,7 +594,8 @@ test("a simultaneous presence burst mounts at most one visible strip per frame",
     const svg = document.querySelector<SVGElement>(`svg.slime[data-slime-member="${90+count}"]`)!;
     const strip = svg.parentElement!.querySelector<HTMLElement>('.slime-loop-body')!;
     expect(Number.parseFloat(strip.querySelector<HTMLElement>('.slime-cels')!.style.animationDelay)).toBe(Number.parseFloat(svg.style.getPropertyValue('--slime-delay')) - count*16);
-    expect(animated.mock.calls.filter(([frames]) => Array.isArray(frames) && frames[0]?.visibility === 'visible')).toHaveLength(3+count);
+    // The vector's hold is made once, at the change of state: the strips joining it later neither restart nor extend it.
+    expect(animated.mock.calls.filter(([frames]) => Array.isArray(frames) && frames[0]?.visibility === 'visible')).toHaveLength(3);
     expect(observer.takeRecords()).toHaveLength(0);
   }
   expect(created.mock.calls.filter(([tag]) => tag === 'template').length).toBeLessThanOrEqual(1);
@@ -604,6 +605,52 @@ test("a simultaneous presence burst mounts at most one visible strip per frame",
   expect(bodies[1]!.isConnected && bodies[2]!.isConnected).toBe(true);
   observer.disconnect();
   for (const id of [91,92,93]) setSlimeState(id,'idle');
+});
+
+test("a heavy state's strips go in a slice a frame, out of sight, and show together, and a newer state drops the rest", () => {
+  const frames: FrameRequestCallback[] = [];
+  let time = 5000;
+  vi.spyOn(performance, 'now').mockImplementation(() => time);
+  vi.spyOn(window, "requestAnimationFrame").mockImplementation(callback => { frames.push(callback); return frames.length; });
+  document.body.innerHTML = slimeFaceHTML({ id: 95, avatar: "slime:shion" }, 40, "", true);
+  const svg = document.querySelector<SVGElement>('svg.slime[data-slime-member="95"]')!;
+  const surface = svg.parentElement!;
+  const frame = (): void => { time += 16; frames.shift()!(time); };
+  const nodes = (): number => surface.querySelectorAll('.slime-loop *').length;
+  setSlimeState(95, 'thinking');
+  frame();
+  // The strips stand, empty and hidden, in the first frame; the vector stays on show.
+  const loops = [...surface.querySelectorAll('.slime-loop')];
+  expect(loops).toHaveLength(2);
+  expect(loops.every(loop => loop.hasAttribute('data-slime-loading'))).toBe(true);
+  let last = nodes();
+  expect(last).toBeGreaterThan(0);
+  let slices = 1;
+  while (surface.querySelector('.slime-loop[data-slime-loading]')) {
+    frame(); slices++;
+    expect(nodes()).toBeGreaterThan(last);
+    expect(nodes() - last).toBeLessThan(700);
+    last = nodes();
+    expect(slices).toBeLessThan(100);
+  }
+  // A thinking slime with a mark is thousands of nodes: more than a handful of frames, and then both strips show at once.
+  expect(slices).toBeGreaterThan(5);
+  expect(last).toBeGreaterThan(2000);
+  expect(surface.querySelectorAll('.slime-loop[data-slime-loading]')).toHaveLength(0);
+  expect([...surface.querySelectorAll('.slime-loop')]).toEqual(loops);
+  // A state that comes while the strips are going in ends that mount: nothing of it is left, and nothing goes on in it.
+  setSlimeState(95, 'searching');
+  frame(); frame();
+  const half = [...surface.querySelectorAll('.slime-loop')];
+  expect(half.every(loop => loop.hasAttribute('data-slime-loading'))).toBe(true);
+  setSlimeState(95, 'working');
+  expect(surface.querySelectorAll('.slime-loop')).toHaveLength(0);
+  frame();
+  expect(half.every(loop => !loop.isConnected)).toBe(true);
+  expect(half.some(loop => loop.querySelector('.slime-cel-body, .slime-cel-eye'))).toBe(true);
+  expect(surface.querySelectorAll('.slime-loop-body')).toHaveLength(1);
+  expect(surface.querySelector('.slime-loop[data-slime-loading]')).toBeNull();
+  setSlimeState(95, 'idle');
 });
 
 

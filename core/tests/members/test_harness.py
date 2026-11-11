@@ -181,7 +181,7 @@ async def test_a_routine_write_obeys_the_same_safety_rule_as_other_writes(setup,
         return Screening(verdict=verdict, rule="Check routine changes")
 
     monkeypatch.setattr(rig.service._gate, "screen", screen)
-    client.chats = [chat("安排練習時間。", ("routine_create", {"title": "Lesson", "prompt": "Teach", "schedule": {"kind": "daily", "time": "08:00"}})), live_said("已安排。")]
+    client.chats = [chat("安排練習時間。", ("routine_create", {"title": "Lesson", "prompt": "Teach", "schedule": {"kind": "daily", "time": "08:00"}})), live_said("已安排。"), live_said("已安排。")]  # a held change: the turn ends, the card is asked, and the turn goes on after the yes
     result = await typed(rig, "Schedule my lesson", teacher.id)
     assert screened == ["routine_create"]
     if verdict == "ask":

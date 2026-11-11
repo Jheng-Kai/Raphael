@@ -364,7 +364,7 @@ npm run look -- dataset-table dataset-chart --theme both --width 1120,720,1920x1
 ```
 
 ```powershell
-npm run look -- media-models-unset media-models-set media-models-menu generated-image generated-video generated-image-missing generated-video-missing generated-image-repair generated-video-repair generated-video-running generated-video-cancelled quick-model-menu running --theme both --width 1120,720,1920x1080
+npm run look -- media-models-unset media-models-set media-models-menu media-models-codex generated-image generated-video generated-image-missing generated-video-missing generated-image-repair generated-video-repair generated-video-running generated-video-cancelled quick-model-menu running --theme both --width 1120,720,1920x1080
 ```
 
 Inspect all sheets and full-size controls at both themes and all selected viewports.
@@ -372,6 +372,12 @@ Compare media rows/pickers with quick-model-menu, stored image and video with ea
 running video with running, and inline repairs with each other. Fixture
 prices and media do not prove live billing, provider compatibility, native playback or
 external design acceptance.
+
+`media-models-codex` (fixture `mediaCodex`) opens the drawing-model picker with the core's own Codex subscription model beside OpenRouter and asserts
+OpenAI's mark (R-UI-123) in the source list, the head of its models and its row, the same drawing in all three, no plug or robot, and 「Codex 訂閱」 said
+in the window's language; `media-models-menu` asserts OpenRouter's own mark in the same list. Other subscription tools (Claude Code, Antigravity) are
+covered by the unit case that every tool in `CLIS` resolves to its maker's mark under its id and its lowercased name; their sources appear in the
+answer picker only. Not covered: a live Codex login.
 
 ## Owner round 10 connected apps and chosen models
 
@@ -789,9 +795,10 @@ three lines), admin-delete-many-approved. 一律允許 keeps a narrow rule for t
 tool (`safety_rules.scope`, Always) and is offered only where it can take effect: an owner's Ask first always wins
 over an Always, so where a rule asks the card names the rule and offers no 一律允許, and a rule of the owner's that is
 Never refuses the call without a card. A yes is bound to the digest of the action asked about: changed inputs, a replay,
-a card of another action, a restart and time never use an old approval. A question someone sits at lives 30 seconds; the
-question of a task that waits unattended (the run that carries on after the owner gave the computer back, a background
-task) lives about ten minutes, and the former answers through `integrations.card_allow`, `card_always` and `card_deny`
+a card of another action, a restart and time never use an old approval. A question someone sits at lives 30 seconds (the overlay's spoken
+yes or no, the attended run on the desktop, the card of a connection's tool); the card of an administrative change asked in
+the owner's conversation has no timer (R-AG-MGMT-04); the question of a task that waits unattended (the run that carries on
+after the owner gave the computer back, a background task) lives thirty minutes, and the former answers through `integrations.card_allow`, `card_always` and `card_deny`
 with the card's digest. A no is for the whole request: the tool is not tried again, no other tool of a connection that
 changes something is tried in its place, and the computer and the CLI's own permission question are refused after it,
 on the API loop, on the CLI brain's MCP path, on the computer run and in the background worker alike (Guardian
@@ -1403,6 +1410,11 @@ Offline coverage: `core/tests/agent/test_cli_stall.py` (watchdog, windows, owner
 (reads alone vs a write), `tests/background/test_run_retry.py`, `tests/members/test_cli_brains.py` (a real fake CLI that
 goes silent after a write and after a read), `tests/brain/test_chatgpt.py` and `tests/agent/test_failure_kinds.py`.
 Core-only change: no new visual scene or frontend change.
+
+R-CLI-10: a fresh native session's first message (`agent/cli/context.py` `fresh_user`) follows the model's window, not a
+fixed 16,000 characters. The request, file names, additions, note and records are never cut and overflow only when they
+alone outgrow the window; the rest is filled with memory and team sections, the summary, the owner's own recent words and
+then recent turns, newest first. Covered offline by `core/tests/agent/test_cli_context.py`.
 ## Background app discovery (2026-11-01)
 
 Background API and CLI snapshots offer the same read-only find_app catalog contract
@@ -1916,7 +1928,7 @@ proves the note has no reserved space before a page requests placement.
 A page that failed (page-gone) reads as a failed mail card (card-mail-failed): 「這個頁面打不開。」 in the card's
 body line first, then what the page said (its fallback text, the member's plain words) in a well where the page
 stood, and 再試一次 at the card's right (R-CARD-01). The words and the well start where the title does, nothing blank
-stands under the retry, and the expand row is gone while it failed (the judge gave 3/5 for the blank, the indent and
+stands under the retry, and it is as tall as the preview it stands for (R-PAGE-02; the judge gave 3/5 for the blank, the indent and
 the page's words alone beside 未能完成 reading as a success, 2026-11-10). The × that puts it away (R-UI-117) joins
 the heading only while the page failed: the hidden × it used to carry was taken by the shared failure of a link the
 page could not open (`cardFailure`), which was then left with no × to put it away. A failed page keeps its words and
@@ -1942,11 +1954,33 @@ width, the height the page says, the page filling the dialog, the hidden name an
 36 px round solid button above the page's top edge by the small gap, right-aligned with it, never over it, inside the
 window under the caption strip; `answer-forms.test.mjs` and `page-card.test.ts` hold the same).
 
+A page in the conversation is a card of one fixed height, not the page shown whole (R-PAGE-02, owner, 2026-11-11: 「如果你現在在畫面裡面顯示…會變成一個超長一段…你點開了之後，它才會展開全部」; Grok Bot's Page card is a title and Open). Before: the whole page (the owner's
+daily-news page, about 470 px wide and more than 700 px tall) stood inside the card with its own scrollbar and working buttons, so one
+page filled the window. Now the card is its title row and the top of the page as a preview of `--h-page-peek` (styles.css, 160 px at
+720, 1120 and 1920; the card is 226 px tall at every width), clipped, with no scrollbar, faded into the card's surface over its last
+56 px (no light edge in the dark theme), and a bare expand icon in the fade's corner. The frame behind the clip keeps the height the
+page says (`--pg-h`) so the page never scrolls behind it, and it is `inert` with no pointer, so nothing in it can be pressed, focused
+or scrolled and the thread scrolls over it. The preview is the card's one control (`role="button"`, one Tab stop once the page is
+ready, named 「打開「標題」」 by `page.open` in all 15 locales); pressing it or the title row, or Enter or Space, opens the page made larger
+(the dialog above), where the same frame is no longer inert, scrolls and its buttons work; closing puts it back. A loading or failed
+card is as tall (a pulsing well; the failed block at the same height with 再試一次 at its foot), so a change of state moves nothing.
+Since a page in its card takes no press, the scenes that press inside a page (page-buy, page-send, page-expand-place,
+page-room-draft, owner-card-room-page) first press the card (`larger` in scenes/pages.mjs). Scenes: page-collapsed (the owner's
+case: a 900 px page, `pageNews`), page-collapsed-room (the same in a room), page-collapsed-two (two pages in one thread, equal
+heights), page-collapsed-press (the press, then page-opened-whole: the frame far taller than the preview, not inert, the × above
+it) and page-collapsed-key (Tab/focus then Enter); the checks page-card and page-collapsed measure the preview's height against
+the token, the frame's height against what the page says, the inert frame, what stands under the pointer, the control's name and
+focus, the fade's colours against the card's surface, equal card heights and no sideways overflow. The look fixture's pages follow
+the theme they are opened in (as the core's helper tells a real page), so the dark captures show a dark page. What a message can
+embed: only a page's frame is shown at any height; a PDF keeps its fixed height with its own 展開, the YouTube player is 16:9,
+pictures and videos are at most 300 px, diagrams, tables and code blocks keep their own size rules, a report is a link card, and the
+computer's screen card is 16:9 with no pointer: none of these changed.
+
 The follow-up explicitly selects both themes at 1120 and 720 once. The maintained
 matrix below also includes the standard 1920x1080 size for later acceptance:
 
 ```powershell
-npm run look -- page-product page-buy page-send page-expand page-expand-place page-gone page-room-draft owner-card-room-page card-page-close --theme both --width 1120,720,1920x1080
+npm run look -- page-product page-buy page-send page-expand page-expand-place page-gone page-room-draft page-collapsed page-collapsed-room page-collapsed-two page-collapsed-press page-collapsed-key owner-card-room-page card-page-close --theme both --width 1120,720,1920x1080
 ```
 
 Compare page-gone with card-mail-failed (body line over a well) and card-connect-failed (body line, retry) at the

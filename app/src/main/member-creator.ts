@@ -63,7 +63,9 @@ export function openMemberCreator(o: MemberCreatorOptions): Dialog {
       storeMounted = true;
       mountMemberStore(store, o.create, o.groupId, () => dialog.close());
     }
-    dialog.el.querySelector<HTMLInputElement>(tab === "store" ? "[data-store-search]" : "#mb-new-name")!.focus();
+    // The maker is taller than the window, so the name field below the fold must take the focus without scrolling the page: a scroll would
+    // carry the tab row (which sits inside the same scroller) out of sight under the pointer that just clicked it.
+    dialog.el.querySelector<HTMLInputElement>(tab === "store" ? "[data-store-search]" : "#mb-new-name")!.focus({ preventScroll: true });
   }
 
   function drawFace(arriving: boolean): void {
@@ -114,7 +116,7 @@ export function openMemberCreator(o: MemberCreatorOptions): Dialog {
   });
   name.addEventListener("input", nameChanged);
   drawFace(false);
-  name.focus();
+  name.focus({ preventScroll: true });
   if (o.store) selectTab("store");
   return dialog;
 }

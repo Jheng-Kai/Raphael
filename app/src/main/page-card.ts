@@ -10,7 +10,7 @@ import { t } from "./i18n";
 import { openDialog } from "./member-dialogs";
 import { mountReportView, type ReportPeople, type ReportView } from "./report-page";
 import type { AgentTurn, PageCard, PageOpened } from "./types";
-import { btn, esc, ico, iconButton } from "./ui";
+import { btn, esc, ico } from "./ui";
 
 const MIN_HEIGHT = 80, MAX_HEIGHT = 2400;
 const SEND_LIMIT = 4000, SEND_GAP_MS = 1000;
@@ -30,11 +30,16 @@ function failedHTML(page: PageCard): string {
     `<div class="card-actions">${btn(esc(t("page.retry")), "sm pri", ' data-page-act="retry"')}</div></div>`;
 }
 
-/** The cards a turn shows, below what it said. A card holds no frame: `mountPages` brings it. A report is a link card. */
+/** The cards a turn shows, below what it said. A card holds no frame: `mountPages` brings it. A report is a link card.
+ *  A page is a card of one fixed height (`--h-page-peek`) whatever it holds or whether it is loading, ready or failed: its
+ *  title row and, under it, only the top of the page, clipped and faded into the card (owner, 2026-11-11: a page shown
+ *  whole made one very long block). The preview is one control: pressing it, or Enter or Space on it, opens the page whole
+ *  (`expand`), where it scrolls and its buttons work. It is a control only once the page is ready. */
 export function pageCardsHTML(turn: AgentTurn): string {
   return (turn.pages ?? []).map(page => page.kind === "report" ? reportLinkHTML(page) : cardHTML({ title: page.title, status: "ready",
-    content: `<div class="pg-body" data-state="loading"></div>${failedHTML(page)}`,
-    actions: iconButton("expand", t("page.expand"), ' data-page-act="expand"', "pg-expand"), cls: "pg-card",
+    content: `<div class="pg-body" data-state="loading" data-page-act="expand" role="button" aria-disabled="true" aria-label="${esc(t("page.open", { title: page.title }))}">` +
+      `<span class="pg-more" aria-hidden="true">${ico("expand")}</span></div>${failedHTML(page)}`,
+    cls: "pg-card",
     attrs: ` data-page="${esc(page.id)}" data-page-rev="${page.rev}" style="--pg-h:${clampHeight(page.height)}px"`,
   })).join("");
 }
@@ -90,8 +95,10 @@ interface Live {
   refused: boolean;
 }
 
-/** Only an atomic move keeps a frame running; a plain append reloads it, which is still better than losing it. */
+/** Only an atomic move keeps a frame running; a plain append reloads it, which is still better than losing it. A frame in
+ *  a card is only a preview: nothing in it can be pressed, focused or scrolled; it works only where the page is made larger. */
 function moveFrame(frame: HTMLIFrameElement, target: HTMLElement): void {
+  frame.toggleAttribute("inert", !target.closest(".pg-view"));
   if (target.moveBefore && frame.isConnected) target.moveBefore(frame, null);
   else target.append(frame);
 }
@@ -122,8 +129,12 @@ export function mountPages(thread: HTMLElement, o: { place(pageId: string, text:
     const pill = card.querySelector(".card-status")!;
     const next = state === "failed" ? "failed" : "ready";
     if (!pill.classList.contains(`is-${next}`)) pill.outerHTML = cardStatusHTML(next);
-    card.querySelector<HTMLElement>(".pg-body")!.dataset.state = state;
-    card.querySelector<HTMLElement>(".pg-body")!.hidden = state === "failed";
+    const body = card.querySelector<HTMLElement>(".pg-body")!;
+    body.dataset.state = state;
+    body.hidden = state === "failed";
+    // The preview is a control only once there is a page to open.
+    if (state === "ready") { body.tabIndex = 0; body.removeAttribute("aria-disabled"); }
+    else { body.removeAttribute("tabindex"); body.setAttribute("aria-disabled", "true"); }
     card.querySelector<HTMLElement>(".pg-failed")!.hidden = state !== "failed";
     // The × that puts a failed page away (R-UI-117) is in the heading only while it failed: a hidden one was taken by the
     // shared failure of a link the page could not open, which was then left with no × to put it away.
@@ -160,6 +171,7 @@ export function mountPages(thread: HTMLElement, o: { place(pageId: string, text:
     frame.setAttribute("sandbox", "allow-scripts allow-forms");
     frame.setAttribute("referrerpolicy", "no-referrer");
     frame.className = "pg-frame";
+    frame.setAttribute("inert", "");
     const live: Live = { id, rev, frame, height: null, opened: null, ready: false, failed: false, expanded: false, refused: false };
     frame.addEventListener("load", () => { if (live.opened) setBodyState(live, "ready"); });
     frames.set(id, live);
@@ -328,14 +340,28 @@ export function mountPages(thread: HTMLElement, o: { place(pageId: string, text:
     moveFrame(live.frame, view);
   }
 
+  /** A ready page opens whole; one still loading or failed has nothing to open. */
+  function enlarge(card: HTMLElement): void {
+    const live = frames.get(card.dataset.page!);
+    if (live && card.querySelector<HTMLElement>(".pg-body")?.dataset.state === "ready") expand(live, card);
+  }
+
   thread.addEventListener("click", event => {
-    const target = (event.target as Element).closest<HTMLElement>("[data-page-act]");
+    const from = event.target as Element;
+    const target = from.closest<HTMLElement>("[data-page-act]");
     if (target?.dataset.pageAct === "report") { void reportView().open(target.dataset.page!, target); return; }
-    const card = target?.closest<HTMLElement>(".pg-card");
+    const card = (target ?? from).closest<HTMLElement>(".pg-card");
     const live = card ? frames.get(card.dataset.page!) : undefined;
-    if (!target || !card || !live) return;
-    if (target.dataset.pageAct === "expand") expand(live, card);
-    else void open(live);
+    if (!card || !live) return;
+    if (target?.dataset.pageAct === "retry") void open(live);
+    // The title row is part of the same card: pressing it opens the page too (not a button of its own, such as the failed card's ×).
+    else if (target?.dataset.pageAct === "expand" || (!target && from.closest(".pg-card > .card-head") && !from.closest("button"))) enlarge(card);
+  });
+  thread.addEventListener("keydown", event => {
+    const body = event.target as Element;
+    if ((event.key !== "Enter" && event.key !== " ") || !body.matches('.pg-body[data-page-act="expand"]')) return;
+    event.preventDefault();
+    enlarge(body.closest<HTMLElement>(".pg-card")!);
   });
 
   // A page draws in the app's theme, which it is told when it opens.

@@ -4,7 +4,7 @@ import * as api from "./api";
 import { describeError } from "./format";
 import { t } from "./i18n";
 import { confirmDelete, groupChoices, groupFromValue, groupValue } from "./member-dialogs";
-import { RAPHAEL_ID, memberOf, orderedMembers, primaryIdOf } from "./members";
+import { RAPHAEL_ID, memberOf, orderedMembers, pinReplacements, primaryIdOf } from "./members";
 import { openPrimaryPicker } from "./primary-picker";
 import type { Member, MemberPatch, MembersList } from "./types";
 import { openMenu, toaster } from "./ui";
@@ -29,6 +29,7 @@ export function createMemberActions(host: MemberActionHost) {
     const m = memberOf(host.list(), id);
     if (!m) return;
     if (action === "primary") return choosePrimary();
+    if (action === "replace-pinned") return replacePinned(id);
     if (id === RAPHAEL_ID) {
       if (action === "pin") { await api.settingsSet("chief_pinned", !m.pinned).catch(error => toaster.info(describeError(error))); await host.load(); }
       return;
@@ -62,6 +63,30 @@ export function createMemberActions(host: MemberActionHost) {
     if (chosen === null || chosen === now) return;
     try {
       await api.membersSetPrimary(chosen);
+    } catch (err) {
+      toaster.info(describeError(err));
+    }
+    await host.load();
+  }
+
+  /**
+   * 換成其他成員 on a pinned tile (owner, 2026-11-11, after Grok Bot's 「Replace with different Bot」): the member chosen takes
+   * exactly this tile's place and this member goes back to its folder or list, where it stood before it was pinned. One press
+   * on a member, no question; doing it the other way round puts everything back. The tile's place is a place in the roster's
+   * order, so the member chosen is set at the old one's position before the old one is unpinned: the old member keeps its own
+   * position and group, and nothing else moves in the pinned row.
+   */
+  async function replacePinned(id: number): Promise<void> {
+    const list = host.list(), old = memberOf(list, id);
+    if (!list || !old?.pinned || id === RAPHAEL_ID) return;
+    const chosen = await openPrimaryPicker({ members: pinReplacements(list), title: t("members.sideReplacePrimary"), immediate: true });
+    if (chosen === null) return;
+    // The roster may have changed while the window was open: the tile must still be this member's.
+    const now = host.list(), tile = memberOf(now, id), next = memberOf(now, chosen);
+    if (!tile?.pinned || !next || next.pinned) return;
+    try {
+      await api.membersUpdate(chosen, { pinned: true, position: tile.position });
+      await api.membersUpdate(id, { pinned: false });
     } catch (err) {
       toaster.info(describeError(err));
     }

@@ -1718,7 +1718,7 @@ export const th = {
   "page.composerNote": "ข้อความนี้มาจากหน้าเว็บ ตรวจสอบก่อนส่ง",
   "page.askOpen": "หน้านี้ต้องการเปิดลิงก์นี้",
   "page.askYes": "ดำเนินการต่อ",
-  "page.expand": "ขยาย",
+  "page.open": "เปิด “{title}”",
   "page.failed": "เปิดหน้านี้ไม่ได้",
   "page.waitingYes": "ต้องได้รับความยินยอมจากคุณก่อน ดูการ์ดในการสนทนา",
   "slime.rimuru": "ริมุรุ",

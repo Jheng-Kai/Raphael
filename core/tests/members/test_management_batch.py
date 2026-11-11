@@ -93,15 +93,24 @@ async def test_declining_declines_all_of_them(setup, client):
     assert rig.conn.execute("SELECT COUNT(*) FROM rooms WHERE id=?", (room["id"],)).fetchone()[0] == 1
 
 
-async def test_a_card_nobody_answered_says_that_it_ran_out_and_what_it_was(setup, client):
+async def test_a_card_in_the_conversation_has_no_timer_and_a_yes_after_an_hour_still_applies(setup, client):
     rig, team = setup
     asked, engineer, architect, kept, room = await three_changes(rig, team, client)
-    pending = rig.service._confirmations._pending[asked["confirm"]["id"]]
-    pending.created_at -= 3600
+    assert asked["confirm"]["timeout_ms"] == 0
+    rig.clock.now += 3600
     rig.service._expire(rig.service._confirmations.sweep())
-    turn = rig.service._history.get(asked["turn_id"])
-    assert turn.status == "expired"
-    assert turn.text.split("\n") == ["你還沒回答就超時了，所以沒有做任何變更", "永久刪除成員及其所有資料：「工程師」", "永久刪除成員及其所有資料：「架構師」", "刪除群聊及全部訊息：「Raphael macOS 版規劃」"]
+    assert rig.service._history.get(asked["turn_id"]).status == "confirm"
+    done = await rig.confirm(asked["confirm"]["id"])
+    assert done["status"] == "done" and not team.members.member_exists(engineer.id)
+
+
+async def test_a_card_that_a_newer_message_replaces_is_cancelled_and_its_yes_finds_nothing(setup, client):
+    rig, team = setup
+    asked, engineer, architect, kept, room = await three_changes(rig, team, client)
+    client.chats = [live_said("Hello.")]
+    await typed(rig, "never mind", 0)
+    assert rig.service._history.get(asked["turn_id"]).status == "cancelled"
+    await rig.confirm(asked["confirm"]["id"])
     assert team.members.member_exists(engineer.id)
 
 
@@ -169,3 +178,34 @@ async def test_every_language_words_the_card_without_json_or_ids_or_another_lang
     if language == "zh-TW":
         for line in lines:
             assert re.search(r"[一-鿿]", line), line
+
+
+def test_every_action_that_can_be_held_has_its_own_words_in_every_language():
+    # A card of fourteen lines must say what each does; "apply this management change" says nothing.
+    from raphael_core.management import ACTIONS
+    from raphael_core.management_words import GENERIC, effect
+    from raphael_core.members.service import MembersService
+    from raphael_core.ui_languages import LANGUAGES
+
+    for action in ACTIONS:
+        if action.name in MembersService.TRADITIONAL or action.destructive:
+            continue  # these have their own titles / effects, tested above
+        english = effect(action.name, "en")
+        assert english != GENERIC[0], action.name
+        for language in LANGUAGES:
+            words = effect(action.name, language)
+            assert words and "{" not in words, (action.name, language)
+            assert language == "en" or words != english, (action.name, language)
+
+
+async def test_a_member_of_another_name_asks_and_raphael_does_not_put_its_name_on_a_card(setup, client):
+    rig, team = setup
+    rig.settings.set("action_mode", "ask")
+    ada, bo, cy = member(team, name="Ada"), member(team, name="Bo"), member(team, name="Cy")
+    reads = [use(*publish("member_skills_list", {"member_id": one.id})) for one in (bo, cy)]
+    client.chats = [chat("Reading.", *reads), live_said("Waiting."), live_said("Done.")]
+    asked = await typed(rig, "Check the others", ada.id, language="en")
+    assert asked["confirm"]["text"].split("\n")[0] == "“Ada”: 2 changes need your approval"
+    client.chats = [chat("Reading.", *reads), live_said("Waiting."), live_said("Done.")]
+    again = await typed(rig, "Check the others", 0, language="en")
+    assert again["confirm"]["text"].split("\n")[0] == "2 changes need your approval"

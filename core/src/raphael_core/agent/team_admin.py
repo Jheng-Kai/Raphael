@@ -11,7 +11,7 @@ import re
 from typing import Any
 
 from .policy import Tier
-from ..management import DEFINITIONS as MANAGEMENT_DEFINITIONS, TIERS as MANAGEMENT_TIERS
+from ..management import DEFINITIONS as MANAGEMENT_DEFINITIONS, MANAGEMENT_TOOLS, TIERS as MANAGEMENT_TIERS
 
 
 @dataclass(frozen=True)
@@ -74,6 +74,12 @@ DEFINITIONS = {
 TIERS = {"team_overview": Tier.T0, "team_work": Tier.T0, **MANAGEMENT_TIERS}
 BATCH_TOOLS = {"member_create", "create_member", "member_update", "group_create", "group_rename"}
 CONFIRM_TOOLS = (set(DEFINITIONS) - TEAM_READS) | {"create_member", "routine_create", "routine_update", "routine_delete"}
+# The speaker's own routine writes are administrative changes like the registry's; they are asked and held with them.
+ROUTINE_WRITES = frozenset({"routine_create", "routine_update", "routine_delete"})
+# What a member's turn in the owner's private chat holds back and asks once, on one card, at its end (`management_batch`).
+STAGED_TOOLS = MANAGEMENT_TOOLS | ROUTINE_WRITES
+# Every call that is an administrative card: none of them has a timer when the owner answers it in a conversation.
+ADMIN_CARD_TOOLS = frozenset(CONFIRM_TOOLS | STAGED_TOOLS | {"team_admin_batch", "management_batch"})
 
 DELEGATED_MANAGEMENT_GUIDANCE = (
     "Member management cannot be delegated through ask_member or handoff. Every member has management tools "

@@ -1,6 +1,8 @@
 """The speech libraries load beside the application and are joined before stdin is read."""
 
+import ast
 import threading
+from pathlib import Path
 
 from raphael_core import __main__ as entry
 
@@ -54,3 +56,12 @@ def test_speech_libraries_overlap_the_application_import_and_finish_before_stdin
     assert events.index("application_start") < events.index("libraries_done")  # they ran at the same time
     assert events.index("libraries_done") < events.index("run_stdio")  # numpy is in before stdin is read
     assert events.index("libraries_done") < events.index("wait_for_libraries") < events.index("run_stdio")
+
+
+def test_the_application_module_is_imported_by_a_statement_the_frozen_build_can_see():
+    """The packaged core holds only the modules its analysis of import statements finds. A module named in a
+    string for importlib is not one of them: the frozen core then starts without the application module and dies."""
+    tree = ast.parse(Path(entry.__file__).read_text(encoding="utf-8"))
+    imported = {(node.module, alias.name) for node in ast.walk(tree) if isinstance(node, ast.ImportFrom) for alias in node.names}
+    assert ("raphael_core", "app") in imported
+    assert not any(isinstance(node, ast.Call) and getattr(node.func, "attr", "") == "import_module" for node in ast.walk(tree))

@@ -1718,7 +1718,7 @@ export const vi = {
   "page.composerNote": "Văn bản này đến từ một trang. Hãy kiểm tra trước khi gửi.",
   "page.askOpen": "Trang này muốn mở liên kết này",
   "page.askYes": "Tiếp tục",
-  "page.expand": "Mở rộng",
+  "page.open": "Mở “{title}”",
   "page.failed": "Không thể mở trang này.",
   "page.waitingYes": "Việc này cần bạn đồng ý trước: xem thẻ trong cuộc trò chuyện.",
   "slime.rimuru": "Rimuru",

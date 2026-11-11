@@ -14,7 +14,7 @@
 .side .mb-top { justify-content: flex-end; min-height: calc(40px + var(--sp-2)); margin-top: calc(-1 * var(--sp-2)); padding: var(--sp-2) 0 var(--sp-1); gap: var(--sp-1); }
 .side .btn.mb-tool { flex: none; width: 36px; min-height: 36px; border-radius: var(--r-sm); }
 .side .mb-scroll { padding: 0 0 var(--sp-3); }
-.side .mb-list { gap: 2px; }
+.side :is(.mb-list, .mb-gclip) { gap: 2px; }
 .side .mb-row-t i { display: inline; max-width: 50%; }
 .side .mb-row-t b:not(:only-child) { max-width: none; }
 .side .mb-row-p { min-height: 17px; }
@@ -74,7 +74,7 @@
 .side .mb-ghead .mb-fold { opacity: 0; }
 .side .mb-ghead:is(:hover, :focus-within) .mb-fold { opacity: 1; }
 .side .au-rooms-section { border: 0; margin: 0; padding: 0; }
-.side .au-room-row { margin: var(--sp-1) 0 0; }
+.side .au-room-row { margin: 2px 0 0; }
 .side .side-foot { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); flex: none; margin: 0; padding: var(--sp-1) 0 0; border: 0; }
 .side .side-foot .nav { justify-content: flex-start; gap: var(--sp-2); min-width: 0; min-height: 40px; padding: 0 var(--sp-2) 0 var(--sp-1); border-radius: var(--r-md); }
 .side .sidebar-account { flex: 1; min-height: 36px; }

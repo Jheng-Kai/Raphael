@@ -216,6 +216,42 @@ _ROWS = {
         "หมดเวลาก่อนที่คุณจะตอบ จึงไม่มีอะไรถูกเปลี่ยน",
         "Waktu habis sebelum Anda menjawab, jadi tidak ada yang diubah",
         "Siz yanıtlamadan süre doldu, bu yüzden hiçbir şey değiştirilmedi"),
+    "Read information (nothing is changed)": (
+        "读取信息（不会更改任何内容）", "정보 읽기(아무것도 변경되지 않음)", "Leer información (no se cambia nada)", "Lire des informations (rien n'est modifié)", "Informationen lesen (nichts wird geändert)", "Ler informações (nada é alterado)", "Leggere informazioni (non viene modificato nulla)", "Прочитать сведения (ничего не меняется)", "Đọc thông tin (không thay đổi gì)", "อ่านข้อมูล (ไม่มีการเปลี่ยนแปลงใด ๆ)", "Membaca informasi (tidak ada yang diubah)", "Bilgileri okuma (hiçbir şey değişmez)"),
+    "Duplicate this member": (
+        "复制此成员", "이 멤버 복제", "Duplicar este miembro", "Dupliquer ce membre", "Dieses Mitglied duplizieren", "Duplicar este membro", "Duplicare questo membro", "Дублировать этого участника", "Nhân bản thành viên này", "ทำสำเนาสมาชิกนี้", "Duplikasi anggota ini", "Bu üyeyi çoğalt"),
+    "Change this member's picture or cover": (
+        "更改此成员的图片或封面", "이 멤버의 사진 또는 커버 변경", "Cambiar la imagen o la portada de este miembro", "Changer l'image ou la couverture de ce membre", "Bild oder Titelbild dieses Mitglieds ändern", "Alterar a imagem ou a capa deste membro", "Cambiare l'immagine o la copertina di questo membro", "Изменить картинку или обложку участника", "Đổi ảnh hoặc ảnh bìa của thành viên này", "เปลี่ยนรูปหรือภาพปกของสมาชิกนี้", "Ubah gambar atau sampul anggota ini", "Bu üyenin resmini veya kapağını değiştir"),
+    "Create a group chat": (
+        "创建群聊", "그룹 채팅 만들기", "Crear un chat de grupo", "Créer un chat de groupe", "Gruppenchat erstellen", "Criar um chat em grupo", "Creare una chat di gruppo", "Создать групповой чат", "Tạo cuộc trò chuyện nhóm", "สร้างแชตกลุ่ม", "Buat obrolan grup", "Grup sohbeti oluştur"),
+    "Change the group chat": (
+        "更改群聊设置", "그룹 채팅 변경", "Cambiar el chat de grupo", "Modifier le chat de groupe", "Gruppenchat ändern", "Alterar o chat em grupo", "Modificare la chat di gruppo", "Изменить групповой чат", "Thay đổi cuộc trò chuyện nhóm", "เปลี่ยนแปลงแชตกลุ่ม", "Ubah obrolan grup", "Grup sohbetini değiştir"),
+    "Stop all work in the group chat": (
+        "停止群聊中的所有工作", "그룹 채팅의 모든 작업 중지", "Detener todo el trabajo del chat de grupo", "Arrêter tout le travail du chat de groupe", "Alle Arbeiten im Gruppenchat stoppen", "Parar todo o trabalho do chat em grupo", "Interrompere tutto il lavoro della chat di gruppo", "Остановить всю работу в групповом чате", "Dừng mọi công việc trong cuộc trò chuyện nhóm", "หยุดงานทั้งหมดในแชตกลุ่ม", "Hentikan semua pekerjaan di obrolan grup", "Grup sohbetindeki tüm işleri durdur"),
+    "Change the folder": (
+        "更改文件夹", "폴더 변경", "Cambiar la carpeta", "Modifier le dossier", "Ordner ändern", "Alterar a pasta", "Modificare la cartella", "Изменить папку", "Thay đổi thư mục", "เปลี่ยนแปลงโฟลเดอร์", "Ubah folder", "Klasörü değiştir"),
+    "Create a routine": (
+        "创建例行任务", "자동 작업 생성", "Crear una rutina", "Créer une routine", "Routine erstellen", "Criar uma rotina", "Creare una routine", "Создать регулярную задачу", "Tạo tác vụ định kỳ", "สร้างงานประจำ", "Buat rutinitas", "Rutin oluştur"),
+    "Change a routine": (
+        "更改例行任务", "자동 작업 수정", "Cambiar una rutina", "Modifier une routine", "Routine ändern", "Alterar uma rotina", "Modificare una routine", "Изменить регулярную задачу", "Thay đổi tác vụ định kỳ", "เปลี่ยนแปลงงานประจำ", "Ubah rutinitas", "Rutini değiştir"),
+    "Change a skill or turn it on or off": (
+        "更改技能或将其开启或关闭", "스킬 변경 또는 켜기/끄기", "Cambiar una habilidad o activarla o desactivarla", "Modifier une compétence ou l'activer ou la désactiver", "Eine Fähigkeit ändern oder ein- oder ausschalten", "Alterar uma habilidade ou ativá-la ou desativá-la", "Modificare una competenza o attivarla o disattivarla", "Изменить навык или включить или выключить его", "Thay đổi kỹ năng hoặc bật hoặc tắt kỹ năng", "เปลี่ยนทักษะหรือเปิดหรือปิดทักษะ", "Ubah keahlian atau aktifkan atau nonaktifkan", "Bir beceriyi değiştir veya aç ya da kapat"),
+    "Turn a connection or its tools on or off": (
+        "开启或关闭连接或其工具", "연결 또는 해당 도구 켜기/끄기", "Activar o desactivar una conexión o sus herramientas", "Activer ou désactiver une connexion ou ses outils", "Eine Verbindung oder ihre Werkzeuge ein- oder ausschalten", "Ativar ou desativar uma conexão ou suas ferramentas", "Attivare o disattivare una connessione o i suoi strumenti", "Включить или выключить подключение или его инструменты", "Bật hoặc tắt kết nối hoặc công cụ của kết nối", "เปิดหรือปิดการเชื่อมต่อหรือเครื่องมือของการเชื่อมต่อ", "Aktifkan atau nonaktifkan koneksi atau alatnya", "Bir bağlantıyı veya araçlarını aç ya da kapat"),
+    "Refresh the connection's tools": (
+        "刷新连接的工具", "연결 도구 새로고침", "Actualizar las herramientas de la conexión", "Actualiser les outils de la connexion", "Die Werkzeuge der Verbindung aktualisieren", "Atualizar as ferramentas da conexão", "Aggiornare gli strumenti della connessione", "Обновить инструменты подключения", "Làm mới công cụ của kết nối", "รีเฟรชเครื่องมือของการเชื่อมต่อ", "Segarkan alat koneksi", "Bağlantının araçlarını yenile"),
+    "Add words to the dictionary": (
+        "向字典添加词语", "사전에 단어 추가", "Añadir palabras al diccionario", "Ajouter des mots au dictionnaire", "Wörter zum Wörterbuch hinzufügen", "Adicionar palavras ao dicionário", "Aggiungere parole al dizionario", "Добавить слова в словарь", "Thêm từ vào từ điển", "เพิ่มคำลงในพจนานุกรม", "Tambahkan kata ke kamus", "Sözlüğe kelime ekle"),
+    "Edit the memory document": (
+        "编辑记忆文档", "기억 문서 편집", "Editar el documento de memoria", "Modifier le document de mémoire", "Das Erinnerungsdokument bearbeiten", "Editar o documento de memória", "Modificare il documento della memoria", "Изменить документ памяти", "Chỉnh sửa tài liệu bộ nhớ", "แก้ไขเอกสารความจำ", "Edit dokumen ingatan", "Bellek belgesini düzenle"),
+    "Change a setting": (
+        "更改一项设置", "설정 하나 변경", "Cambiar un ajuste", "Modifier un réglage", "Eine Einstellung ändern", "Alterar uma configuração", "Modificare un'impostazione", "Изменить настройку", "Thay đổi một cài đặt", "เปลี่ยนการตั้งค่าหนึ่งรายการ", "Ubah satu pengaturan", "Bir ayarı değiştir"),
+    "Mark conversations as read": (
+        "将对话标为已读", "대화를 읽음으로 표시", "Marcar las conversaciones como leídas", "Marquer les conversations comme lues", "Unterhaltungen als gelesen markieren", "Marcar as conversas como lidas", "Segnare le conversazioni come lette", "Отметить беседы как прочитанные", "Đánh dấu cuộc trò chuyện là đã đọc", "ทำเครื่องหมายการสนทนาว่าอ่านแล้ว", "Tandai percakapan sebagai sudah dibaca", "Sohbetleri okundu olarak işaretle"),
+    "Add a custom connection": (
+        "添加自定义连接", "사용자 지정 연결 추가", "Añadir una conexión personalizada", "Ajouter une connexion personnalisée", "Eine eigene Verbindung hinzufügen", "Adicionar uma conexão personalizada", "Aggiungere una connessione personalizzata", "Добавить собственное подключение", "Thêm kết nối tùy chỉnh", "เพิ่มการเชื่อมต่อแบบกำหนดเอง", "Tambahkan koneksi kustom", "Özel bir bağlantı ekle"),
+    "No answer came in thirty minutes. That action was not done; ask again.": (
+        "三十分钟内未获回应，该操作未执行，可再请我做一次。", "30분 안에 응답이 없어 해당 작업은 실행하지 않았습니다. 다시 요청하세요.", "Sin respuesta en treinta minutos. Esa acción no se hizo; vuelve a pedirla.", "Aucune réponse en trente minutes. Cette action n'a pas été faite ; redemandez-la.", "Keine Antwort in dreißig Minuten. Diese Aktion wurde nicht ausgeführt; bitte erneut anfordern.", "Sem resposta em trinta minutos. Essa ação não foi feita; peça de novo.", "Nessuna risposta in trenta minuti. Quell'azione non è stata eseguita; chiedila di nuovo.", "Ответа не было тридцать минут. Действие не выполнено; запросите его снова.", "Không có phản hồi trong ba mươi phút. Hành động đó chưa được thực hiện; hãy yêu cầu lại.", "ไม่มีการตอบกลับใน 30 นาที ยังไม่ได้ทำการนั้น ขอให้ทำอีกครั้งได้", "Tidak ada jawaban dalam tiga puluh menit. Tindakan itu tidak dilakukan; mintalah lagi.", "Otuz dakikada yanıt gelmedi. Bu eylem yapılmadı; yeniden isteyin."),
 }
 
 CARD_WORDS = {source: dict(zip(_ORDER, row, strict=True)) for source, row in _ROWS.items()}

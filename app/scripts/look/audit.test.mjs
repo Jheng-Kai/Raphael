@@ -956,6 +956,12 @@ describe("rendered look checks", () => {
     for (const element of window.document.querySelectorAll("*")) element.getBoundingClientRect = () => ({ left: 10, top: 10, right: 100, bottom: 40, width: 90, height: 30 });
     expect(auditDocument(window.document, { width: 1120, height: 900 }, [], []).mixedLanguage.map(item => item.word)).toEqual(["Message"]);
   });
+  it("treats an IANA time-zone id as an identifier, not as English copy", () => {
+    const window = new Window();
+    window.document.body.innerHTML = '<p>台北 · Asia/Taipei</p><p>America/Argentina/Buenos_Aires</p><p>Asia required</p><p>Europe</p>';
+    for (const element of window.document.querySelectorAll("*")) element.getBoundingClientRect = () => ({ left: 10, top: 10, right: 100, bottom: 40, width: 90, height: 30 });
+    expect(auditDocument(window.document, { width: 1120, height: 900 }, [], []).mixedLanguage.map(item => item.word)).toEqual(["Asia", "required", "Europe"]);
+  });
   it("allows complete product names without allowing their ordinary English words", () => {
     const window = new Window();
     window.document.body.innerHTML = '<p>Claude Code</p><p>claude code</p><p>Code required</p><p>Claude Coder</p><p>KEY=value</p><p>value required</p>';

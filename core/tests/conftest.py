@@ -11,6 +11,7 @@ skipped unless the environment variable RAPHAEL_TEST_MODELS is 1.
 the brain, the assistant and the plugins.
 """
 
+import gc
 import os
 import sqlite3
 from collections.abc import Iterator
@@ -103,6 +104,15 @@ def memory_keyring():
     keyring.set_keyring(backend)
     yield backend
     keyring.set_keyring(backend.restored_afterwards)
+
+
+@pytest.fixture(autouse=True)
+def collect_garbage_after_each_test():
+    """The leak of a socket, a pipe or an event loop is reported by the garbage collector whenever it finds the object,
+    which is the set-up or tear-down of some later test (an error under -W error, far from its cause). Collecting here,
+    after the fixtures of the test have been torn down, puts the warning on the test that left the object behind."""
+    yield
+    gc.collect()
 
 
 @pytest.fixture

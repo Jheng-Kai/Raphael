@@ -9,7 +9,8 @@ SUMMARY_MIN_TOKENS = 2_000
 SUMMARY_MAX_TOKENS = 10_000
 PROTECT_FIRST_MESSAGES = 3
 PROTECT_LAST_MESSAGES = 20
-# Bound a fresh request before transport-specific overhead and optional records.
+# The base of a meeting room's prompt (members/exchanges.py). A fresh CLI session's first message is no longer bound by it:
+# its budget follows the model's window (agent/cli/context.py `fresh_budget`).
 FRESH_CONTEXT_CHARS = 16000
 
 

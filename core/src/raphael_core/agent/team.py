@@ -244,7 +244,7 @@ class Team(Protocol):
     def admin_confirmation(self, name: str, arguments: dict, language: str, *, question: bool = True) -> str:
         ...
 
-    def admin_batch_confirmation(self, operations: list[dict], language: str) -> str:
+    def admin_batch_confirmation(self, operations: list[dict], language: str, *, asker: str = "") -> str:
         ...
 
     def admin_line(self, name: str, arguments: dict, language: str) -> str:

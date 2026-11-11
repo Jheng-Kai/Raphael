@@ -1718,7 +1718,7 @@ export const ko = {
   "page.composerNote": "웹페이지에서 가져온 텍스트입니다. 보내기 전에 확인하세요.",
   "page.askOpen": "이 페이지에서 링크를 열려고 합니다",
   "page.askYes": "계속 진행",
-  "page.expand": "펼치기",
+  "page.open": "“{title}” 열기",
   "page.failed": "페이지를 열지 못했습니다.",
   "page.waitingYes": "먼저 승인이 필요합니다. 대화의 카드를 확인하세요.",
   "slime.rimuru": "리무루",
