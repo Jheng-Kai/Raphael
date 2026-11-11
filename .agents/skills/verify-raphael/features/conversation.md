@@ -1,5 +1,37 @@
 # Conversation
 
+## A one-row composer (owner, 2026-11-12, R-COMPOSER-01)
+
+Owner: 「我不知道為什麼我們的UI 就是沒有像是grokbot 這麼clean 不管頁面大小都是 可以幫我不管排版 大小 文字都盡量達到他們的水準嗎」.
+Measured beside Grok Bot at the same window sizes, its composer is one row of 44 px, 17 px above the window's edge; ours was two rows
+of 90 px, 29 px above it. Now (`composerHTML`, `.composer` and `.cmp-row` in agent.css) the composer is one pill, 44 px at every
+size with corners of 22 px (a taller box keeps them): one grid `auto minmax(200px, 1fr) auto` whose items end at the row's bottom edge,
+the + (`.cmp-attach`), the field (`.cmp-field`), then `.cmp-end` with the permission mode, the model button (a member's only) and the
+one send / voice / Stop button. Every control is 32 px and shares the field's vertical centre; a longer draft grows the field upward
+(six lines, then it scrolls) and the controls stay on the last line, level with the last line of words. A failure line
+(`.composer-failure`), a quoted reply (`.cmp-quote`), waiting files (`.cmp-file`) and the page note (`.cmp-page-note`, which stood
+below the controls until now) are rows of the same box above the row. 16 px stand under the box at every size (`--pa-dock-bottom`;
+the old short-window override is gone). The field keeps 200 px and nothing goes to a second row: the composer is a size container
+(`container: cmp`), and at 452 px or less (the details panel open at 1120 px of window gives 438) the model gives up its depth word and
+the permission mode its word (its shield stays), so the model keeps its name, at 372 px or less (the panel dragged to its widest gives 301)
+the model keeps only its arrow, and the field may be 120 px. The minimum window is 720 px, where the composer is 688 px wide and nothing is shortened.
+
+`composer-shape:<state>` in checks.mjs measures every state and asserts the shape (the box 44 px, the field and every control within
+2 px of one centre for an empty or one-line draft; for a grown draft the same bottom edge, the same control centres and the controls
+within 2 px of the last line of words). The states and their scenes: empty, one line, three lines, twelve lines (the field stops at its
+six and scrolls) and one waiting file in `composer-shape` (a member's conversation) and `composer-shape-room`; a quoted reply in
+`composer-shape-quote` and `composer-shape-room-quote`; words placed by a page in `composer-shape-page-note`; a page open in the
+thread's place in `composer-shape-page-open`; dictation in `composer-shape-recording`; a running task's Stop in `composer-shape-stop`
+and, with Escape armed, `composer-shape-stop-armed`; a send that failed in `composer-shape-failure`; a waiting question's placeholder
+in `composer-shape-waiting` and `composer-shape-room-waiting`; the @ and / menus in `composer-shape-mention` and
+`composer-shape-slash`; an address chip in the field in `composer-shape-mention-chip`; the details panel open in
+`composer-shape-panel` and, dragged wide, `composer-shape-narrow`. A send that is disabled (an empty draft) is the voice emblem in the same slot, which every scene shows.
+
+```powershell
+npm run look -- composer-shape composer-shape-room composer-shape-quote composer-shape-room-quote composer-shape-page-note composer-shape-page-open composer-shape-recording composer-shape-stop composer-shape-stop-armed composer-shape-failure composer-shape-waiting composer-shape-room-waiting composer-shape-mention composer-shape-mention-chip composer-shape-slash composer-shape-panel composer-shape-narrow --theme both --width 1120,720,1920x1080
+npm run look -- chat page-composer-grows page-buy page-inplace composer mode composer-model-menu opener-toggle-model-menu opener-toggle-permission-menu question-card-composer-waiting --theme both --width 1120,720,1920x1080
+```
+
 ## Card buttons at the right; confirmations as Grok Bot's (owner, 2026-11-10)
 
 Owner: 「那個卡片的按鈕盡量放在右側 然後你可以看一下刪除的 dialog 可以參考 grok bot 的 UI」. A conversation card's
