@@ -1725,7 +1725,8 @@ class BackgroundService:
             if question is None or question["result"] is None:
                 self._store.set_state(task.id, "waiting")
                 return
-            result = question["result"]
+            from ..agent.owner_questions import model_result
+            result = model_result(question["result"])
             # The card or question the run waited at was put to the owner (a page, a draft): it is made, and what the owner
             # answered, or whether they cancelled it, is their decision and no failure of the run (a routine's end is judged by it).
             run.succeeded.add(question["kind"])
@@ -1871,7 +1872,9 @@ class BackgroundService:
                 if loop.failure:
                     run.model_failure = loop.failure_reason or Failure(loop.failure, loop.failure)
                     legacy = {"rate_limit": "rate_limited", "usage_limit": "quota", "auth_expired": "login", "unknown": "error"}
-                    reply = {"status":"stopped", "kind":"failed", "detail":"cli_" + legacy.get(loop.failure, loop.failure), "final":outcome.final, "diagnostic_detail":outcome.detail}
+                    # A sign-in that ran out is a failed run of its own cause, told from one that never was (rooms and routines name it).
+                    cli_reason = "login_expired" if getattr(loop.failure_reason, "cause", None) == "expired" else legacy.get(loop.failure, loop.failure)
+                    reply = {"status":"stopped", "kind":"failed", "detail":"cli_" + cli_reason, "final":outcome.final, "diagnostic_detail":outcome.detail}
                 self._conclude_run(task, run, reply)
         except TimeoutError:
             self._conclude_run(task, run, {"status":"stopped", "kind":"limit_time"})

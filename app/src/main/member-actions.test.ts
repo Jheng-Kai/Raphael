@@ -29,7 +29,7 @@ let current: MembersList;
 const load = vi.fn(async () => {});
 const actions = () => createMemberActions({ list: () => current, current: () => 0, select: vi.fn(), load, update: vi.fn(async () => true), deleted: vi.fn() });
 
-beforeEach(() => { current = list(); api.membersUpdate.mockClear(); load.mockClear(); });
+beforeEach(() => { current = list(); api.membersUpdate.mockClear(); api.membersDelete.mockClear(); api.settingsGet.mockClear(); load.mockClear(); });
 afterEach(() => { document.body.innerHTML = ""; });
 
 describe("who a pinned tile can be replaced with", () => {
@@ -99,5 +99,32 @@ describe("換成其他成員 on a pinned tile", () => {
     await done;
     await flush();
     expect(load).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("deleting a member", () => {
+  test("asks nothing about its computer, reads no settings and sends only the member", async () => {
+    const deleted = vi.fn();
+    api.membersDelete.mockResolvedValueOnce({ deleted: true });
+    const done = createMemberActions({ list: () => current, current: () => 0, select: vi.fn(), load, update: vi.fn(async () => true), deleted }).deleteMember(2);
+    await flush();
+    const dialog = document.querySelector<HTMLElement>(".mb-dialog")!;
+    expect(dialog.querySelector("h2")!.textContent).toBe("刪除「成員2」？");
+    expect(dialog.querySelectorAll("p")).toHaveLength(1);
+    expect(dialog.querySelector(".row, .tg, [role=switch], [data-remove-computer]")).toBeNull();
+    expect(api.membersDelete).not.toHaveBeenCalled();
+    document.querySelector<HTMLElement>('[data-dlg="delete"]')!.click();
+    await done;
+    expect(api.membersDelete.mock.calls).toEqual([[2]]);
+    expect(api.settingsGet).not.toHaveBeenCalled();
+    expect(deleted).toHaveBeenCalledWith(2);
+  });
+
+  test("Cancel deletes nothing", async () => {
+    const done = actions().deleteMember(2);
+    await flush();
+    document.querySelector<HTMLElement>('[data-dlg="cancel"]')!.click();
+    await done;
+    expect(api.membersDelete).not.toHaveBeenCalled();
   });
 });

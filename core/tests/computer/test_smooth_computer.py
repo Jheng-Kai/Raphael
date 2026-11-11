@@ -268,11 +268,18 @@ async def test_image_upgrade_announces_before_removal_and_preserves_workspace(de
     assert all("volume" not in args and "-v" not in args for args, _ in runtime.calls)
 
 
-async def test_data_removal_refuses_changed_host_and_shared_workspace(desktop):
+async def test_erasing_never_touches_the_shared_workspace_or_a_container_that_is_not_ours(desktop):
     vm, target, runtime = desktop
-    with pytest.raises(Exception, match="host changed"):
-        await vm.delete_member_data(1, "another-host")
+    assert target.key == "shared"
+    with pytest.raises(VmError, match="shared"):
+        await vm.erase(target)
     assert not runtime.calls
+    from raphael_core.computer.vm import LABEL
+    own = vm.target_for("", "0123456789abcdef")
+    runtime.raw["Config"]["Labels"].update({f"{LABEL}.owner": "someone-else", f"{LABEL}.target": own.key})
+    with pytest.raises(VmError, match="foreign"):
+        await vm.erase(own)
+    assert not any(args[0] in ("rm", "volume") for args, _ in runtime.calls)
 
 
 async def test_rendered_read_rejects_only_exact_nonessential_cookie_button(desktop, tmp_path):

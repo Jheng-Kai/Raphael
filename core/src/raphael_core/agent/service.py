@@ -181,8 +181,8 @@ from ..brain.owner import owner_context
 from .cities import cities_in
 from .commands import COMMANDS, AppCatalog, run_command
 from .device import DeviceActions
-from .failure import AgentFailure, failure_kind, turn_failure
-from ..failures import Failure, classify
+from .failure import AgentFailure, failure_kind, provider_of, turn_failure
+from ..failures import Failure, Missing, classify
 from .gate import BUILTIN_SERVER, ToolGate
 from .history import VOICE, AgentHistory, Turn
 from .conversations import QUICK, Conversations
@@ -191,6 +191,7 @@ from .quotes import quote_from_wire
 from .ledger import Ledger
 from .reactions import private_reactions_for_turns
 from .drafts import DraftError, clean_field, is_mail_sender, is_slack_sender
+from .card_context import viewing_text
 from .pages import Pages, PageError, checked_text, is_report
 from .report_page import checked_report, report_fallback, report_html
 from .public_events import event_record
@@ -305,6 +306,8 @@ _QUICK_SOURCES = (VOICE, "overlay")
 _AT_THIS_COMPUTER = frozenset({*_QUICK_SOURCES, TYPED})
 # Private owner management has the same offer across authenticated chat transports.
 _OWNER_CHAT_SOURCES = _AT_THIS_COMPUTER | {"telegram", "slack", "discord", RESUMED}
+# What the owner writes in a conversation with a member: typed in the app, or sent from a messaging chat.
+_OWNER_TEXT_SOURCES = frozenset({TYPED, "telegram", "slack", "discord"})
 # Routing and answering share this deadline while the voice overlay waits. A turn said into a conversation is not
 # waited on there, and has the time a typed one has: a brain thinking hard takes minutes, and the composer can stop it.
 VOICE_TURN_TIMEOUT_S = 180.0
@@ -448,6 +451,8 @@ class _Ask:
     # The files handed with the request, in memory only.
     attachments: list[Attachment] = field(default_factory=list)
     quote: dict[str, str] | None = None
+    # The page the owner had open beside this request when they typed it (`Pages.viewed_by`).
+    viewing: dict | None = None
     intent: str | None = None
     # Who answers: Raphael, or a member of the team (`speaker`), in whose thread the turn is.
     speaker: Speaker = RAPHAEL
@@ -943,7 +948,9 @@ class AgentService:
         if name not in ("claude", "codex", "gemini"):
             raise invalid_params("Unknown CLI")
         try:
-            return self._cli_brains.login(name)
+            if params.get("cancel") is True:
+                return self._cli_brains.cancel_login(name)
+            return self._cli_brains.login(name, again=params.get("again") is True)
         except (OSError, ValueError):
             raise invalid_params("Install the CLI before signing in") from None
 
@@ -1171,6 +1178,9 @@ class AgentService:
             if not isinstance(source, str) or not _SOURCE.fullmatch(source):
                 raise invalid_params("source must be a short lower-case word")
             ask.source = source
+        if ask.source == TYPED and not quick:
+            # Read now, not when the model runs: a request that waits behind another is still about the page that was open.
+            ask.viewing = self.pages.viewed_by(speaker.id, conversation_id)
         if ask.source in {"telegram", "slack", "discord", RESUMED} and (configured := self._owner_language()):
             ask.language = normalize_language(configured)
         if len(ask.attachments) > MAX_ATTACHMENTS:
@@ -1180,6 +1190,10 @@ class AgentService:
         if ask.attachments and not ask.text.strip():
             ask.text = _LOOK_AT_THIS[ask.language]
         self._last_language = ask.language
+        if resumption is None and not ask.quick and ask.source in _OWNER_TEXT_SOURCES and self._close_waiting_question(ask):
+            # A messaging chat's reply that answers the question waiting there is that answer, and nothing else to run.
+            self._record(ask, "owner_input", "", "", "done", None, Ledger(self._spend))
+            return {"status": "done", "turn_id": ask.turn_id, "prefix": "", "text": "", "steered": True}
         if ask.source == TYPED and not ask.quick and resumption is None:
             return await self._queue_ask(ask)
         if self._was_cancelled(ask.session_id):
@@ -1193,6 +1207,16 @@ class AgentService:
             self._record(ask, "owner_input", "", "", "done", None, Ledger(self._spend))
             return {"status": "done", "turn_id": ask.turn_id, "prefix": "", "text": "", "steered": True}
         return await self._run_ask(ask)
+
+    def _close_waiting_question(self, ask) -> bool:
+        """Something the owner wrote, in a conversation where a question card waits, closes that card unanswered (one
+        question is open at a time, and writing something else leaves it). The member that asked is told, with the owner's
+        words, when its task goes on. True when the words were the answer itself (a messaging chat's reply)."""
+        questions = getattr(self._background, "owner_questions", None)
+        if questions is None or ask.conversation_id is None:
+            return False
+        return questions.close_for_message(said=ask.original_text or ask.text, conversation_id=ask.conversation_id, member_id=ask.speaker.id,
+                                           source=None if ask.source == TYPED or ask.attachments else ask.source)
 
     async def _join_running_work(self, ask):
         """A quick question or a messaging app's message said while its conversation works goes to that work."""
@@ -1600,6 +1624,7 @@ class AgentService:
                 roster=roster_prompt(self._team, ask.speaker, ask.language), owner=owner_context(self._settings),
                 reasoning_effort=self._effort(settings),
                 recall=self._recall(ask, context), source=ask.source, messaging=self._messaging_context(ask.speaker.id),
+                viewing=viewing_text(ask.viewing),
             )
             return owner_script(reply, chinese_variant(self._settings.get("languages")))
 
@@ -2111,6 +2136,7 @@ class AgentService:
                 background=background_block(self._briefs(ask.speaker.id)), summary=context.summary, narrated=True,
                 quote=ask.quote,
                 recall=self._recall(ask, context), source=ask.source, messaging=self._messaging_context(ask.speaker.id),
+                viewing=viewing_text(ask.viewing),
                 standing="\n\n".join(part for part in standing if part),
             )
             user = build_user_message(**message_args)
@@ -3430,7 +3456,11 @@ class AgentService:
             page_id = args.get("page_id")
             page = self.pages.store.get(page_id) if isinstance(page_id, str) else None
             if page is None or page["member_id"] != ask.speaker.id or page["conversation_id"] != ask.conversation_id:
-                raise PageError("gone", "There is no page with that id in this conversation; use show_page")
+                here = [item for item in self.pages.store.listed(ask.speaker.id, ask.conversation_id) if item["source"] == "html"]
+                named = "; ".join(f"page_id={item['id']} {json.dumps(item['title'], ensure_ascii=False)}" for item in here)
+                raise PageError("gone", "There is no page with that id in this conversation. " + (
+                    f"Its pages: {named}. Use update_page with one of these ids, show_page only for a new page." if here
+                    else "It has no page yet; use show_page."))
             if page["source"] != "html":
                 raise PageError("not_html", "Plugin pages cannot be replaced; use show_page for your own page")
             title = args.get("title")
@@ -5735,6 +5765,10 @@ class AgentService:
         model = kind.model if isinstance(kind, AgentFailure) else None
         diagnostic = kind.diagnostic if isinstance(kind, AgentFailure) else None
         kind = kind.kind if isinstance(kind, AgentFailure) else kind
+        if model and not brain_ref(model) and (diagnostic is None and kind in ("auth", "auth_expired", "no_key")
+                                              or diagnostic is not None and diagnostic.kind == "auth_expired" and diagnostic.missing is None):
+            # The key of an API model was refused: its provider's card is where it is put right (the 開啟設定 button), not "sign in".
+            diagnostic = Failure("auth_expired", "Provider refused the credentials", missing=Missing(provider_of(model), "provider", "broken", "models"))
         failure = turn_failure(kind, model or self._read_settings(ask.speaker, ask.conversation_id).model, diagnostic)
         if diagnostic is not None and diagnostic.missing is not None:
             missing = diagnostic.missing

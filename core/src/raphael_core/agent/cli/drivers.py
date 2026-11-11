@@ -21,7 +21,7 @@ from .process import Child, PrivateFiles, secure_directory
 from .native_diagnostics import capture as native_capture, directory as native_directory, enabled as native_enabled
 from ..quota import parse_quota
 from ...brain.meter import codex as codex_usage, delta as usage_delta
-from ...failures import classify, redact
+from ...failures import classify, redact, sign_in_cause
 from ...clock import wall_clock_ms
 
 logger = logging.getLogger(__name__)
@@ -147,7 +147,9 @@ class Driver:
                 detail += '\n\ntool:\n' + redact(self._last_tool_error, secrets=self._diagnostic_secrets, limit=1000)
             # The stderr tail stays in the turn's private detail; the log only gets the classified kind
             # (private diagnostics reach the log only with the native opt-in, `native_diagnostic`).
-            failure = classify({**failure.wire(), "detail": detail[:4000]}, secrets=self._diagnostic_secrets, record=False)
+            # A refused sign-in is told from a missing one by what the CLI said (the stderr tail too: Claude Code prints "Not logged in" there).
+            cause = sign_in_cause(failure.kind, failure.reason, original, tail.decode("utf-8", errors="replace") if tail else "")
+            failure = classify({**failure.wire(), "detail": detail[:4000], **({"cause": cause} if cause else {})}, secrets=self._diagnostic_secrets, record=False)
             if self.exhausted and failure.kind not in ("credits", "auth_expired", "refused"):
                 failure = classify({**failure.wire(), "kind": "usage_limit", "message": failure.reason})
             if failure.kind == "usage_limit" and self.reset_at_ms:

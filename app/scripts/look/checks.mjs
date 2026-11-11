@@ -82,15 +82,18 @@ export function checkRendered(name, context = {}) {
     }
     return {check:name};
   }
-  if (name === "creator-tabs") {
-    const maker = document.querySelector(".cr-dialog"), heading = maker.querySelector(".mb-dlg-head h2");
-    const box = heading.getBoundingClientRect();
-    const previous = window.__look.creatorHeading;
-    require(!previous || (previous.node === heading && Math.abs(previous.x - box.x) < 1 && Math.abs(previous.y - box.y) < 1), "switching tabs preserves the same title and position");
-    window.__look.creatorHeading = {node:heading, x:box.x, y:box.y};
-    require(maker.querySelectorAll('.cr-tabs .tabs.plain.fill > .tab').length === 2, "creator uses the member panel's shared tabs");
-    require(document.querySelectorAll('.cr-dialog').length === 1, "tabs share one creation container");
-    return {check:name};
+  if (name === "store-page") {
+    // The store is a page of its own where the conversation stands (the sidebar's + › 商店), no part of 新增成員 (owner, 2026-11-11).
+    const dialog = document.querySelector(".store-dialog"), scrim = dialog.closest(".mb-scrim"), side = document.getElementById("nav").getBoundingClientRect();
+    require(document.querySelectorAll(".mb-scrim").length === 1 && scrim.classList.contains("store-scrim"), "one page for the store");
+    require(matchMedia("(max-width: 859px)").matches || scrim.getBoundingClientRect().left >= side.right - 1, "it stands where the conversation stands, the sidebar beside it");
+    require(dialog.querySelector(".mb-dlg-head h2").textContent.trim() === "商店" && !dialog.querySelector('.tabs, [role="tab"], #mb-new-name, .cr-dialog'), "its own title, no tabs, no 新增成員");
+    const search = dialog.querySelector("[data-store-search]"), templates = dialog.querySelector('.store-bar [data-dlg="templates"]');
+    require(visible(search) && visible(templates) && templates.textContent.trim() === "從範本開始", "the search and the template button stand in one bar");
+    const s = search.getBoundingClientRect(), tb = templates.getBoundingClientRect();
+    require(Math.abs(s.bottom - tb.bottom) <= 1.5 && tb.left >= s.right - 1 && tb.right <= scrim.getBoundingClientRect().right, "the template button is beside the search, on its line");
+    require(!window.__look.calls.some(call => call.method === "members.create"), "looking makes nobody");
+    return { check: name };
   }
   // The member store's own checks; the plugin store's store-group-* checks live further down.
   if (["store-home", "store-category", "store-search", "store-empty", "store-offline", "store-closed", "store-preview", "store-warning", "store-export"].includes(name)) {
@@ -183,7 +186,7 @@ export function checkRendered(name, context = {}) {
       require(visible(toast) && toast.textContent.includes("損壞或不完整"), "the file is said to be damaged, in the owner's words");
       require(!/JSON|Unexpected|SyntaxError|Invalid/.test(toast.textContent), "no parser or core wording");
       require(!document.querySelector(".template-preview"), "nothing is previewed");
-      require(!calls.some(call => call.method === "members.template"), "the core is never asked about a file that cannot be one");
+      require(!calls.some(call => call.method === "members.template" && call.params.action !== "catalog"), "the core is never asked about a file that cannot be one (the store's own catalogue read is not about the file)");
     }
     if (name === "colleague-name-empty") {
       const dialog = document.querySelector(".template-preview"), field = dialog.querySelector("[data-template-name]"), line = dialog.querySelector(".field-error");
@@ -633,12 +636,21 @@ export function checkRendered(name, context = {}) {
     require(window.__look.calls.some(call => call.method === 'computer.viewer_status' && call.params.check_host && call.params.alias === 'studio-mini'), 'checks the selected alias through the existing owner RPC');
     return {check:name};
   }
-  if (name === 'delete-member-computer') {
-    const checkbox = document.querySelector('[data-remove-computer]');
-    require(visible(checkbox) && checkbox.matches('.tg[role="switch"][aria-checked="false"]'), 'computer cleanup uses the shared switch and defaults to unchecked');
-    require(checkbox.closest('.row').textContent.includes('小晴的電腦'), 'deletion names the member computer');
-    require(!window.__look.calls.some(call => call.method === 'members.delete'), 'showing the option performs no deletion');
-    return {check:name};
+  if (name === 'member-delete-ask') {
+    // Grok Bot's dialog and nothing more (owner, 2026-11-11): the member's name, one sentence, Cancel and Delete. A member's
+    // computer is removed by the app on its own, so the question never mentions it, whether the member has one or not.
+    const dialog = document.querySelector('.mb-dialog.mb-confirm');
+    require(visible(dialog), 'the delete question is open');
+    const title = dialog.querySelector('h2').textContent;
+    require(window.__look.data.members.some(person => title === `刪除「${person.name}」？`), `the title names the member (${title})`);
+    const sentences = [...dialog.querySelectorAll('p')].map(node => node.textContent);
+    require(sentences.length === 1 && sentences[0] === '永久刪除這位成員和對話紀錄，此操作無法復原。', `one sentence says the member and its conversation go for good (${sentences.join(' | ')})`);
+    const buttons = [...dialog.querySelectorAll('button')].filter(visible).map(button => button.textContent.trim());
+    require(buttons.join('|') === '取消|刪除', `two buttons, Cancel then Delete (${buttons.join('|')})`);
+    require(!dialog.querySelector('.row, .tg, [role="switch"], [role="checkbox"], input, select, textarea, [data-remove-computer]'), 'no row, switch or field stands in the question');
+    require(!/電腦|主機|工作檔案|登入狀態|Docker|computer/i.test(dialog.textContent), 'nothing is said about a computer');
+    require(!window.__look.calls.some(call => call.method === 'members.delete'), 'asking performs no deletion');
+    return {check:name, title};
   }
   if (name === 'desktop-stream') {
     const frame = document.querySelector('iframe[data-desktop-stream]');
@@ -1842,6 +1854,9 @@ export function checkRendered(name, context = {}) {
         require(!pill, 'a waiting question uses its title without a redundant status pill');
         require(close?.parentElement?.matches('.card-head') && close === close.parentElement.lastElementChild, 'question close follows the heading at the far right');
         require(Math.abs(close.getBoundingClientRect().right - (box.right - parseFloat(style.paddingRight) - parseFloat(style.borderRightWidth))) < 1.5, 'question close aligns with the right padding');
+      } else if (card.matches('[data-owner-question][data-card-state="answered"]') && card.querySelector('.question-answer-line')) {
+        // An answered question is its title and one row: the check at the row's right says what a pill said.
+        require(!pill && !card.querySelector(':scope > .card-head > .card-close'), 'an answered question has no pill and no ×');
       } else if (card.matches('[data-member-template],[data-template-connection][data-connected="false"]')) {
         require(!pill, 'a template and its unconnected requests have no invented status');
       } else {
@@ -1896,14 +1911,118 @@ export function checkRendered(name, context = {}) {
       for (const button of [...card.querySelectorAll('.card-actions .btn:not(.icon),.question-submit .btn:not(.icon)')].filter(visible))
         require(button.getBoundingClientRect().height >= fieldHeight - 0.5, `a card's text button stands at the field height: ${button.textContent.trim()} is ${button.getBoundingClientRect().height} px against ${fieldHeight}`);
       for (const row of [...card.querySelectorAll('.question-submit')].filter(visible)) {
-        const field = row.querySelector('input'), button = row.querySelector('button');
-        if (!field || !button) continue;
+        const field = row.querySelector('input,textarea'), button = row.querySelector('button');
+        if (!field || !button || !visible(button)) continue;
         const a = field.getBoundingClientRect(), b = button.getBoundingClientRect();
-        require(Math.abs(a.height - b.height) <= 1 && Math.abs((a.top + a.bottom) / 2 - (b.top + b.bottom) / 2) <= 1, `the answer field and its button share one height and centre: ${a.height} px at ${Math.round(a.top)} against ${b.height} px at ${Math.round(b.top)}`);
+        // One line: the field and its button are one height with one centre. Longer, the button stays at the foot of the field.
+        if (a.height <= parseFloat(getComputedStyle(document.documentElement).getPropertyValue?.('--h-field') || 30) + 1) require(Math.abs(a.height - b.height) <= 2 && Math.abs((a.top + a.bottom) / 2 - (b.top + b.bottom) / 2) <= 2, `the answer field and its button share one height and centre: ${a.height} px at ${Math.round(a.top)} against ${b.height} px at ${Math.round(b.top)}`);
+        else require(Math.abs(a.bottom - b.bottom) <= 8, `a longer answer keeps its button at the foot of the field`);
       }
       require(card.scrollWidth <= card.clientWidth + 1, 'card never scrolls sideways');
     }
     return {check:name,cards:cards.length};
+  }
+  if (name.startsWith("question-card-")) {
+    // The question card in its new shape (owner, 2026-11-11): rows with hairlines, a letter badge, grey lines, the own-answer row, and the one collapsed row.
+    const card = document.querySelector('[data-owner-question="owner-choice"]'), calls = window.__look.calls.filter(call => call.method === "owner_questions.answer");
+    require(visible(card) && card.classList.contains("permission-card"), "the shared question card is visible");
+    const box = card.getBoundingClientRect(), column = card.parentElement.getBoundingClientRect();
+    require(box.width <= 480.5 && box.left >= column.left - 1 && box.right <= column.right + 1, "the card fits its column and is at most 480 px wide");
+    const rows = [...card.querySelectorAll('.question-choice')].filter(visible), line = card.querySelector('.question-answer-line');
+    const composer = [...document.querySelectorAll('.cmp-input')].find(visible);
+    const waitingWords = "輸入你的回答，或聊點別的";
+    const requireRows = () => {
+      require(rows.length >= 1, "the card has rows");
+      rows.forEach((row, index) => {
+        const badge = row.querySelector('[data-choice-letter]'), words = row.querySelector('.question-words');
+        require(badge && words && badge.getBoundingClientRect().right <= words.getBoundingClientRect().left, `row ${index} has its badge before its words`);
+        require(row.scrollWidth <= row.clientWidth + 1 && row.getBoundingClientRect().height >= 36, `row ${index} is not clipped and is at least 36 px tall`);
+        require(Math.abs(badge.getBoundingClientRect().left - rows[0].querySelector('[data-choice-letter]').getBoundingClientRect().left) < 1, "every badge stands in one column");
+      });
+      const inside = [...card.querySelectorAll('.question-choices > *')].filter(visible);
+      inside.slice(0, -1).forEach(node => require(parseFloat(getComputedStyle(node).borderBottomWidth) >= 1, "a hairline stands between the rows"));
+    };
+    const requireCollapsed = words => {
+      require(!card.querySelector('.card-status') && !card.querySelector('[data-owner-option],[data-owner-skip],[data-owner-answer],textarea,[data-card-disclosure]'), "the answered card keeps its title and one row only");
+      require(card.dataset.cardState === "answered" && card.querySelectorAll('.question-answer-line').length === 1, "one collapsed row under the title");
+      const text = line.querySelector('.question-answer-text'), mark = line.querySelector('svg'), lb = line.getBoundingClientRect(), tb = text.getBoundingClientRect(), mb = mark.getBoundingClientRect();
+      if (words) require(text.textContent === words, `the row says ${words}: ${text.textContent}`);
+      require(visible(mark) && mb.left >= tb.right - 1 && lb.right - mb.right <= 16 && lb.right - mb.right >= 8, `the check stands at the right of the row (${Math.round(lb.right - mb.right)} px from its edge)`);
+      require(getComputedStyle(text).color !== getComputedStyle(card.querySelector('.card-title')).color, "the answer is in the quiet colour, the title in the strong one");
+      const well = line.parentElement.getBoundingClientRect();
+      require((lb.height >= 34 && lb.height <= 46) || line.getAttribute('aria-expanded') === 'true', `the collapsed row is one line tall (${lb.height})`);
+      require(well.bottom <= box.bottom - 10 && well.left >= box.left + 10, "the row sits inside the card's padding");
+    };
+    const asked = () => card.dataset.cardState === "asked";
+    if (name === "question-card-described") {
+      require(asked(), "the card waits");
+      require(card.querySelector('.card-body').textContent === "選最重要的一個。", "the grey line stands under the title");
+      const notes = [...card.querySelectorAll('.question-note')].filter(visible);
+      require(notes.length === 2 && notes.every(note => note.getBoundingClientRect().top > note.parentElement.firstElementChild.getBoundingClientRect().bottom - 2), "two rows carry a second grey line under their words");
+      const wordsSize = getComputedStyle(rows[1].querySelector('.question-words > span')).fontSize, noteSize = getComputedStyle(notes[0]).fontSize;
+      require(parseFloat(noteSize) < parseFloat(wordsSize), `the grey line is smaller than the words (${noteSize} against ${wordsSize})`);
+      require(getComputedStyle(notes[0]).color !== getComputedStyle(rows[1].querySelector('.question-words > span')).color, "the grey line is in the quiet colour");
+      requireRows();
+      require([...card.querySelectorAll('[data-choice-letter]')].map(node => node.textContent).join('') === "ABCDE" && card.querySelector('[data-owner-skip]').textContent.includes("略過"), "the skip row is lettered after the four options");
+      require(visible(card.querySelector('textarea')) && !visible(card.querySelector('[data-owner-answer="text"]')), "the own-answer row shows its field and no pill yet");
+    } else if (name === "question-card-skipped") {
+      requireCollapsed("已略過");
+      require(calls.length === 1 && calls[0].params.skip === true && !('answer' in calls[0].params), "a skip is sent as a skip, not as words or a cancel");
+    } else if (name.startsWith("question-card-multiple-") || name.startsWith("question-card-room-")) {
+      const state = name.split('-').pop();
+      if (state === "answered") {
+        requireCollapsed("星期一、星期三");
+        require(calls.length === 1 && JSON.stringify(calls[0].params.answer) === JSON.stringify(["星期一", "星期三"]), "the chosen labels are sent once, as a list");
+      } else {
+        require(asked() && card.dataset.ownerMultiple === "true", "a several-choice card waits");
+        require(card.querySelector('.card-body').textContent === "可複選", "the grey line says it takes several");
+        requireRows();
+        const submit = card.querySelector('[data-owner-answer="choices"]');
+        require(visible(submit) && getComputedStyle(submit).backgroundColor === 'rgb(255, 255, 255)', "the submit is the white primary");
+        const end = box.right - parseFloat(getComputedStyle(card).paddingRight) - parseFloat(getComputedStyle(card).borderRightWidth);
+        require(Math.abs(submit.getBoundingClientRect().right - end) <= 1, "the submit stands at the card's right");
+        require(!card.querySelector('[data-owner-answer="text"]') && calls.length === 0, "nothing is sent while rows are marked");
+        const chosen = [...card.querySelectorAll('[aria-checked="true"]')];
+        if (state === "chosen") {
+          require(chosen.length === 2 && !submit.disabled, "two rows are marked and the submit is enabled");
+          chosen.forEach(row => { const badge = row.querySelector('[data-choice-letter]'); require(visible(badge.querySelector('svg')) && !visible(badge.querySelector('span')), "a chosen row shows a check in its badge, not its letter"); });
+          require(getComputedStyle(chosen[0].querySelector('[data-choice-letter]')).backgroundColor !== getComputedStyle(rows[1].querySelector('[data-choice-letter]')).backgroundColor, "a chosen badge differs from an unchosen one");
+        } else require(chosen.length === 0 && submit.disabled, "no row is marked and the submit waits");
+      }
+      if (name.startsWith("question-card-room-")) require(card.closest('.au-room-pane'), "the same card stands in the room");
+      if (name === "question-card-room-asked") require(composer.placeholder === waitingWords, `the room's composer says ${waitingWords}: ${composer.placeholder}`);
+    } else if (name === "question-card-long-typed") {
+      const field = card.querySelector('textarea'), pill = card.querySelector('[data-owner-answer="text"]'), lh = parseFloat(getComputedStyle(field).lineHeight);
+      const fb = field.getBoundingClientRect(), pb = pill.getBoundingClientRect();
+      require(visible(pill) && !pill.disabled, "the pill appears once something is typed");
+      require(field.clientHeight >= lh * 2.5 && field.clientHeight <= lh * 3 + 12, `the field grew to three lines (${field.clientHeight} px for ${lh} px lines)`);
+      require(field.scrollHeight <= field.clientHeight + 2, "three lines show whole, with no inner scroll");
+      require(fb.right <= pb.left && Math.abs(pb.bottom - fb.bottom) <= 8, "the pill stands at the right of the field, at its foot");
+      const end = box.right - parseFloat(getComputedStyle(card).paddingRight) - parseFloat(getComputedStyle(card).borderRightWidth);
+      require(pb.right <= end + 0.5 && end - pb.right <= 10, "the pill ends at the row's right padding");
+      require(calls.length === 0, "typing sends nothing");
+    } else if (name === "question-card-long-answered" || name === "question-card-long-open") {
+      requireCollapsed();
+      const text = line.querySelector('.question-answer-text');
+      if (name === "question-card-long-answered") {
+        require(line.getAttribute('aria-expanded') === "false" && text.scrollWidth > text.clientWidth + 1 && getComputedStyle(text).textOverflow === "ellipsis" && getComputedStyle(text).whiteSpace === "nowrap", "a long answer is one line ending in an ellipsis");
+      } else {
+        require(line.getAttribute('aria-expanded') === "true" && text.scrollWidth <= text.clientWidth + 1 && text.getBoundingClientRect().height > parseFloat(getComputedStyle(text).lineHeight) * 1.5, "pressed, the whole words show");
+      }
+      require(calls.length === 1 && typeof calls[0].params.answer === "string" && calls[0].params.answer.length > 40, "the whole typed words were sent");
+    } else if (name === "question-card-composer-waiting") {
+      require(asked() && composer.placeholder === waitingWords, `the composer says ${waitingWords}: ${composer.placeholder}`);
+    } else if (name === "question-card-composer-after") {
+      require(card.dataset.cardState === "answered" && composer.placeholder && composer.placeholder !== waitingWords, `the composer returns to its usual words: ${composer.placeholder}`);
+    } else if (name === "question-card-closed") {
+      const sent = window.__look.calls.filter(call => call.command === "agent_ask_text");
+      require(card.dataset.cardState === "cancelled" && card.querySelector('.card-status')?.textContent.trim() === "未回答", "the card shows closed, not answered");
+      require(!card.querySelector('.question-answer-line,[data-owner-option],textarea') && calls.length === 0, "a closed card has no row, no controls and was never answered");
+      require(sent.length === 1 && sent[0].text === "先看看今天的行事曆", "the words went as an ordinary message");
+      require(document.querySelector('.page-agent .thread').textContent.includes("好，先不處理這個問題。"), "the member answered the message");
+      require(composer.placeholder && composer.placeholder !== waitingWords, "the composer returned to its usual words");
+    }
+    return { check: name, state: card.dataset.cardState };
   }
   if (name.startsWith("owner-question-")) {
     const card = document.querySelector('[data-owner-question="owner-choice"]');
@@ -1911,22 +2030,24 @@ export function checkRendered(name, context = {}) {
     const waiting = ["owner-question-asked", "owner-question-typed", "owner-question-background", "owner-question-room"].includes(name);
     require(card.dataset.cardState === (waiting ? "asked" : name === "owner-question-cancelled" ? "cancelled" : "answered"), "the persisted state is shown");
     if (name === "owner-question-cancelled") require(card.querySelector('.card-status.is-ready') && !card.querySelector('[data-card-disclosure]'), 'a cancelled question has a neutral decision and no redundant disclosure');
+    if (!waiting && name !== "owner-question-cancelled") require(card.querySelector('.question-answer-line') && !card.querySelector('.card-status'), 'an answered question is its title and one row, with no pill');
     const asked = card.querySelector(".card-title");
     require(getComputedStyle(asked).whiteSpace !== "nowrap" && asked.scrollWidth <= asked.clientWidth + 1, "the whole question shows, wrapped, never cut to one line");
     require(card.querySelectorAll("[data-owner-option]").length === (waiting ? 4 : 0), "choices are real buttons only while waiting");
     require(!card.querySelector("select"), "a short list needs no dropdown");
     const box = card.getBoundingClientRect(), column = card.parentElement.getBoundingClientRect();
     require(box.left >= column.left - 1 && box.right <= column.right + 1, "the question fits its reply column");
-    for (const control of card.querySelectorAll("button,input")) {
+    for (const control of [...card.querySelectorAll("button,input,textarea")].filter(visible)) {
       const bounds = control.getBoundingClientRect();
       require(bounds.left >= box.left && bounds.right <= box.right + 1 && bounds.bottom <= box.bottom + 1, "every answer control fits the card");
     }
     const field = card.querySelector("[data-owner-answer-input]");
     if (field) {
-      require(field.classList.contains("mb-fin") && field.tagName === "INPUT", "the answer uses the shared form field");
+      require(field.classList.contains("mb-fin") && field.tagName === "TEXTAREA" && field.rows === 1, "the answer uses the shared form field, one line to start with");
       require(field.scrollHeight <= field.clientHeight + 2, "the answer field has no inner scroll");
       const submit = card.querySelector('[data-owner-answer="text"]');
-      require(visible(submit), 'the answer primary stays visible while empty or typed');
+      // The pill appears at the right of the own-answer row once something is typed (Grok Bot's card, 2026-11-11).
+      require(visible(submit) === !!field.value.trim(), 'the answer primary shows once something is typed, and not before');
       require(submit.disabled === !field.value.trim(), 'only a nonempty answer enables submit');
       if (name === "owner-question-typed") {
         require(field.value === "請先確認下週的範例排程。" && !submit.disabled, 'typed text remains in the card before sending');
@@ -3043,6 +3164,52 @@ export function checkRendered(name, context = {}) {
     require(document.querySelectorAll('[data-act="manage-usage"]').length === 1, "only the failed reply carries it");
     return { check: name };
   }
+  if (name.startsWith("chat-cli-signin")) {
+    // A reply that failed for want of its subscription CLI's sign-in (R-CLI-SIGNIN-01/02): the core's one sentence that names the tool
+    // and the true cause, and under it the one button that mends it, where the owner is. Never the old sentence that named two causes.
+    const reply = document.querySelector('.chat-message[data-reply]'), strip = reply?.querySelector(':scope > .turn-signin');
+    require(visible(reply) && visible(strip), "the failed reply carries its sign-in strip");
+    require(!document.body.textContent.includes("還沒登入或缺少金鑰") && !document.body.textContent.includes("設定 › 連接"), "the generic sentence that named two causes and a page is gone");
+    const words = reply.querySelector(".message-text");
+    const sentence = words.textContent.trim();
+    require(/^(Claude Code|Codex CLI|Antigravity) (的登入已過期|還沒登入|還沒安裝)。$/.test(sentence), `one sentence that names the tool and its cause: ${sentence}`);
+    require(!/[A-Za-z_]+_[a-z]+|\/login|OAuth|401/.test(sentence), "no code and no raw output in the sentence");
+    const buttons = [...strip.querySelectorAll("button")].filter(visible);
+    const box = strip.getBoundingClientRect(), text = reply.querySelector(".ans").getBoundingClientRect();
+    require(box.top >= text.bottom - 1 && Math.abs(box.left - text.left) <= 2, "it stands under the reply's words, at their left edge");
+    require(buttons.every(button => button.classList.contains("btn") && button.classList.contains("sm")), "its buttons are the app's small buttons");
+    require(buttons.every(button => button.getBoundingClientRect().height <= 30 && button.getBoundingClientRect().width <= 140), "each button is sized to its words");
+    require(document.querySelectorAll(".turn-signin").length === 1 && !document.querySelector("[data-missing-repair]"), "one strip, and no second 開啟設定 beside it");
+    const cause = document.querySelector("[data-cause]")?.dataset.cause;
+    const note = strip.querySelector(".signin-note");
+    const phase = strip.dataset.phase ?? "idle";
+    if (name === "chat-cli-signin") {
+      const [button] = buttons;
+      const expected = { expired: "重新登入", signed_out: "登入" }[cause];
+      if (sentence.endsWith("還沒安裝。")) {
+        require(buttons.length === 1 && button.dataset.act === "cli-install" && button.textContent.trim() === "安裝說明", `a CLI that is not there offers its install guide: ${button?.textContent}`);
+      } else {
+        require(buttons.length === 1 && button.dataset.act === "cli-signin" && button.textContent.trim() === expected, `exactly one button, ${expected}: ${buttons.map(b => b.textContent)}`);
+        require(sentence.endsWith(cause === "expired" ? "的登入已過期。" : "還沒登入。"), `the sentence and the button name the same cause (${cause})`);
+      }
+      require(!note && phase === "idle", "nothing but the button until it is pressed");
+    } else if (name === "chat-cli-signin-waiting") {
+      require(note?.textContent.trim() === "請在開啟的視窗完成登入", `the waiting line: ${note?.textContent}`);
+      require(buttons.length === 1 && buttons[0].dataset.act === "cli-signin-cancel" && buttons[0].textContent.trim() === "取消", "only 取消 while the window is open");
+      const started = window.__look.calls.filter(call => call.method === "brains.cli_login" && call.params.again === true);
+      require(started.length >= 1 && started.every(call => call.params.id === "claude"), "the CLI's own sign-in was started for that CLI, again");
+    } else if (name === "chat-cli-signin-stopped") {
+      require(note?.textContent.trim() === "沒有完成登入", `a window closed first says so: ${note?.textContent}`);
+      require(buttons.length === 1 && buttons[0].dataset.act === "cli-signin" && buttons[0].textContent.trim() === "重新登入", "and the button is usable again");
+      require(!window.__look.calls.some(call => call.command === "agent_ask_text"), "nothing was sent again");
+    } else if (name === "chat-cli-signin-done") {
+      require(note?.textContent.trim() === "已登入，正在重新送出", `a finished sign-in says the question goes again: ${note?.textContent}`);
+      require(buttons.length === 0, "no button while it is sent");
+      const asked = window.__look.calls.filter(call => call.command === "agent_ask_text");
+      require(asked.length === 1, `the question went again exactly once (${asked.length})`);
+    }
+    return { check: name, sentence, phase, buttons: buttons.map(button => button.textContent.trim()) };
+  }
   if (name === "onboarding-composio") {
     // Without Composio its card comes first across the step, and the apps under it are the ones that need none.
     const card = document.querySelector('.ob-composio [data-item="composio"]'), grid = document.querySelector('[data-ob-services]');
@@ -4019,8 +4186,8 @@ export function checkRendered(name, context = {}) {
   }
     if (name === "member-deleted") {
       require(document.querySelector('.mb-pill-t')?.textContent === window.__look.data.members.find(item => item.id === 0)?.name, "deleting the selected member returns to Raphael");
-    require(window.__look.calls.some(call => call.method === "members.delete" && call.params?.id === 2), "the core is asked to delete that member");
-    require(!window.__look.data.members.some(item => item.id === 2) && !document.querySelector('[data-member="2"]'), "the member is gone from the team and the list");
+    const asked = window.__look.calls.filter(call => call.method === "members.delete");
+    require(asked.length === 1 && JSON.stringify(asked[0].params) === '{"id":2}', "the core is asked once to delete that member, and nothing else is sent with it");    require(!window.__look.data.members.some(item => item.id === 2) && !document.querySelector('[data-member="2"]'), "the member is gone from the team and the list");
     require(document.querySelector(".toast")?.textContent.includes("已刪除「小森」"), "a notice names who was deleted");
     return { check: name };
   }
@@ -5089,20 +5256,140 @@ export function checkRendered(name, context = {}) {
     require(document.documentElement.scrollWidth <= innerWidth, "nothing runs out sideways");
     return { check: name, cards: heights.length, card: heights[0], peek };
   }
-  if (name === "page-opened-whole") {
-    // Pressing the card opened the page whole: the same frame, no longer inert, as tall as the page says (up to three quarters of the window),
-    // where it scrolls and its buttons work; the card behind it holds no frame.
-    const view = document.querySelector(".pg-view"), frame = view?.querySelector("iframe");
-    require(frame && !document.querySelector(".pg-card .pg-body iframe"), "the same page moved to the dialog: one frame");
-    require(!frame.hasAttribute("inert") && getComputedStyle(frame).pointerEvents !== "none", "the page works again where it is made larger");
-    const said = parseFloat(view.style.getPropertyValue("--pg-h")), peek = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--h-page-peek"));
-    const shown = frame.getBoundingClientRect();
-    require(Math.abs(shown.height - Math.min(said, innerHeight * 0.75)) <= 1, `as tall as the page says, up to three quarters of the window (${Math.round(shown.height)} of ${said})`);
-    require(shown.height > peek * 2, `far more of the page than the preview showed (${Math.round(shown.height)} against ${peek})`);
-    const close = view.closest(".mb-dialog").querySelector('[data-dlg="close"]').getBoundingClientRect();
-    require(close.bottom <= shown.top + 0.5 && close.top >= 0, "the × stands above the page, inside the window");
+  // A page opens in the conversation's place (owner, 2026-11-11: 「直接顯示在對話裡，它就是會直接替代掉對話，就是內部的顯示器的感覺，它不會再
+  // 打開一個 dialog，然後可能左上角會變成返回上頁」): the same frame, the thread hidden under it, the composer below, the way back the round
+  // arrow at the header's top left, and no dialog, scrim or × anywhere.
+  if (name === "page-inplace" || name === "page-opened-whole" || name === "page-expanded") {
+    const pane = [...document.querySelectorAll(".page-agent .mb-chat")].find(visible), stage = pane.querySelector(":scope > .ra-stage");
+    const view = stage.querySelector(":scope > .pgv"), box = view?.querySelector(".pgv-frame-box"), frame = box?.querySelector("iframe");
+    require(stage.classList.contains("is-page") && stage.dataset.pageKind === "page" && view && !view.hidden, "the page is open in the conversation's place");
+    require(frame && document.querySelectorAll(".pg-frame").length === 1 && !pane.querySelector(".pg-card .pg-body iframe"), "the same page moved: one frame, none left in the card");
+    require(!frame.hasAttribute("inert") && getComputedStyle(frame).pointerEvents !== "none", "the page works where it stands open");
+    require(![...document.querySelectorAll(".mb-scrim, .mb-dialog, .modal-scrim, .pg-view-dialog, .pg-view")].some(layer => !layer.closest("[hidden]")) && !view.querySelector("[data-dlg], .modal-x, .btn"), "no dialog, no scrim and no × anywhere");
+    const scroller = stage.querySelector(":scope > .ra-scroll"), dock = stage.querySelector(":scope > .ra-dock"), composer = dock.querySelector(".composer");
+    require(getComputedStyle(scroller).visibility === "hidden", "the thread is out of sight under it");
+    require(composer && visible(composer) && !composer.closest("[hidden]"), "the composer stays below the page");
+    const back = pane.querySelector(".mb-head [data-page-back]"), head = pane.querySelector(":scope > .mb-head").getBoundingClientRect(), arrow = back?.getBoundingClientRect();
+    require(back && visible(back) && !back.hidden, "the way back is in the header");
+    require(back.classList.contains("icon") && back.getAttribute("aria-label") === "返回" && back.textContent.trim() === "" && back.querySelector("svg"), "a left arrow named 返回, no word on it");
+    require(Math.round(arrow.width) === 36 && Math.round(arrow.height) === 36 && parseFloat(getComputedStyle(back).borderRadius) >= 18 && /^rgb\(/.test(getComputedStyle(back).backgroundColor), "the window edge's soft round button, 36 px, on its solid surface");
+    require(arrow.left - head.left <= 12 && arrow.top >= head.top - 1 && arrow.bottom <= head.bottom + 1, `at the header's top left (${Math.round(arrow.left - head.left)} px in)`);
+    const search = pane.querySelector('.mb-head [data-act="search"]');
+    require(!search || !visible(search), "the thread's search waits where the arrow stands");
+    require(!pane.querySelector(":scope > .ra-find") || !visible(pane.querySelector(":scope > .ra-find")), "and so does its bar");
+    const who = pane.querySelector(".mb-head .conversation-trigger .mb-pill, .mb-head .au-room-heading");
+    require(who && visible(who) && who.textContent.trim().length > 0, "the header still says whose conversation it is");
+    const share = pane.querySelector('.mb-head [data-act="share-member"]');
+    require(!share || !visible(share), "the member's share waits while a page stands in the thread's place");
+    require(!pane.querySelector(".mb-head [data-page-act]"), "and an HTML page has no button of its own there");
+    // The page's title in sight, and the page as wide as the composer's column, rounded, between the header and the composer.
+    const title = view.querySelector(".pgv-title"), column = composer.getBoundingClientRect(), shown = box.getBoundingClientRect();
+    const card = pane.querySelector(".pg-card .card-title")?.textContent;
+    require(title && visible(title) && title.textContent === card, `the page's title is in sight: ${title?.textContent}`);
+    const titled = title.getBoundingClientRect();
+    require(titled.left >= column.left - 1 && titled.right <= column.right + 1 && title.scrollWidth <= title.clientWidth + 1, `the title is not cut and stays in the column: ${Math.round(titled.left)}-${Math.round(titled.right)} in ${Math.round(column.left)}-${Math.round(column.right)}, ${title.scrollWidth} of ${title.clientWidth}`);
+    const dbg = el => { const c = getComputedStyle(el); const r = el.getBoundingClientRect(); return `${el.className}:${Math.round(r.left)}-${Math.round(r.right)} pad ${c.paddingLeft}/${c.paddingRight} mw ${c.maxWidth} w ${c.width} box ${c.boxSizing}`; };
+    require(Math.abs(shown.left - column.left) <= 1 && Math.abs(shown.right - column.right) <= 1, `the page is as wide as the composer: ${Math.round(shown.left)}-${Math.round(shown.right)} and ${Math.round(column.left)}-${Math.round(column.right)} [${[view, view.querySelector(".pgv-body"), view.querySelector(".pgv-page"), box, dock, composer].map(dbg).join(" | ")}]`);
+    require(shown.top >= head.bottom && shown.bottom <= dock.getBoundingClientRect().top + 1, "the page stands between the header and the composer");
+    require(parseFloat(getComputedStyle(box).borderRadius) >= 12 && getComputedStyle(box).borderTopWidth === "0px", "its corners are rounded and nothing is drawn around it");
+    require(shown.height >= 200, `the page has room to be read: ${Math.round(shown.height)} px`);
+    require(view.querySelector(".pgv-status")?.hidden !== false || name !== "page-inplace", "nothing waits under the page before anything is sent");
     require(document.documentElement.scrollWidth <= innerWidth, "nothing runs out sideways");
-    return { check: name, height: shown.height, said };
+    return { check: name, width: Math.round(shown.width), height: Math.round(shown.height) };
+  }
+  // The thread where it was (member-settings-place-*, the same measure): taken before the page opens, compared after the arrow.
+  if (name === "page-inplace-before" || name === "page-inplace-kept") {
+    const pane = [...document.querySelectorAll(".page-agent .mb-chat")].find(visible), scroller = pane.querySelector(".ra-scroll"), stage = pane.querySelector(":scope > .ra-stage");
+    const top = scroller.getBoundingClientRect().top, items = [...scroller.querySelectorAll(".thread > li")];
+    if (name === "page-inplace-before") {
+      require(scroller.scrollHeight - scroller.clientHeight - scroller.scrollTop > 40, "the thread is read higher up, not at its bottom");
+      const item = items.find(li => li.getBoundingClientRect().bottom > top + 4), frame = scroller.querySelector(".pg-card iframe");
+      require(frame, "the card holds its frame");
+      window.__pagePlace = { index: items.indexOf(item), offset: item.getBoundingClientRect().top - top, scrollTop: scroller.scrollTop, frame, loads: 0 };
+      frame.addEventListener("load", () => { window.__pagePlace.loads++; });
+      return { check: name, index: window.__pagePlace.index };
+    }
+    const was = window.__pagePlace;
+    require(!stage.classList.contains("is-page") && stage.querySelector(":scope > .pgv").hidden, "the page is put away");
+    require(getComputedStyle(scroller).visibility === "visible", "the thread is in sight again");
+    const offset = items[was.index].getBoundingClientRect().top - top;
+    require(Math.abs(offset - was.offset) <= 2 && Math.abs(scroller.scrollTop - was.scrollTop) <= 2, `the thread is where it was: ${Math.round(was.offset)} -> ${Math.round(offset)} px`);
+    const frame = scroller.querySelector(".pg-card .pg-body > iframe");
+    require(frame === was.frame && frame.hasAttribute("inert"), "the card holds the same frame as before, inert again");
+    require(was.loads === 0, `the page did not reload: ${was.loads} loads`);
+    const arrow = pane.querySelector(".mb-head [data-page-back]"), search = pane.querySelector('.mb-head [data-act="search"]');
+    require(!arrow || arrow.hidden || !visible(arrow), "the arrow is gone");
+    require(!search || getComputedStyle(search).display !== "none", "the search is back");
+    require(![...document.querySelectorAll(".mb-scrim, .mb-dialog")].some(layer => !layer.closest("[hidden]")), "no dialog was ever opened");
+    return { check: name, moved: Math.round(offset - was.offset), moveBefore: typeof Element.prototype.moveBefore === "function" };
+  }
+  // A page changed while it stands open (core `update_page`): the sampler runs from before the change to after it, so a frame that
+  // closed, blinked out or a view that shut would show as a sample (owner, 2026-11-11: nothing closes, flashes or jumps).
+  if (name === "page-watch") {
+    const stage = [...document.querySelectorAll(".page-agent .mb-chat")].find(visible).querySelector(":scope > .ra-stage");
+    const watch = window.__pageWatch = { samples: 0, bad: [], on: true, frames: new Set(), loads: 0 };
+    const tick = () => {
+      if (!watch.on) return;
+      const view = stage.querySelector(":scope > .pgv"), shown = [...stage.querySelectorAll(".pgv-frame-box > iframe")].filter(frame => frame.style.visibility !== "hidden");
+      shown.forEach(frame => watch.frames.add(frame));
+      watch.samples++;
+      if (!stage.classList.contains("is-page") || !view || view.hidden || shown.length !== 1) watch.bad.push({ at: watch.samples, page: stage.classList.contains("is-page"), shown: shown.length });
+      requestAnimationFrame(tick);
+    };
+    tick();
+    return { check: name };
+  }
+  if (name === "page-inplace-updated") {
+    const pane = [...document.querySelectorAll(".page-agent .mb-chat")].find(visible), stage = pane.querySelector(":scope > .ra-stage"), watch = window.__pageWatch;
+    watch.on = false;
+    require(watch.samples > 20, `the page was watched through the change (${watch.samples} frames)`);
+    require(watch.bad.length === 0, `one page in sight at every frame, the view never shut: ${JSON.stringify(watch.bad.slice(0, 3))}`);
+    require(watch.frames.size === 2, `the old page and the changed page took turns in place: ${watch.frames.size} frames seen`);
+    require(stage.classList.contains("is-page") && stage.dataset.pageKind === "page", "the page is still open");
+    require(document.querySelectorAll(".pg-frame").length === 1, "one frame, the old one gone");
+    const cards = [...pane.querySelectorAll(".pg-card")];
+    require(cards.length === 1 || (cards.length === 2 && cards[0].dataset.page !== cards[1].dataset.page), `the conversation keeps one card for the page: ${cards.map(card => card.dataset.page)}`);
+    require(cards.every(card => card.dataset.pageRev === "2"), "its card is the changed page's revision");
+    const open = stage.querySelector(".pgv-title");
+    require(open && visible(open), "the title stays in sight");
+    return { check: name, samples: watch.samples };
+  }
+  // The same page asked to change from under it: what the member does shows under the page, then its reply (page-view.ts).
+  if (name === "page-inplace-working" || name === "page-inplace-answered") {
+    const pane = [...document.querySelectorAll(".page-agent .mb-chat")].find(visible), stage = pane.querySelector(":scope > .ra-stage");
+    const view = stage.querySelector(":scope > .pgv"), status = view.querySelector(".pgv-status"), dock = stage.querySelector(":scope > .ra-dock"), box = view.querySelector(".pgv-frame-box");
+    require(stage.classList.contains("is-page") && !view.hidden, "the page stays open while the member answers");
+    require(visible(status) && !status.hidden, "something shows under the page");
+    const line = status.firstElementChild.getBoundingClientRect(), column = dock.querySelector(".composer").getBoundingClientRect();
+    const row = status.getBoundingClientRect();
+    require(row.top >= box.getBoundingClientRect().bottom - 1 && row.bottom <= dock.getBoundingClientRect().top + 1, "it stands between the page and the composer");
+    require(line.left >= column.left - 1 && line.right <= column.right + 1 && line.height <= 40, `one line in the column: ${Math.round(line.height)} px`);
+    require(!view.querySelector("button, .btn"), "no button for it, no sentence that explains it");
+    if (name === "page-inplace-working") {
+      const live = status.querySelector(".live-presence .live-action");
+      require(live && live.textContent.trim().length > 0 && !/[{}]/.test(live.textContent), `the member's own line while it works: ${live?.textContent}`);
+      const told = window.__look.viewing;
+      require(told.length === 1 && told[0] === "page-news", `the core was told which page is open before the message went: ${JSON.stringify(told)}`);
+      const asked = window.__look.calls.filter(call => call.command === "agent_ask_text");
+      require(asked.length === 1 && asked[0].memberId === 1 && asked[0].text === "把最後一題改成問今天的新聞", `the message went to the member: ${JSON.stringify(asked.map(call => call.text))}`);
+      return { check: name, line: live.textContent };
+    }
+    const reply = status.querySelector(".pgv-reply");
+    require(reply && !status.querySelector(".live-action") && reply.textContent === "好了，最後一題改成問今天的新聞，其他沒有動。", `its first words: ${reply?.textContent}`);
+    require(reply.scrollWidth <= reply.clientWidth + 1 || getComputedStyle(reply).textOverflow === "ellipsis", "one line, cut with an ellipsis if long");
+    // The whole reply is in the thread, one arrow away.
+    const said = [...pane.querySelectorAll(".ra-scroll .message-text")].some(text => text.textContent.includes("好了，最後一題改成問今天的新聞"));
+    require(said, "the whole reply is in the thread behind it");
+    return { check: name };
+  }
+  // Escape goes back, and a draft in the composer is neither lost nor cleared by it.
+  if (name === "page-inplace-escaped") {
+    const pane = [...document.querySelectorAll(".page-agent .mb-chat")].find(visible), stage = pane.querySelector(":scope > .ra-stage");
+    const input = pane.querySelector(".composer .cmp-input");
+    require(!stage.classList.contains("is-page") && stage.querySelector(":scope > .pgv").hidden, "Escape went back to the conversation");
+    require(input.value === "還沒送出的草稿", `the draft is as it was: ${input.value}`);
+    require(!window.__look.calls.some(call => call.command === "agent_ask_text" || call.command === "agent_stop"), "nothing was sent or stopped");
+    return { check: name };
   }
   if (name === "page-placed" || name === "page-appended") {
     const input = [...document.querySelectorAll('.composer .cmp-input')].find(visible);
@@ -5112,11 +5399,14 @@ export function checkRendered(name, context = {}) {
     require(document.activeElement === input, "the conversation composer has focus");
     require(visible(note) && note.textContent === "這段文字來自頁面，確認後再送出", "one localized note identifies page text before sending");
     require(note.getBoundingClientRect().height <= parseFloat(getComputedStyle(note).lineHeight) * 1.2, "the note stays on one line");
-    require(!document.querySelector('.pg-view'), "placing from an expanded page returns to the conversation");
+    // The page stays open and the composer, in sight under it, holds the words (owner, 2026-11-11: a page is the conversation's place, not a dialog).
+    const open = document.querySelector('.page-agent .ra-stage.is-page');
+    require(![...document.querySelectorAll('.mb-scrim, .pg-view')].some(layer => !layer.closest('[hidden]')), "no dialog is over the page");
+    if (open) require(!open.querySelector(':scope > .pgv').hidden && visible(input), "the page stays open with the composer under it");
     // What stands under the thread grew with the placed text: the thread was at its bottom and stays there, so the last card is
     // whole above the composer (R-UI-21, R-CARD-11; the judge on page-buy dark and page-expand-place light).
     const thread = [...document.querySelectorAll('.page-agent .mb-chat .ra-scroll')].find(visible), cards = thread ? [...thread.querySelectorAll('.pg-card')] : [];
-    if (cards.length) {
+    if (cards.length && !open) {
       const card = cards.at(-1).getBoundingClientRect(), field = input.closest('.composer').getBoundingClientRect(), port = thread.getBoundingClientRect();
       require(card.bottom <= field.top - 4, `the last card ends above the composer with its gap (${Math.round(card.bottom)} against ${Math.round(field.top)})`);
       require(card.bottom <= port.bottom + 0.5 && thread.scrollHeight - thread.scrollTop - thread.clientHeight <= 2, "the thread stays at its bottom as the composer grows");
@@ -5141,32 +5431,6 @@ export function checkRendered(name, context = {}) {
     require(asked.length === 1 && JSON.stringify(asked[0]).includes("把輕量後背包加入購物車"), "only the owner's send submits the placed text once");
     require(![...document.querySelectorAll('.cmp-page-note')].some(visible), "the submitted draft no longer shows a page note");
     return { check: name };
-  }
-  if (name === "page-expanded") {
-    const view = document.querySelector(".pg-view"), frame = view?.querySelector("iframe")?.getBoundingClientRect();
-    require(frame && !document.querySelector(".pg-card .pg-body iframe"), "the same page moved to the dialog: one frame, not a second one");
-    // The page alone: past its card, within the conversation's 960 px column (R-UI-45), and as tall as it says it is there,
-    // so a short page makes a short dialog (the judge on page-expand, 3/5, 2026-11-10: blank below the page).
-    const dialog = view.closest(".mb-dialog"), box = dialog.getBoundingClientRect(), card = document.querySelector(".pg-card").getBoundingClientRect();
-    require(box.width <= 960.5 && frame.width > card.width, `wider than its card, within the conversation's column (${Math.round(box.width)} px)`);
-    const said = parseFloat(view.style.getPropertyValue("--pg-h"));
-    require(Math.abs(frame.height - Math.min(said, innerHeight * 0.75)) <= 1, `as tall as the page says (${Math.round(frame.height)} of ${said} px)`);
-    require(frame.height < innerHeight * 0.5, `a short page makes a short dialog (${Math.round(frame.height)} px)`);
-    require(["left", "top", "right", "bottom"].every(side => Math.abs(frame[side] - box[side]) <= 1.5), "the page fills the dialog");
-    // No title over the page, whose own heading says it (the judge, R-UI-02): the card's title only names the dialog. The ×
-    // is the soft round edge button and never covers the page (owner, 2026-11-11): just outside the page's top right corner,
-    // above it and right-aligned with it, on the scrim, with the standard small gap (--sp-2), and inside the window under the
-    // caption strip at every width, also when the page is as wide as the window.
-    const label = document.getElementById(dialog.getAttribute("aria-labelledby")), button = dialog.querySelector('[data-dlg="close"]'), close = button.getBoundingClientRect();
-    require(label?.textContent === document.querySelector(".pg-card .card-title").textContent && label.getBoundingClientRect().width <= 1, "the card's title names the dialog without standing over the page");
-    const token = side => parseFloat(getComputedStyle(document.documentElement).getPropertyValue(side));
-    require(Math.abs(close.width - 36) <= 0.5 && Math.abs(close.height - 36) <= 0.5 && parseFloat(getComputedStyle(button).borderRadius) >= 18, "the × is the soft round edge button, 36 px");
-    require(/^rgb\(/.test(getComputedStyle(button).backgroundColor), `the × keeps its solid surface: ${getComputedStyle(button).backgroundColor}`);
-    require(Math.abs(close.right - box.right) <= 1.5, `the × is right-aligned with the page (${Math.round(box.right - close.right)} px in)`);
-    require(Math.abs(box.top - close.bottom - token("--sp-2")) <= 1.5, `the × stands above the page's top edge with the small gap (${Math.round(box.top - close.bottom)} px, not ${token("--sp-2")})`);
-    require(close.bottom <= frame.top + 0.5 && close.left >= box.left, "the × never covers the page");
-    require(close.top >= token("--window-controls-height") && close.left >= 0 && close.right <= innerWidth, `the × stands inside the window, under its caption strip (${Math.round(close.top)} px from the top, ${Math.round(innerWidth - close.right)} px from the right)`);
-    return { check: name, width: box.width, height: frame.height };
   }
   if (name.startsWith("page-report-file")) {
     // A report's saved file opened on its own (the `saved-file` step): the app's drawing in its reader's theme, nothing of the app.
@@ -5209,11 +5473,12 @@ export function checkRendered(name, context = {}) {
     const overlaps = (a, b) => a.left < b.right - 0.5 && b.left < a.right - 0.5 && a.top < b.bottom - 0.5 && b.top < a.bottom - 0.5;
     const view = document.querySelector(".page-agent .rp-view"), stage = document.querySelector(".page-agent .ra-stage");
     const scroller = stage.querySelector(":scope > .ra-scroll"), link = document.querySelector(".page-agent .pg-link");
+    const frame = stage.querySelector(":scope > .pgv");
     if (name === "page-report-card") {
       require(link?.tagName === "BUTTON" && link.classList.contains("attachment-file"), "the report is the reply's file card, a real button");
       require(link.querySelector(".me-file-t")?.textContent === "團隊總覽報告" && link.querySelector("small")?.textContent === "頁面", "its title and 「頁面」");
       require(link.querySelector("svg.i"), "with the page's icon");
-      require(!document.querySelector(".page-agent .pg-card") && !(view && !view.hidden), "no frame, and nothing opens until it is pressed");
+      require(!document.querySelector(".page-agent .pg-card") && !(frame && !frame.hidden), "no frame, and nothing opens until it is pressed");
       const line = link.closest(".tn, [data-key]").getBoundingClientRect(), box = link.getBoundingClientRect();
       require(box.left >= line.left && box.right <= line.right + 1, "the card stays inside the reply");
       // The file card's own measure: at least 56 px, as tall as its two lines of words.
@@ -5222,25 +5487,42 @@ export function checkRendered(name, context = {}) {
     }
     require(view, "the report view exists");
     if (name === "page-report-closed") {
-      require(view.hidden && !stage.classList.contains("is-report"), "the report is put away");
+      require(frame.hidden && !stage.classList.contains("is-page"), "the report is put away");
+      const arrow = document.querySelector('.page-agent .mb-head [data-page-back]');
+      require(!arrow || arrow.hidden || !visible(arrow), "the arrow is gone");
       const member = document.querySelector('.page-agent .mb-head [data-act="share-member"]');
-      require(!member || member.hidden || getComputedStyle(member).visibility === "visible", "the conversation header's share is back");
+      require(!member || member.hidden || visible(member), "the conversation header's share is back");
+      require(!document.querySelector('.page-agent .mb-head [data-page-act]'), "the report's button left with the report");
       require(getComputedStyle(scroller).visibility === "visible", "the thread is in sight again");
       require(document.activeElement === link, "the focus is back on the card that opened it");
       const box = link.getBoundingClientRect(), area = scroller.getBoundingClientRect();
       require(box.top >= area.top && box.bottom <= area.bottom, "the card is where it was, in sight");
       return { check: name };
     }
-    require(!view.hidden && stage.classList.contains("is-report"), "the report is open in the conversation's place");
+    require(!frame.hidden && stage.classList.contains("is-page") && stage.dataset.pageKind === "report", "the report is open in the conversation's place");
+    require(![...document.querySelectorAll(".mb-scrim, .mb-dialog")].some(layer => !layer.closest("[hidden]")), "no dialog, no scrim");
+    // The way back is the conversation header's round arrow at its top left, the same one an HTML page has; no × over the report.
+    const back = document.querySelector('.page-agent .mb-head [data-page-back]'), arrowBox = back?.getBoundingClientRect(), headBox = document.querySelector('.page-agent .mb-chat:not([hidden]) > .mb-head').getBoundingClientRect();
+    require(back && visible(back) && back.getAttribute("aria-label") === "返回" && Math.round(arrowBox.width) === 36 && Math.round(arrowBox.height) === 36 && arrowBox.left - headBox.left <= 12, "the arrow named 返回 at the header's top left, the window edge's round button");
+    require(!view.querySelector(".rp-close, [data-report-act=close], .rp-top, .btn"), "nothing floats over the report: no × and no button");
+    // 存成檔案 stands where a thread's share stands (owner, 2026-11-12: its place and look as Grok Bot's share): first of the header's
+    // tools at its top right, the window edge's round button, level with the arrow, drawn as a file and not as the member's share.
+    const save = document.querySelector('.page-agent .mb-chat:not([hidden]) > .mb-head .ra-tools > [data-page-act]'), saveBox = save?.getBoundingClientRect();
+    require(save && visible(save) && save === save.parentElement.firstElementChild && save.getAttribute("aria-label") === "存成檔案" && save.textContent.trim() === "" && save.querySelector("svg"), "one button named 存成檔案 leads the header's tools, no word on it");
+    require(Math.round(saveBox.width) === 36 && Math.round(saveBox.height) === 36 && parseFloat(getComputedStyle(save).borderRadius) >= 18, "the window edge's soft round button, 36 px");
+    require(Math.abs((saveBox.top + saveBox.bottom) - (arrowBox.top + arrowBox.bottom)) <= 2 && headBox.right - saveBox.right < headBox.width / 4, "in the header's row, level with the arrow, at its right");
+    const drawnAs = button => [...(button?.querySelectorAll("svg path") ?? [])].map(path => path.getAttribute("d")).join(" ");
+    const memberShare = document.querySelector('.page-agent .mb-head [data-act="share-member"]');
+    require(drawnAs(save) && drawnAs(save) !== drawnAs(memberShare), "its icon is not the one that shares a member");
+    require(!memberShare || !visible(memberShare), "the member's share waits: one button in that place");
     require(getComputedStyle(scroller).visibility === "hidden", "the thread is out of sight under it");
     const dock = stage.querySelector(":scope > .ra-dock"), composer = dock.querySelector(".composer");
     require(composer && visible(composer), "the member's composer stays below the report");
     require(view.getBoundingClientRect().bottom <= dock.getBoundingClientRect().top + 1, "the report ends where the composer begins");
     // The report stands for the thread: its column starts and ends where the composer does, and so do its tools (R-UI-45,
     // the judge on the first Share run: the × ended past the composer at every width).
-    const column = composer.getBoundingClientRect(), doc = view.querySelector(".rp-doc").getBoundingClientRect(), tools = view.querySelector(".rp-top").getBoundingClientRect();
+    const column = composer.getBoundingClientRect(), doc = view.querySelector(".rp-doc").getBoundingClientRect();
     require(Math.abs(doc.left - column.left) <= 1 && Math.abs(doc.right - column.right) <= 1, `the report's column is the composer's: ${Math.round(doc.left)}-${Math.round(doc.right)} and ${Math.round(column.left)}-${Math.round(column.right)}`);
-    require(Math.abs(tools.right - column.right) <= 1, `share and the × end where the composer does: ${Math.round(tools.right)} and ${Math.round(column.right)}`);
     const page = view.querySelector(":scope > .rp-scroll");
     require(page.scrollWidth <= page.clientWidth + 1, "nothing runs out sideways");
     require(getComputedStyle(page).maskImage.includes("gradient"), "what scrolls away fades before the header, as the thread does");
@@ -5253,15 +5535,6 @@ export function checkRendered(name, context = {}) {
       require(visible(document.querySelector(".rp-callout")), "the summary box above the findings");
       const words = [...document.querySelectorAll(".rp-items .rp-st")].map(word => getComputedStyle(word).color);
       require(words.length === 4 && new Set(words).size === 4, "four status words, each in its own colour");
-      const close = view.querySelector(".rp-close").getBoundingClientRect(), share = view.querySelector(".rp-share").getBoundingClientRect();
-      const title = document.querySelector(".rp-title").getBoundingClientRect();
-      require([close, share].every(box => Math.round(box.width) === 36 && Math.round(box.height) === 36), "share and the × are the window edge's soft round buttons");
-      // Share just before the ×, as the conversation header's buttons stand apart (agent.css .ra-tools).
-      require(Math.abs(share.top - close.top) < 1 && Math.round(close.left - share.right) === 4, `share stands just before the ×: ${Math.round(close.left - share.right)} px`);
-      require(!overlaps(close, title) && !overlaps(share, title), "the title clears both");
-      // One share in sight: the member's own, in the conversation header, waits until the report closes.
-      const member = document.querySelector('.page-agent .mb-head [data-act="share-member"]');
-      require(!member || getComputedStyle(member).visibility === "hidden", "the conversation header's share waits while the report is open");
       return { check: name, toc };
     }
     if (name === "page-report-shared") {
@@ -5276,7 +5549,7 @@ export function checkRendered(name, context = {}) {
       require(file.includes('.rp-st[data-tone="ok"]') && !/<style>[^<]*<(?!\/style>)/.test(file), "the page's own rules, with no tag in them");
       const toast = [...document.querySelectorAll(".toast")].at(-1)?.textContent;
       require(toast === "已存到「下載」", `it says where the file went: ${toast}`);
-      require(document.activeElement?.closest(".rp-view") || document.activeElement === document.body, "the report keeps the focus");
+      require(document.activeElement?.closest(".rp-view") || document.activeElement?.matches("[data-page-act]") || document.activeElement === document.body, "the focus stays with the report or its button");
       return { check: name, bytes: file.length };
     }
     if (name === "page-report-team") {
@@ -5495,35 +5768,99 @@ export function checkRendered(name, context = {}) {
     require(!/跟隨|連接其他來源/.test(menu.textContent), "nothing about following a default or adding a source");
     return { check: name };
   }
-  if (name === "member-maker" || name === "member-maker-chosen") {
-    const dialog = document.querySelector(".cr-dialog"), box = dialog.closest(".mb-scrim").getBoundingClientRect(), side = document.getElementById("nav").getBoundingClientRect();
-    if (!matchMedia("(max-width: 859px)").matches) require(box.left >= side.right - 1 && visible(document.getElementById("nav")), "it stands where the conversation stands, the sidebar beside it");
-    const face = dialog.querySelector(".cr-face svg.slime").getBoundingClientRect(), maker = dialog.querySelector(".cr-maker").getBoundingClientRect();
-    require(face.width >= 100 && Math.abs(face.left + face.width / 2 - maker.left - maker.width / 2) <= 2, "the slime is large, in the middle");
-    require(!dialog.querySelector('img, input[type="file"], [data-pick]'), "a member is a slime: no pictures to choose");
-    require(dialog.querySelectorAll(".cr-colors [data-slime-color]").length >= 8 && dialog.querySelectorAll(".cr-characters [data-slime-character]").length >= 20, "every colour and character is on the page");
-    require(dialog.querySelectorAll("input, textarea").length === 1, "it asks only for a name");
-    const stands = dialog.querySelector(".cr-face svg.slime").parentElement;
-    const painted = [...dialog.querySelectorAll(".cr-face svg.slime path")].filter(part => part.getBoundingClientRect().width && getComputedStyle(part).visibility !== "hidden").map(part => part.getBoundingClientRect());
-    require(painted.length > 0, "the chosen slime is painted");
-    for (let box = stands; box && box !== dialog; box = box.parentElement) {
-      const seen = getComputedStyle(box);
-      const bounds = box.getBoundingClientRect(), reserve = Number(seen.overflowClipMargin.match(/([\d.]+)px/)?.[1] ?? 0);
-      const fits = seen.overflow === "visible" || painted.every(part => part.left >= bounds.left - reserve && part.right <= bounds.right + reserve && part.top >= bounds.top - reserve && part.bottom <= bounds.bottom + reserve);
-      require(box.matches(".mb-dlg-body") || (seen.clipPath === "none" && fits), `nothing cuts the slime's wings and horns (.${box.className})`);
+  if (["member-maker", "member-maker-box", "member-maker-tab", "member-maker-chosen", "member-maker-taken"].includes(name)) {
+    // 新增成員 is one small dialog over the dimmed window, as Grok Bot's Create New Bot (owner, 2026-11-11): the large slime, the name
+    // directly under it, the shared tabbed picker, 取消 and 建立. The numbers are Grok Bot's 440 x 582 dialog and its 56 px pitch, scaled to the picker.
+    const dialog = document.querySelector(".cr-dialog"), scrim = dialog.closest(".mb-scrim");
+    const faceBox = dialog.querySelector(".cr-face"), face = faceBox.querySelector("svg.slime"), nameField = dialog.querySelector("#mb-new-name");
+    const picker = dialog.querySelector(".cr-picker"), tabs = [...picker.querySelectorAll('[role="tab"]')], panels = picker.querySelector(".mb-slime-panels");
+    const foot = dialog.querySelector(".mb-dlg-act"), cancel = foot.querySelector('[data-dlg="cancel"]'), start = foot.querySelector('[data-dlg="create"]');
+    const box = element => { const r = element.getBoundingClientRect(); return [r.left, r.top, r.width, r.height].map(n => Math.round(n * 10) / 10); };
+    if (name === "member-maker-box") {
+      window.__look.makerBox = { dialog: box(dialog), face: box(faceBox), name: box(nameField), picker: box(picker), panels: box(panels), tabs: tabs.map(box), foot: box(foot) };
+      window.__look.makerFace = face.outerHTML;
+      return { check: name };
     }
-    require(getComputedStyle(dialog.querySelector(".cr-face svg.slime")).clipPath === "none", "nothing cuts the slime's wings and horns");
-    const start = dialog.querySelector('[data-dlg="create"]');
-    if (name === "member-maker") require(start.disabled && document.activeElement === dialog.querySelector("#mb-new-name"), "the name has the focus and there is nothing to press yet");
-    else {
-      require(!start.disabled, "a name makes it pressable");
-      require(dialog.querySelector('[data-slime-character="shion"]').getAttribute("aria-pressed") === "true" && dialog.querySelectorAll('[data-slime-color][aria-pressed="true"]').length === 0, "one slime is chosen");
+    const whole = dialog.getBoundingClientRect(), bodyBox = dialog.querySelector(".mb-dlg-body").getBoundingClientRect();
+    const pad = parseFloat(getComputedStyle(dialog.querySelector(".mb-dlg-body")).paddingLeft);
+    require(!scrim.classList.contains("store-scrim") && scrim.getBoundingClientRect().width >= innerWidth - 1, "it stands over the whole window, not in the place of the conversation");
+    require(getComputedStyle(scrim).backgroundColor !== "rgba(0, 0, 0, 0)", "the window behind it is dimmed");
+    const cx = (whole.left + whole.right) / 2, padTop = parseFloat(getComputedStyle(scrim).paddingTop), padBottom = parseFloat(getComputedStyle(scrim).paddingBottom);
+    const cy = (whole.top + whole.bottom) / 2, areaCy = (padTop + innerHeight - padBottom) / 2;
+    require(Math.abs(cx - innerWidth / 2) <= 1.5 && Math.abs(cy - areaCy) <= 1.5, `it is centred over the window (${Math.round(cx)},${Math.round(cy)} of ${innerWidth / 2},${areaCy})`);
+    require(whole.width >= 300 && whole.width <= 441, `about as wide as Grok Bot's 440, and no wider than its picker needs (${Math.round(whole.width)} px)`);
+    require(whole.height <= 600 || innerHeight < 700, `no taller than about 600 px (${Math.round(whole.height)} px in a ${innerHeight} px window)`);
+    require(whole.top >= 0 && whole.bottom <= innerHeight && whole.left >= 0 && whole.right <= innerWidth, "the whole dialog stands in the window");
+    // Nothing scrolls inside it.
+    for (const part of [dialog, dialog.querySelector(".mb-dlg-body"), panels, picker]) require(part.scrollHeight <= part.clientHeight + 1 && part.scrollWidth <= part.clientWidth + 1, `nothing scrolls inside (.${part.className.split(" ")[0]} ${part.scrollHeight} of ${part.clientHeight})`);
+    // The order: head, large slime, name, tabs, grid, footer, each directly under the one before.
+    const head = dialog.querySelector(".mb-dlg-head"), order = [head, faceBox, nameField, picker.querySelector(".mb-slime-tabs"), panels, foot].map(part => part.getBoundingClientRect());
+    order.slice(1).forEach((below, at) => require(below.top >= order[at].bottom - 1, `the order is head, slime, name, tabs, grid, footer (part ${at + 1} starts above part ${at} ends)`));
+    require(head.querySelector("h2").textContent.trim() === "新增成員" && visible(head.querySelector('[data-dlg="close"]')), "the title at the left and the × at the right");
+    require(head.querySelector("h2").getBoundingClientRect().left < head.querySelector('[data-dlg="close"]').getBoundingClientRect().left, "the title is left of the ×");
+    // The preview is large and in the middle; the name is directly under it and centred.
+    const f = face.getBoundingClientRect();
+    require(f.width >= 80 && f.width <= 110 && Math.abs((f.left + f.right) / 2 - cx) <= 2, `the slime is large (${Math.round(f.width)} px), in the middle`);
+    const n = nameField.getBoundingClientRect();
+    require(n.top - faceBox.getBoundingClientRect().bottom <= 16, `the name field is directly under the slime (${Math.round(n.top - faceBox.getBoundingClientRect().bottom)} px)`);
+    require(getComputedStyle(nameField).textAlign === "center" && nameField.placeholder === "名字" && nameField.maxLength === 16, "centred text, a placeholder in the window's language, the member name length");
+    require(Math.abs(n.left - (bodyBox.left + pad)) <= 1 && Math.abs(n.right - (bodyBox.right - pad)) <= 1, "the name field fills the body's inner width");
+    require(dialog.querySelectorAll("input, textarea").length === 1 && !dialog.querySelector('img, input[type="file"], [data-dlg="templates"], [data-tab], [data-pick]'), "it asks only for a name: no template button, no store tab, no pictures");
+    // The tabs fill the dialog's inner width: nothing blank at their right, six slimes across.
+    const first = tabs[0].getBoundingClientRect(), last = tabs[tabs.length - 1].getBoundingClientRect();
+    require(tabs.length === 6 && tabs.every(tab => visible(tab) && Math.abs(tab.getBoundingClientRect().top - first.top) <= 1), "six tabs in one row");
+    require(Math.abs(first.left - n.left) <= 2 && Math.abs(last.right - n.right) <= 2, `the tabs reach both inner edges as the name field does (${Math.round(first.left - n.left)} and ${Math.round(last.right - n.right)} px)`);
+    const open = [...picker.querySelectorAll("[data-slime-group]")].filter(panel => getComputedStyle(panel).visibility !== "hidden" && !panel.hasAttribute("inert"));
+    require(open.length === 1 && open[0].dataset.slimeGroup === picker.querySelector('[role="tab"][aria-selected="true"]').dataset.slimeTab, "only the chosen tab's slimes show");
+    const shown = [...open[0].querySelectorAll("button")], cells = shown.map(button => button.getBoundingClientRect());
+    require(shown.length > 0 && shown.every(visible), "the open group's slimes are all there");
+    require(new Set(cells.map(cell => Math.round(cell.left))).size === Math.min(6, shown.length), "six slimes across");
+    require(cells.every(cell => cell.left >= n.left - 8 && cell.right <= n.right + 8), "the grid stays inside the dialog's inner edges");
+    require(picker.querySelectorAll('[aria-pressed="true"]').length === 1, "exactly one slime is chosen");
+    require(getComputedStyle(picker).position === "static" && getComputedStyle(picker).boxShadow === "none", "the picker lost the popover's chrome inside the dialog");
+    // The footer: 取消 then 建立 at the right, as every dialog (R-UI-27).
+    const c = cancel.getBoundingClientRect(), s = start.getBoundingClientRect();
+    require(c.right <= s.left && Math.abs(s.right - (whole.right - pad)) <= 1.5 && Math.abs(c.height - s.height) <= 0.5 && cancel.textContent.trim() === "取消" && start.textContent.trim() === "建立", "取消 then 建立 at the right of the footer, one height");
+    require(!document.querySelector(".mb-scrim ~ .mb-scrim") && document.querySelectorAll(".cr-dialog").length === 1, "one dialog");
+    if (name === "member-maker") {
+      require(start.disabled && !cancel.disabled && document.activeElement === nameField, "the name has the focus and there is nothing to press yet");
+      require(picker.querySelector('[role="tab"][aria-selected="true"]').dataset.slimeTab === "colors", "it opens on the group of the slime that is chosen");
+    } else if (name === "member-maker-tab") {
+      const before = window.__look.makerBox, same = (a, b) => a.length === b.length && a.every((v, i) => Math.abs(v - b[i]) <= 0.6);
+      require(before, "the dialog was measured before the press");
+      require(same(box(dialog), before.dialog) && same(box(faceBox), before.face) && same(box(nameField), before.name) && same(box(picker), before.picker) && same(box(panels), before.panels) && same(box(foot), before.foot), "a tab press moved and resized nothing");
+      require(tabs.every((tab, i) => same(box(tab), before.tabs[i])), "no tab moved");
+      require(picker.querySelector('[role="tab"][aria-selected="true"]').dataset.slimeTab === "characters", "the pressed tab is the chosen one");
+      require(face.outerHTML === window.__look.makerFace, "a tab changes no slime: the large one is as it was");
+    } else if (name === "member-maker-chosen") {
+      require(!start.disabled, "a name makes 建立 pressable");
+      require(picker.querySelector('[data-slime-character="shion"]').getAttribute("aria-pressed") === "true" && picker.querySelectorAll('[data-slime-color][aria-pressed="true"]').length === 0, "one slime is chosen");
+      require(face.outerHTML !== window.__look.makerFace, "the large slime follows the one pressed");
+      const parts = [...face.querySelectorAll("path")].filter(part => part.getBoundingClientRect().width && getComputedStyle(part).visibility !== "hidden").map(part => part.getBoundingClientRect());
+      require(parts.length > 0 && getComputedStyle(face).clipPath === "none", "the chosen slime is painted whole");
+      for (let el = face.parentElement; el && el !== dialog; el = el.parentElement) {
+        const seen = getComputedStyle(el), bounds = el.getBoundingClientRect(), reserve = Number(seen.overflowClipMargin.match(/([\d.]+)px/)?.[1] ?? 0);
+        require(el.matches(".mb-dlg-body") || (seen.clipPath === "none" && (seen.overflow === "visible" || parts.every(part => part.left >= bounds.left - reserve && part.right <= bounds.right + reserve && part.top >= bounds.top - reserve && part.bottom <= bounds.bottom + reserve))), `nothing cuts the slime's wings and horns (.${el.className})`);
+      }
+    } else {
+      // member-maker-taken: refused where it was typed, with the name kept and nothing made.
+      require(nameField.value === "小森" && nameField.getAttribute("aria-invalid") === "true" && document.activeElement === nameField, "the name stays, marked, with the focus");
+      const said = dialog.querySelector(".field-error");
+      require(visible(said) && said.textContent.includes("小森") && said.getBoundingClientRect().top >= nameField.getBoundingClientRect().bottom - 1 && said.getBoundingClientRect().bottom <= picker.getBoundingClientRect().top + 1, "why is said in the dialog, between the name and the picker");
+      require(!window.__look.calls.some(call => call.method === "members.create"), "nothing was made");
     }
+    return { check: name, width: Math.round(whole.width), height: Math.round(whole.height) };
+  }
+  if (name === "member-maker-closed") {
+    require(!document.querySelector(".cr-dialog, .mb-scrim"), "the dialog is gone");
+    require(!window.__look.calls.some(call => call.method === "members.create"), "nothing was made");
+    require(visible(document.querySelector(".composer .cmp-input")) || visible(document.getElementById("nav")), "the app is as it was behind it");
     return { check: name };
   }
   if (name === "member-maker-made") {
     const made = window.__look.calls.filter(call => call.method === "members.create");
-    require(made.length === 1 && made[0].params.name === "哥布達" && made[0].params.avatar === "slime:gobta", "the member is made once, with its slime");
+    require(made.length === 1 && made[0].params.name === "哥布達" && made[0].params.avatar === "slime:gobta" && made[0].params.greet === true, "the member is made once, with its slime, and asked to greet");
+    require(!document.querySelector(".cr-dialog, .mb-scrim"), "the dialog closed at once");
     require(visible(document.querySelector(".composer .cmp-input")), "its conversation is open");
     const greeting = [...document.querySelectorAll(".page-agent .ra-body")].filter(visible);
     require(greeting.length === 1 && greeting[0].textContent.includes("哥布達") && greeting[0].textContent.includes("？"), "it speaks first and asks what it is for");
@@ -5703,7 +6040,9 @@ export function checkRendered(name, context = {}) {
       window.__look.pickerBox = { menu: box(menu), panels: box(panels), tabs: tabs.map(box) };
       return { check: name };
     }
-    require(tabs.length === 7 && menu.querySelector('[role="tablist"]'), "the groups are tabs of one tablist");
+    // 角色 is the story's characters alone; the archetypes from the red oni onward have the tab after it (owner, 2026-11-11).
+    require(tabs.map(tab => tab.dataset.slimeTab).join() === "characters,fantasy,animals,nature,everyday,colors" && menu.querySelector('[role="tablist"]'), `the groups are tabs of one tablist (${tabs.map(tab => tab.dataset.slimeTab).join()})`);
+    require(menu.querySelectorAll('[data-slime-group="characters"] button').length === 24 && menu.querySelector('[data-slime-group="fantasy"] button')?.dataset.slimeCharacter === "oni-red", "角色 holds the story's 24 characters, and the red oni leads the next tab");
     require(tabs.filter(tab => tab.getAttribute("aria-selected") === "true").length === 1, "exactly one tab is chosen");
     require(tabs.every(tab => visible(tab)) && tabs.every(tab => Math.abs(tab.getBoundingClientRect().top - tabs[0].getBoundingClientRect().top) <= 1), "the tabs stand in one row");
     require(tabs.every(tab => tab.getBoundingClientRect().bottom <= panels.getBoundingClientRect().top + 1), "the tabs are above the slimes");
@@ -5712,9 +6051,23 @@ export function checkRendered(name, context = {}) {
     require(tabs.every(tab => tab.getBoundingClientRect().right <= whole.right + 1) || menu.querySelector("[data-chip-row][data-more-after], [data-chip-row][data-more-before]"), "the tabs fit the picker, or the chip row scrolls with its arrows");
     const open = [...menu.querySelectorAll("[data-slime-group]")].filter(panel => getComputedStyle(panel).visibility !== "hidden" && !panel.hasAttribute("inert"));
     require(open.length === 1 && open[0].dataset.slimeGroup === menu.querySelector('[role="tab"][aria-selected="true"]').dataset.slimeTab, "only the chosen tab's slimes show");
+    // A closed group's panel being hidden is not enough: a rule that makes a slime's own parts visible (reduced motion had one)
+    // shows them through the open group, one drawing on another. Every drawn part of every closed group is out of sight.
+    const leaking = [...menu.querySelectorAll('[data-slime-group]:not([data-active]) :is(button, svg, svg *)')].filter(part => getComputedStyle(part).visibility !== "hidden");
+    require(leaking.length === 0, `nothing of a closed group shows through the open one (${leaking.length} parts of ${[...new Set(leaking.map(part => part.closest('[data-slime-group]').dataset.slimeGroup))].join()} do)`);
     require(!menu.querySelector("h1, h2, h3, h4"), "no heading inside the grid: the tab says it");
     const shown = [...open[0].querySelectorAll("button")];
     require(shown.length > 0 && shown.every(visible), "the group's slimes are all there");
+    // As wide as its row of tabs and no wider (owner, 2026-11-11: 「不要設計的這麼寬 上面 tab 右邊不要有空白」): the last tab
+    // ends at the picker's edge, and so does the grid under it.
+    const tabsPad = parseFloat(getComputedStyle(menu.querySelector('.mb-slime-tabs')).paddingRight), lastTab = tabs[tabs.length - 1].getBoundingClientRect();
+    require(menu.querySelector("[data-chip-row][data-more-after]") || Math.abs((whole.right - lastTab.right) - (tabs[0].getBoundingClientRect().left - whole.left)) <= 1.5, `nothing is left blank at the right of the tabs: the row ends as far from the right edge as it starts from the left (${Math.round(whole.right - lastTab.right)} and ${Math.round(tabs[0].getBoundingClientRect().left - whole.left)} px)`);
+    require(whole.width <= 521, `the picker is no wider than its tabs need (${Math.round(whole.width)} px)`);
+    const cells = shown.map(button => button.getBoundingClientRect()), columns = new Set(cells.map(cell => Math.round(cell.left))).size;
+    require(cells.every(cell => cell.left >= whole.left + 1 && cell.right <= whole.right - 1), "the slimes stay inside the picker");
+    require(shown[0].matches('[data-slime-color]') ? columns === 6 : columns === Math.min(6, shown.length), `the slimes and the colours stand six across (${columns})`);
+    require(whole.right - Math.max(...cells.map(cell => cell.right)) <= 28 || shown.length < 6, `the grid reaches the picker's right edge as the tabs do (${Math.round(whole.right - Math.max(...cells.map(cell => cell.right)))} px short)`);
+    require(whole.width <= 320 || document.documentElement.lang !== "zh-TW", `six two-character tabs make a picker about as wide as Grok Bot's 298 (${Math.round(whole.width)} px)`);
     require(panels.scrollHeight <= panels.clientHeight + 1, `the largest group fits without scrolling (${panels.scrollHeight} of ${panels.clientHeight})`);
     if (name === "slime-picker-tab") {
       const before = window.__look.pickerBox;
@@ -6253,6 +6606,17 @@ export function checkRendered(name, context = {}) {
     require(visible(item) && item.textContent.trim().length > 0, "share opens one plain choice that says what it does");
     // Sharing saves a file or prepares a publish request on GitHub; there is no link to share (owner, 2026-11-11).
     require(/檔案/.test(item.textContent) && /GitHub/.test(item.textContent) && !/連結|link/i.test(item.textContent), `the choice says a file is saved or a request is prepared, and promises no link: ${item.textContent.trim()}`);
+    // The card is drawn for what it does (owner, 2026-11-12, after Grok Bot's Create a copy): its mark is the member's own face twice,
+    // the copy behind and above the one that is, and it hangs under the button with its right edge on the button's.
+    const faces = [...item.querySelectorAll(".mmark .share-faces > *")];
+    require(faces.length === 2 && faces.every(visible) && !item.querySelector(".ck, [data-presence-member]"), "its mark is the member's face twice, a drawing that takes no presence, and no stock icon");
+    const behind = faces[0].getBoundingClientRect(), front = faces[1].getBoundingClientRect();
+    const overlaps = (a, b) => a.left < b.right - 0.5 && b.left < a.right - 0.5 && a.top < b.bottom - 0.5 && b.top < a.bottom - 0.5;
+    require(behind.right > front.right && behind.top < front.top && behind.width < front.width && overlaps(behind, front), "the copy stands behind: smaller, up and to the right, the two overlapping");
+    const card = item.closest(".menu").getBoundingClientRect(), opener = document.querySelector('.mb-chat .mb-head [data-act="share-member"]').getBoundingClientRect(), row = item.getBoundingClientRect();
+    require(card.top >= opener.bottom && Math.abs(card.right - opener.right) <= 2, `the card hangs under the button, right edges together: ${Math.round(card.right)} and ${Math.round(opener.right)}`);
+    const words = item.querySelector(".mtd").getBoundingClientRect(), mark = item.querySelector(".mmark").getBoundingClientRect();
+    require(Math.abs((mark.top + mark.bottom) - (row.top + row.bottom)) <= 2 && words.left - mark.right >= 8, "the mark is centred on its row, clear of the words");
     return { check: name };
   }
   if (name === "store-google") {
@@ -7323,6 +7687,63 @@ export function checkRendered(name, context = {}) {
         require(!document.querySelector('.cb-menu, #app-popover'), "the model menu went with the same press");
       } else throw new Error(`no expectation for ${name}`);
       return { check: name };
+    })();
+  }
+  if (name.startsWith("opener-toggle-")) {
+    // R-UI-124 (owner, 2026-11-11): the control that opened a thing is its toggle. The scene opened it once, then pressed that
+    // control again with the real mouse (`press-opener`); the thing must be closed and have been opened exactly once, counted as it happened.
+    const until = async (ready, what) => {
+      const end = performance.now() + 3000;
+      while (!ready()) {
+        if (performance.now() > end) throw new Error(`${name}: ${what}`);
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
+    };
+    const settle = () => new Promise(resolve => setTimeout(resolve, 700));
+    if (["opener-toggle-row-menu", "opener-toggle-row-again", "opener-toggle-keyboard"].includes(name)) return (async () => {
+      const watch = window.__look.watch, menus = () => document.querySelectorAll("#app-popover");
+      require(watch, "the scene watched nothing");
+      if (name === "opener-toggle-row-menu") {
+        // A left press on the row whose right click opened the menu: the row is not the menu's opener, so the press goes through (R-UI-121).
+        await until(() => document.querySelector('.mb-col [data-member][aria-current="true"]')?.dataset.member === "2", "the left press on the same row did not open that member");
+        await settle();
+        require(!menus().length, "the menu is still open after the press on its row");
+        require(watch.opens === 1, `the menu was opened ${watch.opens} times`);
+      } else if (name === "opener-toggle-row-again") {
+        // A right click is not a close gesture: on the same row it takes the menu to the new point, one menu, opened twice.
+        await until(() => watch.opens === 2, `a second right click on the row left ${watch.opens} openings`);
+        await settle();
+        require(menus().length === 1 && document.querySelector('.mb-col [data-member-more="2"][aria-expanded="true"]'), "one menu is open, the row's");
+        require(watch.opens === 2, `the menu was opened ${watch.opens} times`);
+      } else {
+        require(watch.opens === 2, `Enter opened it once and Space once (${watch.opens} openings): the presses on the open menu's opener only close it`);
+        await settle();
+        require(!menus().length && document.querySelector('.mb-col [data-col="add"][aria-expanded="false"]'), "the menu is closed and stays closed");
+        require(document.activeElement === document.querySelector('.mb-col [data-col="add"]'), "the focus is on the opener");
+      }
+      return { check: name, opens: watch.opens };
+    })();
+    return (async () => {
+      const watch = window.__look.watch, pressed = window.__look.pressedOpener;
+      require(watch && pressed, "the scene watched nothing or pressed nothing");
+      const open = () => document.querySelector(watch.gone);
+      if (!pressed.pressed) {
+        // Only a layout may keep the control out of reach (a drawer that closed behind the first press): never a wide window.
+        require(innerWidth < 860, `the opener could not be pressed in a wide window: ${pressed.reason}`);
+        require(open() && watch.opens === 1, "an opener that cannot be reached leaves the thing open once");
+        return { check: name, skipped: pressed.reason, width: innerWidth };
+      }
+      require(!watch.over || (watch.over === "scrim") === pressed.overScrim, `the press ${pressed.overScrim ? "landed on a scrim" : "landed on the control itself"}, the scene meant ${watch.over}`);
+      const end = performance.now() + 3000;
+      while (open()) {
+        if (performance.now() > end) throw new Error(`${name}: the second press on the opener left it open (${watch.gone}), pressed at ${pressed.hit}`);
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
+      // Closed is not enough: a close that is followed by an opening is the loop. Wait past a fade and a late redraw.
+      await new Promise(resolve => setTimeout(resolve, 700));
+      require(!open(), `it closed and opened again (${watch.gone})`);
+      require(watch.opens === 1, `it was opened ${watch.opens} times, once by the first press and not again by the second`);
+      return { check: name, opens: watch.opens, pressedAt: pressed.hit, overScrim: pressed.overScrim, width: innerWidth };
     })();
   }
   throw new Error(`Unknown rendered check: ${name}`);

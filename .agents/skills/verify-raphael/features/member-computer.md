@@ -64,14 +64,32 @@ a scripted `verify -- --computer` is the next unit):
   1280x827 at +1280+924; the other screens' windows did not move.
 - Pixel difference from the plain wallpaper is 0 along the top of the screen below
   a panel (was 4862 with dock shadows) and 0 at the top of screen 5 of six.
-- One clipped server killed: mark gone, back in 0.9 s. Helper `kill -9`: back in
-  1.5 s with no leftover. Helper SIGTERM: children ended, back in 2.5 s.
-- `docker stop` / start: no mark from the previous boot is ever visible; ready 6 s
-  after the start. A real layer 4 computer (3 GiB, no `RAPHAEL_SCREENS`) reports
-  `incompatible`, is rebuilt on layer 5 and keeps its workspace and browser profile.
+- `docker stop` / start: no mark from the previous boot is ever visible. A real layer 4
+  computer (3 GiB, no `RAPHAEL_SCREENS`) reports `incompatible`, is rebuilt on layer 5
+  and keeps its workspace and browser profile.
 - Six idle screens with no viewer: about 0 % CPU, 425 MiB.
-Not covered: the app's own panel and relay against the token websockify, a remote
-(SSH) host, and everything about members sharing one container (later stages).
+
+Measured again on the round 3 tree (same day, same way, after `origin/main` 704d3d74
+was merged in), because the mark's meaning changed:
+- 1 to 6 screens start with no helper retry and no repair restart (the one-pixel
+  payload limit holds against the real server). The mark is written 10.5 s (four
+  screens) and 15.2 s (six) after the container starts; the driver's socket at 6.5 s.
+  The start poll's grace before its one repair restart is 20 polls.
+- One clipped server killed: the mark stays, the view is back in 1.3 s. Helper
+  `kill -9`: the mark stays, the new helper replaces the views at once. Helper
+  SIGTERM: the mark stays, views back in 2.2 s. The X server killed: the mark is gone
+  within 1 s ("The screen layout was lost"), the core reports not ready. After
+  `docker stop` / start the mark appears about 10 s in and the start is ready.
+- The core's own `DesktopViewer` and relay in front of a four-screen computer whose
+  seat was set to screen 3: the viewer URL the app loads opened in a headless browser,
+  its WebSocket through the relay answered 101 and the canvas showed screen 3 at
+  1280x900.
+- A layer 4 computer never started since the update: `maintain(update)` goes from
+  `incompatible` to ready on layer 5 with its workspace file kept; `LocalVm.erase`
+  removes its container and its folder.
+Not covered: the app's own window around that viewer page, a remote (SSH) host, a
+viewer that stays connected while its clipped server dies, and everything about
+members sharing one container (later stages).
 `wmctrl` is in the image for those stages: Chromium opens every new window beside
 its first and the driver has no tool that moves one.
 
@@ -100,6 +118,42 @@ tests and the container run had both missed; each has a test that was red first)
 `core/tests/computer/test_screens.py::test_rfb_layout_has_one_deadline_for_trickling_reads`,
 `core/tests/computer/test_screens.py::test_rfb_rejects_oversized_skipped_payload_before_reading_it`,
 `core/tests/computer/test_screens.py::test_supervisor_keeps_retrying_screen_setup_instead_of_entering_fatal`.
+
+## Deleting a member removes its computer (2026-11-11)
+
+Owner, after deleting a member in the app: the dialog asked whether to delete the member's computer too, and
+ticking it hung. The app should know and do it, show nothing when there is no computer, and keep such things
+out of the front end (R-COMP-PERF-12, R-UI-27).
+
+What blocked: the old `members.delete` awaited `LocalVm.delete_member_data` before deleting anything. That
+stopped the computer through the per-computer lock that `_prepare_start` holds while it waits for Docker
+Desktop to launch (120 s) or pulls and builds the image (1800 s each), then ran up to five Docker calls of
+15-30 s each, with no bound over the whole and a dialog that had already closed over an unchanged window.
+With the engine off the same call raised `unavailable` and the member stayed. The core test
+`test_a_computer_still_starting_for_the_deleted_member_does_not_hold_the_deletion` is that case.
+
+The shape now: the dialog is the title, one sentence, Cancel and Delete (`members.deleteForever`), the same
+component as every compact delete question; `members.delete {id}` takes no computer parameter. In the core
+`MembersService._delete` reads the member's computers (`ComputerData.claim`: a record in `computer_data` or its
+folder here; nothing is contacted), deletes the member and writes the removal as owed in the same
+transaction, answers, and starts `ComputerData.settle` in the background (`computer/removals.py`).
+`LocalVm.erase` stops the container only if it carries this app's owner and target labels, removes it, then the
+folder or the host's volume; missing is success; the shared computer and foreign containers are refused. A pass
+is paid at the first answer of an engine (`LocalVm.available` tells `ComputerData.engine_up`), on the monitor's
+30 s tick and at the core's start, never starting Docker. Limits: 20 s to learn whether an engine answers,
+120 s per computer, six counted failures from the timer, a host that does not answer at most every 10
+minutes. Computers made before the record existed are found on a host by `LocalVm.recover` (its list of
+owned containers) the next time that host answers; a remote volume left with no container is not.
+
+Selected scenes (both themes, 1120,720,1920x1080): member-delete-ask (a member without a computer),
+member-delete-ask-computer (one with a computer on a host), member-delete (the result), press-through-delete-dialog,
+room-delete and quick-clear-confirm (the shared dialog). `member-delete-ask` asserts the member's name, one
+sentence, two buttons, no row, switch or field, and no word about a computer; `member-delete` asserts the call
+carries exactly `{"id":2}`. A real Docker engine and host are unverified: the tests use a fake engine.
+
+```powershell
+npm run look -- member-delete-ask member-delete-ask-computer member-delete press-through-delete-dialog room-delete quick-clear-confirm --theme both --width 1120,720,1920x1080
+```
 
 ## Viewer transport isolation, phase 1 (2026-11-09)
 
@@ -316,20 +370,20 @@ Idle/eviction and app shutdown only stop compatible owned computers; workspace
 mounts and browser profiles survive. A recognized v3/v4-to-v5 rebuild announces its
 workspace/sign-in preservation before removal, never removes a volume and refuses
 foreign or weakened containers. Files/installs outside workspace are explicitly
-ephemeral in tool/persona text. Member deletion retains computer data by default;
-its unchecked option names the host, pins that host for the operation and excludes
-shared/team storage. No deletion/host operation was executed in this brief.
+ephemeral in tool/persona text. Deleting a member removes its computer data too (see
+[Deleting a member removes its computer](#deleting-a-member-removes-its-computer-2026-11-11)):
+the 2026-11-05 unchecked option that named the host is gone.
 
 Selected future look matrix (both themes, 1120,720,1920x1080): desktop-panel,
 desktop-watch, desktop-watch-collapse,
 desktop-watch-owner, desktop-takeover, desktop-takeover-owner,
 desktop-takeover-done, desktop-owner, desktop-host-remote, desktop-host-invalid,
-desktop-host-health, delete-member-computer. Compare Enlarge/collapse/Stop with
+desktop-host-health, member-delete-ask-computer. Compare Enlarge/collapse/Stop with
 the existing icon buttons and card Done/Skip with computer-card controls at the
 same theme/size. The owner-typing scene uses synthetic RFB input only.
 
 ```powershell
-npm run look -- desktop-panel desktop-watch desktop-watch-collapse desktop-watch-owner desktop-takeover desktop-takeover-owner desktop-takeover-done desktop-owner desktop-host-remote desktop-host-invalid desktop-host-health desktop-host-repair delete-member-computer --theme both --width 1120,720,1920x1080
+npm run look -- desktop-panel desktop-watch desktop-watch-collapse desktop-watch-owner desktop-takeover desktop-takeover-owner desktop-takeover-done desktop-owner desktop-host-remote desktop-host-invalid desktop-host-health desktop-host-repair member-delete-ask-computer --theme both --width 1120,720,1920x1080
 ```
 
 Native journeys: member-computer; computer-speed (explicit opt-in, never --all or

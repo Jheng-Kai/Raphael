@@ -325,3 +325,17 @@ async def test_a_voice_message_is_heard_with_the_dictation_engine_and_normalized
         assert history["kind"] == "ask" and history["target_app"] is None
         assert history["raw_text"] == history["text"] == text
         assert (await app.call("history.latest", {}))["item"] is None
+
+
+async def test_a_waiting_question_is_written_to_the_chat_with_its_lettered_choices(app, monkeypatch):
+    waiting = {"id": "q1", "kind": "ask_owner", "state": "asked", "question": "What first?", "options": ["Mail", "Notes"],
+               "descriptions": ["", "Today"], "subtitle": "Pick one.", "free_text": False, "skip": True}
+
+    async def call(method, params=None):
+        return {"status": "done", "turn_id": 7, "prefix": "", "text": "What first?"}
+
+    monkeypatch.setattr(app, "call", call)
+    monkeypatch.setattr(app.background.owner_questions, "for_turn", lambda turn_id: [waiting])
+    result = await app._ask_from_messaging("telegram:42", "set me up", "en", "telegram")
+    assert result.text.splitlines() == ["What first?", "Pick one.", "", "A. Mail", "B. Notes — Today", "",
+                                        "Reply with a letter, for example A.", "Reply \"skip\" to skip it."]

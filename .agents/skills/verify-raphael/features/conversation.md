@@ -202,6 +202,25 @@ page. Other kinds, providers and finished turns show nothing.
 npm run look -- chat-usage-limit calm-thread --theme both --width 1120,720,1920x1080
 ```
 
+A reply that failed because its subscription CLI cannot take the turn says its true cause in one sentence that names
+the tool (owner, 2026-11-11, an expired Claude Code sign-in; R-CLI-SIGNIN-01/02) and carries one button under its words.
+The turn's failure has `cause` for a `cli:` provider: `expired` 「Claude Code 的登入已過期。」 with 「重新登入」,
+`signed_out` 「…還沒登入。」 with 「登入」, `not_installed` 「…還沒安裝。」 with the install guide (「安裝說明」, the page Settings
+opens). The button (`cli-signin.ts`) starts the CLI's own sign-in through `brains.cli_login` with `again` (a session that
+ran out keeps its credentials, so the plain call would only reconnect it), then reads `brains.cli` until the console's
+process ended: `signing_in` and `login_result` (`done` or `stopped`) come from the process, never from a credential file.
+While the window is open the reply says to finish there beside 「取消」; a window closed first says 「沒有完成登入」 and keeps
+the button; a finished sign-in says 「已登入，正在重新送出」 and sends the question again once (the reply's own 重新產生
+path), only while that reply is the newest answer. An API model's refused key shows the provider's 開啟設定 and no sign-in
+button; a room or routine run records the same cause (`cli_login_expired`, `cli_login`, `cli_missing`) with no button.
+The mock holds a sign-in console open until the scene's `cli-signin-ends` step, so every state is seen in order.
+Native acceptance with a real expired session is the owner's: close the CLI's own sign-in window to see the stopped state,
+and finish it to see the question go again.
+
+```powershell
+npm run look -- chat-cli-expired chat-cli-signed-out chat-cli-not-installed chat-cli-signin-waiting chat-cli-signin-stopped chat-cli-signin-done chat-cli-signin-flow chat-usage-limit calm-thread --theme both --width 1120,720,1920x1080
+```
+
 ## Streaming composer files (2026-11-05)
 
 Private and room composers share twenty-file admission, 250 MiB document limits and
@@ -909,7 +928,7 @@ existing retract-and-restore behavior after the second Escape.
 ```powershell
 npm run look -- esc-main-armed esc-member-armed esc-recording-cancel composer-stop-pending-result composer-stop-background-result composer-stop-voice-result composer-stop-navigation composer-stop-roster chat --theme both --width 1120,720,1920x1080
 npm run look -- member-delete --theme both --width 1120,720,1920x1080
-npm run look -- page-product page-buy page-expand page-gone page-composer-grows --theme both --width 1120,720,1920x1080
+npm run look -- page-product page-buy page-expand page-gone page-composer-grows page-inplace page-inplace-back page-inplace-esc page-inplace-update page-inplace-working page-inplace-reply page-inplace-room page-inplace-room-update --theme both --width 1120,720,1920x1080
 npm run look -- composer-model-small composer-model-favorites composer-model-sources composer-model-same composer-model-fold composer-model-unfolded composer-quick-model composer-model-menu model-sync model-sync-member settings-chatgpt-row composer-model-arrives member-brain-saved --theme both --width 1120,720,1920x1080
 ```
 
@@ -1335,6 +1354,38 @@ Where a question card stands (owner, 2026-11-11): a question card is the last pa
 Core contracts: core/tests/background/test_owner_cards.py and
 core/tests/agent/test_owner_questions.py. The shell allowlist and its existing
 allowlist test include owner_questions.answer.
+
+## The question card's shape (2026-11-11)
+
+Owner request of 2026-11-11: Raphael's flows work as Grok Bot's do, one form of choices for set-up and for everyday work
+(R-CARD-02, R-CARD-08, R-CARD-12, R-CARD-13, R-CARD-14). The reference is Grok Bot's card (the frames in
+bots/research/grokbot, read only: the first-conversation sheet around 01:30-02:20 and the collapsed row of `74-savio-up-e.png`); copy nothing from that folder.
+
+- Tool and storage: `ask_owner` also takes `subtitle`, options as a label or `{label, description}`, `multiple` and `skip`
+  (`core/src/raphael_core/agent/owner_questions.py` `question_input`; the schema in `harness_tools.py`). The card is the existing
+  `owner_questions.payload` (labels in `options`, `descriptions` beside them, `subtitle`, `multiple`, `skip`), so no migration. An answer is a string, a list
+  of labels (a several-choice card) or `{skip: true}` (`owner_questions.answer` takes `skip: true`); the member reads `{"state":"answered","answer":[...]}`, a skip as
+  an answer, or a card closed by a message as unanswered with the owner's words (`model_result`).
+- Card (`permission-card.ts` `ownerQuestionHTML`, `owner-questions.ts`, `owner-question-sync.ts`, `card.css`): title and ×, an optional grey sub-line, a well of rows (letter badge,
+  words, optional smaller grey line), a skip row lettered after the options, the own-answer row last (a textarea that grows to three lines, its pill hidden until something is typed),
+  a several-choice card's checks and one submit. Answered, one row under the title with a check at the right; the typed words on one line with an ellipsis, a press shows them whole.
+  Closed with the × is 已取消, closed by the owner writing something else is 未回答; neither has a row.
+- A card waiting makes the composer of its conversation say 「輸入你的回答，或聊點別的」 (private `pages/agent.ts` `drawComposer`, rooms `group-chats.ts`), and an ordinary message closes it:
+  `AgentService._close_waiting_question` for a typed or chat message, `rooms._send` for a room thread. In a Telegram, Slack or Discord chat the card is written as lettered lines
+  (`messaging/words.py` `question_text`) and a reply naming the letters, the words or the skip word answers it (`answer_from_text`).
+- Mock: `ownerQuestionShape` (`described`, `multiple`, `skip`) shapes the fixture card; `agent_ask_text` and `rooms.send` close a waiting card as the core does.
+
+Selected scenes (the new states first): question-card-described, question-card-skipped, question-card-multiple-asked, question-card-multiple-chosen,
+question-card-multiple-answered, question-card-long-typed, question-card-long-answered, question-card-long-open, question-card-composer-waiting,
+question-card-composer-after, question-card-message-closes, question-card-room-asked, question-card-room-answered; the unchanged consumers owner-question-*,
+card-question-*, routine-sentence-event. Both themes at 1120, 720 and 1920x1080; compare the badge column, row heights, the check's alignment, the collapsed row and the
+pill at the foot of a three-line field with the reference, and nothing clipped at 720.
+
+```powershell
+npm run look -- question-card-described question-card-skipped question-card-multiple-asked question-card-multiple-chosen question-card-multiple-answered question-card-long-typed question-card-long-answered question-card-long-open question-card-composer-waiting question-card-composer-after question-card-message-closes question-card-room-asked question-card-room-answered owner-question-asked owner-question-typed owner-question-answered owner-question-cancelled owner-question-room card-question-key --theme both --width 1120,720,1920x1080
+```
+
+Unverified by definition: a real model choosing the new fields, and a real Telegram chat answering a card.
 
 
 ## Owner input (2026-11-01)
@@ -1919,7 +1970,7 @@ reported as sent/placed. Input source, length and rate checks remain. A page's
 waiting task continues only after the owner submits the reviewed composer; normal
 messages retain their existing send flow. Transcription never auto-submits a page
 draft. HTTPS links, tools/call with the existing core gate, resize, retry and frame
-carry remain; an expanded page returns to the conversation when it places text.
+carry remain; an open page stays open when it places text (the composer under it holds the words).
 
 Tests: page-card.test.ts, chat-composer.test.ts, composer-drafts.test.ts,
 pages/agent-page.test.ts, group-chats.test.ts and owner-questions.test.ts.
@@ -1938,22 +1989,25 @@ in a card's heading to be shown; card-page-close presses the × in the heading, 
 was put away: the member's reply ends the thread and nothing opens again (the judge read that as a missing card,
 3/5 in dark, 2026-11-10).
 
-A page made larger (page-expand) is the page alone, as a picture made larger (the media lightbox) and a report are:
-it fills the dialog edge to edge, as tall as it says it is there, up to three quarters of the window, at most the
-conversation's 960 px column (R-UI-45). Its card's title, which the page's own heading says again, only names the
-dialog for a screen reader. The × is the soft round edge button with its solid surface and it never covers the page
-(2026-11-11: a page with something at its top right was covered by it): it stands just outside the page's top right
-corner, above it and right-aligned with it, on the scrim, with the small gap (`--sp-2`), at every width; the scrim keeps
-the room for it under the window's caption strip (`.mb-scrim:has(> .pg-view-dialog)`), so a page as wide as the window
-still has it above the page and inside the window, and the dialog no longer clips (the page's rounded corners are its
-body's). Wider, the page says again how tall it is; only the dialog follows, and the card keeps its own height
-behind it until the page is back. The judge gave 3/5 for a dialog three quarters of the window tall around a short
-page, then for the title twice, in the dialog's head and the page's heading (2026-11-10); the dialog's title was also
-escaped twice (a title's & or < showed as an entity). The look fixture's page now reports its height as the core's
-helper does (`agent/pages.py`); it had added 32 px, a blank band under every fixture page. page-expanded checks the
-width, the height the page says, the page filling the dialog, the hidden name and the ×'s place (since 2026-11-11: its
-36 px round solid button above the page's top edge by the small gap, right-aligned with it, never over it, inside the
-window under the caption strip; `answer-forms.test.mjs` and `page-card.test.ts` hold the same).
+A page open in the conversation's place (R-PAGE-03, owner, 2026-11-11: 「我要的不是像是這樣子會出現一個 dialog…直接顯示在對話裡，它就是會直接替代掉對話，就是內部的顯示器的感覺…左上角會變成返回上頁」), replacing the dialog a page
+had until then ("a page made larger"; the judge's earlier notes on that dialog, its three-quarter height, its doubled title and the × outside its corner, no longer apply): pressing a page's card, an HTML page's or a report's, in a member's conversation or a room, puts the page where the
+thread was (`.ra-stage.is-page`, `page-view.ts`, `page-view.css`). The thread stays laid out under it, `visibility: hidden`, so its place is kept; the composer
+stays below; the header keeps the conversation's pill and its share (a report hides the header's share: it has its own). The way back is the round arrow at the
+header's top left (`.mb-head-l`, or a room's `.room-picker`): the window edge's soft round 36 px button named 返回, no word, standing where the search stood
+(the search, a room's search keeping its place unseen, and the search bar wait while a page is open). Escape goes back too unless a menu, a dialog, a task's Stop (R-UI-46) or a recording
+has it; the composer's draft is never touched. An HTML page has a title row (its title, once) and the page, rounded, no border, as wide as the composer's
+column (a room's is inset by its own padding), filling the height between the header and the composer, scrolling inside; there is no dialog, scrim or ×. A report is the same place with
+its own heading, its Share at the top right and nothing else over it. The same frame is moved there and back (no reload with `moveBefore`; the scene
+`page-inplace-back` counts `load` events); going back its preview is at the top again and where the owner was reading is kept for the next opening. A page the member
+changes (`update_page`) loads beside the one on screen, is sent back to where the owner was reading (the page's helper reports `scroll` and obeys `scroll-to`) and replaces it once drawn: the
+`page-watch` sampler of page-inplace-update and page-inplace-room-update proves one visible page at every frame and the view never shut, and `page-inplace-updated` that the conversation still holds one card, now at the next revision.
+What the member answers to a message written under the page shows under the page and nowhere else (the calm thread): its working line while it works (page-inplace-working), then
+the first words of its reply as one line (page-inplace-answered); the whole reply is in the thread, one press of the arrow away. The window tells the core which page is open before it
+sends (`pages.viewing`, answered `{viewing}`; the look fixture records them in `window.__look.viewing`), and the core's context says "the page the owner is looking at now: page_id=…" so "here" means it.
+Checks: page-inplace (also under the names page-expanded and page-opened-whole) measures the place, the one frame, the absence of any dialog, scrim or ×, the arrow's size, place, name and
+surface, the pill still saying whose conversation it is, the title, the page's width against the composer's, the composer below; page-inplace-before/-kept the thread's place, the same frame and no reload; page-inplace-escaped the draft and that nothing was sent or stopped.
+`answer-forms.test.mjs` and `page-card.test.ts` hold the same with stubs and the real module. The look fixture's pages (the product page and the news page) mimic the core's helper, scroll and Escape messages included, and
+`updatePage(id)` / `answerPageAsk(text)` of the mock (`lookCall` steps) stand for the core changing a page and the member replying.
 
 A page in the conversation is a card of one fixed height, not the page shown whole (R-PAGE-02, owner, 2026-11-11: 「如果你現在在畫面裡面顯示…會變成一個超長一段…你點開了之後，它才會展開全部」; Grok Bot's Page card is a title and Open). Before: the whole page (the owner's
 daily-news page, about 470 px wide and more than 700 px tall) stood inside the card with its own scrollbar and working buttons, so one
@@ -1963,13 +2017,13 @@ page filled the window. Now the card is its title row and the top of the page as
 page says (`--pg-h`) so the page never scrolls behind it, and it is `inert` with no pointer, so nothing in it can be pressed, focused
 or scrolled and the thread scrolls over it. The preview is the card's one control (`role="button"`, one Tab stop once the page is
 ready, named 「打開「標題」」 by `page.open` in all 15 locales); pressing it or the title row, or Enter or Space, opens the page made larger
-(the dialog above), where the same frame is no longer inert, scrolls and its buttons work; closing puts it back. A loading or failed
+in the conversation's place (above), where the same frame is no longer inert, scrolls and its buttons work; going back puts it in its card again. A loading or failed
 card is as tall (a pulsing well; the failed empty state at the same height, its words and 再試一次 centred), so a change of state moves nothing.
 Since a page in its card takes no press, the scenes that press inside a page (page-buy, page-send, page-expand-place,
 page-room-draft, owner-card-room-page) first press the card (`larger` in scenes/pages.mjs). Scenes: page-collapsed (the owner's
 case: a 900 px page, `pageNews`), page-collapsed-room (the same in a room), page-collapsed-two (two pages in one thread, equal
-heights), page-collapsed-press (the press, then page-opened-whole: the frame far taller than the preview, not inert, the × above
-it) and page-collapsed-key (Tab/focus then Enter); the checks page-card and page-collapsed measure the preview's height against
+heights), page-collapsed-press (the press, then page-opened-whole: the frame far taller than the preview, not inert, in the place of the thread
+with no ×) and page-collapsed-key (Tab/focus then Enter); the checks page-card and page-collapsed measure the preview's height against
 the token, the frame's height against what the page says, the inert frame, what stands under the pointer, the control's name and
 focus, the fade's colours against the card's surface, equal card heights and no sideways overflow. The look fixture's pages follow
 the theme they are opened in (as the core's helper tells a real page), so the dark captures show a dark page. What a message can
@@ -1981,7 +2035,7 @@ The follow-up explicitly selects both themes at 1120 and 720 once. The maintaine
 matrix below also includes the standard 1920x1080 size for later acceptance:
 
 ```powershell
-npm run look -- page-product page-buy page-send page-expand page-expand-place page-gone page-room-draft page-collapsed page-collapsed-room page-collapsed-two page-collapsed-press page-collapsed-key owner-card-room-page card-page-close --theme both --width 1120,720,1920x1080
+npm run look -- page-product page-buy page-send page-expand page-expand-place page-gone page-room-draft page-collapsed page-collapsed-room page-collapsed-two page-collapsed-press page-collapsed-key page-inplace page-inplace-back page-inplace-esc page-inplace-update page-inplace-working page-inplace-reply page-inplace-room page-inplace-room-update owner-card-room-page card-page-close --theme both --width 1120,720,1920x1080
 ```
 
 Compare page-gone with card-mail-failed (body line over a well) and card-connect-failed (body line, retry) at the
@@ -2012,16 +2066,19 @@ The core stamps `as_of` (ISO text, never 13 digits of milliseconds, which can pa
   title and 「頁面」. No frame, no expand control.
 - **Open.** The card opens the report in the thread's place (`.ra-stage.is-report`): the thread
   stays laid out and hidden under it, so its scroll is kept; the composer stays below and the
-  owner can ask for changes. The × at the top right is the window edge's 36 px soft round button
-  (`.rp-top`, R-UI-16 list). Like the thread it stands for, the report's column starts and ends
-  where the composer does, and its top-right buttons end at the composer's right edge (R-UI-45;
+  owner can ask for changes. Nothing floats over the report: the way back is the header's arrow at
+  the top left and its one button stands in the header's tools at the top right (below). Like the
+  thread it stands for, the report's column starts and ends where the composer does (R-UI-45;
   `.rp-scroll` takes `--pa-dock-x`, `.rp-doc` `--pa-colw`; the contents become a right column once
   the column is the full 960 px). Sending, another conversation, or the card leaving the thread puts
   it away; the focus returns to the card. A changed revision is drawn again where it was read.
-- **Share** (owner, 2026-11-10, Grok Bot's Page has Share at its top right; of the three ways put
+- **存成檔案** (owner, 2026-11-10, Grok Bot's Page has Share at its top right; of the three ways put
   to the owner, save a file, open it in the browser or copy it as text, the owner chose 存成檔案).
-  Before the ×, 4 px apart as the conversation header's buttons: the same 36 px soft round button
-  with Lucide `share`, named 分享 (it has no words of its own, so its tooltip repeats nothing). A
+  Since 2026-11-12 it stands where a thread's share stands (owner: its place and look as Grok
+  Bot's): `page-view.ts` puts the open page's `action` first in the header's `.ra-tools`, the same
+  36 px soft round button, with Lucide `file-down` (`fileDown`) and the name 存成檔案 (it has no
+  words of its own, so its tooltip repeats nothing). The member's share (`share`, the arrow out of a
+  box) is `display: none` while any page is open, and an HTML page puts nothing there. A
   press saves the report as one HTML file of the app's own drawing (`reportFile`): its policy
   first (`default-src 'none'`, nothing in it runs or loads), the theme's words for light and for a
   dark screen (white on paper), the table with every row and no tabs, the team drawn at 704, 480
@@ -2031,8 +2088,11 @@ The core stamps `as_of` (ISO text, never 13 digits of milliseconds, which can pa
   named after the page as Windows takes a name, `(2)` and on, never over a file, in 設定 › 一般 ›
   輸出資料夾, or in Downloads when none is chosen or it takes nothing. The shell selects it in File
   Explorer; a toast says 已存到「下載」 or the output folder's name (a failure: 檔案沒有存成，請再試一次。),
-  and the report stays open. While a report is open the conversation header's own share (the
-  member's template, the same icon for another thing) is hidden, so one share is in sight.
+  and the report stays open.
+- **The share card** (`conversation-share`): the member's share opens one row, 建立副本 and what
+  follows it, whose mark is the member's own face twice (`.share-faces`: 20 px behind and above at
+  45 %, 24 px in front; each drawn at its own whole size, never scaled, R-UI-63), with no presence
+  and no stock icon. The card hangs under the button, right edges together.
 - **Page.** Title (`--fs-h1`), 「資料截至 <date time> · 只寫有紀錄的事實」, 「本頁內容」 (a row under
   the title; a sticky column at the right once the report's column is 960 px wide). Findings: a summary box
   (`--panel`, info icon) and rows with a status word in the theme's own colour (`--ok`,
@@ -2052,18 +2112,18 @@ npm run look -- page-report-card page-report page-report-team page-report-tab pa
 ```
 
 page-report-card checks the file card, its words and icon, and that nothing opens before a press;
-every open report scene that the report's column is the composer's and share and the × end at its
-right edge; page-report the composer below, the date line, the contents, four status colours, the
-fade, share and the × (36 px, 4 px apart, clear of the title) and the conversation header's share
+every open report scene that the report's column is the composer's and share ends at its
+right edge, with no × (the header's arrow, the same as an HTML page's, goes back); page-report the composer below, the date line, the contents, four status colours, the
+fade, share (36 px, clear of the title) and the conversation header's share
 hidden; page-report-team that the contents bring the team to where the title stands, five boxes
 and six labels overlap nothing, five colours, the names from the roster and the notes;
-page-report-tab the group filter; page-report-close the thread, the scroll, the focus and the
+page-report-tab the group filter; page-report-close (the header's arrow) the thread, the scroll, the focus, the arrow gone and the
 header's share back.
 The page scenes are the consumers of the shared page card and host (`mountPages`, the room
 composer's send). Compare the link card with a member's file card (`dataset-chart`) at the same
 theme and width: same component, size, surface and type.
 
-Share alone (every state of the report view, whose top right it joins, and its saved file; the link
+Share alone (every state of the report view, whose top right it fills alone since 2026-11-11, and its saved file; the link
 card, the page card and its host are untouched):
 
 ```powershell

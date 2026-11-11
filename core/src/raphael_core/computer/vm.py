@@ -278,7 +278,7 @@ def known_previous(raw, target, owner):
 
 
 class LocalVm:
-    def __init__(self, data_dir, *, settings=None, runner=None, clock=time.monotonic, enabled=True):
+    def __init__(self, data_dir, *, settings=None, runner=None, clock=time.monotonic, enabled=True, conn=None):
         self.root = Path(data_dir).resolve()
         self.owner = hashlib.sha256(os.path.normcase(str(self.root)).encode()).hexdigest()[:16]
         self.enabled = enabled
@@ -318,6 +318,9 @@ class LocalVm:
         self.repair_notice = lambda target: None
         self.repair_admit = lambda target: True
         self.repair_revisions = {}
+        # The computers made here and the ones a deleted member leaves behind (removals.py).
+        from .removals import ComputerData
+        self.data = ComputerData(self, conn)
 
     def record_repair(self, target):
         self.repair_revisions[target.key] = self.repair_revisions.get(target.key, 0) + 1
@@ -416,18 +419,31 @@ class LocalVm:
 
             self.preparing[target.key] = asyncio.create_task(prepare())
 
+    def key_for(self, host, member_id):
+        """The key a member's own computer on `host` ("" is this PC) is named by."""
+        return hashlib.sha256((host + ":" + str(member_id) if host else str(member_id)).encode()).hexdigest()[:16]
+
+    def target_for(self, host, key):
+        name = f"raphael-computer-{self.owner}-{key}"
+        return Target(key, name,
+                      PurePosixPath(name + "-workspace") if host else self.root / "vm-homes" / key,
+                      PurePosixPath(f"raphael-computer-{self.owner}-team") if host else self.root / "vm-shared",
+                      host)
+
     def target(self, member_id=0):
         mode = "per-bot" if self.settings is None else self.settings.get("computer_vm_mode")
-        key = "shared" if mode == "shared" else hashlib.sha256((self.remote + ":" + str(member_id) if self.remote else str(member_id)).encode()).hexdigest()[:16]
-        name = f"raphael-computer-{self.owner}-{key}"
-        target = Target(key, name,
-                        PurePosixPath(name + "-workspace") if self.remote else self.root / "vm-homes" / key,
-                        PurePosixPath(f"raphael-computer-{self.owner}-team") if self.remote else self.root / "vm-shared",
-                        self.remote)
+        key = "shared" if mode == "shared" else self.key_for(self.remote, member_id)
+        target = self.target_for(self.remote, key)
         self.targets[key] = target
         return target
 
     async def available(self, target=None):
+        up = await self._answers(target)
+        # The one place that learns an engine came up or went away: what a deleted member's computer is owed waits for it.
+        (self.data.engine_up if up else self.data.engine_down)(getattr(target, "remote", "") if target else self.remote)
+        return up
+
+    async def _answers(self, target):
         if not self.enabled:
             return False
         try:
@@ -685,6 +701,7 @@ class LocalVm:
                 target.workspace.mkdir(parents=True, exist_ok=True, mode=0o700)
                 target.shared.mkdir(parents=True, exist_ok=True, mode=0o700)
             self.validate_storage(target)
+            self.data.made(target)  # before the engine makes it: a computer unrecorded could never be removed
             result = await self.run_for(target, run_args(target, self.owner, secrets.token_urlsafe(24), tz=zone), timeout=60)
         elif state["state"] == "stopped":
             result = await self.run_for(target, ["start", target.name], timeout=60)
@@ -876,30 +893,62 @@ exec /opt/venv/bin/python /opt/raphael-desktop/wallpaper.py --watch'''
         if tunnel:
             await tunnel.close()
 
-    async def delete_member_data(self, member_id, host):
-        from ..protocol import invalid_params
-        target = self.target(member_id)
-        if target.key == "shared" or not member_id or host != target.remote:
-            raise invalid_params("Computer host changed or workspace is shared; review deletion again")
-        if target.remote:
-            if str(target.workspace) != target.name + "-workspace":
-                raise invalid_params("Invalid member workspace")
-        else:
-            root_path = self.root / 'vm-homes'
+    async def local_installed(self):
+        """Whether Docker Desktop is installed on this PC, whatever host is chosen now. A runner injected by a test
+        stands for an engine that may come back, so it counts as installed."""
+        return True if self._desktop is None else self._desktop.installed()
+
+    async def erase(self, target, *, engine=True):
+        """Remove one member's own computer for good: its container, then its workspace (a folder here, a volume on a
+        host). Whatever is already gone is success. Never starts an engine; with `engine` false (none can exist: Docker
+        is not installed) only the folder goes. The workspace of a shared computer is never a target."""
+        key = target.key
+        if key == "shared":
+            raise VmError("shared")
+        if not target.remote:
+            root_path = self.root / "vm-homes"
             root = root_path.resolve()
             workspace = Path(target.workspace)
-            if root_path.is_symlink() or not root.is_relative_to(self.root) or workspace.is_symlink() or workspace.resolve() != root / target.key:
-                raise invalid_params("Invalid member workspace")
-        await self.stop(target, remove=True)
-        if target.remote:
-            if (await self.run_for(target, ["volume", "rm", str(target.workspace)])).code:
-                raise VmError("workspace_remove_failed")
-        else:
-            import shutil
-            if workspace.is_symlink() or not workspace.resolve().is_relative_to(self.root / 'vm-homes'):
-                raise invalid_params("Invalid member workspace")
-            if workspace.exists():
-                await asyncio.to_thread(shutil.rmtree, workspace)
+            if root_path.is_symlink() or not root.is_relative_to(self.root) or workspace.is_symlink() or workspace.resolve() != root / key:
+                raise VmError("invalid_workspace")
+        elif str(target.workspace) != target.name + "-workspace":
+            raise VmError("invalid_workspace")
+        # A computer the deleted member was still starting is not wanted: end its preparation before it takes the lock.
+        preparing = self.preparing.pop(key, None)
+        if preparing is not None and not preparing.done():
+            preparing.cancel()
+            await asyncio.gather(preparing, return_exceptions=True)
+        async with self.locks.setdefault(key, asyncio.Lock()):
+            if self.active.get(key) or key in self.held or self.busy(key):
+                raise VmError("busy")
+            if engine:
+                raw = await self.inspect(target)  # an engine that is gone is "unavailable", never "no such container"
+                if raw is not None:
+                    labels = raw.get("Config", {}).get("Labels") or {}
+                    if labels.get(f"{LABEL}.owner") != self.owner or labels.get(f"{LABEL}.target") != key:
+                        raise VmError("foreign")
+                    self.changes += 1
+                    result = await self.run_for(target, ["rm", "--force", target.name], timeout=40)
+                    self.changes += 1
+                    if result.code and await self.inspect(target) is not None:
+                        raise VmError("remove_failed")
+            await self.close_viewer(target)
+            if target.remote:
+                if (await self.run_for(target, ["volume", "rm", str(target.workspace)])).code:
+                    volume = await self.run_for(target, ["volume", "inspect", str(target.workspace)])
+                    if volume.code == 0:
+                        raise VmError("workspace_remove_failed")
+                    if not await self._answers(target):
+                        raise VmError("unavailable")
+            else:
+                import shutil
+                if os.path.lexists(workspace):
+                    await asyncio.to_thread(shutil.rmtree, workspace)
+        self.invalidate(target)
+        self.last_activity.pop(key, None)
+        self.targets.pop(key, None)
+        self.running.pop(target, None)
+        self.wallpaper_attempted.discard((target.remote, target.name))
 
     def hold(self, target, held):
         if held:
@@ -1011,16 +1060,16 @@ print(base64.b64encode(data).decode())
         for name in result.stdout.splitlines():
             key = name.removeprefix(prefix)
             if name.startswith(prefix) and (key == "shared" or len(key) == 16 and all(c in "0123456789abcdef" for c in key)):
-                target = Target(key, name,
-                    PurePosixPath(name + "-workspace") if self.remote else self.root / "vm-homes" / key,
-                    PurePosixPath(f"raphael-computer-{self.owner}-team") if self.remote else self.root / "vm-shared", self.remote)
+                target = self.target_for(self.remote, key)
                 self.targets[key] = target
+                self.data.made(target)  # computers made before the app kept a record are found here
                 if (await self.status(target, probe=False))["state"] == "running":
                     self.last_activity.setdefault(key, self.clock())
 
     def start_monitor(self):
         if self.task is None:
             self.task = asyncio.create_task(self._monitor())
+        self.data.settle_soon()  # what a deleted member left owed when the core last ended
 
     async def _monitor(self):
         try:
@@ -1030,10 +1079,12 @@ print(base64.b64encode(data).decode())
                 if self.timezone_pending:
                     await self.refresh_timezone()
                 await self.sweep()
+                self.data.settle_soon()
         except (OSError, TimeoutError, VmError):
             return
 
     async def aclose(self, *, stop=True):
+        await self.data.aclose()
         for pending in self.preparing.values():
             pending.cancel()
         await asyncio.gather(*self.preparing.values(), return_exceptions=True)

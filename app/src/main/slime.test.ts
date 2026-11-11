@@ -31,14 +31,19 @@ const catalogButtons = [...catalogPicker.querySelectorAll<HTMLElement>("[data-sl
 const catalogIds = catalogButtons.map(button => button.dataset.slimeCharacter as SlimeCharacter);
 const originalIds = ["rimuru", "shion", "diablo", "benimaru", "shuna", "souei", "hakurou", "gobta", "rigur", "rigurd", "milim", "veldora", "ranga", "gabiru", "geld", "treyni", "kurobe", "shizu", "hinata", "guy", "testarossa", "ultima", "carrera", "ramiris"];
 const catalogStates: SlimeState[] = ["idle", "thinking", "working", "searching", "computer", "waiting", "blocked", "done", "error", "sleeping", "arriving"];
-const groupIds = ["characters", "animals", "jobs", "nature", "seasonal", "objects", "colors"] as const;
+const groupIds = ["characters", "fantasy", "animals", "nature", "everyday", "colors"] as const;
 const colorButtons = [...catalogPicker.querySelectorAll<HTMLElement>("[data-slime-color]")];
 const colorIds = colorButtons.map(button => button.dataset.slimeColor as SlimeColor);
 
 test("every character belongs to one labeled group, in the owner's order without reordering its slimes", () => {
   const groups = [...catalogPicker.querySelectorAll<HTMLElement>("[data-slime-group]")];
   expect(groups.map(group => group.dataset.slimeGroup)).toEqual(groupIds);
-  expect(groups.map(group => group.querySelectorAll('[role="menuitem"]').length)).toEqual([50, 12, 8, 8, 6, 4, colorIds.length]);
+  expect(groups.map(group => group.querySelectorAll('[role="menuitem"]').length)).toEqual([24, 26, 12, 14, 12, colorIds.length]);
+  // 角色 is the story's characters and no one else; the archetypes, the red oni first, have their own tab (owner, 2026-11-11).
+  const inGroup = (group: string): string[] => [...catalogPicker.querySelectorAll<HTMLElement>(`[data-slime-group="${group}"] [data-slime-character]`)].map(button => button.dataset.slimeCharacter!);
+  expect(inGroup("characters")).toEqual(originalIds);
+  expect(inGroup("fantasy")[0]).toBe("oni-red");
+  expect(inGroup("fantasy").slice(-1)).toEqual(["phoenix-feather"]);
   const ungrouped = document.createElement("div");
   ungrouped.innerHTML = slimeCharactersHTML(null, same);
   expect(catalogIds).toEqual([...ungrouped.querySelectorAll<HTMLElement>("[data-slime-character]")].map(button => button.dataset.slimeCharacter));
@@ -724,4 +729,24 @@ test("a roster read hands a face on screen over before the redraw, so the redraw
   new MutationObserver(records => records.forEach(record => seen.push(record.attributeName ?? ""))).observe(svg, { attributes: true, subtree: true, childList: true });
   followSlimeRoster([{ id: 311, activity: "thinking", waiting: true }]);
   return Promise.resolve().then(() => expect(seen).toEqual([]));
+});
+
+test("the core takes every slime the picker offers: its rule for a slime's name fits each character and each colour", () => {
+  // Chosen in the picker, a slime is saved by the core, which checks its name by a rule of its own (members/store.py). The
+  // rule took letters alone, so every slime with a hyphen in its name, the red oni and nearly all after it, was refused
+  // when chosen (owner, 2026-11-11: 「赤鬼以後的所有角色都沒辦法使用」). Read here, the rule is held to every name the app has.
+  const store = readFileSync(resolve(__dirname, "../../../core/src/raphael_core/members/store.py"), "utf8");
+  const name = /^_SLIME_NAME = r"([^"]+)"$/m.exec(store)?.[1];
+  const avatar = /^_AVATAR = re\.compile\(rf"([^"]+)"\)$/m.exec(store)?.[1];
+  expect(name, "the core's rule for a slime's name").toBeTruthy();
+  expect(avatar, "the core's rule for an avatar").toBeTruthy();
+  // The Python rule as JavaScript: an f-string's doubled braces are single ones, and its one variable is the name's rule.
+  const rule = new RegExp(`^(?:${avatar!.replace(/\{\{/g, "{").replace(/\}\}/g, "}").split("{_SLIME_NAME}").join(name!)})$`);
+  const offered = [...catalogButtons, ...colorButtons].map(button => pickSlime(button)!);
+  expect(offered).toHaveLength(catalogIds.length + colorIds.length);
+  expect(offered.filter(saved => !rule.test(saved))).toEqual([]);
+  // The names that were refused are among them, and what is no slime's name is still refused.
+  expect(offered).toContain("slime:oni-red");
+  expect(offered.filter(saved => saved.includes("-")).length).toBeGreaterThan(30);
+  for (const bad of ["slime:", "slime:-red", "slime:oni-", "slime:oni--red", "slime:Oni-Red", "slime:oni red", "slime:../x", "slime:a:b:c"]) expect(rule.test(bad), bad).toBe(false);
 });

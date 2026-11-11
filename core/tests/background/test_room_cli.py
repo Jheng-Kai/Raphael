@@ -190,6 +190,54 @@ async def test_room_usage_limit_commits_safe_failure_and_emits_it(meeting, monke
     assert "PRIVATE" not in json.dumps(result)
 
 
+@pytest.mark.parametrize("cause,reason,sentence,status", [
+    ("expired", "cli_login_expired", "Claude Code's sign-in has expired.", "CLI sign-in expired"),
+    ("signed_out", "cli_login", "Claude Code is not signed in.", "CLI sign-in needed"),
+])
+async def test_a_room_member_whose_cli_cannot_sign_in_reports_that_cause(meeting, monkeypatch, tmp_path, cause, reason, sentence, status):
+    """Owner, 2026-11-11: the same specific cause in a room, in the room's own words, with no new button there."""
+    rig, members, rooms, room, alice = meeting
+    members.store.update_member(alice.id, model="cli:claude")
+    rig.service.use_cli(Brains(tmp_path))
+
+    async def run(driver, **kwargs):
+        yield Event("error", "auth_expired", {"kind": "auth_expired", "reason": "401 PRIVATE_PROVIDER_PACKET", "cause": cause})
+
+    monkeypatch.setattr("raphael_core.agent.cli.loop.Driver.run", run)
+    await rooms._send({"room_id": room["id"], "text": "@Alice summarize the synthetic project", "request_id": "signin", "ui_language": "en"})
+    await until(lambda: rig.conn.execute("SELECT 1 FROM worker_tasks WHERE room_id=? AND state='failed'", (room["id"],)).fetchone())
+    await rooms.wait_idle()
+    [(task_reason, report)] = rig.conn.execute("SELECT reason, report_text FROM worker_tasks WHERE room_id=? AND state='failed'", (room["id"],)).fetchall()
+    assert task_reason == reason
+    turn_id = rig.conn.execute("SELECT turn_id FROM room_messages WHERE room_id=? AND member_id=?", (room["id"], alice.id)).fetchone()[0]
+    turn = AgentHistory(rig.conn).get(turn_id)
+    assert turn.failure == {"kind": "auth_expired", "provider": "cli:claude", "resets_at": None, "cause": cause}
+    assert sentence in (turn.text or "") + (report or "") and "PRIVATE" not in json.dumps(turn.failure)
+    result = await rooms._messages({"room_id": room["id"]})
+    [intent] = [item for item in result["exchange"]["reply_intents"] if item["recipient_id"] == alice.id]
+    assert (intent["state"], intent["reason"]) == ("blocked", reason)
+    assert "PRIVATE" not in json.dumps(result)
+    from raphael_core.members.rooms import _UNFINISHED_WORDS, unfinished_kind
+    assert _UNFINISHED_WORDS["en"][unfinished_kind(reason)] == status
+
+
+async def test_a_routine_run_whose_cli_sign_in_ran_out_is_a_failed_run_of_that_cause(make_rig, monkeypatch, tmp_path):
+    from raphael_core.members.service import MembersService
+    rig = make_rig()
+    team = MembersService(rig.conn, tmp_path, background=rig.service)
+    member = team.store.create_member(name="Alice", model="cli:codex")
+    rig.service._team = team
+    rig.service.use_cli(Brains(tmp_path))
+    expired = Event("error", "auth_expired", {"kind": "auth_expired", "reason": "Your access token could not be refreshed", "cause": "expired"})
+    played = scripted_cli(monkeypatch, [expired])
+    task = rig.service.submit(session_id="routine:7", text="Check the mail", language="zh-TW", model="cli:codex", member_id=member.id)
+    await until(lambda: rig.task(task).state in ("done", "failed"))
+    assert rig.task(task).state == "failed" and rig.task(task).reason == "cli_login_expired"
+    assert rig.task(task).report_text == "Codex CLI 的登入已過期。"
+    assert len(played) == 1, "an expired session is not tried again by the run"
+    await team.aclose()
+
+
 async def test_private_member_task_uses_its_cli_brain_without_api_fallback(make_rig, monkeypatch, tmp_path):
     from raphael_core.members.service import MembersService
     rig = make_rig()

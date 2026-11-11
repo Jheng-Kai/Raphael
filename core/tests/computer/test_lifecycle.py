@@ -59,7 +59,7 @@ async def test_previous_member_data_deletion_needs_no_new_image_or_start(previou
     if not target.remote:
         target.workspace.mkdir(parents=True)
         (target.workspace / 'saved.txt').write_text('old data', encoding='utf-8')
-    await vm.delete_member_data(1, target.remote)
+    await vm.erase(target)
     assert runtime.raw is None
     assert not any(args[0] in ('start', 'run', 'pull', 'build') for args, _ in runtime.calls)
     if target.remote:

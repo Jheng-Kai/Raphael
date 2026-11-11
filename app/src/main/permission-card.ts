@@ -10,7 +10,7 @@
 
 import { cardDisclosureHTML, cardHTML, cardPromptText } from "./card";
 import { composioText, isComposioTool } from "./composio-result";
-import { t } from "./i18n";
+import { getLocale, t } from "./i18n";
 import type { MessageKey } from "./i18n/zh-TW";
 import { connectionMarkHTML } from "./secret-card";
 import { serviceIconOf } from "./service-icons";
@@ -129,19 +129,50 @@ export function settledQuestions(turn: AgentTurn): (until: number) => string {
   };
 }
 
+const letter = (index: number): string => String.fromCharCode(65 + index);
+
+/** One row of the card's well: a small square letter badge (a mark on a chosen row of a several-choice card) and the words, with a grey line under them when the member gave one. */
+const choiceRow = (index: number, words: string, note: string | undefined, attrs: string, multiple: boolean): string =>
+  btn(`<span data-choice-letter><span>${letter(index)}</span>${multiple ? ico("check") : ""}</span>` +
+    `<span class="question-words"><span>${esc(words)}</span>${note ? `<span class="question-note">${esc(note)}</span>` : ""}</span>`, "question-choice", attrs);
+
+/** The words a card shows once the owner answered it (the chosen rows joined, 已略過 for a skip, what they typed), or null when it holds none. */
+export function questionAnswerText(question: OwnerQuestion): string | null {
+  if (question.state !== "answered") return null;
+  if (question.result?.skipped) return t("ownerQuestion.skipped");
+  const answer = question.result?.answer;
+  if (Array.isArray(answer)) return answer.join(/^(zh|ja)/.test(getLocale()) ? "、" : ", ");
+  return answer ? answer.replace(/\s*\n\s*/g, " ") : t("ownerQuestion.answered");
+}
+
+/** The card while it waits: the rows, the own-answer row, and a several-choice card's submit. */
+function waitingForm(question: OwnerQuestion, id: string, multiple: boolean): string {
+  const rows = question.options.map((option, index) => choiceRow(index, option, question.descriptions?.[index],
+    ` data-owner-option="${esc(option)}"${multiple ? ' role="checkbox" aria-checked="false"' : ""}`, multiple)).join("") +
+    (question.skip ? choiceRow(question.options.length, t("ownerQuestion.skip"), undefined, " data-owner-skip", false) : "");
+  const own = question.free_text ? `<div class="question-own question-submit"><textarea class="mb-fin" rows="1" data-owner-answer-input="${id}" aria-label="${esc(t("cards.answer"))}" maxlength="4000" placeholder="${esc(t("cards.answer"))}"></textarea>` +
+    (multiple ? "" : btn(esc(t("ownerQuestion.submit")), "sm pri", ' data-owner-answer="text" hidden disabled')) + `</div>` : "";
+  return `<div class="owner-question-form">` +
+    (question.kind === "show_page" ? `<div class="card-actions">${btn(esc(t("desktop.done")), "sm pri", ` data-owner-option="${esc(t("desktop.done"))}"`)}</div>` : "") +
+    (rows || own ? `<div class="card-well question-choices">${rows}${own}</div>` : "") +
+    `<div role="alert" hidden></div></div>`;
+}
+
 export function ownerQuestionHTML(question: OwnerQuestion): string {
   const waiting = question.state === "asked", id = esc(question.id);
-  const choices = question.options.map((option, index) => btn(`<span data-choice-letter>${String.fromCharCode(65 + index)}</span><span>${esc(option)}</span>`, "question-choice", ` data-owner-option="${esc(option)}"`)).join("");
-  const form = `<div class="owner-question-form">` +
-    (question.kind === "show_page" ? `<div class="card-actions">${btn(esc(t("desktop.done")), "sm pri", ` data-owner-option="${esc(t("desktop.done"))}"`)}</div>` : "") +
-    (choices ? `<div class="card-well question-choices">${choices}</div>` : "") +
-    (question.free_text ? `<div class="question-submit"><input class="mb-fin" data-owner-answer-input="${id}" aria-label="${esc(t("cards.answer"))}" maxlength="4000" placeholder="${esc(t("cards.answer"))}">${btn(esc(t("ownerQuestion.submit")), "sm pri", ' data-owner-answer="text" disabled')}</div>` : "") +
-    `<div role="alert" hidden></div></div>`;
-  return cardHTML({ title: question.question, status: waiting ? "waiting" : question.state === "cancelled" ? "ready" : "done", statusText: waiting ? cardPromptText("question") : question.state === "cancelled" ? t("ownerQuestion.cancelled") : t("ownerQuestion.answered"),
-    hideStatus: waiting && cardPromptText("question") === undefined,
-    content: waiting ? form : question.result?.answer ? cardDisclosureHTML(question.id, `<div class="card-well card-body">${esc(question.result.answer)}</div>`) : "",
+  const multiple = !!question.multiple && question.options.length > 1;
+  const line = questionAnswerText(question);
+  // Answered, the card is its title and one row (the words in the quiet colour, a check at the right); closed unanswered it keeps a quiet pill.
+  const left = question.result?.by === "message";
+  return cardHTML({ title: question.question, status: waiting ? "waiting" : question.state === "cancelled" ? "ready" : "done",
+    statusText: waiting ? cardPromptText("question") : question.state === "cancelled" ? t(left ? "ownerQuestion.left" : "ownerQuestion.cancelled") : t("ownerQuestion.answered"),
+    hideStatus: (waiting && cardPromptText("question") === undefined) || (!waiting && line !== null),
+    body: waiting ? question.subtitle || (multiple ? t("ownerQuestion.many") : undefined) : undefined,
+    content: waiting ? waitingForm(question, id, multiple) : line !== null
+      ? `<div class="card-well question-answer">${btn(`<span class="question-answer-text">${esc(line)}</span>${ico("check")}`, "question-answer-line", ' data-owner-line aria-expanded="false"')}</div>` : "",
+    actions: waiting && multiple ? btn(esc(t("ownerQuestion.submit")), "sm pri", ' data-owner-answer="choices" disabled') : "",
     close: waiting ? iconBtn("x", t("common.close"), ' data-owner-answer="cancel"') : "", cls: "permission-card owner-question",
-    attrs: ` data-owner-question="${id}" data-owner-turn="${question.turn_id}" data-owner-kind="${esc(question.kind)}" data-owner-page="${esc(question.kind === "show_page" ? question.card_id : "")}" data-card-state="${question.state}" tabindex="0"`,
+    attrs: ` data-owner-question="${id}" data-owner-turn="${question.turn_id}" data-owner-kind="${esc(question.kind)}" data-owner-page="${esc(question.kind === "show_page" ? question.card_id : "")}" data-card-state="${question.state}"${multiple ? ' data-owner-multiple="true"' : ""} tabindex="0"`,
   });
 }
 

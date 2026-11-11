@@ -1,16 +1,19 @@
 // A page a member shows in the conversation, a product page or a small tool, or one a plugin brings (`agent/pages.py`).
 // It runs from the core's own loopback host in a sandbox with an opaque origin, so it reaches neither the app nor the
 // core: it can only post messages to the frame's parent, and everything it asks for is checked here. A thread redraw
-// moves the live frame to the new card, so a page does not reload and lose what the owner did in it.
+// moves the live frame to the new card, so a page does not reload and lose what the owner did in it. Pressed, a card opens
+// its page in the conversation's place (`page-view.ts`): the same frame moves there and, going back, returns to its card.
 import "./page-card.css";
 import { cardFailure, cardHTML, cardStatusHTML, failedClose } from "./card";
 import * as api from "./api";
 import { describeError } from "./format";
 import { t } from "./i18n";
 import { openDialog } from "./member-dialogs";
+import { cancelGesture } from "../shared/cancel-gesture";
+import { mountPageView, tellPage, type PageView } from "./page-view";
 import { mountReportView, type ReportPeople, type ReportView } from "./report-page";
 import type { AgentTurn, PageCard, PageOpened } from "./types";
-import { btn, esc, ico } from "./ui";
+import { btn, esc, ico, toaster } from "./ui";
 
 const MIN_HEIGHT = 80, MAX_HEIGHT = 2400;
 const SEND_LIMIT = 4000, SEND_GAP_MS = 1000;
@@ -89,8 +92,14 @@ interface Live {
   ready: boolean;
   /** It could not open: a redraw of its line shows that again, not an empty box that never loads. */
   failed: boolean;
+  /** It stands in the conversation's place (page-view.ts), not in its card. */
   expanded: boolean;
-  closeExpanded?: () => void;
+  /** Where the owner was reading it there (the page tells: core agent/pages.py), kept for the next time it opens. */
+  reading: number;
+  /** A changed page loading beside the one on screen, which it replaces once it is ready and where it was. */
+  next: HTMLIFrameElement | null;
+  /** What takes the changed page's place once it says it is where the owner was reading. */
+  settled: (() => void) | null;
   /** A declined external link asks no more without a sure press. */
   refused: boolean;
 }
@@ -98,7 +107,7 @@ interface Live {
 /** Only an atomic move keeps a frame running; a plain append reloads it, which is still better than losing it. A frame in
  *  a card is only a preview: nothing in it can be pressed, focused or scrolled; it works only where the page is made larger. */
 function moveFrame(frame: HTMLIFrameElement, target: HTMLElement): void {
-  frame.toggleAttribute("inert", !target.closest(".pg-view"));
+  frame.toggleAttribute("inert", !target.closest(".pgv"));
   if (target.moveBefore && frame.isConnected) target.moveBefore(frame, null);
   else target.append(frame);
 }
@@ -108,18 +117,21 @@ export interface PagesHost {
   sync(): void;
   /** Before a line is replaced: moves its frames to the new line, once that line is in the document. */
   carry(from: Element, to: Element): () => void;
-  /** Puts an open report away, so the thread is in sight again (the owner sent something, or left the conversation). */
-  closeReport(): void;
+  /** The owner is sending something: an open page stays, the core is told which page it is, and its reply is waited for under it. */
+  sent(): Promise<void> | null;
+  /** Puts an open page away, so the thread is in sight again. */
+  close(): void;
 }
 
 export function mountPages(thread: HTMLElement, o: { place(pageId: string, text: string): boolean; people?: () => ReportPeople }): PagesHost {
   const frames = new Map<string, Live>();
   let lastSend = 0, asking = false;
   hearInput();
-  // A report opens in the thread's place: in the conversation's stage, above the composer that stays below it.
+  // A page, a report or an HTML page, opens in the thread's place: in the conversation's stage, above the composer that stays below it.
+  let pageView: PageView | null = null;
+  const view = (): PageView => pageView ??= mountPageView(thread.closest<HTMLElement>(".ra-stage") ?? thread.parentElement!);
   let reports: ReportView | null = null;
-  const reportView = (): ReportView => reports ??= mountReportView(thread.closest<HTMLElement>(".ra-stage") ?? thread.parentElement!,
-    o.people ?? (() => ({ nameOf: () => "", colorOf: () => "var(--text-3)" })));
+  const reportView = (): ReportView => reports ??= mountReportView(view(), o.people ?? (() => ({ nameOf: () => "", colorOf: () => "var(--text-3)" })));
 
   const cardOf = (live: Live): HTMLElement | null => thread.querySelector<HTMLElement>(`.pg-card[data-page="${CSS.escape(live.id)}"]`);
 
@@ -143,10 +155,10 @@ export function mountPages(thread: HTMLElement, o: { place(pageId: string, text:
     else if (state !== "failed") close?.remove();
   }
 
-  /** A page is as tall as it says. Made larger, it says again once it is wider, and only its dialog follows: the card
-   *  keeps its own height behind it until the page is back and says so there. */
+  /** A page is as tall as it says, in its card's preview. In the conversation's place it fills it and says nothing the card
+   *  follows: the card keeps its own height until the page is back and says so there, narrow again. */
   function applyHeight(live: Live): void {
-    if (live.height !== null) (live.frame.closest<HTMLElement>(".pg-view") ?? cardOf(live))?.style.setProperty("--pg-h", `${live.height}px`);
+    if (live.height !== null && !live.expanded) cardOf(live)?.style.setProperty("--pg-h", `${live.height}px`);
   }
 
   async function open(live: Live): Promise<void> {
@@ -166,16 +178,63 @@ export function mountPages(thread: HTMLElement, o: { place(pageId: string, text:
     }
   }
 
-  function make(id: string, rev: number): Live {
+  function newFrame(live: Live): HTMLIFrameElement {
     const frame = document.createElement("iframe");
     frame.setAttribute("sandbox", "allow-scripts allow-forms");
     frame.setAttribute("referrerpolicy", "no-referrer");
     frame.className = "pg-frame";
     frame.setAttribute("inert", "");
-    const live: Live = { id, rev, frame, height: null, opened: null, ready: false, failed: false, expanded: false, refused: false };
     frame.addEventListener("load", () => { if (live.opened) setBodyState(live, "ready"); });
+    return frame;
+  }
+
+  function make(id: string, rev: number): Live {
+    const live = { id, rev, height: null, opened: null, ready: false, failed: false, expanded: false, reading: 0, next: null, settled: null, refused: false } as unknown as Live;
+    live.frame = newFrame(live);
     frames.set(id, live);
     return live;
+  }
+
+  /**
+   * The page changed while it stands in the conversation's place (its member updated it): the new one loads beside the one
+   * on screen, is put back where the owner was reading, and takes its place once it has drawn, so nothing closes, flashes or
+   * jumps (owner, 2026-11-11). A page that cannot be read again stays as it was.
+   */
+  async function replaceInPlace(live: Live): Promise<void> {
+    let opened: PageOpened;
+    try { opened = await api.pagesOpen(live.id, themeNow()); } catch { return; }
+    const box = live.frame.parentElement;
+    if (frames.get(live.id) !== live || !box) return;
+    // The owner went back while it was read: the card's page is the one to change.
+    if (!live.expanded) { void open(live); return; }
+    live.next?.remove();
+    live.opened = opened;
+    const next = newFrame(live);
+    live.next = next;
+    next.removeAttribute("inert");
+    next.title = opened.title;
+    next.style.visibility = "hidden";
+    let done = false;
+    const swap = (): void => {
+      if (done || live.next !== next) return;
+      done = true;
+      live.next = null;
+      live.settled = null;
+      const old = live.frame;
+      live.frame = next;
+      next.style.visibility = "";
+      old.remove();
+    };
+    next.addEventListener("load", () => {
+      if (live.reading > 0) {
+        post(live, { raphaelPage: 1, type: "scroll-to", y: live.reading }, next);
+        // It answers with where it stands once it has gone there; a page that does not still shows.
+        live.settled = swap;
+        setTimeout(swap, 250);
+      } else swap();
+    });
+    box.append(next);
+    next.src = opened.url;
   }
 
   function sync(): void {
@@ -195,22 +254,27 @@ export function mountPages(thread: HTMLElement, o: { place(pageId: string, text:
       applyHeight(live);
       if (live.failed) setBodyState(live, "failed");
       else if (live.ready || live.opened) setBodyState(live, "ready");
-      if (live.rev !== rev) { live.rev = rev; void open(live); }
+      if (live.rev !== rev) { live.rev = rev; void (live.expanded ? replaceInPlace(live) : open(live)); }
     }
     for (const id of [...frames.keys()]) if (!seen.has(id)) frames.delete(id);
-    followReport();
+    followPage();
   }
 
-  /** An open report closes when its card left the thread (another conversation, or none), and follows its member's changes. */
-  function followReport(): void {
-    const shown = reports?.shown();
+  /** An open page closes when its card left the thread (another conversation, or none), and a report follows its member's changes. */
+  function followPage(): void {
+    const shown = pageView?.shown();
     if (!shown) return;
+    if (shown.kind === "page") {
+      if (!thread.querySelector(`.pg-card[data-page="${CSS.escape(shown.id)}"]`)) pageView!.close();
+      return;
+    }
+    const open = reports?.shown();
     const link = thread.querySelector<HTMLElement>(`.pg-link[data-page="${CSS.escape(shown.id)}"]`);
-    if (!link) reports!.close();
-    else if (Number(link.dataset.pageRev) !== shown.rev) void reports!.refresh();
+    if (!link) reports?.close();
+    else if (open && Number(link.dataset.pageRev) !== open.rev) void reports!.refresh();
   }
   // A thread emptied or redrawn without a sync (a conversation that is loading, empty or failed) is followed too.
-  new MutationObserver(followReport).observe(thread, { childList: true });
+  new MutationObserver(followPage).observe(thread, { childList: true });
 
   function carry(from: Element, to: Element): () => void {
     const moves = [...from.querySelectorAll<HTMLElement>(".pg-card[data-page]")].flatMap(card => {
@@ -243,8 +307,8 @@ export function mountPages(thread: HTMLElement, o: { place(pageId: string, text:
     if (typeof text !== "string" || !text.trim() || text.length > SEND_LIMIT) return false;
     const now = Date.now();
     if (now - lastSend < SEND_GAP_MS || pressOf(live.frame) === "none" || !cardOf(live)) return false;
+    // The page stays open and the composer, in sight under it, holds the words (R-CARD-11): the owner alone sends them.
     if (!o.place(live.id, text.trim())) return false;
-    live.closeExpanded?.();
     lastSend = now;
     return true;
   }
@@ -254,11 +318,12 @@ export function mountPages(thread: HTMLElement, o: { place(pageId: string, text:
     let safe: URL;
     try { safe = new URL(url); } catch { return; }
     if (safe.protocol !== "https:") return;
-    const open = (): void => { void api.openExternalUrl(safe.href).catch(() => cardFailure(cardOf(live), open)); };
+    // The card is out of sight while its page stands in the conversation's place: there the failure is a word of its own.
+    const open = (): void => { void api.openExternalUrl(safe.href).catch(() => { if (live.expanded) toaster.show(t("cards.failed")); else cardFailure(cardOf(live), open); }); };
     whenPressed(live, "page.askOpen", safe.href, open);
   }
 
-  const post = (live: Live, message: object): void => { live.frame.contentWindow?.postMessage(message, "*"); };
+  const post = (live: Live, message: object, frame: HTMLIFrameElement = live.frame): void => { frame.contentWindow?.postMessage(message, "*"); };
 
   function hostContext(): object {
     return { theme: themeNow(), displayMode: "inline", availableDisplayModes: ["inline"], locale: document.documentElement.lang };
@@ -304,40 +369,57 @@ export function mountPages(thread: HTMLElement, o: { place(pageId: string, text:
   }
 
   window.addEventListener("message", event => {
-    const live = event.source ? [...frames.values()].find(item => item.frame.contentWindow === event.source) : undefined;
-    const data = event.data as { raphaelPage?: number; jsonrpc?: string; type?: string; text?: unknown; url?: unknown; height?: unknown } | null;
+    const live = event.source ? [...frames.values()].find(item => item.frame.contentWindow === event.source || item.next?.contentWindow === event.source) : undefined;
+    const data = event.data as { raphaelPage?: number; jsonrpc?: string; type?: string; text?: unknown; url?: unknown; height?: unknown; y?: unknown } | null;
     if (!live || !data || typeof data !== "object") return;
+    const loading = live.next !== null && live.next.contentWindow === event.source;
     if (data.jsonrpc === "2.0") {
-      if (live.opened?.source === "mcp") void rpc(live, data as Parameters<typeof rpc>[1]);
+      if (live.opened?.source === "mcp" && !loading) void rpc(live, data as Parameters<typeof rpc>[1]);
       return;
     }
     if (data.raphaelPage !== 1) return;
+    if (data.type === "scroll") {
+      // Where the owner is reading, kept while the page stands in the conversation's place; a changed page that was sent
+      // there says so and takes the place of the one on screen.
+      if (loading) live.settled?.();
+      else if (live.expanded && typeof data.y === "number" && Number.isFinite(data.y)) live.reading = Math.max(0, data.y);
+      return;
+    }
+    if (loading) return;
     if (data.type === "height") { live.height = clampHeight(data.height); applyHeight(live); }
     else if (data.type === "send" && placeText(live, data.text)) post(live, { raphaelPage: 1, type: "result", status: "placed" });
     else if (data.type === "open") openLink(live, data.url);
+    // Escape pressed in the page goes back, as it does outside it, unless a task's Stop or a recording has it first.
+    else if (data.type === "escape" && live.expanded && pressOf(live.frame) !== "none" && !cancelGesture().hasTarget()) pageView?.close();
   });
 
-  /** Larger in the shared dialog, the frame moved there and back, so nothing the owner did in it is lost. The dialog is
-   *  as tall as the card until the page, now wider, says how tall it is there (applyHeight). */
+  /** The page opens in the conversation's place, the same frame moved there, so nothing the owner did in it is lost. It is
+   *  the card's frame again, back at its top, when the owner goes back (`leave`). */
   function expand(live: Live, card: HTMLElement): void {
-    const dialog = openDialog({
-      // openDialog escapes the title itself: escaping it here too showed a title's & or < as an entity.
-      title: card.getAttribute("aria-label") ?? "", body: `<div class="pg-view"></div>`, cls: "pg-view-dialog",
-      // Its × closes it, with no 「關閉」 under it.
-      actions: {},
-      onAct(_act, _target, shown) { shown.close(); },
-      onClosing() {
+    const host = view();
+    const title = card.querySelector(".card-title")?.textContent ?? live.opened?.title ?? "";
+    host.body.innerHTML = `<div class="pgv-page"><h2 class="pgv-title">${esc(title)}</h2><div class="pgv-frame-box"></div></div>`;
+    const box = host.body.querySelector<HTMLElement>(".pgv-frame-box")!;
+    live.expanded = true;
+    host.open({
+      id: live.id, title, kind: "page", opener: card.querySelector<HTMLElement>(".pg-body"),
+      leave() {
         live.expanded = false;
-        live.closeExpanded = undefined;
+        live.next?.remove();
+        live.next = null;
+        live.settled = null;
+        // The card shows the top of the page again; the place the owner was reading is kept for the next time.
+        const reading = live.reading;
+        post(live, { raphaelPage: 1, type: "scroll-to", y: 0 });
+        live.reading = reading;
         const home = cardOf(live)?.querySelector<HTMLElement>(".pg-body");
         if (home) moveFrame(live.frame, home);
+        host.body.replaceChildren();
+        applyHeight(live);
       },
     });
-    const view = dialog.el.querySelector<HTMLElement>(".pg-view")!;
-    view.style.setProperty("--pg-h", card.style.getPropertyValue("--pg-h") || "320px");
-    live.expanded = true;
-    live.closeExpanded = () => dialog.close();
-    moveFrame(live.frame, view);
+    moveFrame(live.frame, box);
+    if (live.reading > 0) post(live, { raphaelPage: 1, type: "scroll-to", y: live.reading });
   }
 
   /** A ready page opens whole; one still loading or failed has nothing to open. */
@@ -370,10 +452,10 @@ export function mountPages(thread: HTMLElement, o: { place(pageId: string, text:
   new MutationObserver(() => {
     if (themeNow() === theme) return;
     theme = themeNow();
-    for (const live of frames.values()) void open(live);
+    for (const live of frames.values()) void (live.expanded ? replaceInPlace(live) : open(live));
   }).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
 
-  return { sync, carry, closeReport: () => reports?.close() };
+  return { sync, carry, sent: () => (pageView ? pageView.sent() : tellPage(null)), close: () => pageView?.close() };
 }
 
 export type { PageCard };
