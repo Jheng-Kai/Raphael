@@ -583,6 +583,58 @@ CalendarDate/CalendarEventFocus boundary. Calendar highlights the requested item
 
 ## Computer host transport (2026-11-01)
 
+Stage A (2026-11-11, R-COMP-SCREEN-01): image `driver-0.37.0-v5`, layer 5,
+adds the standalone stdlib `image/desktop/screens.py` supervisor helper. It waits
+for X, disables XFCE display prompts, authenticates to main VNC using pure Python
+DES, and creates 1..6 real outputs through RFB ExtendedDesktopSize. A 1x1 update
+request carries the layout reply; only a successful new layout moves the pointer
+to the centre of screen 1 on that same connection. Matching monitors skip both.
+The row-major grid uses 1280x900 cells (1x1, 2x1, 2x2, 3x2); the host's canvas calculation is
+held equal to the helper by an offline test. Panel 1 retains its launchers;
+additional panels use unique plugins and pre-owned launcher directories. Multiple
+screens disable only xfwm4 dock shadows, writing only when different and without
+restarting the panel for that property; window frame shadows stay unchanged.
+
+Only port 6901 is published. Token websockify serves the noVNC assets and routes
+`/websockify?token=screen-N` to a loopback clipped `/usr/bin/X0tigervnc` on 5911..5916.
+The helper starts this real binary in the foreground, not Debian's detaching wrapper.
+For one screen, screen-1 routes directly to main VNC on 5901. There is no token
+for the multi-screen canvas. The helper atomically publishes owner-only tokens
+at `/run/user/1000/raphael-vnc-tokens`, then `/dev/shm/raphael-screens.ready` on the
+fresh-per-start tmpfs, and supervises the clipped servers. The mark says this boot's
+screens are set up (layout, panels, every view listening once). It is about the screens,
+not about a view being connectable at this instant: it stays while a view or the helper
+restarts, because the members' work needs the screens, and a viewer reports a refused
+connection itself (`viewer_unreachable`). The helper takes it away only when the layout
+is gone (a view exits and the monitors no longer match, or the X server does not answer)
+and then sets everything up again. Supervisor never gives up on the helper
+(`startretries`), since a FATAL program can be started by nothing here.
+Before views start, even for one screen, it ends leftover X0tigervnc processes
+and waits up to five seconds for 5911..5916 to stop listening. Listener checks
+parse `/proc/net/tcp` without unauthenticated VNC connections. Debian's Python
+runs the standard-library-only helper without dependencies from `/opt/venv`.
+Supervisor lacks CAP_KILL and only restarts programs that exit; the helper ends
+its own children. Nothing may call `supervisorctl stop` or `restart` in a computer.
+LocalVm folds the tmpfs mark check into its driver-version exec, retaining two probes;
+that exec's exit code tells "driver healthy, mark absent" from "driver not up yet". A
+running computer still in the first state after 20 start polls is restarted once, under
+the guards of the missing-socket repair. The layout request has one 15 s deadline for the
+whole RFB conversation and refuses a payload larger than a one-pixel request can bring.
+A `Target` refuses a screen outside 1..screens..6 where it is made.
+Targets carry screen/screens with defaults 1/1; viewer preparation passes the
+captured screen to the relay. SSH still probes `/vnc.html`, which needs no token.
+Recognized layers 3 (2 GiB) and 4 (3 GiB), without RAPHAEL_SCREENS, may rebuild
+to layer 5 under the existing ownership, compatibility, hold and activity guards,
+preserving the workspace. One function (`known_previous`) knows those shapes: start
+upgrades through it, and stop, restart, update, repair, reset and member-data deletion
+treat such a computer as this owner's own before it has ever been upgraded (deleting its
+data needs neither the new image nor a start). Both existing target modes remain 1/1; member assignment,
+leases, browser behavior and the default mode are outside this stage. Offline
+tests do not prove actual TigerVNC, XFCE, websockify or container readiness: the
+container acceptance of 2026-11-12 is recorded in the member-computer feature file.
+The image also carries `wmctrl`, for placing a member's window on its own screen
+in the later stages (Chromium opens each new window beside its first).
+
 `computer/vm.py` owns the single Docker argv boundary for local and SSH engines,
 including `vm_bridge.py` MCP stdio. Targets capture their transport so a settings
 change cannot redirect an in-flight operation to another host. New per-member
@@ -716,7 +768,7 @@ retains its session and receives the image/cursor configuration once.
 vm_bridge.py serializes writes only; one reader resolves pending request IDs.
 Screen reads get 120 seconds, actions 60. Cancellation closes only that owned
 stdio process, fails pending requests and invalidates confidence; no uncertain
-action is replayed. New v4 computers use a 3 GiB memory/swap cap (not a reservation)
+action is replayed. New v5 computers retain the v4 3 GiB memory/swap cap (not a reservation)
 and two CPUs with two local slots. A third start evicts only the least recently
 used idle computer; active and owner-held computers remain protected.
 Offline tests establish contracts, not container latency or driver compatibility.

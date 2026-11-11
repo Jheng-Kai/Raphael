@@ -104,7 +104,7 @@ def test_restored_completion_evidence_uses_only_the_result_header(read_ok):
     assert check.required is not read_ok
 
 
-IMAGE_NAME = "raphael/cua-local-vm:driver-0.37.0-v4"
+IMAGE_NAME = "raphael/cua-local-vm:driver-0.37.0-v5"
 
 
 def answer(code, out="", err="", config="host studio\nuser jack2\nhostname 192.168.8.178\n"):
@@ -250,13 +250,15 @@ async def test_idle_and_close_preserve_container_and_browser_workspace(desktop):
     assert not any(args[0] in ("rm", "kill", "volume") for args, _ in runtime.calls)
 
 
-async def test_image_upgrade_announces_before_removal_and_preserves_workspace(desktop):
+@pytest.mark.parametrize('layer,memory', [('3', 2), ('4', 3)])
+async def test_image_upgrade_announces_before_removal_and_preserves_workspace(desktop, layer, memory):
     vm, target, runtime = desktop
     old_workspace = target.workspace
     runtime.raw["Image"] = "sha256:old-image"
     from raphael_core.computer.vm import LABEL
-    runtime.raw["Config"]["Labels"][f"{LABEL}.layer"] = "3"
-    runtime.raw["HostConfig"].update(Memory=2 * 1024**3, MemorySwap=2 * 1024**3)
+    runtime.raw["Config"]["Labels"][f"{LABEL}.layer"] = layer
+    runtime.raw["Config"]["Env"] = ['VNC_PW=private']
+    runtime.raw["HostConfig"].update(Memory=memory * 1024**3, MemorySwap=memory * 1024**3)
     notices = []
     vm.rebuild_notice = lambda target: notices.append(len(runtime.calls))
     result = await vm._upgrade_image(target)
