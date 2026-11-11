@@ -493,9 +493,16 @@ const shortName = (id: string): string => {
 
 export function pickerModelsFor(o: ModelPickerLook): CatalogModel[] { return pickerModels(o); }
 
+/** The core names a subscription's own model in English ("Codex (subscription)", agent/cli/images.py); the window says it in its language. */
+const SUBSCRIPTION_NAME = /^(.+?) \(subscription\)$/i;
+const localName = (model: CatalogModel): CatalogModel => {
+  const hit = SUBSCRIPTION_NAME.exec(model.name);
+  return hit ? { ...model, name: `${hit[1]} ${t("brains.subscription")}` } : model;
+};
+
 function pickerModels(o: ModelPickerLook): CatalogModel[] {
   const models = o.catalog ? modelsFor(o.catalog, o.role).filter((m) =>
-    !m.id.startsWith("cli:") && o.providers?.find((p) => p.id === connectionId(m))?.enabled !== false) : [];
+    !m.id.startsWith("cli:") && o.providers?.find((p) => p.id === connectionId(m))?.enabled !== false).map(localName) : [];
   return [...models, ...(o.role === "answer" ? cliModels(o.clis ?? []) : [])];
 }
 

@@ -135,6 +135,16 @@ export function orderedMembers(list: MembersList | null): Member[] {
 }
 
 /**
+ * Who 換成其他成員 on a pinned tile offers (owner, 2026-11-11, after Grok Bot's 「Replace with different Bot」): the members
+ * that are not pinned, in the column's order. Not Raphael (he is pinned by his own setting and holds the top slot), nobody
+ * hidden from the sidebar, and not the primary, who already has the top slot and would stand there twice.
+ */
+export function pinReplacements(list: MembersList | null): Member[] {
+  const primary = primaryIdOf(list);
+  return orderedMembers(list).filter(m => m.id !== RAPHAEL_ID && m.id !== primary && !m.pinned && !m.hidden);
+}
+
+/**
  * A row's second line: the last line of its thread (`preview`), or, while a question waits for the
  * owner there, that line in gold after 「等你處理：」 (the waiting turn is the thread's last, so its
  * line is what is asked), 「等你處理」 alone when there is none.

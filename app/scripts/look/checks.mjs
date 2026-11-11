@@ -1515,6 +1515,27 @@ export function checkRendered(name, context = {}) {
         require(model.getBoundingClientRect().width >= 80 && price.getBoundingClientRect().right <= row.getBoundingClientRect().right,
           'the model name and every price unit remain inside the existing picker row');
       }
+      // A known source wears its mark, never the plug of a source nobody drew (owner, 2026-11-11).
+      const openrouter = menu.querySelector('[data-source="openrouter"] > .mono');
+      require(openrouter && /logo-(art|mono)/.test(openrouter.className) && !openrouter.querySelector('svg.i'), 'OpenRouter has its own mark in the source list');
+    } else if (name === 'media-models-codex') {
+      const menu = document.querySelector('.model-chooser');
+      const marks = {
+        'the source list': menu.querySelector('[data-source="codex"] > .mono'),
+        'the head of its models': menu.querySelector('.mc-pane-head > .mono'),
+        'its row': menu.querySelector('.mc-row[data-model="@codex:gpt-image-2"] .mono'),
+      };
+      for (const [place, mark] of Object.entries(marks)) {
+        require(mark && visible(mark) && /logo-(art|mono)/.test(mark.className), `Codex has a maker's mark in ${place}`);
+        require(!mark.querySelector('svg.i'), `${place} draws no plug and no robot for Codex`);
+        const box = mark.getBoundingClientRect();
+        require(box.width >= 14 && box.height >= 14, `${place} draws the mark at a readable size`);
+      }
+      const drawings = Object.values(marks).map(mark => mark.innerHTML);
+      require(new Set(drawings).size === 1, "all three places draw the same mark");
+      const openrouter = menu.querySelector('[data-source="openrouter"] > .mono');
+      require(openrouter && openrouter.innerHTML !== drawings[0], "it is OpenAI's mark and not OpenRouter's");
+      require(menu.querySelector('.mc-pane-head h3').textContent.trim() === 'Codex', 'the head names Codex');
     } else if (name === 'media-models-repair') {
       require(['image-model', 'video-model'].includes(document.activeElement?.dataset.k), 'repair focuses the exact model control');
     }
@@ -5813,6 +5834,58 @@ export function checkRendered(name, context = {}) {
     const box = menu.getBoundingClientRect();
     require(box.left >= 0 && box.right <= innerWidth && box.top >= 0 && box.bottom <= innerHeight, "the menu is inside the viewport");
     return { check: name, shape };
+  }
+  if (name === "sidebar-tile-menu") {
+    // A pinned tile's menu reads as Grok Bot's pinned bot (owner, 2026-11-11): unpin and unread, then the rest, then 換成其他成員 last after a line.
+    const menu = document.querySelector('#app-popover');
+    require(visible(menu), "the tile's menu is open");
+    require(document.querySelector('.mb-pinned [data-member-item="3"]'), "the member whose tile it is stands among the tiles");
+    const shape = [...menu.children].map(node => node.matches('[role="separator"]') ? "|" : node.dataset.pick).join(" ");
+    require(shape === "pin unread | edit | export-template | hide delete | replace-pinned", `the tile's menu is grouped as Grok's pinned bot: ${shape}`);
+    const items = [...menu.querySelectorAll('[data-pick]')];
+    require(items.every(item => visible(item.querySelector('.ck svg.i')) && item.querySelector('.mt').textContent.trim() !== ""), "every row has its own icon and a label");
+    require(items.at(-1).dataset.pick === "replace-pinned" && items.at(-1).previousElementSibling.matches('[role="separator"]'), "換成其他成員 is last, after a hairline");
+    require(items.at(-2).classList.contains("danger") && !items.at(-1).classList.contains("danger"), "刪除 stays red and 換成其他成員 is not");
+    for (const line of menu.querySelectorAll('[role="separator"]')) {
+      const box = line.getBoundingClientRect();
+      require(box.height >= 1 && box.height <= 9 && box.width > menu.getBoundingClientRect().width * 0.7, "each hairline spans the menu");
+    }
+    require(!menu.querySelector('[data-pick="move"]') && !/ID/i.test(menu.textContent), "no 移到分組 and no id on a tile's menu");
+    const box = menu.getBoundingClientRect();
+    require(box.left >= 0 && box.right <= innerWidth && box.top >= 0 && box.bottom <= innerHeight, "the menu is inside the viewport");
+    require(window.__look.calls.every(call => call.method !== "members.update"), "opening the menu writes nothing");
+    return { check: name, shape };
+  }
+  if (name === "sidebar-tile-picker" || name === "sidebar-tile-replaced") {
+    const data = window.__look.data, writes = window.__look.calls.filter(call => call.method === "members.update");
+    const tiles = () => [...document.querySelectorAll('.mb-pinned [data-member-item]')].map(item => Number(item.dataset.memberItem));
+    if (name === "sidebar-tile-picker") {
+      const dialog = document.querySelector('.mb-dialog.mb-primary-picker');
+      require(visible(dialog), "the member picker is open");
+      const title = dialog.querySelector('h2').textContent.trim();
+      require(title !== "" && dialog.querySelector('[role="group"]').getAttribute('aria-label') === title, "it is titled by the action and its list is named by the title");
+      const choices = [...dialog.querySelectorAll('.mb-chat-choice')];
+      const ids = choices.map(button => Number(button.dataset.id));
+      require(choices.length >= 3 && choices.every(button => button.tagName === 'BUTTON' && visible(button)), "the members are real buttons");
+      require(ids.every(id => id !== 0 && !data.members.find(member => member.id === id).pinned), "only members that are not pinned are offered, and not Raphael");
+      require(!dialog.querySelector('.mb-dlg-act, [role="radio"], .mb-chat-choice svg.i'), "no 設為主要, no radio and no check: one press answers");
+      require(visible(dialog.querySelector('[data-primary-search]')), "the search is there");
+      const box = dialog.getBoundingClientRect();
+      require(box.left >= 0 && box.right <= innerWidth && box.top >= 0 && box.bottom <= innerHeight, "the window is inside the viewport");
+      for (const button of choices) {
+        const b = button.getBoundingClientRect();
+        require(b.left >= box.left && b.right <= box.right && b.height >= 40, `${button.textContent.trim()} is a whole row inside the window`);
+      }
+      require(writes.length === 0 && tiles().join() === "0,3,1", "nothing is written before a member is pressed");
+      return { check: name, choices: choices.length };
+    }
+    require(!document.querySelector('.mb-primary-picker, .mb-dialog'), "the picker closed on the press, with no question");
+    require(writes.length === 2 && writes[0].params.id === 4 && writes[0].params.pinned === true && writes[1].params.id === 3 && writes[1].params.pinned === false, "the member chosen is pinned, then the old one is unpinned");
+    require(!("group_id" in writes[1].params) && !("position" in writes[1].params), "the old member's folder and place are not touched");
+    require(tiles().join() === "0,4,1", `the member chosen stands exactly in the old tile's place: ${tiles()}`);
+    require(document.querySelector('.mb-sec [data-member="3"]') && !document.querySelector('.mb-pinned [data-member="3"]'), "the old member is back in its folder as a row");
+    require(document.querySelector('.mb-pinned [data-member="4"].mb-tile') && !document.querySelector('.mb-sec [data-member="4"]'), "the new member is a tile and no longer a row");
+    return { check: name, tiles: tiles() };
   }
   if (name === "primary-menu") {
     const menu = document.querySelector('#app-popover');

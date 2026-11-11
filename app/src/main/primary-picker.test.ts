@@ -117,4 +117,30 @@ describe("the primary contact's window", () => {
     input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
     expect(await answer).toBe(2);
   });
+
+  test("immediate: a press on a member answers at once, with no 設為主要, no check and its own title", async () => {
+    const answer = openPrimaryPicker({ members: MEMBERS, immediate: true, title: "換成其他成員" });
+    expect(dialog().querySelector("h2")!.textContent).toBe("換成其他成員");
+    expect(dialog().querySelector('[role="radiogroup"], [role="radio"]')).toBeNull();
+    expect(dialog().querySelector('[data-dlg="set"], [data-dlg="cancel"], .mb-dlg-act')).toBeNull();
+    expect([...dialog().querySelectorAll<HTMLElement>(".mb-chat-choice")].map((el) => el.tagName)).toEqual(["BUTTON", "BUTTON", "BUTTON"]);
+    choice(3).click();
+    expect(await answer).toBe(3);
+    expect(document.querySelector(".mb-primary-picker")).toBeNull();
+  });
+
+  test("immediate: × and Escape leave without an answer, and Enter in the search takes the first member shown", async () => {
+    let answer = openPrimaryPicker({ members: MEMBERS, immediate: true });
+    dialog().querySelector<HTMLElement>('[data-dlg="close"]')!.click();
+    expect(await answer).toBeNull();
+    answer = openPrimaryPicker({ members: MEMBERS, immediate: true });
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+    expect(await answer).toBeNull();
+    answer = openPrimaryPicker({ members: MEMBERS, immediate: true });
+    const input = dialog().querySelector<HTMLInputElement>("[data-primary-search]")!;
+    input.value = "文書";
+    input.dispatchEvent(new Event("input"));
+    input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+    expect(await answer).toBe(3);
+  });
 });

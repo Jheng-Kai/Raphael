@@ -364,7 +364,7 @@ npm run look -- dataset-table dataset-chart --theme both --width 1120,720,1920x1
 ```
 
 ```powershell
-npm run look -- media-models-unset media-models-set media-models-menu generated-image generated-video generated-image-missing generated-video-missing generated-image-repair generated-video-repair generated-video-running generated-video-cancelled quick-model-menu running --theme both --width 1120,720,1920x1080
+npm run look -- media-models-unset media-models-set media-models-menu media-models-codex generated-image generated-video generated-image-missing generated-video-missing generated-image-repair generated-video-repair generated-video-running generated-video-cancelled quick-model-menu running --theme both --width 1120,720,1920x1080
 ```
 
 Inspect all sheets and full-size controls at both themes and all selected viewports.
@@ -372,6 +372,12 @@ Compare media rows/pickers with quick-model-menu, stored image and video with ea
 running video with running, and inline repairs with each other. Fixture
 prices and media do not prove live billing, provider compatibility, native playback or
 external design acceptance.
+
+`media-models-codex` (fixture `mediaCodex`) opens the drawing-model picker with the core's own Codex subscription model beside OpenRouter and asserts
+OpenAI's mark (R-UI-123) in the source list, the head of its models and its row, the same drawing in all three, no plug or robot, and 「Codex 訂閱」 said
+in the window's language; `media-models-menu` asserts OpenRouter's own mark in the same list. Other subscription tools (Claude Code, Antigravity) are
+covered by the unit case that every tool in `CLIS` resolves to its maker's mark under its id and its lowercased name; their sources appear in the
+answer picker only. Not covered: a live Codex login.
 
 ## Owner round 10 connected apps and chosen models
 

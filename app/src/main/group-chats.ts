@@ -222,7 +222,7 @@ async function editRoomRoles(room: Room, saved: () => void): Promise<void> {
 
 function roomActions(anchor: HTMLElement, room: Room, saved: () => void = () => {}, deleted: () => void = () => {}): void {
   openActions(anchor, [
-    { id: "pin", label: t(room.pinned ? "members.sideUnpin" : "members.sidePin"), icon: "pin" },
+    { id: "pin", label: t(room.pinned ? "members.sideUnpin" : "members.sidePin"), icon: room.pinned ? "pinOff" : "pin" },
     { id: "hide", label: room.hidden ? t("sidebar.show") : t("members.sideHide"), icon: "eyeOff" },
     { id: "rename", label: t("members.rename"), icon: "pencil" },
     ...(!room.is_team ? [{ id: "members", label: t("rooms.members"), icon: "grid" as const }] : []),
