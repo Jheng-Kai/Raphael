@@ -7,6 +7,7 @@ import secrets
 from ..protocol import invalid_params
 from .templates import checked, description
 from .template_author import write
+from .member_catalog import export_files
 
 
 class TemplateCards:
@@ -64,12 +65,15 @@ class TemplateCards:
         return checked(json.loads(row["template"]))
 
     async def save(self, params):
+        """The text of the file. The card becomes `saved` only when the page then says the owner's dialog really wrote it."""
         row = self._row(params)
         value = self._safe(row)
+        if params.get("saved") is not True:
+            return {"text": json.dumps(value, ensure_ascii=False, indent=2) + "\n"}
         with self.conn:
             self.conn.execute("UPDATE member_template_cards SET state='saved' WHERE id=?", (row["id"],))
         self._changed(row)
-        return {"text": json.dumps(value, ensure_ascii=False, indent=2) + "\n"}
+        return {"saved": True}
 
     async def publish(self, params):
         from .member_catalog import handle
@@ -88,5 +92,11 @@ class TemplateCards:
             value = json.loads(row["template"])
             result.setdefault(row["turn_id"], []).append({"id": row["id"], "state": row["state"], "name": value["name"], "avatar": row["avatar"],
                 "description": value.get("description", ""), "counts": {"skills": len(value["skills"]), "routines": len(value["routines"])},
-                "connections": value["connections"], "findings": json.loads(row["findings"]), **({"url": row["url"]} if row["url"] else {})})
+                "connections": value["connections"], "findings": json.loads(row["findings"]), **({"url": row["url"]} if row["url"] else {}),
+                **(self._prepared(value) if row["state"] == "published" else {})})
         return result
+
+    def _prepared(self, value):
+        """Where a published card's files are: the same recipe is always the same folder, so nothing more is stored."""
+        _, _, folder = export_files(self.service, checked(value))
+        return {"folder": str(folder), "folder_id": folder.name}

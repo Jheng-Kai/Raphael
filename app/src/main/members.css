@@ -161,6 +161,9 @@
 .page-agent .mb-dh .btn.icon { width: var(--pa-gh-btn); min-height: var(--pa-gh-btn); border-radius: var(--r-sm); }
 .mb-fin { width: 100%; min-width: 0; min-height: var(--h-field); padding: 4px var(--sp-2); border: 1px solid var(--btn-edge); border-radius: var(--r-sm); background: var(--panel); font-size: var(--pa-dfs); color: var(--text); outline: 0; }
 .mb-fin:focus-visible { outline: 0; }
+/* A field the owner must correct, as .field[data-invalid] marks one: the same edge and a line below that says what to do. */
+.mb-fin[aria-invalid="true"] { border-color: var(--err); }
+.field-error { margin: 0; color: var(--err); }
 .mb-ta { min-height: calc(72px + 32 * var(--pa-u)); resize: vertical; line-height: 1.55; }
 .mb-field .sel, .mb-frow .sel, .mb-rsched .sel { width: 100%; max-width: 100%; justify-content: space-between; }
 .mb-field .sel > span, .mb-frow .sel > span { flex: 1; min-width: 0; text-align: left; }

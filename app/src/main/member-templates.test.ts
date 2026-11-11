@@ -1,9 +1,10 @@
 // @vitest-environment happy-dom
 import { beforeEach, expect, test, vi } from "vitest";
-import { exportMemberTemplate, previewTemplate, starterTemplate, templateContents } from "./member-templates";
+import { previewTemplate, previewTemplateFile, starterTemplate, templateContents } from "./member-templates";
+import { NAME_MAX } from "./members";
 import { openMemberCreator } from "./member-creator";
 import type { Member } from "./types";
-import { t } from "./i18n";
+import { catalogs, t } from "./i18n";
 
 const api = vi.hoisted(() => ({core: vi.fn(), memberTemplateFile: vi.fn(), connectorsConnect: vi.fn(), membersUpdate: vi.fn(), toolsetsList: vi.fn(), integrationsCatalog: vi.fn(), openExternalUrl: vi.fn()}));
 vi.mock("./api", () => api);
@@ -134,16 +135,6 @@ test("store filtering stays local and install carries catalogue identity", async
   expect(create).toHaveBeenCalledWith(expect.objectContaining({catalog_id:"research"}));
 });
 
-test("secret findings block export and publish before any native action", async () => {
-  const template = {...starterTemplate(3),instructions:"password: synthetic-secret"};
-  api.core.mockResolvedValue({template,findings:[{kind:"secret",path:"template.instructions"}]});
-  await exportMemberTemplate(1);
-  expect(document.querySelector<HTMLButtonElement>('[data-dlg="export"]')!.disabled).toBe(true);
-  expect(document.querySelector<HTMLButtonElement>('[data-dlg="publish"]')!.disabled).toBe(true);
-  expect(api.memberTemplateFile).not.toHaveBeenCalled();
-  expect(api.openExternalUrl).not.toHaveBeenCalled();
-});
-
 test("scan warnings name the visible section without exposing internal translation-like paths", async () => {
   const template = starterTemplate(3);
   api.core.mockResolvedValue({template,findings:[{kind:"injection",path:"template.instructions"}]});
@@ -157,26 +148,120 @@ test("scan warnings name the visible section without exposing internal translati
   expect(warning.compareDocumentPosition(document.querySelector(".tpl-sec")!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 });
 
-test("export rechecks the reviewed generation before file save", async () => {
-  const template = starterTemplate(0);
-  api.core.mockResolvedValue({template,findings:[]});
-  await exportMemberTemplate(1);
-  expect(api.memberTemplateFile).not.toHaveBeenCalled();
-  api.core.mockResolvedValue({template:{...template,instructions:"Changed after review"}});
-  document.querySelector<HTMLButtonElement>('[data-dlg="export"]')!.click();
-  for (let i=0;i<8;i++) await Promise.resolve();
-  expect(api.memberTemplateFile).not.toHaveBeenCalled();
+const flush = async (): Promise<void> => { for (let i = 0; i < 12; i++) await Promise.resolve(); };
+// Notepad saves a template with this mark in front of it.
+const BOM = String.fromCharCode(0xfeff);
+const said = (): string => document.body.textContent ?? "";
+
+test("the name field takes what a member's name can be and no more, the core's NAME_MAX", async () => {
+  await previewTemplate(starterTemplate(0), "slime:rimuru", vi.fn(), null, vi.fn());
+  expect(document.querySelector<HTMLInputElement>("[data-template-name]")!.maxLength).toBe(NAME_MAX);
 });
 
-test("publishing prepares the reviewed local recipe before opening the owner browser", async () => {
-  const template = starterTemplate(0);
-  const url = "https://github.com/Jheng-Kai/raphael-catalog/compare/main...main?quick_pull=1";
-  api.core.mockImplementation(async (_method, p) => p.action === "review" ? {template,findings:[]} : {folder:"C:\\Raphael\\template-exports\\sample",url});
-  await exportMemberTemplate(1);
-  expect(api.openExternalUrl).not.toHaveBeenCalled();
-  document.querySelector<HTMLButtonElement>('[data-dlg="publish"]')!.click();
-  for (let i=0;i<8;i++) await Promise.resolve();
-  expect(api.core).toHaveBeenLastCalledWith("members.template", {action:"publish",template});
-  expect(api.openExternalUrl).toHaveBeenCalledWith(url);
-  expect(api.memberTemplateFile).not.toHaveBeenCalled();
+test("an empty name is refused in the field, nothing is added, and typing again takes the complaint back", async () => {
+  const create = vi.fn(async () => ({id: 9, name: "Developer", tools: []}) as unknown as Member);
+  await previewTemplate(starterTemplate(3), "slime:diablo", create, null, vi.fn());
+  const field = document.querySelector<HTMLInputElement>("[data-template-name]")!;
+  field.value = "   ";
+  document.querySelector<HTMLButtonElement>('[data-dlg="import"]')!.click();
+  await flush();
+  expect(create).not.toHaveBeenCalled();
+  const again = document.querySelector<HTMLInputElement>("[data-template-name]")!;
+  expect(again.getAttribute("aria-invalid")).toBe("true");
+  expect(document.querySelector(".field-error")!.textContent).toBe(t("members.nameEmpty"));
+  expect(document.querySelector<HTMLButtonElement>('[data-dlg="import"]')!.disabled).toBe(false);
+  again.value = "Dev";
+  again.dispatchEvent(new Event("input", {bubbles: true}));
+  expect(again.hasAttribute("aria-invalid")).toBe(false);
+  expect(document.querySelector(".field-error")).toBeNull();
+});
+
+test("a name the owner typed stays in the field when adding it was refused", async () => {
+  const create = vi.fn(async () => null);
+  await previewTemplate(starterTemplate(3), "slime:diablo", create, null, vi.fn());
+  document.querySelector<HTMLInputElement>("[data-template-name]")!.value = "我的開發者";
+  document.querySelector<HTMLButtonElement>('[data-dlg="import"]')!.click();
+  await flush();
+  expect(create).toHaveBeenCalledWith(expect.objectContaining({name: "我的開發者"}));
+  expect(document.querySelector<HTMLInputElement>("[data-template-name]")!.value).toBe("我的開發者");
+});
+
+test("a template file the owner opens is read with or without a byte-order mark", async () => {
+  const text = JSON.stringify({...starterTemplate(0), description: "x"});
+  for (const file of [text, BOM + text]) {
+    document.body.innerHTML = "";
+    api.core.mockClear();
+    await previewTemplateFile(file, vi.fn(), null, vi.fn());
+    expect(api.core).toHaveBeenCalledWith("members.template", {action: "preview", template: JSON.parse(text)});
+    expect(document.querySelector(".template-preview")).not.toBeNull();
+  }
+});
+
+test.each([
+  ["not json at all", "template.file.notTemplate"],
+  ["{\"format\":\"something-else\",\"version\":1}", "template.file.notTemplate"],
+  ["{\"format\":\"raphael-member\",\"version\":2}", "template.file.newer"],
+  ["{\"format\":\"raphael-member\",\"version\":1,\"name\":\"cut off", "template.file.damaged"],
+] as const)("a file that cannot be a template says what is wrong in the owner's words (%s)", async (file, key) => {
+  await previewTemplateFile(file, vi.fn(), null, vi.fn());
+  expect(api.core).not.toHaveBeenCalled();
+  expect(document.querySelector(".template-preview")).toBeNull();
+  expect(said()).toContain(t(key));
+  expect(said()).not.toMatch(/JSON|Unexpected|SyntaxError|Invalid params/);
+});
+
+test.each([
+  ["[-32602] Invalid params: Invalid member template fields", "template.file.damaged"],
+  ["[-32602] Invalid params: Remove private credentials from the member recipe first", "template.file.secret"],
+  ["[-32602] Invalid params: Member template is too large", "template.file.tooLarge"],
+] as const)("a template the core refuses is told in the owner's words, never the core's (%s)", async (refusal, key) => {
+  api.core.mockRejectedValue(new Error(refusal));
+  await previewTemplateFile(JSON.stringify(starterTemplate(0)), vi.fn(), null, vi.fn());
+  expect(said()).toContain(t(key));
+  expect(said()).not.toContain("Invalid params");
+});
+
+test("the creator's 開啟 button reads a Notepad file with a mark and shows a bad one plainly", async () => {
+  const maker = openMemberCreator({groupId: null, taken: [], create: vi.fn()});
+  maker.el.querySelector<HTMLButtonElement>('[data-dlg="templates"]')!.click();
+  api.memberTemplateFile.mockResolvedValueOnce(BOM + JSON.stringify(starterTemplate(0)));
+  document.querySelector<HTMLButtonElement>('[data-dlg="open"]')!.click();
+  await flush();
+  expect(document.querySelector(".template-preview")).not.toBeNull();
+  document.querySelector<HTMLElement>(".template-preview .mb-dlg-head [data-dlg=close]")?.click();
+  api.memberTemplateFile.mockResolvedValueOnce("{broken");
+  document.querySelector<HTMLButtonElement>('[data-dlg="open"]')!.click();
+  await flush();
+  expect(said()).toContain(t("template.file.damaged"));
+});
+
+test("a store that is not open says so plainly, asks nothing of any entry and shows no search", async () => {
+  api.core.mockImplementation(async () => ({entries: [], offline: false, open: false}));
+  const maker = openMemberCreator({groupId: null, taken: [], create: vi.fn(), store: true});
+  await flush();
+  expect(maker.el.querySelector("[data-store-closed]")!.textContent).toBe(t("store.notOpen"));
+  expect(maker.el.querySelector<HTMLElement>(".store-categories")!.hidden).toBe(true);
+  expect(maker.el.querySelectorAll(".store-entry")).toHaveLength(0);
+  expect(api.core).toHaveBeenCalledTimes(1);
+});
+
+test("an entry the store cannot give says so in the owner's words", async () => {
+  api.core.mockRejectedValue(new Error("[-32602] Invalid params: The store is not open yet"));
+  await previewTemplate(null, "slime:souei", vi.fn(), null, vi.fn(), "research");
+  expect(said()).toContain(t("store.notOpen"));
+  document.body.innerHTML = "";
+  api.core.mockRejectedValue(new Error("[-32602] Invalid params: Template unavailable offline"));
+  await previewTemplate(null, "slime:souei", vi.fn(), null, vi.fn(), "research");
+  expect(said()).toContain(t("store.unavailable"));
+});
+
+test("every starter's name, in every language, fits what the core takes of a member name", () => {
+  const long: string[] = [];
+  for (const [locale, messages] of Object.entries(catalogs)) {
+    for (const key of ["coordinator", "researcher", "writer", "developer", "planner", "analyst", "editor", "inbox"] as const) {
+      const name = messages[`template.${key}` as const];
+      if ([...name].length > NAME_MAX) long.push(`${locale} ${key}: ${name}`);
+    }
+  }
+  expect(long).toEqual([]);
 });

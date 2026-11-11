@@ -69,6 +69,7 @@ use crate::mic_access::{self, MicAccess};
 use crate::notices::LanguageCell;
 use crate::overlay::{AskPrompt, ConfirmSender, Confirmation, Overlay};
 use crate::rpc::{CORE_EXITED, Notification, RpcError, TIMEOUT};
+use crate::template_file;
 
 /// What `core_call` says when there is no core to call.
 const CORE_NOT_RUNNING: &str = "Raphael's core is not running";
@@ -286,6 +287,9 @@ pub enum MainEvent {
     VoiceLevel {
         value: f32,
     },
+    /// A member template file was opened from the file manager (`template_file`): the window asks for its text with
+    /// `member_template_pending` and shows the import review. The file is not in the event.
+    TemplateFile,
 }
 
 impl From<QuestionNews> for MainEvent {
@@ -922,13 +926,12 @@ pub async fn member_template_file(
     }
     let window = webview.window();
     tauri::async_runtime::spawn_blocking(move || {
-        use std::io::Read;
         use tauri_plugin_dialog::DialogExt;
         let picker = app
             .dialog()
             .file()
             .set_parent(&window)
-            .add_filter("Raphael member", &["raphael-member"]);
+            .add_filter("Raphael member", &[template_file::EXTENSION]);
         let chosen = if action == "open" {
             picker.blocking_pick_file()
         } else {
@@ -942,29 +945,53 @@ pub async fn member_template_file(
         let path = chosen
             .into_path()
             .map_err(|_| "invalid template location".to_owned())?;
-        if path.extension().and_then(|ext| ext.to_str()) != Some("raphael-member") {
+        if path.extension().and_then(|ext| ext.to_str()) != Some(template_file::EXTENSION) {
             return Err("choose a .raphael-member file".to_owned());
         }
         if action == "save" {
             std::fs::write(path, text).map_err(|_| "could not save member template".to_owned())?;
             Ok(Some(String::new()))
         } else {
-            let mut bytes = Vec::new();
-            std::fs::File::open(path)
-                .map_err(|_| "could not open member template".to_owned())?
-                .take(512 * 1024 + 1)
-                .read_to_end(&mut bytes)
-                .map_err(|_| "could not read member template".to_owned())?;
-            if bytes.len() > 512 * 1024 {
-                return Err("member template is too large".to_owned());
-            }
-            String::from_utf8(bytes)
-                .map(Some)
-                .map_err(|_| "member template must be UTF-8".to_owned())
+            template_file::read(&path).map(Some)
         }
     })
     .await
     .map_err(|err| format!("a background task failed: {err}"))?
+}
+
+/// The text of the template file the app was opened with, once (`template_file`): what the owner double-clicked in the
+/// file manager. The window shows its import review; it names no path.
+#[tauri::command]
+pub fn member_template_pending(webview: Webview) -> Result<Option<String>, String> {
+    require_main(&webview)?;
+    Ok(template_file::take())
+}
+
+/// Shows the files of a publish request the app prepared in the file manager, at the owner's press. The window names only
+/// the folder's 16 characters (`folder_id` of the answer to a publish); the core finds the file by them and by nothing else,
+/// so a press never opens a place the window chose.
+#[tauri::command]
+pub async fn show_template_export(
+    app: AppHandle,
+    webview: Webview,
+    folder_id: String,
+) -> Result<(), String> {
+    require_main(&webview)?;
+    let core = app
+        .try_state::<Arc<CoreProcess>>()
+        .ok_or(CORE_NOT_RUNNING)?;
+    let result = core
+        .call(
+            "members.template",
+            json!({"action": "folder", "folder_id": folder_id}),
+        )
+        .await
+        .map_err(|_| "folder unavailable".to_owned())?;
+    let found = result
+        .get("path")
+        .and_then(Value::as_str)
+        .ok_or("folder unavailable")?;
+    show_in_folder(found)
 }
 
 // ---------- questions to Raphael from the window ----------
@@ -2420,6 +2447,7 @@ mod tests {
                 "main_events",
                 "main_window_forward",
                 "member_template_file",
+                "member_template_pending",
                 "mic_access",
                 "open_attachment",
                 "open_external_url",
@@ -2430,6 +2458,7 @@ mod tests {
                 "report_save",
                 "schedule_keep_awake_get",
                 "schedule_keep_awake_set",
+                "show_template_export",
                 "window_hotkey",
             ]
         );
@@ -3767,6 +3796,11 @@ mod tests {
             })
             .unwrap(),
             r#"{"type":"TrayOpen","page":"history"}"#
+        );
+        // A template file that was opened carries no text or path: the window asks for it.
+        assert_eq!(
+            serde_json::to_string(&MainEvent::TemplateFile).unwrap(),
+            r#"{"type":"TemplateFile"}"#
         );
     }
 

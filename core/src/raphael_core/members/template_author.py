@@ -10,6 +10,7 @@ from ..bots.homes import redact_secrets
 from ..memory.brain import MemoryBrain
 from .templates import checked, export, findings
 from .skill_names import SKILL_NAME_RULE
+from .store import NAME_MAX, ROLE_MAX
 
 
 def object_schema(properties):
@@ -25,8 +26,8 @@ SCHEDULE = {"anyOf": [
 ]}
 SCHEMA = object_schema({
     "format": {"enum": ["raphael-member"]}, "version": {"type": "integer", "enum": [1]},
-    "name": {"type": "string", "minLength": 1, "maxLength": 16},
-    "role": {"type": "string", "maxLength": 24},
+    "name": {"type": "string", "minLength": 1, "maxLength": NAME_MAX},
+    "role": {"type": "string", "maxLength": ROLE_MAX},
     "personality": {"type": "string", "maxLength": 2000},
     "instructions": {"type": "string", "maxLength": 2000},
     "reply_style": {"enum": ["full", "conversational"]},

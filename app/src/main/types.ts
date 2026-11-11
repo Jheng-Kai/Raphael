@@ -561,6 +561,9 @@ export interface TemplateCard {
   connections: string[];
   findings: { kind: "secret" | "injection"; path: string }[];
   url?: string;
+  /** Where the files of a prepared publish request are (a published card only), and the 16 characters that name that folder. */
+  folder?: string;
+  folder_id?: string;
 }
 
 /** A computer card: the owner's turn at the computer for a sign-in, a password or a payment. Never what was on screen. */
@@ -869,7 +872,9 @@ export type MainEvent =
   /** The question `id` was answered (here or on the overlay), ran out or was dropped. */
   | { type: "AgentQuestionClosed"; id: string }
   /** The microphone's loudness, 0 to 1, while a question to Raphael is recorded (never a dictation's). */
-  | { type: "VoiceLevel"; value: number };
+  | { type: "VoiceLevel"; value: number }
+  /** A member template file was opened from the file manager: the window takes its text (`memberTemplatePending`) and shows the import review. */
+  | { type: "TemplateFile" };
 
 /** A YES/NO question of Raphael's that waits for its answer (`AgentQuestion`, `agent_question_open`). */
 export interface AgentQuestion {

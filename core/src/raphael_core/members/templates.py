@@ -163,7 +163,7 @@ def export_skill(capabilities, member_id, identifier):
 
 async def handle(service, params):
     action = params.get("action")
-    if action in ("catalog", "catalog-preview", "publish"):
+    if action in ("catalog", "catalog-preview", "publish", "folder"):
         from .member_catalog import handle as catalog_handle
         return await catalog_handle(service, params)
     if action == "review":

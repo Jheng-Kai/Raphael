@@ -1129,3 +1129,23 @@ opens from the menu button in the caption first, which closes nothing; the press
 ```text
 npm run look -- press-through-avatar-picker press-through-row-menu press-through-right-click press-through-delete-dialog press-through-model-menu --theme both --width 1120,720,1920x1080
 ```
+
+## Sharing finished: cancelled saves, where the files are, files from the file manager, the store before it opens (2026-11-11)
+
+R-STORE-05, R-STORE-06, R-STORE-07, R-COLLEAGUE-07. The owner asked that everything about sharing be finished, remote computers included.
+What changed, and how to see it:
+
+- A save dialog the owner cancels leaves the template card a draft (member-template-save-cancelled): the core's `members.template_card_export`
+  gives the text only, and the page sends `saved: true` after the dialog wrote a file.
+- A prepared publish request shows the path of its files, the one next step in a sentence and 顯示檔案, which opens the folder in the file
+  manager (member-template-published). The shell resolves the 16-character folder id through the core; the window names no path.
+- A file Notepad saved (byte-order mark) opens (member-template-notepad-file); a file cut short, or no template, or from a newer Raphael, says so in
+  words (member-template-bad-file); an empty name is marked in the field (member-template-name-empty). The name field takes the core's NAME_MAX.
+- A store with no catalogue key says it is not open yet (store-closed); the app holds no key until the owner has made the catalogue
+  (catalog-template/README.md).
+- `.raphael-member` files are registered by the installer (tauri.conf.json `bundle.fileAssociations`); `template_file.rs` and `template-open.ts` carry a double-clicked
+  file to the import review, and `verify-windows-install.ps1` checks the registry entry and the hand-over on the disposable runner. Only an installed release shows the double-click itself.
+
+npm run look -- member-template-save-cancelled member-template-published member-template-bad-file member-template-notepad-file member-template-name-empty store-closed member-template-export member-template-preview member-template-imported store-empty store-offline chat-setup-cards --theme both --width 1120,720,1920x1080
+
+Inspect every contact sheet and, at light 720 and dark 1120, the published card (the path wraps inside the card), the toast of a bad file, and the empty name's red edge and line.
