@@ -304,6 +304,8 @@ describe("the column, used", () => {
     const menu = document.querySelector<HTMLElement>("#app-popover")!;
     expect([...menu.children].map(node => node.matches('[role="separator"]') ? "|" : (node as HTMLElement).dataset.pick)).toEqual(["pin", "move", "unread", "|", "edit", "|", "export-template", "|", "hide", "delete"]);
     expect(menu.querySelector('[data-pick="delete"]')!.classList.contains("danger")).toBe(true);
+    // The ⋯ is the toggle of its own menu (R-UI-124): pressing it again closes the menu, so each choice below opens its own.
+    closeMenu();
     column.el.querySelector<HTMLElement>('[data-member-more="2"]')!.click();
     document.querySelector<HTMLElement>('#app-popover [data-pick="delete"]')!.click();
     expect(host.deleteMember).toHaveBeenCalledWith(2);

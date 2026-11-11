@@ -2,7 +2,7 @@
 import { afterEach, expect, test, vi } from "vitest";
 import { closeAndPress, registerDismissal } from "./dismissals";
 import { openDialog } from "./member-dialogs";
-import { closeMenu, openConfirmMenu, openMenu } from "./ui";
+import { closeMenu, openConfirmMenu, openMenu, pressOverflow } from "./ui";
 
 const disposers: (() => void)[] = [];
 afterEach(() => {
@@ -232,6 +232,211 @@ test("a dialog's scrim hands the press to a control beside it, the way the sideb
   expect(after).toHaveBeenCalledTimes(1);
   expect(pick).toHaveBeenCalledTimes(1);
   expect(document.activeElement).toBe(member);
+});
+
+// ---------- R-UI-124: the control that opened a panel is its toggle ----------
+
+/** A control that opens a scrim dialog when pressed; `opened` counts the times it did. */
+function dialogOpener(): { button: HTMLButtonElement; opened: ReturnType<typeof vi.fn>; closed: ReturnType<typeof vi.fn>; scrim(): HTMLElement } {
+  const button = document.createElement("button"), opened = vi.fn(), closed = vi.fn();
+  button.id = "opener"; document.body.append(button);
+  let scrim: HTMLElement | null = null;
+  button.addEventListener("click", () => { opened(); scrim = scrimWith(closed).scrim; });
+  return { button, opened, closed, scrim: () => scrim! };
+}
+/** The key's own events, in the order a browser sends them: Enter acts at once, Space when it is let go. */
+function keyPress(target: Element, key: "Enter" | " "): { click: MouseEvent } {
+  target.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, cancelable: true, key }));
+  if (key === "Enter") {
+    const click = new MouseEvent("click", { bubbles: true, cancelable: true, detail: 0 });
+    target.dispatchEvent(click);
+    target.dispatchEvent(new KeyboardEvent("keyup", { bubbles: true, key }));
+    return { click };
+  }
+  target.dispatchEvent(new KeyboardEvent("keyup", { bubbles: true, key }));
+  const click = new MouseEvent("click", { bubbles: true, cancelable: true, detail: 0 });
+  target.dispatchEvent(click);
+  return { click };
+}
+
+test("a press on the control that opened a dialog closes it through the scrim and does not open it again", () => {
+  const { button, opened, closed, scrim } = dialogOpener();
+  press(button);
+  expect(opened).toHaveBeenCalledTimes(1);
+  const over = pointerOver(button, scrim());
+  press(scrim());
+  expect(closed).toHaveBeenCalledTimes(1);
+  expect(scrim().isConnected).toBe(false);
+  // The opener lay under the scrim and was found there, and not pressed: it is the dialog's toggle.
+  expect(over.seen).toEqual(["none"]);
+  expect(opened).toHaveBeenCalledTimes(1);
+  // With nothing open any more it opens again, as a control does.
+  press(button);
+  expect(opened).toHaveBeenCalledTimes(2);
+});
+
+test("a press through a scrim still reaches every control that did not open the dialog", () => {
+  const { button, opened, closed, scrim } = dialogOpener();
+  const other = document.createElement("button"), act = vi.fn();
+  document.body.append(other); other.addEventListener("click", act);
+  press(button);
+  pointerOver(other, scrim());
+  press(scrim());
+  expect(closed).toHaveBeenCalledTimes(1);
+  expect(act).toHaveBeenCalledTimes(1);
+  expect(opened).toHaveBeenCalledTimes(1);
+});
+
+test("an opener that the page drew again is still the opener: its twin is not pressed either", () => {
+  const list = document.createElement("div");
+  list.innerHTML = '<button type="button" data-k="more:2" aria-label="More">...</button>';
+  document.body.append(list);
+  const opened = vi.fn(), closed = vi.fn(), made: { scrim?: HTMLElement } = {};
+  list.addEventListener("click", event => { if ((event.target as Element).closest("[data-k]")) { opened(); made.scrim = scrimWith(closed).scrim; } });
+  press(list.querySelector("button")!);
+  // The list is drawn anew while the dialog is open.
+  list.innerHTML = '<button type="button" data-k="more:2" aria-label="More">...</button><button type="button" data-k="more:3" aria-label="More">...</button>';
+  const scrim = made.scrim!;
+  const over = pointerOver(list.querySelector('[data-k="more:2"]'), scrim);
+  press(scrim);
+  expect(closed).toHaveBeenCalledTimes(1);
+  expect(opened).toHaveBeenCalledTimes(1);
+  expect(over.seen).toEqual(["none"]);
+  // The row beside it is another control, and is pressed as always.
+  const second = scrimWith(vi.fn());
+  pointerOver(list.querySelector('[data-k="more:3"]'), second.scrim);
+  press(second.scrim);
+  expect(opened).toHaveBeenCalledTimes(2);
+});
+
+test("a menu's anchor is the menu's toggle: the second press closes it and the first press opened it once", () => {
+  const anchor = document.createElement("button"), opened = vi.fn();
+  document.body.append(anchor);
+  anchor.addEventListener("click", () => { opened(); openMenu(anchor, [{ value: "a", label: "A" }], "a", () => {}); });
+  press(anchor);
+  expect(document.getElementById("app-popover")).not.toBeNull();
+  const second = press(anchor);
+  expect(document.getElementById("app-popover")).toBeNull();
+  expect(opened).toHaveBeenCalledTimes(1);
+  expect(second.click.defaultPrevented).toBe(true);
+  expect(anchor.getAttribute("aria-expanded")).toBe("false");
+  press(anchor);
+  expect(opened).toHaveBeenCalledTimes(2);
+  expect(document.getElementById("app-popover")).not.toBeNull();
+});
+
+test("a right click on a menu's anchor activates nothing: the menu stays open", () => {
+  const anchor = document.createElement("button");
+  document.body.append(anchor);
+  anchor.addEventListener("click", () => openMenu(anchor, [{ value: "a", label: "A" }], "a", () => {}));
+  press(anchor);
+  anchor.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, button: 2, clientX: 9, clientY: 9 }));
+  expect(document.getElementById("app-popover")).not.toBeNull();
+});
+
+test("a control beside a popover that opened it, and is not its anchor, toggles it too", () => {
+  const field = document.createElement("input"), plus = document.createElement("button"), other = document.createElement("button");
+  const opened = vi.fn(), act = vi.fn();
+  document.body.append(field, plus, other); other.addEventListener("click", act);
+  plus.addEventListener("click", () => { opened(); openMenu(field, [{ value: "a", label: "A" }], "a", () => {}); });
+  press(plus);
+  expect(document.getElementById("app-popover")).not.toBeNull();
+  press(plus);
+  expect(document.getElementById("app-popover")).toBeNull();
+  expect(opened).toHaveBeenCalledTimes(1);
+  // Any other control is pressed through as before.
+  press(plus);
+  press(other);
+  expect(document.getElementById("app-popover")).toBeNull();
+  expect(act).toHaveBeenCalledTimes(1);
+});
+
+test("a press in a field the menu is anchored to leaves the menu open: a caret is not an opener", () => {
+  const field = document.createElement("textarea");
+  document.body.append(field);
+  press(field);
+  openMenu(field, [{ value: "a", label: "A" }], "a", () => {});
+  press(field);
+  expect(document.getElementById("app-popover")).not.toBeNull();
+});
+
+test("Enter and Space on the focused opener close its menu and leave it closed", () => {
+  const anchor = document.createElement("button"), opened = vi.fn();
+  document.body.append(anchor);
+  anchor.addEventListener("click", () => { opened(); openMenu(anchor, [{ value: "a", label: "A" }], "a", () => {}); });
+  for (const key of ["Enter", " "] as const) {
+    anchor.focus();
+    keyPress(anchor, key);
+    expect(document.getElementById("app-popover")).not.toBeNull();
+    const second = keyPress(anchor, key);
+    expect(document.getElementById("app-popover")).toBeNull();
+    expect(second.click.defaultPrevented).toBe(true);
+  }
+  expect(opened).toHaveBeenCalledTimes(2);
+  // Escape is unchanged: it closes and gives the focus back.
+  anchor.focus(); keyPress(anchor, "Enter");
+  anchor.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, cancelable: true, key: "Escape" }));
+  expect(document.getElementById("app-popover")).toBeNull();
+  expect(document.activeElement).toBe(anchor);
+  expect(opened).toHaveBeenCalledTimes(3);
+});
+
+test("Enter on the control that opened a dialog closes the dialog and does not open it again", () => {
+  const { button, opened, closed } = dialogOpener();
+  button.focus();
+  keyPress(button, "Enter");
+  expect(opened).toHaveBeenCalledTimes(1);
+  keyPress(button, "Enter");
+  expect(closed).toHaveBeenCalledTimes(1);
+  expect(opened).toHaveBeenCalledTimes(1);
+});
+
+test("a dialog opened from a menu item is opened by the menu's own opener", () => {
+  const more = document.createElement("button"), opened = vi.fn(), closed = vi.fn();
+  document.body.append(more);
+  const made: { scrim?: HTMLElement } = {};
+  more.addEventListener("click", () => {
+    opened();
+    openMenu(more, [{ value: "delete", label: "Delete" }], "", () => { made.scrim = scrimWith(closed).scrim; });
+  });
+  press(more);
+  press(document.querySelector<HTMLElement>('#app-popover [data-value="delete"]')!);
+  const scrim = made.scrim!;
+  expect(scrim.isConnected).toBe(true);
+  pointerOver(more, scrim);
+  press(scrim);
+  expect(closed).toHaveBeenCalledTimes(1);
+  expect(opened).toHaveBeenCalledTimes(1);
+  expect(document.getElementById("app-popover")).toBeNull();
+});
+
+test("a left press on the row whose right click opened a menu closes it and presses the row", () => {
+  const row = document.createElement("div"), body = document.createElement("button"), more = document.createElement("button"), act = vi.fn();
+  more.setAttribute("data-overflow", ""); more.dataset.k = "row-more:1";
+  row.append(body, more); document.body.append(row);
+  body.addEventListener("click", act);
+  more.addEventListener("click", () => openMenu(more, [{ value: "a", label: "A" }], "a", () => {}));
+  pressOverflow(more, { x: 12, y: 14 });
+  expect(document.getElementById("app-popover")).not.toBeNull();
+  press(body);
+  expect(document.getElementById("app-popover")).toBeNull();
+  // The row is what the press was for: it is not the control that opened the menu.
+  expect(act).toHaveBeenCalledTimes(1);
+});
+
+test("closeAndPress does not press the control that opened the drawer, and presses any other", () => {
+  const scrim = document.createElement("div"), trigger = document.createElement("button"), member = document.createElement("button");
+  const closed = vi.fn(), pressed = vi.fn(), other = vi.fn();
+  document.body.append(trigger, member, scrim); trigger.addEventListener("click", pressed); member.addEventListener("click", other);
+  scrim.addEventListener("click", event => closeAndPress(event, scrim, closed, trigger));
+  pointerOver(trigger, scrim);
+  press(scrim, scrim, { x: 4, y: 6 });
+  expect(closed).toHaveBeenCalledTimes(1);
+  expect(pressed).not.toHaveBeenCalled();
+  pointerOver(member, scrim);
+  press(scrim);
+  expect(closed).toHaveBeenCalledTimes(2);
+  expect(other).toHaveBeenCalledTimes(1);
 });
 
 test("closeAndPress closes a drawer's scrim and presses what was under it, but a key only closes", () => {
