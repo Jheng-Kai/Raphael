@@ -136,7 +136,6 @@ async def test_removing_the_request_turn_keeps_restart_redaction_for_the_saved_l
     vm, target, _ = desktop
     hub = VmTools(EmptyHub(), vm, attachments=AttachmentStore(tmp_path), conn=conn, bridge=Browser)
     hub.logins = LoginVault(rig.vault, conn=conn)
-    vm.grants.set(0, True)
     await hub.prepare()
     await hub._discover(target)
     tool = next(item for item in hub.offered() if item.name == "get_browser_state")

@@ -44,7 +44,7 @@ member-details.ts reuses ui.tabs and keeps the existing settings/resource pages 
 
 computer-state.ts owns the full localized screen sentence and the semantically matching short header word, following the owner's 2026-11-05 request to say each thing once. The existing viewer owns its persistent noVNC frame, watch/takeover boundary and screen actions; Enlarge/Take control require a live screen. Location and lifecycle controls live only in the Computer tab; context-menu.ts maps both its header and work-row overflow to the same existing menu path. The member panel owns its one conversation heading and asks the existing conversation list to omit its internal heading. Library file handles resolve through computer.team_file with member/root containment and the shell's existing read-or-reveal behavior; pages return to their existing conversation result.
 
-LocalVm.status preserves fixed preflight reasons and the missing-image flag. ensure_engine defaults to refusing a stopped host engine; since 2026-11-11 a granted member's own tool call (`engine_start_allowed()` in vm.py, set only in VmTools._call) passes `start_desktop=True`, while status reads and the viewer never do, and `engine_notice` says so in one progress line. An explicit start_docker request on computer.viewer_status pins the current local host, reuses DockerDesktop and the 120-second wait, clears temporary engine progress and returns normal status. Windows launches the installed Docker Desktop.exe, macOS opens the installed Docker.app; no shell/elevation, remote launch, install or image maintenance occurs during a status read. Fake tests do not prove native launch or container operation.
+LocalVm.status preserves fixed preflight reasons and the missing-image flag. ensure_engine defaults to refusing a stopped host engine; since 2026-11-11 a member's own tool call (`engine_start_allowed()` in vm.py, set only in VmTools._call) passes `start_desktop=True`, while status reads and the viewer never do, and `engine_notice` says so in one progress line. An explicit start_docker request on computer.viewer_status pins the current local host, reuses DockerDesktop and the 120-second wait, clears temporary engine progress and returns normal status. Windows launches the installed Docker Desktop.exe, macOS opens the installed Docker.app; no shell/elevation, remote launch, install or image maintenance occurs during a status read. Fake tests do not prove native launch or container operation.
 
 ## Calm conversation projection (owner, 2026-11-05)
 
@@ -86,7 +86,7 @@ recursive filesystem scope is accepted (A-06/10/11).
 ## Smooth member computers (2026-11-05)
 
 VmTools owns run_steps in the existing curated catalog; each subcall re-enters
-the same ToolGate.call_plugin, lease, grant, action and audit boundary. The shared
+the same ToolGate.call_plugin, lease, action and audit boundary. The shared
 worker completion guard is used by API/worker and the existing CLI loop. Tools'
 web_read receives the same VmTools rendered-read callback, with current member
 scope; no new worker, model loop, service registry or provider fallback is added.
@@ -282,7 +282,7 @@ shows readable words. Parent ledgers include the cost without another spend row.
 
 Video keeps background progress and Stop. Cancellation prevents local publication and
 attempts OpenAI deletion; remote cancellation and billing are not guaranteed. Dataset
-work remains under member VM grants and explicit rules, installs pinned dependencies
+work remains under the member VM and explicit rules, installs pinned dependencies
 only on first workspace use, and needs no Docker layer. No new page, RPC or migration.
 
 ## Owner demonstration boundary (2026-11-01)
@@ -346,7 +346,7 @@ results; timeout and host errors are separately audited. Background jobs retain
 bounded live stdout/stderr, belong to one conversation/member or task and cancel on
 session/task stop or app close. They are process-local and never resume after restart.
 
-The local setting is independent of sandbox computer grants and the global tool
+The local setting is independent of the sandbox computer and the global tool
 mode. Always does not bypass explicit command approval for dangerous patterns,
 opaque scripts/subscription CLIs or a turn that consumed outside content. Secret
 store patterns refuse even an explicit approval. Patterns are best effort, not a
@@ -596,7 +596,7 @@ session expiry/close, container stop and VM shutdown dispose of owned forwards.
 
 The earlier long-team-work shared-screen description applies only to explicit
 `computer_vm_mode=shared`; the default is now `per-bot`. The existing lease and
-per-member grant remain authoritative. A serialized local start checks owned
+per-target lease remain authoritative. A serialized local start checks owned
 compatible running containers, retains last-use order, and stops only an idle
 computer to make room; held or active computers yield local_capacity. Remote
 computers skip idle sweep and local capacity limits. Native journey teardown
@@ -702,7 +702,7 @@ Review 3 cold-catalogue correction: ConnectorsService.ensure_tools uses the exis
 computer/vm.py owns the 45-second ready-target confirmation and invalidates it
 against lifecycle/host/timezone changes and observed failures. The hot path never
 takes capacity_lock. vm_tools.py keeps the existing gate, per-target action lock,
-grant, screen lease, private-page redaction and takeover boundaries, and adds only
+screen lease, private-page redaction and takeover boundaries, and adds only
 the browser_open composite to its shared registry. No second worker, RPC, setting
 registry or model loop is introduced (A-01/A-03/A-04/A-08).
 
@@ -918,7 +918,7 @@ before creation; DesktopViewer, member library scans and AttachmentStore use the
 Guest file reads retain their descriptor walk and no-follow checks. This is defense against
 persistent redirection, not a cross-process handle-pinned TOCTOU guarantee.
 
-VmTools rechecks grants, captured targets and owner holds after preparation and checkpoint
+VmTools rechecks captured targets and owner holds after preparation and checkpoint
 awaits. file_reader bounds emitted Office text before joining repeated XLSX shared strings.
 native_diagnostics reuses failures.scrub for complete quoted and Basic/Bearer credentials;
 known secrets also cover JSON escaping and longest-first replacement. Existing state,
@@ -968,3 +968,8 @@ telling the window with `providers.changed`. Members carry pictures by revision:
 `cover.rev`, `members.picture` returns the data URL, `member-pictures.ts` caches by revision and `api.ts` puts
 `avatar_url` and `cover.url` into every members answer, so pages read the same fields as before. The shell's
 `members.picture` is in the main window's method list (commands.rs).
+
+A member's computer needs no grant (2026-11-11, R-COMP-ACCESS-01). `computer/grants.py`, `request_computer`, the grant card, the panel's take-back button and `computer.revoke` are gone;
+`VmTools.offered_for` offers every member its computer's tools whenever computer tools are on and a catalog exists for its target, and `LocalVm.full_permission()` (the 全部允許 mode) is all
+that is left of the old check, for the checkpoint restore's confirmation. The table `computer_grants` (migration 45) stays in the schema, unread and unwritten, with its member-delete trigger.
+The panel's computer row (R-PANEL-06) reads the viewer's state through `computer-row.ts`; the viewer publishes it and the details view draws it.

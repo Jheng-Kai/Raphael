@@ -20,8 +20,6 @@ async def test_template_createagent_creates_members_and_same_events_for_both_con
     actor = team.members.store.create_member(name="Template member", role="Writer",
         instructions="Use template CreateAgent to create bots when the owner asks.")
     rig.settings.set("action_mode", "direct")
-    made = []
-    team.members.member_made = lambda maker, child: made.append((maker, child))
     events = []
     for member_id in (0, actor.id):
         arguments = {"name": f"Helper {member_id}", "role": "Research"}
@@ -52,7 +50,6 @@ async def test_template_createagent_creates_members_and_same_events_for_both_con
         assert result["status"] == "done" and seen
         child = team.members.find(arguments["name"])
         assert child is not None and child.role == "Research"
-        assert (member_id, child.id) in made
         messages = AgentHistory(rig.conn).messages([result["turn_id"]])[result["turn_id"]]
         receipts = [item["text"] for item in messages if item["kind"] == "event"
                     and "Created" in item["text"] and child.name in item["text"]]

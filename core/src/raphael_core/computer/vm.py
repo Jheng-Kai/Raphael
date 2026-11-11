@@ -51,7 +51,7 @@ GUEST_OWN_WALLPAPER = "/opt/raphael-desktop/wallpapers/own.jpg"
 # Docker Desktop on Windows starts WSL first, so a cold start takes the better part of a minute.
 ENGINE_WAIT_S = 120
 ENGINE_POLL_S = 1.0
-# Set only while a granted member's tool call prepares its computer. (owner, 2026-11-11: 「理論上就算我沒有開 Docker，
+# Set only while a member's own tool call prepares its computer. (owner, 2026-11-11: 「理論上就算我沒有開 Docker，
 # 它也會自動自己打開才對」) A viewer opening or any other read never starts the engine, so the contextvar defaults off.
 _MAY_START_ENGINE = ContextVar("computer_may_start_engine", default=False)
 # shutil.which walks PATH on the event loop, and one status poll asks many times.
@@ -70,7 +70,7 @@ def docker_cli():
 
 @contextmanager
 def engine_start_allowed():
-    """A granted member's own tool call may start Docker Desktop on this PC while it prepares the computer."""
+    """A member's own tool call that needs its computer may start Docker Desktop on this PC while it prepares it."""
     token = _MAY_START_ENGINE.set(True)
     try:
         yield
@@ -245,8 +245,6 @@ class LocalVm:
         self.enabled = enabled
         self.settings, self.run, self.clock = settings, runner or Docker(), clock
         self.last_activity, self.active, self.held = {}, {}, set()
-        from .grants import ComputerGrants
-        self.grants = ComputerGrants()
         self.locks, self.targets = {}, {}
         self.task = None
         self.busy = lambda key: False
@@ -540,6 +538,10 @@ class LocalVm:
         # Capacity always precedes target locks: eviction may need another target's lock.
         async with self.capacity_lock:
             return await self._confirmed_start(target)
+
+    def full_permission(self):
+        """全部允許 is on: the owner's standing yes (only a checkpoint restore asks for it)."""
+        return self.settings is not None and self.settings.get("action_mode") == "bypass"
 
     def invalidate(self, target):
         self.running.pop(target, None)

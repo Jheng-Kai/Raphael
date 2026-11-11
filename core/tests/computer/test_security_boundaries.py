@@ -119,16 +119,14 @@ def test_artifact_growth_after_stat_cannot_bypass_the_read_budget(conn, tmp_path
     ("start", "attach_file", {"path": "/home/cua/workspace/a.txt"}),
     ("checkpoint", "vm_exec", {"command": "echo allowed"}),
 ])
-@pytest.mark.parametrize("change", ["revoke", "owner_hold", "target"])
-async def test_revocation_during_preparation_prevents_file_and_command_dispatch(desktop, tmp_path, stage, name, arguments, change):
+@pytest.mark.parametrize("change", ["owner_hold", "target"])
+async def test_a_change_during_preparation_prevents_file_and_command_dispatch(desktop, tmp_path, stage, name, arguments, change):
     vm, target, _ = desktop
     hub = VmTools(EmptyHub(), vm, attachments=AttachmentStore(tmp_path))
     await hub.prepare()
     tools = {tool.name: tool.key for tool in hub.offered()}
     async def revoke(*args, **kwargs):
-        if change == "revoke":
-            vm.grants.set(0, False)
-        elif change == "owner_hold":
+        if change == "owner_hold":
             vm.hold(target, True)
         else:
             vm.settings.set("computer_vm_mode", "per-bot")
@@ -140,7 +138,7 @@ async def test_revocation_during_preparation_prevents_file_and_command_dispatch(
         with vm_scope(("turn", 0, 7), turn_id=7):
             result = await hub.call(tools[name], arguments, approver="auto")
         assert not result.ok
-        assert result.kind == ("owner_holds_control" if change == "owner_hold" else "computer_permission_required")
+        assert result.kind == ("owner_holds_control" if change == "owner_hold" else "computer_changed")
         vm.execute.assert_not_awaited()
         vm.read_file.assert_not_awaited()
     finally:

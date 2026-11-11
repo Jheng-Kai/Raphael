@@ -79,7 +79,7 @@ Owner request of 2026-11-05: use Grok Bot's clear Details / Library / Computer h
 
 R-PANEL-01 through R-PANEL-04 govern the header, shared tabs, live controls and all offline states. Enter from the conversation title for Details; use the monitor for Computer. Gear retains identity, memory, skills, commands and voice. The panel reads the existing private worker-task lane (including delegated private work), newest first. Tasks open their existing results and stop/rerun through the row menu. Library uses the shared team-file chip; file handles are scoped to the selected member's local workspace/team folder, with recorded artifacts/pages retained even without a running computer. Remote volumes are never scanned as local paths. The current scan is capped at 500 entries, depth 3, 100 visible files and 100 task/page/artifact records; ordinary Show more advances by 12.
 
-Owner follow-up of 2026-11-05: say each thing once. Sleeping, starting, waking, updating, repairing, stopped Docker Desktop, missing installation, named remote failure and missing image show the full sentence only inside the screen. The header keeps a matching short state word beside location and overflow, without another face or explanation. Buttons sit after the sentence in normal flow; every offline state has the existing member slime. Only a live screen offers Enlarge and Take control underneath, with no repeated name caption. Details keeps the outer conversation heading and suppresses the list's internal heading. Owner engine recovery starts only the installed local app and reports readiness without implicitly creating a computer (since 2026-11-11 a granted member's own tool call also starts the installed Docker Desktop and waits up to 120 s, see R-PANEL-04; reads and the viewer still never do); selecting the location recovery opens the existing control. No administrator/app-update advice is shown for a stopped engine.
+Owner follow-up of 2026-11-05: say each thing once. Sleeping, starting, waking, updating, repairing, stopped Docker Desktop, missing installation, named remote failure and missing image show the full sentence only inside the screen. The header keeps a matching short state word beside location and overflow, without another face or explanation. Buttons sit after the sentence in normal flow; every offline state has the existing member slime. Only a live screen offers Enlarge and Take control underneath, with no repeated name caption. Details keeps the outer conversation heading and suppresses the list's internal heading. Owner engine recovery starts only the installed local app and reports readiness without implicitly creating a computer (since 2026-11-11 a member's own tool call also starts the installed Docker Desktop and waits up to 120 s, see R-PANEL-04; reads and the viewer still never do); selecting the location recovery opens the existing control. No administrator/app-update advice is shown for a stopped engine.
 
 Consistency comparisons use the existing ui.tabs plain variant, shared fileChipHTML, btn and openMenu. The three member tabs fill the panel to keep equal navigation targets; Connections retains its compact counted tabs within Settings. Work menus have only the applicable action, while maintenance retains its wider descriptive rows and takeover retains its icons. These contextual differences reuse the existing components and tokens. Engine readiness uses the existing viewer notice with role=status and neutral text; failures retain role=alert. Offline recovery buttons retain the screen's existing dark contrast treatment over the wallpaper, while Enlarge and Take control use ordinary panel buttons below it.
 
@@ -194,7 +194,7 @@ completion guards require a post-action window/page read or nonempty verify_stat
 predicates before completion; one correction is allowed, then completion fails.
 
 Thin/empty/consent-wall web_read results escalate through the current member's
-granted browser. Exact Reject all / necessary-only semantic buttons may be
+member's own browser. Exact Reject all / necessary-only semantic buttons may be
 clicked; ambiguous controls never imply consent. Every browser subcall retains
 the normal gate and owner-hold checks. No fallback reader/provider is purchased.
 
@@ -296,8 +296,8 @@ at ten seconds. Elapsed time is included in page JSON when present, otherwise in
 text; lease notices retain their existing JSON contract.
 
 All 30 curated driver tools and Raphael-owned browser_open, vm_exec, attach_file,
-request_takeover, fill_login and per-bot dataset are offered offline after a grant.
-Permissionless turns still see only request_computer. The first actual driver
+request_takeover, fill_login and per-bot dataset are offered offline to every member.
+Every member sees the catalog from turn one. The first actual driver
 operation schedules a bounded background listing on a separate bridge, retaining
 the action session. Missing driver tools are removed and schemas are replaced in
 the existing API/CLI/worker snapshot. Preparing a turn never starts or probes Docker.
@@ -311,7 +311,7 @@ authorized disposable container before release. Apache attribution and NOTICE
 are retained. Packaging explicitly includes this JSON and audits its presence.
 
 Offline scope: tests/computer, tests/agent/test_persona.py,
-tests/agent/test_computer_grants.py, tests/background/test_computer_lazy.py and
+tests/agent/test_member_computer_use.py, tests/background/test_computer_lazy.py and
 packaging tests, followed by the whole core suite once after wait-heavy.ps1.
 The task report records exact commands, exits and counts.
 
@@ -387,7 +387,7 @@ hierarchy. Skills and slash-command templates retain their distinct editors.
 File changes opened from a result card offer only Back, which returns to the conversation;
 nothing was taken over, so handback and the menu are absent there.
 Routine pausing is saved inside the ordinary editor, never on the landing row.
-An unprovisioned/ungranted computer is omitted; unavailable/install/preparation
+An unprovisioned computer is omitted; unavailable/install/preparation
 states retain their existing localized words and repair/start actions.
 
 Screen and conversation-card takeover carry the existing iframe into a full-window
@@ -552,7 +552,7 @@ tests/agent tests/background tests/members tests/computer tests/worker.
 
 Acceptance still requires the owner's real CPU question to member 13 on both API
 and installed CLI brains, harmless process inspection, explicit approval/dismissal,
-tree cleanup on Stop/app close, and the granted Docker path after schema discovery.
+tree cleanup on Stop/app close, and the Docker path after schema discovery.
 Offline fakes and rendered fixture success do not prove Docker, cargo, native
 journeys, network, judge or real subscription commands. Rule IDs: R-PC-01/02/03 and R-AG-13.
 
@@ -560,13 +560,13 @@ The optional Docker desktop defaults to `computer_vm_mode=per-bot`: a durable wo
 container and browser profile per member (3 GiB and two CPUs each), plus a shared team
 folder at `/home/cua/team`. Existing explicitly saved shared mode remains supported. Host paths use pathlib and Docker CSV bind
 mounts; no host shell or alternate runtime is used. The core starts an installed Docker Desktop through the host adapter on the first actual
-computer operation. A granted turn's tool preparation never invokes Docker. When Docker is absent,
+computer operation. A turn's tool preparation never invokes Docker. When Docker is absent,
 no computer tools are offered; the existing Settings computer area has one requirement line and an official download button.
 
 `computer/vm_catalog.py` curates 30 driver tools plus Raphael's `vm_exec` and
 `attach_file` (32 total). Each selection has a one-line reason. Screenshot/window
 state, input, application/window discovery, clipboard, verification and the Linux
-CDP browser helpers are offered together offline from the first granted turn.
+CDP browser helpers are offered together offline from the first turn.
 The checked-in compatibility schemas and Raphael-owned tools are refreshed on use
 by a background driver listing; exact pinned Linux schema capture remains pending
 as described above. Missing tools are removed, and changed schemas are validated
@@ -714,39 +714,72 @@ Native member-computer signs in only to the disposable local page via the real
 side-panel noVNC stream, verifies no member calls while held, then one continuation.
 Docker runs only in an exclusive heavy slot. Stop only the journey-created container by exact name afterward; never stop Docker Desktop or another member computer.
 
-## On-demand member permission (2026-10-31)
+## A member's computer needs no permission (owner, 2026-11-11; supersedes On-demand member permission of 2026-10-31)
 
-Computer access defaults off per member, including Raphael (0). The only computer
-capability offered before permission is computer__request_computer(reason), a pinned
-T2 request answered by the existing private-chat permission card (YES/NO; no Always).
-YES persists a per-member computer_grants row (schema 45), prepares an offline tool offer and updates
-the same turn's production snapshot before the next API model step. CLI loops reload
-the MCP catalog in a new isolated CLI attempt within the same owner turn, preserving
-the native session and without replaying completed actions. NO/expiry explicitly say
-that the computer cannot be used. Routines cannot acquire a grant; requesting access
-ends the routine as failed with computer_permission_required and an owner-facing reason.
+Owner: 「每個 bot 配一台電腦的功能要一模一樣」 (as Grok Bot, where nothing asks and no grant exists) and
+「要盡量減少顯示在前端的事情 不要讓使用者需要思考太多不是他們該思考的東西」. Rule: R-COMP-ACCESS-01.
 
-Explicit computer.viewer_open (not preview or status) grants that member before launch.
-The maintenance CLI start/run does likewise. Revoke through computer.revoke in core RPC
-or python -m raphael_core.computer.vm_cli revoke --data-dir <dir> --member <id>.
-The window has no revoke control yet, and the revoke RPC is not shell-allowlisted;
-use the maintenance CLI today. Revocation blocks subsequent calls, including stale
-snapshots, but does not kill already running commands, containers or owner viewers.
+A member uses its computer when its work needs it, as it uses any tool, under the permission mode the owner chose.
+Removed: `computer/grants.py`, the pinned `computer__request_computer` T2 request and its 「允許 {member} 使用電腦」
+card, the grant written by the owner's open of the viewer and by the maintenance CLI, the member-made-by-a-member
+inheritance, the refusal text of a routine without a grant, the panel's take-back button, the `computer.revoke` RPC
+(also in the Rust allowlist and `management.py`), `granted` in the status and session answers, and
+`computer_permission_required` (a changed target now answers `computer_changed`, an unknown member `blocked`).
+The table `computer_grants` (migration 45) and its member-delete trigger stay in the schema, unread and unwritten:
+dropping it would need a migration for nothing the owner sees.
 
-Container state never grants access. Without an explicit per-member grant, prepare
-does not probe the engine or container, offer operation tools, or persist any grant
-row, even if a compatible VM is already running. The member must request permission.
-After permission, prepare offers tools without starting or probing the VM; viewer launch
-also rechecks after its status probe. No lifecycle, idle-stop, attachment, takeover
-or handback semantics change under a grant. Both native VM journeys grant explicitly.
+`VmTools.offered_for(member)` gives every member (routines and room speakers too) the tools of its own computer
+whenever computer tools are on and Docker Desktop is installed (or a remote host is chosen): the offer is offline,
+`prepare` probes nothing and a turn that never calls a computer tool never starts Docker. A PC without Docker offers
+no VM tool and leaves the owner's own desktop tool on offer (`has_own_computer` is false there). The first real call
+may start Docker Desktop on this PC for any member; a remote host never does.
 
-Offline regressions: core/tests/computer/test_grants.py and
-core/tests/agent/test_computer_grants.py, plus the existing computer/agent/background
-suites. Native member-computer grants first and starts the installed Docker engine
-only when its first screen tool is called. Core-only code
-has no changed visual scene or new UI. Fixture/fake results are not native acceptance.
+What stays exactly as it was: sandbox gestures pass the screening and need the lease; `fill_login`, `fill_contact`,
+`fill_card` and `dataset` still obey the safety rules and the mode (`fill_card` is T3); the worker still cannot
+drive the owner's own desktop (`ToolGate.check(worker=True)`); payment holds, takeover, the owner's hold and a
+changed target still refuse a call; checkpoint restore still asks for the owner's confirmation unless the mode is
+全部允許 (`LocalVm.full_permission()`). In 先詢問 and 計畫 sandbox gestures were never asked after the first yes and
+are not now (the one question that is gone was the grant itself).
 
-The panel view has a start button for a stopped computer and a take-back button for a granted member. `computer.revoke` keeps the row at 0, so a later request asks again. Looking at the panel never starts a computer.
+An explicit non-preview `computer.viewer_open` (the owner's press on the screen) launches a stopped computer;
+preview opens and status reads never do. Looking at the panel never starts a computer.
+
+Offline regressions: `core/tests/computer/test_member_computer_access.py` and
+`core/tests/agent/test_member_computer_use.py`, plus the existing computer, agent and background suites.
+The UI side is R-PANEL-06 (the computer row) and R-COMP-QUIET-01 (nothing but handoff cards in the conversation).
+
+## The computer row and the quiet thread (owner, 2026-11-11, after Grok Bot)
+
+Grok Bot's panel has a computer row that reads Asleep, then Connecting, then a live picture about eight seconds later and
+Awake, and Asleep again a few minutes after the last use; a press opens a full-window view whose pill reads
+Watching / Take control and then You're in control / Stop; in the thread the Bot's computer use is two short bubbles
+and a quiet label naming the step; nothing asks for permission to have a computer.
+
+Raphael now: Details has one tinted row after the routines, 「{name}的電腦」, its state (休眠中 / 連線中 / 已喚醒) and
+a 72 x 45 screen at the right (dark with the monitor until a picture of the live screen is held) (`computer-row.ts`; the viewer publishes, `member-details.ts` draws). While Details is
+open and the computer is already running, the viewer opens its stream unseen (`rowShown`, the panel laid out off the
+window) and the stream's three-second pictures are the row's live picture; nothing is streamed for a sleeping computer
+and looking never starts one. A press fires `member-computer-open`: the page selects the Computer tab and presses the
+screen (`desktop.watch()`), so a sleeping or stopped computer starts and a running one opens large. A PC that cannot
+give a computer replaces the state and the screen by one line (the existing state sentence) and, where the app has
+one, a word: 下載 (no Docker Desktop, opens the download page) or 啟動 (stopped engine). An unreachable host or switched
+off computer tools has no action. An absent image is a first start, so the row reads asleep and the same press
+prepares it. The Computer tab, its host control and its maintenance menu stay as they were (their move to Settings is
+a decision for the owner, not made here).
+
+The larger view's pill: watching offers Take control; in control reads 你正在控制 with a quiet 停止 that hands the
+computer back through the same takeover (the sign-in request's button stays 我完成了).
+
+The conversation shows no line or card for a running, finished or stopped computer task any more
+(`desktop-timeline.ts`); only a handoff the owner must act on is a card.
+
+```
+npm run look -- member-panel-details member-panel-details-computer-asleep member-panel-details-computer-connecting member-panel-details-computer-awake member-panel-details-computer-docker-missing member-panel-details-computer-docker-stopped member-panel-details-computer-remote member-panel-details-computer-open member-panel-details-computer-wake desktop-watch desktop-watch-owner takeover-bar desktop-panel chat-computer-takeover --theme both --width 1120,720,1920x1080
+```
+
+Not built, needs a real engine: one computer with a screen per member (see the unit report and
+`bots/research/shared-computer-2026-11-09.md`); the live picture of the row against a real noVNC stream; the engine
+start from the 啟動 word on a PC with Docker Desktop stopped.
 
 ## Quiet, lazy startup
 
@@ -757,18 +790,18 @@ with `docker desktop start --detach`, with no shell and discarded standard strea
 The GUI launcher is a legacy fallback only when the CLI is absent or the probe
 fails with an explicit diagnostic that `desktop` is not a Docker command. Other
 probe failures do not open the GUI. LocalVm retains its engine readiness polling,
-preparation progress, errors, grants, owner holds and leases.
+preparation progress, errors, owner holds and leases.
 
 Offline coverage: `tests/computer/test_desktop_host.py`, `test_vm.py`,
-`test_grants.py`, `test_takeover.py`, `tests/agent/test_computer_grants.py`,
+`test_member_computer_access.py`, `test_takeover.py`, `tests/agent/test_member_computer_use.py`,
 `tests/background/test_computer_lazy.py`, and the snapshot/CLI/worker consumers.
 All startup tests fake processes and Docker.
 
 Owner acceptance: from `app/`, run `npm.cmd run native -- member-computer`
 in the authorized native environment. Its pre-launch smoke asserts zero Docker
-commands while preparing a granted turn, starts on the first actual screen call,
+commands while preparing a turn, starts on the first actual screen call,
 refreshes controls, and asserts zero Docker commands for the following prepare.
-Also run a granted API and CLI greeting with Docker Desktop initially stopped,
+Also run an API and CLI greeting with Docker Desktop initially stopped,
 then request a screen operation: greetings must leave it stopped, the screen
 operation must complete without a Docker Desktop window appearing or taking focus,
 and a following greeting must not start anything. Inspect the report and captures;

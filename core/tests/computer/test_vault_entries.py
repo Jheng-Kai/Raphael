@@ -126,7 +126,6 @@ async def test_shared_login_revocation_between_fields_stops_before_the_password(
     hub = VmTools(EmptyHub(), vm, conn=conn, attachments=AttachmentStore(tmp_path), bridge=Browser)
     hub.logins = VaultEntries(Vault(), conn=conn)
     identifier = hub.logins.put({"kind": "login", "label": "Travel", "origin": "https://shop.example", "values": {"username": "private-user", "password": "private-password"}})
-    vm.grants.set(0, True)
     await hub.prepare()
     with vm_scope(("turn", 0, 7), turn_id=7, private=True):
         result = await hub.call(next(t.key for t in hub.offered() if t.name == "fill_login"), {"reference": identifier, "site": "https://shop.example", "target_id": "tab", "username_ref": "u", "password_ref": "p"}, approver="user")
@@ -150,7 +149,6 @@ async def test_card_always_needs_an_exact_single_use_approval_and_never_submits(
     hub.logins = VaultEntries(Vault(), conn=conn)
     identifier = hub.logins.put({"kind": "card", "label": "Company", "hint": "Travel only", "values": CARD})
     gate = ToolGate(hub, conn=conn)
-    vm.grants.set(0, True)
     await hub.prepare()
     tools = {t.name: t.key for t in hub.offered()}
     args = {"reference": identifier, "label": "Company", "site": "https://shop.example", "amount": "NT$ 1,280", "target_id": "tab", "fields": {key: key + "-ref" for key in CARD}}
@@ -224,7 +222,6 @@ async def test_private_fill_fails_closed_and_never_returns_driver_values(desktop
     hub = VmTools(EmptyHub(), vm, conn=conn, attachments=AttachmentStore(tmp_path), bridge=Browser)
     hub.logins = VaultEntries(Vault(), conn=conn)
     identifier = hub.logins.put({"kind": "card", "label": "Company", "values": values, "members": [0]})
-    vm.grants.set(0, True)
     await hub.prepare()
     if failure == "revoked": conn.execute("UPDATE vault_entries SET members='[]' WHERE id=?", (identifier,)); conn.commit()
     with vm_scope(("turn", 0, 7), turn_id=7, private=True):

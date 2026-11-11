@@ -46,7 +46,7 @@ async def test_batch_uses_each_gate_once_and_returns_only_final_observation(desk
         await hub.aclose()
 
 
-@pytest.mark.parametrize("failure", ["owner_holds_control", "computer_permission_required", "tool_error", "blocked"])
+@pytest.mark.parametrize("failure", ["owner_holds_control", "computer_changed", "tool_error", "blocked"])
 async def test_batch_stops_at_first_failed_gate_without_replay(desktop, tmp_path, failure):
     vm, _, _ = desktop
     hub = VmTools(EmptyHub(), vm, attachments=AttachmentStore(tmp_path), bridge=CatalogBridge)

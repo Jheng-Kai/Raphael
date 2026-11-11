@@ -84,7 +84,6 @@ def desktop(tmp_path, conn):
     settings.set("computer_vm_mode", "shared")
     runtime = Runtime()
     vm = LocalVm(tmp_path, settings=settings, runner=runtime, clock=lambda: 0)
-    vm.grants.set(0, True)
     target = vm.target()
     runtime.raw = container(vm, target, runtime)
     return vm, target, runtime
@@ -610,7 +609,7 @@ class CatalogBridge(Bridge):
         return await super().request(method, params)
 
 
-async def test_first_screen_starts_docker_for_the_granted_member_then_reuses_catalog(desktop, tmp_path):
+async def test_first_screen_starts_docker_for_the_member_then_reuses_catalog(desktop, tmp_path):
     # (owner, 2026-11-11: 「理論上就算我沒有開 Docker，它也會自動自己打開才對」) supersedes the owner-press-only start.
     from unittest.mock import AsyncMock
     vm, target, runtime = desktop
@@ -706,7 +705,7 @@ async def test_concurrent_computers_share_one_docker_start(tmp_path, conn):
     vm.desktop.start.assert_awaited_once()
 
 
-async def test_status_reads_and_the_viewer_never_start_docker_for_a_granted_member(desktop, tmp_path):
+async def test_status_reads_and_the_viewer_never_start_docker_for_a_member(desktop, tmp_path):
     from raphael_core.computer.viewer import DesktopViewer
     vm, target, runtime, hub, shot = await _stopped_engine(desktop, tmp_path)
     assert (await vm.status(target, probe=False))["error"] == "docker_stopped"
@@ -812,7 +811,7 @@ async def test_real_driver_catalog_offers_only_the_curated_tools(desktop, tmp_pa
 
 
 @pytest.mark.parametrize("interactive", [False, True])
-async def test_vault_discovery_survives_refresh_but_not_a_revoked_computer_grant(desktop, tmp_path, interactive):
+async def test_vault_discovery_survives_refresh_but_not_a_disabled_computer(desktop, tmp_path, interactive):
     vm, _, runtime = desktop
     hub = VmTools(EmptyHub(), vm, attachments=AttachmentStore(tmp_path), bridge=CatalogBridge)
     await hub.prepare()
@@ -832,7 +831,7 @@ async def test_vault_discovery_survives_refresh_but_not_a_revoked_computer_grant
         snapshot.refresh_computer(hub, 0)
         assert deferred <= snapshot.refs.keys(), "a found tool stays callable after a refresh"
         assert [item["function"]["name"] for item in snapshot.definitions] == listed, "and is never listed"
-        vm.grants.set(0, False)
+        vm.enabled = False  # computer tools turned off: nothing of the computer stays on offer
         snapshot.refresh_plugins(hub, 0)
         snapshot.refresh_computer(hub, 0)
         assert not deferred & snapshot.refs.keys()
@@ -888,7 +887,6 @@ async def test_a_tool_call_on_a_running_desktop_does_not_report_preparation(desk
 async def test_tools_share_snapshot_and_gate_and_owner_control(desktop, conn, tmp_path, action_mode):
     vm, target, runtime = desktop
     hub = VmTools(EmptyHub(), vm, attachments=AttachmentStore(tmp_path), conn=conn, bridge=Bridge)
-    vm.grants.set(0, True)
     await hub.prepare(0)
     snapshot = take_snapshot(hub)
     assert "computer__vm_exec" in snapshot.refs and "computer__get_desktop_state" in snapshot.refs
@@ -1097,7 +1095,6 @@ async def test_shared_desktop_lease_refuses_another_active_turn(desktop, tmp_pat
     vm, target, runtime = desktop
     hub = VmTools(EmptyHub(), vm, attachments=AttachmentStore(tmp_path), bridge=Bridge)
     await hub.prepare()
-    vm.grants.set(2, True)
     hub.busy_wait_s = 0  # the wait is tested in test_shared_desktop
     hub.scope_busy = lambda owner: owner == ("turn", 0, 1)
     shot = next(tool for tool in hub.offered() if tool.name == "get_desktop_state")

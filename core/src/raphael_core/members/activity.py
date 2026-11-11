@@ -14,7 +14,6 @@ from functools import wraps
 # First match wins. Unknown service/CLI tools do ordinary work; never infer a
 # computer action merely because a tool runs on the owner's host.
 TOOL_STATES = (
-    ("working", ("mcp:computer-access-",), ("request_computer",)),
     ("computer", ("computer__", "mcp:computer-", "mcp__computer__"), ("computer",)),
     ("searching", (), ("web_search", "web_read", "read_attachment",
                        "history_search", "search_query", "webSearch", "WebSearch",

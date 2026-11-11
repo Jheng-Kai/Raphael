@@ -81,18 +81,18 @@ async def test_private_page_requires_changed_origin_and_absent_fields(desktop, t
     await hub.aclose()
 
 
-async def test_read_revocation_does_not_probe_or_return_a_private_tree(desktop, tmp_path, monkeypatch):
+async def test_a_target_change_during_a_read_does_not_probe_or_return_a_private_tree(desktop, tmp_path, monkeypatch):
     hub, tools, _ = await rig(desktop, tmp_path)
     original = Browser.request
-    async def revoke(self, method, params=None):
+    async def change(self, method, params=None):
         data = await original(self, method, params)
         if method == "tools/call" and params["name"] == "get_browser_state":
-            hub.vm.grants.set(0, False)
+            hub.vm.settings.set("computer_vm_mode", "per-bot")
         return data
-    monkeypatch.setattr(Browser, "request", revoke)
+    monkeypatch.setattr(Browser, "request", change)
     with vm_scope(("turn", 0, 7), turn_id=7):
         result = await hub.call(tools["get_browser_state"], {"target_id": "tab"}, approver="auto")
-        assert not result.ok and result.kind == "computer_permission_required" and not result.blocks
+        assert not result.ok and result.kind == "computer_changed" and not result.blocks
     await hub.aclose()
 
 

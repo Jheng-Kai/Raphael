@@ -1,4 +1,4 @@
-"""The existing approval card grants computer tools in the same API turn; no model calls."""
+"""A member uses its computer when its work needs it: no question, no card, no grant. No model calls."""
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -27,34 +27,37 @@ async def computer_owner(tmp_path, conn, make_rig, client):
     cards = PermissionCards(conn)
     rig = make_rig(plugins=hub, gate=ToolGate(hub, conn=conn), permissions=cards)
     client.decisions.append(decision("answer"))
-    client.chats = [chat("I need the computer.", ("computer__request_computer", {"reason": "Create the requested file"})),
-                    chat("I will create it.", ("computer__vm_exec", {"command": "printf hello"})), finished("File created.")]
+    client.chats = [chat("I will create it.", ("computer__vm_exec", {"command": "printf hello"})), finished("File created.")]
     return rig, vm, hub, cards
 
 
-async def test_yes_uses_existing_card_and_adds_tools_to_the_next_model_step(computer_owner, client):
+async def test_a_member_never_asked_uses_its_computer_from_the_first_step_with_no_card(computer_owner, client, conn):
     rig, vm, hub, cards = computer_owner
-    asked = await typed(rig, "Use the computer to create a file")
-    assert asked["status"] == "confirm" and not vm.grants.allowed(0)
-    vm.start.assert_not_awaited()
-    card = cards.get(asked["confirm"]["id"])
-    assert (card.service, card.tool, card.state, card.always) == ("computer", "request_computer", "pending", False)
-    assert "until you revoke access" in card.summary
-    assert "until you revoke access" in asked["confirm"]["text"]
-    assert "always" not in asked["confirm"]
-    first_names = {tool["function"]["name"] for tool in client.chat_calls[0]["tools"]}
-    assert "computer__vm_exec" not in first_names
-    reply = await rig.call("agent.confirm", {"id": card.id, "approved": True})
+    reply = await typed(rig, "Use the computer to create a file")
     assert reply["status"] == "done" and reply["text"] == "File created."
-    assert vm.grants.allowed(0) and cards.get(card.id).state == "allowed"
+    assert "confirm" not in reply
+    first = {tool["function"]["name"] for tool in client.chat_calls[0]["tools"]}
+    assert {"computer__vm_exec", "computer__get_desktop_state"} <= first
+    assert not any("request_computer" in name or "computer-access" in name for name in first)
     assert vm.start.await_count >= 1
-    assert "computer__vm_exec" in {tool["function"]["name"] for tool in client.chat_calls[1]["tools"]}
-    assert "computer__request_computer" not in {tool["function"]["name"] for tool in client.chat_calls[1]["tools"]}
+    assert conn.execute("SELECT COUNT(*) FROM computer_grants").fetchone()[0] == 0
 
 
-async def test_granted_turns_without_computer_calls_never_probe_or_start(computer_owner, client):
+@pytest.mark.parametrize("mode", ["ask", "direct", "plan", "bypass"])
+async def test_every_permission_mode_offers_the_same_computer_tools_without_a_question(computer_owner, mode):
     rig, vm, hub, cards = computer_owner
-    vm.grants.set(0, True)
+    rig.settings.set("action_mode", "direct")
+    await hub.prepare(0)
+    baseline = sorted(tool.key for tool in hub.offered_for(0))
+    rig.settings.set("action_mode", mode)
+    await hub.prepare(0)
+    names = sorted(tool.key for tool in hub.offered_for(0))
+    assert names == baseline and any(key.endswith("vm_exec") for key in names)
+    assert not any("request_computer" in key for key in names)
+
+
+async def test_turns_without_computer_calls_never_probe_or_start(computer_owner, client):
+    rig, vm, hub, cards = computer_owner
     for _ in range(2):
         client.decisions.append(decision("answer"))
         client.chats = [finished("Hello.")]
@@ -62,14 +65,12 @@ async def test_granted_turns_without_computer_calls_never_probe_or_start(compute
         assert reply["status"] == "done"
         names = {tool["function"]["name"] for tool in client.chat_calls[-1]["tools"]}
         assert "computer__get_desktop_state" in names and "computer__vm_exec" in names
-        assert "computer__request_computer" not in names
     vm.start.assert_not_awaited()
     assert vm.run.calls == []
 
 
 async def test_a_pc_without_docker_offers_no_computer_tools(computer_owner, client):
     rig, vm, hub, cards = computer_owner
-    vm.grants.set(0, True)
     vm.desktop = SimpleNamespace(installed=lambda: False)
     client.chats = [finished("Hello.")]
     assert (await typed(rig, "Hello"))["status"] == "done"
@@ -80,7 +81,6 @@ async def test_a_pc_without_docker_offers_no_computer_tools(computer_owner, clie
 
 async def test_first_api_turn_offers_controls_and_refreshes_after_screen(computer_owner, client):
     rig, vm, hub, cards = computer_owner
-    vm.grants.set(0, True)
     client.chats = [chat("Look first.", ("computer__get_desktop_state", {})),
                     chat("Click.", ("computer__click", {})),
                     chat("Check the result.", ("computer__get_window_state", {"pid": 7, "window_id": 9})), finished("Done.")]
@@ -101,7 +101,6 @@ async def test_first_api_turn_offers_controls_and_refreshes_after_screen(compute
 @pytest.mark.parametrize("missing", [False, True], ids=["changed-schema", "missing-screen"])
 async def test_real_catalog_replaces_bootstrap_schema_without_forwarding_bad_calls(computer_owner, client, missing):
     rig, vm, hub, cards = computer_owner
-    vm.grants.set(0, True)
     sent = []
     class ChangedBridge(Bridge):
         async def request(self, method, params=None):
@@ -122,12 +121,11 @@ async def test_real_catalog_replaces_bootstrap_schema_without_forwarding_bad_cal
 
 
 @pytest.mark.parametrize("use_computer", [False, True])
-async def test_granted_cli_is_lazy_and_reloads_after_first_screen(computer_owner, client, tmp_path, monkeypatch, use_computer):
+async def test_cli_is_lazy_and_reloads_after_first_screen(computer_owner, client, tmp_path, monkeypatch, use_computer):
     import httpx
     from raphael_core.agent.cli.discovery import CliBrains
     from raphael_core.agent.cli.drivers import Event
     rig, vm, hub, cards = computer_owner
-    vm.grants.set(0, True)
     brains = CliBrains(home=tmp_path, environ={}, commands={"codex": ["never-spawn"]})
     monkeypatch.setattr(brains, "available", lambda *args, **kwargs: True)
     rig.service._cli_brains = brains
@@ -144,7 +142,7 @@ async def test_granted_cli_is_lazy_and_reloads_after_first_screen(computer_owner
                 return response.json()["result"]
             names = {tool["name"] for tool in (await rpc("tools/list"))["tools"]}
             catalogs.append(names)
-            assert "computer__get_desktop_state" in names and "computer__request_computer" not in names
+            assert "computer__get_desktop_state" in names
             if use_computer and len(catalogs) == 1:
                 assert {"computer__click", "computer__browser_open", "computer__browser_type"} <= names
                 result = await rpc("tools/call", {"name": "computer__get_desktop_state", "arguments": {}})
@@ -170,58 +168,3 @@ async def test_granted_cli_is_lazy_and_reloads_after_first_screen(computer_owner
         assert vm.run.calls == []
 
 
-@pytest.mark.parametrize("answer", ["no", "expiry"])
-async def test_no_or_expiry_never_grants_or_starts_and_says_cannot_use_computer(computer_owner, answer):
-    rig, vm, hub, cards = computer_owner
-    asked = await typed(rig, "Use the computer")
-    if answer == "expiry":
-        rig.clock.now += 31
-    reply = await rig.call("agent.confirm", {"id": asked["confirm"]["id"], "approved": answer != "no"})
-    assert not vm.grants.allowed(0)
-    vm.start.assert_not_awaited()
-    assert "cannot use the computer" in rig.history.get(asked["turn_id"]).text
-    assert cards.get(asked["confirm"]["id"]).state == ("denied" if answer == "no" else "expired")
-
-
-async def test_cli_reloads_mcp_catalog_after_owner_yes_in_the_same_turn(computer_owner, client, tmp_path, monkeypatch):
-    import httpx
-    from raphael_core.agent.cli.discovery import CliBrains
-    from raphael_core.agent.cli.drivers import Event
-    rig, vm, hub, cards = computer_owner
-    brains = CliBrains(home=tmp_path, environ={}, commands={"codex": ["never-spawn"]})
-    monkeypatch.setattr(brains, "available", lambda *args, **kwargs: True)
-    rig.service._cli_brains = brains
-    rig.settings.set("agent_model", "cli:codex:test")
-    catalogs, sessions = [], []
-
-    async def run(driver, **kwargs):
-        sessions.append(kwargs.get("session"))
-        yield Event("session", "grant-thread")
-        async with httpx.AsyncClient(headers={"Authorization": "Bearer " + kwargs["token"]}) as http:
-            async def rpc(method, params=None):
-                response = await http.post(kwargs["computer_endpoint"], json={
-                    "jsonrpc": "2.0", "id": len(catalogs), "method": method, "params": params or {}})
-                return response.json()["result"]
-            listed = await rpc("tools/list")
-            names = {item["name"] for item in listed["tools"]}
-            catalogs.append(names)
-            if len(catalogs) == 1:
-                assert names == {"computer__request_computer"}
-                answer = await rpc("tools/call", {"name": "computer__request_computer", "arguments": {"reason": "Create the requested file"}})
-                assert not answer["isError"]
-                yield Event("tool_end")
-                pytest.fail("The CLI must reload before another model step")
-            else:
-                assert "computer__vm_exec" in names and "computer__request_computer" not in names
-                answer = await rpc("tools/call", {"name": "computer__vm_exec", "arguments": {"command": "printf hello"}})
-                assert not answer["isError"]
-                yield Event("final", "File created through CLI.")
-
-    monkeypatch.setattr("raphael_core.agent.cli.loop.Driver.run", run)
-    asked = await typed(rig, "Use the computer to create a file")
-    assert asked["status"] == "confirm"
-    vm.start.assert_not_awaited()
-    result = await rig.call("agent.confirm", {"id": asked["confirm"]["id"], "approved": True})
-    assert result["status"] == "done" and result["text"] == "File created through CLI."
-    assert len(catalogs) == 2 and sessions == [None, "grant-thread"]
-    assert vm.grants.allowed(0)

@@ -813,8 +813,6 @@ class TaskRun:
             payload = artifact_payload(reply.get("content", ""), self._attachment_store)
             if payload:
                 self._artifact(payload)
-        if reply.get("kind") == "computer_permission_required":
-            raise stopped("failed", "computer_permission_required")
         if not reply.get("ok") and ref.server == "media":
             from ..failures import missing_for
             missing = missing_for(reply.get("kind"), ref.name)
@@ -901,12 +899,6 @@ class TaskRun:
             return {"ok": False, "kind": "tool_disabled", "content": "The owner disabled this connection for this member. Ask the owner to change the member's tool list.", "truncated": False}, "blocked", None, None
         if self._gate.data_floor.access(ref.key, arguments) == "write":
             return {"ok": False, "kind": "protected_data", "content": WRITE_REFUSAL, "truncated": False}, "blocked", None, None
-        if ref.key.startswith("mcp:computer-access-"):
-            self._gate.record_unrun(ref.key, outcome="blocked", task_id=self.task_id)
-            return {"ok": False, "kind": "computer_permission_required", "content": (
-                "This member has no computer grant. This routine cannot start a computer. "
-                "Ask the owner to grant access in the member's private chat or press Start in its panel."),
-                "truncated": False}, "blocked", "T2", None
         now = self._gate.tier_now(ref.key, arguments)
         if ref.key in self._unanswered and not self._gate.reads_only(ref.server, ref.name, arguments):
             self._gate.record_unrun(ref.key, outcome="blocked", task_id=self.task_id)

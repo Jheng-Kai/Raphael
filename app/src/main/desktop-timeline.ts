@@ -1,7 +1,8 @@
-/** Working events stay compact; owner handoffs use the shared card and existing live stream. */
+/** A member working at its computer shows in the conversation as its short messages and its quiet step label, nothing more
+ *  (owner, 2026-11-11, after Grok Bot). Only what the owner must act on is drawn here: the card of a handoff (a sign-in, a
+ *  password, a payment) with the live stream, and that card folded once it is settled. */
 import type { DesktopState } from "./desktop-viewer";
 import { t } from "./i18n";
-import { NAME, eventLineHTML } from "./event-line";
 import { esc, ico } from "./ui";
 import { btn, patchHTML } from "./ui";
 import { cardDisclosureHTML, cardHTML, cardPromptText } from "./card";
@@ -29,7 +30,7 @@ export function desktopWorkText(work: DesktopWork): string {
   return work.tool in actions ? t(actions[work.tool as keyof typeof actions]) : t("desktop.working");
 }
 
-export function mountDesktopTimeline(host: HTMLElement, name: () => string): { update(state: DesktopState): void; sync(): void; clear(): void } {
+export function mountDesktopTimeline(host: HTMLElement): { update(state: DesktopState): void; sync(): void; clear(): void } {
   let state: DesktopState | undefined;
   const rendered = new WeakMap<Element, string>();
   const asked = new Set<string>();
@@ -45,8 +46,7 @@ export function mountDesktopTimeline(host: HTMLElement, name: () => string): { u
       }) : (asked.has(work.id) || !!work.request_id) ? cardHTML({ title: t("card.pcTitle"), status: "done", statusText: t("cards.done"),
         content: cardDisclosureHTML(`computer-${work.id}`, `<p class="card-body">${esc(desktopWorkText(work))}</p>`),
         cls: "computer-card", attrs: ` data-desktop-work="${esc(work.id)}" data-work-state="${work.state}"`,
-      }) : `<div class="conversation-event-line" data-desktop-work="${esc(work.id)}" data-work-state="${work.state}">` +
-        eventLineHTML(t("desktop.event", { p0: NAME }), ico("monitor"), name(), desktopWorkText(work)) + `</div>`;
+      }) : "";
       if (rendered.get(slot) === html) continue;
       patchHTML(slot, html); rendered.set(slot, html);
     }

@@ -101,7 +101,6 @@ async def test_named_dataset_returns_tables_between_member_turns_and_routine(tmp
         member = (await app.call('members.create', {'name':'Analyst'}))['member']['id']
         app.vm.enabled = True
         app.vm.desktop = None
-        app.vm.grants.set(member, True)
         monkeypatch.setattr(app.vm, 'start', AsyncMock())
         execute = AsyncMock(return_value={'exit_code':0,'output':json.dumps({'dataset':'sales','columns':['total'],'rows':[[36]]})})
         monkeypatch.setattr(app.vm, 'execute', execute)

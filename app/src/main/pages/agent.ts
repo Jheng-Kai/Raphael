@@ -337,6 +337,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     face: () => members.faceOf(members.current(), 22),
     closePanel: () => members.setDetails(false),
     openPanel: () => members.computer(), panelVisible: () => members.detailsOpen() && members.details.dataset.detailsTab === 'computer',
+    rowShown: () => members.detailsOpen() && members.details.dataset.detailsTab === 'details' && !roomPane.active,
     status: active => {
       computerActive = active;
       const trigger = el.querySelector<HTMLElement>(".mb-chat .conversation-trigger");
@@ -347,6 +348,8 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     stop: turnId => { const turn = turns.find(turn => turn.id === turnId); return turn?.task ? api.workerCancel(turn.task.id) : turn?.session_id ? api.agentStop(turn.session_id, memberId()) : Promise.resolve(); },
   });
   members.details.addEventListener('member-panel-tab', () => { if (visible && !roomPane.active) desktop.show(); desktop.sync(); });
+  // The panel's computer row was pressed: the Computer tab, and there the computer wakes or opens large.
+  members.details.addEventListener('member-computer-open', () => { if (roomPane.active) return; members.computer(); desktop.watch(); });
   const detailsScrim = document.createElement("div");
   detailsScrim.className = "mb-det-scrim";
   detailsScrim.setAttribute("aria-hidden", "true");
