@@ -597,11 +597,15 @@ class BackgroundService:
     def _greeting_answered(self, task, question) -> None:
         """The card of a new member's first message was answered or closed. Nothing of the greeting goes on: its task ends
         here, with the greeting as it stands, and an answer is the start of the member's set-up in a turn of its own."""
-        answered = question["result"].get("state") == "answered"
-        if answered and (self._setup is None or task.member_id is None):
+        result = question["result"]
+        # An owner who wrote something else instead, or skipped it, has left the set-up; only an answer goes on (a card that takes
+        # several choices gives them as a list).
+        answer = result.get("answer") if result.get("state") == "answered" else None
+        if isinstance(answer, list):
+            answer = "; ".join(map(str, answer))
+        if answer and (self._setup is None or task.member_id is None):
             return  # not wired yet: `use_setup` asks again
-        language = task.language
-        if answered and not self._setup(task.turn_id, task.member_id, question["question"], question["result"]["answer"], language):
+        if answer and not self._setup(task.turn_id, task.member_id, question["question"], answer, task.language):
             return
         self._store.finish(task.id, "done", prefix="", text="", detail=None, reason=None)
         with self._metrics_conn:
@@ -1754,7 +1758,8 @@ class BackgroundService:
             if question is None or question["result"] is None:
                 self._store.set_state(task.id, "waiting")
                 return
-            result = question["result"]
+            from ..agent.owner_questions import model_result
+            result = model_result(question["result"])
             # The card or question the run waited at was put to the owner (a page, a draft): it is made, and what the owner
             # answered, or whether they cancelled it, is their decision and no failure of the run (a routine's end is judged by it).
             run.succeeded.add(question["kind"])
@@ -1900,7 +1905,9 @@ class BackgroundService:
                 if loop.failure:
                     run.model_failure = loop.failure_reason or Failure(loop.failure, loop.failure)
                     legacy = {"rate_limit": "rate_limited", "usage_limit": "quota", "auth_expired": "login", "unknown": "error"}
-                    reply = {"status":"stopped", "kind":"failed", "detail":"cli_" + legacy.get(loop.failure, loop.failure), "final":outcome.final, "diagnostic_detail":outcome.detail}
+                    # A sign-in that ran out is a failed run of its own cause, told from one that never was (rooms and routines name it).
+                    cli_reason = "login_expired" if getattr(loop.failure_reason, "cause", None) == "expired" else legacy.get(loop.failure, loop.failure)
+                    reply = {"status":"stopped", "kind":"failed", "detail":"cli_" + cli_reason, "final":outcome.final, "diagnostic_detail":outcome.detail}
                 self._conclude_run(task, run, reply)
         except TimeoutError:
             self._conclude_run(task, run, {"status":"stopped", "kind":"limit_time"})

@@ -19,3 +19,13 @@ async def test_an_owner_interjection_is_a_real_owner_message_on_a_new_snapshot(r
     assert len(rig.background.submitted) == submitted + 1
     message = rig.conn.execute("SELECT text,member_id FROM room_messages WHERE id=?", (reply["message_id"],)).fetchone()
     assert tuple(message) == ("Include the prices", None)
+
+
+async def test_writing_in_a_room_closes_the_question_cards_waiting_in_that_thread(rig, rooms):
+    from types import SimpleNamespace
+    room = await create(rig, [0])
+    closed = []
+    rig.background.owner_questions = SimpleNamespace(close_for_message=lambda **found: closed.append(found))
+    await rig.call("rooms.send", {"room_id": room["id"], "text": "Let us talk first", "request_id": "talk"})
+    [found] = closed
+    assert found["said"] == "Let us talk first" and found["room_id"] == room["id"] and found["thread_id"] is not None

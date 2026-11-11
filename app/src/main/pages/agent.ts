@@ -80,7 +80,7 @@ import { mountPages } from "../page-card";
 import { menuReactionsHTML, mountMessageMetadata } from "../message-metadata";
 import { MORE_EMOJI, openEmojiPicker } from "../emoji-picker";
 import { mountMailActions } from "../mail-actions";
-import { answerOwnerPage, mountOwnerQuestions } from "../owner-questions";
+import { answerOwnerPage, mountOwnerQuestions, questionWaits } from "../owner-questions";
 import { mountPendingQuestions } from "../pending-questions";
 import { approvalCopy, permissionFor } from "../permission-card";
 import { memberAccent, memberColor, ownerBubble } from "../owner-bubble";
@@ -88,6 +88,7 @@ import { openPeerChat, type PeerChatView } from "../peer-chat";
 import { exchangeView } from "../exchange-line";
 import { dayLabel, describeError } from "../format";
 import { CHATGPT_USAGE_URL } from "../cli-brains";
+import { createCliSignin } from "../cli-signin";
 import { loadingHTML } from "../loading";
 import {
   type TimelineState,
@@ -112,7 +113,7 @@ import {
   turnHTML,
   wantsRefresh,
 } from "../timeline";
-import type { PageArgument, AgentQuestion, AgentTurn, AppContext, GroupDraft, MemberDraft, MessageQuote, OwnerQuestion, Page, TurnAttachment, WireAttachment } from "../types";
+import type { PageArgument, AgentQuestion, AgentTurn, AppContext, CliBrainId, GroupDraft, MemberDraft, MessageQuote, OwnerQuestion, Page, TurnAttachment, WireAttachment } from "../types";
 import { closeAndPress } from "../dismissals";
 import { closeMenu, copyButton, esc, ico, iconButton, openMenu, patchHTML, toaster } from "../ui";
 import { askInChat } from "../chat-ask";
@@ -350,7 +351,8 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   detailsScrim.className = "mb-det-scrim";
   detailsScrim.setAttribute("aria-hidden", "true");
   // The press that closes the panel goes on to what it was over (R-UI-121).
-  detailsScrim.addEventListener("click", event => closeAndPress(event, detailsScrim, () => members.setDetails(false)));
+  // The header button opened it, and is not pressed again by the press that closes it (R-UI-124).
+  detailsScrim.addEventListener("click", event => closeAndPress(event, detailsScrim, () => members.setDetails(false), conversationButton));
   el.insertBefore(detailsScrim, members.details);
   if (members.detailsOpen()) el.dataset.det = "open";
   el.querySelector(".mb-head-l")!.append(members.picker);
@@ -564,6 +566,16 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   const attachmentMedia = createAttachmentMedia(el, id => api.core("attachments.get", { id }));
   const previews = createLinkPreviews(scroller, url => api.core<LinkPreview | null>("links.preview", { url }));
   const regenerating = new Set<number>();
+  // The sign-in button under a failed reply (cli-signin.ts): a finished sign-in sends the question again, once, only while
+  // that reply is still the latest and nothing else is under way.
+  const signin = createCliSignin({
+    phases: state.signin,
+    redraw: () => { if (visible) render(); },
+    retry: async turnId => {
+      const turn = turns.find(item => item.id === turnId);
+      if (turn && turn.status === "error" && look().regenerateTurnId === turnId) await regenerateTurn(turn);
+    },
+  });
   const measureAllMessages = messagePreviewMeasure(thread);
   const messageResize = typeof ResizeObserver === "function" ? new ResizeObserver(measureAllMessages) : null;
   void document.fonts?.ready.then(measureAllMessages);
@@ -654,8 +666,10 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   const isEmpty = (): boolean =>
     !turns.some(visibleTurn) && !outgoing.some(belongs) && !hearingBelongs();
 
+  /** The newest turn the owner asked and was answered in, by this thread's own member: the one a new answer replaces. */
+  const latestAnsweredId = (): number => turns.filter(turn => turn.question.trim() && sourceOf(turn) !== "routine" && sourceOf(turn) !== "member" && turn.route !== "exchange" && !delegatedTurn(turn) && (turn.text.trim() || turn.messages?.some(m => m.kind === "reply"))).reduce((id, turn) => Math.max(id, turn.id), 0);
   const look = (): TurnLook => {
-    const latest = turns.filter(turn => turn.question.trim() && sourceOf(turn) !== "routine" && sourceOf(turn) !== "member" && turn.route !== "exchange" && !delegatedTurn(turn) && (turn.text.trim() || turn.messages?.some(m => m.kind === "reply"))).reduce((id, turn) => Math.max(id, turn.id), 0);
+    const latest = latestAnsweredId();
     const busy = pacing.active || regenerating.size > 0 || outgoing.some(belongs) || own().some(turn => turn.status === "running" || isLive(turn.task));
     const shared = { regenerateTurnId: busy ? undefined : latest, revealing: (id: number) => pacing.waiting(id), waitingForOwner: desktop.waitingForOwner, memberName: members.nameOf, memberFace: (id: number, size = 18) => members.faceOf(id, size), mentions: members.mentionTargets(),
       // A permission card in the thread can be answered while the window holds its question and is not answering it.
@@ -724,7 +738,9 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   function drawComposer(): void {
     const setup = waitingSetup();
     const brand: Record<string, string> = { telegram: "Telegram", slack: "Slack", discord: "Discord" };
-    const words = setup ? t("chat.askAboutSetup", { p0: brand[setup] ?? setup }) : inRaphael() ? t("home.askRaphael") : memberPlaceholder(members.member().name);
+    // While a question card waits the field says it takes the answer, or anything else (what is written closes the card, unanswered).
+    const asked = questionWaits(turns, pendingQuestions?.member === memberId() && pendingQuestions.conversation === conversationId() ? pendingQuestions.questions : []);
+    const words = setup ? t("chat.askAboutSetup", { p0: brand[setup] ?? setup }) : asked ? t("ownerQuestion.type") : inRaphael() ? t("home.askRaphael") : memberPlaceholder(members.member().name);
     if (input.placeholder !== words) input.placeholder = words;
     if (input.getAttribute("aria-label") !== words) input.setAttribute("aria-label", words);
     empty.classList.toggle("is-member", !inRaphael());
@@ -911,6 +927,8 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     }
     const mounted = turnWindow.select(chronological, turn => String(turn.id), drawingFollows && !searching);
     const latestFailedTurnId = [...chronological].reverse().find(turn => turn.status === "error" || turn.task && ["failed", "interrupted", "cancelled", "limit"].includes(turn.task.state))?.id;
+    // A sign-in button stands only under the failed reply that is also the newest answered one: older failures are history.
+    const signinTurnId = latestAnsweredId();
     windowMount.sync();
     const out = threadItems(mounted, state.nowMs).map((item) =>
       item.kind === "day"
@@ -922,10 +940,10 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
           const live = turn.status === "running" || turn.status === "confirm" || isLive(turn.task) || turn.task?.state === "waiting" || pacing.waiting(turn.id);
           return renderedTurns.line(item.key, historyRevisions.get(turn) ?? turn, [presentationVersion, getLocale(), shape.mentions, turnLook.query ?? "", details.has(turn.id),
             state.open.get(turn.id), state.thinkingOpen.get(turn.id), expanded, task !== undefined && state.stopping.has(task), task !== undefined && state.rerunning.has(task),
-            state.workStartedAt.get(turn.id), view.messages?.length, pacing.waiting(turn.id), desktop.waitingForOwner(turn.id),
-            live ? turnLook.deferPresence : false, live ? shape.activityLabel : "", live ? members.member().activity ?? "" : "", turn.permissions?.some(card => shape.answerable?.(card.id)), turn.id === latestFailedTurnId,
+            state.workStartedAt.get(turn.id), state.signin.get(turn.id), view.messages?.length, pacing.waiting(turn.id), desktop.waitingForOwner(turn.id),
+            live ? turnLook.deferPresence : false, live ? shape.activityLabel : "", live ? members.member().activity ?? "" : "", turn.permissions?.some(card => shape.answerable?.(card.id)), turn.id === latestFailedTurnId, turn.id === signinTurnId,
             item.together?.map(earlier => `${earlier.id}:${earlier.status}:${earlier.messages?.length ?? 0}`).join(",") ?? ""],
-            () => turnHTML(view, state, details.has(turn.id), { ...turnLook, regenerateTurnId: turn.id, latestFailedTurnId, exchangeTogether: item.together }));
+            () => turnHTML(view, state, details.has(turn.id), { ...turnLook, regenerateTurnId: turn.id, latestFailedTurnId, signinTurnId, exchangeTogether: item.together }));
         })(), turnId: item.turn.id },
     );
     renderedTurns.retain(new Set(out.map(line => line.key)));
@@ -1211,6 +1229,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
         if (!earlier && !delta && staleVersion !== undefined && staleHistory.get(member) === staleVersion) staleHistory.delete(member);
         pendingQuestions = { member, conversation: chosen, questions: history.pending_questions ?? [] };
         floatingQuestions.sync();
+        drawComposer();
       }
       got = history.turns.filter(turn => !turn.session_id || !retracted.has(turn.session_id));
     } catch (err) {
@@ -1393,8 +1412,9 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       return;
     }
     composer.querySelector(".composer-failure")?.remove();
-    // What is sent shows in the thread, so a report open in its place goes away.
-    pagesHost.closeReport();
+    // A page open in the thread's place stays: the member that answers is told which page it is (before the message goes),
+    // and what it says shows under the page while it works.
+    const pageTold = pagesHost.sent();
     const sending = files;
     const dictation = correctionLearning.snapshot();
     const corrections = correctionLearning.take(input.value);
@@ -1419,6 +1439,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     drawDock();
     askingMember = member;
     try {
+      if (pageTold) await pageTold;
       await api.agentAskText(text, wireAttachments(sending), member, { requestId, ...destinationOf(member, sentConversation), ...(draft.replacing !== undefined ? { replaceTurnId: draft.replacing } : {}), ...(draft.quote ? { quote: draft.quote } : {}) });
       void learnComposerCorrections(corrections);
     } catch (err) {
@@ -1955,7 +1976,12 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     const source = messageSource(control);
     const latest = look().regenerateTurnId;
     if (!source || latest === undefined || latest !== source.turn.id && !(source.turn.status === "error" && control.classList.contains("rerun"))) return;
-    const member = memberId(), turn = source.turn;
+    await regenerateTurn(source.turn);
+  }
+
+  /** Sends a turn's question again as a new answer: the reply's own 重新產生, and what a finished sign-in does once (cli-signin.ts). */
+  async function regenerateTurn(turn: AgentTurn): Promise<void> {
+    const member = memberId();
     // A greeting has no question to send again: the core writes it again with the member's own model.
     if (turn.route === "greeting") {
       if (turn.status !== "error") return;
@@ -2283,7 +2309,12 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       // One choice, 建立副本 with a line saying what follows (a file saved, or a publish request prepared on GitHub; never a link), and only that asks the member to package itself.
       case "share-member": {
         const member = memberId();
-        openMenu(act, [], "", () => {}, undefined, [{ label: t("template.copyTitle"), desc: t("template.copyHint"), icon: "copy", run() { closeMenu(); askInChat(member, "share-template"); } }]);
+        // Its mark is the member itself, twice: the copy that is about to be made (as Grok Bot's Create a copy; owner, 2026-11-12).
+        // A drawing, not the member at work: it takes no presence, so it never moves with what the member does.
+        // Each is drawn at a whole size of its own (a scaled slime lands on a fraction of a pixel and blurs, R-UI-63).
+        const face = (size: number): string => members.faceOf(member, size).replace(/ data-presence-member="\d+"/g, "");
+        openMenu(act, [], "", () => {}, undefined, [{ label: t("template.copyTitle"), desc: t("template.copyHint"), ...(face(24) ? { mark: `<span class="share-faces">${face(20)}${face(24)}</span>` } : { icon: "copy" as const }),
+          run() { closeMenu(); askInChat(member, "share-template"); } }], { className: "share-card" });
         break;
       }
       case "steps":
@@ -2377,6 +2408,16 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       case "manage-usage":
         void api.openExternalUrl(CHATGPT_USAGE_URL).catch((error) => toaster.info(describeError(error)));
         break;
+      case "cli-signin":
+      case "cli-signin-cancel":
+      case "cli-install": {
+        const turnId = Number(act.closest<HTMLElement>(".tn[data-id]")?.dataset.id), cli = act.dataset.cli as CliBrainId;
+        if (!Number.isSafeInteger(turnId) || !["claude", "codex", "gemini"].includes(cli)) break;
+        if (act.dataset.act === "cli-install") void signin.install(cli);
+        else if (act.dataset.act === "cli-signin") void signin.start(turnId, cli);
+        else void signin.cancel(turnId, cli);
+        break;
+      }
       case "attach":
         picker.value = ""; picker.click();
         break;

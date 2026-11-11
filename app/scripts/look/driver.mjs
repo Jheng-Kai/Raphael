@@ -507,6 +507,28 @@ export async function perform(page, step, evidenceDirectory) {
       await element.dispose();
       break;
     }
+    // The page's own scroll, which the app cannot read (its frame is another origin): the wheel over it, then what it shows.
+    case "frame-scroll": {
+      const at = await page.evaluate(() => { const box = document.querySelector(".pgv-frame-box")?.getBoundingClientRect(); return box && { x: box.x + box.width / 2, y: box.y + box.height / 2 }; });
+      if (!at) throw new Error("No page in the conversation's place to scroll");
+      await page.mouse.move(at.x, at.y);
+      await page.mouse.wheel({ deltaY: step.deltaY });
+      await new Promise(resolve => setTimeout(resolve, 500));
+      break;
+    }
+    case "frame-expect": {
+      const deadline = Date.now() + 8000;
+      for (;;) {
+        const frames = page.frames().filter(item => item !== page.mainFrame() && item.url().startsWith("data:text/html"));
+        const seen = frames.length === 1 ? await frames[0].evaluate(() => ({ text: document.body.innerText, y: Math.round(scrollY), room: Math.max(0, document.documentElement.scrollHeight - innerHeight) })).catch(() => null) : null;
+        // A page that fits its place cannot be read lower down: it is asked to be only as far down as it can be.
+        const least = seen && step.scrollAtLeast !== undefined ? Math.min(step.scrollAtLeast, seen.room) : 0;
+        const problem = !seen ? `${frames.length} page frames, not one` : step.text && !seen.text.includes(step.text) ? `the page does not show 「${step.text}」` : seen.y < least ? `the page is at ${seen.y}, not at ${least} or lower down` : "";
+        if (!problem) return { action: "frame-expect", scrolled: seen.y };
+        if (Date.now() > deadline) throw new Error(`frame-expect: ${problem}`);
+        await new Promise(resolve => setTimeout(resolve, 150));
+      }
+    }
     case "press-feedback": {
       const evidence = [];
       for (const target of step.selectors) {
@@ -649,8 +671,16 @@ export async function perform(page, step, evidenceDirectory) {
       await page.evaluate(events => { for (const event of events) window.__look.emit(event); }, step.events);
       await new Promise(resolve => setTimeout(resolve, step.wait ?? 300));
       return { action: "emit", events: step.events.map(event => event.type) };
+    // What the core does on its own while the scene waits, as the mock names it (`window.__look[name]`): a member changes
+    // a page (`updatePage(id)`), or says its reply to a message written under an open page (`answerPageAsk(text)`).
+    case "look-call":
+      await page.evaluate(({ name, args }) => { window.__look[name](...args); }, { name: step.name, args: step.args ?? [] });
+      await new Promise(resolve => setTimeout(resolve, step.wait ?? 500));
+      return { action: "look-call", name: step.name };
     // The models of the CLI held back by the mock (`codexLate`) arrive now.
     case "codex-arrives": await page.evaluate(() => { window.__look.codexArrives(); }); break;
+    // The sign-in console of a CLI ended (cli-signin.ts): `done`, or `stopped` as when its window was closed first.
+    case "cli-signin-ends": await page.evaluate((id, outcome) => { window.__look.cliSigninEnds(id, outcome); }, step.cli, step.outcome); break;
     // From now on the roster answers after `ms` (the mock's rosterDelay): the thread is asked for first and the roster comes late.
     case "late-roster": await page.evaluate(ms => { window.__look.rosterDelay = ms; }, step.ms); break;
     case "send-probe": return await sendProbe(page, step);
@@ -973,6 +1003,44 @@ export async function perform(page, step, evidenceDirectory) {
         await page.mouse.click(point.x, point.y, { button: "right" });
         await page.evaluate(at => { window.__look.pointer = at; }, point);
       } finally { await element.dispose(); }
+      break;
+    }
+    case "watch-opens": {
+      // R-UI-124: how many times a thing opened, counted as it happens (the end state alone cannot tell a close from a close and a reopen).
+      // A node of `selector` that is drawn, a `hidden` taken off one, or `attribute` appearing on one (a window that opens by a flag on the root) is an opening.
+      await page.evaluate(({ selector, gone, attribute, over }) => {
+        const watch = window.__look.watch = { selector, gone, over, opens: 0 };
+        const hit = node => node instanceof Element && (node.matches(selector) || !!node.querySelector(selector));
+        new MutationObserver(records => {
+          for (const record of records) {
+            if (record.type === "childList") watch.opens += [...record.addedNodes].filter(hit).length;
+            else if (record.attributeName === "hidden") { if (record.oldValue !== null && !record.target.hidden && hit(record.target)) watch.opens++; }
+            else if (attribute && record.attributeName === attribute && record.oldValue === null && record.target.matches?.(selector)) watch.opens++;
+          }
+        }).observe(document, { childList: true, subtree: true, attributes: true, attributeOldValue: true });
+      }, { selector: step.selector, gone: step.gone ?? step.selector, attribute: step.attribute ?? null, over: step.over ?? null });
+      break;
+    }
+    case "press-opener": {
+      // The second press on the control that opened the thing, made with the real mouse at a point of that control that the pointer
+      // reaches: on the control itself, or on the scrim that lies over it. A control the layout hides (a drawer that closed) is reported, not pressed.
+      const point = await page.evaluate(selector => {
+        const scrims = ".modal-scrim, .mb-scrim, .cs-scrim, .sidebar-scrim, .mb-det-scrim";
+        const control = [...document.querySelectorAll(selector)].find(node => node.getClientRects().length && getComputedStyle(node).visibility !== "hidden");
+        if (!control) return { pressed: false, reason: "the control is not drawn at this width" };
+        const box = control.getBoundingClientRect(), centre = { x: box.left + box.width / 2, y: box.top + box.height / 2 };
+        const grid = [];
+        for (let i = 1; i <= 7; i++) for (let j = 1; j <= 7; j++) grid.push({ x: box.left + box.width * i / 8, y: box.top + box.height * j / 8 });
+        grid.sort((a, b) => Math.hypot(a.x - centre.x, a.y - centre.y) - Math.hypot(b.x - centre.x, b.y - centre.y));
+        for (const at of grid) {
+          if (at.x < 0 || at.y < 0 || at.x >= innerWidth || at.y >= innerHeight) continue;
+          const hit = document.elementFromPoint(at.x, at.y);
+          if (hit && (control.contains(hit) || hit.matches(scrims))) return { pressed: true, x: at.x, y: at.y, hit: `${hit.tagName.toLowerCase()}.${String(hit.className).split(" ")[0]}`, overScrim: !control.contains(hit) };
+        }
+        return { pressed: false, reason: "no point of the control is reachable by the pointer (something else covers it)" };
+      }, step.selector);
+      if (point.pressed) await page.mouse.click(point.x, point.y);
+      await page.evaluate(result => { window.__look.pressedOpener = result; }, point);
       break;
     }
     case "focus": await page.focus(step.selector); break;

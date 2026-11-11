@@ -4,7 +4,7 @@ const empty = [{action:"member-column",collapsed:false},click('[data-col="add"]'
 const closed = [{action:"member-column",collapsed:false},click('[data-col="add"]'),click('#app-popover [data-pick="member-store"]'),wait(".member-store"),wait("[data-store-closed]")];
 const preview = [...store,click('.store-entry [data-id="research"]'),wait(".template-preview"),check("template-content")];
 export default [
-  scene("store-home", "Featured catalogue and shared tabs preserve the creation title", [...store,check("creator-tabs"),click('.cr-tabs [data-tab="maker"]'),check("creator-tabs"),click('.cr-tabs [data-tab="store"]'),check("creator-tabs"),check("store-home")]),
+  scene("store-home", "The store is a page of its own with its title, a template button beside the search, and a featured catalogue", [...store,check("store-page"),check("store-home")]),
   scene("store-category", "Category chips filter locally", [...store,click('[data-category="engineering"]'),check("store-category")]),
   scene("store-search", "Search filters names and summaries locally", [...store,type('[data-store-search]',"文字"),check("store-search")]),
   scene("store-empty", "A catalogue without entries has a calm empty state", [...empty,check("store-empty")], {storeEmpty:true}),

@@ -140,6 +140,8 @@ async def test_host_headers_tokens_host_validation_theme_and_deleted_pages(conn)
         assert "allow-same-origin" not in headers and "unsafe-eval" not in headers
         assert "window.raphael" in body and "ResizeObserver" in body and "--bg:#18181b" in body
         assert "window.loaded=1" in body
+        # The page tells the window where the owner is reading, and goes back there when the window asks (a page changed while open).
+        assert "post('scroll'" in body and "'scroll-to'" in body and "event.source === parent" in body and "post('escape'" in body
         assert (await fetch(url, host="attacker.example")).startswith("HTTP/1.1 403")
         assert (await fetch(url, path="/p/wrong")).startswith("HTTP/1.1 404")
         assert (await fetch(url, path="/p/" + page["id"])).startswith("HTTP/1.1 404")
@@ -275,6 +277,73 @@ async def test_update_cannot_replace_a_page_from_another_conversation(make_rig, 
                     chat('{"text":"Please choose a page in this conversation."}')]
     await rig.call("agent.ask", {"session_id": "foreign", "text": "Change the page", "source": "app",
                                 "ui_language": "en", "conversation_id": other})
+    assert rig.service.pages.store.get(page["id"])["rev"] == 1
+
+
+def prompt_of(client):
+    return "\n".join(str(message.get("content", "")) for message in client.chat_calls[-1]["messages"])
+
+
+async def shown_page(rig, client, **arguments):
+    """A first turn in which the member shows a page; the page's row."""
+    client.chats = [chat("", ("show_page", {"title": "Calculator", "html": "<input type=number>", **arguments})), chat('{"text":"Ready."}')]
+    await typed(rig)
+    [turn] = await rig.turns()
+    return rig.service.pages.store.get(turn["pages"][0]["id"])
+
+
+async def test_a_member_reads_the_id_of_a_page_it_showed_in_an_earlier_turn(make_rig, client):
+    """The owner's 2026-11-11 report: asked to change a page, the member sent a new one. Its later turn read only the
+    page's title and revision, never the id update_page needs, so it could not name the page it had made."""
+    rig = make_rig()
+    page = await shown_page(rig, client)
+    client.chats = [chat('{"text":"Which one?"}')]
+    await typed(rig, "Make the box wider")
+    assert f"page_id={page['id']}" in prompt_of(client)
+
+
+async def test_a_page_the_owner_has_open_is_what_here_and_this_mean_in_their_next_message(make_rig, client):
+    rig = make_rig()
+    page = await shown_page(rig, client)
+    assert await rig.call("pages.viewing", {"id": page["id"]}) == {"viewing": page["id"]}
+    client.chats = [chat('{"text":"Wider."}')]
+    await typed(rig, "Change this part")
+    prompt = prompt_of(client)
+    line = next(line for line in prompt.splitlines() if "the owner is looking at now" in line)
+    assert f"page_id={page['id']}" in line and '"Calculator"' in line and "update_page" in line
+    # Put away, the page is not mentioned in the next message.
+    await rig.call("pages.viewing", {"id": None})
+    client.chats = [chat('{"text":"Ok."}')]
+    await typed(rig, "And now?")
+    assert "the owner is looking at now" not in prompt_of(client)
+
+
+async def test_a_page_open_in_another_conversation_or_of_another_member_is_not_told(make_rig, client):
+    rig = make_rig()
+    elsewhere = stored(rig.conn, conversation_id=rig.service.conversations.quick())
+    await rig.call("pages.viewing", {"id": elsewhere["id"]})
+    client.chats = [chat('{"text":"Ok."}')]
+    await typed(rig, "Change this")
+    assert "the owner is looking at now" not in prompt_of(client)
+
+
+async def test_a_page_that_is_gone_cannot_be_open(make_rig):
+    rig = make_rig()
+    with pytest.raises(RpcError) as error:
+        await rig.call("pages.viewing", {"id": "missing"})
+    assert error.value.code == 1005
+    with pytest.raises(RpcError) as error:
+        await rig.call("pages.viewing", {"id": 5})
+    assert error.value.code == INVALID_PARAMS
+
+
+async def test_a_refused_update_names_the_pages_of_this_conversation_so_the_member_can_try_again(make_rig, client):
+    rig = make_rig()
+    page = await shown_page(rig, client)
+    client.chats = [chat("Updating.", ("update_page", {"page_id": "Calculator", "html": "<b>Wider</b>"})), chat('{"text":"Ok."}')]
+    await typed(rig, "Make the box wider")
+    refused = next(message["content"] for message in client.chat_calls[-1]["messages"] if message["role"] == "tool")
+    assert page["id"] in refused and '"Calculator"' in refused
     assert rig.service.pages.store.get(page["id"])["rev"] == 1
 
 

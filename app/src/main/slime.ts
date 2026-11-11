@@ -34,10 +34,16 @@ const COLOR_NAMES = {
   cyan: "slime.color.cyan", cobalt: "slime.color.cobalt", violet: "slime.color.violet", raspberry: "slime.color.raspberry", rose: "slime.color.rose",
 } as const satisfies Record<SlimeColor, string>;
 
-/** Picker sections, in the order the owner reads them. */
+/**
+ * Picker sections, in the order the owner reads them. 角色 holds the characters of the story alone; the fantasy archetypes
+ * that follow them (the red oni onward) have a tab of their own (owner, 2026-11-11: 「只有在動漫裡面的角色會放在角色那，如果是從
+ * 赤鬼那邊開始的話，就是會另外放在另外一個 Tab 上面」). The seasons and the food stand with nature, and the jobs with the small things as 生活:
+ * six tabs of two characters each make a row as wide as six slimes, so the picker is narrow and its tabs fill it (owner, the
+ * same evening: 「不要設計的這麼寬 上面 tab 右邊不要有空白」).
+ */
 const GROUP_NAMES = {
-  characters: "slime.group.characters", animals: "slime.group.animals", jobs: "slime.group.jobs", nature: "slime.group.nature",
-  seasonal: "slime.group.seasonal", objects: "slime.group.objects", colors: "slime.group.colors",
+  characters: "slime.group.characters", fantasy: "slime.group.fantasy", animals: "slime.group.animals", nature: "slime.group.nature",
+  everyday: "slime.group.everyday", colors: "slime.group.colors",
 } as const;
 type CharacterGroup = Exclude<keyof typeof GROUP_NAMES, "colors">;
 
@@ -96,32 +102,32 @@ const CHARACTERS = {
   carrera: { group: "characters", name: "slime.carrera", color: "#F5B417", marks: loose(fill("M 50 66 L 45 71 L 48 85 H 52 L 55 71 Z", "#B3262E"), 50, 66, 0.7) },
   ramiris: { group: "characters", name: "slime.ramiris", color: "#FFC83D", back: loose(`<path d="M 16 54 C 2 48 -2 28 6 16 C 16 20 24 34 27 44 Z M 84 54 C 98 48 102 28 94 16 C 84 20 76 34 73 44 Z" fill="#F6C7DC"/>`, 50, 44, 0.3) },
   // Fantasy archetypes: original silhouettes, with the shared body and face left intact.
-  "oni-red": { group: "characters", name: "slime.oni-red", color: "#CF493B", marks: loose(fill("M 30 35 L 22 17 Q 36 19 40 31 Z", "#FFE2B3"), 35, 33, 0.4) + fill(COLLAR, "#662C37") },
-  "oni-indigo": { group: "characters", name: "slime.oni-indigo", color: "#5256AF", marks: loose(fill("M 27 36 L 26 21 H 34 L 40 32 Z M 60 32 L 66 21 H 74 L 73 36 Z", "#ABD9DD"), 50, 34, 0.4) + fill(SASH, "#EB9D4B") },
-  "kijin-ivory": { group: "characters", name: "slime.kijin-ivory", color: "#AA6470", marks: loose(fill("M 24 39 Q 12 25 23 17 Q 20 28 34 31 Z M 66 31 Q 80 28 77 17 Q 88 25 76 39 Z", "#FBE7C9"), 50, 34, 0.3) },
-  "demon-wings": { group: "characters", name: "slime.demon-wings", color: "#B64563", back: loose(fill("M 24 45 L 5 23 L 7 62 L 18 55 L 22 72 L 32 56 Z M 76 45 L 95 23 L 93 62 L 82 55 L 78 72 L 68 56 Z", "#403049"), 50, 52, 0.3) },
-  "demon-tail": { group: "characters", name: "slime.demon-tail", color: "#744978", back: loose(fill("M 78 75 Q 103 81 86 49 L 78 51 L 82 32 L 97 45 L 91 47 Q 113 85 80 85 Z", "#E399A1"), 83, 76, 0.5) },
-  "dragon-storm": { group: "characters", name: "slime.dragon-storm", color: "#375C92", back: loose(fill("M 28 43 L 10 16 L 8 56 L 20 51 L 21 66 Z M 72 43 L 90 16 L 92 56 L 80 51 L 79 66 Z", "#9CAEBF"), 50, 45, 0.3), marks: fill("M 52 61 L 39 75 H 48 L 44 85 L 64 69 H 53 L 60 61 Z", "#F5D55C") },
-  "dragon-ember": { group: "characters", name: "slime.dragon-ember", color: "#CA622E", back: loose(fill("M 27 48 L 8 34 L 17 24 L 20 11 L 38 35 Z M 73 48 L 92 34 L 83 24 L 80 11 L 62 35 Z", "#85323D"), 50, 43, 0.3), marks: fill("M 27 73 L 35 65 L 43 73 L 35 81 Z M 43 78 L 51 70 L 59 78 L 51 85 Z M 59 73 L 67 65 L 75 73 L 67 81 Z", "#FFD296") },
-  "dragon-ice": { group: "characters", name: "slime.dragon-ice", color: "#288FAD", marks: loose(fill("M 30 34 L 34 13 L 44 29 L 50 5 L 57 29 L 68 15 L 70 35 Z", "#BEF1EE"), 50, 32, 0.25) + fill("M 32 70 L 42 77 L 50 70 L 58 77 L 68 70 L 64 82 H 36 Z", "#B4DCE9") },
-  "fairy-wings": { group: "characters", name: "slime.fairy-wings", color: "#409B83", back: loose(fill("M 24 49 C -1 49 3 19 16 22 Q 28 25 29 43 Z M 22 50 C 2 58 8 75 23 67 L 31 53 Z M 76 49 C 101 49 97 19 84 22 Q 72 25 71 43 Z M 78 50 C 98 58 92 75 77 67 L 69 53 Z", "#C4EBDD"), 50, 48, 0.3) },
-  "fairy-flower": { group: "characters", name: "slime.fairy-flower", color: "#D66C9D", marks: loose(fill("M 29 31 C 13 32 17 18 27 20 C 24 6 39 9 38 21 C 50 12 57 25 43 30 C 49 42 33 44 29 31 Z", "#FFE2A2") + `<circle cx="33" cy="27" r="5" fill="#9E547D"/>`, 34, 31, 0.5) },
-  "beast-fangs": { group: "characters", name: "slime.beast-fangs", color: "#956143", marks: fill("M 22 66 Q 31 66 36 72 L 32 85 Q 26 77 22 66 Z M 78 66 Q 69 66 64 72 L 68 85 Q 74 77 78 66 Z", "#F9DFA7") },
-  "beast-mane": { group: "characters", name: "slime.beast-mane", color: "#B97C2A", back: fill("M 15 70 L 7 54 L 17 44 L 12 29 L 29 29 L 36 15 L 49 23 L 64 15 L 71 29 L 88 29 L 83 44 L 93 54 L 85 70 L 69 79 H 31 Z", "#6E4534") },
-  "knight-helm": { group: "characters", name: "slime.knight-helm", color: "#57728C", marks: fill("M 20 40 Q 24 13 50 13 Q 76 13 80 40 L 68 34 Q 50 25 32 34 Z M 18 43 L 28 42 L 33 62 L 24 66 Z M 82 43 L 72 42 L 67 62 L 76 66 Z", "#C5D5DA") },
-  "knight-plume": { group: "characters", name: "slime.knight-plume", color: "#8A4B78", marks: loose(fill("M 27 32 Q 12 7 29 5 Q 52 6 50 30 Z", "#F1AF70"), 41, 31, 0.6) + fill("M 26 35 Q 50 20 74 35 L 73 40 Q 50 30 27 40 Z", "#D6DCE1") },
-  paladin: { group: "characters", name: "slime.paladin", color: "#C38D32", back: fill("M 24 46 L 16 84 L 50 77 L 84 84 L 76 46 Z", "#3D6597"), marks: fill("M 38 64 H 62 V 75 L 50 85 L 38 75 Z", "#F7E3A9") + fill("M 47 66 H 53 V 72 H 59 V 77 H 53 V 82 H 47 V 77 H 41 V 72 H 47 Z", "#986539") },
-  "ranger-hood": { group: "characters", name: "slime.ranger-hood", color: "#568B49", back: fill("M 13 64 Q 7 29 50 11 Q 93 29 87 64 L 75 51 Q 75 29 50 27 Q 25 29 25 51 Z", "#294C42"), marks: fill("M 27 70 L 50 81 L 73 70 L 66 84 H 34 Z", "#C1BE75") },
-  "archer-feather": { group: "characters", name: "slime.archer-feather", color: "#818E39", marks: loose(fill("M 69 32 Q 66 10 88 6 Q 91 25 69 32 Z", "#72C7B3"), 68, 32, 0.6) + fill("M 21 36 L 40 20 L 68 26 L 79 36 Q 49 31 21 36 Z", "#CBA35F") },
-  "mage-star": { group: "characters", name: "slime.mage-star", color: "#8758AD", marks: loose(fill("M 25 33 L 29 8 L 52 26 L 66 33 Z", "#3D3869"), 47, 32, 0.4) + fill("M 50 62 L 55 69 L 64 70 L 57 76 L 59 84 L 50 80 L 41 84 L 43 76 L 36 70 L 45 69 Z", "#F2D08A") },
-  "sage-scroll": { group: "characters", name: "slime.sage-scroll", color: "#4A88A6", marks: fill("M 29 35 Q 38 29 45 34 L 43 39 L 29 40 Z M 55 34 Q 62 29 71 35 L 71 40 L 57 39 Z", "#E9E1C4") + loose(fill("M 25 67 Q 25 61 33 63 H 68 Q 75 63 75 69 V 77 Q 75 83 67 81 H 32 Q 25 81 25 75 Z", "#F2D5A3") + fill("M 34 65 H 40 V 79 H 34 Z M 61 65 H 67 V 79 H 61 Z", "#B88960"), 50, 71, 0.3) },
-  "alchemist-flask": { group: "characters", name: "slime.alchemist-flask", color: "#397C77", marks: loose(fill("M 44 61 H 56 V 68 L 68 81 Q 67 86 61 86 H 39 Q 33 86 32 81 L 44 68 Z", "#A6DCC0") + fill("M 39 76 H 61 L 65 82 H 35 Z", "#5CAF78") + fill("M 42 59 H 58 V 64 H 42 Z", "#D8BB83"), 50, 65, 0.4) },
-  "maid-apron": { group: "characters", name: "slime.maid-apron", color: "#906F9E", marks: fill("M 25 33 Q 25 23 33 27 Q 36 18 43 24 Q 50 16 57 24 Q 64 18 67 27 Q 75 23 75 33 Z M 35 65 H 65 L 71 83 Q 50 89 29 83 Z", "#F5EBDF") + loose(fill(BOW, "#4D476C"), 50, 72, 0.5) },
-  "butler-silver": { group: "characters", name: "slime.butler-silver", color: "#64788E", marks: fill("M 29 62 L 48 69 L 42 80 Z M 71 62 L 52 69 L 58 80 Z", "#EDF0E7") + fill("M 47 68 H 53 L 55 74 L 52 84 H 48 L 45 74 Z", "#293743") },
-  "witch-moon": { group: "characters", name: "slime.witch-moon", color: "#625397", marks: loose(fill("M 19 34 L 32 8 L 59 10 L 43 18 L 61 32 L 77 35 Q 50 41 19 34 Z", "#322D4C"), 48, 34, 0.5) + fill("M 58 63 Q 41 60 39 75 Q 41 89 58 82 Q 47 80 48 73 Q 48 66 58 63 Z", "#EECF7C") },
-  "wizard-cap": { group: "characters", name: "slime.wizard-cap", color: "#424EC1", marks: loose(fill("M 30 33 L 48 4 L 68 33 Z", "#E5DBAF") + fill("M 38 22 H 58 L 62 28 H 34 Z", "#6D79B9"), 49, 33, 0.4) },
-  "golem-stone": { group: "characters", name: "slime.golem-stone", color: "#727D70", back: fill("M 17 36 V 20 H 34 V 34 Z M 66 34 V 20 H 83 V 36 Z", "#A5B29B"), marks: fill("M 22 65 H 43 V 76 H 22 Z M 48 70 H 76 V 82 H 48 Z M 31 79 H 44 V 86 H 31 Z", "#4D5C51") },
-  "phoenix-feather": { group: "characters", name: "slime.phoenix-feather", color: "#CF512B", back: loose(fill("M 20 68 Q -2 42 13 27 Q 11 45 29 47 L 31 66 Z M 80 68 Q 102 42 87 27 Q 89 45 71 47 L 69 66 Z", "#F6B53C"), 50, 55, 0.4), marks: loose(fill("M 31 32 Q 21 16 36 6 Q 33 21 46 28 Z", "#F9DA70"), 37, 31, 0.6) },
+  "oni-red": { group: "fantasy", name: "slime.oni-red", color: "#CF493B", marks: loose(fill("M 30 35 L 22 17 Q 36 19 40 31 Z", "#FFE2B3"), 35, 33, 0.4) + fill(COLLAR, "#662C37") },
+  "oni-indigo": { group: "fantasy", name: "slime.oni-indigo", color: "#5256AF", marks: loose(fill("M 27 36 L 26 21 H 34 L 40 32 Z M 60 32 L 66 21 H 74 L 73 36 Z", "#ABD9DD"), 50, 34, 0.4) + fill(SASH, "#EB9D4B") },
+  "kijin-ivory": { group: "fantasy", name: "slime.kijin-ivory", color: "#AA6470", marks: loose(fill("M 24 39 Q 12 25 23 17 Q 20 28 34 31 Z M 66 31 Q 80 28 77 17 Q 88 25 76 39 Z", "#FBE7C9"), 50, 34, 0.3) },
+  "demon-wings": { group: "fantasy", name: "slime.demon-wings", color: "#B64563", back: loose(fill("M 24 45 L 5 23 L 7 62 L 18 55 L 22 72 L 32 56 Z M 76 45 L 95 23 L 93 62 L 82 55 L 78 72 L 68 56 Z", "#403049"), 50, 52, 0.3) },
+  "demon-tail": { group: "fantasy", name: "slime.demon-tail", color: "#744978", back: loose(fill("M 78 75 Q 103 81 86 49 L 78 51 L 82 32 L 97 45 L 91 47 Q 113 85 80 85 Z", "#E399A1"), 83, 76, 0.5) },
+  "dragon-storm": { group: "fantasy", name: "slime.dragon-storm", color: "#375C92", back: loose(fill("M 28 43 L 10 16 L 8 56 L 20 51 L 21 66 Z M 72 43 L 90 16 L 92 56 L 80 51 L 79 66 Z", "#9CAEBF"), 50, 45, 0.3), marks: fill("M 52 61 L 39 75 H 48 L 44 85 L 64 69 H 53 L 60 61 Z", "#F5D55C") },
+  "dragon-ember": { group: "fantasy", name: "slime.dragon-ember", color: "#CA622E", back: loose(fill("M 27 48 L 8 34 L 17 24 L 20 11 L 38 35 Z M 73 48 L 92 34 L 83 24 L 80 11 L 62 35 Z", "#85323D"), 50, 43, 0.3), marks: fill("M 27 73 L 35 65 L 43 73 L 35 81 Z M 43 78 L 51 70 L 59 78 L 51 85 Z M 59 73 L 67 65 L 75 73 L 67 81 Z", "#FFD296") },
+  "dragon-ice": { group: "fantasy", name: "slime.dragon-ice", color: "#288FAD", marks: loose(fill("M 30 34 L 34 13 L 44 29 L 50 5 L 57 29 L 68 15 L 70 35 Z", "#BEF1EE"), 50, 32, 0.25) + fill("M 32 70 L 42 77 L 50 70 L 58 77 L 68 70 L 64 82 H 36 Z", "#B4DCE9") },
+  "fairy-wings": { group: "fantasy", name: "slime.fairy-wings", color: "#409B83", back: loose(fill("M 24 49 C -1 49 3 19 16 22 Q 28 25 29 43 Z M 22 50 C 2 58 8 75 23 67 L 31 53 Z M 76 49 C 101 49 97 19 84 22 Q 72 25 71 43 Z M 78 50 C 98 58 92 75 77 67 L 69 53 Z", "#C4EBDD"), 50, 48, 0.3) },
+  "fairy-flower": { group: "fantasy", name: "slime.fairy-flower", color: "#D66C9D", marks: loose(fill("M 29 31 C 13 32 17 18 27 20 C 24 6 39 9 38 21 C 50 12 57 25 43 30 C 49 42 33 44 29 31 Z", "#FFE2A2") + `<circle cx="33" cy="27" r="5" fill="#9E547D"/>`, 34, 31, 0.5) },
+  "beast-fangs": { group: "fantasy", name: "slime.beast-fangs", color: "#956143", marks: fill("M 22 66 Q 31 66 36 72 L 32 85 Q 26 77 22 66 Z M 78 66 Q 69 66 64 72 L 68 85 Q 74 77 78 66 Z", "#F9DFA7") },
+  "beast-mane": { group: "fantasy", name: "slime.beast-mane", color: "#B97C2A", back: fill("M 15 70 L 7 54 L 17 44 L 12 29 L 29 29 L 36 15 L 49 23 L 64 15 L 71 29 L 88 29 L 83 44 L 93 54 L 85 70 L 69 79 H 31 Z", "#6E4534") },
+  "knight-helm": { group: "fantasy", name: "slime.knight-helm", color: "#57728C", marks: fill("M 20 40 Q 24 13 50 13 Q 76 13 80 40 L 68 34 Q 50 25 32 34 Z M 18 43 L 28 42 L 33 62 L 24 66 Z M 82 43 L 72 42 L 67 62 L 76 66 Z", "#C5D5DA") },
+  "knight-plume": { group: "fantasy", name: "slime.knight-plume", color: "#8A4B78", marks: loose(fill("M 27 32 Q 12 7 29 5 Q 52 6 50 30 Z", "#F1AF70"), 41, 31, 0.6) + fill("M 26 35 Q 50 20 74 35 L 73 40 Q 50 30 27 40 Z", "#D6DCE1") },
+  paladin: { group: "fantasy", name: "slime.paladin", color: "#C38D32", back: fill("M 24 46 L 16 84 L 50 77 L 84 84 L 76 46 Z", "#3D6597"), marks: fill("M 38 64 H 62 V 75 L 50 85 L 38 75 Z", "#F7E3A9") + fill("M 47 66 H 53 V 72 H 59 V 77 H 53 V 82 H 47 V 77 H 41 V 72 H 47 Z", "#986539") },
+  "ranger-hood": { group: "fantasy", name: "slime.ranger-hood", color: "#568B49", back: fill("M 13 64 Q 7 29 50 11 Q 93 29 87 64 L 75 51 Q 75 29 50 27 Q 25 29 25 51 Z", "#294C42"), marks: fill("M 27 70 L 50 81 L 73 70 L 66 84 H 34 Z", "#C1BE75") },
+  "archer-feather": { group: "fantasy", name: "slime.archer-feather", color: "#818E39", marks: loose(fill("M 69 32 Q 66 10 88 6 Q 91 25 69 32 Z", "#72C7B3"), 68, 32, 0.6) + fill("M 21 36 L 40 20 L 68 26 L 79 36 Q 49 31 21 36 Z", "#CBA35F") },
+  "mage-star": { group: "fantasy", name: "slime.mage-star", color: "#8758AD", marks: loose(fill("M 25 33 L 29 8 L 52 26 L 66 33 Z", "#3D3869"), 47, 32, 0.4) + fill("M 50 62 L 55 69 L 64 70 L 57 76 L 59 84 L 50 80 L 41 84 L 43 76 L 36 70 L 45 69 Z", "#F2D08A") },
+  "sage-scroll": { group: "fantasy", name: "slime.sage-scroll", color: "#4A88A6", marks: fill("M 29 35 Q 38 29 45 34 L 43 39 L 29 40 Z M 55 34 Q 62 29 71 35 L 71 40 L 57 39 Z", "#E9E1C4") + loose(fill("M 25 67 Q 25 61 33 63 H 68 Q 75 63 75 69 V 77 Q 75 83 67 81 H 32 Q 25 81 25 75 Z", "#F2D5A3") + fill("M 34 65 H 40 V 79 H 34 Z M 61 65 H 67 V 79 H 61 Z", "#B88960"), 50, 71, 0.3) },
+  "alchemist-flask": { group: "fantasy", name: "slime.alchemist-flask", color: "#397C77", marks: loose(fill("M 44 61 H 56 V 68 L 68 81 Q 67 86 61 86 H 39 Q 33 86 32 81 L 44 68 Z", "#A6DCC0") + fill("M 39 76 H 61 L 65 82 H 35 Z", "#5CAF78") + fill("M 42 59 H 58 V 64 H 42 Z", "#D8BB83"), 50, 65, 0.4) },
+  "maid-apron": { group: "fantasy", name: "slime.maid-apron", color: "#906F9E", marks: fill("M 25 33 Q 25 23 33 27 Q 36 18 43 24 Q 50 16 57 24 Q 64 18 67 27 Q 75 23 75 33 Z M 35 65 H 65 L 71 83 Q 50 89 29 83 Z", "#F5EBDF") + loose(fill(BOW, "#4D476C"), 50, 72, 0.5) },
+  "butler-silver": { group: "fantasy", name: "slime.butler-silver", color: "#64788E", marks: fill("M 29 62 L 48 69 L 42 80 Z M 71 62 L 52 69 L 58 80 Z", "#EDF0E7") + fill("M 47 68 H 53 L 55 74 L 52 84 H 48 L 45 74 Z", "#293743") },
+  "witch-moon": { group: "fantasy", name: "slime.witch-moon", color: "#625397", marks: loose(fill("M 19 34 L 32 8 L 59 10 L 43 18 L 61 32 L 77 35 Q 50 41 19 34 Z", "#322D4C"), 48, 34, 0.5) + fill("M 58 63 Q 41 60 39 75 Q 41 89 58 82 Q 47 80 48 73 Q 48 66 58 63 Z", "#EECF7C") },
+  "wizard-cap": { group: "fantasy", name: "slime.wizard-cap", color: "#424EC1", marks: loose(fill("M 30 33 L 48 4 L 68 33 Z", "#E5DBAF") + fill("M 38 22 H 58 L 62 28 H 34 Z", "#6D79B9"), 49, 33, 0.4) },
+  "golem-stone": { group: "fantasy", name: "slime.golem-stone", color: "#727D70", back: fill("M 17 36 V 20 H 34 V 34 Z M 66 34 V 20 H 83 V 36 Z", "#A5B29B"), marks: fill("M 22 65 H 43 V 76 H 22 Z M 48 70 H 76 V 82 H 48 Z M 31 79 H 44 V 86 H 31 Z", "#4D5C51") },
+  "phoenix-feather": { group: "fantasy", name: "slime.phoenix-feather", color: "#CF512B", back: loose(fill("M 20 68 Q -2 42 13 27 Q 11 45 29 47 L 31 66 Z M 80 68 Q 102 42 87 27 Q 89 45 71 47 L 69 66 Z", "#F6B53C"), 50, 55, 0.4), marks: loose(fill("M 31 32 Q 21 16 36 6 Q 33 21 46 28 Z", "#F9DA70"), 37, 31, 0.6) },
   // Animals retain the same two eyes; ears, gills and limbs sit behind the dome.
   "cat-ears": { group: "animals", name: "slime.cat-ears", color: "#C77A57", back: loose(fill("M 18 41 L 17 12 L 38 30 Z M 62 30 L 83 12 L 82 41 Z", "#C77A57") + fill("M 23 29 L 23 20 L 31 28 Z M 69 28 L 77 20 L 77 29 Z", "#F6B99A"), 50, 35, 0.3) },
   "dog-ears": { group: "animals", name: "slime.dog-ears", color: "#AF8555", back: loose(fill("M 28 29 Q 2 24 8 58 Q 12 74 23 59 L 34 36 Z M 72 29 Q 98 24 92 58 Q 88 74 77 59 L 66 36 Z", "#664C40"), 50, 32, 0.5) },
@@ -135,15 +141,7 @@ const CHARACTERS = {
   penguin: { group: "animals", name: "slime.penguin", color: "#31465D", marks: fill("M 27 82 C 28 65 35 61 50 61 C 65 61 72 65 73 82 Q 50 89 27 82 Z", "#E3E5D2") + fill("M 42 58 H 58 L 50 66 Z", "#E9A83E") },
   turtle: { group: "animals", name: "slime.turtle", color: "#56816A", back: fill("M 11 65 L 2 78 L 20 82 L 31 70 Z M 89 65 L 98 78 L 80 82 L 69 70 Z", "#ABC38A"), marks: fill("M 34 64 L 50 58 L 66 64 V 77 L 50 84 L 34 77 Z", "#A3B768") + fill("M 47 61 H 53 V 82 H 47 Z M 35 69 H 65 V 75 H 35 Z", "#4C7150") },
   octopus: { group: "animals", name: "slime.octopus", color: "#D75CA5", back: loose(fill("M 20 65 Q 4 69 4 82 Q 7 91 18 82 L 22 75 L 27 80 Q 22 96 35 92 L 42 80 H 58 L 65 92 Q 78 96 73 80 L 78 75 L 82 82 Q 93 91 96 82 Q 96 69 80 65 Z", "#A84384"), 50, 75, 0.35) },
-  // Work, elements, seasons, food and small everyday objects.
-  "chef-hat": { group: "jobs", name: "slime.chef-hat", color: "#A95D48", marks: loose(fill("M 27 31 V 22 C 9 17 25 1 36 10 C 39 -1 59 -1 63 10 C 77 0 90 19 73 23 V 32 Z M 28 33 H 72 V 39 H 28 Z", "#F3EDDD"), 50, 34, 0.4) },
-  gardener: { group: "jobs", name: "slime.gardener", color: "#599569", marks: fill("M 31 29 L 34 16 H 65 L 69 29 L 84 35 Q 50 41 16 35 Z", "#DBBB75") + fill("M 33 24 H 67 L 69 29 H 31 Z", "#8A6646") },
-  artist: { group: "jobs", name: "slime.artist", color: "#B4528B", marks: loose(fill("M 20 31 C 10 12 41 11 60 15 C 82 19 78 31 65 33 Z M 41 16 L 45 7 H 52 L 50 17 Z", "#643B58"), 49, 31, 0.4) + fill("M 27 72 Q 26 61 40 64 L 66 73 Q 76 84 58 84 H 37 Z", "#E2BC77") },
-  medic: { group: "jobs", name: "slime.medic", color: "#BB5870", marks: fill("M 29 22 H 71 L 76 35 H 24 Z M 45 65 H 55 V 71 H 63 V 79 H 55 V 85 H 45 V 79 H 37 V 71 H 45 Z", "#F5E8DD") },
-  sailor: { group: "jobs", name: "slime.sailor", color: "#2873AD", marks: fill("M 29 28 Q 30 13 50 15 Q 70 13 71 28 Z M 23 29 H 77 V 36 H 23 Z M 26 65 L 43 78 L 50 71 L 57 78 L 74 65 L 64 84 H 36 Z", "#E0E9DF") },
-  astronaut: { group: "jobs", name: "slime.astronaut", color: "#516E8A", back: fill("M 8 67 V 39 C 8 0 92 0 92 39 V 67 L 82 68 V 40 C 82 14 18 14 18 40 V 68 Z M 2 48 H 15 V 74 H 2 Z M 85 48 H 98 V 74 H 85 Z", "#DFE2D8"), marks: fill("M 37 68 H 63 V 82 H 37 Z", "#263E59") + fill("M 42 72 H 50 V 78 H 42 Z", "#79C9C0") },
-  detective: { group: "jobs", name: "slime.detective", color: "#986744", marks: fill("M 30 29 L 32 17 H 47 L 55 23 H 69 L 74 31 L 87 36 H 13 Z", "#4B4140") + fill("M 29 64 L 48 73 L 39 82 Z M 71 64 L 52 73 L 61 82 Z", "#DAC39C") },
-  mechanic: { group: "jobs", name: "slime.mechanic", color: "#507B76", marks: loose(fill("M 30 66 L 40 76 L 56 60 Q 52 51 62 47 L 60 56 L 66 59 L 73 52 Q 77 64 64 66 L 46 84 L 37 84 Z", "#C7D7CF"), 50, 72, 0.4) },
+  // Nature: the elements, then the seasons and food. Everyday: work, then small everyday objects.
   fire: { group: "nature", name: "slime.fire", color: "#D85B32", back: loose(fill("M 24 48 Q 7 29 30 12 Q 27 27 40 29 L 51 0 Q 66 20 64 30 L 80 15 Q 96 38 78 52 Z", "#EEAD3B"), 50, 35, 0.3), marks: fill("M 36 82 Q 29 71 45 61 Q 43 73 54 68 Q 69 82 57 85 Z", "#F8D982") },
   water: { group: "nature", name: "slime.water", color: "#268CA5", marks: loose(fill("M 50 60 Q 29 80 42 84 Q 58 92 65 80 Q 69 73 50 60 Z", "#99E0DC"), 50, 65, 0.4) + fill("M 22 33 Q 26 22 33 20 Q 32 32 22 33 Z", "#B1E8EA") },
   earth: { group: "nature", name: "slime.earth", color: "#9A784C", marks: fill("M 18 76 L 29 63 L 39 70 L 55 59 L 73 73 L 82 81 Q 50 90 18 81 Z", "#5B6B42") + fill("M 27 65 L 29 55 L 38 63 Z M 63 66 L 67 55 L 76 68 Z", "#C5B67A") },
@@ -152,16 +150,24 @@ const CHARACTERS = {
   thunder: { group: "nature", name: "slime.thunder", color: "#9B8038", back: loose(fill("M 18 54 L 4 44 L 14 37 L 5 25 L 27 33 L 22 42 L 31 47 Z M 82 54 L 96 44 L 86 37 L 95 25 L 73 33 L 78 42 L 69 47 Z", "#EFD16A"), 50, 44, 0.3), marks: fill("M 49 61 L 39 75 H 49 L 44 86 L 65 70 H 54 L 60 61 Z", "#FAE8A2") },
   rainbow: { group: "nature", name: "slime.rainbow", color: "#9767A8", marks: fill("M 19 69 Q 50 57 81 69 L 82 75 Q 50 63 18 75 Z", "#F5AE75") + fill("M 18 75 Q 50 63 82 75 L 80 80 Q 50 69 20 80 Z", "#EED77D") + fill("M 20 80 Q 50 69 80 80 L 73 85 Q 50 77 27 85 Z", "#93CFB3") },
   cloud: { group: "nature", name: "slime.cloud", color: "#6885AC", marks: loose(fill("M 20 31 C 8 25 21 12 29 18 C 30 3 49 6 50 16 C 59 2 76 12 72 22 C 88 15 93 32 79 35 H 26 Z", "#D7E6E5"), 50, 32, 0.4) },
-  "cherry-blossom": { group: "seasonal", name: "slime.cherry-blossom", color: "#C36891", marks: loose(fill("M 29 28 Q 12 25 19 14 Q 26 10 32 20 Q 34 4 45 12 Q 50 19 39 25 Q 55 27 46 38 Q 38 41 34 31 Q 29 46 20 37 Q 16 30 29 28 Z", "#F5CECF") + `<circle cx="32" cy="26" r="4" fill="#C89B47"/>`, 33, 30, 0.5) },
-  "autumn-leaf": { group: "seasonal", name: "slime.autumn-leaf", color: "#B66D36", marks: loose(fill("M 48 84 L 46 73 L 32 72 L 36 64 L 29 58 L 43 59 L 50 46 L 56 59 L 70 55 L 65 66 L 70 73 L 55 75 L 53 85 Z", "#F1BA4F"), 50, 73, 0.5) },
-  pumpkin: { group: "seasonal", name: "slime.pumpkin", color: "#D77922", marks: loose(fill("M 45 31 L 44 15 Q 50 10 57 16 L 53 31 Z", "#47694A"), 50, 30, 0.3) + fill("M 27 63 Q 23 73 31 82 H 37 Q 29 72 34 63 Z M 47 64 H 53 V 85 H 47 Z M 66 63 Q 71 72 63 82 H 69 Q 77 73 73 63 Z", "#A94C27") },
-  strawberry: { group: "seasonal", name: "slime.strawberry", color: "#C54458", marks: loose(fill("M 26 30 L 35 20 L 41 26 L 50 12 L 58 26 L 68 20 L 75 31 L 57 30 L 50 37 L 43 30 Z", "#6A934A"), 50, 30, 0.3) + fill("M 27 65 L 33 63 L 31 71 Z M 47 71 L 53 69 L 51 78 Z M 67 65 L 73 63 L 71 71 Z", "#F4D58D") },
-  lemon: { group: "seasonal", name: "slime.lemon", color: "#B89A28", marks: loose(fill("M 48 30 Q 44 12 64 12 Q 65 25 48 30 Z", "#5E8D4C"), 50, 30, 0.4) + fill("M 28 70 Q 50 85 72 70 L 68 79 Q 50 92 32 79 Z", "#F7DF8A") },
-  mushroom: { group: "seasonal", name: "slime.mushroom", color: "#AC725E", marks: loose(fill("M 16 32 Q 21 5 50 8 Q 79 5 84 32 Q 50 42 16 32 Z", "#A9424E") + fill("M 29 25 A 5 5 0 1 1 39 25 A 5 5 0 1 1 29 25 Z M 57 19 A 6 6 0 1 1 69 19 A 6 6 0 1 1 57 19 Z", "#F4DCBB"), 50, 33, 0.4) },
-  "ribbon-bell": { group: "objects", name: "slime.ribbon-bell", color: "#5F85B7", marks: loose(fill("M 50 67 L 29 61 V 78 Z M 50 67 L 71 61 V 78 Z", "#A53E68") + fill("M 43 70 Q 50 64 57 70 L 60 82 H 40 Z M 46 82 H 54 V 87 H 46 Z", "#F1C96D"), 50, 68, 0.6) },
-  parcel: { group: "objects", name: "slime.parcel", color: "#8D8C59", marks: loose(fill("M 27 63 H 73 V 83 H 27 Z", "#C7985E") + fill("M 46 63 H 54 V 83 H 46 Z M 27 70 H 73 V 76 H 27 Z", "#F2D9A1"), 50, 66, 0.3) },
-  candle: { group: "objects", name: "slime.candle", color: "#9272A7", marks: loose(fill("M 41 24 H 59 V 37 H 41 Z", "#E9CDB0") + fill("M 50 24 Q 34 17 51 3 Q 65 20 50 24 Z", "#F5BC54"), 50, 34, 0.4) },
-  "music-note": { group: "objects", name: "slime.music-note", color: "#477C98", marks: loose(fill("M 42 60 L 67 55 V 76 Q 58 87 52 79 Q 50 71 60 71 V 64 L 49 66 V 81 Q 39 91 34 82 Q 31 74 42 75 Z", "#F4D898"), 50, 68, 0.5) },
+  "cherry-blossom": { group: "nature", name: "slime.cherry-blossom", color: "#C36891", marks: loose(fill("M 29 28 Q 12 25 19 14 Q 26 10 32 20 Q 34 4 45 12 Q 50 19 39 25 Q 55 27 46 38 Q 38 41 34 31 Q 29 46 20 37 Q 16 30 29 28 Z", "#F5CECF") + `<circle cx="32" cy="26" r="4" fill="#C89B47"/>`, 33, 30, 0.5) },
+  "autumn-leaf": { group: "nature", name: "slime.autumn-leaf", color: "#B66D36", marks: loose(fill("M 48 84 L 46 73 L 32 72 L 36 64 L 29 58 L 43 59 L 50 46 L 56 59 L 70 55 L 65 66 L 70 73 L 55 75 L 53 85 Z", "#F1BA4F"), 50, 73, 0.5) },
+  pumpkin: { group: "nature", name: "slime.pumpkin", color: "#D77922", marks: loose(fill("M 45 31 L 44 15 Q 50 10 57 16 L 53 31 Z", "#47694A"), 50, 30, 0.3) + fill("M 27 63 Q 23 73 31 82 H 37 Q 29 72 34 63 Z M 47 64 H 53 V 85 H 47 Z M 66 63 Q 71 72 63 82 H 69 Q 77 73 73 63 Z", "#A94C27") },
+  strawberry: { group: "nature", name: "slime.strawberry", color: "#C54458", marks: loose(fill("M 26 30 L 35 20 L 41 26 L 50 12 L 58 26 L 68 20 L 75 31 L 57 30 L 50 37 L 43 30 Z", "#6A934A"), 50, 30, 0.3) + fill("M 27 65 L 33 63 L 31 71 Z M 47 71 L 53 69 L 51 78 Z M 67 65 L 73 63 L 71 71 Z", "#F4D58D") },
+  lemon: { group: "nature", name: "slime.lemon", color: "#B89A28", marks: loose(fill("M 48 30 Q 44 12 64 12 Q 65 25 48 30 Z", "#5E8D4C"), 50, 30, 0.4) + fill("M 28 70 Q 50 85 72 70 L 68 79 Q 50 92 32 79 Z", "#F7DF8A") },
+  mushroom: { group: "nature", name: "slime.mushroom", color: "#AC725E", marks: loose(fill("M 16 32 Q 21 5 50 8 Q 79 5 84 32 Q 50 42 16 32 Z", "#A9424E") + fill("M 29 25 A 5 5 0 1 1 39 25 A 5 5 0 1 1 29 25 Z M 57 19 A 6 6 0 1 1 69 19 A 6 6 0 1 1 57 19 Z", "#F4DCBB"), 50, 33, 0.4) },
+  "chef-hat": { group: "everyday", name: "slime.chef-hat", color: "#A95D48", marks: loose(fill("M 27 31 V 22 C 9 17 25 1 36 10 C 39 -1 59 -1 63 10 C 77 0 90 19 73 23 V 32 Z M 28 33 H 72 V 39 H 28 Z", "#F3EDDD"), 50, 34, 0.4) },
+  gardener: { group: "everyday", name: "slime.gardener", color: "#599569", marks: fill("M 31 29 L 34 16 H 65 L 69 29 L 84 35 Q 50 41 16 35 Z", "#DBBB75") + fill("M 33 24 H 67 L 69 29 H 31 Z", "#8A6646") },
+  artist: { group: "everyday", name: "slime.artist", color: "#B4528B", marks: loose(fill("M 20 31 C 10 12 41 11 60 15 C 82 19 78 31 65 33 Z M 41 16 L 45 7 H 52 L 50 17 Z", "#643B58"), 49, 31, 0.4) + fill("M 27 72 Q 26 61 40 64 L 66 73 Q 76 84 58 84 H 37 Z", "#E2BC77") },
+  medic: { group: "everyday", name: "slime.medic", color: "#BB5870", marks: fill("M 29 22 H 71 L 76 35 H 24 Z M 45 65 H 55 V 71 H 63 V 79 H 55 V 85 H 45 V 79 H 37 V 71 H 45 Z", "#F5E8DD") },
+  sailor: { group: "everyday", name: "slime.sailor", color: "#2873AD", marks: fill("M 29 28 Q 30 13 50 15 Q 70 13 71 28 Z M 23 29 H 77 V 36 H 23 Z M 26 65 L 43 78 L 50 71 L 57 78 L 74 65 L 64 84 H 36 Z", "#E0E9DF") },
+  astronaut: { group: "everyday", name: "slime.astronaut", color: "#516E8A", back: fill("M 8 67 V 39 C 8 0 92 0 92 39 V 67 L 82 68 V 40 C 82 14 18 14 18 40 V 68 Z M 2 48 H 15 V 74 H 2 Z M 85 48 H 98 V 74 H 85 Z", "#DFE2D8"), marks: fill("M 37 68 H 63 V 82 H 37 Z", "#263E59") + fill("M 42 72 H 50 V 78 H 42 Z", "#79C9C0") },
+  detective: { group: "everyday", name: "slime.detective", color: "#986744", marks: fill("M 30 29 L 32 17 H 47 L 55 23 H 69 L 74 31 L 87 36 H 13 Z", "#4B4140") + fill("M 29 64 L 48 73 L 39 82 Z M 71 64 L 52 73 L 61 82 Z", "#DAC39C") },
+  mechanic: { group: "everyday", name: "slime.mechanic", color: "#507B76", marks: loose(fill("M 30 66 L 40 76 L 56 60 Q 52 51 62 47 L 60 56 L 66 59 L 73 52 Q 77 64 64 66 L 46 84 L 37 84 Z", "#C7D7CF"), 50, 72, 0.4) },
+  "ribbon-bell": { group: "everyday", name: "slime.ribbon-bell", color: "#5F85B7", marks: loose(fill("M 50 67 L 29 61 V 78 Z M 50 67 L 71 61 V 78 Z", "#A53E68") + fill("M 43 70 Q 50 64 57 70 L 60 82 H 40 Z M 46 82 H 54 V 87 H 46 Z", "#F1C96D"), 50, 68, 0.6) },
+  parcel: { group: "everyday", name: "slime.parcel", color: "#8D8C59", marks: loose(fill("M 27 63 H 73 V 83 H 27 Z", "#C7985E") + fill("M 46 63 H 54 V 83 H 46 Z M 27 70 H 73 V 76 H 27 Z", "#F2D9A1"), 50, 66, 0.3) },
+  candle: { group: "everyday", name: "slime.candle", color: "#9272A7", marks: loose(fill("M 41 24 H 59 V 37 H 41 Z", "#E9CDB0") + fill("M 50 24 Q 34 17 51 3 Q 65 20 50 24 Z", "#F5BC54"), 50, 34, 0.4) },
+  "music-note": { group: "everyday", name: "slime.music-note", color: "#477C98", marks: loose(fill("M 42 60 L 67 55 V 76 Q 58 87 52 79 Q 50 71 60 71 V 64 L 49 66 V 81 Q 39 91 34 82 Q 31 74 42 75 Z", "#F4D898"), 50, 68, 0.5) },
 } as const satisfies Record<string, { group: CharacterGroup; name: string; color: string; back?: string; marks?: string }>;
 export type SlimeCharacter = keyof typeof CHARACTERS;
 
@@ -728,9 +734,6 @@ export function slimeFaceHTML(member: SlimeFacts & { avatar?: string | null }, s
 
 /** Bareheaded in any season, so that a slime shows what it is. */
 const OFF_SEASON = new Date(2000, 5, 1);
-
-export const SLIME_CHARACTER_COUNT = CHARACTER_IDS.length;
-export const SLIME_COLOR_COUNT = COLOR_IDS.length;
 
 const IN_MENU = ' role="menuitem" tabindex="-1"';
 

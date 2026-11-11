@@ -564,19 +564,24 @@ class CliLoop:
     async def disconnect(self):
         """Stop the child and release the waiting turn with the usual connection guidance."""
         await self.aclose()
+        self.failure_reason = None
         self._failure("login", NAMES[brain_ref(self.model)[0]])
 
     def _failure(self, reason, name):
         self.failure = reason
-        if reason in KINDS:
+        # The CLI is not on this computer, or has no sign-in: each says so by its cause, in the owner's language, and the
+        # reply carries the button that mends it (R-CLI-SIGNIN-01).
+        if reason == "missing" and self.failure_reason is None:
+            self.failure_reason = Failure("unknown", "CLI is not installed", cause="not_installed")
+        elif reason == "login" and self.failure_reason is None:
+            self.failure_reason = Failure("auth_expired", "CLI is not signed in", cause="signed_out")
+        if reason in KINDS or reason in ("missing", "login"):
             failure = self.failure_reason or Failure(reason, reason)
             message = failure.sentence(name, self.language)
             message += self._unfinished()
             self._queue.put_nowait(Outcome("done", final=message, detail=failure.detail))
             return
         messages = {
-            "missing": f"請先安裝 {name}，再到設定 › 模型與用量登入。",
-            "login": f"請先到設定 › 模型與用量 › 訂閱帳號，為 {name} 按下「連線」。",
             "busy": "這個對話仍有 CLI 回合執行中，請先完成或取消它。",
             "error": f"{name} 回合中斷。請確認 CLI 登入狀態後再試一次。",
             "quota": f"{name} 的訂閱額度暫時用完了，請稍後再試，或換一個模型。",
@@ -584,17 +589,13 @@ class CliLoop:
         }
         if str(self.language).startswith("ja"):
             messages = {
-                "missing": f"先に {name} をインストールし、設定 › モデルと使用量でログインしてください。",
-                "login": f"設定 › モデルと使用量 › サブスクリプションアカウントで {name} の「接続」を押してください。",
                 "busy": "この会話ではまだ CLI ターンが実行中です。完了するかキャンセルしてください。",
                 "error": f"{name} が予期せず停止しました。ログイン状態を確認してからもう一度お試しください。",
                 "quota": f"{name} の利用上限に達しました。しばらく待つか、別のモデルを選んでください。",
                 "rate_limited": f"{name} はリクエストが多すぎるため一時的に制限されています。しばらくしてからもう一度お試しください。",
             }
         elif self.language != "zh-TW":
-            messages = {"missing": f"Install {name}, then sign in in Settings > Models & usage.",
-                        "login": f"Connect {name} in Settings > Models & usage > Subscription accounts.",
-                        "busy": "This thread has an active CLI turn. Finish or cancel it first.",
+            messages = {"busy": "This thread has an active CLI turn. Finish or cancel it first.",
                         "error": f"{name} stopped unexpectedly. Check its login and try again.",
                         "quota": f"{name} has used up its subscription quota for now. Try again later or pick another model.",
                         "rate_limited": f"{name} is rate-limited right now (too many requests). Try again in a little while."}
@@ -778,6 +779,7 @@ class CliLoop:
             self._failure("missing", NAMES[name])
             return
         if not self.brains.available(name, command=command):
+            # Never signed in, or disconnected here: a sign-in that ran out is only known from the CLI's own refusal.
             self._failure("login", NAMES[name])
             return
         # A colleague's question resumes no native session of this conversation: a member at work on something answers it too.
@@ -1081,7 +1083,8 @@ class CliLoop:
                     if self._handed_off():
                         return None
                     self.failure_reason = classify({"kind": event.text, "message": event.data.get("reason", event.text),
-                                                    "resets_at": event.data.get("resets_at"), "detail": event.data.get("detail")})
+                                                    "resets_at": event.data.get("resets_at"), "detail": event.data.get("detail"),
+                                                    "cause": event.data.get("cause")})
                     return self.failure_reason.kind
                 elif event.kind == "final":
                     if self._handed_off():

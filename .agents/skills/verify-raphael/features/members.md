@@ -130,8 +130,8 @@ pencil in its middle (owner, 2026-11-08). Scenes: member-face-hover, slime-picke
 npm run look -- members-expanded sidebar-folders --theme both --width 1120,720,1920x1080
 npm run look -- details member-avatar member-edit details-routines details-routine-view details-routine-hover details-skills details-commands details-notify --theme both --width 1120,720,1920x1080
 npm run look -- sidebar-folders member-text --theme both --width 1120,720,1920x1080
-npm run look -- member-delete member-conversation-sections --theme both --width 1120,720,1920x1080
-npm run look -- member-maker member-maker-chosen member-maker-greeting member-maker-made --theme both --width 1120,720,1920x1080
+npm run look -- member-delete-ask member-delete member-conversation-sections --theme both --width 1120,720,1920x1080
+npm run look -- member-maker member-maker-chosen member-maker-made member-maker-enter member-maker-greeting member-maker-taken member-maker-escape member-maker-x member-maker-cancel opener-toggle-member-maker shortcut-new-in-composer --theme both --width 1120,720,1920x1080
 npm run look -- slime-states slime-picker slime-sizes slime-gallery slime-motion-idle slime-motion-busy slime-motion-moments slime-motion-change slime-sharp slime-pointer slime-cost --theme both --width 1120,720,1920x1080
 npm run look -- member-face-hover slime-picker slime-picker-tab --theme both --width 1120,720,1920x1080
 npm run look -- slime-places slime-places-settings busy-team-calm --theme both --width 1120,720,1920x1080
@@ -139,14 +139,26 @@ npm run look -- slime-places slime-places-settings busy-team-calm --theme both -
 
 These walk the owner's flows to their end: `member-delete`
 deletes 小森 from the row's ⋯ menu after the confirmation (the menu had lost 刪除 on
-10/24); `member-conversation-sections` checks that a member's details have no
+10/24; since 2026-11-11 the question is a name, one sentence about the member and its conversation, Cancel and
+Delete, and the call carries only the id: `member-delete-ask` checks it, the computer is the core's to remove,
+see [Member computer](member-computer.md#deleting-a-member-removes-its-computer-2026-11-11)); `member-conversation-sections` checks that a member's details have no
 conversation list and nothing that makes one (owner, 2026-11-06: one conversation per
 member, like Grok Bot, R-UI-103);
-`member-maker*` is 新增成員 as a character maker where the conversation stands, slimes
-only (owner, 10/31: no pictures, for copyright; Grok Bot's create page is the reference
-at bots/research/grokbot/12-flaviocopes-create-first-bot.jpg, without its suggestions: other
-people's bots will come from a library later). It asks only for a name; the
-member opens and speaks first, typing while its own model writes the greeting (since
+`member-maker*` is 新增成員 as one small dialog (R-MAKER-01; owner, 2026-11-11, after Grok Bot's Create
+New Bot, 440 x 582 px, at `bots/research/grokbot/hands-on-2026-11-11/NOTES.md` "Create New Bot" and
+"Picture picker"), slimes only (owner, 10/31: no pictures, for copyright; other people's bots come from the
+store). It is centred over the dimmed window, as wide as its slime picker needs (about 350 px in Chinese)
+and about 560 px high at most 600, nothing scrolling inside. Top to bottom: the title and ×, the large slime
+(96 px), the name (centred placeholder 名字, the only field), the same tabbed picker as a member's face popover
+(`slime-tabs.ts`, one component with two consumers: the dialog stands it in a `.menu.mb-avpop.cr-picker`
+wrapper and takes off only the popover's chrome), and 取消 / 建立 at the right (建立 disabled until a name).
+It opens on the group of the slime chosen at the start (a plain slime by the number of members, so 純色).
+It asks only for a name: no template button, no store tab, no colour row (the page it replaced was a whole
+content-area page with every slime in eight columns, and the store and 範本 rode in it; the store and the
+templates are reached from the sidebar's + › 商店, R-STORE-08). `member-maker-box` and `member-maker-tab`
+measure it before and after a tab press, `member-maker-enter`, `-escape`, `-x`, `-cancel` and
+`opener-toggle-member-maker` (the + pressed again) are the ways it ends, `member-maker-taken` the refusal of a
+name another member has. The member opens and speaks first, typing while its own model writes the greeting (since
 2026-11-11, R-COLLEAGUE-02: its own line and ONE question card, the only tool it may call; a
 failed one is an ordinary failure line whose 重新產生 calls `members.greet`), and the
 owner's answer to the card starts the set-up (R-COLLEAGUE-08, below) that saves its job through
@@ -996,8 +1008,9 @@ Follow-up 1 (2026-11-05): Template previews keep one quiet no-grants/privacy not
 ## Member store (2026-11-05)
 
 R-STORE-01 through R-STORE-04 extend the existing raphael-member v1 recipe, not a
-second package format. New member > Store and sidebar + > Store browse a signed
-catalogue. Featured rows, eight categories and local search reuse existing slime
+second package format. The sidebar's + › 商店 opens the store, a page of its own where the conversation
+stands (R-STORE-08; it is no tab of 新增成員 any more), and browses a signed
+catalogue; 從範本開始, the eight starter templates and 開啟檔案, is one button beside its search. Featured rows, eight categories and local search reuse existing slime
 characters and shared buttons. Preview shows full instructions, personality, skill
 documents/dependencies, routine schedules and individual disabled app connect cards.
 Adding installs skills and routines off and grants no apps; only subsequent per-app
@@ -1030,7 +1043,7 @@ template-export-review, template-review-pages, chat-setup-cards, member-template
 themes and the three widths.
 
 Inspect every contact sheet and each new scene at light 720 and dark 1120. Compare
-store chips/buttons with starter gallery and sidebar-plus, and preview/export cards
+store chips/buttons with the starter gallery (reached from the store page) and sidebar-plus, and preview/export cards
 with member-template-preview at matching dimensions. Run judge on that same run;
 missing external reference images/login are blocked, never design acceptance.
 Native file picker, OS browser/folder opening, persistence across desktop restart,
@@ -1141,6 +1154,34 @@ opens from the menu button in the caption first, which closes nothing; the press
 
 ```text
 npm run look -- press-through-avatar-picker press-through-row-menu press-through-right-click press-through-delete-dialog press-through-model-menu --theme both --width 1120,720,1920x1080
+```
+
+## The control that opened a thing is its toggle (2026-11-11)
+
+R-UI-124 (owner, 2026-11-11, after R-UI-121): with 「連接應用程式」 open, a press that lands on 「連接應用程式」 itself (it lies under the
+scrim) closed the dialog and was then handed down to the button, which opened it again, forever. The press on the opener now closes
+and does nothing else, for every opener. `app/src/main/dismissals.ts` keeps it: a panel records, when it registers, the control the
+last click activated (a menu item that has closed stands for the menu's own opener; a list drawn again is matched by its key; a field
+that takes typing is none), and `closeAndPress` is given the opener of a drawer's scrim. A press on that control closes the panel and its
+click is spent: through a scrim the press is not delivered to it, beside a popover or on a menu's anchor the click is swallowed, and
+Enter or Space on the focused control closes at the key's press (Space would otherwise act at its release, after the panel had gone).
+Every other control is pressed as before, and Escape is unchanged. A right click opens a row's menu from the row's ⋯, so the row is not
+its opener: a left press on that row closes the menu and opens the row, and a second right click takes the menu to the new point.
+
+Openers audited (a second press on each now closes it and it stays closed): the sidebar's 「連接應用程式」 and account button (Settings is a
+scrim dialog), the sidebar's + and search button, the composer's model and permission buttons, a message's ⋯ and react button and the
+emoji picker opened from the reaction bar, the slime picker's face button, a page card made larger, the header's conversation button
+(a drawer's scrim at drawer widths), the narrow sidebar's menu button (in the caption, above the drawer's scrim, and it toggles itself), row ⋯ menus (the ⋯ is not drawn until the row is right-clicked,
+so its toggle is proved in `dismissals.test.ts`), and every other `openMenu`, `openPopover`, `openDialog` and `registerDismissal` user
+by the same mechanism. The composer's + opens the system file picker, which no page can press behind.
+
+Each scene opens the thing once from its control, presses that control again with the real mouse at a point the pointer reaches (on the
+scrim for a dialog, on the control for a popover) and fails unless the thing is closed, stayed closed past a fade, and was opened exactly
+once (`watch-opens` counts the openings as the page makes them, so a close followed by an opening is seen). At drawer widths (720) the
+sidebar's 「連接應用程式」 is not reachable behind its own dialog and the scene says so instead of pressing.
+
+```text
+npm run look -- opener-toggle-connect-apps opener-toggle-settings opener-toggle-add-menu opener-toggle-search-card opener-toggle-model-menu opener-toggle-permission-menu opener-toggle-slime-picker opener-toggle-member-maker opener-toggle-message-menu opener-toggle-reaction-bar opener-toggle-emoji-picker opener-toggle-details opener-toggle-row-menu opener-toggle-row-again opener-toggle-keyboard --theme both --width 1120,720,1920x1080
 ```
 
 ## Sharing finished: cancelled saves, where the files are, files from the file manager, the store before it opens (2026-11-11)

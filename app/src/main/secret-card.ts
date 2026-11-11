@@ -11,6 +11,7 @@ import { cardDisclosureHTML, cardHTML, cardPromptText } from "./card";
 import { NAME, eventLineHTML } from "./event-line";
 import { t } from "./i18n";
 import type { MessageKey } from "./i18n/zh-TW";
+import { syncQuestionCard } from "./owner-question-sync";
 import { SERVICE_ICONS, type MonoIconId, brandStyle, hasLogo, serviceIconOf, serviceIconSVG, serviceLogoHTML } from "./service-icons";
 import type { AgentTurn, SecretCard } from "./types";
 import { btn, esc, ico } from "./ui";
@@ -140,6 +141,13 @@ export function carryTyped(before: Element, after: Element): () => void {
       if (old === document.activeElement) focus.push({ field: fresh, start: old.selectionStart, end: old.selectionEnd });
     }
   }
+  // The rows chosen on a several-choice card stay chosen when the card is drawn again.
+  for (const old of before.querySelectorAll<HTMLElement>('[data-owner-question][data-card-state=asked] [data-owner-option][aria-checked="true"]')) {
+    const id = old.closest<HTMLElement>("[data-owner-question]")!.dataset.ownerQuestion;
+    const fresh = [...after.querySelectorAll<HTMLElement>("[data-owner-question] [data-owner-option]")].find(row =>
+      row.dataset.ownerOption === old.dataset.ownerOption && row.closest<HTMLElement>("[data-owner-question]")!.dataset.ownerQuestion === id);
+    if (fresh) { fresh.setAttribute("aria-checked", "true"); syncQuestionCard(fresh.closest("[data-owner-question]")!); }
+  }
   const fields = "input[data-secret-input], input[data-login-user], [data-owner-answer-input]";
   const identity = (input: HTMLInputElement | HTMLTextAreaElement): string => input.dataset.loginUser ? `login:${input.dataset.loginUser}` : input.dataset.secretInput ?? input.dataset.ownerAnswerInput ?? "";
   for (const old of before.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>(fields)) {
@@ -152,8 +160,8 @@ export function carryTyped(before: Element, after: Element): () => void {
     fresh.value = item.value;
     const save = fresh.closest(".secret-card")?.querySelector<HTMLButtonElement>('[data-act="card-save"]');
     if (save) save.disabled = false;
-    const submit = fresh.closest("[data-owner-question]")?.querySelector<HTMLButtonElement>('[data-owner-answer="text"]');
-    if (submit) submit.disabled = false;
+    const question = fresh.closest("[data-owner-question]");
+    if (question) syncQuestionCard(question);
     if (fresh instanceof HTMLTextAreaElement) resized.push(fresh);
     if (item.focused) focus.push({ field: fresh, start: item.start, end: item.end });
   }

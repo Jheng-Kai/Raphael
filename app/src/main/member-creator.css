@@ -1,26 +1,17 @@
-/* The character maker stands where the conversation stands: the sidebar stays beside it and the window controls above it. */
-.mb-scrim.cr-scrim { inset: var(--window-controls-height) 0 0 var(--sidebar-width); padding: 0; background: var(--content); animation: none; }
-.mb-dialog.cr-dialog { width: 100%; height: 100%; max-height: 100%; gap: 0; padding: 0; border-radius: 0; background: transparent; box-shadow: none; animation: none; }
-.cr-dialog .mb-dlg-head { padding: 0 var(--sp-4) var(--sp-1); }
-.cr-dialog .mb-dlg-head h2 { font-size: var(--fs-sm); font-weight: var(--weight-semibold); }
-.cr-dialog .mb-dlg-act { display: none; }
-.cr-dialog .mb-dlg-body { flex: 1; align-content: start; justify-items: center; padding: var(--sp-5) var(--sp-4); }
-
-.cr-maker { display: grid; grid-template-columns: minmax(0, 1fr); justify-items: center; gap: var(--sp-3); width: min(460px, 100%); }
-.cr-face { display: flex; align-items: center; justify-content: center; height: 124px; }
-.cr-colors { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--sp-2); }
-.cr-colors .mb-slime-color { width: 28px; height: 28px; min-height: 0; padding: 0; border: 0; border-radius: var(--r-pill); background: var(--slime-color); box-shadow: 0 0 0 2px transparent; cursor: pointer; }
-.cr-colors .mb-slime-color:hover { background: var(--slime-color); box-shadow: 0 0 0 2px var(--hover-edge); }
-.cr-colors .mb-slime-color[aria-pressed="true"] { box-shadow: 0 0 0 2px var(--content), 0 0 0 4px var(--text); }
-.cr-characters { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: var(--sp-1); width: 100%; }
-.cr-characters .mb-preset-slime { aspect-ratio: 1; width: 100%; min-height: 0; padding: var(--sp-1); border: 1px solid transparent; border-radius: var(--r-md); background: transparent; cursor: pointer; }
-.cr-characters .mb-preset-slime:hover { background: var(--hover); }
-.cr-characters .mb-preset-slime[aria-pressed="true"] { border-color: var(--text); background: var(--hover); }
-.cr-characters .mb-preset-slime .slime { width: 100%; height: 100%; }
-
-.cr-fields { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); width: 100%; margin-top: var(--sp-2); }
-.cr-start { display: flex; justify-content: center; margin-top: var(--sp-1); }
-.cr-start .btn { min-width: 120px; }
+/* 新增成員, as Grok Bot's Create New Bot (owner, 2026-11-11): the shared confirm shell (members.css `.mb-confirm`: a head and a footer over
+   hairlines) as wide as the slime picker inside it needs and no wider, with the large slime, the name and the picker stacked in its
+   body. Grok Bot's is 440 x 582; this one is about 330 x 556, since the picker is six across (slime.css) and keeps its own size. */
+.mb-dialog.mb-confirm.cr-dialog { width: max-content; min-width: min(320px, 100%); max-width: min(440px, 100%); }
+/* A Cancel in the footer hides the confirm shell's ×; this dialog keeps it, as Grok Bot's does. */
+.mb-dialog.mb-confirm.cr-dialog .mb-dlg-head .btn.icon[data-dlg="close"] { display: inline-flex; }
+.cr-dialog .mb-dlg-body { gap: var(--sp-3); padding: var(--sp-4); overflow-x: hidden; overflow-y: auto; }
+.cr-face { display: flex; align-items: center; justify-content: center; height: 96px; }
+.cr-name { text-align: center; }
+.cr-dialog .field-error { text-align: center; font-size: var(--fs-sm); }
+.cr-dialog .field-error[hidden] { display: none; }
+/* The picker is the popover's component, stood in the body: only the popover's chrome comes off, and its tabs and slimes reach the
+   body's inner edges as the name field does (the picker pads its own tabs and grid by 6 px). */
+.cr-dialog .menu.mb-avpop.cr-picker:has(.mb-slime-tabs) { position: static; z-index: auto; width: auto; min-width: 0; max-width: none; max-height: none; margin-inline: -6px; padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
 
 .template-gallery { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--sp-2); }
 .template-starter { display: flex; flex-direction: column; height: auto; white-space: normal; padding: var(--sp-2); }
@@ -32,5 +23,4 @@
 .template-preview h3 { margin: 0; font-size: var(--fs-sm); font-weight: var(--weight-semibold); }
 .template-preview .mb-dlg-act { flex-wrap: wrap; }
 .template-preview [data-template-notice] { flex-basis: 100%; margin: 0; }
-.cr-start { gap: var(--sp-2); flex-wrap: wrap; }
 @media (max-width: 760px) { .template-gallery { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

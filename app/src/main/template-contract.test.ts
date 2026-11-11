@@ -4,7 +4,8 @@
 // refuses any other field, and this file proves the TypeScript type names exactly those fields and the review shows all of them.
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import ts from "typescript";
+// TypeScript 7 (the build) ships no compiler API; parsing uses the 6.x compatibility package it recommends for tools.
+import ts from "typescript-6";
 import { describe, expect, test } from "vitest";
 import { connectionName, type MemberTemplate } from "./member-templates";
 import { NAME_MAX, ROLE_MAX } from "./members";

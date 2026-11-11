@@ -15,9 +15,9 @@ describe("owner question card", () => {
     document.body.innerHTML = ownerQuestionHTML(question);
     expect(document.querySelector(".connector-card")).not.toBeNull();
     expect(document.querySelectorAll("button[data-owner-option]")).toHaveLength(4);
-    expect(document.querySelector("input[data-owner-answer-input]")).not.toBeNull();
-    expect(document.querySelector("input[data-owner-answer-input]")!.classList.contains("mb-fin")).toBe(true);
-    expect(document.querySelector("input[data-owner-answer-input]")!.classList.contains("mb-ta")).toBe(false);
+    expect(document.querySelector("textarea[data-owner-answer-input]")).not.toBeNull();
+    expect(document.querySelector("textarea[data-owner-answer-input]")!.classList.contains("mb-fin")).toBe(true);
+    expect(document.querySelector("textarea[data-owner-answer-input]")!.getAttribute("rows")).toBe("1");
     expect(document.querySelector("select")).toBeNull();
     expect(document.querySelector('[data-owner-answer="cancel"]')).not.toBeNull();
   });
@@ -27,7 +27,7 @@ describe("owner question card", () => {
     expect(document.body.textContent).toContain("週二");
     expect(document.querySelector("[data-owner-option],[data-owner-answer]")).toBeNull();
     document.body.innerHTML = ownerQuestionHTML({ ...question, state: "cancelled", result: { state: "cancelled" } });
-    expect(document.querySelector("input[data-owner-answer-input]")).toBeNull();
+    expect(document.querySelector("textarea[data-owner-answer-input]")).toBeNull();
   });
 
   it("submits only once while busy", async () => {
@@ -62,7 +62,7 @@ describe("owner question card", () => {
     const thread = document.createElement("div");
     thread.innerHTML = ownerQuestionHTML(question);
     mountOwnerQuestions(thread, vi.fn());
-    const field = thread.querySelector<HTMLTextAreaElement>("input[data-owner-answer-input]")!;
+    const field = thread.querySelector<HTMLTextAreaElement>("textarea[data-owner-answer-input]")!;
     field.value = "Next Tuesday"; field.dispatchEvent(new Event("input", { bubbles: true }));
     thread.querySelector<HTMLButtonElement>('[data-owner-answer="text"]')!.click();
     await vi.waitFor(() => expect(thread.querySelector<HTMLElement>('[role="alert"]')!.hidden).toBe(false));
@@ -78,7 +78,7 @@ describe("owner question card", () => {
     thread.innerHTML = ownerQuestionHTML(question);
     mountOwnerQuestions(thread, vi.fn());
     thread.querySelector<HTMLButtonElement>("[data-owner-option]")!.click();
-    const field = thread.querySelector<HTMLInputElement>("[data-owner-answer-input]")!;
+    const field = thread.querySelector<HTMLTextAreaElement>("[data-owner-answer-input]")!;
     const submit = thread.querySelector<HTMLButtonElement>('[data-owner-answer="text"]')!;
     await vi.waitFor(() => expect(field.disabled).toBe(false));
     expect(submit.disabled).toBe(true);

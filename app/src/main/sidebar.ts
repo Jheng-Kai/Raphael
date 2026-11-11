@@ -152,7 +152,7 @@ export function createSidebar(nav: HTMLElement, column: HTMLElement, app?: Pick<
     if ((event.target as Element).closest('[data-sidebar="close"], [data-go], [data-connect-apps], [data-member], [data-room]')) close();
   });
   // The press that closes the drawer goes on to what it was over (R-UI-121).
-  scrim.addEventListener("click", event => closeAndPress(event, scrim, close));
+  scrim.addEventListener("click", event => closeAndPress(event, scrim, close, toggle));
   // What takes the whole window from a menu of the drawer has no use for the drawer behind it.
   window.addEventListener("raphael:close-sidebar", close);
   document.addEventListener("keydown", event => {

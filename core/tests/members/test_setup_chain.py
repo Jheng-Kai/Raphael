@@ -364,6 +364,23 @@ async def test_typing_instead_of_answering_closes_the_card_and_is_an_ordinary_me
     assert caught.value.code == INVALID_PARAMS
 
 
+async def test_a_skipped_first_card_ends_the_set_up_and_several_choices_are_one_answer(chain, client):
+    rig = chain
+    new, turn = await greet(rig, client, card={**FIRST_CARD, "skip": True, "multiple": True})
+    [question] = turn["owner_questions"]
+    calls = len(client.chat_calls)
+    await rig.background.rpc.call("owner_questions.answer", {"id": question["id"], "skip": True})
+    await asyncio.sleep(0.1)
+    [first] = await rig.turns(member_id=new["id"])
+    assert first["task"]["state"] == "done" and len(client.chat_calls) == calls and not rig.team.members.store.member(new["id"]).role
+    other, again = await greet(rig, client, name="Noa", card={**FIRST_CARD, "multiple": True})
+    client.chats += [chat("Both noted.")]
+    await answer(rig, again["owner_questions"][0], ["Mail", "Research"])
+    step = await setup_turn(rig, other["id"])
+    await until(lambda: rig.history.get(step["id"]).status == "done")
+    assert step_view(await rig.turns(member_id=other["id"]), step["id"])["question"] == "Mail; Research"
+
+
 async def test_closing_the_card_ends_the_set_up_quietly(chain, client):
     rig = chain
     new, turn = await greet(rig, client)

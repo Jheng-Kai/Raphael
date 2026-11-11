@@ -169,3 +169,45 @@ async def test_deleting_task_or_turn_removes_its_question_payload(make_rig, remo
     else:
         AgentHistory(rig.conn).delete(origin)
     assert rig.service.owner_questions.get(question["id"]) is None
+
+
+CARD = {"question": "What first?", "subtitle": "Pick the one that matters most.", "multiple": True, "skip": True,
+        "options": ["Mail", {"label": "Calendar", "description": "Today and this week"}, "Notes"]}
+
+
+async def test_restart_keeps_the_whole_card_and_the_chosen_list_reaches_the_resumed_task(make_rig):
+    rig = make_rig()
+    origin = AgentHistory(rig.conn, rig.wall).add(session_id="s1", question="Set me up", route="delegate", prefix="", text="", status="running")
+    rig.client.replies = [turn("What first?", [call("ask_owner", CARD, "a")])]
+    task_id = rig.submit()
+    rig.service.attach_turn(task_id, origin)
+    await until(lambda: rig.task(task_id).state == "waiting")
+    [before] = rig.service.owner_questions.for_turn(origin)
+    await rig.service.aclose()
+    restarted = make_rig()
+    restarted.service.recover_owner_waits()
+    [after] = restarted.service.owner_questions.for_turn(origin)
+    assert after == before
+    assert (after["subtitle"], after["descriptions"], after["multiple"], after["skip"]) == (
+        "Pick the one that matters most.", ["", "Today and this week", ""], True, True)
+    restarted.client.replies = [report("Mail and notes first.")]
+    await restarted.rpc.call("owner_questions.answer", {"id": after["id"], "answer": ["Mail", "Notes"]})
+    await restarted.wait_for_reports()
+    assert '"answer": ["Mail", "Notes"]' in restarted.client.chat_calls[-1]["messages"][-1]["content"]
+
+
+@pytest.mark.parametrize("routine", [False, True])
+async def test_a_skip_in_a_background_or_routine_turn_resumes_it_as_an_answer(make_rig, routine):
+    rig = make_rig()
+    turn_id = AgentHistory(rig.conn, rig.wall).add(session_id="s1", question="Set me up", route="routine" if routine else "delegate",
+        prefix="", text="", status="running", source="routine" if routine else "app")
+    rig.client.replies = [turn("What first?", [call("ask_owner", CARD, "ask1")])]
+    task_id = rig.service.submit(session_id="s1", text="Set me up", language="en", model="fake/model", routine_id=1 if routine else None)
+    rig.service.attach_turn(task_id, turn_id)
+    await until(lambda: rig.task(task_id).state == "waiting")
+    [question] = rig.service.owner_questions.for_turn(turn_id)
+    rig.client.replies = [report("Going on without it.")]
+    await rig.rpc.call("owner_questions.answer", {"id": question["id"], "skip": True})
+    await until(lambda: rig.task(task_id).state == "done")
+    told = rig.client.chat_calls[-1]["messages"][-1]["content"]
+    assert '"skipped": true' in told and rig.service.owner_questions.get(question["id"])["state"] == "answered"

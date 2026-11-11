@@ -225,8 +225,7 @@ before the card is asked, so the thread reads them in that order. The parked tas
 `BackgroundService._greeting_answered` ends the task without touching the turn; an answer calls the handler `AgentService.begin_setup`, which runs
 a turn of its own (session `setup-<greeting turn>-…`, source `app`, the answer as its words, `setup` in its view) with `SETUP_STEPS` beside the answer.
 That turn is an ordinary interactive turn: `set_my_job`, the connect card (whose resumption carries `SETUP_AFTER_CONNECT`) and the next `ask_owner`
-are the tools it has, and the card after it is parked like any other. A message typed to the member calls `AgentService.leave_setup`, which closes
-a greeting's open card as its x does. A restart keeps the card (`worker_tasks` continuation) and `AgentService.start` carries on any answer the
+are the tools it has, and the card after it is parked like any other. A message typed to the member closes the greeting's card like any waiting card (`OwnerQuestions.close_for_message`, unanswered), and the task of a greeting ends there without a set-up. A restart keeps the card (`worker_tasks` continuation) and `AgentService.start` carries on any answer the
 last run did not get to. `agent.history.list` sends each owner question's `created_at_ms`, so a settled card stands among the replies where it was asked.
 
 ## Pending owner questions in conversation cards (2026-11-04)

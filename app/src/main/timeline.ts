@@ -37,7 +37,7 @@ import { quoteHTML } from "./message-quote";
 import { formatUsd } from "./format";
 import { formatPerMtok } from "./pricing";
 import { SERVICE_ICONS, brandStyle, hasLogo, serviceIconOf, serviceIconSVG, serviceLogoHTML } from "./service-icons";
-import type { AgentStep, AgentTask, AgentTurn, MainEvent, MediaPayload, MessageQuote, TurnAttachment } from "./types";
+import type { AgentStep, AgentTask, AgentTurn, CliBrainId, MainEvent, MediaPayload, MessageQuote, TurnAttachment } from "./types";
 import { btn, esc, ico, iconBtn } from "./ui";
 
 /** The small turning ring of something under way. */
@@ -269,6 +269,8 @@ export interface TimelineState {
   stopping: Set<number>;
   /** Tasks the reader asked to run again; each is run again once. */
   rerunning: Set<number>;
+  /** Failed replies whose subscription CLI is being signed in from their button (cli-signin.ts), and how that stands. */
+  signin: Map<number, SigninPhase>;
   /** Tasks that were seen under way: the draw that finds one ended shows its check coming in. */
   live: Set<number>;
   /** Tasks whose end this draw shows for the first time (`noteTaskEnds`): their check pops in. */
@@ -284,6 +286,7 @@ export const emptyTimelineState = (): TimelineState => ({
   seen: new Set(),
   stopping: new Set(),
   rerunning: new Set(),
+  signin: new Map(),
   live: new Set(),
   ended: new Set(),
   nowMs: Date.now(),
@@ -566,6 +569,8 @@ export interface TurnLook {
   waitingForOwner?: (turnId: number) => boolean;
   regenerateTurnId?: number;
   latestFailedTurnId?: number;
+  /** The newest answered turn of the thread: only a failed reply that is this one carries a sign-in button. */
+  signinTurnId?: number;
   /** The face of who answers (Raphael's, avatar.ts, or the member's): `loop` while at work on it. */
   face: (loop: boolean) => string;
   liveFace?: () => string;
@@ -629,7 +634,7 @@ export function messageActionsHTML(_time: number, regenerate = false, owner?: "e
     (actionable ? action("more", t("chat.more"), "more-message").replace('data-act="more-message"', `data-act="more-message" data-regenerate="${regenerate}"${owner ? ` data-owner-act="${owner}"` : ""} aria-haspopup="menu"`) : "") + `</div>`;
 }
 
-function messageBlockHTML(turn: AgentTurn, key: string, text: string, time: number, query: string, state: TimelineState, reply: boolean, regenerate = false, origin = true, last = true): string {
+function messageBlockHTML(turn: AgentTurn, key: string, text: string, time: number, query: string, state: TimelineState, reply: boolean, regenerate = false, origin = true, last = true, latestFailure = false): string {
   if (reply) text = plainReplies([text])[0];
   text = composioText(text, composioAction(turn));
   const expanded = state.expandedMessages.has(`${turn.id}:${key}`);
@@ -637,7 +642,7 @@ function messageBlockHTML(turn: AgentTurn, key: string, text: string, time: numb
   return `<div class="chat-message${expanded ? " is-expanded" : ""}" data-message="${esc(key)}"${reply ? ' data-reply="true"' : ""}>` +
     (reply && origin && sourceOf(turn) === "routine" ? routineLineHTML(turn) : "") +
     (reply ? replyContentHTML(text, query, turn.status === "running") : `<div class="ans progress"><div class="message-text">${messageHTML(text, query)}</div></div>`) +
-    (reply && last ? usageActionHTML(turn) : "") +
+    (reply && last ? usageActionHTML(turn) + signinActionHTML(turn, state, latestFailure) : "") +
     // Its links are chips in its words, with no row of cards under it.
     reactionRowHTML(turn.reactions?.[key]) + messageActionsHTML(time, regenerate, undefined, reply, reply ? retry : "") + `</div>`;
 }
@@ -650,6 +655,37 @@ function usageActionHTML(turn: AgentTurn): string {
   const failure = turn.failure;
   if (turn.status !== "error" || failure?.kind !== "usage_limit" || !USAGE_PROVIDERS.has(failure.provider)) return "";
   return `<div class="turn-usage">${btn(esc(t("brains.manageUsage")), "sm", ` data-act="manage-usage" data-provider="${esc(failure.provider)}"`)}</div>`;
+}
+
+/** Where a failed reply's sign-in stands: its console is open (`waiting`), it ended and the question goes again (`done`), or it closed first (`stopped`). */
+export type SigninPhase = "waiting" | "done" | "stopped";
+
+/**
+ * The subscription CLI a failed reply names and why it could not take the turn, or null for any other reply: the
+ * core says it in the turn's failure (`cause`), so the button follows the true cause and nothing is guessed here.
+ */
+export function signinOf(turn: AgentTurn): { cli: CliBrainId; cause: NonNullable<NonNullable<AgentTurn["failure"]>["cause"]> } | null {
+  const failure = turn.failure, cli = /^cli:(claude|codex|gemini)$/.exec(failure?.provider ?? "")?.[1] as CliBrainId | undefined;
+  return turn.status === "error" && cli && failure?.cause ? { cli, cause: failure.cause } : null;
+}
+
+/**
+ * Under a reply that names a CLI's sign-in or install as its whole cause, the one button that mends it, where the
+ * owner is: 重新登入 for a session that ran out, 登入 for none, the install guide for a CLI that is not there. The
+ * sentence above already says why. While the CLI's own window is open it says to finish there, with 取消; a closed window
+ * says so and leaves the button; a finished sign-in says that the question goes again.
+ */
+function signinActionHTML(turn: AgentTurn, state: TimelineState, latest: boolean): string {
+  const need = signinOf(turn), phase = state.signin.get(turn.id);
+  if (!need || !latest && !phase) return "";
+  const act = (name: string, label: string, cause = ""): string => btn(esc(label), "sm", ` data-act="${name}" data-cli="${need.cli}"${cause ? ` data-cause="${cause}"` : ""}`);
+  const note = (key: "brains.signinWaiting" | "brains.signinDone" | "brains.signinFailed"): string => `<span class="signin-note" role="status">${esc(t(key))}</span>`;
+  if (need.cause === "not_installed") return `<div class="turn-signin">${act("cli-install", t("brains.install"))}</div>`;
+  const label = t(need.cause === "expired" ? "conn.relogin" : "brains.signinFirst");
+  const body = phase === "waiting" ? note("brains.signinWaiting") + act("cli-signin-cancel", t("common.cancel"))
+    : phase === "done" ? note("brains.signinDone")
+    : (phase === "stopped" ? note("brains.signinFailed") : "") + act("cli-signin", label, need.cause);
+  return `<div class="turn-signin" data-phase="${phase ?? "idle"}">${body}</div>`;
 }
 
 /** A failed reply's Run again: a bare icon first among its actions, which stay in sight on the latest failure. */
@@ -897,7 +933,7 @@ export function mediaCardHTML(payload: MediaPayload, query: string, seq?: number
 }
 
 /** Renders all ordered items in `turn.messages` (thinking block, progress, media cards, event chips, replies). */
-function turnMessagesHTML(turn: AgentTurn, state: TimelineState, query: string, regenerate: boolean, revealing: boolean, settled = "", fallback = "", waitingForOwner = false): string {
+function turnMessagesHTML(turn: AgentTurn, state: TimelineState, query: string, regenerate: boolean, revealing: boolean, settled = "", fallback = "", waitingForOwner = false, latestFailure = false): string {
   const ordered = [...(turn.messages ?? [])].sort((a, b) => a.seq - b.seq);
   const replies = ordered.filter(m => m.kind === "reply");
   const said = new Map(plainReplies(replies.map(m => m.text)).map((text, index) => [replies[index].seq, text.trim()]));
@@ -920,7 +956,7 @@ function turnMessagesHTML(turn: AgentTurn, state: TimelineState, query: string, 
       return media ? `<div class="chat-message" data-message="${message.seq}">${mediaCardHTML(media, query, message.seq)}</div>` : "";
     }
     // A card asked in the same millisecond as a reply (the words that come with it) stands after it.
-    return asked(message.at_ms - 1) + `<div data-seq="${message.seq}">${messageBlockHTML(turn, String(message.seq), text, message.at_ms, query, state, true, regenerate && message.seq === lastReply, message.seq === replies.find(reply => said.get(reply.seq))?.seq, message.seq === lastReply)}</div>`;
+    return asked(message.at_ms - 1) + `<div data-seq="${message.seq}">${messageBlockHTML(turn, String(message.seq), text, message.at_ms, query, state, true, regenerate && message.seq === lastReply, message.seq === replies.find(reply => said.get(reply.seq))?.seq, message.seq === lastReply, latestFailure)}</div>`;
   }).join("") + asked(Infinity) + (replies.length ? "" : fallback) + work;
 }
 
@@ -1031,7 +1067,7 @@ export function turnHTML(turn: AgentTurn, state: TimelineState, detailOpen: bool
   // A turn without reply messages answers in its text: a question spoken to Raphael with public progress has no other.
   // A draft handed to this chat (`route` "draft") is a card, and what it is told is for the model, not for the page.
   const textAnswer = turn.status === "confirm" || settledDraft || turn.route === "draft" || !turn.text.trim()
-    ? "" : messageBlockHTML(turn, "reply", turn.text, turn.created_at_ms, query, state, true, regenerate);
+    ? "" : messageBlockHTML(turn, "reply", turn.text, turn.created_at_ms, query, state, true, regenerate, true, true, turn.id === look.signinTurnId);
   return (
     `<li class="tn${turn.id === look.latestFailedTurnId ? " is-latest-failure" : ""}${turn.status === "queued" || turn.route === "owner_input" || (live && !hasMsgs) ? " is-owner-only" : ""}" data-id="${id}" data-status="${esc(turn.status)}"${live ? ' data-live="true"' : ""}>` +
     (resumed ? resumedLineHTML(turn) + secretResumedLineHTML(turn) + computerResumedLineHTML(turn) : "") +
@@ -1048,7 +1084,7 @@ export function turnHTML(turn: AgentTurn, state: TimelineState, detailOpen: bool
     `<div class="ra-body">` +
     // A question already answered came before the answer: it reads in that order, under the work and above the reply.
     (hasMsgs
-      ? turnMessagesHTML(turn, state, query, regenerate, revealing, permissionCardsHTML(turn, look.answerable, true, turn.member_id ? look.memberName?.(turn.member_id) : t("agent.title")), textAnswer, waitingForOwner)
+      ? turnMessagesHTML(turn, state, query, regenerate, revealing, permissionCardsHTML(turn, look.answerable, true, turn.member_id ? look.memberName?.(turn.member_id) : t("agent.title")), textAnswer, waitingForOwner, turn.id === look.signinTurnId)
       : permissionCardsHTML(turn, look.answerable, true, turn.member_id ? look.memberName?.(turn.member_id) : t("agent.title")) + ownerQuestionsHTML(turn, true) + textAnswer + workSectionHTML(turn, state, query, revealing, waitingForOwner)) +
     (settledDraft ? settledDraftHTML(turn, detailOpen, query) : "") +
     connectorCardsHTML(turn) + mcpProposalsHTML(turn) + secretCardsHTML(turn) + chatCardsHTML(turn) + computerCardsHTML(turn) +
