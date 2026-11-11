@@ -506,7 +506,7 @@ kinds are 工具, 技能與指令, 個性與指示 and 通知; Settings' tabs ar
 lands on 一般. `memory-view.ts`, its styles and the scenes that opened it are gone.
 
 ```powershell
-npm run verify -- --core
+npm run verify -- --contract
 npm run look -- member-settings member-settings-raphael settings-owner --theme both --width 1120,720,1920x1080
 npm run native -- memory-growth
 ```
@@ -549,7 +549,7 @@ event line without exposing its internal event payload. zh-TW and Japanese memor
 join the member name directly to the possessive particle.
 
 ```powershell
-npm run verify -- --core
+npm run verify -- --contract
 npm run look -- details-skills raphael-skills member-text details-commands --theme both --width 1120,720,1920x1080
 npm run native -- skill-growth
 ```

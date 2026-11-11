@@ -635,7 +635,7 @@ only containers owned by this data directory and verifies compatibility before u
 From `app/`, with the installed Python selected via `RAPHAEL_CORE_PYTHON`:
 
 ```powershell
-npm.cmd run verify -- --core
+npm.cmd run verify -- --contract
 npm.cmd run native -- member-computer
 ```
 

@@ -53,7 +53,7 @@ Run the checks from `app/`:
 
 ```powershell
 npm run verify             # TypeScript, unit tests, contrast, Rust formatting
-npm run verify -- --core   # plus the Python core
+npm run verify -- --contract   # plus the core's scenario and prompt-budget tests (CI runs the whole core suite)
 npm run verify -- --rust   # plus the Rust shell
 ```
 

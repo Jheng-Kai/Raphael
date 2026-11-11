@@ -201,7 +201,7 @@ from theme tokens, including a future black palette. Markdown images initially
 have no src; only Load image assigns a source, always without a referrer.
 
 ```powershell
-npm run verify -- --core
+npm run verify -- --contract
 npm run look -- rich-chief rich-member rich-room rich-code rich-diagram rich-source rich-expand rich-image rich-image-loaded rich-table-example rich-invalid rich-streaming rich-sequence rich-class rich-state rich-er rich-architecture rich-wide-table reply-split-bubbles conversation-chief-up conversation-member-up conversation-room-up long-owner long-owner-expanded long-room-messages chat --theme both --width 1120,720,1920x1080
 ```
 
@@ -244,7 +244,7 @@ Selected acceptance: sidebar, sidebar-folders, sidebar-folded, sidebar-many,
 sidebar-unread, sidebar-drawer, sidebar-search, sidebar-chief-pinned, sidebar-rail, sidebar-plus, sidebar-group-avatar,
 sidebar-group-avatar-pair, sidebar-group-avatar-four, sidebar-owner, sidebar-owner-upload, sidebar-owner-crop, sidebar-owner-crop-held, chat, details, profile, plugins-installed,
 all home-* scenes (including full/sparse/empty, edge-only hover and month gestures), both themes at 1120,720,1920x1080,1280x800. Home's emblem is 128px (96px compact), its report is --fs-h1 and its date is unchanged. Check these scenes in black at 1120,720,1920x1080 too.
-Run `npm run verify -- --core`, then the selected look matrix and inspect every
+Run `npm run verify -- --contract`, then the selected look matrix and inspect every
 contact sheet/relevant full-size image. Native readable-layout, locale-sweep and
 delete-conversation cover navigation in an isolated fake-brain app. No judge,
 OpenRouter or Claude session search; one heavy process at a time.
@@ -606,7 +606,7 @@ Offline evidence lives in `core/tests/brain/test_chatgpt.py`: loopback callback,
 JWT validation, account separation, rotation-before-use, Responses tool round trip
 through NarratedLoop/run_task, gate rejection, terminal stream errors, classified
 turn failures, redaction and revocation. Select these core tests plus the existing
-provider, worker and architecture consumers, then `npm run verify -- --core`.
+provider, worker and architecture consumers, then `npm run verify -- --contract`.
 No UI/look/judge scope applies. Real sign-in, OS vault/browser, plan inference and
 live tool round trips require separately authorized acceptance; fake HTTP is not
 live proof. Never run the owner probe or borrow another application's credentials.
