@@ -382,7 +382,12 @@ export function checkRendered(name, context = {}) {
       require(!panel.querySelector('.mb-panel-tasks, .mb-task-list, [data-panel-task]'), 'Details has no work list');
       require(panel.querySelector('.mb-tab-body > section')?.matches('.mb-panel-routines') && !panel.querySelector('[data-slot="conversations"]'), 'routines come first, and a member has no conversation list');
       const closeRight = panel.querySelector('[data-det="close"]').getBoundingClientRect().right, listBox = panel.querySelector('.mb-rts').getBoundingClientRect(), tabBar = panel.querySelector('.mb-tabs .tabs').getBoundingClientRect();
-      require(Math.abs(closeRight - listBox.right) < 1, `close stands on the content's right edge (${Math.round(closeRight)} vs ${Math.round(listBox.right)})`);
+      // R-TOP-01: where the panel's top row reaches the window's three buttons, close ends 14 px before them; elsewhere it
+      // stands on the content's right edge as before.
+      const controls = document.querySelector('.window-controls')?.getBoundingClientRect(), head = panel.querySelector('.mb-det-head').getBoundingClientRect();
+      const underControls = controls && head.right > controls.left && head.top < controls.bottom;
+      const wanted = underControls ? controls.left - 14 : listBox.right;
+      require(Math.abs(closeRight - wanted) <= 2, `close stands ${underControls ? "14 px before the window's buttons" : "on the content's right edge"} (${Math.round(closeRight)} vs ${Math.round(wanted)})`);
       require(Math.abs((tabBar.left + tabBar.right) / 2 - (listBox.left + listBox.right) / 2) < 1, 'the tabs sit in the middle of the content');
       require(['mb-panel-routines', 'mb-panel-computer', 'mb-panel-suggest'].join() === [...panel.querySelectorAll('.mb-tab-body > section')].map(section => section.className).join(), 'the computer is one row after the routines and before the bots');
     } else if (name === 'member-panel-details-empty') {
