@@ -19,6 +19,7 @@ from ..protocol import INTERNAL_ERROR, NOT_FOUND, RpcError, invalid_params
 
 HTML_BYTES = 256 * 1024
 MCP_MIME = "text/html;profile=mcp-app"
+VIEWING_MS = 6 * 60 * 60 * 1000
 CDNS = ("https://cdnjs.cloudflare.com", "https://cdn.jsdelivr.net", "https://unpkg.com")
 
 
@@ -99,6 +100,15 @@ _HELPER = """<script>
   window.raphael = Object.freeze({
     send(text) { if (typeof text === 'string' && text.trim() && text.length <= 4000) post('send', {text}); },
     open(url) { try { const u = new URL(url); if (u.protocol === 'https:' && !u.username && !u.password && u.href.length <= 2048) post('open', {url:u.href}); } catch {} }
+  });
+  // Where the owner is reading: the window keeps it, so a page changed while open comes back to the same place.
+  let scrolling = 0;
+  addEventListener('scroll', () => { if (!scrolling) scrolling = requestAnimationFrame(() => { scrolling = 0; post('scroll', {y: Math.round(scrollY)}); }); }, {passive: true});
+  // The page has the keys once the owner pressed in it: Escape there goes back to the conversation as it does outside.
+  addEventListener('keydown', event => { if (event.key === 'Escape' && !event.defaultPrevented && !event.isComposing) post('escape', {}); });
+  addEventListener('message', event => {
+    const data = event.data;
+    if (event.source === parent && data && data.raphaelPage === 1 && data.type === 'scroll-to' && Number.isFinite(data.y)) scrollTo(0, Math.max(0, data.y));
   });
   addEventListener('DOMContentLoaded', () => {
     let previous = 0;
@@ -206,6 +216,12 @@ class PageStore:
         self.conn.execute("DELETE FROM page_revisions WHERE page_id=? AND rev <="
                           " (SELECT rev-10 FROM pages WHERE id=?)", (page_id, page_id))
 
+    def listed(self, member_id, conversation_id, limit=5):
+        """The newest pages of a member's conversation, for the words that refuse an update: what a member can still name."""
+        return [dict(row) for row in self.conn.execute(
+            "SELECT id, title, rev, source FROM pages WHERE member_id=? AND conversation_id IS ? ORDER BY updated_at_ms DESC, rowid DESC LIMIT ?",
+            (member_id, conversation_id, limit))]
+
     def shown_in(self, turn_ids):
         found = {}
         ids = list(dict.fromkeys(turn_ids))
@@ -300,9 +316,12 @@ class Pages:
         self.notify, self.tool_call = notify, None
         # The owner's output folder (settings `owner_output_folder`), read when a report is saved.
         self.output_folder = output_folder
+        # The page the owner has open in front of them, as the window last said (`pages.viewing`): in memory only.
+        self._viewing = None
 
     def register(self, router):
         router.register("pages.open", self.open)
+        router.register("pages.viewing", self.viewing)
         router.register("pages.tool_call", self.call)
         # The shell's alone (`report_save`): the window may not call it, so it never names a folder.
         router.register("pages.export", self.export)
@@ -333,6 +352,31 @@ class Pages:
         if page["source"] == "mcp":
             result.update(tool_input=page["tool_input"], tool_result=page["tool_result"], tool=page["tool"])
         return result
+
+    async def viewing(self, params):
+        """The window's word, before it sends what the owner wrote, of the page that stands open beside it (null: none).
+        The member that answers is told which page "here" and "this" mean (`viewed_by`)."""
+        page_id = params.get("id")
+        if page_id is None:
+            self._viewing = None
+            return {"viewing": None}
+        if not isinstance(page_id, str):
+            raise invalid_params("id must be a page id or null")
+        page = self.of(params)
+        self._viewing = (page["id"], self.store.now_ms())
+        return {"viewing": page["id"]}
+
+    def viewed_by(self, member_id, conversation_id):
+        """The page open in front of the owner, when it is one of this member's conversation; else None. The window
+        says so again at every send, so a word older than a few hours is a window that closed without saying."""
+        if self._viewing is None:
+            return None
+        page_id, at = self._viewing
+        page = self.store.get(page_id)
+        if (page is None or self.store.now_ms() - at > VIEWING_MS
+                or page["member_id"] != member_id or page["conversation_id"] != conversation_id):
+            return None
+        return page
 
     async def call(self, params):
         page = self.of(params)

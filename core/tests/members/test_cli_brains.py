@@ -458,7 +458,57 @@ async def test_not_logged_in_never_starts_the_fake_cli(setup, tmp_path):
     teacher = member(team, model="cli:gemini")
     rig.service._cli_brains = CliBrains(home=tmp_path, environ={}, commands={"gemini": ["this-must-not-run"]})
     result = await typed(rig, "Hello", teacher.id)
-    assert result["text"] == "請先到設定 › 模型與用量 › 訂閱帳號，為 Antigravity 按下「連線」。"
+    assert result["text"] == "Antigravity 還沒登入。"
+    [turn] = (await rig.call("agent.history.list", {"member_id": teacher.id}))["turns"]
+    assert turn["failure"] == {"kind": "auth_expired", "provider": "cli:gemini", "resets_at": None, "cause": "signed_out"}
+
+
+EXPIRED_SESSION = '''import json, sys
+from pathlib import Path
+json.loads(sys.stdin.readline())
+with Path(LAUNCHES).open("a") as out:
+    out.write("x")
+print(json.dumps({"type":"result", "subtype":"success", "is_error":True, "api_error_status":401,
+    "result":"Failed to authenticate. API Error: 401 OAuth token has expired. Please obtain a new token or refresh your existing token. Please run /login"}), flush=True)
+'''
+
+
+@pytest.mark.parametrize("language,words", [("zh-TW", "Claude Code 的登入已過期。"), ("en", "Claude Code's sign-in has expired."),
+                                            ("ja", "Claude Code のログインの有効期限が切れました。")])
+async def test_an_expired_sign_in_is_said_as_expired_and_is_not_asked_again(setup, tmp_path, language, words):
+    rig, team = setup
+    teacher = member(team, model="cli:claude")
+    launches = tmp_path / "launches.txt"
+    fake_brain(rig, tmp_path, EXPIRED_SESSION.replace("LAUNCHES", repr(str(launches))))
+    result = await typed(rig, "Hello", teacher.id, language=language)
+    # The whole reply is the one sentence: no second cause, no settings path, no raw output, and a button carries the fix.
+    assert result["text"] == words
+    assert launches.read_text() == "x", "a refused session is not retried with the same session"
+    [turn] = (await rig.call("agent.history.list", {"member_id": teacher.id}))["turns"]
+    assert turn["status"] == "error"
+    assert turn["failure"] == {"kind": "auth_expired", "provider": "cli:claude", "resets_at": None, "cause": "expired"}
+    shown = [turn["text"], *(message["text"] for message in turn["messages"])]
+    assert all(words == text and "還沒登入或缺少金鑰" not in text and "OAuth" not in text for text in shown if text), shown
+
+
+async def test_a_cli_that_is_not_installed_says_so_and_never_starts(setup, tmp_path):
+    rig, team = setup
+    teacher = member(team, model="cli:claude")
+    rig.service._cli_brains = CliBrains(home=tmp_path, environ={}, commands={})
+    result = await typed(rig, "Hello", teacher.id, language="zh-TW")
+    assert result["text"] == "Claude Code 還沒安裝。"
+    [turn] = (await rig.call("agent.history.list", {"member_id": teacher.id}))["turns"]
+    assert turn["failure"] == {"kind": "unknown", "provider": "cli:claude", "resets_at": None, "cause": "not_installed"}
+
+
+async def test_raphael_himself_on_an_expired_cli_says_the_same_cause(setup, tmp_path):
+    rig, _ = setup
+    rig.settings.set("agent_model", "cli:claude")
+    fake_brain(rig, tmp_path, EXPIRED_SESSION.replace("LAUNCHES", repr(str(tmp_path / "launches.txt"))))
+    result = await typed(rig, "Hello", 0, language="zh-TW")
+    assert result["text"] == "Claude Code 的登入已過期。"
+    [turn] = (await rig.call("agent.history.list", {"member_id": 0}))["turns"]
+    assert turn["failure"]["cause"] == "expired"
 
 
 async def test_crash_keeps_diagnostics_in_detail_and_does_not_publish_private_reasoning(setup, tmp_path, caplog, monkeypatch):
@@ -792,9 +842,9 @@ async def test_mcp_memory_update_in_ask_first_is_audited_as_user(setup, tmp_path
 @pytest.mark.parametrize(
     "language,expected",
     [
-        ("zh-TW", "請先到設定 › 模型與用量 › 訂閱帳號，為 Codex CLI 按下「連線」。"),
-        ("en", "Connect Codex CLI in Settings > Models & usage > Subscription accounts."),
-        ("ja", "設定 › モデルと使用量 › サブスクリプションアカウントで Codex CLI の「接続」を押してください。"),
+        ("zh-TW", "Codex CLI 還沒登入。"),
+        ("en", "Codex CLI is not signed in."),
+        ("ja", "Codex CLI にログインしていません。"),
     ],
 )
 async def test_disconnected_cli_refuses_turns_for_member_and_raphael_in_window_language(setup, tmp_path, language, expected):
@@ -838,7 +888,7 @@ time.sleep(30)
                 await asyncio.sleep(.01)
         assert await asyncio.wait_for(rig.call("brains.cli_disconnect", {"id": "claude"}), 5) == {"disconnected": True}
         result = await asyncio.wait_for(task, 5)
-        assert "Connect Claude Code in Settings" in result["text"]
+        assert result["text"] == "Claude Code is not signed in."
         from pathlib import Path
         assert not Path(json.loads(marker.read_text())["config"]).exists()
         assert (rig.service._cli_brains.home / ".claude" / ".credentials.json").read_text() == "{}"

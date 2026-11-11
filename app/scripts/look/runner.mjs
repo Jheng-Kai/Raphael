@@ -36,7 +36,9 @@ export const BROWSER_ARGS = ["--no-sandbox", "--disable-gpu", "--disable-crash-r
 
 const app = resolve(import.meta.dirname, "../..");
 const requireFromApp = createRequire(join(app, "package.json"));
-export const REQUIRED_PUPPETEER = "puppeteer-core@25.13.0";
+// The version package.json pins, read from it: an update of the dependency cannot leave this name behind (it said 25.13.0
+// while 25.16.0 was installed).
+export const REQUIRED_PUPPETEER = `puppeteer-core@${requireFromApp("./package.json").devDependencies["puppeteer-core"]}`;
 
 export const needsDesktopFixture = selected => selected.some(scene => scene.fixture?.desktop || scene.fixture?.cardDeck || scene.name.startsWith("desktop-") || scene.name === "chat-computer-takeover");
 

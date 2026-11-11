@@ -19,6 +19,10 @@ KINDS = frozenset(("credits", "usage_limit", "rate_limit", "overloaded", "server
                    "network", "cli_stopped", "permission_denied", "not_found", "tool_broken", "invalid_request", "timeout", "refused", "unknown",
                    "chatgpt_unavailable", "chatgpt_plan_unavailable", "chatgpt_scope",
                    "context_overflow", "payload_too_large", "content_policy"))
+# Why a subscription CLI could not take a turn when the fix is its own sign-in or install (`Failure.cause`): the sign-in it
+# had was refused, it never had one (or was disconnected), or it is not on this computer. Each is told apart from the
+# others and from an API brain's key, and each has its own button under a reply (owner, 2026-11-11).
+CAUSES = frozenset(("expired", "signed_out", "not_installed"))
 # What is worth asking again. A spent quota (`credits`, `usage_limit`) is not: waiting does not refill it.
 TRANSIENT = frozenset(("rate_limit", "overloaded", "server", "network", "timeout", "cli_stopped"))
 # A failed model call is made again after these waits, which are all a question gets before the owner is told: nothing
@@ -118,6 +122,13 @@ _OWNER_MESSAGES["ja"].update({
 })
 
 _OWNER_MESSAGES = with_ui_words(_OWNER_MESSAGES)
+
+# One sentence that names the tool and the true cause, and nothing else: a button under the reply is the fix.
+_CAUSE_MESSAGES = with_ui_words({
+    "zh-TW": {"expired": "{name} 的登入已過期。", "signed_out": "{name} 還沒登入。", "not_installed": "{name} 還沒安裝。"},
+    "ja": {"expired": "{name} のログインの有効期限が切れました。", "signed_out": "{name} にログインしていません。", "not_installed": "{name} がインストールされていません。"},
+    "en": {"expired": "{name}'s sign-in has expired.", "signed_out": "{name} is not signed in.", "not_installed": "{name} is not installed."},
+})
 
 # When the provider says a usage limit lifts, the owner is told when (`{when}` is `_when`).
 _RESET_MESSAGES = with_ui_words({
@@ -276,6 +287,8 @@ class Failure:
     resets_at: float | None = field(default=None, compare=False)
     missing: Missing | None = None
     detail: str | None = field(default=None, compare=False)
+    # One of `CAUSES` for a subscription CLI whose sign-in or install is the whole problem; None for every other failure.
+    cause: str | None = field(default=None, compare=False)
 
     @property
     def transient(self):
@@ -292,6 +305,8 @@ class Failure:
             wire["detail"] = self.detail
         if self.missing is not None:
             wire["missing"] = self.missing.wire()
+        if self.cause is not None:
+            wire["cause"] = self.cause
         if self.resets_at is not None:
             wire["resets_at"] = self.resets_at
         return wire
@@ -309,6 +324,8 @@ class Failure:
         if self.kind in ("tool_broken", "cli_stopped") and (server := re.search(_MCP_START + r":\s*([\w., -]+)", self.reason, re.I)):
             servers = server[1].strip()[:100]
             return with_ui_words({"zh-TW": "{name} 無法啟動必要的 MCP 伺服器：{servers}。", "en": "{name} could not start the required MCP server: {servers}.", "ja": "{name} は必須の MCP サーバーを起動できませんでした：{servers}。"})[language].format(name=name, servers=servers)
+        if self.cause in CAUSES:
+            return _CAUSE_MESSAGES[language][self.cause].format(name=name)
         if self.missing is not None:
             text = _OWNER_MESSAGES[language][self.kind].format(name=name) if self.kind.startswith("chatgpt_") else self.missing.sentence(language)
             return f"{name}: {text}" if self.missing.requirement == "provider" and not self.kind.startswith("chatgpt_") else text
@@ -350,6 +367,20 @@ _OVERFLOW = (r"context[_ ](?:length|window|size)|maximum context|(?:prompt|input
              r"|reduce the length|more than max tokens|上下文長度|上下文长度|超過最大長度|超过最大长度")
 _CONTENT_POLICY = (r"content[_ ]filter|content[_ ]polic|usage polic|flagged (?:by|for)|safety (?:system|filter|polic)"
                    r"|responsibleaipolicyviolation|data_inspection_failed")
+# How a subscription CLI says its sign-in is no good: Claude Code prints "Please run /login" after a 401 or "Not logged in", Codex
+# says its token "could not be refreshed" or asks to "log out and sign in again".
+_SIGN_IN_WORDS = (r"(?:please )?run /login|not signed in|not authenticated|(?:log ?in|sign ?in) again|log ?out and (?:log|sign) ?in|could not be refreshed|refresh token"
+                  r"|invalid(?:ated)? (?:authentication|credentials|token|api key)|(?:please )?(?:log|sign) ?in (?:first|to continue)")
+# A CLI that was never signed in, or was signed out, says so; one whose sign-in ran out says it was refused or expired.
+_SIGNED_OUT = r"not (?:logged|signed) in|not authenticated|no (?:stored |saved )?(?:credentials|login session)|logged out|signed out"
+
+
+def sign_in_cause(kind, *texts):
+    """`expired` or `signed_out` for an `auth_expired` failure of a subscription CLI, told by what the CLI said; None for any other kind.
+    A CLI that reached its model had a sign-in, so a refusal that does not say "not logged in" means it ran out."""
+    if kind != "auth_expired":
+        return None
+    return "signed_out" if re.search(_SIGNED_OUT, " ".join(str(text) for text in texts if text), re.I) else "expired"
 
 
 def _status(value, error):
@@ -435,7 +466,7 @@ def classify(value: object, *, secrets=(), record=True) -> Failure:
             ("credits", _CREDITS),
             ("usage_limit", _QUOTA),
             ("refused", r"safety|policy violation|refusal|owner.{0,20}(?:denied|said no)"),
-            ("auth_expired", r"\b401\b|unauthorized|auth|not logged in|token.{0,20}expired|missing[_ ](?:key|secret)|not_configured"),
+            ("auth_expired", r"\b401\b|unauthorized|auth|not logged in|token.{0,20}expired|missing[_ ](?:key|secret)|not_configured|" + _SIGN_IN_WORDS),
             ("permission_denied", r"\b403\b|forbidden|permission|access_denied|missing_scopes|toolkit_not_allowed"),
             ("not_found", r"\b404\b|not[_ ]found|no such|\bgone\b"),
             ("overloaded", r"server[_ ]?overloaded|overload|at capacity|\b529\b"),
@@ -451,7 +482,10 @@ def classify(value: object, *, secrets=(), record=True) -> Failure:
     missing = Missing.read(value.get("missing")) if isinstance(value, dict) else None
     detail = value.get("detail") if isinstance(value, dict) else None
     safe_detail = "\n".join(redact(line, secrets=secrets, limit=500) for line in str(detail).splitlines())[:4000] if detail else None
-    failure = Failure(kind, redact(reason, secrets=secrets) or kind, time.time() + wait if wait else None, missing, safe_detail)
+    cause = value.get("cause") if isinstance(value, dict) else None
+    # A cause belongs to the failure it explains: a CLI that is not installed has no kind of its own, a refused sign-in is `auth_expired`.
+    cause = cause if cause in CAUSES and kind == ("unknown" if cause == "not_installed" else "auth_expired") else None
+    failure = Failure(kind, redact(reason, secrets=secrets) or kind, time.time() + wait if wait else None, missing, safe_detail, cause)
     if record:
         line = f"{failure.kind}: {failure.reason}"
         RECENT.append(line)

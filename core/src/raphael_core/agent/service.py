@@ -167,7 +167,7 @@ from ..services.urls import SeenUrls
 from ..messaging.words import compose
 from ..worker.loop import Stop, ToolOutcome, WAITING
 from ..worker.guards import MAX_ARGUMENT_CHARS, canonical
-from .answers import Reply, Voice, build_user_message, owner_script, turn_text
+from .answers import Reply, Voice, build_user_message, owner_script, parse_reply, turn_text
 from .attribution import labelled_lines, owner_lines, owner_words, relayed_answer
 from .narration import NarratedLoop
 from ..members.activity import Activity, member_turn, step as activity_step, tool_step
@@ -176,13 +176,13 @@ from .actions import action_call
 from .cli.discovery import CliBrains, brain_ref
 from .cli.loop import CLI_SILENCE_S, CLI_TOOL_S, COMPUTER_CHANGED, CliLoop, Sessions as CliSessions
 from .persona import cli_system_prompt, memory_files
-from .persona import FULL_PERMISSION, NEW_MEMBER, NEW_MEMBER_STEP, PLAN_MODE
+from .persona import FULL_PERMISSION, NEW_MEMBER, NEW_MEMBER_STEP, PLAN_MODE, SETUP_ANSWER, SETUP_AFTER_CONNECT, SETUP_STEPS
 from ..brain.owner import owner_context
 from .cities import cities_in
 from .commands import COMMANDS, AppCatalog, run_command
 from .device import DeviceActions
-from .failure import AgentFailure, failure_kind, turn_failure
-from ..failures import Failure, classify
+from .failure import AgentFailure, failure_kind, provider_of, turn_failure
+from ..failures import Failure, Missing, classify
 from .gate import BUILTIN_SERVER, ToolGate
 from .history import VOICE, AgentHistory, Turn
 from .conversations import QUICK, Conversations
@@ -191,6 +191,7 @@ from .quotes import quote_from_wire
 from .ledger import Ledger
 from .reactions import private_reactions_for_turns
 from .drafts import DraftError, clean_field, is_mail_sender, is_slack_sender
+from .card_context import viewing_text
 from .pages import Pages, PageError, checked_text, is_report
 from .report_page import checked_report, report_fallback, report_html
 from .public_events import event_record
@@ -298,6 +299,8 @@ HISTORY_SENT_MAX_LIMIT = 200
 _SOURCE = re.compile(r"[a-z]{1,20}")
 # A question typed in the app's conversation page: asked at this computer, like a spoken one.
 TYPED = "app"
+# The session of the turn that goes on from the answer to a new member's first card (`begin_setup`).
+SETUP_PREFIX = "setup-"
 # The source of a turn that carries on a task whose connector cards were connected (`resume_turn`).
 RESUMED = "connector"
 # The sources of the requests made at this computer: a new one replaces every question that waits.
@@ -305,6 +308,8 @@ _QUICK_SOURCES = (VOICE, "overlay")
 _AT_THIS_COMPUTER = frozenset({*_QUICK_SOURCES, TYPED})
 # Private owner management has the same offer across authenticated chat transports.
 _OWNER_CHAT_SOURCES = _AT_THIS_COMPUTER | {"telegram", "slack", "discord", RESUMED}
+# What the owner writes in a conversation with a member: typed in the app, or sent from a messaging chat.
+_OWNER_TEXT_SOURCES = frozenset({TYPED, "telegram", "slack", "discord"})
 # Routing and answering share this deadline while the voice overlay waits. A turn said into a conversation is not
 # waited on there, and has the time a typed one has: a brain thinking hard takes minutes, and the composer can stop it.
 VOICE_TURN_TIMEOUT_S = 180.0
@@ -448,6 +453,8 @@ class _Ask:
     # The files handed with the request, in memory only.
     attachments: list[Attachment] = field(default_factory=list)
     quote: dict[str, str] | None = None
+    # The page the owner had open beside this request when they typed it (`Pages.viewed_by`).
+    viewing: dict | None = None
     intent: str | None = None
     # Who answers: Raphael, or a member of the team (`speaker`), in whose thread the turn is.
     speaker: Speaker = RAPHAEL
@@ -489,6 +496,8 @@ class _Ask:
     waiting_secrets: list[str] = field(default_factory=list)
     waiting_computer: bool = False
     background_owner: bool = False
+    # For the turn that goes on from the answer to a new member's first card: the question the card asked.
+    setup: str = ""
     owner_question: tuple | None = None
     owner_card_ids: list[str] = field(default_factory=list)
     # The digest of the computer request under way: kept with the card, so that a resume never makes it again.
@@ -811,6 +820,8 @@ class AgentService:
             self._connection_proposals.gate = self._gate
         self._conversation.changes = self._gate.step_changes
         self._background = background
+        if hasattr(background, "use_setup"):
+            background.use_setup(self.begin_setup)
         from types import SimpleNamespace
         from .self_check import snapshot as diagnostics
         def task_diagnostics(speaker, turn_id):
@@ -943,7 +954,9 @@ class AgentService:
         if name not in ("claude", "codex", "gemini"):
             raise invalid_params("Unknown CLI")
         try:
-            return self._cli_brains.login(name)
+            if params.get("cancel") is True:
+                return self._cli_brains.cancel_login(name)
+            return self._cli_brains.login(name, again=params.get("again") is True)
         except (OSError, ValueError):
             raise invalid_params("Install the CLI before signing in") from None
 
@@ -979,6 +992,34 @@ class AgentService:
                 self._failed(ask, "greeting", failure_kind(done.exception()), ask.ledger or Ledger(self._spend))
         task.add_done_callback(finished)
         return {"turn_id": ask.turn_id}
+
+    def begin_setup(self, turn_id: int, member_id: int, question: str, answer: str, language: str) -> bool:
+        """The owner answered the card of a new member's first message: what the member does about it is a turn of its own,
+        in the same conversation, with the steps of its set-up (`SETUP_STEPS`). False where nothing could be started yet."""
+        speaker = self._speaker(member_id)
+        origin = self._history.get(turn_id)
+        if speaker is None or origin is None:
+            return True  # the member or the conversation is gone: nothing waits for this answer
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return False
+        ask = _Ask(session_id=f"{SETUP_PREFIX}{turn_id}-{uuid.uuid4().hex[:8]}", text=answer, language=normalize_language(language),
+                   source=TYPED, speaker=speaker, conversation_id=origin.conversation_id, started_at_ms=self._now_ms(), setup=question)
+        self._last_language = ask.language
+        task = loop.create_task(self._run_ask(ask))
+        self._greeting_tasks.add(task)
+        def finished(done):
+            self._greeting_tasks.discard(done)
+            if not done.cancelled() and done.exception() is not None:
+                logger.warning("A new member's set-up turn failed: %s", type(done.exception()).__name__)
+        task.add_done_callback(finished)
+        return True
+
+    def _carries_setup(self, ask: _Ask) -> bool:
+        """Whether `ask` carries on a set-up turn once the app it asked for is connected."""
+        origin = self._history.get(ask.source_turn_id) if ask.source_turn_id else None
+        return origin is not None and origin.session_id.startswith(SETUP_PREFIX)
 
     def computer_scope_busy(self, member_id, conversation_id):
         return ((member_id, conversation_id) in self._inflight_scopes.values()
@@ -1171,6 +1212,9 @@ class AgentService:
             if not isinstance(source, str) or not _SOURCE.fullmatch(source):
                 raise invalid_params("source must be a short lower-case word")
             ask.source = source
+        if ask.source == TYPED and not quick:
+            # Read now, not when the model runs: a request that waits behind another is still about the page that was open.
+            ask.viewing = self.pages.viewed_by(speaker.id, conversation_id)
         if ask.source in {"telegram", "slack", "discord", RESUMED} and (configured := self._owner_language()):
             ask.language = normalize_language(configured)
         if len(ask.attachments) > MAX_ATTACHMENTS:
@@ -1180,6 +1224,10 @@ class AgentService:
         if ask.attachments and not ask.text.strip():
             ask.text = _LOOK_AT_THIS[ask.language]
         self._last_language = ask.language
+        if resumption is None and not ask.quick and ask.source in _OWNER_TEXT_SOURCES and self._close_waiting_question(ask):
+            # A messaging chat's reply that answers the question waiting there is that answer, and nothing else to run.
+            self._record(ask, "owner_input", "", "", "done", None, Ledger(self._spend))
+            return {"status": "done", "turn_id": ask.turn_id, "prefix": "", "text": "", "steered": True}
         if ask.source == TYPED and not ask.quick and resumption is None:
             return await self._queue_ask(ask)
         if self._was_cancelled(ask.session_id):
@@ -1193,6 +1241,16 @@ class AgentService:
             self._record(ask, "owner_input", "", "", "done", None, Ledger(self._spend))
             return {"status": "done", "turn_id": ask.turn_id, "prefix": "", "text": "", "steered": True}
         return await self._run_ask(ask)
+
+    def _close_waiting_question(self, ask) -> bool:
+        """Something the owner wrote, in a conversation where a question card waits, closes that card unanswered (one
+        question is open at a time, and writing something else leaves it). The member that asked is told, with the owner's
+        words, when its task goes on. True when the words were the answer itself (a messaging chat's reply)."""
+        questions = getattr(self._background, "owner_questions", None)
+        if questions is None or ask.conversation_id is None:
+            return False
+        return questions.close_for_message(said=ask.original_text or ask.text, conversation_id=ask.conversation_id, member_id=ask.speaker.id,
+                                           source=None if ask.source == TYPED or ask.attachments else ask.source)
 
     async def _join_running_work(self, ask):
         """A quick question or a messaging app's message said while its conversation works goes to that work."""
@@ -1267,6 +1325,9 @@ class AgentService:
     def start(self):
         for scope in self._inbox.scopes():
             self._start_drain(scope)
+        # An answer to a new member's first card that the last run did not get to carry on from.
+        if hasattr(self._background, "recover_owner_waits"):
+            self._background.recover_owner_waits()
 
     def _start_drain(self, scope):
         if self._closing or scope in self._drains:
@@ -1600,6 +1661,7 @@ class AgentService:
                 roster=roster_prompt(self._team, ask.speaker, ask.language), owner=owner_context(self._settings),
                 reasoning_effort=self._effort(settings),
                 recall=self._recall(ask, context), source=ask.source, messaging=self._messaging_context(ask.speaker.id),
+                viewing=viewing_text(ask.viewing),
             )
             return owner_script(reply, chinese_variant(self._settings.get("languages")))
 
@@ -2111,6 +2173,7 @@ class AgentService:
                 background=background_block(self._briefs(ask.speaker.id)), summary=context.summary, narrated=True,
                 quote=ask.quote,
                 recall=self._recall(ask, context), source=ask.source, messaging=self._messaging_context(ask.speaker.id),
+                viewing=viewing_text(ask.viewing),
                 standing="\n\n".join(part for part in standing if part),
             )
             user = build_user_message(**message_args)
@@ -2120,7 +2183,9 @@ class AgentService:
             native_sections = {}
             if ask.exchange_speakers is not None:
                 user += "\n\nA colleague, another of the owner's assistants, asks you this for the owner. " + CONSULTED
-            if ask.speaker.has_no_job and ask.scope == "private" and ask.exchange_speakers is None:
+            if ask.setup and ask.scope == "private" and ask.exchange_speakers is None:
+                user += (SETUP_STEPS if ask.speaker.has_no_job else SETUP_ANSWER).replace("{question}", json.dumps(ask.setup, ensure_ascii=False))
+            elif ask.speaker.has_no_job and ask.scope == "private" and ask.exchange_speakers is None:
                 user += NEW_MEMBER_STEP
             if leadership:
                 user += LEADERSHIP
@@ -2135,6 +2200,8 @@ class AgentService:
                 user += "\nThese read-only diagnostics were checked first. Answer from them; do not start a whole-profile log scan."
             if ask.resumption is not None:
                 user += ask.resumption.note()
+                if self._carries_setup(ask):
+                    user += SETUP_AFTER_CONNECT
             if brain_ref(settings.model):
                 # The initial snapshot is sent once; checkpoints carry only later edits.
                 native_sections["Team"] = roster_prompt(self._team, ask.speaker, ask.language)
@@ -2274,6 +2341,10 @@ class AgentService:
                 if ref.kind == USE:  # unwrapped before it gets here (`unwrap`), unless it names nothing callable
                     return ToolOutcome(False, "unknown_tool", instruction=USE_REFUSALS["unknown_tool"])
                 planned = plan(name, args)
+                if (planned is not None and ask.setup and planned.tool.key == "member_update"
+                        and "name" in planned.arguments and str(planned.arguments["name"]).strip() not in ask.text):
+                    # A new member takes a new name only when the owner's answer gives it in so many words.
+                    return ToolOutcome(False, "owner_name_required", instruction="Your name stays as it is: the owner did not give you a new one.")
                 screened = [screenings[call_id]] if call_id in screenings else None
                 if name in BATCH_TOOLS and ask.nested:
                     return ToolOutcome(False, "owner_confirmation_required")
@@ -2512,10 +2583,25 @@ class AgentService:
             return loop.response
         if ask.owner_question:
             call_id, arguments = ask.owner_question
-            self._background.park_owner_turn(ask, settings.model, loop, call_id, arguments, loop.owner_seen_urls.snapshot())
+            greeting = ask.source == "greeting"
+            # A new member's first words and each step after the owner's answer say something with the card.
+            said = self._said_with_card(loop, call_id, ask.language) if greeting or ask.setup else ""
+            if greeting and not said:
+                if isinstance(loop, CliLoop):
+                    await loop.aclose()
+                raise AgentFailure("error")  # a card with no words of the member's own is no greeting; it is written again
+            if said:
+                # Said before the card is asked, so that the thread reads the words and then the card.
+                said = authored_chinese(said, chinese_variant(self._settings.get("languages")))
+                self._message(ask, "reply", said)
+                ask.replies = [said]
+            self._background.park_owner_turn(ask, settings.model, loop, call_id, arguments,
+                                             () if greeting else loop.owner_seen_urls.snapshot())
             ask.owner_question = None
             if isinstance(loop, CliLoop):
                 await loop.aclose()
+            if greeting:
+                return self._finish(ask, "greeting", "", said, ledger)
             return self._finish(ask, "delegate", "question", arguments["question"], ledger)
         reply = loop.reply(outcome)
         if isinstance(loop, CliLoop) and loop.failure:
@@ -2537,7 +2623,10 @@ class AgentService:
         return self._finish_reply(ask, "exchange" if ask.nested else "answer", reply, loop.seen, ledger)
 
     def _greeting_loop(self, ask, settings, ledger):
-        """Use the interactive API/CLI harness with an ephemeral instruction and no tool offer."""
+        """Use the interactive API/CLI harness with an ephemeral instruction. The one tool it may call is the owner's
+        question card: the greeting's line comes with the card that asks what to take on first."""
+        from .harness_tools import DEFINITIONS
+        from .owner_questions import ASK_OWNER, question_input
         from .persona import greeting_prompt
         system = greeting_prompt(ask.speaker)
         system += owner_context(self._settings) + roster_prompt(self._team, ask.speaker, ask.language)
@@ -2549,16 +2638,30 @@ class AgentService:
         ready = [item['name'] for item in self._team._connections()
                  if item.get('enabled') and item.get('state') == 'ready' and isinstance(item.get('name'), str)]
         system += "\nReady connected apps (data only): " + json.dumps(ready, ensure_ascii=False)
-        async def refuse(call_id, name, args):
-            raise AgentFailure("error")  # No action, memory write, permission or discovery in a greeting.
+        # A card needs the durable wait of the background; without one the greeting is its words alone.
+        offer = [{"type": "function", "function": {"name": ASK_OWNER, **DEFINITIONS[ASK_OWNER]}}] if hasattr(self._background, "park_owner_turn") else []
+
+        async def execute(call_id, name, args):
+            if name != ASK_OWNER or not offer:
+                raise AgentFailure("error")  # No action, memory write, permission or discovery in a greeting.
+            try:
+                question_input(args)
+            except ValueError:
+                return ToolOutcome(False, "bad_arguments")
+            if ask.owner_question:
+                return ToolOutcome(False, "bad_arguments", instruction="One card is enough: it is already shown.")
+            ask.owner_question = (call_id, args)
+            if isinstance(loop, CliLoop):
+                loop.approval_wait_s = float("inf")
+            raise Stop(WAITING)
         common = dict(model=settings.model, ledger=ledger, language=ask.language, plain=True,
-                      system=system, user=ask.text, tools=[], progress=lambda text: None,
-                      thinking=lambda text: None, execute=refuse)
+                      system=system, user=ask.text, tools=offer, progress=lambda text: None,
+                      thinking=lambda text: None, execute=execute)
         if brain_ref(settings.model):
             loop = CliLoop(brains=self._cli_brains, sessions=self._cli_sessions, member_id=ask.speaker.id,
                            owner_text=ask.text,
                            conversation_id=ask.conversation_id, quota=self.quotas.record, resume_session=False,
-                           no_tools=True, rate_limit_waits=(), event=lambda text: None,
+                           no_tools=True, only=(ASK_OWNER,) if offer else (), rate_limit_waits=(), event=lambda text: None,
                            stall_s=CLI_SILENCE_S, tool_s=CLI_TOOL_S, **common)
             self._cli_loops.add(loop)
             loop.on_done = self._cli_loops.discard
@@ -2567,6 +2670,20 @@ class AgentService:
         loop.system = system  # The greeting has its own instruction instead of task narration rules.
         loop.max_tokens = 1024
         return loop
+
+    @staticmethod
+    def _said_with_card(loop, call_id: str, language: str) -> str:
+        """The words a model wrote in the same message as its question card: nothing else shows them, since words
+        before a tool call are progress. API loops keep them in the message of the call, a CLI loop as its last speech."""
+        said = loop.last_speech if isinstance(loop, CliLoop) else next((
+            message.get("content") for message in reversed(loop.messages or loop.live or [])
+            if message.get("role") == "assistant" and any(call.get("id") == call_id for call in message.get("tool_calls") or [])), "")
+        if not isinstance(said, str) or not said.strip():
+            return ""
+        try:
+            return parse_reply(said, language, plain=True, long=True).text.strip()
+        except AgentFailure:
+            return ""
 
     def _asks(self, call: PlannedCall, screening: Screening) -> bool:
         """Whether the owner is asked before `call` is made: the tier, the switch that asks first, a rule or the
@@ -3280,6 +3397,11 @@ class AgentService:
                                                           interactive=self._management_chat(ask), approval=approval)
                     finally:
                         ORIGIN_TURN.reset(token)
+                if (name == "member_update" and ask.speaker.id and args.get("id") == ask.speaker.id and isinstance(args.get("name"), str)
+                        and (renamed := (data.get("member") or {}).get("name")) and renamed != ask.speaker.name):
+                    # A member's new name stands in the thread as the first Bot's does (`bot-renamed`).
+                    words = with_ui_words({"en": "Renamed to ", "zh-TW": "已重新命名為 ", "ja": "名前を変更："}).get(ask.language, "Renamed to ")
+                    self._message(ask, "event", json.dumps({"type": "renamed", "name": renamed, "text": words + renamed}, ensure_ascii=False))
                 if name == "member_create":
                     ask.member_creates += 1
                     if created_name := (data.get("member") or {}).get("name"):
@@ -3331,6 +3453,8 @@ class AgentService:
                 if self._team is None:
                     raise HarnessToolError("unavailable")
                 data = await self._team.set_my_job(ask.speaker.id, args)
+                # The thread says so in one quiet line (the words are the app's: `members.jobSetNotice`).
+                self._message(ask, "event", json.dumps({"type": "job_set", "name": data["role"]}, ensure_ascii=False))
             elif name in ("self_check", "raphael_help"):
                 from .self_check import ABOUT, snapshot
                 data = snapshot(self, ask) if name == "self_check" else {"reference": ABOUT}
@@ -3430,7 +3554,11 @@ class AgentService:
             page_id = args.get("page_id")
             page = self.pages.store.get(page_id) if isinstance(page_id, str) else None
             if page is None or page["member_id"] != ask.speaker.id or page["conversation_id"] != ask.conversation_id:
-                raise PageError("gone", "There is no page with that id in this conversation; use show_page")
+                here = [item for item in self.pages.store.listed(ask.speaker.id, ask.conversation_id) if item["source"] == "html"]
+                named = "; ".join(f"page_id={item['id']} {json.dumps(item['title'], ensure_ascii=False)}" for item in here)
+                raise PageError("gone", "There is no page with that id in this conversation. " + (
+                    f"Its pages: {named}. Use update_page with one of these ids, show_page only for a new page." if here
+                    else "It has no page yet; use show_page."))
             if page["source"] != "html":
                 raise PageError("not_html", "Plugin pages cannot be replaced; use show_page for your own page")
             title = args.get("title")
@@ -5451,6 +5579,12 @@ class AgentService:
         pages = self.pages.store.shown_in(ids)
         reactions = private_reactions_for_turns(self._conn, ids)
         questions = self._background.owner_questions.for_turns(ids) if hasattr(self._background, "owner_questions") else {}
+        if questions:
+            # When each was asked: a card stands among the replies at its place in time, not before them all.
+            from ..brain.db import rows_for_turns
+            asked_at = {row["id"]: row["created_at_ms"] for row in rows_for_turns(self._conn, "owner_questions", list(questions))}
+            questions = {turn: [{**item, "created_at_ms": asked_at[item["id"]]} if item["id"] in asked_at else item for item in items]
+                         for turn, items in questions.items()}
         handoffs_by_turn = self._background.handoff_views_for_turns(ids)
         work_ids = {int(turn.session_id.removeprefix("handoff:")) for turn in turns
                     if turn.scope == "exchange" and turn.session_id.startswith("handoff:")
@@ -5480,6 +5614,8 @@ class AgentService:
                     "session_id": turn.session_id,
                     "source": turn.source,
                     "question": turn.question,
+                    # The turn that goes on from the answer to a new member's first card: the answer is the card's, not a message.
+                    **({"setup": True} if turn.session_id.startswith(SETUP_PREFIX) else {}),
                     **({"routine": triggers[turn.id]} if triggers.get(turn.id) else {}),
                     "route": turn.route,
                     "prefix": turn.prefix,
@@ -5735,6 +5871,10 @@ class AgentService:
         model = kind.model if isinstance(kind, AgentFailure) else None
         diagnostic = kind.diagnostic if isinstance(kind, AgentFailure) else None
         kind = kind.kind if isinstance(kind, AgentFailure) else kind
+        if model and not brain_ref(model) and (diagnostic is None and kind in ("auth", "auth_expired", "no_key")
+                                              or diagnostic is not None and diagnostic.kind == "auth_expired" and diagnostic.missing is None):
+            # The key of an API model was refused: its provider's card is where it is put right (the 開啟設定 button), not "sign in".
+            diagnostic = Failure("auth_expired", "Provider refused the credentials", missing=Missing(provider_of(model), "provider", "broken", "models"))
         failure = turn_failure(kind, model or self._read_settings(ask.speaker, ask.conversation_id).model, diagnostic)
         if diagnostic is not None and diagnostic.missing is not None:
             missing = diagnostic.missing

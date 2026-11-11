@@ -4,6 +4,7 @@ import { setLocale, t } from "./i18n";
 import type { MentionTarget } from "./mention-text";
 import { ico } from "./ui";
 import {
+  type SigninPhase,
   type TurnLook,
   dayHTML,
   forgetReruns,
@@ -222,6 +223,70 @@ test("a reply that failed on ChatGPT's usage limit leads with Manage usage under
   expect(html(limited("openrouter")).querySelector(".turn-usage")).toBeNull();
   expect(html({ status: "error", failure: { kind: "network", provider: "chatgpt", resets_at: null } }).querySelector(".turn-usage")).toBeNull();
   expect(html({ status: "done", failure: null }).querySelector(".turn-usage")).toBeNull();
+});
+
+describe("a reply that failed for want of its subscription CLI's sign-in (R-CLI-SIGNIN-02)", () => {
+  const failed = (cause: "expired" | "signed_out" | "not_installed", more: Partial<AgentTurn> = {}): Partial<AgentTurn> =>
+    ({ status: "error", text: "Claude Code 的登入已過期。", failure: { kind: "auth_expired", provider: "cli:claude", resets_at: null, cause }, ...more });
+  const html = (more: Partial<AgentTurn>, phase?: SigninPhase, latest = true): HTMLElement => {
+    const state = emptyTimelineState();
+    if (phase) state.signin.set(1, phase);
+    const root = document.createElement("div");
+    root.innerHTML = turnHTML(turn(1, more), state, false, { ...LOOK, signinTurnId: latest ? 1 : 2 });
+    return root;
+  };
+  const button = (root: HTMLElement): HTMLButtonElement[] => [...root.querySelectorAll<HTMLButtonElement>(".chat-message[data-reply] > .turn-signin button")];
+
+  test("the sentence is the core's and exactly one button follows it: 重新登入 for a session that ran out, 登入 for none", () => {
+    setLocale("zh-TW");
+    const expired = html(failed("expired"));
+    expect(expired.querySelector(".chat-message[data-reply] .message-text")?.textContent).toBe("Claude Code 的登入已過期。");
+    expect(button(expired).map(b => [b.textContent, b.dataset.act, b.dataset.cli, b.dataset.cause])).toEqual([["重新登入", "cli-signin", "claude", "expired"]]);
+    expect(button(html(failed("signed_out"))).map(b => [b.textContent, b.dataset.act])).toEqual([["登入", "cli-signin"]]);
+    // The old generic sentence, which named two causes and a settings page, is no longer anything the window shows.
+    expect(expired.textContent).not.toContain("還沒登入或缺少金鑰");
+    expect(expired.querySelector(".turn-signin .signin-note")).toBeNull();
+  });
+
+  test("a CLI that is not installed offers its install guide, for whichever CLI it is", () => {
+    setLocale("zh-TW");
+    for (const cli of ["claude", "codex", "gemini"]) {
+      const root = html({ ...failed("not_installed"), failure: { kind: "unknown", provider: `cli:${cli}`, resets_at: null, cause: "not_installed" } });
+      expect(button(root).map(b => [b.textContent, b.dataset.act, b.dataset.cli])).toEqual([[t("brains.install"), "cli-install", cli]]);
+    }
+  });
+
+  test("the window waiting for the sign-in says to finish there and offers 取消, a closed one says so and leaves the button", () => {
+    setLocale("zh-TW");
+    const waiting = html(failed("expired"), "waiting");
+    expect(waiting.querySelector(".turn-signin .signin-note")?.textContent).toBe(t("brains.signinWaiting"));
+    expect(button(waiting).map(b => [b.textContent, b.dataset.act])).toEqual([[t("common.cancel"), "cli-signin-cancel"]]);
+    const stopped = html(failed("expired"), "stopped");
+    expect(stopped.querySelector(".turn-signin .signin-note")?.textContent).toBe(t("brains.signinFailed"));
+    expect(button(stopped).map(b => [b.textContent, b.dataset.act])).toEqual([["重新登入", "cli-signin"]]);
+    const done = html(failed("expired"), "done");
+    expect(done.querySelector(".turn-signin .signin-note")?.textContent).toBe(t("brains.signinDone"));
+    expect(button(done)).toHaveLength(0);
+  });
+
+  test("only the newest answered reply carries it, and only a subscription CLI's own failure", () => {
+    setLocale("zh-TW");
+    expect(html(failed("expired"), undefined, false).querySelector(".turn-signin")).toBeNull();
+    expect(html(failed("expired"), "waiting", false).querySelector(".turn-signin")).not.toBeNull();
+    expect(html({ status: "done", failure: null }).querySelector(".turn-signin")).toBeNull();
+    expect(html({ ...failed("expired"), status: "done" }).querySelector(".turn-signin")).toBeNull();
+    // An API model's refused key is its provider's 開啟設定 (R-UI-02), never this button.
+    expect(html({ status: "error", failure: { kind: "auth_expired", provider: "openrouter", resets_at: null } }).querySelector(".turn-signin")).toBeNull();
+    expect(html({ status: "error", failure: { kind: "auth_expired", provider: "chatgpt", resets_at: null, cause: "expired" } }).querySelector(".turn-signin")).toBeNull();
+    expect(html({ status: "error", failure: { kind: "auth_expired", provider: "cli:claude", resets_at: null } }).querySelector(".turn-signin")).toBeNull();
+  });
+
+  test("every language has the words of the waiting line and of the first sign-in", () => {
+    for (const locale of ["zh-TW", "en", "ja", "de", "tr"]) {
+      setLocale(locale);
+      for (const key of ["brains.signinWaiting", "brains.signinDone", "brains.signinFailed", "brains.signinFirst"] as const) expect(t(key).trim()).not.toBe("");
+    }
+  });
 });
 
 /** What a sighted reader sees: the text outside the tags, without what only a screen reader hears. */

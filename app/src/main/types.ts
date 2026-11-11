@@ -137,6 +137,9 @@ export interface CliBrain {
   login_command: string;
   models: CliModel[];
   notes?: string;
+  /** The CLI's own sign-in is open in its console now, and how the last one ended (`done`, or `stopped` when the console closed first). */
+  signing_in?: boolean;
+  login_result?: "done" | "stopped" | null;
 }
 
 export interface CliModel {
@@ -292,7 +295,7 @@ export interface MediaPayload {
 /** A turn of the conversation with Raphael (`agent.history.list`, newest first). */
 export interface AgentTurn {
   /** What kind of failure ended the turn and which brain it came from; null for a turn that did not fail. */
-  failure?: { kind: string; provider: string; resets_at: number | null } | null;
+  failure?: { kind: string; provider: string; resets_at: number | null; cause?: "expired" | "signed_out" | "not_installed" } | null;
   reactions?: Record<string, string[]>;
   routine?: Pick<Routine, "id" | "schedule" | "when" | "app_name">;
   handoffs?: HandoffView[];
@@ -304,6 +307,8 @@ export interface AgentTurn {
   created_at_ms: number;
   /** What the person said, as the speech recognition heard it. */
   question: string;
+  /** The turn that goes on from the answer to a new member's first card: that answer is the card's, not a message. */
+  setup?: boolean;
   /** How the question was routed: a command, a question, a chat... (the core's word). */
   route: string;
   /** The word before Raphael's reply: 答, 告, 否, 了 or 問 (Answer, Notice, ... in English). */
@@ -371,7 +376,10 @@ export interface AgentTurn {
 export interface OwnerQuestion {
   id: string; task_id: number; turn_id: number; member_id: number; kind: string; card_id: string;
   question: string; options: string[]; free_text: boolean; state: "asked" | "answered" | "cancelled";
-  result: { state: string; answer?: string } | null;
+  /** The card's grey line under the title, a grey line per option (parallel to `options`, "" for none), several rows may be chosen, a skip row. */
+  subtitle?: string; descriptions?: string[]; multiple?: boolean; skip?: boolean;
+  /** How it ended: the chosen words (a list on a several-choice card), a skip, or a card closed by the owner writing something else (`by`). */
+  result: { state: string; answer?: string | string[]; skipped?: boolean; by?: string; said?: string } | null;
   /**
    * When it was asked. The core keeps it (`owner_questions.created_at_ms`, which orders a turn's questions) but `view` in
    * agent/owner_questions.py does not send it yet, so a card without it stands before the turn's replies (settledQuestions).

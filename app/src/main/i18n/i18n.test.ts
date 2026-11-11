@@ -3,7 +3,8 @@ import { afterEach, describe, expect, test, vi } from "vitest";
 import { catalogs, getLocale, isUiLocale, LOCALES, onLocaleChange, setLocale, t, translatedMessage } from "./index";
 import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
-import ts from "typescript";
+// TypeScript 7 (the build) ships no compiler API; parsing uses the 6.x compatibility package it recommends for tools.
+import ts from "typescript-6";
 import { durationParts } from "../stats";
 import { DICTATION_MODES } from "../dictation";
 import { languagePanelHTML } from "../languages";

@@ -11,6 +11,8 @@ import menus from "./menus.mjs";
 import presence from "./presence.mjs";
 import sidebar from "./sidebar.mjs";
 import pressThrough from "./press-through.mjs";
+import openerToggle from "./opener-toggle.mjs";
+import composerShape from "./composer-shape.mjs";
 import shortcuts from "./shortcuts.mjs";
 import routineWorkflow from "./routine-workflow.mjs";
 import daily from "./daily.mjs";
@@ -28,6 +30,7 @@ import answerForms from "./answer-forms.mjs";
 import unreadDivider from "./unread-divider.mjs";
 import threadWindow from "./thread-window.mjs";
 import chat from "./chat.mjs";
+import topRow, { TOP_ROW_SCENES } from "./top-row.mjs";
 import desktop from "./desktop.mjs";
 import memberPanel from './member-panel.mjs';
 import memberSettings from './member-settings.mjs';
@@ -67,6 +70,8 @@ scenes.push(...memberPanel);
 scenes.push(...memberSettings);
 scenes.push(...quota);
 scenes.push(...pressThrough);
+scenes.push(...openerToggle);
+scenes.push(...composerShape);
 scenes.push({name:'motion-cost-details',description:'Isolated emblem decoder and single large vector cost',fixture:{},motion:true,steps:[{action:'motion-details'}]});
 scenes.push({name:'motion-cost-comparison',description:'Identical mixed-state fixture and sampling window, starting revision versus current cels',fixture:{},motion:true,steps:[{action:'motion-cost',revision:'e2143ec7'},{action:'motion-cost'}]});
 for (const scene of scenes) if (['admin-approval','room-question-card','composer-stop-voice'].includes(scene.name)) {
@@ -78,4 +83,6 @@ for (const scene of scenes) if (['slime-states', 'presence-states-sidebar', 'bus
   const freeze = scene.steps.findIndex(step => step.action === 'freeze-motion');
   scene.steps.splice(freeze < 0 ? scene.steps.length : freeze, 0, { action: 'motion-cost', ...(process.env.LOOK_TRACE==='1'?{measure:{name:'motion-cost',enforce:false}}:{}) });
 }
+scenes.push(...topRow);
+for (const scene of scenes) if (TOP_ROW_SCENES.has(scene.name)) scene.steps.push({ action: "check", name: "conversation-top-row" });
 if (new Set(scenes.map(scene => scene.name)).size !== scenes.length) throw new Error("Duplicate look scene name");

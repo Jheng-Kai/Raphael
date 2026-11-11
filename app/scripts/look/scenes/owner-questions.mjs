@@ -1,6 +1,8 @@
 import { scene, check, click, hover, member, room, type, wait, waitGone } from "./steps.mjs";
 
 const open = [member(1), wait('[data-owner-question="owner-choice"]')];
+// Words that run past one line of the field and past one line of the collapsed row at every size.
+const LONG = "我想先把下週所有的行程整理成一份清單，再依照重要程度排好順序，最後請在週五下午之前寄給我確認，內容要包含每一場會議的時間與地點。";
 export default [
   scene("owner-question-pending", "An off-screen member question floats above the conversation", [member(1), wait('.pending-questions:not([hidden])'), check("owner-question-pending")], { ownerQuestion: "pending" }),
   scene("owner-question-brought", "One press brings the original question to the newest turn", [member(1), wait('.pending-questions:not([hidden])'), click('.pending-question'), waitGone('.pending-questions:not([hidden])'), check("owner-question-brought")], { ownerQuestion: "pending" }),
@@ -11,7 +13,7 @@ export default [
     ...(kind === "connect" ? [click('[data-connector] [data-act="card-connect"]'), wait('[data-connector][data-card-state="authorizing"]')] :
       kind === "secret" ? [type('[data-secret-input]', "synthetic-room-key")] :
       kind === "mail" ? [type('[data-mail-field="subject"]', "Room report for review"), wait('[data-mail-card][data-version="2"]')] :
-      [{ action: "frame-wait", selector: "#buy" }, click(".pg-card .pg-body"), wait(".pg-view iframe"), { action: "frame-click", selector: "#buy" }, check("page-placed"), click('.au-room-pane .cmp-send'), wait('[data-owner-question="room-page-q"][data-card-state="answered"]')]),
+      [{ action: "frame-wait", selector: "#buy" }, click(".pg-card .pg-body"), wait(".pgv-frame-box iframe"), { action: "frame-click", selector: "#buy" }, check("page-placed"), click('.au-room-pane .cmp-send'), click('.mb-head [data-page-back]'), wait('[data-owner-question="room-page-q"][data-card-state="answered"]')]),
     check(`owner-card-room-${kind}`)], { roomOwnerCard: kind, ...(kind === "page" ? { pageTurn: true } : {}) })),
   scene("owner-question-room", "The room uses the same durable card and answers through the shared controller", [room(1), wait('[data-owner-question="owner-choice"]'), check("owner-question-room"), click('[data-owner-option="星期二"]'), wait('[data-card-state="answered"]'), check("owner-question-answered")], { ownerQuestion: "room" }),
   // Where the card stands in its turn (owner, 2026-11-11): at the end while it waits, among the conversation once answered.
@@ -23,4 +25,19 @@ export default [
   scene("owner-question-cancelled", "Cancel reports the decision on the original card", [...open, click('[data-owner-answer="cancel"]'), wait('[data-card-state="cancelled"]'), check("owner-question-cancelled")], { ownerQuestion: "asked" }),
   scene("owner-question-background", "A routine's question lives in its member conversation and keeps Stop in the composer", [...open, check("owner-question-background")], { ownerQuestion: "background" }),
   scene("owner-question-text", "An owner can send a free text answer using the same card", [...open, type('[data-owner-answer-input]', "請改到下週五寄出，先讓我確認內容。"), click('[data-owner-answer="text"]'), wait('[data-card-state="answered"]'), check("owner-question-answered")], { ownerQuestion: "asked" }),
+  // The card in the shape Grok Bot's form of choices has (owner, 2026-11-11): a grey line, described rows, a skip row, several choices,
+  // a field that grows to three lines, an answered card that is one row, and a composer that says it takes the answer or anything else.
+  scene("question-card-described", "A card with a grey line, a second line under two rows and a skip row", [...open, check("question-card-described")], { ownerQuestion: "asked", ownerQuestionShape: "described" }),
+  scene("question-card-skipped", "The skip row answers as a skip and the card collapses to one row", [...open, click("[data-owner-skip]"), wait('[data-card-state="answered"]'), check("question-card-skipped")], { ownerQuestion: "asked", ownerQuestionShape: "described" }),
+  scene("question-card-multiple-asked", "A several-choice card says so and waits for a row", [...open, check("question-card-multiple-asked")], { ownerQuestion: "asked", ownerQuestionShape: "multiple" }),
+  scene("question-card-multiple-chosen", "Two rows marked enable the submit and send nothing yet", [...open, click('[data-owner-option="星期一"]'), click('[data-owner-option="星期三"]'), check("question-card-multiple-chosen")], { ownerQuestion: "asked", ownerQuestionShape: "multiple" }),
+  scene("question-card-multiple-answered", "The submit sends the chosen labels once and the card collapses to them", [...open, click('[data-owner-option="星期一"]'), click('[data-owner-option="星期三"]'), click('[data-owner-answer="choices"]'), wait('[data-card-state="answered"]'), check("question-card-multiple-answered")], { ownerQuestion: "asked", ownerQuestionShape: "multiple" }),
+  scene("question-card-long-typed", "A long typed answer grows the field to three lines and brings the pill", [...open, type('[data-owner-answer-input]', LONG), check("question-card-long-typed")], { ownerQuestion: "asked" }),
+  scene("question-card-long-answered", "A long answer collapses to one row ending in an ellipsis", [...open, type('[data-owner-answer-input]', LONG), click('[data-owner-answer="text"]'), wait('[data-card-state="answered"]'), check("question-card-long-answered")], { ownerQuestion: "asked" }),
+  scene("question-card-long-open", "Pressing the collapsed row shows the whole words", [...open, type('[data-owner-answer-input]', LONG), click('[data-owner-answer="text"]'), wait('[data-card-state="answered"]'), click('[data-owner-line]'), check("question-card-long-open")], { ownerQuestion: "asked" }),
+  scene("question-card-composer-waiting", "While a card waits the composer says it takes the answer or anything else", [...open, check("question-card-composer-waiting")], { ownerQuestion: "asked" }),
+  scene("question-card-composer-after", "Once the card is answered the composer says its usual words again", [...open, click('[data-owner-option="星期二"]'), wait('[data-card-state="answered"]'), check("question-card-composer-after")], { ownerQuestion: "asked" }),
+  scene("question-card-message-closes", "An ordinary message closes the waiting card unanswered and is answered as a message", [...open, type('.cmp-input', "先看看今天的行事曆"), click('.cmp-send'), wait('[data-card-state="cancelled"]'), check("question-card-closed")], { ownerQuestion: "asked" }),
+  scene("question-card-room-asked", "The same several-choice card stands in a room and its composer takes the answer too", [room(1), wait('[data-owner-question="owner-choice"]'), check("question-card-room-asked")], { ownerQuestion: "room", ownerQuestionShape: "multiple" }),
+  scene("question-card-room-answered", "A room's several-choice card submits once and collapses in place", [room(1), wait('[data-owner-question="owner-choice"]'), click('[data-owner-option="星期一"]'), click('[data-owner-option="星期三"]'), click('[data-owner-answer="choices"]'), wait('[data-card-state="answered"]'), check("question-card-room-answered")], { ownerQuestion: "room", ownerQuestionShape: "multiple" }),
 ];

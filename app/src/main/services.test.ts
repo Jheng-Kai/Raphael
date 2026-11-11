@@ -453,15 +453,14 @@ describe("what the section does", () => {
     // a click on the row's chevron or its muted words opens it too
     const again = mount();
     await again.panel.load();
+    // One press closes the dialog that is open and opens this one (R-UI-121); a second press on the row would close it (R-UI-124).
     again.host.querySelector<HTMLElement>('.cs-item[data-id="pdf"] .chev')!.click();
     expect(dlg(host)).toBeNull();
-    again.host.querySelector<HTMLElement>('.cs-item[data-id="pdf"] .chev')!.click();
     expect(titleOf(again.host)).toBe("讀 PDF");
     const third = mount();
     await third.panel.load();
     third.host.querySelector<HTMLElement>('.cs-item[data-id="vision"] .svc-now')!.click();
     expect(dlg(again.host)).toBeNull();
-    third.host.querySelector<HTMLElement>('.cs-item[data-id="vision"] .svc-now')!.click();
     expect(titleOf(third.host)).toBe("看圖片");
   });
 
