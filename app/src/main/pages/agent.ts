@@ -2308,7 +2308,12 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       // One choice, 建立副本 with a line saying what follows (a file saved, or a publish request prepared on GitHub; never a link), and only that asks the member to package itself.
       case "share-member": {
         const member = memberId();
-        openMenu(act, [], "", () => {}, undefined, [{ label: t("template.copyTitle"), desc: t("template.copyHint"), icon: "copy", run() { closeMenu(); askInChat(member, "share-template"); } }]);
+        // Its mark is the member itself, twice: the copy that is about to be made (as Grok Bot's Create a copy; owner, 2026-11-12).
+        // A drawing, not the member at work: it takes no presence, so it never moves with what the member does.
+        // Each is drawn at a whole size of its own (a scaled slime lands on a fraction of a pixel and blurs, R-UI-63).
+        const face = (size: number): string => members.faceOf(member, size).replace(/ data-presence-member="\d+"/g, "");
+        openMenu(act, [], "", () => {}, undefined, [{ label: t("template.copyTitle"), desc: t("template.copyHint"), ...(face(24) ? { mark: `<span class="share-faces">${face(20)}${face(24)}</span>` } : { icon: "copy" as const }),
+          run() { closeMenu(); askInChat(member, "share-template"); } }], { className: "share-card" });
         break;
       }
       case "steps":

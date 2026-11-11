@@ -5162,7 +5162,8 @@ export function checkRendered(name, context = {}) {
     const who = pane.querySelector(".mb-head .conversation-trigger .mb-pill, .mb-head .au-room-heading");
     require(who && visible(who) && who.textContent.trim().length > 0, "the header still says whose conversation it is");
     const share = pane.querySelector('.mb-head [data-act="share-member"]');
-    require(!share || getComputedStyle(share).visibility !== "hidden", "the member's own share stays: only a report has its share");
+    require(!share || !visible(share), "the member's share waits while a page stands in the thread's place");
+    require(!pane.querySelector(".mb-head [data-page-act]"), "and an HTML page has no button of its own there");
     // The page's title in sight, and the page as wide as the composer's column, rounded, between the header and the composer.
     const title = view.querySelector(".pgv-title"), column = composer.getBoundingClientRect(), shown = box.getBoundingClientRect();
     const card = pane.querySelector(".pg-card .card-title")?.textContent;
@@ -5372,7 +5373,8 @@ export function checkRendered(name, context = {}) {
       const arrow = document.querySelector('.page-agent .mb-head [data-page-back]');
       require(!arrow || arrow.hidden || !visible(arrow), "the arrow is gone");
       const member = document.querySelector('.page-agent .mb-head [data-act="share-member"]');
-      require(!member || member.hidden || getComputedStyle(member).visibility === "visible", "the conversation header's share is back");
+      require(!member || member.hidden || visible(member), "the conversation header's share is back");
+      require(!document.querySelector('.page-agent .mb-head [data-page-act]'), "the report's button left with the report");
       require(getComputedStyle(scroller).visibility === "visible", "the thread is in sight again");
       require(document.activeElement === link, "the focus is back on the card that opened it");
       const box = link.getBoundingClientRect(), area = scroller.getBoundingClientRect();
@@ -5384,16 +5386,25 @@ export function checkRendered(name, context = {}) {
     // The way back is the conversation header's round arrow at its top left, the same one an HTML page has; no × over the report.
     const back = document.querySelector('.page-agent .mb-head [data-page-back]'), arrowBox = back?.getBoundingClientRect(), headBox = document.querySelector('.page-agent .mb-chat:not([hidden]) > .mb-head').getBoundingClientRect();
     require(back && visible(back) && back.getAttribute("aria-label") === "返回" && Math.round(arrowBox.width) === 36 && Math.round(arrowBox.height) === 36 && arrowBox.left - headBox.left <= 12, "the arrow named 返回 at the header's top left, the window edge's round button");
-    require(!view.querySelector(".rp-close, [data-report-act=close]") && view.querySelectorAll(".rp-top .btn").length === 1, "Share alone is over the page: no ×");
+    require(!view.querySelector(".rp-close, [data-report-act=close], .rp-top, .btn"), "nothing floats over the report: no × and no button");
+    // 存成檔案 stands where a thread's share stands (owner, 2026-11-12: its place and look as Grok Bot's share): first of the header's
+    // tools at its top right, the window edge's round button, level with the arrow, drawn as a file and not as the member's share.
+    const save = document.querySelector('.page-agent .mb-chat:not([hidden]) > .mb-head .ra-tools > [data-page-act]'), saveBox = save?.getBoundingClientRect();
+    require(save && visible(save) && save === save.parentElement.firstElementChild && save.getAttribute("aria-label") === "存成檔案" && save.textContent.trim() === "" && save.querySelector("svg"), "one button named 存成檔案 leads the header's tools, no word on it");
+    require(Math.round(saveBox.width) === 36 && Math.round(saveBox.height) === 36 && parseFloat(getComputedStyle(save).borderRadius) >= 18, "the window edge's soft round button, 36 px");
+    require(Math.abs((saveBox.top + saveBox.bottom) - (arrowBox.top + arrowBox.bottom)) <= 2 && headBox.right - saveBox.right < headBox.width / 4, "in the header's row, level with the arrow, at its right");
+    const drawnAs = button => [...(button?.querySelectorAll("svg path") ?? [])].map(path => path.getAttribute("d")).join(" ");
+    const memberShare = document.querySelector('.page-agent .mb-head [data-act="share-member"]');
+    require(drawnAs(save) && drawnAs(save) !== drawnAs(memberShare), "its icon is not the one that shares a member");
+    require(!memberShare || !visible(memberShare), "the member's share waits: one button in that place");
     require(getComputedStyle(scroller).visibility === "hidden", "the thread is out of sight under it");
     const dock = stage.querySelector(":scope > .ra-dock"), composer = dock.querySelector(".composer");
     require(composer && visible(composer), "the member's composer stays below the report");
     require(view.getBoundingClientRect().bottom <= dock.getBoundingClientRect().top + 1, "the report ends where the composer begins");
     // The report stands for the thread: its column starts and ends where the composer does, and so do its tools (R-UI-45,
     // the judge on the first Share run: the × ended past the composer at every width).
-    const column = composer.getBoundingClientRect(), doc = view.querySelector(".rp-doc").getBoundingClientRect(), tools = view.querySelector(".rp-top").getBoundingClientRect();
+    const column = composer.getBoundingClientRect(), doc = view.querySelector(".rp-doc").getBoundingClientRect();
     require(Math.abs(doc.left - column.left) <= 1 && Math.abs(doc.right - column.right) <= 1, `the report's column is the composer's: ${Math.round(doc.left)}-${Math.round(doc.right)} and ${Math.round(column.left)}-${Math.round(column.right)}`);
-    require(Math.abs(tools.right - column.right) <= 1, `share ends where the composer does: ${Math.round(tools.right)} and ${Math.round(column.right)}`);
     const page = view.querySelector(":scope > .rp-scroll");
     require(page.scrollWidth <= page.clientWidth + 1, "nothing runs out sideways");
     require(getComputedStyle(page).maskImage.includes("gradient"), "what scrolls away fades before the header, as the thread does");
@@ -5406,13 +5417,6 @@ export function checkRendered(name, context = {}) {
       require(visible(document.querySelector(".rp-callout")), "the summary box above the findings");
       const words = [...document.querySelectorAll(".rp-items .rp-st")].map(word => getComputedStyle(word).color);
       require(words.length === 4 && new Set(words).size === 4, "four status words, each in its own colour");
-      const share = view.querySelector(".rp-share").getBoundingClientRect();
-      const title = document.querySelector(".rp-title").getBoundingClientRect();
-      require(Math.round(share.width) === 36 && Math.round(share.height) === 36, "share is the window edge's soft round button");
-      require(!overlaps(share, title), "the title clears share");
-      // One share in sight: the member's own, in the conversation header, waits until the report closes.
-      const member = document.querySelector('.page-agent .mb-head [data-act="share-member"]');
-      require(!member || getComputedStyle(member).visibility === "hidden", "the conversation header's share waits while the report is open");
       return { check: name, toc };
     }
     if (name === "page-report-shared") {
@@ -5427,7 +5431,7 @@ export function checkRendered(name, context = {}) {
       require(file.includes('.rp-st[data-tone="ok"]') && !/<style>[^<]*<(?!\/style>)/.test(file), "the page's own rules, with no tag in them");
       const toast = [...document.querySelectorAll(".toast")].at(-1)?.textContent;
       require(toast === "已存到「下載」", `it says where the file went: ${toast}`);
-      require(document.activeElement?.closest(".rp-view") || document.activeElement === document.body, "the report keeps the focus");
+      require(document.activeElement?.closest(".rp-view") || document.activeElement?.matches("[data-page-act]") || document.activeElement === document.body, "the focus stays with the report or its button");
       return { check: name, bytes: file.length };
     }
     if (name === "page-report-team") {
@@ -6484,6 +6488,17 @@ export function checkRendered(name, context = {}) {
     require(visible(item) && item.textContent.trim().length > 0, "share opens one plain choice that says what it does");
     // Sharing saves a file or prepares a publish request on GitHub; there is no link to share (owner, 2026-11-11).
     require(/檔案/.test(item.textContent) && /GitHub/.test(item.textContent) && !/連結|link/i.test(item.textContent), `the choice says a file is saved or a request is prepared, and promises no link: ${item.textContent.trim()}`);
+    // The card is drawn for what it does (owner, 2026-11-12, after Grok Bot's Create a copy): its mark is the member's own face twice,
+    // the copy behind and above the one that is, and it hangs under the button with its right edge on the button's.
+    const faces = [...item.querySelectorAll(".mmark .share-faces > *")];
+    require(faces.length === 2 && faces.every(visible) && !item.querySelector(".ck, [data-presence-member]"), "its mark is the member's face twice, a drawing that takes no presence, and no stock icon");
+    const behind = faces[0].getBoundingClientRect(), front = faces[1].getBoundingClientRect();
+    const overlaps = (a, b) => a.left < b.right - 0.5 && b.left < a.right - 0.5 && a.top < b.bottom - 0.5 && b.top < a.bottom - 0.5;
+    require(behind.right > front.right && behind.top < front.top && behind.width < front.width && overlaps(behind, front), "the copy stands behind: smaller, up and to the right, the two overlapping");
+    const card = item.closest(".menu").getBoundingClientRect(), opener = document.querySelector('.mb-chat .mb-head [data-act="share-member"]').getBoundingClientRect(), row = item.getBoundingClientRect();
+    require(card.top >= opener.bottom && Math.abs(card.right - opener.right) <= 2, `the card hangs under the button, right edges together: ${Math.round(card.right)} and ${Math.round(opener.right)}`);
+    const words = item.querySelector(".mtd").getBoundingClientRect(), mark = item.querySelector(".mmark").getBoundingClientRect();
+    require(Math.abs((mark.top + mark.bottom) - (row.top + row.bottom)) <= 2 && words.left - mark.right >= 8, "the mark is centred on its row, clear of the words");
     return { check: name };
   }
   if (name === "store-google") {

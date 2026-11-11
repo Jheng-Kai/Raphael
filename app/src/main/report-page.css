@@ -7,9 +7,6 @@
 .rp-scroll { position: relative; min-height: 0; overflow-x: hidden; overflow-y: auto; scrollbar-width: none; container-type: inline-size; padding-inline: var(--pa-dock-x); mask-image: linear-gradient(to bottom, transparent 16px, var(--text) 40px); }
 .rp-scroll::-webkit-scrollbar { display: none; }
 .rp-scroll:focus { outline: none; }
-/* Share stays at the top right, out of the fade, while the page scrolls under it: the window edge's round button, ending
-   where the composer ends. The way back is not here but at the conversation header's top left (page-view.css). */
-.rp-top { position: absolute; top: var(--sp-3); right: max(var(--pa-dock-x), calc((100% - var(--pa-colw)) / 2)); z-index: 2; display: flex; gap: var(--sp-1); }
 
 .rp-doc { max-width: var(--pa-colw); margin: 0 auto; padding: calc(var(--sp-6) + var(--sp-2)) 0 calc(2 * var(--sp-6)); }
 .rp-title { margin: 0; font: var(--weight-medium) var(--fs-h1)/1.35 var(--ui); overflow-wrap: anywhere; }
