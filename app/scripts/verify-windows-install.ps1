@@ -145,6 +145,37 @@ function Assert-SecondLaunchHandsOver {
     Write-Host "Second launch ($Description): handed over to the running app and exited."
 }
 
+# The installer gave `.raphael-member` files to Raphael: Windows knows the extension and the command that opens it.
+function Assert-TemplateAssociation {
+    param([string]$Description)
+    $extension = 'HKCU:\Software\Classes\.raphael-member'
+    $handler = (Get-ItemProperty -LiteralPath $extension -ErrorAction SilentlyContinue).'(default)'
+    if (-not $handler) { throw "The installer did not register the .raphael-member extension ($Description)." }
+    $command = (Get-ItemProperty -LiteralPath "HKCU:\Software\Classes\$handler\shell\open\command" -ErrorAction SilentlyContinue).'(default)'
+    if (-not $command -or -not $command.Contains($installDirectory) -or -not $command.Contains('%1')) {
+        throw "The .raphael-member extension does not open with the installed app and the file ($Description)."
+    }
+    Write-Host "Template file association ($Description): registered."
+}
+
+# A template file opened while Raphael runs reaches the running app (its window shows the import review) and starts nothing new.
+function Assert-TemplateFileHandsOver {
+    param($Instance, [string]$Description)
+    $file = Join-Path $verificationRoot 'verification.raphael-member'
+    Set-Content -LiteralPath $file -Value '{"format":"raphael-member","version":1}' -Encoding utf8
+    $count = { param([string]$Text) @(Select-String -LiteralPath $logFile -SimpleMatch $Text).Count }
+    $received = & $count 'a member template file was handed over'
+    Assert-SecondLaunchHandsOver -Instance $Instance -Arguments @($file) -Description $Description
+    $deadline = [DateTime]::UtcNow.AddSeconds(10)
+    while ((& $count 'a member template file was handed over') -le $received -and [DateTime]::UtcNow -lt $deadline) {
+        Start-Sleep -Milliseconds 200
+    }
+    if ((& $count 'a member template file was handed over') -le $received) {
+        throw "The running app did not hear of the template file ($Description)."
+    }
+    Write-Host "Template file ($Description): handed over to the running app."
+}
+
 function Stop-InstalledApp {
     param($Instance, [string]$Description)
     if (-not $Instance.Application.HasExited) { $Instance.Application.Kill(); $Instance.Application.WaitForExit(10000) | Out-Null }
@@ -157,6 +188,7 @@ $createdUserDataDirectory = $false
 try {
     Install-Raphael -Description 'Installer'
     Assert-InstalledFiles -Description 'fresh install'
+    Assert-TemplateAssociation -Description 'fresh install'
     & $Python (Join-Path $PSScriptRoot '../../core/packaging/smoke.py') --core $coreExecutable
     if ($LASTEXITCODE -ne 0) { throw 'The installed core failed its isolated RPC smoke test.' }
 
@@ -181,6 +213,7 @@ try {
     $running += $second
     Assert-SecondLaunchHandsOver -Instance $second -Arguments @() -Description 'plain launch'
     Assert-SecondLaunchHandsOver -Instance $second -Arguments @('--autostart') -Description 'start with Windows'
+    Assert-TemplateFileHandsOver -Instance $second -Description 'a template file opened from the file manager'
     Stop-InstalledApp -Instance $second -Description 'after the upgrade'
 
     # Uninstall silently, as a user would from Apps & features. The NSIS uninstaller copies itself to
@@ -211,4 +244,4 @@ try {
         Remove-Item -LiteralPath $userDataDirectory
     }
 }
-Write-Output 'Installer layout, relocated core, desktop startup, second-launch handover, upgrade over the running app, silent uninstall and child-process cleanup passed.'
+Write-Output 'Installer layout, relocated core, desktop startup, second-launch handover, template file association and handover, upgrade over the running app, silent uninstall and child-process cleanup passed.'

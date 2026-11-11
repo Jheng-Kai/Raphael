@@ -407,7 +407,11 @@ html[data-window-hidden] *, html[data-window-hidden] *::before, html[data-window
      Their showing is the strip's opacity, not its visibility: that is inherited, and flipping it styled every cel again (150 ms and more). */
   .slime-loop[data-slime-loading] { opacity: 0 !important; animation: none !important; }
   .slime-surface:has(> .slime-loop[data-slime-loading]) > .slime { visibility: visible !important; }
-  .slime-surface:has(> .slime[data-transitioning]) > .slime-loop { animation: slime-loop-show 320ms steps(1, end) both; }
+  /* The vector stands in for its strips for the moment of a change of state, and the strips show when it ends: 320 ms, and 1.6 s
+     for error (--slime-moment). A rule of error's own for the strips lost to this one by specificity while the vector was still
+     standing, so the strips showed at 320 ms over the vector's still-visible error pose: two horns for a moment (2026-11-11). */
+  .slime-surface:has(> .slime[data-transitioning]) > .slime-loop { animation: slime-loop-show var(--slime-moment, 320ms) steps(1, end) both; }
+  .slime-surface[data-state="error"] { --slime-moment: 1.6s; }
   .slime[data-transitioning]:is([data-state="thinking"], [data-state="working"], [data-state="searching"], [data-state="computer"], [data-state="waiting"], [data-state="blocked"]) { animation: slime-idle-hide 320ms steps(1, end) both; }
   .slime-surface[data-state="error"] > .slime-loop { animation: slime-loop-show 1.6s steps(1, end) both; }
   .slime[data-state="error"] { animation: slime-idle-hide 1.6s steps(1, end) both; }

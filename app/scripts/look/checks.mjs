@@ -93,7 +93,7 @@ export function checkRendered(name, context = {}) {
     return {check:name};
   }
   // The member store's own checks; the plugin store's store-group-* checks live further down.
-  if (["store-home", "store-category", "store-search", "store-empty", "store-offline", "store-preview", "store-warning", "store-export"].includes(name)) {
+  if (["store-home", "store-category", "store-search", "store-empty", "store-offline", "store-closed", "store-preview", "store-warning", "store-export"].includes(name)) {
     const calls = window.__look.calls;
     require(!calls.some(c => c.method === "members.template" && ["import", "publish"].includes(c.params.action)), "browsing and review never install or publish");
     require(!calls.some(c => /connect$/.test(c.method || "")), "preview never connects apps");
@@ -103,6 +103,11 @@ export function checkRendered(name, context = {}) {
       if (name === "store-home") require(document.querySelectorAll(".store-featured .store-entry").length === 2, "featured row");
       else require(document.querySelectorAll(".store-entry").length === 1, "local filter selects one entry");
       require(calls.filter(c => c.method === "members.template" && c.params.action === "catalog").length === 1, "filtering never refetches");
+    } else if (name === "store-closed") {
+      const results = document.querySelector(".store-results");
+      require(results.textContent.trim() === "商店還沒開放" && visible(results.querySelector("[data-store-closed]")), "the store says it is not open yet, and nothing else");
+      require(!visible(document.querySelector("[data-store-search]")) && !visible(document.querySelector(".store-categories")), "no search or categories for a store with nothing in it");
+      require(!document.querySelector(".store-entry") && !document.body.textContent.includes("離線"), "no entries and no offline claim");
     } else if (["store-empty", "store-offline"].includes(name)) {
       require(document.querySelector(".store-results").textContent.includes("商店目前沒有內容"), "calm empty copy");
       require(!document.querySelector(".store-entry"), "no fabricated catalogue entries");
@@ -154,6 +159,38 @@ export function checkRendered(name, context = {}) {
       const member = window.__look.data.members.at(-1);
       require(member.tools.length === 0, "no imported app grants");
       require(window.__look.data.routines.filter(r => r.member_id === member.id).every(r => !r.enabled), "imported routines stay off");
+    }
+    if (name === "colleague-save-cancelled") {
+      const card = document.querySelector('[data-template-card-id="tpl-1"]');
+      require(calls.some(call => call.command === "member_template_file" && call.action === "save"), "the owner's save dialog was opened");
+      require(!window.__look.exportedTemplate, "a cancelled dialog writes nothing");
+      require(card.dataset.cardState === "draft" && !card.textContent.includes("已儲存"), "the card does not say saved");
+      require(!calls.some(call => call.method === "members.template_card_export" && call.params.saved === true), "the core is not told it was saved");
+      require([...card.querySelectorAll(".card-actions button")].every(button => !button.disabled), "the card's buttons are back");
+    }
+    if (name === "colleague-published") {
+      const card = document.querySelector('[data-template-card-id="tpl-1"]'), where = card.querySelector("[data-template-where]"), next = card.querySelector(".template-next");
+      require(card.dataset.cardState === "published" && visible(where) && visible(next), "the card says where the files are and what to do next");
+      require(where.textContent.includes("template-exports") && where.textContent.includes("3f9a1c07d2e84b56"), "the path of the prepared folder is written out");
+      const edge = card.getBoundingClientRect().right;
+      require(where.getBoundingClientRect().right <= edge + 0.5 && next.getBoundingClientRect().right <= edge + 0.5, "the path and the sentence wrap inside the card");
+      const buttons = [...card.querySelectorAll(".card-actions button")];
+      require(buttons.map(button => button.dataset.act).join() === "template-open,template-folder,template-view" && buttons.every(visible), "open the GitHub page, show the files, view");
+      require(buttons[0].classList.contains("pri") && !buttons[1].classList.contains("pri"), "the GitHub page is the one primary button");
+    }
+    if (name === "colleague-bad-file") {
+      const toast = document.querySelector(".toast");
+      require(visible(toast) && toast.textContent.includes("損壞或不完整"), "the file is said to be damaged, in the owner's words");
+      require(!/JSON|Unexpected|SyntaxError|Invalid/.test(toast.textContent), "no parser or core wording");
+      require(!document.querySelector(".template-preview"), "nothing is previewed");
+      require(!calls.some(call => call.method === "members.template"), "the core is never asked about a file that cannot be one");
+    }
+    if (name === "colleague-name-empty") {
+      const dialog = document.querySelector(".template-preview"), field = dialog.querySelector("[data-template-name]"), line = dialog.querySelector(".field-error");
+      require(field.getAttribute("aria-invalid") === "true" && visible(line) && line.textContent === "請輸入名字", "the field is marked and one line says what to do");
+      require(getComputedStyle(field).borderTopColor === getComputedStyle(line).color, "the field's edge and the line share the error colour");
+      require(!calls.some(call => call.method === "members.template" && call.params.action === "import"), "nothing is added");
+      require(!dialog.querySelector('[data-dlg="import"]').disabled, "the owner can try again");
     }
     if (name === "colleague-export") {
       const template = JSON.parse(window.__look.exportedTemplate);
@@ -1535,6 +1572,12 @@ export function checkRendered(name, context = {}) {
       const openrouter = menu.querySelector('[data-source="openrouter"] > .mono');
       require(openrouter && openrouter.innerHTML !== drawings[0], "it is OpenAI's mark and not OpenRouter's");
       require(menu.querySelector('.mc-pane-head h3').textContent.trim() === 'Codex', 'the head names Codex');
+      // A subscription is not an API priced by the token: its own heading, a head that says it is included, no price on the row.
+      const heading = source => source.closest('section').querySelector('h3').textContent.trim();
+      require(heading(menu.querySelector('[data-source="codex"]')) !== heading(menu.querySelector('[data-source="openrouter"]')) && heading(menu.querySelector('[data-source="codex"]')) !== 'API', 'Codex stands under a heading of its own, not under API');
+      require(!/按量計費|每百萬/.test(menu.querySelector('.mc-pane-head').textContent) && /訂閱/.test(menu.querySelector('.mc-pane-head p').textContent), 'the head says it is included in the subscription');
+      const codexRow = menu.querySelector('.mc-row[data-model="@codex:gpt-image-2"]');
+      require(!codexRow.querySelector('.mc-price') && !/價格未知/.test(codexRow.textContent), 'the row has no price');
     } else if (name === 'media-models-repair') {
       require(['image-model', 'video-model'].includes(document.activeElement?.dataset.k), 'repair focuses the exact model control');
     }
@@ -1838,7 +1881,8 @@ export function checkRendered(name, context = {}) {
           // The row stands at the card's right with the primary rightmost (owner, 2026-11-10: 卡片的按鈕盡量放在右側), measured
           // against the card's own right padding, not the row: a row its parent had shrunk to its buttons left a failed
           // page's 再試一次 at the card's left and still passed (2026-11-10).
-          if (row.matches('.card-actions')) {
+          // A failed page's empty state (R-PAGE-02, 2026-11-11) centres its 再試一次 with the words that say what failed.
+          if (row.matches('.card-actions') && !row.closest('.pg-failed')) {
             const end = box.right - parseFloat(style.paddingRight) - parseFloat(style.borderRightWidth), right = pri.getBoundingClientRect().right;
             require(Math.abs(right - end) <= 1 && buttons.every(button => button.getBoundingClientRect().right <= right + 0.5), `the card's buttons stand at its right, the primary rightmost (${Math.round(end - right)} px)`);
           }
@@ -4074,6 +4118,13 @@ export function checkRendered(name, context = {}) {
     require(innerHeight - box.top <= canvas + 40, "the page stays inside the overlay window");
     return { check: name, text };
   }
+  if (name === "overlay-held-answer") {
+    const line = document.querySelector(".subs.on .sub-line");
+    require(visible(line) && line.textContent === "《答。台北現在二十四度。》", "the held answer is the line in the corner");
+    require(!visible(document.querySelector("#progress")) || !/\d+ %/.test(document.querySelector("#progress").textContent), "the dictation's percentage is gone before the answer");
+    require(!visible(document.querySelector("#ask")) && !visible(document.querySelector("#overlay-stop")), "an answer to read has no buttons");
+    return { check: name, text: line.textContent };
+  }
   if (name === "overlay-step") {
     require(document.getElementById('progress')?.textContent === "《告。正在查看今天下午的行程。》", "the latest shared turn narration is the subtitle");
     return { check: name, text: document.getElementById('progress').textContent };
@@ -5208,20 +5259,33 @@ export function checkRendered(name, context = {}) {
     require(well && visible(well) && well.textContent.includes("NT$ 1,280"), "then what it knows of the page, in a well");
     require(failed.querySelector('[data-page-act="retry"]'), "and offers to try again");
     require(document.querySelector(".pg-body").hidden, "no empty box is left");
-    // One left edge with the title, 再試一次 at the card's right (R-CARD-01) and nothing blank under it (the judge, 2026-11-10).
-    const card = failed.closest(".pg-card"), box = card.getBoundingClientRect(), style = getComputedStyle(card), title = card.querySelector(".card-title").getBoundingClientRect();
-    for (const [what, node] of [["words", said], ["well", well]]) {
-      const left = node.getBoundingClientRect().left;
-      require(Math.abs(left - title.left) <= 1, `the ${what} start where the title does (${Math.round(left - title.left)} px)`);
-    }
+    // An empty state of the card (owner, 2026-11-11): the words, what it knows and 再試一次 stand together, centred in the
+    // area the preview has, with no blank gap between them or under the title row.
+    const card = failed.closest(".pg-card"), area = failed.getBoundingClientRect();
     const retry = failed.querySelector('[data-page-act="retry"]').getBoundingClientRect();
-    const right = box.right - parseFloat(style.paddingRight) - parseFloat(style.borderRightWidth), bottom = box.bottom - parseFloat(style.paddingBottom) - parseFloat(style.borderBottomWidth);
-    require(Math.abs(right - retry.right) <= 1, `the retry stands at the card's right (${Math.round(right - retry.right)} px)`);
-    require(bottom - retry.bottom <= 1, `nothing blank stands under the retry (${Math.round(bottom - retry.bottom)} px)`);
+    const stack = [said, well, failed.querySelector('[data-page-act="retry"]')].map(node => node.getBoundingClientRect());
+    const centre = box => box.left + box.width / 2;
+    for (const [what, box] of [["words", stack[0]], ["well", stack[1]], ["retry", stack[2]]]) {
+      require(Math.abs(centre(box) - (area.left + area.width / 2)) <= 1, `the ${what} are centred across the card (${Math.round(centre(box) - (area.left + area.width / 2))} px)`);
+    }
+    const above = stack[0].top - area.top, under = area.bottom - retry.bottom;
+    require(Math.abs(above - under) <= 1.5, `the stack is centred in the area (${Math.round(above)} px above, ${Math.round(under)} px under)`);
+    require(stack[1].top - stack[0].bottom <= 16 && stack[2].top - stack[1].bottom <= 16, "the words, the well and the retry stand together, no blank gap between them");
+    // It stands where the preview does, directly under the title row, and the card is as tall as one that is ready.
+    const body = card.querySelector(".pg-body"), height = () => card.getBoundingClientRect().height;
+    body.hidden = false; failed.hidden = true;
+    const ready = { top: body.getBoundingClientRect().top, height: height() };
+    body.hidden = true; failed.hidden = false;
+    require(Math.abs(area.top - ready.top) <= 0.5, `the empty state stands where the preview does (${area.top} against ${ready.top})`);
+    require(Math.abs(height() - ready.height) <= 0.5, `the failed card is as tall as a ready one (${height()} against ${ready.height})`);
+    const mark = card.querySelector(":scope > .card-head > [data-card-failed-close]");
+    mark.style.display = "none";
+    require(Math.abs(height() - ready.height) <= 0.5, "the × in the heading makes the card no taller");
+    mark.style.display = "";
     require(![...card.querySelectorAll(":scope > .card-actions")].some(visible), "the failed page has no expand row");
     // As tall as the preview it stands for, so a card that fails moves nothing in the thread (owner, 2026-11-11).
     const peek = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--h-page-peek"));
-    require(Math.abs(failed.getBoundingClientRect().height - peek) <= 0.5, `the failed card is as tall as the preview (${failed.getBoundingClientRect().height} against ${peek})`);
+    require(Math.abs(area.height - peek) <= 0.5, `the failed area is as tall as the preview (${area.height} against ${peek})`);
     // R-UI-117: a failed card is put away by the × in its heading.
     const close = card.querySelector(":scope > .card-head > [data-card-failed-close]");
     require(close && visible(close), "the × that puts it away is in its heading");
@@ -5510,6 +5574,15 @@ export function checkRendered(name, context = {}) {
         return { left: body.left - box.left, top: body.top - box.top, right: body.right - box.left, bottom: body.bottom - box.top, eyeX: (eyes.left + eyes.right) / 2 - box.left };
       });
       for (const edge of Object.keys(before)) require(Math.abs(before[edge] - after[edge]) <= 1, `a change of state jumps in ${row.textContent.slice(0, 3)}: ${edge} moved ${Math.abs(before[edge] - after[edge]).toFixed(1)}px`);
+    }
+    // One drawing at a time: while the vector stands in for the strips of the new state it is the only one painted, and when
+    // the strips show the vector is gone (2026-11-11: the strips of an error showed at 320 ms over the vector, two horns).
+    for (const face of document.querySelectorAll(".look-slime-board .mb-av-slime")) {
+      const svg = face.querySelector("svg.slime"), surface = svg?.closest(".slime-surface");
+      if (!svg || !surface) continue;
+      const shown = node => { const css = getComputedStyle(node); return css.display !== "none" && css.visibility !== "hidden" && Number(css.opacity) > 0; };
+      const strips = [...surface.querySelectorAll(":scope > .slime-loop:not([data-slime-loading])")].filter(shown);
+      require(!(strips.length && shown(svg)), `two drawings of the slime are painted at once in ${face.closest(".look-slime-board > div").textContent.slice(0, 3)} (${face.textContent.trim()}, ${svg.dataset.state})`);
     }
     return { check: name, rows: document.querySelectorAll(".look-slime-board > div").length };
   }
@@ -6124,6 +6197,19 @@ export function checkRendered(name, context = {}) {
     require(/檔案/.test(item.textContent) && /GitHub/.test(item.textContent) && !/連結|link/i.test(item.textContent), `the choice says a file is saved or a request is prepared, and promises no link: ${item.textContent.trim()}`);
     return { check: name };
   }
+  if (name === "store-google") {
+    const card = document.querySelector('[data-conn="open-store"][data-id="google"]')?.closest('.cs-card');
+    require(card && card.textContent.includes("Google（私人連接）"), "the owner's own Google has its row");
+    require(card.querySelector('.logo-art, .logo-mono, svg') && !card.querySelector('.need'), "it wears Gmail's mark and asks nothing it would have to explain on its row");
+    require(card.querySelector('[data-conn="join"]'), "it is added from its row like any app");
+    return { check: name };
+  }
+  if (name === "store-google-in-chat") {
+    const text = document.querySelector('.page-agent:not([hidden]) .composer textarea')?.value ?? "";
+    require(text === "幫我連接我自己的 Google 帳號", `the owner's words are in the composer (${text})`);
+    require(!window.__look.calls.some(call => /^connectors\.(connect|google\.)/.test(call.method) || call.method === "integrations.card_connect"), "nothing was connected from the store");
+    return { check: name };
+  }
   if (name === "store-n8n") {
     const card = document.querySelector('[data-conn="open-store"][data-id="n8n"]')?.closest('.cs-card');
     require(card?.querySelector('.logo-mono svg path'), "n8n carries its own mark, not the generic plug");
@@ -6418,6 +6504,28 @@ export function checkRendered(name, context = {}) {
     const box = dialog.getBoundingClientRect();
     require(box.left >= 0 && box.right <= innerWidth && box.top >= 0 && box.bottom <= innerHeight, "the dialog stays in the window");
     require(!document.querySelector('.mb-det [data-det="routine-add"]'), "the panel has no plus: a routine is made in the conversation");
+    return { check: name };
+  }
+  if (name === "routine-view-failed") {
+    // A run that did not work is said as one beside its reason, and the dialog stays a thing to read.
+    const dialog = document.querySelector(".mb-dialog.rv-dialog");
+    const status = dialog?.querySelector(".rv-status.is-failed");
+    require(visible(status) && status.textContent.trim().length > 4, "the failed run is told in words");
+    require(visible(status.querySelector(".st.err .dot.err")), "the failed state has its dot, not colour alone");
+    require(!dialog.querySelector('input, textarea, select, [role="switch"], .mb-dlg-act'), "nothing in it is a field or a switch");
+    const box = status.getBoundingClientRect(), outer = dialog.getBoundingClientRect();
+    require(box.left >= outer.left && box.right <= outer.right + 1, "the reason stays inside the dialog");
+    return { check: name };
+  }
+  if (name === "routine-running") {
+    // A routine's run shows the same working line as a turn the owner asked, and its instructions are no message of the owner's.
+    const line = document.querySelector('.tn[data-live="true"]');
+    require(visible(line), "the running routine is a live line of the thread");
+    const action = line.querySelector(".live-presence .live-action");
+    require(visible(action) && action.textContent.trim(), "the working line says what it is doing");
+    require(!line.querySelector(".owner-message"), "a routine's instructions are not drawn as the owner's message");
+    const box = line.getBoundingClientRect();
+    require(box.left >= 0 && box.right <= innerWidth, "the line stays in the window");
     return { check: name };
   }
   if (name === "reply-measure") {
@@ -6724,6 +6832,72 @@ export function checkRendered(name, context = {}) {
       require(visible(card.querySelector("[data-inline-submit]")) && card.querySelector("input[type=password]").value === "", "the inline form returns with its secret cleared");
       const reply = [...document.querySelectorAll('.tn .ra .chat-message')].filter(visible).at(-1);
       require(reply.textContent.includes("沒有接受這把金鑰") && reply.textContent.includes("設定 › 連接 › 商店"), "the member names what to do and where");
+    }
+    return { check: name, state };
+  }
+  if (name.startsWith("connector-cause-")) {
+    // A card that did not connect says why in its own sentence, never only 「沒有連上」, and offers a retry only where it can help.
+    const kind = name.split("-")[2], card = [...document.querySelectorAll('.connector-card')].find(visible);
+    require(card && card.dataset.cardState === "failed", "the card failed");
+    require(card.getBoundingClientRect().width <= 481 && card.scrollWidth <= card.clientWidth + 1, "the card fits its column");
+    const footer = [...card.querySelectorAll('footer button')].filter(visible), sentence = card.querySelector('.cc-state')?.textContent.trim() ?? "";
+    const words = { busy: "另一個連線還在進行", refused: "服務拒絕了這次連線：This project may not add Gmail", unknown: "無法判斷為什麼沒有連上" }[kind];
+    require(sentence.includes(words), `the card says the cause (${sentence})`);
+    require(sentence !== "沒有連上" && !/[{}]|Traceback|[a-z]+_[a-z]+/.test(sentence), "no bare failure, JSON, trace or machine word on the card's face");
+    if (kind === "refused") require(footer.length === 0, "no retry where pressing again cannot help");
+    else require(footer.length === 1 && footer[0].dataset.act === "card-connect" && footer[0].textContent.trim() === "再試一次", "one retry");
+    require(visible(card.querySelector('.card-head [data-card-failed-close]')), "a failed card is put away with the ×");
+    if (kind === "unknown") {
+      const fold = card.querySelector('.card-disclosure'), detail = fold?.querySelector('.card-detail');
+      require(fold && fold.textContent.includes("詳細資料") && detail, "the short reason is folded under 詳細資料");
+      if (name.endsWith("-open")) require(!detail.hidden && visible(detail) && detail.textContent.trim() === "protocol · HTTP 502", "opened, it shows the short technical reason");
+      else require(detail.hidden && !card.querySelector('.cc-state').textContent.includes("HTTP"), "closed, the card's face has no technical reason");
+    }
+    return { check: name, sentence };
+  }
+  if (name.startsWith("connector-google-")) {
+    // The owner's own Google, at each step of its card: steps and text to copy, the two fields, the one button, the account.
+    const step = name.slice("connector-google-".length), secret = "zk-look-0123456789", calls = window.__look.calls;
+    const card = document.querySelector('[data-connector="card-google"]');
+    require(visible(card) && card.classList.contains("connector-card"), "the Google card is visible");
+    require(card.getBoundingClientRect().width <= 481 && card.scrollWidth <= card.clientWidth + 1, "the card fits its column");
+    const state = card.querySelector('.cc-state')?.textContent.trim() ?? "", footer = [...card.querySelectorAll('footer button')].filter(visible);
+    const sent = calls.filter(call => call.method === "integrations.card_connect");
+    require(!document.body.textContent.includes(secret), "the secret is on no page text");
+    require(!JSON.stringify(calls.filter(call => call.method !== "integrations.card_connect")).includes(secret), "no call but the card's own carries the secret");
+    const fields = [...card.querySelectorAll('[data-setup-field]')], id = fields.find(field => field.dataset.setupField === "client_id"), key = fields.find(field => field.dataset.setupField === "client_secret");
+    if (["steps", "filled"].includes(step)) {
+      require(id?.type === "text" && key?.type === "password", "the Client ID is plain and the Client secret masked");
+      const steps = [...card.querySelectorAll('.cn-steps li')], detail = card.querySelector('.card-detail');
+      require(steps.length === 5 && steps.every(visible) && !detail.hidden, "five numbered steps, open");
+      const copies = [...card.querySelectorAll('[data-dlg="copy"]')].filter(visible);
+      require(copies.length === 2 && copies[0].dataset.copy.includes("auth/gmail.modify") && copies[0].dataset.copy.includes("auth/calendar.events") && copies[1].dataset.copy === "http://127.0.0.1", "the scopes and the return address are text to copy");
+      const scopes = card.querySelector('textarea[readonly]');
+      require(visible(scopes) && scopes.scrollHeight <= scopes.clientHeight + 1 && scopes.value.split("\n").length === 2, "the scopes show whole, with no inner scrollbar");
+      require(visible(card.querySelector('input[readonly][value="http://127.0.0.1"]')), "the return address shows");
+      const submit = card.querySelector('[data-inline-submit]');
+      require(visible(submit) && submit.textContent.trim() === "連接 Google" && submit.classList.contains("pri"), "one primary button: 連接 Google");
+      require(visible(card.querySelector('.card-shield')), "storage is explained");
+      require(sent.length === 0, "nothing was sent before 連接 Google");
+    }
+    if (step === "steps") require(id.value === "" && key.value === "" && state.includes("不經過 Composio") && footer.length === 0, "empty fields and the lead; the button is in the form");
+    if (step === "filled") require(id.value === "look-client-id.apps.googleusercontent.com" && key.value === secret, "both are typed, the secret masked");
+    if (step === "authorizing") {
+      require(card.dataset.cardState === "authorizing" && state.includes("等你在瀏覽器登入"), `the card waits for the browser (${state})`);
+      require(sent.length === 1 && sent[0].params.id === "card-google" && sent[0].params.fields.client_secret === secret && sent[0].params.fields.client_id === "look-client-id.apps.googleusercontent.com", "both crossed the one call, integrations.card_connect");
+      require(fields.length === 0 && footer.length === 1 && footer[0].dataset.act === "card-cancel", "the form is gone and Cancel is the one action");
+    }
+    if (step === "connected") {
+      require(card.dataset.cardState === "connected" && state === "已連結 · owner@example.test · 7 個工具", `which account, and the tools (${state})`);
+      require(sent.length === 1 && fields.length === 0, "one call, and no form is left");
+    }
+    if (step === "kept") {
+      require(card.dataset.cardState === "failed" && state.includes("你拒絕了授權"), `the cause is said (${state})`);
+      require(fields.length === 0 && footer.length === 1 && footer[0].dataset.act === "card-connect" && footer[0].textContent.trim() === "連接 Google", "no fields, and one button signs in again");
+    }
+    if (step === "rejected") {
+      require(card.dataset.cardState === "failed" && state.includes("Google 沒有接受這組 Client ID 或 Client secret"), `the cause is said (${state})`);
+      require(fields.length === 2 && id.value === "" && key.value === "" && footer.length === 0, "both fields are asked for again, empty");
     }
     return { check: name, state };
   }

@@ -70,6 +70,14 @@ export default [
     ...store, type('#conn-search', 'n8n'), wait('[data-conn="open-store"][data-id="n8n"]'), check("store-n8n"),
     click('[data-conn="join"][data-id="n8n"]'), wait('.page-agent:not([hidden]) .composer textarea'), check("store-in-chat"),
   ]),
+  // R-CONNECT-02 (owner, 2026-10-25): the owner's own Google is reachable where the Google row is; 加入 leaves for the conversation.
+  scene("store-google", "The owner's own Google is in the store as one row, like n8n", [
+    ...store, type('#conn-search', 'Google'), wait('[data-conn="open-store"][data-id="google"]'), check("store-google"),
+  ], { noOwnGoogle: true }),
+  scene("store-google-in-chat", "加入 on the owner's own Google leaves for the conversation with the owner's words, where the member shows the card that walks the steps", [
+    ...store, type('#conn-search', 'Google'), wait('[data-conn="open-store"][data-id="google"]'),
+    click('[data-conn="join"][data-id="google"]'), wait('.page-agent:not([hidden]) .composer textarea'), check("store-google-in-chat"),
+  ], { noOwnGoogle: true }),
   scene("plugins-store", "Search-first catalog of the apps not added yet, in bounded pages", [
     ...store, check("plugins-store"), check("plugins-store-rows"), check("plugins-store-groups"),
     type('#conn-search', '360'), wait('[data-conn="open-store"][data-id$="-359"]'), check("plugins-store-search"),

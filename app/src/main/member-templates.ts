@@ -4,9 +4,9 @@ import { cardDisclosureHTML, cardHTML } from "./card";
 import { describeError } from "./format";
 import { t } from "./i18n";
 import { openDialog } from "./member-dialogs";
-import { mountTemplateReview } from "./template-review";
+import { parseTemplateFile, templateErrorText } from "./template-file";
 import { slimeFaceHTML } from "./slime";
-import { routineSentenceHTML } from "./members";
+import { NAME_MAX, cleanName, routineSentenceHTML } from "./members";
 import { SERVICE_ICONS } from "./service-icons";
 import type { Member, NewMember, Routine } from "./types";
 import { appMarkHTML } from "./connector-card";
@@ -55,9 +55,21 @@ export function openTemplateGallery(create: (member: NewMember) => Promise<Membe
     onAct(action, button) {
       if (action === "starter") void previewTemplate(starterTemplate(Number(button.dataset.index)), `slime:${STARTERS[Number(button.dataset.index)][1]}`, create, groupId, () => {dialog.close(); done();});
       if (action === "open") void api.memberTemplateFile("open").then(text => {
-        if (text !== null) return previewTemplate(JSON.parse(text), "slime:rimuru", create, groupId, () => {dialog.close(); done();});
-      }).catch(error => toaster.info(describeError(error)));
+        if (text !== null) return previewTemplateFile(text, create, groupId, () => {dialog.close(); done();});
+      }).catch(error => toaster.info(templateErrorText(error)));
     }});
+}
+
+/**
+ * The import review of a template file's text, as the owner chose it in the file dialog or opened it from the file manager:
+ * a file that is no template, comes from a newer Raphael or is damaged says so in the owner's words, and nothing is added
+ * before the owner presses 加入.
+ */
+export function previewTemplateFile(text: string, create: (member: NewMember) => Promise<Member | null>, groupId: number | null, done: () => void): Promise<void> {
+  let raw: unknown;
+  try { raw = parseTemplateFile(text); }
+  catch (error) { toaster.info(templateErrorText(error)); return Promise.resolve(); }
+  return previewTemplate(raw, "slime:rimuru", create, groupId, done);
 }
 
 export interface ScanFinding { kind: "secret" | "injection"; path: string }
@@ -144,11 +156,13 @@ if (typeof document !== "undefined") document.addEventListener("click", event =>
 export async function previewTemplate(raw: unknown, avatar: string, create: (member: NewMember) => Promise<Member | null>, groupId: number | null, done: () => void, catalogId?: string): Promise<void> {
   try {
     const {template, findings = []} = await api.core<{template: MemberTemplate; findings?: ScanFinding[]}>("members.template", catalogId ? {action: "catalog-preview", catalog_id: catalogId} : {action: "preview", template: raw});
-    let made: Member | null = null, busy = false;
+    let made: Member | null = null, busy = false, typed = template.name, empty = false;
     const connected = new Set<string>();
-    // The name to give it, then what it holds, in the dialog itself rather than inside another card.
+    // The name to give it, then what it holds, in the dialog itself rather than inside another card. The
+    // name is at most what the core takes of any member (NAME_MAX), and what the owner typed stays when adding it is refused.
     const body = (): string => `<div class="tpl-import" data-member-template>` +
-      `<label class="mp-label">${esc(t("members.name"))}<input class="mb-fin" data-template-name maxlength="24" value="${esc(made?.name || template.name)}"${made ? " disabled" : ""}></label>` +
+      `<label class="mp-label">${esc(t("members.name"))}<input class="mb-fin" data-template-name maxlength="${NAME_MAX}" value="${esc(made?.name || typed)}"${made ? " disabled" : ""}${empty ? ' aria-invalid="true"' : ""}></label>` +
+      (empty ? `<p class="note field-error" role="alert">${esc(t("members.nameEmpty"))}</p>` : "") +
       templateContents({...template, connections: []}, findings, {thirdParty: true}) +
       (template.connections.length ? `<section class="tpl-sec"><h4>${esc(t("template.connections"))}</h4>${template.connections.map(app => cardHTML({title: connectionName(app), status: "done", statusText: t("conn.signedIn"), hideStatus: !connected.has(app), attrs: ` data-template-connection="${esc(app)}" data-connected="${connected.has(app)}"`, body: made ? t("template.connectHelp") : undefined, actions: btn(esc(t(connected.has(app) ? "conn.signedIn" : "template.connect")), "sm", ` data-dlg="connect" data-app="${esc(app)}"${!made || busy || connected.has(app) ? " disabled" : ""}`)})).join("")}</section>` : "") + `</div>`;
     const dialog = openDialog({title: t("template.preview"), cls: "template-preview", body: body(),
@@ -160,7 +174,10 @@ export async function previewTemplate(raw: unknown, avatar: string, create: (mem
         const run = async (): Promise<void> => {
           busy = true; button.setAttribute("disabled", "");
           if (action === "import" && !made) {
-            const name = dialog.el.querySelector<HTMLInputElement>("[data-template-name]")!.value.trim();
+            typed = dialog.el.querySelector<HTMLInputElement>("[data-template-name]")!.value;
+            const name = cleanName(typed);
+            empty = !name;
+            if (empty) return;
             made = await create({name, template, avatar, group_id: groupId, ...(catalogId ? {catalog_id: catalogId} : {})});
             if (made) {done(); dialog.el.querySelector('[data-dlg="import"]')?.remove();}
           } else if (action === "connect" && made) {
@@ -179,7 +196,15 @@ export async function previewTemplate(raw: unknown, avatar: string, create: (mem
           }
         });
       }});
-  } catch (error) {toaster.info(describeError(error));}
+    // Typing a name again takes the complaint back.
+    dialog.el.addEventListener("input", event => {
+      const field = event.target as Element;
+      if (!empty || !field.matches?.("[data-template-name]")) return;
+      empty = false;
+      field.removeAttribute("aria-invalid");
+      dialog.el.querySelector(".field-error")?.remove();
+    });
+  } catch (error) {toaster.info(templateErrorText(error, catalogId ? "store" : "file"));}
 }
 
 async function connectTemplateApp(name: string): Promise<string> {
@@ -208,32 +233,4 @@ async function connectTemplateApp(name: string): Promise<string> {
   const result = await api.connectorsConnect(slug);
   if (!result.connected) throw new Error(result.error || t("plugins.connectFailed"));
   return `composio:${slug}`;
-}
-
-export async function exportMemberTemplate(id: number, face = ""): Promise<void> {
-  const {template, findings = []} = await api.core<{template: MemberTemplate; findings: ScanFinding[]}>("members.template", {action: "review", id});
-  let busy = false;
-  const blocked = findings.some(w => w.kind === "secret");
-  const dialog = openDialog({title: t("store.review"), cls: "template-preview template-export-review", body: "",
-    actions: {secondary: btn(esc(t("store.publish")), "", ` data-dlg="publish"${blocked ? " disabled" : ""}`), primary: {label: esc(t("store.export")), attrs: ` data-dlg="export"${blocked ? " disabled" : ""}`}},
-    canClose: () => !busy,
-    onAct(action, button) {
-      if (busy || blocked || !["export", "publish"].includes(action)) return;
-      busy = true; button.setAttribute("disabled", "");
-      void (async () => {
-        if (action === "export") {
-          const result = await api.core<{template: MemberTemplate}>("members.template", {action: "export", id});
-          // The exact reviewed generation is the one the owner agreed to share.
-          if (JSON.stringify(result.template) !== JSON.stringify(template)) throw new Error(t("store.changed"));
-          await api.memberTemplateFile("save", JSON.stringify(template, null, 2));
-        } else {
-          const result = await api.core<{folder: string; url: string}>("members.template", {action: "publish", template});
-          const note = document.createElement("p"); note.className = "note"; note.textContent = t("store.prepared", {p0: result.folder});
-          dialog.el.querySelector(".mb-dlg-body")!.append(note);
-          await api.openExternalUrl(result.url);
-        }
-      })().catch(error => toaster.info(describeError(error))).finally(() => {busy = false; button.removeAttribute("disabled");});
-    }});
-  // Its parts, one page each.
-  mountTemplateReview(dialog, template, {face, notes: reviewNotes(findings)});
 }

@@ -8,7 +8,7 @@ from raphael_core.brain.openrouter import OpenRouterError
 
 
 def test_every_kind_of_failure_has_a_phrase_in_every_language():
-    assert KINDS == ("no_key", "auth", "budget", "credits", "offline", "timeout", "error")
+    assert KINDS == ("no_key", "auth", "budget", "credits", "offline", "timeout", "error", "no_answer")
     for phrases in PHRASES.values():
         for kind in KINDS:
             assert getattr(phrases, kind)

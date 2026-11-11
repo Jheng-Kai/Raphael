@@ -577,13 +577,11 @@ async def test_failed_sign_in_restores_prior_session_permissions(tmp_path, conn,
         task.cancel()
         with pytest.raises(asyncio.CancelledError):
             await task
-    elif outcome == "browser-error":
-        with pytest.raises(RpcError, match="Connector operation failed"):
-            await task
     else:
         result = await task
         assert result.get("connected") is not True
-        assert result["error"] == ("toolkit_not_allowed" if outcome == "refused" else outcome.lower())
+        # A browser that cannot be opened is a named failure of its own, and its message (it may carry the link) is not in it.
+        assert result["error"] == ("toolkit_not_allowed" if outcome == "refused" else "browser" if outcome == "browser-error" else outcome.lower())
         assert "private" not in json.dumps(result)
     assert fake.config == before
     assert fake.config["tools"] == {"slack": {"disable": ["SLACK_WRITE"]}}
@@ -1197,6 +1195,13 @@ async def test_rpc_exception_messages_are_value_free(tmp_path, conn, caplog):
 
     router, service, hub, vault = setup_service(tmp_path, conn, Platform(), open_browser=browser)
     await router.call("connectors.set_key", {"key": "ak_private"})
+    # A browser that cannot be opened is named (`browser`), and what it said (it may carry the link) is not in the answer.
+    result = await router.call("connectors.connect", {"toolkit": "gmail"})
+    assert result["error"] == "browser" and not any(x in json.dumps(result) for x in ("ak_", "Bearer ", "refresh_token", "lt_"))
+    assert not any(x in caplog.text for x in ("ak_", "Bearer ", "refresh_token", "lt_"))
+    # Any other failure inside an operation is an internal error whose message holds no value.
+    vault.set("connectors:composio:key", "ak_private")
+    service.vault.get = lambda name: (_ for _ in ()).throw(RuntimeError("ak_private lt_private Bearer secret refresh_token"))
     with pytest.raises(RpcError) as failure:
         await router.call("connectors.connect", {"toolkit": "gmail"})
     assert str(failure.value.message) == "Connector operation failed"

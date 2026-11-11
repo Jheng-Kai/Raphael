@@ -28,7 +28,7 @@ import { type RulesView, rulesHTML } from "../safety-rules";
 import { type VaultView, emptyVaultView, vaultHTML } from "../vault";
 import { AUTO_MICROPHONE, microphoneChoices } from "../microphone";
 import type { LocalView } from "../local-models";
-import { type ModelPickerLook, modelPickerHTML, modelsFor, planRef, priceDescription, splitEffort } from "../model-picker";
+import { type ModelPickerLook, modelPickerHTML, modelsFor, onPlan, planRef, priceDescription, splitEffort } from "../model-picker";
 import { type ServicesView, servicesHTML } from "../services";
 import { type ProvidersView, providersHTML, providersAddHTML, emptyProvidersView } from "../providers";
 import { type CliBrainsView, cliBrainsHTML, cliModels, emptyCliBrainsView } from "../cli-brains";
@@ -304,6 +304,7 @@ export function mediaRowPrice(v: SettingsView, role: "image" | "video"): string 
   const chosen = v.brain?.[role === "image" ? "image_model" : "video_model"] ?? "";
   const models = catalogOf(v) ? modelsFor(catalogOf(v)!, role) : [];
   const model = models.find(m => m.id === chosen);
+  if (model && onPlan(model)) return t("brains.subscription");
   return `${model ? priceDescription(model, role) : chosen ? t("media.unavailable") : t("media.unset")} · ${t("media.paid")}` +
     (!chosen && !models.length && v.catalog !== "loading" ? ` · ${t("media.none")}` : "");
 }

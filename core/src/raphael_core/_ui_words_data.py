@@ -20492,4 +20492,430 @@ WORDS.update({
         'id': 'Perintah atau alat berkas tidak boleh mengubah data Raphael. Tidak ada yang dijalankan.',
         'tr': 'Komut veya dosya aracı Raphael’in verilerini değiştiremez. Hiçbir işlem yapılmadı.',
     },
+    "A step this run needed was refused, so it did not finish.": {"zh-CN": "这次运行需要的一个步骤被拒绝了，没有完成。", "ko": "이번 실행에 필요한 단계가 거부되어 끝내지 못했습니다.", "es": "Se rechazó un paso que esta ejecución necesitaba, así que no terminó.", "fr": "Une étape nécessaire à cette exécution a été refusée ; elle n'a donc pas abouti.", "de": "Ein Schritt, den dieser Lauf brauchte, wurde abgelehnt; er wurde nicht abgeschlossen.", "pt-BR": "Uma etapa de que esta execução precisava foi recusada, então ela não terminou.", "it": "Un passaggio necessario a questa esecuzione è stato rifiutato, quindi non è stata completata.", "ru": "Шаг, нужный для этого запуска, был отклонён, поэтому он не завершён.", "vi": "Một bước mà lần chạy này cần đã bị từ chối nên nó chưa hoàn thành.", "th": "ขั้นตอนที่การทำงานครั้งนี้ต้องใช้ถูกปฏิเสธ จึงยังไม่เสร็จ", "id": "Satu langkah yang dibutuhkan proses ini ditolak, sehingga proses tidak selesai.", "tr": "Bu çalıştırmanın ihtiyaç duyduğu bir adım reddedildi, bu yüzden tamamlanmadı."},
+    "This run did not make what it was set to, so it is not done.": {"zh-CN": "这次运行没有做出原本要做的东西，不算完成。", "ko": "이번 실행은 만들기로 한 것을 만들지 못해 완료로 치지 않습니다.", "es": "Esta ejecución no hizo lo que debía hacer, así que no cuenta como terminada.", "fr": "Cette exécution n'a pas fait ce qu'elle devait : elle n'est pas terminée.", "de": "Dieser Lauf hat nicht erstellt, was er erstellen sollte, und gilt daher nicht als erledigt.", "pt-BR": "Esta execução não fez o que deveria fazer, então não conta como concluída.", "it": "Questa esecuzione non ha prodotto ciò che doveva produrre, quindi non conta come completata.", "ru": "Этот запуск не создал то, что должен был создать, поэтому он не считается выполненным.", "vi": "Lần chạy này không tạo ra thứ cần tạo nên không được tính là hoàn thành.", "th": "การทำงานครั้งนี้ไม่ได้สร้างสิ่งที่ตั้งใจไว้ จึงไม่นับว่าเสร็จ", "id": "Proses ini tidak membuat apa yang seharusnya dibuat, sehingga tidak dihitung selesai.", "tr": "Bu çalıştırma yapması gerekeni yapmadı, bu yüzden tamamlanmış sayılmaz."},
 })
+
+WORDS.update({
+    'The model gave no answer this time. Try again or choose another model.': {
+        'zh-CN': '模型这次没有给出回答，请再试一次，或换一个模型。',
+        'ko': '모델이 이번에는 답변을 내지 않았습니다. 다시 시도하거나 다른 모델을 선택해 주세요.',
+        'es': 'El modelo no dio ninguna respuesta esta vez. Inténtalo de nuevo o elige otro modelo.',
+        'fr': 'Le modèle n’a donné aucune réponse cette fois. Réessayez ou choisissez un autre modèle.',
+        'de': 'Das Modell hat diesmal keine Antwort gegeben. Versuche es erneut oder wähle ein anderes Modell.',
+        'pt-BR': 'O modelo não deu nenhuma resposta desta vez. Tente novamente ou escolha outro modelo.',
+        'it': 'Il modello questa volta non ha dato alcuna risposta. Riprova o scegli un altro modello.',
+        'ru': 'Модель на этот раз не дала ответа. Попробуйте ещё раз или выберите другую модель.',
+        'vi': 'Lần này mô hình không đưa ra câu trả lời. Hãy thử lại hoặc chọn mô hình khác.',
+        'th': 'โมเดลไม่ได้ตอบกลับในครั้งนี้ ลองอีกครั้งหรือเลือกโมเดลอื่น',
+        'id': 'Model tidak memberikan jawaban kali ini. Coba lagi atau pilih model lain.',
+        'tr': 'Model bu sefer yanıt vermedi. Tekrar deneyin veya başka bir model seçin.',
+    },
+    'reached the reply limit for this discussion': {
+        'zh-CN': '这次讨论的回复次数已达上限',
+        'ko': '이번 토론의 답변 횟수 한도에 도달했습니다',
+        'es': 'alcanzó el límite de respuestas de esta discusión',
+        'fr': 'a atteint la limite de réponses de cette discussion',
+        'de': 'hat das Antwortlimit dieser Diskussion erreicht',
+        'pt-BR': 'atingiu o limite de respostas desta discussão',
+        'it': 'ha raggiunto il limite di risposte di questa discussione',
+        'ru': 'достигнут предел ответов в этом обсуждении',
+        'vi': 'đã đạt giới hạn số lượt trả lời của cuộc thảo luận này',
+        'th': 'ถึงขีดจำกัดจำนวนการตอบของการสนทนานี้แล้ว',
+        'id': 'telah mencapai batas balasan untuk diskusi ini',
+        'tr': 'bu tartışmanın yanıt sınırına ulaştı',
+    },
+})
+WORDS.update({'{cause} I have stopped asking members to reply. Check the models and sign-ins in Settings or shorten the discussion, then write here again and everyone will carry on.': {'zh-CN': '{cause}我先不再请成员回复。请到“设置”检查模型和登录状态，或缩短讨论内容，再在这里写一条消息，大家就会继续。',
+                                                                                                                                                                            'ko': '{cause} '
+                                                                                                                                                                                  '멤버에게 '
+                                                                                                                                                                                  '답변을 '
+                                                                                                                                                                                  '요청하는 '
+                                                                                                                                                                                  '것을 '
+                                                                                                                                                                                  '중단했습니다. '
+                                                                                                                                                                                  '설정에서 '
+                                                                                                                                                                                  '모델과 '
+                                                                                                                                                                                  '로그인 '
+                                                                                                                                                                                  '상태를 '
+                                                                                                                                                                                  '확인하거나 '
+                                                                                                                                                                                  '논의를 '
+                                                                                                                                                                                  '줄인 '
+                                                                                                                                                                                  '다음, '
+                                                                                                                                                                                  '여기에 '
+                                                                                                                                                                                  '다시 '
+                                                                                                                                                                                  '메시지를 '
+                                                                                                                                                                                  '쓰면 '
+                                                                                                                                                                                  '모두 '
+                                                                                                                                                                                  '이어서 '
+                                                                                                                                                                                  '진행합니다.',
+                                                                                                                                                                            'es': '{cause} '
+                                                                                                                                                                                  'He '
+                                                                                                                                                                                  'dejado '
+                                                                                                                                                                                  'de '
+                                                                                                                                                                                  'pedir '
+                                                                                                                                                                                  'respuestas '
+                                                                                                                                                                                  'a '
+                                                                                                                                                                                  'los '
+                                                                                                                                                                                  'miembros. '
+                                                                                                                                                                                  'Revisa '
+                                                                                                                                                                                  'los '
+                                                                                                                                                                                  'modelos '
+                                                                                                                                                                                  'y '
+                                                                                                                                                                                  'los '
+                                                                                                                                                                                  'inicios '
+                                                                                                                                                                                  'de '
+                                                                                                                                                                                  'sesión '
+                                                                                                                                                                                  'en '
+                                                                                                                                                                                  'Ajustes '
+                                                                                                                                                                                  'o '
+                                                                                                                                                                                  'acorta '
+                                                                                                                                                                                  'la '
+                                                                                                                                                                                  'conversación, '
+                                                                                                                                                                                  'y '
+                                                                                                                                                                                  'luego '
+                                                                                                                                                                                  'escribe '
+                                                                                                                                                                                  'aquí '
+                                                                                                                                                                                  'de '
+                                                                                                                                                                                  'nuevo '
+                                                                                                                                                                                  'para '
+                                                                                                                                                                                  'que '
+                                                                                                                                                                                  'todos '
+                                                                                                                                                                                  'continúen.',
+                                                                                                                                                                            'fr': '{cause} '
+                                                                                                                                                                                  'J’ai '
+                                                                                                                                                                                  'cessé '
+                                                                                                                                                                                  'de '
+                                                                                                                                                                                  'demander '
+                                                                                                                                                                                  'des '
+                                                                                                                                                                                  'réponses '
+                                                                                                                                                                                  'aux '
+                                                                                                                                                                                  'membres. '
+                                                                                                                                                                                  'Vérifiez '
+                                                                                                                                                                                  'les '
+                                                                                                                                                                                  'modèles '
+                                                                                                                                                                                  'et '
+                                                                                                                                                                                  'les '
+                                                                                                                                                                                  'connexions '
+                                                                                                                                                                                  'dans '
+                                                                                                                                                                                  'les '
+                                                                                                                                                                                  'Réglages '
+                                                                                                                                                                                  'ou '
+                                                                                                                                                                                  'raccourcissez '
+                                                                                                                                                                                  'la '
+                                                                                                                                                                                  'discussion, '
+                                                                                                                                                                                  'puis '
+                                                                                                                                                                                  'écrivez '
+                                                                                                                                                                                  'à '
+                                                                                                                                                                                  'nouveau '
+                                                                                                                                                                                  'ici '
+                                                                                                                                                                                  'et '
+                                                                                                                                                                                  'tout '
+                                                                                                                                                                                  'le '
+                                                                                                                                                                                  'monde '
+                                                                                                                                                                                  'reprendra.',
+                                                                                                                                                                            'de': '{cause} '
+                                                                                                                                                                                  'Ich '
+                                                                                                                                                                                  'frage '
+                                                                                                                                                                                  'die '
+                                                                                                                                                                                  'Mitglieder '
+                                                                                                                                                                                  'nicht '
+                                                                                                                                                                                  'mehr '
+                                                                                                                                                                                  'nach '
+                                                                                                                                                                                  'Antworten. '
+                                                                                                                                                                                  'Prüfe '
+                                                                                                                                                                                  'in '
+                                                                                                                                                                                  'den '
+                                                                                                                                                                                  'Einstellungen '
+                                                                                                                                                                                  'die '
+                                                                                                                                                                                  'Modelle '
+                                                                                                                                                                                  'und '
+                                                                                                                                                                                  'Anmeldungen '
+                                                                                                                                                                                  'oder '
+                                                                                                                                                                                  'kürze '
+                                                                                                                                                                                  'die '
+                                                                                                                                                                                  'Diskussion, '
+                                                                                                                                                                                  'und '
+                                                                                                                                                                                  'schreibe '
+                                                                                                                                                                                  'dann '
+                                                                                                                                                                                  'hier '
+                                                                                                                                                                                  'erneut, '
+                                                                                                                                                                                  'damit '
+                                                                                                                                                                                  'alle '
+                                                                                                                                                                                  'weitermachen.',
+                                                                                                                                                                            'pt-BR': '{cause} '
+                                                                                                                                                                                     'Parei '
+                                                                                                                                                                                     'de '
+                                                                                                                                                                                     'pedir '
+                                                                                                                                                                                     'respostas '
+                                                                                                                                                                                     'aos '
+                                                                                                                                                                                     'membros. '
+                                                                                                                                                                                     'Verifique '
+                                                                                                                                                                                     'os '
+                                                                                                                                                                                     'modelos '
+                                                                                                                                                                                     'e '
+                                                                                                                                                                                     'os '
+                                                                                                                                                                                     'logins '
+                                                                                                                                                                                     'em '
+                                                                                                                                                                                     'Configurações '
+                                                                                                                                                                                     'ou '
+                                                                                                                                                                                     'encurte '
+                                                                                                                                                                                     'a '
+                                                                                                                                                                                     'discussão '
+                                                                                                                                                                                     'e '
+                                                                                                                                                                                     'escreva '
+                                                                                                                                                                                     'aqui '
+                                                                                                                                                                                     'de '
+                                                                                                                                                                                     'novo '
+                                                                                                                                                                                     'para '
+                                                                                                                                                                                     'que '
+                                                                                                                                                                                     'todos '
+                                                                                                                                                                                     'continuem.',
+                                                                                                                                                                            'it': '{cause} '
+                                                                                                                                                                                  'Ho '
+                                                                                                                                                                                  'smesso '
+                                                                                                                                                                                  'di '
+                                                                                                                                                                                  'chiedere '
+                                                                                                                                                                                  'risposte '
+                                                                                                                                                                                  'ai '
+                                                                                                                                                                                  'membri. '
+                                                                                                                                                                                  'Controlla '
+                                                                                                                                                                                  'i '
+                                                                                                                                                                                  'modelli '
+                                                                                                                                                                                  'e '
+                                                                                                                                                                                  'gli '
+                                                                                                                                                                                  'accessi '
+                                                                                                                                                                                  'nelle '
+                                                                                                                                                                                  'Impostazioni '
+                                                                                                                                                                                  'oppure '
+                                                                                                                                                                                  'accorcia '
+                                                                                                                                                                                  'la '
+                                                                                                                                                                                  'discussione, '
+                                                                                                                                                                                  'poi '
+                                                                                                                                                                                  'scrivi '
+                                                                                                                                                                                  'di '
+                                                                                                                                                                                  'nuovo '
+                                                                                                                                                                                  'qui '
+                                                                                                                                                                                  'e '
+                                                                                                                                                                                  'tutti '
+                                                                                                                                                                                  'riprenderanno.',
+                                                                                                                                                                            'ru': '{cause} '
+                                                                                                                                                                                  'Я '
+                                                                                                                                                                                  'перестал '
+                                                                                                                                                                                  'просить '
+                                                                                                                                                                                  'участников '
+                                                                                                                                                                                  'отвечать. '
+                                                                                                                                                                                  'Проверьте '
+                                                                                                                                                                                  'модели '
+                                                                                                                                                                                  'и '
+                                                                                                                                                                                  'входы '
+                                                                                                                                                                                  'в '
+                                                                                                                                                                                  'Настройках '
+                                                                                                                                                                                  'или '
+                                                                                                                                                                                  'сократите '
+                                                                                                                                                                                  'обсуждение, '
+                                                                                                                                                                                  'а '
+                                                                                                                                                                                  'затем '
+                                                                                                                                                                                  'снова '
+                                                                                                                                                                                  'напишите '
+                                                                                                                                                                                  'здесь '
+                                                                                                                                                                                  '— '
+                                                                                                                                                                                  'все '
+                                                                                                                                                                                  'продолжат.',
+                                                                                                                                                                            'vi': '{cause} '
+                                                                                                                                                                                  'Tôi '
+                                                                                                                                                                                  'đã '
+                                                                                                                                                                                  'ngừng '
+                                                                                                                                                                                  'nhờ '
+                                                                                                                                                                                  'các '
+                                                                                                                                                                                  'thành '
+                                                                                                                                                                                  'viên '
+                                                                                                                                                                                  'trả '
+                                                                                                                                                                                  'lời. '
+                                                                                                                                                                                  'Hãy '
+                                                                                                                                                                                  'kiểm '
+                                                                                                                                                                                  'tra '
+                                                                                                                                                                                  'mô '
+                                                                                                                                                                                  'hình '
+                                                                                                                                                                                  'và '
+                                                                                                                                                                                  'đăng '
+                                                                                                                                                                                  'nhập '
+                                                                                                                                                                                  'trong '
+                                                                                                                                                                                  'Cài '
+                                                                                                                                                                                  'đặt '
+                                                                                                                                                                                  'hoặc '
+                                                                                                                                                                                  'rút '
+                                                                                                                                                                                  'ngắn '
+                                                                                                                                                                                  'cuộc '
+                                                                                                                                                                                  'thảo '
+                                                                                                                                                                                  'luận, '
+                                                                                                                                                                                  'rồi '
+                                                                                                                                                                                  'viết '
+                                                                                                                                                                                  'lại '
+                                                                                                                                                                                  'ở '
+                                                                                                                                                                                  'đây '
+                                                                                                                                                                                  'để '
+                                                                                                                                                                                  'mọi '
+                                                                                                                                                                                  'người '
+                                                                                                                                                                                  'tiếp '
+                                                                                                                                                                                  'tục.',
+                                                                                                                                                                            'th': '{cause} '
+                                                                                                                                                                                  'ฉันหยุดขอให้สมาชิกตอบแล้ว '
+                                                                                                                                                                                  'โปรดตรวจสอบโมเดลและการเข้าสู่ระบบในการตั้งค่า '
+                                                                                                                                                                                  'หรือย่อการสนทนาให้สั้นลง '
+                                                                                                                                                                                  'แล้วเขียนที่นี่อีกครั้งเพื่อให้ทุกคนทำต่อ',
+                                                                                                                                                                            'id': '{cause} '
+                                                                                                                                                                                  'Saya '
+                                                                                                                                                                                  'berhenti '
+                                                                                                                                                                                  'meminta '
+                                                                                                                                                                                  'anggota '
+                                                                                                                                                                                  'membalas. '
+                                                                                                                                                                                  'Periksa '
+                                                                                                                                                                                  'model '
+                                                                                                                                                                                  'dan '
+                                                                                                                                                                                  'status '
+                                                                                                                                                                                  'masuk '
+                                                                                                                                                                                  'di '
+                                                                                                                                                                                  'Pengaturan '
+                                                                                                                                                                                  'atau '
+                                                                                                                                                                                  'persingkat '
+                                                                                                                                                                                  'diskusi, '
+                                                                                                                                                                                  'lalu '
+                                                                                                                                                                                  'tulis '
+                                                                                                                                                                                  'lagi '
+                                                                                                                                                                                  'di '
+                                                                                                                                                                                  'sini '
+                                                                                                                                                                                  'agar '
+                                                                                                                                                                                  'semua '
+                                                                                                                                                                                  'melanjutkan.',
+                                                                                                                                                                            'tr': '{cause} '
+                                                                                                                                                                                  'Üyelerden '
+                                                                                                                                                                                  'yanıt '
+                                                                                                                                                                                  'istemeyi '
+                                                                                                                                                                                  'bıraktım. '
+                                                                                                                                                                                  'Ayarlar’da '
+                                                                                                                                                                                  'modelleri '
+                                                                                                                                                                                  've '
+                                                                                                                                                                                  'oturumları '
+                                                                                                                                                                                  'kontrol '
+                                                                                                                                                                                  'edin '
+                                                                                                                                                                                  'ya '
+                                                                                                                                                                                  'da '
+                                                                                                                                                                                  'tartışmayı '
+                                                                                                                                                                                  'kısaltın, '
+                                                                                                                                                                                  'sonra '
+                                                                                                                                                                                  'buraya '
+                                                                                                                                                                                  'yeniden '
+                                                                                                                                                                                  'yazın; '
+                                                                                                                                                                                  'herkes '
+                                                                                                                                                                                  'devam '
+                                                                                                                                                                                  'edecek.'},
+ '{n} replies in a row failed because they were longer than the model can read.': {'zh-CN': '连续 {n} '
+                                                                                            '次回复因内容超出模型一次能读的长度而失败。',
+                                                                                   'ko': '답변 {n}회 연속으로 모델이 읽을 수 있는 길이를 '
+                                                                                         '넘어 실패했습니다.',
+                                                                                   'es': '{n} respuestas seguidas '
+                                                                                         'fallaron porque eran más '
+                                                                                         'largas de lo que el modelo '
+                                                                                         'puede leer.',
+                                                                                   'fr': '{n} réponses de suite ont '
+                                                                                         'échoué parce qu’elles '
+                                                                                         'dépassaient ce que le modèle '
+                                                                                         'peut lire.',
+                                                                                   'de': '{n} Antworten in Folge sind '
+                                                                                         'fehlgeschlagen, weil sie '
+                                                                                         'länger waren, als das Modell '
+                                                                                         'lesen kann.',
+                                                                                   'pt-BR': '{n} respostas seguidas '
+                                                                                            'falharam por serem '
+                                                                                            'maiores do que o modelo '
+                                                                                            'consegue ler.',
+                                                                                   'it': '{n} risposte di seguito sono '
+                                                                                         'fallite perché più lunghe di '
+                                                                                         'quanto il modello riesca a '
+                                                                                         'leggere.',
+                                                                                   'ru': '{n} ответов подряд не '
+                                                                                         'удались, потому что они '
+                                                                                         'длиннее, чем модель может '
+                                                                                         'прочитать.',
+                                                                                   'vi': '{n} câu trả lời liên tiếp '
+                                                                                         'thất bại vì dài hơn mức mô '
+                                                                                         'hình có thể đọc.',
+                                                                                   'th': 'การตอบ {n} '
+                                                                                         'ครั้งติดต่อกันล้มเหลวเพราะยาวเกินกว่าที่โมเดลจะอ่านได้',
+                                                                                   'id': '{n} balasan berturut-turut '
+                                                                                         'gagal karena lebih panjang '
+                                                                                         'dari yang bisa dibaca model.',
+                                                                                   'tr': '{n} yanıt üst üste, modelin '
+                                                                                         'okuyabileceğinden uzun '
+                                                                                         'oldukları için başarısız '
+                                                                                         'oldu.'},
+ '{n} replies in a row did not finish because the model or its service failed.': {'zh-CN': '连续 {n} 次回复因模型或服务出问题而没有完成。',
+                                                                                  'ko': '답변 {n}회 연속으로 모델 또는 서비스 문제로 '
+                                                                                        '완료되지 않았습니다.',
+                                                                                  'es': '{n} respuestas seguidas no '
+                                                                                        'terminaron porque falló el '
+                                                                                        'modelo o su servicio.',
+                                                                                  'fr': '{n} réponses de suite ne se '
+                                                                                        'sont pas terminées car le '
+                                                                                        'modèle ou son service a '
+                                                                                        'échoué.',
+                                                                                  'de': '{n} Antworten in Folge wurden '
+                                                                                        'nicht fertig, weil das Modell '
+                                                                                        'oder sein Dienst ausgefallen '
+                                                                                        'ist.',
+                                                                                  'pt-BR': '{n} respostas seguidas não '
+                                                                                           'terminaram porque o modelo '
+                                                                                           'ou o serviço falhou.',
+                                                                                  'it': '{n} risposte di seguito non '
+                                                                                        'sono terminate perché il '
+                                                                                        'modello o il suo servizio ha '
+                                                                                        'avuto un problema.',
+                                                                                  'ru': '{n} ответов подряд не '
+                                                                                        'завершились из-за сбоя модели '
+                                                                                        'или её сервиса.',
+                                                                                  'vi': '{n} câu trả lời liên tiếp '
+                                                                                        'không hoàn tất vì mô hình '
+                                                                                        'hoặc dịch vụ của nó gặp lỗi.',
+                                                                                  'th': 'การตอบ {n} '
+                                                                                        'ครั้งติดต่อกันไม่เสร็จสิ้นเพราะโมเดลหรือบริการของโมเดลขัดข้อง',
+                                                                                  'id': '{n} balasan berturut-turut '
+                                                                                        'tidak selesai karena model '
+                                                                                        'atau layanannya bermasalah.',
+                                                                                  'tr': '{n} yanıt üst üste, model ya '
+                                                                                        'da hizmeti arızalandığı için '
+                                                                                        'tamamlanmadı.'},
+ '{n} hand-offs in a row were refused because that work already has an owner.': {'zh-CN': '连续 {n} '
+                                                                                          '次交办都被拒绝，因为那项工作已经有人负责。',
+                                                                                 'ko': '업무 전달 {n}회 연속으로 해당 작업에 이미 담당자가 '
+                                                                                       '있어 거절되었습니다.',
+                                                                                 'es': '{n} encargos seguidos fueron '
+                                                                                       'rechazados porque ese trabajo '
+                                                                                       'ya tiene responsable.',
+                                                                                 'fr': '{n} délégations de suite ont '
+                                                                                       'été refusées car ce travail a '
+                                                                                       'déjà un responsable.',
+                                                                                 'de': '{n} Übergaben in Folge wurden '
+                                                                                       'abgelehnt, weil diese Arbeit '
+                                                                                       'bereits eine verantwortliche '
+                                                                                       'Person hat.',
+                                                                                 'pt-BR': '{n} delegações seguidas '
+                                                                                          'foram recusadas porque esse '
+                                                                                          'trabalho já tem um '
+                                                                                          'responsável.',
+                                                                                 'it': '{n} deleghe di seguito sono '
+                                                                                       'state rifiutate perché quel '
+                                                                                       'lavoro ha già un responsabile.',
+                                                                                 'ru': '{n} поручений подряд '
+                                                                                       'отклонены, потому что у этой '
+                                                                                       'работы уже есть ответственный.',
+                                                                                 'vi': '{n} lần giao việc liên tiếp bị '
+                                                                                       'từ chối vì công việc đó đã có '
+                                                                                       'người phụ trách.',
+                                                                                 'th': 'การมอบหมายงาน {n} '
+                                                                                       'ครั้งติดต่อกันถูกปฏิเสธเพราะงานนั้นมีผู้รับผิดชอบอยู่แล้ว',
+                                                                                 'id': '{n} penugasan berturut-turut '
+                                                                                       'ditolak karena pekerjaan itu '
+                                                                                       'sudah ada penanggung jawabnya.',
+                                                                                 'tr': '{n} görev devri üst üste '
+                                                                                       'reddedildi çünkü bu işin zaten '
+                                                                                       'bir sahibi var.'}})

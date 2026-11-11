@@ -50,7 +50,9 @@ A snapshot is the offer, not the permission. Every call is judged again by the g
 changed since the snapshot is refused, listed or not.
 """
 
+import difflib
 import json
+import re
 from collections.abc import Collection, Sequence
 from dataclasses import dataclass, field
 from typing import Any
@@ -65,6 +67,7 @@ from ..agent.harness_tools import CALENDAR_TOOLS, DEFINITIONS as HARNESS_DEFINIT
 from ..memory.growth import DEFINITIONS as MEMORY_DEFINITIONS
 from ..agent.owner_questions import BACKGROUND_TOOLS
 from ..agent.harness_tools import ROUTINE_TOOLS
+from ..agent.team_admin import TEAM_READS
 from ..computer.tools import PRESENCE_TOOLS
 from ..agent.toolpick import first_sentence, scored
 
@@ -295,6 +298,21 @@ class Snapshot:
         call use_tool would make."""
         return self.refs.get(name) or self.reveal(name)
 
+    def nearest(self, name: Any, count: int = 5) -> list[str]:
+        """The tools of the task whose names are closest to `name`, a name that is none of them: what a model that
+        called a tool by a name it was given in its instructions (or made up) is told, so that the run goes on with
+        the real one (owner, 2026-11-11: `unknown_tool` four times in a health check)."""
+        if not isinstance(name, str) or not name.strip():
+            return []
+        names = sorted({*self.catalog(), *self.refs, FIND_TOOLS, USE_TOOL})
+        wanted = name.strip().casefold()
+        close = difflib.get_close_matches(wanted, [item.casefold() for item in names], n=count, cutoff=0.5)
+        by_fold = {item.casefold(): item for item in names}
+        found = [by_fold[item] for item in close]
+        words = {word for word in re.split(r"[^a-z0-9]+", wanted) if len(word) > 2}
+        found += [item for item in names if item not in found and words & set(re.split(r"[^a-z0-9]+", item.casefold()))]
+        return found[:count]
+
     def use(self, arguments: Any) -> tuple[str, dict[str, Any]] | str:
         """The tool a use_tool call names and the arguments it gives that tool, the tool callable from
         now on; or why the call cannot be made (`USE_REFUSALS`): "bad_arguments", "unavailable" for the
@@ -416,6 +434,7 @@ def take_snapshot(
     turned_off: Collection[str] = (),
     owner_management: bool = True,
     background_management: bool = False,
+    routine: bool = False,
 ) -> Snapshot:
     """The tools a task starting now may use. What is listed follows the member and the kind of work,
     never the request (decision 2, above): with `memory`, the memory's tools that read too (the
@@ -423,7 +442,7 @@ def take_snapshot(
     owner's own chat (`interactive`) the harness's tools for the owner at the PC, with the owner's
     management found (`owner_management`); in the background the owner's questions, routines and the
     memory's own tools, with member management found when the work is private
-    (`background_management`). A plugin that fails to list its tools is left out. Every speaker shares
+    (`background_management`); a routine's run (`routine`) lists the team reads too. A plugin that fails to list its tools is left out. Every speaker shares
     the enabled tools and connections; `team` are the team tools allowed by the request's depth and
     cycle guards (`agent.team`: asking another member, adding one), T1 like the plugins' tools that are
     on. `turned_off` are the tools of Raphael's own that the owner switched off (`Tools.turned_off`):
@@ -462,6 +481,14 @@ def take_snapshot(
                   *((*sorted(BACKGROUND_TOOLS), *sorted(ROUTINE_TOOLS)) if not interactive else ()))
     for name in everywhere:
         native(name, HARNESS_DEFINITIONS[name])
+    # Work that runs by itself reads the team as its member does in the conversation (`team_overview`, `team_work`: reads
+    # only, T0): a routine's run lists them, as a conversation does, because its instructions name them (owner, 2026-11-11:
+    # a health check called them and got `unknown_tool`, four times); other background work finds them.
+    for name in () if interactive else sorted(TEAM_READS):
+        if routine:
+            own(name, harness_tool(name).tier, HARNESS_DEFINITIONS[name])
+        else:
+            snapshot.work[name] = HARNESS_DEFINITIONS[name]
     if interactive:
         from ..management import MANAGEMENT_TOOLS
         for name, item in definitions_for(speaker):
@@ -480,8 +507,9 @@ def take_snapshot(
         for name, item in MEMORY_DEFINITIONS.items():
             own(name, harness_tool(name).tier, item)
     if background_management:
-        from ..management import BACKGROUND_MEMBER_TOOLS, DEFINITIONS as management_definitions
-        snapshot.management.update({name: item for name, item in management_definitions.items() if name in BACKGROUND_MEMBER_TOOLS})
+        from ..management import BACKGROUND_MEMBER_TOOLS, BACKGROUND_READS, DEFINITIONS as management_definitions
+        snapshot.management.update({name: item for name, item in management_definitions.items()
+                                    if name in BACKGROUND_MEMBER_TOOLS or name in BACKGROUND_READS})
     if plugins is not None:
         try:
             tools = [

@@ -190,6 +190,8 @@ export interface CatalogModel {
   input_modalities?: string[];
   /** The roles of its kind. */
   roles: Partial<Record<ModelRole, RoleFit>>;
+  /** `subscription`: the owner's own plan serves it (Codex's drawing model), so it has no price per token. */
+  billing_source?: string;
 }
 
 /** A chosen model that OpenRouter no longer lists, whose setting went back to its default. */
@@ -514,11 +516,21 @@ export interface ConnectorCard {
    * What connecting it asks of the owner: a sign-in only (the default), their own key, a developer app of their own, or
    * (`own_server`) the address and token of a server of their own, such as n8n.
    */
-  needs?: AppNeeds | "own_server";
+  needs?: AppNeeds | "own_server" | "own_google";
   /** The Composio toolkit the form for `needs` is read from. */
   toolkit?: string;
-  /** An own server's fields, given by the card itself (`connectors/cards.py`): never their values. */
+  /** An own server's or the owner's own Google's fields, given by the card itself (`connectors/cards.py`): never their values. */
   fields?: { name: string; label: string; required: boolean; secret: boolean; description?: string }[];
+  /** A short reason the named cause (`error`, a cause of the core's `CAUSES`) carries: the service's own words when it refused, the technical reason when nothing could be named. */
+  detail?: string | null;
+  /** Whether pressing again can help. */
+  retry?: boolean;
+  /** What the owner puts right first: the Composio key in Connections (`settings`), or what the card asks for (`form`). */
+  fix?: "settings" | "form" | null;
+  /** The owner's own Google: what to copy into Google Cloud, and whether a Client ID is kept so that the card asks only for the sign-in. */
+  google?: { redirect: string; scopes: string[]; configured: boolean };
+  /** The Google account that signed in, once connected. */
+  account?: string;
 }
 
 /** A secret card: a key a connection needs and has none of, and where saving it stands. Never the key itself. */
@@ -561,6 +573,9 @@ export interface TemplateCard {
   connections: string[];
   findings: { kind: "secret" | "injection"; path: string }[];
   url?: string;
+  /** Where the files of a prepared publish request are (a published card only), and the 16 characters that name that folder. */
+  folder?: string;
+  folder_id?: string;
 }
 
 /** A computer card: the owner's turn at the computer for a sign-in, a password or a payment. Never what was on screen. */
@@ -869,7 +884,9 @@ export type MainEvent =
   /** The question `id` was answered (here or on the overlay), ran out or was dropped. */
   | { type: "AgentQuestionClosed"; id: string }
   /** The microphone's loudness, 0 to 1, while a question to Raphael is recorded (never a dictation's). */
-  | { type: "VoiceLevel"; value: number };
+  | { type: "VoiceLevel"; value: number }
+  /** A member template file was opened from the file manager: the window takes its text (`memberTemplatePending`) and shows the import review. */
+  | { type: "TemplateFile" };
 
 /** A YES/NO question of Raphael's that waits for its answer (`AgentQuestion`, `agent_question_open`). */
 export interface AgentQuestion {
@@ -1099,6 +1116,8 @@ export interface HandoffView {
   /** Null for a quick question (`ask_member`), which has no task: `work_turn_id` is its record. */
   task_id: number | null; source_turn_id: number; work_turn_id: number; member_id: number;
   member_name: string; from_member_id: number; stage_id: string; mode: "work" | "consult";
+  /** What the work is called: the first words of its request. `stage_id` is the member's key for the system and is never shown. */
+  title?: string;
   state: string; reason: string | null; created_at_ms: number; ready_at_ms: number;
   dispatch_policy: "immediate"; result: string;
   /** What was sent to the colleague: a consultation's question. */
@@ -1137,6 +1156,8 @@ export interface Routine {
   app_name?: string;
   last_checked?: number | null;
   last_error?: string;
+  /** The latest run that ended did not work: `last_error` says why (the core writes it in the owner's words). */
+  last_failed?: boolean;
   enabled: boolean;
   last_run: number | null;
   next_run: number | null;

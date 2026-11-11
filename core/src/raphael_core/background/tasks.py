@@ -67,6 +67,14 @@ def _asker_key(turn_id: int) -> str:
     return hashlib.sha256(json.dumps(["asker", turn_id]).encode()).hexdigest()
 
 
+# The most work one reply in a room may hand off (a room holds six, and a reply gives each colleague one piece), and the
+# most that starts in one room thread between two messages of the owner's: the bound a single task already has on its own
+# fan-out (`background.service.MAX_HANDOFFS`). Live, one member ran about 87 background tasks in a meeting nobody had asked
+# for them in.
+MAX_TURN_HANDOFFS = 6
+MAX_THREAD_HANDOFFS = 24
+
+
 class Refused(Exception):
     """A task cannot be taken. `kind` names the phrase that says why (`persona.Phrases`):
     "worker_disabled" (the worker crashed too often). A long queue is no reason: work waits its turn."""
@@ -266,6 +274,20 @@ class TaskStore:
                                        (scope_key, stage)).fetchone()
             if owner and (parent is None or owner[0] != parent.id or mode == 'consult'):
                 raise Refused('stage_conflict')
+            if scope_key.startswith('room:'):
+                # The same work for the same colleague under another stage_id is the same work: a refusal is not mended by a
+                # new code (live, eight refused hand-offs were sent again that way).
+                # Since the owner last wrote in the thread: a request he makes again is new work.
+                _, room_id, thread_id = scope_key.split(':')
+                since = self._conn.execute("SELECT COALESCE(MAX(created),0) FROM room_messages WHERE room_id=? AND thread_id IS ? AND member_id IS NULL",
+                                           (int(room_id), None if thread_id == 'None' else int(thread_id))).fetchone()[0]
+                if self._conn.execute(
+                        "SELECT 1 FROM task_stage_owners o JOIN worker_tasks w ON w.id=o.owner_task_id WHERE o.scope_key=? "
+                        "AND o.stage_id!=? AND w.member_id=? AND w.text=? AND w.mode=? AND w.created_at_ms>=? AND w.state NOT IN "
+                        "('failed','cancelled','interrupted','limit')", (scope_key, stage, assignee, request, mode, since)).fetchone():
+                    raise Refused('stage_conflict')
+                if self.room_handoffs_used(source, parent):
+                    raise Refused('handoff_limit')
             if parent and self.get(parent.id).state not in ('running', 'queued'):
                 raise Refused('cancelled')
         own_lane = source.scope == 'private' and assignee == source.member_id
@@ -310,6 +332,22 @@ class TaskStore:
             self._conn.execute("INSERT INTO task_outbox VALUES (?,?, 'queued',?,?,?,?,NULL,NULL)",
                 (f'{task_id}:queued',task_id,source.id,source.room_id,source.thread_id,now))
         return task_id, False
+
+    def room_handoffs_used(self, source, parent):
+        """Whether the work handed off from a reply in a room is at its bound: this reply's own
+        (`MAX_TURN_HANDOFFS`), or the room thread's since the owner last wrote in it (`MAX_THREAD_HANDOFFS`)."""
+        room = source.room_id if source.scope == 'room' else parent.report_room_id if parent else None
+        thread = source.thread_id if source.scope == 'room' else parent.report_thread_id if parent else None
+        if room is None:
+            return False
+        if source.scope == 'room' and self._conn.execute(
+                "SELECT COUNT(*) FROM worker_tasks WHERE source_turn_id=? AND mode IS NOT NULL", (source.id,)).fetchone()[0] >= MAX_TURN_HANDOFFS:
+            return True
+        since = self._conn.execute("SELECT COALESCE(MAX(created),0) FROM room_messages WHERE room_id=? AND thread_id IS ? AND member_id IS NULL",
+                                   (room, thread)).fetchone()[0]
+        return self._conn.execute(
+            "SELECT COUNT(*) FROM worker_tasks WHERE report_room_id=? AND report_thread_id IS ? AND mode IS NOT NULL AND created_at_ms>=?",
+            (room, thread, since)).fetchone()[0] >= MAX_THREAD_HANDOFFS
 
     def _work_exchange(self, task_id, source, assignee, request, model, conversation, now):
         """A separate audit of the brief, inserted before the owner's work turn."""

@@ -205,11 +205,28 @@ export function ownServerForm(id: string): { name: string; urlHint: string; head
   return { name: preset.name, urlHint: preset.urlHint ?? "", header, prefix };
 }
 
-/** The store entries of `PRESET_FORMS`, marked added when a connection already is that app. */
+/**
+ * The owner's own Google: the store's row for Gmail and Calendar through a Google Cloud client of their own, no Composio. Like n8n it
+ * is set up in the conversation (the member shows the card that walks the steps and takes the Client ID and Client secret), so its
+ * 加入 leaves for the composer; it is marked added once that connection exists. It is the store's only, never the guide's.
+ */
+export const OWN_GOOGLE = "google";
+export function ownGoogleEntry(googleId: string | null): StoreService {
+  const said = (key: "plugins.googleDescription" | "store.googleAbout"): Words => { const text = t(key); return { "zh-TW": text, en: text, ja: text }; };
+  const examples = [t("store.googleSetUp")];
+  return {
+    id: OWN_GOOGLE, name: t("plugins.privateGoogle"), publisher: "Google", url: "", category: "productivity", icon: "gmail", popular: false, auth: "none",
+    summary: said("plugins.googleDescription"), about: said("store.googleAbout"), examples: { "zh-TW": examples, en: examples, ja: examples },
+    server_id: googleId,
+  };
+}
+
+/** The store entries of `PRESET_FORMS` and the owner's own Google, marked added when a connection already is that app. */
 function presetEntries(v: ConnectionsView): StoreService[] {
   if (!Array.isArray(v.catalog)) return [];
   const groups = Array.isArray(v.groups) ? v.groups : [];
-  return ownServerApps((icon) => groups.find((g) => serviceIconOf({ name: g.name, url: g.url }) === icon)?.id ?? null);
+  return [...ownServerApps((icon) => groups.find((g) => serviceIconOf({ name: g.name, url: g.url }) === icon)?.id ?? null),
+    ownGoogleEntry(groups.find((g) => g.source === "google")?.id ?? null)];
 }
 
 // ---------- words ----------
@@ -544,7 +561,7 @@ function joinControl(s: StoreService, v: ConnectionsView, deferIcon = false): st
 }
 
 /** An app set up in the conversation rather than here: a server of the owner's own, or a developer app of theirs. */
-const inChat = (s: StoreService): boolean => !!PRESET_FORMS[s.id] || s.needs === "own_app";
+const inChat = (s: StoreService): boolean => !!PRESET_FORMS[s.id] || s.id === OWN_GOOGLE || s.needs === "own_app";
 
 /**
  * What adding the entry asks of the owner, in words, for the row and the page to show before anything is pressed: only a key.
@@ -1468,7 +1485,7 @@ export function createConnections(host: ConnectionsHost): Connections {
         // A sign-in, or one key, is done here at once. Anything more (a server of the owner's own, a developer app) is set
         // up in the conversation, where the member says what it needs and explains it (owner, 2026-11-09: 「一律全部都在對話中
         // 進行…除非真的是登入就結束 或是輸入金鑰匙就結束」).
-        if (inChat(entry)) { host.tryPrompt(t("store.setUpInChat", { p0: entry.name })); break; }
+        if (inChat(entry)) { host.tryPrompt(entry.id === OWN_GOOGLE ? t("store.googleSetUp") : t("store.setUpInChat", { p0: entry.name })); break; }
         if (entry.needs === "key") void addWithForm(entry, entry.needs);
         else void signIn({ catalog_id: entry.id }, entry.name, false);
         break;

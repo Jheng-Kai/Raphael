@@ -66,7 +66,7 @@ DEFINITIONS = {
     "team_overview": definition("Read a compact complete roster: IDs, names, roles, models and counts. Supply member_id for that member's full brain, grants, tools, skills, commands and routines. Rooms are limited to the caller's own membership.",
                                 {"member_id": {"type": "integer", "minimum": 0}}),
     "team_work": definition("Read the team's recorded work for a report or status overview (報告, 統整, 總覽, 進度, 狀況, report, overview, status, progress): each member's role, recent finished and failed work, unfinished work, what waits for the owner, routines, outputs and hand-offs between members. "
-                            "Read-only; every item is a stored record with its local time and nothing is estimated: write only these facts and say what is unknown. Only in the owner's private chat. member_id narrows it to one member; days (1-30, default 14) is the window.",
+                            "Read-only; every item is a stored record with its local time and nothing is estimated: write only these facts and say what is unknown. Only in the owner's private chat and in your own routines' runs. member_id narrows it to one member; days (1-30, default 14) is the window.",
                             {"member_id": {"type": "integer", "minimum": 0},
                              "days": {"type": "integer", "minimum": 1, "maximum": 30}}),
     **MANAGEMENT_DEFINITIONS,

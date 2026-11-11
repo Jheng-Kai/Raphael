@@ -6,19 +6,30 @@ A card is a row of `connect_cards`, bound to the turn whose task asked for the a
 
     pending ── Connect ──> authorizing ──> connected
        ^                       |  |
-       |                       |  +──> failed (denied, timeout, scope, state, needs_composio_key, needs_key, ...)
+       |                       |  +──> failed (a named cause: `CAUSES`)
        +── Connect again <─────+─────> cancelled (the owner's Cancel)
     pending, failed or cancelled ── CARD_WAIT_MS ──> expired
 
 `integrations.card_connect {id, fields?}` answers at once and signs in in the background: through the owner's
 own Google authorization when it is configured (a loopback callback with PKCE and a `state`), else
-through Composio; with neither, the card fails with `needs_composio_key` and no browser opens. An app that
+through Composio; with neither, the card fails with `needs_composio_key` and no browser opens. The app `google`
+(`OWN_GOOGLE`) is the owner's own Google on purpose: its card walks the Google Cloud steps and takes the Client ID and
+Client secret as `fields` (the secret goes to the vault through `connectors.google.configure`, as the Composio key and
+every other secret does), then signs in in the browser, and says which account connected. An app that
 signs in with the owner's own key or developer app (`needs` "key", "own_app") is given its `fields` by the
 window's form: they go to `connectors.connect` in memory and nowhere else (no row, no event, no log, no
 reply), and the model never sees them. A card that failed for want of something says exactly what and where
 (`needs_composio_key`, `needs_key`, `needs_own_app`, `key_rejected`), to the owner and to the member. Connected
 means the app's read tools can be called now, so a sign-in that granted less (a partial consent) is
 `scope`, never connected. `integrations.card_cancel {id}` ends a sign-in under way.
+
+A card that did not connect always says why. Every way an attempt can fail is a cause of `CAUSES`, with a retry flag
+(can pressing again help?) and a `fix` where the owner has to put something right first (`settings`: the Composio key in
+Connections; `form`: what the card asks for). The window words each cause itself; the member is told the same cause as
+data (`cause <name>: <what happened>`), so that it explains rather than says "press again". What the code cannot name is
+`unknown`, with a short technical reason (`detail`, never JSON or a trace) that the card folds under its details. The
+case that used to be bare was an attempt that failed before any request was sent: another sign-in or the connection
+list still held the connector (`busy`), the vault could not be read (`vault`), the browser could not be opened (`browser`).
 
 When every card of a turn is connected, that turn's task resumes, once (`resume`, which the agent
 supplies): the claim is one conditional update, so a replayed callback or a second Connect finds
@@ -37,9 +48,9 @@ from dataclasses import dataclass
 
 from ..clock import wall_clock_ms
 from ..protocol import RpcError, invalid_params
-from .apps import APPS, SERVER_APPS, App, catalog_apps
+from .apps import APPS, OWN_GOOGLE, SERVER_APPS, App, catalog_apps
 from .composio import KEY
-from .google import PREFIX
+from .google import LOOPBACK, PREFIX, TOOLS, scopes_for
 from .service import GOOGLE_SERVER
 from .toolkits import SIGN_IN
 from ..failures import Failure, Missing, classify
@@ -58,16 +69,130 @@ MOVES: dict[str, tuple[str, ...]] = {
     "connected": (),
     "expired": (),
 }
-# What a sign-in that did not connect says, by what the provider called it. Anything else is "error".
-_FAILURES = {
-    "denied": "denied", "access_denied": "denied", "timeout": "timeout", "expired": "timeout",
-    "state": "state", "missing_scopes": "scope", "scope": "scope", "not_configured": "not_configured",
-    "missing_key": "needs_composio_key", "needs_key": "needs_key", "needs_own_app": "needs_own_app",
-    "key_rejected": "key_rejected",
+
+
+@dataclass(frozen=True)
+class Cause:
+    """Why a card did not connect. `said` is what happened and the one thing to do, in English, for the member (the
+    window has its own words for the owner). `retry`: pressing again can help. `fix`: what the owner puts right first."""
+    name: str
+    retry: bool
+    kind: str
+    said: str
+    fix: str = ""  # "settings": the Composio key in Settings > Connections > Store; "form": what the card asks for
+
+
+CAUSES: dict[str, Cause] = {cause.name: cause for cause in (
+    # Nothing was sent: the attempt never left this PC.
+    Cause("busy", True, "network", "Another sign-in, or the list of connections, was still working on this PC, so nothing was sent. Wait a moment, then press Connect again."),
+    Cause("vault", True, "tool_broken", "Raphael could not read its secure key store on this PC, so nothing was sent. Check that Windows Credential Manager works, then press Connect again."),
+    Cause("browser", True, "tool_broken", "Raphael could not open the browser for the sign-in. Open a browser on this PC, then press Connect again."),
+    # This PC and the service.
+    Cause("network", True, "network", "This PC could not reach the service (offline, a firewall or a proxy). Check the connection, then press Connect again."),
+    Cause("no_answer", True, "timeout", "The service did not answer in time. Try again in a moment."),
+    Cause("service_down", True, "server", "The service reported a fault on its own side. Try again later."),
+    Cause("rate_limit", True, "rate_limit", "The service is limiting requests right now. Try again in a few minutes."),
+    Cause("refused", False, "refused", "The service refused the request."),
+    Cause("invalid_request", True, "invalid_request", "The service could not accept the format of this version's request. Update Raphael, then try again."),
+    Cause("not_found", False, "not_found", "The service has no such app or address any more (it may have been removed)."),
+    Cause("bad_response", True, "tool_broken", "The service answered in a form Raphael cannot read. Try again; if it keeps happening the service may have changed."),
+    Cause("address", True, "tool_broken", "The service sent a sign-in address that does not belong to it, so Raphael did not open it. Try again."),
+    Cause("not_allowed", False, "permission_denied", "Composio does not allow this app for the owner's project. The owner can allow it in the Composio dashboard."),
+    # The keys and the owner's own setup.
+    Cause("needs_composio_key", False, "auth_expired", "Composio's API key is missing. The owner adds it in Settings > Connections > Store.", "settings"),
+    Cause("key_refused", False, "auth_expired", "Composio refused its API key. The owner checks or replaces it in Settings > Connections > Store.", "settings"),
+    Cause("not_configured", False, "auth_expired", "Raphael's own Google sign-in is not set up.", "settings"),
+    Cause("needs_key", False, "auth_expired", "This app signs in with the owner's own key, which the card asks for.", "form"),
+    Cause("needs_own_app", False, "auth_expired", "This app needs a developer app of the owner's own, which the card asks for.", "form"),
+    Cause("key_rejected", False, "auth_expired", "The app did not accept the key the owner entered. The owner enters it again on the card.", "form"),
+    Cause("needs_own_google", False, "auth_expired", "The owner's own Google needs the Client ID and Client secret of a Desktop client from their Google Cloud project, entered on the card.", "form"),
+    Cause("client_rejected", False, "auth_expired", "Google did not accept the Client ID or Client secret. The owner checks them in Google Cloud and enters them again on the card.", "form"),
+    # A server of the owner's own (n8n).
+    Cause("needs_server_fields", False, "auth_expired", "The server's address and access token are missing; the card asks for both.", "form"),
+    Cause("server_address", False, "invalid_request", "The server address is not valid. The owner copies it again from the server's MCP settings.", "form"),
+    Cause("server_auth", False, "auth_expired", "The server did not accept the access token. The owner copies a current one from the server's MCP settings.", "form"),
+    Cause("server_unreachable", True, "network", "The server could not be reached. Check that it is running and that the address on the card is right."),
+    # The sign-in itself.
+    Cause("denied", True, "permission_denied", "The owner declined access in the browser."),
+    Cause("timeout", True, "timeout", "The sign-in was not finished in time."),
+    Cause("state", True, "auth_expired", "The answer to the sign-in did not match this attempt, so it was ignored. Start the sign-in again."),
+    Cause("scope", True, "permission_denied", "The sign-in did not grant all the access this app's tools need. Sign in again and allow everything that is asked."),
+    Cause("signin_failed", True, "auth_expired", "The service ended the sign-in without connecting."),
+    Cause("signin_expired", True, "auth_expired", "Google no longer accepts that sign-in. Sign in again. A Google Cloud project left in Testing makes sign-ins last only 7 days; publishing it to production avoids that."),
+    Cause("no_refresh", True, "auth_expired", "Google signed in but gave no long-lived sign-in, so Raphael could not keep the connection. Sign in again and accept everything that is asked."),
+    Cause("api_disabled", True, "permission_denied", "Google signed in, but the Gmail API is not turned on in the owner's Google Cloud project. The owner turns on the Gmail API and the Google Calendar API there, then connects again."),
+    Cause("mcp_unavailable", False, "tool_broken", "The app connected, but its tools could not be loaded."),
+    Cause("interrupted", True, "cli_stopped", "The sign-in was cut off before it finished. Try again."),
+    Cause("unknown", True, "unknown", "Raphael could not tell why it did not connect."),
+)}
+# What a provider calls a failure, as the cause the owner is told. The few that depend on more than their name (a status,
+# where it happened, a message) are decided in `_cause_of`.
+_RAW = {
+    "denied": "denied", "access_denied": "denied", "timeout": "timeout", "expired": "timeout", "state": "state",
+    "missing_scopes": "scope", "scope": "scope", "not_configured": "not_configured", "missing_key": "needs_composio_key",
+    "needs_key": "needs_key", "needs_own_app": "needs_own_app", "key_rejected": "key_rejected", "busy": "busy",
+    "network": "network", "rate_limit": "rate_limit", "gone": "not_found", "protocol": "bad_response",
+    "response": "bad_response", "pagination": "bad_response", "account_mismatch": "bad_response", "untrusted_url": "address",
+    "reconnect": "signin_expired", "toolkit_not_allowed": "not_allowed", "browser": "browser",
+    "missing_refresh_token": "no_refresh", "invalid_client": "client_rejected", "api_disabled": "api_disabled",
+    "mcp_unavailable": "mcp_unavailable", "failed": "signin_failed", "inactive": "signin_failed", "revoked": "signin_failed",
+    "cancelled": "interrupted", "interrupted": "interrupted", "needs_own_google": "needs_own_google",
 }
 # The failures that are the owner's to put right, each with a place in the window to do it.
-SETUP = frozenset(("needs_composio_key", "needs_key", "needs_own_app", "key_rejected"))
+SETUP = frozenset(("needs_composio_key", "key_refused", "needs_key", "needs_own_app", "key_rejected", "needs_own_google", "client_rejected"))
 WHERE = "Settings > Connections > Store"
+DETAIL_CHARS = 140
+# The steps of the owner's own Google, for the member to explain; the card shows the same in the window's language.
+GOOGLE_STEPS = (
+    "Open console.cloud.google.com and create a project, or pick one.",
+    "In APIs & Services > Library, turn on the Gmail API and the Google Calendar API.",
+    "In Google Auth Platform > Get started, give the app a name and a support email, choose External as the audience, add a contact email and create.",
+    "In Data Access, add the scopes the card lists (copy them from the card).",
+    "In Audience, choose Publish app (In production). Left in Testing, a sign-in stops working after 7 days.",
+    "In Clients, create a client of the type Desktop app. Copy its Client ID and Client secret into the card. Google accepts Raphael's local return address by itself; nothing has to be registered.",
+    "Press Connect Google on the card. The browser asks the owner to sign in; when Google says it has not verified the app, choose Advanced and continue (the project is the owner's own).",
+)
+
+
+def short(text: object, limit: int = DETAIL_CHARS) -> str:
+    """A provider's own words for the card: one line, without the marks of what was taken out of it, at most `limit` characters."""
+    text = re.sub(r"\[(?:email|url|redacted|credential|profile path)\]", " ", str(text or ""))
+    text = " ".join(text.split())
+    return text if len(text) <= limit else text[:limit - 1].rstrip() + "…"
+
+
+def _technical(raw: str, status) -> str:
+    """The short reason for what could not be named: its word and status, never the provider's text, JSON or a trace."""
+    word = " ".join(re.sub(r"[^\w .-]", " ", raw).split())[:60]
+    return " · ".join(part for part in (word, f"HTTP {status}" if status else "") if part)
+
+
+def _cause_of(raw: str, *, status=None, stage: str = "", message: str = "", via: str = "") -> tuple[str, str]:
+    """(cause, detail) of a failure the connectors reported as `raw`: a `ConnectorFailure` kind, or the state an account ended in."""
+    status = status if type(status) is int else None
+    if raw == "auth":
+        return ("key_refused" if via == "composio" else "client_rejected"), ""
+    if raw == "timeout" and stage == "request":
+        return "no_answer", ""
+    if raw == "http_error":
+        return ("service_down", "") if (status or 0) >= 500 else ("refused", short(message))
+    if raw in ("invalid_request", "conflict"):
+        return ("refused", short(message)) if message or raw == "conflict" else ("invalid_request", "")
+    if raw in _RAW:
+        return _RAW[raw], ""
+    return "unknown", _technical(raw, status)
+
+
+def _pack(cause: str, detail: str = "") -> str:
+    """The card's `error` column holds the cause and, after a colon, the short detail that goes with it."""
+    return f"{cause}:{detail}" if detail else cause
+
+
+def _unpack(error: str) -> tuple[str, str]:
+    cause, _, detail = (error or "").partition(":")
+    return cause, detail
+
+
 _COLUMNS = ("id, turn_id, member_id, conversation_id, app, language, reconnect, state, error, tool_count, done,"
             " created_at_ms, expires_at_ms, resumed_at_ms, app_name, provider, app_logo")
 
@@ -96,12 +221,25 @@ class Card:
     def name(self):
         return self.app_name or (APPS[self.app].name if self.app in APPS else self.app)
 
+    @property
+    def cause(self) -> str:
+        """Why it failed, as a cause of `CAUSES` ('' while it has not failed). A word an old row carries that no cause
+        names is `unknown`, with no reason to show."""
+        cause = _unpack(self.error)[0]
+        return cause if not cause or cause in CAUSES else "unknown"
+
+    @property
+    def detail(self) -> str:
+        return _unpack(self.error)[1] if self.cause else ""
+
     def view(self) -> dict:
         """The card as the window draws it. One that timed out has nothing left to set up."""
-        error = _shown_error(self.error, self.app)
+        error = _shown_error(self.cause, self.app)
+        failed = self.state == "failed" and error in CAUSES
         return {"id": self.id, "app": self.app, "name": self.name, "logo": self.app_logo, "state": self.state,
                 "error": error or None, "reconnect": self.reconnect, "tool_count": self.tool_count,
                 "expires_at_ms": self.expires_at_ms, "resumed": self.resumed,
+                **({"detail": self.detail or None, "retry": CAUSES[error].retry, "fix": CAUSES[error].fix or None} if failed else {}),
                 **({"missing": missing.wire()} if self.state != "expired" and (missing := _card_missing(error)) else {})}
 
 
@@ -197,10 +335,12 @@ class CardStore:
 
 
 class _Failed(Exception):
-    def __init__(self, kind: str, diagnostic=None) -> None:
+    """An attempt that did not connect, as the cause the card names and the short detail that goes with it."""
+
+    def __init__(self, kind: str, detail: str = "") -> None:
         super().__init__(kind)
         self.kind = kind
-        self.diagnostic = diagnostic
+        self.detail = detail
 
 
 class ConnectorCards:
@@ -263,6 +403,8 @@ class ConnectorCards:
                 server = self._own_server(app)
                 hub = self._connectors.hub
                 return [tool.name for tool in server.tools if server.tool_on(tool)] if server and hub._server_entry(server)["state"] == "ready" else []
+            if app.provider == "own_google":
+                return [name for name in TOOLS if self._connectors.tool_available(GOOGLE_SERVER, name)]
             if app.provider == "builtin":
                 hub = self._connectors.hub
                 return [tool.name for server in hub._config.servers() if server.catalog_id == app.id
@@ -298,8 +440,8 @@ class ConnectorCards:
 
     def _needs_of(self, app: App) -> str:
         """The public setup kind: sign-in, key, developer app or the owner's server."""
-        if app.provider == "own_server":
-            return "own_server"
+        if app.provider in ("own_server", "own_google"):
+            return app.provider
         if app.provider != "composio":
             return SIGN_IN
         try:
@@ -316,8 +458,37 @@ class ConnectorCards:
         if needs == "own_server":
             view["fields"] = self._server_fields()
             if card.state == "failed":
-                view["error_message"] = self._server_failure(card.error).reason
+                view["error_message"] = self._server_failure(card.cause).reason
+        if needs == "own_google":
+            view["fields"] = self._google_fields()
+            view["google"] = self._google_guide(card)
+            if card.state == "connected":
+                view["account"] = self._google_account()
         return view
+
+    @staticmethod
+    def _google_fields() -> list[dict]:
+        """Public form metadata only; the window words the labels and submitted values never become card state."""
+        return [{"name": "client_id", "label": "Client ID", "required": True, "secret": False},
+                {"name": "client_secret", "label": "Client secret", "required": True, "secret": True}]
+
+    def _google_guide(self, card: Card | None = None) -> dict:
+        """What the owner copies into Google Cloud: the return address Raphael uses and the scopes it asks for (the presets
+        of the connection when there is one), and whether a Client ID is kept already so that the card asks only for the
+        sign-in. A client Google refused is asked for again."""
+        entry = self._connectors.store.connectors.get("google")
+        try:
+            kept = bool(self._connectors.vault.get(PREFIX + "client_id"))
+        except Exception:
+            kept = False
+        refused = card is not None and card.state == "failed" and card.cause in ("needs_own_google", "client_rejected")
+        return {"redirect": LOOPBACK, "scopes": scopes_for(entry.gmail, entry.calendar) if entry else scopes_for("write", "write"),
+                "configured": kept and not refused}
+
+    def _google_account(self) -> str:
+        """The address of the Google account that signed in, when Google gave it."""
+        entry = self._connectors.store.connectors.get("google")
+        return str(entry.accounts[0].get("label") or "") if entry is not None and entry.accounts else ""
 
     @staticmethod
     def _server_fields() -> list[dict]:
@@ -333,6 +504,12 @@ class ConnectorCards:
         """Give the member instructions and field names, never defaults or entered values."""
         if app.provider == "own_server":
             return {"fields": self._server_fields()}
+        if app.provider == "own_google":
+            guide = self._google_guide()
+            return {"steps": GOOGLE_STEPS, "redirect": guide["redirect"], "scopes": guide["scopes"], "client_kept": guide["configured"],
+                    "fields": [{key: field[key] for key in ("name", "label", "required", "secret")} for field in self._google_fields()],
+                    "note": "The card shows these steps, the copyable return address and scopes, and the two fields. Explain each step in the owner's "
+                            "language, one at a time. The Client ID and Client secret go only into the card, never into chat."}
         if self._needs_of(app) not in {"key", "own_app"}:
             return {}
         try:
@@ -354,10 +531,10 @@ class ConnectorCards:
         reason = {
             "needs_server_fields": "Enter the n8n server address and access token in the card. Try again after filling both fields.",
             "server_address": "The n8n server address is not valid. Copy the MCP server address from n8n settings into the card. Try again.",
-            "auth": "n8n did not accept the access token. Copy a current token from n8n MCP settings into the card. Try again.",
+            "server_auth": "n8n did not accept the access token. Copy a current token from n8n MCP settings into the card. Try again.",
             "scope": "n8n returned no available workflows. Enable MCP access and expose a workflow in n8n settings. Try again from the card.",
         }.get(kind, "Could not connect to n8n. Check that n8n is running and that the card has the MCP server address and current access token from n8n settings. Try again from the card.")
-        return Failure("auth_expired" if kind == "auth" else "network", reason)
+        return Failure("auth_expired" if kind == "server_auth" else "network", reason)
 
     async def _connect_server(self, app: App, fields: dict | None) -> None:
         """Only the owner's card press reaches this existing add/test path."""
@@ -382,7 +559,7 @@ class ConnectorCards:
             identifier = result["server"]["id"]
             tested = await self._router.call("integrations.test", {"id": identifier})
             if not tested.get("ok"):
-                raise _Failed("auth" if tested.get("error") == "auth" else "server_unreachable")
+                raise _Failed("server_auth" if tested.get("error") == "auth" else "server_unreachable")
             if not tested.get("tools"):
                 raise _Failed("scope")
             # Refresh retains the checked schemas; enabling happens only after both checks succeed.
@@ -445,6 +622,8 @@ class ConnectorCards:
     def _provider(self, app: App) -> tuple[str, dict] | None:
         """The sign-in to use: the owner's own Google authorization first, then Composio."""
         vault = self._connectors.vault
+        if app.provider == "own_google":
+            return "connectors.google.connect", {}
         if app.provider == "builtin":
             server = next((s for s in self._connectors.hub._config.servers() if s.catalog_id == app.id), None)
             return "integrations.connect", {"id": server.id} if server else {"catalog_id": app.id}
@@ -458,9 +637,20 @@ class ConnectorCards:
         """What a card that could not connect tells the member: exactly what is missing and where the owner adds it
         (the same words the window shows), so that what the member says is never only "not set up"."""
         name = app.name
-        if kind == "needs_composio_key":
-            return Failure("auth_expired", f"No app can be added yet: Composio's API key is missing or was refused. The owner adds it in Settings > "
-                                           f"Connections > Store (Composio key, made at composio.dev); then {name} can be added from the card or from {WHERE}.", missing=_card_missing(kind))
+        if kind == "needs_own_google":
+            return Failure("auth_expired", "The owner's own Google needs a Desktop client from their Google Cloud project: its Client ID and Client secret. The card "
+                                           "shows the steps with the return address and scopes to copy, and the two fields. Explain each step in the owner's language, "
+                                           "one at a time; never ask for the values in chat.")
+        if kind == "client_rejected":
+            return Failure("auth_expired", "Google did not accept the Client ID or Client secret entered on the card. The owner opens Google Cloud > Google Auth "
+                                           "Platform > Clients, checks the Desktop client and enters both again on the card. Never ask for them in chat.")
+        if kind in ("needs_composio_key", "key_refused"):
+            own = (" Or the owner can connect their own Google account instead: connect_app with the id google, which walks them through a Google Cloud client."
+                   if app.provider == "google" else "")
+            return Failure("auth_expired", f"No app can be added yet: Composio's API key is {'missing' if kind == 'needs_composio_key' else 'refused'}. The owner "
+                                           f"{'adds' if kind == 'needs_composio_key' else 'checks or replaces'} it in Settings > "
+                                           f"Connections > Store (Composio key, made at composio.dev); then {name} can be added from the card or from {WHERE}.{own}",
+                           missing=_card_missing("needs_composio_key") if kind == "needs_composio_key" else None)
         if kind == "key_rejected":
             return Failure("auth_expired", f"{name} did not accept the key the owner entered. The owner checks it and enters it again "
                                            f"from the card or with Add on {name} in {WHERE}.")
@@ -484,18 +674,56 @@ class ConnectorCards:
         return Failure("auth_expired", f"{name} needs the owner's own key ({asks}); Composio keeps it.{link} The owner enters it from the "
                                        f"card or with Add on {name} in {WHERE}.")
 
+    def _refusal(self, method: str, result: dict) -> _Failed:
+        """The cause of a connector call that answered without connecting (`{"ok": False, "error": ...}`, or an account that ended)."""
+        failure = result.get("failure")
+        message = classify(failure, record=False).reason if isinstance(failure, dict) else ""
+        cause, detail = _cause_of(str(result.get("error") or "unknown"), status=result.get("http_status"),
+                                  stage=str(result.get("stage") or ""), message=message,
+                                  via="composio" if method == "connectors.connect" else "google")
+        return _Failed(cause, detail)
+
+    async def _connect_own_google(self, fields: dict | None) -> None:
+        """The owner's own Google: the Client ID and Client secret the card was given go to the vault (`connectors.google.configure`,
+        which keeps them as it keeps the refresh token), then the browser sign-in runs. With nothing given, the client kept
+        from an earlier try is used, so that a card whose sign-in only needs pressing again asks for nothing."""
+        if fields:
+            client_id, secret = str(fields.get("client_id", "")).strip(), str(fields.get("client_secret", "")).strip()
+            if (set(fields) - {"client_id", "client_secret"} or not client_id or not secret or len(client_id) > 300 or len(secret) > 300
+                    or re.search(r"[\s\x00-\x1f]", client_id) or re.search(r"[\x00-\x1f]", secret)):
+                raise _Failed("needs_own_google")
+            result = await self._router.call("connectors.google.configure", {"client_id": client_id, "client_secret": secret})
+            client_id = secret = ""
+            if result.get("ok") is False:
+                raise self._refusal("connectors.google.configure", result)
+        else:
+            try:
+                kept = bool(self._connectors.vault.get(PREFIX + "client_id"))
+            except Exception:
+                raise _Failed("vault") from None
+            if not kept:
+                raise _Failed("needs_own_google")
+        result = await self._router.call("connectors.google.connect", {})
+        if not result.get("connected"):
+            raise self._refusal("connectors.google.connect", result)
+
     async def _sign_in(self, card: Card, fields: dict | None = None) -> None:
         known = APPS.get(card.app)
         app = known if known and known.provider == card.provider else App(card.app, card.name, "", card.app, card.provider)
-        diagnostic = None
         try:
             try:
                 if card.reconnect or not self.ready_tools(app):
                     if app.provider == "own_server":
                         await self._connect_server(app, fields)
                         fields = None
+                    elif app.provider == "own_google":
+                        await self._connect_own_google(fields)
+                        fields = None
                     else:
-                        provider = self._provider(app)
+                        try:
+                            provider = self._provider(app)
+                        except Exception:
+                            raise _Failed("vault") from None
                         if provider is None:
                             raise _Failed("needs_composio_key")
                         method, params = provider
@@ -505,22 +733,17 @@ class ConnectorCards:
                         result = await self._router.call(method, params)
                         params = None
                         if not result.get("connected"):
-                            raw = str(result.get("error") or "unknown")
-                            if method == "connectors.connect" and raw == "auth":
-                                raw = "missing_key"  # Composio refused its own key: as good as none
-                            raise _Failed(_FAILURES.get(raw, classify(raw).kind),
-                                          classify(result["failure"]) if result.get("failure") else None)
+                            raise self._refusal(method, result)
                 tools = self.ready_tools(app)
                 if not tools:
                     raise _Failed("scope")
                 ended = self.store.move(card.id, "connected", tool_count=len(tools))
             except _Failed as failure:
-                diagnostic = failure.diagnostic
-                ended = self.store.move(card.id, "failed", error=failure.kind)
+                ended = self.store.move(card.id, "failed", error=_pack(failure.kind, failure.detail))
             except Exception as exc:
-                failure = classify(exc)
-                diagnostic = failure
-                ended = self.store.move(card.id, "failed", error=failure.kind)
+                # The class only: what an exception says may hold anything the owner typed.
+                logger.warning("A connection card could not connect: %s", type(exc).__name__)
+                ended = self.store.move(card.id, "failed", error=_pack("unknown", _technical(type(exc).__name__, None)))
             except asyncio.CancelledError:
                 if not self._owner_cancelled:
                     self.store.move(card.id, "failed", error="interrupted")
@@ -538,11 +761,19 @@ class ConnectorCards:
             except Exception as exc:
                 await self._failed(ended, classify(exc))
         elif ended is not None and ended.state == "failed":
-            if app.provider == "own_server":
-                diagnostic = self._server_failure(ended.error)
-            if diagnostic is None and ended.error in SETUP:
-                diagnostic = await self._missing(ended.error, app)
-            await self._failed(ended, diagnostic or classify(ended.error))
+            await self._failed(ended, await self._told(ended, app))
+
+    async def _told(self, card: Card, app: App) -> Failure:
+        """What the member is told of a card that did not connect: the same cause the card names, as data to explain."""
+        cause, detail = card.cause, card.detail
+        if app.provider == "own_server":
+            return self._server_failure(cause)
+        if cause in SETUP:
+            setup = await self._missing(cause, app)
+            return Failure(setup.kind, f"cause {cause}: {setup.reason}", missing=setup.missing)
+        said = CAUSES[cause].said + (f' The service said: "{detail}"' if cause == "refused" and detail else "")
+        return Failure(CAUSES[cause].kind, f"{app.name}: cause {cause}: {said}",
+                       detail=detail if cause == "unknown" and detail else None, missing=_card_missing(cause))
 
     async def _failed(self, card, failure):
         if self.failure is not None and card.turn_id not in self._reported_failures:

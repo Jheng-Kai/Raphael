@@ -29,7 +29,7 @@ import type { MessageKey } from "./i18n/zh-TW";
 
 import { plainReplies } from "../shared/anime";
 import { messageExpandHTML } from "./message-preview";
-import { TYPED, VOICE, exchangeTurn, hasDetail, highlightHTML, sourceOf } from "./conversation";
+import { TYPED, VOICE, delegatedTurn, exchangeTurn, hasDetail, highlightHTML, sourceOf } from "./conversation";
 import { receivedLineHTML } from "./exchange-line";
 import { isBotRename, isSettledDraftTurn, settledDraftHTML } from "./member-draft";
 import { messageHTML, replyContentHTML } from "./message-content";
@@ -991,7 +991,7 @@ export function turnHTML(turn: AgentTurn, state: TimelineState, detailOpen: bool
   const resumed = sourceOf(turn) === "connector";
   // what a colleague handed this member says who from, in place of the owner's words
   const handed = exchangeTurn(turn);
-  const said = turn.question.trim() !== "" && !routine && !resumed && !handed;
+  const said = turn.question.trim() !== "" && !routine && !resumed && !handed && !delegatedTurn(turn);
   const asked = said || (turn.attachments?.length ?? 0) > 0;
   const waitingForOwner = look.waitingForOwner?.(turn.id) ?? false;
   const live = !waitingForOwner && !waitsAtCard(turn) && turn.task?.state !== "waiting" && (turn.status === "running" || isLive(turn.task));
@@ -1014,6 +1014,8 @@ export function turnHTML(turn: AgentTurn, state: TimelineState, detailOpen: bool
   return (
     `<li class="tn${turn.id === look.latestFailedTurnId ? " is-latest-failure" : ""}${turn.status === "queued" || turn.route === "owner_input" || (live && !hasMsgs) ? " is-owner-only" : ""}" data-id="${id}" data-status="${esc(turn.status)}"${live ? ' data-live="true"' : ""}>` +
     (resumed ? resumedLineHTML(turn) + secretResumedLineHTML(turn) + computerResumedLineHTML(turn) : "") +
+    // A brief another member handed over says who from, in place of the owner's bubble.
+    (delegatedTurn(turn) && turn.question.trim() ? receivedLineHTML(turn, look) : "") +
     (asked
       ? `<div class="me">` +
         `<div class="chat-message owner-message${state.expandedMessages.has(`${id}:question`) ? " is-expanded" : ""}" data-message="question" data-expandable="true">` +

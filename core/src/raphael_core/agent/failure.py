@@ -15,8 +15,9 @@ from ..failures import KINDS as SHARED_KINDS
 
 # no_key: no OpenRouter key is stored. auth: OpenRouter does not accept it. budget: this month's
 # limit is used up. credits: the OpenRouter account has none left. offline: the network cannot
-# be reached. timeout: the request did not finish in time. error: anything else.
-KINDS = ("no_key", "auth", "budget", "credits", "offline", "timeout", "error")
+# be reached. timeout: the request did not finish in time. no_answer: the model gave no answer (a reply that was only
+# reasoning has none). error: anything else.
+KINDS = ("no_key", "auth", "budget", "credits", "offline", "timeout", "error", "no_answer")
 
 _KIND_OF_OPENROUTER = {
     "auth": "auth",
@@ -64,14 +65,17 @@ def turn_failure(kind, model, diagnostic=None):
                "monthly_budget": "credits", "budget": "credits", "error": "unknown"}
     kind = diagnostic.kind if diagnostic is not None else aliases.get(kind, kind)
     kind = kind if kind in SHARED_KINDS else "unknown"
-    if isinstance(model, str) and model.startswith("cli:"):
-        provider = ":".join(model.split(":", 2)[:2])
-    elif isinstance(model, str) and model.startswith("@"):
-        provider = model[1:].split(":", 1)[0]
-    else:
-        provider = "openrouter"
-    return public_failure({"kind": kind, "provider": provider,
+    return public_failure({"kind": kind, "provider": provider_of(model),
                            "resets_at": diagnostic.resets_at if diagnostic is not None else None})
+
+
+def provider_of(model):
+    """The provider a model reference runs on: `cli:codex` for a subscription CLI, `chatgpt` for `@chatgpt:...`, else openrouter."""
+    if isinstance(model, str) and model.startswith("cli:"):
+        return ":".join(model.split(":", 2)[:2])
+    if isinstance(model, str) and model.startswith("@"):
+        return model[1:].split(":", 1)[0]
+    return "openrouter"
 
 
 def failure_kind(error: BaseException) -> str:

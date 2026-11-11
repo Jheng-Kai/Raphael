@@ -30,6 +30,32 @@ Harness step 4 of the backend design (「群組與交辦」「失敗與可靠性
   lines, still one centred line: the owner needs to see it (owner, 2026-11-10, after the judge read it as small
   and faint).
 
+## A room stops a spiral by itself; length is no error; a CLI member keeps its session (core, 2026-11-11)
+
+From the owner's own data of 2026-11-09 to 11-11 (a meeting of 330 member turns in 70 minutes, 97 failed for length,
+nothing stopped it). R-ROOM-10 to R-ROOM-13, R-MEM-11. No screen changes: the one new line is the existing close-out
+bubble (`kind: wrapup`) in the chief's name, the only words a failure puts in the room.
+
+- What a reply is given of the discussion follows the model's window (`fresh_budget`) as well as `ROOM_CONTEXT_CHARS`.
+  A message that must be there and alone outgrows the window is left out and says how long it was.
+- `RoomExchanges.breaker` reads the thread's replies since the owner last wrote: 3 failures in a row of one cause
+  (overflow, provider, refused hand-offs) stop the room (`reason: circuit_open`) and `RoomsService._breaker_notice`
+  posts one line, in the owner's language, once. A pass neither counts nor breaks the run. The owner writing in the
+  thread ends it.
+- Hand-offs from a room: at most 6 for a reply and 24 for a thread between two owner messages; the same work for the same
+  colleague under another stage_id is the stage conflict (`TaskStore.accept_handoff`).
+- A CLI member's reply resumes its own native session for the thread (`room_cli_sessions`, migration 79,
+  `background/cli.py RoomCliSessions`) and is sent only what is new; the team, the members and the board are sections
+  sent again when they change. `room_thread_summaries` holds the thread's rolling summary (`members/room_summary.py`),
+  folded after the discussion rests, and given to a renewed session before the newest messages.
+- Memory passes (`reflect`, `consolidate`) and the conversation's fold are asked again with less when the model says
+  the input is too long, skip an item that alone is too long, and never block: a fold that cannot be written is covered
+  without a model (`Conversation._fall_back`).
+
+Offline evidence: `core/tests/members/test_room_breaker.py`, `test_room_length.py`, `test_room_summary.py`,
+`core/tests/background/test_room_handoff_bounds.py`, `test_room_sessions.py`, `core/tests/memory/test_length_is_no_error.py`.
+Not proven offline: a real CLI resuming a real session by its id in a room, and a real model writing the summary.
+
 Offline evidence, written first: `core/tests/members/test_room_turns.py` (all 24 failed on the old code)
 and `core/tests/background/test_room_attempts.py` (2 of 5 failed; the other 3 guard what already held),
 then `app/src/main/group-chats.test.ts`. Scenes:
@@ -234,7 +260,7 @@ guardian_manifest.json maps the read-only work_status tool to S08.completion.
 Follow-up 1 authorizes the selected offline look matrix below. Network and paid APIs
 remain forbidden. The status board is a compact pending-question-style row pinned
 under the header, outside the scrolling thread. It opens the shared popover with
-member faces, current stages, shared state pills and plain decision lines. Empty
+member faces, the title of each member's current work (never its stage_id or a task number, R-TEXT-02), shared state pills and plain decision lines. Empty
 meetings hide the row. Report cards reuse conversation-card and the shared file chip,
 never display digests, and retain the private work destination. A chip uses an opaque
 task/evidence handle through the existing native open_team_file boundary; TaskStore

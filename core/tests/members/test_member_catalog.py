@@ -263,7 +263,7 @@ def test_aggregate_file_cap_and_injection_warning():
 async def test_index_cap_redirects_and_unavailable_empty(tmp_path):
     cat, state, _, _ = harness(tmp_path)
     state["offline"] = True
-    assert await cat.fetch() == {"entries": [], "offline": True}
+    assert await cat.fetch() == {"entries": [], "offline": True, "open": True}
     async def large(req):
         return httpx.Response(200, content=b"x" * (INDEX_CAP + 1))
     cat.transport = httpx.MockTransport(large)

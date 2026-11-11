@@ -162,6 +162,19 @@ its words are in (`hand_over`), so the dictation key works during the answer (R-
 voice-keys` proves both with the real worker, the recognising light and a slow brain at high depth. A turn said
 into a conversation has the time a typed one has; only the overlay's quick question has `VOICE_TURN_TIMEOUT_S`.
 
+A question said to the overlay (Alt+Space) leaves the slot the same way, and the dictation key always wins (R-VC-03):
+pressed while the answer is worked on, asked a yes or no, or on the overlay, it dictates at once. The answer is held while
+a recording has the overlay and told again once the words are typed, for its ordinary time; a newer quick question
+replaces it. The shell's timing is proved by the `dictation.rs` tests named in R-VC-03; the one thing the corner shows
+is the answer arriving behind the dictation's 100 %, which `overlay-held-answer` replays on the real overlay page:
+
+```powershell
+npm run look -- overlay-held-answer --theme both --width 1120,720,1920x1080
+```
+
+Only a real key press proves the rest: Alt+Space, a question that takes a while, Right Alt during the answer and the
+answer appearing after the pasted words (`npm run native -- voice-keys` covers the conversation case only).
+
 ## Sub-features
 
 Four separate totals, activity/shortcuts, horizontal tabs, dated history, dictionary and connection notices; native

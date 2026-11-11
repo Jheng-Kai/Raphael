@@ -24,6 +24,7 @@ mod overlay;
 mod paste;
 mod rpc;
 mod schedule_awake;
+mod template_file;
 mod tray;
 mod updates;
 mod webview_power;
@@ -127,7 +128,13 @@ pub fn run() {
         tauri::Builder::default(),
         |app, args| {
             log::info!("another launch handed over");
-            if first_run::opens_at_start(&args) {
+            // A template file double-clicked while the app runs: the window shows its import review.
+            let template = template_file::offer(&args);
+            if template {
+                log::info!("a member template file was handed over");
+                commands::tell_main_window(commands::MainEvent::TemplateFile);
+            }
+            if template || first_run::opens_at_start(&args) {
                 log::info!("manual launch handed over: showing the main window");
                 show_main_window(app);
             }
@@ -195,6 +202,8 @@ pub fn run() {
             learned::learned_finish,
             commands::pick_output_folder,
             commands::member_template_file,
+            commands::member_template_pending,
+            commands::show_template_export,
             commands::schedule_keep_awake_get,
             commands::schedule_keep_awake_set,
             commands::device_settings_get,
@@ -380,6 +389,11 @@ pub fn run() {
 
             // A member's desktop notices follow the core even while the main window is hidden.
             member_notifications::spawn(app.handle());
+
+            // ---- A template file the app was opened with ----
+            // Double-clicked in the file manager (the installer's file association): the window takes
+            // its text when it has loaded (`member_template_pending`) and shows the import review.
+            template_file::offer(&std::env::args().collect::<Vec<_>>());
 
             // ---- First run ----
             // Until the first-run guide has been gone through, the main window opens by itself.

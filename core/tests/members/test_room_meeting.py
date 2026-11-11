@@ -1,4 +1,5 @@
 """Meeting cursors, attributed posts and restart close-out on synthetic data."""
+import pytest
 from raphael_core.agent.history import AgentHistory
 from raphael_core.members.rooms import RoomsService
 from .test_exchanges import exchange, team, send, finish, history, meeting_source  # noqa: F401
@@ -106,3 +107,55 @@ async def test_overflow_uses_the_shared_sentence_in_the_requested_language(rig, 
         rig.conn.execute("UPDATE room_reply_intents SET state='blocked',reason='cli_context_overflow' WHERE origin_message_id=?", (origin,))
     for language in ("zh-TW", "en", "ja", "fr"):
         assert exchange._unfinished(origin, language) == [("Alice", Failure("context_overflow", "context_overflow").sentence("Claude Code", language))]
+
+
+def _post_many(rig, exchange, room, source, count, *, member=0, start=0):
+    for number in range(start, start + count):
+        exchange.post(member, {'room_id': room['id'], 'text': f'Point {number}.'}, source)
+
+
+async def test_a_member_who_posts_too_fast_is_told_the_room_is_pausing_and_when_it_goes_on(rig, exchange):
+    from raphael_core.protocol import RpcError
+    room, ids = await team(rig)
+    await send(rig, room, '@Alice review')
+    source = exchange._history.add(session_id='chief', question='Post', route='answer', prefix='', text='', status='running')
+    _post_many(rig, exchange, room, source, 4)
+    with pytest.raises(RpcError) as refused:
+        exchange.post(0, {'room_id': room['id'], 'text': 'Point 5.'}, source)
+    words = refused.value.message
+    assert 'room is pausing' in words and 'too many replies came at once' in words and 'seconds' in words
+    assert '4 from each member' in words and '12 posts a minute' in words
+    assert 'budget' not in words.lower() and 'quota' not in words.lower()
+    seconds = int(words.split('in about ')[1].split(' seconds')[0])
+    assert 1 <= seconds <= 60
+
+
+async def test_a_busy_room_pauses_every_member_and_the_same_words_twice_are_a_repeat(rig, exchange):
+    from raphael_core.protocol import RpcError
+    room, ids = await team(rig)
+    await send(rig, room, '@Alice review')
+    members = (0, *ids)
+    sources = {member: exchange._history.add(session_id=f'm{member}', question='Post', route='answer', prefix='', text='',
+                                             status='running', member_id=member) for member in members}
+    thread = rig.conn.execute('SELECT thread_id FROM room_messages').fetchone()[0]
+    rig.conn.execute('DELETE FROM room_messages WHERE member_id IS NOT NULL')
+    with rig.conn:  # twelve posts in the last minute, three or four from each
+        for number in range(12):
+            rig.conn.execute('INSERT INTO room_messages(room_id,thread_id,member_id,text,created) VALUES (?,?,?,?,?)',
+                             (room['id'], thread, members[number % 3], f'Earlier {number}.', exchange._now() - 1000))
+    for member in members:  # the room itself is full, whoever has said how much
+        with pytest.raises(RpcError) as refused:
+            exchange.post(member, {'room_id': room['id'], 'text': 'One more.'}, sources[member])
+        assert 'room is pausing' in refused.value.message
+    with pytest.raises(RpcError) as repeated:
+        exchange.post(0, {'room_id': room['id'], 'text': 'Earlier 0.'}, sources[0])
+    assert 'exact message' in repeated.value.message and 'pausing' not in repeated.value.message
+
+
+def test_a_discussion_that_hit_its_reply_limit_is_not_called_a_budget_in_any_language():
+    from raphael_core.members.rooms import _UNFINISHED_WORDS, unfinished_kind
+    assert unfinished_kind('reply_budget') == 'reply_cap' and unfinished_kind('cost') == 'budget'
+    assert _UNFINISHED_WORDS['zh-TW']['reply_cap'] == '這次討論的回覆次數已達上限'
+    assert _UNFINISHED_WORDS['en']['reply_cap'] == 'reached the reply limit for this discussion'
+    for language, words in _UNFINISHED_WORDS.items():
+        assert words['reply_cap'].strip() and words['reply_cap'] != words['budget'], language

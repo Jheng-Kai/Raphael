@@ -108,8 +108,11 @@ class Phrases:
     offline: str  # the network cannot be reached
     timeout: str  # the request took too long
     error: str  # anything else that went wrong
+    no_answer: str  # the model gave no answer (it spent its turn thinking, or said nothing)
     work_only_words: str  # work handed on came back with a promise or a line, and nothing done
     work_file_missing: str  # the file the work was to leave is not there, or changed since
+    routine_refused: str  # a routine's run said it was done, but a step it needed was refused and nothing after went through
+    routine_nothing: str  # a routine's run said it was done, but what it was to make is not there
     work_children_open: str  # work this one handed on again is not all finished
     speech_missing: str  # an inline dictation gap, not a line spoken by Raphael
     denied: str  # the user said no, or cancelled
@@ -204,8 +207,11 @@ PHRASES: dict[str, Phrases] = with_ui_words({
         offline="無法連線至網路。",
         timeout="回應時間過長，請再試一次。",
         error="處理過程中發生異常。請再試一次。",
+        no_answer="模型這次沒有給出回答，請再試一次，或換一個模型。",
         work_only_words="只有回覆，沒有實際做事，這項工作不算完成。",
         work_file_missing="完成條件要的檔案沒有找到，這項工作不算完成。",
+        routine_refused="這次執行需要的一個步驟被拒絕了，沒有完成。",
+        routine_nothing="這次執行沒有做出原本要做的東西，不算完成。",
         work_children_open="交給同事的工作還沒全部完成，這項工作不算完成。",
         speech_missing="（這段沒有聽清楚）",
         denied="已取消。",
@@ -279,8 +285,11 @@ PHRASES: dict[str, Phrases] = with_ui_words({
         offline="The network is unreachable.",
         timeout="The request took too long. Please try again.",
         error="An error occurred during processing. Please try again.",
+        no_answer="The model gave no answer this time. Try again or choose another model.",
         work_only_words="It only replied and did nothing, so this work does not count as done.",
         work_file_missing="The file this work was to leave is missing, so it does not count.",
+        routine_refused="A step this run needed was refused, so it did not finish.",
+        routine_nothing="This run did not make what it was set to, so it is not done.",
         work_children_open="What was handed on to colleagues is not all finished, so this does not count.",
         speech_missing="(this part was not heard)",
         denied="Cancelled.",
@@ -361,8 +370,11 @@ PHRASES: dict[str, Phrases] = with_ui_words({
         offline="ネットワークに接続できません。",
         timeout="応答に時間がかかりすぎました。もう一度お試しください。",
         error="処理中に異常が発生しました。再度お試しください。",
+        no_answer="モデルから回答が返りませんでした。もう一度試すか、別のモデルを選んでください。",
         work_only_words="返信だけで実際の作業がないため、完了とみなしません。",
         work_file_missing="完了条件のファイルが見つからないため、完了とみなしません。",
+        routine_refused="この実行に必要な手順が拒否されたため、完了しませんでした。",
+        routine_nothing="この実行は作るはずだったものを作れなかったため、完了とみなしません。",
         work_children_open="同僚に渡した作業がすべて終わっていないため、完了とみなしません。",
         speech_missing="（この部分は聞き取れませんでした）",
         denied="取り消しました。",
@@ -834,7 +846,7 @@ same outlet, an equivalent outlet, or material you can adapt, such as a regular 
 rewritten simply for a learner), and say in one clause what you used instead. Ask the owner to \
 paste something only when no other source can do.
 - If the task needs an app outside your snapshot, use find_app to search the read-only catalog, \
-then connect_app with its exact id to show the existing connection card for sign-in, a key, a developer app or an own server. Explain each field and where to find it in the owner's language, in plain words with no unexplained terms, one step at a time; answer follow-up questions here. For n8n, explain enabling MCP access in n8n settings and copying its MCP server address and access token into the card. All field values go only into the card, never chat. Never send complex setup to Settings. Only the owner signs \
+then connect_app with its exact id to show the existing connection card for sign-in, a key, a developer app or an own server. Explain each field and where to find it in the owner's language, in plain words with no unexplained terms, one step at a time; answer follow-up questions here. For n8n, explain enabling MCP access in n8n settings and copying its MCP server address and access token into the card. When the owner wants their own Google account (a Google Cloud client of their own, no Composio), connect_app with the id google. When a connection card fails, its failure names a cause: say what it means and the one thing to do, not only to press again. All field values go only into the card, never chat. Never send complex setup to Settings. Only the owner signs \
 in, even in full-permission mode; the same task resumes after they finish. Use ask_owner for \
 information only the owner can supply, and the offered secret, draft or page cards when needed. connect_messaging shows the secure Telegram, Slack or Discord bot-token card only when the speaker has no connected bot; never ask for tokens in chat. An existing bot stays connected without another token. Pairing cards arrive in this conversation and the owner approves or rejects them here. The bot's panel row has its switch and details; ask in this conversation to remove an allowed person or disconnect, with owner approval. Never direct the owner to a messaging settings page. share_template lets a member offer its recipe snapshot for the owner to review, save or publish. \
 Never ask for a password or key in chat. If no offered tool can do the action or ask for what is \

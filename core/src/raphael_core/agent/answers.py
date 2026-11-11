@@ -141,7 +141,7 @@ _WEB_TOOLS = ("web_search", "web_read", "read_attachment")
 def _tool_line(result: ToolResult) -> str:
     label = _UNTRUSTED_WEB if result.name in _WEB_TOOLS else _UNTRUSTED
     name = f"{result.name} [{label}]" if result.untrusted else result.name
-    data = "" if result.data is None else f" {json.dumps(result.data, ensure_ascii=False)}"
+    data = "" if result.data is None else f" {json.dumps(result.shown, ensure_ascii=False)}"
     if result.ok:
         return f"{name}:{data}"
     if result.error == DISABLED:

@@ -74,6 +74,9 @@ export function fitFor(model: CatalogModel, role: PickerRole): { usable: boolean
 /** A model on the owner's own plan, which has no price of its own: a CLI's or ChatGPT's. */
 export const planRef = (ref: string): boolean => ref.startsWith("cli:") || ref.startsWith("@chatgpt:");
 
+/** A model the owner's plan serves, whatever its role: a CLI's, ChatGPT's or the core's own drawing model on Codex. It is not priced by the token. */
+export const onPlan = (model: CatalogModel): boolean => planRef(model.id) || model.billing_source === "subscription";
+
 /** Whether `role` can use `model`. */
 export const usableFor = (model: CatalogModel, role: PickerRole): boolean => fitFor(model, role).usable;
 
@@ -90,8 +93,8 @@ const hasTokenPrice = (m: CatalogModel): boolean => m.input_per_mtok !== null ||
  * by the token, `$2.00 / $12 每百萬 token`. Else 免費, 價格不固定 (a router) or 價格未知.
  */
 export function priceText(model: CatalogModel, role: PickerRole): string {
+  if (onPlan(model)) return t("brains.subscription");
   if (role === "image" || role === "video") return mediaPrice(model);
-  if (planRef(model.id)) return t("brains.subscription");
   if (model.variable_price) return t("picker.varies");
   if (model.free) return t("picker.free");
   if (model.per_minute !== null) return t("pricing.003", { p0: formatPerMinute(model.per_minute) });
@@ -101,6 +104,7 @@ export function priceText(model: CatalogModel, role: PickerRole): string {
 
 /** The price in full words, for a screen reader: 「輸入 $0.10 / 輸出 $0.50 每百萬 token」. */
 export function priceDescription(model: CatalogModel, role: PickerRole): string {
+  if (onPlan(model)) return t("brains.subscription");
   if (role === "image" || role === "video") return mediaPrice(model);
   if (KIND[role] === "llm" && !model.variable_price && !model.free && hasTokenPrice(model)) {
     return t("pricing.002", { p0: perMtok(model.input_per_mtok), p1: perMtok(model.output_per_mtok) });
@@ -522,7 +526,9 @@ export function chooserSources(o: ModelPickerLook): ChooserSource[] {
     const id = connectionId(model);
     if (!sources.some((source) => source.id === id)) {
       const name = connectionName(model), kind = id === "openrouter" ? "openrouter" : name.toLowerCase();
-      sources.push({ id, name, kind, group: isLocal(kind) ? "local" : "api", models: models.filter((m) => connectionId(m) === id) });
+      // The core's own drawing model on Codex stands with the subscriptions, not under the APIs priced by the token.
+      const group = isLocal(kind) ? "local" : models.filter((m) => connectionId(m) === id).every(onPlan) ? "subscriptions" : "api";
+      sources.push({ id, name, kind, group, models: models.filter((m) => connectionId(m) === id) });
     }
   }
   if (o.local) sources.push({ id: "local-speech", name: t("chooser.localSpeech"), kind: "", group: "local", models: [] });
@@ -531,7 +537,7 @@ export function chooserSources(o: ModelPickerLook): ChooserSource[] {
 
 /** A fallback is allowed only for an exact maker and model identifier, never a similar name. */
 export function chooserPrice(model: CatalogModel, models: readonly CatalogModel[], role: PickerRole): string {
-  if (planRef(model.id)) return "";
+  if (onPlan(model)) return "";
   if (role === "image" || role === "video") return priceText(model, role);
   if (model.free || model.variable_price || model.per_minute !== null || hasTokenPrice(model)) return priceText(model, role);
   const raw = model.id.replace(/^@[^:]+:/, "");
@@ -829,7 +835,7 @@ class MountedPicker implements ModelPicker {
           `${this.o.chatgptError ? `<p role="alert">${esc(this.o.chatgptError)}</p>` : ""}${btn(`${providerMark("openai")}${esc(t("brains.chatgptSignIn"))}`, "", ' data-dlg="chatgpt"')}</div>`;
       this.paintFooter(); return;
     }
-    if (source.group === "subscriptions" && !source.cli?.available && source.id !== "chatgpt") {
+    if (source.id.startsWith("cli:") && !source.cli?.available) {
       pane.innerHTML += `<div class="mc-empty"><p>${esc(t(source.cli?.disconnected ? "brains.disconnected" : source.cli?.installed ? "chooser.loginNote" : "chooser.installNote"))}</p>${this.o.clis ? btn(esc(t(source.cli?.installed ? "brains.connect" : "brains.install")), "", ' data-dlg="login"') : esc(t("common.loading"))}</div>`;
       this.paintFooter(); return;
     }

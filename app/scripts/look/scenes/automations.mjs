@@ -9,6 +9,8 @@ const today = "2026-10-24";
 const tools = [...calendar, { action: "calendar-tools" }, check("calendar-tools")];
 const eventRoutine = { id: 90, member_id: 1, title: "客戶來信草稿", prompt: "整理來信，準備草稿交給我。", schedule: null, enabled: true, last_run: 1792803600000, next_run: 1792807380000, last_checked: 1792807200000,
   when: { app: "Gmail", event: { tool: "mcp:Gmail/messages", arguments: { limit: 50 }, items: "messages", id: "id" }, filter: { field: "sender", equals: "client@example.com" } } };
+const failedRoutine = { id: 2, member_id: 1, title: "每日新聞", prompt: "每天早上整理日本語的新聞，做成一個網頁。", schedule: { kind: "daily", time: "08:00" }, enabled: true,
+  last_run: 1792803600000, next_run: 1792890000000, last_error: "這次執行需要的一個步驟被拒絕了，沒有完成。", last_failed: true };
 const eventDetails = [member(1), { action: "open-details" },  wait('[data-routine="90"]')];
 const rhythm = {calendarRhythm:true};
 const rhythmDetail = [...auto, ...view("day"), wait('.au-all-day-row .is-rhythm'), click('.au-all-day-row .is-rhythm'), wait('.au-rhythm-runs')];
@@ -21,6 +23,8 @@ export default [
   scene("routine-sentence", "The transcript names its trigger and opens that exact routine", sentenceRoundTrip, {routineSentence:true}),
   scene("routine-sentence-event", "An event run retains its trigger beside the existing owner question", [...sentenceRoundTrip,check('owner-question-background')], {routineSentence:"waiting",ownerQuestion:"background",routines:[eventRoutine]}),
   scene("routine-sentence-webhook", "A failed webhook run keeps its readable trigger and routine link", sentenceRoundTrip, {routineSentence:true,routines:[{...eventRoutine,when:{webhook:true}}]}),
+  scene("routine-view-failed", "A routine whose last run did not work says so with the reason, as a status with a dot", [member(1),{action:"open-details"},wait('.mb-det [data-det="routine-open"]'),click('.mb-det [data-det="routine-open"]'),wait('.mb-dialog.rv-dialog'),check('routine-view-failed')], {routines:[failedRoutine]}),
+  scene("routine-running", "A routine that is running shows the member's working line in its conversation", [member(1),wait('.tn[data-live="true"] .live-presence'),check('routine-running')], {routineRunning:true}),
   scene("automation-monthly-calendar", "A date 31 appears on the last day of November", [...auto,...view('month'),click('[data-au="next"]'),wait('[data-month-day="2026-11-30"] .is-routine'),check('moving-monthly-calendar')], {routines:[{...eventRoutine,title:"每月範例",when:null,schedule:{kind:"monthly",day:31,time:"08:00"},next_run:1793404800000}],routineRuns:[]}),
   scene("automation-minutes-calendar", "Five-minute runs stay in one rhythm bar", [...auto,...view('day'),wait('.au-all-day-row .is-rhythm'),check('moving-minutes-calendar')], {routines:[{...eventRoutine,title:"分鐘範例",when:null,schedule:{kind:"every",minutes:5},next_run:1792800000000}],routineRuns:[]}),
   scene("automation-offer", "A suggested routine shares the trigger sentence", [{action:"member-column",collapsed:false},click('[data-col="add"]'),click('#app-popover [data-pick="member"]'),wait('.cr-dialog'),type('#mb-new-name','範例成員'),click('.cr-dialog [data-dlg="create"]'),wait('.mb-offer-t .routine-sentence'),check('moving-offer')], {routineOffer:true}),

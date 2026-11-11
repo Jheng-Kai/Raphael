@@ -3,6 +3,7 @@
 from raphael_core.ui_words import ui_word, with_ui_words
 import asyncio
 import json
+import sqlite3
 import logging
 import re
 import traceback
@@ -19,6 +20,7 @@ from ..answers import MESSAGE_RULES, MESSAGE_BREAK, message_parts, parse_reply, 
 from ..conversations import Conversations
 from ..mcp_server import RaphaelMcp
 from ...brain.meter import Usage, claude_code_model, claude_code_rows, codex as codex_usage, gemini as gemini_usage
+from ...brain.reasoning import split_reasoning
 from ...brain.textnorm import public_line
 from ..narration import PUBLIC_PROGRESS_RULES
 from ..owner_questions import OWNER_CARDS
@@ -141,6 +143,15 @@ class Sessions:
             self.conn.execute("DELETE FROM agent_conversation_cli_contexts")
             self.conn.execute("DELETE FROM agent_conversation_cli_sessions")
             self.conn.execute("DELETE FROM agent_cli_sessions")
+            self._clear_rooms()
+
+    def _clear_rooms(self, member_id=None):
+        """The room sessions go with the others (a database before the room sessions has no table: nothing to clear)."""
+        try:
+            self.conn.execute("DELETE FROM room_cli_sessions" + ("" if member_id is None else " WHERE member_id=?"),
+                              () if member_id is None else (member_id,))
+        except sqlite3.OperationalError:
+            pass
 
     def forget(self, member, brain, conversation_id=None):
         if conversation_id is None:
@@ -158,6 +169,7 @@ class Sessions:
                 (member_id,),
             )
             self.conn.execute("DELETE FROM agent_cli_sessions WHERE member_id = ?", (member_id,))
+            self._clear_rooms(member_id)
 
     def get_context(self, member, brain, session, conversation_id=None):
         if conversation_id is None:
@@ -328,6 +340,13 @@ class CliLoop:
             self._release_held(answer=True)
             self._show(reply, lines)
         return lines
+
+    def _unthought(self, text):
+        """`text` without reasoning the CLI wrote into its answer, which is shown as thinking (brain/reasoning.py)."""
+        words, thought = split_reasoning(text)
+        if thought := " ".join(thought.split()):
+            self.thinking(thought[-240:])
+        return words
 
     def _show(self, reply, lines):
         self._publish_reply(replace(reply, messages=lines, text="\n\n".join(lines)))
@@ -1008,12 +1027,13 @@ class CliLoop:
                         self._buffer = parts[-1]
                 elif event.kind == "message" and self._publish_reply is not None:
                     key = (self._attempts, event.data.get("id"))
-                    public = bool(event.data.get("final") or public_reply(event.text, self.language, plain=self.plain, explicit=True))
+                    words = self._unthought(event.text)
+                    public = bool(event.data.get("final") or public_reply(words, self.language, plain=self.plain, explicit=True))
                     if not key[1] or key not in self._message_ids:
                         if public:
-                            self._publish(event.text, previous=self._separated, settled=bool(event.data.get("final")))
+                            self._publish(words, previous=self._separated, settled=bool(event.data.get("final")))
                         self._message_ids.add(key)
-                    self._buffer = "" if public else event.text
+                    self._buffer = "" if public else words
                     self._completed_buffer, self._separated = True, []
                 elif event.kind == "thinking":
                     self._thought = (self._thought + event.text)[-240:]
@@ -1060,7 +1080,7 @@ class CliLoop:
                 elif event.kind == "final":
                     if self._handed_off():
                         return None
-                    final = event.text.strip()
+                    final = self._unthought(event.text).strip()
                     if final:
                         if check := self._computer_check.finishing():
                             if check == "stop":

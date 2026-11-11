@@ -77,7 +77,7 @@ async def test_status_board_keeps_running_work_ahead_of_queued_followups(meeting
     rig.service._store.start(first)
     rig.service.handoff(RAPHAEL,{**request,'stage_id':'later'},source_turn_id=source,language='en')
     [row]=rooms.speech_context(room['id'],rig.task(first).report_thread_id)['board']
-    assert row['task_id']==first and row['state']=='running' and row['stage_id']=='current'
+    assert row['title']=='Review privately.' and row['state']=='running' and row['stage_id']=='current'
 
 
 async def test_speech_reads_work_status_through_the_shared_worker_without_starting_work(meeting):
@@ -185,7 +185,7 @@ async def test_stop_invalidates_all_room_lanes_before_any_transport_cancel(make_
     target,source=setup(rig)
     monkeypatch.setattr(rig.service,'_ensure_pump',lambda:None)
     first=rig.service.handoff(RAPHAEL,args(target,stage_id='one'),source_turn_id=source.id,language='en').data['task_id']
-    second=rig.service.handoff(RAPHAEL,args(target,stage_id='two'),source_turn_id=source.id,language='en').data['task_id']
+    second=rig.service.handoff(RAPHAEL,args(target,stage_id='two',request='Write the summary of the report.'),source_turn_id=source.id,language='en').data['task_id']
     seen=[]
     async def cancel(params):
         assert all(rig.task(identifier).generation>0 for identifier in (first,second))
@@ -265,3 +265,50 @@ async def test_a_reply_with_pass_suffix_is_saved_as_words_in_the_room_and_turn(m
     assert row['text'] == saved.text == 'The source confirms the release date.'
     assert (await rooms._messages({'room_id':room['id']}))['messages'][-1]['text'] == saved.text
 
+
+
+@pytest.mark.parametrize('language', ['zh-TW', 'en'])
+async def test_a_stopped_rooms_wrap_up_names_work_by_title_and_never_by_code(meeting, monkeypatch, language):
+    from raphael_core.background.handback import internal_ids
+    rig,members,rooms,room,alice=meeting
+    monkeypatch.setattr(rig.service,'_ensure_pump',lambda:None)
+    await rooms._send({'room_id':room['id'],'text':'@Raphael review','request_id':'wrap','ui_language':language})
+    source=rig.conn.execute("SELECT id FROM agent_turns WHERE scope='room'").fetchone()[0]
+    request={'member_id':alice.id,'stage_id':'S2-03','request':'S2-03: Review the Q3 report. Check every table.','done_when':'A written review.'}
+    task_id=rig.service.handoff(RAPHAEL,request,source_turn_id=source,language=language).data['task_id']
+    await rooms._stop({'room_id':room['id']})
+    await rooms.wait_idle()
+    [wrapup]=[m for m in (await rooms._messages({'room_id':room['id']}))['messages'] if m['kind']=='wrapup']
+    text=wrapup['text']
+    assert 'Alice / Review the Q3 report.' in text
+    assert 'S2-03' not in text and f'{task_id}' not in text.replace('Q3', '') and not internal_ids(text)
+
+
+async def test_the_board_and_work_status_name_work_by_title_and_hand_over_no_numbers(meeting,monkeypatch):
+    from raphael_core.agent.tools import ToolResult
+    rig,members,rooms,room,alice=meeting
+    monkeypatch.setattr(rig.service,'_ensure_pump',lambda:None)
+    await rooms._send({'room_id':room['id'],'text':'@Raphael review','request_id':'titles'})
+    source=rig.conn.execute("SELECT id FROM agent_turns WHERE scope='room'").fetchone()[0]
+    request={'member_id':alice.id,'stage_id':'S2-03','request':'Review the Q3 report. Check every table.','done_when':'A written review.'}
+    receipt=rig.service.handoff(RAPHAEL,request,source_turn_id=source,language='en')
+    assert receipt.data['title']=='Review the Q3 report.' and receipt.data['member_name']=='Alice'
+    shown=json.loads(json.dumps(receipt.shown))
+    assert 'task_id' not in shown and 'work_turn_id' not in shown and 'root_task_id' not in shown
+    assert shown['title']=='Review the Q3 report.' and shown['member_id']==alice.id
+    board=rooms.speech_context(room['id'],rig.task(receipt.data['task_id']).report_thread_id)
+    [row]=board['board']
+    assert row['title']=='Review the Q3 report.' and row['stage_id']=='S2-03'
+    assert not {'task_id','work_turn_id','conversation_id'} & set(row)
+    status=ToolResult('work_status',True,board)
+    assert 'task_id' not in json.dumps(status.shown)
+
+
+def test_what_a_parent_is_told_of_delegated_work_names_it_and_hides_the_numbers():
+    from raphael_core.background.service import HANDOFF_RESULTS_NOTE, _results_message
+    message=_results_message([{'title':'Review the Q3 report.','member_name':'Alice','member_id':3,'state':'completed',
+                               'work_location':{'member_id':3,'conversation_id':41,'work_turn_id':90},'exchange_turn_id':89,'evidence':[]}])
+    assert 'Review the Q3 report.' in message and 'Alice' in message
+    for number in ('conversation_id','work_turn_id','exchange_turn_id','task_id'):
+        assert number not in message
+    assert 'never said to the owner' in HANDOFF_RESULTS_NOTE and 'title' in HANDOFF_RESULTS_NOTE

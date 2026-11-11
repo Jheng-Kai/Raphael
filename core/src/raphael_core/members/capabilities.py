@@ -19,6 +19,10 @@ from .skill_library import SHARED, SkillHomes, SkillLibrary
 from .skill_plugins import PluginSets
 
 MAX_SKILL_BYTES = 128 * 1024
+# What `skill_read` gives of the other files in a skill's folder: text a run uses (a page template, a stylesheet, data).
+MAX_SKILL_FILE_BYTES = 256 * 1024
+SKILL_FILE_TYPES = frozenset({".html", ".htm", ".css", ".js", ".mjs", ".json", ".md", ".txt", ".svg", ".csv", ".xml", ".yaml", ".yml"})
+_SECRET_FILE = re.compile(r"secret|credential|passw|token|vault|\.env|id_rsa|\.pem$|\.key$|\.db(?:-|$)|\.sqlite", re.I)
 MAX_SKILLS = 40
 MAX_COMMANDS = 50
 _PART = re.compile(r"[A-Za-z0-9_.-]{1,100}")
@@ -366,6 +370,53 @@ class MemberCapabilities(PluginSets, SkillLibrary, GrowingSkills):
         self._mirror(member_id)
         return bool(cursor.rowcount)
 
+    def read_skill_file(self, member_id: int, name: object, reference: object) -> str:
+        """A text file that lies in the folder of an enabled skill (a page template, a data file, a script's source) by
+        its path in that folder: what a run reads to do what the skill says, through the tool meant for it
+        (`skill_read`) and not through a command, which the data floor does not let touch Raphael's own folders.
+        The folder of ONE skill, text types only, no secret-looking name, no link out: the database, the vault, keys and
+        `.env` are never in it, and a path that leaves it is refused. MemberError names what is wrong."""
+        if not isinstance(name, str):
+            raise MemberError("skill", "give the skill's exact name")
+        skills = [skill for skill in self.skills(member_id) if skill["enabled"]]
+        matches = [skill for skill in skills if skill["slash_name"].casefold() == name.casefold()]
+        matches = matches or [skill for skill in skills if skill["name"].casefold() == name.casefold()]
+        if len(matches) != 1:
+            raise MemberError("not_found", "no enabled skill has that name")
+        parts = self._reference_parts(reference)
+        folder = self._path(member_id, matches[0]["id"]).parent
+        target = folder.joinpath(*parts)
+        try:
+            self.homes.safe(target)
+            inside = target.resolve().is_relative_to(folder.resolve()) and target.is_file()
+            size = target.stat().st_size if inside else 0
+        except (HomeError, OSError, ValueError):
+            inside = False
+        if not inside:
+            raise MemberError("not_found", "the skill's folder has no such file")
+        if size > MAX_SKILL_FILE_BYTES:
+            raise MemberError("size", "that file is too large to read; it is over 256 KB")
+        try:
+            text = target.read_text(encoding="utf-8")
+        except UnicodeError:
+            raise MemberError("skill", "that file is not UTF-8 text") from None
+        except OSError:
+            raise MemberError("not_found", "the skill's folder has no such file") from None
+        return redact_secrets(text)
+
+    @staticmethod
+    def _reference_parts(reference: object) -> list[str]:
+        """The parts of a path inside a skill's folder, or MemberError: relative, no `..`, a name that is not a
+        secret's and a text type."""
+        if not isinstance(reference, str) or not reference.strip() or len(reference) > 200 or "\x00" in reference:
+            raise MemberError("reference", "give a path in the skill's folder, such as templates/page.html")
+        parts = [part for part in reference.strip().replace("\\", "/").split("/") if part not in ("", ".")]
+        if (reference.strip().startswith(("/", "\\")) or re.match(r"[A-Za-z]:", reference.strip()) or not parts
+                or any(part == ".." or ":" in part or _SECRET_FILE.search(part) for part in parts)
+                or Path(parts[-1]).suffix.casefold() not in SKILL_FILE_TYPES):
+            raise MemberError("reference", "that path is not a text file in the skill's own folder")
+        return parts
+
     def read_skill(self, member_id: int, name: object) -> str | None:
         if not isinstance(name, str):
             return None
@@ -390,7 +441,7 @@ class MemberCapabilities(PluginSets, SkillLibrary, GrowingSkills):
                             continue
                         text += "\n\n<reference name=" + json.dumps(relative) + ">\n" + content + "\n</reference>"
                 if skill["source"].startswith("local:") or skill.get("set_id"):
-                    text += "\n\nSkill folder: " + str(path.parent) + "\nRun scripts only through the local command tool and its ordinary approval rules. Import and guidance grant no execution permission."
+                    text += "\n\nSkill folder: " + str(path.parent) + "\nRead the other files of this folder (a page template, data) with skill_read and reference, not with a command. Run scripts only through the local command tool and its ordinary approval rules. Import and guidance grant no execution permission."
                 return text
         return None
 

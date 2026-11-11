@@ -89,6 +89,7 @@ from ..worker.context import CONTEXT_OVERFLOW, is_context_overflow, provider_win
 from ..worker.loop import MORE_ROOM, REPLY_TOKENS, WAITING, WRAP_UP, FINAL_REPORT, ToolOutcome, result_text
 from ..members.activity import current, tool_step
 from ..own_calendar import CalendarError
+from .routine_outcome import REFUSED_KINDS
 from .snapshot import BUILTIN, FIND, MCP, NOTHING_FITS, USE, USE_REFUSALS, USE_TOOL, Snapshot, ToolRef
 from .tasks import TaskStore
 
@@ -329,6 +330,10 @@ class TaskRun:
         self.tool_calls = 0
         # Something was done outside: a call succeeded and was not a read (`_note_action`). Reading is not acting.
         self.acted = False
+        # The tools of the run that went through, and the last call of a tool that was refused with nothing after it
+        # that went through: how a routine's run is told to have ended well or not (`routine_outcome`).
+        self.succeeded: set[str] = set()
+        self.last_refused: tuple[str, str] | None = None
         self.cancelled = False
         self.timed_out = False
         # A call of a plugin's tool was under way when the task was cancelled: it may have been made.
@@ -749,12 +754,14 @@ class TaskRun:
         if ref is None or len(json.dumps(arguments, ensure_ascii=False)) > MAX_ARGUMENT_CHARS:
             # Not a tool the task was given: nothing to call, and nothing to audit.
             self._step(kind="tool", outcome="blocked", ms=_ms(began), reason="blocked")
+            if ref is None:
+                self.last_refused = (name, "unknown_tool")
             if ref is None and name in self.snapshot._aliases:
                 return {**_refused(), "content": "This tool is no longer enabled or connected. Read connections_list for current access; do not retry its old alias."}
             if self.room_speech:
                 return {**_refused(),'instruction':'Start this as private work with handoff.','content':'This room is for speech only.'}
             if ref is None:
-                return {**_refused(), "content": "This tool is not available to this member. The owner may have disabled its connection in the member's tool list; use find_tools for currently allowed tools."}
+                return {**_refused(), "content": "This tool is not available to this member. The owner may have disabled its connection in the member's tool list; use find_tools for currently allowed tools." + self._nearby(name)}
             return _refused()
         sent: int | None = None
         detail: str | None = None
@@ -770,6 +777,7 @@ class TaskRun:
             reply, outcome, tier = self._refused_use(arguments)
         else:
             reply, outcome, tier, detail = await self._builtin(ref, arguments, name, call_id)
+        self._note_result(ref, reply)
         self._note_action(ref, arguments, bool(reply.get("ok")))  # before the limits: the call was made
         self._check()
         if reply.get("ok") and isinstance(reply.get("content"), str):
@@ -814,6 +822,17 @@ class TaskRun:
                 self._artifact({"missing": missing.wire()})
         return reply
 
+    def _note_result(self, ref: ToolRef, reply: dict) -> None:
+        """What the run did with its tools, for the judgement of how it ended (`routine_outcome`): the tools that
+        succeeded, and the last call of a real tool when it was refused and nothing after it went through."""
+        if ref.kind not in (BUILTIN, MCP):
+            return
+        if reply.get("ok"):
+            self.succeeded.add(ref.name)
+            self.last_refused = None
+        elif reply.get("kind") in REFUSED_KINDS:
+            self.last_refused = (ref.name, reply["kind"])
+
     def _note_action(self, ref: ToolRef, arguments: dict, ok: bool) -> None:
         """A call that succeeded and was not a read is something done outside. What reads is told as the conversation
         tells it (its `made`): a plugin's tool by what its server says (`reads_only`), Raphael's own by the tier T0."""
@@ -825,9 +844,13 @@ class TaskRun:
     def continuation_state(self):
         return {"declined": sorted(self._declined), "unanswered": sorted(self._unanswered), "seen_urls": self.seen_urls.snapshot(), "acted": self.acted,
                 "untrusted": self._memory_untrusted, "handoff_receipts": self.handoff_receipts,
-                "conversation_cost": getattr(self, "conversation_cost", 0.0)}
+                "conversation_cost": getattr(self, "conversation_cost", 0.0),
+                "succeeded": sorted(self.succeeded), "last_refused": list(self.last_refused) if self.last_refused else None}
 
     def restore_continuation(self, state):
+        self.succeeded.update(name for name in state.get("succeeded", []) if isinstance(name, str))
+        refused = state.get("last_refused")
+        self.last_refused = (refused[0], refused[1]) if isinstance(refused, list) and len(refused) == 2 else None
         self._declined.update(state.get("declined", []))
         self._unanswered.update(state.get("unanswered", []))
         for url in state.get("seen_urls", []):
@@ -1009,7 +1032,8 @@ class TaskRun:
                 kind="tool", tool=ref.name, server=ref.server, tier=waiting.tier.name,
                 outcome=outcome, ms=_ms(began), reason=reason_of(outcome, result.error),
             )  # fmt: skip
-            content = json.dumps(result.data, ensure_ascii=False) if result.ok else ""
+            content = json.dumps(result.shown, ensure_ascii=False) if result.ok else ""
+            self._note_result(ref, {"ok": result.ok, "kind": result.error})
             self._note_action(ref, waiting.arguments, result.ok)
             if status is not None:
                 status.update(outcome=outcome, reason=reason_of(outcome, result.error))
@@ -1056,6 +1080,7 @@ class TaskRun:
         )  # fmt: skip
         if result.ok:
             self.seen_urls.add_from(text)
+        self._note_result(ref, {"ok": result.ok, "kind": result.kind})
         self._note_action(ref, waiting.arguments, result.ok)
         shown = ToolOutcome(result.ok, result.kind, text, cut or result.truncated)
         if status is not None:
@@ -1072,12 +1097,21 @@ class TaskRun:
         _, lines = self.snapshot.find(query)
         return {"ok": True, "kind": None, "content": "\n".join(lines) or NOTHING_FITS, "truncated": False}, "ok", "T0"
 
+    def _nearby(self, name: object) -> str:
+        """The tools of the task closest to a name that is none of them, said to the model so that the run goes on."""
+        near = self.snapshot.nearest(name)
+        return f" The nearest tools of this task: {', '.join(near)}." if near else ""
+
     def _refused_use(self, arguments: dict) -> tuple[dict, str, str | None]:
         """A use_tool call that names no tool of the task, or gives it no object of arguments: `tool` makes
         every other as the call of the tool it names."""
         kind = self.snapshot.use(arguments)
         kind = kind if isinstance(kind, str) else "unknown_tool"
-        return {"ok": False, "kind": kind, "content": "", "instruction": USE_REFUSALS[kind], "truncated": False}, "blocked", "T0"
+        named = arguments.get("name") if isinstance(arguments, dict) else None
+        if kind in ("unknown_tool", "unavailable"):
+            self.last_refused = (named if isinstance(named, str) else USE_TOOL, kind)
+        told = USE_REFUSALS[kind] + (self._nearby(named) if kind == "unknown_tool" else "")
+        return {"ok": False, "kind": kind, "content": "", "instruction": told, "truncated": False}, "blocked", "T0"
 
     async def _builtin(
         self, ref: ToolRef, arguments: dict, alias: str = "", call_id: str = ""
@@ -1116,7 +1150,8 @@ class TaskRun:
                 return _refused(), "blocked", tier.name, None
         from ..agent.owner_questions import BACKGROUND_TOOLS
         from ..agent.harness_tools import ROUTINE_TOOLS
-        if ref.name in BACKGROUND_TOOLS or ref.name in ROUTINE_TOOLS or ref.name in CONNECTION_TOOLS:
+        from ..agent.team_admin import TEAM_READS
+        if ref.name in BACKGROUND_TOOLS or ref.name in ROUTINE_TOOLS or ref.name in CONNECTION_TOOLS or ref.name in TEAM_READS:
             result = (await self._owner_tool(ref.name, arguments) if self._owner_tool else
                       ToolResult(ref.name, False, None, "unavailable"))
             if result.ok and isinstance(result.data, dict) and result.data.get("owner_wait"):
@@ -1133,7 +1168,7 @@ class TaskRun:
         gate.record_builtin(ref.name, outcome=outcome, task_id=self.task_id)
         if result.ok:
             limit = 2 * 128 * 1024 + 1000 if ref.name == "skill_read" else None
-            text, cut = _cut(json.dumps(result.data, ensure_ascii=False), limit)
+            text, cut = _cut(json.dumps(result.shown, ensure_ascii=False), limit)
             reply = {"ok": True, "kind": None, "content": text, "truncated": cut}
         else:
             reply = {"ok": False, "kind": result.error or "error", "content": "", "truncated": False}
@@ -1148,8 +1183,10 @@ class TaskRun:
                 self._gate.check_for(action, name, arguments, approval)
                 return ToolResult(name, True, {"approved": True})
             from ..agent.harness_tools import CONNECTION_TOOLS, ROUTINE_TOOLS
-            from ..management import BACKGROUND_MEMBER_TOOLS
-            if name in CONNECTION_TOOLS or name in ROUTINE_TOOLS or name in BACKGROUND_MEMBER_TOOLS:
+            from ..agent.team_admin import TEAM_READS
+            from ..management import BACKGROUND_MEMBER_TOOLS, BACKGROUND_READS
+            if (name in CONNECTION_TOOLS or name in ROUTINE_TOOLS or name in BACKGROUND_MEMBER_TOOLS or name in TEAM_READS
+                    or name in BACKGROUND_READS):
                 return await self._owner_tool(name, arguments, approval=approval, action=action) if self._owner_tool else ToolResult(name, False, None, "unavailable")
             from ..memory.growth import TOOLS as GROWTH_TOOLS
             if name in GROWTH_TOOLS:

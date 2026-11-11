@@ -121,7 +121,7 @@ async def test_one_undeliverable_result_leaves_the_others_and_is_delivered_once_
     target,source=setup(rig)
     rig.client.replies.extend([report('First answer'),report('Second answer'),report('Later task')])
     first=rig.service.handoff(RAPHAEL,args(target,mode='consult',stage_id='one'),source_turn_id=source.id,language='en').data['task_id']
-    second=rig.service.handoff(RAPHAEL,args(target,mode='consult',stage_id='two'),source_turn_id=source.id,language='en').data['task_id']
+    second=rig.service.handoff(RAPHAEL,args(target,mode='consult',stage_id='two',request='Another question for the writer.'),source_turn_id=source.id,language='en').data['task_id']
     rig.conn.execute(f"CREATE TRIGGER fail_delivery BEFORE INSERT ON room_messages WHEN NEW.request_id='handoff-{first}' "
                      "BEGIN SELECT RAISE(ABORT,'fixture delivery failure'); END")
     later=rig.submit()  # Raphael's own task runs beside the Writer's two, which follow one another

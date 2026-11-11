@@ -20,9 +20,10 @@ from ..protocol import INVALID_PARAMS, RpcError, invalid_params
 from .templates import MAX_BYTES, checked, findings
 
 DEFAULT_URL = "https://raw.githubusercontent.com/Jheng-Kai/raphael-catalog/main"
-# Reserved deployment trust roots. Fixture keys are supplied only by offline tests.
-PUBLIC_KEYS = ("cc1a2f06ea541dc3d558b78ef3d29363ec806e9c42d76340bf08e20c3a563139",
-               "9b91d6bdba80a8f774ed816aa3f0ddbbf4adb22e20db66e8473c9b8fc5262dc1c")
+# The catalogue's public keys, raw Ed25519 as 64 hex characters, one or two (a second while a key is rotated). There is none
+# until the owner has created the catalogue and its key (catalog-template/README.md): with no key the store is not open, asks
+# nothing of the network and says so. Fixture keys are supplied only by offline tests.
+PUBLIC_KEYS: tuple[str, ...] = ()
 INDEX_CAP = 256 * 1024
 MAX_INDEX_AGE = 7 * 24 * 60 * 60
 STALE_INDEX = with_ui_words({
@@ -73,8 +74,10 @@ class Catalog:
         parsed = urlsplit(url)
         if parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password or parsed.query or parsed.fragment:
             raise ValueError("Catalogue requires an HTTPS root")
-        if not 1 <= len(keys) <= 2:
-            raise ValueError("One or two public keys required")
+        if len(keys) > 2:
+            raise ValueError("At most two public keys")
+        if any(not isinstance(key, str) or not re.fullmatch(r"[0-9a-f]{64}", key) for key in keys):
+            raise ValueError("A public key is 64 hexadecimal characters")
         self.url, self.keys, self.transport = url.rstrip("/"), keys, transport
         self.folder = folder / hashlib.sha256(self.url.encode()).hexdigest()[:16]
         self.lock = asyncio.Lock()
@@ -116,7 +119,14 @@ class Catalog:
                     raise ValueError("Remote file too large")
             return bytes(data), response.headers.get("etag")
 
+    @property
+    def is_open(self):
+        """Without a public key nothing the catalogue says can be believed, so the store stays closed."""
+        return bool(self.keys)
+
     async def fetch(self):
+        if not self.is_open:
+            return self.view(False)
         async with self.lock:
             try:
                 async with asyncio.timeout(10), httpx.AsyncClient(transport=self.transport, timeout=10, follow_redirects=False) as http:
@@ -151,7 +161,7 @@ class Catalog:
 
     def view(self, offline):
         index = self.cached["index"] if self.cached else {"entries": [], "revoked": []}
-        return {"entries": [e for e in index["entries"] if e["id"] not in index["revoked"]], "offline": offline}
+        return {"entries": [e for e in index["entries"] if e["id"] not in index["revoked"]], "offline": offline, "open": self.is_open}
 
     def require_fresh(self):
         verified = self.cached.get("verified_at") if self.cached else None
@@ -160,6 +170,8 @@ class Catalog:
             raise RpcError(INVALID_PARAMS, STALE_INDEX.get(self.language(), STALE_INDEX["en"]))
 
     async def package(self, identifier, *, require_fresh=False):
+        if not self.is_open:
+            raise invalid_params("The store is not open yet")
         await self.fetch()
         if require_fresh:
             self.require_fresh()
@@ -190,6 +202,23 @@ class Catalog:
         return value
 
 
+def export_files(service, value):
+    """The bytes a publish request holds, their digest and the folder they are prepared in; one recipe is always the same folder."""
+    raw = (json.dumps(value, ensure_ascii=False, indent=2) + "\n").encode()
+    digest = hashlib.sha256(raw).hexdigest()
+    return raw, digest, service._avatars.parent / "template-exports" / digest[:16]
+
+
+def export_file(service, folder_id):
+    """The recipe file of a folder this app prepared, found by the 16 characters its name is made of and by nothing else."""
+    if not isinstance(folder_id, str) or not re.fullmatch(r"[0-9a-f]{16}", folder_id):
+        raise invalid_params("folder_id must name a prepared publish request")
+    file = service._avatars.parent / "template-exports" / folder_id / "member.raphael-member"
+    if not file.is_file():
+        raise invalid_params("folder_id must name a prepared publish request")
+    return file
+
+
 def client(service):
     if not hasattr(service, "_member_catalog"):
         service._member_catalog = Catalog(service._avatars.parent / "member-catalog", url=os.environ.get("RAPHAEL_CATALOG_URL", DEFAULT_URL),
@@ -204,15 +233,15 @@ async def handle(service, params):
             return await client(service).fetch()
         except (ValueError, OSError):
             # An unavailable or rejected catalogue has the same calm empty state.
-            return {"entries": [], "offline": True}
+            return {"entries": [], "offline": True, "open": client(service).is_open}
     if action == "catalog-preview":
         value = await client(service).package(params.get("catalog_id"))
         return {"template": value, "findings": findings(value)}
+    if action == "folder":
+        return {"path": str(export_file(service, params.get("folder_id")))}
     value = checked(params.get("template"))
-    raw = (json.dumps(value, ensure_ascii=False, indent=2) + "\n").encode()
-    digest = hashlib.sha256(raw).hexdigest()
-    folder = service._avatars.parent / "template-exports" / digest[:16]
+    raw, digest, folder = export_files(service, value)
     atomic(folder / "member.raphael-member", raw)
     atomic(folder / "README.md", b"Submit this recipe by pull request. No credentials or permissions are included.\n")
     query = urlencode({"quick_pull": "1", "title": f"Add member template: {value['name']}", "body": f"Package: member.raphael-member\nSHA256: {digest}\n\nFork the catalogue and add the package, README and index entry. The maintainer reviews and signs the index."})
-    return {"folder": str(folder), "url": "https://github.com/Jheng-Kai/raphael-catalog/compare/main...main?" + query}
+    return {"folder": str(folder), "folder_id": folder.name, "url": "https://github.com/Jheng-Kai/raphael-catalog/compare/main...main?" + query}

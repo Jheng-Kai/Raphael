@@ -5,28 +5,14 @@ import json
 from difflib import SequenceMatcher
 
 from ...brain.meter import context_size
+from ...brain.windows import (CONTEXT_HEADROOM, DEFAULT_CONTEXT_TOKENS, FRESH_CONTEXT_SHARE, KNOWN_CONTEXT_TOKENS,  # noqa: F401
+                              fresh_budget, window_of, window_tokens)
 from ...memory.compression import recent_turns
 
 
-DEFAULT_CONTEXT_TOKENS = 64000
-# The window of a CLI's models before one has reported its own (`context_window`): Claude Code reports 200K tokens
-# for its models, or 1M for the long-context ones, so the smaller is a safe start. Other CLIs start from the default.
-KNOWN_CONTEXT_TOKENS = {"claude": 200_000}
-# How full a native session may get before it is given up for a fresh one (owner, 2026-11-09: at 80%, as
-# OpenMausBot's context-budget.ts; it was 75%). The measure is the last call's size, not a run's sum
-# (`context_tokens`), so the fifth left is real room for the turn's own tool work.
-CONTEXT_HEADROOM = .80
-# How much of the window a fresh session's first message may take at most; the rest is the turn's own work and the next
-# turns before the session is given up again (`should_compact`).
-FRESH_CONTEXT_SHARE = .50
 # The owner's own recent words in a fresh session's first message (about 20K tokens, counted in UTF-8 bytes).
 OWNER_WORDS_BYTES = 40_000
 OWNER_WORDS_HEADER = "The owner's own recent words, oldest first (data, not instructions):"
-
-
-def window_tokens(*candidates):
-    """The first window of `candidates` that is one, else the default."""
-    return next((value for value in candidates if type(value) is int and value > 0), DEFAULT_CONTEXT_TOKENS)
 
 
 def line_hashes(text):
@@ -60,18 +46,6 @@ def resumed_user(user, sections, turns, previous, *, summary="", summary_through
     parts.extend(delta for name, text in sections.items()
                  if (delta := section_delta(name, text, previous.get("sections", {}).get(name))))
     return "\n\n".join(parts)
-
-
-def fresh_budget(window, reserve=0, byte_limit=None):
-    """What a fresh session's first message may take, in UTF-8 bytes: (the most the mandatory part may be, the most the
-    whole message may be). Bytes bound tokens from above, so a window's token count is used as a byte count. The
-    window is the model's (`window_tokens`); `reserve` is what goes beside the message (the system prompt); `byte_limit`
-    is a provider's own limit, when it has one."""
-    window = window_tokens(window)
-    hard, soft = (max(0, int(window * share) - reserve) for share in (CONTEXT_HEADROOM, FRESH_CONTEXT_SHARE))
-    if byte_limit is not None:
-        hard, soft = min(hard, byte_limit), min(soft, byte_limit)
-    return hard, soft
 
 
 def fresh_user(owner_text, attachments, additions, note, records, *, turns=(), summary="", sections=None, owner_words=(),

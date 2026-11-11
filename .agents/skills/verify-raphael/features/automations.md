@@ -19,6 +19,21 @@ the words and nothing was created; `routine-row-hover` that the switch stands in
 that describe the editor's rows, menus, test runs, webhook and tunnel cards are history: their scenes were retired with
 it, and the core contracts they cite stay.
 
+## Routine runs that tell the truth (owner, 2026-11-11)
+
+A run is done only when it did its work (R-ROUTINE-05): a refused step or a missing page makes it failed, with its reason on
+the routine (`last_error`, `last_failed`) and in the member's conversation. The read-only routine view says so as a status with
+a dot (`routine-view-failed`), and a routine that is running shows the member's working line in its conversation, with no owner
+bubble for its instructions (`routine-running`, R-ROUTINE-08). Existing consumers: `routine-sentence` (a failed run's line and
+the same view), `details-routine-view` (a routine that works has no status line).
+
+```powershell
+npm run look -- routine-view-failed routine-running routine-sentence details-routine-view --theme both --width 1120,720,1920x1080
+```
+
+`routine-view-failed` checks the failed state has words and a dot and the dialog still holds nothing to change;
+`routine-running` that the live working line is there and no `.owner-message` is drawn for the routine's instructions.
+
 ## Calm conversations (owner, 2026-11-05)
 
 See [Conversation](conversation.md#calm-conversations-owner-request-2026-11-05) for R-UI-101/R-CLI-07 and the selected matrix. Routine origins now name the routine inside its reply, with the existing editor target. Failures appear once; rerun shares reply/copy actions. Public work receipts collapse into reply detail; calendars and owner cards retain their behavior. This supersedes older transcript trigger-chip and between-message receipt descriptions.
