@@ -975,6 +975,44 @@ export async function perform(page, step, evidenceDirectory) {
       } finally { await element.dispose(); }
       break;
     }
+    case "watch-opens": {
+      // R-UI-124: how many times a thing opened, counted as it happens (the end state alone cannot tell a close from a close and a reopen).
+      // A node of `selector` that is drawn, a `hidden` taken off one, or `attribute` appearing on one (a window that opens by a flag on the root) is an opening.
+      await page.evaluate(({ selector, gone, attribute, over }) => {
+        const watch = window.__look.watch = { selector, gone, over, opens: 0 };
+        const hit = node => node instanceof Element && (node.matches(selector) || !!node.querySelector(selector));
+        new MutationObserver(records => {
+          for (const record of records) {
+            if (record.type === "childList") watch.opens += [...record.addedNodes].filter(hit).length;
+            else if (record.attributeName === "hidden") { if (record.oldValue !== null && !record.target.hidden && hit(record.target)) watch.opens++; }
+            else if (attribute && record.attributeName === attribute && record.oldValue === null && record.target.matches?.(selector)) watch.opens++;
+          }
+        }).observe(document, { childList: true, subtree: true, attributes: true, attributeOldValue: true });
+      }, { selector: step.selector, gone: step.gone ?? step.selector, attribute: step.attribute ?? null, over: step.over ?? null });
+      break;
+    }
+    case "press-opener": {
+      // The second press on the control that opened the thing, made with the real mouse at a point of that control that the pointer
+      // reaches: on the control itself, or on the scrim that lies over it. A control the layout hides (a drawer that closed) is reported, not pressed.
+      const point = await page.evaluate(selector => {
+        const scrims = ".modal-scrim, .mb-scrim, .cs-scrim, .sidebar-scrim, .mb-det-scrim";
+        const control = [...document.querySelectorAll(selector)].find(node => node.getClientRects().length && getComputedStyle(node).visibility !== "hidden");
+        if (!control) return { pressed: false, reason: "the control is not drawn at this width" };
+        const box = control.getBoundingClientRect(), centre = { x: box.left + box.width / 2, y: box.top + box.height / 2 };
+        const grid = [];
+        for (let i = 1; i <= 7; i++) for (let j = 1; j <= 7; j++) grid.push({ x: box.left + box.width * i / 8, y: box.top + box.height * j / 8 });
+        grid.sort((a, b) => Math.hypot(a.x - centre.x, a.y - centre.y) - Math.hypot(b.x - centre.x, b.y - centre.y));
+        for (const at of grid) {
+          if (at.x < 0 || at.y < 0 || at.x >= innerWidth || at.y >= innerHeight) continue;
+          const hit = document.elementFromPoint(at.x, at.y);
+          if (hit && (control.contains(hit) || hit.matches(scrims))) return { pressed: true, x: at.x, y: at.y, hit: `${hit.tagName.toLowerCase()}.${String(hit.className).split(" ")[0]}`, overScrim: !control.contains(hit) };
+        }
+        return { pressed: false, reason: "no point of the control is reachable by the pointer (something else covers it)" };
+      }, step.selector);
+      if (point.pressed) await page.mouse.click(point.x, point.y);
+      await page.evaluate(result => { window.__look.pressedOpener = result; }, point);
+      break;
+    }
     case "focus": await page.focus(step.selector); break;
     case "ime": {
       // The browser's own input-method path (the one WebView2 uses): it makes compositionstart/update and the composing `input`

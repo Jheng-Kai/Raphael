@@ -16,6 +16,10 @@ export const ime = (selector, sequence) => ({ action: "ime", selector, sequence 
 export const scroll = selector => ({ action: "scroll", selector });
 export const waitScrollEnd = selector => ({ action: "wait-scroll-end", selector });
 export const rightClick = selector => ({ action: "right-click", selector });
+// R-UI-124: count how many times a thing opens (`selector` drawn, `hidden` lifted, or `attribute` set on it), and press its opener a second time.
+// `gone` is what must be absent afterwards; `over` says where that second press should land: "scrim" (a layer over the control) or "control".
+export const watchOpens = (selector, options = {}) => ({ action: "watch-opens", selector, ...options });
+export const pressOpener = selector => ({ action: "press-opener", selector });
 export const page = name => click(name === "agent" ? ".mb-chief" : `#nav [data-go="${name}"]`);
 // 連結應用程式 is no tab of Settings: its one way in is the sidebar's button, which opens it as a dialog of its own (R-UI-111).
 // Appearance is a section of 一般 (the six settings tabs): its scenes open 一般 at that section. Messaging has no section

@@ -351,7 +351,8 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   detailsScrim.className = "mb-det-scrim";
   detailsScrim.setAttribute("aria-hidden", "true");
   // The press that closes the panel goes on to what it was over (R-UI-121).
-  detailsScrim.addEventListener("click", event => closeAndPress(event, detailsScrim, () => members.setDetails(false)));
+  // The header button opened it, and is not pressed again by the press that closes it (R-UI-124).
+  detailsScrim.addEventListener("click", event => closeAndPress(event, detailsScrim, () => members.setDetails(false), conversationButton));
   el.insertBefore(detailsScrim, members.details);
   if (members.detailsOpen()) el.dataset.det = "open";
   el.querySelector(".mb-head-l")!.append(members.picker);

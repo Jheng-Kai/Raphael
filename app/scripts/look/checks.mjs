@@ -7211,5 +7211,62 @@ export function checkRendered(name, context = {}) {
       return { check: name };
     })();
   }
+  if (name.startsWith("opener-toggle-")) {
+    // R-UI-124 (owner, 2026-11-11): the control that opened a thing is its toggle. The scene opened it once, then pressed that
+    // control again with the real mouse (`press-opener`); the thing must be closed and have been opened exactly once, counted as it happened.
+    const until = async (ready, what) => {
+      const end = performance.now() + 3000;
+      while (!ready()) {
+        if (performance.now() > end) throw new Error(`${name}: ${what}`);
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
+    };
+    const settle = () => new Promise(resolve => setTimeout(resolve, 700));
+    if (["opener-toggle-row-menu", "opener-toggle-row-again", "opener-toggle-keyboard"].includes(name)) return (async () => {
+      const watch = window.__look.watch, menus = () => document.querySelectorAll("#app-popover");
+      require(watch, "the scene watched nothing");
+      if (name === "opener-toggle-row-menu") {
+        // A left press on the row whose right click opened the menu: the row is not the menu's opener, so the press goes through (R-UI-121).
+        await until(() => document.querySelector('.mb-col [data-member][aria-current="true"]')?.dataset.member === "2", "the left press on the same row did not open that member");
+        await settle();
+        require(!menus().length, "the menu is still open after the press on its row");
+        require(watch.opens === 1, `the menu was opened ${watch.opens} times`);
+      } else if (name === "opener-toggle-row-again") {
+        // A right click is not a close gesture: on the same row it takes the menu to the new point, one menu, opened twice.
+        await until(() => watch.opens === 2, `a second right click on the row left ${watch.opens} openings`);
+        await settle();
+        require(menus().length === 1 && document.querySelector('.mb-col [data-member-more="2"][aria-expanded="true"]'), "one menu is open, the row's");
+        require(watch.opens === 2, `the menu was opened ${watch.opens} times`);
+      } else {
+        require(watch.opens === 2, `Enter opened it once and Space once (${watch.opens} openings): the presses on the open menu's opener only close it`);
+        await settle();
+        require(!menus().length && document.querySelector('.mb-col [data-col="add"][aria-expanded="false"]'), "the menu is closed and stays closed");
+        require(document.activeElement === document.querySelector('.mb-col [data-col="add"]'), "the focus is on the opener");
+      }
+      return { check: name, opens: watch.opens };
+    })();
+    return (async () => {
+      const watch = window.__look.watch, pressed = window.__look.pressedOpener;
+      require(watch && pressed, "the scene watched nothing or pressed nothing");
+      const open = () => document.querySelector(watch.gone);
+      if (!pressed.pressed) {
+        // Only a layout may keep the control out of reach (a drawer that closed behind the first press): never a wide window.
+        require(innerWidth < 860, `the opener could not be pressed in a wide window: ${pressed.reason}`);
+        require(open() && watch.opens === 1, "an opener that cannot be reached leaves the thing open once");
+        return { check: name, skipped: pressed.reason, width: innerWidth };
+      }
+      require(!watch.over || (watch.over === "scrim") === pressed.overScrim, `the press ${pressed.overScrim ? "landed on a scrim" : "landed on the control itself"}, the scene meant ${watch.over}`);
+      const end = performance.now() + 3000;
+      while (open()) {
+        if (performance.now() > end) throw new Error(`${name}: the second press on the opener left it open (${watch.gone}), pressed at ${pressed.hit}`);
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
+      // Closed is not enough: a close that is followed by an opening is the loop. Wait past a fade and a late redraw.
+      await new Promise(resolve => setTimeout(resolve, 700));
+      require(!open(), `it closed and opened again (${watch.gone})`);
+      require(watch.opens === 1, `it was opened ${watch.opens} times, once by the first press and not again by the second`);
+      return { check: name, opens: watch.opens, pressedAt: pressed.hit, overScrim: pressed.overScrim, width: innerWidth };
+    })();
+  }
   throw new Error(`Unknown rendered check: ${name}`);
 }
