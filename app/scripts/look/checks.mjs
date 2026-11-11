@@ -82,15 +82,18 @@ export function checkRendered(name, context = {}) {
     }
     return {check:name};
   }
-  if (name === "creator-tabs") {
-    const maker = document.querySelector(".cr-dialog"), heading = maker.querySelector(".mb-dlg-head h2");
-    const box = heading.getBoundingClientRect();
-    const previous = window.__look.creatorHeading;
-    require(!previous || (previous.node === heading && Math.abs(previous.x - box.x) < 1 && Math.abs(previous.y - box.y) < 1), "switching tabs preserves the same title and position");
-    window.__look.creatorHeading = {node:heading, x:box.x, y:box.y};
-    require(maker.querySelectorAll('.cr-tabs .tabs.plain.fill > .tab').length === 2, "creator uses the member panel's shared tabs");
-    require(document.querySelectorAll('.cr-dialog').length === 1, "tabs share one creation container");
-    return {check:name};
+  if (name === "store-page") {
+    // The store is a page of its own where the conversation stands (the sidebar's + › 商店), no part of 新增成員 (owner, 2026-11-11).
+    const dialog = document.querySelector(".store-dialog"), scrim = dialog.closest(".mb-scrim"), side = document.getElementById("nav").getBoundingClientRect();
+    require(document.querySelectorAll(".mb-scrim").length === 1 && scrim.classList.contains("store-scrim"), "one page for the store");
+    require(matchMedia("(max-width: 859px)").matches || scrim.getBoundingClientRect().left >= side.right - 1, "it stands where the conversation stands, the sidebar beside it");
+    require(dialog.querySelector(".mb-dlg-head h2").textContent.trim() === "商店" && !dialog.querySelector('.tabs, [role="tab"], #mb-new-name, .cr-dialog'), "its own title, no tabs, no 新增成員");
+    const search = dialog.querySelector("[data-store-search]"), templates = dialog.querySelector('.store-bar [data-dlg="templates"]');
+    require(visible(search) && visible(templates) && templates.textContent.trim() === "從範本開始", "the search and the template button stand in one bar");
+    const s = search.getBoundingClientRect(), tb = templates.getBoundingClientRect();
+    require(Math.abs(s.bottom - tb.bottom) <= 1.5 && tb.left >= s.right - 1 && tb.right <= scrim.getBoundingClientRect().right, "the template button is beside the search, on its line");
+    require(!window.__look.calls.some(call => call.method === "members.create"), "looking makes nobody");
+    return { check: name };
   }
   // The member store's own checks; the plugin store's store-group-* checks live further down.
   if (["store-home", "store-category", "store-search", "store-empty", "store-offline", "store-closed", "store-preview", "store-warning", "store-export"].includes(name)) {
@@ -183,7 +186,7 @@ export function checkRendered(name, context = {}) {
       require(visible(toast) && toast.textContent.includes("損壞或不完整"), "the file is said to be damaged, in the owner's words");
       require(!/JSON|Unexpected|SyntaxError|Invalid/.test(toast.textContent), "no parser or core wording");
       require(!document.querySelector(".template-preview"), "nothing is previewed");
-      require(!calls.some(call => call.method === "members.template"), "the core is never asked about a file that cannot be one");
+      require(!calls.some(call => call.method === "members.template" && call.params.action !== "catalog"), "the core is never asked about a file that cannot be one (the store's own catalogue read is not about the file)");
     }
     if (name === "colleague-name-empty") {
       const dialog = document.querySelector(".template-preview"), field = dialog.querySelector("[data-template-name]"), line = dialog.querySelector(".field-error");
@@ -5495,35 +5498,99 @@ export function checkRendered(name, context = {}) {
     require(!/跟隨|連接其他來源/.test(menu.textContent), "nothing about following a default or adding a source");
     return { check: name };
   }
-  if (name === "member-maker" || name === "member-maker-chosen") {
-    const dialog = document.querySelector(".cr-dialog"), box = dialog.closest(".mb-scrim").getBoundingClientRect(), side = document.getElementById("nav").getBoundingClientRect();
-    if (!matchMedia("(max-width: 859px)").matches) require(box.left >= side.right - 1 && visible(document.getElementById("nav")), "it stands where the conversation stands, the sidebar beside it");
-    const face = dialog.querySelector(".cr-face svg.slime").getBoundingClientRect(), maker = dialog.querySelector(".cr-maker").getBoundingClientRect();
-    require(face.width >= 100 && Math.abs(face.left + face.width / 2 - maker.left - maker.width / 2) <= 2, "the slime is large, in the middle");
-    require(!dialog.querySelector('img, input[type="file"], [data-pick]'), "a member is a slime: no pictures to choose");
-    require(dialog.querySelectorAll(".cr-colors [data-slime-color]").length >= 8 && dialog.querySelectorAll(".cr-characters [data-slime-character]").length >= 20, "every colour and character is on the page");
-    require(dialog.querySelectorAll("input, textarea").length === 1, "it asks only for a name");
-    const stands = dialog.querySelector(".cr-face svg.slime").parentElement;
-    const painted = [...dialog.querySelectorAll(".cr-face svg.slime path")].filter(part => part.getBoundingClientRect().width && getComputedStyle(part).visibility !== "hidden").map(part => part.getBoundingClientRect());
-    require(painted.length > 0, "the chosen slime is painted");
-    for (let box = stands; box && box !== dialog; box = box.parentElement) {
-      const seen = getComputedStyle(box);
-      const bounds = box.getBoundingClientRect(), reserve = Number(seen.overflowClipMargin.match(/([\d.]+)px/)?.[1] ?? 0);
-      const fits = seen.overflow === "visible" || painted.every(part => part.left >= bounds.left - reserve && part.right <= bounds.right + reserve && part.top >= bounds.top - reserve && part.bottom <= bounds.bottom + reserve);
-      require(box.matches(".mb-dlg-body") || (seen.clipPath === "none" && fits), `nothing cuts the slime's wings and horns (.${box.className})`);
+  if (["member-maker", "member-maker-box", "member-maker-tab", "member-maker-chosen", "member-maker-taken"].includes(name)) {
+    // 新增成員 is one small dialog over the dimmed window, as Grok Bot's Create New Bot (owner, 2026-11-11): the large slime, the name
+    // directly under it, the shared tabbed picker, 取消 and 建立. The numbers are Grok Bot's 440 x 582 dialog and its 56 px pitch, scaled to the picker.
+    const dialog = document.querySelector(".cr-dialog"), scrim = dialog.closest(".mb-scrim");
+    const faceBox = dialog.querySelector(".cr-face"), face = faceBox.querySelector("svg.slime"), nameField = dialog.querySelector("#mb-new-name");
+    const picker = dialog.querySelector(".cr-picker"), tabs = [...picker.querySelectorAll('[role="tab"]')], panels = picker.querySelector(".mb-slime-panels");
+    const foot = dialog.querySelector(".mb-dlg-act"), cancel = foot.querySelector('[data-dlg="cancel"]'), start = foot.querySelector('[data-dlg="create"]');
+    const box = element => { const r = element.getBoundingClientRect(); return [r.left, r.top, r.width, r.height].map(n => Math.round(n * 10) / 10); };
+    if (name === "member-maker-box") {
+      window.__look.makerBox = { dialog: box(dialog), face: box(faceBox), name: box(nameField), picker: box(picker), panels: box(panels), tabs: tabs.map(box), foot: box(foot) };
+      window.__look.makerFace = face.outerHTML;
+      return { check: name };
     }
-    require(getComputedStyle(dialog.querySelector(".cr-face svg.slime")).clipPath === "none", "nothing cuts the slime's wings and horns");
-    const start = dialog.querySelector('[data-dlg="create"]');
-    if (name === "member-maker") require(start.disabled && document.activeElement === dialog.querySelector("#mb-new-name"), "the name has the focus and there is nothing to press yet");
-    else {
-      require(!start.disabled, "a name makes it pressable");
-      require(dialog.querySelector('[data-slime-character="shion"]').getAttribute("aria-pressed") === "true" && dialog.querySelectorAll('[data-slime-color][aria-pressed="true"]').length === 0, "one slime is chosen");
+    const whole = dialog.getBoundingClientRect(), bodyBox = dialog.querySelector(".mb-dlg-body").getBoundingClientRect();
+    const pad = parseFloat(getComputedStyle(dialog.querySelector(".mb-dlg-body")).paddingLeft);
+    require(!scrim.classList.contains("store-scrim") && scrim.getBoundingClientRect().width >= innerWidth - 1, "it stands over the whole window, not in the place of the conversation");
+    require(getComputedStyle(scrim).backgroundColor !== "rgba(0, 0, 0, 0)", "the window behind it is dimmed");
+    const cx = (whole.left + whole.right) / 2, padTop = parseFloat(getComputedStyle(scrim).paddingTop), padBottom = parseFloat(getComputedStyle(scrim).paddingBottom);
+    const cy = (whole.top + whole.bottom) / 2, areaCy = (padTop + innerHeight - padBottom) / 2;
+    require(Math.abs(cx - innerWidth / 2) <= 1.5 && Math.abs(cy - areaCy) <= 1.5, `it is centred over the window (${Math.round(cx)},${Math.round(cy)} of ${innerWidth / 2},${areaCy})`);
+    require(whole.width >= 300 && whole.width <= 441, `about as wide as Grok Bot's 440, and no wider than its picker needs (${Math.round(whole.width)} px)`);
+    require(whole.height <= 600 || innerHeight < 700, `no taller than about 600 px (${Math.round(whole.height)} px in a ${innerHeight} px window)`);
+    require(whole.top >= 0 && whole.bottom <= innerHeight && whole.left >= 0 && whole.right <= innerWidth, "the whole dialog stands in the window");
+    // Nothing scrolls inside it.
+    for (const part of [dialog, dialog.querySelector(".mb-dlg-body"), panels, picker]) require(part.scrollHeight <= part.clientHeight + 1 && part.scrollWidth <= part.clientWidth + 1, `nothing scrolls inside (.${part.className.split(" ")[0]} ${part.scrollHeight} of ${part.clientHeight})`);
+    // The order: head, large slime, name, tabs, grid, footer, each directly under the one before.
+    const head = dialog.querySelector(".mb-dlg-head"), order = [head, faceBox, nameField, picker.querySelector(".mb-slime-tabs"), panels, foot].map(part => part.getBoundingClientRect());
+    order.slice(1).forEach((below, at) => require(below.top >= order[at].bottom - 1, `the order is head, slime, name, tabs, grid, footer (part ${at + 1} starts above part ${at} ends)`));
+    require(head.querySelector("h2").textContent.trim() === "新增成員" && visible(head.querySelector('[data-dlg="close"]')), "the title at the left and the × at the right");
+    require(head.querySelector("h2").getBoundingClientRect().left < head.querySelector('[data-dlg="close"]').getBoundingClientRect().left, "the title is left of the ×");
+    // The preview is large and in the middle; the name is directly under it and centred.
+    const f = face.getBoundingClientRect();
+    require(f.width >= 80 && f.width <= 110 && Math.abs((f.left + f.right) / 2 - cx) <= 2, `the slime is large (${Math.round(f.width)} px), in the middle`);
+    const n = nameField.getBoundingClientRect();
+    require(n.top - faceBox.getBoundingClientRect().bottom <= 16, `the name field is directly under the slime (${Math.round(n.top - faceBox.getBoundingClientRect().bottom)} px)`);
+    require(getComputedStyle(nameField).textAlign === "center" && nameField.placeholder === "名字" && nameField.maxLength === 16, "centred text, a placeholder in the window's language, the member name length");
+    require(Math.abs(n.left - (bodyBox.left + pad)) <= 1 && Math.abs(n.right - (bodyBox.right - pad)) <= 1, "the name field fills the body's inner width");
+    require(dialog.querySelectorAll("input, textarea").length === 1 && !dialog.querySelector('img, input[type="file"], [data-dlg="templates"], [data-tab], [data-pick]'), "it asks only for a name: no template button, no store tab, no pictures");
+    // The tabs fill the dialog's inner width: nothing blank at their right, six slimes across.
+    const first = tabs[0].getBoundingClientRect(), last = tabs[tabs.length - 1].getBoundingClientRect();
+    require(tabs.length === 6 && tabs.every(tab => visible(tab) && Math.abs(tab.getBoundingClientRect().top - first.top) <= 1), "six tabs in one row");
+    require(Math.abs(first.left - n.left) <= 2 && Math.abs(last.right - n.right) <= 2, `the tabs reach both inner edges as the name field does (${Math.round(first.left - n.left)} and ${Math.round(last.right - n.right)} px)`);
+    const open = [...picker.querySelectorAll("[data-slime-group]")].filter(panel => getComputedStyle(panel).visibility !== "hidden" && !panel.hasAttribute("inert"));
+    require(open.length === 1 && open[0].dataset.slimeGroup === picker.querySelector('[role="tab"][aria-selected="true"]').dataset.slimeTab, "only the chosen tab's slimes show");
+    const shown = [...open[0].querySelectorAll("button")], cells = shown.map(button => button.getBoundingClientRect());
+    require(shown.length > 0 && shown.every(visible), "the open group's slimes are all there");
+    require(new Set(cells.map(cell => Math.round(cell.left))).size === Math.min(6, shown.length), "six slimes across");
+    require(cells.every(cell => cell.left >= n.left - 8 && cell.right <= n.right + 8), "the grid stays inside the dialog's inner edges");
+    require(picker.querySelectorAll('[aria-pressed="true"]').length === 1, "exactly one slime is chosen");
+    require(getComputedStyle(picker).position === "static" && getComputedStyle(picker).boxShadow === "none", "the picker lost the popover's chrome inside the dialog");
+    // The footer: 取消 then 建立 at the right, as every dialog (R-UI-27).
+    const c = cancel.getBoundingClientRect(), s = start.getBoundingClientRect();
+    require(c.right <= s.left && Math.abs(s.right - (whole.right - pad)) <= 1.5 && Math.abs(c.height - s.height) <= 0.5 && cancel.textContent.trim() === "取消" && start.textContent.trim() === "建立", "取消 then 建立 at the right of the footer, one height");
+    require(!document.querySelector(".mb-scrim ~ .mb-scrim") && document.querySelectorAll(".cr-dialog").length === 1, "one dialog");
+    if (name === "member-maker") {
+      require(start.disabled && !cancel.disabled && document.activeElement === nameField, "the name has the focus and there is nothing to press yet");
+      require(picker.querySelector('[role="tab"][aria-selected="true"]').dataset.slimeTab === "colors", "it opens on the group of the slime that is chosen");
+    } else if (name === "member-maker-tab") {
+      const before = window.__look.makerBox, same = (a, b) => a.length === b.length && a.every((v, i) => Math.abs(v - b[i]) <= 0.6);
+      require(before, "the dialog was measured before the press");
+      require(same(box(dialog), before.dialog) && same(box(faceBox), before.face) && same(box(nameField), before.name) && same(box(picker), before.picker) && same(box(panels), before.panels) && same(box(foot), before.foot), "a tab press moved and resized nothing");
+      require(tabs.every((tab, i) => same(box(tab), before.tabs[i])), "no tab moved");
+      require(picker.querySelector('[role="tab"][aria-selected="true"]').dataset.slimeTab === "characters", "the pressed tab is the chosen one");
+      require(face.outerHTML === window.__look.makerFace, "a tab changes no slime: the large one is as it was");
+    } else if (name === "member-maker-chosen") {
+      require(!start.disabled, "a name makes 建立 pressable");
+      require(picker.querySelector('[data-slime-character="shion"]').getAttribute("aria-pressed") === "true" && picker.querySelectorAll('[data-slime-color][aria-pressed="true"]').length === 0, "one slime is chosen");
+      require(face.outerHTML !== window.__look.makerFace, "the large slime follows the one pressed");
+      const parts = [...face.querySelectorAll("path")].filter(part => part.getBoundingClientRect().width && getComputedStyle(part).visibility !== "hidden").map(part => part.getBoundingClientRect());
+      require(parts.length > 0 && getComputedStyle(face).clipPath === "none", "the chosen slime is painted whole");
+      for (let el = face.parentElement; el && el !== dialog; el = el.parentElement) {
+        const seen = getComputedStyle(el), bounds = el.getBoundingClientRect(), reserve = Number(seen.overflowClipMargin.match(/([\d.]+)px/)?.[1] ?? 0);
+        require(el.matches(".mb-dlg-body") || (seen.clipPath === "none" && (seen.overflow === "visible" || parts.every(part => part.left >= bounds.left - reserve && part.right <= bounds.right + reserve && part.top >= bounds.top - reserve && part.bottom <= bounds.bottom + reserve))), `nothing cuts the slime's wings and horns (.${el.className})`);
+      }
+    } else {
+      // member-maker-taken: refused where it was typed, with the name kept and nothing made.
+      require(nameField.value === "小森" && nameField.getAttribute("aria-invalid") === "true" && document.activeElement === nameField, "the name stays, marked, with the focus");
+      const said = dialog.querySelector(".field-error");
+      require(visible(said) && said.textContent.includes("小森") && said.getBoundingClientRect().top >= nameField.getBoundingClientRect().bottom - 1 && said.getBoundingClientRect().bottom <= picker.getBoundingClientRect().top + 1, "why is said in the dialog, between the name and the picker");
+      require(!window.__look.calls.some(call => call.method === "members.create"), "nothing was made");
     }
+    return { check: name, width: Math.round(whole.width), height: Math.round(whole.height) };
+  }
+  if (name === "member-maker-closed") {
+    require(!document.querySelector(".cr-dialog, .mb-scrim"), "the dialog is gone");
+    require(!window.__look.calls.some(call => call.method === "members.create"), "nothing was made");
+    require(visible(document.querySelector(".composer .cmp-input")) || visible(document.getElementById("nav")), "the app is as it was behind it");
     return { check: name };
   }
   if (name === "member-maker-made") {
     const made = window.__look.calls.filter(call => call.method === "members.create");
-    require(made.length === 1 && made[0].params.name === "哥布達" && made[0].params.avatar === "slime:gobta", "the member is made once, with its slime");
+    require(made.length === 1 && made[0].params.name === "哥布達" && made[0].params.avatar === "slime:gobta" && made[0].params.greet === true, "the member is made once, with its slime, and asked to greet");
+    require(!document.querySelector(".cr-dialog, .mb-scrim"), "the dialog closed at once");
     require(visible(document.querySelector(".composer .cmp-input")), "its conversation is open");
     const greeting = [...document.querySelectorAll(".page-agent .ra-body")].filter(visible);
     require(greeting.length === 1 && greeting[0].textContent.includes("哥布達") && greeting[0].textContent.includes("？"), "it speaks first and asks what it is for");

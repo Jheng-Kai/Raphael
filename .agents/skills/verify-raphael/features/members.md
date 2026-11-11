@@ -131,7 +131,7 @@ npm run look -- members-expanded sidebar-folders --theme both --width 1120,720,1
 npm run look -- details member-avatar member-edit details-routines details-routine-view details-routine-hover details-skills details-commands details-notify --theme both --width 1120,720,1920x1080
 npm run look -- sidebar-folders member-text --theme both --width 1120,720,1920x1080
 npm run look -- member-delete member-conversation-sections --theme both --width 1120,720,1920x1080
-npm run look -- member-maker member-maker-chosen member-maker-greeting member-maker-made --theme both --width 1120,720,1920x1080
+npm run look -- member-maker member-maker-chosen member-maker-made member-maker-enter member-maker-greeting member-maker-taken member-maker-escape member-maker-x member-maker-cancel opener-toggle-member-maker shortcut-new-in-composer --theme both --width 1120,720,1920x1080
 npm run look -- slime-states slime-picker slime-sizes slime-gallery slime-motion-idle slime-motion-busy slime-motion-moments slime-motion-change slime-sharp slime-pointer slime-cost --theme both --width 1120,720,1920x1080
 npm run look -- member-face-hover slime-picker slime-picker-tab --theme both --width 1120,720,1920x1080
 npm run look -- slime-places slime-places-settings busy-team-calm --theme both --width 1120,720,1920x1080
@@ -142,11 +142,21 @@ deletes 小森 from the row's ⋯ menu after the confirmation (the menu had lost
 10/24); `member-conversation-sections` checks that a member's details have no
 conversation list and nothing that makes one (owner, 2026-11-06: one conversation per
 member, like Grok Bot, R-UI-103);
-`member-maker*` is 新增成員 as a character maker where the conversation stands, slimes
-only (owner, 10/31: no pictures, for copyright; Grok Bot's create page is the reference
-at bots/research/grokbot/12-flaviocopes-create-first-bot.jpg, without its suggestions: other
-people's bots will come from a library later). It asks only for a name; the
-member opens and speaks first, typing while its own model writes the greeting (since
+`member-maker*` is 新增成員 as one small dialog (R-MAKER-01; owner, 2026-11-11, after Grok Bot's Create
+New Bot, 440 x 582 px, at `bots/research/grokbot/hands-on-2026-11-11/NOTES.md` "Create New Bot" and
+"Picture picker"), slimes only (owner, 10/31: no pictures, for copyright; other people's bots come from the
+store). It is centred over the dimmed window, as wide as its slime picker needs (about 350 px in Chinese)
+and about 560 px high at most 600, nothing scrolling inside. Top to bottom: the title and ×, the large slime
+(96 px), the name (centred placeholder 名字, the only field), the same tabbed picker as a member's face popover
+(`slime-tabs.ts`, one component with two consumers: the dialog stands it in a `.menu.mb-avpop.cr-picker`
+wrapper and takes off only the popover's chrome), and 取消 / 建立 at the right (建立 disabled until a name).
+It opens on the group of the slime chosen at the start (a plain slime by the number of members, so 純色).
+It asks only for a name: no template button, no store tab, no colour row (the page it replaced was a whole
+content-area page with every slime in eight columns, and the store and 範本 rode in it; the store and the
+templates are reached from the sidebar's + › 商店, R-STORE-08). `member-maker-box` and `member-maker-tab`
+measure it before and after a tab press, `member-maker-enter`, `-escape`, `-x`, `-cancel` and
+`opener-toggle-member-maker` (the + pressed again) are the ways it ends, `member-maker-taken` the refusal of a
+name another member has. The member opens and speaks first, typing while its own model writes the greeting (since
 2026-11-06, R-COLLEAGUE-02: no tools, at most two sentences, only known owner context; a
 failed one is an ordinary failure line whose 重新產生 calls `members.greet`), and the
 owner's answer becomes its job through `set_my_job`, offered only while it has none. Whoever makes a
@@ -983,8 +993,9 @@ Follow-up 1 (2026-11-05): Template previews keep one quiet no-grants/privacy not
 ## Member store (2026-11-05)
 
 R-STORE-01 through R-STORE-04 extend the existing raphael-member v1 recipe, not a
-second package format. New member > Store and sidebar + > Store browse a signed
-catalogue. Featured rows, eight categories and local search reuse existing slime
+second package format. The sidebar's + › 商店 opens the store, a page of its own where the conversation
+stands (R-STORE-08; it is no tab of 新增成員 any more), and browses a signed
+catalogue; 從範本開始, the eight starter templates and 開啟檔案, is one button beside its search. Featured rows, eight categories and local search reuse existing slime
 characters and shared buttons. Preview shows full instructions, personality, skill
 documents/dependencies, routine schedules and individual disabled app connect cards.
 Adding installs skills and routines off and grants no apps; only subsequent per-app
@@ -1017,7 +1028,7 @@ template-export-review, template-review-pages, chat-setup-cards, member-template
 themes and the three widths.
 
 Inspect every contact sheet and each new scene at light 720 and dark 1120. Compare
-store chips/buttons with starter gallery and sidebar-plus, and preview/export cards
+store chips/buttons with the starter gallery (reached from the store page) and sidebar-plus, and preview/export cards
 with member-template-preview at matching dimensions. Run judge on that same run;
 missing external reference images/login are blocked, never design acceptance.
 Native file picker, OS browser/folder opening, persistence across desktop restart,
@@ -1155,7 +1166,7 @@ once (`watch-opens` counts the openings as the page makes them, so a close follo
 sidebar's 「連接應用程式」 is not reachable behind its own dialog and the scene says so instead of pressing.
 
 ```text
-npm run look -- opener-toggle-connect-apps opener-toggle-settings opener-toggle-page-card opener-toggle-add-menu opener-toggle-search-card opener-toggle-model-menu opener-toggle-permission-menu opener-toggle-slime-picker opener-toggle-message-menu opener-toggle-reaction-bar opener-toggle-emoji-picker opener-toggle-details opener-toggle-row-menu opener-toggle-row-again opener-toggle-keyboard --theme both --width 1120,720,1920x1080
+npm run look -- opener-toggle-connect-apps opener-toggle-settings opener-toggle-page-card opener-toggle-add-menu opener-toggle-search-card opener-toggle-model-menu opener-toggle-permission-menu opener-toggle-slime-picker opener-toggle-member-maker opener-toggle-message-menu opener-toggle-reaction-bar opener-toggle-emoji-picker opener-toggle-details opener-toggle-row-menu opener-toggle-row-again opener-toggle-keyboard --theme both --width 1120,720,1920x1080
 ```
 
 ## Sharing finished: cancelled saves, where the files are, files from the file manager, the store before it opens (2026-11-11)

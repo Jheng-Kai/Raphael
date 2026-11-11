@@ -791,7 +791,8 @@ export async function drive(name, context) {
     await click(page, '#app-popover [data-pick="member"]');
     await wait(page, ".cr-dialog");
     await capture("maker");
-    await click(page, '.cr-characters [data-slime-character="gobta"]');
+    await click(page, '.cr-dialog [data-slime-tab="characters"]');
+    await click(page, '.cr-dialog [data-slime-character="gobta"]');
     await type(page, "#mb-new-name", "NativeJob");
     await click(page, '.cr-dialog [data-dlg="create"]');
     await page.waitForSelector(".cr-dialog", { hidden: true });

@@ -58,7 +58,7 @@ describe("keyboard focus and the window controls", () => {
   });
 
   test("a dialog dims the caption too and starts below it, whichever dialog it is", () => {
-    for (const dimmed of [":root:has(.mb-scrim:not(.cr-scrim))", ":root:has(.menu.side-search)"]) {
+    for (const dimmed of [":root:has(.mb-scrim:not(.store-scrim))", ":root:has(.menu.side-search)"]) {
       expect(lastOf(`${dimmed} .window-chrome`, "background")).toBe("transparent");
       expect(lastOf(`${dimmed} .window-button:focus-visible:not(:hover)`, "background")).toBe("transparent");
     }
