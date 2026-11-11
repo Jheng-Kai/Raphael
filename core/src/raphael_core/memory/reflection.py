@@ -28,11 +28,13 @@ from collections.abc import Callable, Collection, Sequence
 from dataclasses import dataclass, field
 from datetime import date
 
+from ..brain.windows import fresh_budget
 from ..agent.history import Turn
 from ..agent.ledger import Ledger
 from ..brain.openrouter import OpenRouterError
 from ..brain.providers.base import ModelProvider
 from ..brain.providers.registry import for_purpose
+from ..worker.context import is_context_overflow
 from .conversation import turn_time
 from .store import MemoryFile
 from .doctrine import DOCTRINE
@@ -172,6 +174,10 @@ class Applied:
     full: list[str] = field(default_factory=list)
     # They were written after outside content, with the mark.
     marked: bool = False
+    # The model said what it was given is more than it reads: the pass is asked again with less, and when one item alone
+    # is more (`skipped`), that item is left unread, said so in the log, and nothing failed.
+    overflow: bool = False
+    skipped: int = 0
 
     @property
     def changed(self) -> int:
@@ -194,6 +200,7 @@ class Applied:
         self.refused += other.refused
         self.failed = self.failed or other.failed
         self.marked = self.marked or other.marked
+        self.overflow = self.overflow or other.overflow
 
 
 class BadAnswer(Exception):
@@ -266,6 +273,12 @@ def _turn_line(turn: Turn, outside: Collection[int], agent: str) -> str:
     return f"[turn {turn.id}, {turn_time(turn.created_at_ms)}] User: {_clip(turn.question)}\n{agent}: {_clip(said)}{extra}"
 
 
+def reflection_limit(window: int | None) -> int:
+    """What one pass may read, in characters: the usual bound, or less when the model's window leaves less than that
+    after the pass's instructions (`agent.cli.context.fresh_budget`, bytes bound tokens)."""
+    return min(REFLECTION_CHARS, fresh_budget(window, reserve=len(_REFLECT_SYSTEM.encode("utf-8")))[1])
+
+
 def readable_turns(today: date, own: MemoryFile, shared: MemoryFile, turns: Sequence[Turn], outside: Collection[int],
                    agent: str = "Raphael", limit: int = REFLECTION_CHARS) -> list[Turn]:
     """The newest of `turns` whose reflection message stays within `limit` characters, oldest first; the newest
@@ -335,24 +348,44 @@ class Reflector:
                 if current():
                     total.merge(apply(edits))
         except (OpenRouterError, TimeoutError, BadAnswer) as error:
+            if is_context_overflow(error):
+                # Asked again with less, unless the first answer was already applied: the refusal's second ask was too long.
+                total.overflow = not total.changed
+                return total
             kind, message = failure_summary(error)
             logger.warning("A memory pass failed: kind=%s reason=%s", kind, message)
             total.failed = True
         return total
 
     async def reflect(self, own: MemoryFile, shared: MemoryFile, turns: Sequence[Turn], *, outside: Collection[int] = (), today: date, model: str, ledger: Ledger, apply: Callable[[Sequence[Edit]], Applied], current: Callable[[], bool] = lambda: True, agent: str = "Raphael") -> Applied:
-        """One pass over `turns` (oldest first), the turns of the assistant `agent`. Never raises for the
-        model: a model that fails changes nothing."""
+        """One pass over `turns` (oldest first), the turns of the assistant `agent`. Never raises for the model: a model
+        that fails changes nothing. A model that says it was given too much is asked again with the newest half of the
+        turns, whole, down to one; a turn that alone is more than it reads is skipped, not failed (the caller moves its
+        watermark past it), so that length is never an error."""
         if not turns:
             return Applied()
-        applied = await self._pass(_REFLECT_SYSTEM.format(agent=agent), reflection_message(today, own, shared, turns, outside, agent),
-                                   model=model, ledger=ledger, apply=apply, current=current)
-        logger.info("Reflection pass: turns=%d written=%d deleted=%d refused=%d", len(turns), len(applied.written), len(applied.deleted), len(applied.refused))
+        kept = list(turns)
+        while True:
+            applied = await self._pass(_REFLECT_SYSTEM.format(agent=agent), reflection_message(today, own, shared, kept, outside, agent),
+                                       model=model, ledger=ledger, apply=apply, current=current)
+            if not applied.overflow:
+                break
+            if len(kept) == 1:
+                applied.skipped = 1
+                logger.warning("A memory pass skipped a turn that alone is more than the model reads: turn=%s", kept[0].id)
+                break
+            kept = kept[len(kept) // 2:]
+            logger.info("A memory pass was given too much: asking again with the newest %d turns", len(kept))
+        logger.info("Reflection pass: turns=%d written=%d deleted=%d refused=%d", len(kept), len(applied.written), len(applied.deleted), len(applied.refused))
         return applied
 
     async def consolidate(self, memory: MemoryFile, *, today: date, model: str, ledger: Ledger, apply: Callable[[Sequence[Edit]], Applied], current: Callable[[], bool] = lambda: True) -> Applied:
         """The tidy of one file. Never raises for the model."""
         user = f"Today: {today.isoformat()}\n\n" + _block(memory.name, memory) + f"\n\nThe target of every edit is \"{memory.target}\"."
         applied = await self._pass(_CONSOLIDATE_SYSTEM, user, model=model, ledger=ledger, apply=apply, current=current)
+        if applied.overflow:
+            # A file is bounded by its own limit: if even that is more than the model reads, the tidy is skipped for today.
+            applied.skipped = 1
+            logger.warning("A memory consolidation skipped a file that alone is more than the model reads: %s", memory.name)
         logger.info("Memory consolidated: written=%d deleted=%d refused=%d", len(applied.written), len(applied.deleted), len(applied.refused))
         return applied

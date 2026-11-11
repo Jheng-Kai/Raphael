@@ -401,7 +401,7 @@ SCHEMA_V27 = {
         "stop_requested INTEGER NOT NULL DEFAULT 0", "wrapup_sent INTEGER NOT NULL DEFAULT 0", "reason TEXT NOT NULL DEFAULT ''",
     ],
 }
-LATEST = 78
+LATEST = 79
 
 
 def test_v59_existing_tasks_default_to_no_artifact_and_keep_their_reports(monkeypatch, tmp_path):
@@ -693,7 +693,13 @@ SCHEMA_V74 = {**SCHEMA_V73, "agent_turns": [*SCHEMA_V73["agent_turns"], "failure
 SCHEMA_V75 = {**SCHEMA_V74, "worker_tasks": [*SCHEMA_V74["worker_tasks"], "handback TEXT"]}
 SCHEMA_V76 = {**SCHEMA_V75, "spend": [*SCHEMA_V75["spend"], "job TEXT", "billing TEXT", "cache_read_tokens INTEGER NOT NULL DEFAULT 0", "cache_write_tokens INTEGER NOT NULL DEFAULT 0", "cache_write_long_tokens INTEGER NOT NULL DEFAULT 0", "reasoning_tokens INTEGER NOT NULL DEFAULT 0", "reported_cost_usd REAL", "member_id INTEGER"]}
 
-@pytest.mark.parametrize("start_version, expected_steps", [(version, [step for step in (63, 64, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78) if step > version]) for version in (62, 63, 64, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77)])
+SCHEMA_V79 = {**SCHEMA_V76,
+    "room_cli_sessions": ["room_id INTEGER PK NOT NULL", "thread_id INTEGER PK NOT NULL", "member_id INTEGER PK NOT NULL", "brain TEXT PK NOT NULL",
+                          "session_id TEXT NOT NULL", "state TEXT", "updated_at_ms INTEGER NOT NULL"],
+    "room_thread_summaries": ["room_id INTEGER PK NOT NULL", "thread_id INTEGER PK NOT NULL", "text TEXT NOT NULL",
+                              "through_message_id INTEGER NOT NULL", "updated_at_ms INTEGER NOT NULL"]}
+
+@pytest.mark.parametrize("start_version, expected_steps", [(version, [step for step in (63, 64, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79) if step > version]) for version in (62, 63, 64, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78)])
 def test_latest_upgrade_runs_only_pending_migrations_and_preserves_vault_entries(monkeypatch, tmp_path, start_version, expected_steps):
     path = tmp_path / f"v{start_version}-to-latest.db"
     with monkeypatch.context() as old:
@@ -715,7 +721,7 @@ def test_latest_upgrade_runs_only_pending_migrations_and_preserves_vault_entries
     db.migrate(conn)
     assert steps == expected_steps
     assert conn.execute("PRAGMA user_version").fetchone()[0] == LATEST
-    for table, columns in SCHEMA_V76.items():
+    for table, columns in SCHEMA_V79.items():
         if table != "agent_turns_fts":
             assert describe_columns(conn, table) == columns
     entry = conn.execute("SELECT kind,label,hint,origin,members,credential FROM vault_entries WHERE id='legacy-login'").fetchone()
@@ -885,7 +891,7 @@ def describe_columns(conn, table):
 
 
 def test_connect_creates_the_latest_schema(conn):
-    assert schema_names(conn, "table") == set(SCHEMA_V76) | FTS_SHADOWS | SEQUENCE
+    assert schema_names(conn, "table") == set(SCHEMA_V79) | FTS_SHADOWS | SEQUENCE
     assert {
         "history_created",
         "agent_turns_created",
@@ -906,7 +912,7 @@ def test_connect_creates_the_latest_schema(conn):
         "one_standard_conversation",
     } <= schema_names(conn, "index")
     assert conn.execute("PRAGMA user_version").fetchone()[0] == LATEST
-    for table, columns in SCHEMA_V76.items():
+    for table, columns in SCHEMA_V79.items():
         if table != "agent_turns_fts":
             assert describe_columns(conn, table) == columns
     assert [c["name"] for c in conn.execute("PRAGMA table_info(agent_turns_fts)")] == [

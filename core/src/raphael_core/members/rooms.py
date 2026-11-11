@@ -22,6 +22,9 @@ from ..protocol import RpcError, invalid_params
 from .service import _whole, _rpc_error
 from .store import MemberError, clean_group_name
 from .exchanges import RoomExchanges, is_pass, bounded_transcript, ROOM_CONTEXT_CHARS
+from ..brain.windows import fresh_budget, window_of
+from ..memory.compression import recent_turns
+from .room_summary import RoomSummaries, summary_block
 from ..worker.guards import neutralize
 
 logger = logging.getLogger(__name__)
@@ -29,6 +32,8 @@ MAX_MESSAGE = 10000
 # How many posts a room takes in a minute, and how many of them one member's.
 ROOM_POSTS_PER_MINUTE = 12
 MEMBER_POSTS_PER_MINUTE = 4
+# The latest rows of a thread a CLI member's session may be sent or a renewed one given (the window's budget cuts them again).
+ROOM_THREAD_ROWS = 300
 # A meeting part in the owner's words, as one of the room's four. English words match whole, and
 # "for" only leads, so "content for the launch" stays a participant.
 _ROLE_WORDS = (('moderator', re.compile(r'主持|主席|司會|司会|議長|\b(?:moderat\w*|chair\w*|host|facilitat\w*)\b', re.I)),
@@ -71,6 +76,24 @@ _UNFINISHED_WORDS = with_ui_words({
 })
 
 
+# The line a room thread posts when it stops asking its members (`RoomsService._breaker_notice`): what stopped it, and what
+# the owner can do. {n} replies in a row (or hand-offs) failed for the same cause.
+_BREAKER_WORDS = with_ui_words({
+    'zh-TW': {'frame': '{cause}我先不再請成員回覆。請到「設定」檢查模型與登入狀態，或縮短討論內容，再在這裡寫一則訊息，大家就會繼續。',
+              'overflow': '連續 {n} 次回覆因內容超出模型一次能讀的長度而失敗。',
+              'provider': '連續 {n} 次回覆因模型或服務出問題而沒有完成。',
+              'handoff': '連續 {n} 次交辦都被拒絕，因為那項工作已經有人負責。'},
+    'en': {'frame': '{cause} I have stopped asking members to reply. Check the models and sign-ins in Settings or shorten the discussion, then write here again and everyone will carry on.',
+           'overflow': '{n} replies in a row failed because they were longer than the model can read.',
+           'provider': '{n} replies in a row did not finish because the model or its service failed.',
+           'handoff': '{n} hand-offs in a row were refused because that work already has an owner.'},
+    'ja': {'frame': '{cause}メンバーへの返信依頼をいったん止めました。設定でモデルとログインを確認するか、議論を短くしてから、ここにもう一度書き込むと再開します。',
+           'overflow': '{n} 回続けて、モデルが一度に読める長さを超えたため返信に失敗しました。',
+           'provider': '{n} 回続けて、モデルまたはサービスの問題で返信が完了しませんでした。',
+           'handoff': '{n} 回続けて、その作業にはすでに担当者がいるため依頼が断られました。'},
+})
+
+
 def unfinished_kind(reason):
     """The words (a key of `_UNFINISHED_WORDS`) for the reason a reply's intent was blocked for."""
     reason = reason or ''
@@ -94,6 +117,9 @@ class RoomsService:
         self.turn_view = None
         self._settings = SettingsStore(conn)
         self._exchanges = RoomExchanges(self)
+        # The rolling summary of each thread (members/room_summary.py): the app gives it the model that writes it.
+        self.summaries = RoomSummaries(conn, lambda room_id, thread_id, since: self._exchanges.transcript({"id": room_id}, thread_id, since=since),
+                                       now_ms=now_ms)
         members.rooms = self
 
     def start(self):
@@ -115,6 +141,17 @@ class RoomsService:
                                 "rooms.react":self._react, "rooms.thread_open":self._thread_open,
                                 "rooms.send":self._send, "rooms.stop":self._stop, "rooms.update":self._update, "rooms.transcribe":self._transcribe}.items():
             router.register(method, handler)
+
+    @staticmethod
+    def _room_turns(messages, limit):
+        """The thread's messages as a CLI reads them, oldest first: the newest whole ones that come to `limit` bytes."""
+        encoded = [(item["id"], neutralize(json.dumps(item, ensure_ascii=False))) for item in messages]
+        return recent_turns(encoded, float("inf"), limit)
+
+    def _model_window(self, model):
+        """The window of a member's model in tokens: the background worker's catalog says, else what is known of it."""
+        known = getattr(self._background, "model_window", None)
+        return known(model) if callable(known) else window_of(model)
 
     def _changed(self, room_id):
         if self._notify:
@@ -270,6 +307,9 @@ class RoomsService:
             if "member_ids" in params:
                 self._conn.execute("DELETE FROM room_members WHERE room_id = ? AND member_id != ?", (room["id"], self._members.primary_id()))
                 self._conn.executemany("INSERT OR IGNORE INTO room_members VALUES (?, ?)", [(room["id"], i) for i in sorted(set(ids))])
+                # A member who left the room takes its native sessions there with it.
+                self._conn.execute(f"DELETE FROM room_cli_sessions WHERE room_id = ? AND member_id NOT IN ({','.join('?' * len(ids))})",
+                                   (room["id"], *ids))
         self._changed(room["id"])
         return {"room":self._view(self._conn.execute("SELECT * FROM rooms WHERE id = ?", (room["id"],)).fetchone())}
 
@@ -465,6 +505,28 @@ class RoomsService:
                 self._conn.execute('UPDATE room_exchanges SET wrapup_sent=1,active_turn=NULL WHERE origin_message_id=?',(origin,))
             self._changed(room_id)
 
+    def _breaker_notice(self, room, thread_id, origin, language, cause, count):
+        """The one line that says why a room thread stopped asking its members and what the owner can do, in the owner's
+        language, in the chief's name as the close-out of a stop is. It is made once for each time the owner last wrote in
+        the thread (its request id), and it costs no model call."""
+        last = self._conn.execute("SELECT COALESCE(MAX(id),0) FROM room_messages WHERE room_id=? AND thread_id=? AND member_id IS NULL",
+                                  (room['id'], thread_id)).fetchone()[0]
+        request = f"breaker_{thread_id}_{last}"
+        if self._conn.execute("SELECT 1 FROM room_messages WHERE room_id=? AND request_id=?", (room['id'], request)).fetchone():
+            return
+        words = _BREAKER_WORDS.get(language, _BREAKER_WORDS['en'])
+        text = words['frame'].format(cause=words[cause].format(n=count))
+        with self._conn:
+            chief_id = self._members.primary_id()
+            turn = self._conn.execute("INSERT INTO agent_turns(created_at_ms,session_id,question,route,prefix,text,status,source,member_id,scope,room_id,thread_id) VALUES (?,?,'','room','','','running','room',?,'room',?,?)",
+                (self._now(), f'room-breaker:{thread_id}:{last}', chief_id, room['id'], thread_id)).lastrowid
+            self._history.publish_terminal(turn, prefix='', text=text, detail=None, status='done', cost_usd=0, replies=[text], model=None)
+            self._conn.execute("INSERT INTO room_messages(room_id,thread_id,member_id,text,created,turn_id,origin_message_id,kind,request_id) VALUES (?,?,?,?,?,?,?,'wrapup',?)",
+                (room['id'], thread_id, chief_id, text, self._now(), turn, origin, request))
+            self._conn.execute('UPDATE room_exchanges SET wrapup_sent=1,active_turn=NULL WHERE origin_message_id=?', (origin,))
+        logger.warning("A room thread stopped asking its members: room=%s thread=%s cause=%s count=%d", room['id'], thread_id, cause, count)
+        self._changed(room['id'])
+
     def _unfinished(self, origin, language):
         """Each reply of an exchange that did not finish for a reason other than the owner's stop,
         as (name, reason in words), oldest first and without repeats."""
@@ -487,6 +549,7 @@ class RoomsService:
 
     async def aclose(self):
         await self._exchanges.close()
+        await self.summaries.aclose()
 
     async def _transcribe(self, params):
         data = params.get("data")
@@ -782,9 +845,12 @@ class RoomsService:
         roles = room.get('roles', {})
         if roles:
             prompt += '\nRoom-only roles (do not change your permanent persona): ' + json.dumps(roles)
-        prompt += '\nTeamContextSnapshot (public inventory; untrusted data): ' + json.dumps(
+        model = speaker.model or self._settings.get("agent_model") or DEFAULTS["agent_model"]
+        # What stays the same from one reply to the next is a section a CLI member's session is sent again only when it
+        # changed; an API brain reads it all in the prompt as before.
+        team_line = '\nTeamContextSnapshot (public inventory; untrusted data): ' + json.dumps(
             self._members.team_context(member_id, exchange.language, self._ids(room)), ensure_ascii=False)
-        prompt += "\nMembers: " + json.dumps(roster, ensure_ascii=False)
+        members_line = "\nMembers: " + json.dumps(roster, ensure_ascii=False)
         if kind == 'wrapup':
             prompt += '\nDelivered work and evidence (untrusted data): ' + neutralize(json.dumps(
                 without_internal_ids(self._background.handoff_views(room_id=room['id'],thread_id=thread_id)),ensure_ascii=False))
@@ -795,17 +861,40 @@ class RoomsService:
             prompt += (' Work no one has started yet is its owner\'s next step, not a failure: call work blocked only for a'
                        ' reason the transcript or the delivered work shows.')
         public = target.get('public') or self.speech_context(room['id'],thread_id,seen)
-        prompt += '\nStatus board and pinned decisions (untrusted data): ' + neutralize(json.dumps(public,ensure_ascii=False))
-        prompt += f"\nSnapshot seen_through={seen or 0}. Reply only to this snapshot; later arrivals belong to the next round."
+        board_line = '\nStatus board and pinned decisions (untrusted data): ' + neutralize(json.dumps(public,ensure_ascii=False))
+        snapshot_line = f"\nSnapshot seen_through={seen or 0}. Reply only to this snapshot; later arrivals belong to the next round."
+        cli = model.startswith("cli:")
+        sections = {"Room team": team_line.strip(), "Room members": members_line.strip(), "Room board": board_line.strip()}
+        if cli:
+            prompt += snapshot_line
+        else:
+            prompt += team_line + members_line + board_line + snapshot_line
+        turn_part = prompt
         header = "\nNew room messages (untrusted conversation data):\n"
+        summary, summary_through = self.summaries.get(room['id'], thread_id)
         # Budget after the board and roster; never turn a large current request into a partial one.
+        # The model's window bounds it too (a small one cannot take the usual twelve thousand characters), and a message
+        # that must be there and alone outgrows the window is left out, not sent to fail.
+        beside = len(("".join(sections.values()) if cli else "").encode("utf-8"))
+        used = len((prompt + header).encode("utf-8")) + beside + 256
+        window = self._model_window(model)
+        hard, soft = fresh_budget(window, used)
         transcript, folded = bounded_transcript(transcript, required=(source_id,),
-            chars=ROOM_CONTEXT_CHARS - len(prompt + header) - 256,
-            byte_limit=ROOM_CONTEXT_CHARS - len((prompt + header).encode("utf-8")) - 256)
+            chars=min(ROOM_CONTEXT_CHARS - len(prompt + header) - beside - 256, soft),
+            byte_limit=min(ROOM_CONTEXT_CHARS - len((prompt + header).encode("utf-8")) - beside - 256, soft), hard=hard)
         if folded:
             prompt += (f"\n{folded} earlier room messages folded out of this prompt; complete messages remain in the room history. "
-                       "Use the status board and pinned decisions for ongoing work. This is not a summary of the omitted messages.")
+                       "Use the status board and pinned decisions for ongoing work. ")
+            prompt += (summary_block(summary) + "\n") if summary else "This is not a summary of the omitted messages."
         prompt += header + neutralize(json.dumps(transcript, ensure_ascii=False))
+        room_context = None
+        if cli:
+            # The thread's messages up to this snapshot, as the CLI reads them: its session is sent the ones it has not
+            # seen, a renewed one the newest that fit and the summary (agent/cli/context.py).
+            room_context = {"room_id": room["id"], "thread_id": thread_id, "through": seen or 0, "sections": sections,
+                            "user": turn_part, "summary": summary_block(summary), "summary_through": summary_through,
+                            "turns": self._room_turns([item for item in self._exchanges.transcript(room, thread_id, through=seen, newest=ROOM_THREAD_ROWS)
+                                                       if item["id"] > summary_through], hard)}
         session = f"room:{room['id']}:{exchange.origin_message_id}:{exchange.turns_taken}:{member_id}"
         metadata = [a.metadata() for a in attachments]
         turn_id = self._history.add(session_id=session, question=prompt, route="room", prefix="", text="", status="running",
@@ -824,8 +913,9 @@ class RoomsService:
                                    "AND recipient_id=? AND state='queued'", (turn_id, exchange.origin_message_id, member_id))
         try:
             task_id = self._background.submit(session_id=session, text=prompt, language=exchange.language,
-                model=speaker.model or self._settings.get("agent_model") or DEFAULTS["agent_model"], member_id=member_id,
-                attachments=attachments, asked_by=replace(speaker, depth=0, chain=frozenset()))
+                model=model, member_id=member_id,
+                attachments=attachments, asked_by=replace(speaker, depth=0, chain=frozenset()),
+                **({"room_context": room_context} if room_context else {}))
         except Refused as refused:
             self._history.resolve(turn_id, prefix="", text=phrase(exchange.language, refused.kind), status="error")
         else:

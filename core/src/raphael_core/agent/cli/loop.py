@@ -3,6 +3,7 @@
 from raphael_core.ui_words import ui_word, with_ui_words
 import asyncio
 import json
+import sqlite3
 import logging
 import re
 import traceback
@@ -142,6 +143,15 @@ class Sessions:
             self.conn.execute("DELETE FROM agent_conversation_cli_contexts")
             self.conn.execute("DELETE FROM agent_conversation_cli_sessions")
             self.conn.execute("DELETE FROM agent_cli_sessions")
+            self._clear_rooms()
+
+    def _clear_rooms(self, member_id=None):
+        """The room sessions go with the others (a database before the room sessions has no table: nothing to clear)."""
+        try:
+            self.conn.execute("DELETE FROM room_cli_sessions" + ("" if member_id is None else " WHERE member_id=?"),
+                              () if member_id is None else (member_id,))
+        except sqlite3.OperationalError:
+            pass
 
     def forget(self, member, brain, conversation_id=None):
         if conversation_id is None:
@@ -159,6 +169,7 @@ class Sessions:
                 (member_id,),
             )
             self.conn.execute("DELETE FROM agent_cli_sessions WHERE member_id = ?", (member_id,))
+            self._clear_rooms(member_id)
 
     def get_context(self, member, brain, session, conversation_id=None):
         if conversation_id is None:

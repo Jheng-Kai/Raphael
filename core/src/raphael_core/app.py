@@ -988,6 +988,8 @@ class App(Router):
                                   notify=self.notify, transcribe=self._transcribe_room,
                                   attachment_store=self.attachment_store)
         self.rooms.register(self)
+        # The summary of a room thread is written by the memory's own choice of model (members/room_summary.py).
+        self.rooms.summaries.summarize = self.memory.summarize_room
         self.memory.member_exists = self.members.member_exists
         self.memory.language = lambda: self.agent.language
         from .agent.owner_language import configured_language

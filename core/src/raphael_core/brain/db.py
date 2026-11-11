@@ -1933,6 +1933,47 @@ PRAGMA user_version = 78;
 COMMIT;
 """
 
+# One native CLI session for each member and room thread (background/cli.py `RoomCliSessions`): a CLI member that speaks
+# in a room goes on in its own session and is sent only what is new, where each reply used to start a session and read
+# the messages after the member's cursor. `state` is the session's delivery cursor (agent/cli/context.py). The rolling
+# summary of a room thread (members/room_summary.py) is what a renewed session is given of the messages it no longer
+# holds. Both go with their room, their thread and their member.
+_MIGRATIONS[79] = """
+BEGIN;
+CREATE TABLE room_cli_sessions (
+    room_id INTEGER NOT NULL,
+    thread_id INTEGER NOT NULL,
+    member_id INTEGER NOT NULL,
+    brain TEXT NOT NULL,
+    session_id TEXT NOT NULL,
+    state TEXT,
+    updated_at_ms INTEGER NOT NULL,
+    PRIMARY KEY(room_id, thread_id, member_id, brain)
+);
+CREATE TABLE room_thread_summaries (
+    room_id INTEGER NOT NULL,
+    thread_id INTEGER NOT NULL,
+    text TEXT NOT NULL,
+    through_message_id INTEGER NOT NULL,
+    updated_at_ms INTEGER NOT NULL,
+    PRIMARY KEY(room_id, thread_id)
+);
+CREATE INDEX room_cli_sessions_member ON room_cli_sessions(member_id);
+CREATE TRIGGER room_sessions_with_room AFTER DELETE ON rooms BEGIN
+    DELETE FROM room_cli_sessions WHERE room_id=OLD.id;
+    DELETE FROM room_thread_summaries WHERE room_id=OLD.id;
+END;
+CREATE TRIGGER room_sessions_with_thread AFTER DELETE ON room_threads BEGIN
+    DELETE FROM room_cli_sessions WHERE thread_id=OLD.id;
+    DELETE FROM room_thread_summaries WHERE thread_id=OLD.id;
+END;
+CREATE TRIGGER room_sessions_with_member AFTER DELETE ON members BEGIN
+    DELETE FROM room_cli_sessions WHERE member_id=OLD.id;
+END;
+PRAGMA user_version = 79;
+COMMIT;
+"""
+
 LATEST_VERSION = max(_MIGRATIONS)
 
 

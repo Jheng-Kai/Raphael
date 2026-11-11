@@ -185,7 +185,7 @@ async def test_stop_invalidates_all_room_lanes_before_any_transport_cancel(make_
     target,source=setup(rig)
     monkeypatch.setattr(rig.service,'_ensure_pump',lambda:None)
     first=rig.service.handoff(RAPHAEL,args(target,stage_id='one'),source_turn_id=source.id,language='en').data['task_id']
-    second=rig.service.handoff(RAPHAEL,args(target,stage_id='two'),source_turn_id=source.id,language='en').data['task_id']
+    second=rig.service.handoff(RAPHAEL,args(target,stage_id='two',request='Write the summary of the report.'),source_turn_id=source.id,language='en').data['task_id']
     seen=[]
     async def cancel(params):
         assert all(rig.task(identifier).generation>0 for identifier in (first,second))
