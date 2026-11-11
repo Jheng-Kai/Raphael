@@ -80,7 +80,6 @@ import { mountPages } from "../page-card";
 import { menuReactionsHTML, mountMessageMetadata } from "../message-metadata";
 import { MORE_EMOJI, openEmojiPicker } from "../emoji-picker";
 import { mountMailActions } from "../mail-actions";
-import { mountGreeting } from "../member-greeting";
 import { answerOwnerPage, mountOwnerQuestions, questionWaits } from "../owner-questions";
 import { mountPendingQuestions } from "../pending-questions";
 import { approvalCopy, permissionFor } from "../permission-card";
@@ -649,7 +648,6 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   const drawnHTML = new WeakMap<Element, string>();
   const pagesHost = mountPages(thread, { place: pageDraft.place, people: () => ({ nameOf: id => members.nameOf(id), colorOf: id => members.colorOf(id) }) });
   mountOwnerQuestions(thread, () => { void load(false); });
-  mountGreeting(thread, sendFromPage);
   const floatingQuestions = mountPendingQuestions(thread, scroller, () => load(false), () => pendingQuestions?.member === memberId() && pendingQuestions.conversation === conversationId() ? pendingQuestions.questions : [], revealTurn);
   /** The newest turn drawn: a turn after it comes in from below. */
   let newestDrawn = 0;
@@ -673,7 +671,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   const look = (): TurnLook => {
     const latest = latestAnsweredId();
     const busy = pacing.active || regenerating.size > 0 || outgoing.some(belongs) || own().some(turn => turn.status === "running" || isLive(turn.task));
-    const shared = { greetingOpen: !turns.some(turn => !!turn.question.trim()) && !outgoing.some(belongs), regenerateTurnId: busy ? undefined : latest, revealing: (id: number) => pacing.waiting(id), waitingForOwner: desktop.waitingForOwner, memberName: members.nameOf, memberFace: (id: number, size = 18) => members.faceOf(id, size), mentions: members.mentionTargets(),
+    const shared = { regenerateTurnId: busy ? undefined : latest, revealing: (id: number) => pacing.waiting(id), waitingForOwner: desktop.waitingForOwner, memberName: members.nameOf, memberFace: (id: number, size = 18) => members.faceOf(id, size), mentions: members.mentionTargets(),
       // A permission card in the thread can be answered while the window holds its question and is not answering it.
       answerable: (cardId: string) => question?.id === cardId && !answering };
     if (inRaphael()) return { ...shared, face: moving => faceHTML(members.member(), 26, { moving }), liveFace: () => faceHTML(members.member(), 28, { moving: true }), activityLabel: members.member().activity_label };
@@ -940,7 +938,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
           const turn = item.turn, view = pacing.view(turn), task = turn.task?.id;
           const expanded = [...state.expandedMessages].filter(key => key.startsWith(`${turn.id}:`)).join("\0");
           const live = turn.status === "running" || turn.status === "confirm" || isLive(turn.task) || turn.task?.state === "waiting" || pacing.waiting(turn.id);
-          return renderedTurns.line(item.key, historyRevisions.get(turn) ?? turn, [presentationVersion, getLocale(), turn.route === "greeting" ? shape.greetingOpen : false, shape.mentions, turnLook.query ?? "", details.has(turn.id),
+          return renderedTurns.line(item.key, historyRevisions.get(turn) ?? turn, [presentationVersion, getLocale(), shape.mentions, turnLook.query ?? "", details.has(turn.id),
             state.open.get(turn.id), state.thinkingOpen.get(turn.id), expanded, task !== undefined && state.stopping.has(task), task !== undefined && state.rerunning.has(task),
             state.workStartedAt.get(turn.id), state.signin.get(turn.id), view.messages?.length, pacing.waiting(turn.id), desktop.waitingForOwner(turn.id),
             live ? turnLook.deferPresence : false, live ? shape.activityLabel : "", live ? members.member().activity ?? "" : "", turn.permissions?.some(card => shape.answerable?.(card.id)), turn.id === latestFailedTurnId, turn.id === signinTurnId,

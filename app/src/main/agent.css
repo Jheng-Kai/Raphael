@@ -719,6 +719,8 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 .draft-done.is-open .draft-done-sum .steps-chev .i { transform: rotate(90deg); }
 .draft-done-list { list-style: none; margin: 0; padding: var(--sp-2) var(--sp-3); display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); border-radius: var(--r-md); background: var(--surface-2); color: var(--text-2); font-size: var(--fs-xs); line-height: 1.55; }
 .draft-done-item { min-width: 0; overflow-wrap: anywhere; }
+/* The one quiet line under a new member's connect card: the size and colour of the thread's other quiet lines (.sys). */
+.setup-note { max-width: 480px; margin: var(--sp-2) 0 0; font-size: var(--pa-sys); color: var(--text-3); }
 .bot-renamed { width: 100%; margin: var(--sp-3) 0; text-align: center; color: var(--text-2); font-size: var(--fs-sm); }
 .ra.is-system-result { display: block; }
 

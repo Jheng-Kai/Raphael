@@ -2078,6 +2078,8 @@ export const id = {
   "vault.cardNotice": "Anda menyetujui setiap penggunaan dan menyelesaikan pembayaran atau pengiriman akhir.",
   "vault.busy": "Bekerja…",
   "skills.updatedNotice": "Diperbarui: {p0}",
+  "members.jobSetNotice": "Tugas ditetapkan: {p0}",
+  "cards.connectYes": "Tidak ada yang dikirim atau diubah tanpa persetujuanmu.",
   "lang.search": "Cari bahasa",
   "lang.none": "Bahasa tidak ditemukan",
   "onboarding.demo1Ask": "Rapikan Gmail hari ini",

@@ -2078,6 +2078,8 @@ export const vi = {
   "vault.cardNotice": "Bạn phê duyệt mỗi lần dùng và tự hoàn tất thanh toán hoặc gửi cuối cùng.",
   "vault.busy": "Đang làm việc…",
   "skills.updatedNotice": "Đã cập nhật: {p0}",
+  "members.jobSetNotice": "Đã đặt vai trò: {p0}",
+  "cards.connectYes": "Không có gì được gửi hoặc thay đổi nếu bạn chưa đồng ý.",
   "lang.search": "Tìm ngôn ngữ",
   "lang.none": "Không có ngôn ngữ đó",
   "onboarding.demo1Ask": "Sắp xếp Gmail hôm nay",
