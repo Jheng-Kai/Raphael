@@ -215,6 +215,9 @@ class NarratedLoop:
             usage=getattr(answer, "usage", None), prompt_tokens=answer.prompt_tokens, completion_tokens=answer.completion_tokens,
             ms=int((time.perf_counter() - began) * 1000),
         )
+        if thought := " ".join(getattr(answer, "reasoning", "").split()):
+            # What the model wrote into the channel of its answer is its thinking, never its reply (brain/reasoning.py).
+            self.thinking(thought[-240:])
         if answer.content.strip():
             # Only explicitly public fields are published, including those in final content.
             # Keep envelope validation without choosing or converting the authored language.
@@ -298,6 +301,8 @@ class NarratedLoop:
             if self.last_failure is not None and outcome.kind == "failed":
                 raise AgentFailure(self.last_failure.kind, diagnostic=self.last_failure, model=self.model)
             raise AgentFailure(outcome.detail or "error")
+        if not outcome.final.strip():
+            raise AgentFailure("no_answer")  # a reply that was only reasoning is no answer (brain/reasoning.py)
         # Final authored words use the same whole-envelope boundary as CLI replies.
         # Progress parsing must never consume JSON examples inside the answer.
         return parse_reply(outcome.final, self.language, plain=self.plain, long=True)

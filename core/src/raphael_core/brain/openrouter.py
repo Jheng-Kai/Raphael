@@ -30,6 +30,7 @@ import httpx
 from .meter import Usage
 from .meter import chat as _chat_usage
 from .prompt_cache import mark as mark_cache
+from .reasoning import REASONING_PARTS, TEXT_PARTS, split_reasoning
 from .settings import DEFAULTS
 from .streams import MalformedStream, chat_completion
 from ..failures import classify, redact
@@ -160,6 +161,9 @@ class ChatTurn:
     finish_reason: str = ""
     # The call's exact split (brain/meter.py): cache reads and writes, reasoning, the cost the provider reported.
     usage: Usage | None = field(default=None, repr=False)
+    # Reasoning the model wrote in the channel of its answer (a <think> block, an analysis channel): it is taken out of
+    # `content` and belongs to the turn's thinking part, never to the reply (brain/reasoning.py).
+    reasoning: str = ""
 
 
 @dataclass
@@ -411,6 +415,8 @@ def _to_completion(reply: _Reply, requested_model: str) -> Completion:
 
     message = choice.get("message")
     content = message.get("content") if isinstance(message, dict) else None
+    if isinstance(content, str):
+        content = split_reasoning(content)[0]
     try:
         data = json.loads(content)
     except (TypeError, ValueError) as exc:  # not a string, or not JSON
@@ -491,6 +497,8 @@ def _to_text_completion(reply: _Reply, requested_model: str) -> TextCompletion:
         )
     message = choice.get("message")
     content = message.get("content") if isinstance(message, dict) else None
+    if isinstance(content, str):
+        content = split_reasoning(content)[0]
     if not isinstance(content, str) or not content.strip():
         raise _failure(reply.status, "bad_response", "The reply has no text")
     usage = _usage_of(body)
@@ -547,18 +555,30 @@ def _to_tool_plan(reply: _Reply, requested_model: str) -> ToolPlan:
     )
 
 
-def _content_text(content: Any) -> str:
-    """The words of a message: a string, or a list of parts of which the text ones count."""
-    if isinstance(content, str):
-        return content
+def _content_text(content: Any) -> tuple[str, str]:
+    """The words of a message and the reasoning it carries: a string, or a list of parts of which the text ones are
+    the words and the reasoning ones (a thinking part) are not. Reasoning written into the words themselves is split
+    off as well (brain/reasoning.py)."""
+    reasoning: list[str] = []
     if isinstance(content, list):
-        parts = [
-            part.get("text")
-            for part in content
-            if isinstance(part, dict) and isinstance(part.get("text"), str)
-        ]
-        return "".join(parts)
-    return ""
+        words = []
+        for part in content:
+            if not isinstance(part, dict):
+                continue
+            kind = part.get("type")
+            if kind in REASONING_PARTS:
+                thought = next((part[key] for key in ("text", "thinking", "reasoning", "summary") if isinstance(part.get(key), str)), "")
+                if thought.strip():
+                    reasoning.append(thought.strip())
+            elif kind in TEXT_PARTS and isinstance(part.get("text"), str):
+                words.append(part["text"])
+        content = "".join(words)
+    elif not isinstance(content, str):
+        return "", ""
+    answer, thought = split_reasoning(content)
+    if thought:
+        reasoning.append(thought)
+    return answer, "\n".join(reasoning)
 
 
 def _to_chat_turn(reply: _Reply, requested_model: str) -> ChatTurn:
@@ -599,8 +619,10 @@ def _to_chat_turn(reply: _Reply, requested_model: str) -> ChatTurn:
         )
     usage = _usage_of(body)
     answered_by = body.get("model")
+    content, reasoning = _content_text(message.get("content"))
     return ChatTurn(
-        content=_content_text(message.get("content")),
+        content=content,
+        reasoning=reasoning,
         calls=calls,
         model=answered_by if isinstance(answered_by, str) and answered_by else requested_model,
         cost_usd=_usage_cost(usage),

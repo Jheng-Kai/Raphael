@@ -25,7 +25,7 @@ from raphael_core.ui_languages import LANGUAGES
     ("cli_cli_stopped", "unavailable"), ("cli_timeout", "unavailable"), ("stalled", "unavailable"), ("no_reply", "unavailable"),
     ("refused", "refused"), ("content_policy", "refused"), ("cli_refused", "refused"),
     ("context_overflow", "context_overflow"), ("cli_context_overflow", "context_overflow"),
-    ("cost", "budget"), ("reply_budget", "budget"), ("revoked", "removed"), ("restart", "restart"),
+    ("cost", "budget"), ("reply_budget", "reply_cap"), ("revoked", "removed"), ("restart", "restart"),
     # A cause nobody can name stays an error.
     ("worker", "error"), ("cli_error", "error"), ("cli_tool_broken", "error"), ("unknown", "error"), ("", "error"), (None, "error"),
 ])

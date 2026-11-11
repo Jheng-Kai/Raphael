@@ -1106,6 +1106,8 @@ export interface HandoffView {
   /** Null for a quick question (`ask_member`), which has no task: `work_turn_id` is its record. */
   task_id: number | null; source_turn_id: number; work_turn_id: number; member_id: number;
   member_name: string; from_member_id: number; stage_id: string; mode: "work" | "consult";
+  /** What the work is called: the first words of its request. `stage_id` is the member's key for the system and is never shown. */
+  title?: string;
   state: string; reason: string | null; created_at_ms: number; ready_at_ms: number;
   dispatch_policy: "immediate"; result: string;
   /** What was sent to the colleague: a consultation's question. */

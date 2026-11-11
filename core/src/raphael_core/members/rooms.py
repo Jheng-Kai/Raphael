@@ -3,13 +3,16 @@ from raphael_core.ui_words import ui_word, with_ui_words
 import base64
 import binascii
 import json
+import logging
 import re
 from dataclasses import replace
 
 from ..brain.model_ref import cli_name
 from ..agent.history import AgentHistory
 from ..agent.persona import normalize_language, phrase
+from ..agent.tools import without_internal_ids
 from ..agent.speaker import MAX_DEPTH, RAPHAEL_NAMES
+from ..background.handback import internal_ids, title
 from ..background.tasks import Refused
 from ..brain.settings import SettingsStore, DEFAULTS
 from ..clock import wall_clock_ms
@@ -21,7 +24,11 @@ from .store import MemberError, clean_group_name
 from .exchanges import RoomExchanges, is_pass, bounded_transcript, ROOM_CONTEXT_CHARS
 from ..worker.guards import neutralize
 
+logger = logging.getLogger(__name__)
 MAX_MESSAGE = 10000
+# How many posts a room takes in a minute, and how many of them one member's.
+ROOM_POSTS_PER_MINUTE = 12
+MEMBER_POSTS_PER_MINUTE = 4
 # A meeting part in the owner's words, as one of the room's four. English words match whole, and
 # "for" only leads, so "content for the launch" stays a participant.
 _ROLE_WORDS = (('moderator', re.compile(r'主持|主席|司會|司会|議長|\b(?:moderat\w*|chair\w*|host|facilitat\w*)\b', re.I)),
@@ -40,7 +47,7 @@ _OWNER_STOPS = ('owner', 'interjection')
 # has its own words (owner, 2026-11-09: no more "an error occurred" for a brain that only ran out of credits); a
 # kind whose cause is not known stays an error.
 _UNFINISHED = {'rate_limit':'rate_limit', 'rate_limited':'rate_limit', 'usage_limit':'quota', 'quota':'quota', 'credits':'credits',
-               'context_overflow':'context_overflow', 'cost':'budget', 'reply_budget':'budget', 'revoked':'removed', 'restart':'restart',
+               'context_overflow':'context_overflow', 'cost':'budget', 'reply_budget':'reply_cap', 'revoked':'removed', 'restart':'restart',
                # What asking again did not mend: the provider is busy, down or out of reach, or the reply went silent.
                **dict.fromkeys(('stalled', 'no_reply', 'overloaded', 'server', 'network', 'timeout', 'cli_stopped',
                                 'chatgpt_unavailable'), 'unavailable'),
@@ -51,13 +58,16 @@ _CLI_UNFINISHED = {'login':'login', 'missing':'login', 'auth_expired':'login'}
 _UNFINISHED_WORDS = with_ui_words({
     'zh-TW':{'rate_limit':'請求太頻繁而被限流', 'quota':'訂閱額度已用完', 'login':'需要登入 CLI', 'budget':'預算已用完',
              'removed':'已不在房間', 'restart':'重新啟動後中斷', 'error':'發生錯誤', 'unavailable':'暫時無法回應',
-             'credits':'服務點數已用完', 'sign_in':'需要登入或設定金鑰', 'refused':'拒絕了這項請求'},
+             'credits':'服務點數已用完', 'sign_in':'需要登入或設定金鑰', 'refused':'拒絕了這項請求',
+             'reply_cap':'這次討論的回覆次數已達上限'},
     'en':{'rate_limit':'rate-limited (too many requests)', 'quota':'subscription quota used up', 'login':'CLI sign-in needed',
           'budget':'budget exhausted', 'removed':'no longer in the room', 'restart':'interrupted by a restart', 'error':'an error occurred', 'unavailable':'unavailable',
-          'credits':'credits used up', 'sign_in':'sign-in or key needed', 'refused':'declined the request'},
+          'credits':'credits used up', 'sign_in':'sign-in or key needed', 'refused':'declined the request',
+          'reply_cap':'reached the reply limit for this discussion'},
     'ja':{'rate_limit':'リクエスト過多で制限中', 'quota':'サブスクリプションの上限', 'login':'CLI のログインが必要', 'budget':'予算の上限',
           'removed':'ルームから外れました', 'restart':'再起動で中断', 'error':'エラーが発生', 'unavailable':'応答できません',
-          'credits':'クレジット切れ', 'sign_in':'ログインまたはキーが必要', 'refused':'リクエストを拒否'},
+          'credits':'クレジット切れ', 'sign_in':'ログインまたはキーが必要', 'refused':'リクエストを拒否',
+          'reply_cap':'この議論の返信回数の上限に達しました'},
 })
 
 
@@ -116,6 +126,14 @@ class RoomsService:
         if row is None:
             raise invalid_params("no such room")
         return dict(row)
+
+    def _posting_wait(self, recent, member_id):
+        """Whole seconds until a member may post again, 0 when it may now. `recent` is the last minute's posts, newest first."""
+        waits = []
+        for rows, limit in ((recent, ROOM_POSTS_PER_MINUTE), ([row for row in recent if row['member_id']==member_id], MEMBER_POSTS_PER_MINUTE)):
+            if len(rows) >= limit:  # it may post again once enough of the oldest have left the minute
+                waits.append(sorted(row['created'] for row in rows)[len(rows)-limit] + 60000 - self._now())
+        return max(1, -(-max(waits) // 1000)) if waits else 0
 
     def _ids(self, room):
         if room["is_team"]:
@@ -304,10 +322,17 @@ class RoomsService:
         existing = self._conn.execute("SELECT id FROM room_messages WHERE room_id=? AND request_id=?", (room["id"], request)).fetchone()
         if existing:
             return {"room_id": room["id"], "message_id": existing[0], "member_id": member_id, "duplicate": True}
-        recent = self._conn.execute('SELECT member_id,text FROM room_messages WHERE room_id=? AND created>? AND member_id IS NOT NULL ORDER BY id DESC',
+        recent = self._conn.execute('SELECT member_id,text,created FROM room_messages WHERE room_id=? AND created>? AND member_id IS NOT NULL ORDER BY id DESC',
                                     (room['id'], self._now()-60000)).fetchall()
-        if len(recent) >= 12 or sum(row['member_id']==member_id for row in recent) >= 4 or any(row['member_id']==member_id and row['text']==text.strip() for row in recent):
-            raise invalid_params('room post budget reached; wait for new information')
+        if any(row['member_id']==member_id and row['text']==text.strip() for row in recent):
+            raise invalid_params('You posted this exact message to the room within the last minute; do not post it again.')
+        if wait := self._posting_wait(recent, member_id):
+            # A pause for replies that came too fast: no money and no usage limit is involved, and the owner is told so.
+            raise invalid_params(
+                f'The room is pausing because too many replies came at once (it takes {ROOM_POSTS_PER_MINUTE} posts a minute, '
+                f'{MEMBER_POSTS_PER_MINUTE} from each member). Posting works again in about {wait} seconds. It has nothing to do '
+                'with money or a usage limit: if you tell the owner, say the room is pausing because replies came too fast, and when '
+                'it goes on. Meanwhile read what others said and post only what is new.')
         with self._conn:
             turn = self._history.add(session_id=request, question="", route="exchange", source="member", prefix="",
                 text=text.strip(), status="done", member_id=member_id, scope="room", room_id=room["id"],
@@ -416,7 +441,7 @@ class RoomsService:
             reason_words=reasons.get(language,reasons['en'])
             delivered=[]
             for task in self._conn.execute("SELECT w.*,m.name,(SELECT COUNT(*) FROM task_evidence e WHERE e.task_id=w.id) AS evidence_count FROM worker_tasks w LEFT JOIN members m ON m.id=w.member_id WHERE w.mode IS NOT NULL AND COALESCE(w.report_room_id,w.room_id)=? AND w.source_turn_id IN (SELECT turn_id FROM room_messages WHERE origin_message_id=?)", (room_id,origin)):
-                label=f"{task['name'] or 'Raphael'} / {task['stage_id']}".replace('@','＠')
+                label=f"{task['name'] or 'Raphael'} / {title(task['text'])}".replace('@','＠')
                 evidence=self._conn.execute("SELECT uri FROM task_evidence WHERE task_id=? AND kind='artifact'",(task['id'],)).fetchall()
                 artifacts=', '.join(item['uri'].replace('@','＠') for item in evidence)
                 delivered.append(f"{label}: {state_words.get(task['state'],state_words['failed'])}" + (f" / {artifacts}" if artifacts else ''))
@@ -424,10 +449,12 @@ class RoomsService:
                    *(f"{name}{separator}{words}".replace('@','＠') for name,words in self._unfinished(origin,language)),
                    *(delivered or [empty])]
             public = self.speech_context(room_id, owner['thread_id'])
-            lines.extend(f"{item['member_name']} / {item['stage_id']}: {item['state']}".replace('@', '＠') for item in public['board']
-                         if not delivered)
+            lines.extend((f"{item['member_name']} / {item['title']}" + (f": {state_words[item['state']]}" if item['state'] in state_words else '')).replace('@', '＠')
+                         for item in public['board'] if not delivered)
             lines.extend(item['text'].replace('@', '＠') for item in public['decisions'])
             text='\n'.join(lines)+f"\n\n{reason_words.get(exchange['reason'],reason_words['worker'])} {awaiting}"
+            if leaked := internal_ids(text):  # work is named by its title: a code here is in a title a member wrote
+                logger.warning("A room wrap-up names %d internal identifier(s)", len(leaked))
             with self._conn:
                 chief_id = self._members.primary_id()
                 turn=self._conn.execute("INSERT INTO agent_turns(created_at_ms,session_id,question,route,prefix,text,status,source,member_id,scope,room_id,thread_id) VALUES (?,?,'','room','','','running','room',?,'room',?,?)",
@@ -694,8 +721,9 @@ class RoomsService:
                 latest[member] = task
         board = []
         for member,task in latest.items():
-            row = {key:task.get(key) for key in ('task_id','member_id','member_name','stage_id','state','reason','waiting_owner',
-                                                'created_at_ms','started_at_ms','finished_at_ms','work_turn_id','conversation_id')}
+            # The board is read by the members: the work is named by its title, and the system's numbers stay out of it.
+            row = {key:task.get(key) for key in ('title','member_id','member_name','stage_id','state','reason','waiting_owner',
+                                                'created_at_ms','started_at_ms','finished_at_ms')}
             last = reports.get(member)
             row['last_report'] = (last.get('result') or '')[:240] if last else ''
             row['evidence'] = [{key:item.get(key) for key in ('uri','digest','verdict')} for item in last.get('evidence',[])][-4:] if last else []
@@ -727,6 +755,7 @@ class RoomsService:
             "to yourself or a colleague for a concrete assignment in that member's private conversation. "
             "This room is a meeting for discussion, checking process and synchronizing data. Never do tool work here. "
             "Check the status board for the existing stage owner before starting work; use the same stage_id for that action. "
+            "A stage_id is only a key for the system: never say it, a task number or any id to anyone; name work by its title and colleagues by name. "
             "After handoff, say briefly what you started. Work runs privately and reports back as a short card. "
             "Approval and sign-in cards stay private. Source document dates are never schedule authorization. ")
         # Whether this turn may pass, as Hermes's hosted_room_discussion tells each turn: never when the owner named you.
@@ -758,7 +787,7 @@ class RoomsService:
         prompt += "\nMembers: " + json.dumps(roster, ensure_ascii=False)
         if kind == 'wrapup':
             prompt += '\nDelivered work and evidence (untrusted data): ' + neutralize(json.dumps(
-                self._background.handoff_views(room_id=room['id'],thread_id=thread_id),ensure_ascii=False))
+                without_internal_ids(self._background.handoff_views(room_id=room['id'],thread_id=thread_id)),ensure_ascii=False))
             prompt += '\nReplies that did not finish (untrusted data): ' + neutralize(json.dumps(
                 [{'name':name,'reason':words} for name,words in self._unfinished(exchange.origin_message_id,'en')],ensure_ascii=False))
             prompt += '\nSay exactly what was delivered, and state blocked or incomplete work honestly. Use no @ addresses.'

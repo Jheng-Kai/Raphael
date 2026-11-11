@@ -927,3 +927,24 @@ async def test_a_plan_conversation_that_does_not_fit_is_told_apart(rig):
     with pytest.raises(OpenRouterError) as error:
         await rig.registry.chatgpt.chat_tools(model="chosen-model", messages=[], tools=[], timeout_s=2, max_tokens=50)
     assert error.value.kind == "context_overflow"
+
+
+async def test_reasoning_items_and_reasoning_written_into_the_answer_are_not_the_reply(rig):
+    """The stream is scripted: nothing here has met the real API."""
+    await rig.sign_in()
+    thought = "I should check the price before answering."
+    summary = {"type": "reasoning", "id": "rs", "summary": [{"type": "summary_text", "text": thought}], "encrypted_content": "enc"}
+    rig.responses = [sse([summary, message(f"<think>{thought}</think>AAPL is 190.")]), sse([summary, message(f"<think>{thought}")])]
+    thoughts = []
+
+    async def execute(call_id, name, arguments):
+        raise AssertionError("no tool was called")
+    first = loop(rig, execute)
+    first.thinking = thoughts.append
+    outcome = await first.run()
+    assert first.reply(outcome).text == "AAPL is 190." and thoughts == [thought]
+    second = loop(rig, execute)
+    outcome = await second.run()
+    with pytest.raises(AgentFailure) as failure:
+        second.reply(outcome)
+    assert failure.value.kind == "no_answer"

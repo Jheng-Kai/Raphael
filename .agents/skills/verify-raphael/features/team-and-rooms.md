@@ -234,7 +234,7 @@ guardian_manifest.json maps the read-only work_status tool to S08.completion.
 Follow-up 1 authorizes the selected offline look matrix below. Network and paid APIs
 remain forbidden. The status board is a compact pending-question-style row pinned
 under the header, outside the scrolling thread. It opens the shared popover with
-member faces, current stages, shared state pills and plain decision lines. Empty
+member faces, the title of each member's current work (never its stage_id or a task number, R-TEXT-02), shared state pills and plain decision lines. Empty
 meetings hide the row. Report cards reuse conversation-card and the shared file chip,
 never display digests, and retain the private work destination. A chip uses an opaque
 task/evidence handle through the existing native open_team_file boundary; TaskStore

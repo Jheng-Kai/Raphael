@@ -20493,3 +20493,34 @@ WORDS.update({
         'tr': 'Komut veya dosya aracı Raphael’in verilerini değiştiremez. Hiçbir işlem yapılmadı.',
     },
 })
+
+WORDS.update({
+    'The model gave no answer this time. Try again or choose another model.': {
+        'zh-CN': '模型这次没有给出回答，请再试一次，或换一个模型。',
+        'ko': '모델이 이번에는 답변을 내지 않았습니다. 다시 시도하거나 다른 모델을 선택해 주세요.',
+        'es': 'El modelo no dio ninguna respuesta esta vez. Inténtalo de nuevo o elige otro modelo.',
+        'fr': 'Le modèle n’a donné aucune réponse cette fois. Réessayez ou choisissez un autre modèle.',
+        'de': 'Das Modell hat diesmal keine Antwort gegeben. Versuche es erneut oder wähle ein anderes Modell.',
+        'pt-BR': 'O modelo não deu nenhuma resposta desta vez. Tente novamente ou escolha outro modelo.',
+        'it': 'Il modello questa volta non ha dato alcuna risposta. Riprova o scegli un altro modello.',
+        'ru': 'Модель на этот раз не дала ответа. Попробуйте ещё раз или выберите другую модель.',
+        'vi': 'Lần này mô hình không đưa ra câu trả lời. Hãy thử lại hoặc chọn mô hình khác.',
+        'th': 'โมเดลไม่ได้ตอบกลับในครั้งนี้ ลองอีกครั้งหรือเลือกโมเดลอื่น',
+        'id': 'Model tidak memberikan jawaban kali ini. Coba lagi atau pilih model lain.',
+        'tr': 'Model bu sefer yanıt vermedi. Tekrar deneyin veya başka bir model seçin.',
+    },
+    'reached the reply limit for this discussion': {
+        'zh-CN': '这次讨论的回复次数已达上限',
+        'ko': '이번 토론의 답변 횟수 한도에 도달했습니다',
+        'es': 'alcanzó el límite de respuestas de esta discusión',
+        'fr': 'a atteint la limite de réponses de cette discussion',
+        'de': 'hat das Antwortlimit dieser Diskussion erreicht',
+        'pt-BR': 'atingiu o limite de respostas desta discussão',
+        'it': 'ha raggiunto il limite di risposte di questa discussione',
+        'ru': 'достигнут предел ответов в этом обсуждении',
+        'vi': 'đã đạt giới hạn số lượt trả lời của cuộc thảo luận này',
+        'th': 'ถึงขีดจำกัดจำนวนการตอบของการสนทนานี้แล้ว',
+        'id': 'telah mencapai batas balasan untuk diskusi ini',
+        'tr': 'bu tartışmanın yanıt sınırına ulaştı',
+    },
+})
