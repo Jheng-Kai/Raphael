@@ -1,5 +1,83 @@
 # Member computer (Phases A and B)
 
+## Image screen plumbing, stage A (2026-11-11)
+
+R-COMP-SCREEN-01 covers image `driver-0.37.0-v5` (layer 5). RAPHAEL_SCREENS
+selects 1..6 real VNC outputs in 1280x900 cells, with one panel per output.
+The standalone stdlib helper owns RFB 3.8/VNC DES authentication, layout, panels,
+atomic 0600 token publication and readiness, plus clipped-server supervision.
+The helper is standard library only: Debian Python runs it without anything from
+`/opt/venv`. Main VNC listens on 5901; multi-screen clipped views use the foreground
+binary `/usr/bin/X0tigervnc` (not Debian's detaching wrapper) on loopback 5911..5916.
+Before starting views for any count, the helper ends leftovers with
+`pkill -x X0tigervnc` and waits up to five seconds for all six view ports to clear.
+Listener readiness parses `/proc/net/tcp`, never opening unauthenticated VNC
+connections that could blacklist viewers. Only 6901 is published, using TokenFile
+routing: `/websockify?token=screen-N`. A single screen
+routes directly to 5901; no multi-screen canvas token is exposed. noVNC's static
+`/vnc.html` remains available for the existing SSH tunnel check. The viewer relay
+receives the session target's captured screen. Readiness checks both the driver
+and `/dev/shm/raphael-screens.ready` with the existing two execs; this tmpfs is fresh
+on each container start. Tokens stay at `/run/user/1000/raphael-vnc-tokens`.
+Supervisor lacks CAP_KILL, so it only restarts what exits and cannot stop programs;
+the helper ends its own children. Nothing may call `supervisorctl stop` or `restart`
+in a computer. A newly set layout requests only a 1x1 update and, after status 0,
+sends one pointer event to screen 1's centre on the same RFB connection. A matching
+layout sends neither request nor pointer event. For multiple screens, xfwm4
+`/general/show_dock_shadow` is false (created as bool if absent), written only when
+different with no panel restart; window frame shadows stay unchanged.
+Known layer 3/4 rebuilds preserve workspace and keep all compatibility, owner-hold
+and active-use guards.
+
+Existing per-bot/shared targets keep screen/screens=1/1. Member assignment,
+leases, browser changes and default-mode changes are deferred. Offline scope is
+`tests/computer` (including `tests/computer/test_screens.py`), using the
+repository interpreter, PYTHONPATH=core/src, RAPHAEL_TEST_MODELS=0, PYTHONUTF8=1,
+`-q -W error -p no:cacheprovider`. Offline tests establish contracts only: the
+first tree passed 939 of them and failed in a real container seven ways (the
+detaching wrapper, the mark outliving a restart, orphaned servers, supervisor
+unable to stop programs, the neighbour's panel shadow, the tooltip on screen 5,
+the connect probe). A change to `computer/image/`, the container's shape in
+`vm.py` or the view path is not done until it has run in real containers.
+
+Container acceptance of 2026-11-12 (the owner's Docker Desktop, a throwaway image
+tag and data folder, production capabilities, through the real `LocalVm`; by hand,
+a scripted `verify -- --computer` is the next unit):
+- 1, 2, 3, 4, 5 and 6 screens start ready in 24 to 33 s with no helper retry:
+  outputs `VNC-0..N-1` at the grid's rectangles, the token file, the mark in
+  `/dev/shm`, N clipped servers as children of the helper on loopback only, one
+  panel per output, no "Displays" dialog, no tooltip window (5 and 6 screens).
+- Through noVNC on the published port every `screen-K` connects at 1280x900 and
+  shows only its screen; no token, `bogus`, `screen-0` and `screen-N+1` are refused;
+  the hash-form `viewer_url` connects; `/vnc.html` is 200.
+- A click at (688,165) through screen 4's view maximised screen 4's window to
+  1280x827 at +1280+924; the other screens' windows did not move.
+- Pixel difference from the plain wallpaper is 0 along the top of the screen below
+  a panel (was 4862 with dock shadows) and 0 at the top of screen 5 of six.
+- One clipped server killed: mark gone, back in 0.9 s. Helper `kill -9`: back in
+  1.5 s with no leftover. Helper SIGTERM: children ended, back in 2.5 s.
+- `docker stop` / start: no mark from the previous boot is ever visible; ready 6 s
+  after the start. A real layer 4 computer (3 GiB, no `RAPHAEL_SCREENS`) reports
+  `incompatible`, is rebuilt on layer 5 and keeps its workspace and browser profile.
+- Six idle screens with no viewer: about 0 % CPU, 425 MiB.
+Not covered: the app's own panel and relay against the token websockify, a remote
+(SSH) host, and everything about members sharing one container (later stages).
+`wmctrl` is in the image for those stages: Chromium opens every new window beside
+its first and the driver has no tool that moves one.
+
+Round 2 offline evidence:
+`core/tests/computer/test_screens.py::test_clipped_server_runs_the_foreground_binary_with_real_parameter_names`,
+`core/tests/computer/test_screens.py::test_tcp_listener_parser_requires_the_loopback_port_and_listen_state`,
+`core/tests/computer/test_screens.py::test_leftover_cleanup_kills_exact_binary_and_waits_for_every_view_port`,
+`core/tests/computer/test_screens.py::test_leftover_cleanup_timeout_is_bounded_and_prevents_starting_views`,
+`core/tests/computer/test_screens.py::test_views_publish_after_listeners_restart_exited_child_and_clean_up`,
+`core/tests/computer/test_screens.py::test_rfb_handshake_authenticates_and_waits_for_its_own_layout_reply`,
+`core/tests/computer/test_screens.py::test_startup_clears_stale_readiness_and_skips_matching_layout`,
+`core/tests/computer/test_screens.py::test_multiple_screens_disable_only_dock_shadows_when_different`,
+`core/tests/computer/test_screens.py::test_host_and_helper_share_the_fresh_tmpfs_readiness_path`,
+`core/tests/computer/test_screens.py::test_image_installs_screen_views_and_preserves_the_single_token_port`,
+`core/tests/computer/test_screens.py::test_image_build_context_has_no_bytecode`.
+
 ## Viewer transport isolation, phase 1 (2026-11-09)
 
 `computer/viewer_relay.py` owns the loopback HTTP listener, both WebSocket pumps,
@@ -212,7 +290,7 @@ uses SSH -W pipes. Unsupported forwarding falls back to ssh:// with bounded back
 No Windows ControlMaster or remote install/start is required.
 
 Idle/eviction and app shutdown only stop compatible owned computers; workspace
-mounts and browser profiles survive. A recognized v3-to-v4 rebuild announces its
+mounts and browser profiles survive. A recognized v3/v4-to-v5 rebuild announces its
 workspace/sign-in preservation before removal, never removes a volume and refuses
 foreign or weakened containers. Files/installs outside workspace are explicitly
 ephemeral in tool/persona text. Member deletion retains computer data by default;
@@ -280,7 +358,7 @@ five seconds inside that same tool call. It
 refuses ambiguous windows, missing targets/tabs and non-http/https URLs, and stops
 after any failed stage. Browser follow-up tools remain individually available.
 
-The v4 image passes --no-overlay only when serve --help advertises it; every
+The v5 image retains v4's --no-overlay only when serve --help advertises it; every
 member driver connection also disables its exact session cursor_id and sets
 max_image_dimension 1456. New computers use a 3 GiB
 memory/swap cap (not a reservation) and two CPUs, with two local running computers.

@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 
 BASE = "docker.io/trycua/xfce-cua@sha256:274eb636f5cf3fc58f705916ee72b7a701270b3877369d08533a385c5325be9b"
 VERSION = "0.37.0"
-IMAGE = "raphael/cua-local-vm:driver-0.37.0-v4"
+IMAGE = "raphael/cua-local-vm:driver-0.37.0-v5"
 GUEST = "/home/cua/workspace"
 SHARED = "/home/cua/team"
 MEMORY_GB = 3
@@ -36,8 +36,9 @@ LOCAL_LIMIT = 2
 PREFLIGHT_S = 45.0
 DRIVER = "/usr/local/libexec/raphael/cua-driver"
 SOCKET = "/run/user/1000/raphael-cua.sock"
+SCREENS_READY = "/dev/shm/raphael-screens.ready"
 LABEL = "org.raphael.computer"
-IMAGE_LABELS = {LABEL: "1", f"{LABEL}.driver": VERSION, f"{LABEL}.base": BASE, f"{LABEL}.layer": "4"}
+IMAGE_LABELS = {LABEL: "1", f"{LABEL}.driver": VERSION, f"{LABEL}.base": BASE, f"{LABEL}.layer": "5"}
 MAX_OUTPUT = 50_000  # what a task may be shown of a result at most (`worker.guards`)
 # The longest a command may be waited for, and the longest a job started in the background may run.
 FOREGROUND_S = 1800
@@ -142,6 +143,8 @@ class Target:
     workspace: Path | PurePosixPath
     shared: Path | PurePosixPath | None = None
     remote: str = ""
+    screen: int = 1
+    screens: int = 1
 
 
 def mount_arg(path, destination=GUEST, *, remote=False):
@@ -157,8 +160,18 @@ def timezone_name(tz):
         return "UTC"
 
 
+def screen_grid(count, width=1280, height=900):
+    # Kept equal to the standalone image helper by test_host_and_guest_grids_match.
+    count = max(1, min(6, count))
+    columns = math.ceil(math.sqrt(count))
+    rows = math.ceil(count / columns)
+    return ([(i % columns * width, i // columns * height, width, height) for i in range(count)],
+            (columns * width, rows * height))
+
+
 def run_args(target, owner, password, *, tz=None):
     zone = timezone_name(tz)
+    _, canvas = screen_grid(target.screens)
     args = ["run", "-d", "--name", target.name, "--hostname", target.name]
     for key, value in {**IMAGE_LABELS, f"{LABEL}.owner": owner, f"{LABEL}.target": target.key}.items():
         args += ["--label", f"{key}={value}"]
@@ -170,6 +183,8 @@ def run_args(target, owner, password, *, tz=None):
         *(["--mount", mount_arg(target.shared, SHARED, remote=bool(target.remote))] if target.shared else []),
         "-e", f"VNC_PW={password}",
         "-e", f"TZ={zone}",
+        "-e", f"RAPHAEL_SCREENS={target.screens}",
+        "-e", f"VNC_RESOLUTION={canvas[0]}x{canvas[1]}",
         "-p", "127.0.0.1::6901", IMAGE,
     ]
 
@@ -201,6 +216,7 @@ def compatible(raw, target, owner, image_id):
         caps = lambda values: {v.upper().removeprefix("CAP_") for v in values or []}
         return (
             all(labels.get(k) == v for k, v in expected.items()) and raw["Image"] == image_id
+            and [entry for entry in config.get("Env", []) if entry.startswith("RAPHAEL_SCREENS=")] == [f"RAPHAEL_SCREENS={target.screens}"]
             and host.get("Privileged") is False and caps(host.get("CapDrop")) == {"ALL"}
             and caps(host.get("CapAdd")) == {"SETUID", "SETGID"}
             and host.get("IpcMode") == "private" and host.get("CgroupnsMode") == "private"
@@ -464,14 +480,14 @@ class LocalVm:
         running = raw.get("State", {}).get("Running") is True
         ready = False
         if running and probe:
-            version = await self.run_for(target, exec_args(target, [DRIVER, "--version"]))
+            version = await self.run_for(target, exec_args(target, ["sh", "-c", 'test -f "$1" && shift && exec "$@"', "sh", SCREENS_READY, DRIVER, "--version"]))
             health = await self.run_for(target, exec_args(target, [DRIVER, "call", "health_report", "{}", "--socket", SOCKET]))
             ready = version.code == health.code == 0 and version.stdout.strip() == f"cua-driver {VERSION}" and healthy(health.stdout)
         if not running or probe and not ready:
             self.invalidate(target)
         bindings = raw.get("NetworkSettings", {}).get("Ports", {}).get("6901/tcp") or []
         port = next((int(p["HostPort"]) for p in bindings if p.get("HostIp") == "127.0.0.1" and str(p.get("HostPort", "")).isdigit()), None)
-        url = f"http://127.0.0.1:{port}/vnc.html#autoconnect=true&resize=scale&view_only=true" if port and not target.remote else ""
+        url = f"http://127.0.0.1:{port}/vnc.html#autoconnect=true&resize=scale&view_only=true&path=websockify?token=screen-{target.screen}" if port and not target.remote else ""
         return {"state": "running" if running else "stopped", "ready": ready, "viewer_url": url}
 
     async def viewer_connection(self, target):
@@ -682,10 +698,15 @@ class LocalVm:
         previous = copy.deepcopy(raw) if raw else {}
         labels = previous.get("Config", {}).get("Labels") or {}
         host = previous.get("HostConfig", {})
-        known_previous = labels.get(f"{LABEL}.layer") == "3" and host.get("Memory") == host.get("MemorySwap") == 2 * 1024**3
+        env = previous.get("Config", {}).get("Env") or []
+        layer = labels.get(f"{LABEL}.layer")
+        known_previous = (target.screens == 1 and not any(entry.startswith("RAPHAEL_SCREENS=") for entry in env)
+                          and (layer == "3" and host.get("Memory") == host.get("MemorySwap") == 2 * 1024**3
+                               or layer == "4" and host.get("Memory") == host.get("MemorySwap") == 3 * 1024**3))
         if known_previous:
             labels[f"{LABEL}.layer"] = IMAGE_LABELS[f"{LABEL}.layer"]
             host.update(Memory=MEMORY_GB * 1024**3, MemorySwap=MEMORY_GB * 1024**3)
+            previous["Config"]["Env"] = [*env, "RAPHAEL_SCREENS=1"]
         legacy_remote = bool(target.remote and host.get("PortBindings") in (None, {}))
         if legacy_remote:
             host["PortBindings"] = {"6901/tcp": [{"HostIp": "127.0.0.1", "HostPort": ""}]}

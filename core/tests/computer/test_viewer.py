@@ -522,7 +522,8 @@ async def test_private_connection_uses_the_current_validated_container_after_res
         await bridge.vm.viewer_connection(target)
 
 
-async def test_persistent_websocket_gates_input_before_and_after_handback(viewer):
+@pytest.mark.parametrize('screen', [1, 4])
+async def test_persistent_websocket_gates_input_before_and_after_handback(viewer, screen):
     bridge, _, _ = viewer
     requests = []
 
@@ -543,6 +544,9 @@ async def test_persistent_websocket_gates_input_before_and_after_handback(viewer
     async def connection(target): return port, "never-in-websocket-url"
     bridge.vm.viewer_connection = connection
     opened = await bridge.open({})
+    from dataclasses import replace
+    session = bridge.sessions[opened['session']]
+    session.target = replace(session.target, screen=screen, screens=4 if screen > 1 else 1)
     await bridge.control({**opened, "held": True})
     from urllib.parse import urlsplit
     url = urlsplit(opened["url"])
@@ -565,7 +569,7 @@ async def test_persistent_websocket_gates_input_before_and_after_handback(viewer
         assert await exchange(handshake) == handshake
         pointer = b"\x05" + bytes(5)
         assert await exchange(pointer) == pointer
-        assert requests[0].startswith(b"GET /websockify HTTP/1.1")
+        assert requests[0].startswith(f"GET /websockify?token=screen-{screen} HTTP/1.1".encode())
         assert b"never-in-websocket-url" not in requests[0]
         await bridge.control({**opened, "held": False})
         assert bridge.sessions[opened["session"]].sockets
