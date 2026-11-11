@@ -226,7 +226,7 @@ export function installMock(fixture, config = {}, target = window) {
     data.catalog.image = [media, { ...unit, id: "test/image-unit", name: "圖片單價範例", per_image: .04 },
       { ...unit, id: "test/image-request", name: "請求單價範例", per_request: .025 }];
     // The core's own drawing model on the owner's Codex subscription (agent/cli/images.py): a source of its own beside OpenRouter.
-    if (variant.mediaCodex) data.catalog.image.push({ ...media, id: "@codex:gpt-image-2", name: "Codex (subscription)", provider: "Codex", provider_id: "codex", provider_name: "Codex",
+    if (variant.mediaCodex) data.catalog.image.push({ ...media, id: "@codex:gpt-image-2", name: "Codex (subscription)", provider: "Codex", provider_id: "codex", provider_name: "Codex", billing_source: "subscription",
       input_per_mtok: null, output_per_mtok: null, image_output_per_mtok: null });
     data.catalog.video = [];
     data.settings.image_model = ""; data.settings.video_model = "";

@@ -1536,6 +1536,12 @@ export function checkRendered(name, context = {}) {
       const openrouter = menu.querySelector('[data-source="openrouter"] > .mono');
       require(openrouter && openrouter.innerHTML !== drawings[0], "it is OpenAI's mark and not OpenRouter's");
       require(menu.querySelector('.mc-pane-head h3').textContent.trim() === 'Codex', 'the head names Codex');
+      // A subscription is not an API priced by the token: its own heading, a head that says it is included, no price on the row.
+      const heading = source => source.closest('section').querySelector('h3').textContent.trim();
+      require(heading(menu.querySelector('[data-source="codex"]')) !== heading(menu.querySelector('[data-source="openrouter"]')) && heading(menu.querySelector('[data-source="codex"]')) !== 'API', 'Codex stands under a heading of its own, not under API');
+      require(!/按量計費|每百萬/.test(menu.querySelector('.mc-pane-head').textContent) && /訂閱/.test(menu.querySelector('.mc-pane-head p').textContent), 'the head says it is included in the subscription');
+      const codexRow = menu.querySelector('.mc-row[data-model="@codex:gpt-image-2"]');
+      require(!codexRow.querySelector('.mc-price') && !/價格未知/.test(codexRow.textContent), 'the row has no price');
     } else if (name === 'media-models-repair') {
       require(['image-model', 'video-model'].includes(document.activeElement?.dataset.k), 'repair focuses the exact model control');
     }
@@ -1839,7 +1845,8 @@ export function checkRendered(name, context = {}) {
           // The row stands at the card's right with the primary rightmost (owner, 2026-11-10: 卡片的按鈕盡量放在右側), measured
           // against the card's own right padding, not the row: a row its parent had shrunk to its buttons left a failed
           // page's 再試一次 at the card's left and still passed (2026-11-10).
-          if (row.matches('.card-actions')) {
+          // A failed page's empty state (R-PAGE-02, 2026-11-11) centres its 再試一次 with the words that say what failed.
+          if (row.matches('.card-actions') && !row.closest('.pg-failed')) {
             const end = box.right - parseFloat(style.paddingRight) - parseFloat(style.borderRightWidth), right = pri.getBoundingClientRect().right;
             require(Math.abs(right - end) <= 1 && buttons.every(button => button.getBoundingClientRect().right <= right + 0.5), `the card's buttons stand at its right, the primary rightmost (${Math.round(end - right)} px)`);
           }
@@ -5213,20 +5220,33 @@ export function checkRendered(name, context = {}) {
     require(well && visible(well) && well.textContent.includes("NT$ 1,280"), "then what it knows of the page, in a well");
     require(failed.querySelector('[data-page-act="retry"]'), "and offers to try again");
     require(document.querySelector(".pg-body").hidden, "no empty box is left");
-    // One left edge with the title, 再試一次 at the card's right (R-CARD-01) and nothing blank under it (the judge, 2026-11-10).
-    const card = failed.closest(".pg-card"), box = card.getBoundingClientRect(), style = getComputedStyle(card), title = card.querySelector(".card-title").getBoundingClientRect();
-    for (const [what, node] of [["words", said], ["well", well]]) {
-      const left = node.getBoundingClientRect().left;
-      require(Math.abs(left - title.left) <= 1, `the ${what} start where the title does (${Math.round(left - title.left)} px)`);
-    }
+    // An empty state of the card (owner, 2026-11-11): the words, what it knows and 再試一次 stand together, centred in the
+    // area the preview has, with no blank gap between them or under the title row.
+    const card = failed.closest(".pg-card"), area = failed.getBoundingClientRect();
     const retry = failed.querySelector('[data-page-act="retry"]').getBoundingClientRect();
-    const right = box.right - parseFloat(style.paddingRight) - parseFloat(style.borderRightWidth), bottom = box.bottom - parseFloat(style.paddingBottom) - parseFloat(style.borderBottomWidth);
-    require(Math.abs(right - retry.right) <= 1, `the retry stands at the card's right (${Math.round(right - retry.right)} px)`);
-    require(bottom - retry.bottom <= 1, `nothing blank stands under the retry (${Math.round(bottom - retry.bottom)} px)`);
+    const stack = [said, well, failed.querySelector('[data-page-act="retry"]')].map(node => node.getBoundingClientRect());
+    const centre = box => box.left + box.width / 2;
+    for (const [what, box] of [["words", stack[0]], ["well", stack[1]], ["retry", stack[2]]]) {
+      require(Math.abs(centre(box) - (area.left + area.width / 2)) <= 1, `the ${what} are centred across the card (${Math.round(centre(box) - (area.left + area.width / 2))} px)`);
+    }
+    const above = stack[0].top - area.top, under = area.bottom - retry.bottom;
+    require(Math.abs(above - under) <= 1.5, `the stack is centred in the area (${Math.round(above)} px above, ${Math.round(under)} px under)`);
+    require(stack[1].top - stack[0].bottom <= 16 && stack[2].top - stack[1].bottom <= 16, "the words, the well and the retry stand together, no blank gap between them");
+    // It stands where the preview does, directly under the title row, and the card is as tall as one that is ready.
+    const body = card.querySelector(".pg-body"), height = () => card.getBoundingClientRect().height;
+    body.hidden = false; failed.hidden = true;
+    const ready = { top: body.getBoundingClientRect().top, height: height() };
+    body.hidden = true; failed.hidden = false;
+    require(Math.abs(area.top - ready.top) <= 0.5, `the empty state stands where the preview does (${area.top} against ${ready.top})`);
+    require(Math.abs(height() - ready.height) <= 0.5, `the failed card is as tall as a ready one (${height()} against ${ready.height})`);
+    const mark = card.querySelector(":scope > .card-head > [data-card-failed-close]");
+    mark.style.display = "none";
+    require(Math.abs(height() - ready.height) <= 0.5, "the × in the heading makes the card no taller");
+    mark.style.display = "";
     require(![...card.querySelectorAll(":scope > .card-actions")].some(visible), "the failed page has no expand row");
     // As tall as the preview it stands for, so a card that fails moves nothing in the thread (owner, 2026-11-11).
     const peek = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--h-page-peek"));
-    require(Math.abs(failed.getBoundingClientRect().height - peek) <= 0.5, `the failed card is as tall as the preview (${failed.getBoundingClientRect().height} against ${peek})`);
+    require(Math.abs(area.height - peek) <= 0.5, `the failed area is as tall as the preview (${area.height} against ${peek})`);
     // R-UI-117: a failed card is put away by the × in its heading.
     const close = card.querySelector(":scope > .card-head > [data-card-failed-close]");
     require(close && visible(close), "the × that puts it away is in its heading");
@@ -5516,6 +5536,15 @@ export function checkRendered(name, context = {}) {
         return { left: body.left - box.left, top: body.top - box.top, right: body.right - box.left, bottom: body.bottom - box.top, eyeX: (eyes.left + eyes.right) / 2 - box.left };
       });
       for (const edge of Object.keys(before)) require(Math.abs(before[edge] - after[edge]) <= 1, `a change of state jumps in ${row.textContent.slice(0, 3)}: ${edge} moved ${Math.abs(before[edge] - after[edge]).toFixed(1)}px`);
+    }
+    // One drawing at a time: while the vector stands in for the strips of the new state it is the only one painted, and when
+    // the strips show the vector is gone (2026-11-11: the strips of an error showed at 320 ms over the vector, two horns).
+    for (const face of document.querySelectorAll(".look-slime-board .mb-av-slime")) {
+      const svg = face.querySelector("svg.slime"), surface = svg?.closest(".slime-surface");
+      if (!svg || !surface) continue;
+      const shown = node => { const css = getComputedStyle(node); return css.display !== "none" && css.visibility !== "hidden" && Number(css.opacity) > 0; };
+      const strips = [...surface.querySelectorAll(":scope > .slime-loop:not([data-slime-loading])")].filter(shown);
+      require(!(strips.length && shown(svg)), `two drawings of the slime are painted at once in ${face.closest(".look-slime-board > div").textContent.slice(0, 3)} (${face.textContent.trim()}, ${svg.dataset.state})`);
     }
     return { check: name, rows: document.querySelectorAll(".look-slime-board > div").length };
   }

@@ -17,8 +17,11 @@ See [Conversation](conversation.md#calm-conversations-owner-request-2026-11-05) 
   responsive sidebar. Ctrl+1..9 selects the displayed member order. Alt+Up/Down
   selects the previous/next conversation of the current member, without wrapping.
   IME and repeated keys suppress every shortcut. Visible modals own keyboard
-  input; mounted hidden settings do not block shortcuts. Editable fields only
-  permit Ctrl+K outside another modal. The existing Ctrl+N also respects fields.
+  input; mounted hidden settings do not block shortcuts. Since 2026-11-11 the
+  Ctrl combinations (K, F, Shift+F, B, N, 1..9) also work while a text field,
+  such as the composer, has the focus, because none of them types anything;
+  Alt+Up/Down stay with the text and the combinations a field uses itself
+  (Ctrl+A, C, V, X, Z, Y, Enter, arrows) are never taken.
 - R-ROUTINE-01: A member, including Raphael, has at most 50 routines, enabled or
   paused. Every trigger shares admission: 300 runs per rolling hour across the
   team, 200 for one member. Persisted bounded admission receipts survive deletion
@@ -59,7 +62,7 @@ full-size review. Run after the shared heavy waiter says clear, or after its
 timeout under the follow-up's explicit exception. Native/live remain deferred.
 
 ```powershell
-npm run look -- command-palette command-palette-filter command-palette-member shortcut-find-chief shortcut-find-member shortcut-find-room shortcut-search owner-output-folder routine-guard-reason chat sidebar-rail sidebar-drawer --theme both --width 1120,720,1920x1080
+npm run look -- shortcut-new-in-composer shortcut-sidebar-in-composer shortcut-member-in-composer command-palette command-palette-filter command-palette-member shortcut-find-chief shortcut-find-member shortcut-find-room shortcut-search owner-output-folder routine-guard-reason chat sidebar-rail sidebar-drawer --theme both --width 1120,720,1920x1080
 ```
 
 Inspect every contact sheet and full-size palette, compact search/finder,
