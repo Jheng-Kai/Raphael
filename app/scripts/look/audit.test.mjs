@@ -297,6 +297,23 @@ describe("rendered look checks", () => {
     expect(found('dim')).toEqual([]);
     win.happyDOM.abort();
   });
+  it("lets a pane's top row stand over what scrolls under it, and still rejects a covered control of the row itself", () => {
+    const win = new Window();
+    win.document.body.innerHTML = '<section><header id="row" data-window-drag><span id="pill">name</span><button id="tool">Share</button></header><div id="panel">card</div><ol><li><button id="file">Open file</button></li></ol></section>';
+    const rect = { left: 10, top: 10, right: 110, bottom: 40, width: 100, height: 30 };
+    for (const element of win.document.querySelectorAll('*')) element.getBoundingClientRect = () => rect;
+    const found = cover => {
+      win.document.elementFromPoint = () => win.document.getElementById(cover);
+      return auditDocument(win.document, { width: 1120, height: 900 }, [], []).productRules.filter(item => item.rule === 'R-UI-145').map(item => item.text);
+    };
+    // The thread's file card has scrolled under the row: the row, or its pill, stands there on purpose.
+    expect(found('row')).toEqual([]);
+    // A part of the row over the thread's file card is the row doing its work; over the row's own button it is a finding.
+    expect(found('pill')).toEqual(['Share']);
+    // Anything else over the row's own button, or over the thread's, is still a finding.
+    expect(found('panel')).toEqual(['Share', 'Open file']);
+    win.happyDOM.abort();
+  });
   it("completion checks reject a lost alias result and an inner scrollbar", () => {
     const win = new Window();
     win.document.body.innerHTML = `<div class="composer"><textarea></textarea></div><div id="app-popover" style="position:fixed;overflow-y:hidden"><div class="menu-head" aria-hidden="true">連接的服務</div>${Array.from({length:8},(_,i)=>`<button style="background:transparent" data-value="Notebook ${i}">Notebook ${i}</button>`).join('')}</div>`;

@@ -69,6 +69,10 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
     const top = doc.elementFromPoint?.(x, y);
     if (!top || top === element || element.contains(top) || top.contains(element)) return null;
     if ([...(element.labels ?? [])].some(label => label === top || label.contains(top))) return null;
+    // R-TOP-01: a pane's top row (the conversation header on the window's own row, a panel's, a side thread's) stands over what
+    // scrolls under it and fades there. What has scrolled under the row is covered on purpose; a control of the row itself is not.
+    const row = top.closest?.('[data-window-drag]');
+    if (row && !row.contains(element)) return null;
     const layer = fixedLayer(top);
     return layer && !layer.contains(element) ? null : top;
   };
