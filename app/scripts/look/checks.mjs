@@ -735,6 +735,7 @@ export function checkRendered(name, context = {}) {
     require(row.textContent.includes('工作 1 · 決議 1'), "the row names work and decisions in the screen language");
     require(reports[0].querySelector('.team-file[data-room-act="artifact-open"]:not([disabled])'), "produced files use the shared actionable file chip");
     require(!reports[0].textContent.includes('fixture-repo') && !reports[0].querySelector('code,ul'), "the report never prints a digest or raw evidence list");
+    require(!pane.textContent.includes('S2-03'), "R-TEXT-02: a stage code is never in what the meeting shows");
     if (name === "room-meeting-report") {
       reports[0].querySelector('[data-room-act="artifact-open"]').click();
       require(window.__look.openedTeamFile === 'task-artifact:42:501', "the file press reaches the native artifact resolver");
@@ -742,6 +743,7 @@ export function checkRendered(name, context = {}) {
     if (name === "room-meeting-board") {
       const board = document.querySelector('#app-popover [data-room-board]');
       require(board && board.textContent.includes('成果檢查') && board.textContent.includes('每個階段由一位成員負責'), "the board retains status and pinned decisions");
+      require(!board.textContent.includes('S2-03'), "R-TEXT-02: the board names work by its title, never by its stage code");
       require(board.querySelector('.room-board-member .card-status') && board.querySelector('.room-board-member .av'), "each member has their shared face and state pill");
       require(!board.querySelector('ul'), "pinned decisions are plain lines");
     }
@@ -3043,8 +3045,9 @@ export function checkRendered(name, context = {}) {
     require(note.textContent === expected, `which subscription, what is left and when it resets: ${note.textContent}`);
     require(note.getAttribute("role") === "status", "it is read out as a status");
     require(box.left >= 0 && box.top >= 0 && box.right <= innerWidth + 0.5 && box.bottom <= innerHeight + 0.5, `the toast is inside the window: ${JSON.stringify(box)}`);
+    // Reading the catalogue of models moves nothing; on a loaded machine the composer's own read of it lands after the mark.
     const moved = window.__look.calls.slice(window.__quotaCallsBefore ?? 0)
-      .filter(call => ["members.update", "settings.set"].includes(call.method) || /model/i.test(`${call.method ?? ""} ${call.command ?? ""}`));
+      .filter(call => call.method !== "models.catalog" && (["members.update", "settings.set"].includes(call.method) || /model/i.test(`${call.method ?? ""} ${call.command ?? ""}`)));
     require(moved.length === 0, `no model, member or setting moves: ${JSON.stringify(moved)}`);
     return { check: name, text: note.textContent, width: Math.round(box.width), height: Math.round(box.height) };
   }

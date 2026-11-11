@@ -364,7 +364,7 @@ export function installMock(fixture, config = {}, target = window) {
       {...data.roomWrapupMessage,reply_to:null,reply_to_member:null,text:"目前沒有可驗收的成果。小晴還需要來源的權限，取得後就會處理。"}];
   }
   if (variant.roomMeeting) {
-    const task = {...data.roomHandoff, state: "done", member_id: 1, member_name: "小晴", stage_id: "成果檢查",
+    const task = {...data.roomHandoff, state: "done", member_id: 1, member_name: "小晴", stage_id: "S2-03", title: "成果檢查",
       evidence: data.roomHandoff.evidence.map((item, index) => ({...item, id: 501 + index})),
       result: "已完成成果檢查，驗收報告與私人工作紀錄都已保留。", started_at_ms: data.now - 120000};
     const decision = {...data.messages[1], id: 800, kind: "decision", member_id: 0, text: "每個階段由一位成員負責，完成後再交接。", created: data.now - 60000};
