@@ -8,6 +8,9 @@
   --card-primary: #ffffff; --card-primary-ink: #171717; --card-primary-edge: #d6d6d6;
   --desktop-frame-bg: #171717; --desktop-frame-text: #f0f0f0;
   --sidebar-width: 296px; --window-controls-height: 32px;
+  /* The window's three caption buttons are 46 px cells (.window-button). What stands at the top right of a pane that reaches the
+     window's edge ends this far short of them: the gap Grok Bot leaves, measured at 14 px (2026-11-12). */
+  --window-controls-width: calc(3 * 46px); --window-controls-gap: 14px;
   /* scale: spacing, type, radius, control heights (docs/ui.md) */
   --sp-1: 4px; --sp-2: 8px; --sp-3: 12px; --sp-4: 16px; --sp-5: 24px; --sp-6: 32px;
   /* Content measures: see the verification feature map's content-width contract. */
@@ -171,6 +174,14 @@ svg.i { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor;
 /* A dialog dims the caption with everything else; its buttons still answer on top of the dim. */
 :root:has(.mb-scrim:not(.store-scrim)) .window-chrome, :root:has(.menu.side-search) .window-chrome { background: transparent; border-color: transparent; }
 .window-drag { flex: 1; min-width: 0; }
+/* A conversation's header is the window's top row (members.css): its own empty stretch moves the window (it carries
+   data-window-drag, window-chrome.ts), and this strip, whose drag cell would lie over the pill and the round buttons, lets the pointer
+   through to it; the window's buttons and the sidebar's menu button in it still answer.
+   Anything that dims or replaces the header keeps the cell: a dialog, the store (a page over the conversation), the narrow sidebar,
+   the member's settings page and the larger computer view. The details panel lying over the chat (under 1120 px) dims the row with its scrim, whose own top row moves the window
+   instead (members.css). */
+:where(:root[data-window-layout="main"]:not([data-window-modal="true"], [data-desktop-expanded], [data-sidebar-open]):has(.main > .page-agent:not([hidden]) > .mb-chat:not([hidden]) > .mb-head):not(:has(.page-agent > .ms-pane:not([hidden]), .mb-scrim, .menu.side-search))) .window-chrome { pointer-events: none; }
+:where(:root[data-window-layout="main"]:not([data-window-modal="true"], [data-desktop-expanded], [data-sidebar-open]):has(.main > .page-agent:not([hidden]) > .mb-chat:not([hidden]) > .mb-head):not(:has(.page-agent > .ms-pane:not([hidden]), .mb-scrim, .menu.side-search))) .window-chrome > :not(.window-drag) { pointer-events: auto; }
 /* Windows' own caption buttons, 46 px cells the strip's full height with square
    corners; under the pointer the whole cell fills, and close turns red with a white cross. */
 .window-controls { display: flex; flex: none; gap: 0; padding: 0; }

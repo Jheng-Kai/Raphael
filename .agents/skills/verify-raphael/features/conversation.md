@@ -2268,3 +2268,34 @@ early names/dates, giant-turn restart, private tool readback, recent exclusion, 
 auxiliary fallback and a synthetic 5000-turn recall benchmark. Exact commands/results
 and benchmark evidence are in app/.look/briefs/memory-hermes-standard-report.md.
 Core-only change; no UI/native/live/provider acceptance follows from offline tests.
+
+## One row at the top of a conversation (owner, 2026-11-12; R-TOP-01)
+
+A conversation, a member's and a group's, has one row above its thread, and it is the window's own top row (after Grok Bot, measured at
+1120, 720 and 1920): the header (`.mb-head`) is 60 px (`--pa-top`), the pill's centre 30 px from the window's top and the round buttons
+level with it, nothing above it. The header takes no room (its height is its negative bottom margin), so the stage, and the thread in it,
+reach the window's top; the thread keeps `--pa-lead` (the row, plus 20 px while a quick question's caption hangs under the pill; 40 px
+while the search bar stands under the row) as its top padding, and its mask fades what scrolls up as it reaches the row. A report's
+`.rp-scroll` does the same; an HTML page (`.pgv-page`) and the conversation between members (`.peer-chat`) stand under the row.
+
+At the right the tools end 14 px short of the window's three buttons (`--pa-top-end`) where the pane reaches the window's edge. With the
+details panel open as a column (1120 and wider) the panel's own head (`.mb-det-head`) is the row over it, its last button 14 px short of the
+window's buttons, and the conversation's tools go to the pane's edge; under 1120 px the panel lies over the chat and its scrim dims the
+header. A group's side thread does the same with its header. Under 860 px the sidebar's menu button stands at the window's top left and the
+pill row starts clear of it (`--pa-top-start`).
+
+Dragging: the header carries `data-window-drag` (and the panel's and the side thread's heads, and the peer view's), so its empty parts move
+the window and a double press maximises, as the strip does; while a conversation's header is shown the strip (`.window-chrome`, whose drag
+cell would lie over the pill and the buttons) lets the pointer through (`pointer-events: none`, styles.css), its window buttons and the sidebar's menu button still answering. A dialog, the store
+(a page over the conversation, which starts its content under the strip), the narrow sidebar, the member's settings page and the larger computer
+view keep the cell. The details panel lying over the chat (under 1120 px) dims the
+row with its scrim, whose own top row (`.mb-det-scrim-row`) moves the window instead. A wheel
+over the header moves the thread (`passWheelUnder`).
+
+`conversation-top-row` measures all of it and returns the numbers (pill centre, row, stage top, thread height, first message top, tools'
+gap); `details-top-row` does the panel's row; `conversation-top-row-scrolled` and `conversation-top-row-wheel` the thread under the row. It
+ends the scenes in `TOP_ROW_SCENES` (scenes/top-row.mjs), and the narrow case is every scene at 720.
+
+```powershell
+npm run look -- top-row-find top-row-details top-row-room top-row-room-find top-row-scrolled top-row-wheel chat conversation-share details raphael-details room calm-thread page-inplace page-inplace-back page-inplace-room page-report page-report-share room-thread-open --theme both --width 1120,720,1920x1080
+```

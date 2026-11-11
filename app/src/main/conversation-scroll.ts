@@ -1,6 +1,21 @@
 import { onLocaleChange, t } from "./i18n";
 import { iconButton } from "./ui";
 
+/**
+ * The conversation's header stands over the top of its thread (members.css), so a wheel turned over it would stop at the header. It
+ * moves what the thread, or the report open in its place, would have moved: the header takes no room from the thread and no
+ * wheel from it either.
+ */
+export function passWheelUnder(head: HTMLElement, stage: HTMLElement): void {
+  head.addEventListener("wheel", event => {
+    if (event.ctrlKey || !event.deltaY) return;
+    const under = stage.classList.contains("is-page") ? stage.querySelector<HTMLElement>(".rp-scroll") : stage.querySelector<HTMLElement>(":scope > .ra-scroll");
+    if (!under || under.scrollHeight <= under.clientHeight) return;
+    event.preventDefault();
+    under.scrollTop += event.deltaY * (event.deltaMode === 1 ? 40 : event.deltaMode === 2 ? under.clientHeight : 1);
+  }, { passive: false });
+}
+
 /** One scroll affordance for chief, member and room timelines. */
 export function mountConversationScroll(scroller: HTMLElement): void {
   const stage = scroller.parentElement!;

@@ -44,7 +44,14 @@
   --pa-colw: var(--layout-thread-max);
   --pa-bw: 60ch;
   --pa-ctl: calc(30px + 4 * var(--pa-u));
-  --pa-pill-h: calc(32px + 20 * var(--pa-u));
+  /* The top row: the conversation's header, the details panel's and a side thread's are the window's own top row, with the buttons of
+     the window at their right. The pill and the round buttons are centred in it, 30 px from the window's top, as Grok Bot's
+     (measured 2026-11-12); the thread passes under it. */
+  --pa-top: 60px;
+  /* What the window's buttons take from the top row's right end, and from its left end at narrow widths, where the sidebar's menu button
+     (sidebar.css, 40 px wide) stands at the window's top left. */
+  --pa-top-end: calc(var(--window-controls-width) + var(--window-controls-gap));
+  --pa-top-start: 0px;
   --pa-pill-av: calc(22px + 14 * var(--pa-u));
   --pa-pill-fs: var(--fs-sm);
   --pa-gap: var(--sp-5);
@@ -105,6 +112,7 @@
   --pa-new-av: calc(64px + 24 * var(--pa-u));
   --pa-preset: calc(40px + 12 * var(--pa-u));
 }
+@media (max-width: 859px) { .page-agent { --pa-top-start: calc(40px + var(--sp-2)); } }
 
 /* The page's columns (the members, the chat, the details) are in members.css; the chat holds the
    head, the search and the stage, one above the other. */
@@ -780,8 +788,9 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 .emoji-foot-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .room-thread-chip { color: var(--text-2); margin-top: var(--sp-1); }
 .au-room-pane.has-side-thread { position: relative; }
-.room-side-thread { position: absolute; z-index: 12; inset: 0 0 0 auto; width: min(440px, 100%); display: flex; flex-direction: column; background: var(--content); border-left: 1px solid var(--edge); padding-top: var(--sp-3); }
-.room-side-thread > header { display: flex; align-items: center; justify-content: space-between; padding: var(--sp-3) var(--sp-5); }
+.room-side-thread { position: absolute; z-index: 12; inset: 0 0 0 auto; width: min(440px, 100%); display: flex; flex-direction: column; background: var(--content); border-left: 1px solid var(--edge); padding-top: 0; }
+/* The side thread reaches the window's top: its header is its top row, ended short of the window's buttons (`--pa-top`). */
+.room-side-thread > header { flex: none; display: flex; align-items: center; justify-content: space-between; height: var(--pa-top); padding: 0 var(--pa-top-end) 0 calc(var(--pa-top-start) + var(--sp-5)); }
 .room-side-scroll { flex: 1; min-height: 0; overflow-y: auto; padding: var(--sp-4) var(--sp-5); }
 .room-thread-origin { border-bottom: 1px solid var(--edge); margin-bottom: var(--sp-4); padding-bottom: var(--sp-3); }
 .room-side-thread .thread { list-style: none; padding: 0; margin: 0; }

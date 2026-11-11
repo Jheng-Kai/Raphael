@@ -5273,7 +5273,9 @@ export function checkRendered(name, context = {}) {
     require(back && visible(back) && !back.hidden, "the way back is in the header");
     require(back.classList.contains("icon") && back.getAttribute("aria-label") === "返回" && back.textContent.trim() === "" && back.querySelector("svg"), "a left arrow named 返回, no word on it");
     require(Math.round(arrow.width) === 36 && Math.round(arrow.height) === 36 && parseFloat(getComputedStyle(back).borderRadius) >= 18 && /^rgb\(/.test(getComputedStyle(back).backgroundColor), "the window edge's soft round button, 36 px, on its solid surface");
-    require(arrow.left - head.left <= 12 && arrow.top >= head.top - 1 && arrow.bottom <= head.bottom + 1, `at the header's top left (${Math.round(arrow.left - head.left)} px in)`);
+    // Under 860 px the sidebar's menu button stands at the window's top left and the row starts clear of it (`--pa-top-start`).
+    const lead = parseFloat(getComputedStyle(back.parentElement).marginLeft) || 0;
+    require(arrow.left - head.left <= 12 + lead && arrow.top >= head.top - 1 && arrow.bottom <= head.bottom + 1, `at the header's top left (${Math.round(arrow.left - head.left)} px in)`);
     const search = pane.querySelector('.mb-head [data-act="search"]');
     require(!search || !visible(search), "the thread's search waits where the arrow stands");
     require(!pane.querySelector(":scope > .ra-find") || !visible(pane.querySelector(":scope > .ra-find")), "and so does its bar");
@@ -5503,7 +5505,7 @@ export function checkRendered(name, context = {}) {
     require(![...document.querySelectorAll(".mb-scrim, .mb-dialog")].some(layer => !layer.closest("[hidden]")), "no dialog, no scrim");
     // The way back is the conversation header's round arrow at its top left, the same one an HTML page has; no × over the report.
     const back = document.querySelector('.page-agent .mb-head [data-page-back]'), arrowBox = back?.getBoundingClientRect(), headBox = document.querySelector('.page-agent .mb-chat:not([hidden]) > .mb-head').getBoundingClientRect();
-    require(back && visible(back) && back.getAttribute("aria-label") === "返回" && Math.round(arrowBox.width) === 36 && Math.round(arrowBox.height) === 36 && arrowBox.left - headBox.left <= 12, "the arrow named 返回 at the header's top left, the window edge's round button");
+    require(back && visible(back) && back.getAttribute("aria-label") === "返回" && Math.round(arrowBox.width) === 36 && Math.round(arrowBox.height) === 36 && arrowBox.left - headBox.left <= 12 + (parseFloat(getComputedStyle(back.parentElement).marginLeft) || 0), "the arrow named 返回 at the header's top left, the window edge's round button");
     require(!view.querySelector(".rp-close, [data-report-act=close], .rp-top, .btn"), "nothing floats over the report: no × and no button");
     // 存成檔案 stands where a thread's share stands (owner, 2026-11-12: its place and look as Grok Bot's share): first of the header's
     // tools at its top right, the window edge's round button, level with the arrow, drawn as a file and not as the member's share.
@@ -6591,6 +6593,102 @@ export function checkRendered(name, context = {}) {
     const first = document.querySelector('#app-popover[data-team-mentions] [data-value]');
     require(visible(first) && first.dataset.value === "Notion", `「@notoin」 finds Notion first (${first?.dataset.value})`);
     return { check: name };
+  }
+  // One row at the top of a conversation (owner, 2026-11-12, after Grok Bot, measured: the pill's centre 30 px from the window's top, the round
+  // buttons level with it and ending 14 px short of the window's buttons, the thread passing under the row): the header is the window's top
+  // row, nothing but it stands above the thread, the tools never meet the window's three buttons, and the empty parts of the row still move
+  // the window while the pill and the buttons still press. The numbers are returned so that a run shows them.
+  if (name === "conversation-top-row") {
+    const pane = [...document.querySelectorAll(".page-agent > .mb-chat")].find(visible), head = pane?.querySelector(":scope > .mb-head");
+    require(pane && visible(head), "a conversation with its header is on screen");
+    const stage = pane.querySelector(":scope > .ra-stage"), scroller = stage.querySelector(":scope > .ra-scroll"), find = pane.querySelector(":scope > .ra-find");
+    const controls = document.querySelector(".window-chrome .window-controls").getBoundingClientRect(), box = element => element.getBoundingClientRect();
+    const page = box(pane), row = box(head), mid = element => box(element).top + box(element).height / 2;
+    const who = head.querySelector(".conversation-trigger .mb-pill, .au-room-heading b, .au-room-heading");
+    require(visible(who), "the header names whose conversation it is");
+    const pillY = Math.round(mid(who));
+    require(Math.abs(pillY - 30) <= 2, `the pill's centre is 30 px from the window's top, as Grok Bot's: ${pillY}`);
+    require(row.top <= 1 && row.height <= 62, `the header is the window's top row: it starts at ${Math.round(row.top)} and is ${Math.round(row.height)} px high`);
+    // A button that keeps its place without showing (a room's search while a page stands in the thread's place) is not pressed.
+    const buttons = [...head.querySelectorAll(".btn.icon")].filter(button => visible(button) && getComputedStyle(button).visibility !== "hidden");
+    for (const button of buttons) require(Math.abs(mid(button) - pillY) <= 2, `a round button is level with the pill: ${Math.round(mid(button))} and ${pillY} (${button.getAttribute("aria-label")})`);
+    const findOpen = !!find && visible(find);
+    require(box(stage).top <= 1 || findOpen, `nothing but the row stands above the thread: the stage starts at ${Math.round(box(stage).top)}`);
+    require(!findOpen || box(find).top >= row.bottom - 1, "the search bar stands under the row, not over it");
+    const lead = parseFloat(getComputedStyle(scroller).paddingTop), visibleThread = getComputedStyle(scroller).visibility !== "hidden";
+    require(!visibleThread || findOpen || lead >= row.bottom - box(scroller).top - 1, `the first message stands clear of the row: ${Math.round(lead)} px of padding under a row ending at ${Math.round(row.bottom)}`);
+    require(!visibleThread || /linear-gradient/.test(getComputedStyle(scroller).maskImage), "what scrolls up fades out under the row");
+    const first = [...scroller.querySelectorAll(".thread > li")].find(visible);
+    // No tool meets the window's buttons: it ends 14 px short of them where the pane reaches the window's edge, and at its pane's edge where another pane stands to its right.
+    const tools = buttons.filter(button => button.closest(".ra-tools")), edge = tools.length ? Math.max(...tools.map(button => box(button).right)) : null;
+    const reaches = page.right >= innerWidth - 1 && !pane.classList.contains("has-side-thread") && !(pane.closest(".page-agent")?.dataset.det === "open" && !pane.classList.contains("au-room-pane") && innerWidth >= 1120);
+    if (edge !== null && reaches) require(Math.abs(controls.left - edge - 14) <= 2, `the tools end 14 px short of the window's buttons, as Grok Bot's: ${Math.round(controls.left - edge)} (${Math.round(edge)} and ${Math.round(controls.left)})`);
+    for (const button of tools) { const b = box(button); require(b.right <= page.right + 1, "a tool stays inside its pane"); }
+    // What the pointer reaches: the pill and every button press; the empty stretch of the row moves the window. Under 1120 px an open
+    // details panel lies over the chat with a dim over its header: nothing of the row presses, and the scrim's top row moves the window. A
+    // group's side thread lies over the pane's right under 1100 px, with its own row (its header moves the window too).
+    const at = (x, y) => document.elementFromPoint(x, y);
+    const dimmed = (pane.closest(".page-agent")?.dataset.det === "open" && !pane.classList.contains("au-room-pane") && innerWidth < 1120)
+      || (pane.classList.contains("has-side-thread") && innerWidth < 1100);
+    require(head.hasAttribute("data-window-drag"), "the header's empty stretch moves the window");
+    if (dimmed && !pane.classList.contains("au-room-pane")) {
+      const rowBox = box(pane.closest(".page-agent").querySelector(".mb-det-scrim-row")), grab = at(Math.round(page.left + 40), 14);
+      require(grab?.matches(".mb-det-scrim-row[data-window-drag]") && rowBox.height >= 59 && rowBox.top <= 1, `the dimmed row is draggable through the scrim's top row: ${grab?.className}`);
+    }
+    if (dimmed) return { check: name, pillY, rowTop: Math.round(row.top), rowHeight: Math.round(row.height), stageTop: Math.round(box(stage).top), threadHeight: Math.round(scroller.clientHeight), dimmed };
+    for (const target of [who.closest("button") ?? who, ...buttons]) {
+      const b = box(target), hit = at(b.left + b.width / 2, b.top + 6);
+      const why = () => { const root = document.documentElement; return `${hit?.className}; the strip's drag cell takes pointer events: ${getComputedStyle(document.querySelector(".window-drag")).pointerEvents}; layout ${root.dataset.windowLayout}, modal ${root.dataset.windowModal}, sidebar open ${root.hasAttribute("data-sidebar-open")}, header ${!!document.querySelector(".main > .page-agent:not([hidden]) > .mb-chat:not([hidden]) > .mb-head")}, settings page ${!!document.querySelector(".page-agent > .ms-pane:not([hidden])")}, dialog ${!!document.querySelector(".mb-scrim:not(.store-scrim)")}`; };
+      require(hit && target.contains(hit) && !hit.closest(".window-chrome"), `the pointer reaches ${target.getAttribute("aria-label") ?? target.className} at the top of the row (${why()})`);
+    }
+    const gapX = (() => { const a = box(who.closest("button") ?? who); return (a.right + (buttons.filter(b => box(b).left > a.right)[0]?.getBoundingClientRect().left ?? a.right + 40)) / 2; })();
+    const empty = at(gapX, 14);
+    require(empty?.closest(".mb-head") === head && !empty.closest("button"), `an empty part of the row is the header's own, under no strip of the window: ${empty?.className}`);
+    return { check: name, pillY, rowTop: Math.round(row.top), rowHeight: Math.round(row.height), stageTop: Math.round(box(stage).top), threadHeight: Math.round(scroller.clientHeight), firstMessageTop: first ? Math.round(box(first).top) : null, toolsGap: edge === null ? null : Math.round(controls.left - edge), findOpen };
+  }
+  // The details panel reaches the window's top: its own head is its top row, its round buttons level with the window's, its last one 14 px short of them.
+  if (name === "details-top-row") {
+    const panel = document.querySelector(".mb-det:not([hidden])"), head = panel?.querySelector(":scope > .mb-det-head");
+    require(visible(panel) && visible(head), "the details panel is open");
+    const controls = document.querySelector(".window-chrome .window-controls").getBoundingClientRect(), box = element => element.getBoundingClientRect();
+    require(Math.abs(box(panel).top) <= 1 && box(head).top <= 1 && Math.abs(box(head).height - 60) <= 2, `the panel's head is its top row: ${Math.round(box(head).top)} and ${Math.round(box(head).height)} px high`);
+    const buttons = [...head.querySelectorAll(".btn.icon")].filter(visible);
+    require(buttons.length >= 2, "the panel's gear and close stand in its row");
+    for (const button of buttons) require(Math.abs(box(button).top + box(button).height / 2 - 30) <= 2, `a panel button is level with the window's buttons' row, 30 px from the top: ${Math.round(box(button).top + box(button).height / 2)}`);
+    const last = Math.max(...buttons.map(button => box(button).right));
+    require(Math.abs(controls.left - last - 14) <= 2, `the panel's last button ends 14 px short of the window's buttons: ${Math.round(controls.left - last)}`);
+    require(head.hasAttribute("data-window-drag"), "the panel's row moves the window");
+    for (const button of buttons) { const b = box(button), hit = document.elementFromPoint(b.left + b.width / 2, b.top + 6); require(hit && button.contains(hit), `the pointer reaches the panel's ${button.getAttribute("aria-label")} at the top of the row`); }
+    const scroll = panel.querySelector(":scope > .mb-det-scroll");
+    require(box(scroll).top >= box(head).bottom - 1, "the panel's contents start under its row");
+    return { check: name, rowHeight: Math.round(box(head).height), closeGap: Math.round(controls.left - last) };
+  }
+  // The thread read higher up has messages under the row; they fade (the mask) and the pill and buttons stay on their own opaque surfaces.
+  if (name === "conversation-top-row-scrolled") {
+    const pane = [...document.querySelectorAll(".page-agent > .mb-chat")].find(visible), head = pane.querySelector(":scope > .mb-head"), scroller = pane.querySelector(":scope > .ra-stage > .ra-scroll");
+    const row = head.getBoundingClientRect(), lines = [...scroller.querySelectorAll(".thread > li")].filter(visible);
+    require(scroller.scrollTop > 0 && scroller.scrollHeight - scroller.clientHeight - scroller.scrollTop > 40, "the thread is read higher up");
+    require(lines.some(line => line.getBoundingClientRect().top < row.bottom - 8 && line.getBoundingClientRect().bottom > row.top + 8), "a message passes under the row");
+    const mask = getComputedStyle(scroller).maskImage;
+    require(/linear-gradient/.test(mask) && /rgba\(0, 0, 0, 0\)|transparent/.test(mask), `what reaches the row fades out: ${mask}`);
+    for (const button of [...head.querySelectorAll(".btn.icon")].filter(visible)) {
+      const style = getComputedStyle(button);
+      require(/^rgb\(/.test(style.backgroundColor) && style.opacity === "1", `a header button stands on its own opaque surface: ${style.backgroundColor}`);
+    }
+    const pillSurface = getComputedStyle(head.querySelector(".conversation-trigger .mb-pill") ?? head, "::before");
+    require(!head.querySelector(".conversation-trigger .mb-pill") || /^rgb\(/.test(pillSurface.backgroundColor), `the pill stands on its own opaque surface: ${pillSurface.backgroundColor}`);
+    return { check: name, under: lines.filter(line => line.getBoundingClientRect().top < row.bottom).length };
+  }
+  if (name === "conversation-top-row-wheel-before") {
+    const scroller = [...document.querySelectorAll(".page-agent > .mb-chat")].find(visible).querySelector(":scope > .ra-stage > .ra-scroll");
+    require(scroller.scrollHeight - scroller.clientHeight > 120, "the thread is long enough to turn");
+    window.__rowWheel = scroller.scrollTop;
+    return { check: name, top: Math.round(scroller.scrollTop) };
+  }
+  if (name === "conversation-top-row-wheel") {
+    const scroller = [...document.querySelectorAll(".page-agent > .mb-chat")].find(visible).querySelector(":scope > .ra-stage > .ra-scroll");
+    require(scroller.scrollTop < window.__rowWheel - 100, `a wheel over the header moved the thread up: ${Math.round(window.__rowWheel)} -> ${Math.round(scroller.scrollTop)}`);
+    return { check: name, moved: Math.round(window.__rowWheel - scroller.scrollTop) };
   }
   if (name === "conversation-share") {
     const head = document.querySelector('.mb-chat .mb-head'), share = head?.querySelector('[data-act="share-member"]'), search = head?.querySelector('[data-act="search"]');

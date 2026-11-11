@@ -12,7 +12,18 @@
 /* ---------- the page: the column, the chat, the panel ---------- */
 .page.page-agent { position: relative; max-width: none; height: 100%; padding: 0; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
 .page.page-agent[data-det="open"]:not(.is-room) { grid-template-columns: minmax(0, 1fr) var(--pa-det); }
-.mb-chat { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto minmax(0, 1fr); min-width: 0; min-height: 0; padding: calc(var(--window-controls-height) + 4px) var(--pa-chat-pad) 0; }
+/* The chat has no strip above it: its header is the window's top row (`--pa-top`) and the thread passes under it. The header takes no
+   room (its row is as tall as its negative margin), so the stage reaches the window's top; the thread keeps `--row-lead` of padding
+   so that its first message stands clear of the row, and what scrolls up fades out as it reaches the row (conversations.css). */
+.mb-chat { --row-edge: var(--pa-chat-pad); --row-hang: 0px; --row-lead: calc(var(--pa-top) + var(--row-hang)); display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto minmax(0, 1fr); min-width: 0; min-height: 0; padding: 0 var(--pa-chat-pad); }
+/* A quick question's caption hangs under the pill (agent.ts): the thread starts below it. */
+.mb-chat:has(.conversation-caption:not(:empty, [hidden])) { --row-hang: 20px; }
+/* Tools at the top right stop short of the window's buttons where the pane reaches the window's edge; where another pane stands at
+   the right (the details panel as a column, a room's side thread) that pane's own top row carries them and the tools go to the
+   pane's edge. */
+.mb-chat { --row-end: max(0px, calc(var(--pa-top-end) - var(--row-edge))); --row-start: max(0px, calc(var(--pa-top-start) - var(--row-edge))); }
+@media (min-width: 1120px) { .page-agent[data-det="open"]:not(.is-room) .mb-chat { --row-end: 0px; } }
+@media (min-width: 1100px) { .au-room-pane.has-side-thread { --row-end: 0px; } }
 
 /* ---------- the member column ---------- */
 .mb-col { display: flex; flex-direction: column; min-width: 0; min-height: 0; background: var(--side); border-right: 0; padding-top: calc(var(--window-controls-height) + 4px); }
@@ -91,11 +102,12 @@
 .av.mb-av-pic > img { object-fit: cover; }
 
 /* ---------- the chat's top row: the narrow windows' dropdown, the pill, the tools ---------- */
-.page-head.mb-head { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: var(--sp-2); min-height: calc(var(--pa-pill-h) + 8px); }
+.page-head.mb-head { position: relative; z-index: 3; display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: var(--sp-2); height: var(--pa-top); min-height: 0; margin-bottom: calc(-1 * var(--pa-top)); }
 .mb-h1 { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-.mb-head-l { justify-self: start; min-width: 0; max-width: 100%; }
+.mb-head-l { justify-self: start; min-width: 0; max-width: 100%; margin-left: var(--row-start); }
+.mb-head .room-picker { margin-left: var(--row-start); }
 .mb-head-c { justify-self: center; min-width: 0; max-width: 100%; }
-.mb-head .ra-tools { justify-self: end; }
+.mb-head .ra-tools { justify-self: end; margin-right: var(--row-end); }
 .mb-pill-t { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .sel.mb-pick { display: none; max-width: 180px; }
 .sel.mb-pick .mb-dot { margin-left: -2px; }
@@ -121,7 +133,8 @@
 .ra-empty.is-member .ra-hi { font: 500 var(--fs-lg)/1.5 var(--display); letter-spacing: 0; }
 
 /* ---------- the details panel ---------- */
-.mb-det { position: relative; display: flex; flex-direction: column; min-width: 0; min-height: 0; background: var(--side); border-left: 0; padding-top: var(--window-controls-height); }
+/* The panel reaches the window's top: its own head is its top row, the window's buttons at its right (`--pa-top`). */
+.mb-det { position: relative; display: flex; flex-direction: column; min-width: 0; min-height: 0; background: var(--side); border-left: 0; padding-top: 0; }
 /* The panel's left edge drags it (members-shell.ts): no handle, a thin line only while it moves or has the keyboard. */
 .det-edge { position: absolute; top: 0; left: 0; bottom: 0; z-index: 5; width: 6px; cursor: col-resize; touch-action: none; outline: none; }
 .det-edge:focus-visible::after, .det-edge.is-dragging::after { content: ""; position: absolute; top: 0; left: 0; bottom: 0; width: 2px; background: var(--edge); }
@@ -133,10 +146,12 @@
 /* In the panel, everything in it follows its width: the gear on the left edge, close on the right, and every
    card and the computer's screen as wide as the panel is. */
 /* Two round buttons never touch: back and the gear keep a gap between them. */
-.mb-det-head { display: flex; align-items: center; gap: var(--sp-2); width: 100%; padding: 4px var(--pa-dpad) 0; }
+.mb-det-head { flex: none; display: flex; align-items: center; gap: var(--sp-2); box-sizing: border-box; width: 100%; height: var(--pa-top); padding: 0 var(--pa-top-end) 0 var(--pa-dpad); }
 .mb-det-fill { flex: 1; }
-.mb-det-scroll { flex: 1; min-height: 0; width: 100%; overflow-x: hidden; overflow-y: auto; display: flex; flex-direction: column; gap: var(--pa-dgap); padding: 0 var(--pa-dpad) calc(18px + 6 * var(--pa-u)); }
+.mb-det-scroll { flex: 1; min-height: 0; width: 100%; overflow-x: hidden; overflow-y: auto; display: flex; flex-direction: column; gap: var(--pa-dgap); padding: var(--sp-2) var(--pa-dpad) calc(18px + 6 * var(--pa-u)); }
 .mb-det-scrim { display: none; }
+/* Under 1120 px the scrim dims the header too: its top row, the header's place, moves the window as the header does. */
+.mb-det-scrim-row { position: absolute; inset: 0 0 auto; height: var(--pa-top); }
 .mb-who { display: grid; grid-template-columns: minmax(0, 1fr); justify-items: center; gap: calc(2px + 3 * var(--pa-u)); text-align: center; }
 /* the face is the button that changes it: no edge and no fill, so that Raphael's emblem stands bare */
 .page-agent .btn.mb-avbtn { width: var(--pa-det-av); height: var(--pa-det-av); min-height: var(--pa-det-av); margin-bottom: calc(4px + 4 * var(--pa-u)); padding: 0; border-color: transparent; background: transparent; transition: opacity 0.15s ease; }
@@ -273,7 +288,7 @@
   .page.page-agent[data-det="open"]:not(.is-room) { grid-template-columns: minmax(0, 1fr); }
   .mb-det { position: absolute; top: 0; right: 0; bottom: 0; z-index: 20; width: var(--pa-det); max-width: calc(100% - 16px); box-shadow: var(--pop); }
 }
-@media (max-width: 859px) { .mb-chat { padding-inline: var(--sp-4); } }
+@media (max-width: 859px) { .mb-chat { --row-edge: var(--sp-4); padding-inline: var(--sp-4); } }
 
 /* 個性 and 指示: closed, one line behind a button (the name, the first line, a chevron); open, the box. */
 .mb-fold-field { gap: var(--sp-2); }
