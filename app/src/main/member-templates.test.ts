@@ -2,21 +2,22 @@
 import { beforeEach, expect, test, vi } from "vitest";
 import { previewTemplate, previewTemplateFile, starterTemplate, templateContents } from "./member-templates";
 import { NAME_MAX } from "./members";
-import { openMemberCreator } from "./member-creator";
+import { openMemberStore } from "./member-store";
 import type { Member } from "./types";
 import { catalogs, t } from "./i18n";
 
 const api = vi.hoisted(() => ({core: vi.fn(), memberTemplateFile: vi.fn(), connectorsConnect: vi.fn(), membersUpdate: vi.fn(), toolsetsList: vi.fn(), integrationsCatalog: vi.fn(), openExternalUrl: vi.fn()}));
 vi.mock("./api", () => api);
-beforeEach(() => {document.body.innerHTML = ""; vi.clearAllMocks(); api.core.mockImplementation(async (_method, params) => ({template: params.template}));});
+beforeEach(() => {document.body.innerHTML = ""; vi.clearAllMocks(); api.core.mockImplementation(async (_method, params) => params.action === "catalog" ? {entries: [], offline: false} : {template: params.template});});
+const catalogOnly = (): boolean => api.core.mock.calls.every(([, params]) => params.action === "catalog");
 
-test("the creator opens eight local slime recipes without installing anything", () => {
+test("the store's template button opens eight local slime recipes without installing anything", () => {
   const create = vi.fn();
-  const maker = openMemberCreator({groupId: null, taken: [], create});
-  maker.el.querySelector<HTMLButtonElement>('[data-dlg="templates"]')!.click();
+  const store = openMemberStore({groupId: null, create});
+  store.el.querySelector<HTMLButtonElement>('[data-dlg="templates"]')!.click();
   expect(document.querySelectorAll(".template-gallery [data-index]")).toHaveLength(8);
   expect(document.querySelectorAll(".template-gallery svg.slime")).toHaveLength(8);
-  expect(api.core).not.toHaveBeenCalled(); expect(create).not.toHaveBeenCalled();
+  expect(catalogOnly()).toBe(true); expect(create).not.toHaveBeenCalled();
 });
 
 test("preview shows skills, paused routines and a disabled card per requested connection until import", async () => {
@@ -105,24 +106,18 @@ test("store filtering stays local and install carries catalogue identity", async
     {id:"research",name:"Research",creator:"Example",summary:"Check sources",category:"engineering",avatar:"souei",featured:true},
     {id:"writer",name:"Writer",creator:"Example",summary:"Clear articles",category:"marketing",avatar:"shuna",featured:false},
   ],offline:false} : {template:starterTemplate(3),findings:[]});
-  const maker = openMemberCreator({groupId:null, taken:[], create, store:true});
+  const store = openMemberStore({groupId:null, create});
   for (let i=0;i<6;i++) await Promise.resolve();
   const input = document.querySelector<HTMLInputElement>("[data-store-search]")!;
   input.value = "Writer"; input.dispatchEvent(new Event("input"));
   expect(document.querySelectorAll(".store-entry")).toHaveLength(1);
   expect(api.core).toHaveBeenCalledTimes(1);
-  const heading = maker.el.querySelector(".mb-dlg-head h2");
-  const tabs = maker.el.querySelector(".cr-tabs .tabs.plain.fill")!;
-  expect(tabs.querySelectorAll(".tab")).toHaveLength(2);
-  expect(tabs.querySelector('[data-tab="store"]')!.getAttribute("aria-selected")).toBe("true");
-  maker.el.querySelector<HTMLButtonElement>('[data-tab="maker"]')!.click();
-  maker.el.querySelector<HTMLInputElement>("#mb-new-name")!.value = "Draft member";
-  maker.el.querySelector<HTMLButtonElement>('[data-tab="store"]')!.click();
-  expect(maker.el.querySelector(".mb-dlg-head h2")).toBe(heading);
-  expect(document.querySelectorAll(".cr-dialog")).toHaveLength(1);
-  expect(maker.el.querySelector<HTMLInputElement>("#mb-new-name")!.value).toBe("Draft member");
-  expect(input.value).toBe("Writer");
-  expect(api.core).toHaveBeenCalledTimes(1);
+  // The store is a page of its own: one title, no tabs, and 新增成員 is nowhere in it.
+  expect(store.el.querySelector(".mb-dlg-head h2")!.textContent).toBe(t("store.title"));
+  expect(store.el.querySelector('.tabs, [role="tab"], #mb-new-name')).toBeNull();
+  expect(store.el.closest(".mb-scrim")!.classList.contains("store-scrim")).toBe(true);
+  expect(document.querySelectorAll(".store-dialog")).toHaveLength(1);
+  expect(document.activeElement).toBe(input);
   input.value = ""; input.dispatchEvent(new Event("input"));
   document.querySelector<HTMLButtonElement>('[data-category="engineering"]')!.click();
   expect(document.querySelectorAll(".store-entry")).toHaveLength(1);
@@ -221,9 +216,9 @@ test.each([
   expect(said()).not.toContain("Invalid params");
 });
 
-test("the creator's 開啟 button reads a Notepad file with a mark and shows a bad one plainly", async () => {
-  const maker = openMemberCreator({groupId: null, taken: [], create: vi.fn()});
-  maker.el.querySelector<HTMLButtonElement>('[data-dlg="templates"]')!.click();
+test("the gallery's 開啟 button reads a Notepad file with a mark and shows a bad one plainly", async () => {
+  const store = openMemberStore({groupId: null, create: vi.fn()});
+  store.el.querySelector<HTMLButtonElement>('[data-dlg="templates"]')!.click();
   api.memberTemplateFile.mockResolvedValueOnce(BOM + JSON.stringify(starterTemplate(0)));
   document.querySelector<HTMLButtonElement>('[data-dlg="open"]')!.click();
   await flush();
@@ -237,11 +232,14 @@ test("the creator's 開啟 button reads a Notepad file with a mark and shows a b
 
 test("a store that is not open says so plainly, asks nothing of any entry and shows no search", async () => {
   api.core.mockImplementation(async () => ({entries: [], offline: false, open: false}));
-  const maker = openMemberCreator({groupId: null, taken: [], create: vi.fn(), store: true});
+  const store = openMemberStore({groupId: null, create: vi.fn()});
   await flush();
-  expect(maker.el.querySelector("[data-store-closed]")!.textContent).toBe(t("store.notOpen"));
-  expect(maker.el.querySelector<HTMLElement>(".store-categories")!.hidden).toBe(true);
-  expect(maker.el.querySelectorAll(".store-entry")).toHaveLength(0);
+  expect(store.el.querySelector("[data-store-closed]")!.textContent).toBe(t("store.notOpen"));
+  expect(store.el.querySelector<HTMLElement>(".store-categories")!.hidden).toBe(true);
+  expect(store.el.querySelector<HTMLElement>("[data-store-search]")!.closest("label")!.hidden).toBe(true);
+  // The local templates need no catalogue: their button stays.
+  expect(store.el.querySelector<HTMLElement>('[data-dlg="templates"]')!.hidden).toBe(false);
+  expect(store.el.querySelectorAll(".store-entry")).toHaveLength(0);
   expect(api.core).toHaveBeenCalledTimes(1);
 });
 

@@ -39,6 +39,7 @@ import {
   offerRoutine,
 } from "./member-dialogs";
 import { openMemberCreator } from "./member-creator";
+import { openMemberStore } from "./member-store";
 import { previewTemplateFile } from "./member-templates";
 import { RAPHAEL_ID, faceHTML, isMemberNameTaken, memberOf, orderedMembers, memberRole, raphaelOf, stableMember } from "./members";
 import { memberColor, nameAccent } from "./owner-bubble";
@@ -480,10 +481,9 @@ export function createMembers(host: MembersHost): MembersShell {
     return answer.member;
   }
 
-  function newMember(groupId: number | null, store = false): void {
+  function newMember(groupId: number | null): void {
     window.dispatchEvent(new Event("raphael:close-sidebar"));
     openMemberCreator({
-      store,
       groupId,
       taken: (list?.members ?? []).map((m) => m.name),
       create: createMember,
@@ -564,8 +564,11 @@ export function createMembers(host: MembersHost): MembersShell {
   }
 
   window.addEventListener("raphael:new-member", () => newMember(null));
-  window.addEventListener("raphael:member-store", () => newMember(null, true));
-  // A template file opened from the file manager (template-open.ts): its import review, the same as the maker's 開啟.
+  window.addEventListener("raphael:member-store", () => {
+    window.dispatchEvent(new Event("raphael:close-sidebar"));
+    openMemberStore({ groupId: null, create: createMember });
+  });
+  // A template file opened from the file manager (template-open.ts): its import review, the same as the template gallery's 開啟.
   window.addEventListener("raphael:template-file", (event) => {
     window.dispatchEvent(new Event("raphael:close-sidebar"));
     void previewTemplateFile(String((event as CustomEvent<string>).detail ?? ""), createMember, null, () => {});
