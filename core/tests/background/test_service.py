@@ -324,7 +324,7 @@ async def test_a_report_with_no_words_is_incomplete_instead_of_claiming_success(
     rig.client.replies = [turn("   ")]
     task_id = rig.submit()
     [done] = await rig.wait_for_reports()
-    assert (done["state"], done["text"]) == ("failed", phrase("en", "error"))
+    assert (done["state"], done["text"]) == ("failed", phrase("en", "no_answer"))
     assert rig.task(task_id).reason == 'missing_terminal'
 
 

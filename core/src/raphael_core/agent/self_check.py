@@ -1,5 +1,6 @@
 """Read-only product knowledge and bounded runtime checks shared by all brains."""
 
+import json
 import os
 import re
 from pathlib import Path
@@ -15,7 +16,7 @@ ABOUT_INDEX = """About Raphael (read raphael_help for details):
 3. Cards: connect_app, connect_messaging and request_secret pause a request for the owner. share_template offers a member recipe snapshot for review, saving or publishing.
 4. Continuation: successful cards resume once; failures return their classified reason.
 5. Brains: API providers and signed-in subscription CLIs share Raphael tools.
-6. Usage: plan windows and credits are separate; available credits permit work.
+6. Usage: plan windows and credits are separate; available credits permit work. Say a quota is used up only when self_check's quota says used_up (and until when); a member's failure has its own cause there.
 7. Settings: general, dictation, tools, safety, models, about; connected apps have their own entry. Bots belong to their member panels and conversation cards.
 8. Safety: permissions and consent remain authoritative; never bypass a denial.
 9. Logs: raphael.log; self_check reads only recent redacted failure diagnostics.
@@ -133,6 +134,85 @@ def _presence(read):
         return None
 
 
+_PROVIDER_NAMES = {"codex": "Codex", "claude": "Claude", "gemini": "Antigravity", "chatgpt": "ChatGPT", "openrouter": "OpenRouter"}
+_SUBSCRIPTIONS = ("codex", "claude", "gemini")
+QUOTA_RULE = ("Say that a quota or usage limit is used up only for a provider whose state here is used_up, and say until "
+              "when from used_up_until (epoch seconds). not_reported means nobody has read it: say it is not known. A member's "
+              "failed turn has its own cause in member_failures; call a failure a quota only when its kind is usage_limit or credits.")
+
+
+def _seconds(ms):
+    return ms // 1000 if type(ms) is int else None
+
+
+def quota_facts(service, *, now_ms=None, window_ms=7 * 24 * 3600 * 1000):
+    """Per provider whether a usage window is used up and until when, and why each member's latest failed turn failed.
+    Read from what was recorded (the windows the subscriptions reported, the turns of the last week): no provider is
+    asked. A reading that a later successful turn on the same provider contradicts is not used up."""
+    from .failure import provider_of
+    now = service.quotas.now_ms() if now_ms is None else now_ms
+    seen: dict[str, dict] = {}   # provider -> its latest successful turn (ms) and its latest failed one
+    failures = []
+    for row in service._conn.execute(
+            "SELECT member_id, created_at_ms, status, failure, model FROM agent_turns WHERE status IN ('done','error') "
+            "AND created_at_ms > ? ORDER BY id DESC LIMIT 400", (now - window_ms,)):
+        failure = None
+        if row["status"] == "error":
+            try:
+                failure = json.loads(row["failure"]) if row["failure"] else None
+            except ValueError:
+                failure = None
+            if not isinstance(failure, dict) or "kind" not in failure:
+                continue
+        provider = ((failure or {}).get("provider") or provider_of(row["model"])).removeprefix("cli:")
+        entry = seen.setdefault(provider, {"success": None, "failure": None})
+        if failure is None:
+            entry["success"] = entry["success"] or row["created_at_ms"]
+            continue
+        if entry["failure"] is None:
+            entry["failure"] = {"kind": failure["kind"], "at_ms": row["created_at_ms"], "resets_at": failure.get("resets_at")}
+        speaker = service._speaker(row["member_id"])
+        member = speaker.name if speaker and speaker.name else "Raphael"
+        if len(failures) < 10 and all(item["member"] != member for item in failures):
+            name = _PROVIDER_NAMES.get(provider, provider)
+            spent = failure["kind"] in ("usage_limit", "credits")
+            failures.append({"member": member, "at_ms": row["created_at_ms"], "provider": name, "kind": failure["kind"],
+                             "cause": classify(failure["kind"], record=False).sentence(name, "en"),
+                             "used_up_until": failure.get("resets_at") if spent else None})
+    blocked = {row["provider"]: row for row in service._conn.execute(
+        "SELECT provider, reset_at_ms, updated_at_ms FROM subscription_quotas WHERE reset_at_ms IS NULL OR reset_at_ms > ?", (now,))}
+    providers = []
+    for name in dict.fromkeys((*_SUBSCRIPTIONS, *seen)):
+        allowances = service.quotas.allowances(name)
+        windows = [{"period": w["period"], "remaining_percent": w["remaining_percent"], "resets_at": w["resets_at"],
+                    "used_up": w["status"] == "rejected" and (w["resets_at"] is None or w["resets_at"] * 1000 > now)}
+                   for w in allowances]
+        read_at = max([w["updated_at_ms"] for w in allowances] + ([blocked[name]["updated_at_ms"]] if name in blocked else []), default=0)
+        last = seen.get(name, {})
+        success, failure = last.get("success"), last.get("failure")
+        spent = [w for w in windows if w["used_up"]]
+        until = None
+        if name in blocked or spent:
+            state, basis = "used_up", "reading"
+            ends = [w["resets_at"] for w in spent] + ([_seconds(blocked[name]["reset_at_ms"])] if name in blocked else [])
+            until = None if any(end is None for end in ends) else max(ends)
+            if success and success > read_at:
+                state, basis, until = "available", "a turn succeeded after that reading", None
+        elif failure and failure["kind"] in ("usage_limit", "credits") and not (success and success > failure["at_ms"]) \
+                and (failure["resets_at"] is None or failure["resets_at"] * 1000 > now):
+            state, basis, until = "used_up", "the latest turn on it", failure["resets_at"]
+        elif windows:
+            state, basis = "available", "reading"
+        elif success:
+            state, basis = "available", "the latest turn on it"
+        else:
+            state, basis = "not_reported", "nothing read"
+        providers.append({"provider": name, "name": _PROVIDER_NAMES.get(name, name), "state": state, "basis": basis,
+                          "used_up_until": until, "windows": windows, "credits": service.quotas.credits.get(name),
+                          "last_success_ms": success, "last_failure": failure})
+    return {"providers": providers, "member_failures": failures, "rule": QUOTA_RULE}
+
+
 def snapshot(service, ask):
     """No provider/CLI processes; only existing settings, vault presence and stored state."""
     connections, keys = [], {"OpenRouter": _presence(service._keys.get)}
@@ -181,7 +261,7 @@ def snapshot(service, ask):
                           "failure": classify(row["error"], record=False).wire() if row["error"] else None})
     from .card_context import messaging_facts
     messaging = getattr(service._secret_cards, "messaging", None)
-    return {"connections": connections, "keys_present": keys, "brains": brains, "cards": cards,
+    return {"connections": connections, "keys_present": keys, "brains": brains, "quota": quota_facts(service), "cards": cards,
             "logs": log_diagnostics(service) if private else {"path": None, "recent_failures": []},
             "messaging": messaging_facts(messaging, ask.speaker.id) if private else [],
             "memory": service._memory.health() if service._memory is not None and hasattr(service._memory, "health") else {"status": "unknown"},

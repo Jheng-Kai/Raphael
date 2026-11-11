@@ -1009,7 +1009,7 @@ class TaskRun:
                 kind="tool", tool=ref.name, server=ref.server, tier=waiting.tier.name,
                 outcome=outcome, ms=_ms(began), reason=reason_of(outcome, result.error),
             )  # fmt: skip
-            content = json.dumps(result.data, ensure_ascii=False) if result.ok else ""
+            content = json.dumps(result.shown, ensure_ascii=False) if result.ok else ""
             self._note_action(ref, waiting.arguments, result.ok)
             if status is not None:
                 status.update(outcome=outcome, reason=reason_of(outcome, result.error))
@@ -1133,7 +1133,7 @@ class TaskRun:
         gate.record_builtin(ref.name, outcome=outcome, task_id=self.task_id)
         if result.ok:
             limit = 2 * 128 * 1024 + 1000 if ref.name == "skill_read" else None
-            text, cut = _cut(json.dumps(result.data, ensure_ascii=False), limit)
+            text, cut = _cut(json.dumps(result.shown, ensure_ascii=False), limit)
             reply = {"ok": True, "kind": None, "content": text, "truncated": cut}
         else:
             reply = {"ok": False, "kind": result.error or "error", "content": "", "truncated": False}

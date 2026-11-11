@@ -130,7 +130,7 @@ DEFINITIONS = {
         {"role": {"type": "string", "maxLength": 24, "description": "Your role in a few words, in the owner's language."},
          "instructions": {"type": "string", "maxLength": 2000, "description": "The job as the owner gave it: what to do, where to look, what to ask them first."}},
         ["role", "instructions"]),
-    "self_check": definition("Read Raphael's connection failures, required key presence (never values), brain sign-in and reported quota/credits, relevant settings and recent redacted failure logs. Read-only, offline; unknown stays unknown."),
+    "self_check": definition("Read Raphael's connection failures, required key presence (never values), brain sign-in, per-provider quota state (used up and until when, or not reported) with each member's latest failure and its cause, credits, relevant settings and recent redacted failure logs. Read-only, offline; unknown stays unknown."),
     "raphael_help": definition("Read the About Raphael reference: connections, keys, cards, brains, settings and logs. Read-only."),
     "show": definition("Show a seen URL inside this conversation as a video, PDF, image or link card. Prefer this over opening a browser.", {"url": {"type": "string"}}, ["url"]),
     "routine_create": definition("Create a routine for the current speaker from the owner's request. Supply exactly one of schedule or when. For an event, ask for a narrow filter if the owner has not named one. Translate the times they asked for into a schedule in their local time zone: next Tuesday only is once, until the end of the month is until, only five times is max_runs.", ROUTINE_FIELDS, ["title", "prompt"]),

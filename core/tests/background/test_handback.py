@@ -127,3 +127,31 @@ async def test_own_background_work_is_not_a_colleagues_request(make_rig, monkeyp
     await until(lambda: rig.conn.execute("SELECT 1 FROM room_messages WHERE kind='report'").fetchone() is not None)
     [room_report] = rig.conn.execute("SELECT text FROM room_messages WHERE kind='report'").fetchall()
     assert room_report[0] == "The comparison is done; the result is in my conversation."
+
+
+@pytest.mark.parametrize("request_text, named", [
+    ("Review the Q3 report. Check every table and the totals.", "Review the Q3 report."),
+    ("S2-03: Build the login form", "Build the login form"),
+    ("[T4] 整理本週的收件匣。把重要的信列出來", "整理本週的收件匣。"),
+    ("12. Send the invoice", "Send the invoice"),
+    ("AAPL earnings: summarize the call", "AAPL earnings: summarize the call"),
+    ("Order #4471 status", "Order #4471 status"),
+    ("A" * 80, "A" * 39 + "…"),
+    ("", ""),
+])
+def test_work_is_named_by_its_first_words_without_the_numbering_in_front_of_them(request_text, named):
+    from raphael_core.background.handback import title
+    assert title(request_text) == named
+
+
+@pytest.mark.parametrize("text, found", [
+    ("Alice / Review the Q3 report.: Incomplete", []),
+    ("AAPL 190.2 and order #4471 are what you asked about", []),
+    ("Alice / S2-03: Delivered", ["S2-03"]),
+    ("Bob finished T-12 and task 14", ["T-12", "task 14"]),
+    ("任務 17 已完成", ["任務 17"]),
+    ("the stage_id is review", ["stage_id"]),
+])
+def test_the_check_on_the_cores_own_words_finds_stage_codes_and_task_numbers_only(text, found):
+    from raphael_core.background.handback import internal_ids
+    assert internal_ids(text) == found

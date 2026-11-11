@@ -2040,7 +2040,7 @@ class AgentService:
     @staticmethod
     def _loop_result(result: ToolResult) -> ToolOutcome:
         # A call that failed has no data: its kind is what the model is shown, not a "null".
-        return ToolOutcome(result.ok, result.error, "" if result.data is None and not result.ok else json.dumps(result.data, ensure_ascii=False),
+        return ToolOutcome(result.ok, result.error, "" if result.data is None and not result.ok else json.dumps(result.shown, ensure_ascii=False),
                            instruction=result.instruction or "", blocks=result.blocks or [])
 
     def _computer_result(self, loop: NarratedLoop, result: dict) -> ToolOutcome:

@@ -108,6 +108,7 @@ class Phrases:
     offline: str  # the network cannot be reached
     timeout: str  # the request took too long
     error: str  # anything else that went wrong
+    no_answer: str  # the model gave no answer (it spent its turn thinking, or said nothing)
     work_only_words: str  # work handed on came back with a promise or a line, and nothing done
     work_file_missing: str  # the file the work was to leave is not there, or changed since
     work_children_open: str  # work this one handed on again is not all finished
@@ -204,6 +205,7 @@ PHRASES: dict[str, Phrases] = with_ui_words({
         offline="無法連線至網路。",
         timeout="回應時間過長，請再試一次。",
         error="處理過程中發生異常。請再試一次。",
+        no_answer="模型這次沒有給出回答，請再試一次，或換一個模型。",
         work_only_words="只有回覆，沒有實際做事，這項工作不算完成。",
         work_file_missing="完成條件要的檔案沒有找到，這項工作不算完成。",
         work_children_open="交給同事的工作還沒全部完成，這項工作不算完成。",
@@ -279,6 +281,7 @@ PHRASES: dict[str, Phrases] = with_ui_words({
         offline="The network is unreachable.",
         timeout="The request took too long. Please try again.",
         error="An error occurred during processing. Please try again.",
+        no_answer="The model gave no answer this time. Try again or choose another model.",
         work_only_words="It only replied and did nothing, so this work does not count as done.",
         work_file_missing="The file this work was to leave is missing, so it does not count.",
         work_children_open="What was handed on to colleagues is not all finished, so this does not count.",
@@ -361,6 +364,7 @@ PHRASES: dict[str, Phrases] = with_ui_words({
         offline="ネットワークに接続できません。",
         timeout="応答に時間がかかりすぎました。もう一度お試しください。",
         error="処理中に異常が発生しました。再度お試しください。",
+        no_answer="モデルから回答が返りませんでした。もう一度試すか、別のモデルを選んでください。",
         work_only_words="返信だけで実際の作業がないため、完了とみなしません。",
         work_file_missing="完了条件のファイルが見つからないため、完了とみなしません。",
         work_children_open="同僚に渡した作業がすべて終わっていないため、完了とみなしません。",

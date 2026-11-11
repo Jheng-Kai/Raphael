@@ -14,6 +14,7 @@ from ..model_ref import EFFORTS
 from ..openrouter import (
     ChatTurn, ChatToolCall, Completion, OpenRouterError, TextCompletion, ToolCall, ToolPlan, request_timeout, retry_after_of,
 )
+from ..reasoning import split_reasoning
 from ..streams import Packets
 from .chatgpt_auth import RESOURCE, failure
 
@@ -258,10 +259,11 @@ class ChatGPTProvider:
                 for key in ("input_tokens", "output_tokens")):
             raise OpenRouterError(200, "invalid_request", "Invalid ChatGPT usage")
         # Subscription usage is not a dollar price or an invented remaining-quota meter.
-        return ChatTurn("".join(text), calls, completed.get("model", model), 0.0,
+        answer, reasoning = split_reasoning("".join(text))
+        return ChatTurn(answer, calls, completed.get("model", model), 0.0,
             int(usage.get("input_tokens", 0)), int(usage.get("output_tokens", 0)),
             int((time.perf_counter() - started) * 1000), usage_known=True, responses_output=output,
-            finish_reason="length" if cut else "", usage=responses_usage(usage))
+            finish_reason="length" if cut else "", usage=responses_usage(usage), reasoning=reasoning)
 
     async def chat_text(self, *, model, system, user, timeout_s, max_tokens, fallbacks=(), plugins=(), reasoning_effort="none",
                         _cache_key="raphael-text"):

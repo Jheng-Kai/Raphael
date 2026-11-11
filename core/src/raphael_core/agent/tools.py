@@ -139,6 +139,21 @@ def sky_of(code: Any) -> str | None:
     return SKIES.get(code)
 
 
+# The system's own numbers for a piece of work. No tool takes them and the owner is never told them: a model that is
+# shown one quotes it, so what a model is shown of a result leaves them out (`ToolResult.shown`).
+INTERNAL_KEYS = frozenset(("task_id", "root_task_id", "parent_task_id", "work_turn_id", "source_turn_id", "exchange_turn_id",
+                           "conversation_id", "report_task_id"))
+
+
+def without_internal_ids(value: Any) -> Any:
+    """`value` (JSON-like) without the system's numbers for work."""
+    if isinstance(value, dict):
+        return {key: without_internal_ids(item) for key, item in value.items() if key not in INTERNAL_KEYS}
+    if isinstance(value, list):
+        return [without_internal_ids(item) for item in value]
+    return value
+
+
 @dataclass
 class ToolResult:
     name: str
@@ -156,6 +171,12 @@ class ToolResult:
     # it is shown in place of `error` (that stays in logs and receipts).
     instruction: str | None = None
     blocks: list[dict] | None = None
+
+    @property
+    def shown(self) -> dict | None:
+        """`data` as the model is shown it: a hand-off or a status board names its work by title and its colleague by
+        name, never by the system's numbers."""
+        return without_internal_ids(self.data) if self.name in ("handoff", "work_status") else self.data
 
 
 def _number(value: Any) -> float | int | None:
