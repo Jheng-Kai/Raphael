@@ -12,10 +12,14 @@ REQUEST_TIMEOUT_S = 20.0
 
 
 class ConnectorFailure(Exception):
-    def __init__(self, kind: str, status: int = 0, diagnostic=None) -> None:
+    """`stage` says where it happened when that changes what the owner does: "request" is a call to the service that got
+    no answer (a `timeout` or a `network` failure of this PC), against a sign-in the owner did not finish in time."""
+
+    def __init__(self, kind: str, status: int = 0, diagnostic=None, stage: str = "") -> None:
         self.kind = kind
         self.status = status
         self.diagnostic = diagnostic
+        self.stage = stage
         super().__init__(kind)
 
 
@@ -74,9 +78,9 @@ class PrivateHttp:
         except ConnectorFailure:
             raise
         except (TimeoutError, httpx.TimeoutException):
-            raise ConnectorFailure("timeout") from None
+            raise ConnectorFailure("timeout", stage="request") from None
         except Exception:
-            raise ConnectorFailure("network") from None
+            raise ConnectorFailure("network", stage="request") from None
         return response
 
     async def json(self, method: str, url: str, **kwargs: Any) -> dict:
@@ -93,6 +97,8 @@ class PrivateHttp:
                 error = data.get("error")
                 if error == "invalid_grant":
                     kind = "reconnect"
+                elif error == "invalid_client":
+                    kind = "invalid_client"
                 detail = error if isinstance(error, dict) else data
                 if response.status_code == 400 and (detail.get("slug") == "ToolRouterV2_ToolkitNotAllowed"
                         or detail.get("code") == "ToolRouterV2_ToolkitNotAllowed"):

@@ -37,6 +37,7 @@ import {
   examplePrompt,
   iconHTML,
   needsLogin,
+  ownGoogleEntry,
   toolLabel,
 } from "./connections";
 import { ico, toaster } from "./ui";
@@ -102,7 +103,7 @@ describe("the two views", () => {
     expect(bar).toContain('class="tabs plain"');
     expect(bar).toContain('role="tablist"');
     expect(bar).toMatch(/<button[^>]*class="tab"[^>]*role="tab"[^>]*aria-selected="true"[^>]*data-id="installed"[^>]*>已連結<span class="n">2<\/span>/);
-    expect(bar).toMatch(/<button[^>]*class="tab"[^>]*role="tab"[^>]*aria-selected="false"[^>]*data-id="store"[^>]*>商店<span class="n">4<\/span>/); // with n8n
+    expect(bar).toMatch(/<button[^>]*class="tab"[^>]*role="tab"[^>]*aria-selected="false"[^>]*data-id="store"[^>]*>商店<span class="n">5<\/span>/); // with n8n and the owner's own Google
     expect(bar).toContain('id="conn-search"');
     expect(connectionsHTML(view({ tab: "store" }))).toMatch(/aria-selected="true"[^>]*data-id="store"/);
     // nothing connected yet still says so: 0
@@ -418,20 +419,21 @@ describe("商店", () => {
   test("the store tab and every pager count the same addable apps, including popular apps but excluding connected ones", () => {
     const catalog = [...CATALOG, ...Array.from({ length: 38 }, (_, index) => service(`extra-${index}`, `Extra ${String(index).padStart(2, "0")}`))];
     const seen = new Set<string>();
-    // Linear, Sentry, Canva, the extras and n8n: 42.
+    // Linear, Sentry, Canva, the extras, n8n and the owner's own Google: 43.
     for (let storePage = 0; storePage < 3; storePage++) {
       const out = connectionsHTML(view({ tab: "store", catalog, storePage }));
-      expect(out).toMatch(/data-id="store"[^>]*>商店<span class="n">42<\/span>/);
-      expect(out).toContain(`${storePage * 18 + 1}–${Math.min((storePage + 1) * 18, 42)} / 42`);
+      expect(out).toMatch(/data-id="store"[^>]*>商店<span class="n">43<\/span>/);
+      expect(out).toContain(`${storePage * 18 + 1}–${Math.min((storePage + 1) * 18, 43)} / 43`);
       const ids = [...out.matchAll(/data-conn="join" data-id="([^"]+)"/g)].map(match => match[1]!);
-      expect(ids).toHaveLength(storePage < 2 ? 18 : 6);
+      expect(ids).toHaveLength(storePage < 2 ? 18 : 7);
       for (const id of ids) {
         expect(seen.has(id)).toBe(false);
         seen.add(id);
       }
     }
-    expect(seen.size).toBe(42);
+    expect(seen.size).toBe(43);
     expect(seen.has("n8n")).toBe(true);
+    expect(seen.has("google")).toBe(true);
     expect(seen.has("linear")).toBe(true);
     expect(seen.has("notion")).toBe(false);
   });
@@ -441,14 +443,14 @@ describe("商店", () => {
     const filter = vi.spyOn(composioCatalog, "filter");
     const out = connectionsHTML(view({ tab: "store", configured: true, composioCatalog }));
     expect(out).toContain('data-k="cs-store:slack"');
-    expect(out).toMatch(/data-id="store"[^>]*>商店<span class="n">5<\/span>/);
+    expect(out).toMatch(/data-id="store"[^>]*>商店<span class="n">6<\/span>/);
     expect(filter).toHaveBeenCalledTimes(1);
   });
 
   test("the store is one list of the apps not added yet, popular ones first (owner, 2026-11-08)", () => {
     const titles = [...html.matchAll(/<h2>([^<]+)<\/h2>/g)].map(match => match[1]);
     expect(titles).toEqual(["全部"]);
-    expect([...html.matchAll(/class="nm">([^<]+)</g)].map(match => match[1])).toEqual(["Linear", "Canva", "n8n", "Sentry"]);
+    expect([...html.matchAll(/class="nm">([^<]+)</g)].map(match => match[1])).toEqual(["Linear", "Canva", "Google（私人連接）", "n8n", "Sentry"]);
     expect(html).not.toContain("已安裝");
     expect(html).not.toContain('data-k="conn-category"');
     expect(html.match(/data-conn="store-group"/g)).toHaveLength(10);
@@ -1056,6 +1058,26 @@ describe("what the tab does", () => {
     expect(api.connectorsConnect).not.toHaveBeenCalled();
   });
 
+  // Owner request (10-25, 「接上 Composio 與自己的 Google 授權」): the owner's own Google is reachable where the Google row is.
+  test("the store offers the owner's own Google, and its 加入 leaves for the conversation where the card walks the steps", async () => {
+    const c = createConnections(host);
+    await c.load();
+    const html = connectionsHTML(c.view());
+    c.click(button("tab", { id: "store" }));
+    const entry = ownGoogleEntry(null);
+    expect(entry).toMatchObject({ id: "google", name: "Google（私人連接）", icon: "gmail", server_id: null });
+    expect(entry.about["zh-TW"]).toContain("不經過 Composio");
+    c.click(button("join", { id: "google" }));
+    expect(host.tryPrompt).toHaveBeenLastCalledWith("幫我連接我自己的 Google 帳號");
+    expect(c.view().form).toBeNull();
+    // Nothing is sent from here: no Composio call, no form of its own.
+    expect(api.connectorsConnect).not.toHaveBeenCalled();
+    expect(api.connectorsGoogleConnect).not.toHaveBeenCalled();
+    // Once the private Google connection exists the row is added.
+    expect(ownGoogleEntry("google").server_id).toBe("google");
+    expect(html).toBeTruthy();
+  });
+
   test.each(["finish", "switch", "reset"])("store paints visible rows first and cancels stale fill on %s", async (ending) => {
     api.connectorsStatus.mockResolvedValue({ connectors: [], composio_configured: false, google_configured: false });
     api.integrationsCatalog.mockResolvedValue({ services: Array.from({ length: 24 }, (_, i) => service(`app-${i}`, `App ${i}`)) });
@@ -1092,7 +1114,7 @@ describe("what the tab does", () => {
       expect(browser.document.querySelector('[data-cs-pending]')).toBeNull();
       expect(browser.document.querySelectorAll('.cs-card [data-conn="open-store"]')).toHaveLength(18);
       expect(browser.document.querySelector('.cs-card [data-conn="open-store"]')).toBe(first);
-      expect(browser.document.querySelector('.cs-store-pages .num')!.textContent).toContain('/ 25'); // and n8n
+      expect(browser.document.querySelector('.cs-store-pages .num')!.textContent).toContain('/ 26'); // and n8n and the owner's own Google
     } finally { vi.useRealTimers(); vi.unstubAllGlobals(); await browser.happyDOM.abort(); }
   });
 

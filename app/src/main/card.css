@@ -77,6 +77,14 @@
 .conversation-card .inline-connection-setup { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
 .conversation-card .cn-fields { margin: 0; }
 .inline-connection-setup .cn-hint { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* The owner's own Google (google-card.ts): the text to copy into Google Cloud, a read-only field under its name with the copy button at the right. */
+.google-setup .card-detail:not([hidden]) { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; white-space: normal; }
+.cn-copy { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.cn-copy-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.cn-copy .field { width: 100%; min-width: 0; resize: none; overflow: hidden; text-overflow: ellipsis; color: var(--text); }
+/* The scopes are two lines in a field that is as tall as they are: the shared field height is for one line. */
+.cn-copy textarea.field { display: block; height: auto; padding-block: 6px; line-height: 1.5; white-space: pre; }
+.google-setup .cn-steps { margin: 0; }
 .card-computer-screen { position: relative; }
 .card-computer-screen > button { position: absolute; inset: 0; width: 100%; height: 100%; background: transparent; z-index: 1; }
 /* The hit target keeps the preview visible; a theme hover fill would wash out its frame-coloured icon. */

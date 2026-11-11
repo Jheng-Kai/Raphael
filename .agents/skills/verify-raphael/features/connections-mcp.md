@@ -628,6 +628,35 @@ in the card's one `integrations.card_connect` call and in no page text.
 npm run look -- connector-server connector-server-sent --theme both --width 1120,720,1920x1080
 ```
 
+## A card says why it did not connect, and the owner's own Google (2026-11-11, R-CONNECT-01 to 03)
+
+Owner's open task since 2026-10-25 (「接上 Composio 與自己的 Google 授權」). Two behaviours, one machine (`connectors/cards.py`):
+
+- A failed connection card is always a named cause (`CAUSES`: busy, vault, browser, network, no_answer, service_down, rate_limit,
+  refused, invalid_request, not_found, bad_response, address, not_allowed, key_refused, needs_*, client_rejected, denied, timeout,
+  state, scope, signin_failed, signin_expired, no_refresh, api_disabled, mcp_unavailable, interrupted, unknown). The view carries
+  `error` (the cause), `retry`, `fix` (`settings` or `form`) and `detail` (the service's short words for `refused`, the technical
+  reason for `unknown`). The member gets `cause <name>: ...` as the failure's reason. The attempt that used to be bare is `busy`:
+  `connectors.connect` answers `busy` before it sends anything while another sign-in or `connectors.*` work holds its lock.
+- The owner's own Google is the app `google` (`apps.OWN_GOOGLE`): `connect_app google`, or 加入 on 「Google（私人連接）」 in the store,
+  which leaves for the composer with 「幫我連接我自己的 Google 帳號」. Its card (`needs: "own_google"`) walks five steps (open), gives
+  the scopes and the return address as text to copy, asks for the Client ID (plain) and the Client secret (masked) and signs in with
+  one 連接 Google. The two values leave in `integrations.card_connect` and reach the vault through `connectors.google.configure`.
+  With a Client ID kept the card has no fields: one button signs in. Connected, it says the account (Gmail's profile) and the tool count.
+- A card of an older core (no `retry`, `fix`, `detail`) keeps the actions it had.
+
+```powershell
+npm run look -- connector-cause-busy connector-cause-refused connector-cause-unknown connector-google-steps connector-google-filled connector-google-authorizing connector-google-connected connector-google-kept connector-google-rejected store-google store-google-in-chat --theme both --width 1120,720,1920x1080
+npm run look -- connector-invalid-request connector-failed-continued connector-server connector-key-form plugins-store --theme both --width 1120,720,1920x1080
+```
+
+`connector-cause-*` require the cause's own sentence (never 沒有連上), one 再試一次 only where it can help, the × to put the card away,
+no technical reason on the card's face and, for `unknown`, the reason folded under 詳細資料. `connector-google-*` require five open
+steps, the two texts to copy, a plain Client ID and a masked Client secret, one primary 連接 Google, a secret that is in no page text
+and in no call but the card's own, the sign-in waiting with only 取消, and the account on the connected card. What only a real Google
+client proves: that Google accepts a Desktop client with no registered return address, the real consent screens (including the
+unverified-app warning), the 7-day expiry of a project left in Testing, and that `access_type=offline` returns a refresh token.
+
 ## Executable round 10 matrix
 
 ```powershell

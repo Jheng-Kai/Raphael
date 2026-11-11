@@ -3605,7 +3605,9 @@ class AgentService:
         needs = self._cards.view(card)["needs"]
         guide = await self._cards.setup_guide(app)
         asks = {"key": f" {app.name} signs in with the owner's own key, which the card asks for (Composio keeps it; you never see it): say so.",
-                "own_app": f" {app.name} needs a developer app of the owner's own, which the card walks them through: say so."}.get(needs, "")
+                "own_app": f" {app.name} needs a developer app of the owner's own, which the card walks them through: say so.",
+                "own_google": " This is the owner's own Google account: the card lists the Google Cloud steps with the return address and scopes to copy, takes the Client ID and "
+                              "Client secret (the secure vault keeps them; you never see them), then signs in in the browser and shows which account connected."}.get(needs, "")
         return {"app": app.name, "card": card.state, "needs": needs, "setup": guide, "note": (
             f"A card to connect {app.name} is shown to the owner in this chat.{asks} Explain what each field means and where "
             "to find it, in the owner's language, in plain words with no unexplained terms, one step at a time. "

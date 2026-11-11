@@ -156,6 +156,7 @@ class ConnectorsService:
                 return {"ok": False, "error": "timeout", "http_status": None}
             except ConnectorFailure as error:
                 return {"ok": False, "error": error.kind, "http_status": error.status or None,
+                        **({"stage": error.stage} if error.stage and name in ("connect", "google.connect") else {}),
                         **({"failure": error.diagnostic.wire()} if error.diagnostic else {})}
             except RpcError:
                 raise
@@ -164,6 +165,16 @@ class ConnectorsService:
                 # vault, browser, callback or HTTP exception messages reach that path.
                 raise RpcError(INTERNAL_ERROR, "Connector operation failed") from None
         return run
+
+    async def _open(self, url: str) -> None:
+        """Open a sign-in page for the owner. A browser that cannot be opened is its own named failure, never an
+        internal error: the exception may carry the link, which is never shown or logged."""
+        try:
+            await self.open_browser(url)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            raise ConnectorFailure("browser") from None
 
     @property
     def login_pending(self):
@@ -568,7 +579,7 @@ class ConnectorsService:
             entry.accounts = [a for a in entry.accounts if a["id"] != account_id] + [{"id": account_id, "status": "INITIALIZING"}]
             self._save()
             try:
-                await self.open_browser(url)
+                await self._open(url)
                 deadline = self.now() + self.poll_timeout
                 while self.now() < deadline:
                     account = await self.composio.request("GET", "/connected_accounts/" + segment(account_id))
@@ -794,8 +805,9 @@ class ConnectorsService:
         entry.status = "INITIATED"
         self._save()
         try:
-            entry.granted_scopes = await self.google.connect(scopes_for(entry.gmail, entry.calendar), self.open_browser)
-            entry.status, entry.accounts = "ACTIVE", [self.account_view({"id": "me", "status": "ACTIVE"}, entry.accounts)]
+            entry.granted_scopes = await self.google.connect(scopes_for(entry.gmail, entry.calendar), self._open)
+            address = await self.google.account_address()
+            entry.status, entry.accounts = "ACTIVE", [self.account_view({"id": "me", "status": "ACTIVE", "email": address}, entry.accounts)]
             await self.sync_google()
             self._save()
         except BaseException:

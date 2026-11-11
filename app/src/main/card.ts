@@ -36,10 +36,10 @@ export function cardHTML(card: CardOptions): string {
     (card.content ?? "") + (actions ? `<footer class="card-actions cc-actions">${actions}</footer>` : "") + `</section>`;
 }
 
-export function cardDisclosureHTML(id: string, content: string, label = t("cards.show"), openLabel?: string): string {
+export function cardDisclosureHTML(id: string, content: string, label = t("cards.show"), openLabel?: string, expanded = false): string {
   if (!content.trim()) return "";
   const open = openLabel ? ` data-open-label="${esc(openLabel)}"` : "";
-  return `<div class="card-disclosure">${btn(`${ico("right")}<span>${esc(label)}</span>`, "card-disclosure-toggle", ` data-card-disclosure aria-expanded="false" aria-controls="card-detail-${esc(id)}"${open}`)}<div class="card-detail" id="card-detail-${esc(id)}" hidden>${content}</div></div>`;
+  return `<div class="card-disclosure">${btn(`${ico("right")}<span>${esc(label)}</span>`, "card-disclosure-toggle", ` data-card-disclosure aria-expanded="${expanded}" aria-controls="card-detail-${esc(id)}"${open}`)}<div class="card-detail" id="card-detail-${esc(id)}"${expanded ? "" : " hidden"}>${content}</div></div>`;
 }
 
 if (typeof document !== "undefined") document.addEventListener("click", event => {
