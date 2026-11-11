@@ -59,17 +59,19 @@ _UNFINISHED = {'rate_limit':'rate_limit', 'rate_limited':'rate_limit', 'usage_li
                **dict.fromkeys(('auth_expired', 'chatgpt_scope', 'chatgpt_plan_unavailable'), 'sign_in'),
                **dict.fromkeys(('refused', 'content_policy'), 'refused')}
 # A CLI signs in on the owner's computer, not with a key in Settings.
-_CLI_UNFINISHED = {'login':'login', 'missing':'login', 'auth_expired':'login'}
+_CLI_UNFINISHED = {'login':'login', 'login_expired':'login_expired', 'missing':'not_installed', 'auth_expired':'login'}
 _UNFINISHED_WORDS = with_ui_words({
-    'zh-TW':{'rate_limit':'請求太頻繁而被限流', 'quota':'訂閱額度已用完', 'login':'需要登入 CLI', 'budget':'預算已用完',
+    'zh-TW':{'rate_limit':'請求太頻繁而被限流', 'quota':'訂閱額度已用完', 'login':'需要登入 CLI', 'login_expired':'CLI 的登入已過期',
+             'not_installed':'CLI 還沒安裝', 'budget':'預算已用完',
              'removed':'已不在房間', 'restart':'重新啟動後中斷', 'error':'發生錯誤', 'unavailable':'暫時無法回應',
              'credits':'服務點數已用完', 'sign_in':'需要登入或設定金鑰', 'refused':'拒絕了這項請求',
              'reply_cap':'這次討論的回覆次數已達上限'},
     'en':{'rate_limit':'rate-limited (too many requests)', 'quota':'subscription quota used up', 'login':'CLI sign-in needed',
-          'budget':'budget exhausted', 'removed':'no longer in the room', 'restart':'interrupted by a restart', 'error':'an error occurred', 'unavailable':'unavailable',
+          'login_expired':'CLI sign-in expired', 'not_installed':'CLI not installed', 'budget':'budget exhausted', 'removed':'no longer in the room', 'restart':'interrupted by a restart', 'error':'an error occurred', 'unavailable':'unavailable',
           'credits':'credits used up', 'sign_in':'sign-in or key needed', 'refused':'declined the request',
           'reply_cap':'reached the reply limit for this discussion'},
-    'ja':{'rate_limit':'リクエスト過多で制限中', 'quota':'サブスクリプションの上限', 'login':'CLI のログインが必要', 'budget':'予算の上限',
+    'ja':{'rate_limit':'リクエスト過多で制限中', 'quota':'サブスクリプションの上限', 'login':'CLI のログインが必要', 'login_expired':'CLI のログインの期限切れ',
+          'not_installed':'CLI が未インストール', 'budget':'予算の上限',
           'removed':'ルームから外れました', 'restart':'再起動で中断', 'error':'エラーが発生', 'unavailable':'応答できません',
           'credits':'クレジット切れ', 'sign_in':'ログインまたはキーが必要', 'refused':'リクエストを拒否',
           'reply_cap':'この議論の返信回数の上限に達しました'},
@@ -766,6 +768,9 @@ class RoomsService:
             self._conn.execute("UPDATE room_messages SET origin_message_id = ?, reply_to_member = ?, reply_to = ? WHERE id = ?",
                                (owner_id, recipient, reply_to, owner_id))
         self._changed(room["id"])
+        # Writing in the room leaves a question that waits in this thread: its card closes unanswered, the member is told.
+        if (questions := getattr(self._background, "owner_questions", None)) is not None:
+            questions.close_for_message(said=text, room_id=room["id"], thread_id=thread_id)
         await self._exchanges.start(room, owner_id, language, attachments, recipient)
         self._changed(room["id"])
         return {"message_id":owner_id, "duplicate":False}

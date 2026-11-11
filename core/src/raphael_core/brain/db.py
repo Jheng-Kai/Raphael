@@ -1974,6 +1974,23 @@ PRAGMA user_version = 79;
 COMMIT;
 """
 
+# The computers the app made, by the engine that holds them (`host` is "" for this PC, else the SSH alias) and the
+# target key their names derive from (computer/removals.py). A deleted member's computer is `owed` for removal until its
+# engine can be reached; `attempts` counts the tries that failed. A row never goes with a member: the member is gone
+# before its data is.
+_MIGRATIONS[80] = """
+BEGIN;
+CREATE TABLE computer_data (
+    host TEXT NOT NULL,
+    key TEXT NOT NULL,
+    owed INTEGER NOT NULL DEFAULT 0 CHECK(owed IN (0, 1)),
+    attempts INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY(host, key)
+);
+PRAGMA user_version = 80;
+COMMIT;
+"""
+
 LATEST_VERSION = max(_MIGRATIONS)
 
 

@@ -1,4 +1,3 @@
-import { greetingHTML } from "./member-greeting";
 import { missingHTML, missingRepairHTML, missingText, type Missing } from "./missing";
 import { fileKind, sentFileHTML } from "./attachments";
 import { computerCardsHTML, computerResumedLineHTML } from "./computer-card";
@@ -38,7 +37,7 @@ import { quoteHTML } from "./message-quote";
 import { formatUsd } from "./format";
 import { formatPerMtok } from "./pricing";
 import { SERVICE_ICONS, brandStyle, hasLogo, serviceIconOf, serviceIconSVG, serviceLogoHTML } from "./service-icons";
-import type { AgentStep, AgentTask, AgentTurn, MainEvent, MediaPayload, MessageQuote, TurnAttachment } from "./types";
+import type { AgentStep, AgentTask, AgentTurn, CliBrainId, MainEvent, MediaPayload, MessageQuote, TurnAttachment } from "./types";
 import { btn, esc, ico, iconBtn } from "./ui";
 
 /** The small turning ring of something under way. */
@@ -270,6 +269,8 @@ export interface TimelineState {
   stopping: Set<number>;
   /** Tasks the reader asked to run again; each is run again once. */
   rerunning: Set<number>;
+  /** Failed replies whose subscription CLI is being signed in from their button (cli-signin.ts), and how that stands. */
+  signin: Map<number, SigninPhase>;
   /** Tasks that were seen under way: the draw that finds one ended shows its check coming in. */
   live: Set<number>;
   /** Tasks whose end this draw shows for the first time (`noteTaskEnds`): their check pops in. */
@@ -285,6 +286,7 @@ export const emptyTimelineState = (): TimelineState => ({
   seen: new Set(),
   stopping: new Set(),
   rerunning: new Set(),
+  signin: new Map(),
   live: new Set(),
   ended: new Set(),
   nowMs: Date.now(),
@@ -562,12 +564,13 @@ export function answerMeta(turn: AgentTurn): string {
 export interface TurnLook {
   /** The earlier exchanges with the same colleague in a row (conversation.ts threadItems), counted in this turn's line. */
   exchangeTogether?: readonly AgentTurn[];
-  greetingOpen?: boolean;
   deferPresence?: boolean;
   revealing?: (turnId: number) => boolean;
   waitingForOwner?: (turnId: number) => boolean;
   regenerateTurnId?: number;
   latestFailedTurnId?: number;
+  /** The newest answered turn of the thread: only a failed reply that is this one carries a sign-in button. */
+  signinTurnId?: number;
   /** The face of who answers (Raphael's, avatar.ts, or the member's): `loop` while at work on it. */
   face: (loop: boolean) => string;
   liveFace?: () => string;
@@ -631,7 +634,7 @@ export function messageActionsHTML(_time: number, regenerate = false, owner?: "e
     (actionable ? action("more", t("chat.more"), "more-message").replace('data-act="more-message"', `data-act="more-message" data-regenerate="${regenerate}"${owner ? ` data-owner-act="${owner}"` : ""} aria-haspopup="menu"`) : "") + `</div>`;
 }
 
-function messageBlockHTML(turn: AgentTurn, key: string, text: string, time: number, query: string, state: TimelineState, reply: boolean, regenerate = false, origin = true, last = true): string {
+function messageBlockHTML(turn: AgentTurn, key: string, text: string, time: number, query: string, state: TimelineState, reply: boolean, regenerate = false, origin = true, last = true, latestFailure = false): string {
   if (reply) text = plainReplies([text])[0];
   text = composioText(text, composioAction(turn));
   const expanded = state.expandedMessages.has(`${turn.id}:${key}`);
@@ -639,7 +642,7 @@ function messageBlockHTML(turn: AgentTurn, key: string, text: string, time: numb
   return `<div class="chat-message${expanded ? " is-expanded" : ""}" data-message="${esc(key)}"${reply ? ' data-reply="true"' : ""}>` +
     (reply && origin && sourceOf(turn) === "routine" ? routineLineHTML(turn) : "") +
     (reply ? replyContentHTML(text, query, turn.status === "running") : `<div class="ans progress"><div class="message-text">${messageHTML(text, query)}</div></div>`) +
-    (reply && last ? usageActionHTML(turn) : "") +
+    (reply && last ? usageActionHTML(turn) + signinActionHTML(turn, state, latestFailure) : "") +
     // Its links are chips in its words, with no row of cards under it.
     reactionRowHTML(turn.reactions?.[key]) + messageActionsHTML(time, regenerate, undefined, reply, reply ? retry : "") + `</div>`;
 }
@@ -652,6 +655,37 @@ function usageActionHTML(turn: AgentTurn): string {
   const failure = turn.failure;
   if (turn.status !== "error" || failure?.kind !== "usage_limit" || !USAGE_PROVIDERS.has(failure.provider)) return "";
   return `<div class="turn-usage">${btn(esc(t("brains.manageUsage")), "sm", ` data-act="manage-usage" data-provider="${esc(failure.provider)}"`)}</div>`;
+}
+
+/** Where a failed reply's sign-in stands: its console is open (`waiting`), it ended and the question goes again (`done`), or it closed first (`stopped`). */
+export type SigninPhase = "waiting" | "done" | "stopped";
+
+/**
+ * The subscription CLI a failed reply names and why it could not take the turn, or null for any other reply: the
+ * core says it in the turn's failure (`cause`), so the button follows the true cause and nothing is guessed here.
+ */
+export function signinOf(turn: AgentTurn): { cli: CliBrainId; cause: NonNullable<NonNullable<AgentTurn["failure"]>["cause"]> } | null {
+  const failure = turn.failure, cli = /^cli:(claude|codex|gemini)$/.exec(failure?.provider ?? "")?.[1] as CliBrainId | undefined;
+  return turn.status === "error" && cli && failure?.cause ? { cli, cause: failure.cause } : null;
+}
+
+/**
+ * Under a reply that names a CLI's sign-in or install as its whole cause, the one button that mends it, where the
+ * owner is: 重新登入 for a session that ran out, 登入 for none, the install guide for a CLI that is not there. The
+ * sentence above already says why. While the CLI's own window is open it says to finish there, with 取消; a closed window
+ * says so and leaves the button; a finished sign-in says that the question goes again.
+ */
+function signinActionHTML(turn: AgentTurn, state: TimelineState, latest: boolean): string {
+  const need = signinOf(turn), phase = state.signin.get(turn.id);
+  if (!need || !latest && !phase) return "";
+  const act = (name: string, label: string, cause = ""): string => btn(esc(label), "sm", ` data-act="${name}" data-cli="${need.cli}"${cause ? ` data-cause="${cause}"` : ""}`);
+  const note = (key: "brains.signinWaiting" | "brains.signinDone" | "brains.signinFailed"): string => `<span class="signin-note" role="status">${esc(t(key))}</span>`;
+  if (need.cause === "not_installed") return `<div class="turn-signin">${act("cli-install", t("brains.install"))}</div>`;
+  const label = t(need.cause === "expired" ? "conn.relogin" : "brains.signinFirst");
+  const body = phase === "waiting" ? note("brains.signinWaiting") + act("cli-signin-cancel", t("common.cancel"))
+    : phase === "done" ? note("brains.signinDone")
+    : (phase === "stopped" ? note("brains.signinFailed") : "") + act("cli-signin", label, need.cause);
+  return `<div class="turn-signin" data-phase="${phase ?? "idle"}">${body}</div>`;
 }
 
 /** A failed reply's Run again: a bare icon first among its actions, which stay in sight on the latest failure. */
@@ -899,7 +933,7 @@ export function mediaCardHTML(payload: MediaPayload, query: string, seq?: number
 }
 
 /** Renders all ordered items in `turn.messages` (thinking block, progress, media cards, event chips, replies). */
-function turnMessagesHTML(turn: AgentTurn, state: TimelineState, query: string, regenerate: boolean, revealing: boolean, settled = "", fallback = "", waitingForOwner = false): string {
+function turnMessagesHTML(turn: AgentTurn, state: TimelineState, query: string, regenerate: boolean, revealing: boolean, settled = "", fallback = "", waitingForOwner = false, latestFailure = false): string {
   const ordered = [...(turn.messages ?? [])].sort((a, b) => a.seq - b.seq);
   const replies = ordered.filter(m => m.kind === "reply");
   const said = new Map(plainReplies(replies.map(m => m.text)).map((text, index) => [replies[index].seq, text.trim()]));
@@ -908,7 +942,9 @@ function turnMessagesHTML(turn: AgentTurn, state: TimelineState, query: string, 
   const settledDraft = isSettledDraftTurn(turn);
   // A question the owner has settled stands where it was asked, among the replies (permission-card.ts settledQuestions).
   const asked = settledQuestions(turn);
-  return settled + ordered.filter(message => (message.kind === "reply" && !(settledDraft && said.get(message.seq) === turn.text.trim())) || message.kind === "media").map(message => {
+  const inline = publicEventsHTML(turn, true, "inline");
+  return settled + ordered.filter(message => (message.kind === "reply" && !(settledDraft && said.get(message.seq) === turn.text.trim())) || message.kind === "media" || (message.kind === "event" && inline.has(message.seq))).map(message => {
+    if (message.kind === "event") return inline.get(message.seq) ?? "";
     const text = message.kind === "reply" ? said.get(message.seq) ?? "" : message.text.trim();
     if (!text) return "";
     if (message.kind === "media") {
@@ -919,7 +955,8 @@ function turnMessagesHTML(turn: AgentTurn, state: TimelineState, query: string, 
       const media = parseMediaPayload(text);
       return media ? `<div class="chat-message" data-message="${message.seq}">${mediaCardHTML(media, query, message.seq)}</div>` : "";
     }
-    return asked(message.at_ms) + `<div data-seq="${message.seq}">${messageBlockHTML(turn, String(message.seq), text, message.at_ms, query, state, true, regenerate && message.seq === lastReply, message.seq === replies.find(reply => said.get(reply.seq))?.seq, message.seq === lastReply)}</div>`;
+    // A card asked in the same millisecond as a reply (the words that come with it) stands after it.
+    return asked(message.at_ms - 1) + `<div data-seq="${message.seq}">${messageBlockHTML(turn, String(message.seq), text, message.at_ms, query, state, true, regenerate && message.seq === lastReply, message.seq === replies.find(reply => said.get(reply.seq))?.seq, message.seq === lastReply, latestFailure)}</div>`;
   }).join("") + asked(Infinity) + (replies.length ? "" : fallback) + work;
 }
 
@@ -929,6 +966,18 @@ function turnMessagesHTML(turn: AgentTurn, state: TimelineState, query: string, 
  */
 function learnedSkillEvent(text: string): string | null {
   try { const event = JSON.parse(text); return event?.type === "skill_learned" && typeof event.name === "string" ? event.name : null; }
+  catch { return null; }
+}
+
+/** The role a new member saved as its job (the core's `job_set` event), or null: one quiet line in the conversation. */
+function jobSetEvent(text: string): string | null {
+  try { const event = JSON.parse(text); return event?.type === "job_set" && typeof event.name === "string" && event.name.trim() ? event.name.trim() : null; }
+  catch { return null; }
+}
+
+/** The words of a member's own rename (the core's `renamed` event), or null: the line the first Bot's rename has (`bot-renamed`). */
+function renamedEvent(text: string): { name: string; words: string } | null {
+  try { const event = JSON.parse(text); return event?.type === "renamed" && typeof event.name === "string" && typeof event.text === "string" ? { name: event.name, words: event.text.trim() } : null; }
   catch { return null; }
 }
 
@@ -942,7 +991,7 @@ function turnEventsHTML(turn: AgentTurn, look: TurnLook): string {
  * with colleagues, shown on one line) and a skill the member learned (it changes what the member
  * does next). Every other public event is work and folds into the reply.
  */
-function publicEventsHTML(turn: AgentTurn, conversation: boolean): Map<number, string> {
+function publicEventsHTML(turn: AgentTurn, conversation: boolean, place: "inline" | "after" = "after"): Map<number, string> {
   const labels = {
     "routine.created": "event.routine.created", "routine.updated": "event.routine.updated", "routine.deleted": "event.routine.deleted",
     "calendar.created": "event.calendar.created", "calendar.updated": "event.calendar.updated", "calendar.deleted": "event.calendar.deleted",
@@ -956,14 +1005,21 @@ function publicEventsHTML(turn: AgentTurn, conversation: boolean): Map<number, s
     // Older CLI failures wrote the final sentence as an event too. Keep one public sentence.
     if (plainLine(message.text) === plainLine(turn.text) || turn.messages?.some(reply => reply.kind === "reply" && plainLine(reply.text) === plainLine(message.text))) continue;
     const known = ["routine", "calendar"].includes(event?.type ?? "") && ["created", "updated", "deleted"].includes(event?.action ?? "") && typeof event.name === "string" && Number.isSafeInteger(event.id) && event.id! > 0;
-    const meeting = meetingEvent(message.text), skill = learnedSkillEvent(message.text);
-    if ((!!meeting || !!skill) !== conversation) continue;
-    const kind = known ? `${event.type}.${event.action}` : meeting ? "meeting" : skill ? "skill" : `notice:${plainLine(message.text)}`;
-    const words = known ? eventLineHTML(t(labels[`${event.type}.${event.action}` as keyof typeof labels], {p0: NAME}), ico(event.type === "routine" ? "clock" : "calendar"), event.name!) : meeting ? eventLineHTML(t("rooms.meetingOpened", {p0: NAME}), ico("chat"), meeting.name) : skill ? eventLineHTML(t(event?.action === "updated" ? "skills.updatedNotice" : "skills.learnedNotice", {p0: NAME}), ico(event?.action === "updated" ? "pencil" : "check"), skill) : `<span class="sys event-line">${esc(plainLine(message.text.trim().startsWith("{") || message.text.trim().startsWith("[") ? t("event.changed") : message.text))}</span>`;
+    const meeting = meetingEvent(message.text), skill = learnedSkillEvent(message.text), job = jobSetEvent(message.text), renamed = renamedEvent(message.text);
+    if ((!!meeting || !!skill || !!job || !!renamed) !== conversation) continue;
+    // A new member's job and its new name stand among the replies where they happened; the rest follow the reply.
+    if (conversation && (!!job || !!renamed) !== (place === "inline")) continue;
+    if (renamed) {
+      const line = `<div class="conversation-event-line timeline-event" data-timeline-event="${turn.id}:${message.seq}"><p class="bot-renamed" role="status">${esc(renamed.words)}</p></div>`;
+      groups.push({kind: `renamed:${message.seq}`, lines: [line], names: new Map(), seq: message.seq});
+      continue;
+    }
+    const kind = known ? `${event.type}.${event.action}` : meeting ? "meeting" : skill ? "skill" : job ? "job" : `notice:${plainLine(message.text)}`;
+    const words = job ? eventLineHTML(t("members.jobSetNotice", {p0: NAME}), ico("check"), job) : known ? eventLineHTML(t(labels[`${event.type}.${event.action}` as keyof typeof labels], {p0: NAME}), ico(event.type === "routine" ? "clock" : "calendar"), event.name!) : meeting ? eventLineHTML(t("rooms.meetingOpened", {p0: NAME}), ico("chat"), meeting.name) : skill ? eventLineHTML(t(event?.action === "updated" ? "skills.updatedNotice" : "skills.learnedNotice", {p0: NAME}), ico(event?.action === "updated" ? "pencil" : "check"), skill) : `<span class="sys event-line">${esc(plainLine(message.text.trim().startsWith("{") || message.text.trim().startsWith("[") ? t("event.changed") : message.text))}</span>`;
     const attrs = meeting ? `data-meeting-room="${meeting.room_id}"` : event?.type === "routine" ? `data-act="open-routine" data-routine="${event.id}"${Number.isSafeInteger(event.member_id) && event.member_id! >= 0 ? ` data-routine-member="${event.member_id}"` : ""}` : `data-act="open-calendar-event" data-event="${event?.id}" data-date="${esc(event?.date ?? "")}"`;
     const openable = meeting || known && event?.action !== "deleted" && (event.type === "routine" || /^\d{4}-\d{2}-\d{2}$/.test(event.date ?? ""));
     const line = `<div class="conversation-event-line timeline-event" data-timeline-event="${turn.id}:${message.seq}">${openable ? btn(words, "event-open", ` ${attrs}`) : words}</div>`;
-    const target = known ? {key: `${event.type}:${event.id}`, name: event.name!, face: ico(event.type === "routine" ? "clock" : "calendar")} : meeting ? {key: `meeting:${meeting.room_id}`, name: meeting.name, face: ico("chat")} : {key: kind, name: skill || t("event.changed"), face: ico("check")};
+    const target = job ? {key: "job", name: job, face: ico("check")} : known ? {key: `${event.type}:${event.id}`, name: event.name!, face: ico(event.type === "routine" ? "clock" : "calendar")} : meeting ? {key: `meeting:${meeting.room_id}`, name: meeting.name, face: ico("chat")} : {key: kind, name: skill || t("event.changed"), face: ico("check")};
     let group = groups[groups.length - 1];
     if (group?.kind !== kind) { group = {kind, lines: [], names: new Map(), seq: message.seq}; groups.push(group); }
     group.lines.push(line);
@@ -991,7 +1047,8 @@ export function turnHTML(turn: AgentTurn, state: TimelineState, detailOpen: bool
   const resumed = sourceOf(turn) === "connector";
   // what a colleague handed this member says who from, in place of the owner's words
   const handed = exchangeTurn(turn);
-  const said = turn.question.trim() !== "" && !routine && !resumed && !handed && !delegatedTurn(turn);
+  // The answer to a new member's first card is the card's (it stands in it), not a message of the owner's.
+  const said = turn.question.trim() !== "" && !routine && !resumed && !handed && !delegatedTurn(turn) && !turn.setup;
   const asked = said || (turn.attachments?.length ?? 0) > 0;
   const waitingForOwner = look.waitingForOwner?.(turn.id) ?? false;
   const live = !waitingForOwner && !waitsAtCard(turn) && turn.task?.state !== "waiting" && (turn.status === "running" || isLive(turn.task));
@@ -1009,8 +1066,8 @@ export function turnHTML(turn: AgentTurn, state: TimelineState, detailOpen: bool
   const regenerate = !live && (said || turn.route === "greeting") && turn.id === look.regenerateTurnId;
   // A turn without reply messages answers in its text: a question spoken to Raphael with public progress has no other.
   // A draft handed to this chat (`route` "draft") is a card, and what it is told is for the model, not for the page.
-  const textAnswer = turn.status === "confirm" || settledDraft || turn.route === "draft" || (turn.route === "greeting" && !!greetingHTML(turn, look.greetingOpen ?? true)) || !turn.text.trim()
-    ? "" : messageBlockHTML(turn, "reply", turn.text, turn.created_at_ms, query, state, true, regenerate);
+  const textAnswer = turn.status === "confirm" || settledDraft || turn.route === "draft" || !turn.text.trim()
+    ? "" : messageBlockHTML(turn, "reply", turn.text, turn.created_at_ms, query, state, true, regenerate, true, true, turn.id === look.signinTurnId);
   return (
     `<li class="tn${turn.id === look.latestFailedTurnId ? " is-latest-failure" : ""}${turn.status === "queued" || turn.route === "owner_input" || (live && !hasMsgs) ? " is-owner-only" : ""}" data-id="${id}" data-status="${esc(turn.status)}"${live ? ' data-live="true"' : ""}>` +
     (resumed ? resumedLineHTML(turn) + secretResumedLineHTML(turn) + computerResumedLineHTML(turn) : "") +
@@ -1027,13 +1084,13 @@ export function turnHTML(turn: AgentTurn, state: TimelineState, detailOpen: bool
     `<div class="ra-body">` +
     // A question already answered came before the answer: it reads in that order, under the work and above the reply.
     (hasMsgs
-      ? turnMessagesHTML(turn, state, query, regenerate, revealing, permissionCardsHTML(turn, look.answerable, true, turn.member_id ? look.memberName?.(turn.member_id) : t("agent.title")), textAnswer, waitingForOwner)
+      ? turnMessagesHTML(turn, state, query, regenerate, revealing, permissionCardsHTML(turn, look.answerable, true, turn.member_id ? look.memberName?.(turn.member_id) : t("agent.title")), textAnswer, waitingForOwner, turn.id === look.signinTurnId)
       : permissionCardsHTML(turn, look.answerable, true, turn.member_id ? look.memberName?.(turn.member_id) : t("agent.title")) + ownerQuestionsHTML(turn, true) + textAnswer + workSectionHTML(turn, state, query, revealing, waitingForOwner)) +
     (settledDraft ? settledDraftHTML(turn, detailOpen, query) : "") +
     connectorCardsHTML(turn) + mcpProposalsHTML(turn) + secretCardsHTML(turn) + chatCardsHTML(turn) + computerCardsHTML(turn) +
     `<div data-desktop-slot="${id}"></div>` +
     permissionCardsHTML(turn, look.answerable, false, turn.member_id ? look.memberName?.(turn.member_id) : t("agent.title")) + mailCardsHTML(turn, look) + pageCardsHTML(turn) +
-    ownerQuestionsHTML(turn, false) + greetingHTML(turn, look.greetingOpen ?? true) +
+    ownerQuestionsHTML(turn, false) +
     (turn.status === "confirm" ? `<div class="turn-question" data-question-turn="${id}"></div>` : "") +
     (turn.task?.state === "done" ? `<div data-task-result-slot="${id}" data-task-member="${turn.member_id ?? 0}"></div>` : "") +
     (!look.deferPresence && (live || waitingForOwner || waitsAtCard(turn) || revealing || turn.task?.state === "waiting" || turn.status === "confirm") ? livePresenceHTML(look, latestProgress(turn), live || revealing) : "") +

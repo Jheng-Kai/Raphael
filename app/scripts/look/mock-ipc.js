@@ -72,6 +72,20 @@ export function installMock(fixture, config = {}, target = window) {
     Object.assign(latest, { status: "error", text: sentence, model: "@chatgpt:gpt-6-sol", failure: { kind: "usage_limit", provider: "chatgpt", resets_at: null },
       messages: [{ seq: 1, kind: "reply", text: sentence, at_ms: latest.created_at_ms }], task: null });
   }
+  // A member's latest reply failed because its subscription CLI has no usable sign-in, as the core words it
+  // (`failures.py` `_CAUSE_MESSAGES`): the reply carries the one button that mends it (cli-signin.ts).
+  // `cliSignin`: a cause, or { cause, cli }.
+  if (variant.cliSignin) {
+    const { cause = "expired", cli = "claude" } = typeof variant.cliSignin === "object" ? variant.cliSignin : { cause: variant.cliSignin };
+    const latest = data.turns.filter(turn => turn.member_id === 1 && turn.conversation_id === 11).sort((a, b) => b.id - a.id)[0];
+    const name = { claude: "Claude Code", codex: "Codex CLI", gemini: "Antigravity" }[cli];
+    const sentence = { expired: `${name} 的登入已過期。`, signed_out: `${name} 還沒登入。`, not_installed: `${name} 還沒安裝。` }[cause];
+    Object.assign(latest, { status: "error", text: sentence, model: `cli:${cli}`, failure: { kind: cause === "not_installed" ? "unknown" : "auth_expired", provider: `cli:${cli}`, resets_at: null, cause },
+      messages: [{ seq: 1, kind: "reply", text: sentence, at_ms: latest.created_at_ms }], task: null });
+    const row = data.clis.find(item => item.id === cli);
+    // An expired session still has its credentials; a CLI that was never signed in or is not there is not available.
+    Object.assign(row, { installed: cause !== "not_installed", logged_in: cause === "expired", available: cause === "expired" });
+  }
   // The member settings page (member-settings.ts): two connections that are on.
   if (variant.memberSettings) {
     data.servers.forEach(server => { server.enabled = true; });
@@ -498,6 +512,11 @@ export function installMock(fixture, config = {}, target = window) {
   }
   if (variant.ownerQuestion) {
     const question = structuredClone(data.ownerQuestionCard);
+    // The shapes of the card the member may ask for (owner, 2026-11-11): a grey line, a grey line under some rows, several choices, a skip row.
+    Object.assign(question, {
+      described: { subtitle: "選最重要的一個。", descriptions: ["", "今天與本週的行程", "", "會議與待辦的紀錄"], skip: true },
+      multiple: { multiple: true }, skip: { skip: true },
+    }[variant.ownerQuestionShape] ?? {});
     const turn = { ...structuredClone(data.turns.find(turn => turn.member_id === 1 && turn.conversation_id === 11)),
       id: question.turn_id, session_id: "owner-question", question: "請幫我整理並寄出報告。", route: "delegate", source: variant.ownerQuestion === "background" ? "routine" : "app",
       text: "報告已整理完成，需要你決定寄出的日期。", detail: null, messages: [], steps: [], owner_questions: [question], status: variant.ownerQuestion === "background" ? "running" : "done",
@@ -572,10 +591,12 @@ export function installMock(fixture, config = {}, target = window) {
   // `pageNews`: a page far taller than its card (a day's Japanese news, 900 px), alone ("only") or after the product page ("both").
   if (variant.pageTurn) {
     const base = data.turns.find(turn => turn.member_id === 1);
-    if (variant.pageNews !== "only") data.turns.push({ ...structuredClone(base), id: 801, question: "幫我找一個輕量後背包。", text: "這款符合你的需求,可以直接在下面操作。", status: "done", route: "answer", steps: [],
+    // Older than a long thread's turns (`longThread`), so the page's card stands high up in it, not at its bottom.
+    const created = variant.longThread ? base.created_at_ms - 13 * 60000 : base.created_at_ms;
+    if (variant.pageNews !== "only") data.turns.push({ ...structuredClone(base), id: 801, created_at_ms: created, question: "幫我找一個輕量後背包。", text: "這款符合你的需求,可以直接在下面操作。", status: "done", route: "answer", steps: [],
       messages: [{ seq: 1, kind: "reply", text: "這款符合你的需求,可以直接在下面操作。", at_ms: data.now }], attachments: [],
       pages: [{ id: "page-product", title: "輕量後背包", rev: 1, height: 320, source: "html", server: null, fallback: "輕量後背包 NT$ 1,280,防潑水、重量 480 公克。" }] });
-    if (variant.pageNews) data.turns.push({ ...structuredClone(base), id: 803, question: "幫我整理今天的日文新聞。", text: "整理好了，點開就能讀。", status: "done", route: "answer", steps: [],
+    if (variant.pageNews) data.turns.push({ ...structuredClone(base), id: 803, created_at_ms: created, question: "幫我整理今天的日文新聞。", text: "整理好了，點開就能讀。", status: "done", route: "answer", steps: [],
       messages: [{ seq: 1, kind: "reply", text: "整理好了，點開就能讀。", at_ms: data.now }], attachments: [],
       pages: [{ id: "page-news", title: "每日新聞日文學習 2026-11-11", rev: 1, height: 900, source: "html", server: null, fallback: "三則新聞、今日單字與練習問題。" }] });
   }
@@ -829,6 +850,23 @@ export function installMock(fixture, config = {}, target = window) {
   target.__look = state;
   // The late CLI models (`codexLate`) come now, and the window is told as the core tells it.
   state.codexArrives = () => { codexArrived = true; notify("BrainsChanged", {}); };
+  // A member changes a page it showed (core `update_page`): the page keeps its id, its revision goes up in every turn that holds
+  // its card (a member's, or a room message's), and the window is told as the core tells it.
+  state.pageRevs = {};
+  state.viewing = [];
+  state.updatePage = id => {
+    const rev = state.pageRevs[id] = (state.pageRevs[id] ?? 1) + 1;
+    const turns = [...data.turns, ...data.messages.flatMap(message => (message.turn ? [message.turn] : []))];
+    for (const turn of turns) for (const page of turn.pages ?? []) if (page.id === id) page.rev = rev;
+    for (const turn of data.turns) if ((turn.pages ?? []).some(page => page.id === id)) notify("AgentTurn", { turn_id: turn.id, member_id: turn.member_id });
+    notify("RoomsChanged", { room_id: 1 });
+  };
+  // The CLI's sign-in console ended (`done`, or `stopped` when it was closed first), as `brains.cli` then tells.
+  state.cliSigninEnds = (id, outcome) => {
+    const cli = data.clis.find(item => item.id === id);
+    Object.assign(cli, { signing_in: false, login_result: outcome }, outcome === "done" ? { logged_in: true, available: true } : {});
+    notify("BrainsChanged", {});
+  };
   // What the owner could see of the open conversation's place, frame by frame (`scrollTimeline`): a place seen once is the
   // place the thread opens at, so a bottom followed by the line (or the other way) shows as two samples.
   if (variant.scrollTimeline) {
@@ -847,11 +885,48 @@ export function installMock(fixture, config = {}, target = window) {
   // The roster read answers late (`rosterDelay`, or the `late-roster` step), as a busy core does.
   state.rosterDelay = variant.rosterDelay ?? 0;
   const copy = value => value === undefined ? undefined : structuredClone(value);
-  if (variant.colleague === "greeting" || variant.colleague === "handoff") {
+  if (variant.colleague === "handoff") {
     const base = structuredClone(data.turns.find(turn => turn.member_id === 1));
     const sample = data.colleagueSample;
     Object.assign(data.members.find(member => member.id === 1), {role: sample.role, name:sample.name, unread:false, activity:"idle", waiting:false});
-    data.turns = data.turns.filter(turn => turn.member_id !== 1).concat({...base,id:9800,session_id:"colleague-greeting",member_id:1,conversation_id:11,question:"",route:variant.colleague === "greeting" ? "greeting" : "answer",source:variant.colleague === "greeting" ? "greeting" : "app",text:variant.colleague === "greeting" ? sample.greeting : sample.handoff,detail:variant.colleague === "greeting" ? JSON.stringify({kind:"greeting",options:sample.options}) : null,status:"done",steps:[],messages:[],task:null,permissions:[],owner_questions:[],computers:[],secrets:[],connectors:[],drafts:[],pages:[],handoffs:[]});
+    data.turns = data.turns.filter(turn => turn.member_id !== 1).concat({...base,id:9800,session_id:"colleague-greeting",member_id:1,conversation_id:11,question:"",route:"answer",source:"app",text:sample.handoff,detail:null,status:"done",steps:[],messages:[],task:null,permissions:[],owner_questions:[],computers:[],secrets:[],connectors:[],drafts:[],pages:[],handoffs:[]});
+  }
+  // A new member's set-up by cards (owner, 2026-11-11): the greeting with its question card ("card"), the card answered, the job saved
+  // and the first-task card ("job"), the one app the job needs ("connect"), or a clear answer that skips the cards ("collapsed").
+  // "flow" starts as "card" and moves to "job" when the card is answered. The core sends each question's time (created_at_ms).
+  const setupStage = stage => {
+    const sample = data.colleagueSample, member = data.members.find(item => item.id === 1);
+    const base = structuredClone(data.turns.find(turn => turn.member_id === 1 && turn.conversation_id === 11) ?? data.turns.find(turn => turn.member_id === 1));
+    const blank = { ...base, member_id: 1, conversation_id: 11, detail: null, model: "openai/gpt-6-sol", cost_usd: 0, steps: [], handoffs: [], permissions: [], drafts: [], connectors: [], secrets: [], pages: [], computers: [], owner_questions: [], task: null, attachments: [], reactions: {} };
+    const first = data.now - 180000, answered = stage !== "card";
+    const answer = stage === "collapsed" ? "叫我阿信，每天幫我整理 Gmail 信件，先從今天的未讀信開始" : "整理 Gmail 信件，每天幫我回覆重要的信";
+    const line = `嗨，我是${sample.name}，很高興加入你的團隊。`;
+    const card = { id: "setup-first", task_id: 9811, turn_id: 9810, member_id: 1, kind: "ask_owner", card_id: "", question: "你想先讓我接手哪一件事？",
+      options: ["整理 Gmail 信件", "安排行程與提醒", "查資料、做研究", "寫文件與報告"], free_text: true, state: answered ? "answered" : "asked",
+      result: answered ? { state: "answered", answer } : null, created_at_ms: first + 1000 };
+    Object.assign(member, { name: stage === "collapsed" ? "阿信" : sample.name, role: stage === "card" ? "" : "信件管家", unread: false, activity: "idle", waiting: !answered });
+    const turns = [{ ...blank, id: 9810, session_id: "greeting-1-look", created_at_ms: first, question: "", route: "greeting", source: "greeting", prefix: "", text: line, status: "done",
+      messages: [{ seq: 1, kind: "reply", text: line, at_ms: first }], owner_questions: [card],
+      task: { id: 9811, state: answered ? "done" : "waiting", waiting_owner: answered ? 0 : 1, started_at_ms: first, created_at_ms: first + 1000, finished_at_ms: answered ? first + 30000 : null } }];
+    if (!answered) return turns;
+    const at = first + 31000, event = (seq, value) => ({ seq, kind: "event", text: JSON.stringify(value), at_ms: at + seq });
+    const step = { ...blank, id: 9820, session_id: "setup-9810-look", created_at_ms: at, question: answer, setup: true, source: "app", prefix: "", status: "done" };
+    if (stage === "job") {
+      const ask = { id: "setup-task", task_id: 9821, turn_id: 9820, member_id: 1, kind: "ask_owner", card_id: "", question: "先從哪一件事開始？", options: ["整理今天的未讀信", "草擬重要信件的回覆"], free_text: true, state: "asked", result: null, created_at_ms: at + 5000 };
+      turns.push({ ...step, route: "delegate", text: ask.question, messages: [event(1, { type: "job_set", name: "信件管家" }), { seq: 2, kind: "reply", text: "好，我負責幫你整理信件，重要的先回覆。", at_ms: at + 4000 }],
+        owner_questions: [ask], task: { id: 9821, state: "waiting", waiting_owner: 1, started_at_ms: at, created_at_ms: at + 5000, finished_at_ms: null } });
+    } else if (stage === "connect") {
+      turns.push({ ...step, route: "answer", text: "好，我負責整理信件。先連結 Gmail 才能讀信。", messages: [event(1, { type: "job_set", name: "信件管家" }), { seq: 2, kind: "reply", text: "好，我負責整理信件。先連結 Gmail 才能讀信。", at_ms: at + 4000 }],
+        connectors: [structuredClone(data.connectorTurns.gmail.connectors[0])] });
+    } else {
+      turns.push({ ...step, route: "answer", text: "好，我是阿信，現在先整理今天的未讀信。", messages: [event(1, { type: "renamed", name: "阿信", text: "已重新命名為 阿信" }), event(2, { type: "job_set", name: "信件管家" }),
+        { seq: 3, kind: "reply", text: "好，我是阿信，現在先整理今天的未讀信。", at_ms: at + 4000 }] });
+    }
+    return turns;
+  };
+  if (variant.setupChain) {
+    const stage = variant.setupChain === "flow" ? "card" : variant.setupChain;
+    data.turns = data.turns.filter(turn => turn.member_id !== 1).concat(setupStage(stage));
   }
   const nextId = items => Math.max(0, ...items.map(item => item.id)) + 1;
   const unsupported = name => { const message = `Unmocked IPC: ${name}`; state.errors.push(message); throw new Error(message); };
@@ -874,14 +949,19 @@ export function installMock(fixture, config = {}, target = window) {
     if (latest) latest.is_default = true;
     else data.conversations.push({ id: nextId(data.conversations), member_id: member, title: "", is_default: true, kind: "standard", created_at_ms: data.now, updated_at_ms: data.now });
   };
-  // As the core does since 2026-11-06: the member types while its own model writes the greeting, with no choices.
+  // As the core does since 2026-11-11: the member types while its own model writes the greeting; it comes as its line and one question card.
   const greet = member => {
     mainConversation(member.id);
     const conversation = data.conversations.find(item => item.member_id === member.id && item.is_default);
     const greeting = { id: nextId(data.turns), session_id: `greeting-${member.id}`, question: "", route: "greeting", prefix: "", text: "", detail: null, status: "running", cost_usd: 0, source: "greeting", model: null, steps: [], messages: [], attachments: [], member_id: member.id, conversation_id: conversation.id, created_at_ms: data.now, created_at: new Date(data.now).toISOString() };
     data.turns.push(greeting);
     if (!variant.greetingPending) setTimeout(() => {
-      Object.assign(greeting, { status: "done", text: `嗨，我是${member.name} 👋 想讓我先幫你分擔哪件事？可以是手上的專案，或其他成員還沒顧到的事。` });
+      // The member's own line with the one question card (the core's greeting since 2026-11-11), asked after the line.
+      const line = `嗨，我是${member.name} 👋 很高興加入你的團隊。`;
+      Object.assign(greeting, { status: "done", text: line, messages: [{ seq: 1, kind: "reply", text: line, at_ms: data.now }],
+        task: { id: 9900 + greeting.id, state: "waiting", waiting_owner: 1, started_at_ms: data.now, created_at_ms: data.now + 1, finished_at_ms: null },
+        owner_questions: [{ id: `greeting-card-${greeting.id}`, task_id: 9900 + greeting.id, turn_id: greeting.id, member_id: member.id, kind: "ask_owner", card_id: "", question: "你想先讓我接手哪一件事？",
+          options: ["整理 Gmail 信件", "安排行程與提醒", "查資料、做研究", "寫文件與報告"], free_text: true, state: "asked", result: null, created_at_ms: data.now + 1 }] });
       notify("AgentTurn", { turn_id: greeting.id, member_id: member.id });
     }, 600);
     return greeting;
@@ -957,11 +1037,14 @@ export function installMock(fixture, config = {}, target = window) {
         // A report has no frame: its checked content, which the app draws, and the time its data is from.
         if (p.id === "page-report") {
           const { title, sections } = data.pageReport;
-          return { kind: "report", title, rev: 1, height: 320, source: "html", server: null, report: { as_of: new Date(data.now - 30 * 60000).toISOString().replace(/\.\d+Z$/, "Z"), sections: structuredClone(sections) } };
+          return { kind: "report", title, rev: state.pageRevs["page-report"] ?? 1, height: 320, source: "html", server: null, report: { as_of: new Date(data.now - 30 * 60000).toISOString().replace(/\.\d+Z$/, "Z"), sections: structuredClone(sections) } };
         }
         // Not a file of the dev server, which would write its own client into the page.
-        if (p.id === "page-news") return { url: `data:text/html;charset=utf-8,${encodeURIComponent(data.pageNewsHtml.replace("__THEME__", p.theme === "dark" ? "dark" : ""))}`, title: "每日新聞日文學習 2026-11-11", rev: 1, height: 900, source: "html", server: null };
-        return { url: `data:text/html;charset=utf-8,${encodeURIComponent(data.pageProductHtml.replace("__THEME__", p.theme === "dark" ? "dark" : ""))}`, title: "輕量後背包", rev: 1, height: 320, source: "html", server: null };
+        // A page its member changed (`state.updatePage`) is another page: the news page's last heading, the product's price.
+        if (p.id === "page-news") return { url: `data:text/html;charset=utf-8,${encodeURIComponent(data.pageNewsHtml.replace("__THEME__", p.theme === "dark" ? "dark" : "").replace("練習問題", (state.pageRevs[p.id] ?? 1) > 1 ? "練習問題（已更新）" : "練習問題"))}`, title: "每日新聞日文學習 2026-11-11", rev: state.pageRevs[p.id] ?? 1, height: 900, source: "html", server: null };
+        return { url: `data:text/html;charset=utf-8,${encodeURIComponent(data.pageProductHtml.replace("__THEME__", p.theme === "dark" ? "dark" : "").replace("NT$ 1,280", (state.pageRevs[p.id] ?? 1) > 1 ? "NT$ 990（已降價）" : "NT$ 1,280"))}`, title: "輕量後背包", rev: state.pageRevs[p.id] ?? 1, height: 320, source: "html", server: null };
+      // The page that stands open beside the composer, told before a message is sent (what the member is then told "here" means).
+      case "pages.viewing": state.viewing.push(p.id ?? null); return { viewing: p.id ?? null };
       case "computer.wallpaper": return variant.ownWallpaper ? { image: variant.ownWallpaper } : {};
       case "computer.lifecycle": {
         if (p.target !== data.desktop.target || p.host !== data.desktop.host || p.action === 'reset' && p.confirmed !== true) throw new Error('Maintenance confirmation or target missing');
@@ -1182,7 +1265,7 @@ export function installMock(fixture, config = {}, target = window) {
         for (let at = data.turns.length - 1; at >= 0; at--) if (data.turns[at].member_id === p.id && data.turns[at].route === "greeting" && data.turns[at].status === "error") data.turns.splice(at, 1);
         return { turn_id: greet(member).id };
       }
-      case "members.delete": data.members = data.members.filter(item => item.id !== p.id); if (p.id === data.primaryId) data.primaryId = 0; notify("MembersChanged", { member_id: p.id }); return { deleted: true };
+      case "members.delete": if (Object.keys(p).some(key => key !== "id")) throw new Error("Invalid params: members.delete takes only the member's id"); data.members =data.members.filter(item => item.id !== p.id); if (p.id === data.primaryId) data.primaryId = 0; notify("MembersChanged", { member_id: p.id }); return { deleted: true };
       case "members.skills.list": {
         if (p.marketplace) {
           const marketplace = structuredClone(data.skillMarketplaceCatalog);
@@ -1359,8 +1442,13 @@ export function installMock(fixture, config = {}, target = window) {
         if (!question) throw new Error("Unknown owner question");
         if (question.state !== "asked") return { status: question.state };
         question.state = p.answer === null ? "cancelled" : "answered";
-        question.result = p.answer === null ? { state: "cancelled" } : { state: "answered", answer: p.answer };
+        question.result = p.skip ? { state: "answered", skipped: true } : p.answer === null ? { state: "cancelled" } : { state: "answered", answer: p.answer };
         turn.task = { ...turn.task, state: "done", waiting_owner: 0, finished_at_ms: data.now };
+        if (variant.setupChain === "flow" && question.id === "setup-first" && question.state === "answered") {
+          // The job is saved and the first-task card is asked, in a turn of its own.
+          data.turns = data.turns.filter(item => item.member_id !== 1).concat(setupStage("job"));
+          notify("AgentTurn", { turn_id: 9820, member_id: 1 });
+        }
         notify("AgentTurn", { turn_id: turn.id, member_id: turn.member_id });
         return { status: question.state };
       }
@@ -1456,7 +1544,7 @@ export function installMock(fixture, config = {}, target = window) {
       }
       case "rooms.delete": data.rooms = data.rooms.filter(item => item.id !== p.room_id); return { deleted: true };
       case "rooms.stop": { for (const exchange of data.roomExchanges.filter(item => item.room_id === p.room_id && ["running", "queued"].includes(item.state))) exchange.stop_requested = 1; for(const exchange of data.roomExchanges.filter(item=>item.room_id===p.room_id)){exchange.state="stopped";exchange.active_turn=null;}for(const message of data.messages.filter(item=>item.room_id===p.room_id&&item.status==="running")){message.status="error";message.text="已停止工作。";}for(const task of data.roomHandoffs.filter(item=>["queued","running","waiting"].includes(item.state)))task.state="cancelled";data.messages.push({...data.roomWrapupMessage,id:nextId(data.messages),reply_to:null,reply_to_member:null,text:"### 結論\n已停止本次工作，已完成的動作保留。\n\n### 待決定\n尚未完成的工作已取消。\n\n### 下一步\n等待你的新指示。"});notify("RoomsChanged", { room_id: p.room_id }); return { stopped: true }; }
-      case "rooms.send": { const message = { thread_id:p.thread_id ?? 1, id: nextId(data.messages), room_id: p.room_id, member_id: null, text: p.text, request_id: p.request_id, status: "done", created: data.now, reply_to: p.reply_to ?? null, turn_id: null, reply_to_member: data.messages.find(item => item.id === p.reply_to)?.member_id ?? null, origin_message_id: nextId(data.messages), kind: "message", attachments: (p.attachments ?? []).map((file, index) => { const id = `${"f".repeat(30)}${String(index).padStart(2, "0")}.png`; (data.keptFiles ??= {})[id] = { mime: file.mime, data: file.data }; return { id, name: file.name, mime: file.mime }; }) }; data.messages.push(message); return { message_id: message.id, duplicate: false }; }
+      case "rooms.send": { if (variant.ownerQuestion) for (const turn of data.turns) for (const item of turn.owner_questions ?? []) if (item.state === "asked" && item.kind === "ask_owner") { item.state = "cancelled"; item.result = { state: "cancelled", by: "message", said: p.text }; turn.task = { ...turn.task, state: "done", waiting_owner: 0 }; } const message = { thread_id:p.thread_id ?? 1, id: nextId(data.messages), room_id: p.room_id, member_id: null, text: p.text, request_id: p.request_id, status: "done", created: data.now, reply_to: p.reply_to ?? null, turn_id: null, reply_to_member: data.messages.find(item => item.id === p.reply_to)?.member_id ?? null, origin_message_id: nextId(data.messages), kind: "message", attachments: (p.attachments ?? []).map((file, index) => { const id = `${"f".repeat(30)}${String(index).padStart(2, "0")}.png`; (data.keptFiles ??= {})[id] = { mime: file.mime, data: file.data }; return { id, name: file.name, mime: file.mime }; }) }; data.messages.push(message); return { message_id: message.id, duplicate: false }; }
       case "computer.revoke": if (data.desktop) data.desktop.granted = false; return { granted: false };
       case "brains.cli":
         // As the core does: a CLI's models come after the first read, in the background. With `codexLate` they come when the scene's
@@ -1479,6 +1567,14 @@ export function installMock(fixture, config = {}, target = window) {
       }
       case "brains.cli_login": {
         const cli = data.clis.find(cli => cli.id === p.id);
+        // As the core does: a sign-in that ran out starts again (`again`), its console stays open until the scene's
+        // `cli-signin-ends` step says how it ended, and a cancel ends it without a failure to tell.
+        if (p.cancel) { Object.assign(cli, { signing_in: false, login_result: null }); notify("BrainsChanged", {}); return { cancelled: true }; }
+        if (p.again) {
+          if (cli.signing_in) return { started: true, running: true };
+          Object.assign(cli, { signing_in: true, login_result: null }); notify("BrainsChanged", {});
+          return { started: true };
+        }
         cli.disconnected = false;
         cli.available = cli.installed && cli.logged_in === true;
         if (cli.available && cli.savedModels) cli.models = cli.savedModels;
@@ -1832,11 +1928,6 @@ export function installMock(fixture, config = {}, target = window) {
         return null;
       }
       if (command === "agent_ask_text") {
-        if (variant.colleague === "greeting") {
-          const base = data.turns.find(turn => turn.member_id === args.memberId);
-          const turn = {...base,id:nextId(data.turns),session_id:args.requestId,route:"answer",source:"app",question:args.text,text:data.colleagueSample.outcomeQuestion,detail:null};
-          data.turns.push(turn); notify("AgentTurn",{turn_id:turn.id,member_id:args.memberId}); return null;
-        }
         if (variant.cardSendFailure && !variant.cardSendRetried) { variant.cardSendRetried = true; throw new Error("Synthetic send unavailable"); }
         if (variant.ownerAddition || variant.queuedOwner) {
           const active = data.turns.find(turn => turn.status === "running" && turn.member_id === args.memberId);
@@ -1845,6 +1936,36 @@ export function installMock(fixture, config = {}, target = window) {
           data.turns.push({...active, id: addition, session_id: args.requestId, question: args.text, route: variant.queuedOwner ? "answer" : "owner_input", text: "", status: variant.queuedOwner ? "queued" : "done", attachments: [], task: null, steps: [], messages: [], created_at_ms: data.now});
           notify("AgentTurn", {turn_id: addition, member_id: active.member_id});
           return null;
+        }
+        // A member answering what was written under an open page (`pageAsk`): its turn is running until the scene lets it say its reply.
+        if (variant.pageAsk) {
+          const base = data.turns.find(turn => turn.member_id === args.memberId);
+          const turn = { ...structuredClone(base), id: nextId(data.turns), session_id: args.requestId, route: "answer", source: "app", question: args.text, text: "", detail: null, status: "running", prefix: "", messages: [], steps: [], attachments: [], pages: [], task: null, created_at_ms: data.now };
+          data.turns.push(turn);
+          notify("AgentTurn", { turn_id: turn.id, member_id: turn.member_id });
+          return new Promise(resolve => {
+            state.answerPageAsk = text => {
+              Object.assign(turn, { status: "done", prefix: "答", text, messages: [{ seq: 1, kind: "reply", text, at_ms: data.now }] });
+              notify("AgentTurn", { turn_id: turn.id, member_id: turn.member_id });
+              resolve(null);
+            };
+          });
+        }
+        // Writing in a conversation where a question card waits closes the card unanswered and is answered as an ordinary message (the core's close_for_message).
+        if (variant.ownerQuestion) {
+          const asked = data.turns.flatMap(turn => (turn.owner_questions ?? []).filter(item => item.state === "asked" && item.kind === "ask_owner").map(item => [turn, item]));
+          for (const [turn, item] of asked) {
+            item.state = "cancelled"; item.result = { state: "cancelled", by: "message", said: args.text };
+            turn.task = { ...turn.task, state: "done", waiting_owner: 0, finished_at_ms: data.now };
+            notify("AgentTurn", { turn_id: turn.id, member_id: turn.member_id });
+          }
+          if (asked.length) {
+            const base = asked[0][0], id = nextId(data.turns);
+            data.turns.push({ ...structuredClone(base), id, session_id: args.requestId, question: args.text, route: "answer", source: "app", status: "done", detail: null,
+              text: "好，先不處理這個問題。", messages: [{ seq: 1, kind: "reply", text: "好，先不處理這個問題。", at_ms: data.now }], owner_questions: [], task: null, steps: [], created_at_ms: data.now + 1 });
+            notify("AgentTurn", { turn_id: id, member_id: base.member_id });
+            return null;
+          }
         }
         // The native call stays pending until the reply ends, including before the first agent.turn.
         if (variant.stopPending) return new Promise(resolve => pendingReplies.set(args.requestId, resolve));

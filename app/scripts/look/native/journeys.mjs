@@ -791,7 +791,8 @@ export async function drive(name, context) {
     await click(page, '#app-popover [data-pick="member"]');
     await wait(page, ".cr-dialog");
     await capture("maker");
-    await click(page, '.cr-characters [data-slime-character="gobta"]');
+    await click(page, '.cr-dialog [data-slime-tab="characters"]');
+    await click(page, '.cr-dialog [data-slime-character="gobta"]');
     await type(page, "#mb-new-name", "NativeJob");
     await click(page, '.cr-dialog [data-dlg="create"]');
     await page.waitForSelector(".cr-dialog", { hidden: true });
@@ -848,16 +849,17 @@ await page.waitForFunction(role => document.querySelector('.ms-pane #ms-role')?.
     };
     const inFrame = (frame, id) => frame.$eval(id, el => el.textContent);
     const asked = async question => (await snapshot()).agent_turns.filter(row => row.question === question);
-    // A page in its card is only a preview (inert, R-PAGE-02): the owner presses the card, and only there the page takes a press or speaks.
+    // A page in its card is only a preview (inert, R-PAGE-02): the owner presses the card, and the page opens in the conversation's place
+    // (R-PAGE-01, 2026-11-11), where it takes a press and speaks; the header's arrow goes back.
     const larger = async () => {
-      if (await page.$(".pg-view iframe")) return;
+      if (await page.$(".pgv-frame-box iframe")) return;
       await click(page, ".pg-card .pg-body");
-      await wait(page, ".pg-view iframe");
+      await wait(page, ".pgv-frame-box iframe");
     };
     const smaller = async () => {
-      if (!await page.$(".pg-view-dialog")) return;
-      await click(page, '.pg-view-dialog [data-dlg="close"]');
-      await page.waitForSelector(".pg-view-dialog", { hidden: true });
+      if (!await page.$(".ra-stage.is-page")) return;
+      await click(page, ".mb-head [data-page-back]");
+      await page.waitForSelector(".ra-stage.is-page", { hidden: true });
     };
     const refuseAsk = async () => {
       if (await page.waitForSelector(".pg-ask", { timeout: 2500 }).catch(() => null)) {

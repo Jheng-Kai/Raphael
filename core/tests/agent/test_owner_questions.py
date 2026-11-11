@@ -20,6 +20,13 @@ async def wired(make_rig, conn, plugins):
     await background.close()
 
 
+def later_turn(agent, text="Lunch is at noon."):
+    """A later turn in the chief's conversation that the owner did not write (a routine's report): a question still waits above it.
+    What the owner writes closes the card instead (test_owner_question_card.py)."""
+    return agent.history.add(session_id="later", question="", route="answer", prefix="", text=text, status="done", source="routine",
+                             conversation_id=agent.service.conversations.main(0))
+
+
 @pytest.mark.parametrize("scope", ["private", "room"])
 @pytest.mark.parametrize("mode", ["direct", "bypass"])
 async def test_background_discovers_app_then_owner_signs_in_and_same_task_resumes(wired, tmp_path, scope, mode):
@@ -288,7 +295,7 @@ async def test_a_question_answered_after_the_owner_said_more_continues_at_the_en
     await typed(agent, "Arrange a visit")
     [asked] = await agent.turns()
     [question] = asked["owner_questions"]
-    await typed(agent, "When is lunch?")
+    later_turn(agent)
     page = await agent.rpc.call("agent.history.list", {"limit": 1})
     assert len(page["turns"]) == 1 and page["turns"][0]["id"] != asked["id"]
     assert [item["id"] for item in page["pending_questions"]] == [question["id"]]
@@ -321,7 +328,7 @@ async def test_the_chiefs_pending_question_is_available_outside_the_loaded_page(
     conversation_id = agent.service.conversations.main(0)
     saved = agent.conn.execute("SELECT member_id, conversation_id FROM agent_turns WHERE id=?", (asked["id"],)).fetchone()
     assert tuple(saved) == (0, conversation_id)
-    await typed(agent, "When is lunch?")
+    later_turn(agent)
     if stored_member is None:
         # The current schema writes chief turns as 0; shadow it to exercise nullable compatibility rows.
         agent.conn.execute("CREATE TEMP TABLE agent_turns AS SELECT * FROM main.agent_turns")

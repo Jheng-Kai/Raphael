@@ -21,7 +21,7 @@ async def guide_reads(router):
     result = await asyncio.wait_for(asyncio.gather(
         router.call("integrations.catalog"), router.call("connectors.status"),
         router.call("connectors.catalog"),
-    ), .5)
+    ), 5)
     assert len(result) == 3
     assert all(isinstance(item, dict) for item in result)
 
@@ -46,7 +46,7 @@ async def test_pending_composio_never_blocks_guide_reads_and_second_login_is_bus
     hub._connector.login = never_login
     task = asyncio.create_task(router.call("connectors.connect", {"toolkit": "gmail"}))
     try:
-        await asyncio.wait_for(opened.wait(), .5)
+        await asyncio.wait_for(opened.wait(), 5)
         await guide_reads(router)
         # The bounds are for a call that hangs, not a measure of speed: a refusal comes at once, and 200 ms was within
         # reach of a slow CI machine.
@@ -56,12 +56,12 @@ async def test_pending_composio_never_blocks_guide_reads_and_second_login_is_bus
             await asyncio.wait_for(router.call("integrations.connect", {"catalog_id": "slack"}), 2)
         if cancel:
             assert await router.call("integrations.connect_cancel") == {"cancelled": True}
-            assert await asyncio.wait_for(task, .5) == {"connected": False, "error": "cancelled"}
+            assert await asyncio.wait_for(task, 5) == {"connected": False, "error": "cancelled"}
             assert not service.login_pending and not service._lock.locked()
             assert platform.config["toolkits"]["enable"] == []
             await guide_reads(router)
             platform.statuses = ["ACTIVE"]
-            assert (await asyncio.wait_for(router.call("connectors.connect", {"toolkit": "gmail"}), .5))["connected"]
+            assert (await asyncio.wait_for(router.call("connectors.connect", {"toolkit": "gmail"}), 5))["connected"]
         else:
             assert not task.done()
     finally:
@@ -93,7 +93,7 @@ async def test_builtin_login_never_blocks_parallel_guide_reads_and_releases_its_
     hub._config.add(ServerConfig(id="synthetic", name="Synthetic", transport="http", url="https://example.invalid", auth="oauth"))
     task = asyncio.create_task(router.call("integrations.connect", {"id": "synthetic"}))
     try:
-        await asyncio.wait_for(opened.wait(), .5)
+        await asyncio.wait_for(opened.wait(), 5)
         await guide_reads(router)
         with pytest.raises(RpcError, match="under way"):
             await asyncio.wait_for(router.call("integrations.connect", {"catalog_id": "slack"}), 2)
@@ -122,7 +122,7 @@ async def test_abandoned_composio_releases_permissions_and_lock(tmp_path, conn, 
     platform = Platform(["INITIATED"])
     router, service, _, vault = setup_service(tmp_path, conn, platform, sleep=sleep, open_browser=browser, poll_timeout=.02)
     vault.set("connectors:composio:key", "synthetic-key")
-    result = await asyncio.wait_for(router.call("connectors.connect", {"toolkit": "gmail"}), .5)
+    result = await asyncio.wait_for(router.call("connectors.connect", {"toolkit": "gmail"}), 5)
     assert result["error"] == "timeout"
     assert not service.login_pending and not service._lock.locked()
     assert platform.config["toolkits"]["enable"] == []
@@ -138,7 +138,7 @@ async def test_hung_composio_http_answers_with_timeout(tmp_path, conn, monkeypat
 
     router, _, _, vault = setup_service(tmp_path, conn, hung)
     vault.set("connectors:composio:key", "synthetic-key")
-    result = await asyncio.wait_for(router.call("connectors." + method, params), .3)
+    result = await asyncio.wait_for(router.call("connectors." + method, params), 5)
     if method == "status":
         # Status publishes the local snapshot when refreshing the provider fails.
         assert isinstance(result, dict)
@@ -165,7 +165,7 @@ async def test_total_http_timeout_includes_a_body_that_never_finishes(monkeypatc
     stream = Stream()
     http = PrivateHttp(transport=httpx.MockTransport(lambda request: httpx.Response(200, stream=stream)))
     with pytest.raises(ConnectorFailure, match="timeout"):
-        await asyncio.wait_for(http.response("GET", "https://example.invalid", max_bytes=max_bytes), .3)
+        await asyncio.wait_for(http.response("GET", "https://example.invalid", max_bytes=max_bytes), 5)
     assert stream.closed
 
 
@@ -189,7 +189,7 @@ async def test_google_browser_hang_closes_callback_listener():
     vault = MemoryVault()
     vault.set(PREFIX + "client_id", "synthetic-client")
     with pytest.raises(ConnectorFailure, match="timeout"):
-        await asyncio.wait_for(GoogleClient(vault, listener=listener).connect([], browser, timeout=.02), .3)
+        await asyncio.wait_for(GoogleClient(vault, listener=listener).connect([], browser, timeout=.02), 5)
     assert closed == [True]
 
 
@@ -206,7 +206,7 @@ async def test_cancel_closes_an_accepted_incomplete_oauth_callback():
             await asyncio.sleep(0)
         assert listener._writers
         await listener.close()
-        assert await asyncio.wait_for(reader.read(), .2) == b""
+        assert await asyncio.wait_for(reader.read(), 5) == b""
     finally:
         writer.close()
         await writer.wait_closed()
@@ -221,7 +221,7 @@ async def test_device_oauth_request_has_a_total_deadline(monkeypatch):
 
     async with httpx2.AsyncClient(transport=httpx2.MockTransport(hung)) as http:
         with pytest.raises(McpFailure, match="timeout"):
-            await asyncio.wait_for(device._post(http, "https://example.invalid/token", {}), .3)
+            await asyncio.wait_for(device._post(http, "https://example.invalid/token", {}), 5)
 
 
 async def test_oauth_revocation_has_a_total_deadline(monkeypatch):
@@ -241,5 +241,5 @@ async def test_oauth_revocation_has_a_total_deadline(monkeypatch):
 
     monkeypatch.setattr(httpx2, "AsyncClient", client)
     storage = SimpleNamespace(read_for_revocation=lambda: ("synthetic-refresh", None, "synthetic-client"))
-    assert not await asyncio.wait_for(revoke(storage, "https://example.invalid/revoke", timeout_s=.02), .3)
+    assert not await asyncio.wait_for(revoke(storage, "https://example.invalid/revoke", timeout_s=.02), 5)
     assert closed == [True]

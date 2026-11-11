@@ -283,7 +283,7 @@ describe("rendered look checks", () => {
     for (const element of win.document.querySelectorAll('*')) element.getBoundingClientRect = () => rect;
     const found = cover => {
       win.document.elementFromPoint = () => cover && win.document.getElementById(cover);
-      return auditDocument(win.document, { width: 1120, height: 900 }, [], []).productRules.filter(item => item.rule === 'R-UI-140');
+      return auditDocument(win.document, { width: 1120, height: 900 }, [], []).productRules.filter(item => item.rule === 'R-UI-145');
     };
     const hit = found('panel');
     expect(hit).toHaveLength(1);
@@ -291,7 +291,7 @@ describe("rendered look checks", () => {
     expect(found('under')).toEqual([]);
     expect(found(null)).toEqual([]);
     win.document.elementFromPoint = () => win.document.querySelector('#under span');
-    expect(auditDocument(win.document, { width: 1120, height: 900 }, [], []).productRules.filter(item => item.rule === 'R-UI-140')).toEqual([]);
+    expect(auditDocument(win.document, { width: 1120, height: 900 }, [], []).productRules.filter(item => item.rule === 'R-UI-145')).toEqual([]);
     expect(found('menu')).toEqual([]);
     expect(found('drawer')).toEqual([]);
     expect(found('dim')).toEqual([]);

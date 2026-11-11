@@ -1,6 +1,7 @@
 import {scene,click,type,wait,waitGone,member,settings,check,scroll} from "./steps.mjs";
 
-const maker = [{action:"member-column",collapsed:false},click('[data-col="add"]'),click('#app-popover [data-pick="member"]'),wait(".cr-dialog"),click('[data-dlg="templates"]'),wait(".template-gallery")];
+// The gallery is reached from the store page (the sidebar's + › 商店), no longer from 新增成員.
+const maker = [{action:"member-column",collapsed:false},click('[data-col="add"]'),click('#app-popover [data-pick="member-store"]'),wait(".member-store"),click('.member-store [data-dlg="templates"]'),wait(".template-gallery")];
 const preview = [...maker,click('[data-dlg="open"]'),wait(".template-preview"),check("template-content")];
 const accountFixture = {managedConnectors:[{id:"composio:gmail",kind:"composio",name:"Gmail",description:"整理重要來信與準備回覆",status:"ACTIVE",enabled:true,enabled_tools:["GMAIL_FETCH_EMAILS"],disabled_tools:[],accounts:[{id:"work",status:"ACTIVE",label:"工作信箱 · work@example.test"},{id:"personal",status:"ACTIVE",label:"私人信箱 · personal@example.test"}]}]};
 const accounts = [...settings("connections"),click('[data-conn="open"][data-id="composio:gmail"]'),wait(".cs-accts")];
@@ -16,8 +17,12 @@ export default [
   scene("member-template-bad-file","A file that is cut short, is no template or comes from a newer Raphael is said so in plain words, and nothing is previewed",[...maker,click('[data-dlg="open"]'),wait(".toast"),check("colleague-bad-file")],{templateFile:"broken"}),
   scene("member-template-notepad-file","A template saved by Notepad, with a byte-order mark in front, opens in the import review",[...maker,click('[data-dlg="open"]'),wait(".template-preview"),check("template-content")],{templateFile:"bom"}),
   scene("member-template-name-empty","An empty name is refused in the field with one line saying what to do; nothing is added",[...preview,type('[data-template-name]',""),click('.template-preview [data-dlg="import"]'),wait(".template-preview .field-error"),check("colleague-name-empty")]),
-  scene("member-greeting-choices","The first message uses the shared answer form with local choices and free text",[member(1),wait('[data-greeting-question]'),check("colleague-greeting")],{colleague:"greeting"}),
-  scene("member-greeting-goal","Choosing sends the owner words and the colleague asks one outcome question",[member(1),wait('[data-greeting-option]'),click('[data-greeting-option]'),{action:"wait-text",selector:'.ra-scroll',text:"這些工作希望達成什麼成果"},check("colleague-goal")],{colleague:"greeting"}),
+  // A new member sets itself up by cards (owner, 2026-11-11): its line with one question card, then, one at a time, the job saved with
+  // one quiet line, the one app it needs with a line under it, the first task; a clear answer skips the cards.
+  scene("member-greeting-choices","The first message is the member's own line with the one question card: four options and the owner's own answer",[member(1),wait('[data-owner-question="setup-first"][data-card-state="asked"]'),check("colleague-setup-card")],{setupChain:"card"}),
+  scene("member-greeting-goal","Choosing an option answers the card in place, saves the job with one quiet line and asks the first task on one more card",[member(1),wait('[data-owner-question="setup-first"][data-card-state="asked"]'),click('[data-owner-question="setup-first"] [data-owner-option]'),wait('[data-owner-question="setup-task"][data-card-state="asked"]'),check("colleague-setup-job")],{setupChain:"flow"}),
+  scene("member-setup-connect","The one app the job needs is the existing connect card, with one quiet line under it",[member(1),wait('[data-connector]'),check("colleague-setup-connect")],{setupChain:"connect"}),
+  scene("member-setup-collapsed","A clear answer is taken at once: the new name, the job, one sentence and the task, with no card after",[member(1),wait('.bot-renamed'),check("colleague-setup-collapsed")],{setupChain:"collapsed"}),
   scene("team-folder-handoff","A colleague handoff can cite context, meetings and project paths",[member(1),{action:"wait-text",selector:'.ra-scroll',text:"/home/cua/team/projects/"},check("colleague-handoff")],{colleague:"handoff"}),
   scene("account-labels","Connections distinguishes work and personal accounts",[...accounts,check("colleague-accounts")],accountFixture),
   scene("account-label-edit","The owner names an exact signed-in account",[...accounts,click('[data-conn="account-label"][data-account="work"]'),wait('[data-account-name]'),type('[data-account-name]',"研究信箱"),click('.mb-dialog [data-dlg="save"]'),waitGone('[data-account-name]'),check("colleague-label-saved")],accountFixture),

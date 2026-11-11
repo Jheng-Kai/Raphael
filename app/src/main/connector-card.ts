@@ -154,7 +154,9 @@ export function connectorCardHTML(card: ConnectorCard): string {
 
 /** The cards a turn showed, below what it said. */
 export function connectorCardsHTML(turn: AgentTurn): string {
-  return (turn.connectors ?? []).map(connectorCardHTML).join("");
+  const cards = (turn.connectors ?? []).map(connectorCardHTML).join("");
+  // The one app a new member asks for in its set-up comes with one quiet line under the card.
+  return cards + (cards && turn.setup ? `<p class="setup-note" data-setup-note>${esc(t("cards.connectYes"))}</p>` : "");
 }
 
 /** The brand names of the apps (`connectors/apps.py`), never translated. */

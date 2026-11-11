@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
-import ts from "typescript";
+// TypeScript 7 (the build) ships no compiler API; parsing uses the 6.x compatibility package it recommends for tools.
+import ts from "typescript-6";
 import { UI_LOCALES } from "../locales.mjs";
 
 /** Read literal catalog data, including imported spreads, without evaluating app modules. */

@@ -3,7 +3,7 @@
 // the core wrote goes through `esc` first.
 
 import { onLocaleChange, t, translatedMessage } from "./i18n";
-import { pressWentThrough, registerDismissal } from "./dismissals";
+import { pressWentThrough, pressWithoutOpener, registerDismissal } from "./dismissals";
 
 import { type Notifier, UNDO_MS } from "./undo";
 import { ICON } from "./icon-set";
@@ -406,7 +406,8 @@ export function pressOverflow(button: HTMLElement, at?: { x: number; y: number }
   if (!menu?.el.contains(button)) closeMenu();
   if (at) pointedAt.set(button, { ...at, until: performance.now() + POINTED_GRACE_MS });
   else pointedAt.delete(button);
-  button.click();
+  // The row was pressed, not the ⋯: a press on the ⋯ afterwards moves the menu under it (R-UI-124 leaves it no opener).
+  pressWithoutOpener(() => button.click());
 }
 
 export function closeMenu(): void {
@@ -761,6 +762,8 @@ export interface MenuAction {
   label: string;
   desc?: string;
   icon?: IconName;
+  /** A mark drawn for this item alone, in the icon's place (trusted HTML: a member's faces, a tile). */
+  mark?: string;
   submenu?: boolean;
   /** What it does is under way: the item stays where it is but does nothing until it is done. */
   busy?: boolean;
@@ -823,7 +826,7 @@ export function openMenu(
       .map(
         (a, i) =>
           `<button type="button" role="${placement?.completion ? "option" : "menuitem"}"${placement?.completion ? ' aria-selected="false"' : ""} tabindex="-1" class="menu-action" data-action="${i}"${a.busy ? ' aria-disabled="true"' : ""}${a.submenu ? ' aria-haspopup="menu" aria-expanded="false"' : ""}>` +
-          `<span class="ck">${a.icon ? ico(a.icon) : ""}</span><span class="mtd"><span class="mt">${esc(a.label)}</span>${a.desc ? `<span class="mdesc">${esc(a.desc)}</span>` : ""}</span>${a.submenu ? ico("right") : ""}</button>`,
+          `${a.mark ? `<span class="mmark" aria-hidden="true">${a.mark}</span>` : `<span class="ck">${a.icon ? ico(a.icon) : ""}</span>`}<span class="mtd"><span class="mt">${esc(a.label)}</span>${a.desc ? `<span class="mdesc">${esc(a.desc)}</span>` : ""}</span>${a.submenu ? ico("right") : ""}</button>`,
       )
       .join("");
   const el = openPopover(anchor, html, {
@@ -959,6 +962,11 @@ class Toaster implements Notifier {
    * time it has left (styles.css), so that its going is no surprise.
    */
   show(message: string, undo?: () => void): void {
+    // The same note again takes the place of the one on screen and starts its time over: six failures in a row are one
+    // note, not a pile of six (owner's screen, 2026-11-11).
+    for (const shown of [...this.messages.keys()]) {
+      if (shown !== this.undoToast && shown.querySelector("span")?.textContent === message) { shown.remove(); this.messages.delete(shown); }
+    }
     const toast = document.createElement("div");
     toast.className = "toast";
     toast.setAttribute("role", "status");

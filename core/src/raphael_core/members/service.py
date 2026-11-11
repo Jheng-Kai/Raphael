@@ -15,12 +15,16 @@ The RPC methods (the main window only, through the shell's allow-list):
   `{member, routine_offer}`. `routine_offer` is the routine offered to a member of a group that
   has places to look (`sources`): `{title, prompt, schedule}` for 「每天早上的進度」 at 09:00, or
   null. It is offered, not made: `routines.create` makes it.
-- `members.greet {id}` -> `{turn_id}`: start another hidden, tool-free greeting before any owner
-  message, replacing failed greetings. Only the member's own interactive brain answers it.
+- `members.greet {id}` -> `{turn_id}`: start another hidden greeting before any owner message,
+  replacing failed greetings. Only the member's own interactive brain answers it, and the one tool
+  it may call is the question card that asks what to take on first (`agent.service.begin_setup`
+  carries on from the owner's answer).
 - `members.update {id, name?, role?, personality?, instructions?, group_id?, avatar?, tools?, model?, position?}`
   -> `{member}`. `avatar` here is "" or a slime, "slime:<character>" or "slime:color:<color>". Raphael (0) is not changed here: his picture is the app's to change.
 - `members.delete {id}` -> `{deleted}`: the member, its conversation (and the exchanges of other
-  threads with it), its memory folder, its routines, its tasks and its picture. The app asks first.
+  threads with it), its memory folder, its routines, its tasks and its picture. The app asks first. Its own
+  computer, if it had one, is removed too, afterwards and in the background (`computer/removals.py`): the answer
+  never waits for it, and nothing is asked of the caller about it.
 - `members.set_primary {id}` -> `{primary_id}`: the owner's primary contact, the Bot that new work is brought
   to and that hands it to the colleague it belongs to. Raphael (0) until the owner chooses another; exactly one
   at a time. The roster says who it is to every model and to the window (`members.list`'s `team_context`,
@@ -297,7 +301,8 @@ class MembersService:
         self._notify = notify
         # Told of each member made through the tools: who made it, and which it is.
         self.member_made = lambda maker, made: None
-        self.remove_computer_data = None
+        # The record of the computers (computer/removals.py `ComputerData`): who has one, and what a deleted member owes.
+        self.computer_data = None
         self.remove_messaging = None
         self.deleting: set[int] = set()
         self._connections = connections
@@ -1118,14 +1123,10 @@ class MembersService:
 
     async def _delete(self, params: dict) -> dict:
         member_id = self._member_id(params)
-        if type(params.get("remove_computer_data", False)) is not bool:
-            raise invalid_params("remove_computer_data must be a boolean")
-        if params.get("remove_computer_data"):
-            if self.remove_computer_data is None:
-                raise invalid_params("Computer data removal unavailable")
-            await self.remove_computer_data(member_id, params.get("computer_host"))
         member = self.store.member(member_id)
         assert member is not None
+        # Read before the member goes, with nothing contacted: its computer is the app's to remove afterwards.
+        computers = self.computer_data.claim(member_id) if self.computer_data is not None else []
         self.deleting.add(member_id)
         try:
             if self.remove_messaging is not None:
@@ -1143,9 +1144,14 @@ class MembersService:
             if not any(other.id != member_id and other.avatar == member.avatar for other in self.store.members()):
                 self._remove_picture(member.avatar)
             self._save_cover(member_id, None)
-            deleted = self.store.delete_member(member_id)
+            with self.store.transaction():  # the member and what is owed for its computer, or neither
+                deleted = self.store.delete_member(member_id)
+                if deleted and computers:
+                    self.computer_data.owe(computers)
             if self._viewing == member_id:
                 self._viewing = None
+            if deleted and computers:
+                self.computer_data.settle_soon()  # in the background: the answer below never waits for it
             if deleted:
                 await self.webhooks.sync()
                 self._changed()

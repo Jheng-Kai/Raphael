@@ -64,6 +64,40 @@ def words(language: str, key: str, **values: str) -> str:
     return table[key].format(**values)
 
 
+# The lines a question card is written with where it cannot be drawn (a chat). Other languages read the English.
+_QUESTION_WORDS: dict[str, dict[str, str]] = {
+    "zh-TW": {"one": "回覆選項字母（例如 A）。", "many": "可複選。回覆選項字母（例如 A、C）。", "skip": "回覆「略過」可以略過。", "own": "也可以直接寫下你的答案。"},
+    "zh-CN": {"one": "回复选项字母（例如 A）。", "many": "可多选。回复选项字母（例如 A、C）。", "skip": "回复“略过”可以略过。", "own": "也可以直接写下你的答案。"},
+    "en": {"one": "Reply with a letter, for example A.", "many": "Choose all that apply: reply with letters, for example A, C.",
+           "skip": "Reply \"skip\" to skip it.", "own": "Or write your own answer."},
+    "ja": {"one": "選択肢の記号で答えてください（例: A）。", "many": "複数選べます。記号で答えてください（例: A、C）。",
+           "skip": "「スキップ」と返すと飛ばせます。", "own": "自分の言葉で答えることもできます。"},
+}
+
+
+def question_text(language: str, payload: dict) -> str:
+    """A question card written as plain lines for a chat: the question, its grey line, the lettered choices with their
+    descriptions, and how to answer. `payload` is the card as the core stores it (`question_input`)."""
+    table = _QUESTION_WORDS.get(language, _QUESTION_WORDS["en"])
+    options, notes = payload.get("options", []), payload.get("descriptions", [])
+    lines = [payload["question"]]
+    if payload.get("subtitle"):
+        lines.append(payload["subtitle"])
+    if options:
+        lines.append("")
+        for index, option in enumerate(options):
+            lines.append(f"{chr(65 + index)}. {option}" + (f" — {notes[index]}" if index < len(notes) and notes[index] else ""))
+        lines.append("")
+        lines.append(table["many" if payload.get("multiple") else "one"])
+        if payload.get("skip"):
+            lines.append(table["skip"])
+        if payload.get("free_text", True):
+            lines.append(table["own"])
+    elif payload.get("skip"):
+        lines.extend(["", table["skip"]])
+    return "\n".join(lines)
+
+
 def heard(language: str, transcript: str) -> str:
     """The line that says what was understood from a voice message."""
     text = " ".join(transcript.split())

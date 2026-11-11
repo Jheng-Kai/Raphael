@@ -4,7 +4,7 @@
    2026-11-11: a page shown whole made the conversation one very long block). Under its title row the card shows only the top
    of the page, clipped, with no scrollbar and nothing in it to press or scroll (the frame is inert and takes no pointer, so
    the thread scrolls over it); the cut fades into the card's own surface (--panel), in both themes. The preview is one
-   control: pressing it opens the page whole, as a page made larger (below). The frame keeps the height the page says, so
+   control: pressing it opens the page whole, in the conversation's place (page-view.css). The frame keeps the height the page says, so
    the page itself never scrolls behind the clip. */
 .pg-card { display: grid; grid-template-columns: minmax(0, 1fr); justify-self: start; width: min(calc(560px + 200 * var(--pa-u)), 100%); overflow: hidden; border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--content); }
 .pg-body { position: relative; height: var(--h-page-peek); overflow: hidden; border-radius: var(--r-sm); background: var(--panel); cursor: pointer; }
@@ -29,22 +29,6 @@
 .pg-card .pg-failed > .card-actions { justify-content: center; }
 .pg-fallback { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; max-width: 100%; margin: 0; padding: var(--sp-2) var(--sp-3); color: var(--text); font-size: var(--fs-sm); white-space: pre-wrap; overflow-wrap: anywhere; overflow: hidden; }
 @keyframes pg-loading { 50% { opacity: 0.6; } }
-
-/* A page made larger is the page alone, as a picture made larger (the lightbox) and a report are: its card's title,
-   which the page's own heading says again, stays only as the dialog's name. Its × is the soft round edge button, and it never
-   covers the page: it stands just outside the page's top right corner, above it and right-aligned with it, on the scrim
-   (owner, 2026-11-11: a page with something at its top right was covered by it). The scrim keeps the room for it under the
-   window's caption strip, so at every width, a page as wide as the window included, it stays above the page and inside the
-   window. The dialog is as tall as the page says it is there, up to three quarters of the window, so a short page leaves no
-   blank box, and at most the conversation's 960 px column (R-UI-45; the judge on page-expand, 3/5, 2026-11-10: a dialog
-   three quarters of the window tall around a short page, its title twice). */
-.mb-scrim:has(> .pg-view-dialog) { padding-top: calc(var(--window-controls-height) + var(--sp-2) + 36px + var(--sp-2)); }
-.mb-dialog.pg-view-dialog { position: relative; width: min(960px, calc(100vw - 48px)); gap: 0; padding: 0; overflow: visible; }
-.pg-view-dialog .mb-dlg-head { position: absolute; bottom: calc(100% + var(--sp-2)); right: 0; z-index: 1; }
-.pg-view-dialog .mb-dlg-head h2 { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-/* The dialog no longer clips, so the page's rounded corners are the body's. */
-.mb-dialog.pg-view-dialog .mb-dlg-body { padding: 0; overflow: hidden; border-radius: var(--r-lg); }
-.pg-view { height: min(var(--pg-h, 320px), 75vh); background: var(--content); }
 
 @media (prefers-reduced-motion: reduce) {
   .pg-body[data-state="loading"] { animation: none; }

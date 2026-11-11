@@ -21,7 +21,7 @@ import {
   sourceLabel,
 } from "./members";
 import type { MemberGroup, MemberSource, RoutineOffer, WireAttachment } from "./types";
-import { type ActionRowOptions, actionRow, btn, closeMenu, esc, ico, iconButton, openPopover, row, tg, toaster } from "./ui";
+import { type ActionRowOptions, actionRow, btn, closeMenu, esc, ico, iconButton, openPopover, toaster } from "./ui";
 
 // ---------- the dialog ----------
 
@@ -141,24 +141,22 @@ export function openDialog(o: DialogOptions): Dialog {
   return dialog;
 }
 
-/** Confirms deletion or history clearing with the shared compact destructive dialog. */
-export function confirmDelete(name: string, options: { clearHistory?: boolean; computerHost?: string; removeComputer?(remove: boolean): void } = {}): Promise<boolean> {
+/**
+ * Confirms deletion or history clearing with the shared compact destructive dialog: the title, one sentence and the two
+ * buttons, as Grok Bot's. A member's own says that the member and its conversation go for good. Nothing is asked about
+ * what the deletion also clears (a member's computer is the app's to remove, without a word to the owner).
+ */
+export function confirmDelete(name: string, options: { clearHistory?: boolean; member?: boolean } = {}): Promise<boolean> {
   return new Promise((resolve) => {
-    let answer = false, removeComputer = false;
+    let answer = false;
     openDialog({
       title: options.clearHistory ? t("conversations.clearConfirm", { p0: name }) : t("members.deleteConfirm", { p0: name }),
-      body: `<p>${esc(t("members.deleteHint"))}</p>` + (options.computerHost !== undefined ? row(esc(t('desktop.deleteData', { p0: name })), options.computerHost ? esc(t('desktop.dataHostRemote', { p0: options.computerHost })) : '', tg(false, t('desktop.deleteData', { p0: name }), ' data-dlg="remove-computer" data-remove-computer')) : ''),
+      body: `<p>${esc(t(options.member ? "members.deleteForever" : "members.deleteHint"))}</p>`,
       describedByBody: true,
       cls: "mb-confirm",
       actions: { secondary: btn(esc(t("common.cancel")), "", ' data-dlg="cancel"'), primary: { label: esc(options.clearHistory ? t("conversations.clear") : t("members.delete")), attrs: ' data-dlg="delete"' } },
-      onAct(act, target, dialog) {
-        if (act === 'remove-computer') {
-          removeComputer = !removeComputer;
-          target.closest('[data-remove-computer]')?.setAttribute('aria-checked', String(removeComputer));
-          return;
-        }
+      onAct(act, _target, dialog) {
         answer = act === "delete";
-        if (answer) options.removeComputer?.(removeComputer);
         dialog.close();
       },
       onClose: () => resolve(answer),

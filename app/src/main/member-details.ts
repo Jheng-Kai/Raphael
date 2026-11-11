@@ -68,7 +68,7 @@ export function createDetails(host: DetailsHost): DetailsPanel {
   el.innerHTML =
     // The gear on the left edge and close on the right, apart: the gear opens the member's settings as
     // a page of its own in the main area. Sharing is done from the conversation's header.
-    `<div class="mb-det-head">${iconButton("gear", t("computer.settings"), ' data-det="gear"', "mb-tool")}<span class="mb-det-fill"></span>${iconButton("x", t("members.close"), ' data-det="close"', "mb-tool")}</div>` +
+    `<div class="mb-det-head" data-window-drag>${iconButton("gear", t("computer.settings"), ' data-det="gear"', "mb-tool")}<span class="mb-det-fill"></span>${iconButton("x", t("members.close"), ' data-det="close"', "mb-tool")}</div>` +
     `<div class="mb-det-scroll"><div class="mb-who"></div><div class="mb-tabs"></div><div class="mb-tab-body" role="tabpanel" id="member-panel-body"></div></div>`;
   const who = el.querySelector<HTMLElement>(".mb-who")!;
   const tabBar = el.querySelector<HTMLElement>(".mb-tabs")!;

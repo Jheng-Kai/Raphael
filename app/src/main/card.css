@@ -48,11 +48,28 @@
 .conversation-card .mail-in.mb-fin:focus, .conversation-card .mail-body.mb-fin:focus { border-color: var(--edge); background: var(--panel); }
 .conversation-card .mail-body.mb-fin { display: block; width: calc(100% - 16px); margin: 8px; min-height: 110px; }
 .conversation-card .question-choices { display: flex; flex-direction: column; }
-.question-choices .btn { display: flex; justify-content: start; align-items: start; gap: 10px; width: 100%; border: 0; border-radius: 0; padding: 10px 12px; text-align: start; white-space: normal; background: transparent; }
+.question-choices .question-choice { display: flex; justify-content: start; align-items: start; gap: 10px; width: 100%; border: 0; border-radius: 0; padding: 10px 12px; text-align: start; white-space: normal; background: transparent; }
 [data-choice-letter] { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 22px; flex: 0 0 20px; border-radius: var(--sp-1); background: var(--hover); color: var(--text-3); }
 /* The answer field and its button stand as one row at the same height (the judge: the 送出回答 button was 22 px beside a 30 px field, R-UI-17). */
 .question-submit { display: flex; align-items: stretch; gap: 8px; }
 .question-submit input { flex: 1; width: 0; }
+/* The question card, as Grok Bot draws its form of choices: rows with hairlines in a well, a square letter badge before the words (a check on a row chosen
+   on a several-choice card), an optional grey line under the words, and the owner's own answer as the last row, a field that grows to three lines with its
+   pill at the right once something is typed. */
+.owner-question .question-words { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.owner-question .question-note { color: var(--text-3); font-size: var(--fs-2xs); line-height: 1.4; }
+.owner-question [data-choice-letter] > svg { display: none; width: 16px; height: 16px; }
+.owner-question [aria-checked="true"] [data-choice-letter] { background: var(--text); color: var(--panel); }
+.owner-question [aria-checked="true"] [data-choice-letter] > span { display: none; }
+.owner-question [aria-checked="true"] [data-choice-letter] > svg { display: block; }
+.owner-question .question-own { display: flex; align-items: flex-end; gap: 8px; padding: 6px 8px 6px 12px; }
+.owner-question .question-own textarea { flex: 1; width: 0; resize: none; min-height: calc(var(--h-field) - 2px); max-height: calc(3lh + 8px); padding: 4px 0; border-color: transparent; background: transparent; line-height: 1.5; overflow-y: auto; }
+.owner-question .question-own .btn { flex: 0 0 auto; }
+/* An answered card is its title and one row: the words in the quiet colour, a check at the right; the whole words open when they were cut to the line. */
+.owner-question .question-answer-line.btn { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; min-height: 0; padding: 10px 12px; border: 0; border-radius: 0; background: transparent; color: var(--text-2); text-align: start; }
+.owner-question .question-answer-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.owner-question .question-answer-line[aria-expanded="true"] .question-answer-text { white-space: pre-wrap; overflow-wrap: anywhere; overflow: visible; }
+.owner-question .question-answer-line > svg { width: 16px; height: 16px; flex: 0 0 16px; }
 .conversation-card .sc-form { display: flex; grid-column: auto; flex-wrap: wrap; gap: 8px; }
 .conversation-card .sc-field { min-width: 100px; flex: 1; }
 .conversation-card .sc-login { flex-direction: column; }
@@ -90,9 +107,9 @@
 /* The hit target keeps the preview visible; a theme hover fill would wash out its frame-coloured icon. */
 .card-computer-screen > .btn:hover:not(:disabled), .card-computer-screen > .btn:active:not(:disabled) { background: transparent; }
 .card-computer-screen > iframe { height: 100%; }
-/* A message that could not be sent starts where the field it came from starts, a card no wider than any other card
+/* A message that could not be sent stands at the composer's left, inside its box and above its row, a card no wider than any other card
    (judge R-UI-45, 2026-11-10: centred in the composer, it floated between two empty gutters). */
-.composer-failure { margin: 0 0 8px; }
+.composer-failure { margin: var(--sp-1) var(--sp-1) var(--sp-2); }
 .conversation-card .mcp-fields { padding: 12px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
 .conversation-card .mcp-field { min-width: 0; }
 @keyframes card-spin { to { rotate: 360deg; } }
@@ -101,6 +118,7 @@
 :is(.page-agent, .cs-dialog) .conversation-card .btn.pri, :is(.page-agent, .cs-dialog) .conversation-card .btn.pri:hover:not(:disabled), :is(.page-agent, .cs-dialog) .conversation-card .btn.pri:active:not(:disabled) { background: var(--card-primary); color: var(--card-primary-ink); border-color: var(--card-primary-edge); }
 .page-agent .conversation-card .btn.pri:active:not(:disabled) { background: color-mix(in srgb, var(--card-primary) 85%, var(--card-primary-ink)); }
 .conversation-card .question-choice { border: 0 solid var(--edge); border-bottom-width: 1px; }
+.conversation-card .question-choice:last-child { border-bottom-width: 0; }
 .conversation-card .mail-in { font-weight: 400; }
 .conversation-card .draft-more-toggle { padding: 6px 8px; }
 

@@ -486,6 +486,8 @@ class BackgroundService:
         self._paused: dict[int, _Paused] = {}
         from ..agent.owner_questions import OwnerQuestions
         self.owner_questions = OwnerQuestions(conn, self._owner_answered, now_ms)
+        # Where the answer to a new member's first card goes (`use_setup`).
+        self._setup = None
         self._owner_tools = None
         self._attachment_store = None
         self._expiry: asyncio.TimerHandle | None = None
@@ -503,6 +505,12 @@ class BackgroundService:
 
     def use_owner_tools(self, execute) -> None:
         self._owner_tools = execute
+
+    def use_setup(self, begin) -> None:
+        """Let the answer to the card of a new member's first message start the member's set-up: `begin(turn_id, member_id,
+        question, answer, language)`, true once it took the answer over. An answer that could not be taken over yet (a restart, before the
+        agent runs) waits, and `recover_owner_waits` offers it again."""
+        self._setup = begin
 
     def _artifact(self, task, payload):
         if task.turn_id:
@@ -572,6 +580,10 @@ class BackgroundService:
         question = self.owner_questions.get(saved.get("owner_wait")) if saved.get("owner_wait") else None
         if question is None or question["result"] is None:
             return
+        origin = self._history.get(task.turn_id) if task.turn_id else None
+        if question["kind"] == "ask_owner" and origin is not None and origin.source == "greeting":
+            self._greeting_answered(task, question)
+            return
         with self._metrics_conn:
             changed = self._metrics_conn.execute("UPDATE worker_tasks SET state='queued' WHERE id=? AND state='waiting'",
                                                  (task_id,)).rowcount
@@ -581,6 +593,25 @@ class BackgroundService:
             self._notify("agent.turn", {"turn_id": task.turn_id, "member_id": task.member_id})
             self._changed(task_id, QUEUED)
             self._ensure_pump()
+
+    def _greeting_answered(self, task, question) -> None:
+        """The card of a new member's first message was answered or closed. Nothing of the greeting goes on: its task ends
+        here, with the greeting as it stands, and an answer is the start of the member's set-up in a turn of its own."""
+        result = question["result"]
+        # An owner who wrote something else instead, or skipped it, has left the set-up; only an answer goes on (a card that takes
+        # several choices gives them as a list).
+        answer = result.get("answer") if result.get("state") == "answered" else None
+        if isinstance(answer, list):
+            answer = "; ".join(map(str, answer))
+        if answer and (self._setup is None or task.member_id is None):
+            return  # not wired yet: `use_setup` asks again
+        if answer and not self._setup(task.turn_id, task.member_id, question["question"], answer, task.language):
+            return
+        self._store.finish(task.id, "done", prefix="", text="", detail=None, reason=None)
+        with self._metrics_conn:
+            self._metrics_conn.execute("UPDATE worker_tasks SET continuation=NULL WHERE id=?", (task.id,))
+        self._changed(task.id, "done", ending=True)
+        self._notify("agent.turn", {"turn_id": task.turn_id, "member_id": task.member_id})
 
     def bring_owner_question(self, identifier) -> int | None:
         """Move a question still waiting for the owner to the end of its conversation, when the owner has said
@@ -673,6 +704,8 @@ class BackgroundService:
                 "seen_urls": list(seen_urls), "untrusted": ask.memory_untrusted, "conversation_cost": loop.ledger.total,
                 "acted": bool(ask.made)},
             "spec": {"task_id": task_id, "system": loop.system, "user": loop.user}})
+        if ask.source == "greeting":
+            self._store.scrub(task_id)  # the request of a greeting is no words of the owner's
         self._notify("agent.turn", {"turn_id": ask.turn_id, "member_id": ask.speaker.id})
         self._changed(task_id, "waiting")
         return question
@@ -1725,7 +1758,8 @@ class BackgroundService:
             if question is None or question["result"] is None:
                 self._store.set_state(task.id, "waiting")
                 return
-            result = question["result"]
+            from ..agent.owner_questions import model_result
+            result = model_result(question["result"])
             # The card or question the run waited at was put to the owner (a page, a draft): it is made, and what the owner
             # answered, or whether they cancelled it, is their decision and no failure of the run (a routine's end is judged by it).
             run.succeeded.add(question["kind"])
@@ -1871,7 +1905,9 @@ class BackgroundService:
                 if loop.failure:
                     run.model_failure = loop.failure_reason or Failure(loop.failure, loop.failure)
                     legacy = {"rate_limit": "rate_limited", "usage_limit": "quota", "auth_expired": "login", "unknown": "error"}
-                    reply = {"status":"stopped", "kind":"failed", "detail":"cli_" + legacy.get(loop.failure, loop.failure), "final":outcome.final, "diagnostic_detail":outcome.detail}
+                    # A sign-in that ran out is a failed run of its own cause, told from one that never was (rooms and routines name it).
+                    cli_reason = "login_expired" if getattr(loop.failure_reason, "cause", None) == "expired" else legacy.get(loop.failure, loop.failure)
+                    reply = {"status":"stopped", "kind":"failed", "detail":"cli_" + cli_reason, "final":outcome.final, "diagnostic_detail":outcome.detail}
                 self._conclude_run(task, run, reply)
         except TimeoutError:
             self._conclude_run(task, run, {"status":"stopped", "kind":"limit_time"})

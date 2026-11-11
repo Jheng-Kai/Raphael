@@ -116,7 +116,7 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
       const cutY = /hidden|clip/.test(style.overflowY) && !(parseInt(style.webkitLineClamp, 10) > 0) && element.scrollHeight > element.clientHeight + 1;
       if (cutX || cutY) clippedText.push({ ...description, cut: cutX ? `x ${element.scrollWidth}>${element.clientWidth}` : `y ${element.scrollHeight}>${element.clientHeight}` });
     }
-    // R-UI-140: a control that is drawn answers a press. Something else standing on it (a panel that stayed in the layout under the
+    // R-UI-145: a control that is drawn answers a press. Something else standing on it (a panel that stayed in the layout under the
     // open one, a card that grew over its neighbour) is a defect even when every "is it hidden" question says no: it was found
     // by a person looking at a picture (2026-11-11, the slimes of every closed tab drawn over the open tab's).
     // A layer that is fixed to the window (a menu, a dialog, a scrim, a toast, the window's own buttons) is meant to stand over the
@@ -128,7 +128,7 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
         const covers = at.map(([x, y]) => coverOf(element, x, y)).filter(Boolean);
         // The centre alone is enough; the corners only count when most of them are covered, so a rounded edge is not a finding.
         const centre = coverOf(element, at[0][0], at[0][1]);
-        if (centre || covers.length >= 3) productRules.push({ ...description, rule: 'R-UI-140', reason: `A control is covered by ${(() => { const o = describe(centre || covers[0]); return `<${o.tag}${o.class ? ' class="' + o.class + '"' : ''}> "${(o.text || '').slice(0, 40)}"`; })()}` });
+        if (centre || covers.length >= 3) productRules.push({ ...description, rule: 'R-UI-145', reason: `A control is covered by ${(() => { const o = describe(centre || covers[0]); return `<${o.tag}${o.class ? ' class="' + o.class + '"' : ''}> "${(o.text || '').slice(0, 40)}"`; })()}` });
       }
     }
     // The conversation between members has the same jump-to-latest edge button as a conversation (peer-chat.ts).
@@ -137,7 +137,7 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
     // so is an icon that floats on a picture (the lightbox's close, a member page's way back and its cover's change), which needs its own surface,
     // and so are the guide's foot's round buttons: a rerun's × on a quiet grey, and a step's pair, the way back on that grey and
     // the way on a circle of the accent (owner, 2026-11-11).
-    const sidebarAction = element.matches(".side .btn.icon, .page-agent .mb-det-head .btn.icon, .page-agent .mb-head :is(.ra-tools, .mb-head-l) .btn.icon, :is(.mb-dlg-head, .cs-dlg-head, .room-side-thread > header, .desktop-panel[data-expanded] .desktop-dock, .rp-top) .btn.icon, .btn.icon.modal-x, .ob-foot .btn.icon.ob-back, .ob-foot .ob-pair > .btn.icon, .media-lightbox .lb-card > .btn.icon.lb-close, .ms-cover > .btn.icon.ms-cover-btn, .ms-bar > .btn.icon.ms-back");
+    const sidebarAction = element.matches(".side .btn.icon, .page-agent .mb-det-head .btn.icon, .page-agent .mb-head :is(.ra-tools, .mb-head-l, .room-picker) .btn.icon, :is(.mb-dlg-head, .cs-dlg-head, .room-side-thread > header, .desktop-panel[data-expanded] .desktop-dock) .btn.icon, .btn.icon.modal-x, .ob-foot .btn.icon.ob-back, .ob-foot .ob-pair > .btn.icon, .media-lightbox .lb-card > .btn.icon.lb-close, .ms-cover > .btn.icon.ms-cover-btn, .ms-bar > .btn.icon.ms-back");
     const violation = (rule, reason) => productRules.push({ ...description, rule, reason });
     if (element.matches('button:disabled[title], [aria-disabled="true"][title]')) {
       const title = element.getAttribute('title')?.trim();
