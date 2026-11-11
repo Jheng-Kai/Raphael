@@ -20,7 +20,7 @@ dependencies = [
     "sounddevice==0.5.6",
     "soundfile==0.14.0",
     "soxr>=1.1",
-    "tzdata>=2025.3",
+    "tzdata>=2026.6",
 ]
 
 [dependency-groups]
@@ -28,8 +28,8 @@ packaging = [
     "pyinstaller==6.22.3",
 ]
 dev = [
-    "pytest>=8",
-    "pytest-asyncio>=0.24",
+    "pytest>=9.2.0",
+    "pytest-asyncio>=1.4.1.post1",
 ]
 
 [build-system]
