@@ -63,9 +63,9 @@ test.each([
   ["slime:diablo", "characters"],
   ["slime:oni-red", "fantasy"],
   ["slime:phoenix-feather", "fantasy"],
-  ["slime:cherry-blossom", "seasonal"],
+  ["slime:cherry-blossom", "nature"],
   ["slime:cloud", "nature"],
-  ["slime:parcel", "objects"],
+  ["slime:parcel", "everyday"],
 ])("it opens on the group that holds the face now: %s is in %s, and the face is marked there", (avatar, group) => {
   expect(slimeGroupOf(avatar)).toBe(group);
   const picker = open(avatar);
@@ -135,7 +135,8 @@ test("Down goes from the tab into the open group, Up and Down step over its slim
   const picker = open("slime:cherry-blossom");
   const tab = tabsOf(picker).find(item => item.getAttribute("aria-selected") === "true")!;
   const grid = [...picker.querySelectorAll<HTMLElement>("[data-slime-group][data-active] button")];
-  expect(grid.length).toBe(6);
+  // The seasons and the food stand with nature: eight elements and six of the seasons.
+  expect(grid.length).toBe(14);
   key(tab, "ArrowDown");
   expect(document.activeElement).toBe(grid.find(button => button.getAttribute("aria-pressed") === "true"));
   key(document.activeElement!, "End");

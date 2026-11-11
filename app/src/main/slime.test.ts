@@ -31,14 +31,14 @@ const catalogButtons = [...catalogPicker.querySelectorAll<HTMLElement>("[data-sl
 const catalogIds = catalogButtons.map(button => button.dataset.slimeCharacter as SlimeCharacter);
 const originalIds = ["rimuru", "shion", "diablo", "benimaru", "shuna", "souei", "hakurou", "gobta", "rigur", "rigurd", "milim", "veldora", "ranga", "gabiru", "geld", "treyni", "kurobe", "shizu", "hinata", "guy", "testarossa", "ultima", "carrera", "ramiris"];
 const catalogStates: SlimeState[] = ["idle", "thinking", "working", "searching", "computer", "waiting", "blocked", "done", "error", "sleeping", "arriving"];
-const groupIds = ["characters", "fantasy", "animals", "jobs", "nature", "seasonal", "objects", "colors"] as const;
+const groupIds = ["characters", "fantasy", "animals", "nature", "everyday", "colors"] as const;
 const colorButtons = [...catalogPicker.querySelectorAll<HTMLElement>("[data-slime-color]")];
 const colorIds = colorButtons.map(button => button.dataset.slimeColor as SlimeColor);
 
 test("every character belongs to one labeled group, in the owner's order without reordering its slimes", () => {
   const groups = [...catalogPicker.querySelectorAll<HTMLElement>("[data-slime-group]")];
   expect(groups.map(group => group.dataset.slimeGroup)).toEqual(groupIds);
-  expect(groups.map(group => group.querySelectorAll('[role="menuitem"]').length)).toEqual([24, 26, 12, 8, 8, 6, 4, colorIds.length]);
+  expect(groups.map(group => group.querySelectorAll('[role="menuitem"]').length)).toEqual([24, 26, 12, 14, 12, colorIds.length]);
   // 角色 is the story's characters and no one else; the archetypes, the red oni first, have their own tab (owner, 2026-11-11).
   const inGroup = (group: string): string[] => [...catalogPicker.querySelectorAll<HTMLElement>(`[data-slime-group="${group}"] [data-slime-character]`)].map(button => button.dataset.slimeCharacter!);
   expect(inGroup("characters")).toEqual(originalIds);
