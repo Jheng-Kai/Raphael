@@ -633,12 +633,21 @@ export function checkRendered(name, context = {}) {
     require(window.__look.calls.some(call => call.method === 'computer.viewer_status' && call.params.check_host && call.params.alias === 'studio-mini'), 'checks the selected alias through the existing owner RPC');
     return {check:name};
   }
-  if (name === 'delete-member-computer') {
-    const checkbox = document.querySelector('[data-remove-computer]');
-    require(visible(checkbox) && checkbox.matches('.tg[role="switch"][aria-checked="false"]'), 'computer cleanup uses the shared switch and defaults to unchecked');
-    require(checkbox.closest('.row').textContent.includes('小晴的電腦'), 'deletion names the member computer');
-    require(!window.__look.calls.some(call => call.method === 'members.delete'), 'showing the option performs no deletion');
-    return {check:name};
+  if (name === 'member-delete-ask') {
+    // Grok Bot's dialog and nothing more (owner, 2026-11-11): the member's name, one sentence, Cancel and Delete. A member's
+    // computer is removed by the app on its own, so the question never mentions it, whether the member has one or not.
+    const dialog = document.querySelector('.mb-dialog.mb-confirm');
+    require(visible(dialog), 'the delete question is open');
+    const title = dialog.querySelector('h2').textContent;
+    require(window.__look.data.members.some(person => title === `刪除「${person.name}」？`), `the title names the member (${title})`);
+    const sentences = [...dialog.querySelectorAll('p')].map(node => node.textContent);
+    require(sentences.length === 1 && sentences[0] === '永久刪除這位成員和對話紀錄，此操作無法復原。', `one sentence says the member and its conversation go for good (${sentences.join(' | ')})`);
+    const buttons = [...dialog.querySelectorAll('button')].filter(visible).map(button => button.textContent.trim());
+    require(buttons.join('|') === '取消|刪除', `two buttons, Cancel then Delete (${buttons.join('|')})`);
+    require(!dialog.querySelector('.row, .tg, [role="switch"], [role="checkbox"], input, select, textarea, [data-remove-computer]'), 'no row, switch or field stands in the question');
+    require(!/電腦|主機|工作檔案|登入狀態|Docker|computer/i.test(dialog.textContent), 'nothing is said about a computer');
+    require(!window.__look.calls.some(call => call.method === 'members.delete'), 'asking performs no deletion');
+    return {check:name, title};
   }
   if (name === 'desktop-stream') {
     const frame = document.querySelector('iframe[data-desktop-stream]');
@@ -4015,8 +4024,8 @@ export function checkRendered(name, context = {}) {
   }
     if (name === "member-deleted") {
       require(document.querySelector('.mb-pill-t')?.textContent === window.__look.data.members.find(item => item.id === 0)?.name, "deleting the selected member returns to Raphael");
-    require(window.__look.calls.some(call => call.method === "members.delete" && call.params?.id === 2), "the core is asked to delete that member");
-    require(!window.__look.data.members.some(item => item.id === 2) && !document.querySelector('[data-member="2"]'), "the member is gone from the team and the list");
+    const asked = window.__look.calls.filter(call => call.method === "members.delete");
+    require(asked.length === 1 && JSON.stringify(asked[0].params) === '{"id":2}', "the core is asked once to delete that member, and nothing else is sent with it");    require(!window.__look.data.members.some(item => item.id === 2) && !document.querySelector('[data-member="2"]'), "the member is gone from the team and the list");
     require(document.querySelector(".toast")?.textContent.includes("已刪除「小森」"), "a notice names who was deleted");
     return { check: name };
   }

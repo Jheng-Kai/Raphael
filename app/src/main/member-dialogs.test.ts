@@ -16,27 +16,16 @@ beforeEach(() => {
   document.body.innerHTML = "";
 });
 
-test('computer data removal names the host and remains unchecked until the owner chooses it', async () => {
-  const remove = vi.fn();
-  const answer = confirmDelete('Sample', {computerHost:'studio-mini', removeComputer:remove});
-  const checkbox = document.querySelector<HTMLButtonElement>('[data-remove-computer]')!;
-  expect(checkbox.matches('.tg[role="switch"][aria-checked="false"]')).toBe(true);
-  expect(checkbox.closest('.row')?.textContent).toContain('studio-mini');
-  expect(checkbox.getAttribute('aria-label')).toContain('Sample');
+test("a member's deletion asks one sentence, Cancel and Delete, and nothing about its computer", async () => {
+  const answer = confirmDelete("小晴", { member: true });
+  const dialog = document.querySelector<HTMLElement>(".mb-dialog")!;
+  expect(dialog.querySelector("h2")!.textContent).toBe("刪除「小晴」？");
+  expect([...dialog.querySelectorAll("p")].map(p => p.textContent)).toEqual(["永久刪除這位成員和對話紀錄，此操作無法復原。"]);
+  expect([...dialog.querySelectorAll(".mb-dlg-act .btn")].map(b => b.textContent)).toEqual(["取消", "刪除"]);
+  expect(dialog.querySelector(".row, .tg, [role=switch], input, [data-remove-computer]")).toBeNull();
+  expect(dialog.textContent).not.toMatch(/電腦|computer/i);
   document.querySelector<HTMLButtonElement>('[data-dlg="delete"]')!.click();
-  expect(await answer).toBe(true); expect(remove).toHaveBeenCalledWith(false);
-});
-
-test('computer removal is chosen through the shared switch without closing the dialog', async () => {
-  const remove = vi.fn();
-  const answer = confirmDelete('小晴', {computerHost:'mac-mini', removeComputer:remove});
-  const control = document.querySelector<HTMLButtonElement>('[data-remove-computer]')!;
-  control.click();
-  expect(control.getAttribute('aria-checked')).toBe('true');
-  expect(document.querySelector('.mb-dialog')?.textContent).toContain('在 mac-mini 上');
-  expect(remove).not.toHaveBeenCalled();
-  document.querySelector<HTMLButtonElement>('[data-dlg="delete"]')!.click();
-  expect(await answer).toBe(true); expect(remove).toHaveBeenCalledWith(true);
+  expect(await answer).toBe(true);
 });
 
 test("a language change dismisses a translated confirmation before it can show stale actions", async () => {

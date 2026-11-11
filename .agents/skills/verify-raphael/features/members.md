@@ -130,7 +130,7 @@ pencil in its middle (owner, 2026-11-08). Scenes: member-face-hover, slime-picke
 npm run look -- members-expanded sidebar-folders --theme both --width 1120,720,1920x1080
 npm run look -- details member-avatar member-edit details-routines details-routine-view details-routine-hover details-skills details-commands details-notify --theme both --width 1120,720,1920x1080
 npm run look -- sidebar-folders member-text --theme both --width 1120,720,1920x1080
-npm run look -- member-delete member-conversation-sections --theme both --width 1120,720,1920x1080
+npm run look -- member-delete-ask member-delete member-conversation-sections --theme both --width 1120,720,1920x1080
 npm run look -- member-maker member-maker-chosen member-maker-greeting member-maker-made --theme both --width 1120,720,1920x1080
 npm run look -- slime-states slime-picker slime-sizes slime-gallery slime-motion-idle slime-motion-busy slime-motion-moments slime-motion-change slime-sharp slime-pointer slime-cost --theme both --width 1120,720,1920x1080
 npm run look -- member-face-hover slime-picker slime-picker-tab --theme both --width 1120,720,1920x1080
@@ -139,7 +139,9 @@ npm run look -- slime-places slime-places-settings busy-team-calm --theme both -
 
 These walk the owner's flows to their end: `member-delete`
 deletes 小森 from the row's ⋯ menu after the confirmation (the menu had lost 刪除 on
-10/24); `member-conversation-sections` checks that a member's details have no
+10/24; since 2026-11-11 the question is a name, one sentence about the member and its conversation, Cancel and
+Delete, and the call carries only the id: `member-delete-ask` checks it, the computer is the core's to remove,
+see [Member computer](member-computer.md#deleting-a-member-removes-its-computer-2026-11-11)); `member-conversation-sections` checks that a member's details have no
 conversation list and nothing that makes one (owner, 2026-11-06: one conversation per
 member, like Grok Bot, R-UI-103);
 `member-maker*` is 新增成員 as a character maker where the conversation stands, slimes
