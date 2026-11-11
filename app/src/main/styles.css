@@ -178,7 +178,7 @@ svg.i { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor;
 .window-drag { flex: 1; min-width: 0; }
 /* A conversation's header is the window's top row (members.css): its own empty stretch moves the window (it carries
    data-window-drag, window-chrome.ts), and this strip, whose drag cell would lie over the pill and the round buttons, lets the pointer
-   through to it; the window's buttons and the sidebar's menu button in it still answer.
+   through to it; the window's buttons in it still answer.
    Anything that dims or replaces the header keeps the cell: a dialog, the store (a page over the conversation), the narrow sidebar,
    the member's settings page and the larger computer view. The details panel lying over the chat (under 1120 px) dims the row with its scrim, whose own top row moves the window
    instead (members.css). */

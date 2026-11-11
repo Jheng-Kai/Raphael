@@ -113,10 +113,10 @@ and the account. Folders folded in the list stay folded in the rail, and a folde
 (widen the window). The wide list's foot is one row: the account's face at the left and the 36 px Connections pill filling the rest, with
 microphone and Home at its end while the pill keeps 180 px; a list narrower than 336 px puts those two in the top row beside search and plus.
 `sidebar-metrics` records the numbers (width, pitch, highlight, type, foot, rows that fit), `sidebar-air` asserts them (and the rail's),
-`sidebar-air-foot` the narrow list, `sidebar-rail-menu` the right click, `sidebar-drag-row` a dragged row at the new height.
+`sidebar-air-foot` the narrow list, `panel-widest` (the details panel dragged as wide as it goes beside the conversation: at 1120 the panel stops at 388 px so the conversation keeps 386 px and the one-row composer 301 px, `composer-shape-narrow` measures the same), `sidebar-rail-menu` the right click, `sidebar-drag-row` a dragged row at the new height.
 
 ```powershell
-npm run look -- sidebar-metrics sidebar-air sidebar-air-foot sidebar-rail-menu sidebar-drag-row sidebar-rail sidebar-drawer sidebar sidebar-many sidebar-unread --theme both --width 1120,720,1920x1080
+npm run look -- sidebar-metrics sidebar-air sidebar-air-foot sidebar-rail-menu sidebar-drag-row panel-widest sidebar-rail sidebar-drawer sidebar sidebar-many sidebar-unread --theme both --width 1120,720,1920x1080
 ```
 
 Select a member, then click the stacked header title for details.

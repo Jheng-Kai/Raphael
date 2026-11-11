@@ -12,7 +12,7 @@ const faces=count=>({rooms:fixture.rooms.map(item=>({...item,member_ids:item.id=
 
 export default [
   scene('daily-footer-hover','Connections pill has an outlined quiet hover',[{action:'member-column',collapsed:false},hover('.sidebar-apps'),check('sidebar-shell')]),
-  scene('daily-footer-marks','Three connected service marks share the outlined door',[{action:'member-column',collapsed:false},wait('.sidebar-app-marks .mono'),check('daily-marks'),check('sidebar-shell')],marks),
+  scene('daily-footer-marks','Three connected service marks share the outlined door',[{action:'member-column',collapsed:false},wide(wait('.sidebar-app-marks .mono')),check('daily-marks'),check('sidebar-shell')],marks),
   scene('daily-footer-home','Home retains the selected icon surface',[page('home'),{action:'member-column',collapsed:false},check('sidebar-shell'),check('sidebar-selection')]),
   scene('daily-press-feedback','Ordinary and selected sidebar controls answer a press without moving',[
     page('agent'),{action:'member-column',collapsed:false},

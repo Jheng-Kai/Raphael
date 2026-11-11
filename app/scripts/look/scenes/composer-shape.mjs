@@ -41,5 +41,5 @@ export default [
   scene("composer-shape-mention-chip", "An address is a chip in the field and the row keeps its one line", [type(typedField, "請用 @"), ...pick("Notion"), check("composer-shape:one-line")]),
   scene("composer-shape-slash", "The / menu hangs above the field the same way", [type(typedField, "/"), wait(".slash-menu"), check("composer-shape:menu")], commands),
   scene("composer-shape-panel", "With the member's panel open beside it (a 438 px composer at 1120) the model gives up its depth word and shortens its name, the field keeps 200 px", [{ action: "open-details" }, check("composer-shape:one-line")]),
-  scene("composer-shape-narrow", "The details panel dragged wide leaves the row narrow: the model is short, the field keeps its room, nothing wraps", [{ action: "open-details" }, drag(".page-agent .det-edge", -140), check("composer-shape:narrow")]),
+  scene("composer-shape-narrow", "The details panel dragged wide leaves the row narrow: the model is short, the field keeps its room, nothing wraps", [{ action: "open-details" }, drag(".page-agent .det-edge", -140), check("composer-shape:narrow"), check("panel-widest")]),
 ];

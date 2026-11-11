@@ -22,6 +22,9 @@
   --pa-u: calc(var(--pa-t) / 960);
   /* the three columns */
   --pa-det: clamp(300px, 24vw, 460px);
+  /* The conversation never gets narrower than it was beside the old 296 px list and a panel of 440 px at 1120 px of window (386 px, a 301 px composer):
+     a panel dragged wider gives way first, and only then does the list (members.css, members-shell.ts PANE_MIN). */
+  --pa-conv-min: 386px;
   /* the member column */
   --pa-pad: var(--sp-2);
   --pa-tool: calc(30px + 18 * var(--pa-u));
@@ -48,8 +51,8 @@
      the window at their right. The pill and the round buttons are centred in it, 30 px from the window's top, as Grok Bot's
      (measured 2026-11-12); the thread passes under it. */
   --pa-top: 60px;
-  /* What the window's buttons take from the top row's right end, and from its left end at narrow widths, where the sidebar's menu button
-     (sidebar.css, 40 px wide) stands at the window's top left. */
+  /* What the window's buttons take from the top row's right end. The left end takes nothing: under 860 px the list is the rail of
+     faces beside the pane, with no menu button at the window's top left. */
   --pa-top-end: calc(var(--window-controls-width) + var(--window-controls-gap));
   --pa-top-start: 0px;
   --pa-pill-av: calc(22px + 14 * var(--pa-u));
@@ -113,7 +116,6 @@
   --pa-new-av: calc(64px + 24 * var(--pa-u));
   --pa-preset: calc(40px + 12 * var(--pa-u));
 }
-@media (max-width: 859px) { .page-agent { --pa-top-start: calc(40px + var(--sp-2)); } }
 
 /* The page's columns (the members, the chat, the details) are in members.css; the chat holds the
    head, the search and the stage, one above the other. */
