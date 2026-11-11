@@ -899,7 +899,7 @@ class App(Router):
 
         import os
         from .native_journeys import native_enabled
-        self.vm = LocalVm(data_dir, settings=SettingsStore(self._conn),
+        self.vm = LocalVm(data_dir, settings=SettingsStore(self._conn), conn=self._conn,
                           enabled=not fake_llm or (native_enabled(fake_llm) and os.environ.get("RAPHAEL_TEST_NATIVE_COMPUTER") == "1"))
         from .computer.viewer import DesktopViewer
         self.desktop_viewer = DesktopViewer(self.vm, member_exists=lambda member: member == 0 or self._conn.execute("SELECT 1 FROM members WHERE id=?", (member,)).fetchone() is not None)
@@ -1056,7 +1056,7 @@ class App(Router):
         self.background.use_workspaces(
             lambda member: [path for path in (self.vm.target(member).workspace, self.vm.target(member).shared) if path] if self.vm.grants.allowed(member) else None)
         self.vm_tools.names = self.members.name_of
-        self.members.remove_computer_data = self.vm.delete_member_data
+        self.members.computer_data = self.vm.data
         # A member made by one the owner let use a computer has one too: it is a sandbox of its own, and a team
         # that was just made would otherwise stop at its first step to ask for each of them.
         self.members.member_made = lambda maker, made: self.vm.grants.set(made, True) if self.vm.grants.state(maker) is True else None
