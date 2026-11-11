@@ -29,6 +29,7 @@ import answerForms from "./answer-forms.mjs";
 import unreadDivider from "./unread-divider.mjs";
 import threadWindow from "./thread-window.mjs";
 import chat from "./chat.mjs";
+import topRow, { TOP_ROW_SCENES } from "./top-row.mjs";
 import desktop from "./desktop.mjs";
 import memberPanel from './member-panel.mjs';
 import memberSettings from './member-settings.mjs';
@@ -80,4 +81,6 @@ for (const scene of scenes) if (['slime-states', 'presence-states-sidebar', 'bus
   const freeze = scene.steps.findIndex(step => step.action === 'freeze-motion');
   scene.steps.splice(freeze < 0 ? scene.steps.length : freeze, 0, { action: 'motion-cost', ...(process.env.LOOK_TRACE==='1'?{measure:{name:'motion-cost',enforce:false}}:{}) });
 }
+scenes.push(...topRow);
+for (const scene of scenes) if (TOP_ROW_SCENES.has(scene.name)) scene.steps.push({ action: "check", name: "conversation-top-row" });
 if (new Set(scenes.map(scene => scene.name)).size !== scenes.length) throw new Error("Duplicate look scene name");
