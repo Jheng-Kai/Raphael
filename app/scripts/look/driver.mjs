@@ -478,9 +478,18 @@ export async function perform(page, step, evidenceDirectory) {
       try { await new Promise(resolve => setTimeout(resolve, 160)); pressed = await measure(); }
       finally { await page.mouse.move(0, 100); await page.mouse.up(); }
       if (pressed.background !== (step.control === 'close' ? pressed.close : pressed.pressed)) throw new Error('Caption press needs the pressed token');
-      await page.keyboard.press('Tab'); await element.focus();
-      const focus = await element.evaluate(button => { const style = getComputedStyle(button); return { style: style.outlineStyle, width: parseFloat(style.outlineWidth) }; });
-      if (focus.style === 'none' || focus.width < 2) throw new Error('Caption keyboard focus needs a visible ring');
+      // A ring is drawn only in a window that has the system's focus, and the browser window of a look run may not have
+      // it (another window was in front, or Tab left the page from its last control): one capture in fifteen failed here
+      // with the control focused and no ring. The page is told it has the focus for as long as the ring is read.
+      const client = await page.createCDPSession();
+      let focus;
+      try {
+        await client.send('Emulation.setFocusEmulationEnabled', { enabled: true });
+        await page.keyboard.press('Tab'); await element.focus();
+        focus = await element.evaluate(button => { const style = getComputedStyle(button); return { style: style.outlineStyle, width: parseFloat(style.outlineWidth),
+          keys: document.documentElement.hasAttribute('data-keys'), active: document.activeElement === button, visible: button.matches(':focus-visible'), window: document.hasFocus() }; });
+      } finally { await client.send('Emulation.setFocusEmulationEnabled', { enabled: false }).catch(() => {}); await client.detach().catch(() => {}); }
+      if (focus.style === 'none' || focus.width < 2) throw new Error(`Caption keyboard focus needs a visible ring: ${JSON.stringify(focus)}`);
       await element.evaluate(button => button.blur());
       await element.hover(); await new Promise(resolve => setTimeout(resolve, 160));
       await element.dispose();
