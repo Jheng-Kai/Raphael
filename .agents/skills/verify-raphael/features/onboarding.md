@@ -18,19 +18,21 @@ state saved. There are no practice lessons, no microphone step and no completion
 the window, with no progress bar and no side, as Grok Bot's first run (owner, 2026-11-07): every
 step is one calm centred column, a title (three of the team's own characters float by it, aria-hidden,
 others on every step and in other places — Gobta, Shion, Ranga; Shuna, Diablo, Benimaru; Milim, Souei,
-Rigurd — owner 2026-11-08; gone below 640px wide), the choice, and under it one row with a button at
-each end: at the left 上一步, a quiet grey pill with a left chevron before its words, and at the right the black
-primary pill, 下一步 with a right chevron after its words (開始使用, or 完成 on a rerun, on the last step, with no
-chevron). Both are 44 px tall, the guide's pills that the owner kept on 2026-11-08 as the one exception to the
-shared button height, as wide as their words ask and at least 128 px; 上一步 is one step lighter under the pointer,
-takes the app's focus ring from the keyboard and comes before the primary in the tab order. On 2026-11-11 the
-owner sent back the two stacked pills, because the stack took room the AI tools and services steps need:
-「導覽這個 button…上下堆疊會造成我們畫面有些空間比較緊，像是選擇 AI 工具，還有連接你的服務這邊會比較需要空間。
-感覺左右放，或者左右放那個箭頭之類的，或許會比較好」, and the same day the first answer to that, a round arrow
-beside one wide pill in the middle: 「這個不是這樣做，我要的是左右 button」. The row is as wide as the widest
-step's column (900 px, less in a narrow card) on every step, so neither button moves from step to step; it never
-stacks, and the height the second pill used belongs to the step's content. The welcome keeps its one wide pill
-(360 px) in the middle, with a round × at its left on a rerun; a status in a tile
+Rigurd — owner 2026-11-08; gone below 640px wide), the choice, and under it two round buttons
+together in the middle of the card: the way back at the left and the way on at the right, each a 48 px circle
+holding one filled triangle that points where it goes (the same drawing, turned round for the way back), 12 px
+apart. Neither has words: each is named for assistive tech and in its tooltip, 上一步 and 下一步 (開始使用, or 完成
+on a rerun, on the last step, whose way on holds a check instead of a triangle). The way on is a circle of the
+solid accent; the way back is on a quiet grey, one step lighter under the pointer, takes the app's focus ring
+from the keyboard and comes before the primary in the tab order; neither has an edge. The guide's own sizes are
+the one exception to the shared button height, kept by the owner on 2026-11-08. On 2026-11-11 the owner sent
+back, in turn: the two stacked pills, because the stack took room the AI tools and services steps need
+(「導覽這個 button…上下堆疊會造成我們畫面有些空間比較緊，像是選擇 AI 工具，還有連接你的服務這邊會比較需要空間。
+感覺左右放，或者左右放那個箭頭之類的，或許會比較好」); a round arrow beside one wide pill in the middle
+(「這個不是這樣做，我要的是左右 button」); and a worded pill at each end of the row (「改成集中在中間這邊好不好？
+然後 icon 改一下，可以改特別一點點，不一定要寫字，can 用兩個三角形之類的」). The pair stands in the same place on
+every step and never stacks, and the height a second pill used belongs to the step's content. The welcome keeps
+its one wide pill (360 px) in the middle, with a round × at its left on a rerun; a status in a tile
 wraps inside it in every language. There is no back arrow at the top; the first run's welcome has the pill alone.
 The left slot is the way out of the screen: on a rerun's welcome (the guide opened again from Settings, scene
 `onboarding-rerun`) it is the same round button holding a × named 取消, which leaves the guide (a close is the × alone,
@@ -104,12 +106,12 @@ key (refused beside its field), `onboarding-composio-saved` a project key (the c
 Composio's apps join); `onboarding-services-n8n` searches n8n and opens its address field (check
 `onboarding-composio` for the card). Check that each tile is one row with its mark in its square,
 its name, one line and its control on the right inside it, that the tiles stand in three columns
-(two at 720), that the controls are real buttons and switches, that the foot is one row (上一步 at its left
-end and the primary at its right end, both with words and a chevron, on one line, in the same place on every
-step, never stacked at 720) and the
+(two at 720), that the controls are real buttons and switches, that the foot is the pair (two round buttons
+together in the middle, the way back's triangle pointing left and the way on's pointing right, a check on the
+last step, in the same place on every step, never stacked at 720) and the
 grid fades out over it, that the steps' content ends above the foot, that nothing is cut off at 720 wide
-and that the dark theme has no light edges. `onboarding-back-hover` hovers 上一步 (a lighter surface than at rest)
-and `onboarding-back-focus` presses Shift+Tab from the primary (上一步 takes the app's focus ring, so it
+and that the dark theme has no light edges. `onboarding-back-hover` hovers the way back (a lighter surface than at rest)
+and `onboarding-back-focus` presses Shift+Tab from the primary (the way back takes the app's focus ring, so it
 is before the primary in the tab order); `onboarding-rerun` opens the guide from Settings 導覽 and checks that the
 welcome's row is the × and the pill on one line. Native proof needs an authorized fresh `RAPHAEL_DATA_DIR`: finish the
 steps, relaunch and verify onboarding stays dismissed and the chosen tools, services and switches

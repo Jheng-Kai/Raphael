@@ -23,7 +23,7 @@ import { openConnectionSetup } from "../connection-setup";
 import { modelPickerHTML, mountModelPicker, type ModelPickerLook } from "../model-picker";
 import { createServices, servicesHTML as abilityRowsHTML } from "../services";
 import type { AppContext, BrainSettings, MainEvent, ModelCatalog, StoreService } from "../types";
-import { actionRow, btn, closeMenu, esc, ico, iconButton, openMenuOnArrow, toaster } from "../ui";
+import { actionRow, closeMenu, esc, iconButton, openMenuOnArrow, toaster } from "../ui";
 import { SERVICES_WAIT_MS, mergeServices, within } from "./helpers";
 import { type FlowState, type Mode, initialState, isLast, reduce } from "./flow";
 import {
@@ -164,12 +164,13 @@ export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: A
   const accountsError = (): string => accounts.view().chatgptError;
 
   /**
-   * A step's foot is one row with a button at each end (owner, 2026-11-11, of a round arrow beside one wide pill: 「我要的是
-   * 左右 button」; the row itself since 「上下堆疊會造成我們畫面有些空間比較緊…感覺左右放」): the way back at the left, a quiet
-   * pill with a chevron and its words, and the way on at the right, the black pill with its words and a chevron. The last
-   * step's pill says what finishing does and has no chevron: nothing comes after it. The welcome has nowhere to go back to
-   * and keeps its one wide pill in the middle; on a rerun a round × stands before it and leaves the guide (a close is the
-   * × alone, never a word button).
+   * A step's foot is two round buttons together in the middle, the way back at the left and the way on at the right, each
+   * a filled triangle that points where it goes (owner, 2026-11-11 evening, of two worded pills at the row's ends:
+   * 「改成集中在中間這邊好不好？然後 icon 改一下，可以改特別一點點，不一定要寫字，can 用兩個三角形之類的」; a left and a right
+   * button at all since 「我要的是左右 button」 that afternoon, and one row since 「上下堆疊會造成我們畫面有些空間比較緊」). Neither
+   * has words, so each is named for assistive tech and in its tooltip. The last step's way on is a check: it finishes, and
+   * nothing comes after it. The welcome has nowhere to go back to and keeps its one wide pill; on a rerun a round × stands
+   * before it and leaves the guide (a close is the × alone, never a word button).
    */
   function footHTML(): string {
     const next = ` data-ob="next"${finishing ? " disabled" : ""}`;
@@ -181,11 +182,9 @@ export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: A
       });
     }
     const last = isLast(flow), label = last ? (mode === "rerun" ? "onboarding.finishRerun" : "onboarding.finish") : "onboarding.next";
-    return actionRow({
-      cls: "ob-actions ob-ends",
-      secondary: btn(`${ico("left")}<span>${esc(t("onboarding.back"))}</span>`, "ob-prev", ' data-ob="back"'),
-      primary: { label: `<span>${esc(t(label))}</span>${last ? "" : ico("right")}`, attrs: next },
-    });
+    return `<div class="action-row ob-actions ob-pair">` +
+      iconButton("play", t("onboarding.back"), ' data-ob="back"', "ob-prev ob-tri") +
+      iconButton(last ? "check" : "play", t(label), next, `pri ob-go${last ? "" : " ob-tri"}`) + `</div>`;
   }
 
   function paintFoot(): void {

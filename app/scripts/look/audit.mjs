@@ -83,8 +83,9 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
     const floatingLatest = element.matches(".page-agent .ra-stage > button.conversation-latest, .peer-chat > button.conversation-latest");
     // The sidebar's icons and the buttons on the window's edges are soft round buttons;
     // so is an icon that floats on a picture (the lightbox's close, a member page's way back and its cover's change), which needs its own surface,
-    // and so is the guide's arrow beside its primary pill, on the grey the old 上一步 pill had (owner, 2026-11-11).
-    const sidebarAction = element.matches(".side .btn.icon, .page-agent .mb-det-head .btn.icon, .page-agent .mb-head :is(.ra-tools, .mb-head-l) .btn.icon, :is(.mb-dlg-head, .cs-dlg-head, .room-side-thread > header, .desktop-panel[data-expanded] .desktop-dock, .rp-top) .btn.icon, .btn.icon.modal-x, .ob-foot .btn.icon.ob-back, .media-lightbox .lb-card > .btn.icon.lb-close, .ms-cover > .btn.icon.ms-cover-btn, .ms-bar > .btn.icon.ms-back");
+    // and so are the guide's foot's round buttons: a rerun's × on a quiet grey, and a step's pair, the way back on that grey and
+    // the way on a circle of the accent (owner, 2026-11-11).
+    const sidebarAction = element.matches(".side .btn.icon, .page-agent .mb-det-head .btn.icon, .page-agent .mb-head :is(.ra-tools, .mb-head-l) .btn.icon, :is(.mb-dlg-head, .cs-dlg-head, .room-side-thread > header, .desktop-panel[data-expanded] .desktop-dock, .rp-top) .btn.icon, .btn.icon.modal-x, .ob-foot .btn.icon.ob-back, .ob-foot .ob-pair > .btn.icon, .media-lightbox .lb-card > .btn.icon.lb-close, .ms-cover > .btn.icon.ms-cover-btn, .ms-bar > .btn.icon.ms-back");
     const violation = (rule, reason) => productRules.push({ ...description, rule, reason });
     if (element.matches('button:disabled[title], [aria-disabled="true"][title]')) {
       const title = element.getAttribute('title')?.trim();
@@ -174,14 +175,16 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
     }
     if (element.matches('.modal-body .purpose')) violation('R-UI-02', 'Settings subtitle repeats the pane purpose');
     if (element.matches('.ob-col > h2') && parseFloat(style.fontSize) < 28) violation('R-UI-37', 'Onboarding needs a large headline');
-    // The welcome's one pill fills its row. A step's row has a button at each end (owner, 2026-11-11): the way back at
-    // the left edge and the primary at the right edge, neither stretched across.
-    if (element.matches('.ob-actions:not(.ob-ends) > .btn.pri') && box.width < element.parentElement.getBoundingClientRect().width * .6)
+    // The welcome's one pill fills its row. A step has two round buttons together in the middle of the foot (owner,
+    // 2026-11-11 evening): the way back at the left of the primary, one size, neither at an edge of the card.
+    if (element.matches('.ob-actions:not(.ob-pair) > .btn.pri') && box.width < element.parentElement.getBoundingClientRect().width * .6)
       violation('R-UI-37', 'Onboarding primary action must fill the action row');
-    if (element.matches('.ob-actions.ob-ends')) {
+    if (element.matches('.ob-actions.ob-pair')) {
       const [back, primary] = [element.querySelector(':scope > .btn:not(.pri)'), element.querySelector(':scope > .btn.pri')].map(button => button?.getBoundingClientRect());
-      if (!back || !primary || Math.abs(back.left - box.left) > 1 || Math.abs(primary.right - box.right) > 1 || back.right > primary.left)
-        violation('R-UI-37', 'Onboarding step needs its way back at the left end and its primary at the right end of the row');
+      const foot = element.parentElement.getBoundingClientRect();
+      if (!back || !primary || back.right > primary.left || primary.left - back.right > 24 || Math.abs(back.width - primary.width) > 1 || Math.abs(back.height - primary.height) > 1
+        || Math.abs((back.left + primary.right) / 2 - (foot.left + foot.right) / 2) > 2)
+        violation('R-UI-37', 'Onboarding step needs its two round buttons together in the middle, the way back at the left of the primary');
     }
     if (element.matches('.ob-item')) {
       const text = element.querySelector(':scope > .ob-tx'), control = element.querySelector(':scope > .ob-ctl');
