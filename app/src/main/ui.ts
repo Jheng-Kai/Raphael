@@ -937,7 +937,20 @@ class Toaster implements Notifier {
       this.host.className = "toasts";
       document.body.append(this.host);
     }
+    this.lift(this.host);
     return this.host;
+  }
+
+  /**
+   * A conversation's composer grows with its attachments, its quote and its draft, and a note that stands a fixed height above the
+   * window's foot then lay over its attachments (2026-11-11, the twenty-first file). The note stands over the composer's top edge,
+   * wherever that is; styles.css keeps its usual height as the least.
+   */
+  private lift(host: HTMLElement): void {
+    const composers = [...document.querySelectorAll<HTMLElement>(".page-agent:not([hidden]) .composer")];
+    const top = composers.map(composer => composer.getBoundingClientRect()).find(box => box.width > 0 && box.height > 0)?.top;
+    if (top === undefined) host.style.removeProperty("--toast-lift");
+    else host.style.setProperty("--toast-lift", `${Math.max(0, Math.round(window.innerHeight - top + 12))}px`);
   }
 
   /**

@@ -276,6 +276,27 @@ describe("rendered look checks", () => {
     expect(result.mixedLanguage.map(item => item.word)).toEqual(['Save']);
     window.happyDOM.abort();
   });
+  it("rejects a control that something else stands over, and lets a layer fixed to the window stand over the page", () => {
+    const win = new Window();
+    win.document.body.innerHTML = '<main><button id="under"><span>Open</span></button><div id="panel">card</div><div id="drawer" style="position:absolute;z-index:3">drawer</div></main><div id="menu" style="position:fixed">menu</div><div id="dim" class="mb-det-scrim"></div>';
+    const rect = { left: 10, top: 10, right: 110, bottom: 40, width: 100, height: 30 };
+    for (const element of win.document.querySelectorAll('*')) element.getBoundingClientRect = () => rect;
+    const found = cover => {
+      win.document.elementFromPoint = () => cover && win.document.getElementById(cover);
+      return auditDocument(win.document, { width: 1120, height: 900 }, [], []).productRules.filter(item => item.rule === 'R-UI-140');
+    };
+    const hit = found('panel');
+    expect(hit).toHaveLength(1);
+    expect(hit[0]).toMatchObject({ tag: 'button', reason: expect.stringContaining('div') });
+    expect(found('under')).toEqual([]);
+    expect(found(null)).toEqual([]);
+    win.document.elementFromPoint = () => win.document.querySelector('#under span');
+    expect(auditDocument(win.document, { width: 1120, height: 900 }, [], []).productRules.filter(item => item.rule === 'R-UI-140')).toEqual([]);
+    expect(found('menu')).toEqual([]);
+    expect(found('drawer')).toEqual([]);
+    expect(found('dim')).toEqual([]);
+    win.happyDOM.abort();
+  });
   it("completion checks reject a lost alias result and an inner scrollbar", () => {
     const win = new Window();
     win.document.body.innerHTML = `<div class="composer"><textarea></textarea></div><div id="app-popover" style="position:fixed;overflow-y:hidden"><div class="menu-head" aria-hidden="true">連接的服務</div>${Array.from({length:8},(_,i)=>`<button style="background:transparent" data-value="Notebook ${i}">Notebook ${i}</button>`).join('')}</div>`;

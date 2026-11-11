@@ -1138,6 +1138,14 @@ export function checkRendered(name, context = {}) {
         require(!card.querySelector('script,img,iframe,[onerror],[src]'), 'form data cannot load or execute content');
         for (const node of card.querySelectorAll('.board-card,.forecast-day,.chart-legend')) require(node.scrollWidth <= node.clientWidth + 1, 'content wraps within its card');
         if (card.matches('.message-chart')) require(card.querySelectorAll('circle title,rect title').length >= 6, 'every plotted value has readable hover text');
+        // A key shows what it names: a bar chart's is a filled swatch in the bar's own colour, a line's a stroke (2026-11-11).
+        if (card.matches('.message-chart')) {
+          const bars = card.querySelector('rect.chart-series-0'), swatch = card.querySelector('.chart-key-0');
+          if (bars) {
+            const mark = getComputedStyle(swatch, '::before'), bar = getComputedStyle(bars);
+            require(mark.backgroundColor === bar.fill && parseFloat(mark.height) >= 6 && mark.borderTopStyle !== 'dashed', `a bar chart's key is a swatch of the bar's colour: ${mark.backgroundColor} ${mark.height} ${mark.borderTopStyle} against ${bar.fill}`);
+          }
+        }
       }
       if (name === "form-forecast") {
         require(cards[0].querySelectorAll('.forecast-day').length === 7, 'seven known days fit without a panel scrollbar');
@@ -2315,6 +2323,8 @@ export function checkRendered(name, context = {}) {
     require(window.__lookSlot === place, `the slot never moves: ${window.__lookSlot} then ${place}`);
     if (name === "composer-slot-armed") {
       require(stop.dataset.cancelArmed === "true", "Escape arms the Stop it shows");
+      // Held open for the picture: its real-time window (1.5 s) ended before the 1920 capture (2026-11-11).
+      import('/src/shared/cancel-gesture.ts').then(({ cancelGesture }) => clearTimeout(cancelGesture().timer));
       require(form.querySelector('.cmp-input').value === "還沒寫完", "the words stay in the field");
     }
     return {check:name,place};
@@ -2394,7 +2404,7 @@ export function checkRendered(name, context = {}) {
     }
     return { check: name };
   }
-  if (name === "owner-bubble-tinted" || name === "owner-bubble-neutral") {
+  if (name === "owner-bubble-tinted" || name === "owner-bubble-neutral" || name === "owner-bubble-dark-words") {
     const bubble = [...document.querySelectorAll('.owner-message .bubble')].find(visible);
     const style = getComputedStyle(bubble), chat = bubble.closest('.mb-chat');
     const channel = value => value / 255 <= 0.03928 ? value / 255 / 12.92 : ((value / 255 + 0.055) / 1.055) ** 2.4;
@@ -2402,6 +2412,9 @@ export function checkRendered(name, context = {}) {
     const [a, b] = [light(style.backgroundColor), light(style.color)], ratio = (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
     // R-UI-81: white words hold a 3.4:1 minimum contrast on a coloured bubble; dark words read at 4.5:1.
     require(ratio >= (b > a ? 3.39 : 4.5), `the words read on the bubble: ${ratio}`);
+    // A character nearly white takes dark words and keeps its own colour. The scene once named a slime whose id had since become
+    // Raphael's blue, so it showed white words on blue under the title "dark words" and no check noticed (2026-11-11).
+    if (name === "owner-bubble-dark-words") require(b < a, `a nearly white character takes dark words on its own colour: ${style.color} on ${style.backgroundColor}`);
     // As slim as Grok Bot's 36 px pill (owner, 2026-11-09: 「我們的太胖了」): one line is a 38 px pill.
     const box = bubble.getBoundingClientRect(), lines = Math.round((box.height - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom)) / parseFloat(style.lineHeight));
     if (lines === 1) require(box.height <= 40 && parseFloat(style.borderTopLeftRadius) >= box.height / 2 - 1, `a one-line message is a slim pill (${Math.round(box.height)} px, radius ${style.borderTopLeftRadius})`);
@@ -3551,6 +3564,9 @@ export function checkRendered(name, context = {}) {
     const button = document.querySelector('[data-cancel-armed="true"]');
     if(name === "cancel-cleared") { require(!button,"other input clears the gesture");return {check:name}; }
     require(visible(button),"the targeted Stop is visibly armed");
+    // The armed Escape lasts 1.5 s of real time, less than a capture of a large window under load took: the 1920 picture of
+    // a passing check showed a Stop that was no longer armed (2026-11-11). Hold the window open for the picture.
+    import('/src/shared/cancel-gesture.ts').then(({ cancelGesture }) => clearTimeout(cancelGesture().timer));
     require(button.dataset.cancelHint === "再按一次取消", "the cancellation hint follows the interface language");
     // A desktop question has no Stop beside it: the emblem carries the armed Escape.
     if (button.matches("canvas")) { require(!visible(document.querySelector("#overlay-stop")), "the emblem is armed because no Stop stands beside the question"); return {check:name,target:"emblem"}; }
@@ -4972,6 +4988,11 @@ export function checkRendered(name, context = {}) {
     require(![...document.querySelectorAll('.ask-card')].some(visible), "plain ask card is hidden when draft panel is shown");
     const box = panel.getBoundingClientRect();
     require(box.top >= 0 && box.bottom <= innerHeight, "draft panel fits the viewport");
+    // The folder's name is one small pill that hugs its field: stretched across the card it showed a narrow white field lost in a grey bar (2026-11-11).
+    for (const pill of panel.querySelectorAll('.draft-group-pill')) {
+      const field = pill.querySelector('input').getBoundingClientRect(), whole = pill.getBoundingClientRect();
+      require(whole.width <= field.width + 56, `the folder pill hugs its field: ${Math.round(whole.width)} wide around a ${Math.round(field.width)} field`);
+    }
     const cards = [...panel.querySelectorAll('.draft-card')].filter(visible);
     const confirmBtn = panel.querySelector('[data-draft-act="confirm"]');
     const cancelBtn = panel.querySelector('[data-draft-act="cancel"]');
@@ -5448,6 +5469,10 @@ export function checkRendered(name, context = {}) {
     const chosen = rows.filter(row => row.getAttribute("aria-checked") === "true");
     require(chosen.length === 1 && chosen[0].querySelector(".cb-check svg").getBoundingClientRect().left >= chosen[0].querySelector(".cb-name").getBoundingClientRect().right, "one mode is checked, the check at the end of its row");
     require(document.querySelector("#app-popover").getBoundingClientRect().bottom <= document.querySelector(".cmp-mode").getBoundingClientRect().top + 1, "it opens above the button, inside the window");
+    // The button stands at the composer's left, so the card begins at the button and runs inward: right-aligned to it, the card
+    // reached out over the sidebar (2026-11-11).
+    const popover = document.querySelector("#app-popover").getBoundingClientRect(), box = document.querySelector(".composer").getBoundingClientRect();
+    require(popover.left >= box.left - 1, `the card stays over the conversation: it begins at ${Math.round(popover.left)}, the composer at ${Math.round(box.left)}`);
     return { check: name };
   }  if (name === "chooser-chatgpt") {
     const rail = [...document.querySelectorAll(".model-chooser [data-source]")], chatgpt = document.querySelector('.model-chooser [data-source="chatgpt"]');

@@ -41,6 +41,37 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
     }
     return right > left && bottom > top;
   };
+  // The part of an element a person can see: clipped by the window and by every scrollport or clip above it.
+  const shownRect = element => {
+    const box = element.getBoundingClientRect();
+    let left = Math.max(0, box.left), top = Math.max(0, box.top), right = Math.min(viewport.width, box.right), bottom = Math.min(viewport.height, box.bottom);
+    for (let parent = element.parentElement; parent && parent !== doc.body; parent = parent.parentElement) {
+      const style = win.getComputedStyle(parent), rect = parent.getBoundingClientRect();
+      if (/auto|scroll|hidden|clip/.test(style.overflowX || style.overflow)) { left = Math.max(left, rect.left); right = Math.min(right, rect.right); }
+      if (/auto|scroll|hidden|clip/.test(style.overflowY || style.overflow)) { top = Math.max(top, rect.top); bottom = Math.min(bottom, rect.bottom); }
+    }
+    return right > left && bottom > top ? { left, top, width: right - left, height: bottom - top } : null;
+  };
+  const PRESSABLE = 'button, a[href], input:not([type="hidden"]), textarea, select, summary, [role="button"], [role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [role="option"], [role="tab"], [role="switch"], [role="checkbox"], [role="radio"]';
+  const NEVER_COVERED_EXEMPT = '.window-resize';
+  // A layer is fixed to the window, or is positioned with a z-index of its own (the compact drawer over the conversation): it is
+  // drawn over the page on purpose, and so is the dim that goes with it.
+  const fixedLayer = node => {
+    for (let n = node; n && n !== doc.body; n = n.parentElement) {
+      const style = win.getComputedStyle(n);
+      if (style.position === 'fixed' || (style.position === 'absolute' && /^[1-9]\d*$/.test(style.zIndex)) || /(?:^|[\s-])scrim(?:$|[\s-])/.test(typeof n.className === 'string' ? n.className : '')) return n;
+    }
+    return null;
+  };
+  // What stands over the point (x, y) of a control that is not the control, a part of it or the label around it, and is not a layer fixed to the window
+  // that does not itself hold the control.
+  const coverOf = (element, x, y) => {
+    const top = doc.elementFromPoint?.(x, y);
+    if (!top || top === element || element.contains(top) || top.contains(element)) return null;
+    if ([...(element.labels ?? [])].some(label => label === top || label.contains(top))) return null;
+    const layer = fixedLayer(top);
+    return layer && !layer.contains(element) ? null : top;
+  };
   // R-UI-56: what clears, deletes or removes waits in a ⋯ and the right click of its row. Keep the places it may stand explicit:
   // the menu itself; a dialog about that one thing, which confirms or edits it; a local model's inline question; what is being
   // composed (a message's attachments and quote, Raphael's member drafts); and a favourite's star, which destroys nothing.
@@ -55,7 +86,7 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
   // An IANA time-zone id ("Asia/Taipei") is an identifier, like a file name or a URL: the Chinese row names the city and
   // then shows the id the setting stores (zoneLabel in timezones.ts, 2026-11-05), so the id is not English copy.
   const IANA_ZONE_ID = /\b(?:Africa|America|Antarctica|Arctic|Asia|Atlantic|Australia|Europe|Indian|Pacific)\/[A-Za-z0-9_+-]+(?:\/[A-Za-z0-9_+-]+)?/g;
-  const outsideViewport = [], horizontalOverflow = [], missingI18nKeys = [], nativeControls = [], invalidDurations = [], mixedLanguage = [], rawMarkdown = [], productRules = [];
+  const outsideViewport = [], horizontalOverflow = [], missingI18nKeys = [], nativeControls = [], invalidDurations = [], mixedLanguage = [], rawMarkdown = [], productRules = [], clippedText = [];
   const markdownPattern = /(?:^|\r?\n)[\t ]*(?:#{1,6}(?:[\t ]|$)|-\s+\[[ xX]\])|\*\*[^*\r\n]+\*\*|`{3,}/;
   // A textarea holds the document its owner is editing (a private skill's SKILL.md), so Markdown there is data, not unrendered copy.
   const checkMarkdown = element => {
@@ -79,8 +110,29 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
     if (element.namespaceURI !== 'http://www.w3.org/2000/svg' && element.clientWidth > 0 && element.scrollWidth > element.clientWidth + 1 && !/auto|scroll|hidden|clip/.test(style.overflowX || style.overflow))
       horizontalOverflow.push({ ...description, width: element.clientWidth, scrollWidth: element.scrollWidth });
     if (!onScreen(element)) continue;
+    // Not a failure: words that a box cuts off without an ellipsis or a line clamp, for the person reading the pictures to look at.
+    if (element.namespaceURI !== 'http://www.w3.org/2000/svg' && box.width > 2 && box.height > 2 && [...element.childNodes].some(node => node.nodeType === 3 && node.textContent.trim())) {
+      const cutX = /hidden|clip/.test(style.overflowX) && style.textOverflow !== 'ellipsis' && element.scrollWidth > element.clientWidth + 1;
+      const cutY = /hidden|clip/.test(style.overflowY) && !(parseInt(style.webkitLineClamp, 10) > 0) && element.scrollHeight > element.clientHeight + 1;
+      if (cutX || cutY) clippedText.push({ ...description, cut: cutX ? `x ${element.scrollWidth}>${element.clientWidth}` : `y ${element.scrollHeight}>${element.clientHeight}` });
+    }
+    // R-UI-140: a control that is drawn answers a press. Something else standing on it (a panel that stayed in the layout under the
+    // open one, a card that grew over its neighbour) is a defect even when every "is it hidden" question says no: it was found
+    // by a person looking at a picture (2026-11-11, the slimes of every closed tab drawn over the open tab's).
+    // A layer that is fixed to the window (a menu, a dialog, a scrim, a toast, the window's own buttons) is meant to stand over the
+    // page, so it may cover what is behind it; anything else may not stand over a control.
+    if (element.matches(PRESSABLE) && box.width >= 6 && box.height >= 6 && !element.closest(NEVER_COVERED_EXEMPT)) {
+      const rect = shownRect(element);
+      if (rect) {
+        const at = [[.5, .5], [.2, .2], [.8, .2], [.2, .8], [.8, .8]].map(([x, y]) => [rect.left + rect.width * x, rect.top + rect.height * y]);
+        const covers = at.map(([x, y]) => coverOf(element, x, y)).filter(Boolean);
+        // The centre alone is enough; the corners only count when most of them are covered, so a rounded edge is not a finding.
+        const centre = coverOf(element, at[0][0], at[0][1]);
+        if (centre || covers.length >= 3) productRules.push({ ...description, rule: 'R-UI-140', reason: `A control is covered by ${(() => { const o = describe(centre || covers[0]); return `<${o.tag}${o.class ? ' class="' + o.class + '"' : ''}> "${(o.text || '').slice(0, 40)}"`; })()}` });
+      }
+    }
     // The conversation between members has the same jump-to-latest edge button as a conversation (peer-chat.ts).
-    const floatingLatest = element.matches(".page-agent .ra-stage > button.conversation-latest, .peer-chat > button.conversation-latest");
+    const floatingLatest =element.matches(".page-agent .ra-stage > button.conversation-latest, .peer-chat > button.conversation-latest");
     // The sidebar's icons and the buttons on the window's edges are soft round buttons;
     // so is an icon that floats on a picture (the lightbox's close, a member page's way back and its cover's change), which needs its own surface,
     // and so are the guide's foot's round buttons: a rerun's × on a quiet grey, and a step's pair, the way back on that grey and
@@ -381,8 +433,23 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
     if (left - box.left < HOVER_TEXT_GAP || (!cutOff && box.right - right < HOVER_TEXT_GAP))
       productRules.push({ ...describe(element), rule: "R-UI-53", reason: `Words ${Math.round(left - box.left)}px and ${Math.round(box.right - right)}px from the edges of a hover fill (${fill.selector.trim()})` });
   }
+  // Not a failure: in the dark theme, a bright border or a large bright surface, for the person reading the pictures to look at.
+  const lightEdges = [];
+  if (doc.documentElement.dataset.theme === 'dark') {
+    for (const element of doc.body.querySelectorAll('*')) {
+      if (element.namespaceURI === 'http://www.w3.org/2000/svg' || !visible(element) || !onScreen(element)) continue;
+      if (element.closest('.toast, svg, img, canvas, video, iframe, [class*="slime"], .mono, .logo')) continue;
+      const style = win.getComputedStyle(element), box = element.getBoundingClientRect();
+      if (box.width < 12 || box.height < 12) continue;
+      const edge = ['Top', 'Right', 'Bottom', 'Left'].map(side => ({ w: parseFloat(style[`border${side}Width`]), c: parsed(style[`border${side}Color`]), s: style[`border${side}Style`] }))
+        .find(item => item.w > 0 && item.s !== 'none' && item.c && item.c.a > 0.3 && luminance(item.c) > 0.45);
+      const fill = parsed(style.backgroundColor);
+      if (edge) lightEdges.push({ ...describe(element), what: 'border' });
+      else if (fill && fill.a > 0.5 && luminance(fill) > 0.5 && box.width * box.height > 600) lightEdges.push({ ...describe(element), what: 'surface' });
+    }
+  }
   const documentWidth = Math.max(doc.documentElement.scrollWidth, doc.body.scrollWidth);
-  return { horizontalOverflow: { document: documentWidth > viewport.width + 1, documentWidth, viewportWidth: viewport.width, elements: horizontalOverflow }, outsideViewport, missingI18nKeys, nativeControls, invalidDurations, mixedLanguage, rawMarkdown, productRules };
+  return { horizontalOverflow: { document: documentWidth > viewport.width + 1, documentWidth, viewportWidth: viewport.width, elements: horizontalOverflow }, outsideViewport, missingI18nKeys, nativeControls, invalidDurations, mixedLanguage, rawMarkdown, productRules, clippedText, lightEdges };
 }
 
 export function failedChecks(result) {
