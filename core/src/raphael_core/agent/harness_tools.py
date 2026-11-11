@@ -44,6 +44,13 @@ WHEN = {
     "required": ["app", "event", "filter"],
 }
 ROUTINE_FIELDS = {"title": {"type": "string"}, "prompt": {"type": "string", "description": "What to do when due, with the learning goal. The run has no owner at the keyboard: name only tools a routine's run has (find_tools finds them; self_check reads the app's own state and recent failures, skill_read with reference reads a skill's template), or none. A name it will not have is refused."}, "schedule": SCHEDULE, "when": {"oneOf": [WHEN, {"type":"object", "properties":{"webhook":{"type":"boolean", "const":True}}, "required":["webhook"], "additionalProperties":False}]}, "enabled": {"type": "boolean"}}
+# routine_update takes routine_create's fields; each rule is said once, in routine_create (the list is paid on every call).
+_AS_CREATE = "As in routine_create."
+ROUTINE_UPDATE_FIELDS = {
+    **ROUTINE_FIELDS, "prompt": {"type": "string", "description": _AS_CREATE},
+    "schedule": {**SCHEDULE, "description": _AS_CREATE},
+    "when": {"oneOf": [{**WHEN, "description": _AS_CREATE}, ROUTINE_FIELDS["when"]["oneOf"][1]]},
+}
 
 
 def definition(description, properties=None, required=()):
@@ -135,7 +142,7 @@ DEFINITIONS = {
     "show": definition("Show a seen URL inside this conversation as a video, PDF, image or link card. Prefer this over opening a browser.", {"url": {"type": "string"}}, ["url"]),
     "routine_create": definition("Create a routine for the current speaker from the owner's request. Supply exactly one of schedule or when. For an event, ask for a narrow filter if the owner has not named one. Translate the times they asked for into a schedule in their local time zone: next Tuesday only is once, until the end of the month is until, only five times is max_runs.", ROUTINE_FIELDS, ["title", "prompt"]),
     "routine_list": definition("List this speaker's routines and ACTIVE connected-app events. Pass an event id from the catalogue and value for repository (owner/repo) or channel if required. For slack-message, contains optionally narrows text to a literal phrase or <@USER_ID> mention in that channel. One gated read detects and returns an ordinary when for routine_create. event_error means no routine can be created yet; retry later. Never guess paths.", {"event": {"type": "string"}, "value": {"type": "string"}, "contains": {"type": "string"}}),
-    "routine_update": definition("Update the current speaker's routine by id; give only changed fields.", {"id": {"type": "integer"}, **ROUTINE_FIELDS}, ["id"]),
+    "routine_update": definition("Update the current speaker's routine by id; give only changed fields.", {"id": {"type": "integer"}, **ROUTINE_UPDATE_FIELDS}, ["id"]),
     "routine_delete": definition("Delete the current speaker's routine by id.", {"id": {"type": "integer"}}, ["id"]),
     CALENDAR_LIST: definition(
         f"Read the owner's calendar in this app ({CALENDAR_WORDS}). It answers with everything the calendar shows, each entry marked with its "
