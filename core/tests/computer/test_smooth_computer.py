@@ -104,7 +104,7 @@ def test_restored_completion_evidence_uses_only_the_result_header(read_ok):
     assert check.required is not read_ok
 
 
-IMAGE_NAME = "raphael/cua-local-vm:driver-0.37.0-v4"
+IMAGE_NAME = "raphael/cua-local-vm:driver-0.37.0-v5"
 
 
 def answer(code, out="", err="", config="host studio\nuser jack2\nhostname 192.168.8.178\n"):
@@ -250,13 +250,15 @@ async def test_idle_and_close_preserve_container_and_browser_workspace(desktop):
     assert not any(args[0] in ("rm", "kill", "volume") for args, _ in runtime.calls)
 
 
-async def test_image_upgrade_announces_before_removal_and_preserves_workspace(desktop):
+@pytest.mark.parametrize('layer,memory', [('3', 2), ('4', 3)])
+async def test_image_upgrade_announces_before_removal_and_preserves_workspace(desktop, layer, memory):
     vm, target, runtime = desktop
     old_workspace = target.workspace
     runtime.raw["Image"] = "sha256:old-image"
     from raphael_core.computer.vm import LABEL
-    runtime.raw["Config"]["Labels"][f"{LABEL}.layer"] = "3"
-    runtime.raw["HostConfig"].update(Memory=2 * 1024**3, MemorySwap=2 * 1024**3)
+    runtime.raw["Config"]["Labels"][f"{LABEL}.layer"] = layer
+    runtime.raw["Config"]["Env"] = ['VNC_PW=private']
+    runtime.raw["HostConfig"].update(Memory=memory * 1024**3, MemorySwap=memory * 1024**3)
     notices = []
     vm.rebuild_notice = lambda target: notices.append(len(runtime.calls))
     result = await vm._upgrade_image(target)
@@ -266,11 +268,18 @@ async def test_image_upgrade_announces_before_removal_and_preserves_workspace(de
     assert all("volume" not in args and "-v" not in args for args, _ in runtime.calls)
 
 
-async def test_data_removal_refuses_changed_host_and_shared_workspace(desktop):
+async def test_erasing_never_touches_the_shared_workspace_or_a_container_that_is_not_ours(desktop):
     vm, target, runtime = desktop
-    with pytest.raises(Exception, match="host changed"):
-        await vm.delete_member_data(1, "another-host")
+    assert target.key == "shared"
+    with pytest.raises(VmError, match="shared"):
+        await vm.erase(target)
     assert not runtime.calls
+    from raphael_core.computer.vm import LABEL
+    own = vm.target_for("", "0123456789abcdef")
+    runtime.raw["Config"]["Labels"].update({f"{LABEL}.owner": "someone-else", f"{LABEL}.target": own.key})
+    with pytest.raises(VmError, match="foreign"):
+        await vm.erase(own)
+    assert not any(args[0] in ("rm", "volume") for args, _ in runtime.calls)
 
 
 async def test_rendered_read_rejects_only_exact_nonessential_cookie_button(desktop, tmp_path):

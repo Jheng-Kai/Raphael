@@ -35,6 +35,8 @@ need diff/link review rather than application suites. Full integration acceptanc
 `npm run verify -- --contract --rust`, CI green on the exact commit (it runs the whole core suite),
 and `npm run look -- --all --theme both --width 1120,720,1920x1080`.
 Brain/tool changes also require `npm run verify -- --live` in an authorized live environment.
+A change to the computer image, the container's shape in `vm.py` or the view path also requires
+`npm run verify -- --computer` with Docker already running (it never starts Docker, never runs in CI).
 CI enforces repository contracts and the offline suites on every PR; the rendered matrix,
 judge and live checks run locally and never in CI. A Windows release starts only after CI has
 passed on its exact commit (run CI by hand on it when no pull request did). Use the [PR contract](.github/pull_request_template.md)

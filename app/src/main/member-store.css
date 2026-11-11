@@ -1,5 +1,13 @@
+/* The store stands where the conversation stands: the sidebar stays beside it and the window controls above it. */
+/* It reaches the window's top and starts its content under the buttons: the conversation's header, which is the window's top row, would show above it otherwise. */
+.mb-scrim.store-scrim { inset: 0 0 0 var(--sidebar-width); padding: var(--window-controls-height) 0 0; background: var(--content); animation: none; }
+.mb-dialog.store-dialog { width: 100%; height: 100%; max-height: 100%; gap: 0; padding: 0; border-radius: 0; background: transparent; box-shadow: none; animation: none; }
+.store-dialog .mb-dlg-head { padding: 0 var(--sp-4) var(--sp-1); }
+.store-dialog .mb-dlg-head h2 { font-size: var(--fs-sm); font-weight: var(--weight-semibold); }
+.store-dialog .mb-dlg-body { flex: 1; align-content: start; justify-items: center; padding: var(--sp-5) var(--sp-4); }
 .member-store { width: min(960px, 100%); min-width: 0; }
-.member-store[hidden], .cr-maker[hidden] { display: none; }
+.store-bar { display: flex; align-items: flex-end; gap: var(--sp-2); }
+.store-bar .mp-label { flex: 1; min-width: 0; }
 .store-categories { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0 24px; }
 .store-categories [aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
 .store-grid, .store-featured { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
@@ -23,7 +31,6 @@
 .template-skill .card-detail[hidden] { display: none; }
 .template-warnings { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); }
 .template-warnings p { margin: 0; }
-.cr-tabs { width: min(460px, 100%); }
 @media (max-width: 760px) { .store-grid, .store-featured { grid-template-columns: minmax(0, 1fr); } }
 /* A member template review shows who it is, then short cards of rows. */
 .tpl-hero { display: grid; grid-template-columns: minmax(0, 1fr); justify-items: center; gap: 2px; text-align: center; }

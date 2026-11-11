@@ -111,7 +111,7 @@
 /* The larger view: the whole window, sidebar included, with the screen centred at its own proportions,
    the fold-back button in the window buttons' row and one pill at the bottom (R-PANEL-03). */
 :root[data-desktop-expanded] .page-agent .mb-det { position: fixed; inset: var(--window-controls-height) 0 0; width: 100%; max-width: none; padding-top: 0; z-index: 80; transform: none; background: var(--content); }
-:root[data-window-layout][data-desktop-expanded]:not([data-window-modal="true"]):not(:has(.mb-scrim:not(.cr-scrim))) .window-chrome { left: 0; border-top-left-radius: 0; background: var(--content); }
+:root[data-window-layout][data-desktop-expanded]:not([data-window-modal="true"]):not(:has(.mb-scrim:not(.store-scrim))) .window-chrome { left: 0; border-top-left-radius: 0; background: var(--content); }
 :root[data-desktop-expanded] .mb-det-scroll { height: 100%; max-width: none; overflow-x: hidden; overflow-y: auto; padding: 0; }
 :root[data-desktop-expanded] .mb-det-head, :root[data-desktop-expanded] .mb-det-scroll > :not(.desktop-panel), :root[data-desktop-expanded] .det-edge { display: none; }
 .desktop-panel[data-expanded] { display: flex; flex-direction: column; flex: 1; width: 100%; min-height: 0; height: 100%; margin: 0; gap: 0; padding-bottom: 64px; }

@@ -1,5 +1,6 @@
 import { spawnSync } from "node:child_process";
-import { resolve } from "node:path";
+import { readFileSync } from "node:fs";
+import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { verifyChecks } from "./verify-checks.mjs";
 
@@ -29,6 +30,29 @@ describe("the checks of a verify run", () => {
   it("checks formatting once when the Rust checks are asked for", () => {
     expect(names(["--core", "--rust"])).toEqual(["tsc", "vitest", "contrast", "pytest", "rustfmt", "cargo", "listener", "clippy"]);
   });
+  it("runs isolated computer acceptance only when explicitly requested and keeps its JSON in the verify run", () => {
+    for (const args of [[], ["--core"], ["--contract"], ["--live"]]) expect(names(args)).not.toContain("computer");
+    expect(names([], { CI: "true" })).not.toContain("computer");
+    const check = verifyChecks({ args: ["--computer"], directory: "C:/a verify run", environment: {} }).find(check => check.name === "computer");
+    expect(check.args).toContain("raphael_core.evaluate.computer_acceptance");
+    expect(check.args.slice(-2)).toEqual(["--out", "C:/a verify run"]);
+    expect(check.env.RAPHAEL_COMPUTER_CANCEL_FILE).toBe(join("C:/a verify run", "computer.cancel"));
+    expect(check.args).not.toContain("raphael_core.evaluate.guardian");
+    expect(check.env.PYTHONPATH.split(process.platform === "win32" ? ";" : ":")[0]).toBe(resolve(app, "../core/src"));
+  });
+});
+describe("the TypeScript compiler of the build", () => {
+  const read = path => JSON.parse(readFileSync(resolve(app, path), "utf8"));
+  it("is TypeScript 7, by path: the 6.x parser package drags a second `tsc` bin that owns node_modules/.bin/tsc", () => {
+    expect(read("node_modules/typescript/package.json").version).toMatch(/^7\./);
+    expect(read("package.json").scripts.build).toMatch(/^node node_modules\/typescript\/bin\/tsc /);
+    expect(verifyChecks({ args: [], directory: "run", environment: {} }).find(check => check.name === "tsc").args[0]).toBe(join(app, "node_modules/typescript/bin/tsc"));
+  });
+  it("keeps TypeScript 6 only as the parser the tests and look scripts import under its own name", () => {
+    const manifest = read("package.json");
+    expect(manifest.devDependencies["typescript-6"]).toMatch(/^npm:@typescript\/typescript6@/);
+    expect(read("node_modules/typescript-6/package.json").name).toBe("@typescript/typescript6");
+  });
 });
 describe("verify CLI", () => {
   it("documents optional core/Rust checks without executing them", () => {
@@ -39,6 +63,8 @@ describe("verify CLI", () => {
     expect(result.stdout).toContain("--rust");
     expect(result.stdout).toContain("--out dir");
     expect(result.stdout).toContain("--live");
+    expect(result.stdout).toContain("--computer");
+    expect(result.stdout).toContain("requires running Linux Docker");
     expect(result.stdout).toContain("--judge run");
   });
   it("runs the Rust checks CI runs, so a formatting or Clippy failure shows up before a push", () => {

@@ -13,3 +13,11 @@ test("login sends only the selected CLI id", async () => {
   expect(await brainsCliLogin("claude")).toEqual({ started: true });
   expect(invoke).toHaveBeenLastCalledWith("core_call", { method: "brains.cli_login", params: { id: "claude" } });
 });
+test("a sign-in that ran out is started again, and the one this app started can be cancelled, through the same method", async () => {
+  invoke.mockResolvedValueOnce({ started: true });
+  await brainsCliLogin("claude", { again: true });
+  expect(invoke).toHaveBeenLastCalledWith("core_call", { method: "brains.cli_login", params: { id: "claude", again: true } });
+  invoke.mockResolvedValueOnce({ started: true });
+  await brainsCliLogin("codex", { cancel: true });
+  expect(invoke).toHaveBeenLastCalledWith("core_call", { method: "brains.cli_login", params: { id: "codex", cancel: true } });
+});

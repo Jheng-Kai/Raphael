@@ -1,5 +1,13 @@
 # Raphael feature map
 
+## Deleting a member removes its computer (2026-11-11)
+
+See [Member computer](member-computer.md#deleting-a-member-removes-its-computer-2026-11-11): the delete
+question is Grok Bot's (name, one sentence, Cancel and Delete) and asks nothing about a computer; the core
+removes the computer afterwards in the background and never starts Docker for it. Selected scenes:
+member-delete-ask, member-delete-ask-computer, member-delete, press-through-delete-dialog, room-delete and
+quick-clear-confirm, both themes at 1120,720,1920x1080.
+
 ## Subscription quota warning (2026-11-10)
 
 See [Usage](usage.md) for R-QUOTA-01: a subscription window with 10% or less left is told once per

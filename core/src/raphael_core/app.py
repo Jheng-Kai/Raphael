@@ -899,7 +899,7 @@ class App(Router):
 
         import os
         from .native_journeys import native_enabled
-        self.vm = LocalVm(data_dir, settings=SettingsStore(self._conn),
+        self.vm = LocalVm(data_dir, settings=SettingsStore(self._conn), conn=self._conn,
                           enabled=not fake_llm or (native_enabled(fake_llm) and os.environ.get("RAPHAEL_TEST_NATIVE_COMPUTER") == "1"))
         from .computer.viewer import DesktopViewer
         self.desktop_viewer = DesktopViewer(self.vm, member_exists=lambda member: member == 0 or self._conn.execute("SELECT 1 FROM members WHERE id=?", (member,)).fetchone() is not None)
@@ -1056,7 +1056,7 @@ class App(Router):
         self.background.use_workspaces(
             lambda member: [path for path in (self.vm.target(member).workspace, self.vm.target(member).shared) if path])
         self.vm_tools.names = self.members.name_of
-        self.members.remove_computer_data = self.vm.delete_member_data
+        self.members.computer_data = self.vm.data
         # Messaging apps (Telegram): messages reach the assistant like a spoken question.
         self.messaging = MessagingService(
             MessagingStore(data_dir),
@@ -1445,6 +1445,14 @@ class App(Router):
         # Every message of the reply, unframed, as the app shows them: never only the last one.
         shown = [m for m in (reply.get("messages") or []) if isinstance(m, str) and m.strip()]
         parts = [forms_plain_text(m) for m in plain_replies(shown or [reply.get("text", "")])]
+        if reply.get("status") == "done" and type(reply.get("turn_id")) is int:
+            # A question the member put to the owner is written out with its choices: a chat cannot draw the card.
+            from .messaging.words import question_text
+            questions = getattr(self.background, "owner_questions", None)
+            waiting = [q for q in questions.for_turn(reply["turn_id"]) if q["state"] == "asked" and q["kind"] == "ask_owner"] if questions is not None else []
+            if waiting:
+                written = question_text(language, waiting[0])
+                parts = [*parts[:-1], written] if parts and parts[-1].strip() == waiting[0]["question"] else [*parts, written]
         return Answer("\n\n".join(parts), list(turn_files(self.agent._history, reply.get("turn_id", 0), self.attachment_store)), parts)
 
     async def _transcribe_room(self, audio: bytes, language: str) -> str:

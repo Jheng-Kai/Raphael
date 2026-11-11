@@ -557,7 +557,8 @@ class DesktopViewer:
             config = {"password": password, "held": not session.preview and self.owners.get(session.target.key) == token,
                       "preview": session.preview, "path": f"/{token}/websockify/{revision}"}
             return {"code": 200, "body": json.dumps(config).encode(), "type": "application/json", "token": token, "revision": revision}
-        return {"token": token, "revision": revision, "port": port, "asset": asset, "websocket": websocket}
+        return {"token": token, "revision": revision, "port": port, "asset": asset, "websocket": websocket,
+                "screen": session.target.screen}
 
     async def aclose(self):
         self.closing = True

@@ -44,6 +44,10 @@ export class CancelGesture {
     }
     return null;
   }
+  /** Whether an Escape would arm or press something now (a task's Stop, a recording): it is that target's, not another view's. */
+  hasTarget(): boolean {
+    return this.current() !== null;
+  }
   sync(): void {
     const target = this.current();
     if (this.armed && (target?.key !== this.armed.key || target.button !== this.armed.button)) this.clear();

@@ -22,7 +22,7 @@ import { openActions } from "./member-column";
 import { createChatComposer } from "./chat-composer";
 import { messageHTML, messagePlainText, replyContentHTML } from "./message-content";
 import { mountRichContent, preserveRichScroll, richScrollFollows, releaseRichScroll } from "./message-rich";
-import { mountConversationScroll } from "./conversation-scroll";
+import { mountConversationScroll, passWheelUnder } from "./conversation-scroll";
 import { messageExpandHTML, measureMessagePreviews, messagePreviewMeasure } from "./message-preview";
 import { plainReplies, replyBody, replyMessages } from "../shared/anime";
 import { bindComposerMentions, mentionTargets } from "./team-mentions";
@@ -33,7 +33,7 @@ import { keepReadingPlace } from "./reading-place";
 import { createBackgroundQuestions } from "./background-questions";
 import { conversationCardsHTML, filesHTML, latestProgress, livePresenceHTML, messageActionsHTML, updateLiveTimes, waitsAtCard } from "./timeline";
 import { mountConversationCardActions } from "./conversation-card-actions";
-import { answerOwnerPage, mountOwnerQuestions } from "./owner-questions";
+import { answerOwnerPage, mountOwnerQuestions, questionWaits } from "./owner-questions";
 import { mountPendingQuestions } from "./pending-questions";
 import { composioAction, composioText } from "./composio-result";
 import { mountTaskResults } from "./task-result";
@@ -244,7 +244,7 @@ function roomActions(anchor: HTMLElement, room: Room, saved: () => void = () => 
 /** A room occupies the member conversation pane; creation and management alone use dialogs. */
 export function createRoomPane(_app: AppContext, onClose: () => void, onRender: () => void = () => {}) {
   const el=document.createElement("section");el.className="mb-chat au-room-pane";el.hidden=true;
-  el.innerHTML=`<header class="page-head mb-head"><span class="room-picker"></span><div class="au-room-heading"></div><div class="ra-tools">${iconButton("search",t("agent.search"), ' data-room-search')}${iconButton("more",t("members.more",{p0:t("rooms.title")}), ' data-room-menu')}</div></header><div class="ra-find" hidden></div><div class="ra-stage"><div class="ra-scroll"><div class="ra-col"><div class="ra-older"></div><ol class="thread au-room-thread"></ol></div></div><div class="ra-dock"></div></div>`;
+  el.innerHTML=`<header class="page-head mb-head" data-window-drag><span class="room-picker"></span><div class="au-room-heading"></div><div class="ra-tools">${iconButton("search",t("agent.search"), ' data-room-search')}${iconButton("more",t("members.more",{p0:t("rooms.title")}), ' data-room-menu')}</div></header><div class="ra-find" hidden></div><div class="ra-stage"><div class="ra-scroll"><div class="ra-col"><div class="ra-older"></div><ol class="thread au-room-thread"></ol></div></div><div class="ra-dock"></div></div>`;
   const thread=el.querySelector<HTMLElement>(".thread")!,scroll=el.querySelector<HTMLElement>(".ra-scroll")!,older=el.querySelector<HTMLElement>(".ra-older")!;
   keepReadingPlace(scroll, ".thread > *");
   let room:Room|undefined,list:MembersList={members:[],groups:[]},messages:RoomMessage[]=[],generation=0,opened=false,canOlder=false,loadingOlder=false;
@@ -292,6 +292,7 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
   const roomWindow = new TranscriptWindow();
   const windowMount = mountTranscriptWindow(scroll, thread, roomWindow, { draw, older: loadRoomEarlier, canOlder: () => canOlder && !loadingOlder });
   mountConversationScroll(scroll);
+  passWheelUnder(el.querySelector<HTMLElement>(":scope > .mb-head")!, scroll.parentElement!);
   mountRichContent(scroll);
   mountMessageMetadata(thread, control => {
     const message = messages.find(item => item.id === Number(control.closest<HTMLElement>("[data-room-message]")?.dataset.roomMessage));
@@ -349,10 +350,10 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
     scroll.scrollTop=top+scroll.scrollHeight-height;
   }});
   const sendingRooms=new Set<number>(),pendingStops=new Set<number>();
-  const composer=createChatComposer({stopTask:stopRoom,placeholder:()=>t("rooms.message"),answerPage:(id,text)=>!replyTo && answerOwnerPage(thread,id,text,()=>{void refresh();}),transcriptTarget(){const id=roomId;return text=>{if(roomId===id){composer.input.value+=(composer.input.value?" ":"")+text;composer.seedDictation(text);}else if(id){const draft=drafts.get(id)??{text:"",files:[]};draft.text+=(draft.text?" ":"")+text;drafts.set(id,draft);writeDraftWords(`room:${id}`,{text:draft.text,quote:draft.quote,pageId:draft.pageId});}};},async send(text,files){
+  const composer=createChatComposer({stopTask:stopRoom,placeholder:()=>questionWaits([], pendingQuestions && pendingQuestions.room===roomId ? pendingQuestions.questions : []) ? t("ownerQuestion.type") : t("rooms.message"),answerPage:(id,text)=>!replyTo && answerOwnerPage(thread,id,text,()=>{void refresh();}),transcriptTarget(){const id=roomId;return text=>{if(roomId===id){composer.input.value+=(composer.input.value?" ":"")+text;composer.seedDictation(text);}else if(id){const draft=drafts.get(id)??{text:"",files:[]};draft.text+=(draft.text?" ":"")+text;drafts.set(id,draft);writeDraftWords(`room:${id}`,{text:draft.text,quote:draft.quote,pageId:draft.pageId});}};},async send(text,files){
     if (!roomId) return;
-    // What is sent shows in the thread, so a report open in its place goes away.
-    pagesHost.closeReport();
+    // A page open in the thread's place stays; what the room answers shows under it while it works.
+    void pagesHost.sent();
     const id = roomId, sentQuote = replyTo?.id, key = JSON.stringify([id,text,files,sentQuote]);
     const requestId = failedRequests.get(key) ?? crypto.randomUUID();
     failedRequests.delete(key);

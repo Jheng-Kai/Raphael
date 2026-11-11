@@ -29,6 +29,6 @@ test("invalid Mermaid keeps source; strict token-themed rendering strips all act
   expect(svg).toContain('style=";fill:#eeeeee"');
   expect(svg).toContain('style=";fill:#101010"');
   expect(svg).toContain('circle fill="#101010"');
-  expect(mock.initialize).toHaveBeenLastCalledWith(expect.objectContaining({ securityLevel: "strict", htmlLabels: false, startOnLoad: false, themeVariables: expect.objectContaining({ primaryColor: colors.surface, primaryTextColor: colors.text, attributeBackgroundColorOdd: colors.panel, attributeBackgroundColorEven: colors.surface, rowOdd: colors.panel, rowEven: colors.surface }) }));
+  expect(mock.initialize).toHaveBeenLastCalledWith(expect.objectContaining({ securityLevel: "strict", htmlLabels: false, startOnLoad: false, layout: "dagre", look: "classic", flowchart: expect.objectContaining({ look: "classic", theme: "base", layout: "dagre", minNodeWidth: 0 }), state: expect.objectContaining({ layout: "dagre", look: "classic" }), sequence: expect.objectContaining({ look: "classic", theme: "base" }), themeVariables: expect.objectContaining({ primaryColor: colors.surface, primaryTextColor: colors.text, attributeBackgroundColorOdd: colors.panel, attributeBackgroundColorEven: colors.surface, rowOdd: colors.panel, rowEven: colors.surface }) }));
   expect(document.querySelector('.mermaid-staging')).toBeNull();
 });

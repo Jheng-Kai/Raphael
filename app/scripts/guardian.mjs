@@ -11,8 +11,8 @@ export function coreEnvironment() {
 export function coreCheck(kind, args = []) {
   const root = resolve(import.meta.dirname, "../..");
   const core = join(root, "core");
-  const python = join(core, ".venv", process.platform === "win32" ? "Scripts/python.exe" : "bin/python");
-  const module = kind === "live" ? "raphael_core.evaluate.guardian" : "raphael_core.evaluate.design_judge";
+  const python = process.env.RAPHAEL_CORE_PYTHON || join(core, ".venv", process.platform === "win32" ? "Scripts/python.exe" : "bin/python");
+  const module = kind === "computer" ? "raphael_core.evaluate.computer_acceptance" : kind === "live" ? "raphael_core.evaluate.guardian" : "raphael_core.evaluate.design_judge";
   const options = kind === "live" && process.env.RAPHAEL_LIVE_CONFIG ? ["--config", process.env.RAPHAEL_LIVE_CONFIG] : [];
   // Fail closed even if an editable venv points at another checkout's older API-only judge.
   if (kind === "judge" && !args.some(arg => arg === "--brain" || arg.startsWith("--brain="))) options.push("--brain", "claude");

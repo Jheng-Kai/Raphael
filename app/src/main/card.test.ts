@@ -64,12 +64,12 @@ test.each(Object.entries(cards))("%s uses the shared shell, textual status and n
   if (actions?.querySelector(".pri")) expect(actions.firstElementChild?.classList.contains("pri")).toBe(true);
 });
 
-test("questions use a lettered well and an input without a redundant waiting line", () => {
+test("questions use a lettered well and an own-answer row without a redundant waiting line", () => {
   document.body.innerHTML = ownerQuestionHTML(question);
   expect(document.querySelector(".card-title")?.textContent).toBe(question.question);
   expect([...document.querySelectorAll("[data-choice-letter]")].map(node => node.textContent)).toEqual(["A", "B"]);
-  expect(document.querySelector("input[data-owner-answer-input]")).not.toBeNull();
-  expect(document.querySelector("textarea")).toBeNull();
+  expect(document.querySelector("textarea[data-owner-answer-input]")).not.toBeNull();
+  expect(document.querySelector("input")).toBeNull();
 });
 
 test("letter shortcuts answer only inside the focused question, never while typing", async () => {

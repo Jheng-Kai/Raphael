@@ -182,13 +182,17 @@ DEFINITIONS = {
         ["to", "subject", "body"]),
 }
 DEFINITIONS[ASK_OWNER] = definition(
-    "Ask the owner a question that truly blocks this job and only the owner can answer. Prefer deciding routine details yourself. "
-    "Give one question, up to four options with short labels, and free_text (default true) for an optional written answer. "
+    "Ask the owner a card when a decision is theirs and fits two to four choices; decide the rest yourself, and never ask what the app "
+    "or you can find out (connected apps, time zone, language, names you know). One card at a time. "
+    "Give one question, up to four options (a short label, or {label, description}), an optional one-line subtitle, "
+    "multiple (several may be chosen), skip (adds a skip row) and free_text (default true) for an optional written answer. "
     "The durable card ends this turn until answered or cancelled; the same task continues with the outcome. "
     "Never use this for permission: the tool gate handles approvals. Never request passwords or keys here; use request_secret.",
-    {"question": {"type": "string", "maxLength": 2000},
-     "options": {"type": "array", "maxItems": 4, "items": {"type": "string", "maxLength": 80}},
-     "free_text": {"type": "boolean"}}, ["question"])
+    {"question": {"type": "string", "maxLength": 2000}, "subtitle": {"type": "string", "maxLength": 120},
+     "options": {"type": "array", "maxItems": 4, "items": {"oneOf": [{"type": "string", "maxLength": 80},
+         {"type": "object", "properties": {"label": {"type": "string", "maxLength": 80}, "description": {"type": "string", "maxLength": 120}},
+          "required": ["label"], "additionalProperties": False}]}},
+     "multiple": {"type": "boolean"}, "skip": {"type": "boolean"}, "free_text": {"type": "boolean"}}, ["question"])
 
 DEFINITIONS["connections_list"] = definition("List the current connected apps, custom MCP servers and their individual tool names and enabled states. Read this before manage_connection; ids are exact, never guessed.")
 DEFINITIONS["manage_connection"] = definition(

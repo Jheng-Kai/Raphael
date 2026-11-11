@@ -28,6 +28,7 @@ class Runtime:
     def __init__(self):
         self.calls, self.raw, self.image_id = [], None, "sha256:test-image"
         self.up, self.built = True, True
+        self.screens_ready = True
 
     async def __call__(self, args, **kwargs):
         if args[:1] == ["--host"]:
@@ -48,6 +49,8 @@ class Runtime:
         if args[0] == "rm":
             self.raw = None
         if args[0] == "exec" and args[-1] == "--version":
+            if "/dev/shm/raphael-screens.ready" in args and not self.screens_ready:
+                return Result(42, "cua-driver 0.37.0")
             return Result(0, "cua-driver 0.37.0")
         if "health_report" in args:
             return Result(0, '{"schema_version":"1","overall":"ok","checks":[]}')
@@ -60,7 +63,7 @@ class Runtime:
 
 def container(vm, target, runtime):
     raw = {"Name": "/" + target.name, "Image": runtime.image_id,
-        "Config": {"Labels": {**IMAGE_LABELS, f"{LABEL}.owner": vm.owner, f"{LABEL}.target": target.key}, "Env": ["VNC_PW=private"]},
+        "Config": {"Labels": {**IMAGE_LABELS, f"{LABEL}.owner": vm.owner, f"{LABEL}.target": target.key}, "Env": ["VNC_PW=private", f"RAPHAEL_SCREENS={target.screens}"]},
         "State": {"Running": True}, "HostConfig": {"Privileged": False, "CapDrop": ["ALL"], "CapAdd": ["SETUID", "SETGID"],
             "IpcMode": "private", "CgroupnsMode": "private", "NetworkMode": "bridge", "RestartPolicy": {"Name": "no"},
             "Memory": 3 * 1024**3, "MemorySwap": 3 * 1024**3, "NanoCpus": 2_000_000_000, "PidsLimit": 4096,
@@ -264,7 +267,7 @@ async def test_a_stalled_wallpaper_copy_cannot_hold_the_ready_computer(desktop, 
 def test_run_args_use_known_iana_zone_or_utc(tmp_path, zone, expected):
     vm = LocalVm(tmp_path)
     args = run_args(vm.target(), vm.owner, "secret", tz=zone)
-    assert [args[index + 1] for index, arg in enumerate(args) if arg == "-e"] == ["VNC_PW=secret", f"TZ={expected}"]
+    assert [args[index + 1] for index, arg in enumerate(args) if arg == "-e"] == ["VNC_PW=secret", f"TZ={expected}", "RAPHAEL_SCREENS=1", "VNC_RESOLUTION=1280x900"]
     assert args[-1] == IMAGE
 
 
