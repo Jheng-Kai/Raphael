@@ -1,5 +1,37 @@
 # Conversation
 
+## A one-row composer (owner, 2026-11-12, R-COMPOSER-01)
+
+Owner: 「我不知道為什麼我們的UI 就是沒有像是grokbot 這麼clean 不管頁面大小都是 可以幫我不管排版 大小 文字都盡量達到他們的水準嗎」.
+Measured beside Grok Bot at the same window sizes, its composer is one row of 44 px, 17 px above the window's edge; ours was two rows
+of 90 px, 29 px above it. Now (`composerHTML`, `.composer` and `.cmp-row` in agent.css) the composer is one pill, 44 px at every
+size with corners of 22 px (a taller box keeps them): one grid `auto minmax(200px, 1fr) auto` whose items end at the row's bottom edge,
+the + (`.cmp-attach`), the field (`.cmp-field`), then `.cmp-end` with the permission mode, the model button (a member's only) and the
+one send / voice / Stop button. Every control is 32 px and shares the field's vertical centre; a longer draft grows the field upward
+(six lines, then it scrolls) and the controls stay on the last line, level with the last line of words. A failure line
+(`.composer-failure`), a quoted reply (`.cmp-quote`), waiting files (`.cmp-file`) and the page note (`.cmp-page-note`, which stood
+below the controls until now) are rows of the same box above the row. 16 px stand under the box at every size (`--pa-dock-bottom`;
+the old short-window override is gone). The field keeps 200 px and nothing goes to a second row: the composer is a size container
+(`container: cmp`), and at 452 px or less (the details panel open at 1120 px of window gives 438) the model gives up its depth word and
+the permission mode its word (its shield stays), so the model keeps its name, at 372 px or less (the panel dragged to its widest gives 301)
+the model keeps only its arrow, and the field may be 120 px. The minimum window is 720 px, where the composer is 688 px wide and nothing is shortened.
+
+`composer-shape:<state>` in checks.mjs measures every state and asserts the shape (the box 44 px, the field and every control within
+2 px of one centre for an empty or one-line draft; for a grown draft the same bottom edge, the same control centres and the controls
+within 2 px of the last line of words). The states and their scenes: empty, one line, three lines, twelve lines (the field stops at its
+six and scrolls) and one waiting file in `composer-shape` (a member's conversation) and `composer-shape-room`; a quoted reply in
+`composer-shape-quote` and `composer-shape-room-quote`; words placed by a page in `composer-shape-page-note`; a page open in the
+thread's place in `composer-shape-page-open`; dictation in `composer-shape-recording`; a running task's Stop in `composer-shape-stop`
+and, with Escape armed, `composer-shape-stop-armed`; a send that failed in `composer-shape-failure`; a waiting question's placeholder
+in `composer-shape-waiting` and `composer-shape-room-waiting`; the @ and / menus in `composer-shape-mention` and
+`composer-shape-slash`; an address chip in the field in `composer-shape-mention-chip`; the details panel open in
+`composer-shape-panel` and, dragged wide, `composer-shape-narrow`. A send that is disabled (an empty draft) is the voice emblem in the same slot, which every scene shows.
+
+```powershell
+npm run look -- composer-shape composer-shape-room composer-shape-quote composer-shape-room-quote composer-shape-page-note composer-shape-page-open composer-shape-recording composer-shape-stop composer-shape-stop-armed composer-shape-failure composer-shape-waiting composer-shape-room-waiting composer-shape-mention composer-shape-mention-chip composer-shape-slash composer-shape-panel composer-shape-narrow --theme both --width 1120,720,1920x1080
+npm run look -- chat page-composer-grows page-buy page-inplace composer mode composer-model-menu opener-toggle-model-menu opener-toggle-permission-menu question-card-composer-waiting --theme both --width 1120,720,1920x1080
+```
+
 ## Card buttons at the right; confirmations as Grok Bot's (owner, 2026-11-10)
 
 Owner: 「那個卡片的按鈕盡量放在右側 然後你可以看一下刪除的 dialog 可以參考 grok bot 的 UI」. A conversation card's
@@ -2268,3 +2300,34 @@ early names/dates, giant-turn restart, private tool readback, recent exclusion, 
 auxiliary fallback and a synthetic 5000-turn recall benchmark. Exact commands/results
 and benchmark evidence are in app/.look/briefs/memory-hermes-standard-report.md.
 Core-only change; no UI/native/live/provider acceptance follows from offline tests.
+
+## One row at the top of a conversation (owner, 2026-11-12; R-TOP-01)
+
+A conversation, a member's and a group's, has one row above its thread, and it is the window's own top row (after Grok Bot, measured at
+1120, 720 and 1920): the header (`.mb-head`) is 60 px (`--pa-top`), the pill's centre 30 px from the window's top and the round buttons
+level with it, nothing above it. The header takes no room (its height is its negative bottom margin), so the stage, and the thread in it,
+reach the window's top; the thread keeps `--pa-lead` (the row, plus 20 px while a quick question's caption hangs under the pill; 40 px
+while the search bar stands under the row) as its top padding, and its mask fades what scrolls up as it reaches the row. A report's
+`.rp-scroll` does the same; an HTML page (`.pgv-page`) and the conversation between members (`.peer-chat`) stand under the row.
+
+At the right the tools end 14 px short of the window's three buttons (`--pa-top-end`) where the pane reaches the window's edge. With the
+details panel open as a column (1120 and wider) the panel's own head (`.mb-det-head`) is the row over it, its last button 14 px short of the
+window's buttons, and the conversation's tools go to the pane's edge; under 1120 px the panel lies over the chat and its scrim dims the
+header. A group's side thread does the same with its header. Under 860 px the sidebar's menu button stands at the window's top left and the
+pill row starts clear of it (`--pa-top-start`).
+
+Dragging: the header carries `data-window-drag` (and the panel's and the side thread's heads, and the peer view's), so its empty parts move
+the window and a double press maximises, as the strip does; while a conversation's header is shown the strip (`.window-chrome`, whose drag
+cell would lie over the pill and the buttons) lets the pointer through (`pointer-events: none`, styles.css), its window buttons and the sidebar's menu button still answering. A dialog, the store
+(a page over the conversation, which starts its content under the strip), the narrow sidebar, the member's settings page and the larger computer
+view keep the cell. The details panel lying over the chat (under 1120 px) dims the
+row with its scrim, whose own top row (`.mb-det-scrim-row`) moves the window instead. A wheel
+over the header moves the thread (`passWheelUnder`).
+
+`conversation-top-row` measures all of it and returns the numbers (pill centre, row, stage top, thread height, first message top, tools'
+gap); `details-top-row` does the panel's row; `conversation-top-row-scrolled` and `conversation-top-row-wheel` the thread under the row. It
+ends the scenes in `TOP_ROW_SCENES` (scenes/top-row.mjs), and the narrow case is every scene at 720.
+
+```powershell
+npm run look -- top-row-find top-row-details top-row-room top-row-room-find top-row-scrolled top-row-wheel chat conversation-share details raphael-details room calm-thread page-inplace page-inplace-back page-inplace-room page-report page-report-share room-thread-open --theme both --width 1120,720,1920x1080
+```

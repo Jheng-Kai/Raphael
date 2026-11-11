@@ -217,6 +217,17 @@ extensions open; executables retain the existing show-in-folder policy.
 This section supersedes older descriptions of sequential speech and room-scope tool work.
 
 
+## A new member's set-up by cards (2026-11-11)
+
+The greeting turn (`AgentService._greeting_loop`) offers exactly `ask_owner` (an API loop's one tool; a CLI loop's MCP list, with its native tools
+still denied) and parks the card through the ordinary `BackgroundService.park_owner_turn`: the member's words with the card are written as a reply
+before the card is asked, so the thread reads them in that order. The parked task of a greeting is never continued. When its question is settled,
+`BackgroundService._greeting_answered` ends the task without touching the turn; an answer calls the handler `AgentService.begin_setup`, which runs
+a turn of its own (session `setup-<greeting turn>-…`, source `app`, the answer as its words, `setup` in its view) with `SETUP_STEPS` beside the answer.
+That turn is an ordinary interactive turn: `set_my_job`, the connect card (whose resumption carries `SETUP_AFTER_CONNECT`) and the next `ask_owner`
+are the tools it has, and the card after it is parked like any other. A message typed to the member closes the greeting's card like any waiting card (`OwnerQuestions.close_for_message`, unanswered), and the task of a greeting ends there without a set-up. A restart keeps the card (`worker_tasks` continuation) and `AgentService.start` carries on any answer the
+last run did not get to. `agent.history.list` sends each owner question's `created_at_ms`, so a settled card stands among the replies where it was asked.
+
 ## Pending owner questions in conversation cards (2026-11-04)
 
 OwnerQuestions.in_conversation projects only pending ask_owner rows joined to

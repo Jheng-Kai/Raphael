@@ -21,7 +21,7 @@ import { copyButton, esc, iconButton, toaster } from "./ui";
 export async function openRoomThread(host: HTMLElement, app: AppContext, roomId: number, messageId: number, people: MembersList, changed: () => void): Promise<() => void> {
   const result = await api.core<{ thread_id: number }>("rooms.thread_open", { room_id: roomId, message_id: messageId });
   const pane = document.createElement("aside"); pane.className = "room-side-thread"; pane.setAttribute("aria-label", t("rooms.thread"));
-  pane.innerHTML = `<header><b>${esc(t("rooms.thread"))}</b>${iconButton("x", t("common.close"), ' data-thread-close')}</header><div class="room-side-scroll"><div class="room-thread-origin"></div><ol class="thread"></ol></div><div class="room-thread-dock"></div>`;
+  pane.innerHTML = `<header data-window-drag><b>${esc(t("rooms.thread"))}</b>${iconButton("x", t("common.close"), ' data-thread-close')}</header><div class="room-side-scroll"><div class="room-thread-origin"></div><ol class="thread"></ol></div><div class="room-thread-dock"></div>`;
   host.append(pane); host.classList.add("has-side-thread");
   let alive = true, generation = 0, messages: RoomMessage[] = [], pending: string | undefined;
   const thread = pane.querySelector<HTMLElement>("ol")!, origin = pane.querySelector<HTMLElement>(".room-thread-origin")!;
