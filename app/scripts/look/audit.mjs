@@ -376,12 +376,19 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
   // just below it, wherever both are a large surface. A dialog's dim, a menu or the lightbox covers the strip by design.
   const chromeBar = doc.querySelector('.window-chrome');
   // A scrim the page keeps closed (a hidden settings modal) dims nothing: only a drawn one counts.
-  const dimmed = chromeBar && [...doc.querySelectorAll('.mb-scrim:not(.cr-scrim), .modal-scrim, .cs-scrim, .sidebar-scrim, .menu.side-search')].some(visible);
+  // The details panel over a narrow window dims the conversation with a scrim of its own (.mb-det-scrim), whose top row lies over the strip.
+  const DIMS = '.mb-scrim:not(.cr-scrim), .modal-scrim, .cs-scrim, .sidebar-scrim, .mb-det-scrim, .menu.side-search';
+  const dimmed = chromeBar && [...doc.querySelectorAll(DIMS)].some(visible);
   // Under a dialog's dim the strip is dimmed with everything else, so it has no surface of its own: a bright strip over a dimmed window
-  // (the new member's page under a template preview, 2026-11-12) reads as a broken layer.
+  // (the new member's page under a template preview, 2026-11-12) reads as a broken layer. A dim that itself lies over the strip dims it
+  // too, whatever the strip's own colour: only a strip that stands above the dim stays bright.
   if (chromeBar && dimmed && doc.documentElement.dataset.desktopExpanded === undefined) {
-    const own = parsed(win.getComputedStyle(chromeBar).backgroundColor);
-    if (own && own.a > 0) productRules.push({ ...describe(chromeBar), rule: 'R-UI-141', reason: 'A dialog dims the window but the caption strip keeps a surface of its own, so it stays bright over the dim' });
+    const own = parsed(win.getComputedStyle(chromeBar).backgroundColor), bar = chromeBar.getBoundingClientRect();
+    const under = typeof doc.elementFromPoint === 'function' && [bar.left + 24, (bar.left + bar.right) / 2].every(x => {
+      const top = doc.elementFromPoint(x, bar.top + 3);
+      return !!top && !chromeBar.contains(top) && !!top.closest(DIMS);
+    });
+    if (own && own.a > 0 && !under) productRules.push({ ...describe(chromeBar), rule: 'R-UI-141', reason: 'A dialog dims the window but the caption strip keeps a surface of its own, so it stays bright over the dim' });
   }
   if (chromeBar && !dimmed && typeof doc.elementsFromPoint === 'function' && doc.documentElement.dataset.windowModal !== 'true' && !doc.querySelector('.media-lightbox')) {
     const bar = chromeBar.getBoundingClientRect();
