@@ -11,10 +11,10 @@ export default [
   scene("update-auto", "Automatic updates are explicitly enabled through the shared switch", [...about, click('[data-k="auto-update"]'), wait('[data-k="auto-update"][aria-checked="true"]'), check("app-update-auto")], {appUpdate:"found"}),
   scene("attachment-limits", "The real composer keeps twenty files and refuses a twenty-first", [
     ...Array.from({length:20}, (_, i) => dropFile(".composer", `研究筆記-${i + 1}.txt`, {mime:"text/plain"})),
-    wait('.cmp-chip:nth-child(20)'), dropFile(".composer", "超過數量.txt", {mime:"text/plain"}), check("app-attachment-count"),
+    wait('.cmp-chip:nth-child(20)'), dropFile(".composer", "超過數量.txt", {mime:"text/plain"}), check("app-attachment-count"), check("toast-clearance"),
   ]),
   scene("attachment-too-large", "Document and video refusals name their separate byte limits before any read", [
     dropFile(".composer", "大型研究資料.pdf", {mime:"application/pdf",size:250 * 1024 * 1024 + 1}),
-    dropFile(".composer", "大型錄影.mp4", {mime:"video/mp4",size:1024 * 1024 * 1024 + 1}), check("app-attachment-size"),
+    dropFile(".composer", "大型錄影.mp4", {mime:"video/mp4",size:1024 * 1024 * 1024 + 1}), check("app-attachment-size"), check("toast-clearance"),
   ]),
 ];

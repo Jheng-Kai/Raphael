@@ -272,6 +272,25 @@ gigabyte in unit tests. Actual native upload/playback and upgrades remain unveri
 npm run look -- attachment-limits attachment-too-large --theme both --width 1120,720,1920x1080
 ```
 
+## Looking at the conversation's pictures (2026-11-11, R-UI-145)
+
+Three defects that every check had passed were found by a person looking at a picture
+(the slimes of every closed tab drawn over the open tab's, a dialog that reopened itself,
+a note piled up six times). The look audit therefore asks the page itself, in every scene,
+what stands over each visible control (five points of each button, link, field, menu item,
+tab, switch and option); only a layer made to stand over the page may cover one. A scene's
+own check is no longer the only guard. The audit also lists, without failing, the words a box
+cuts off without an ellipsis (`clippedText`) and, in the dark theme, bright borders and large
+bright surfaces (`lightEdges`) in `report.json`, for whoever reads the pictures.
+
+Found by reading the pictures of the conversation scenes (all of them, both themes, three sizes):
+the permission card of the composer opened right-aligned to a button at the composer's left and
+reached over the sidebar (`mode`, `composer`; it now begins at its button); a note stood a fixed
+height above the window's foot and lay over the attachments of a tall composer (`attachment-limits`;
+the note now stands over the composer's top edge, and `toast-clearance` asks it); the armed
+Escape (1.5 s of real time) was gone before the 1920 capture of a passing check (`esc-*-armed`,
+`composer-stop-armed-with-words`; the check now holds the window open for the picture).
+
 ## Commands and conversation shortcuts (2026-11-05)
 
 R-NAV-01 reuses the shared popover, cross-conversation search and the existing

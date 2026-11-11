@@ -703,7 +703,7 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 .draft-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); min-width: 0; }
 .draft-face { display: inline-flex; width: 28px; height: 28px; flex: none; }
 .draft-title { font-size: var(--fs-sm); font-weight: var(--weight-semibold); color: var(--text); }
-.draft-group-pill { display: inline-flex; align-items: center; gap: var(--sp-1); padding: 2px var(--sp-2); border-radius: var(--r-pill); background: var(--surface-2); color: var(--text-2); font-size: var(--fs-2xs); }
+.draft-group-pill { display: inline-flex; justify-self: start; align-self: flex-start; width: fit-content; align-items: center; gap: var(--sp-1); padding: 2px var(--sp-2); border-radius: var(--r-pill); background: var(--surface-2); color: var(--text-2); font-size: var(--fs-2xs); }
 .draft-group-name { width: 140px; min-width: 0; font-size: var(--fs-xs); }
 .draft-list { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); max-height: min(52vh, 440px); overflow-x: hidden; overflow-y: auto; padding-right: 2px; }
 .draft-card { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; min-width: 0; padding: var(--sp-2); border: 1px solid var(--edge); border-radius: var(--r-md); background: var(--content); }

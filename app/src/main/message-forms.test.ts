@@ -86,3 +86,11 @@ test("forecast dates omit the year in the column but keep the full date availabl
     expect(root.querySelector<HTMLElement>('.forecast-day')!.title).toBe("2026-11-01");
   } finally { vi.useRealTimers(); }
 });
+
+test("a bar chart's legend is marked as bars, a line chart's is not", () => {
+  const bar = replyContentHTML(fence("chart", examples.chart));
+  expect(bar).toContain('class="chart-legend chart-legend-bar"');
+  const line = replyContentHTML(fence("chart", { ...examples.chart, type: "line" }));
+  expect(line).toContain('class="chart-legend"');
+  expect(line).not.toContain("chart-legend-bar");
+});
