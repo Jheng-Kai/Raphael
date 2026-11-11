@@ -2798,9 +2798,10 @@ export function checkRendered(name, context = {}) {
     const pill = document.querySelector('.ob-actions > .btn.pri'), box = pill.getBoundingClientRect();
     // The guide keeps its own wide pills instead of the shared button height.
     require(box.width >= 240 && box.height >= 40 && parseFloat(getComputedStyle(pill).borderTopLeftRadius) >= box.height / 2 - 1, "the one button is a wide pill");
-    // The steps' row (an arrow and a pill) is exactly this wide, so the pill's place never moves from step to step (owner, 2026-11-11).
+    // The welcome's one pill is 360 px wide, or what a narrow card leaves it; a rerun's × and pill fill the same width.
     const foot = document.querySelector('.ob-foot'), footStyle = getComputedStyle(foot), room = foot.getBoundingClientRect().width - parseFloat(footStyle.paddingLeft) - parseFloat(footStyle.paddingRight);
-    require(Math.abs(box.width - Math.min(360, room)) <= 1, `the welcome's pill is the width of the steps' row (${Math.round(box.width)} px of ${Math.round(Math.min(360, room))})`);
+    require(Math.abs(box.width - Math.min(360, room)) <= 1, `the welcome's pill is 360 px wide, or its room (${Math.round(box.width)} px of ${Math.round(Math.min(360, room))})`);
+    require(!document.querySelector('.ob-foot .ob-ends'), "the welcome's row is its own, not a step's two ends");
     const ink = getComputedStyle(pill).backgroundColor, text = getComputedStyle(document.body).color;
     require(ink !== 'rgba(0, 0, 0, 0)' && ink !== getComputedStyle(document.querySelector('.ob-card')).backgroundColor, `the pill is the solid accent, not the card's colour (${ink} on ${text})`);
     const drawn = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data;
@@ -2809,12 +2810,60 @@ export function checkRendered(name, context = {}) {
     require(inked > 40, `the emblem is drawn on its canvas (${inked} pixels)`);
     return { check: name, inked };
   }
-  // The guide's foot (owner, 2026-11-11), the same on every step and on a rerun's welcome: one row with the round button for
-  // the way out of the screen at its left and the wide primary pill filling the rest.
-  const requireGuideRow = card => {
-    // Under the choice: one row, as wide as the welcome's pill, with the round arrow for the way back at its left and the
-    // wide black pill filling the rest (owner, 2026-11-11: 「上下堆疊會造成我們畫面有些空間比較緊」), so the step keeps the room
-    // a second pill took.
+  // A step's foot (owner, 2026-11-11, of a round arrow beside one wide pill: 「我要的是左右 button」; one row at all since
+  // 「上下堆疊會造成我們畫面有些空間比較緊…感覺左右放」): one row with a button at each end, the way back at the left and the
+  // way on at the right, both with words and a chevron that points where they go.
+  const requireStepEnds = (card, last) => {
+    const rowEl = document.querySelector('.ob-foot .ob-actions'), row = rowEl.getBoundingClientRect();
+    const buttons = [...rowEl.querySelectorAll(':scope > .btn')].filter(visible);
+    require(rowEl.classList.contains('ob-ends') && buttons.length === 2 && document.querySelectorAll('.ob-foot .btn').length === 2, `the foot holds two buttons and nothing else (${buttons.length})`);
+    const [back, primary] = buttons, left = back.getBoundingClientRect(), ink = primary.getBoundingClientRect();
+    require(back.dataset.ob === "back" && primary.dataset.ob === "next" && primary.matches('.pri') && !back.matches('.pri, .icon'), "the way back comes first and is the quiet one, the primary after it");
+    // Words on both, in the screen language: no icon-only button, so nothing needs a tooltip to be understood.
+    require(back.textContent.trim() === "上一步" && !back.hasAttribute('title') && !back.hasAttribute('aria-label'), `the way back says 上一步 in words, with no tooltip repeating them (${back.textContent.trim()})`);
+    // The last step's primary finishes: 開始使用 on a first run, 完成 when the guide was opened again.
+    const words = last ? ["開始使用", "完成"] : ["下一步"];
+    require(words.includes(primary.textContent.trim()), `the primary says ${words.join(" or ")} (${primary.textContent.trim()})`);
+    // A chevron points where each goes: before the words on the way back, after them on the way on; finishing has none.
+    const drawn = button => [...button.children].map(child => child.matches('svg.i') ? 'chevron' : 'words').join(' ');
+    require(drawn(back) === 'chevron words', `the way back is a chevron and then its words (${drawn(back)})`);
+    require(drawn(primary) === (last ? 'words' : 'words chevron'), `the primary is its words${last ? " alone" : " and then a chevron"} (${drawn(primary)})`);
+    for (const [button, side] of [[back, 'first'], ...(last ? [] : [[primary, 'last']])]) {
+      const mark = button.querySelector('svg.i').getBoundingClientRect(), text = button.querySelector('span').getBoundingClientRect(), box = button.getBoundingClientRect();
+      require(visible(button.querySelector('svg.i')) && Math.abs(mark.width - mark.height) <= 1 && mark.width >= 16, `the chevron is drawn (${Math.round(mark.width)} px)`);
+      require(side === 'first' ? mark.right <= text.left + 1 && mark.left > box.left : mark.left >= text.right - 1 && mark.right < box.right, "the chevron is on the side it points to, inside the pill");
+      require(Math.abs((mark.top + mark.bottom) / 2 - (text.top + text.bottom) / 2) <= 1.5, "the chevron sits on the words' line");
+    }
+    // One row: the two at its two ends, on one line, the same height, neither stretched across.
+    require(Math.abs(left.left - row.left) <= 1 && Math.abs(ink.right - row.right) <= 1, `the way back is at the row's left end and the primary at its right end (${Math.round(left.left - row.left)} and ${Math.round(row.right - ink.right)} px in)`);
+    require(Math.abs((left.top + left.bottom) / 2 - (ink.top + ink.bottom) / 2) <= 1 && Math.abs(left.height - ink.height) <= 1, `the two are on one line and one height (${Math.round(left.height)} and ${Math.round(ink.height)})`);
+    require(left.right < ink.left && ink.left - left.right >= 24, `the two stand apart (${Math.round(ink.left - left.right)} px between them)`);
+    for (const [what, box] of [["the way back", left], ["the primary", ink]]) {
+      require(box.width >= 120 && box.width <= Math.max(200, row.width * .34), `${what} is as wide as its words ask, not a strip across the row (${Math.round(box.width)} px of ${Math.round(row.width)})`);
+      require(box.height >= 40, `${what} is a comfortable target (${Math.round(box.height)} px tall)`);
+    }
+    require(parseFloat(getComputedStyle(primary).borderTopLeftRadius) >= ink.height / 2 - 1 && parseFloat(getComputedStyle(back).borderTopLeftRadius) >= left.height / 2 - 1, "both are pills");
+    // The row is as wide as the widest step's column, whatever the step, so the buttons stand in the same place on
+    // every step; it is centred in the card.
+    const foot = document.querySelector('.ob-foot'), footBox = foot.getBoundingClientRect(), footStyle = getComputedStyle(foot);
+    const room = footBox.width - parseFloat(footStyle.paddingLeft) - parseFloat(footStyle.paddingRight);
+    require(Math.abs(row.width - Math.min(900, room)) <= 1, `the row is the width of the widest step's column (${Math.round(row.width)} px of ${Math.round(Math.min(900, room))})`);
+    require(Math.abs((row.left + row.right) / 2 - (card.left + card.width / 2)) <= 2, "the row is centred in the card");
+    // The colours: the primary is the solid accent; the way back has a quiet surface of its own with no edge to see.
+    const surface = getComputedStyle(back).backgroundColor, cardSurface = getComputedStyle(document.querySelector('.ob-card')).backgroundColor;
+    require(!['rgba(0, 0, 0, 0)', 'transparent'].includes(surface) && surface !== getComputedStyle(primary).backgroundColor && surface !== cardSurface, `the way back keeps a quiet surface of its own (${surface})`);
+    require(getComputedStyle(back).borderTopColor === surface, `the way back's edge is its fill's colour: no edge shows, in the dark theme least of all (${getComputedStyle(back).borderTopColor})`);
+    // The foot is one control and its padding tall, and the content ends where it begins.
+    const pad = parseFloat(footStyle.paddingTop) + parseFloat(footStyle.paddingBottom);
+    require(footBox.height <= ink.height + pad + 1, `the foot is one control plus its padding tall (${Math.round(footBox.height)} px, a control ${Math.round(ink.height)} + ${Math.round(pad)})`);
+    require(document.querySelector('.ob-body').getBoundingClientRect().bottom <= footBox.top + 1, "the content area ends where the foot begins");
+    require(!!(back.compareDocumentPosition(primary) & Node.DOCUMENT_POSITION_FOLLOWING), "the way back comes before the primary in the tab order");
+    require(ink.bottom <= card.bottom && left.bottom <= card.bottom && left.left >= card.left && ink.right <= card.right, "both stay inside the card");
+    return { back: left, ink };
+  };
+  // A rerun's welcome keeps the welcome's own row: a round × for the way out at the left of the one wide pill (a close is
+  // the × alone, never a word button; owner, 2026-11-11).
+  const requireWelcomeRow = card => {
     const primary = document.querySelector('.ob-actions > .btn.pri'), back = document.querySelector('.ob-actions > .btn.ob-back'), rowEl = document.querySelector('.ob-actions'), row = rowEl.getBoundingClientRect();
     const foot = document.querySelector('.ob-foot'), footBox = foot.getBoundingClientRect(), footStyle = getComputedStyle(foot);
     const ink = primary.getBoundingClientRect(), arrow = back?.getBoundingClientRect();
@@ -2841,30 +2890,33 @@ export function checkRendered(name, context = {}) {
     return { ink, arrow };
   };
   if (name === "onboarding-back-hover" || name === "onboarding-back-focus") {
-    // The round back arrow of the guide's foot (owner, 2026-11-11): its surface is the grey the 上一步 pill had, one step
-    // lighter under the pointer, and the keyboard shows the app's usual ring on it, the arrow coming before the pill.
+    // 上一步 at the left end of a step's foot (owner, 2026-11-11): a quiet pill on a grey of its own, one step lighter
+    // under the pointer, edge and fill alike; the keyboard shows the app's usual ring on it, and it comes before the primary.
     const back = document.querySelector('.ob-foot [data-ob="back"]');
     const token = value => { const probe = document.createElement('i'); probe.style.backgroundColor = `var(${value})`; document.body.append(probe); const colour = getComputedStyle(probe).backgroundColor; probe.remove(); return colour; };
-    require(visible(back) && back.matches('.btn.icon'), "the guide's foot has its round back arrow");
+    require(visible(back) && back.matches('.btn.ob-prev:not(.icon)') && back.textContent.trim() === "上一步", "the step's foot has 上一步, in words");
     if (name === "onboarding-back-hover") {
-      require(back.matches(':hover'), "the pointer is on the arrow");
-      require(getComputedStyle(back).backgroundColor === token('--pressed') && token('--pressed') !== token('--hover'), `the arrow is one step lighter under the pointer (${getComputedStyle(back).backgroundColor})`);
-      require(!document.documentElement.hasAttribute('data-keys') && getComputedStyle(back).outlineStyle === 'none', "the pointer adds no keyboard ring");
+      const style = getComputedStyle(back);
+      require(back.matches(':hover'), "the pointer is on 上一步");
+      require(style.backgroundColor === token('--pressed') && token('--pressed') !== token('--hover'), `上一步 is one step lighter under the pointer (${style.backgroundColor})`);
+      require(style.borderTopColor === style.backgroundColor, `its edge changes with its fill, so no ring appears under the pointer (${style.borderTopColor})`);
+      require(!document.documentElement.hasAttribute('data-keys') && style.outlineStyle === 'none', "the pointer adds no keyboard ring");
     } else {
       const style = getComputedStyle(back);
-      require(document.activeElement === back && document.documentElement.hasAttribute('data-keys'), "Shift+Tab from the pill lands on the arrow, by the keyboard");
-      require(style.outlineStyle !== 'none' && parseFloat(style.outlineWidth) >= 2 && style.outlineColor !== 'rgba(0, 0, 0, 0)', `the arrow shows the app's focus ring (${style.outlineWidth} ${style.outlineStyle} ${style.outlineColor})`);
-      require(style.backgroundColor === token('--hover'), "the arrow rests on the grey of the old pill");
-      require(parseFloat(style.borderTopLeftRadius) >= back.getBoundingClientRect().height / 2 - 1, "the ring follows a circle");
+      require(document.activeElement === back && document.documentElement.hasAttribute('data-keys'), "Shift+Tab from the primary lands on 上一步, by the keyboard");
+      require(style.outlineStyle !== 'none' && parseFloat(style.outlineWidth) >= 2 && style.outlineColor !== 'rgba(0, 0, 0, 0)', `上一步 shows the app's focus ring (${style.outlineWidth} ${style.outlineStyle} ${style.outlineColor})`);
+      require(style.backgroundColor === token('--hover'), "上一步 rests on its quiet grey");
+      require(parseFloat(style.borderTopLeftRadius) >= back.getBoundingClientRect().height / 2 - 1, "the ring follows the pill");
     }
     return { check: name };
   }
   if (name === "onboarding-rerun") {
-    // The guide opened again from Settings: its welcome has the same one row as the steps, the way out being a round × (a
-    // close is the × alone, never a word button; owner, 2026-11-11), then the pill. Nothing stacks.
+    // The guide opened again from Settings: its welcome is one row, the way out being a round × (a close is the × alone,
+    // never a word button; owner, 2026-11-11), then the wide pill. Nothing stacks.
     const card = document.querySelector('.ob-card').getBoundingClientRect();
     require(visible(document.querySelector('.ob-emblem canvas.ob-emb')) && document.querySelector('.ob-col > h2.ob-wordmark'), "the welcome is on screen");
-    const { ink, arrow } = requireGuideRow(card);
+    require(!document.querySelector('.ob-foot .ob-ends'), "the welcome's row is its own, not a step's two ends");
+    const { ink, arrow } = requireWelcomeRow(card);
     const back = document.querySelector('.ob-actions > .btn.ob-back');
     require(back.dataset.ob === "back" && back.querySelector('svg.i') && !back.textContent.trim(), "the way out is a × with no words");
     require(document.querySelectorAll('.ob-foot .btn').length === 2, "the foot holds the × and the pill and nothing else");
@@ -2967,7 +3019,7 @@ export function checkRendered(name, context = {}) {
       }
       require(document.querySelector('[data-svc="toggle"][data-id="read"]').getAttribute('aria-checked') === 'false', "a switch that was pressed turned off");
     }
-    const { ink, arrow } = requireGuideRow(card);
+    requireStepEnds(card, name === "onboarding-abilities");
     // Every word of a tile stays inside it, in every language.
     for (const tile of document.querySelectorAll('.ob-tile')) {
       const t = tile.getBoundingClientRect();
@@ -2976,7 +3028,6 @@ export function checkRendered(name, context = {}) {
         require(p.right <= t.right + 1 && p.left >= t.left - 1, `${part.textContent.trim().slice(0, 24)} stays inside its tile`);
       }
     }
-    require(ink.bottom <= card.bottom && arrow.bottom <= card.bottom && arrow.left >= card.left, "the arrow and the pill stay inside the card");
     return { check: name, items: items.length, columns: lefts.size, headline: getComputedStyle(title).fontSize };
   }
   if (name === "chat-usage-limit") {
@@ -6279,10 +6330,13 @@ export function checkRendered(name, context = {}) {
       const [r, g, b] = getComputedStyle(bar).backgroundColor.match(/[\d.]+/g).map(Number);
       require(Math.max(r, g, b) - Math.min(r, g, b) > 60, `the bar is a member's colour, not black or white: rgb(${r}, ${g}, ${b})`);
     }
-    // One refresh for the whole tab, at its top right, an icon with no words.
-    const refreshes = [...document.querySelectorAll('.set-content button')].filter(button => visible(button) && button.querySelector('svg.i') && /refresh|models-refresh/.test(button.dataset.act ?? button.dataset.runAct ?? ""));
-    require(refreshes.length === 1 && refreshes[0].closest('.set-head') && refreshes[0].classList.contains('icon') && !refreshes[0].textContent.trim(), `one refresh icon, beside the tab's name (${refreshes.length})`);
-    require(refreshes[0].dataset.state === "idle" && refreshes[0].getAttribute("aria-busy") === "false", "the refresh says it is idle when nothing is being read");
+    // No refresh anywhere: opening Settings reads the allowances (`usage-open-*`), so nothing stands beside the tab's name.
+    const heading = document.querySelector('.set-content > #set-title'), page = heading?.parentElement, first = page?.querySelector('.models-page');
+    require(heading && first, "the tab's name stands alone above its views");
+    const beside = [...page.children].slice(0, [...page.children].indexOf(first)).filter(child => child !== heading);
+    require(!document.querySelector('[data-act="models-refresh"], .models-refresh, .set-head') && beside.every(child => !child.matches('button') && !child.querySelector('button')), "no refresh button or icon beside the tab's name");
+    const refreshes = [...page.querySelectorAll('button')].filter(button => visible(button) && /refresh|reload|重新整理|重新讀取|更新/i.test(`${button.getAttribute('aria-label') ?? ''} ${button.textContent} ${button.dataset.act ?? ''} ${button.dataset.runAct ?? ''}`));
+    require(refreshes.length === 0, `no button on the tab refreshes anything (${refreshes.map(button => button.getAttribute('aria-label') || button.textContent.trim()).join(', ')})`);
     const cards = [...panel.querySelectorAll('.run-subscription')].filter(visible), allowance = panel.querySelector('.run-allowance');
     const subscriptions = window.__look.data.allowances.brains.length;
     if (subscriptions) {
@@ -6293,6 +6347,62 @@ export function checkRendered(name, context = {}) {
       }
     } else require(!visible(allowance), "with no subscription the allowance section stands aside");
     return { check: name, cards: cards.length };
+  }
+  if (name.startsWith("usage-open-")) {
+    // Settings reads the allowances each time it opens, on whatever tab and unseen: asked for once at the opening, the
+    // numbers already on their tab, a reading that finds the same numbers touches nothing, a new number replaces the old
+    // in the same card, and no busy state or message is ever drawn.
+    const stage = name.slice("usage-open-".length), asked = () => window.__look.calls.filter(call => call.method === "usage.allowances").length;
+    const root = () => document.querySelector('.usage-analytics'), keep = () => (window.__lookUsage ??= { touched: 0, busy: false });
+    const count = (state, records) => {
+      for (const record of records) {
+        state.touched++;
+        if (record.type === 'attributes' && record.attributeName === 'aria-busy' && (record.oldValue === 'true' || record.target.getAttribute('aria-busy') === 'true')) state.busy = true;
+      }
+    };
+    const watched = () => { const state = keep(); count(state, state.observer?.takeRecords() ?? []); return state; };
+    if (stage === "general") {
+      require(visible(document.querySelector('.modal-scrim [data-pane="general"][aria-current="page"]')) && !document.querySelector('[data-models-tab]'), "Settings is open on 一般, not on the allowances' tab");
+      require(asked() === 1, `the allowances were asked for once, at the opening (${asked()})`);
+      require(!document.querySelector('[data-act="models-refresh"]'), "no refresh button exists");
+      return { check: name, asked: asked() };
+    }
+    if (stage === "arm") {
+      require(asked() === 1, `reaching the tab asks for nothing more (${asked()})`);
+      const area = root(), card = area?.querySelector('.run-subscription');
+      require(visible(area) && card && area.getAttribute('aria-busy') === 'false', "the numbers are on the tab as it opens, none being waited for");
+      const state = keep();
+      state.card = card; state.html = area.innerHTML; state.touched = 0; state.busy = false; state.text = card.textContent;
+      state.observer?.disconnect();
+      state.observer = new MutationObserver(records => count(state, records));
+      state.observer.observe(area, { attributes: true, attributeOldValue: true, childList: true, characterData: true, subtree: true });
+      return { check: name, asked: asked() };
+    }
+    if (stage === "lower") {
+      // The next reading finds another number: the first window of the first subscription has less left.
+      const window0 = window.__look.data.allowances.brains[0].windows[0];
+      window0.remaining_percent = Math.max(0, window0.remaining_percent - 10);
+      return { check: name, remaining: window0.remaining_percent };
+    }
+    if (stage !== "same" && stage !== "changed") throw new Error(`${name}: unknown stage`);
+    return (async () => {
+      // The reading has answered (the mock stamps the end of each call), and the page has had a moment to draw it.
+      const answered = () => window.__look.calls.filter(call => call.method === "usage.allowances").every(call => call.t1 !== undefined);
+      for (let waited = 0; waited < 3000 && !(answered() && asked() >= (stage === "same" ? 2 : 3)); waited += 25) await new Promise(resolve => setTimeout(resolve, 25));
+      await new Promise(resolve => setTimeout(resolve, 150));
+      const state = watched(), area = root();
+      require(visible(area) && state.card && area.contains(state.card), "the card the numbers were shown in is still on the page");
+      if (stage === "same") {
+        require(asked() === 2, `the next opening asked again (${asked()})`);
+        require(state.touched === 0 && area.innerHTML === state.html, `a reading that found the same numbers touched nothing (${state.touched} changes)`);
+      } else {
+        require(asked() === 3, `the opening after asked again (${asked()})`);
+        require(state.card.textContent !== state.text && /\d+%/.test(state.card.textContent) && state.touched > 0, "the new number replaced the old in the same card");
+        require(!state.busy && area.getAttribute('aria-busy') === 'false', "no busy state was drawn while it read");
+      }
+      require(!document.querySelector('.toast'), "nothing was said about the reading");
+      return { check: name, asked: asked(), touched: state.touched };
+    })();
   }
   if (name === "overlay-percentage") {
     const caption = document.querySelector("#progress");

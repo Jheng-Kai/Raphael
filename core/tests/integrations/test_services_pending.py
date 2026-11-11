@@ -48,10 +48,12 @@ async def test_pending_composio_never_blocks_guide_reads_and_second_login_is_bus
     try:
         await asyncio.wait_for(opened.wait(), .5)
         await guide_reads(router)
-        busy = await asyncio.wait_for(router.call("connectors.connect", {"toolkit": "gmail"}), .2)
+        # The bounds are for a call that hangs, not a measure of speed: a refusal comes at once, and 200 ms was within
+        # reach of a slow CI machine.
+        busy = await asyncio.wait_for(router.call("connectors.connect", {"toolkit": "gmail"}), 2)
         assert busy["error"] == "busy"
         with pytest.raises(RpcError, match="under way"):
-            await asyncio.wait_for(router.call("integrations.connect", {"catalog_id": "slack"}), .2)
+            await asyncio.wait_for(router.call("integrations.connect", {"catalog_id": "slack"}), 2)
         if cancel:
             assert await router.call("integrations.connect_cancel") == {"cancelled": True}
             assert await asyncio.wait_for(task, .5) == {"connected": False, "error": "cancelled"}
@@ -73,7 +75,10 @@ async def test_builtin_login_never_blocks_parallel_guide_reads_and_releases_its_
     opened, closed = asyncio.Event(), asyncio.Event()
     router, service, hub, vault = setup_service(tmp_path, conn, Platform())
     vault.set("connectors:composio:key", "synthetic-key")
-    hub._login_timeout_s = .08
+    # The sign-in must still be under way while the reads and the two refused connects below run. At 80 ms it was over
+    # before them on a slow CI machine, and the refusal no longer said "under way" (2026-11-11). The run that is
+    # cancelled needs no end of its own. The run that times out gets a second, twelve times what those calls take.
+    hub._login_timeout_s = 30 if cancel else 1
     monkeypatch.setattr(builtin_service, "REFRESH_TOTAL_S", 0)
 
     async def login(*args, **kwargs):
@@ -91,11 +96,11 @@ async def test_builtin_login_never_blocks_parallel_guide_reads_and_releases_its_
         await asyncio.wait_for(opened.wait(), .5)
         await guide_reads(router)
         with pytest.raises(RpcError, match="under way"):
-            await asyncio.wait_for(router.call("integrations.connect", {"catalog_id": "slack"}), .2)
+            await asyncio.wait_for(router.call("integrations.connect", {"catalog_id": "slack"}), 2)
         assert (await router.call("connectors.connect", {"toolkit": "gmail"}))["error"] == "busy"
         if cancel:
             assert await router.call("integrations.connect_cancel") == {"cancelled": True}
-        result = await asyncio.wait_for(task, .5)
+        result = await asyncio.wait_for(task, 3)
         assert result == {"connected": False, "error": "cancelled" if cancel else "timeout"}
         assert closed.is_set() and hub._login is None
         await guide_reads(router)

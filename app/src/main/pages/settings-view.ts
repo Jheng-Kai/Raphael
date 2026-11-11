@@ -113,8 +113,6 @@ export const HOTKEY_ROWS: Record<HotkeyField, string> = { dictation_keys: "hotke
 export interface SettingsView {
   update?: import("../api").UpdateView | null;
   modelsTab?: ModelsTab;
-  /** What the refresh of 模型與用量 is doing. */
-  modelsRefresh?: "idle" | "busy" | "done";
   pane: SettingsPane;
   device: DeviceSettings;
   /** The brain's settings; null while the core does not answer. */
@@ -405,14 +403,9 @@ function shortcutRow(name: string, bindings: readonly string[], change?: { act: 
 const altgrNote = (v: SettingsView, bindings: readonly string[]): string[] =>
   v.altgr && bindings.some((binding) => binding.split("+").includes("AltRight")) ? [note(st("warn", t("settings.054")))] : [];
 
-/**
- * The pane title receives focus when settings open. Actions share its row.
- */
-export const headingHTML = (v: SettingsView, actions = ""): string => {
-  // A tab is its name alone: no line under it.
-  const title = `<h1 id="set-title" tabindex="-1">${esc(paneTitle(v.pane))}</h1>`;
-  return actions ? `<div class="set-head">${title}${actions}</div>` : title;
-};
+/** The pane title receives focus when settings open. A tab is its name alone: no line under it, no action beside it. */
+export const headingHTML = (v: SettingsView): string =>
+  `<h1 id="set-title" tabindex="-1">${esc(paneTitle(v.pane))}</h1>`;
 
 /** What the tabs that need the core say when it does not answer. */
 const coreNote = (v: SettingsView): string => (v.brain === null ? `<div class="alert core-note">${st("err", t("settings.052"))}</div>` : "");
@@ -544,15 +537,6 @@ export const retentionOf = (v: SettingsView): string => String(v.brain?.history_
  * One page with model connections and usage in separate views. Legacy ids choose their own view. Usage is as plain as
  * Usage: what each subscription has left, then the key and what was spent, with no charts.
  */
-/**
- * The one refresh of 模型與用量 and what it is doing: it turns while it
- * reads, then is a check for a moment. It stays a button that keeps the focus; a press while it reads does nothing.
- */
-export function modelsRefreshHTML(state: "idle" | "busy" | "done"): string {
-  const label = t(state === "busy" ? "conn.refreshing" : state === "done" ? "runs.refreshed" : "runs.refresh");
-  return iconBtn(state === "done" ? "check" : "refresh", label, ` data-act="models-refresh" data-state="${state}" aria-busy="${state === "busy"}"${state === "busy" ? ' aria-disabled="true"' : ""}`, "models-refresh");
-}
-
 function modelsHTML(v: SettingsView): string {
   const providers = v.providers ?? emptyProvidersView();
   const selected = v.modelsTab ?? (v.pane === "usage" ? "usage" : "models");
@@ -562,8 +546,8 @@ function modelsHTML(v: SettingsView): string {
       keyRow(v),
       ...(v.keyError ? [note(st("err", v.keyError()), ' role="alert"')] : []),
     ]);
-  // Read once while the app runs; this reads it all again.
-  return headingHTML(v, modelsRefreshHTML(v.modelsRefresh ?? "idle")) + coreNote(v) + `<div class="models-page">` +
+  // No refresh of its own: opening Settings reads it all again, unseen (settings.ts `refreshInBackground`).
+  return headingHTML(v) + coreNote(v) + `<div class="models-page">` +
     tabs((["models", "usage"] as const).map((id) => ({
       id, label: id === "models" ? t("providers.title") : t("models.usage"),
       attrs: ` id="models-tab-${id}" data-models-tab="${id}" data-k="models-tab:${id}" aria-controls="models-panel-${id}" tabindex="${id === selected ? 0 : -1}"`,

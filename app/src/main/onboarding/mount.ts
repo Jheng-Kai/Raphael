@@ -23,7 +23,7 @@ import { openConnectionSetup } from "../connection-setup";
 import { modelPickerHTML, mountModelPicker, type ModelPickerLook } from "../model-picker";
 import { createServices, servicesHTML as abilityRowsHTML } from "../services";
 import type { AppContext, BrainSettings, MainEvent, ModelCatalog, StoreService } from "../types";
-import { actionRow, closeMenu, esc, iconButton, openMenuOnArrow, toaster } from "../ui";
+import { actionRow, btn, closeMenu, esc, ico, iconButton, openMenuOnArrow, toaster } from "../ui";
 import { SERVICES_WAIT_MS, mergeServices, within } from "./helpers";
 import { type FlowState, type Mode, initialState, isLast, reduce } from "./flow";
 import {
@@ -164,19 +164,27 @@ export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: A
   const accountsError = (): string => accounts.view().chatgptError;
 
   /**
-   * One row: a round arrow for the way back, then the wide black pill that fills the rest (owner, 2026-11-11: 「上下堆疊會造成
-   * 我們畫面有些空間比較緊…感覺左右放，或者左右放那個箭頭之類的」), so the step above keeps the room the second pill took. The
-   * left slot is the way out of the screen: the arrow on a step, and on a rerun's welcome a × that leaves the guide (a close
-   * is the × alone, never a word button). A first run has nothing to go back to from its welcome, which is the pill alone.
+   * A step's foot is one row with a button at each end (owner, 2026-11-11, of a round arrow beside one wide pill: 「我要的是
+   * 左右 button」; the row itself since 「上下堆疊會造成我們畫面有些空間比較緊…感覺左右放」): the way back at the left, a quiet
+   * pill with a chevron and its words, and the way on at the right, the black pill with its words and a chevron. The last
+   * step's pill says what finishing does and has no chevron: nothing comes after it. The welcome has nowhere to go back to
+   * and keeps its one wide pill in the middle; on a rerun a round × stands before it and leaves the guide (a close is the
+   * × alone, never a word button).
    */
   function footHTML(): string {
-    const label = flow.step === "welcome" ? "onboarding.start" : isLast(flow) ? (mode === "rerun" ? "onboarding.finishRerun" : "onboarding.finish") : "onboarding.next";
-    const secondary = flow.step !== "welcome" ? iconButton("left", t("onboarding.back"), ' data-ob="back"', "ob-back")
-      : mode === "rerun" ? iconButton("x", t("common.cancel"), ' data-ob="back"', "ob-back") : undefined;
+    const next = ` data-ob="next"${finishing ? " disabled" : ""}`;
+    if (flow.step === "welcome") {
+      return actionRow({
+        cls: "ob-actions",
+        secondary: mode === "rerun" ? iconButton("x", t("common.cancel"), ' data-ob="back"', "ob-back") : undefined,
+        primary: { label: esc(t("onboarding.start")), attrs: next },
+      });
+    }
+    const last = isLast(flow), label = last ? (mode === "rerun" ? "onboarding.finishRerun" : "onboarding.finish") : "onboarding.next";
     return actionRow({
-      cls: "ob-actions",
-      secondary,
-      primary: { label: esc(t(label)), attrs: ` data-ob="next"${finishing ? " disabled" : ""}` },
+      cls: "ob-actions ob-ends",
+      secondary: btn(`${ico("left")}<span>${esc(t("onboarding.back"))}</span>`, "ob-prev", ' data-ob="back"'),
+      primary: { label: `<span>${esc(t(label))}</span>${last ? "" : ico("right")}`, attrs: next },
     });
   }
 

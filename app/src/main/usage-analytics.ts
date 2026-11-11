@@ -78,7 +78,7 @@ export function mountUsageAnalytics(host: HTMLElement, api: UsageAnalyticsApi): 
     root.hidden = !busy && !cards;
     root.setAttribute("aria-busy", String(busy));
     root.setAttribute("aria-label", t("runs.allowance"));
-    // No refresh of its own: the one at the top of 模型與用量 reads this too.
+    // No refresh of its own: Settings reads this again each time it opens, unseen (settings.ts `refreshInBackground`).
     patchHTML(root, `<header><h2 tabindex="-1">${t("runs.allowance")}</h2></header>${cards}`);
     if (focused) root.querySelector<HTMLElement>(`[data-run-act="${focused}"]`)?.focus({ preventScroll: true });
   }
@@ -89,14 +89,15 @@ export function mountUsageAnalytics(host: HTMLElement, api: UsageAnalyticsApi): 
     if (!quiet) render();
     let next = allowance, broke = false;
     try { next = await api.usageAllowances(); } catch { broke = true; }
+    // A quiet reading that fails leaves the page as it is (what was last known stays, with no notice over it); its caller
+    // hears. Only the first reading shows its failure in the view.
+    if (quiet && broke) throw new Error("allowance");
     const account = await api.chatgptStatus?.().catch(() => null);
     if (disposed || current !== revision) return;
     allowance = next; failed = broke;
     chatgpt = !!account?.signed_in && account.plan_scope_granted !== false;
     busy = false;
     if (!quiet || JSON.stringify([allowance, failed, chatgpt]) !== before) render();
-    // The page's one refresh says when a reading failed; the first reading shows its failure in the view.
-    if (quiet && broke) throw new Error("allowance");
   }
 
   function clicked(event: MouseEvent): void {
