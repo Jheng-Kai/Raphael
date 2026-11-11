@@ -37,6 +37,11 @@ export function verifyChecks({ args, directory, judge, environment = process.env
     );
   }
   if (args.includes("--live")) checks.push(coreCheck("live"));
+  if (args.includes("--computer")) {
+    const computer = coreCheck("computer", ["--out", directory]);
+    computer.env.RAPHAEL_COMPUTER_CANCEL_FILE = join(directory, "computer.cancel");
+    checks.push(computer);
+  }
   if (judge) checks.push(coreCheck("judge", [resolve(judge)]));
   return checks;
 }

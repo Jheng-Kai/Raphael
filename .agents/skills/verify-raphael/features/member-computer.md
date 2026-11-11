@@ -52,7 +52,7 @@ the connect probe). A change to `computer/image/`, the container's shape in
 
 Container acceptance of 2026-11-12 (the owner's Docker Desktop, a throwaway image
 tag and data folder, production capabilities, through the real `LocalVm`; by hand,
-a scripted `verify -- --computer` is the next unit):
+now encoded in the opt-in `verify -- --computer` command described below):
 - 1, 2, 3, 4, 5 and 6 screens start ready in 24 to 33 s with no helper retry:
   outputs `VNC-0..N-1` at the grid's rectangles, the token file, the mark in
   `/dev/shm`, N clipped servers as children of the helper on loopback only, one
@@ -118,6 +118,41 @@ tests and the container run had both missed; each has a test that was red first)
 `core/tests/computer/test_screens.py::test_rfb_layout_has_one_deadline_for_trickling_reads`,
 `core/tests/computer/test_screens.py::test_rfb_rejects_oversized_skipped_payload_before_reading_it`,
 `core/tests/computer/test_screens.py::test_supervisor_keeps_retrying_screen_setup_instead_of_entering_fatal`.
+
+## Scripted container acceptance (2026-11-12)
+
+R-COMP-SCREEN-01: from `app/`, `npm run verify -- --computer` requires an already
+running Linux Docker engine. It never starts Docker, never runs implicitly with
+`--core` or in CI, and builds only `raphael-acceptance/cua-local-vm:<run id>`.
+Every container belongs to a fresh temporary data-directory owner. Cleanup checks
+that exact owner label, then removes only this run's containers, image tag and data,
+including after failure/interruption. Direct module `--keep` retains them for inspection.
+The JSON check report is `computer-acceptance.json` in the verify run's folder.
+
+The default counts 1,3,6 cover a single view, a grid with an empty cell and the
+largest layout. Direct module `--screens 1,4,6` selects other distinct counts in 1..6.
+Checks drive production start/status/stop/viewer, the image helper's grid/token/DES,
+monitor/panel geometry, parented loopback view processes, token refusals, launcher
+clicks with isolated framebuffer pixels, boot-mark timing, restart freshness,
+clipped-server/helper recovery and X loss. The largest multi-screen target also
+opens the real DesktopViewer last-screen relay and rejects an unknown session path.
+A locally available layer 4 image additionally exercises start, maintain(update),
+and erase with workspace files; its absence is a named skip. Engine absence exits
+2, any failed check exits 1. Each check prints expected/observed evidence on failure.
+
+Run this when computer/image/, vm.py's container shape or the view path changes.
+Offline framing, authentication, parser and isolation tests live in
+`core/tests/evaluate/test_computer_acceptance.py`; no Docker or network is used by
+those tests. They establish contracts only. This command exercises the core relay;
+the native app's own panel, remote SSH host, a viewer retained across a clipped
+server death, and member seat/lease stages remain outside its acceptance scope.
+
+First real runs (2026-11-12, this PC's Docker Desktop): the first found three defects of the
+command itself that 179 offline tests had passed (guest paths built with the host's path type
+on Windows; a terminal counted as two windows and placed by its frame-relative corner; a
+picture check that compared a black terminal with the wallpaper, which is the night picture
+at 03:00); the second found that a one-screen computer's panel names no output. The third,
+through `npm run verify -- --computer`, is the result recorded in the pull request.
 
 ## Deleting a member removes its computer (2026-11-11)
 
@@ -192,8 +227,12 @@ The fake VNC and client run independently of core; a synthetic 300 ms main-loop
 block must leave framebuffer, owner/teaching input and relay expiry below 200 ms.
 Tests also cover both socket ends closing, preview/watch input denial, stale
 handshakes, privacy and the 8-session/64-connection caps. Evidence and exact exits:
-`app/.look/briefs/viewer-path-report.md`. Actual container/SSH/noVNC rendering,
-native frame pacing and browser canvas performance remain separate acceptance.
+`app/.look/briefs/viewer-path-report.md`. `npm run verify -- --computer` now covers
+local container layout/readiness, authenticated clipped noVNC transport, screen-local
+input/raw pixels, recovery/restart, available layer 4 migration/deletion, and the
+core's own `DesktopViewer` connection/relay path. The native app's panel around that
+relay, remote SSH hosts, native frame pacing and browser canvas performance still
+need separate acceptance.
 
 ## Library: only what the member delivered (owner, 2026-11-07 night)
 
