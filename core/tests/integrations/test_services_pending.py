@@ -138,7 +138,9 @@ async def test_hung_composio_http_answers_with_timeout(tmp_path, conn, monkeypat
         # Status publishes the local snapshot when refreshing the provider fails.
         assert isinstance(result, dict)
     else:
-        assert result == {"ok": False, "error": "timeout", "http_status": None}
+        # A connect that got no answer from the service says so (R-CONNECT-01: stage "request" is the `no_answer` cause).
+        assert result == {"ok": False, "error": "timeout", "http_status": None,
+                          **({"stage": "request"} if method == "connect" else {})}
 
 
 @pytest.mark.parametrize("max_bytes", [None, 1024])

@@ -220,7 +220,12 @@ async def test_allow_all_tools_keep_rules_and_the_selected_brain(tmp_path, monke
         task_id = app.members._run(app.members.store.routine(routine['id']))
         await until(lambda: app.background.task(task_id).state in ('done', 'failed', 'cancelled', 'waiting'))
         task = app.background.task(task_id)
-        assert task.state == 'done', (task.state, task.reason, task.report_text)
+        if forbidden:
+            # R-ROUTINE-05: a run whose one needed step the owner's rule refused did not do its work, so it is failed, not done.
+            assert (task.state, task.reason) == ('failed', 'routine_refused'), (task.state, task.reason, task.report_text)
+            assert 'safety rule' in task.report_text
+        else:
+            assert task.state == 'done', (task.state, task.reason, task.report_text)
         assert app._conn.execute('SELECT count(*) FROM owner_questions').fetchone()[0] == 0
         expected = 0 if forbidden else 1 if tool == 'video_generate' else 2
         assert (execute if tool == 'dataset' else image if tool == 'image_generate' else video).await_count == expected
