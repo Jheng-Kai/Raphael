@@ -566,7 +566,7 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
 .menu .menu-action[aria-disabled="true"] { color: var(--text-3); cursor: default; }
 /* The share card (owner, 2026-11-12, after Grok Bot's 「Create a copy」): what the header's share opens is one row whose mark is drawn for
    it alone, the member's own face twice, the copy standing behind the one that is. Any menu item may carry such a mark (ui.ts `mark`). */
-.menu .mmark { display: inline-grid; flex: none; place-items: center; }
+.menu .mmark { display: inline-flex; flex: none; align-items: center; justify-content: center; }
 .menu.share-card { min-width: 248px; }
 .menu.share-card .menu-action { align-items: center; gap: var(--sp-3); padding: var(--sp-1) var(--sp-3) var(--sp-1) var(--sp-2); }
 .share-faces { position: relative; display: block; width: 38px; height: 32px; pointer-events: none; }
