@@ -655,21 +655,33 @@ body:has(.page-agent:not([hidden])[data-det="open"]:not(.is-room)) .toast { max-
 .lang-search .i { width: 16px; height: 16px; }
 :where(:root[data-keys]) .lang-search:focus-within { box-shadow: inset 0 0 0 2px var(--focus); }
 .lang-none { margin: 0; padding: var(--sp-2) var(--sp-3); font-size: var(--fs-sm); color: var(--text-3); }
-/* Under the choice: one row, the round arrow for the way back at its left and the wide black pill filling the rest (owner,
-   2026-11-11: 「上下堆疊會造成我們畫面有些空間比較緊…感覺左右放，或者左右放那個箭頭之類的，或許會比較好」). The row is as wide
-   as the welcome's single pill, so the pill's place does not move from step to step, and the step above keeps the room the
-   second pill took. The grid fades out over the foot. */
+/* Under a step: one row with a button at each end (owner, 2026-11-11, of a round arrow beside one wide pill: 「我要的是左右
+   button」; one row at all since 「上下堆疊會造成我們畫面有些空間比較緊…感覺左右放，或者左右放那個箭頭之類的，或許會比較好」).
+   The way back is at the left, a quiet pill, and the way on at the right, the black pill: each has its words and a chevron
+   that points where it goes. The row is as wide as the widest step's column (the two stores'), whatever the step, so
+   neither button moves from step to step. The welcome keeps its one wide pill in the middle, and a rerun's welcome a round
+   × before it. The grid fades out over the foot. */
 .ob-foot { --ob-pill: 44px; position: relative; display: grid; grid-template-columns: minmax(0, 1fr); justify-items: center; padding: var(--sp-3) var(--sp-6) var(--sp-5); }
 .ob-foot::before { content: ""; position: absolute; inset: auto 0 100% 0; height: 28px; background: linear-gradient(to bottom, color-mix(in srgb, var(--content) 0%, transparent), var(--content)); pointer-events: none; }
-/* The guide keeps its own wide pills, the one exception to the shared button height. */
+/* The guide keeps its own tall pills, the one exception to the shared button height. */
 .ob-foot .ob-actions { display: flex; flex-direction: row; flex-wrap: nowrap; align-items: stretch; justify-content: flex-start; gap: var(--sp-2); width: min(100%, 360px); }
 .ob-foot .btn { min-height: var(--ob-pill); border-radius: 999px; font-size: var(--fs-md); }
-.ob-foot .btn.pri { flex: 1 1 0; min-width: 0; }
-/* The way out of a screen (the arrow on a step, the × on a rerun's welcome) is a circle as tall as the pill, on the grey the
-   old 上一步 pill had, with only a drawing in it. */
-.ob-foot .ob-back { border-color: var(--hover); background: var(--hover); }
+/* The welcome's one pill fills its row. */
+.ob-foot .ob-actions:not(.ob-ends) .btn.pri { flex: 1 1 0; min-width: 0; }
+/* A step's two: each as wide as its words ask and never less than the other's least, apart at the row's ends. The chevron
+   sits a little into the padding, so the words and the pill's round end keep an even margin. */
+.ob-foot .ob-ends { justify-content: space-between; width: min(100%, 900px); }
+.ob-foot .ob-ends .btn { flex: none; gap: var(--sp-1); min-width: 128px; padding-inline: var(--sp-5); }
+.ob-foot .ob-ends .btn > svg.i { flex: none; width: 18px; height: 18px; }
+.ob-foot .ob-ends .btn > svg.i:first-child { margin-left: calc(var(--sp-2) * -1); }
+.ob-foot .ob-ends .btn > svg.i:last-child { margin-right: calc(var(--sp-2) * -1); }
+/* The way out of a screen (上一步 on a step, the × on a rerun's welcome) is on a grey of its own, one step lighter under
+   the pointer. 上一步 has words, so it has an edge, in its fill's own colour; the × is a drawing alone and has none. */
+.ob-foot .ob-back, .ob-foot .ob-prev { border-color: var(--hover); background: var(--hover); color: var(--text); }
 .ob-foot .ob-back:is(:hover, :active):not(:disabled) { background: var(--pressed); }
-.ob-foot .btn.icon.ob-back { flex: none; width: var(--ob-pill); height: var(--ob-pill); border-color: transparent; color: var(--text); }
+.ob-foot .ob-prev:is(:hover, :active):not(:disabled) { border-color: var(--pressed); background: var(--pressed); }
+/* The rerun's × is a circle as tall as the pill, with only a drawing in it. */
+.ob-foot .btn.icon.ob-back { flex: none; width: var(--ob-pill); height: var(--ob-pill); border-color: transparent; }
 .ob-foot .btn.icon.ob-back svg.i { width: 20px; height: 20px; }
 /* The team's characters float by a step's title, each where screens.ts puts it: they take no room, and a narrow card
    drops them. */

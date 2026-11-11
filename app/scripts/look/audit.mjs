@@ -174,8 +174,15 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
     }
     if (element.matches('.modal-body .purpose')) violation('R-UI-02', 'Settings subtitle repeats the pane purpose');
     if (element.matches('.ob-col > h2') && parseFloat(style.fontSize) < 28) violation('R-UI-37', 'Onboarding needs a large headline');
-    if (element.matches('.ob-actions > .btn.pri') && box.width < element.parentElement.getBoundingClientRect().width * .6)
+    // The welcome's one pill fills its row. A step's row has a button at each end (owner, 2026-11-11): the way back at
+    // the left edge and the primary at the right edge, neither stretched across.
+    if (element.matches('.ob-actions:not(.ob-ends) > .btn.pri') && box.width < element.parentElement.getBoundingClientRect().width * .6)
       violation('R-UI-37', 'Onboarding primary action must fill the action row');
+    if (element.matches('.ob-actions.ob-ends')) {
+      const [back, primary] = [element.querySelector(':scope > .btn:not(.pri)'), element.querySelector(':scope > .btn.pri')].map(button => button?.getBoundingClientRect());
+      if (!back || !primary || Math.abs(back.left - box.left) > 1 || Math.abs(primary.right - box.right) > 1 || back.right > primary.left)
+        violation('R-UI-37', 'Onboarding step needs its way back at the left end and its primary at the right end of the row');
+    }
     if (element.matches('.ob-item')) {
       const text = element.querySelector(':scope > .ob-tx'), control = element.querySelector(':scope > .ob-ctl');
       if (text && control && visible(control)) {
