@@ -48,7 +48,7 @@ tauri-plugin-single-instance = "2.5"
 enigo = "0.6"
 # The `#[implement]` of the UI Automation focus handler (src/learn/uia.rs) expands to
 # `::windows_core` paths, so the crate the `windows` crate below uses must be a dependency too.
-windows-core = "0.62"
+windows-core = "0.100"
 # The asynchronous operations of the Windows Runtime (`IAsyncOperation`), which the media controls
 # answer with. It is the version the `windows` crate below already uses.
 windows-future = "0.3"
