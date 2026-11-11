@@ -146,7 +146,7 @@ async def test_live_view_bytes_do_not_wait_for_a_busy_core_loop(viewer, wire_ups
         await asyncio.to_thread(thread.join, 3)
 
 
-@pytest.mark.parametrize("ending", ["close", "revoke", "expiry"])
+@pytest.mark.parametrize("ending", ["close", "expiry"])
 async def test_main_loop_session_end_closes_both_relay_sockets(viewer, wire_upstream, ending):
     bridge, _, clock = viewer
     port, disconnected = wire_upstream
@@ -159,9 +159,7 @@ async def test_main_loop_session_end_closes_both_relay_sockets(viewer, wire_upst
         writer.write(request)
         await writer.drain()
         await asyncio.wait_for(reader.readuntil(b"\r\n\r\n"), 2)
-        if ending == "revoke":
-            await bridge.revoke({"member_id": 1})
-        elif ending == "expiry":
+        if ending == "expiry":
             clock[0] += LEASE_SECONDS + 1
         else:
             await bridge.close(opened)
@@ -213,7 +211,7 @@ async def test_relay_drops_unauthorized_input_without_stalling_frames(viewer, wi
         writer.close()
 
 
-async def test_revoke_during_teaching_capture_cannot_forward_late_input(viewer, wire_upstream):
+async def test_closing_during_teaching_capture_cannot_forward_late_input(viewer, wire_upstream):
     from raphael_core.computer.rfb_input import frame
     bridge, _, _ = viewer
     port, _ = wire_upstream
@@ -245,7 +243,7 @@ async def test_revoke_during_teaching_capture_cannot_forward_late_input(viewer, 
         writer.write(frame(b"\x05\x01" + bytes(4)))
         await writer.drain()
         assert await asyncio.to_thread(entered.wait, 2)
-        await bridge.revoke({"member_id": 1})
+        await bridge.close(opened)
         assert await asyncio.wait_for(reader.read(), 2) == b""
         assert cancelled.is_set()
         assert not commits
@@ -383,7 +381,7 @@ async def test_status_and_session_urls_never_publish_vnc_credentials(viewer):
     bridge, _, _ = viewer
     public = await bridge.status({"member_id": 1})
     opened = await bridge.open({"member_id": 1})
-    assert public == {"state": "running", "ready": True, "control": "member", "granted": False,
+    assert public == {"state": "running", "ready": True, "control": "member",
                       "host": "", "target": "shared", "mode": "shared", "idle_minutes": 15, "lifecycle": None}
     assert "private" not in json.dumps([public, opened, await bridge.vm.status(bridge.vm.target())])
     assert "password" not in opened["url"]

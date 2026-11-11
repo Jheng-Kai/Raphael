@@ -358,9 +358,9 @@ export function checkRendered(name, context = {}) {
       require(parseFloat(style.borderRadius) >= box.width / 2 - 0.5 && Math.abs(box.width - box.height) < 1 && style.backgroundColor !== 'rgba(0, 0, 0, 0)', `the buttons on the window's edges are soft round buttons (${button.getAttribute('aria-label') ?? button.dataset.act})`);
     }
     if (tab === 'details') for (const section of panel.querySelectorAll('.mb-tab-body > section')) {
-      const head = section.querySelector(':scope > .mb-dh'), list = section.querySelector('.mb-rts, .conversation-rows, :scope > .mp-empty');
+      const head = section.querySelector(':scope > .mb-dh'), list = section.querySelector('.mb-rts, .conversation-rows, .mb-computer, :scope > .mp-empty');
       if (!visible(head) || !visible(list)) continue;
-      const pad = node => node ? parseFloat(getComputedStyle(node).paddingLeft) : 0, row = list.querySelector('.mb-rt, .conversation-open');
+      const pad = node => node ? parseFloat(getComputedStyle(node).paddingLeft) : 0, row = list.querySelector('.mb-rt, .conversation-open, .mb-computer-row');
       const inner = list.getBoundingClientRect().left + pad(list) + pad(row), start = head.getBoundingClientRect().left + pad(head);
       require(Math.abs(inner - start) <= 1 && getComputedStyle(list).backgroundColor !== 'rgba(0, 0, 0, 0)', `a panel heading starts where the text of its tinted list starts (${Math.round(start)} vs ${Math.round(inner)})`);
     }
@@ -389,8 +389,34 @@ export function checkRendered(name, context = {}) {
       const wanted = underControls ? controls.left - 14 : listBox.right;
       require(Math.abs(closeRight - wanted) <= 2, `close stands ${underControls ? "14 px before the window's buttons" : "on the content's right edge"} (${Math.round(closeRight)} vs ${Math.round(wanted)})`);
       require(Math.abs((tabBar.left + tabBar.right) / 2 - (listBox.left + listBox.right) / 2) < 1, 'the tabs sit in the middle of the content');
+      require(['mb-panel-routines', 'mb-panel-computer', 'mb-panel-suggest'].join() === [...panel.querySelectorAll('.mb-tab-body > section')].map(section => section.className).join(), 'the computer is one row after the routines and before the bots');
     } else if (name === 'member-panel-details-empty') {
       require(!panel.querySelector('.mb-panel-tasks') && panel.querySelector('.mb-panel-routines .mp-empty'), 'an empty Details is one quiet routine line and no work list');
+    } else if (name.startsWith('member-panel-details-computer-')) {
+      // The computer is one quiet row for every member (owner, 2026-11-11): its state in a word or two and a small screen at its right;
+      // a PC that cannot give one says so in that row with the one action that fixes it. Nothing asks whether the member may have it.
+      const kind = name.slice('member-panel-details-computer-'.length), section = panel.querySelector('.mb-panel-computer'), box = section.querySelector('.mb-computer');
+      const open = box.querySelector('[data-det="computer-open"]'), word = box.querySelector('.mb-computer-state'), thumb = box.querySelector('[data-computer-thumb]'), fix = box.querySelector('[data-det="computer-fix"]');
+      const expected = { asleep: ['asleep', '休眠中'], connecting: ['connecting', '連線中'], awake: ['awake', '已喚醒'], 'docker-missing': ['unavailable', '這台電腦尚未安裝 Docker Desktop'],
+        'docker-stopped': ['unavailable', '這台電腦的 Docker Desktop 沒有在執行'], remote: ['unavailable', '無法連線至 studio-mini，請檢查電腦位置'] }[kind];
+      require(visible(box) && box.dataset.computerState === expected[0] && word.textContent === expected[1], `the row reads ${expected[1]} (${box.dataset.computerState}: ${word.textContent})`);
+      require(box.querySelectorAll('button').length === (fix ? 2 : 1) && /的電腦$/.test(open.querySelector('b').textContent), 'one press opens it, and only an unavailable PC adds its one fix');
+      if (expected[0] === 'unavailable') {
+        require(!thumb, 'a PC that cannot give a computer draws no screen');
+        require(kind === 'remote' ? !fix : visible(fix) && fix.textContent === (kind === 'docker-missing' ? '下載' : '啟動'), 'the one action that fixes it is a word beside the line');
+      } else {
+        require(!fix && visible(thumb), 'a computer that can be had draws its small screen and no fix');
+        const screen = thumb.getBoundingClientRect(), row = open.getBoundingClientRect();
+        require(Math.abs(screen.width - 72) <= 1 && Math.abs(screen.height - 45) <= 1 && screen.right <= row.right - 8 && screen.right >= row.right - 14, `the small screen stands at the row's right edge (${screen.width}x${screen.height})`);
+        require(thumb.dataset.thumb === (expected[0] === 'awake' ? 'live' : 'idle') && (expected[0] !== 'awake' || /^data:image\/jpeg/.test(thumb.querySelector('.mb-computer-shot')?.getAttribute('src') ?? '')), 'the awake row shows the last picture of the screen, the others a dark screen with the monitor');
+      }
+      // The same row as a routine's: its title and sentence in the same type, the tinted list at the same inset, the heading where the text begins.
+      const title = open.querySelector('b'), routineTitle = panel.querySelector('.mb-rt-main b'), routineSentence = panel.querySelector('.mb-rt-main span');
+      if (routineTitle) require(getComputedStyle(title).fontSize === getComputedStyle(routineTitle).fontSize && getComputedStyle(title).fontWeight === getComputedStyle(routineTitle).fontWeight && getComputedStyle(word).fontSize === getComputedStyle(routineSentence).fontSize, 'the computer row is set in the type of a routine row');
+      require(!/允許|授權|撤銷|收回|映像|主機|開始使用/.test(panel.querySelector('.mb-tab-body').textContent.replace(expected[1], '')), 'the panel asks nothing about having a computer and says nothing of engines, images or hosts beyond the one line');
+      const wide = box.getBoundingClientRect(), list = panel.querySelector('.mb-rts');
+      if (list) require(Math.abs(wide.left - list.getBoundingClientRect().left) <= 1 && Math.abs(wide.right - list.getBoundingClientRect().right) <= 1, 'the row is as wide as the routine list');
+      require(panel.scrollWidth <= panel.clientWidth + 1 && box.scrollWidth <= box.clientWidth + 1, 'the row does not overflow the panel');
     } else if (name === 'member-panel-library-images') {
       const body = panel.querySelector('.mb-tab-body');
       const pressed = [...body.querySelectorAll('[data-lib-filter]')].filter(button => button.getAttribute('aria-pressed') === 'true').map(button => button.textContent);
@@ -730,7 +756,11 @@ export function checkRendered(name, context = {}) {
       const dock = panel.querySelector('.desktop-dock'), screenBox = panel.querySelector('.desktop-screen').getBoundingClientRect();
       require(visible(dock) && Math.abs((dock.getBoundingClientRect().left + dock.getBoundingClientRect().right) / 2 - innerWidth / 2) <= 2 && dock.getBoundingClientRect().top >= screenBox.bottom, 'one pill sits centred below the screen');
       require(Math.abs(screenBox.width / screenBox.height - 1280 / 900) < 0.03, 'the screen keeps its own proportions');
-      require(dock.querySelector('.desktop-mode-label').textContent === (panel.dataset.desktopState === 'owner' ? '你正在操作' : '觀看中'), 'the pill says who holds the computer');
+      require(dock.querySelector('.desktop-mode-label').textContent === (panel.dataset.desktopState === 'owner' ? '你正在控制' : '觀看中'), 'the pill says who holds the computer');
+      // Grok Bot's two states: watching offers Take control; in control offers Stop (which hands the computer back).
+      const take = dock.querySelector('[data-desktop="take"]'), stopControl = dock.querySelector('[data-desktop="return"]');
+      if (panel.dataset.desktopState === 'owner') require(visible(stopControl) && stopControl.textContent === '停止' && !visible(take), 'in control the pill offers Stop and nothing else of control');
+      else require(visible(take) && take.textContent === '接手控制' && !visible(stopControl), 'watching the pill offers Take control and nothing else of control');
       if (name === 'desktop-watch' && window.__look.data.desktop.works?.some(work => work.state === 'running')) {
         const stop = panel.querySelector('[data-desktop="stop"]');
         require(visible(stop) && stop.title === stop.getAttribute('aria-label') && stop.title.trim(), 'Stop has its translated tooltip');
@@ -1097,7 +1127,7 @@ export function checkRendered(name, context = {}) {
     } else if (name === 'level-takeover' || name === 'level-menu') {
       const frame = desktop.querySelector('iframe'), dock = desktop.querySelector('.desktop-dock');
       require(desktop.hasAttribute('data-expanded') && visible(frame) && visible(dock), 'the same stream fills the window above its one pill');
-      require(dock.textContent.includes('你正在操作') && visible(dock.querySelector('[data-desktop="return"]')), 'the pill says the owner is in control and offers handback');
+      require(dock.textContent.includes('你正在控制') && dock.querySelector('[data-desktop="return"]')?.textContent === '停止' && visible(dock.querySelector('[data-desktop="return"]')), 'the pill says the owner is in control and offers Stop, which hands the computer back');
       const box = frame.getBoundingClientRect();
       require(Math.abs(box.width / box.height - 1280 / 900) < 0.03 && (box.width >= innerWidth - 96 || box.height >= innerHeight - 160), 'the screen fills the window at its own proportions');
       require(!document.querySelector('.side, [data-sidebar="open"]')?.checkVisibility({visibilityProperty:true}), 'takeover leaves no sidebar entry above its bar');
@@ -2822,7 +2852,9 @@ export function checkRendered(name, context = {}) {
     const screenHit=panel.querySelector('[data-desktop="enlarge"]');
     if(frame&&!screenHit.hidden)require(getComputedStyle(screenHit).backgroundColor==='rgba(0, 0, 0, 0)','screen click target stays transparent including hover');
     const events=document.querySelectorAll('[data-desktop-work]');
-    if(name.startsWith('computer-'))require(events.length===1&&events[0].matches(name==='computer-panel'?'.conversation-event-line':'.conversation-card')&&events[0].closest('.tn')?.dataset.id==='2','one work presentation belongs to the private turn');
+    // A member working at its computer adds nothing to the conversation (owner, 2026-11-11); only a handoff the owner must act on is a card.
+    if(name==='computer-panel')require(events.length===0&&!document.querySelector('.conversation-event-line [data-i="monitor"], [data-desktop-slot]:not(:empty)'),'a working computer draws no line or card in the conversation');
+    else if(name.startsWith('computer-'))require(events.length===1&&events[0].matches('.conversation-card')&&events[0].closest('.tn')?.dataset.id==='2','one work presentation belongs to the private turn');
     if(name==='computer-takeover')require(panel.querySelector('.desktop-request').textContent.includes('登入'),'request sits above the live screen');
     if(name==='computer-takeover-owner') {
       require(visible(document.querySelector('[data-card-desktop="return"]')), 'one explicit done action in the card');

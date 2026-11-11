@@ -297,6 +297,6 @@ async def test_timeout_or_cancel_closes_owned_bridge_and_releases_waiters(deskto
 def test_member_persona_explains_first_turn_tools_and_targeted_reads():
     from raphael_core.agent.persona import _SHARED_CONTRACT
     assert "browser_open(url)" in _SHARED_CONTRACT
-    assert "Granted tools exist from turn one" in _SHARED_CONTRACT
+    assert "Computer tools exist from turn one" in _SHARED_CONTRACT
     assert "max_elements 200" in _SHARED_CONTRACT
     assert "before input" in _SHARED_CONTRACT

@@ -163,7 +163,6 @@ class DesktopViewer:
         for name, handler in (("status", self.status), ("open", self.open), ("renew", self.renew),
                               ("control", self.control), ("close", self.close)):
             router.register(f"computer.viewer_{name}", handler)
-        router.register("computer.revoke", self.revoke)
         router.register("computer.lifecycle", self.lifecycle)
         router.register("computer.team_file", self.team_file)
         router.register("computer.wallpaper", self.wallpaper)
@@ -214,25 +213,11 @@ class DesktopViewer:
         except (OSError, ValueError):
             raise invalid_params("no such member file") from None
 
-    async def revoke(self, params):
-        self.target(params)
-        member = params.get("member_id", 0)
-        self.vm.grants.set(member, False)
-        tokens = [token for token, session in self.sessions.items() if session.member_id == member]
-        for token in tokens:
-            self.sessions[token].expires = self.vm.clock()
-            self.publish_session(token)
-        for token in tokens:
-            await self.close({"session": token})
-        return {"granted": False}
-
     async def lifecycle(self, params):
         from .lifecycle import maintain
         target = self.target(params)
         if params.get("host") != target.remote or params.get("target") != target.key:
             raise invalid_params("Computer changed; review maintenance again")
-        if not self.vm.grants.allowed(params.get("member_id", 0)):
-            raise invalid_params("Computer access is not granted")
         await maintain(self.vm, target, params.get("action"), confirmed=params.get("confirmed", False))
         return await self.status(params)
 
@@ -268,7 +253,7 @@ class DesktopViewer:
                 "idle_minutes": self.vm.settings.get("computer_vm_idle_minutes") if self.vm.settings else 15,
                 "lifecycle": self.vm.lifecycle.get(target.key),
                 **({"repair_revision": self.vm.repair_revisions[target.key]} if target.key in self.vm.repair_revisions else {}),
-                "granted": self.vm.grants.allowed(params.get("member_id", 0)), **({"works": works} if works else {}),
+                **({"works": works} if works else {}),
                 **(self.teaching.status(params.get("member_id", 0), params.get("conversation_id"), target) if self.teaching else {})}
 
     async def open(self, params):
@@ -290,12 +275,9 @@ class DesktopViewer:
         token = secrets.token_urlsafe(32)
         if type(params.get("preview", False)) is not bool:
             raise invalid_params("preview must be a boolean")
-        if not params.get("preview"):
-            self.vm.grants.set(params.get("member_id", 0), True)
         session = Session(target, self.vm.clock() + LEASE_SECONDS,
             member_id=params.get("member_id", 0), conversation_id=params.get("conversation_id"), preview=params.get("preview", False))
-        if (not params.get("preview") and (await self.status_for(target))["state"] != "running"
-                and self.vm.grants.allowed(params.get("member_id", 0))):
+        if not params.get("preview") and (await self.status_for(target))["state"] != "running":
             self.vm.launch(target)
         if target.remote and (await self.status_for(target))["state"] == "running":
             try:
@@ -360,7 +342,7 @@ class DesktopViewer:
                 "lifecycle": self.vm.lifecycle.get(session.target.key),
                 **({"repair_revision": self.vm.repair_revisions[session.target.key]} if session.target.key in self.vm.repair_revisions else {}),
                 "control": "owner" if self.sessions.get(token) is session else "member",
-                "preview_allowed": session.target.key not in self.vm.held, "granted": self.vm.grants.allowed(session.member_id),
+                "preview_allowed": session.target.key not in self.vm.held,
                 **({"works": works} if works else {}),
                 **(self.teaching.status(session.member_id, session.conversation_id, session.target) if self.teaching else {}),
                 **({"error": session.error, "ready": False} if session.error else {})}

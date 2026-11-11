@@ -1054,12 +1054,9 @@ class App(Router):
         self.members.panel_workspaces = lambda member: [] if self.vm.remote else [
             ("workspace", self.vm.target(member).workspace), ("team", self.vm.target(member).shared)]
         self.background.use_workspaces(
-            lambda member: [path for path in (self.vm.target(member).workspace, self.vm.target(member).shared) if path] if self.vm.grants.allowed(member) else None)
+            lambda member: [path for path in (self.vm.target(member).workspace, self.vm.target(member).shared) if path])
         self.vm_tools.names = self.members.name_of
         self.members.computer_data = self.vm.data
-        # A member made by one the owner let use a computer has one too: it is a sandbox of its own, and a team
-        # that was just made would otherwise stop at its first step to ask for each of them.
-        self.members.member_made = lambda maker, made: self.vm.grants.set(made, True) if self.vm.grants.state(maker) is True else None
         # Messaging apps (Telegram): messages reach the assistant like a spoken question.
         self.messaging = MessagingService(
             MessagingStore(data_dir),

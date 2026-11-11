@@ -24,14 +24,13 @@ async def test_background_turn_starts_only_for_real_computer_call(make_rig, tmp_
         runtime.raw = container(vm, target, runtime)
     vm.start = AsyncMock(side_effect=start)
     hub = VmTools(rig.plugins.hub, vm, attachments=AttachmentStore(tmp_path), conn=rig.conn, bridge=Bridge)
-    vm.grants.set(0, True)
     rig.gate = rig.service._gate = ToolGate(hub, conn=rig.conn)
     used = False
 
     async def work(loop):
         nonlocal used
         names = {tool["function"]["name"] for tool in loop.tools}
-        assert "computer__get_desktop_state" in names and "computer__request_computer" not in names
+        assert "computer__get_desktop_state" in names
         if use_computer and not used:
             assert {"computer__click", "computer__browser_open", "computer__browser_type"} <= names
             result = await loop._tool("screen", "computer__get_desktop_state", {})

@@ -21,7 +21,7 @@ async def test_local_preflight_distinguishes_installation_from_stopped_engine(tm
 
 
 async def test_reading_status_or_opening_the_viewer_never_starts_the_host_engine(tmp_path):
-    # Only a granted member's own tool call, or the owner's press, may start it (R-PANEL-04).
+    # Only a member's own tool call that needs its computer, or the owner's press, may start it (R-PANEL-04).
     desktop = SimpleNamespace(installed=lambda: True, start=AsyncMock())
     vm = LocalVm(tmp_path, runner=AsyncMock())
     vm.desktop = desktop
@@ -42,7 +42,7 @@ async def test_reading_status_or_opening_the_viewer_never_starts_the_host_engine
     desktop.start.assert_not_awaited()
 
 
-async def test_granted_member_use_starts_the_installed_host_engine_and_waits_for_it(tmp_path, monkeypatch):
+async def test_member_use_starts_the_installed_host_engine_and_waits_for_it(tmp_path, monkeypatch):
     # (owner, 2026-11-11: 「理論上就算我沒有開 Docker，它也會自動自己打開才對」)
     monkeypatch.setattr('raphael_core.computer.vm.ENGINE_POLL_S', 0)
     noticed, up = [], []

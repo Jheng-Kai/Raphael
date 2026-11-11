@@ -102,7 +102,6 @@ async def test_card_in_the_real_loop_asks_even_with_allow_all(desktop, conn, tmp
             return await super().request(method, params)
     SettingsStore(conn).set("action_mode", mode)
     hub = VmTools(EmptyHub(), vm, attachments=AttachmentStore(tmp_path), conn=conn, bridge=Browser)
-    vm.grants.set(0, True)
     hub.logins = VaultEntries(Vault(), conn=conn)
     identifier = hub.logins.put({"kind": "card", "label": "Company travel", "hint": "Travel only", "values": {"name": "private-holder", "number": "4111111111111111", "expiry": "private-expiry", "cvc": "private-cvc"}})
     gate = ToolGate(hub, conn=conn)

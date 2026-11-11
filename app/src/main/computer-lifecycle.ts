@@ -55,7 +55,7 @@ export function mountComputerLifecycle(_host: HTMLElement, panel: HTMLElement, m
     const set = <T extends object, K extends keyof T>(target: T, key: K, value: T[K]): void => { if (target[key] !== value) target[key] = value; };
     set(repaired, 'hidden', !state?.repair_revision);
     if (state?.repair_revision) set(repaired, 'textContent', t('desktop.repaired'));
-    const available = !!state && state.state !== 'absent' && state.granted !== false;
+    const available = !!state && state.state !== 'absent';
     // No words over a computer that is not running: its state shows once its screen is up.
     set(label, 'hidden', !state || state.state !== 'running'); set(button, 'hidden', !available);
     if (button.getAttribute('aria-label') !== t('chat.more')) button.setAttribute('aria-label', t('chat.more'));

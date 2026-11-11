@@ -7,6 +7,18 @@ const state = (value, extra = {}) => ({desktop:{state:value,ready:value==='runni
 export default [
   scene('member-panel-details', 'Details opens first with the routines and no list of past work', [...details,wait('.mb-rts .mb-rt'),check('member-panel-details')]),
   scene('member-panel-details-empty', 'Details keeps one-line empty sections', [...details,check('member-panel-details-empty')], {routineEmpty:true}),
+  // The computer is one quiet row for every member, never asked about (owner, 2026-11-11): asleep, connecting or awake with a small screen,
+  // or one line with the one action that fixes a PC that cannot give one.
+  ...[
+    ['asleep', state('stopped'), 'asleep'], ['connecting', state('starting'), 'connecting'], ['awake', state('running'), 'awake'],
+    ['docker-missing', state('absent', {error:'docker_missing'}), 'unavailable'], ['docker-stopped', state('unavailable', {error:'docker_stopped'}), 'unavailable'],
+    ['remote', {...state('unavailable', {error:'remote_unavailable', host:'studio-mini'}), computerHost:'studio-mini'}, 'unavailable'],
+  ].map(([kind, fixture, phase]) => scene(`member-panel-details-computer-${kind}`, 'Details carries one computer row: its state in a word or two and a small screen, or one line and its one fix', [...details,
+    wait(`.mb-computer[data-computer-state="${phase}"]`), ...(kind === 'awake' ? [wait('.mb-computer-thumb[data-thumb="live"]')] : []), check(`member-panel-details-computer-${kind}`)], fixture)),
+  scene('member-panel-details-computer-open', 'One press on the computer row opens the running computer in the larger view', [...details, wait('.mb-computer-thumb[data-thumb="live"]'),
+    click('.mb-computer-row'), wait(':root[data-desktop-watch]'), check('desktop-watch')], state('running')),
+  scene('member-panel-details-computer-wake', 'One press on the sleeping computer row wakes it in the Computer tab', [...details, wait('.mb-computer[data-computer-state="asleep"]'),
+    click('.mb-computer-row'), wait('.mb-det[data-details-tab="computer"] .desktop-screen iframe:not([hidden])'), hover('.mb-det-head'), check('member-panel-computer-live')], {...state('stopped'), desktopStarts:true}),
   scene('member-panel-library', 'Arrow navigation reaches Library: everything the member delivered by day, no links, sorted by a filter instead of a Show more', [...details,click('.mb-tabs [data-tab="details"]'),key('ArrowRight'),wait('.mb-det[data-details-tab="library"] [data-panel-file]'),wait('.lib-pic img[src]'),check('member-panel-library'),click('[data-lib-filter="images"]'),check('member-panel-library-images')], {memberPanelFiles:true}),
   scene('member-panel-library-open', 'A delivered file opens with the computer\'s own program, and a picture opens large', [...details,click('.mb-tabs [data-tab="library"]'),wait('.lib-pic img[src]'),click('[data-panel-file="delivered-file:bundle"]'),click('.lib-pic'),wait('.media-lightbox'),check('member-panel-library-open')], {memberPanelFiles:true}),
   scene('member-panel-library-empty', 'Library keeps its empty sentence and arrow keys reach Computer and return', [...details,click('.mb-tabs [data-tab="library"]'),wait('.mb-det[data-details-tab="library"] .mp-empty'),check('member-panel-library-empty'),key('ArrowRight'),wait('.mb-det[data-details-tab="computer"]'),key('ArrowLeft'),wait('.mb-det[data-details-tab="library"]'),check('member-panel-library-empty')]),

@@ -4089,14 +4089,10 @@ class AgentService:
             tool=call.tool.name,
             what=parenthesized(language, shown),
         )
-        computer_request = call.tool.key.startswith("mcp:computer-access-")
         payment = call.tool.name == "fill_card" and call.tool.server == "computer"
         if payment:
             from ..computer.vault_entries import payment_question
             question = payment_question(call.arguments, language)
-        if computer_request:
-            from ..computer.grants import request_question
-            question = request_question(language, ask.speaker.name or "Raphael", shown)
         local = is_local(call.tool.key)
         if local:
             question = call.arguments.get("command", "")
@@ -4110,8 +4106,6 @@ class AgentService:
             # it asked, and whether 一律允許 can take effect (not where a rule asks: Ask first wins).
             exact = phrase(language, "confirm_plugin", server=call.tool.server, tool=call.tool.name,
                            what=parenthesized(language, preview(call.arguments, CARD_PREVIEW_CHARS)))
-            if computer_request:
-                exact = question
             if payment:
                 exact = question
             managed = getattr(self._plugins, "managed", None)
@@ -4133,7 +4127,7 @@ class AgentService:
         only where nothing the owner wrote asks first or could not be read (a rule that asks, a judge that
         failed) and the tool can be undone."""
         tier = self._tier_now(call)
-        return (not call.tool.key.startswith("mcp:computer-access-") and tier is not None and tier < Tier.T3 and call.tool.key.startswith(PLUGIN_PREFIX)
+        return (tier is not None and tier < Tier.T3 and call.tool.key.startswith(PLUGIN_PREFIX)
                 and not screening.unchecked and (screening.verdict != ASK or screening.switch))
 
     def ask_in_background(self, ask: _Ask, ledger: Ledger) -> dict:
@@ -4665,8 +4659,6 @@ class AgentService:
             return self._page_result(followup.ask, result)
         if followup.loop is not None:
             loop = followup.loop
-            if result.ok and call.tool.key.startswith("mcp:computer-access-"):
-                loop.refresh_computer()
             loop.seen.append(result)
             if result.ok and call.tool.key == CREATE_MEMBER:
                 self._message(followup.ask, "event", phrase(
@@ -5031,9 +5023,6 @@ class AgentService:
             if followup is not None:
                 # The owner said no: nothing else that needs their yes is asked, or made, in this request.
                 followup.ask.declined.append((followup.call.tool.key, followup.rule))
-            if followup is not None and followup.call.tool.key.startswith("mcp:computer-access-"):
-                self._drop_followup(pending, "denied")
-                return self._outcome(pending, "understood", self._computer_refusal(pending, "denied"), "denied")
             if followup is not None and isinstance(followup.loop, CliLoop):
                 self._followups.pop(pending.id)
                 followup.loop.permission_always = False
@@ -5230,9 +5219,6 @@ class AgentService:
             # A card nobody answered says that it ran out and what it was, so the owner can ask again.
             from ..management_words import expired
             return "\n".join([expired(pending.language), *pending.action.args["lines"]])
-        if pending.action.tool.startswith("mcp:computer-access-"):
-            return with_ui_words({"zh-TW": "未取得電腦使用授權，我無法使用電腦。", "ja": "許可を得ていないため、コンピューターを使用できません。", "en": "Computer access was not granted, so I cannot use the computer."}, lambda _ui_language: ui_word('Computer access was not granted, so I cannot use the computer.', _ui_language)).get(
-                pending.language, "Computer access was not granted, so I cannot use the computer.")
         return phrase(pending.language, kind)
 
     def _expire(self, pendings: list[Pending]) -> None:

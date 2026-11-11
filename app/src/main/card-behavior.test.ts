@@ -67,7 +67,7 @@ test("failed composer delivery retains words in place and offers retry in a card
 
 test("desktop owner waits render a card and identical refresh preserves its element", () => {
   document.body.innerHTML = '<ol><li data-desktop-slot="42"></li></ol>';
-  const timeline = mountDesktopTimeline(document.querySelector("ol")!, () => "Alex");
+  const timeline = mountDesktopTimeline(document.querySelector("ol")!);
   const state = { state: "running", ready: true, control: "owner", works: [{ id: "work", turn_id: 42, state: "waiting_control", tool: "", reason: "sign_in" }] } as const;
   timeline.update({ ...state, works: [...state.works] });
   const card = document.querySelector(".conversation-card"); expect(card).not.toBeNull();

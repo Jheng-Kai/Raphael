@@ -13,7 +13,7 @@ import re
 # nothing else of the run went through. The owner's own no (`declined`) is the owner's decision, not a failure of the run.
 REFUSED_KINDS = frozenset({
     "protected_data", "forbidden", "approval_required", "unknown_tool", "unavailable", "unanswered", "blocked",
-    "tool_disabled", "presence_required", "computer_permission_required", "own_routines_only",
+    "tool_disabled", "presence_required", "computer_changed", "own_routines_only",
 })
 
 # What makes each kind of thing a routine can be set to make.

@@ -381,7 +381,7 @@ describe("rendered look checks", () => {
   });
   it("checks the takeover sidebar's CSS visibility rather than its reserved box", () => {
     const browser = new Window();
-    browser.document.body.innerHTML = '<button data-sidebar="open" style="visibility:hidden">Sidebar</button><aside class="mb-det"><section class="desktop-panel" data-expanded><div class="desktop-takeover-bar"><div class="desktop-dock"><span class="desktop-mode-label">你正在操作</span><button data-desktop="return">Return</button></div></div><iframe></iframe></section></aside>';
+    browser.document.body.innerHTML = '<button data-sidebar="open" style="visibility:hidden">Sidebar</button><aside class="mb-det"><section class="desktop-panel" data-expanded><div class="desktop-takeover-bar"><div class="desktop-dock"><span class="desktop-mode-label">你正在控制</span><button data-desktop="return">停止</button></div></div><iframe></iframe></section></aside>';
     for (const element of browser.document.querySelectorAll('*')) element.getBoundingClientRect = () => ({width:720,height:40});
     const frame = browser.document.querySelector('iframe');
     frame.getBoundingClientRect = () => ({width:700,height:492});

@@ -219,7 +219,7 @@ class ToolGate:
         changes something."""
         if self.data_floor.access(action.tool, action.args) is not None or self.firm_confirmation(action.tool, action.args):
             return False
-        if action.tool.startswith(("mcp:computer-access-", "mcp:local/")):
+        if action.tool.startswith("mcp:local/"):
             return False
         tier = self.tier_now(action.tool, action.args)
         if self._safety is None or tier is None or tier >= Tier.T3:

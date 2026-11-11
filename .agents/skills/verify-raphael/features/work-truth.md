@@ -32,7 +32,7 @@ RPC, schema migration or alternative brain loop.
   history views show the mirrored steps once; arguments/results remain outside this audit.
 - team_overview resolves brains from each member's own selection (or the existing
   chief default), and tools from the same worker snapshot, including hidden catalog
-  entries. It reports configured native file/image limits and computer grants,
+  entries. It reports configured native file/image limits and the local-command mode,
   without asserting provider health, quota or a running computer.
 
 ## Offline verification

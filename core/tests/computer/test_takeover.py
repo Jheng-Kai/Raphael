@@ -24,8 +24,6 @@ async def rig(tmp_path, conn):
     vm = LocalVm(tmp_path, settings=settings, runner=runtime)
     runtime.raw = container(vm, vm.target(), runtime)
     hub = VmTools(EmptyHub(), vm, attachments=AttachmentStore(tmp_path), bridge=Bridge, conn=conn)
-    vm.grants.set(0, True)
-    vm.grants.set(1, True)
     await hub.prepare(1)
     hub.scope_busy = lambda scope: True
     viewer = DesktopViewer(vm)

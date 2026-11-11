@@ -24,10 +24,12 @@ const api = vi.hoisted(() => ({
   telegramStatus: vi.fn(),
   messagingCall: vi.fn(),
   agentAskText: vi.fn().mockResolvedValue(undefined),
+  openExternalUrl: vi.fn().mockResolvedValue(undefined),
 }));
 vi.mock("./api", () => api);
 
 import { createDetails } from "./member-details";
+import { forgetComputerRow, publishComputerRow } from "./computer-row";
 import { setAvatar } from "./avatar";
 import { setLocale, t } from "./i18n";
 
@@ -67,6 +69,7 @@ beforeEach(() => {
   setAvatar(null);
   setLocale('zh-TW');
   current = 3;
+  for (const id of [0, 3, 4]) forgetComputerRow(id);
   for (const fn of Object.values(api)) fn.mockReset();
   api.routinesList.mockResolvedValue({ routines: [ROUTINE] });
   api.routineRuns.mockResolvedValue({ runs: [] });
@@ -342,3 +345,45 @@ describe("primary changes do not add face badges", () => {
   });
 });
 
+describe("the computer row", () => {
+  const row = (panel: ReturnType<typeof mount>): HTMLElement | null => panel.el.querySelector<HTMLElement>('.mb-panel-computer .mb-computer');
+  test("every member has one, after the routines and before the bots, asking nothing", async () => {
+    for (const id of [3, 0]) {
+      current = id; const panel = mount(); await flush();
+      const sections = [...panel.el.querySelectorAll('.mb-tab-body > section')].map(section => section.className);
+      expect(sections.indexOf('mb-panel-routines')).toBeLessThan(sections.indexOf('mb-panel-computer'));
+      expect(sections.indexOf('mb-panel-computer')).toBeLessThan(sections.indexOf('mb-panel-suggest'));
+      expect(row(panel)!.querySelectorAll('button')).toHaveLength(1);
+      expect(row(panel)!.textContent).toContain(t('desktop.event', { p0: LIST.members.find(m => m.id === id)!.name }));
+      expect(panel.el.textContent).not.toMatch(/允許|授權|撤銷|Docker|映像/);
+      document.body.innerHTML = "";
+    }
+  });
+  test("it says asleep, connecting or awake in a word or two, with the last picture of the screen when awake", async () => {
+    const panel = mount(); await flush();
+    const state = () => row(panel)!.querySelector('.mb-computer-state')!.textContent;
+    expect(state()).toBe('');
+    publishComputerRow({ member: 3, state: 'asleep' }); expect(state()).toBe(t('computer.row.asleep'));
+    expect(row(panel)!.querySelector('[data-computer-thumb]')!.getAttribute('data-thumb')).toBe('idle');
+    publishComputerRow({ member: 3, state: 'connecting' }); expect(state()).toBe(t('computer.row.connecting'));
+    publishComputerRow({ member: 3, state: 'awake', picture: 'data:image/jpeg;base64,AAAA' }); expect(state()).toBe(t('computer.row.awake'));
+    expect(row(panel)!.querySelector('[data-computer-thumb]')!.getAttribute('data-thumb')).toBe('live');
+    expect(row(panel)!.querySelector('.mb-computer-shot')!.getAttribute('src')).toBe('data:image/jpeg;base64,AAAA');
+    publishComputerRow({ member: 4, state: 'asleep' }); expect(state()).toBe(t('computer.row.awake'));
+  });
+  test("pressing it asks the shell to open the computer, and a PC without an engine says so with its one action", async () => {
+    api.openExternalUrl.mockResolvedValue(undefined);
+    const panel = mount(); await flush();
+    const opened = vi.fn(); panel.el.addEventListener('member-computer-open', opened);
+    publishComputerRow({ member: 3, state: 'asleep' });
+    row(panel)!.querySelector<HTMLElement>('[data-det="computer-open"]')!.click(); expect(opened).toHaveBeenCalledTimes(1);
+    publishComputerRow({ member: 3, state: 'unavailable', problem: t('desktop.dockerMissing'), fix: 'download' });
+    expect(row(panel)!.textContent).toContain(t('desktop.dockerMissing')); expect(row(panel)!.querySelector('[data-computer-thumb]')).toBeNull();
+    row(panel)!.querySelector<HTMLElement>('[data-det="computer-fix"]')!.click();
+    expect(api.openExternalUrl).toHaveBeenCalledWith('https://www.docker.com/products/docker-desktop/'); expect(opened).toHaveBeenCalledTimes(1);
+    publishComputerRow({ member: 3, state: 'unavailable', problem: t('desktop.dockerStopped'), fix: 'start' });
+    row(panel)!.querySelector<HTMLElement>('[data-det="computer-fix"]')!.click(); expect(opened).toHaveBeenCalledTimes(2);
+    publishComputerRow({ member: 3, state: 'unavailable', problem: t('desktop.unavailable'), fix: 'retry' });
+    expect(row(panel)!.querySelector('[data-det="computer-fix"]')).toBeNull();
+  });
+});

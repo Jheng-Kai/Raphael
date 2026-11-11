@@ -59,9 +59,8 @@ async def vm_smoke(directory):
     vm._progress = record_progress
     hub = VmTools(EmptyHub(), vm, attachments=AttachmentStore(directory), conn=conn)
     try:
-        vm.grants.set(0, True)
         await hub.prepare()
-        assert not docker_commands, "Preparing a granted turn must not invoke Docker"
+        assert not docker_commands, "Preparing a turn must not invoke Docker"
         snapshot = take_snapshot(hub)
         # Default journeys use a separate computer per member.
         shot = next((name for name in snapshot.refs if name == "computer__get_desktop_state"), None)
@@ -169,21 +168,14 @@ async def _page_tools(snapshot, gate):
 
 
 def vm_signin_fixture(directory, member_id):
-    """Seed only the isolated journey member's own workspace, and its grant, without starting Docker."""
+    """Seed only the isolated journey member's own workspace, without starting Docker."""
     import shutil
-    from .brain.db import connect
-    from .computer.grants import ComputerGrants
     from .computer.vm import LocalVm
     if not native_enabled(True):
         raise RuntimeError("VM sign-in fixture requires the native runner")
     workspace = LocalVm(directory).target(member_id).workspace
     workspace.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(Path(__file__).parent / "evaluate/signin_fixture.py", workspace / "native-signin.py")
-    conn = connect(Path(directory) / "raphael.db")
-    try:
-        ComputerGrants(conn).set(member_id, True)
-    finally:
-        conn.close()
 
 
 async def vm_cleanup(directory):
@@ -264,7 +256,6 @@ async def computer_speed(directory):
         if await vm.inspect(target) is not None:
             raise VmError("speed_name_collision")
         owned_target = True
-        vm.grants.set(0, True)
         await hub.prepare()
         await vm.start(target)
         html = '<!doctype html><title>Computer speed</title>' + ''.join(
@@ -336,7 +327,6 @@ async def vm_timezone_smoke(directory):
         def record_unrun(self, *args, **kwargs): pass
     hub = VmTools(EmptyHub(), vm, attachments=AttachmentStore(directory))
     try:
-        vm.grants.set(0, True)
         await hub.prepare()
         tool = next(tool for tool in hub.offered() if tool.name == "vm_exec")
         gate = ToolGate(hub)

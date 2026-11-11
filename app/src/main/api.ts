@@ -140,7 +140,6 @@ export const desktopOpen = (member_id: number, options?: { conversation_id?: num
 export const desktopRenew = (session: string): Promise<DesktopState> => core("computer.viewer_renew", { session });
 export const desktopControl = (session: string, held: boolean, takeover?: string): Promise<DesktopState> => core("computer.viewer_control", { session, held, takeover });
 export const desktopClose = (session: string): Promise<unknown> => core("computer.viewer_close", { session });
-export const desktopRevoke = (member_id: number): Promise<{ granted: boolean }> => core("computer.revoke", { member_id });
 export const desktopMaintain = (member_id: number, action: import('./computer-lifecycle').ComputerMaintenance, captured: DesktopState, confirmed = false): Promise<DesktopState> =>
   core('computer.lifecycle', { member_id, action, host: captured.host, target: captured.target, confirmed });
 export interface TeachingDraft { id: string; state: string; text: string; conversation_id?: number }

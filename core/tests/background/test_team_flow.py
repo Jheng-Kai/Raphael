@@ -142,8 +142,6 @@ async def test_an_existing_team_works_at_once_and_waits_for_the_computer(tmp_pat
         workspace = runtime.workspace = vm.target(0).workspace
         workspace.mkdir(parents=True)
         runtime.raw = container(vm, vm.target(0), runtime)
-        vm.grants = hub.vm.grants
-        vm.grants.allowed = lambda member: True
         vm.busy = lambda key: key in hub.leases and hub.scope_busy(hub.leases[key])
         app.vm = hub.vm = vm
         hub.bridge, hub.busy_poll_s = Desktop, 0.02

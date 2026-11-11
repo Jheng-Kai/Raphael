@@ -444,7 +444,6 @@ const ALLOWED_METHODS: &[&str] = &[
     "computer.viewer_renew",
     "computer.viewer_control",
     "computer.viewer_close",
-    "computer.revoke",
     "computer.lifecycle",
     "computer.wallpaper",
     "pages.open",
@@ -2778,7 +2777,6 @@ mod tests {
             "computer.viewer_renew",
             "computer.viewer_control",
             "computer.viewer_close",
-            "computer.revoke",
             "computer.lifecycle",
             "computer.wallpaper",
         ] {
