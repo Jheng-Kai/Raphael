@@ -371,7 +371,10 @@ export interface AgentTurn {
 export interface OwnerQuestion {
   id: string; task_id: number; turn_id: number; member_id: number; kind: string; card_id: string;
   question: string; options: string[]; free_text: boolean; state: "asked" | "answered" | "cancelled";
-  result: { state: string; answer?: string } | null;
+  /** The card's grey line under the title, a grey line per option (parallel to `options`, "" for none), several rows may be chosen, a skip row. */
+  subtitle?: string; descriptions?: string[]; multiple?: boolean; skip?: boolean;
+  /** How it ended: the chosen words (a list on a several-choice card), a skip, or a card closed by the owner writing something else (`by`). */
+  result: { state: string; answer?: string | string[]; skipped?: boolean; by?: string; said?: string } | null;
   /**
    * When it was asked. The core keeps it (`owner_questions.created_at_ms`, which orders a turn's questions) but `view` in
    * agent/owner_questions.py does not send it yet, so a card without it stands before the turn's replies (settledQuestions).

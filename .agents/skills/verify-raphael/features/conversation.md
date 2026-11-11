@@ -1336,6 +1336,38 @@ Core contracts: core/tests/background/test_owner_cards.py and
 core/tests/agent/test_owner_questions.py. The shell allowlist and its existing
 allowlist test include owner_questions.answer.
 
+## The question card's shape (2026-11-11)
+
+Owner request of 2026-11-11: Raphael's flows work as Grok Bot's do, one form of choices for set-up and for everyday work
+(R-CARD-02, R-CARD-08, R-CARD-12, R-CARD-13, R-CARD-14). The reference is Grok Bot's card (the frames in
+bots/research/grokbot, read only: the first-conversation sheet around 01:30-02:20 and the collapsed row of `74-savio-up-e.png`); copy nothing from that folder.
+
+- Tool and storage: `ask_owner` also takes `subtitle`, options as a label or `{label, description}`, `multiple` and `skip`
+  (`core/src/raphael_core/agent/owner_questions.py` `question_input`; the schema in `harness_tools.py`). The card is the existing
+  `owner_questions.payload` (labels in `options`, `descriptions` beside them, `subtitle`, `multiple`, `skip`), so no migration. An answer is a string, a list
+  of labels (a several-choice card) or `{skip: true}` (`owner_questions.answer` takes `skip: true`); the member reads `{"state":"answered","answer":[...]}`, a skip as
+  an answer, or a card closed by a message as unanswered with the owner's words (`model_result`).
+- Card (`permission-card.ts` `ownerQuestionHTML`, `owner-questions.ts`, `owner-question-sync.ts`, `card.css`): title and ×, an optional grey sub-line, a well of rows (letter badge,
+  words, optional smaller grey line), a skip row lettered after the options, the own-answer row last (a textarea that grows to three lines, its pill hidden until something is typed),
+  a several-choice card's checks and one submit. Answered, one row under the title with a check at the right; the typed words on one line with an ellipsis, a press shows them whole.
+  Closed with the × is 已取消, closed by the owner writing something else is 未回答; neither has a row.
+- A card waiting makes the composer of its conversation say 「輸入你的回答，或聊點別的」 (private `pages/agent.ts` `drawComposer`, rooms `group-chats.ts`), and an ordinary message closes it:
+  `AgentService._close_waiting_question` for a typed or chat message, `rooms._send` for a room thread. In a Telegram, Slack or Discord chat the card is written as lettered lines
+  (`messaging/words.py` `question_text`) and a reply naming the letters, the words or the skip word answers it (`answer_from_text`).
+- Mock: `ownerQuestionShape` (`described`, `multiple`, `skip`) shapes the fixture card; `agent_ask_text` and `rooms.send` close a waiting card as the core does.
+
+Selected scenes (the new states first): question-card-described, question-card-skipped, question-card-multiple-asked, question-card-multiple-chosen,
+question-card-multiple-answered, question-card-long-typed, question-card-long-answered, question-card-long-open, question-card-composer-waiting,
+question-card-composer-after, question-card-message-closes, question-card-room-asked, question-card-room-answered; the unchanged consumers owner-question-*,
+card-question-*, routine-sentence-event. Both themes at 1120, 720 and 1920x1080; compare the badge column, row heights, the check's alignment, the collapsed row and the
+pill at the foot of a three-line field with the reference, and nothing clipped at 720.
+
+```powershell
+npm run look -- question-card-described question-card-skipped question-card-multiple-asked question-card-multiple-chosen question-card-multiple-answered question-card-long-typed question-card-long-answered question-card-long-open question-card-composer-waiting question-card-composer-after question-card-message-closes question-card-room-asked question-card-room-answered owner-question-asked owner-question-typed owner-question-answered owner-question-cancelled owner-question-room card-question-key --theme both --width 1120,720,1920x1080
+```
+
+Unverified by definition: a real model choosing the new fields, and a real Telegram chat answering a card.
+
 
 ## Owner input (2026-11-01)
 

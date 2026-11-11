@@ -11,7 +11,7 @@ test("the shared choice form sends exactly the option or free text through the o
   expect(thread.querySelector("[data-owner-question]")).toBeNull();
   thread.querySelector<HTMLButtonElement>("[data-greeting-option]")!.click();
   expect(send).toHaveBeenLastCalledWith("Help me clear important mail");
-  const input = thread.querySelector<HTMLInputElement>("input")!; input.value = "Prepare the launch"; input.dispatchEvent(new Event("input",{bubbles:true}));
+  const input = thread.querySelector<HTMLTextAreaElement>("textarea")!; input.value = "Prepare the launch"; input.dispatchEvent(new Event("input",{bubbles:true}));
   thread.querySelector<HTMLButtonElement>('[data-greeting-answer="text"]')!.click();
   expect(send).toHaveBeenLastCalledWith("Prepare the launch");
   expect(greetingHTML(turn, false)).toBe("");

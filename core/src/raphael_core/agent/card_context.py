@@ -92,8 +92,13 @@ def _fact(table, row, now_ms):
         if row["kind"] == "ask_owner":
             payload = _object(row["payload"])
             text = f" for {_label(payload.get('question', ''))}"
-            if state == "answered" and isinstance(result.get("answer"), str):
-                text += f"; owner answer {_label(result['answer'])}"
+            if state == "answered" and isinstance(result.get("answer"), (str, list)):
+                chosen = result["answer"] if isinstance(result["answer"], str) else "; ".join(map(str, result["answer"]))
+                text += f"; owner answer {_label(chosen)}"
+            elif state == "answered" and result.get("skipped"):
+                text += "; the owner skipped it"
+            elif result.get("by") == "message":
+                text += "; the owner wrote something else instead of answering"
         return f"Owner question card ({_label(row['kind'])}){text}: {state}."
     if table == "connection_proposals":
         state = {"draft": "pending configuration", "approval": "pending approval", "tested": "tested; not enabled"}.get(state, state)

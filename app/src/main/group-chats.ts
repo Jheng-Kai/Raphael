@@ -33,7 +33,7 @@ import { keepReadingPlace } from "./reading-place";
 import { createBackgroundQuestions } from "./background-questions";
 import { conversationCardsHTML, filesHTML, latestProgress, livePresenceHTML, messageActionsHTML, updateLiveTimes, waitsAtCard } from "./timeline";
 import { mountConversationCardActions } from "./conversation-card-actions";
-import { answerOwnerPage, mountOwnerQuestions } from "./owner-questions";
+import { answerOwnerPage, mountOwnerQuestions, questionWaits } from "./owner-questions";
 import { mountPendingQuestions } from "./pending-questions";
 import { composioAction, composioText } from "./composio-result";
 import { mountTaskResults } from "./task-result";
@@ -349,7 +349,7 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
     scroll.scrollTop=top+scroll.scrollHeight-height;
   }});
   const sendingRooms=new Set<number>(),pendingStops=new Set<number>();
-  const composer=createChatComposer({stopTask:stopRoom,placeholder:()=>t("rooms.message"),answerPage:(id,text)=>!replyTo && answerOwnerPage(thread,id,text,()=>{void refresh();}),transcriptTarget(){const id=roomId;return text=>{if(roomId===id){composer.input.value+=(composer.input.value?" ":"")+text;composer.seedDictation(text);}else if(id){const draft=drafts.get(id)??{text:"",files:[]};draft.text+=(draft.text?" ":"")+text;drafts.set(id,draft);writeDraftWords(`room:${id}`,{text:draft.text,quote:draft.quote,pageId:draft.pageId});}};},async send(text,files){
+  const composer=createChatComposer({stopTask:stopRoom,placeholder:()=>questionWaits([], pendingQuestions && pendingQuestions.room===roomId ? pendingQuestions.questions : []) ? t("ownerQuestion.type") : t("rooms.message"),answerPage:(id,text)=>!replyTo && answerOwnerPage(thread,id,text,()=>{void refresh();}),transcriptTarget(){const id=roomId;return text=>{if(roomId===id){composer.input.value+=(composer.input.value?" ":"")+text;composer.seedDictation(text);}else if(id){const draft=drafts.get(id)??{text:"",files:[]};draft.text+=(draft.text?" ":"")+text;drafts.set(id,draft);writeDraftWords(`room:${id}`,{text:draft.text,quote:draft.quote,pageId:draft.pageId});}};},async send(text,files){
     if (!roomId) return;
     // What is sent shows in the thread, so a report open in its place goes away.
     pagesHost.closeReport();

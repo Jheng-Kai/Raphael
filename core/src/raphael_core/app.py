@@ -1448,6 +1448,14 @@ class App(Router):
         # Every message of the reply, unframed, as the app shows them: never only the last one.
         shown = [m for m in (reply.get("messages") or []) if isinstance(m, str) and m.strip()]
         parts = [forms_plain_text(m) for m in plain_replies(shown or [reply.get("text", "")])]
+        if reply.get("status") == "done" and type(reply.get("turn_id")) is int:
+            # A question the member put to the owner is written out with its choices: a chat cannot draw the card.
+            from .messaging.words import question_text
+            questions = getattr(self.background, "owner_questions", None)
+            waiting = [q for q in questions.for_turn(reply["turn_id"]) if q["state"] == "asked" and q["kind"] == "ask_owner"] if questions is not None else []
+            if waiting:
+                written = question_text(language, waiting[0])
+                parts = [*parts[:-1], written] if parts and parts[-1].strip() == waiting[0]["question"] else [*parts, written]
         return Answer("\n\n".join(parts), list(turn_files(self.agent._history, reply.get("turn_id", 0), self.attachment_store)), parts)
 
     async def _transcribe_room(self, audio: bytes, language: str) -> str:

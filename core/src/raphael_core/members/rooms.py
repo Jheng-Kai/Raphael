@@ -766,6 +766,9 @@ class RoomsService:
             self._conn.execute("UPDATE room_messages SET origin_message_id = ?, reply_to_member = ?, reply_to = ? WHERE id = ?",
                                (owner_id, recipient, reply_to, owner_id))
         self._changed(room["id"])
+        # Writing in the room leaves a question that waits in this thread: its card closes unanswered, the member is told.
+        if (questions := getattr(self._background, "owner_questions", None)) is not None:
+            questions.close_for_message(said=text, room_id=room["id"], thread_id=thread_id)
         await self._exchanges.start(room, owner_id, language, attachments, recipient)
         self._changed(room["id"])
         return {"message_id":owner_id, "duplicate":False}
