@@ -199,10 +199,60 @@ export function checkRendered(name, context = {}) {
       const template = JSON.parse(window.__look.exportedTemplate);
       require(template.format === "raphael-member" && !template.memory && !template.tools && !template.avatar, "one recipe excludes private state and grants");
     }
-    if (name === "colleague-greeting") require(visible(document.querySelector('[data-greeting-question]')) && document.querySelectorAll('[data-greeting-option]').length === 3, "shared choice form and free text");
-    if (name === "colleague-goal") {
-      require(calls.some(call => call.command === "agent_ask_text" && call.text === window.__look.data.colleagueSample.options[0]), "choice submits exactly the owner's words");
-      require(document.querySelector('.ra-scroll').innerText.includes(window.__look.data.colleagueSample.outcomeQuestion), "one outcome question is visible");
+    if (name === "colleague-setup-card") {
+      // The first message of a new member: its own line and the one question card, read as one message.
+      const body = [...document.querySelectorAll(".page-agent .ra-body")].filter(visible);
+      require(body.length === 1, `the line and its card are one message: ${body.length} bodies`);
+      const card = body[0].querySelector('[data-owner-question="setup-first"][data-card-state="asked"]');
+      require(visible(card), "the question card stands in the same message");
+      const line = [...body[0].querySelectorAll("[data-seq]")].find(item => item.textContent.includes("很高興加入你的團隊"));
+      require(visible(line), "the member's own greeting line is there");
+      require(line.getBoundingClientRect().bottom <= card.getBoundingClientRect().top + 1, "the line stands above the card");
+      const options = [...card.querySelectorAll("[data-owner-option]")].filter(visible);
+      require(options.length === 4 && options.map(item => item.querySelector("[data-choice-letter]").textContent).join("") === "ABCD", "four options with their letters");
+      require(visible(card.querySelector("[data-owner-answer-input]")) && visible(card.querySelector('[data-owner-answer="cancel"]')), "the owner's own answer and the close are on the card");
+      require(![...document.querySelectorAll(".page-agent .owner-message")].some(visible), "nothing is put in the owner's mouth");
+      require(!document.querySelector("[data-greeting-question],[data-greeting-option]"), "the idle greeting clone is gone: the card is the ordinary one");
+      const wide = Math.max(...[line, card].map(item => item.getBoundingClientRect().width));
+      require(card.getBoundingClientRect().right <= document.querySelector(".page-agent .ra-scroll, .page-agent").getBoundingClientRect().right + 1, `the card stays inside the conversation: ${wide}`);
+    }
+    if (name === "colleague-setup-job") {
+      // The card answered and the job saved: the answer is the card's, one quiet line says the job, one sentence, then the first-task card.
+      const first = document.querySelector('[data-owner-question="setup-first"]');
+      require(first && first.dataset.cardState === "answered" && first.textContent.includes("整理 Gmail 信件，每天幫我回覆重要的信"), "the first card stands answered, with the owner's answer in it");
+      require(![...document.querySelectorAll(".page-agent .owner-message")].some(visible), "the answer is not said again as a message");
+      const line = [...document.querySelectorAll(".page-agent .conversation-event-line")].find(item => item.textContent.includes("已設定職務：信件管家"));
+      require(visible(line), "one quiet line says the job was set");
+      const ack = [...document.querySelectorAll("[data-seq]")].find(item => item.textContent.includes("我負責幫你整理信件"));
+      const card = document.querySelector('[data-owner-question="setup-task"][data-card-state="asked"]');
+      require(visible(ack) && visible(card), "the member's sentence and the first-task card are shown");
+      const order = [first, line, ack, card].map(item => item.getBoundingClientRect().top);
+      require(order.every((top, index) => index === 0 || top >= order[index - 1] - 1), `they read in order: ${order.join(",")}`);
+      require(card.querySelectorAll("[data-owner-option]").length === 2, "two concrete tasks, and the owner's own answer");
+      require(document.querySelectorAll('[data-card-state="asked"]').length === 1, "one open card at a time");
+      const box = line.getBoundingClientRect(), page = document.querySelector(".page-agent").getBoundingClientRect();
+      require(Math.abs((box.left + box.right) / 2 - (page.left + page.right) / 2) < page.width * 0.2, "the line is centred in the conversation");
+    }
+    if (name === "colleague-setup-connect") {
+      const card = document.querySelector("[data-connector]");
+      const note = document.querySelector("[data-setup-note]");
+      require(visible(card) && card.dataset.cardState === "pending", "the connect card for the one app");
+      require(visible(note) && note.textContent.includes("沒有你的同意，我不會寄出或更動任何東西"), "one quiet line says nothing is sent or changed without a yes");
+      require(card.getBoundingClientRect().bottom <= note.getBoundingClientRect().top + 1, "the line stands under the card");
+      require(card.getBoundingClientRect().left <= note.getBoundingClientRect().left + 1 && note.getBoundingClientRect().right <= card.getBoundingClientRect().right + 1, "the line stands within the card's width");
+      require(parseFloat(getComputedStyle(note).fontSize) <= parseFloat(getComputedStyle(document.body).fontSize), "and is quiet");
+      require(visible([...document.querySelectorAll(".conversation-event-line")].find(item => item.textContent.includes("已設定職務：信件管家"))), "the job line precedes it");
+      require(document.querySelectorAll('[data-owner-question][data-card-state="asked"]').length === 0, "no second question while the app is asked for");
+    }
+    if (name === "colleague-setup-collapsed") {
+      // A clear answer that gives a name, a job and a task: it renames, saves, says so and starts, with no card after.
+      const renamed = [...document.querySelectorAll(".bot-renamed")].find(item => item.textContent.trim() === "已重新命名為 阿信");
+      require(visible(renamed), "the rename stands as the first Bot's rename does");
+      require(visible([...document.querySelectorAll(".conversation-event-line")].find(item => item.textContent.includes("已設定職務：信件管家"))), "the job line");
+      require(visible([...document.querySelectorAll("[data-seq]")].find(item => item.textContent.includes("現在先整理今天的未讀信"))), "it says what it starts");
+      require(document.querySelectorAll('[data-owner-question][data-card-state="asked"]').length === 0, "no further card");
+      require(document.querySelector('[data-owner-question="setup-first"]').dataset.cardState === "answered", "the first card stays answered where it was asked");
+      require(![...document.querySelectorAll(".page-agent .owner-message")].some(visible), "the answer is not said again as a message");
     }
     if (name === "colleague-handoff") require(document.querySelector('.ra-scroll').innerText.includes('/home/cua/team/projects/'), "handoff cites a shared-team path");
     if (name === "colleague-accounts") require(document.querySelector('.cs-accts').textContent.includes('工作信箱') && document.querySelector('.cs-accts').textContent.includes('私人信箱'), "accounts have distinct public labels");
@@ -1849,8 +1899,8 @@ export function checkRendered(name, context = {}) {
       require(box.width <= 480.5, `card width is at most 480px: ${box.width}`);
       const draftHost = card.closest('.draft-panel');
       if (draftHost) require(parseFloat(getComputedStyle(draftHost).borderTopWidth) === 0 && parseFloat(getComputedStyle(draftHost).paddingLeft) === 0, 'the draft host adds no second card frame');
-      if (card.matches('[data-owner-question][data-card-state="asked"],[data-greeting-question][data-card-state="asked"]')) {
-        const close = card.querySelector('[data-owner-answer="cancel"],[data-greeting-answer="cancel"]');
+      if (card.matches('[data-owner-question][data-card-state="asked"]')) {
+        const close = card.querySelector('[data-owner-answer="cancel"]');
         require(!pill, 'a waiting question uses its title without a redundant status pill');
         require(close?.parentElement?.matches('.card-head') && close === close.parentElement.lastElementChild, 'question close follows the heading at the far right');
         require(Math.abs(close.getBoundingClientRect().right - (box.right - parseFloat(style.paddingRight) - parseFloat(style.borderRightWidth))) < 1.5, 'question close aligns with the right padding');
@@ -1879,7 +1929,7 @@ export function checkRendered(name, context = {}) {
         require(!turn?.hasAttribute('data-live'), 'the member is paused while waiting for computer handoff');
       }
       const taskLine = card.closest('.ra-body')?.querySelector(':scope > .task-actions');
-      if (card.matches('.task-result,[data-owner-question],[data-greeting-question],[data-permission-card],[data-secret-card],[data-connector]')) require(!taskLine || taskLine.hidden || !visible(taskLine), 'the card replaces a duplicate task state line');
+      if (card.matches('.task-result,[data-owner-question],[data-permission-card],[data-secret-card],[data-connector]')) require(!taskLine || taskLine.hidden || !visible(taskLine), 'the card replaces a duplicate task state line');
       for (const hint of [...card.querySelectorAll('.cn-hint')].filter(visible)) require(getComputedStyle(hint).whiteSpace === 'nowrap' && hint.getBoundingClientRect().height <= parseFloat(getComputedStyle(hint).lineHeight) + 1, 'field hints stay on one line');
         for (const well of [...card.querySelectorAll('.card-well')].filter(visible)) {
           const shade = value => value.match(/[\d.]+/g).slice(0, 3).reduce((sum, part) => sum + Number(part), 0);
@@ -5863,10 +5913,12 @@ export function checkRendered(name, context = {}) {
     require(!document.querySelector(".cr-dialog, .mb-scrim"), "the dialog closed at once");
     require(visible(document.querySelector(".composer .cmp-input")), "its conversation is open");
     const greeting = [...document.querySelectorAll(".page-agent .ra-body")].filter(visible);
-    require(greeting.length === 1 && greeting[0].textContent.includes("哥布達") && greeting[0].textContent.includes("？"), "it speaks first and asks what it is for");
+    require(greeting.length === 1 && greeting[0].textContent.includes("哥布達"), "it speaks first, in its own words");
+    const card = greeting[0].querySelector('[data-owner-question][data-card-state="asked"]');
+    require(visible(card) && card.textContent.includes("你想先讓我接手哪一件事？") && card.querySelectorAll("[data-owner-option]").length === 4, "and asks what to take on first on one question card, with four options");
+    require(visible(card.querySelector("[data-owner-answer-input]")), "the owner may answer in their own words");
     require(![...document.querySelectorAll(".page-agent .owner-message")].some(visible), "nothing is put in the owner's mouth");
     require(!visible(document.querySelector(".page-agent .work-toggle")), "no steps are claimed for what it said");
-    require(!document.querySelector(".page-agent [data-greeting-question]"), "a model-written greeting carries no choice form");
     return { check: name };
   }
   if (name === "member-maker-greeting") {

@@ -1321,6 +1321,8 @@ export const zhTW = {
   "mem.editLabel": "編輯{p0}",
   "skills.learnedNotice": "學會了：{p0}",
   "skills.updatedNotice": "更新了：{p0}",
+  "members.jobSetNotice": "已設定職務：{p0}",
+  "cards.connectYes": "沒有你的同意，我不會寄出或更動任何東西。",
   "lang.search": "搜尋語言",
   "lang.none": "找不到這個語言",
   "onboarding.demo1Ask": "幫我整理今天的 Gmail",

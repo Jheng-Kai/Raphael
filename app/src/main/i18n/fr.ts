@@ -2078,6 +2078,8 @@ export const fr = {
   "vault.cardNotice": "Vous approuvez chaque utilisation et effectuez le paiement ou l’envoi final.",
   "vault.busy": "Travail en cours…",
   "skills.updatedNotice": "Mis à jour : {p0}",
+  "members.jobSetNotice": "Poste défini : {p0}",
+  "cards.connectYes": "Rien n'est envoyé ni modifié sans ton accord.",
   "lang.search": "Rechercher des langues",
   "lang.none": "Aucune langue correspondante",
   "onboarding.demo1Ask": "Trie mon Gmail d’aujourd’hui",
