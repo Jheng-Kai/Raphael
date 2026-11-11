@@ -1991,6 +1991,21 @@ PRAGMA user_version = 80;
 COMMIT;
 """
 
+# Seats outlive a member until explicitly released, just like computer_data.
+_MIGRATIONS[81] = """
+BEGIN;
+CREATE TABLE computer_seats (
+    host TEXT NOT NULL,
+    member_id INTEGER NOT NULL,
+    seat INTEGER NOT NULL,
+    used REAL NOT NULL,
+    PRIMARY KEY(host, member_id),
+    UNIQUE(host, seat)
+);
+PRAGMA user_version = 81;
+COMMIT;
+"""
+
 LATEST_VERSION = max(_MIGRATIONS)
 
 
