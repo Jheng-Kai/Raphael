@@ -255,8 +255,9 @@ describe("the tabs", () => {
         expect(html).not.toContain("set-purpose");
         // Connections' Add stands on the row of its two views, clear of the dialog's ✕.
         if (id === "connections") expect(html).toMatch(/<div class="cs-bar">.*?<\/div><button type="button" class="sel cs-add"[^>]*data-k="conn-add"/s);
-        // 模型與用量's one refresh stands at its top right: it is read once while the app runs.
-        expect(html.startsWith(id === "models" ? `<div class="set-head">${head}` : head)).toBe(true);
+        // No tab has a button beside its name: 模型與用量 is read again by each opening of Settings, not by a refresh.
+        expect(html.startsWith(head)).toBe(true);
+        expect(html).not.toMatch(/set-head|models-refresh/);
         expect(html).not.toContain('class="purpose"');
       }
     }

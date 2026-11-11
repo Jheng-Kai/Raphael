@@ -452,10 +452,6 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
 .nav-em .em-d { display: none; }
 :root[data-theme="dark"] .nav-em .em-l { display: none; }
 :root[data-theme="dark"] .nav-em .em-d { display: block; }
-/* A tab whose name has actions beside it (連接's 新增). */
-.set-head { display: flex; align-items: center; gap: var(--sp-3); }
-.set-head h1 { flex: 1; min-width: 0; padding-right: 0; }
-.set-head .sel { flex: none; }
 .modal-body { overflow-x: hidden; overflow-y: auto; padding: var(--sp-6) 40px 44px; min-width: 0; min-height: 0; scrollbar-gutter: stable; }
 /* A settings pane has one measure, including its header, tools and grids. */
 .modal-body > * { max-width: var(--layout-reading-max); }
@@ -518,8 +514,6 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
   .modal-scrim { --modal-gap: 16px; }
   .modal-scrim { --set-nav: 160px; }
   .modal-body { padding: var(--sp-5) var(--sp-5) var(--sp-6); }
-  /* Header actions use the content edge, below the corner Close control. */
-  .modal-body:has(> .set-content > .set-head) { padding-top: calc(var(--sp-6) + var(--sp-4) + var(--sp-2)); }
   .modal-nav { padding: var(--sp-3) var(--sp-2); }
   .modal-nav .nav { padding-inline: var(--sp-2); gap: var(--sp-2); }
   /* A long tab name (Models & usage) takes two lines rather than losing its end. */

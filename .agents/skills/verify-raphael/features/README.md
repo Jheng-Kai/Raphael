@@ -387,7 +387,7 @@ behavior the fixture cannot prove.
 | [Dictation](dictation.md) | Overview, history, dictionary, shortcuts, microphone and paste |
 | [Settings and appearance](settings-appearance.md) | Profile/preferences, black and white themes, languages, models and app information |
 | [Connections and MCP](connections-mcp.md) | Connected apps and their count, Settings-only connected-app entry, an app's accounts and tools, members' private skills, managed store, MCP setup/discovery and Home's private Google calendar read |
-| [Usage](usage.md) | Spend overview, grouping, CSV, CLI allowances and the once-per-window 90% warning |
+| [Usage](usage.md) | Spend overview, CLI allowances read unseen at each opening of Settings (no refresh button), and the once-per-window 90% warning |
 | [Onboarding](onboarding.md) | Welcome, optional setup and immediate conversation |
 
 Keep entry points, prerequisites and observable end states current. If data is

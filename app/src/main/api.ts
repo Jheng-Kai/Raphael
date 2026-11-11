@@ -72,7 +72,10 @@ import type {
  */
 const SHARED_READS = new Set(["members.list", "settings.get", "rooms.list", "home.overview", "status.get", "secrets.status",
   "integrations.inventory", "integrations.catalog", "integrations.audit", "connectors.catalog", "connectors.status",
-  "models.catalog", "brains.cli", "languages.list", "toolsets.list", "background.waiting.list", "audio.devices"]);
+  "models.catalog", "brains.cli", "languages.list", "toolsets.list", "background.waiting.list", "audio.devices",
+  // Settings reads the allowances at every opening and the page asks again after a turn: a reading under way is joined, and
+  // asking is not a change that makes the reads of the start-up ask the core again.
+  "usage.allowances", "chatgpt.status"]);
 let changes = 0;
 const reading = new Map<string, { answer: Promise<unknown>; changes: number }>();
 /** Events that say something may have changed; the microphone's loudness and the like do not. */

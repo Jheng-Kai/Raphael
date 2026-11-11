@@ -234,7 +234,6 @@
 .mcp-row-actions { display: flex; align-items: center; gap: var(--sp-1); }
 .modal-body:has(.cs-form) { display:flex; flex-direction:column; overflow:hidden; }
 .modal-body:has(.cs-form) > .set-content { display:flex; flex-direction:column; flex:1; min-height:0; }
-.modal-body:has(.cs-form) .set-head { padding-right:var(--sp-2); }
 .cs-form { display:flex; flex-direction:column; flex:1; min-height:0; }
 .cs-form > h2,.cs-form > .cd-help { flex:none; }
 .cs-form > .trust { flex:none; margin-top:var(--sp-3); margin-right:var(--sp-2); }

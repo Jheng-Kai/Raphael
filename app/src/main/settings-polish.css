@@ -17,7 +17,7 @@
 .data-heading { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); margin-bottom: var(--sp-3); }
 .data-heading h2 { margin: 0; }
 /* A tab's name alone heads it; its first section keeps the gap of the others. */
-.modal-body > h1 + .sgroup, .modal-body > .set-head + .sgroup, .modal-body > h1 + div > .sgroup:first-child { margin-top: var(--sp-5); }
+.modal-body > h1 + .sgroup, .modal-body > h1 + div > .sgroup:first-child { margin-top: var(--sp-5); }
 /* The sections of 一般 that hold sections of their own (messaging): their cards follow one another under one name. */
 .set-messaging > .sgroup { margin-top: var(--sp-2); }
 .set-messaging > h2 + .sgroup { margin-top: 0; }
