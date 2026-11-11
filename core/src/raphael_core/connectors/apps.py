@@ -28,8 +28,13 @@ APPS: dict[str, App] = {app.id: app for app in (
     App("googlecalendar", "Google Calendar", "calendar_", "googlecalendar", "google"),
 )}
 
+# The owner's own Google authorization (a Desktop client of their Google Cloud project, signed in with PKCE on a loopback
+# address): Gmail and Calendar through `connectors/google.py`, not through Composio. Its card is chosen by id, never by
+# the app that needs Gmail, so that an owner who has only a Composio key is not sent to Google Cloud.
+OWN_GOOGLE = App("google", "Google", "", "google", "own_google")
+
 # Per-owner addresses cannot live in the fixed-address integrations catalog.
-SERVER_APPS = {"n8n": App("n8n", "n8n", "", "n8n", "own_server")}
+SERVER_APPS = {"n8n": App("n8n", "n8n", "", "n8n", "own_server"), OWN_GOOGLE.id: OWN_GOOGLE}
 
 
 async def catalog_apps(connectors):

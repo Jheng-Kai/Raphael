@@ -2,6 +2,17 @@
 export function installMock(fixture, config = {}, target = window) {
   const data = structuredClone(fixture);
   const variant = config.fixture ?? {};
+  /** The conversation in which the owner asked for his own Google: the member answers with the card that walks the steps (`connectors/cards.py`, the app `google`). */
+  function ownGoogleTurn(data) {
+    const turn = structuredClone(data.connectorTurns.server);
+    const text = "Google 要用你自己的帳號連接：照卡片上的步驟在 Google Cloud 建立桌面應用程式，再把 Client ID 與 Client secret 貼進卡片，最後按「連接 Google」。";
+    Object.assign(turn, { id: 127, session_id: "look-connect-google", question: "幫我連接我自己的 Google 帳號", text, messages: [{ ...turn.messages[0], text }] });
+    turn.connectors = [{ id: "card-google", app: "google", name: "Google", logo: "", state: "pending", error: null, reconnect: false, tool_count: null,
+      expires_at_ms: turn.connectors[0].expires_at_ms, resumed: false, needs: "own_google", toolkit: "google",
+      fields: [{ name: "client_id", label: "Client ID", required: true, secret: false }, { name: "client_secret", label: "Client secret", required: true, secret: true }],
+      google: { redirect: "http://127.0.0.1", scopes: ["https://www.googleapis.com/auth/gmail.modify", "https://www.googleapis.com/auth/calendar.events"], configured: false } }];
+    return turn;
+  }
   if (variant.hiddenMember) {
     // One member and one group chat taken off the list: they wait in the sidebar's hidden folder.
     const member = data.members.find(item => item.id === 2), room = data.rooms.find(item => item.id === 1);
@@ -424,8 +435,11 @@ export function installMock(fixture, config = {}, target = window) {
   // A task that waits for an app shows its connector card; `cardSignIn` "approve" finishes the sign-in the
   // way the core reports it (authorizing, then connected) and adds the turn that resumes the task.
   if (variant.connectorCard) {
-    const turn = structuredClone(data.connectorTurns[variant.connectorCard]);
+    const turn = structuredClone(variant.connectorCard === "google" ? ownGoogleTurn(data) : data.connectorTurns[variant.connectorCard]);
     if (variant.connectorState) turn.connectors[0].state = variant.connectorState;
+    // A card that failed, as the core words it: the cause (`error`), whether pressing again helps (`retry`), what to put right
+    // first (`fix`) and the short `detail` (`connectors/cards.py`, CAUSES).
+    if (variant.connectorFailure) Object.assign(turn.connectors[0], { state: "failed", detail: null, retry: true, fix: null }, variant.connectorFailure);
     if (variant.connectorMember) Object.assign(turn, { member_id: variant.connectorMember,
       conversation_id: data.conversations.find(item => item.member_id === variant.connectorMember && item.is_default).id, prefix: "" });
     data.turns.push(turn);
@@ -699,6 +713,8 @@ export function installMock(fixture, config = {}, target = window) {
     data.home.calendar_counts['2026-10-24']=4;
     data.home.calendar_days=Object.keys(data.home.calendar_counts);
   }
+  // The owner has not set up his own Google yet: its row is in the store (R-CONNECT-02).
+  if (variant.noOwnGoogle) data.managedConnectors = data.managedConnectors.filter(c => c.id !== "google");
   if (variant.calendarComposio) {
     data.managedConnectors = data.managedConnectors.filter(c=>c.id!=="google" && c.id!=="composio:googlecalendar");
     data.managedConnectors.push({id:"composio:googlecalendar",kind:"composio",name:"Google Calendar",status:"ACTIVE",enabled:true,enabled_tools:["GOOGLECALENDAR_EVENTS_LIST"],disabled_tools:[]});
@@ -1519,12 +1535,13 @@ export function installMock(fixture, config = {}, target = window) {
         const card = turn?.connectors.find(item => item.id === p.id);
         if (!card) throw new Error(`Fixture card not found: ${p.id}`);
         if (!["pending", "failed", "cancelled"].includes(card.state)) return { card: copy(card), started: false };
-        if (card.needs && card.needs !== "sign_in" && !p.fields) throw new Error("Fixture: this card needs the form's fields");
-        Object.assign(card, { state: "authorizing", error: null });
+        if (card.needs && card.needs !== "sign_in" && !p.fields && !card.google?.configured) throw new Error("Fixture: this card needs the form's fields");
+        Object.assign(card, { state: "authorizing", error: null, detail: null });
         notify("AgentTurn", { turn_id: turn.id, member_id: turn.member_id });
         if (variant.cardSignIn === "approve") {
           setTimeout(() => {
-            Object.assign(card, { state: "connected", tool_count: 2, resumed: true });
+            Object.assign(card, { state: "connected", tool_count: 2, resumed: true },
+              card.needs === "own_google" ? { tool_count: 7, account: "owner@example.test", google: { ...card.google, configured: true } } : {});
             data.turns.push(structuredClone(data.connectorResume));
             state.emit({ type: "AgentTurn", turn_id: turn.id, member_id: turn.member_id });
           }, 0);

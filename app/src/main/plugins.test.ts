@@ -59,7 +59,7 @@ function setup() {
 }
 const settle = () => new Promise(resolve => setTimeout(resolve, 0));
 /** The store's cards of these sources: n8n, the owner's own server, is always in the store too (owner, 2026-11-08). */
-const apps = (root: ParentNode): Element[] => [...root.querySelectorAll(".cs-card")].filter(card => !card.querySelector('[data-id="n8n"]'));
+const apps = (root: ParentNode): Element[] => [...root.querySelectorAll(".cs-card")].filter(card => !card.querySelector('[data-id="n8n"], [data-id="google"]'));
 
 test("unifies managed, private Google and custom MCP without bridge duplicates", async () => {
   const { c, root } = setup(); await c.load();
@@ -300,7 +300,7 @@ test("built-in services work without a key, search locally, and use their existi
   api.integrationsConnect.mockReturnValue(new Promise(() => {}));
   const { c, root, click } = setup(); await c.load(); click("tab", "store");
   expect(apps(root)).toHaveLength(1);
-  expect(root.querySelector('[data-k="conn-tab:store"] .n')?.textContent).toBe("2"); // Sentry and n8n
+  expect(root.querySelector('[data-k="conn-tab:store"] .n')?.textContent).toBe("3"); // Sentry, n8n and the owner's own Google
   expect(root.querySelector('[data-conn="configure-composio"]')).not.toBeNull();
   c.input({ id: "conn-search", value: "unmatched" } as HTMLInputElement);
   await new Promise(resolve => setTimeout(resolve, 100));

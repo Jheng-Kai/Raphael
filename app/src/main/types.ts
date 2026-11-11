@@ -514,11 +514,21 @@ export interface ConnectorCard {
    * What connecting it asks of the owner: a sign-in only (the default), their own key, a developer app of their own, or
    * (`own_server`) the address and token of a server of their own, such as n8n.
    */
-  needs?: AppNeeds | "own_server";
+  needs?: AppNeeds | "own_server" | "own_google";
   /** The Composio toolkit the form for `needs` is read from. */
   toolkit?: string;
-  /** An own server's fields, given by the card itself (`connectors/cards.py`): never their values. */
+  /** An own server's or the owner's own Google's fields, given by the card itself (`connectors/cards.py`): never their values. */
   fields?: { name: string; label: string; required: boolean; secret: boolean; description?: string }[];
+  /** A short reason the named cause (`error`, a cause of the core's `CAUSES`) carries: the service's own words when it refused, the technical reason when nothing could be named. */
+  detail?: string | null;
+  /** Whether pressing again can help. */
+  retry?: boolean;
+  /** What the owner puts right first: the Composio key in Connections (`settings`), or what the card asks for (`form`). */
+  fix?: "settings" | "form" | null;
+  /** The owner's own Google: what to copy into Google Cloud, and whether a Client ID is kept so that the card asks only for the sign-in. */
+  google?: { redirect: string; scopes: string[]; configured: boolean };
+  /** The Google account that signed in, once connected. */
+  account?: string;
 }
 
 /** A secret card: a key a connection needs and has none of, and where saving it stands. Never the key itself. */

@@ -53,9 +53,12 @@ export function mountInlineConnectionSetup(thread: HTMLElement,
   const act = (slot: HTMLElement, action: () => Promise<unknown>): void => {
     void Promise.resolve(action()).catch(() => cardFailure(slot.closest(".conversation-card"), () => act(slot, action)));
   };
-  /** A server of the owner's own (n8n) brings its fields in its card: there is no catalog, guide or redirect to read. */
+  /**
+   * A server of the owner's own (n8n) and the owner's own Google bring their fields in their card: there is no catalog, guide or
+   * redirect to read. The Google card draws its own form (`google-card.ts`); the slot only needs the plan to send the fields by.
+   */
   const serverPlan = (slot: HTMLElement): ToolkitPlan | null => {
-    if (slot.dataset.needs !== "own_server") return null;
+    if (slot.dataset.needs !== "own_server" && slot.dataset.needs !== "own_google") return null;
     let fields: ToolkitPlan["fields"] = [];
     try {
       const given = JSON.parse(slot.dataset.serverFields ?? "[]") as Partial<ToolkitPlan["fields"][number]>[];
@@ -72,6 +75,7 @@ export function mountInlineConnectionSetup(thread: HTMLElement,
       const plan = server ?? await api.connectorsToolkit(slot.dataset.toolkit ?? "");
       if (!active || !slot.isConnected) return;
       plans.set(slot, plan);
+      if (slot.dataset.needs === "own_google") return;
       if (server) {
         slot.classList.add("inline-connection-setup");
         slot.innerHTML = fieldsHTML(plan) + `<div class="card-actions">${btn(esc(t("card.keySave")), "sm pri", " data-inline-submit")}</div>`;
@@ -120,7 +124,9 @@ export function mountInlineConnectionSetup(thread: HTMLElement,
     if (!button.hasAttribute("data-inline-submit")) {
       const url = button.dataset.dlg === "guide" ? plan.guide_url : button.dataset.dlg === "home" ? plan.app_url : null;
       if (url && /^https:\/\//.test(url)) act(slot, () => api.openExternalUrl(url));
-      if (button.dataset.dlg === "copy" && plan.redirect_url) act(slot, () => copyButton(button, plan.redirect_url!));
+      // A text the card gives to copy (the Google card's scopes and return address), else the developer app's redirect URL.
+      const text = button.dataset.dlg === "copy" ? button.dataset.copy ?? plan.redirect_url : null;
+      if (text) act(slot, () => copyButton(button, text));
       return;
     }
     const inputs = [...slot.querySelectorAll<HTMLInputElement>("[data-setup-field]")];
