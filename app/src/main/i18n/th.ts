@@ -1815,6 +1815,8 @@ export const th = {
   "slime.candle": "เทียน",
   "slime.music-note": "โน้ตดนตรี",
   "slime.group.characters": "ตัวละคร",
+
+  "slime.group.fantasy": "แฟนตาซี",
   "slime.group.animals": "สัตว์",
   "slime.group.jobs": "อาชีพ",
   "slime.group.nature": "ธรรมชาติ",

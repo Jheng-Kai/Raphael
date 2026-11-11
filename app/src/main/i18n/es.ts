@@ -1815,6 +1815,8 @@ export const es = {
   "slime.candle": "Vela",
   "slime.music-note": "Nota musical",
   "slime.group.characters": "Personajes",
+
+  "slime.group.fantasy": "Fantasía",
   "slime.group.animals": "Animales",
   "slime.group.jobs": "Profesiones",
   "slime.group.nature": "Naturaleza",

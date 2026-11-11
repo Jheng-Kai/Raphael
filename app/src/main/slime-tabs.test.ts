@@ -61,6 +61,8 @@ test("the groups are tabs in one row, in their order, in the app's pill tabs and
 test.each([
   ["slime:color:sky", "colors"],
   ["slime:diablo", "characters"],
+  ["slime:oni-red", "fantasy"],
+  ["slime:phoenix-feather", "fantasy"],
   ["slime:cherry-blossom", "seasonal"],
   ["slime:cloud", "nature"],
   ["slime:parcel", "objects"],

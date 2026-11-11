@@ -1815,6 +1815,8 @@ export const vi = {
   "slime.candle": "Nến",
   "slime.music-note": "Nốt nhạc",
   "slime.group.characters": "Nhân vật",
+
+  "slime.group.fantasy": "Giả tưởng",
   "slime.group.animals": "Động vật",
   "slime.group.jobs": "Nghề nghiệp",
   "slime.group.nature": "Thiên nhiên",

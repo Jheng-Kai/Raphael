@@ -1815,6 +1815,8 @@ export const ko = {
   "slime.candle": "촛불",
   "slime.music-note": "음표",
   "slime.group.characters": "캐릭터",
+
+  "slime.group.fantasy": "판타지",
   "slime.group.animals": "동물",
   "slime.group.jobs": "직업",
   "slime.group.nature": "자연",

@@ -1815,6 +1815,8 @@ export const ru = {
   "slime.candle": "Свеча",
   "slime.music-note": "Нота",
   "slime.group.characters": "Персонажи",
+
+  "slime.group.fantasy": "Фэнтези",
   "slime.group.animals": "Животные",
   "slime.group.jobs": "Профессии",
   "slime.group.nature": "Природа",
