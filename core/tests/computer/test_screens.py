@@ -4,7 +4,7 @@ from dataclasses import replace
 from pathlib import Path
 import struct
 import subprocess
-from types import ModuleType
+from types import ModuleType, SimpleNamespace
 
 import pytest
 
@@ -140,7 +140,7 @@ def test_rfb_handshake_authenticates_and_waits_for_its_own_layout_reply(monkeypa
 
 
 def test_rfb_reader_skips_initial_pixels_bells_and_clipboard():
-    raw = b'\0\0\0\x01' + struct.pack('>HHHHi', 0, 0, 2, 1, 0) + bytes(8)
+    raw = b'\0\0\0\x01' + struct.pack('>HHHHi', 0, 0, 1, 1, 0) + bytes(4)
     clipboard = b'\x03' + bytes(3) + struct.pack('>I', 4) + b'text'
     assert screens.read_layout_status(Socket(b'\x02' + clipboard + raw + update()), 4) == 0
     with pytest.raises(EOFError):
@@ -236,7 +236,7 @@ def test_atomic_publication_sets_owner_only_mode_before_rename(tmp_path, monkeyp
 
 
 @pytest.mark.parametrize('value,already_configured', [('1', True), ('4', False), ('4', True), ('invalid', True)])
-def test_startup_clears_stale_readiness_and_skips_matching_layout(monkeypatch, tmp_path, value, already_configured):
+def test_helper_start_preserves_boot_mark_and_skips_matching_layout(monkeypatch, tmp_path, value, already_configured):
     ready, tokens = tmp_path / 'ready', tmp_path / 'tokens'
     ready.write_text('stale', encoding='utf-8')
     tokens.write_text('stale', encoding='utf-8')
@@ -248,7 +248,7 @@ def test_startup_clears_stale_readiness_and_skips_matching_layout(monkeypatch, t
     calls = []
 
     def wait(args):
-        assert not ready.exists() and not tokens.exists()
+        assert ready.read_text(encoding='utf-8') == 'stale' and not tokens.exists()
         calls.append(('wait', args))
 
     monkeypatch.setattr(screens, 'wait_for', wait)
@@ -284,7 +284,7 @@ def test_layout_failures_are_bounded_reported_and_exit_nonzero(monkeypatch, tmp_
 
 
 @pytest.mark.parametrize('count', [1, 4])
-def test_views_publish_after_listeners_restart_exited_child_and_clean_up(monkeypatch, tmp_path, count):
+def test_views_preserve_boot_mark_during_restart_and_stop(monkeypatch, tmp_path, count):
     monkeypatch.setattr(screens, 'READY', tmp_path / 'ready')
     monkeypatch.setattr(screens, 'TOKENS', tmp_path / 'tokens')
     processes, events, handlers = [], [], {}
@@ -315,6 +315,7 @@ def test_views_publish_after_listeners_restart_exited_child_and_clean_up(monkeyp
     sleeps = []
 
     def sleep(duration):
+        assert screens.READY.read_text(encoding='utf-8') == str(count) + '\n'
         sleeps.append(duration)
         if len(sleeps) == 1 and count > 1:
             processes[0].returncode = 1
@@ -327,9 +328,11 @@ def test_views_publish_after_listeners_restart_exited_child_and_clean_up(monkeyp
     monkeypatch.setattr(screens, 'atomic_write', publish)
     monkeypatch.setattr(screens, 'wait_for_port', lambda port, child: events.append(('listen', port)))
     monkeypatch.setattr(screens, 'cleanup_views', lambda: events.append(('cleanup',)))
+    monkeypatch.setattr(screens, 'monitors_match', lambda text, rectangles: True)
+    monkeypatch.setattr(screens, 'command', lambda args: '')
     screens.serve(count, screens.grid(count)[0])
     assert events[0] == ('cleanup',)
-    assert not screens.READY.exists()
+    assert screens.READY.read_text(encoding='utf-8') == str(count) + '\n'
     assert screens.TOKENS.read_text(encoding='utf-8') == screens.token_text(count)
     first_publish = next(i for i, event in enumerate(events) if event[0] == 'publish')
     assert len([event for event in events[:first_publish] if event[0] == 'listen']) == (4 if count == 4 else 0)
@@ -341,7 +344,7 @@ def test_views_publish_after_listeners_restart_exited_child_and_clean_up(monkeyp
         commands = [event[1] for event in events if event[0] == 'spawn']
         assert commands[3][commands[3].index('-Geometry') + 1] == '1280x900+1280+900'
         assert commands[3][commands[3].index('-rfbport') + 1] == '5914'
-        assert 1 in sleeps and publications.count(screens.READY) == 2
+        assert 1 in sleeps and publications.count(screens.READY) == 1
 
 
 @pytest.mark.parametrize('count', range(1, 7))
@@ -544,3 +547,115 @@ def test_host_and_helper_share_the_fresh_tmpfs_readiness_path():
 
 def test_image_build_context_has_no_bytecode():
     assert not list(IMAGE.rglob('__pycache__'))
+
+
+@pytest.mark.parametrize('screen,count', [(0, 1), (2, 1), (7, 7), (1, 0), (1, 7), (True, 1), (1, True), ('1', 1), (1, '1')])
+def test_target_rejects_invalid_screen_numbers_at_construction(desktop, screen, count):
+    _, target, _ = desktop
+    with pytest.raises(ValueError):
+        replace(target, screen=screen, screens=count)
+
+
+@pytest.mark.parametrize('phase', ['handshake', 'layout', 'pixels', 'clipboard'])
+def test_rfb_layout_has_one_deadline_for_trickling_reads(monkeypatch, phase):
+    clock = [0]
+    initial = struct.pack('>HH', 1280, 900) + b'\x20' + bytes(15) + struct.pack('>I', 4) + b'desk'
+    prefix = b'RFB 003.008\n\x01\x02' + bytes(range(16)) + bytes(4) + initial
+    extra = {'handshake': b'', 'layout': b'',
+             'pixels': b'\0\0\0\x01' + struct.pack('>HHHHi', 0, 0, 1, 1, 0) + bytes(4),
+             'clipboard': b'\x03' + bytes(3) + struct.pack('>I', 4) + b'text'}[phase]
+
+    class SlowSocket(Socket):
+        def recv(self, size):
+            slow = phase == 'handshake' or len(self.sent) >= 7
+            if slow:
+                clock[0] += min(4, self.timeout)
+                if self.timeout <= 4:
+                    raise TimeoutError('Synthetic socket deadline')
+                size = 1
+            return super().recv(size)
+
+    sock = SlowSocket(prefix + extra + update())
+    monkeypatch.setattr(screens, 'time', SimpleNamespace(monotonic=lambda: clock[0]))
+    monkeypatch.setattr(screens.socket, 'create_connection', lambda *args, **kwargs: sock)
+    with pytest.raises(TimeoutError):
+        screens.set_layout(*screens.grid(2), 'private')
+    assert clock[0] <= 15
+
+
+@pytest.mark.parametrize('message', [
+    b'\0\0\0\x01' + struct.pack('>HHHHi', 0, 0, 2, 1, 0),
+    b'\x03' + bytes(3) + struct.pack('>I', 4097),
+    b'\x01' + struct.pack('>xHH', 0, 257),
+])
+def test_rfb_rejects_oversized_skipped_payload_before_reading_it(message):
+    with pytest.raises(ValueError, match='payload'):
+        screens.read_layout_status(Socket(message), 4)
+
+
+@pytest.mark.parametrize('layout_matches', [True, False])
+def test_simultaneous_view_exits_keep_boot_mark_unless_layout_is_lost(monkeypatch, tmp_path, layout_matches):
+    monkeypatch.setattr(screens, 'READY', tmp_path / 'ready')
+    monkeypatch.setattr(screens, 'TOKENS', tmp_path / 'tokens')
+    handlers, children, publications, checks = {}, [], [], []
+
+    class Child:
+        returncode = None
+
+        def poll(self):
+            return self.returncode
+
+        def terminate(self):
+            self.returncode = -15
+
+        def wait(self, timeout=None):
+            return self.returncode
+
+    def spawn(args):
+        if children:
+            assert screens.READY.exists() or len(children) < 2
+        child = Child()
+        children.append(child)
+        return child
+
+    def publish(path, text):
+        publications.append(path)
+        path.write_text(text, encoding='utf-8')
+
+    pauses = []
+
+    def sleep(duration):
+        assert screens.READY.exists()
+        pauses.append(duration)
+        if len(pauses) == 1:
+            children[0].returncode = children[1].returncode = 1
+        elif duration == .5:
+            handlers[screens.signal.SIGTERM](None, None)
+
+    def command(args):
+        checks.append(args)
+        return 'monitors'
+
+    monkeypatch.setattr(screens.subprocess, 'Popen', spawn)
+    monkeypatch.setattr(screens.signal, 'signal', lambda sig, handler: handlers.update({sig: handler}))
+    monkeypatch.setattr(screens.time, 'sleep', sleep)
+    monkeypatch.setattr(screens, 'cleanup_views', lambda: None)
+    monkeypatch.setattr(screens, 'wait_for_port', lambda port, child: None)
+    monkeypatch.setattr(screens, 'atomic_write', publish)
+    monkeypatch.setattr(screens, 'command', command)
+    monkeypatch.setattr(screens, 'monitors_match', lambda text, rectangles: layout_matches)
+    if layout_matches:
+        screens.serve(2, screens.grid(2)[0])
+        assert screens.READY.exists() and len(children) == 4
+        assert checks == [['xrandr', '--listmonitors']] * 2
+    else:
+        with pytest.raises(RuntimeError, match='layout'):
+            screens.serve(2, screens.grid(2)[0])
+        assert not screens.READY.exists() and len(children) == 2
+    assert publications == [screens.TOKENS, screens.READY]
+    assert all(child.poll() is not None for child in children)
+
+
+def test_supervisor_keeps_retrying_screen_setup_instead_of_entering_fatal():
+    program = (IMAGE / 'Dockerfile').read_text(encoding='utf-8').split('[program:raphael-screens]', 1)[1]
+    assert "'startretries=1000000'" in program

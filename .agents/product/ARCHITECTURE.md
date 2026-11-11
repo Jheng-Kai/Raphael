@@ -601,19 +601,34 @@ The helper starts this real binary in the foreground, not Debian's detaching wra
 For one screen, screen-1 routes directly to main VNC on 5901. There is no token
 for the multi-screen canvas. The helper atomically publishes owner-only tokens
 at `/run/user/1000/raphael-vnc-tokens`, then `/dev/shm/raphael-screens.ready` on the
-fresh-per-start tmpfs, supervises clipped servers and clears readiness on exit.
+fresh-per-start tmpfs, and supervises the clipped servers. The mark says this boot's
+screens are set up (layout, panels, every view listening once). It is about the screens,
+not about a view being connectable at this instant: it stays while a view or the helper
+restarts, because the members' work needs the screens, and a viewer reports a refused
+connection itself (`viewer_unreachable`). The helper takes it away only when the layout
+is gone (a view exits and the monitors no longer match, or the X server does not answer)
+and then sets everything up again. Supervisor never gives up on the helper
+(`startretries`), since a FATAL program can be started by nothing here.
 Before views start, even for one screen, it ends leftover X0tigervnc processes
 and waits up to five seconds for 5911..5916 to stop listening. Listener checks
 parse `/proc/net/tcp` without unauthenticated VNC connections. Debian's Python
 runs the standard-library-only helper without dependencies from `/opt/venv`.
 Supervisor lacks CAP_KILL and only restarts programs that exit; the helper ends
 its own children. Nothing may call `supervisorctl stop` or `restart` in a computer.
-LocalVm folds the tmpfs mark check into its driver-version exec, retaining two probes.
+LocalVm folds the tmpfs mark check into its driver-version exec, retaining two probes;
+that exec's exit code tells "driver healthy, mark absent" from "driver not up yet". A
+running computer still in the first state after 20 start polls is restarted once, under
+the guards of the missing-socket repair. The layout request has one 15 s deadline for the
+whole RFB conversation and refuses a payload larger than a one-pixel request can bring.
+A `Target` refuses a screen outside 1..screens..6 where it is made.
 Targets carry screen/screens with defaults 1/1; viewer preparation passes the
 captured screen to the relay. SSH still probes `/vnc.html`, which needs no token.
 Recognized layers 3 (2 GiB) and 4 (3 GiB), without RAPHAEL_SCREENS, may rebuild
 to layer 5 under the existing ownership, compatibility, hold and activity guards,
-preserving the workspace. Both existing target modes remain 1/1; member assignment,
+preserving the workspace. One function (`known_previous`) knows those shapes: start
+upgrades through it, and stop, restart, update, repair, reset and member-data deletion
+treat such a computer as this owner's own before it has ever been upgraded (deleting its
+data needs neither the new image nor a start). Both existing target modes remain 1/1; member assignment,
 leases, browser behavior and the default mode are outside this stage. Offline
 tests do not prove actual TigerVNC, XFCE, websockify or container readiness: the
 container acceptance of 2026-11-12 is recorded in the member-computer feature file.

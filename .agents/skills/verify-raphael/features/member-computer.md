@@ -19,6 +19,16 @@ routes directly to 5901; no multi-screen canvas token is exposed. noVNC's static
 receives the session target's captured screen. Readiness checks both the driver
 and `/dev/shm/raphael-screens.ready` with the existing two execs; this tmpfs is fresh
 on each container start. Tokens stay at `/run/user/1000/raphael-vnc-tokens`.
+The mark says this boot's screens are set up. It stays while a view or the helper
+restarts (the members' work needs the screens, and a viewer reports a refused
+connection itself as `viewer_unreachable`) and goes only when the layout is lost: a
+view exits and the monitors no longer match, or the X server does not answer; the
+helper then sets everything up again. Supervisor never gives up on the helper
+(`startretries`), and a running computer whose driver is healthy but whose mark is
+still absent after 20 start polls is restarted once under the repair guards.
+A computer of a previous layer is this owner's own for stop, restart, update, repair,
+reset and member-data deletion before it has ever been upgraded. A `Target` refuses a
+screen outside 1..screens..6; the layout request has one 15 s deadline.
 Supervisor lacks CAP_KILL, so it only restarts what exits and cannot stop programs;
 the helper ends its own children. Nothing may call `supervisorctl stop` or `restart`
 in a computer. A newly set layout requests only a 1x1 update and, after status 0,
@@ -70,13 +80,26 @@ Round 2 offline evidence:
 `core/tests/computer/test_screens.py::test_tcp_listener_parser_requires_the_loopback_port_and_listen_state`,
 `core/tests/computer/test_screens.py::test_leftover_cleanup_kills_exact_binary_and_waits_for_every_view_port`,
 `core/tests/computer/test_screens.py::test_leftover_cleanup_timeout_is_bounded_and_prevents_starting_views`,
-`core/tests/computer/test_screens.py::test_views_publish_after_listeners_restart_exited_child_and_clean_up`,
+`core/tests/computer/test_screens.py::test_views_preserve_boot_mark_during_restart_and_stop`,
 `core/tests/computer/test_screens.py::test_rfb_handshake_authenticates_and_waits_for_its_own_layout_reply`,
-`core/tests/computer/test_screens.py::test_startup_clears_stale_readiness_and_skips_matching_layout`,
+`core/tests/computer/test_screens.py::test_helper_start_preserves_boot_mark_and_skips_matching_layout`,
 `core/tests/computer/test_screens.py::test_multiple_screens_disable_only_dock_shadows_when_different`,
 `core/tests/computer/test_screens.py::test_host_and_helper_share_the_fresh_tmpfs_readiness_path`,
 `core/tests/computer/test_screens.py::test_image_installs_screen_views_and_preserves_the_single_token_port`,
 `core/tests/computer/test_screens.py::test_image_build_context_has_no_bytecode`.
+
+Round 3 (an independent review of the first commit proved six defects the offline
+tests and the container run had both missed; each has a test that was red first):
+`core/tests/computer/test_lifecycle.py::test_previous_computer_maintenance_rebuilds_without_starting_old_image`,
+`core/tests/computer/test_lifecycle.py::test_previous_member_data_deletion_needs_no_new_image_or_start`,
+`core/tests/computer/test_remote_viewer.py::test_old_remote_computer_of_a_previous_layer_still_upgrades`,
+`core/tests/computer/test_lifecycle.py::test_missing_screen_setup_repairs_once_after_twenty_polls`,
+`core/tests/computer/test_viewer.py::test_viewer_reports_its_connection_failure_independently_of_boot_mark`,
+`core/tests/computer/test_screens.py::test_simultaneous_view_exits_keep_boot_mark_unless_layout_is_lost`,
+`core/tests/computer/test_screens.py::test_target_rejects_invalid_screen_numbers_at_construction`,
+`core/tests/computer/test_screens.py::test_rfb_layout_has_one_deadline_for_trickling_reads`,
+`core/tests/computer/test_screens.py::test_rfb_rejects_oversized_skipped_payload_before_reading_it`,
+`core/tests/computer/test_screens.py::test_supervisor_keeps_retrying_screen_setup_instead_of_entering_fatal`.
 
 ## Viewer transport isolation, phase 1 (2026-11-09)
 

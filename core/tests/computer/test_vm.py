@@ -50,7 +50,7 @@ class Runtime:
             self.raw = None
         if args[0] == "exec" and args[-1] == "--version":
             if "/dev/shm/raphael-screens.ready" in args and not self.screens_ready:
-                return Result(1)
+                return Result(42, "cua-driver 0.37.0")
             return Result(0, "cua-driver 0.37.0")
         if "health_report" in args:
             return Result(0, '{"schema_version":"1","overall":"ok","checks":[]}')

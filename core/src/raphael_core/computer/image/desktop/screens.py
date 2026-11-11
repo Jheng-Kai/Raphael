@@ -127,9 +127,22 @@ def extended_desktop_reply(header, payload):
     return status if reason == 1 else None
 
 
-def receive(sock, size):
+# One deadline covers the whole RFB conversation, so a stalled or trickling server cannot hold the helper.
+LAYOUT_DEADLINE_S = 15
+# What may be skipped while waiting for the layout reply. The helper asks for one pixel, so a raw rectangle is one
+# pixel (4 bytes at 32 bits); a colour map has at most 256 entries of 6 bytes; clipboard text it never asked for
+# is skipped up to 4096 bytes. Anything larger is refused before it is read.
+MAX_RAW_PIXELS, MAX_COLOURS, MAX_CUT_TEXT = 1, 256, 4096
+
+
+def receive(sock, size, deadline=None):
     data = bytearray()
     while len(data) < size:
+        if deadline is not None:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise TimeoutError('The VNC layout request passed its deadline')
+            sock.settimeout(min(5, remaining))
         chunk = sock.recv(min(size - len(data), 65536))
         if not chunk:
             raise EOFError('VNC server disconnected')
@@ -137,71 +150,80 @@ def receive(sock, size):
     return bytes(data)
 
 
-def discard(sock, size):
+def discard(sock, size, deadline=None):
     while size:
-        chunk = receive(sock, min(size, 65536))
+        chunk = receive(sock, min(size, 65536), deadline)
         size -= len(chunk)
 
 
-def read_layout_status(sock, bytes_per_pixel):
-    deadline = time.monotonic() + 15
+def read_layout_status(sock, bytes_per_pixel, deadline=None):
+    if deadline is None:
+        deadline = time.monotonic() + LAYOUT_DEADLINE_S
     while time.monotonic() < deadline:
-        kind = receive(sock, 1)[0]
+        kind = receive(sock, 1, deadline)[0]
         if kind == 0:
-            rectangles = struct.unpack('>xH', receive(sock, 3))[0]
+            rectangles = struct.unpack('>xH', receive(sock, 3, deadline))[0]
             for _ in range(rectangles):
-                header = receive(sock, 12)
+                header = receive(sock, 12, deadline)
                 _, _, width, height, encoding = struct.unpack('>HHHHi', header)
                 if encoding == -308:
-                    payload = receive(sock, 4)
-                    payload += receive(sock, payload[0] * 16)
+                    payload = receive(sock, 4, deadline)
+                    payload += receive(sock, payload[0] * 16, deadline)
                     status = extended_desktop_reply(header, payload)
                     if status is not None:
                         return status
                 elif encoding == 0:
-                    discard(sock, width * height * bytes_per_pixel)
+                    if width * height > MAX_RAW_PIXELS:
+                        raise ValueError(f'Unexpected RFB payload: a {width}x{height} raw rectangle for a one-pixel request')
+                    discard(sock, width * height * bytes_per_pixel, deadline)
                 else:
                     raise ValueError(f'Unexpected RFB encoding {encoding}')
         elif kind == 1:
-            _, colors = struct.unpack('>xHH', receive(sock, 5))
-            discard(sock, colors * 6)
+            _, colors = struct.unpack('>xHH', receive(sock, 5, deadline))
+            if colors > MAX_COLOURS:
+                raise ValueError(f'Unexpected RFB payload: a colour map of {colors} entries')
+            discard(sock, colors * 6, deadline)
         elif kind == 2:
             continue
         elif kind == 3:
-            discard(sock, struct.unpack('>xxxI', receive(sock, 7))[0])
+            length = struct.unpack('>xxxI', receive(sock, 7, deadline))[0]
+            if length > MAX_CUT_TEXT:
+                raise ValueError(f'Unexpected RFB payload: {length} bytes of clipboard text')
+            discard(sock, length, deadline)
         else:
             raise ValueError(f'Unexpected RFB message {kind}')
     raise TimeoutError('No ExtendedDesktopSize reply')
 
 
 def set_layout(rectangles, canvas, password):
+    deadline = time.monotonic() + LAYOUT_DEADLINE_S
     with socket.create_connection(('127.0.0.1', 5901), timeout=5) as sock:
         sock.settimeout(5)
-        if receive(sock, 12) != b'RFB 003.008\n':
+        if receive(sock, 12, deadline) != b'RFB 003.008\n':
             raise ValueError('VNC server does not offer RFB 3.8')
         sock.sendall(b'RFB 003.008\n')
-        count = receive(sock, 1)[0]
-        if not count or 2 not in receive(sock, count):
+        count = receive(sock, 1, deadline)[0]
+        if not count or 2 not in receive(sock, count, deadline):
             raise ValueError('VNC authentication unavailable')
         sock.sendall(b'\x02')
-        challenge = receive(sock, 16)
+        challenge = receive(sock, 16, deadline)
         key = vnc_key(password)
         sock.sendall(des_encrypt(key, challenge[:8]) + des_encrypt(key, challenge[8:]))
-        if receive(sock, 4) != b'\0\0\0\0':
+        if receive(sock, 4, deadline) != b'\0\0\0\0':
             raise ValueError('VNC authentication failed')
         sock.sendall(b'\x01')  # Shared ClientInit keeps existing viewers connected.
-        initial = receive(sock, 24)
+        initial = receive(sock, 24, deadline)
         bits = initial[4]
         if bits not in (8, 16, 32):
             raise ValueError('Invalid RFB pixel format')
         name_length = struct.unpack('>I', initial[20:24])[0]
         if name_length > 65536:
             raise ValueError('VNC desktop name too long')
-        discard(sock, name_length)
+        discard(sock, name_length, deadline)
         sock.sendall(struct.pack('>BxHi', 2, 1, -308))
         sock.sendall(desktop_size(rectangles, canvas))
         sock.sendall(struct.pack('>BBHHHH', 3, 0, 0, 0, 1, 1))
-        status = read_layout_status(sock, bits // 8)
+        status = read_layout_status(sock, bits // 8, deadline)
         if status == 0:
             x, y, width, height = rectangles[0]
             sock.sendall(struct.pack('>BBHH', 5, 0, x + width // 2, y + height // 2))
@@ -336,6 +358,13 @@ def cleanup_views():
     raise TimeoutError('Leftover clipped servers still listen after 5 seconds')
 
 
+def layout_intact(rectangles):
+    try:
+        return monitors_match(command(['xrandr', '--listmonitors']), rectangles)
+    except (subprocess.SubprocessError, OSError):
+        return False  # An X server that does not answer has lost the layout too.
+
+
 def serve(count, rectangles):
     children = {}
     stopping = False
@@ -354,19 +383,22 @@ def serve(count, rectangles):
         for i in children:
             wait_for_port(5911 + i, children[i])
         atomic_write(TOKENS, token_text(count))
+        # The mark says this boot's screens are set up. It stays while a view or this helper restarts: the members'
+        # work needs the screens, not a view, and a viewer reports a refused connection itself.
         atomic_write(READY, str(count) + '\n')
         while not stopping:
             for i, child in list(children.items()):
                 if child.poll() is not None:
-                    READY.unlink(missing_ok=True)
+                    # A view also dies with its X server. On a lost layout the mark goes and the set-up runs again.
+                    if not layout_intact(rectangles):
+                        READY.unlink(missing_ok=True)
+                        raise RuntimeError('The screen layout was lost; setting the screens up again')
                     print(f'screen-{i + 1} view exited ({child.returncode}); restarting', file=sys.stderr)
                     time.sleep(1)
                     children[i] = subprocess.Popen(view_command(i, rectangles[i]))
                     wait_for_port(5911 + i, children[i])
-                    atomic_write(READY, str(count) + '\n')
             time.sleep(.5)
     finally:
-        READY.unlink(missing_ok=True)
         for child in children.values():
             if child.poll() is None:
                 child.terminate()
@@ -389,7 +421,8 @@ def wait_for_port(port, child):
 
 
 def main():
-    READY.unlink(missing_ok=True)
+    # The mark lives on a tmpfs that is empty at every boot, so one found here is this boot's: a restarted helper
+    # leaves it, and takes it away only when the layout it stands for is gone.
     TOKENS.unlink(missing_ok=True)
     os.environ['DISPLAY'] = ':1'
     count = screen_count(os.environ.get('RAPHAEL_SCREENS', '1'))
@@ -399,6 +432,7 @@ def main():
             wait_for(['xset', 'q'])
             command(xfconf_args('displays', '/Notify', 'int', ['0']))
             if not monitors_match(command(['xrandr', '--listmonitors']), rectangles):
+                READY.unlink(missing_ok=True)
                 status = set_layout(rectangles, canvas, os.environ.get('VNC_PW', ''))
                 if status != 0:
                     raise RuntimeError(f'SetDesktopSize failed with status {status}')

@@ -146,6 +146,10 @@ class Target:
     screen: int = 1
     screens: int = 1
 
+    def __post_init__(self):
+        if type(self.screen) is not int or type(self.screens) is not int or not 1 <= self.screen <= self.screens <= 6:
+            raise ValueError("Screens must be integers with 1 <= screen <= screens <= 6")
+
 
 def mount_arg(path, destination=GUEST, *, remote=False):
     stream = io.StringIO(newline="")
@@ -252,6 +256,25 @@ def mounts_match(mounts, configured, target):
         elif Path(request.get("Source", "")).resolve() != source.resolve():
             return False
     return True
+
+
+def known_previous(raw, target, owner):
+    """Recognize only the two previous single-screen shapes with all other guards intact."""
+    import copy
+    try:
+        previous = copy.deepcopy(raw)
+        config, host = previous["Config"], previous["HostConfig"]
+        labels, env = config.get("Labels") or {}, config.get("Env") or []
+        memory = {"3": 2, "4": 3}.get(labels.get(f"{LABEL}.layer"))
+        if (target.screens != 1 or memory is None or any(entry.startswith("RAPHAEL_SCREENS=") for entry in env)
+                or host.get("Memory") != memory * 1024**3 or host.get("MemorySwap") != memory * 1024**3):
+            return False
+        labels[f"{LABEL}.layer"] = IMAGE_LABELS[f"{LABEL}.layer"]
+        host.update(Memory=MEMORY_GB * 1024**3, MemorySwap=MEMORY_GB * 1024**3)
+        config["Env"] = [*env, "RAPHAEL_SCREENS=1"]
+        return compatible(previous, target, owner, raw["Image"])
+    except (KeyError, TypeError, AttributeError):
+        return False
 
 
 class LocalVm:
@@ -479,16 +502,20 @@ class LocalVm:
             return {"state": "incompatible", "ready": False}
         running = raw.get("State", {}).get("Running") is True
         ready = False
+        screens_pending = False
         if running and probe:
-            version = await self.run_for(target, exec_args(target, ["sh", "-c", 'test -f "$1" && shift && exec "$@"', "sh", SCREENS_READY, DRIVER, "--version"]))
+            version = await self.run_for(target, exec_args(target, ["sh", "-c", 'mark=$1; shift; "$@" || exit $?; test -f "$mark" || exit 42', "sh", SCREENS_READY, DRIVER, "--version"]))
             health = await self.run_for(target, exec_args(target, [DRIVER, "call", "health_report", "{}", "--socket", SOCKET]))
-            ready = version.code == health.code == 0 and version.stdout.strip() == f"cua-driver {VERSION}" and healthy(health.stdout)
+            driver_ready = health.code == 0 and version.stdout.strip() == f"cua-driver {VERSION}" and healthy(health.stdout)
+            ready = version.code == 0 and driver_ready
+            screens_pending = version.code == 42 and driver_ready
         if not running or probe and not ready:
             self.invalidate(target)
         bindings = raw.get("NetworkSettings", {}).get("Ports", {}).get("6901/tcp") or []
         port = next((int(p["HostPort"]) for p in bindings if p.get("HostIp") == "127.0.0.1" and str(p.get("HostPort", "")).isdigit()), None)
         url = f"http://127.0.0.1:{port}/vnc.html#autoconnect=true&resize=scale&view_only=true&path=websockify?token=screen-{target.screen}" if port and not target.remote else ""
-        return {"state": "running" if running else "stopped", "ready": ready, "viewer_url": url}
+        return {"state": "running" if running else "stopped", "ready": ready, "viewer_url": url,
+                **({"screens_pending": True} if screens_pending else {})}
 
     async def viewer_connection(self, target):
         try:
@@ -668,6 +695,7 @@ class LocalVm:
         if result.code:
             raise VmError("start_failed")
         self.last_activity[target.key] = self.clock()
+        repaired = False
         for attempt in range(45):
             state = await self.status(target)
             if state["ready"]:
@@ -680,11 +708,15 @@ class LocalVm:
                         (target.shared / name).mkdir(parents=True, exist_ok=True, mode=0o700)
                 await self._wallpaper(target)
                 return state
-            if attempt == 0 and already_running and state["state"] == "running" and target.key not in self.held and self.active.get(target.key, 0) <= 1:
-                socket = await self.run_for(target, exec_args(target, ["test", "-S", SOCKET]), timeout=5)
-                if socket.code and self.repair_admit(target):
+            if not repaired and state["state"] == "running" and target.key not in self.held and self.active.get(target.key, 0) <= 1:
+                missing_socket = False
+                if attempt == 0 and already_running:
+                    socket = await self.run_for(target, exec_args(target, ["test", "-S", SOCKET]), timeout=5)
+                    missing_socket = bool(socket.code)
+                if (missing_socket or attempt >= 20 and state.get("screens_pending")) and self.repair_admit(target):
                     if (await self.run_for(target, ["restart", "--time", "10", target.name], timeout=60)).code:
                         raise VmError("start_failed")
+                    repaired = True
                     self.record_repair(target)
             await asyncio.sleep(1)
         raise VmError("health_timeout")
@@ -696,23 +728,14 @@ class LocalVm:
         # Only known image or remote binding upgrades on otherwise exactly compatible
         # owned computers may rebuild. Workspace volumes are never removed.
         previous = copy.deepcopy(raw) if raw else {}
-        labels = previous.get("Config", {}).get("Labels") or {}
         host = previous.get("HostConfig", {})
-        env = previous.get("Config", {}).get("Env") or []
-        layer = labels.get(f"{LABEL}.layer")
-        known_previous = (target.screens == 1 and not any(entry.startswith("RAPHAEL_SCREENS=") for entry in env)
-                          and (layer == "3" and host.get("Memory") == host.get("MemorySwap") == 2 * 1024**3
-                               or layer == "4" and host.get("Memory") == host.get("MemorySwap") == 3 * 1024**3))
-        if known_previous:
-            labels[f"{LABEL}.layer"] = IMAGE_LABELS[f"{LABEL}.layer"]
-            host.update(Memory=MEMORY_GB * 1024**3, MemorySwap=MEMORY_GB * 1024**3)
-            previous["Config"]["Env"] = [*env, "RAPHAEL_SCREENS=1"]
         legacy_remote = bool(target.remote and host.get("PortBindings") in (None, {}))
         if legacy_remote:
             host["PortBindings"] = {"6901/tcp": [{"HostIp": "127.0.0.1", "HostPort": ""}]}
-        image_upgrade = known_previous and raw.get("Image") != image_id
-        if (not raw or not image_id or not (legacy_remote and raw.get("Image") == image_id or image_upgrade)
-                or not compatible(previous, target, self.owner, raw.get("Image"))):
+        # `previous` carries the remote binding repair, so an old remote computer of a previous layer still upgrades.
+        image_upgrade = known_previous(previous, target, self.owner) and raw.get("Image") != image_id
+        if (not raw or not image_id or not (image_upgrade or legacy_remote and raw.get("Image") == image_id
+                and compatible(previous, target, self.owner, raw.get("Image")))):
             raise VmError("incompatible")
         if target.key in self.held or self.active.get(target.key, 0) > 1:
             raise VmError("busy")
@@ -826,9 +849,10 @@ exec /opt/venv/bin/python /opt/raphael-desktop/wallpaper.py --watch'''
             if self.active.get(target.key, 0) or target.key in self.held:
                 raise VmError("busy")
             state = await self.status(target, probe=False)
-            if state["state"] == "incompatible" and captured_image:
+            if state["state"] == "incompatible":
                 raw = await self.inspect(target)
-                if raw and raw.get("Image") == captured_image and compatible(raw, target, self.owner, captured_image):
+                if known_previous(raw, target, self.owner) or (captured_image and raw and raw.get("Image") == captured_image
+                        and compatible(raw, target, self.owner, captured_image)):
                     state = {"state": "running" if raw.get("State", {}).get("Running") else "stopped"}
             if state["state"] == "missing":
                 self.wallpaper_attempted.discard((target.remote, target.name))

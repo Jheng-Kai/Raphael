@@ -125,6 +125,8 @@ RUN set -eux; \
 # Its X readiness wait also handles supervisor starting before the X socket is ready.
 # Without CAP_KILL, supervisor only restarts what exits; the helper ends its own children.
 # Nothing may call supervisorctl stop or restart in a computer.
+# A program that fails to start startretries times is FATAL for good, because nothing here can start it again:
+# the screens are retried for as long as the computer runs.
 RUN install -m 0755 /opt/raphael-desktop/start-novnc.sh /usr/local/bin/start-novnc.sh; \
     printf '%s\n' \
       '' \
@@ -134,6 +136,7 @@ RUN install -m 0755 /opt/raphael-desktop/start-novnc.sh /usr/local/bin/start-nov
       'environment=HOME="/home/cua",USER="cua",DISPLAY=":1"' \
       'autorestart=true' \
       'startsecs=2' \
+      'startretries=1000000' \
       'stdout_logfile=/var/log/supervisor/screens.log' \
       'stderr_logfile=/var/log/supervisor/screens.error.log' \
       'priority=25' \

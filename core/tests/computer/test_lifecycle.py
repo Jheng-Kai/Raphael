@@ -15,6 +15,100 @@ from raphael_core.computer.vm_tools import VmTools, vm_scope
 from raphael_core.services.attachment_store import AttachmentStore
 
 
+@pytest.fixture
+def previous_computer(desktop, request):
+    remote, layer = request.param
+    vm, _, runtime = desktop
+    vm.settings.set('computer_vm_mode', 'per-bot')
+    vm.settings.set('computer_ssh_alias', 'review-host' if remote else '')
+    target = vm.target(1)
+    runtime.raw = container(vm, target, runtime)
+    runtime.raw['Image'] = 'sha256:previous-image'
+    runtime.raw['Config']['Labels'][f'{LABEL}.layer'] = str(layer)
+    runtime.raw['Config']['Env'] = ['VNC_PW=private', 'TZ=UTC']
+    memory = (2 if layer == 3 else 3) * 1024**3
+    runtime.raw['HostConfig'].update(Memory=memory, MemorySwap=memory)
+    return vm, target, runtime
+
+
+@pytest.mark.parametrize('previous_computer', [(remote, layer) for remote in (False, True) for layer in (3, 4)], indirect=True)
+@pytest.mark.parametrize('action', ['restart', 'update', 'repair', 'reset'])
+async def test_previous_computer_maintenance_rebuilds_without_starting_old_image(previous_computer, action):
+    vm, target, runtime = previous_computer
+    original = vm.run
+
+    async def runner(args, **kwargs):
+        actual = args[2:] if args[:1] == ['--host'] else args
+        if actual[0] == 'run':
+            runtime.raw = container(vm, target, runtime)
+        return await original(args, **kwargs)
+
+    vm.run = runner
+    assert (await maintain(vm, target, action, confirmed=action == 'reset'))['ready']
+    assert sum(args[0] == 'rm' for args, _ in runtime.calls) == 1
+    assert sum(args[0] == 'run' for args, _ in runtime.calls) == 1
+    assert not any(args[0] == 'start' for args, _ in runtime.calls)
+    assert [args for args, _ in runtime.calls if args[0] == 'volume'] == (
+        [['volume', 'rm', str(target.workspace)]] if action == 'reset' and target.remote else [])
+
+
+@pytest.mark.parametrize('previous_computer', [(remote, layer) for remote in (False, True) for layer in (3, 4)], indirect=True)
+async def test_previous_member_data_deletion_needs_no_new_image_or_start(previous_computer):
+    vm, target, runtime = previous_computer
+    runtime.built = False
+    if not target.remote:
+        target.workspace.mkdir(parents=True)
+        (target.workspace / 'saved.txt').write_text('old data', encoding='utf-8')
+    await vm.delete_member_data(1, target.remote)
+    assert runtime.raw is None
+    assert not any(args[0] in ('start', 'run', 'pull', 'build') for args, _ in runtime.calls)
+    if target.remote:
+        assert ['volume', 'rm', str(target.workspace)] in [args for args, _ in runtime.calls]
+    else:
+        assert not target.workspace.exists()
+
+
+@pytest.mark.parametrize('guard', ['allowed', 'admission', 'held', 'active', 'driver', 'fresh', 'recovers', 'persistent'])
+async def test_missing_screen_setup_repairs_once_after_twenty_polls(desktop, monkeypatch, guard):
+    vm, target, runtime = desktop
+    runtime.screens_ready = False
+    if guard == 'held':
+        vm.held.add(target.key)
+    vm.active[target.key] = 2 if guard == 'active' else 1
+    vm.repair_admit = lambda captured: guard != 'admission'
+    if guard == 'fresh':
+        runtime.raw['State']['Running'] = False
+    pauses, repairs = [], []
+    original = vm.run
+
+    async def runner(args, **kwargs):
+        if args[0] == 'restart':
+            repairs.append(len(pauses))
+            if guard != 'persistent':
+                runtime.screens_ready = True
+        if guard == 'driver' and 'health_report' in args:
+            return Result(1)
+        return await original(args, **kwargs)
+
+    async def sleep(seconds):
+        pauses.append(seconds)
+        if guard == 'recovers' and len(pauses) == 19:
+            runtime.screens_ready = True
+
+    vm.run = runner
+    monkeypatch.setattr(asyncio, 'sleep', sleep)
+    if guard in ('allowed', 'fresh', 'recovers'):
+        assert (await vm._start(target))['ready']
+    else:
+        with pytest.raises(VmError, match='^health_timeout$'):
+            await vm._start(target)
+    expected = [20] if guard in ('allowed', 'fresh', 'persistent') else []
+    assert repairs == expected
+    # Waking a stopped computer in the middle of a member's call is recorded as a repair of its own.
+    assert vm.repair_revisions.get(target.key, 0) == len(expected) + (guard == 'fresh')
+    assert all(args == ['restart', '--time', '10', target.name] for args, _ in runtime.calls if args[0] == 'restart')
+
+
 @pytest.mark.parametrize("action", ["restart", "update", "repair", "reset"])
 async def test_maintenance_is_targeted_and_only_confirmed_reset_removes_workspace(desktop, action):
     vm, target, runtime = desktop

@@ -16,6 +16,23 @@ from raphael_core.protocol import RpcError
 from .test_vm import Runtime, container
 
 
+async def test_viewer_reports_its_connection_failure_independently_of_boot_mark(viewer):
+    bridge, runtime, _ = viewer
+    target = bridge.vm.target()
+    runtime.screens_ready = False
+    assert not (await bridge.vm.status(target))['ready']
+    runtime.calls.clear()
+    assert await bridge.read_status(target) == {'state': 'running', 'ready': True}
+    assert await bridge.vm.viewer_connection(target) == (6080, 'private')
+    assert not any(args[0] == 'exec' for args, _ in runtime.calls)
+    opened = await bridge.open({})
+    session = bridge.sessions[opened['session']]
+    bridge._peer_failed(opened['session'], session.revision)
+    assert session.error == 'viewer_unreachable'
+    with pytest.raises(VmError, match='^viewer_unreachable$'):
+        await bridge.connection_for(session)
+
+
 @pytest.fixture
 def wire_upstream():
     disconnected = threading.Event()
