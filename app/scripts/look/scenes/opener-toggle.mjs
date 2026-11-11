@@ -20,9 +20,7 @@ export default [
     "#nav .sidebar-apps", '.modal-scrim[data-standalone="connections"] .modal-body .cs', ":root[data-window-modal]", { over: "scrim", attribute: "data-window-modal" }),
   toggle("settings", "With Settings open, a press on the account button behind the scrim closes it and does not open it again", [],
     '#nav [data-go="settings"]', ".modal-scrim [data-pane]", ":root[data-window-modal]", { over: "scrim", attribute: "data-window-modal" }),
-  // A card that a conversation's page opens large, under a scrim: the card is the opener.
-  toggle("page-card", "With a page made larger, a press on its card behind the scrim closes it and does not enlarge it again", [member(1), wait('.pg-body[data-state="ready"] iframe')],
-    ".pg-card .pg-body", ".pg-view iframe", ".pg-view-dialog", { over: "scrim", fixture: { pageTurn: true } }),
+  // A page's card is no opener of this kind any more: its page stands in the thread's place with no scrim over the card (R-PAGE-03).
   // Menus and popovers beside their opener.
   toggle("add-menu", "The sidebar's + opens its menu and a second press on the + closes it", [column],
     '.mb-col [data-col="add"]', "#app-popover", "#app-popover"),

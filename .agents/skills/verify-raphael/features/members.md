@@ -1155,7 +1155,7 @@ once (`watch-opens` counts the openings as the page makes them, so a close follo
 sidebar's 「連接應用程式」 is not reachable behind its own dialog and the scene says so instead of pressing.
 
 ```text
-npm run look -- opener-toggle-connect-apps opener-toggle-settings opener-toggle-page-card opener-toggle-add-menu opener-toggle-search-card opener-toggle-model-menu opener-toggle-permission-menu opener-toggle-slime-picker opener-toggle-message-menu opener-toggle-reaction-bar opener-toggle-emoji-picker opener-toggle-details opener-toggle-row-menu opener-toggle-row-again opener-toggle-keyboard --theme both --width 1120,720,1920x1080
+npm run look -- opener-toggle-connect-apps opener-toggle-settings opener-toggle-add-menu opener-toggle-search-card opener-toggle-model-menu opener-toggle-permission-menu opener-toggle-slime-picker opener-toggle-message-menu opener-toggle-reaction-bar opener-toggle-emoji-picker opener-toggle-details opener-toggle-row-menu opener-toggle-row-again opener-toggle-keyboard --theme both --width 1120,720,1920x1080
 ```
 
 ## Sharing finished: cancelled saves, where the files are, files from the file manager, the store before it opens (2026-11-11)
