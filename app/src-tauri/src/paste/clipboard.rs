@@ -1,4 +1,4 @@
-// Adapted from Handy (MIT); see core/packaging/licenses.
+// Adapted from Handy (MIT); see app/scripts/release-licenses.
 
 //! The clipboard half of pasting.
 //!

@@ -10,8 +10,7 @@ export const SERVICES_SHOWN = 18;
 export const SERVICES_WAIT_MS = 15_000;
 
 /**
- * `promise`, or a rejection after `ms`: a call the core does not answer never keeps a screen spinning (owner, 2026-11-08:
- * the services step spun on after a sign-in was cancelled).
+ * `promise`, or a rejection after `ms`: a call the core does not answer never keeps a screen spinning.
  */
 export function within<T>(promise: Promise<T>, ms: number): Promise<T> {
   return new Promise<T>((resolve, reject) => {

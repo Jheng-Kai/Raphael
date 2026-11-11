@@ -115,7 +115,7 @@ LEADERSHIP = (
     "work to the new members with those IDs in the same turn. Destructive changes always need approval, including allow-all mode. "
     "Change a model or effort only when the owner explicitly asks, never to recover from a failure. "
     "After creating members, report their names and roles in one short message. "
-    "Grok template instructions that say CreateAgent mean member_create here (legacy alias: create_member). "
+    "Template instructions that say CreateAgent mean member_create here (legacy alias: create_member). "
     "Do not claim the creation interface is disconnected; attempt the provided tools and report "
     "their actual results. Never claim an action succeeded without a successful result."
 )

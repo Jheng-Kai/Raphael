@@ -29,7 +29,7 @@ import { createDetails } from "./member-details";
 import { createMemberSettings, type MemberSettings } from "./member-settings";
 import { mountEdge, savedWidth, saveWidth } from "./edge-drag";
 
-/** The details panel's widths (px): Grok Bot's opens at about 453 and drags to about 685; narrower than PANEL_CLOSE it closes. */
+/** The details panel's widths (px): it opens at about 453 and drags to about 685; narrower than PANEL_CLOSE it closes. */
 const PANEL_MIN = 300, PANEL_MAX = 720, PANEL_CLOSE = 240;
 const PANEL_KEY = "raphael.panel.width";
 import {
@@ -206,8 +206,8 @@ export function createMembers(host: MembersHost): MembersShell {
     back: () => host.app.go("agent"),
   });
 
-  // As Grok Bot's: the panel's left edge drags it wider or narrower, and dragged narrower than it can be it closes; the
-  // header's name opens it again at the width it had. There is no button for it (owner, 2026-11-06).
+  // The panel's left edge drags it wider or narrower, and dragged narrower than it can be it closes; the
+  // header's name opens it again at the width it had. There is no button for it.
   let panelWidth = savedWidth(PANEL_KEY, PANEL_MIN, PANEL_MAX);
   const panelEdge = document.createElement("div");
   panelEdge.className = "det-edge";
@@ -243,7 +243,7 @@ export function createMembers(host: MembersHost): MembersShell {
   /** The pill and the narrow dropdown, for the open member. */
   function drawHead(): void {
     const m = member();
-    // As Grok Bot's header pill: the face and name, and a › that slides in under the pointer (the pill opens the panel).
+    // The header pill: the face and name, and a › that slides in under the pointer (the pill opens the panel).
     patchHTML(pill, faceHTML(m, 22, { cls: "mb-pill-face" }) + `<span class="mb-pill-t">${esc(m.name)}</span><span class="mb-pill-go" aria-hidden="true">${ico("right")}</span>`);
     const waiting = list?.members.some((other) => other.id !== current && (other.waiting || other.unread)) ?? false;
     patchHTML(picker, `<span>${esc(m.name)}</span>${waiting ? `<i class="mb-dot is-wait" aria-hidden="true"></i>` : ""}${ico("down")}`);
@@ -632,7 +632,7 @@ export function createMembers(host: MembersHost): MembersShell {
         details.refreshRoutines();
       } else if (event.type === "MemberActivity") {
         setSlimeState(event.member_id, event.state, event.label);
-        // A press of a panel button ends when the member stops; the bot it set up shows at once (owner, 2026-11-07).
+        // A press of a panel button ends when the member stops; the bot it set up shows at once.
         settleAsks(event.member_id, event.state);
         if (event.member_id === current && open && ["idle", "done", "error", "waiting", "blocked"].includes(event.state)) details.refreshChannels();
       } else if (event.type === 'AgentTurn' && (event.member_id ?? 0) === current && open) {

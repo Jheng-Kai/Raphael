@@ -323,7 +323,7 @@ export function mountPages(thread: HTMLElement, o: { place(pageId: string, text:
     const dialog = openDialog({
       // openDialog escapes the title itself: escaping it here too showed a title's & or < as an entity.
       title: card.getAttribute("aria-label") ?? "", body: `<div class="pg-view"></div>`, cls: "pg-view-dialog",
-      // Its × closes it, with no 「關閉」 under it (owner, 2026-11-08).
+      // Its × closes it, with no 「關閉」 under it.
       actions: {},
       onAct(_act, _target, shown) { shown.close(); },
       onClosing() {

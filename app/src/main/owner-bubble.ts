@@ -12,12 +12,12 @@ const WHITE = [255, 255, 255];
 const DARK_PANEL = [0x16, 0x16, 0x16];
 const onWhite = (rgb: number[]): number => contrast(rgb, WHITE);
 
-/** How far white words must stand off a bubble: Grok Bot's green bubble holds its white words at 3.4:1, and
- *  darkening further (to 4.5:1, until 2026-11-06) dulled every colour, which the owner saw at once. */
+/** How far white words must stand off a bubble: white words on a coloured bubble use a 3.4:1 minimum, and
+ *  this preserves the member's hue without unnecessary darkening. */
 export const LIGHT_WORDS_RATIO = 3.4;
 
 /**
- * The owner's bubble in a member's conversation, so the member shows at a glance. As Grok Bot's, the words are
+ * The owner's bubble in a member's conversation, so the member shows at a glance. The words are
  * white on a shade of the member's colour, darkened only as far as it must; only a slime nearly white (a silver or
  * white one, under 1.6:1) stays itself and takes dark words.
  */
@@ -28,7 +28,7 @@ export function ownerBubble(color: string): { fill: string; words: "light" | "da
   return { fill: hexOf(rgb), words: "light" };
 }
 
-/** A member's colour, Raphael's being his first blue slime's since 2026-11-07 (it was his gold). */
+/** A member's colour, Raphael's being his first blue slime's (it was his gold). */
 export const memberColor = (member: { id: number; avatar?: string | null }): string => member.id === 0 ? RAPHAEL_COLOR : slimeColorOf(member);
 
 /**
@@ -42,5 +42,5 @@ export function memberAccent(color: string): string {
   return `light-dark(${hexOf(light)}, ${hexOf(dark)})`;
 }
 
-/** A member's name in its colour, as Grok Bot names each Bot in a conversation between Bots. */
+/** A member's name in its colour, to identify each speaker in a conversation. */
 export const nameAccent = (member: { id: number; avatar?: string | null }): string => memberAccent(memberColor(member));

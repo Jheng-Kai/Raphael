@@ -1,5 +1,5 @@
 // One connected view joins managed toolkits, private Google and custom MCP servers; it holds connectors only, since a
-// member's skills are managed in that member's own panel (owner, 2026-11-07):
+// member's skills are managed in that member's own panel:
 // the apps that can be called now first (their number is the core's, the one the sidebar and every model's roster
 // show), then the ones that cannot. Details group tool switches by write/read and say how many are
 // on; removal stays in the overflow menu. The store starts with built-in services and offers Composio as an optional catalog.
@@ -176,8 +176,7 @@ const emptyForm = (): ConnectionForm => ({
 
 /**
  * Apps the store offers as the owner's own server, filled in. n8n runs at each owner's own address and has no Composio
- * toolkit, so the built-in catalogue (fixed official addresses only) cannot carry it (owner, 2026-11-08: 「為什麼
- * connectors 那邊沒有 N8N」); its 加入 opens the server form with the type, name and header already there.
+ * toolkit, so the built-in catalogue (fixed official addresses only) cannot carry it; its 加入 opens the server form with the type, name and header already there.
  */
 const PRESET_FORMS: Record<string, Pick<ConnectionForm, "type" | "name" | "pairLines" | "urlHint">> = {
   n8n: { type: "http", name: "n8n", pairLines: "Authorization=Bearer ", urlHint: "https://n8n.example.com/mcp-server/http" },
@@ -314,13 +313,13 @@ function lineOf(g: ConnectionGroup, v: ConnectionsView): string {
 
 const matches = (query: string, ...texts: string[]): boolean => {
   const q = query.trim().toLowerCase();
-  // As typed anywhere in its words, or its name nearly spelled (`find-match.ts`, owner 2026-11-08).
+  // As typed anywhere in its words, or its name nearly spelled (`find-match.ts`).
   return !q || texts.some((text) => text.toLowerCase().includes(q)) || findsName(texts.slice(0, 1), q);
 };
 
 // ---------- the bar: the two views and the search; the menu that adds, beside the tab's name ----------
 
-/** 「新增 ▾」, the menu that adds a server of the user's own: on the row of the two views, clear of the dialog's ✕ (owner, 2026-11-07). */
+/** 「新增 ▾」, the menu that adds a server of the user's own: on the row of the two views, clear of the dialog's ✕. */
 export const connectionsAddHTML = (): string =>
   `<button type="button" class="sel cs-add" aria-haspopup="menu" aria-expanded="false" data-k="conn-add">` +
   `<span>${esc(t("conn.addMenu"))}</span>${ico("down")}</button>`;
@@ -572,7 +571,7 @@ const needWords = (s: StoreService): string => (s.needs === "key" && !inChat(s) 
 const needHTML = (text: string): string => `<b class="need">${esc(text)}</b>`;
 
 /**
- * The line under an entry's name, as Grok Bot's store rows carry only the name (owner, 2026-11-07): what adding it asks, in
+ * The line under an entry's name: what adding it asks, in
  * words, or the wait for its login. What the app does is on its own page and in the row's title.
  */
 function subLine(s: StoreService, here: boolean): string {
@@ -637,8 +636,7 @@ function storeEntries(v: ConnectionsView): StoreEntries {
   const inGroup = (s: StoreService): boolean => !v.category || storeGroup(s) === v.category;
   const every = [...(Array.isArray(v.catalog) ? v.catalog : []), ...presetEntries(v), ...uniqueComposio(v)].filter(inGroup);
   const all = every.filter(s => storeMatches(s, v.search)).sort((a, b) => a.name.localeCompare(b.name));
-  // After what the search finds as typed come the apps whose names it only nearly spells, nearest first (owner,
-  // 2026-11-08: a typo or swapped letters still find the app).
+  // After what the search finds as typed come the apps whose names it only nearly spells, nearest first.
   if (v.search.trim()) {
     const found = new Set(all);
     const near = every.filter(s => !found.has(s)).map(s => [s, storeNear(s, v.search)] as const).filter(([, score]) => score < Infinity);
@@ -677,8 +675,7 @@ function storeHTML(v: ConnectionsView, entries: StoreEntries = storeEntries(v), 
     list.length ? `<section class="cs-sec"><h2>${esc(title)}</h2><div class="cs-grid" data-stagger="store:${key}">${list.map(card).join("")}</div></section>` : "";
   const retry = (action: string): string => `<div class="alert core-note" role="alert">${st("err", t("conn.loadFailed"))}${btn(esc(t("plugins.retry")), "sm", ` data-conn="${action}"`)}</div>`;
   const loading = `<p class="settings-loading" role="status">${esc(t("conn.loading"))}</p>`;
-  // The store is only what is not added yet, in one list (owner, 2026-11-08: no 已連接 and no 常用 in it, so a page
-  // shows more apps); popular apps still come first while browsing.
+  // The store is only what is not added yet, in one list; popular apps still come first while browsing.
   const page = Math.min(v.storePage ?? 0, Math.max(0, Math.ceil(entries.count / STORE_PAGE_SIZE) - 1));
   const shown = entries.available.slice(page * STORE_PAGE_SIZE, (page + 1) * STORE_PAGE_SIZE);
   const chips = `<div class="cs-store-groups-row" data-chip-row><div class="cs-store-groups" data-chip-scroll role="group" aria-label="${esc(t("plugins.category"))}">${["", ...STORE_GROUPS].map(group =>
@@ -789,8 +786,7 @@ export function bodyHTML(v: ConnectionsView, entries?: StoreEntries, pending?: S
   return v.tab === "installed" ? installedHTML(v) + recommendedHTML(v, entries ?? storeEntries(v)) : storeHTML(v, entries, pending);
 }
 
-/** Under the apps already there, a few popular ones not added yet, each addable in place (owner, 2026-11-08: the page
- * looked empty below its list). Hidden while searching; the store keeps the whole catalogue. */
+/** Under the apps already there, a few popular ones not added yet, each addable in place. Hidden while searching; the store keeps the whole catalogue. */
 function recommendedHTML(v: ConnectionsView, entries: StoreEntries): string {
   if (v.search.trim() || !Array.isArray(v.groups)) return "";
   // Never an app already there, however it was added (Notion directly, Gmail through the Google connection).

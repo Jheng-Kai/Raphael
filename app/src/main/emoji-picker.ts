@@ -1,4 +1,4 @@
-// Reactions as Grok Bot gives them (owner, 2026-11-06): a quick bar of five, whose last slot opens every emoji in one
+// Reactions: a quick bar of five, whose last slot opens every emoji in one
 // card: a search field, one scrolling grid in Unicode's sections, and a footer naming the emoji under the pointer.
 // Choosing one closes the card; one Esc leaves it.
 
@@ -6,7 +6,7 @@ import { emojiSections, searchEmoji, type Emoji, type EmojiSection } from "./emo
 import { t } from "./i18n";
 import { closeMenu, esc, ico, openPopover } from "./ui";
 
-/** The quick reactions, in Grok Bot's order. */
+/** The quick reactions, in a fixed order. */
 export const QUICK_REACTIONS = ["👍", "😂", "👎", "❤️", "🎉"] as const;
 /** The value of the slot that opens every emoji. */
 export const MORE_EMOJI = "+";
@@ -69,7 +69,7 @@ export function openEmojiPicker(anchor: HTMLElement, chosen: readonly string[], 
     `<label class="emoji-find">${ico("search")}<input type="search" autocomplete="off" spellcheck="false" placeholder="${esc(t("chat.emojiSearch"))}" aria-label="${esc(t("chat.emojiSearch"))}"></label>` +
       `<div class="emoji-grid" role="listbox" aria-label="${esc(t("chat.react"))}"><p class="emoji-none" role="status">${esc(t("common.loading"))}</p></div>` +
       `<div class="emoji-foot" aria-hidden="true"><span class="emoji-foot-char"></span><span class="emoji-foot-name"></span></div>`,
-    // From the button's left edge, above it when there is room: beside the message, as Grok's, never over the sidebar.
+    // From the button's left edge, above it when there is room: beside the message, never over the sidebar.
     { className: "menu emoji-picker", role: "dialog", label: t("chat.react"), placement: "start", onKey: (event) => move(event) },
   );
   const input = el.querySelector<HTMLInputElement>("input")!;

@@ -56,7 +56,7 @@ export function mountComputerLifecycle(_host: HTMLElement, panel: HTMLElement, m
     set(repaired, 'hidden', !state?.repair_revision);
     if (state?.repair_revision) set(repaired, 'textContent', t('desktop.repaired'));
     const available = !!state && state.state !== 'absent' && state.granted !== false;
-    // No words over a computer that is not running (owner, 2026-11-07): its state shows once its screen is up.
+    // No words over a computer that is not running: its state shows once its screen is up.
     set(label, 'hidden', !state || state.state !== 'running'); set(button, 'hidden', !available);
     if (button.getAttribute('aria-label') !== t('chat.more')) button.setAttribute('aria-label', t('chat.more'));
     set(button, 'title', t('chat.more'));

@@ -17,7 +17,7 @@
 /* ---------- the member column ---------- */
 .mb-col { display: flex; flex-direction: column; min-width: 0; min-height: 0; background: var(--side); border-right: 0; padding-top: calc(var(--window-controls-height) + 4px); }
 .mb-top { display: flex; align-items: center; gap: var(--sp-1); padding: 0 var(--pa-pad) 6px; }
-/* The search card, as Grok Bot's (owner, 2026-11-06): in the middle of the window over a dimmed page, the field above a
+/* The search card: in the middle of the window over a dimmed page, the field above a
    hairline, every member in two lines, what the words find in the messages, and 新增成員 at the foot. */
 .menu.side-search { display: flex; flex-direction: column; width: min(560px, calc(100vw - 24px)); max-width: none; max-height: min(480px, calc(100vh - 96px)); padding: 0; overflow: hidden; border-radius: var(--r-lg); box-shadow: 0 0 0 100vmax var(--scrim), var(--pop); }
 .side-search-field { flex: none; display: flex; align-items: center; gap: var(--sp-2); height: 52px; padding: 0 var(--sp-4); border-bottom: 1px solid var(--line); color: var(--text-3); }
@@ -122,7 +122,7 @@
 
 /* ---------- the details panel ---------- */
 .mb-det { position: relative; display: flex; flex-direction: column; min-width: 0; min-height: 0; background: var(--side); border-left: 0; padding-top: var(--window-controls-height); }
-/* The panel's left edge drags it, as Grok Bot's (members-shell.ts): no handle, a thin line only while it moves or has the keyboard. */
+/* The panel's left edge drags it (members-shell.ts): no handle, a thin line only while it moves or has the keyboard. */
 .det-edge { position: absolute; top: 0; left: 0; bottom: 0; z-index: 5; width: 6px; cursor: col-resize; touch-action: none; outline: none; }
 .det-edge:focus-visible::after, .det-edge.is-dragging::after { content: ""; position: absolute; top: 0; left: 0; bottom: 0; width: 2px; background: var(--edge); }
 :root[data-desktop-expanded] .det-edge, :root[data-desktop-watch] .det-edge { display: none; }
@@ -130,9 +130,9 @@
 .mb-det.leaving { animation: mb-det-out 0.16s ease-in forwards; pointer-events: none; }
 @keyframes mb-det-in { from { opacity: 0; transform: translateX(16px); } }
 @keyframes mb-det-out { to { opacity: 0; transform: translateX(16px); } }
-/* As Grok Bot's panel, everything in it follows its width: the gear on the left edge, close on the right, and every
-   card and the computer's screen as wide as the panel is (owner, 2026-11-07). */
-/* Two round buttons never touch (owner, 2026-11-07): back and the gear keep a gap between them. */
+/* In the panel, everything in it follows its width: the gear on the left edge, close on the right, and every
+   card and the computer's screen as wide as the panel is. */
+/* Two round buttons never touch: back and the gear keep a gap between them. */
 .mb-det-head { display: flex; align-items: center; gap: var(--sp-2); width: 100%; padding: 4px var(--pa-dpad) 0; }
 .mb-det-fill { flex: 1; }
 .mb-det-scroll { flex: 1; min-height: 0; width: 100%; overflow-x: hidden; overflow-y: auto; display: flex; flex-direction: column; gap: var(--pa-dgap); padding: 0 var(--pa-dpad) calc(18px + 6 * var(--pa-u)); }
@@ -151,7 +151,7 @@
 .mb-brain { display: inline-flex; align-items: center; justify-content: center; gap: var(--sp-2); max-width: 100%; color: var(--text-2); font-size: var(--fs-sm); }
 .mb-brain .mono.md { width: 16px; height: 16px; flex: none; }
 .mb-who-role::placeholder { color: var(--text-3); }
-/* Grok Bot's panel tabs: the shared small pills side by side in the middle (2026-11-05; slimmer since 2026-11-08). */
+/* The panel tabs: the shared small pills side by side in the middle. */
 .mb-tabs:has(> .tabs.plain) { display: flex; justify-content: center; }
 .mb-tabs .tabs.plain .tab { min-height: var(--pa-dtab-h); font-size: var(--pa-dtab); }
 /* the sections of a tab (個性, 指示, 分組, 模型, 例行任務) are set apart, each label close to its own field */

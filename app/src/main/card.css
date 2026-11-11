@@ -105,7 +105,7 @@
 .conversation-card .draft-more-toggle { padding: 6px 8px; }
 
 .ra-body > .conversation-card, [data-desktop-slot] > .conversation-card, [data-task-result-slot] > .conversation-card { margin-top: 12px; }
-/* The cards of what the panel sends into the conversation (owner, 2026-11-07): where a bot is made beside its field,
+/* The cards of what the panel sends into the conversation: where a bot is made beside its field,
    a pairing code, and what a template brings. */
 .card-actions-inline { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
 .pair-code .code { font-family: var(--mono); font-size: var(--fs-lg); letter-spacing: 0.14em; }

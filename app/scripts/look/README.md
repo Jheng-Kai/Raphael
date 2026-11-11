@@ -401,7 +401,7 @@ login or external references is blocked/SKIP, never design acceptance.
 
 The nine `composer-stop-*` scenes cover roster repaints, typed requests before the first turn, native voice processing, quick/member navigation and a live background task. Result scenes press the same slot and assert the exact cancellation boundary, no voice key, and the returned idle emblem. `composer-task-stop` also rejects an emblem mislabeled as Stop.
 
-### Designed main viewport (owner round 4)
+### Designed main viewport
 
 With no --width argument, look reads the main window's dimensions from
 src-tauri/tauri.conf.json (1280x800). Explicit plain widths retain the 900px
@@ -416,23 +416,23 @@ centered welcome are asserted by their ordinary feature scenes. no-naming
 replaces the removed first-Bot setup scenes. Details' pointer focus assertion
 runs before its separate keyboard icon-interaction check.
 
-## Owner round 5 readable layout
+## Readable conversation layout
 
 Run all main-page scenes in both themes at 1120, 720, 1920x1080 and 1280x800.
 `sidebar-shell` checks the fixed conversation list and compact drawer, including
 open and folded folders. `details-alignment` compares New conversation, the search
 input and routines/memory block. `conversation-header` rejects duplicate compact
 identity and clipped header line boxes. The former Team canvas and Fit/zoom
-interactions were retired by the owner's 2026-10-30 sidebar decision.
+interactions are replaced by the conversation sidebar.
 
 `npm run native -- readable-layout` applies the same assertions to an isolated
 WebView/SQLite run. Roster prerequisites use production RPC; folder folding,
 drawer navigation, Home month changes and details controls use the real UI. Captures
 record their actual viewport dimensions.
 
-## Owner round 7 layout
+## Conversation layout checks
 
-The feature map names the affected scene matrix and shared checks. Native readable-layout now also checks separate model/source lines, aligned card actions, a single quick-question row label, the conversation fade and Home/sidebar geometry. Keep the pre-fix binary identity separate from exact source build evidence. The owner runs design judge from their shell for this round.
+The feature map names the affected scene matrix and shared checks. Native readable-layout now also checks separate model/source lines, aligned card actions, a single quick-question row label, the conversation fade and Home/sidebar geometry. Keep the pre-fix binary identity separate from exact source build evidence. Run design judge locally from a signed-in shell.
 
 The theme-clarity scene records computed surface/filter evidence. Computer desktop-* scenes use the existing member side panel and persistent stream; no desktop dialog or inline screen is mounted. Native member-computer uses the same screen-click and explicit nonce handback.
 ### Stable view controls (R-UI-49)

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { findsName, foldName, nameScore } from "./find-match";
 
-describe("finding a thing by its name forgives typing (owner, 2026-11-08)", () => {
+describe("finding a thing by its name forgives typing", () => {
   test.each([
     ["gamil", "Gmail"], // two letters swapped
     ["gmial", "Gmail"],

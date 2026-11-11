@@ -51,7 +51,7 @@ export function visibleTurn(turn: AgentTurn): boolean {
   return !!(turn.question.trim() || turn.text.trim() || turn.detail?.trim() ||
     turn.messages?.some(message => message.text.trim()) || turn.attachments?.length || turn.handoffs?.length ||
     turn.connectors?.length || turn.secrets?.length || turn.computers?.length || turn.permissions?.length || turn.drafts?.length || turn.pages?.length ||
-    // A pairing code that came later is a turn with its card and no words (owner, 2026-11-07); a template card too.
+    // A pairing code that came later is a turn with its card and no words; a template card too.
     turn.pairings?.length || turn.templates?.length ||
     turn.status === "running" || turn.status === "confirm" || turn.task || turn.steps?.length);
 }
@@ -71,7 +71,7 @@ export function threadItems(turns: readonly AgentTurn[], nowMs: number): ThreadI
       const label = dayLabel(turn.created_at_ms, nowMs);
       items.push({ kind: "day", key: `time:${turn.id}`, label });
     }
-    // The same colleague again, right after its last exchange on the same day: one line 「與 X 的 4 則訊息」 (owner, 2026-11-08).
+    // The same colleague again, right after its last exchange on the same day: one line 「與 X 的 4 則訊息」.
     const last = items[items.length - 1];
     if (last?.kind === "turn" && bareExchange(turn) && bareExchange(last.turn) && (last.turn.peer_id ?? 0) === (turn.peer_id ?? 0)) {
       items[items.length - 1] = { kind: "turn", key: `turn:${turn.id}`, turn, together: [...(last.together ?? []), last.turn] };

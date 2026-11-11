@@ -175,10 +175,10 @@ describe("shared look IPC boundary", () => {
     expect((await stated.__TAURI_INTERNALS__.invoke("core_call", { method: "agent.history.sent", params: {} })).texts).toEqual(["b", "a"]);
   });
   it("accepts only the declared native correction snapshot without duplicating acceptance rules", async () => {
-    const target = {}, edit = { before: "Please use Open Mouse", after: "Please use OpenMausBot" };
+    const target = {}, edit = { before: "Please use Sample Too", after: "Please use SampleToolX" };
     const state = installMock(fixture, { fixture: { dictationText: edit } }, target);
     const call = (params) => target.__TAURI_INTERNALS__.invoke("core_call", { method: "dictionary.correct", params });
-    expect(await call({ edits: [edit] })).toEqual({ learned: ["OpenMausBot"], undo: "synthetic-correction-batch" });
+    expect(await call({ edits: [edit] })).toEqual({ learned: ["SampleToolX"], undo: "synthetic-correction-batch" });
     expect(state.errors).toEqual([]);
     await expect(call({ edits: [{ ...edit, after: "A different edit" }] })).rejects.toThrow("fixture edit");
   });

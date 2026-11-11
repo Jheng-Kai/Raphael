@@ -264,7 +264,7 @@ test("a primary changes room picker order and becomes the required chief", async
  expect(chief.disabled).toBe(true); expect(chief.getAttribute('aria-pressed')).toBe('true');
  expect(document.querySelector('[data-dlg="member"][data-member="0"]')!.getAttribute('aria-pressed')).toBe('false');
  document.querySelector<HTMLElement>('[data-dlg="member"][data-member="0"]')!.click();
- // The rows' own checks say who takes part (owner, 2026-11-09): no second line of picked names.
+ // The rows' own checks say who takes part: no second line of picked names.
  expect([...document.querySelectorAll<HTMLElement>('[data-dlg="member"][aria-pressed="true"]')].map(row=>row.querySelector('.room-row-name')!.textContent)).toEqual(['Alice','Raphael']);
  expect(document.querySelector('[data-picked]')).toBeNull();
  expect(api.roomsCreate).not.toHaveBeenCalled();
@@ -323,13 +323,13 @@ test("a reply quotes its source at the top of its bubble: who said it and its fi
 test("the room voice target seeds correction learning while preserving reply delivery",async()=>{
  const create=vi.spyOn(chatComposer,"createChatComposer");
  try {
-  api.core.mockResolvedValue({learned:["OpenMausBot"]});
+  api.core.mockResolvedValue({learned:["SampleToolX"]});
   api.roomMessages.mockResolvedValue({messages:[{id:7,member_id:1,text:"Ready",created:1,status:"done"}]});
   await pane();document.querySelector<HTMLElement>('[data-room-act="reply"]')!.click();
-  create.mock.calls[create.mock.calls.length-1][0].transcriptTarget!()("Please use Open Mouse Bot");
-  draft("Please use OpenMausBot");document.querySelector<HTMLElement>('.cmp-send')!.click();await flush();
-  expect(api.roomSend).toHaveBeenCalledWith(1,"Please use OpenMausBot",expect.any(String),"en",[],7);
-  expect(api.core).toHaveBeenCalledWith("dictionary.correct",{edits:[{before:"Please use Open Mouse Bot",after:"Please use OpenMausBot"}]});
+  create.mock.calls[create.mock.calls.length-1][0].transcriptTarget!()("Please use Sample Tool Ex");
+  draft("Please use SampleToolX");document.querySelector<HTMLElement>('.cmp-send')!.click();await flush();
+  expect(api.roomSend).toHaveBeenCalledWith(1,"Please use SampleToolX",expect.any(String),"en",[],7);
+  expect(api.core).toHaveBeenCalledWith("dictionary.correct",{edits:[{before:"Please use Sample Tool Ex",after:"Please use SampleToolX"}]});
   expect(document.querySelector('.cmp-quote')!.textContent).toBe("");
  } finally { create.mockRestore(); }
 });

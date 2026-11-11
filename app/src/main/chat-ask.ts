@@ -1,10 +1,10 @@
-// A button on a panel that is done in the conversation (owner, 2026-11-07): setting up a bot, sharing a member as a
+// A button on a panel that is done in the conversation: setting up a bot, sharing a member as a
 // template, changing its skills, memory or voice. The press sends the owner's words into the member's own
 // conversation with an intent beside them; the member explains what it needs there and shows a card for anything only
 // the owner can give. Nothing is typed into the panel.
 //
 // While the member works on it the button is busy: drawn with a spinner and pressed again it sends nothing, so the
-// owner's words never go twice (owner, 2026-11-07). It is free again once the member stops (its activity is idle, done
+// owner's words never go twice. It is free again once the member stops (its activity is idle, done
 // or an error), or after PENDING_MAX_MS if no word of that ever comes.
 
 import * as api from "./api";

@@ -34,9 +34,9 @@ def test_these_forms_are_not_distinctive(form):
     "form",
     [
         "cloud", "clod", "tail scale", "open router", "chat G P T", "git hub", "gem mini",
-        "Typelist", "gpt4", "curse or", "pie thon",
+        "Typepat", "gpt4", "curse or", "pie thon",
         "拉菲爾", "李慕璐", "托耳金", "轉入帳", "ラファエロ", "손님들",
-        "手 phone", "Hermes 的",
+        "手 phone", "Helion 的",
     ],
 )
 def test_these_forms_are_distinctive(form):
@@ -74,12 +74,12 @@ def test_three_cjk_characters_are_the_least():
         ("Cursor", "curse or"),
         ("Python", "pie thon"),
         ("Alice", "Allice"),
-        ("Typeless", "TypeList"),
+        ("Typepad", "TypePat"),
         # Sound alike by the phonetic key.
         ("Tauri", "tow ree"),
         # A shared stem.
         ("migration", "migrate"),
-        ("Hermes Agent", "Hermes"),
+        ("Helion Agent", "Helion"),
         # CJK: the same length and a character in the same place.
         ("拉斐爾", "拉菲爾"),
         ("托爾金", "托耳金"),
@@ -196,9 +196,9 @@ def test_the_edit_distance_counts_insertions_deletions_and_substitutions(first, 
         ("OpenRouter", "我用歐噴 router 傳訊息"),
         ("Telegram", "跟 tele gram 傳訊息給你"),
         ("STT", "語音轉文字的 SST model"),
-        ("Hermes Agent", "我想要變成類似Hermegie這樣子的感覺"),
-        ("Hermes Agent", "home 目前 Herman Seligs 的金鏢在哪裡啊"),
-        ("Typeless", "目前只有 typelist 的功能"),
+        ("Helion Agent", "請整理 Heliongie 的測試清單"),
+        ("Helion Agent", "文件中的 Helan Selix 標記在哪裡"),
+        ("Typepad", "目前只有 typepat 的功能"),
         ("MCP", "plugins、NCP servers 之類的"),
         ("claude", "打開 Claude Code"),
         ("computer use", "還有 Computer News 這些"),

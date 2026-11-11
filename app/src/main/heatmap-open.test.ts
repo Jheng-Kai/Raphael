@@ -26,7 +26,7 @@ describe("the days of the grid", () => {
     expect(heatmapSVG(grid())).toContain('40 words"');
   });
 
-  test("a day opens nothing: pressing it only says its words (owner, 2026-11-07)", () => {
+  test("a day opens nothing: pressing it only says its words", () => {
     const svg = heatmapSVG(grid());
     expect(svg).not.toContain('role="button"');
     expect(svg).not.toContain("tabindex");

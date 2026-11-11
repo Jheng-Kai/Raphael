@@ -1,6 +1,6 @@
 /* The panel previews the member's workspace; takeover carries that same stream. */
 .mb-det:not([data-details-tab="computer"]) .desktop-panel:not([data-expanded]) { display: none; }
-/* While the member's computer works, a small dot follows its name in the header: no button, as Grok Bot's header. */
+/* While the member's computer works, a small dot follows its name in the header: no button. */
 .conversation-trigger.is-computer-active .mb-pill::after { content: ""; flex: none; width: 8px; height: 8px; border-radius: var(--r-pill); background: var(--computer-active); }
 .desktop-wallpaper { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center bottom; }
 /* xfdesktop zooms the owner's picture from its centre, and its subject sits in the middle rather than along the bottom. */
@@ -11,7 +11,7 @@
 .desktop-last { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
 .desktop-panel { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); }
 .desktop-shell { display: grid; grid-template-rows: minmax(0, 1fr) auto; gap: var(--sp-2); min-height: 0; }
-/* R-PANEL-03: as Grok Bot's, the preview is captioned with whose screen it is, and the whole preview opens the larger view;
+/* R-PANEL-03: the preview is captioned with whose screen it is, and the whole preview opens the larger view;
    under the pointer or keyboard focus a small dark pill says so. */
 .desktop-caption { margin: 0; color: var(--text-3); font-size: var(--fs-xs); text-align: center; }
 .btn.desktop-open { position: absolute; z-index: 3; inset: 0; display: grid; place-items: center; width: 100%; height: 100%; min-height: 0; padding: 0; border: 0; border-radius: inherit; background: transparent; cursor: pointer; }
@@ -22,7 +22,7 @@
 .btn.desktop-open:active .desktop-open-pill { background: var(--desktop-frame-bg); }
 /* Asleep, the same cover wakes the computer and says nothing: the screen already shows the face and its one line. */
 .btn.desktop-open[data-asleep] .desktop-open-pill { display: none; }
-/* No words over a computer that is not showing its screen (owner, 2026-11-07): the press starts it, with no label. */
+/* No words over a computer that is not showing its screen: the press starts it, with no label. */
 .desktop-panel:is([data-desktop-state="stopped"], [data-desktop-state="unavailable"]) .btn.desktop-open .desktop-open-pill { display: none; }
 @media (prefers-reduced-motion: reduce) { .desktop-open-pill { transition: none; } }
 .computer-lifecycle { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); min-width: 0; width: 100%; }
@@ -50,7 +50,7 @@
 .desktop-heading h2 { margin: 0; overflow: hidden; color: inherit; font-size: var(--fs-sm); font-weight: 400; text-overflow: ellipsis; white-space: nowrap; }
 .desktop-request, .computer-repair-note { margin: 0; color: var(--text-2); font-size: var(--fs-sm); overflow-wrap: anywhere; }
 .desktop-panel[data-expanded] > .desktop-request { padding: 0 var(--sp-3); }
-/* Every state keeps the running screen's proportions, so the wallpaper is never squeezed (owner, 2026-11-07). The clip,
+/* Every state keeps the running screen's proportions, so the wallpaper is never squeezed. The clip,
    unlike hidden, leaves the box free to grow past its ratio when a narrow panel's words and buttons need the height. */
 .desktop-screen { position: relative; width: 100%; aspect-ratio: 1280 / 900; overflow: clip; background: var(--content); border: 1px solid var(--line); border-radius: var(--r-lg); }
 .desktop-screen iframe, [data-card-desktop-screen] iframe, [data-card-screen] iframe { position: relative; z-index: 1; display: block; width: 100%; height: 100%; border: 0; }
@@ -86,7 +86,7 @@
 .desktop-placeholder .missing-note, .desktop-placeholder > [data-act="docker-download"] { --btn: var(--desktop-frame-bg); --hover: color-mix(in srgb, var(--desktop-frame-text) 10%, var(--desktop-frame-bg)); --pressed: color-mix(in srgb, var(--desktop-frame-text) 18%, var(--desktop-frame-bg)); }
 .desktop-error { margin: 0; color: var(--err); }
 .desktop-error[role="status"] { color: var(--text-2); }
-/* A slim pill, the face beside its one stage (owner, 2026-11-07: the box was too fat); a percent or the first-build note
+/* A slim pill, the face beside its one stage; a percent or the first-build note
    takes the next line. */
 .desktop-preparation { width: fit-content; max-width: 100%; display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; column-gap: var(--sp-2); row-gap: var(--sp-1); padding: 6px var(--sp-3) 6px 6px; border-radius: var(--r-pill); }
 .desktop-preparation > :is(progress, .desktop-first-build) { grid-column: 1 / -1; }
@@ -106,7 +106,7 @@
   @keyframes desktop-stream-in { from { opacity: 0; } to { opacity: 1; } }
 }
 
-/* The larger view, as Grok Bot's: the whole window, sidebar included, with the screen centred at its own proportions,
+/* The larger view: the whole window, sidebar included, with the screen centred at its own proportions,
    the fold-back button in the window buttons' row and one pill at the bottom (R-PANEL-03). */
 :root[data-desktop-expanded] .page-agent .mb-det { position: fixed; inset: var(--window-controls-height) 0 0; width: 100%; max-width: none; padding-top: 0; z-index: 80; transform: none; background: var(--content); }
 :root[data-window-layout][data-desktop-expanded]:not([data-window-modal="true"]):not(:has(.mb-scrim:not(.cr-scrim))) .window-chrome { left: 0; border-top-left-radius: 0; background: var(--content); }
@@ -141,7 +141,7 @@
 .computer-location { min-width: 0; }
 .computer-location .btn { max-width: 100%; }
 /* Beside the state word and the ⋯ the location is a quiet button: words and a chevron, with no frame and no
-   fill, not even under the pointer (owner, 2026-11-06). Keyboard focus keeps its ring. */
+   fill, not even under the pointer. Keyboard focus keeps its ring. */
 .desktop-location-header .computer-location .btn, .desktop-location-header .computer-location .btn:is(:hover, :active, [aria-expanded="true"]):not(:disabled) { border-color: transparent; background: transparent; }
 .computer-location .btn > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .desktop-takeover-bar .computer-location { flex: 0 1 auto; }

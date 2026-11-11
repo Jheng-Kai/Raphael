@@ -1,12 +1,12 @@
 let typing = false;
 let listening = false;
 
-/** The dictation pages keep their tooltips (owner, 2026-11-07); everywhere else a tip that only repeats is left out. */
+/** The dictation pages keep their tooltips; everywhere else a tip that only repeats is left out. */
 const KEEPS_ECHOES = ".page-dictation, .page-dict";
 const words = (text: string): string => text.replace(/\s+/g, " ").trim();
 
 /**
- * Whether `tip` only repeats what `element` already shows (owner, 2026-11-07: 「為什麼要在 hover 時顯示兩個相同的字」).
+ * Whether `tip` only repeats what `element` already shows.
  * The rendered text counts, so a name hidden in the folded sidebar still gets its tip; an icon has no text to repeat.
  */
 export function echoesItsText(element: HTMLElement, tip: string): boolean {

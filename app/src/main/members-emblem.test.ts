@@ -1,10 +1,9 @@
 // @vitest-environment happy-dom
 // Raphael's face on the 拉斐爾 page is his emblem exactly as it is at the bottom right: bare, with no
 // background, border, ring, disc, shadow or circle crop, in the member column, the pill, the details
-// panel and the thread. (The design page once drew a gold disc behind it by a selector that matched
-// the emblem by accident; the owner does not want it.) These read the style sheets for any rule that
-// could reach the emblem's element or what it is drawn into, and look at the HTML that draws it.
-// Owner review 2026-10-30: only a face inside a composite group avatar has its own
+// panel and the thread. These tests inspect style rules that could reach the emblem's element or
+// its drawing surface, along with the rendered HTML.
+// Only a face inside a composite group avatar has its own
 // round background and a 2px separator matching the surface behind that group.
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
@@ -70,7 +69,7 @@ describe("Raphael's emblem stands bare", () => {
     expect(bad).toEqual([]);
   });
 
-  test("Raphael's face is the first blue slime wherever the page draws it, his emblem only in voice (owner, 2026-11-07)", () => {
+  test("Raphael's face is the first blue slime wherever the page draws it, his emblem only in voice", () => {
     const raphael = raphaelOf(null);
     for (const size of [22, 26, 30, 34, 64, 96]) {
       const html = faceHTML(raphael, size, { cls: "mb-pill-face" });

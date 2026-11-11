@@ -67,7 +67,7 @@ export function patchHTML(root: Element, html: string): void {
       } else {
         if (node !== at) live.insertBefore(node, at);
         // A face never turns into someone else's: its clock remembers the drawing it was made with, so morphing
-        // Testarossa's into Raphael's drew her bow on him while he moved (owner, 2026-11-07). Another member takes the
+        // Testarossa's into Raphael's drew her bow on him while he moved. Another member takes the
         // fresh face whole.
         if (node instanceof Element && fresh instanceof Element && node.matches(".slime-surface") && fresh.matches(".slime-surface") && faceIdentity(node) !== faceIdentity(fresh)) {
           live.replaceChild(fresh, node);
@@ -104,9 +104,9 @@ export function patchHTML(root: Element, html: string): void {
   walk(root, template.content);
 }
 
-// The app's line icons are Lucide's, as Grok Bot's are (owner, 2026-11-06): icon-set.ts is generated from the pinned
+// The app's line icons are Lucide's: icon-set.ts is generated from the pinned
 // lucide-static by scripts/icons/build-icons.mjs. Each is drawn in a 24 x 24 box with a stroke of 2 (styles.css `svg.i`),
-// so it shows 1.33 px lines at 16 px and Grok Bot's 1.5 px at the 18 px of the edge buttons.
+// so it shows 1.33 px lines at 16 px and 1.5 px at the 18 px of the edge buttons.
 export type IconName = keyof typeof ICON;
 
 /** A line icon, 16 px unless its place says otherwise. */
@@ -565,7 +565,7 @@ export function menuPlacement(
     : size.height <= below || (size.height > above && below >= above);
   const maxHeight = useBelow ? below : above;
   return {
-    // "center" stands under the middle of its anchor (a face picker under the face, owner 2026-11-07).
+    // "center" stands under the middle of its anchor (a face picker under the face).
     left: Math.max(8, Math.min(alignment === "center" ? ((anchor.left ?? anchor.right) + anchor.right - size.width) / 2 : alignment === "end" || alignment === "above" ? anchor.right - size.width : anchor.left ?? anchor.right, viewport.width - size.width - 8)),
     top: useBelow ? belowTop : aboveBottom - Math.min(size.height, maxHeight),
     maxHeight,
@@ -593,7 +593,7 @@ export function placeMenu(): void {
   const { el, anchor } = menu;
   const r = menu.anchorRect?.() ?? menu.rect;
   const headerBottom = document.getElementById("window-chrome")?.getBoundingClientRect().bottom ?? 0;
-  // A dropdown's menu is at least as wide as the dropdown itself (owner, 2026-10-24).
+  // A dropdown's menu is at least as wide as the dropdown itself.
   if (anchor.classList?.contains("sel")) el.style.minWidth = `${Math.round(r.width)}px`;
   // Release the previous side's height limit before measuring a menu after scrolling or redraw.
   el.style.maxHeight = `${Math.max(0, innerHeight - headerBottom - 16)}px`;

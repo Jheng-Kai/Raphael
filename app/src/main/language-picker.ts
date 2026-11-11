@@ -1,5 +1,4 @@
-// The window's language, chosen from a short list that searches itself once there are many (owner, 2026-11-08: 「可能會有
-// 很多語言，應該可以加入搜尋語言」). Each language says its own name in its own script; its English name helps the search.
+// The window's language, chosen from a short list that searches itself once there are many. Each language says its own name in its own script; its English name helps the search.
 import { t } from "./i18n";
 import { closeMenu, esc, ico, openPopover } from "./ui";
 import { findsName } from "./find-match";

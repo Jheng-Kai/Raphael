@@ -1,9 +1,9 @@
-// The settings of one member, as a page of its own in the main area where the conversation is (owner, 2026-11-08): the gear
+// The settings of one member, as a page of its own in the main area where the conversation is: the gear
 // of the member's panel opens it, the arrow left of its name (and Escape) goes back to the conversation. It reads like a
 // Notion page: a cover the owner can change (a pattern in the member's own slime colour, or a picture), the face large
 // across the cover's lower edge, the name and the role in place. Under them the settings are kinds in a column on the left,
-// as Settings' own (owner, 2026-11-08: 「左側會有一些分區…不要就這樣子長長一條」), and only the chosen kind is shown, as
-// compact sections, each a name over one tinted list of rows (Grok Bot's panel). Every member has the same kinds, Raphael
+// as Settings' own, and only the chosen kind is shown, as
+// compact sections, each a name over one tinted list of rows. Every member has the same kinds, Raphael
 // too: tools, skills and commands, personality and instructions, notifications (owner, 2026-11-09). There is no memory
 // here, nor anywhere in the app (owner, 2026-11-11: 「可以像 Hermes Agent 一樣，都不要讓我們看到記憶好了，所以記憶是在背後
 // 管理的…如果使用者在使用的情況下遇到記憶有錯誤的時候，再跟他說一下，他自己去改就好了」): the core keeps it, the member

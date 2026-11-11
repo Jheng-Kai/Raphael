@@ -21,7 +21,7 @@ const before = check("completion-before");
 export default [
   scene("completion-mentions", "Mention headings and five recent services from thirty-two connections", [before, type(field, "@"), wait("#app-popover"), check("completion-mentions")], discovery),
   scene("completion-filtered", "Alias search ranks services and caps visible results", [before, type(field, "@notes"), wait("#app-popover"), check("completion-filtered")], discovery),
-  scene("typo-mention", "A typo or swapped letters after the @ still find the app, first (owner, 2026-11-08: 「@gamil」)", [type(field, "@notoin"), wait("#app-popover[data-team-mentions]"), check("typo-mention")], apps),
+  scene("typo-mention", "A typo or swapped letters after the @ still find the app, first", [type(field, "@notoin"), wait("#app-popover[data-team-mentions]"), check("typo-mention")], apps),
   scene("completion-expanded", "Show all opens services in place with bounded pages", [before, type(field, "@"), wait("#app-popover .menu-action"), click("#app-popover .menu-action"), check("completion-expanded")], discovery),
   scene("completion-expanded-last", "Every service is reachable, including sign-in and key states", [before, type(field, "@"), wait("#app-popover .menu-action"), click("#app-popover .menu-action"), ...Array.from({ length: 3 }, () => click('#app-popover button[data-action]:last-child')), check("completion-expanded-last")], discovery),
   scene("completion-group", "Group mentions limit members while retaining connected services", [room(1), before, type("#room-message", "@"), wait("#app-popover"), check("completion-group")], discovery),

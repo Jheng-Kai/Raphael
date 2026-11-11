@@ -182,7 +182,7 @@ export function createDictationOverview(app: AppContext): Page {
     paintGrid();
   }
 
-  // A day's words, shown when the day is pressed (owner, 2026-11-07: no hover tips); pressed again, elsewhere or Esc, gone.
+  // A day's words, shown when the day is pressed; pressed again, elsewhere or Esc, gone.
   const dayTip = document.createElement("div");
   dayTip.className = "message-tooltip heat-tip";
   dayTip.setAttribute("role", "status");

@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 // The member panel's Library: only what the member delivered, by day, pictures as thumbnails and every other
-// deliverable a row with its kind's icon, title and time (owner, 2026-11-07 night, as Grok Bot's Library).
+// deliverable a row with its kind's icon, title and time.
 import { expect, test } from "vitest";
 import { panelLibraryHTML, type LibraryItem } from "./member-panel-work";
 
@@ -26,12 +26,12 @@ test("groups by day, newest first, with pictures as thumbnails and the rest as r
   expect([picture.tagName, picture.dataset.panelFile, picture.querySelector("img")!.dataset.attachment]).toEqual(["BUTTON", "attachment:a.png", "a".repeat(32) + ".png"]);
   expect([...page.querySelectorAll<HTMLElement>(".lib-row")].map(row => [row.dataset.panelFile, row.querySelector<HTMLElement>(".lib-icon")!.dataset.kind, row.querySelector(".lib-title")!.textContent, row.querySelector("time")!.textContent]))
     .toEqual([["page:p", "page", "Weekly page", "13:00"], ["delivered-file:z", "archive", "Bundle.zip", "13:00"], ["delivered-file:old", "document", "Notes.md", "15:00"]]);
-  // Never a 「顯示更多」, even when the core says there is more (owner, 2026-11-08).
+  // Never a 「顯示更多」, even when the core says there is more.
   expect(page.querySelector("[data-panel-more], .lib-more")).toBeNull();
   expect(page.querySelector(".team-file")).toBeNull();
 });
 
-test("links are never shown, and the kinds there are become one filter that narrows the list (owner, 2026-11-08)", () => {
+test("links are never shown, and the kinds there are become one filter that narrows the list", () => {
   const files = [
     item("attachment:a.png", "image", "Shot.png", NOW, { attachment_id: "a".repeat(32) + ".png" }),
     item("attachment:v.mp4", "video", "Run.mp4", NOW - 1000),

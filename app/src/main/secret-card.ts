@@ -70,7 +70,7 @@ function actionHTML(card: SecretCard): string {
 }
 
 /**
- * A bot token a member asked for in its conversation (owner, 2026-11-07): where to make the bot, then the same masked
+ * A bot token a member asked for in its conversation: where to make the bot, then the same masked
  * field; the core checks the token and connects the member's own bot (`connect_messaging`).
  */
 const SLACK_SCOPES = ["im:read", "im:history", "chat:write", "files:read", "files:write"] as const;

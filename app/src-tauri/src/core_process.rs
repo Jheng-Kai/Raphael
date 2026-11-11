@@ -191,7 +191,7 @@ fn command_in(repo: &Path, python: Option<OsString>) -> Result<CoreCommand, Stri
     };
     // The core's source of this checkout comes first on Python's path. A venv installs the core
     // editable from whichever checkout ran `uv sync`, so a build made in another worktree would
-    // otherwise run that checkout's core, not its own (2026-11-08: a staged build ran old code).
+    // otherwise run that checkout's core, not its own (a staged build can otherwise run old code).
     let source = core_dir.join("src").display().to_string();
     Ok(CoreCommand {
         program,

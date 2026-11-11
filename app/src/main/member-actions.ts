@@ -19,7 +19,7 @@ interface MemberActionHost {
 }
 
 export function createMemberActions(host: MemberActionHost) {
-  /** Changing a member is done with it in its conversation (owner, 2026-11-07): the menu opens it and asks there. */
+  /** Changing a member is done with it in its conversation: the menu opens it and asks there. */
   function editMember(m: Member): void {
     host.select(m.id);
     askInChat(m.id, "settings");

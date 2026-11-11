@@ -7,8 +7,7 @@ import "../dictation-page.css";
 
 const TAB_IDS: DictationTab[] = ["overview", "history", "dictionary"];
 /**
- * 聽寫 opens on 總覽 every time it is opened again (owner, 2026-11-09: it must not reopen on the history or the
- * dictionary). Going back through the navigation history still lands on the tab that place was.
+ * 聽寫 opens on 總覽 every time it is opened again. Going back through the navigation history still lands on the tab that place was.
  */
 export function createDictation(app: AppContext, pages: Record<DictationTab, Page>, chooseTab?: (tab: DictationTab) => void) {
   const el = document.createElement("div"); el.className = "page page-dictation"; el.dataset.page = "dictation"; el.hidden = true;
@@ -19,7 +18,7 @@ export function createDictation(app: AppContext, pages: Record<DictationTab, Pag
   let selected: DictationTab = "overview", visible = false;
   function paint(): void {
     const restoreFocus = head.contains(document.activeElement);
-    // The app's one tab component (ui.ts tabs()), as the panel's and 模型與用量's (owner, 2026-11-09: buttons alike).
+    // The app's one tab component (ui.ts tabs()), as the panel's and 模型與用量's.
     head.innerHTML = `<div class="page-head"><h1>${esc(t("nav.dictation"))}</h1></div>` +
       `<div class="dictation-nav">${tabs(TAB_IDS.map(id => ({
         id, label: t(id === "overview" ? "dictation.overview" : id === "history" ? "main.002" : "main.003"),

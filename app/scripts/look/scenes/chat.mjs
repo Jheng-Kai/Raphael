@@ -1,7 +1,7 @@
 import { scene, click, hover, type, wait, waitGone, member, room, search, check, key, scroll, paste, dropFile } from "./steps.mjs";
 
-const LONG_LINK = "https://x.com/someone/status/2115177376921293212?ref_src=twsrc%5Etfw%7Ctwcamp%5Etweetembed%7Ctwterm%5E2115177376921293212&ref_url=https%3A%2F%2Fexample.com%2Fai-agents-pixel-office-tools";
-const linked = selector => paste(selector, { text: `${LONG_LINK}\n這個是我當時看到的` });
+const LONG_LINK = "https://x.com/someone/status/2000000000000000001?ref_src=twsrc%5Etfw%7Ctwcamp%5Etweetembed%7Ctwterm%5E2000000000000000001&ref_url=https%3A%2F%2Fexample.com%2Fsample-project-status-notes";
+const linked = selector => paste(selector, { text: `${LONG_LINK}\n這是用來測試的範例` });
 const twoPictures = [room(1), paste("#room-message", { image: "clipboard.png" }), wait(".au-room-pane .composer .cmp-chip img.cmp-thumb"), dropFile(".au-room-pane .ra-stage", "dropped.png"), wait('.au-room-pane .composer .cmp-chip + .cmp-chip')];
 
 export const learnedSkill = member_id => ({ id: 31, member_id, name: "research-summary", description: "整理研究摘要並核對來源", enabled: true, source: "learned", provenance: "learned", learned_at: "2026-10-29T10:00:00", updated_at: "2026-10-29T10:00:00", text: "---\nname: research-summary\ndescription: 整理研究摘要並核對來源\n---\n## When to use\nUse for a research summary.\n## Procedure\nCheck and compare sources.\n## Pitfalls\nCheck publication dates.\n## Verification\nReopen each cited source." });
@@ -9,11 +9,11 @@ export const sharedSourceSkill = { id: 32, member_id: -1, name: "來源核對", 
 const details = [member(1), { action: "open-details" }, check("member-details")];
 // The gear of the panel opens the member settings page where the conversation is; its arrow goes back.
 const gear = [click('.mb-det [data-det="gear"]'), wait('.ms-pane:not([hidden]) .ms-name')];
-// The member settings page shows one kind at a time, chosen in its left column (owner, 2026-11-08).
+// The member settings page shows one kind at a time, chosen in its left column.
 const msKind = id => [click(`.ms-pane .ms-nav [data-cat="${id}"]`), wait(`.ms-pane .ms-nav [data-cat="${id}"][aria-current="page"]`)];
 const closeSettings = [click('.ms-pane [data-ms="back"]'), wait('.page-agent:not([hidden]) .mb-chat .composer')];
 const composer = [click(".cmp-mode"), wait("#app-popover")];
-const dictationText = { before: "Please use Open Mouse", after: "Please use OpenMausBot" };
+const dictationText = { before: "Please use Sample Too", after: "Please use SampleToolX" };
 // A key made up for the scenes: it is typed into a secret card and must reach nothing but `integrations.card_save`.
 const lookKey = "sk-look-4c9f2b7e81d3";
 // And one for the forms that add an app with its own key: it must reach nothing but the one call that adds the app.
@@ -237,12 +237,12 @@ export default [
   scene("members-expanded", "Original Raphael emblem and expanded member column", [{ action: "member-column", collapsed: false }, check("member-column")]),
   scene("primary-contact-column", "The primary takes the first conversation row and Raphael takes its group slot", [{ action: "member-column", collapsed: false }, check("member-column"), check("primary-column")], { primaryMember: 1 }),
   scene("primary-contact-menu", "The primary's own menu (Raphael's) ends with 換成其他成員 after a hairline, without a star", [{ action: "member-column", collapsed: false }, click('.mb-col [data-member-more="0"]'), wait('#app-popover [data-pick="primary"]'), check("primary-menu")]),
-  scene("member-row-menu", "A member's row menu is grouped as Grok Bot's: 釘選, 移到分組, 標為未讀 | 編輯 | 分享為範本 | 隱藏, 刪除 in red", [{ action: "member-column", collapsed: false }, click('.mb-col [data-member-more="2"]'), wait('#app-popover [data-pick="delete"]'), check("member-menu")]),
+  scene("member-row-menu", "A member's row menu is grouped: 釘選, 移到分組, 標為未讀 | 編輯 | 分享為範本 | 隱藏, 刪除 in red", [{ action: "member-column", collapsed: false }, click('.mb-col [data-member-more="2"]'), wait('#app-popover [data-pick="delete"]'), check("member-menu")]),
   scene("primary-contact-picker", "換成其他成員 in 小晴's menu opens 選擇主要成員: Raphael and the other members as buttons, and choosing 小森 readies the primary action", [...primaryMenu(1), click('.mb-primary-picker [data-id="2"]'), check("primary-picker")], { primaryMember: 1 }),
   scene("primary-contact-set", "換成其他成員, then 小晴, exchanges display positions without changing rooms, tasks or conversations", [...primaryMenu(), click('.mb-primary-picker [data-id="1"]'), click('.mb-primary-picker [data-dlg="set"]'), wait('.mb-col .mb-chief[data-member="1"]'), member(1), { action: "open-details" }, ...gear, wait(".ms-pane .ms-face"), check("primary-set")]),
   scene("primary-room-chief", "The current chief wears the room crown and writes its one wrap-up", [{ action: "member-column", collapsed: false }, room(1), wait(".au-room-wrapup"), check("primary-room-chief")], { primaryMember: 1, roomWrapup: true }),
   scene("chat", "Conversation with public progress, replies and an attachment", [wait(".ra .chat-message[data-reply]"), check("conversation-design")]),
-  scene("conversation-share", "Share sits at the header's right, opposite search, in a member's conversation (owner, 2026-11-08)", [
+  scene("conversation-share", "Share sits at the header's right, opposite search, in a member's conversation", [
     member(1), wait('.mb-head [data-act="share-member"]:not([hidden])'), check("conversation-share"),
     click('.mb-head [data-act="share-member"]'), wait('#app-popover .menu-action'), check("conversation-share-menu"),
   ]),
@@ -250,7 +250,7 @@ export default [
   scene("centred-system-events", "Hand-off, consultation and meeting lines centred between question and answer", [wait("[data-handoff-group]"), check("centred-system-events")], { systemEvents: true }),
   scene("bot-ask-centred", "The asker's chat names the colleague it asked in one centred line that opens their conversation on the question and the answer",
     [member(2), wait('[data-handoff="x71"]'), check("bot-ask-centred"), click('[data-handoff="x71"]'), wait('.peer-chat'), check("bot-ask-expanded")], { colleagues: 1 }),
-  scene("peer-chat", "The line opens the real conversation between two members in place, as Grok Bot's",
+  scene("peer-chat", "The line opens the real conversation between two members in place",
     [wait('[data-handoff="61"]'), click('[data-handoff="61"]'), wait('.peer-chat'), check("peer-chat")], { peerChat: true }),
   scene("peer-chat-close", "Close chat returns to the thread and the line",
     [wait('[data-handoff="61"]'), click('[data-handoff="61"]'), wait('.peer-chat'), click('.peer-close'), check("peer-chat-closed")], { peerChat: true }),
@@ -288,11 +288,11 @@ export default [
   scene("member-maker-chosen", "A colour, then a character, then a name: the large slime follows", [{ action: "member-column", collapsed: false }, click('[data-col="add"]'), click('#app-popover [data-pick="member"]'), wait(".cr-dialog"), click('.cr-colors [data-slime-color="coral"]'), click('.cr-characters [data-slime-character="shion"]'), type("#mb-new-name", "紫苑"), check("member-maker-chosen")]),
   scene("member-maker-made", "建立 opens the member, which speaks first and asks what it is for", [{ action: "member-column", collapsed: false }, click('[data-col="add"]'), click('#app-popover [data-pick="member"]'), wait(".cr-dialog"), click('.cr-characters [data-slime-character="gobta"]'), type("#mb-new-name", "哥布達"), click('.cr-dialog [data-dlg="create"]'), waitGone(".cr-dialog"), { action: "wait-text", selector: ".page-agent .ra-body", text: "哥布達" }, check("member-maker-made")]),
   scene("member-maker-greeting", "While its own model writes the greeting, the new member is typing and nothing is put in the owner's mouth", [{ action: "member-column", collapsed: false }, click('[data-col="add"]'), click('#app-popover [data-pick="member"]'), wait(".cr-dialog"), click('.cr-characters [data-slime-character="gobta"]'), type("#mb-new-name", "哥布達"), click('.cr-dialog [data-dlg="create"]'), waitGone(".cr-dialog"), check("member-maker-greeting")], { greetingPending: true }),
-  // The owner's flows of 2026-10-27, each to its end in the real page.
+  // Complete workflows exercised through the real page.
   scene("member-delete", "A member is deleted from its ⋯ menu after the confirmation: its row leaves and a notice says so", [
     member(2), { action: "member-column", collapsed: false }, click('.mb-col [data-member-more="2"]'), click('#app-popover [data-pick="delete"]'), wait(".mb-dialog"),
     click('.mb-dialog [data-dlg="delete"]'), waitGone('.mb-col [data-member="2"]'), wait(".toast"), check("member-deleted")]),
-  // The panel's close is one of the window edges' soft round buttons since 2026-11-06 (R-UI-16), so it has a surface.
+  // The panel's close is one of the window edges' soft round buttons (R-UI-16), so it has a surface.
   scene("details", "Title opens member details", [...details, click('.mb-det-head'), check("details-pointer-focus")]),
   scene("raphael-details", "Title opens Raphael details", [{ action: "open-details" }, check("member-details")]),
   ...[0, 1].map(id => scene(`speaker-draft-${id ? "member" : "chief"}`, "Every speaker can turn the shared draft preference off in details settings", [
@@ -330,19 +330,19 @@ export default [
   ...["routines", "skills", "commands", "notify"].map(tab => scene(`details-${tab}`, `Member ${tab} pane`, [...details, ...(tab === "routines" ? [] : gear), ...(tab === "skills" ? [...msKind('skills'), click('.ms-pane [data-ms="skill-open"][data-id="32"]'), wait('.ms-pane #ms-skill-text'), check("member-shared-source"), click('.ms-pane [data-ms="back"]'), click('.ms-pane [data-ms="skill-open"][data-id="31"]'), wait('.ms-pane #ms-skill-text'), check("growing-skills")]
     : tab === "commands" ? [...msKind('skills'), click('.ms-pane [data-ms="command-open"]'), wait('.ms-pane #ms-command-name')]
     : tab === "notify" ? [...msKind('notify'), wait('.ms-pane [data-ms="notify"]')] : [])], tab === "skills" ? { skills: [learnedSkill(1), sharedSourceSkill], memberSettings: true } : { memberSettings: true })),
-  scene("voice-flyer-emblem", "In voice, Raphael's emblem is the corner's own renderer, listening and following the voice as with Alt held (owner, 2026-11-07)", [wait(".page-agent:not([hidden]) .composer .cmp-voice"), { action: "press-voice" }, { action: "emit", events: [{ type: "Dictation", phase: "listening", agent: true, member_id: 0 }, { type: "VoiceLevel", value: 0.6 }], wait: 900 }, wait(".ra-flyer canvas.ra-flyer-emblem"), check("voice-flyer-emblem")], { voicePress: true, emblem: true }),
-  scene("chat-setup-cards", "In the member's conversation: the Slack bot token card with where to make the bot, a pairing to allow, and the template card (owner, 2026-11-07)", [member(1), wait('[data-template-card-id="tpl-1"]'), scroll('[data-secret-card="card-slack"]'), check("chat-setup-cards")], { chatCards: true }),
-  scene("chat-pairing-bottom", "A pairing code that came later is the last thing in the conversation, and the field asks about the setup that waits (owner, 2026-11-07)", [member(1), wait('[data-pairing-card="pair-late"]'), check("chat-pairing-bottom")], { chatCards: true, latePairing: true }),
+  scene("voice-flyer-emblem", "In voice, Raphael's emblem is the corner's own renderer, listening and following the voice as with Alt held", [wait(".page-agent:not([hidden]) .composer .cmp-voice"), { action: "press-voice" }, { action: "emit", events: [{ type: "Dictation", phase: "listening", agent: true, member_id: 0 }, { type: "VoiceLevel", value: 0.6 }], wait: 900 }, wait(".ra-flyer canvas.ra-flyer-emblem"), check("voice-flyer-emblem")], { voicePress: true, emblem: true }),
+  scene("chat-setup-cards", "In the member's conversation: the Slack bot token card with where to make the bot, a pairing to allow, and the template card", [member(1), wait('[data-template-card-id="tpl-1"]'), scroll('[data-secret-card="card-slack"]'), check("chat-setup-cards")], { chatCards: true }),
+  scene("chat-pairing-bottom", "A pairing code that came later is the last thing in the conversation, and the field asks about the setup that waits", [member(1), wait('[data-pairing-card="pair-late"]'), check("chat-pairing-bottom")], { chatCards: true, latePairing: true }),
   scene("chat-pairing-allowed", "Allowing a pairing answers in the card", [member(1), wait('[data-pairing-card="pair-1"]'), scroll('[data-pairing-card="pair-1"]'), click('[data-pairing-card="pair-1"] [data-act="pairing-allow"]'), wait('[data-pairing-card="pair-1"][data-card-state="approved"]')], { chatCards: true }),
   scene("member-avatar", "A press on the member's face in its panel opens the picker: a row of tabs and the open group's slimes (owner, 2026-11-11)", [...details, click('.mb-panel-identity [data-det="avatar"]'), wait("#app-popover"), check("slime-picker-shape")]),
   scene("member-edit", "The member settings page: the face, the name and the role in place, the kinds on the left and the first one beside them", [...details, ...gear, wait('.ms-pane [data-k="ms-tools"]')], { memberSettings: true }),
   scene("composer", "Composer attachment menu", composer),
   scene("mode", "Composer permission modes, each saying what it does", [...composer, wait("#app-popover [data-mode]"), check("permission-menu")]),
-  scene("actions", "An answer's menu has its reactions above Reply and Copy, as Grok Bot's", [hover(".ra .chat-message[data-reply]"), click('.ra .chat-message[data-reply] [data-act="more-message"]'), wait("#app-popover"), check("message-menu")]),
-  scene("reaction-bar", "An answer's react button opens Grok's pill of five quick reactions and a slot for every emoji", [hover(".ra .chat-message[data-reply]"), click('.ra .chat-message[data-reply] [data-act="react-message"]'), wait("#app-popover.reaction-bar"), check("reaction-bar")]),
+  scene("actions", "An answer's menu has its reactions above Reply and Copy", [hover(".ra .chat-message[data-reply]"), click('.ra .chat-message[data-reply] [data-act="more-message"]'), wait("#app-popover"), check("message-menu")]),
+  scene("reaction-bar", "An answer's react button opens a pill of five quick reactions and a slot for every emoji", [hover(".ra .chat-message[data-reply]"), click('.ra .chat-message[data-reply] [data-act="react-message"]'), wait("#app-popover.reaction-bar"), check("reaction-bar")]),
   scene("emoji-picker", "Every emoji in one card: a search field, one grid of eight columns under section labels, and a footer naming the emoji under the pointer", [hover(".ra .chat-message[data-reply]"), click('.ra .chat-message[data-reply] [data-act="react-message"]'), click('#app-popover [data-quick="+"]'), wait("#app-popover.emoji-picker .emoji-cell"), hover('#app-popover .emoji-cell[data-emoji="😂"]'), check("emoji-picker")]),
-  scene("header-pill-hover", "The header's face and name are one soft pill that lights a step and shows a › under the pointer, as Grok Bot's", [member(1), hover(".mb-chat .conversation-trigger"), check("header-pill")]),
-  scene("emoji-picker-speed","Every emoji opens quickly: the first time within 700 ms (it took 1.34 s), and again within 120 ms with no long task (owner, 2026-11-06)", [hover(".ra .chat-message[data-reply]"), click('.ra .chat-message[data-reply] [data-act="react-message"]'), { ...click('#app-popover [data-quick="+"]'), measure: { name: "emoji-picker-open", budgetMs: 700, maxLongTaskMs: 600, readySelector: "#app-popover.emoji-picker .emoji-cell" } }, wait("#app-popover.emoji-picker .emoji-cell"),
+  scene("header-pill-hover", "The header's face and name are one soft pill that lights a step and shows a › under the pointer", [member(1), hover(".mb-chat .conversation-trigger"), check("header-pill")]),
+  scene("emoji-picker-speed","Every emoji opens quickly: the first time within 700 ms (it took 1.34 s), and again within 120 ms with no long task", [hover(".ra .chat-message[data-reply]"), click('.ra .chat-message[data-reply] [data-act="react-message"]'), { ...click('#app-popover [data-quick="+"]'), measure: { name: "emoji-picker-open", budgetMs: 700, maxLongTaskMs: 600, readySelector: "#app-popover.emoji-picker .emoji-cell" } }, wait("#app-popover.emoji-picker .emoji-cell"),
     key("Escape"), click('.ra .chat-message[data-reply] [data-act="react-message"]'), { ...click('#app-popover [data-quick="+"]'), measure: { name: "emoji-picker-reopen", budgetMs: 120, maxLongTaskMs: 50, readySelector: "#app-popover.emoji-picker .emoji-cell" } }, wait("#app-popover.emoji-picker .emoji-cell")]),
   scene("emoji-search","Search filters the grid in place to emoji whose names match, with no section labels", [hover(".ra .chat-message[data-reply]"), click('.ra .chat-message[data-reply] [data-act="react-message"]'), click('#app-popover [data-quick="+"]'), wait("#app-popover.emoji-picker .emoji-cell"), type("#app-popover.emoji-picker input", "愛心"), check("emoji-search")]),
   scene("reply", "Quote a reply into the composer", [hover(".ra .chat-message[data-reply]"), click('.ra .chat-message[data-reply] [data-act="reply-message"]')]),

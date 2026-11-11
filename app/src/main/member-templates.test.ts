@@ -28,7 +28,7 @@ test("preview shows skills, paused routines and a disabled card per requested co
   expect(dialog.textContent!.split(t("template.noGrants"))).toHaveLength(2);
   expect(dialog.querySelector(".mb-dlg-act")!.firstElementChild!.matches("[data-template-notice]")).toBe(true);
   expect(dialog.querySelectorAll(".card-status, .card-well")).toHaveLength(0);
-  // One row per skill and per routine (owner, 2026-11-07: the review reads as Grok Bot's cards of rows).
+  // One row per skill and per routine.
   const rows = dialog.querySelectorAll(".tpl-row");
   expect(rows).toHaveLength(2);
   expect(rows[0].querySelector(".tpl-row-t > span")!.textContent).toBe(t("template.developerGoal"));

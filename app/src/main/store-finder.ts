@@ -20,7 +20,7 @@ export function storeMatches(item: StoreService, query: string): boolean {
 
 /**
  * How near a query that finds nothing as typed comes to an app's names (its name, id, publisher and other names), with
- * typos and swapped letters forgiven (`find-match.ts`, owner 2026-11-08: 「gamil」 finds Gmail); Infinity when it does not.
+ * typos and swapped letters forgiven (`find-match.ts`: 「gamil」 finds Gmail); Infinity when it does not.
  * Only the names, never the long descriptions: a near miss in a paragraph is noise.
  */
 export function storeNear(item: StoreService, query: string): number {

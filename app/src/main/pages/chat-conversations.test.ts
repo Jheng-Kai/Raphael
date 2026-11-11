@@ -29,7 +29,7 @@ test("the stacked member and conversation title toggles details with one state, 
   expect(page.el.querySelector('.desktop-panel')?.closest('.mb-det')).not.toBeNull();
   expect(page.el.querySelector('[data-act="clear"]')).toBeNull();
   expect(title.hasAttribute("aria-haspopup")).toBe(false);
-  // The only icon is the › that shows under the pointer, as Grok Bot's header pill has.
+  // The header pill's only icon is the chevron shown on hover.
   expect([...title.querySelectorAll(".i")].every(icon => icon.closest(".mb-pill-go"))).toBe(true);
   const initial = title.getAttribute("aria-expanded") === "true";
   title.click(); await flush();

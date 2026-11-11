@@ -22,7 +22,7 @@ const turn = (over: Partial<AgentTurn>): AgentTurn => ({ id: 1, ...over }) as Ag
 
 beforeEach(() => { document.body.innerHTML = ""; vi.clearAllMocks(); api.openLink.mockResolvedValue(undefined); api.openExternalUrl.mockResolvedValue(undefined); });
 
-describe("cards a member shows in its conversation for the panel's buttons (owner, 2026-11-07)", () => {
+describe("cards a member shows in its conversation for the panel's buttons", () => {
   test("a pairing request shows its code with Allow first, and answers through the core", async () => {
     const host = dom(chatCardsHTML(turn({ pairings: [pairing()] })));
     expect(host.querySelector(".code")!.textContent).toBe("SL7Q2K");

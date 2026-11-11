@@ -611,15 +611,15 @@ def test_an_unknown_variant_is_refused():
     ("text", "expected"),
     [
         # A Latin word repeated after a comma.
-        ("Hermes，Hermes agent", "Hermes agent"),
-        ("之後會有 Hermes，Hermes agents 可以幫我", "之後會有 Hermes agents 可以幫我"),
-        ("Hermes, Hermes agent can help", "Hermes agent can help"),
-        ("用Hermes、Hermes agent", "用Hermes agent"),
+        ("Helion，Helion agent", "Helion agent"),
+        ("之後會有 Helion，Helion agents 可以幫我", "之後會有 Helion agents 可以幫我"),
+        ("Helion, Helion agent can help", "Helion agent can help"),
+        ("用Helion、Helion agent", "用Helion agent"),
         ("please update the, the config file", "please update the config file"),
         ("I, I think so", "I think so"),
         ("add a, a retry", "add a retry"),
         ("the API, API key", "the API key"),
-        ("Hermes, hermes agent", "hermes agent"),  # the later spelling stays
+        ("Helion, helion agent", "helion agent"),  # the later spelling stays
         ("the, the, the config", "the config"),  # a chain
         ("don't, don't do it", "don't do it"),
         # A CJK run of two to four characters repeated after a comma.
@@ -634,7 +634,7 @@ def test_an_unknown_variant_is_refused():
         ("任何，任何，任何事情", "任何事情"),
         ("明日の、明日の会議は三時から", "明日の会議は三時から"),
         # The text around it is not touched, line breaks included.
-        ("第一行\nHermes，Hermes agent\n第三行", "第一行\nHermes agent\n第三行"),
+        ("第一行\nHelion，Helion agent\n第三行", "第一行\nHelion agent\n第三行"),
         ("任何，任何事情。另外，另外一件事。", "任何事情。另外一件事。"),
     ],
 )
@@ -650,7 +650,7 @@ def test_remove_stutters_drops_the_first_of_an_immediate_repeat_after_a_comma(te
         # A repeat with no comma between is no stutter to this rule.
         "很好很好",
         "謝謝謝謝",
-        "Hermes Hermes agent",
+        "Helion Helion agent",
         "任何任何事情",
         # A comma that is part of a list, not of a stutter.
         "red, green, blue",
@@ -661,8 +661,8 @@ def test_remove_stutters_drops_the_first_of_an_immediate_repeat_after_a_comma(te
         # A partial restart: the second part is not the first part again.
         "我想要，我想先把這個功能做完",
         "the, theory is right",
-        "Hermes, Hermesian",
-        "Hermes agent, Hermes agents",
+        "Helion, Helionian",
+        "Helion agent, Helion agents",
         "他說要，他說先付訂金",
         # A single character is no run, and five or more are not touched.
         "好，好",
@@ -674,7 +674,7 @@ def test_remove_stutters_drops_the_first_of_an_immediate_repeat_after_a_comma(te
         "Yes, yes, I know",
         "bye, bye",
         # Not at the same place of the line: another line is another sentence.
-        "Hermes,\nHermes agent",
+        "Helion,\nHelion agent",
         "任何，\n任何事情",
     ],
 )

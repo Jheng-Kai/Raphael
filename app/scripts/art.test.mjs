@@ -28,7 +28,7 @@ describe("artwork shipped in the repository", () => {
     for (const name of ["app-icon.png", "raphael-portrait.png", "glyph-ring.png"]) pngSize(join(app, "public", "brand", name));
   });
 
-  it("shows the README's picture on the About page, so the two never differ (owner, 2026-11-07)", () => {
+  it("shows the README's picture on the About page, so the two never differ", () => {
     const readme = readFileSync(join(app, "..", "README.md"), "utf8");
     const brand = readFileSync(join(app, "src", "main", "brand.ts"), "utf8");
     expect(readme).toContain('<img src="app/public/brand/raphael-portrait.png"');

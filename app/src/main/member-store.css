@@ -11,7 +11,7 @@
 .store-entry .store-summary { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .store-entry > button { align-self: center; }
 .template-text { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; margin: 0; }
-/* As narrow as Grok Bot's template review (owner, 2026-11-08: the dialogs were too wide). */
+/* A narrow template review dialog. */
 .template-preview { width: min(calc(480px + 2 * var(--pa-dlg-pad)), calc(100vw - 32px)); }
 .template-preview .mb-dlg-body { align-content: start; }
 .template-section { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); }
@@ -25,7 +25,7 @@
 .template-warnings p { margin: 0; }
 .cr-tabs { width: min(460px, 100%); }
 @media (max-width: 760px) { .store-grid, .store-featured { grid-template-columns: minmax(0, 1fr); } }
-/* A member template as Grok Bot's dialogs show things (owner, 2026-11-07): who it is, then short cards of rows. */
+/* A member template review shows who it is, then short cards of rows. */
 .tpl-hero { display: grid; grid-template-columns: minmax(0, 1fr); justify-items: center; gap: 2px; text-align: center; }
 .tpl-face { display: flex; justify-content: center; margin-bottom: var(--sp-2); }
 .tpl-hero b { font: 500 var(--fs-md)/1.35 var(--display); color: var(--text); }
@@ -57,7 +57,7 @@
 .tpl-import { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--pa-dlg-gap, var(--sp-4)); }
 /* The row's own mark already says it repeats; the schedule line keeps only its words. */
 .tpl-row-t > span .i { display: none; }
-/* A template reviewed as Grok Bot reviews one (template-review.ts, owner 2026-11-08): the first page is the face, the
+/* A template reviewed as separate pages (template-review.ts): the first page is the face, the
    name, when it was last updated and what it is for, then one tinted card of rows that open pages; a page has a back
    arrow and its title in the head, and its parts are labelled tinted boxes. Nothing scrolls inside but the dialog body. */
 .mb-dialog.tpr[data-page="main"] .mb-dlg-head h2 { visibility: hidden; }

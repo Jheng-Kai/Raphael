@@ -15,10 +15,10 @@ import "./avatar.css";
 
 // ---------- the emblem as a picture, drawn by the corner's renderer ----------
 //
-// Since 2026-11-07 the emblem shows in the main window only in voice (the voice button and the voice screen); Raphael's
+// The emblem shows in the main window only in voice (the voice button and the voice screen); Raphael's
 // face elsewhere is the first blue slime (members.ts). It is the overlay's own renderer drawn once at the size it is
 // shown, times the screen's pixel ratio, exactly as the corner draws it over the desktop: no dark ground behind it, in
-// either theme (owner, 2026-11-07). Until the texture is there (and where there is no canvas, the tests) the pictures of
+// either theme. Until the texture is there (and where there is no canvas, the tests) the pictures of
 // app/public/brand stand in.
 
 const stills = new Map<string, string | null>();
@@ -49,7 +49,7 @@ function emblemStill(px: number): string | null {
     if (ctx) {
       ctx.translate(side / 2, side / 2);
       // The letters' rim reaches a little past the outer radius; a small face keeps its white ring visible. Unturned, the
-      // word break stands at one o'clock as in the owner's photo.
+      // word break stands at one o'clock.
       drawEmblem(ctx, side / 2 / 1.04, params("steady", 0, px < 48 ? 0.3 : 0.15), { tq: 0, rot: 0, dim: 1, calm: 0.7, lvl: 0.15, surface: "transparent" });
       url = canvas.toDataURL("image/png");
     }

@@ -1,4 +1,4 @@
-"""Signed, bounded member catalogue; inspired by OpenMausBot (Apache-2.0), see NOTICES.md."""
+"""Signed member catalogue with bounded downloads and validated exports."""
 
 from raphael_core.ui_words import ui_word, with_ui_words
 import asyncio

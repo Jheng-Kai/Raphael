@@ -3,7 +3,7 @@ import { afterEach, expect, test, vi } from "vitest";
 const api = vi.hoisted(() => ({ core: vi.fn() }));
 vi.mock("./api", () => api);
 import { ComposerLearning, bindComposerLearning, composerCorrections, learnComposerCorrections } from "./composer-learning";
-const before = "Please use Open Mouse Bot", after = "Please use OpenMausBot";
+const before = "Please use Sample Tool Ex", after = "Please use SampleToolX";
 const correction = [{ before, after }];
 afterEach(() => { vi.useRealTimers(); vi.clearAllMocks(); document.body.innerHTML = ""; });
 
@@ -47,7 +47,7 @@ test("pending-send retry evidence is erased at the original deadline", () => {
   learning.restore(retry); expect(learning.take(after)).toEqual([]);
 });
 test("learning uses native IPC and leaves notice ownership to the passive pill", async () => {
-  api.core.mockResolvedValue({ learned: ["OpenMausBot"] });
+  api.core.mockResolvedValue({ learned: ["SampleToolX"] });
   await learnComposerCorrections(correction);
   expect(api.core).toHaveBeenCalledWith("dictionary.correct", { edits: correction });
   expect(document.querySelectorAll(".toast")).toHaveLength(0);

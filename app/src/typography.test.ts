@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test } from "vitest";
 
-test("both window UI stacks prefer Inter, with Chinese in Noto Sans TC as Grok Bot's text has it, JhengHei last", () => {
+test("both window UI stacks prefer Inter, with Chinese in Noto Sans TC, JhengHei last", () => {
   for (const file of ["main/styles.css", "overlay/overlay.css"]) {
     const css = readFileSync(join(__dirname, file), "utf8");
     expect(css, file).toContain('--ui: "Inter", "Noto Sans TC", "PingFang TC", "Microsoft JhengHei UI", "Microsoft JhengHei", system-ui, sans-serif;');

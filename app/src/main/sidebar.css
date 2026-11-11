@@ -1,6 +1,6 @@
 /* One fixed conversation list, shared by Home, chat, calendar and dictation. */
 .side { position: relative; overflow: hidden; padding: var(--sp-2); gap: var(--sp-2); }
-/* The list is dragged by its edge, as Grok Bot's (edge-drag.ts): no handle is drawn, the cursor changes over it, and a thin
+/* The list is dragged by its edge (edge-drag.ts): no handle is drawn, the cursor changes over it, and a thin
    line shows only while it moves or has the keyboard. */
 .side-edge { position: absolute; top: 0; right: 0; bottom: 0; z-index: 5; width: 6px; cursor: col-resize; touch-action: none; outline: none; }
 .side-edge:focus-visible::after, .side-edge.is-dragging::after { content: ""; position: absolute; top: 0; right: 0; bottom: 0; width: 2px; background: var(--edge); }
@@ -10,7 +10,7 @@
 .btn.sidebar-close, .btn.sidebar-toggle { display: none; }
 .sidebar-conversations { display: flex; flex: 1; min-height: 0; }
 .side .mb-col { flex: 1; width: 100%; padding-top: 0; }
-/* The top of the sidebar, its padding included, moves the window like the caption (owner, 2026-11-08). */
+/* The top of the sidebar, its padding included, moves the window like the caption. */
 .side .mb-top { justify-content: flex-end; min-height: calc(40px + var(--sp-2)); margin-top: calc(-1 * var(--sp-2)); padding: var(--sp-2) 0 var(--sp-1); gap: var(--sp-1); }
 .side .btn.mb-tool { flex: none; width: 36px; min-height: 36px; border-radius: var(--r-sm); }
 .side .mb-scroll { padding: 0 0 var(--sp-3); }
@@ -18,7 +18,7 @@
 .side .mb-row-t i { display: inline; max-width: 50%; }
 .side .mb-row-t b:not(:only-child) { max-width: none; }
 .side .mb-row-p { min-height: 17px; }
-/* Grok Bot's rows (R-UI-77), tighter so more members fit (owner, 2026-11-07): a 40 px face, the name over one quiet
+/* Compact rows (R-UI-77), tighter so more members fit: a 40 px face, the name over one quiet
    line, 48 px tall and 50 px apart, with no time. */
 .side .nav.mb-row { grid-template-columns: 40px minmax(0, 1fr) auto; min-height: 48px; padding-block: 4px; border-radius: var(--r-lg); }
 .side .mb-row-main { gap: 0; }
@@ -44,7 +44,7 @@
 :root[data-sidebar-collapsed] .side .mb-top { flex-direction: column; min-height: 0; }
 :root[data-sidebar-collapsed] .side .mb-sec[data-open="false"], :root[data-sidebar-collapsed] .side .mb-ghead, :root[data-sidebar-collapsed] .side .mb-item .btn.mb-more, :root[data-sidebar-collapsed] .side .au-room-row .btn.au-room-more { display: none; }
 :root[data-sidebar-collapsed] .side .mb-pinned { grid-template-columns: minmax(0, 1fr); }
-/* As Grok Bot's rail (owner, 2026-11-06): a very faint line under the pinned faces, under Raphael's row, and between groups,
+/* In the rail: a very faint line under the pinned faces, under Raphael's row, and between groups,
    where the list's names would have told them apart. */
 :root[data-sidebar-collapsed] .side :is(.mb-pinned, .mb-list > .mb-item:has(> .mb-chief))::after, :root[data-sidebar-collapsed] .side :is(.mb-list > .mb-sec[data-open="true"] ~ .mb-sec[data-open="true"], .au-rooms-section:has(.au-room-row))::before { content: ""; display: block; height: 1px; margin: var(--sp-2) var(--sp-3); background: var(--rail-line); }
 :root[data-sidebar-collapsed] .side .mb-pinned::after { grid-column: 1 / -1; }
@@ -65,10 +65,10 @@
 :root[data-sidebar-collapsed] .side .sidebar-account { flex: none; }
 :root[data-sidebar-collapsed] .side .side-foot .nav { justify-content: center; width: 44px; padding: 0; border-radius: var(--r-sm); }
 :root[data-sidebar-collapsed] .side-foot :is(.nav-t, .sidebar-account-name) { display: none; }
-/* Where a dragged row lands: one line between two rows, the row itself dimmed in its place (owner, 2026-11-07). */
+/* Where a dragged row lands: one line between two rows, the row itself dimmed in its place. */
 .mb-drop-line { position: fixed; z-index: 30; height: 2px; border-radius: var(--r-pill); background: var(--accent-text); pointer-events: none; }
 .side .is-dragged { opacity: 0.4; }
-/* Under the pointer only its words brighten, with no fill: no hover frames (owner, 2026-11-06 and 2026-11-07). */
+/* Under the pointer only its words brighten, with no fill: no hover frames. */
 .side .mb-ghead { cursor: pointer; border-radius: var(--r-sm); }
 .side .mb-ghead:hover .mb-gname { color: var(--text); }
 .side .mb-ghead .mb-fold { opacity: 0; }
@@ -86,7 +86,7 @@
 .side :is(.btn.mb-tool, .side-foot .btn.icon):is(:hover, :active, [aria-current="page"]):not(:disabled) { border-color: transparent; background: transparent; color: var(--text); }
 .side :is(.btn.mb-tool, .side-foot .btn.icon):is(:hover, :active, [aria-current="page"]):not(:disabled) .i { color: var(--text); }
 .side :is(.btn.mb-tool, .side-foot .btn.icon):active:not(:disabled) :is(.i, .i *) { color: var(--text-3); }
-/* Search and plus are Grok Bot's two soft round buttons (owner, 2026-11-06), in the top row or at the rail's foot. */
+/* Search and plus are two soft round buttons, in the top row or at the rail's foot. */
 .side .btn.icon.mb-tool[data-col] { border-radius: var(--r-pill); background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--edge-rim); color: var(--text-2); }
 .side .btn.icon.mb-tool[data-col]:hover:not(:disabled) { background: var(--hover); color: var(--text); }
 .side .btn.icon.mb-tool[data-col]:active:not(:disabled) { background: var(--pressed); color: var(--text); }

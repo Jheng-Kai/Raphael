@@ -267,7 +267,7 @@ def may_become_rule(word: str, form: str) -> bool:
 _LATIN_RUN = re.compile(r"[0-9A-Za-zÀ-ɏ]+")
 _LATIN_PHRASE = re.compile(r"[0-9A-Za-zÀ-ɏ]+(?:[\s\-_.'’]+[0-9A-Za-zÀ-ɏ]+)*")
 # The most runs of a transcript put together to compare with a word: speech-to-text splits words
-# ("tele gram") and a dictionary word can have several ("Hermes Agent").
+# ("tele gram") and a dictionary word can have several ("Cedar Agent").
 _MAX_WINDOW_RUNS = 3
 
 

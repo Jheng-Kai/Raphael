@@ -473,7 +473,7 @@ export function installMock(fixture, config = {}, target = window) {
     turn.secrets = [{...turn.secrets[0], id: "card-login", name: "https://research.example", secret: "login", login: true}];
     data.turns.push(turn);
   }
-  // The panel's 設定 and share answered in the member's conversation (owner, 2026-11-07): a bot token card, a pairing
+  // The panel's 設定 and share answered in the member's conversation: a bot token card, a pairing
   // request to that bot, and the template the member made of itself.
   if (variant.chatCards) {
     const base = structuredClone(data.secretTurns.notion);
@@ -481,7 +481,7 @@ export function installMock(fixture, config = {}, target = window) {
     data.turns.push(turn(141, "幫我設定 Slack", "我需要一個 Slack 機器人權杖：照卡片上的步驟建立機器人，再把權杖貼進來。", { secrets: [{ id: "card-slack", name: "Slack", secret: "bot_token", state: "pending", error: null, expires_at_ms: data.now + 600000, resumed: false, platform: "slack", link: "https://api.slack.com/apps" }],
       pairings: [{ id: "pair-1", platform: "slack", member_id: 1, code: "SL7Q2K", who: "Sam", expires_at_ms: data.now + 300000, state: "pending" }] }));
     data.turns.push(turn(142, "把你自己打包成範本，讓別人也能用", "範本做好了，可以先看內容，再儲存成檔案或準備發布請求。", { templates: [{ id: "tpl-1", state: "draft", name: "研究與資訊整理", avatar: "slime:shion", description: "幫人查證來源、整理成一份能直接讀的研究摘要。", counts: { skills: 2, routines: 1 }, connections: ["Gmail", "Notion"], findings: [] }] }));
-    // A code that came later is a turn of its own at the bottom, with no words (the core's pairing turn, 2026-11-07).
+    // A code that came later is a turn of its own at the bottom, with no words (the core's pairing turn).
     if (variant.latePairing) data.turns.push(turn(143, "", "", { route: "pairing", source: "messaging", session_id: "pairing-late", created_at_ms: data.now + 1000,
       pairings: [{ id: "pair-late", platform: "slack", member_id: 1, code: "SL9X4M", who: "Sam", expires_at_ms: data.now + 600000, state: "pending" }] }));
   }
@@ -744,7 +744,7 @@ export function installMock(fixture, config = {}, target = window) {
       data.status.spend.month_usd = .88;
     }
   }
-  // Home as the core sends it (2026-11-08): every item of today, his line on today, the offline health check and the
+  // Home as the core sends it: every item of today, his line on today, the offline health check and the
   // numbers Home charts.
   {
     const home = data.home, now = home.generated_at_ms, quiet = variant.homeSparse || variant.homeEmpty;
@@ -764,7 +764,7 @@ export function installMock(fixture, config = {}, target = window) {
     const check = (id, name, status = "ok", detail = null) => ({ id, name, label_key: `health.${id.split(":")[0]}`, status, detail, detail_key: detail ? "health.connection_unavailable" : null });
     home.health = { reason: null, checks: [check("key:OpenRouter", "OpenRouter"), check("brain:codex", "Codex"), check("brain:claude", "Claude"), check("connection:gmail", "Gmail"),
       check("connection:notion", "Notion", variant.problem ? "warn" : "ok", variant.problem ? "連線尚未就緒。" : null), check("memory", "")] };
-    // Home's charts since 2026-11-08: fourteen local days of finished work with a weekday rhythm and one day that went
+    // Home's charts: fourteen local days of finished work with a weekday rhythm and one day that went
     // wrong, and today's routines, events and questions in numbers.
     const shape = [[3, 1, 6, 0, 0], [5, 2, 6, 0, 0], [4, 0, 6, 1, 1], [6, 3, 6, 0, 0], [2, 1, 6, 0, 0], [0, 0, 4, 0, 0], [1, 0, 4, 0, 0],
       [4, 2, 6, 0, 0], [7, 1, 6, 0, 0], [5, 4, 5, 1, 2], [6, 2, 6, 0, 0], [3, 1, 6, 0, 0], [1, 0, 4, 0, 0], [2, 1, 3, 1, 0]];
@@ -1042,7 +1042,7 @@ export function installMock(fixture, config = {}, target = window) {
         // Model only this scene's declared IPC response; acceptance belongs to native/core tests.
         const edit = variant.dictationText;
         if (!edit || JSON.stringify(p.edits) !== JSON.stringify([{ before: edit.before, after: edit.after }])) return unsupported("dictionary.correct fixture edit");
-        const word = "OpenMausBot";
+        const word = "SampleToolX";
         if (!data.dictionary.some(entry => entry.word === word)) data.dictionary.push({ id: nextId(data.dictionary), word, misheard: [], source: "learned", created_at_ms: data.now });
         return { learned: [word], undo: "synthetic-correction-batch" };
       }
@@ -1154,7 +1154,7 @@ export function installMock(fixture, config = {}, target = window) {
           return {template,findings};
         }
         if (p.action === "review") return {template:data.colleagueSample.template,findings};
-        if (p.action === "publish") return {folder:"C:\\Raphael\\template-exports\\sample",url:"https://github.com/Jheng-Kai/raphael-catalog/compare/main...main?quick_pull=1"};
+        if (p.action === "publish") return {folder:"C:\\Raphael\\template-exports\\sample",url:"https://github.com/example-owner/sample-catalog/compare/main...main?quick_pull=1"};
         if (p.action === "preview") return {template:p.template,findings};
         if (p.action === "export") return {template:data.colleagueSample.template};
         if (p.action === "import") {

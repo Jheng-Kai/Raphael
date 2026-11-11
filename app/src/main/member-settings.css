@@ -1,6 +1,6 @@
-/* The member settings page (member-settings.ts): a page of its own where the conversation is, Notion-like. A cover from the
+/* The member settings page (member-settings.ts): a page of its own where the conversation is. A cover from the
    member's own slime colour (--ms-tint, set by the page; tokens only), the face large across the cover's lower edge, then
-   sections, each a name over one tinted list of rows as Grok Bot's panel. Nothing here scrolls but the page itself. */
+   sections, each a name over one tinted list of rows. Nothing here scrolls but the page itself. */
 
 .page-agent > .ms-pane { grid-column: 1; grid-row: 1; position: relative; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); min-width: 0; min-height: 0; background: var(--content); container: ms-pane / inline-size; }
 .page-agent:has(> .ms-pane:not([hidden])) > .mb-chat { display: none; }
@@ -30,7 +30,7 @@
 .ms-cover[data-pattern="plain"] { background: color-mix(in srgb, var(--ms-tint) 24%, var(--content)); }
 .ms-cover[data-pattern="image"] { background: var(--panel); }
 .ms-cover-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
-/* Its one control, a soft round icon at its lower right (Grok Bot's edge buttons, styles.css), away from the face on the
+/* Its one control, a soft round icon at its lower right (the round edge buttons, styles.css), away from the face on the
    left: the same solid surface as the way back, so it reads on any picture in either theme. */
 .ms-cover > .btn.icon.ms-cover-btn { position: absolute; right: var(--sp-4); bottom: var(--sp-3); }
 .ms-pane:not([data-view="main"]) .ms-cover, .ms-pane:not([data-view="main"]) .ms-id { display: none; }

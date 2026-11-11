@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-// Reactions as Grok Bot gives them: the quick bar, and every emoji in one card with a search, sections and a footer.
+// Reactions: the quick bar, and every emoji in one card with a search, sections and a footer.
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { beforeEach, expect, test, vi } from "vitest";

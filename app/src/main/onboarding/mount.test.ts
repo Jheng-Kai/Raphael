@@ -329,7 +329,7 @@ describe("step 2: the services", () => {
     expect(root.querySelector(".ob-tile")).not.toBeNull();
   });
 
-  test("a store that never answers offers another try instead of spinning on (owner, 2026-11-08)", async () => {
+  test("a store that never answers offers another try instead of spinning on", async () => {
     vi.useFakeTimers();
     try {
       api.integrationsCatalog.mockReturnValueOnce(new Promise(() => {}));
@@ -359,7 +359,7 @@ describe("step 2: the services", () => {
     expect(root.querySelector('button.ob-tile[data-item="github"]')!.hasAttribute("disabled")).toBe(false);
   });
 
-  test("without Composio its card comes first, then the built-in apps that need none (owner, 2026-11-09)", async () => {
+  test("without Composio its card comes first, then the built-in apps that need none", async () => {
     api.connectorsStatus.mockResolvedValue({ composio_configured: false, connectors: [] });
     await toServices();
     expect([...root.querySelectorAll(".ob-tile")].map((el) => (el as HTMLElement).dataset.item)).toEqual(["composio", "notion", "github"]);
@@ -396,7 +396,7 @@ describe("step 2: the services", () => {
     expect(root.querySelector('[data-ob="composio-open"]')).not.toBeNull();
   });
 
-  test("a search finds n8n; its address and key, typed in its tile, add it as the owner's own server (owner, 2026-11-09)", async () => {
+  test("a search finds n8n, its address and key, typed in its tile, add it as the owner's own server", async () => {
     api.integrationsAdd.mockResolvedValue({ server: { id: "srv-n8n" } });
     await toServices();
     expect(root.querySelector('[data-item="n8n"]')).toBeNull();

@@ -12,7 +12,7 @@ export const journeys = [
   { name: "typing", description: "200 human-paced keys on 150 persisted rich turns with concurrent offline brains; Event Timing, long frames and CPU profile" },
   { name: "appearance", description: "Real Appearance dropdown, theme persistence and narrow rows at three native sizes" },
   { name: "owner-face", description: "A window that may load before the core still hears it: a saved owner photo reaches the sidebar" },
-  { name: "sidebar-home", description: "Inspect the Grok-style sidebar, in-place search and Home emblem in the real WebView" },
+  { name: "sidebar-home", description: "Inspect the resizable sidebar, in-place search and Home emblem in the real WebView" },
   { name: "rich-content", description: "Persisted rich reply renders tables, highlighted code and SVG; remote images require consent" },
   { name: "owner-round10", description: "Native learned batch Undo, hover/expiry, passive window and stable conversation controls" },
   { name: "home-timing", description: "Measure first painted Home against a two-second offline CLI allowance read" },
@@ -37,7 +37,7 @@ export const journeys = [
   { name: "voice-keys", description: "The real worker: after the composer's microphone the dictation key works during the answer, one Esc ends it, the recognising light shows, and a slow brain at high depth finishes" },
   { name: "long-think", description: "The real core: a model that thinks past the old 60 second deadline finishes its turn, and the answer reaches the window" },
   { name: "every-source", description: "One real turn on every signed-in CLI: Claude Code, Codex, Antigravity, with Claude's models as the CLI lists them" },
-  { name: "room-cli", description: "The real core and the real Claude Code CLI in a group: both members addressed answer, with no 「暫時沒有回應」 (owner, 2026-11-09)" },
+  { name: "room-cli", description: "The real core and the real Claude Code CLI in a group: both members addressed answer, with no 「暫時沒有回應」" },
   { name: "openrouter-turn", description: "One real turn through the owner's OpenRouter key on a free model: no other paid request" },
   { name: "delete-conversation", description: "Delete conversations/member after real exchanges and room reports; detect stale timeline rows" },
   { name: "gmail-connect", description: "Owner-only Composio card sign-in; stop before approving Google consent" },
@@ -282,7 +282,7 @@ export async function drive(name, context) {
         await page.evaluate(() => clearInterval(window.__nativeWindowProbe.timer));
       }
       // A return that races the suspension (minimized, then back before or while it settles) must
-      // still leave a visible page that runs: the owner found the window frozen after one.
+      // still leave a responsive page after it stops.
       result.windowSleep.rapid = [];
       await page.evaluate(() => {
         window.__nativeWindowProbe = { ticks: [] };
@@ -387,7 +387,7 @@ export async function drive(name, context) {
     await page.waitForFunction(() => window.__homeTiming?.firstPaintMs !== null);
     result.homeTiming = await page.evaluate(() => window.__homeTiming);
     await capture("first-paint");
-    // Home shows no allowances since 2026-11-07, but the core still reads them for its overview: that read must not hold Home up.
+    // Home shows no allowances, but the core still reads them for its overview: that read must not hold Home up.
     if (result.homeTiming.firstPaintMs >= 1500) throw new Error(`Home waited for CLI allowances: ${result.homeTiming.firstPaintMs.toFixed(1)} ms`);
     return;
   }
@@ -526,8 +526,7 @@ export async function drive(name, context) {
     return;
   }
   if (name === "room-cli") {
-    // A group turn on Claude Code once ended at EOF because the room's tool list dropped the permission callback its
-    // command line named; the owner saw 「Claude Code 暫時沒有回應」 again and again (2026-11-09).
+    // Room tool lists must retain the permission callback named on the CLI command line to avoid premature EOF.
     await keepFocus(page);
     let cli;
     for (let i = 0; i < 300; i++) {
@@ -561,7 +560,7 @@ export async function drive(name, context) {
     await capture("room-cli");
     const silent = messages.some(row => /暫時沒有回應|not responding|応答がありません/.test(String(row.text ?? "")));
     const answered = both.every(id => turns.some(row => row.member_id === id && row.status === "done") && messages.some(row => row.member_id === id && String(row.text ?? "").trim()));
-    // What a member says is words, never the reply envelope it was written in (2026-11-09: {"text": …, "detail": ""}).
+    // Member replies display their text rather than the reply envelope.
     const envelope = messages.some(row => row.member_id !== null && /^\s*(?:```(?:json)?\s*)?\{\s*"(?:text|detail|prefix|messages)"\s*:/.test(String(row.text ?? "")));
     if (silent || !answered || envelope) throw new Error(`The group on Claude Code did not answer in words: ${JSON.stringify(result.roomCli)}`);
     return;
@@ -1073,7 +1072,7 @@ await page.waitForFunction(role => document.querySelector('.ms-pane #ms-role')?.
     result.computer.timezone = { ...clock, ownerZone, expected, checks: timezoneChecks };
     if (clock?.offset !== expected) throw new Error(`VM UTC offset ${clock?.offset ?? "unavailable"} differs from host ${expected}`);
     await chat(page);
-    // The panel's Computer tab shows the computer on demand (no header button since 2026-11-06), until something is at work on it.
+    // The panel's Computer tab shows the computer on demand (no header button), until something is at work on it.
     if (await page.$eval('.mb-chat .conversation-trigger', button => button.getAttribute('aria-expanded') !== 'true')) await click(page, '.mb-chat .conversation-trigger');
     await click(page, '#member-tab-computer');
     await wait(page, ' .desktop-panel:not([hidden])');
@@ -1095,7 +1094,7 @@ await page.waitForFunction(role => document.querySelector('.ms-pane #ms-role')?.
     };
     await inspectDesktop("viewer");
     await capture("viewer");
-    // As Grok Bot's: the preview opens the larger view, and Take control is there.
+    // The preview opens the larger view, and Take control is there.
     await click(page, '[data-desktop="enlarge"]');
     await page.waitForSelector('.desktop-panel[data-expanded] [data-desktop="take"]:not(:disabled)', { visible: true, timeout: 60000 });
     await click(page, '[data-desktop="take"]');

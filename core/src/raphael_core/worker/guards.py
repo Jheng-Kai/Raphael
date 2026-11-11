@@ -1,3 +1,4 @@
+# Adapted from NousResearch/hermes-agent (MIT); see core/packaging/licenses.
 """What stands between a tool's result and the model: marking it as data and cutting it down.
 
 A tool's result is text that nobody vetted: a web page, a note, a mail. Whatever it says, it is data
@@ -16,12 +17,10 @@ import re
 from collections.abc import Mapping
 from typing import Any
 
-# The most of a result the model is shown, in characters. Most tools here have no pages to turn, so
-# one read should hold a long page or a source file: 50,000 characters is between OpenHands' 30,000
-# and Hermes' 100,000 (which spills the rest to a file). That is about 13,000 tokens of English, and
-# at most about 50,000 of Chinese, so a smaller window gets a smaller limit (`result_limit`).
+# Bound large tool results while retaining long pages and source files.
+# Smaller model windows receive a lower limit through result_limit.
 MAX_RESULT_CHARS = 50_000
-# Hermes' scale for a window: one result may take 15% of it, at three characters a token, with a floor.
+# Scale each result to the model window, with a minimum readable allowance.
 RESULT_WINDOW_SHARE = 0.15
 CHARS_PER_TOKEN = 3
 MIN_RESULT_CHARS = 8_000

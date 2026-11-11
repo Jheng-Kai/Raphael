@@ -8,7 +8,7 @@
 //!
 //! `HotkeyManager` is `Send` but not `Sync`, so one thread owns it. The service talks to that
 //! thread over one channel shared by commands and backend wake notifications.
-//! Adapted from Handy (MIT); see core/packaging/licenses.
+//! Adapted from Handy (MIT); see app/scripts/release-licenses.
 //!
 //! handy-keys is vendored in `vendor/handy-keys` (0.3.4, patched; the note at the top of its
 //! `src/platform/windows/listener.rs` says what changed). Upstream had two gaps, found with

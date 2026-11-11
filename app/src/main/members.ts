@@ -62,7 +62,7 @@ const fold = (text: string): string => text.normalize("NFKC").toLocaleLowerCase(
 export function memberMatches(member: Pick<Member, "id" | "name" | "role" | "blurb">, query: string): boolean {
   const q = fold(query.trim());
   return q === "" || fold(member.name).includes(q) || fold(memberRole(member)).includes(q) || fold(member.blurb ?? "").includes(q) ||
-    findsName([member.name, memberRole(member)], q); // a name or role nearly spelled (owner, 2026-11-08)
+    findsName([member.name, memberRole(member)], q); // a name or role nearly spelled
 }
 
 /** A section of the column: a group (null: 未分組) and its members that answer the search. */
@@ -181,7 +181,7 @@ export const isPictureUrl = (url: unknown): url is string => typeof url === "str
 /** The placeholder's character: the first of the name (a whole character, an emoji too), or nothing. */
 export const initialOf = (name: string): string => Array.from(name.trim())[0] ?? "";
 
-/** Raphael's slime in the main window: the very first one, the cute blue slime (owner, 2026-11-07). */
+/** Raphael's slime in the main window: the very first one, the cute blue slime. */
 export const RAPHAEL_SLIME = "slime:rimuru";
 
 /**
@@ -198,7 +198,7 @@ export function faceHTML(member: { id: number; name: string; avatar?: string | n
     if (currentAvatar()) return avatarHTML({ size, cls: o.cls, still: !o.moving }).replace("<span", `<span${presenceAttrs(member.id)}`);
     return slimeFaceHTML({ ...member, avatar: RAPHAEL_SLIME }, size, o.cls, o.moving);
   }
-  // A picture the owner generated for it (the face picker's 生成, 2026-11-07 night) stands in the slime's place.
+  // A generated member picture replaces the slime face.
   if (member.avatar?.startsWith("file:") && member.avatar_url?.startsWith("data:image/"))
     return `<span class="av mb-av mb-av-pic${o.cls ? ` ${o.cls}` : ""}" data-presence-member="${member.id}" style="--av:${Math.round(size)}px" aria-hidden="true">` +
       `<img src="${member.avatar_url.replace(/"/g, "%22")}" alt="" draggable="false"></span>`;

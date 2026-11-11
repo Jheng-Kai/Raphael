@@ -1,6 +1,5 @@
 """The reflection pass and the consolidation: the member's own brain looks back and edits the memory
-files the way a turn does (`store.MemoryFile.apply`), which is Hermes's background review on a member's
-own brain, with no tools: it answers with the edits, and the code applies them.
+files through `store.MemoryFile.apply`. It returns edits without tools, and the code applies them.
 
 The reflection pass reads the turns the owner had with the member since it last ran and both files as
 they are. It reads only the owner's questions and the member's lines: never what a tool returned, a web

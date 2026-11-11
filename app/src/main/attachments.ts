@@ -71,8 +71,7 @@ export function fileIcon(file: Pick<TurnAttachment, "name" | "mime">): string {
   const ext = file.name.split(".").pop()?.toUpperCase().slice(0, 6) ?? "";
   return `<span class="attachment-icon">${ico(/^(DOCX|XLSX|PPTX|PDF)$/.test(ext) ? "book" : "file")}<small>${esc(ext)}</small></span>`;
 }
-/** A draft card's inside: a picture is only its thumbnail, which opens it large, with the remove button inside it (owner,
- *  2026-11-07: no name, no size); another file shows its type icon, name and size. The caller fills in the thumbnail from
+/** A draft card's inside: a picture is only its thumbnail, which opens it large, with the remove button inside it; another file shows its type icon, name and size. The caller fills in the thumbnail from
  *  the draft's own bytes. */
 export function draftFileHTML(file: { name: string; mime: string; size?: number }, removeAttrs: string): string {
   if (fileKind(file.mime) === "image") return `<button type="button" class="btn cmp-pic" data-act="attachment-image" aria-label="${esc(file.name)}">` +

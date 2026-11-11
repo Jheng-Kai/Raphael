@@ -1,0 +1,36 @@
+{"id": "dont-answer", "input": "請記錄這個問題：印表機要怎麼設定雙面列印？", "dictionary": [], "must_contain": [], "must_not_contain": ["步驟", "1."]}
+{"id": "self-correction", "input": "示範會議在週二，不對，是週五下午。", "dictionary": [], "must_contain": ["週五"], "must_not_contain": ["週二"]}
+{"id": "fillers-zh", "input": "嗯，這組合成資料，呃，應該先檢查。", "dictionary": [], "must_contain": ["合成資料", "檢查"], "must_not_contain": ["嗯", "呃"]}
+{"id": "fillers-ja", "input": "ええと、この資料を、あの、確認します。", "dictionary": [], "must_contain": ["資料", "確認"], "must_not_contain": ["ええと", "あの"]}
+{"id": "fillers-en", "input": "Um, we should, uh, ship it on Friday.", "dictionary": [], "must_contain": ["ship", "Friday"], "must_not_contain": ["Um", "uh"]}
+{"id": "keep-english", "input": "請把 synthetic-marker 寫進 README。", "dictionary": [], "must_contain": ["synthetic-marker", "README"], "must_not_contain": []}
+{"id": "numbered-list", "input": "示範清單第一項整理標籤，第二項核對數量。", "dictionary": [], "must_contain": ["1.", "2."], "must_not_contain": []}
+{"id": "command-stays-text", "input": "幫我開啟 YouTube 的示範影片。", "dictionary": [], "must_contain": ["YouTube"], "must_not_contain": ["了。"]}
+{"id": "dictionary-homophone", "input": "請讓拉菲爾整理這組合成記錄。", "dictionary": ["拉斐爾"], "must_contain": ["拉斐爾"], "must_not_contain": ["拉菲爾"]}
+{"id": "question-capital", "input": "示範海島的首都是哪裡", "dictionary": [], "must_contain": ["首都是哪裡", "？"], "must_not_contain": []}
+{"id": "question-library", "input": "請問圖書館週三幾點關門", "dictionary": [], "must_contain": ["幾點", "？"], "must_not_contain": []}
+{"id": "question-train", "input": "下一班示範列車要停哪一站", "dictionary": [], "must_contain": ["哪一站", "？"], "must_not_contain": []}
+{"id": "chat-tone-line", "input": "這份合成表格先放這裡，等等再檢查。", "dictionary": [], "must_contain": ["合成表格"], "must_not_contain": [], "target_app": "LINE.exe"}
+{"id": "first-time-not-a-list", "input": "這是第一次測試這個合成流程，不是列舉項目。", "dictionary": [], "must_contain": ["第一次"], "must_not_contain": ["1."]}
+{"id": "variant-en-gb-spelling", "input": "Use colour labels for this synthetic catalogue. ", "dictionary": [], "must_contain": [], "must_not_contain": [], "languages": ["en-GB"], "must_contain_ci": ["colour"]}
+{"id": "variant-zh-cn-simplified", "input": "这个软体的资料我明天再发给你。", "dictionary": [], "must_contain": ["软件"], "must_not_contain": ["软体"], "languages": ["zh-CN"]}
+{"id": "variant-zh-hk-usage", "input": "這個軟體的資料我明天再發給你，你先看一下那個影片。", "dictionary": [], "must_contain": ["軟件"], "must_not_contain": ["軟體"], "languages": ["zh-HK"]}
+{"id": "variant-zh-cn-documents", "input": "这份申请数据包含推荐信，我明天再发给你。", "dictionary": [], "must_contain": ["申请资料"], "must_not_contain": ["申请数据"], "languages": ["zh-CN", "en-US"]}
+{"id": "variant-zh-hk-documents", "input": "這份申請數據包含推薦信，我明天再發給你。", "dictionary": [], "must_contain": ["申請資料"], "must_not_contain": ["申請數據"], "languages": ["zh-HK", "en-GB"]}
+{"id": "mishear-related-book-names", "input": "書架上有星河之輸，作者是林昂。", "dictionary": [], "must_contain": ["星河之書", "林安"], "must_not_contain": ["星河之輸", "林昂"]}
+{"id": "literal-distance-stays", "input": "示範記錄說我轉生走了史萊姆，再坐在長椅上。", "dictionary": [], "must_contain": ["轉身", "十來米"], "must_not_contain": ["轉生", "史萊姆"]}
+{"id": "heldout-stutter-docker-compose", "input": "我想把服務放到 Docker，Docker Compose 裡面跑。", "dictionary": [], "must_contain": ["Docker Compose"], "must_not_contain": ["Docker，Docker"]}
+{"id": "heldout-stutter-person-en", "input": "Please ask Priya, Priya Raman to review the draft.", "dictionary": [], "must_contain": ["Priya Raman"], "must_not_contain": ["Priya, Priya"], "languages": ["en-US"]}
+{"id": "heldout-stutter-zh-demonstrative", "input": "我覺得這個，這個方案需要再改一下。", "dictionary": [], "must_contain": ["這個方案"], "must_not_contain": ["這個，這個"]}
+{"id": "heldout-restart-fuller-zh-question", "input": "你可以幫我，你可以先把檔案備份一下嗎？", "dictionary": [], "must_contain": ["你可以", "先把檔案備份", "？"], "must_not_contain": ["你可以幫我，你可以"]}
+{"id": "heldout-restart-fuller-en-question", "input": "Can you send, can you send me the latest invoice by tomorrow?", "dictionary": [], "must_contain": ["latest invoice", "tomorrow", "?"], "must_not_contain": ["Can you send, can you send"], "languages": ["en-US"]}
+{"id": "heldout-restart-name-zh", "input": "請把這份文件寄給王，寄給王經理，謝謝。", "dictionary": [], "must_contain": ["王經理"], "must_not_contain": ["寄給王，寄給"]}
+{"id": "heldout-canonical-docker-context", "input": "把這個服務放進 doctor compose 的 yaml 裡。", "dictionary": [], "must_contain": [], "must_not_contain": ["doctor compose"], "must_contain_ci": ["Docker Compose"]}
+{"id": "heldout-canonical-openai-gemini", "input": "我先用 gem and I 分析，再丟給 open AI 的模型整理。", "dictionary": [], "must_contain": ["Gemini", "OpenAI"], "must_not_contain": ["gem and I", "open AI"]}
+{"id": "heldout-canonical-claude-asked", "input": "I asked cloud to refactor the parser and it wrote the tests too.", "dictionary": [], "must_contain": ["Claude"], "must_not_contain": ["cloud"], "languages": ["en-US"]}
+{"id": "heldout-literal-doctor-stays", "input": "The Docker said I should rest, so I skipped the gym.", "dictionary": [], "must_contain": ["doctor"], "must_not_contain": ["Docker"], "languages": ["en-US"]}
+{"id": "heldout-literal-cloud-weather", "input": "Tomorrow there will be heavy Claude over the mountains, so bring a jacket.", "dictionary": [], "must_contain": ["cloud"], "must_not_contain": ["Claude"], "languages": ["en-US"]}
+{"id": "heldout-literal-python-snake-zh", "input": "動物園新來了一條 Python，飼養員說牠一個月只吃一次老鼠。", "dictionary": [], "must_contain": ["python"], "must_not_contain": ["Python"]}
+{"id": "heldout-literal-cursor-text-en", "input": "Press Home to move the Cursor to the start of the line.", "dictionary": [], "must_contain": ["cursor"], "must_not_contain": ["Cursor"], "languages": ["en-US"]}
+{"id": "heldout-literal-permission-agent", "input": "這個 personal agent 會在每次安裝套件前向使用者要求核准。", "dictionary": [], "must_contain": ["permission agent"], "must_not_contain": ["personal agent"]}
+{"id": "literal-common-words-stay", "input": "A cloud moved above the field while a python rested nearby; the cursor marks where the permission agent will type.", "dictionary": [], "must_contain": ["cloud", "cursor", "python", "permission agent"], "must_not_contain": ["Claude", "Cursor", "Python", "personal agent"], "target_app": "WindowsTerminal.exe", "languages": ["en-US"]}

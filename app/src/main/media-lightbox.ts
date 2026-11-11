@@ -14,7 +14,7 @@ export function openMediaLightbox(button: HTMLElement, src: string): void {
   scrim.setAttribute("role", "dialog");
   scrim.setAttribute("aria-modal", "true");
   scrim.setAttribute("aria-label", title || t("agent.viewImage"));
-  // Only the picture, as large as the window allows, with its close button inside it (owner, 2026-11-07: no bar above).
+  // Only the picture, as large as the window allows, with its close button inside it.
   scrim.innerHTML =
     `<div class="lb-card">` +
     `<img class="lb-img" src="${esc(src)}" alt="${esc(title)}">` +

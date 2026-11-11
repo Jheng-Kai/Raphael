@@ -5,7 +5,7 @@
 //! user still holds, send the paste chord, then wait for the target to read the text and put the
 //! user's clipboard back. If the focus check says not to paste, the text stays on the clipboard.
 //!
-//! Adapted from Handy (MIT); see core/packaging/licenses.
+//! Adapted from Handy (MIT); see app/scripts/release-licenses.
 //! The chord sends modifiers down, a key click, a 100 ms hold, then modifiers up.
 //! Held modifiers are released first; [`shortcut_for`] selects the per-program chord.
 //!

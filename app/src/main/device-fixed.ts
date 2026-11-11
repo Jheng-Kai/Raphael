@@ -1,7 +1,7 @@
 import type { DeviceSettings } from "./types";
 
 /**
- * Settings the owner asked to keep simple, so Settings no longer offers them (owner, 2026-11-06): the desktop emblem is
+ * Fixed settings that are not exposed in Settings: the desktop emblem is
  * always small, its subtitles always on, and Raphael starts with Windows (Windows' own Startup apps turn that off). A
  * computer that kept another choice is brought to these once at start; null when nothing needs to change.
  */

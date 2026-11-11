@@ -1,5 +1,5 @@
-// Who wears the crown: the owner's primary member, as Grok Bot marks its chief of staff with a star
-// (owner, 2026-11-07). It is Raphael (id 0) until another is chosen, the same rule as `primaryIdOf`
+// Who wears the crown: the owner's primary member, marked with a crown
+// It is Raphael (id 0) until another is chosen, the same rule as `primaryIdOf`
 // in members.ts; `membersList` (api.ts) sets it from every roster the core sends, the only place
 // the primary is read. slime.ts draws the crown on that member's slime.
 

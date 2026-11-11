@@ -1,4 +1,4 @@
-// Local colleague recipes inspired by Grok Bot; see core/packaging/licenses/NOTICES.md.
+// Local colleague recipes for common team roles.
 import * as api from "./api";
 import { cardDisclosureHTML, cardHTML } from "./card";
 import { describeError } from "./format";
@@ -105,7 +105,7 @@ export function skillContents(text: string): { name: string; description: string
 }
 
 /**
- * What a member template holds, as Grok Bot's dialogs show things (owner, 2026-11-07): who it is, then each part as a
+ * What a member template holds: who it is, then each part as a
  * short card of rows: the instructions and personality as a few lines that open in full, one row per skill (its name and
  * one line; its text behind 顯示內容), one row per routine (its name and when), the apps it needs by their marks. A
  * warning stands at the top only when there is something to warn of: a third-party template being added, or a secret
@@ -158,7 +158,7 @@ export async function previewTemplate(raw: unknown, avatar: string, create: (mem
     const {template, findings = []} = await api.core<{template: MemberTemplate; findings?: ScanFinding[]}>("members.template", catalogId ? {action: "catalog-preview", catalog_id: catalogId} : {action: "preview", template: raw});
     let made: Member | null = null, busy = false, typed = template.name, empty = false;
     const connected = new Set<string>();
-    // The name to give it, then what it holds, in the dialog itself rather than inside another card (owner, 2026-11-07). The
+    // The name to give it, then what it holds, in the dialog itself rather than inside another card. The
     // name is at most what the core takes of any member (NAME_MAX), and what the owner typed stays when adding it is refused.
     const body = (): string => `<div class="tpl-import" data-member-template>` +
       `<label class="mp-label">${esc(t("members.name"))}<input class="mb-fin" data-template-name maxlength="${NAME_MAX}" value="${esc(made?.name || typed)}"${made ? " disabled" : ""}${empty ? ' aria-invalid="true"' : ""}></label>` +
@@ -166,7 +166,7 @@ export async function previewTemplate(raw: unknown, avatar: string, create: (mem
       templateContents({...template, connections: []}, findings, {thirdParty: true}) +
       (template.connections.length ? `<section class="tpl-sec"><h4>${esc(t("template.connections"))}</h4>${template.connections.map(app => cardHTML({title: connectionName(app), status: "done", statusText: t("conn.signedIn"), hideStatus: !connected.has(app), attrs: ` data-template-connection="${esc(app)}" data-connected="${connected.has(app)}"`, body: made ? t("template.connectHelp") : undefined, actions: btn(esc(t(connected.has(app) ? "conn.signedIn" : "template.connect")), "sm", ` data-dlg="connect" data-app="${esc(app)}"${!made || busy || connected.has(app) ? " disabled" : ""}`)})).join("")}</section>` : "") + `</div>`;
     const dialog = openDialog({title: t("template.preview"), cls: "template-preview", body: body(),
-      // Its × closes it; no 「關閉」 beside 加入 (owner, 2026-11-08).
+      // Its × closes it; no 「關閉」 beside 加入.
       actions: {secondary: `<p class="note" data-template-notice>${esc(t("template.noGrants"))}</p>`, primary: {label: esc(t("template.import")), attrs: ' data-dlg="import"'}}, canClose: () => !busy,
       onAct(action, button) {
         if (action === "close") return dialog.close();

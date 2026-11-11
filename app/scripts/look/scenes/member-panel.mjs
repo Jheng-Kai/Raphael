@@ -1,7 +1,7 @@
 import { scene, member, click, wait, check, key, hover } from './steps.mjs';
 
 const details = [member(1), {action:'open-details'}, wait('.mb-det[data-details-tab="details"] .mb-panel-routines')];
-// Nothing is written over an offline computer (owner, 2026-11-07), so scenes wait for the state the panel keeps in data.
+// Nothing is written over an offline computer, so scenes wait for the state the panel keeps in data.
 const computer = (phase = 'unavailable') => [...details, click('.mb-tabs [data-tab="computer"]'), wait(`.desktop-panel:not([hidden])[data-desktop-state="${phase}"]`)];
 const state = (value, extra = {}) => ({desktop:{state:value,ready:value==='running',control:'member',host:'',target:'synthetic-member',...extra}});
 export default [

@@ -4,8 +4,6 @@ The assistant writes Markdown (the app renders it). Telegram's `parse_mode=HTML`
 <b> <i> <s> <code> <pre> <a> <blockquote>, so everything else is escaped and a Markdown construct
 without an equivalent (a table, a list) is kept as the text it is. Nothing is summarised or cut:
 the converted text has all the words of the source.
-
-Approach after NousResearch/hermes-agent's Telegram adapter (MIT); the code is our own.
 """
 
 import re

@@ -2104,7 +2104,7 @@ class AgentService:
                            "and call them with use_tool. "
                            "They manage members, folders, group chats, conversations, connections, models and settings. "
                            "Destructive and permission changes always wait for the owner's approval.")
-                system += "\nGrok template CreateAgent instructions map to member_create (legacy alias: create_member)."
+                system += "\nTemplate CreateAgent instructions map to member_create (legacy alias: create_member)."
             message_args = dict(
                 question=labelled_lines(ask.exchange_speakers[0], ask.text) if ask.exchange_speakers else ask.text,
                 moment=self._moment(), context=context.turns, tools=[], language=ask.language,

@@ -94,7 +94,7 @@ export function cropDialog(url: string): Promise<AvatarCrop | null> {
       `<div class="av-crop" role="dialog" aria-modal="true" aria-labelledby="av-crop-title" style="--stage:${STAGE_PX}px">` +
       `<h2 id="av-crop-title">${esc(t("settings.avatar"))}</h2>` +
       `<div class="av-crop-view" tabindex="0" aria-label="${esc(t("settings.avatarFrame"))}">` +
-      // The picture shows in a circle everywhere, so the frame is a circle, as Google's avatar crop (owner, 2026-11-07):
+      // The picture shows in a circle everywhere, so the frame is a circle, to match the displayed avatar:
       // the ring dims what falls outside it; the square frame over it only carries the corners that resize it.
       `<img src="${esc(url)}" alt="" draggable="false"><div class="av-crop-ring" hidden><span class="av-crop-grid"></span></div><div class="av-crop-frame" hidden>${corners}</div></div>` +
       actionRow({ cls: "av-crop-act", secondary: btn(esc(t("common.cancel")), "", ' data-act="crop-cancel"'), primary: { label: esc(t("settings.avatarDone")), attrs: ' data-act="crop-done"' } }) +

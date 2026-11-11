@@ -14,7 +14,7 @@ the next, for the provider's prompt cache):
   not finish, with why and what its steps already did (a short note, `attribution.unfinished_note`),
   never with the apology it ended with as if it were an answer. One that waits for a yes, or still
   runs, says nothing yet; a routine that failed is not the owner's request.
-- The summary (`conversation_summaries`) covers the turns before them. Hermes' effective input
+- The summary (`conversation_summaries`) covers the turns before them. The effective input
   threshold is capped at 24K by default. Oldest unread turns are folded in bounded passes with the
   owner's auxiliary quick model, retaining the opening and latest 20 messages and a 20% token tail.
   The rolling summary takes 20% of each pass, bounded between 2K and 10K tokens.
@@ -257,7 +257,7 @@ def plan_fold(
     into the summary now, and the id of the last turn the summary will cover; None when it is not
     time to fold, or nothing may be folded yet.
 
-    It is time when readable turns and the summary pass the Hermes effective-window trigger.
+    It is time when readable turns and the summary pass the configured effective-window trigger.
     Keep at least the newest 20 messages and the owner's last four turns, with a tail budget
     of 20% of the trigger. The fold stops before the
     first turn in `protected`, so that the summary covers a run of turns from the start."""
