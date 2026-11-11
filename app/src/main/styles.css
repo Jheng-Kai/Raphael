@@ -169,7 +169,7 @@ svg.i { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor;
    strip of their own; the right panel reaches the window's top under them, and the columns below keep their room. */
 :root[data-window-layout="main"]:has(.main > .page-agent:not([hidden])) .window-chrome { background: transparent; }
 /* A dialog dims the caption with everything else; its buttons still answer on top of the dim. */
-:root:has(.mb-scrim:not(.cr-scrim)) .window-chrome, :root:has(.menu.side-search) .window-chrome { background: transparent; border-color: transparent; }
+:root:has(.mb-scrim:not(.store-scrim)) .window-chrome, :root:has(.menu.side-search) .window-chrome { background: transparent; border-color: transparent; }
 .window-drag { flex: 1; min-width: 0; }
 /* Windows' own caption buttons, 46 px cells the strip's full height with square
    corners; under the pointer the whole cell fills, and close turns red with a white cross. */
@@ -183,7 +183,7 @@ svg.i { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor;
 /* Caption actions retain a visible keyboard outline inside the window. */
 .window-close:hover:focus-visible { outline-color: var(--focus); }
 :root[data-window-modal="true"] .window-button:focus-visible:not(:hover) { background: transparent; }
-:root:has(.mb-scrim:not(.cr-scrim)) .window-button:focus-visible:not(:hover), :root:has(.menu.side-search) .window-button:focus-visible:not(:hover) { background: transparent; }
+:root:has(.mb-scrim:not(.store-scrim)) .window-button:focus-visible:not(:hover), :root:has(.menu.side-search) .window-button:focus-visible:not(:hover) { background: transparent; }
 .window-close:hover { background: var(--close); color: var(--on-close); }
 .window-close:active { background: var(--close); color: var(--on-close); }
 .window-restore-glyph { display: none; }

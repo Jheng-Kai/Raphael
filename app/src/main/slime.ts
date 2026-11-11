@@ -735,9 +735,6 @@ export function slimeFaceHTML(member: SlimeFacts & { avatar?: string | null }, s
 /** Bareheaded in any season, so that a slime shows what it is. */
 const OFF_SEASON = new Date(2000, 5, 1);
 
-export const SLIME_CHARACTER_COUNT = CHARACTER_IDS.length;
-export const SLIME_COLOR_COUNT = COLOR_IDS.length;
-
 const IN_MENU = ' role="menuitem" tabindex="-1"';
 
 /** Every character, each as a button; `item` makes them a menu's items. */
