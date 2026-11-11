@@ -414,7 +414,11 @@ class RpcDriver:
                 # Only these known internal fixture actions are approved. Native CLI
                 # permissions are never automatically accepted by the suite.
                 action = self.app.agent._confirmations._pending.get(result["confirm"]["id"])
-                if action and action.action.tool in {"routine_create", "routine_update", "routine_delete"}:
+                routines = {"routine_create", "routine_update", "routine_delete"}
+                # A routine delete is asked on the one card of the turn's held changes (`management_batch`): approved only
+                # when every change on it is one of these fixture routine actions.
+                batch = action.action.args.get("operations") if action and action.action.tool == "management_batch" else None
+                if action and (action.action.tool in routines or batch and all(op["name"] in routines for op in batch)):
                     result = await self.confirm(result, True)
             found = (await self.app.call("routines.list", {"member_id": 0}))["routines"]
             tool = "routine_" + {"edit": "update", "pause": "update", "resume": "update"}.get(operation, operation)
