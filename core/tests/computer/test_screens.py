@@ -553,7 +553,7 @@ def test_image_build_context_has_no_bytecode():
 def test_target_rejects_invalid_screen_numbers_at_construction(desktop, screen, count):
     _, target, _ = desktop
     with pytest.raises(ValueError):
-        replace(target, screen=screen, screens=count)
+        replace(target, container='', screen=screen, screens=count)
 
 
 @pytest.mark.parametrize('phase', ['handshake', 'layout', 'pixels', 'clipboard'])

@@ -23,7 +23,7 @@ from ..integrations.audit import AuditLog
 from ..services.attachments import Attachment, MAX_FILE_BYTES, sniff_ok
 from .vm import VmError, engine_start_allowed
 from .vm_bridge import CuaBridge
-from .vm_catalog import DRIVER_TOOLS, FRESH_READS, NOTICES, PAGE_TOOLS, READS, SCREEN_READS, offline_catalog, without_session
+from .vm_catalog import DRIVER_TOOLS, FRESH_READS, NATIVE_INPUT_TOOLS, NOTICES, PAGE_TOOLS, READS, SCREEN_READS, offline_catalog, without_session
 from .takeover import TAKEOVER
 
 _SCOPE = ContextVar("computer_scope", default=None)
@@ -169,6 +169,7 @@ class VmTools:
         self.vm.busy = lambda key: key in self.leases and self.scope_busy(self.leases[key])
         self.listed = set()
         self.connections, self.labels = {}, itertools.count(1)
+        self.connection_locks, self.native_actions = {}, {}
         self.logins = None
         self.private_pages = {}
         self.payment_holds = set() if conn is None else {row[0] for row in conn.execute("SELECT target FROM computer_payment_holds")}
@@ -185,9 +186,9 @@ class VmTools:
         attempts = _REPAIRS.get()
         if attempts is None:
             return True  # The viewer has its own single retry outside a member call.
-        if target in attempts:
+        if target.physical in attempts:
             return False
-        attempts.add(target)
+        attempts.add(target.physical)
         return True
 
     def _engine_notice(self, target):
@@ -295,12 +296,17 @@ class VmTools:
         # Looking for the program runs nothing. With no Docker on this PC there is no computer to offer.
         if self.vm.desktop and not self.vm.desktop.installed():
             return
-        target = self.vm.target(member_id)
+        try:
+            target = await self.vm.seat(member_id)
+        except VmError as error:
+            if str(error) != "seats_full":
+                raise
+            target = self.vm.target(member_id)
         if self.logins:
             try:
                 if hasattr(self.logins, "preload"):
                     self.logins.preload(member_id)
-                for row in self.logins.references(None if target.key == "shared" else member_id):
+                for row in self.logins.references(None if target.container == "shared" else member_id):
                     try:
                         self.logins.load(row["member_id"], row["origin"], row["reference"])
                     except Exception as error:
@@ -315,7 +321,7 @@ class VmTools:
     def _catalog(self, target, definitions):
         definitions.update(vm_exec=EXEC, attach_file=ATTACH, request_takeover=TAKEOVER, fill_login=FILL_LOGIN,
                            vault_entries=ENTRY_CHOICES, fill_contact=FILL_CONTACT, fill_card=FILL_CARD, browser_open=BROWSER_OPEN, run_steps=RUN_STEPS)
-        if target.key != "shared":
+        if target.container != "shared":
             from .datasets import DEFINITION
             definitions["dataset"] = DEFINITION
         keys = []
@@ -401,7 +407,7 @@ class VmTools:
     def tier_of(self, key):
         if key in self.tools:
             shared = self.vm.settings is not None and self.vm.settings.get("computer_vm_mode") == "shared"
-            matches = (self.routes[key].key == "shared") == shared
+            matches = (self.routes[key].container == "shared") == shared
             return self.tools[key].tier if self.vm.enabled and matches and self.routes[key].remote == self.vm.remote and key in self.catalogs.get(self.routes[key].key, []) else None
         return self.delegate.tier_of(key)
 
@@ -469,7 +475,7 @@ class VmTools:
                 result.text = (prefix + "\n" if prefix else "") + json.dumps(data, ensure_ascii=False)
             else:
                 result.text = (result.text + f"\nElapsed: {elapsed:.2f} seconds.").strip()
-        private_members = list(self.logins.values) if self.logins and picture_target.key == "shared" else [member]
+        private_members = list(self.logins.values) if self.logins and picture_target.container == "shared" else [member]
         if self.logins and any(self.logins.values.get(identifier) for identifier in private_members):
             for identifier in private_members:
                 result.text = self.logins.redact(identifier, result.text)
@@ -500,7 +506,7 @@ class VmTools:
         if plain_read(command):
             return
         ticket = (target.key, member, turn or owner)
-        async with self.checkpoint_locks.setdefault(target.key, asyncio.Lock()):
+        async with self.checkpoint_locks.setdefault(target.state_key, asyncio.Lock()):
             if ticket in self.checkpointed:
                 return
             self.checkpointed.add(ticket)
@@ -509,9 +515,9 @@ class VmTools:
                 self.vm.checkpoint_failures = failures = {}
             try:
                 await asyncio.wait_for(self.vm.checkpoint(target, "begin", member=member, turn=turn), 11)
-                failures.pop(target.key, None)
+                failures.pop(target.state_key, None)
             except Exception as error:
-                failures[target.key] = True
+                failures[target.state_key] = True
                 logger.warning("File checkpoint skipped: %s", type(error).__name__)
 
     def _observe_page(self, target, page):
@@ -593,7 +599,13 @@ class VmTools:
                 if row is None:
                     return PluginResult(False, "blocked")
                 member = row[0]
+            if target.screen == 0 and target == self.vm.target(member):
+                await self.vm.seat(member)
+                return PluginResult(False, "computer_changed")
             if target != self.vm.target(member):
+                current = self.vm.target(member)
+                if current.container and not current.screen and current.key == target.key:
+                    await self.vm.seat(member)
                 return PluginResult(False, "computer_changed", "This computer is no longer the member's own. Read the refreshed computer tool catalog.")
             if self.tier_of(key) is None or approver == "none" or tool.tier >= Tier.T2 and approver != "user":
                 return result
@@ -631,8 +643,9 @@ class VmTools:
                 return PluginResult(False, "desktop_check_required")
             if tool.name == "request_takeover":
                 # Never over input that is already running at the screen (a long command in the workspace is none).
-                if self.vm.active.get(target.key, 0) > self.commands.get(target.key, 0) or (
-                        self.actions.get(target.key) and self.actions[target.key].locked()):
+                if any(self.vm.active.get(seat.key, 0) > self.commands.get(seat.key, 0) or (
+                        self.actions.get(seat.key) and self.actions[seat.key].locked())
+                        for seat in self.vm.unit_targets(target)):
                     return self._busy(target, None, 0.0)
                 data = await self.vm.work.request(work, arguments["reason"])
                 if arguments["reason"] == "payment" and target.key in self.payment_holds:
@@ -745,7 +758,7 @@ class VmTools:
                             async with asyncio.timeout(CuaBridge.read_timeout_s):
                                 data = await self._browser_open(target, member, client, session, arguments)
                         else:
-                            data = await client.request("tools/call", {"name": tool.name, "arguments": sent})
+                            data = await self._driver_call(target, client, tool.name, sent)
                     except (VmError, ConnectionError, TimeoutError) as error:
                         self.vm.invalidate(target)
                         await self._disconnect(target.key)
@@ -782,7 +795,7 @@ class VmTools:
                         text.append(json.dumps(data["structuredContent"], ensure_ascii=False))
                     combined = "\n".join(text)
                     if self.logins:
-                        for identifier in self.logins.values if target.key == "shared" else (member,):
+                        for identifier in self.logins.values if target.container == "shared" else (member,):
                             combined = self.logins.redact(identifier, combined)
                     limit = 60_000 if tool.name.startswith(PAGE_TOOLS) else 20_000
                     result = PluginResult(not data.get("isError", False), "tool_error" if data.get("isError") else None,
@@ -795,7 +808,11 @@ class VmTools:
                 self.vm.active[target.key] -= 1
                 if command:
                     self.commands[target.key] -= 1
-                self.vm.last_activity[target.key] = self.vm.clock()
+                self.vm.last_activity[target.state_key] = self.vm.clock()
+                if target.container:
+                    holder = self.vm.seats.holders(target.remote).get(target.screen)
+                    if holder is not None and self.vm.key_for(target.remote, holder) == target.key:
+                        self.vm.seats.touch(target.remote, holder)
                 if lock is not None:
                     self.lease_used[target.key] = self.vm.clock()
                     lock.release()
@@ -810,6 +827,10 @@ class VmTools:
             return result
         except VmError as error:
             self.vm.invalidate(target)
+            if str(error) in ("seats_full", "computer_busy"):
+                return self._busy(target, None, self.busy_wait_s if str(error) == "computer_busy" else 0,
+                                  note="every screen of the computer is in use" if str(error) == "seats_full" else None,
+                                  held_by="the owner" if self.vm.unit_held(target) else None)
             result = PluginResult(False, str(error), ENGINE_FAILURES.get(str(error), ""))
             return result
         except ConnectionError:
@@ -861,7 +882,7 @@ class VmTools:
             key = tool_key(f"computer-{target.key}", name)
             if name.startswith("browser_") and "delivery_mode" in self.schemas.get(key, {}).get("properties", {}):
                 args = {"delivery_mode": "foreground", **args}
-            reply = await client.request("tools/call", {"name": name, "arguments": {**args, "session": session}})
+            reply = await self._driver_call(target, client, name, {**args, "session": session})
             if reply.get("isError"):
                 raise VmError("browser_open_failed")
             return reply
@@ -936,7 +957,7 @@ class VmTools:
                 self.logins.load(member, args["site"], args["reference"])
                 # Driver echoes and pictures are deliberately discarded, including errors.
                 self._protect_page(target, args["target_id"], url, (call["ref"],))
-                reply = await client.request("tools/call", {"name": "browser_type", "arguments": {**call, "session": session}})
+                reply = await self._driver_call(target, client, "browser_type", {**call, "session": session})
                 if reply.get("isError"):
                     return PluginResult(False, "login_not_filled", '{"filled": false}')
             return PluginResult(True, text='{"filled": true}')
@@ -988,7 +1009,7 @@ class VmTools:
                         with self.conn:
                             self.conn.execute("INSERT OR IGNORE INTO computer_payment_holds VALUES (?)", (target.key,))
                 self._protect_page(target, args["target_id"], url, (call["ref"],))
-                reply = await client.request("tools/call", {"name": "browser_type", "arguments": {**call, "session": session}})
+                reply = await self._driver_call(target, client, "browser_type", {**call, "session": session})
                 if reply.get("isError"):
                     raise ValueError()
             return PluginResult(True, text=json.dumps({"filled": True, "owner_finishes": kind == "card"}))
@@ -996,7 +1017,35 @@ class VmTools:
             self.vm.invalidate(target)
             return PluginResult(False, "entry_not_filled", '{"filled": false}')
 
+    async def _driver_call(self, target, client, name, arguments):
+        if not target.container or name not in NATIVE_INPUT_TOOLS:
+            return await client.request("tools/call", {"name": name, "arguments": arguments})
+        began = time.monotonic()
+        lock = self.native_actions.setdefault(target.state_key, asyncio.Lock())
+        while True:
+            if target.key in self.vm.held:
+                raise VmError("owner_holds_control")
+            if not self.vm.unit_held(target) and not lock.locked():
+                await lock.acquire()
+                break
+            remaining = self.busy_wait_s - (time.monotonic() - began)
+            if remaining <= 0:
+                raise VmError("computer_busy")
+            await asyncio.sleep(min(self.busy_poll_s, remaining))
+        try:
+            # No await separates the last hold check and acquisition on the core loop.
+            member = self.vm.seats.holders(target.remote).get(target.screen)
+            if member is None or self.vm.shared_target(target.remote, member, target.screen) != target:
+                raise VmError("computer_changed")
+            return await client.request("tools/call", {"name": name, "arguments": arguments})
+        finally:
+            lock.release()
+
     async def _connection(self, target, *, member=None):
+        async with self.connection_locks.setdefault(target.key, asyncio.Lock()):
+            return await self._connect(target, member=member)
+
+    async def _connect(self, target, *, member=None):
         """A computer's one connection to its driver, and its session label. The driver ends a session with the connection
         that used it, and with it the browser it opened, the tab it bound and the screenshot a gesture needs. A new
         connection takes a new label: the driver refuses one that has ended."""
@@ -1070,15 +1119,15 @@ class VmTools:
         self.lease_used[target.key] = self.vm.clock()
         return None
 
-    def _busy(self, target, held, waited):
+    def _busy(self, target, held, waited, *, note=None, held_by=None):
         """Not a tool failing: how things stand, so that the model can do other work or ask again later."""
         held = held or self.leases.get(target.key)
-        name = "someone" if held is None else self._name_of(held)
+        name = held_by or ("someone" if held is None else self._name_of(held))
         since = self.lease_since.get(target.key)
         return PluginResult(True, "computer_busy", json.dumps({
             "status": "computer_busy", "held_by": name,
             "held_for_s": None if since is None else round(self.vm.clock() - since), "waited_s": round(waited),
-            "note": f"{name} is using the computer. Nothing was done. Do other work that does not need it, or call again "
+            "note": note or f"{name} is using the computer. Nothing was done. Do other work that does not need it, or call again "
                     "later; this is not an error."}, ensure_ascii=False))
 
     def _name_of(self, scope):

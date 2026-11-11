@@ -28,10 +28,15 @@ async def rig(tmp_path, conn):
     hub.scope_busy = lambda scope: True
     viewer = DesktopViewer(vm)
     snapshot = take_snapshot(hub)
+    snapshot.refresh_computer(hub, 1)
     gate = ToolGate(hub)
 
     async def call(name, arguments=None, *, turn=42, private=True, task_id=None):
-        with vm_scope(("turn", 1, 11), turn_id=turn, private=private):
+        member = 0 if task_id else 1
+        if task_id:
+            await hub.prepare(member)
+            snapshot.refresh_computer(hub, member)
+        with vm_scope(("turn", member, 11), turn_id=turn, private=private):
             result = await gate.call_plugin(snapshot.refs["computer__" + name].key, arguments or {}, task_id=task_id)
             snapshot.refresh_computer(hub, 1)
             return result
@@ -42,10 +47,10 @@ async def rig(tmp_path, conn):
         await viewer.aclose()
 
 
-async def waiting(vm):
+async def waiting(vm, member=1):
     for _ in range(50):
-        if vm.work.pending(vm.target()):
-            return vm.work.pending(vm.target())
+        if vm.work.pending(vm.target(member)):
+            return vm.work.pending(vm.target(member))
         await asyncio.sleep(0)
     raise AssertionError("Takeover did not pause")
 
@@ -67,7 +72,7 @@ async def test_private_takeover_blocks_every_tool_and_resumes_once_after_explici
                 assert not result.ok
                 assert result.kind == ("blocked" if ref.name == "fill_card" else "owner_holds_control")
         assert vm.run.calls == before
-        wrong = await viewer.open({"member_id": 0})
+        wrong = await viewer.open({"member_id": 1, "conversation_id": 12})
         with pytest.raises(RpcError):
             await viewer.control({**wrong, "held": True})
         opened = await viewer.open({"member_id": 1, "conversation_id": 11})
@@ -183,9 +188,9 @@ async def test_an_old_done_cannot_complete_a_second_takeover_of_the_same_task(ri
 
 async def test_takeover_never_overlaps_an_already_running_input(rig):
     vm, _, call, _ = rig
-    vm.active[vm.target().key] = 1
+    vm.active[vm.target(1).key] = 1
     assert (await call("request_takeover", {"reason": "sign_in"})).kind == "computer_busy"
-    assert not vm.work.pending(vm.target()) and not vm.held
+    assert not vm.work.pending(vm.target(1)) and not vm.held
 
 
 async def test_private_background_takeover_is_bound_to_its_existing_conversation(rig, conn):
@@ -201,7 +206,7 @@ async def test_private_background_takeover_is_bound_to_its_existing_conversation
     task_id = store.create(session_id="background-computer", language="en", text="Local test")
     store.attach_turn(task_id, turn)
     task = asyncio.create_task(call("request_takeover", {"reason": "captcha"}, private=False, task_id=task_id))
-    work = await waiting(vm)
+    work = await waiting(vm, 0)
     try:
         assert work.turn_id == turn and work.member_id == 0 and work.conversation_id == conversation
         assert len(vm.work.views(0, conversation)) == 1 and not vm.work.views(1, 11)

@@ -192,6 +192,7 @@ async def test_relay_drops_unauthorized_input_without_stalling_frames(viewer, wi
     port, _ = wire_upstream
     async def connection(target): return port, "synthetic"
     bridge.vm.viewer_connection = connection
+    await bridge.vm.seat(0)
     opened = await bridge.open({"preview": preview})
     url, request = websocket_request(bridge, opened)
     reader, writer = await asyncio.open_connection(url.hostname, url.port)
@@ -382,7 +383,7 @@ async def test_status_and_session_urls_never_publish_vnc_credentials(viewer):
     public = await bridge.status({"member_id": 1})
     opened = await bridge.open({"member_id": 1})
     assert public == {"state": "running", "ready": True, "control": "member",
-                      "host": "", "target": "shared", "mode": "shared", "idle_minutes": 15, "lifecycle": None}
+                      "host": "", "target": bridge.vm.target(1).key, "mode": "shared", "idle_minutes": 15, "lifecycle": None}
     assert "private" not in json.dumps([public, opened, await bridge.vm.status(bridge.vm.target())])
     assert "password" not in opened["url"]
     assert bridge.server.sockets[0].getsockname()[0] == "127.0.0.1"

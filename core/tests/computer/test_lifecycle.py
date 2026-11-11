@@ -105,7 +105,7 @@ async def test_missing_screen_setup_repairs_once_after_twenty_polls(desktop, mon
     expected = [20] if guard in ('allowed', 'fresh', 'persistent') else []
     assert repairs == expected
     # Waking a stopped computer in the middle of a member's call is recorded as a repair of its own.
-    assert vm.repair_revisions.get(target.key, 0) == len(expected) + (guard == 'fresh')
+    assert vm.repair_revisions.get(target.state_key, 0) == len(expected) + (guard == 'fresh')
     assert all(args == ['restart', '--time', '10', target.name] for args, _ in runtime.calls if args[0] == 'restart')
 
 
@@ -167,7 +167,7 @@ async def test_never_sleep_and_remote_idle_keep_the_same_stop_contract(desktop):
     vm, target, runtime = desktop
     assert checked('computer_vm_idle_minutes', 0) == ('computer_vm_idle_minutes', 0)
     vm.settings.set('computer_vm_idle_minutes', 0)
-    vm.last_activity[target.key] = -100000
+    vm.last_activity[target.state_key] = -100000
     await vm.sweep()
     assert not runtime.calls
     vm.settings.set('computer_vm_idle_minutes', 5)
@@ -359,7 +359,7 @@ async def test_a_second_driver_connection_failure_is_returned_without_repair_loo
         with vm_scope(0, private=True, progress=lines.append, language='zh-TW'):
             result = await hub.call(key, {}, approver='auto')
         assert not result.ok and Driver.attempts == 2
-        assert vm.repair_revisions[target.key] == 1
+        assert vm.repair_revisions[target.state_key] == 1
     finally:
         await hub.aclose()
 
@@ -384,7 +384,7 @@ async def test_owner_maintenance_never_evicts_another_computer_at_capacity(deskt
 
 async def test_another_task_cannot_start_a_computer_during_maintenance(desktop):
     vm, target, runtime = desktop
-    vm.maintenance[target.key] = object()
+    vm.maintenance[target.state_key] = object()
     with pytest.raises(VmError, match='busy'):
         await vm.start(target)
     assert not runtime.calls

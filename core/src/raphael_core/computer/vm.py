@@ -18,7 +18,7 @@ import secrets
 import time
 from contextlib import contextmanager
 from contextvars import ContextVar
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path, PurePosixPath
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -145,10 +145,29 @@ class Target:
     remote: str = ""
     screen: int = 1
     screens: int = 1
+    container: str = ""
+
+    @property
+    def unit(self):
+        return self.container or self.key
+
+    @property
+    def state_key(self):
+        return (self.remote, self.unit) if self.container and self.remote else self.unit
+
+    @property
+    def physical(self):
+        return replace(self, key=self.unit, screen=1) if self.container else self
 
     def __post_init__(self):
-        if type(self.screen) is not int or type(self.screens) is not int or not 1 <= self.screen <= self.screens <= 6:
+        if (type(self.screen) is not int or type(self.screens) is not int
+                or not (0 if self.container else 1) <= self.screen <= self.screens <= 6 or self.screens < 1):
             raise ValueError("Screens must be integers with 1 <= screen <= screens <= 6")
+
+
+def resources(target):
+    """Memory GiB and CPUs for the captured computer kind."""
+    return (6, 4) if target.container == "shared" else (MEMORY_GB, 2)
 
 
 def mount_arg(path, destination=GUEST, *, remote=False):
@@ -175,12 +194,13 @@ def screen_grid(count, width=1280, height=900):
 
 def run_args(target, owner, password, *, tz=None):
     zone = timezone_name(tz)
+    memory, cpus = resources(target)
     _, canvas = screen_grid(target.screens)
     args = ["run", "-d", "--name", target.name, "--hostname", target.name]
-    for key, value in {**IMAGE_LABELS, f"{LABEL}.owner": owner, f"{LABEL}.target": target.key}.items():
+    for key, value in {**IMAGE_LABELS, f"{LABEL}.owner": owner, f"{LABEL}.target": target.unit}.items():
         args += ["--label", f"{key}={value}"]
     return args + [
-        "--restart", "no", "--memory", f"{MEMORY_GB}g", "--memory-swap", f"{MEMORY_GB}g", "--cpus", "2",
+        "--restart", "no", "--memory", f"{memory}g", "--memory-swap", f"{memory}g", "--cpus", str(cpus),
         "--pids-limit", "4096", "--ipc", "private", "--cgroupns", "private",
         "--cap-drop", "ALL", "--cap-add", "SETUID", "--cap-add", "SETGID", "--shm-size", "512m",
         "--mount", mount_arg(target.workspace, remote=bool(target.remote)),
@@ -213,7 +233,8 @@ def compatible(raw, target, owner, image_id):
     try:
         config, host = raw["Config"], raw["HostConfig"]
         labels = config.get("Labels") or {}
-        expected = {**IMAGE_LABELS, f"{LABEL}.owner": owner, f"{LABEL}.target": target.key}
+        memory, cpus = resources(target)
+        expected = {**IMAGE_LABELS, f"{LABEL}.owner": owner, f"{LABEL}.target": target.unit}
         mounts = raw["Mounts"]
         configured_mounts = host.get("Mounts", mounts)
         ports = host.get("PortBindings", {})
@@ -228,8 +249,8 @@ def compatible(raw, target, owner, image_id):
             and host.get("NetworkMode") not in ("host", "none")
             and not any("unconfined" in x or "disable" in x for x in host.get("SecurityOpt") or [])
             and host.get("RestartPolicy", {}).get("Name", "no") in ("", "no")
-            and host.get("Memory") == MEMORY_GB * 1024**3 and host.get("MemorySwap") == MEMORY_GB * 1024**3
-            and host.get("NanoCpus") == 2_000_000_000 and host.get("PidsLimit") == 4096
+            and host.get("Memory") == memory * 1024**3 and host.get("MemorySwap") == memory * 1024**3
+            and host.get("NanoCpus") == cpus * 1_000_000_000 and host.get("PidsLimit") == 4096
             and host.get("ShmSize") == 512 * 1024**2
             and mounts_match(mounts, configured_mounts, target)
             and (
@@ -259,19 +280,25 @@ def mounts_match(mounts, configured, target):
 
 
 def known_previous(raw, target, owner):
-    """Recognize only the two previous single-screen shapes with all other guards intact."""
+    """Recognize previous single-screen shapes with all other guards intact."""
     import copy
     try:
         previous = copy.deepcopy(raw)
         config, host = previous["Config"], previous["HostConfig"]
         labels, env = config.get("Labels") or {}, config.get("Env") or []
-        memory = {"3": 2, "4": 3}.get(labels.get(f"{LABEL}.layer"))
-        if (target.screens != 1 or memory is None or any(entry.startswith("RAPHAEL_SCREENS=") for entry in env)
+        layer = labels.get(f"{LABEL}.layer")
+        shared_upgrade = target.container == "shared" and target.screens == 6
+        memory = {"3": 2, "4": 3, **({"5": 3} if shared_upgrade else {})}.get(layer)
+        screens = [entry for entry in env if entry.startswith("RAPHAEL_SCREENS=")]
+        if ((target.screens != 1 and not shared_upgrade) or memory is None
+                or screens != (["RAPHAEL_SCREENS=1"] if layer == "5" else [])
+                or host.get("NanoCpus") != 2_000_000_000
                 or host.get("Memory") != memory * 1024**3 or host.get("MemorySwap") != memory * 1024**3):
             return False
         labels[f"{LABEL}.layer"] = IMAGE_LABELS[f"{LABEL}.layer"]
-        host.update(Memory=MEMORY_GB * 1024**3, MemorySwap=MEMORY_GB * 1024**3)
-        config["Env"] = [*env, "RAPHAEL_SCREENS=1"]
+        memory, cpus = resources(target)
+        host.update(Memory=memory * 1024**3, MemorySwap=memory * 1024**3, NanoCpus=cpus * 1_000_000_000)
+        config["Env"] = [entry for entry in env if not entry.startswith("RAPHAEL_SCREENS=")] + [f"RAPHAEL_SCREENS={target.screens}"]
         return compatible(previous, target, owner, raw["Image"])
     except (KeyError, TypeError, AttributeError):
         return False
@@ -319,9 +346,50 @@ class LocalVm:
         # The computers made here and the ones a deleted member leaves behind (removals.py).
         from .removals import ComputerData
         self.data = ComputerData(self, conn)
+        from .seats import ComputerSeats
+        self.seats = ComputerSeats(conn)
+        self.seat_lock = asyncio.Lock()
+        async def close_seat_viewers(target):
+            pass
+        self.close_seat_viewers = close_seat_viewers
+
+    def unit_targets(self, target):
+        seats = [self.shared_target(target.remote, member, number)
+                 for number, member in self.seats.holders(target.remote).items()] if target.container else []
+        return {other.key: other for other in [target, *self.targets.values(), *seats]
+                if (other.remote, other.name) == (target.remote, target.name)}.values()
+
+    def unit_active(self, target, *, excluding=None):
+        return sum(self.active.get(other.key, 0) for other in self.unit_targets(target) if other.key != excluding)
+
+    def unit_held(self, target):
+        return any(other.key in self.held for other in self.unit_targets(target))
+
+    def unit_busy(self, target, *, excluding=None):
+        return any(self.busy(other.key) for other in self.unit_targets(target) if other.key != excluding)
+
+    def units(self):
+        return {(target.remote, target.name): target for target in self.targets.values()}.values()
+
+    async def disconnect_unit(self, target):
+        for other in self.unit_targets(target):
+            await self.disconnect_driver(other.key)
+
+    async def close_displaced_seat_windows(self, target):
+        """Stage B3 hook: close the displaced seat's windows once window ownership is wired."""
+
+    async def release_member_seats(self, member):
+        for host, identifier in list(self.seats.rows):
+            if identifier == member:
+                target = self.shared_target(host, member, self.seats.seat(host, member))
+                self.seats.release(host, member)
+                await self.disconnect_driver(target.key)
+                await self.close_seat_viewers(target)
+                await self.close_displaced_seat_windows(target)
+                self.targets.pop(target.key, None)
 
     def record_repair(self, target):
-        self.repair_revisions[target.key] = self.repair_revisions.get(target.key, 0) + 1
+        self.repair_revisions[target.state_key] = self.repair_revisions.get(target.state_key, 0) + 1
         self.repair_notice(target)
 
     @property
@@ -370,7 +438,7 @@ class LocalVm:
 
     def _progress(self, target, state, text=""):
         # Only fixed-image pull/build output is passed here, never exec output.
-        self.preparation[target.key] = {"state": state, "ready": False,
+        self.preparation[target.state_key] = {"state": state, "ready": False,
                                         "progress": " ".join(text.split())[:180]}
 
     async def ensure_engine(self, target, *, start_desktop=False):
@@ -405,17 +473,17 @@ class LocalVm:
 
     def launch(self, target):
         """Viewer opens immediately; preparation belongs to the shared VM lifecycle."""
-        if target.key not in self.preparing or self.preparing[target.key].done():
+        if target.state_key not in self.preparing or self.preparing[target.state_key].done():
             self._progress(target, "preparing")
 
             async def prepare():
                 try:
                     await self.start(target)
                 except (VmError, OSError, TimeoutError) as error:
-                    self.preparation[target.key] = {"state": "unavailable", "ready": False,
+                    self.preparation[target.state_key] = {"state": "unavailable", "ready": False,
                         "error": str(error) if isinstance(error, VmError) else "start_failed"}
 
-            self.preparing[target.key] = asyncio.create_task(prepare())
+            self.preparing[target.state_key] = asyncio.create_task(prepare())
 
     def key_for(self, host, member_id):
         """The key a member's own computer on `host` ("" is this PC) is named by."""
@@ -430,10 +498,37 @@ class LocalVm:
 
     def target(self, member_id=0):
         mode = "per-bot" if self.settings is None else self.settings.get("computer_vm_mode")
-        key = "shared" if mode == "shared" else self.key_for(self.remote, member_id)
-        target = self.target_for(self.remote, key)
-        self.targets[key] = target
+        target = (self.shared_target(self.remote, member_id, self.seats.seat(self.remote, member_id) or 0)
+                  if mode == "shared" else self.target_for(self.remote, self.key_for(self.remote, member_id)))
+        self.targets[target.key] = target
         return target
+
+    def shared_target(self, host, member, screen):
+        return replace(self.target_for(host, "shared"), key=self.key_for(host, member),
+                       container="shared", screen=screen, screens=6)
+
+    async def seat(self, member_id=0):
+        target = self.target(member_id)
+        if not target.container:
+            return target
+        from .seats import SeatsFull
+        async with self.seat_lock:
+            def busy(member):
+                key = self.key_for(target.remote, member)
+                return bool(self.active.get(key) or key in self.held or self.busy(key))
+            previous = {member: self.shared_target(target.remote, member, number)
+                        for number, member in self.seats.holders(target.remote).items()}
+            try:
+                number, displaced = self.seats.take(target.remote, member_id, busy=busy)
+            except SeatsFull:
+                raise VmError("seats_full") from None
+            if displaced is not None:
+                old = previous[displaced]
+                await self.disconnect_driver(old.key)
+                await self.close_seat_viewers(old)
+                await self.close_displaced_seat_windows(old)
+                self.targets.pop(old.key, None)
+            return self.target(member_id)
 
     async def available(self, target=None):
         up = await self._answers(target)
@@ -527,7 +622,7 @@ class LocalVm:
             self.invalidate(target)
         bindings = raw.get("NetworkSettings", {}).get("Ports", {}).get("6901/tcp") or []
         port = next((int(p["HostPort"]) for p in bindings if p.get("HostIp") == "127.0.0.1" and str(p.get("HostPort", "")).isdigit()), None)
-        url = f"http://127.0.0.1:{port}/vnc.html#autoconnect=true&resize=scale&view_only=true&path=websockify?token=screen-{target.screen}" if port and not target.remote else ""
+        url = f"http://127.0.0.1:{port}/vnc.html#autoconnect=true&resize=scale&view_only=true&path=websockify?token=screen-{target.screen}" if port and not target.remote and target.screen else ""
         return {"state": "running" if running else "stopped", "ready": ready, "viewer_url": url,
                 **({"screens_pending": True} if screens_pending else {})}
 
@@ -588,7 +683,7 @@ class LocalVm:
 
     async def start(self, target):
         self.validate_storage(target)
-        if target.key in self.maintenance and self.maintenance[target.key] is not asyncio.current_task():
+        if target.state_key in self.maintenance and self.maintenance[target.state_key] is not asyncio.current_task():
             raise VmError("busy")
         if (state := self._recent_start(target)) is not None:
             return state
@@ -603,7 +698,7 @@ class LocalVm:
         return self.settings is not None and self.settings.get("action_mode") == "bypass"
 
     def invalidate(self, target):
-        self.running.pop(target, None)
+        self.running.pop(target.physical, None)
         self.status_engines.pop(target.remote, None)
 
     def validate_storage(self, target):
@@ -621,38 +716,47 @@ class LocalVm:
         return self.changes, self.enabled, self.remote, self.timezone(), self.timezone_pending
 
     def _recent_start(self, target):
-        kept = self.running.get(target)
+        kept = self.running.get(target.physical)
         if kept and kept[1] == self._start_signature() and 0 <= self.clock() - kept[0] < PREFLIGHT_S:
-            return dict(kept[2])
+            return self.seat_status(target, kept[2])
         return None
 
-    async def _confirmed_start(self, target):
-        if (state := self._recent_start(target)) is not None:
-            return state
-        self.invalidate(target)
-        state = await self._prepare_start(target)
-        if state.get("ready"):
-            self.running[target] = self.clock(), self._start_signature(), dict(state)
+    @staticmethod
+    def seat_status(target, state):
+        state = dict(state)
+        if target.container and state.get("viewer_url"):
+            state["viewer_url"] = re.sub(r"screen-\d+", f"screen-{target.screen}", state["viewer_url"]) if target.screen else ""
         return state
 
+    async def _confirmed_start(self, target):
+        async with self.locks.setdefault(target.state_key, asyncio.Lock()):
+            if target.state_key in self.maintenance and self.maintenance[target.state_key] is not asyncio.current_task():
+                raise VmError("busy")
+            if (state := self._recent_start(target)) is not None:
+                return state
+            self.invalidate(target)
+            state = await self._prepare_start(target)
+            if state.get("ready"):
+                self.running[target.physical] = self.clock(), self._start_signature(), dict(state)
+            return state
+
     async def _prepare_start(self, target):
-        async with self.locks.setdefault(target.key, asyncio.Lock()):
+        self.changes += 1
+        try:
+            await self.ensure_engine(target, start_desktop=_MAY_START_ENGINE.get())
+            async with self.build_lock:
+                if not await self.image(target):
+                    self._progress(target, "building")
+                    await self.build(target, progress=lambda text: self._progress(target, "building", text))
+            # Every computer tool call passes here: a running desktop is not being prepared.
+            if (await self.status(target, probe=False))["state"] != "running":
+                self._progress(target, "preparing")
+            if not target.remote:
+                await self._make_room(target)
+            return await self._start(target)
+        finally:
+            self.preparation.pop(target.state_key, None)
             self.changes += 1
-            try:
-                await self.ensure_engine(target, start_desktop=_MAY_START_ENGINE.get())
-                async with self.build_lock:
-                    if not await self.image(target):
-                        self._progress(target, "building")
-                        await self.build(target, progress=lambda text: self._progress(target, "building", text))
-                # Every computer tool call passes here: a running desktop is not being prepared.
-                if (await self.status(target, probe=False))["state"] != "running":
-                    self._progress(target, "preparing")
-                if not target.remote:
-                    await self._make_room(target)
-                return await self._start(target)
-            finally:
-                self.preparation.pop(target.key, None)
-                self.changes += 1
 
     async def _make_room(self, target):
         if target.remote or (await self.status(target, probe=False))["state"] == "running":
@@ -660,8 +764,8 @@ class LocalVm:
         await self.recover()
         running = []
         protected = set()
-        for other in list(self.targets.values()):
-            if other.remote or other.key == target.key:
+        for other in list(self.units()):
+            if other.remote or (other.remote, other.name) == (target.remote, target.name):
                 continue
             state = (await self.status(other, probe=False))["state"]
             if state == "running":
@@ -674,13 +778,13 @@ class LocalVm:
                     running.append(other)
                     protected.add(other.key)
         while len(running) >= LOCAL_LIMIT:
-            if target.key in self.maintenance:
+            if target.state_key in self.maintenance:
                 raise VmError("local_capacity")  # Owner maintenance never evicts another computer.
-            candidates = [other for other in running if other.key not in protected and not self.active.get(other.key)
-                          and other.key not in self.held and not self.busy(other.key)]
+            candidates = [other for other in running if other.key not in protected and not self.unit_active(other)
+                          and not self.unit_held(other) and not self.unit_busy(other)]
             if not candidates:
                 raise VmError("local_capacity")
-            victim = min(candidates, key=lambda other: self.last_activity.get(other.key, 0))
+            victim = min(candidates, key=lambda other: self.last_activity.get(other.state_key, 0))
             await self.stop(victim)
             running.remove(victim)
 
@@ -707,13 +811,13 @@ class LocalVm:
             result = await self.run_for(target, run_args(target, self.owner, secrets.token_urlsafe(24), tz=zone), timeout=60)
         elif state["state"] == "stopped":
             result = await self.run_for(target, ["start", target.name], timeout=60)
-            if not result.code and self.active.get(target.key) and target.key not in self.maintenance:
+            if not result.code and self.unit_active(target) and target.state_key not in self.maintenance:
                 self.record_repair(target)
         else:
             result = Result(0)
         if result.code:
             raise VmError("start_failed")
-        self.last_activity[target.key] = self.clock()
+        self.last_activity[target.state_key] = self.clock()
         repaired = False
         for attempt in range(45):
             state = await self.status(target)
@@ -727,7 +831,7 @@ class LocalVm:
                         (target.shared / name).mkdir(parents=True, exist_ok=True, mode=0o700)
                 await self._wallpaper(target)
                 return state
-            if not repaired and state["state"] == "running" and target.key not in self.held and self.active.get(target.key, 0) <= 1:
+            if not repaired and state["state"] == "running" and not self.unit_held(target) and self.unit_active(target) <= 1 and not self.unit_active(target, excluding=target.key) and not self.unit_busy(target, excluding=target.key):
                 missing_socket = False
                 if attempt == 0 and already_running:
                     socket = await self.run_for(target, exec_args(target, ["test", "-S", SOCKET]), timeout=5)
@@ -752,11 +856,11 @@ class LocalVm:
         if legacy_remote:
             host["PortBindings"] = {"6901/tcp": [{"HostIp": "127.0.0.1", "HostPort": ""}]}
         # `previous` carries the remote binding repair, so an old remote computer of a previous layer still upgrades.
-        image_upgrade = known_previous(previous, target, self.owner) and raw.get("Image") != image_id
+        image_upgrade = known_previous(previous, target, self.owner) and (raw.get("Image") != image_id or target.container == "shared")
         if (not raw or not image_id or not (image_upgrade or legacy_remote and raw.get("Image") == image_id
                 and compatible(previous, target, self.owner, raw.get("Image")))):
             raise VmError("incompatible")
-        if target.key in self.held or self.active.get(target.key, 0) > 1:
+        if self.unit_held(target) or (self.unit_active(target) > 1 or self.unit_active(target, excluding=target.key)) or self.unit_busy(target, excluding=target.key):
             raise VmError("busy")
         self.rebuild_notice(target)
         if raw.get("State", {}).get("Running") and (await self.run_for(target, ["stop", "--time", "10", target.name], timeout=30)).code:
@@ -822,8 +926,8 @@ exec /opt/venv/bin/python /opt/raphael-desktop/wallpaper.py --watch'''
             if not compatible(raw, target, self.owner, await self.image(target)):
                 raise VmError("incompatible")
             if f"TZ={zone}" not in raw["Config"].get("Env", []):
-                if target.key in self.held:
-                    raise VmError("owner_holds_control")
+                if self.unit_held(target) or (self.unit_active(target) > 1 or self.unit_active(target, excluding=target.key)) or self.unit_busy(target, excluding=target.key) or self.unit_busy(target) and not self.unit_active(target):
+                    raise VmError("owner_holds_control" if self.unit_held(target) else "busy")
                 # Only status-validated, owned containers reach this path. Docker
                 # cannot change their environment; the bind workspace survives.
                 if state["state"] == "running" and (await self.run_for(target, ["stop", "--time", "10", target.name], timeout=30)).code:
@@ -848,9 +952,9 @@ exec /opt/venv/bin/python /opt/raphael-desktop/wallpaper.py --watch'''
         await self.recover()
         self.timezone_pending = False
         async with self.capacity_lock:
-            for target in list(self.targets.values()):
-                async with self.locks.setdefault(target.key, asyncio.Lock()):
-                    if self.active.get(target.key) or target.key in self.held or self.busy(target.key):
+            for target in list(self.units()):
+                async with self.locks.setdefault(target.state_key, asyncio.Lock()):
+                    if self.unit_active(target) or self.unit_held(target) or self.unit_busy(target):
                         self.timezone_pending = True
                         continue  # The next tool start retries after the current work/hold.
                     try:
@@ -864,8 +968,8 @@ exec /opt/venv/bin/python /opt/raphael-desktop/wallpaper.py --watch'''
                         continue  # Home remains usable while Docker is unavailable.
 
     async def stop(self, target, *, remove=False, captured_image=None):
-        async with self.locks.setdefault(target.key, asyncio.Lock()):
-            if self.active.get(target.key, 0) or target.key in self.held:
+        async with self.locks.setdefault(target.state_key, asyncio.Lock()):
+            if self.unit_active(target) or self.unit_held(target):
                 raise VmError("busy")
             state = await self.status(target, probe=False)
             if state["state"] == "incompatible":
@@ -878,7 +982,7 @@ exec /opt/venv/bin/python /opt/raphael-desktop/wallpaper.py --watch'''
                 return
             if state["state"] not in ("running", "stopped"):
                 raise VmError(state["state"])
-            if self.active.get(target.key, 0) or target.key in self.held or self.busy(target.key):
+            if self.unit_active(target) or self.unit_held(target) or self.unit_busy(target):
                 raise VmError("busy")
             self.changes += 1
             result = await self.run_for(target, ["stop", "--time", "10", target.name], timeout=30)
@@ -905,7 +1009,7 @@ exec /opt/venv/bin/python /opt/raphael-desktop/wallpaper.py --watch'''
         host). Whatever is already gone is success. Never starts an engine; with `engine` false (none can exist: Docker
         is not installed) only the folder goes. The workspace of a shared computer is never a target."""
         key = target.key
-        if key == "shared":
+        if target.container == "shared" or target.unit == "shared":
             raise VmError("shared")
         if not target.remote:
             root_path = self.root / "vm-homes"
@@ -949,7 +1053,7 @@ exec /opt/venv/bin/python /opt/raphael-desktop/wallpaper.py --watch'''
         self.invalidate(target)
         self.last_activity.pop(key, None)
         self.targets.pop(key, None)
-        self.running.pop(target, None)
+        self.running.pop(target.physical, None)
         self.wallpaper_attempted.discard((target.remote, target.name))
 
     def hold(self, target, held):
@@ -957,7 +1061,7 @@ exec /opt/venv/bin/python /opt/raphael-desktop/wallpaper.py --watch'''
             self.held.add(target.key)
         else:
             self.held.discard(target.key)
-        self.last_activity[target.key] = self.clock()
+        self.last_activity[target.state_key] = self.clock()
 
     async def checkpoint(self, target, action, **metadata):
         from . import checkpoints
@@ -1041,12 +1145,14 @@ print(base64.b64encode(data).decode())
         minutes = 15 if self.settings is None else self.settings.get("computer_vm_idle_minutes")
         if minutes == 0:
             return
-        for key, last in list(self.last_activity.items()):
-            if key in self.maintenance:
+        for target in list(self.units()):
+            key = target.state_key
+            last = self.last_activity.get(key)
+            if last is None or key in self.maintenance:
                 continue
-            if self.clock() - last >= minutes * 60 and not self.active.get(key) and key not in self.held and not self.busy(key):
+            if self.clock() - last >= minutes * 60 and not self.unit_active(target) and not self.unit_held(target) and not self.unit_busy(target):
                 try:
-                    await self.stop(self.targets[key])
+                    await self.stop(target)
                     self.last_activity.pop(key, None)
                 except (VmError, OSError, TimeoutError):
                     pass
@@ -1063,10 +1169,15 @@ print(base64.b64encode(data).decode())
             key = name.removeprefix(prefix)
             if name.startswith(prefix) and (key == "shared" or len(key) == 16 and all(c in "0123456789abcdef" for c in key)):
                 target = self.target_for(self.remote, key)
-                self.targets[key] = target
+                if key == "shared":
+                    target = replace(target, container="shared", screens=6)
+                    for number, member in self.seats.holders(self.remote).items():
+                        seat = self.shared_target(self.remote, member, number)
+                        self.targets[seat.key] = seat
+                self.targets[target.state_key] = target
                 self.data.made(target)  # computers made before the app kept a record are found here
                 if (await self.status(target, probe=False))["state"] == "running":
-                    self.last_activity.setdefault(key, self.clock())
+                    self.last_activity.setdefault(target.state_key, self.clock())
 
     def start_monitor(self):
         if self.task is None:
@@ -1095,7 +1206,7 @@ print(base64.b64encode(data).decode())
             self.task.cancel()
             await asyncio.gather(self.task, return_exceptions=True)
             self.task = None
-        for target in list(self.targets.values()) if stop else []:
+        for target in list(self.units()) if stop else []:
             # App shutdown stops only known, compatible idle computers. Workspaces,
             # browser profiles and volumes survive; no recovery scan or force removal.
             try:

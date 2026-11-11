@@ -63,10 +63,11 @@ class Runtime:
 
 def container(vm, target, runtime):
     raw = {"Name": "/" + target.name, "Image": runtime.image_id,
-        "Config": {"Labels": {**IMAGE_LABELS, f"{LABEL}.owner": vm.owner, f"{LABEL}.target": target.key}, "Env": ["VNC_PW=private", f"RAPHAEL_SCREENS={target.screens}"]},
+        "Config": {"Labels": {**IMAGE_LABELS, f"{LABEL}.owner": vm.owner, f"{LABEL}.target": target.unit}, "Env": ["VNC_PW=private", f"RAPHAEL_SCREENS={target.screens}"]},
         "State": {"Running": True}, "HostConfig": {"Privileged": False, "CapDrop": ["ALL"], "CapAdd": ["SETUID", "SETGID"],
             "IpcMode": "private", "CgroupnsMode": "private", "NetworkMode": "bridge", "RestartPolicy": {"Name": "no"},
-            "Memory": 3 * 1024**3, "MemorySwap": 3 * 1024**3, "NanoCpus": 2_000_000_000, "PidsLimit": 4096,
+            "Memory": (6 if target.container else 3) * 1024**3, "MemorySwap": (6 if target.container else 3) * 1024**3,
+            "NanoCpus": (4 if target.container else 2) * 1_000_000_000, "PidsLimit": 4096,
             "ShmSize": 512 * 1024**2, "PortBindings": {"6901/tcp": [{"HostIp": "127.0.0.1", "HostPort": "6080"}]}},
         "Mounts": [{"Type": "bind", "Source": str(target.workspace), "Destination": GUEST, "RW": True}],
         "NetworkSettings": {"Ports": {"6901/tcp": [{"HostIp": "127.0.0.1", "HostPort": "6080"}]}}}
@@ -82,12 +83,12 @@ def container(vm, target, runtime):
 
 
 @pytest.fixture
-def desktop(tmp_path, conn):
+async def desktop(tmp_path, conn):
     settings = SettingsStore(conn)
     settings.set("computer_vm_mode", "shared")
     runtime = Runtime()
     vm = LocalVm(tmp_path, settings=settings, runner=runtime, clock=lambda: 0)
-    target = vm.target()
+    target = await vm.seat()
     runtime.raw = container(vm, target, runtime)
     return vm, target, runtime
 
@@ -305,7 +306,7 @@ async def test_start_launches_installed_docker_and_builds_missing_image_once(des
     async def run(args, **kwargs):
         if args[0] in ("pull", "build"):
             kwargs["progress"]("#3 [2/4] Installing desktop tools")
-            progress.append(vm.preparation[target.key].copy())
+            progress.append(vm.preparation[target.state_key].copy())
         if args[0] == "build":
             runtime.built = True
         return await original(args, **kwargs)
@@ -455,7 +456,9 @@ def test_targets_are_isolated_by_default_and_can_explicitly_share(conn, tmp_path
     vm = LocalVm(tmp_path, settings=settings)
     assert vm.target(0) != vm.target(17)
     settings.set("computer_vm_mode", "shared")
-    assert vm.target(0) == vm.target(17)
+    assert vm.target(0) != vm.target(17)
+    assert vm.target(0).unit == vm.target(17).unit == 'shared'
+    assert vm.target(0).workspace == vm.target(17).workspace
     assert vm.target("../../escape").workspace.parent == tmp_path / "vm-homes"
 
 
@@ -515,7 +518,7 @@ async def test_recovery_and_idle_stop_keep_workspace_and_ignore_busy_or_held(des
     file = target.workspace / "keep.txt"
     file.write_text("persistent")
     await vm.recover()
-    assert target.key in vm.last_activity
+    assert target.state_key in vm.last_activity
     vm.clock = lambda: 15 * 60 + 1
     vm.active[target.key] = 1
     await vm.sweep()
@@ -1094,7 +1097,7 @@ def test_schema_root_combinators_become_plain_object():
     assert set(schema["properties"]) == {"url", "a", "b"} and schema["required"] == ["url"]
 
 
-async def test_shared_desktop_lease_refuses_another_active_turn(desktop, tmp_path):
+async def test_a_seats_lease_refuses_another_active_turn_of_the_same_member(desktop, tmp_path):
     vm, target, runtime = desktop
     hub = VmTools(EmptyHub(), vm, attachments=AttachmentStore(tmp_path), bridge=Bridge)
     await hub.prepare()
@@ -1103,13 +1106,13 @@ async def test_shared_desktop_lease_refuses_another_active_turn(desktop, tmp_pat
     shot = next(tool for tool in hub.offered() if tool.name == "get_desktop_state")
     with vm_scope(("turn", 0, 1)):
         assert (await hub.call(shot.key, {}, approver="auto")).ok
-    with vm_scope(("turn", 2, 3)):
+    with vm_scope(("turn", 0, 3)):
         assert (await hub.call(shot.key, {}, approver="auto")).kind == "computer_busy"
     vm.clock = lambda: 500 * 60
     await vm.sweep()
     assert runtime.raw["State"]["Running"]
     hub.scope_busy = lambda owner: False
-    with vm_scope(("turn", 2, 3)):
+    with vm_scope(("turn", 0, 3)):
         assert (await hub.call(shot.key, {}, approver="auto")).ok
 
 

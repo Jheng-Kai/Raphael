@@ -242,7 +242,7 @@ async def test_ten_remote_docker_calls_share_one_ssh_connection(desktop, monkeyp
 
 async def test_idle_and_close_preserve_container_and_browser_workspace(desktop):
     vm, target, runtime = desktop
-    vm.last_activity[target.key] = 0
+    vm.last_activity[target.state_key] = 0
     vm.clock = lambda: 100000
     await vm.sweep()
     await vm.aclose()
@@ -258,7 +258,7 @@ async def test_image_upgrade_announces_before_removal_and_preserves_workspace(de
     from raphael_core.computer.vm import LABEL
     runtime.raw["Config"]["Labels"][f"{LABEL}.layer"] = layer
     runtime.raw["Config"]["Env"] = ['VNC_PW=private']
-    runtime.raw["HostConfig"].update(Memory=memory * 1024**3, MemorySwap=memory * 1024**3)
+    runtime.raw["HostConfig"].update(Memory=memory * 1024**3, MemorySwap=memory * 1024**3, NanoCpus=2 * 10**9)
     notices = []
     vm.rebuild_notice = lambda target: notices.append(len(runtime.calls))
     result = await vm._upgrade_image(target)
@@ -270,7 +270,7 @@ async def test_image_upgrade_announces_before_removal_and_preserves_workspace(de
 
 async def test_erasing_never_touches_the_shared_workspace_or_a_container_that_is_not_ours(desktop):
     vm, target, runtime = desktop
-    assert target.key == "shared"
+    assert target.container == "shared" and target.key != target.unit
     with pytest.raises(VmError, match="shared"):
         await vm.erase(target)
     assert not runtime.calls

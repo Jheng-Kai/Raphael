@@ -72,6 +72,9 @@ async def test_picture_suppression_survives_navigation_time_and_other_tabs(deskt
 
 async def test_a_colleagues_saved_login_does_not_blind_a_shared_computer(desktop, tmp_path):
     hub, tools, _ = await rig(desktop, tmp_path)
+    await hub.prepare(2)
+    await hub._discover(hub.vm.target(2))
+    tools = {tool.name: tool.key for tool in hub.offered_for(2)}
     with vm_scope(("turn", 2, 7), turn_id=7):
         assert (await hub.call(tools["get_desktop_state"], {}, approver="auto")).blocks
     await hub.aclose()

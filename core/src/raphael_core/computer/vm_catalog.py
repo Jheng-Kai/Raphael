@@ -44,6 +44,12 @@ DRIVER_TOOLS = {
 
 PAGE_TOOLS = ("browser_", "get_browser_state")
 
+# Each call can move the physical pointer, focus or clipboard, including browser launch.
+NATIVE_INPUT_TOOLS = frozenset({
+    "click", "double_click", "right_click", "type_text", "press_key", "hotkey", "scroll", "drag",
+    "move_cursor", "bring_to_front", "launch_app", "clipboard_write", "browser_prepare",
+})
+
 # Answers that report how things stand and are not a tool failing: a model told one decides what to do, and
 # nothing it did is evidence of work.
 NOTICES = ("computer_busy", "screen_changed")
