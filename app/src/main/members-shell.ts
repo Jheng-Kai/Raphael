@@ -39,10 +39,11 @@ import {
   offerRoutine,
 } from "./member-dialogs";
 import { openMemberCreator } from "./member-creator";
-import { RAPHAEL_ID, faceHTML, memberOf, orderedMembers, memberRole, raphaelOf, stableMember } from "./members";
+import { previewTemplateFile } from "./member-templates";
+import { RAPHAEL_ID, faceHTML, isMemberNameTaken, memberOf, orderedMembers, memberRole, raphaelOf, stableMember } from "./members";
 import { memberColor, nameAccent } from "./owner-bubble";
 import { followSlimeRoster, setSlimeState } from "./slime";
-import type { AppContext, MainEvent, Member, MemberGroup, MemberPatch, MembersList } from "./types";
+import type { AppContext, MainEvent, Member, MemberGroup, MemberPatch, MembersList, NewMember } from "./types";
 import { type Choice, closeMenu, esc, ico, leave, openMenu, patchHTML, toaster } from "./ui";
 
 /** Below this width details start closed to leave a readable conversation column. */
@@ -445,39 +446,47 @@ export function createMembers(host: MembersHost): MembersShell {
     return true;
   }
 
+  // Adds a member the maker or an import review made. A name another member has is said here, in the owner's words, whichever
+  // way the member comes (the maker, a starter, a template file, the store).
+  async function createMember(made: NewMember): Promise<Member | null> {
+    if (isMemberNameTaken(made.name, (list?.members ?? []).map((m) => m.name))) {
+      toaster.info(t("members.nameTaken", { p0: made.name }));
+      return null;
+    }
+    let answer: Awaited<ReturnType<typeof api.membersCreate>>;
+    try {
+      answer = await api.membersCreate({ ...made, ui_language: getLocale() });
+    } catch (err) {
+      toaster.info(describeError(err));
+      return null;
+    }
+    const id = answer.member.id;
+    toaster.info(t("members.created", { p0: made.name }));
+    await load();
+    select(id);
+    // the routine the core offers goes in only with the owner's 加入, once the maker is gone
+    const offer = answer.routine_offer;
+    if (offer) {
+      setTimeout(async () => {
+        if (!(await offerRoutine(offer))) return;
+        try {
+          await api.routinesCreate({ member_id: id, ...offer });
+        } catch (err) {
+          toaster.info(describeError(err));
+        }
+        if (current === id) details.showMember();
+      }, 0);
+    }
+    return answer.member;
+  }
+
   function newMember(groupId: number | null, store = false): void {
     window.dispatchEvent(new Event("raphael:close-sidebar"));
     openMemberCreator({
       store,
       groupId,
       taken: (list?.members ?? []).map((m) => m.name),
-      async create(made) {
-        let answer: Awaited<ReturnType<typeof api.membersCreate>>;
-        try {
-          answer = await api.membersCreate({ ...made, ui_language: getLocale() });
-        } catch (err) {
-          toaster.info(describeError(err));
-          return null;
-        }
-        const id = answer.member.id;
-        toaster.info(t("members.created", { p0: made.name }));
-        await load();
-        select(id);
-        // the routine the core offers goes in only with the owner's 加入, once the maker is gone
-        const offer = answer.routine_offer;
-        if (offer) {
-          setTimeout(async () => {
-            if (!(await offerRoutine(offer))) return;
-            try {
-              await api.routinesCreate({ member_id: id, ...offer });
-            } catch (err) {
-              toaster.info(describeError(err));
-            }
-            if (current === id) details.showMember();
-          }, 0);
-        }
-        return answer.member;
-      },
+      create: createMember,
     });
   }
 
@@ -556,6 +565,11 @@ export function createMembers(host: MembersHost): MembersShell {
 
   window.addEventListener("raphael:new-member", () => newMember(null));
   window.addEventListener("raphael:member-store", () => newMember(null, true));
+  // A template file opened from the file manager (template-open.ts): its import review, the same as the maker's 開啟.
+  window.addEventListener("raphael:template-file", (event) => {
+    window.dispatchEvent(new Event("raphael:close-sidebar"));
+    void previewTemplateFile(String((event as CustomEvent<string>).detail ?? ""), createMember, null, () => {});
+  });
   onLocaleChange(() => { drawAll(); });
   // A group chat comes where the conversation is: the settings page gives way to it.
   window.addEventListener("raphael:open-room", () => { panelBeforeSettings = null; settings.close(); });

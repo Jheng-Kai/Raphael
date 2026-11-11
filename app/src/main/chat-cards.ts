@@ -41,8 +41,11 @@ function templateCardHTML(card: TemplateCard): string {
   const on = (act: string): string => ` data-act="${act}" data-template-card="${esc(card.id)}"`;
   const facts = [t("cards.templateSkills", { p0: card.counts.skills }), t("cards.templateRoutines", { p0: card.counts.routines }),
     card.connections.length ? t("cards.templateNeeds", { p0: card.connections.join("、") }) : ""].filter(Boolean);
-  const actions = card.state === "published" && card.url
-    ? btn(esc(t("cards.templateOpen")), "sm pri", `${on("template-open")} data-template-url="${esc(card.url)}"`) + btn(esc(t("cards.templateView")), "sm", on("template-view"))
+  const prepared = card.state === "published" && card.url;
+  const actions = prepared
+    ? btn(esc(t("cards.templateOpen")), "sm pri", `${on("template-open")} data-template-url="${esc(card.url!)}"`) +
+      (card.folder_id ? btn(esc(t("cards.templateFolder")), "sm", `${on("template-folder")} data-template-folder="${esc(card.folder_id)}"`) : "") +
+      btn(esc(t("cards.templateView")), "sm", on("template-view"))
     : btn(esc(t("cards.templatePublish")), "sm pri", `${on("template-publish")}${blocked ? " disabled" : ""}`) +
       btn(esc(t("cards.templateSave")), "sm", `${on("template-save")}${blocked ? " disabled" : ""}`) + btn(esc(t("cards.templateView")), "sm", on("template-view"));
   return cardHTML({
@@ -52,7 +55,10 @@ function templateCardHTML(card: TemplateCard): string {
     status: blocked ? "failed" : card.state === "draft" ? "ready" : "done",
     statusText: blocked ? t("cards.templateBlocked") : card.state === "published" ? t("cards.templatePublished") : card.state === "saved" ? t("cards.templateSaved") : t("cards.templateReady"),
     body: card.description || undefined,
-    content: `<p class="card-body template-facts">${facts.map((fact) => `<span>${esc(fact)}</span>`).join("")}</p>`,
+    // A prepared publish request says what the owner does next and where the files are to be found.
+    content: `<p class="card-body template-facts">${facts.map((fact) => `<span>${esc(fact)}</span>`).join("")}</p>` +
+      (prepared ? `<p class="card-body template-next">${esc(t("cards.templatePrepared"))}</p>` +
+        (card.folder ? `<p class="card-body template-where" data-template-where><span>${esc(t("cards.templateWhere"))}</span><span class="template-path">${esc(card.folder)}</span></p>` : "") : ""),
     actions,
     cls: "template-card", attrs: ` data-template-card-id="${esc(card.id)}" data-card-state="${esc(card.state)}" data-template-avatar="${esc(card.avatar ?? "")}"`,
   });
@@ -102,11 +108,21 @@ export function chatCardAction(act: HTMLElement): boolean {
   if (!template) return false;
   if (kind === "template-view") { void viewTemplate(template, card?.dataset.templateAvatar ?? "").catch((error) => toaster.info(describeError(error))); return true; }
   if (kind === "template-save") {
-    run(async () => { const { text } = await api.core<{ text: string }>("members.template_card_export", { id: template }); await api.memberTemplateFile("save", text); });
+    // The card says saved only once the owner's dialog wrote a file: a cancelled dialog leaves it as it was.
+    run(async () => {
+      const { text } = await api.core<{ text: string }>("members.template_card_export", { id: template });
+      if ((await api.memberTemplateFile("save", text)) === null) return;
+      await api.core("members.template_card_export", { id: template, saved: true });
+    });
     return true;
   }
   if (kind === "template-publish") {
-    run(async () => { const { url } = await api.core<{ folder: string; url: string }>("members.template_card_publish", { id: template }); await api.openExternalUrl(url); });
+    // The card then shows where the prepared files are (templateCardHTML); the GitHub page opens beside it.
+    run(async () => { const { url } = await api.core<{ url: string }>("members.template_card_publish", { id: template }); await api.openExternalUrl(url); });
+    return true;
+  }
+  if (kind === "template-folder") {
+    run(() => api.showTemplateExport(act.dataset.templateFolder ?? ""));
     return true;
   }
   if (kind === "template-open") {

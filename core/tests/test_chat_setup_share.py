@@ -266,13 +266,18 @@ async def test_template_card_is_snapshot_with_review_export_publish_and_descript
     assert len(rig.brain.json_calls) == 1
     saved = await rig.agent.call("members.template_card_export", {"id": view["id"]})
     assert json.loads(saved["text"]) == review["template"] and "\n  " in saved["text"]
+    # Asking for the text saves nothing: a dialog the owner cancels must leave the card as it was.
+    assert rig.team.members.template_cards.views([result["turn_id"]])[result["turn_id"]][0]["state"] == "draft"
+    assert await rig.agent.call("members.template_card_export", {"id": view["id"], "saved": True}) == {"saved": True}
     assert rig.team.members.template_cards.views([result["turn_id"]])[result["turn_id"]][0]["state"] == "saved"
     published = await rig.agent.call("members.template_card_publish", {"id": view["id"]})
     from pathlib import Path
     assert json.loads((Path(published["folder"]) / "member.raphael-member").read_text(encoding="utf-8")) == review["template"]
     latest = rig.team.members.template_cards.views([result["turn_id"]])[result["turn_id"]][0]
     assert latest["state"] == "published" and latest["url"] == published["url"]
-    await rig.agent.call("members.template_card_export", {"id": view["id"]})
+    # The prepared folder is part of what the card shows after a restart, as the publish said it.
+    assert latest["folder"] == published["folder"] and latest["folder_id"] == published["folder_id"]
+    await rig.agent.call("members.template_card_export", {"id": view["id"], "saved": True})
     assert rig.team.members.template_cards.views([result["turn_id"]])[result["turn_id"]][0]["state"] == "saved"
     for index, description in enumerate(("I clarify public guides.", "x" * 280)):
         rig.brain.chats = [live_said("Hello.")]

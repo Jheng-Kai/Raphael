@@ -93,7 +93,7 @@ export function checkRendered(name, context = {}) {
     return {check:name};
   }
   // The member store's own checks; the plugin store's store-group-* checks live further down.
-  if (["store-home", "store-category", "store-search", "store-empty", "store-offline", "store-preview", "store-warning", "store-export"].includes(name)) {
+  if (["store-home", "store-category", "store-search", "store-empty", "store-offline", "store-closed", "store-preview", "store-warning", "store-export"].includes(name)) {
     const calls = window.__look.calls;
     require(!calls.some(c => c.method === "members.template" && ["import", "publish"].includes(c.params.action)), "browsing and review never install or publish");
     require(!calls.some(c => /connect$/.test(c.method || "")), "preview never connects apps");
@@ -103,6 +103,11 @@ export function checkRendered(name, context = {}) {
       if (name === "store-home") require(document.querySelectorAll(".store-featured .store-entry").length === 2, "featured row");
       else require(document.querySelectorAll(".store-entry").length === 1, "local filter selects one entry");
       require(calls.filter(c => c.method === "members.template" && c.params.action === "catalog").length === 1, "filtering never refetches");
+    } else if (name === "store-closed") {
+      const results = document.querySelector(".store-results");
+      require(results.textContent.trim() === "商店還沒開放" && visible(results.querySelector("[data-store-closed]")), "the store says it is not open yet, and nothing else");
+      require(!visible(document.querySelector("[data-store-search]")) && !visible(document.querySelector(".store-categories")), "no search or categories for a store with nothing in it");
+      require(!document.querySelector(".store-entry") && !document.body.textContent.includes("離線"), "no entries and no offline claim");
     } else if (["store-empty", "store-offline"].includes(name)) {
       require(document.querySelector(".store-results").textContent.includes("商店目前沒有內容"), "calm empty copy");
       require(!document.querySelector(".store-entry"), "no fabricated catalogue entries");
@@ -154,6 +159,38 @@ export function checkRendered(name, context = {}) {
       const member = window.__look.data.members.at(-1);
       require(member.tools.length === 0, "no imported app grants");
       require(window.__look.data.routines.filter(r => r.member_id === member.id).every(r => !r.enabled), "imported routines stay off");
+    }
+    if (name === "colleague-save-cancelled") {
+      const card = document.querySelector('[data-template-card-id="tpl-1"]');
+      require(calls.some(call => call.command === "member_template_file" && call.action === "save"), "the owner's save dialog was opened");
+      require(!window.__look.exportedTemplate, "a cancelled dialog writes nothing");
+      require(card.dataset.cardState === "draft" && !card.textContent.includes("已儲存"), "the card does not say saved");
+      require(!calls.some(call => call.method === "members.template_card_export" && call.params.saved === true), "the core is not told it was saved");
+      require([...card.querySelectorAll(".card-actions button")].every(button => !button.disabled), "the card's buttons are back");
+    }
+    if (name === "colleague-published") {
+      const card = document.querySelector('[data-template-card-id="tpl-1"]'), where = card.querySelector("[data-template-where]"), next = card.querySelector(".template-next");
+      require(card.dataset.cardState === "published" && visible(where) && visible(next), "the card says where the files are and what to do next");
+      require(where.textContent.includes("template-exports") && where.textContent.includes("3f9a1c07d2e84b56"), "the path of the prepared folder is written out");
+      const edge = card.getBoundingClientRect().right;
+      require(where.getBoundingClientRect().right <= edge + 0.5 && next.getBoundingClientRect().right <= edge + 0.5, "the path and the sentence wrap inside the card");
+      const buttons = [...card.querySelectorAll(".card-actions button")];
+      require(buttons.map(button => button.dataset.act).join() === "template-open,template-folder,template-view" && buttons.every(visible), "open the GitHub page, show the files, view");
+      require(buttons[0].classList.contains("pri") && !buttons[1].classList.contains("pri"), "the GitHub page is the one primary button");
+    }
+    if (name === "colleague-bad-file") {
+      const toast = document.querySelector(".toast");
+      require(visible(toast) && toast.textContent.includes("損壞或不完整"), "the file is said to be damaged, in the owner's words");
+      require(!/JSON|Unexpected|SyntaxError|Invalid/.test(toast.textContent), "no parser or core wording");
+      require(!document.querySelector(".template-preview"), "nothing is previewed");
+      require(!calls.some(call => call.method === "members.template"), "the core is never asked about a file that cannot be one");
+    }
+    if (name === "colleague-name-empty") {
+      const dialog = document.querySelector(".template-preview"), field = dialog.querySelector("[data-template-name]"), line = dialog.querySelector(".field-error");
+      require(field.getAttribute("aria-invalid") === "true" && visible(line) && line.textContent === "請輸入名字", "the field is marked and one line says what to do");
+      require(getComputedStyle(field).borderTopColor === getComputedStyle(line).color, "the field's edge and the line share the error colour");
+      require(!calls.some(call => call.method === "members.template" && call.params.action === "import"), "nothing is added");
+      require(!dialog.querySelector('[data-dlg="import"]').disabled, "the owner can try again");
     }
     if (name === "colleague-export") {
       const template = JSON.parse(window.__look.exportedTemplate);

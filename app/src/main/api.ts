@@ -597,6 +597,10 @@ export const openLibraryFile = (memberId: number, id: string): Promise<void> => 
 export const usageAllowances = (): Promise<CliAllowances> => core("usage.allowances");
 export const pickOutputFolder = (): Promise<string | null> => invoke("pick_output_folder");
 export const memberTemplateFile = (action: "open" | "save", text = ""): Promise<string | null> => invoke("member_template_file", { action, text });
+/** The text of the template file the app was opened with (double-clicked in the file manager), once; null when there is none. */
+export const memberTemplatePending = (): Promise<string | null> => invoke("member_template_pending");
+/** Shows the files of a prepared publish request in the file manager, by the folder's 16 characters (`folder_id` of the publish). */
+export const showTemplateExport = (folderId: string): Promise<void> => invoke("show_template_export", { folderId });
 // Group threads reuse the same worker and safety gate as individual conversations.
 export const routineRuns = (routineId: number): Promise<{ runs: RoutineRun[]; total?: number }> => core("routines.runs", { routine_id: routineId });
 export const roomsList = (): Promise<{ rooms: Room[] }> => core("rooms.list");

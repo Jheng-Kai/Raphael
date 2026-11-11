@@ -7,6 +7,7 @@ import { resolve } from "node:path";
 import ts from "typescript";
 import { describe, expect, test } from "vitest";
 import { connectionName, type MemberTemplate } from "./member-templates";
+import { NAME_MAX, ROLE_MAX } from "./members";
 import { routineText } from "./members";
 import { reviewPageHTML, type ReviewPage } from "./template-review";
 import { t } from "./i18n";
@@ -57,6 +58,16 @@ describe("the MemberTemplate type is the core's recipe", () => {
   });
 });
 
+describe("a member's name and role are as long as the core says, in every field of sharing", () => {
+  const store = readFileSync(resolve(root, "core/src/raphael_core/members/store.py"), "utf8");
+  const limit = (name: string): number => Number(new RegExp(`^${name} = ([0-9]+)`, "m").exec(store)![1]);
+
+  test("the window's limits are the core's", () => {
+    expect(NAME_MAX).toBe(limit("NAME_MAX"));
+    expect(ROLE_MAX).toBe(limit("ROLE_MAX"));
+  });
+});
+
 describe("the review shows everything a shared member holds", () => {
   const pages: ReviewPage[] = [{ kind: "main" }, { kind: "context" }, ...fixture.skills.map((_, index) => ({ kind: "skill", index }) as ReviewPage),
     { kind: "routines" }, ...fixture.routines.map((_, index) => ({ kind: "routine", index }) as ReviewPage), { kind: "integrations" }];
@@ -90,7 +101,7 @@ describe("the review shows everything a shared member holds", () => {
 
 describe("the words say what sharing does", () => {
   // Sharing saves a file, or prepares a publish request on GitHub; it never makes a link (owner, 2026-11-11).
-  const keys = ["template.copyHint", "template.export", "cards.templateSave", "cards.templatePublish", "cards.templatePublished", "cards.templateOpen", "store.publish", "store.export"] as const;
+  const keys = ["template.copyHint", "template.export", "cards.templateSave", "cards.templatePublish", "cards.templatePublished", "cards.templateOpen", "cards.templatePrepared", "cards.templateWhere", "cards.templateFolder", "store.publish", "store.notOpen", "store.unavailable"] as const;
   const link = /link|連結|链接|リンク|링크|enlace|\blien\b|tautan|collegamento|ссылк|ลิงก์|bağlant|liên kết/i;
   const locales = { de, en, es, fr, id, it: itLocale, ja, ko, ptBR, ru, th, tr, vi, zhCN, zhTW } as Record<string, Record<string, string>>;
 

@@ -34,6 +34,7 @@ import { installContextMenus } from "./context-menu";
 import { prefetchEmojiWhenIdle } from "./emoji-data";
 import { fixedDevicePatch } from "./device-fixed";
 import { followTray } from "./tray-open";
+import { followTemplateFile, openPendingTemplate, type TemplateOpenTarget } from "./template-open";
 import { installWindowChrome, labelWindowControls, showMaximized } from "./window-chrome";
 import { installWindowZoom } from "./window-zoom";
 import { stopOffscreenSlimes } from "./slime-offscreen";
@@ -360,6 +361,16 @@ watchChipRows(document.body);
   // The tray's menu asks for a page. Rust sends this before it shows the window.
   ctx.onEvent((event) => followTray(event, { inGuide: () => !guide.hidden, go, addWord: () => dictionary.addWord() }));
 
+  // A member template file double-clicked in the file manager: the shell keeps its text, and the members page shows the import
+  // review of it, once the guide (if any) is done and when the window has started.
+  const templateFile: TemplateOpenTarget = {
+    inGuide: () => !guide.hidden,
+    take: api.memberTemplatePending,
+    go,
+    review: (text) => void window.dispatchEvent(new CustomEvent("raphael:template-file", { detail: text })),
+  };
+  ctx.onEvent((event) => followTemplateFile(event, templateFile));
+
   api.subscribeMainEvents((event) => {
     if (event.type === "CoreReady") console.info("main page: CoreReady");
     if (event.type === "SetupMissing") toaster.notice(() => missingHTML(event.missing));
@@ -403,6 +414,7 @@ watchChipRows(document.body);
           tellAgentPage();
           if (mode === "first" || !current) go(START_PAGE);
           firstViewShown();
+          void openPendingTemplate(templateFile).catch((err) => console.warn("main: the opened template file was not shown", err));
           // The speech models that the guide did not wait for come on in the background.
           void resumeModels({ status: api.modelsStatus, ensure: api.modelsEnsure }, (message) => console.warn("main:", message));
         },
@@ -422,6 +434,7 @@ watchChipRows(document.body);
     showPages();
     go(START_PAGE);
     firstViewShown();
+    void openPendingTemplate(templateFile).catch((err) => console.warn("main: the opened template file was not shown", err));
     // A guide that was left before the speech models were all there: fetch what is missing.
     void resumeModels({ status: api.modelsStatus, ensure: api.modelsEnsure }, (message) => console.warn("main:", message));
   }
