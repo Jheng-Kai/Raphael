@@ -1488,20 +1488,24 @@ class MembersService:
             if name == "group_rename" and type(identifier) is int:
                 group = self.store.group(identifier)
                 target = group.name if group else ""
+            if name.startswith("routine_"):  # the speaker's own routine, named by its title
+                routine = self.store.routine(arguments["id"]) if type(arguments.get("id")) is int else None
+                target = routine.title if routine else str(arguments.get("title", "")) if isinstance(arguments.get("title", ""), str) else ""
             from ..management_words import quoted
             return joined(title_of(name, language), quoted(target, language) if target else "", language)
         detail, notes = self.management_target(name, arguments, language)
         return joined(effect(self.management_effect(action, values), language), " ".join([detail, *notes]).strip(), language)
 
-    def admin_batch_confirmation(self, operations: list[dict], language: str) -> str:
-        """One card for the changes asked for in one turn: a line each, one question."""
+    def admin_batch_confirmation(self, operations: list[dict], language: str, *, asker: str = "") -> str:
+        """One card for the changes asked for in one turn: a line each, one question. `asker` is the member that asks,
+        named on the first line of a card of several (one change is titled with the asker by the window)."""
         from ..management_words import batch
         from ..ui_languages import fixed_language
 
         language = fixed_language(language)
         if len(operations) == 1:
             return self.admin_confirmation(operations[0]["name"], operations[0]["arguments"], language)
-        return batch([self.admin_line(op["name"], op["arguments"], language) for op in operations], language)
+        return batch([self.admin_line(op["name"], op["arguments"], language) for op in operations], language, asker=asker)
 
     def management_target(self, name: str, arguments: dict, language: str) -> tuple[str, list[str]]:
         """What a change is about, by name, resolved at card time: the quoted names, and the notes under them.
@@ -1563,6 +1567,9 @@ class MembersService:
             def span(days) -> str:
                 return say(language, "forever", "永久保留", "無期限") if days is None or days < 0 else say(language, "{days} days", "{days} 天", "{days} 日").format(days=days)
             return f"{span(self._settings.get(item.setting))} → {span(arguments.get('value'))}", notes
+        value = arguments.get("value")
+        if item.setting and isinstance(value, (str, int)) and not isinstance(value, bool) and str(value).strip():
+            return listed([str(value).strip()[:120]], language), notes  # the new value of a setting, as the owner reads it
         if item.rpc in ("integrations.disconnect", "connectors.disconnect") or name == "manage_connection":
             connection = arguments.get("id", arguments.get("connection"))
             names = [str(next((entry.get("name", connection) for entry in self._connections() if entry.get("id") == connection), connection))]

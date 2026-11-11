@@ -199,6 +199,10 @@ DEFINITIONS = {item.name: item.definition for item in ACTIONS if not item.settin
 DEFINITIONS[SETTINGS_TOOL.name] = SETTINGS_TOOL.definition
 DEFINITIONS.update({name: item.definition for name, item in GROUPED_TOOLS.items()})
 MANAGEMENT_TOOLS = frozenset(REGISTRY) | {"create_member"}
+# What these actions give back is the owner's own data and nothing changes; in the mode that asks first they still
+# ask, and the owner's yes then covers the reading (`ManagementAction.tier` is T1 for every action that is not destructive).
+READS = frozenset({"conversation_list", "dictionary_list", "settings_read", "member_skills_list", "member_skill_read",
+                   "member_commands_list", "member_routines_list", "memory_document_read"})
 BACKGROUND_MEMBER_TOOLS = frozenset(name for name in DEFINITIONS if name.startswith("member_")) | {"create_member"}
 TIERS = {item.name: item.tier for item in ACTIONS}
 TIERS[SETTINGS_TOOL.name] = SETTINGS_TOOL.tier

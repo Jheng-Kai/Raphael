@@ -294,6 +294,9 @@ class CliLoop:
         self.on_done = None
         self.activity_turn = None
         self.expire = expire
+        # How long a card held in a tool call of the CLI waits: a CLI cannot hold a call open for long, so it is the thirty seconds
+        # (a local command, `approval_wait_s`, is the exception). The cards of administrative changes are never held here:
+        # the turn is in before they are asked (R-AG-MGMT-04).
         self.wait_timeout_s = CONFIRM_TIMEOUT_S if wait_timeout_s is None else wait_timeout_s
         self.approval_wait_s = None
 

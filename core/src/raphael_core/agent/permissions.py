@@ -24,7 +24,7 @@ There are two kinds of cards by who delivers the answer:
 - `run`: a question of the run on the desktop that carries on after the owner gave the computer back
   (`computer.handback`). Nobody is at that question: the card is its only door, `integrations.card_allow`,
   `integrations.card_always` and `integrations.card_deny {id, digest?}`, and it waits as long as an
-  unattended question does (`policy.UNATTENDED_WAIT_S`, about ten minutes). The answer goes to the run
+  unattended question does (`policy.UNATTENDED_WAIT_S`, thirty minutes). The answer goes to the run
   that waits on that very question with the digest of the card, so a card that is not the question any
   more answers nothing, a replay finds the card answered, and a core that started again has no run:
   the card is expired.

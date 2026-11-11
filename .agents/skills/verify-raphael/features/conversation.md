@@ -795,9 +795,10 @@ three lines), admin-delete-many-approved. 一律允許 keeps a narrow rule for t
 tool (`safety_rules.scope`, Always) and is offered only where it can take effect: an owner's Ask first always wins
 over an Always, so where a rule asks the card names the rule and offers no 一律允許, and a rule of the owner's that is
 Never refuses the call without a card. A yes is bound to the digest of the action asked about: changed inputs, a replay,
-a card of another action, a restart and time never use an old approval. A question someone sits at lives 30 seconds; the
-question of a task that waits unattended (the run that carries on after the owner gave the computer back, a background
-task) lives about ten minutes, and the former answers through `integrations.card_allow`, `card_always` and `card_deny`
+a card of another action, a restart and time never use an old approval. A question someone sits at lives 30 seconds (the overlay's spoken
+yes or no, the attended run on the desktop, the card of a connection's tool); the card of an administrative change asked in
+the owner's conversation has no timer (R-AG-MGMT-04); the question of a task that waits unattended (the run that carries on
+after the owner gave the computer back, a background task) lives thirty minutes, and the former answers through `integrations.card_allow`, `card_always` and `card_deny`
 with the card's digest. A no is for the whole request: the tool is not tried again, no other tool of a connection that
 changes something is tried in its place, and the computer and the CLI's own permission question are refused after it,
 on the API loop, on the CLI brain's MCP path, on the computer run and in the background worker alike (Guardian
