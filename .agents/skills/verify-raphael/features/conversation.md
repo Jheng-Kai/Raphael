@@ -1026,7 +1026,7 @@ owner's own key or developer app has its own card states and form (see
 connections-mcp.md, 2026-10-31); `card-composio-missing` and `card-key-rejected` check both.
 
 ```powershell
-npm run verify -- --core
+npm run verify -- --contract
 npm run look -- connector-failed-continued connector-reconnected chat-secret-saved-not-resumed --theme both --width 1120,720,1920x1080
 npm run native -- self-diagnosis
 ```

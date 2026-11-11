@@ -246,7 +246,7 @@ npm run look -- composer-learn member-composer-learn room-composer-learn --theme
 npm run look -- appearance --locale ja --out .look/review
 npm run verify
 npm run verify -- --quick
-npm run verify -- --core --rust
+npm run verify -- --contract --rust
 npm run judge -- .look/run-EXAMPLE --references <external-reference.png>
 npm run verify -- --live
 ```
@@ -261,7 +261,7 @@ themes and 1120/720/1920x1080. A shared confirmation dialog, for example, uses
 `npm run look -- delete automation-delete team-delete room-delete --theme both --width 1120,720,1920x1080`.
 Shared components need representative affected consumers, not every unrelated page.
 Reserve `--all` for integration/release acceptance, CI, explicit requests or genuinely
-app-wide changes. Add `verify -- --core` or `verify -- --rust` only when those
+app-wide changes. Add `verify -- --contract` or `verify -- --rust` only when those
 boundaries change; documentation-only work needs diff/link review. Judge reviews the
 same selected look run. State the selection and any incomplete evidence in the handoff.
 
@@ -375,7 +375,8 @@ centering, inner margins, labels, keyboard focus and close contrast without clos
 Its `hoverOnly` option preserves an open settings modal for the resulting screenshot.
 
 Verify always runs TypeScript and Vitest; its default also runs contrast. `--quick`
-excludes contrast; `--core` adds offline pytest with warnings as errors and `--rust` adds what CI's Windows shell
+excludes contrast; `--contract` adds the core's scenario drivers and the default prompt's size budget; `--core` adds
+the whole offline pytest suite with warnings as errors (CI runs it on every push); `--rust` adds what CI's Windows shell
 job checks: `cargo fmt --check`, offline locked cargo tests for the app and the vendored
 listener, and Clippy with warnings denied. Optional checks use the existing environment/cache and fail if unavailable.
 Use `--out dir` to select a writable evidence directory for look or verify.

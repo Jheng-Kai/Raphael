@@ -21,6 +21,11 @@ describe("the checks of a verify run", () => {
   it("keeps the quick run to the two frontend checks", () => {
     expect(names(["--quick"])).toEqual(["tsc", "vitest"]);
   });
+  it("runs the core contract in place of the whole suite, and the whole suite when both are asked for", () => {
+    expect(names(["--contract"])).toEqual(["tsc", "vitest", "contrast", "contract", "rustfmt"]);
+    expect(names(["--contract", "--core"])).toContain("pytest");
+    expect(names(["--contract", "--core"])).not.toContain("contract");
+  });
   it("checks formatting once when the Rust checks are asked for", () => {
     expect(names(["--core", "--rust"])).toEqual(["tsc", "vitest", "contrast", "pytest", "rustfmt", "cargo", "listener", "clippy"]);
   });
