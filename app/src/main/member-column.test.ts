@@ -284,6 +284,14 @@ describe("the column, used", () => {
     expect(host.newMember).toHaveBeenCalled();
   });
 
+  test("every row of the plus menu has a mark of its own: the store is not drawn with the plus of 新增成員", () => {
+    const column = mount();
+    column.el.querySelector<HTMLElement>('[data-col="add"]')!.click();
+    const drawings = [...document.querySelectorAll<HTMLElement>("#app-popover [data-pick]")].map(item => item.querySelector(".ck svg")?.innerHTML ?? "");
+    expect(drawings.every(Boolean)).toBe(true);
+    expect(new Set(drawings).size).toBe(drawings.length);
+  });
+
   test("the plus menu retains group creation and opens the shared group chat creator", () => {
     const column = mount();
     column.el.querySelector<HTMLElement>('[data-col="add"]')!.click();
