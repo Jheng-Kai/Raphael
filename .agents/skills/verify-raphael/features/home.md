@@ -54,8 +54,7 @@ asked for no slime, and for Raphael to be alive with effects (「它不是一張
 
 ## How to get to it (user POV)
 
-The square Home button at the sidebar's foot. At narrow widths, open the sidebar drawer
-first.
+The square Home button at the sidebar's foot (the rail's foot at narrow widths).
 
 ## Driving it with look
 

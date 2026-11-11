@@ -91,16 +91,36 @@ The owner's primary contact (P15b-1, the last section) takes the top display slo
 
 ## How to get to it (user POV)
 
-The fixed sidebar is present on every page. Its chief uses the same compact row as colleagues. Folders preserve their collapsed state; drag members between folders or reorder folders. Below 860px the menu opens the same full sidebar as a drawer. No icon strip or separate Team page remains.
+The fixed sidebar is present on every page. Its chief uses the same compact row as colleagues. Folders preserve their collapsed state; drag members between folders or reorder folders. Below 860px the list is not hidden behind a menu button or a drawer: it is the 88px rail of faces (see Grok Bot's air below). No separate Team page remains.
 
-Both sides are resized by dragging, as Grok Bot's (owner, 2026-11-06, R-UI-110): there is no fold button and no handle is drawn, only the cursor changes over the edge and a thin line shows while it moves. The list's right edge drags it from 240 to 400 px; narrower than 176 px it folds to the 72 px rail, and the rail dragged out opens it at the width it was let go. The details panel's left edge drags it from 300 to 720 px; narrower than 240 px it closes, and the header's name opens it again at its kept width. Widths and the fold are kept in the browser's storage. Each edge is a keyboard separator (arrows; Enter folds the list or closes the panel); Ctrl+B still folds the list.
+Both sides are resized by dragging, as Grok Bot's (owner, 2026-11-06, R-UI-110): there is no fold button and no handle is drawn, only the cursor changes over the edge and a thin line shows while it moves. The list's right edge drags it from 240 to 400 px; narrower than 176 px it folds to the 88 px rail, and the rail dragged out opens it at the width it was let go. The details panel's left edge drags it from 300 to 720 px; narrower than 240 px it closes, and the header's name opens it again at its kept width. Widths and the fold are kept in the browser's storage. Each edge is a keyboard separator (arrows; Enter folds the list or closes the panel); Ctrl+B still folds the list.
 
 ```powershell
 npm run look -- sidebar-rail sidebar-rail-dragged-open sidebar-dragged-wider panel-dragged-wider panel-drag-keeps-place panel-drag-closes --theme both --width 1120,720,1920x1080
 ```
 
+### Grok Bot's air: rows, width, rail and foot (owner, 2026-11-12, R-SIDE-01)
+
+Measured beside Grok Bot at 1120 x 900 (`bots/research/grokbot/clean-ui-measured-2026-11-12.md`): a row is a 54 px highlight with 12 px
+corners, 12 px in from the list's edges and 58 px from the next (before: 48 px, inset 8, 50 px apart), the 40 px face centred on it,
+the name 14 px over a 13 px line (ink 14 and 12 on a Chinese line, Grok Bot's 14 and 13), a folder's label 13 px with 26 px over it and 18 px
+under it to its first row. The list is 348 px wide from 952 px of window up, `min(348px, 100vw - 604px)` below that, so the conversation never
+gets narrower than at 900 px with the old list; a dragged width (240 to 400 px) keeps winning. Under 860 px the list is the rail of faces,
+88 px wide, with no menu button, drawer or scrim: each face 36 px on a 54 px square (lit for the open conversation) 58 px apart, a faint line
+under Raphael's row and between folders, the unread dot on the face's corner, the name as the face's tooltip, a right click opens the row menu,
+and at its foot search and plus side by side (the plus opens the list's own menu), microphone and Home side by side, the Connections icon
+and the account. Folders folded in the list stay folded in the rail, and a folder's heading and the hidden folder are not reachable there
+(widen the window). The wide list's foot is one row: the account's face at the left and the 36 px Connections pill filling the rest, with
+microphone and Home at its end while the pill keeps 180 px; a list narrower than 336 px puts those two in the top row beside search and plus.
+`sidebar-metrics` records the numbers (width, pitch, highlight, type, foot, rows that fit), `sidebar-air` asserts them (and the rail's),
+`sidebar-air-foot` the narrow list, `sidebar-rail-menu` the right click, `sidebar-drag-row` a dragged row at the new height.
+
+```powershell
+npm run look -- sidebar-metrics sidebar-air sidebar-air-foot sidebar-rail-menu sidebar-drag-row sidebar-rail sidebar-drawer sidebar sidebar-many sidebar-unread --theme both --width 1120,720,1920x1080
+```
+
 Select a member, then click the stacked header title for details.
-At compact width open the sidebar drawer to select a member first. The same title
+At compact width press a member's face in the rail to select a member first. The same title
 closes the panel; its close button updates the same remembered session state. Details holds the face (a press shows
 every picture and colour at once; since 2026-11-08 under the pointer the face dims along its own outline with a white pencil in its middle, as on the owner's photo in Settings), the routines, Raphael's conversations, 訊息平台 (each Telegram, Slack and
 Discord bot not set up is one row with 設定; a connected one is its card with pairing) and, since 2026-11-08 (owner:
@@ -636,7 +656,7 @@ npm run look -- presence-states-sidebar --theme both --width 1120,720,1920x1080
 Hidden theme emblem alternatives defer loading until visible (avatar.test.ts).
 Presence effects avoid composited opacity animation so the animated SVG keeps
 the static pose's edge (slime.test.ts; slime-sharp). Re-run slime-cost after paint changes.
-Compact drawer controls start below window controls (sidebar.test.ts); the actual
+The rail's controls start below window controls (sidebar.test.ts); the actual
 room-group-menu, room-required-chief and room-generated-name journeys click the
 plus button and open group creation at all three mapped widths.
 
@@ -1149,8 +1169,7 @@ pointer receives the focus and one click; bare scrim only closes; a menu open ov
 next press. Unit proof: `app/src/main/dismissals.test.ts` and `app/src/main/dialog-outside-close.test.ts`.
 
 Each scene presses once with the real mouse on a control that is not part of what is open and fails if either half is missing;
-`checks.mjs` `press-through-*` waits only for the page to draw the result, never presses again. At drawer widths (720) the list
-opens from the menu button in the caption first, which closes nothing; the press on the member is still one press.
+`checks.mjs` `press-through-*` waits only for the page to draw the result, never presses again. At 720 the list is the rail of faces, always on screen, so the press on a face is one press.
 
 ```text
 npm run look -- press-through-avatar-picker press-through-row-menu press-through-right-click press-through-delete-dialog press-through-model-menu --theme both --width 1120,720,1920x1080
@@ -1171,14 +1190,14 @@ its opener: a left press on that row closes the menu and opens the row, and a se
 Openers audited (a second press on each now closes it and it stays closed): the sidebar's 「連接應用程式」 and account button (Settings is a
 scrim dialog), the sidebar's + and search button, the composer's model and permission buttons, a message's ⋯ and react button and the
 emoji picker opened from the reaction bar, the slime picker's face button, a page card made larger, the header's conversation button
-(a drawer's scrim at drawer widths), the narrow sidebar's menu button (in the caption, above the drawer's scrim, and it toggles itself), row ⋯ menus (the ⋯ is not drawn until the row is right-clicked,
+(its scrim), row ⋯ menus (the ⋯ is not drawn until the row is right-clicked,
 so its toggle is proved in `dismissals.test.ts`), and every other `openMenu`, `openPopover`, `openDialog` and `registerDismissal` user
 by the same mechanism. The composer's + opens the system file picker, which no page can press behind.
 
 Each scene opens the thing once from its control, presses that control again with the real mouse at a point the pointer reaches (on the
 scrim for a dialog, on the control for a popover) and fails unless the thing is closed, stayed closed past a fade, and was opened exactly
-once (`watch-opens` counts the openings as the page makes them, so a close followed by an opening is seen). At drawer widths (720) the
-sidebar's 「連接應用程式」 is not reachable behind its own dialog and the scene says so instead of pressing.
+once (`watch-opens` counts the openings as the page makes them, so a close followed by an opening is seen). At 720 the
+sidebar's 「連接應用程式」 is an icon in the rail's foot and is pressed the same way.
 
 ```text
 npm run look -- opener-toggle-connect-apps opener-toggle-settings opener-toggle-add-menu opener-toggle-search-card opener-toggle-model-menu opener-toggle-permission-menu opener-toggle-slime-picker opener-toggle-member-maker opener-toggle-message-menu opener-toggle-reaction-bar opener-toggle-emoji-picker opener-toggle-details opener-toggle-row-menu opener-toggle-row-again opener-toggle-keyboard --theme both --width 1120,720,1920x1080

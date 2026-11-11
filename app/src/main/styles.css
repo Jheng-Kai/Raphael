@@ -7,7 +7,9 @@
 :root {
   --card-primary: #ffffff; --card-primary-ink: #171717; --card-primary-edge: #d6d6d6;
   --desktop-frame-bg: #171717; --desktop-frame-text: #f0f0f0;
-  --sidebar-width: 296px; --window-controls-height: 32px;
+  /* The list is as wide as Grok Bot's (348 px) from 952 px of window up, and gives way to the conversation below that so
+     that it never gets narrower than it is on a 900 px window (604 px); under 860 px it is a rail of faces (sidebar.css). */
+  --sidebar-width: min(348px, calc(100vw - 604px)); --window-controls-height: 32px;
   /* The window's three caption buttons are 46 px cells (.window-button). What stands at the top right of a pane that reaches the
      window's edge ends this far short of them: the gap Grok Bot leaves, measured at 14 px (2026-11-12). */
   --window-controls-width: calc(3 * 46px); --window-controls-gap: 14px;

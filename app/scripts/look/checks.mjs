@@ -979,14 +979,14 @@ export function checkRendered(name, context = {}) {
     if (name === "presence-states-sidebar") for (const [id, state] of [[1,"thinking"],[2,"working"],[3,"blocked"]]) require(document.querySelector(`[data-member="${id}"] .slime`)?.dataset.state === state, `sidebar member ${id} shows ${state}`);
     if (["presence-hover-action", "presence-sidebar-hover", "presence-rail-hover"].includes(name)) {
       const tips = [...document.querySelectorAll('[role="tooltip"]')].filter(visible);
-      const nameFirst = name === "presence-rail-hover" && innerWidth >= 860;
+      const nameFirst = document.documentElement.hasAttribute("data-sidebar-collapsed");
       const member = window.__look.data.members.find(member => member.id === 1);
       require(tips.length === 1 && tips[0].textContent === `${nameFirst ? member.name + "\n" : ""}Comparing sample sources`, "one open tooltip follows the public action, with the rail name first");
       const box = tips[0].getBoundingClientRect(), chrome = document.querySelector('.window-chrome').getBoundingClientRect();
       require(box.left >= 8 && box.right <= innerWidth - 8 && box.top >= chrome.bottom + 8 && box.bottom <= innerHeight - 8, "the complete tooltip stays inside the viewport and clear of window controls");
       if (name === "presence-sidebar-hover" && innerWidth < 860) {
         const add = document.querySelector('[data-col="add"]'), control = add.getBoundingClientRect();
-        require(control.top >= chrome.bottom && add.contains(document.elementFromPoint(control.x + control.width / 2, control.y + control.height / 2)), "the compact drawer add button stays below the chrome and receives pointer input");
+        require(control.top >= chrome.bottom && add.contains(document.elementFromPoint(control.x + control.width / 2, control.y + control.height / 2)), "the rail's add button stays below the chrome and receives pointer input");
       }
       if (name === "presence-hover-action") {
         const face = [...document.querySelectorAll('.mb-head .av')].find(visible), control = face.closest('button');
@@ -1039,7 +1039,7 @@ export function checkRendered(name, context = {}) {
       require(!visible(row.parentElement.querySelector('.mb-more')), "no ⋯ shows under the pointer: a right click opens the row's menu");
       const pair = [...document.querySelectorAll('.side .mb-item')].find(item => visible(item) && item.nextElementSibling?.matches('.mb-item') && !item.querySelector('.mb-tile'));
       const rows = pair ? [pair, pair.nextElementSibling].map(item => item.querySelector('.nav.mb-row').getBoundingClientRect()) : [];
-      require(rows.length < 2 || (Math.abs(rows[0].height - 48) <= 1 && Math.abs(rows[1].top - rows[0].top - 50) <= 1), `rows are 48 px tall and 50 px apart, compact rows (${rows.map(box => Math.round(box.top) + '/' + Math.round(box.height)).join(' ')})`);
+      require(rows.length < 2 || (Math.abs(rows[0].height - 54) <= 1 && Math.abs(rows[1].top - rows[0].top - 58) <= 1), `rows are 54 px tall and 58 px apart, Grok Bot's air (${rows.map(box => Math.round(box.top) + '/' + Math.round(box.height)).join(' ')})`);
     }
     if (name === "sidebar-group-author") require([...document.querySelectorAll('.au-room-row .mb-row-p')].some(line => line.textContent.startsWith(`${window.__look.data.members.find(m => m.id === 1).name}：`)), "group preview starts with its author");
     return { check: name };
@@ -1091,7 +1091,7 @@ export function checkRendered(name, context = {}) {
       require(dock.textContent.includes('你正在操作') && visible(dock.querySelector('[data-desktop="return"]')), 'the pill says the owner is in control and offers handback');
       const box = frame.getBoundingClientRect();
       require(Math.abs(box.width / box.height - 1280 / 900) < 0.03 && (box.width >= innerWidth - 96 || box.height >= innerHeight - 160), 'the screen fills the window at its own proportions');
-      require(!document.querySelector('[data-sidebar="open"]')?.checkVisibility({visibilityProperty:true}), 'takeover leaves no sidebar entry above its bar');
+      require(!document.querySelector('.side, [data-sidebar="open"]')?.checkVisibility({visibilityProperty:true}), 'takeover leaves no sidebar entry above its bar');
       const current = calls.findLast(call => call.method === 'computer.viewer_open').params.member_id;
       require(calls.filter(call => call.method === 'computer.viewer_open' && call.params.member_id === current).length === 1 && frame.contentWindow.__desktopConnections === 1, 'takeover opens no additional stream');
       if (name === 'level-menu') require(visible(document.querySelector('#app-popover [data-pick="files"]')) && visible(document.querySelector('#app-popover [data-pick="teach"]')), 'the shared menu holds files and teaching');
@@ -2272,6 +2272,24 @@ export function checkRendered(name, context = {}) {
     else if (!document.querySelector('.page-agent').hidden) require(rows[0].matches('[data-member], [data-room]'), "chat selects only its conversation");
     return rows[0].getAttribute('data-go') ?? rows[0].getAttribute('data-member') ?? rows[0].getAttribute('data-room');
   };
+  // Records the sidebar's geometry (no judgement): width, row pitch, the highlight's box, type sizes, the foot and how many rows fit.
+  if (name === "sidebar-metrics") {
+    const nav = document.getElementById("nav"), scroll = nav.querySelector(".mb-scroll"), foot = nav.querySelector(".side-foot"), top = nav.querySelector(".mb-top");
+    const around = nav.getBoundingClientRect(), box = element => { const r = element.getBoundingClientRect(); return { left: Math.round((r.left - around.left) * 10) / 10, top: Math.round(r.top * 10) / 10, width: Math.round(r.width * 10) / 10, height: Math.round(r.height * 10) / 10 }; };
+    const rows = [...nav.querySelectorAll(".mb-row:not(.mb-tile)")].filter(visible);
+    const items = rows.map(row => row.closest(".mb-item, .au-room-row"));
+    const pitches = items.slice(1).map((item, index) => Math.round((item.getBoundingClientRect().top - items[index].getBoundingClientRect().top) * 10) / 10);
+    const first = rows[0], nameEl = first?.querySelector("b"), preview = first?.querySelector(".mb-row-p");
+    const area = scroll.getBoundingClientRect(), fitting = rows.filter(row => { const r = row.getBoundingClientRect(); return r.top >= area.top - 1 && r.bottom <= area.bottom + 1; }).length;
+    const label = nav.querySelector(".mb-ghead .mb-gname");
+    const gap = label && label.closest(".mb-sec").previousElementSibling;
+    return { check: name, width: Math.round(around.width * 10) / 10, rail: document.documentElement.hasAttribute("data-sidebar-collapsed"),
+      row: first && box(first), pitch: pitches.slice(0, 6), face: first && box(first.querySelector(".av, .room-avatar")), nameSize: nameEl && getComputedStyle(nameEl).fontSize, nameLine: nameEl && getComputedStyle(nameEl).lineHeight,
+      previewSize: preview && getComputedStyle(preview).fontSize, previewLine: preview && getComputedStyle(preview).lineHeight, nameBox: nameEl && box(nameEl), previewBox: preview && box(preview),
+      foot: foot && box(foot), top: top && box(top), list: box(scroll), rowsFitting: fitting, rowsTotal: rows.length,
+      label: label && { box: box(label), size: getComputedStyle(label).fontSize, head: box(label.closest(".mb-ghead")), section: box(label.closest(".mb-sec")), gapAbove: gap ? Math.round((label.closest(".mb-sec").getBoundingClientRect().top - gap.getBoundingClientRect().bottom) * 10) / 10 : null },
+      main: box(document.getElementById("main")), controls: [...nav.querySelectorAll(".mb-top > *, .side-foot .btn, .side-foot .nav, .side-foot .sidebar-foot-row > *")].filter(visible).map(el => ({ c: el.className.split(" ").slice(0, 3).join("."), ...box(el) })) };
+  }
   if (name === "sidebar-selection") return {check:name, selected:selection()};
   if (name === "home-hover-content") {
     const {normal, hovered} = context;
@@ -2285,9 +2303,9 @@ export function checkRendered(name, context = {}) {
   if (name === "sidebar-shell") {
     selection();
     const nav = document.getElementById("nav"), column = nav.querySelector(".mb-col"), main = document.getElementById("main");
-    const compact = matchMedia("(max-width: 859px)").matches, open = document.documentElement.hasAttribute("data-sidebar-open");
+    const compact = matchMedia("(max-width: 859px)").matches;
     require(document.querySelectorAll(".mb-col").length === 1 && column, "one global conversation list");
-    if (!compact) {
+    if (!compact && !document.documentElement.hasAttribute('data-sidebar-collapsed')) {
       // The window's top-left corner, above the sidebar's list, moves the window like the caption;
       // its search and add buttons still press.
       const corner = document.elementFromPoint(12, 12), gap = document.elementFromPoint(40, 24);
@@ -2304,38 +2322,40 @@ export function checkRendered(name, context = {}) {
     require(pair.map(button=>button.dataset.col).join()==='search,add'&&!column.querySelector('input'),'search then plus, with no field standing in the list');
     for(const button of pair.filter(visible)){const box=button.getBoundingClientRect(),style=getComputedStyle(button);require(Math.abs(box.width-36)<1&&Math.abs(box.height-36)<1&&parseFloat(style.borderRadius)>=18&&style.backgroundColor!=='rgba(0, 0, 0, 0)'&&style.borderTopColor==='rgba(0, 0, 0, 0)','search and plus are 36px soft round buttons with no frame');}
     if(!rail&&pair.every(visible))require(pair.every(button=>button.parentElement===header)&&Math.abs(pair[0].getBoundingClientRect().top-pair[1].getBoundingClientRect().top)<1&&pair[1].getBoundingClientRect().right>pair[0].getBoundingClientRect().right,'search and plus stand side by side in the top row');
-    require(nav.querySelector('.side-foot > .sidebar-apps[data-connect-apps]')&&[...nav.querySelectorAll('.side-foot [data-go]')].map(el=>el.dataset.go).join()==='settings,dictation,home','footer opens Connect apps (its own dialog, R-UI-111) above account, dictation and Home');
+    // Dictation and Home stand beside the account on the foot's one row, or in the top row when the list is too narrow for them.
+    require(nav.querySelector('.side-foot > .sidebar-apps[data-connect-apps]')&&['settings','dictation','home'].every(go=>nav.querySelector(`.side-foot [data-go="${go}"], .mb-top [data-go="${go}"]`)),'footer opens Connect apps (its own dialog, R-UI-111) beside account, dictation and Home');
     if(!document.documentElement.hasAttribute('data-sidebar-collapsed')){const home=nav.querySelector('.sidebar-home'),box=home.getBoundingClientRect();require(Math.abs(box.width-36)<1&&Math.abs(box.height-36)<1&&getComputedStyle(home).borderRadius===getComputedStyle(nav.querySelector('.sidebar-dictation')).borderRadius,'Home keeps the shared icon surface');}
     for(const button of nav.querySelectorAll('.btn.icon:not([data-col]), .side-foot .nav'))if(visible(button)&&!visible(button.querySelector('.nav-t'))){const box=button.getBoundingClientRect(),corner=parseFloat(getComputedStyle(button).borderRadius);require(corner>0&&corner<Math.min(box.width,box.height)/2,`sidebar buttons are rounded squares, never circles (${button.className})`);}
     require(nav.querySelector('.side-foot [data-go="dictation"]').getAttribute('aria-label')&&!nav.querySelector('.side-foot [data-go="dictation"] .nav-t'),'dictation is a named icon button');
     require(nav.querySelector('.sidebar-account .owner-face')&&nav.querySelector('.sidebar-account').getAttribute('aria-label'),'account has its own face and accessible name');
-    require(!nav.querySelector('.sidebar-account > svg.i')&&(rail||visible(nav.querySelector('.sidebar-account-name'))),'account shows its face and name, without a gear');
+    require(!nav.querySelector('.sidebar-account > svg.i')&&visible(nav.querySelector('.sidebar-account .owner-face')),'account shows its face alone (its name is its accessible name), without a gear');
     require(!nav.querySelector('.au-rooms-section .mb-ghead, [data-room-new], .mb-sec[data-group="none"] .mb-ghead'),'only owner-created sections have headings');
     require(getComputedStyle(nav.querySelector('.side-foot')).borderTopWidth==='0px','footer has no separator');
-    if (compact) {
-      require(visible(document.querySelector('.sidebar-toggle')) && main.getBoundingClientRect().left < 1 && Math.abs(main.getBoundingClientRect().width - innerWidth) < 1, "compact content uses the whole window behind a menu button");
-      require(nav.inert === !open && main.inert === open, "drawer owns focus and closes access to covered content");
-    } else {
-      const listWidth=rail?72:296;
-      require(Math.abs(nav.getBoundingClientRect().width - listWidth) < 1 && main.getBoundingClientRect().left >= listWidth - 1, "desktop list retains its fixed width");
-      require(!visible(document.querySelector('.sidebar-toggle')) && !visible(nav.querySelector('.sidebar-close')), "desktop has no drawer controls");
-    }
+    // The list is always on screen: a rail of faces under 860 px (no menu button, drawer or scrim), else 348 px wide as Grok Bot's
+    // (less on a window under 952 px, so that the conversation keeps 604 px), or the width it was dragged to.
+    require(!document.querySelector('.sidebar-toggle, .sidebar-close, .sidebar-scrim, [data-sidebar="open"]'), "there is no menu button, drawer or scrim");
+    const dragged = Number(localStorage.getItem('raphael.sidebar.width')) || 0;
+    const listWidth = rail ? 88 : dragged ? Math.min(dragged, Math.max(240, innerWidth - 604)) : Math.min(348, innerWidth - 604);
+    require(Math.abs(nav.getBoundingClientRect().width - listWidth) < 1 && Math.abs(main.getBoundingClientRect().left - listWidth) < 1, `the list keeps its width: ${nav.getBoundingClientRect().width} not ${listWidth}`);
+    if (compact) require(rail && !nav.inert && !main.inert, "a narrow window shows the rail of faces, and nothing is inert");
     const chief = column.querySelector('.mb-chief');
     require(chief && chief.querySelector('b') && chief.querySelector('.av'), "the top member shows its face and name");
     if(chief)require(!document.querySelector('.mb-star'),'no member carries a star');
-    if(!rail){const pill=nav.querySelector('.sidebar-apps'),name=pill.querySelector('.nav-t').getBoundingClientRect(),plug=pill.querySelector('.i').getBoundingClientRect(),owner=nav.querySelector('.sidebar-account-name').getBoundingClientRect(),face=nav.querySelector('.sidebar-account .owner-face').getBoundingClientRect();require(name.left>=plug.right+6&&name.left<=plug.right+16&&owner.left>=face.right+6&&owner.left<=face.right+16,'pill and account words start after their own leading mark');}
+    if(!rail){const pill=nav.querySelector('.sidebar-apps'),name=pill.querySelector('.nav-t').getBoundingClientRect(),plug=pill.querySelector('.i').getBoundingClientRect();require(name.left>=plug.right+6&&name.left<=plug.right+16,"the pill's words start after its own leading mark");}
     const mic=nav.querySelector('.sidebar-dictation').getBoundingClientRect(),home=nav.querySelector('.sidebar-home').getBoundingClientRect();require(Math.abs(mic.width-home.width)<1&&Math.abs(mic.height-home.height)<1&&Math.abs(mic.width-36)<1,'both footer icon buttons share the top controls size');
-    if(chief&&!rail&&!chief.matches('.mb-tile')&&(!compact||open))require(Math.abs(chief.querySelector('.av').getBoundingClientRect().width-40)<1&&chief.querySelector('.mb-row-main'),'an unpinned top member is an ordinary row');
+    if(chief&&!rail&&!chief.matches('.mb-tile'))require(Math.abs(chief.querySelector('.av').getBoundingClientRect().width-40)<1&&chief.querySelector('.mb-row-main'),'an unpinned top member is an ordinary row');
     for(const row of column.querySelectorAll('.mb-row')){
       const time=row.querySelector('time');
       if(time&&!row.parentElement.matches(':hover, :focus-within'))require(getComputedStyle(time).opacity!=='0','row time stands beside the name until hover or focus swaps it for the overflow');
     }
-    return { check:name, compact, open, folders:column.querySelectorAll('.mb-sec').length };
+    return { check:name, compact, folders:column.querySelectorAll('.mb-sec').length };
   }
   if(name==='sidebar-tile'){
     const tile=document.querySelector('#nav .mb-pinned .mb-tile');
     require(tile,'a pinned member is a tile');
     const box=tile.getBoundingClientRect(),face=tile.querySelector(':scope > .av').getBoundingClientRect(),label=tile.querySelector(':scope > b').getBoundingClientRect();
+    // On the rail of faces a pinned member is a face like the others, on its own 54px square.
+    if(document.documentElement.hasAttribute('data-sidebar-collapsed')){require(Math.abs(face.width-36)<1&&Math.abs(box.width-54)<1&&Math.abs(face.left+face.width/2-(box.left+box.width/2))<1,'on the rail a pinned member is a 36px face centred on its 54px square');return {check:name,face:face.width};}
     require(face.width>=64&&Math.abs(face.left+face.width/2-(box.left+box.width/2))<1,'the tile has a larger centered face');
     require(label.top>=face.bottom&&Math.abs(label.left+label.width/2-(box.left+box.width/2))<1,'the name is centered below the face');
     return {check:name,face:face.width};
@@ -2364,18 +2384,103 @@ export function checkRendered(name, context = {}) {
   }
   if(name==='sidebar-rail'){
     const nav=document.getElementById('nav'),compact=matchMedia('(max-width: 859px)').matches;
-    if(compact){
-      require(!document.documentElement.hasAttribute('data-sidebar-collapsed')&&!visible(nav.querySelector('.side-edge')),'on a narrow window the list is a drawer: it never folds to a rail and has no edge to drag');
-      return {check:name,compact};
-    }
-    require(document.documentElement.hasAttribute('data-sidebar-collapsed')&&Math.abs(nav.getBoundingClientRect().width-72)<1,'the list collapses to a 72px rail');
+    require(document.documentElement.hasAttribute('data-sidebar-collapsed')&&Math.abs(nav.getBoundingClientRect().width-88)<1,'the list is an 88px rail of faces');
+    require(!compact||!visible(nav.querySelector('.side-edge')),'a narrow window has no edge to drag');
     require(!visible(nav.querySelector('.sidebar-account-name')),'the rail shows no names');
     const faces=[...nav.querySelectorAll('.mb-row > .av, .mb-row > .room-avatar')].filter(visible);
-    require(faces.length>0&&faces.every(face=>{const box=face.getBoundingClientRect();return Math.abs(box.left+box.width/2-36)<1;}),'every face is centered in the rail');
+    require(faces.length>0&&faces.every(face=>{const box=face.getBoundingClientRect();return Math.abs(box.left+box.width/2-44)<1&&Math.abs(box.width-36)<1;}),'every face is 36px and centered in the rail');
     require([...nav.querySelectorAll('.mb-item .btn.mb-more, .au-room-row .btn.au-room-more')].every(button=>getComputedStyle(button).display==='none'),'the rail draws no ⋯ over a face; a right click opens its menu');
     const search=nav.querySelector('.side-foot [data-col="search"]').getBoundingClientRect(),add=nav.querySelector('.side-foot [data-col="add"]').getBoundingClientRect(),owner=nav.querySelector('.sidebar-account').getBoundingClientRect();
-    require(search.bottom<=add.top&&add.bottom<=owner.top,'search and plus sit above the owner in the rail');
+    require(Math.abs(search.top-add.top)<1&&search.right<=add.left&&add.bottom<=owner.top,'search and plus sit side by side above the owner in the rail');
     return {check:name,faces:faces.length};
+  }
+  // The rail of faces and the full list as Grok Bot's (owner, 2026-11-12): measured, at every width.
+  if(name==='sidebar-air'){
+    const nav=document.getElementById('nav'),scroll=nav.querySelector('.mb-scroll'),narrow=matchMedia('(max-width: 859px)').matches;
+    const box=el=>el.getBoundingClientRect(),near=(a,b,message)=>require(Math.abs(a-b)<=1,message+`: ${Math.round(a*10)/10} not ${b}`);
+    const rows=[...nav.querySelectorAll('.mb-row:not(.mb-tile)')].filter(visible);
+    require(rows.length>=4,'the list shows its rows');
+    const items=rows.map(row=>row.closest('.mb-item, .au-room-row'));
+    const pairs=items.map((item,i)=>[item,items[i+1]]).filter(([a,b])=>b&&a.parentElement===b.parentElement);
+    if(narrow){
+      // A rail of faces: no words at all, the face 36px on a 54px square, the open one lit, the list scrolls, the foot in a column.
+      require(document.documentElement.hasAttribute('data-sidebar-collapsed')&&document.documentElement.hasAttribute('data-sidebar-narrow'),'a narrow window is the rail');
+      near(box(nav).width,88,'the rail is 88px wide');
+      require(!document.querySelector('.sidebar-toggle')&&!nav.inert,'no menu button hides it');
+      for(const row of rows){
+        require([...row.querySelectorAll('b, .mb-row-p, .mb-row-t, .mb-row-main')].every(part=>part.getBoundingClientRect().width<=1),'a face carries no name or preview');
+        near(box(row).width,54,'a face stands on a 54px square');near(box(row).height,54,'a face stands on a 54px square');
+        const face=row.querySelector(':scope > .av, :scope > .room-avatar');near(box(face).width,36,'the face is 36px');
+        near(box(face).left+18,box(nav).left+44,'the face is centred in the rail');
+      }
+      const open=rows.filter(row=>row.getAttribute('aria-current')==='true');
+      require(open.length===1&&getComputedStyle(open[0]).backgroundColor!=='rgba(0, 0, 0, 0)'&&parseFloat(getComputedStyle(open[0]).borderTopLeftRadius)>=8,'the open conversation stands on a lit rounded square');
+      require(rows.every(row=>row===open[0]||getComputedStyle(row).backgroundColor==='rgba(0, 0, 0, 0)'||row.matches(':hover')),'only the open one is lit');
+      for(const dot of nav.querySelectorAll('.mb-row .mb-dot')){
+        if(!visible(dot))continue;
+        const row=dot.closest('.mb-row'),face=row.querySelector(':scope > .av, :scope > .room-avatar'),d=box(dot),f=box(face);
+        require(d.left>=f.right-d.width-4&&d.top<=f.top+d.height&&d.right<=box(row).right,"the unread dot sits on the face's corner");
+      }
+      require(nav.scrollWidth<=nav.clientWidth+1&&scroll.scrollWidth<=scroll.clientWidth+1,'the rail has no horizontal overflow');
+      require(['auto','scroll'].includes(getComputedStyle(scroll).overflowY),'the list scrolls when it is long');
+      const pitch=pairs.map(([a,b])=>box(b).top-box(a).top);
+      require(pitch.length>0&&pitch.every(d=>Math.abs(d-58)<=1),`faces are 58px apart: ${pitch}`);
+      const foot=nav.querySelector('.side-foot'),parts=['[data-col="search"]','[data-col="add"]','.sidebar-dictation','.sidebar-home','.sidebar-apps','.sidebar-account'].map(sel=>foot.querySelector(sel));
+      require(parts.every(visible),"search, plus, microphone, Home, Connections and the account are all in the rail's foot");
+      require(parts.every(el=>box(el).left>=box(nav).left&&box(el).right<=box(nav).right),'the foot fits the rail');
+      require(box(parts[0]).top<box(parts[4]).top&&box(parts[4]).top<box(parts[5]).top,'the foot is a column: search and plus, then the apps, then the account');
+      require(!visible(foot.querySelector('.nav-t'))&&!visible(foot.querySelector('.sidebar-account-name')),'the foot has icons only');
+      require(box(foot).bottom<=innerHeight&&box(scroll).height>=3*58,`the faces keep room above the foot: ${box(scroll).height}`);
+      return {check:name,narrow:true,faces:rows.length,foot:Math.round(box(foot).height)};
+    }
+    // The full list: 54px highlights 58px apart, 12px in from the list's edges, the name 14px over a 13px line.
+    const first=rows[0],n=box(nav);
+    near(box(first).height,54,'a highlight is 54px tall');
+    near(box(first).left-n.left,12,"a highlight is 12px in from the list's left edge");
+    near(n.right-box(first).right,12,"a highlight is 12px in from the list's right edge");
+    require(parseFloat(getComputedStyle(first).borderTopLeftRadius)===12,"a highlight has Grok Bot's 12px corners");
+    require(pairs.length>0&&pairs.every(([a,b])=>Math.abs(box(b).top-box(a).top-58)<=1),`rows are 58px apart: ${pairs.map(([a,b])=>box(b).top-box(a).top)}`);
+    const name14=first.querySelector('b'),line13=first.querySelector('.mb-row-p');
+    require(getComputedStyle(name14).fontSize==='14px'&&getComputedStyle(line13).fontSize==='13px','the name is 14px and its line 13px');
+    const face=first.querySelector(':scope > .av, :scope > .room-avatar');
+    near(box(face).top+box(face).height/2,box(first).top+box(first).height/2,'the face is centred on the taller row');
+    const label=nav.querySelector('.mb-ghead .mb-gname');
+    if(label){
+      require(getComputedStyle(label).fontSize==='13px',"a folder's label is 13px");
+      const section=label.closest('.mb-sec'),prev=section.previousElementSibling,centre=box(label).top+box(label).height/2;
+      if(prev)near(centre-box(prev).bottom,26,'a label stands 26px under the row above it');
+      near(box(section.querySelector('.mb-row')).top-centre,18,'a label stands 18px over its first row');
+    }
+    // The foot is one row: the account's face at the left, the pill filling the rest, and the microphone and Home at its end while the pill keeps 180px.
+    const foot=nav.querySelector('.side-foot'),account=foot.querySelector('.sidebar-account'),pill=foot.querySelector('.sidebar-apps'),mic=nav.querySelector('.sidebar-dictation'),home=nav.querySelector('.sidebar-home');
+    near(box(pill).height,36,'the pill is 36px tall');near(box(account).top,box(pill).top,'the account and the pill stand on one row');
+    require(box(account).right<=box(pill).left&&Math.abs(box(account).left-n.left-12)<=1,"the account's face is at the left, the pill after it");
+    if(n.width>=336){
+      near(box(mic).top,box(pill).top,"the microphone stands on the foot's row");near(box(home).top,box(pill).top,"Home stands on the foot's row");
+      require(box(pill).width>=180&&Math.abs(n.right-12-box(home).right)<=1,`the pill keeps ${Math.round(box(pill).width)}px and Home ends the row`);
+      near(box(foot).height,44,'the foot is one row');
+    }else{
+      require(mic.closest('.mb-top')&&home.closest('.mb-top'),'in a narrow list the microphone and Home stand in the top row with search and plus');
+      require(Math.abs(box(pill).right-(n.right-12))<=1&&box(pill).width>=140,"the pill fills the foot's row");
+    }
+    return {check:name,narrow:false,rows:rows.length,pitch:pairs.slice(0,3).map(([a,b])=>box(b).top-box(a).top),foot:Math.round(box(foot).height),width:Math.round(n.width)};
+  }
+  // A dragged row (sidebar-drag-row): dimmed in its place, with one line over the row it will land before.
+  if(name==='sidebar-drag-line'){
+    const line=document.querySelector('.mb-drop-line'),dragged=document.querySelector('#nav .is-dragged'),target=document.querySelector('#nav [data-member-item="4"]');
+    require(line&&!line.hidden&&visible(line)&&dragged&&target,'a dragged row is dimmed and its landing line shows');
+    const l=line.getBoundingClientRect(),t=target.getBoundingClientRect(),nav=document.getElementById('nav').getBoundingClientRect();
+    require(Math.abs(l.top+l.height/2-t.top)<=1.5&&l.left>=nav.left&&l.right<=nav.right&&l.width>200,`the line stands over the row it lands before: ${l.top} ${t.top}`);
+    require(getComputedStyle(dragged).opacity==='0.4'&&Math.abs(dragged.getBoundingClientRect().height-54)<=1,'the dragged row is dimmed and keeps its 54px');
+    return {check:name,line:Math.round(l.top)};
+  }
+  // The rail's + opens the sidebar's own menu.
+  if(name==='sidebar-add-menu'){
+    const add=document.querySelector('#nav [data-col="add"]'),menu=document.querySelector('#app-popover');
+    require(visible(add)&&add.getAttribute('aria-expanded')==='true'&&visible(menu)&&menu.querySelector('[data-pick="member"]')&&menu.querySelector('[data-pick="group"]')&&menu.querySelector('[data-pick="group-chat"]'),'the + opens the same menu');
+    const m=menu.getBoundingClientRect();
+    require(m.left>=0&&m.right<=innerWidth&&m.top>=0&&m.bottom<=innerHeight,'the menu stays inside the window');
+    return {check:name,left:Math.round(m.left)};
   }
   if(name==='sidebar-search-before'||name==='sidebar-search-open'){
     const buttons=[...document.querySelectorAll('#nav [data-col]')];
@@ -2429,7 +2534,7 @@ export function checkRendered(name, context = {}) {
     const nav = document.querySelector('#nav'), width = nav.getBoundingClientRect().width, stored = Number(localStorage.getItem('raphael.sidebar.width'));
     require(!document.documentElement.hasAttribute('data-sidebar-collapsed') && width >= 240 && width <= 400, "the list is open, between 240 and 400 px");
     require(Math.abs(width - stored) <= 1 && Math.abs(width - parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--sidebar-width'))) <= 1, "the width the edge was let go at is the list's, and is kept");
-    require(width > 300, "the list is wider than its default");
+    require(width > 348, "the list is wider than its default");
     const main = document.querySelector('#main').getBoundingClientRect();
     require(Math.abs(main.left - width) <= 2, "the conversation starts where the list ends");
     require(!document.querySelector('[data-sidebar="collapse"]') && visible(nav.querySelector('.mb-top [data-col="search"]')), "no fold button, and search stands at the top of the wider list");
@@ -2593,6 +2698,8 @@ export function checkRendered(name, context = {}) {
     return {check:name,background:style.backgroundColor,ratio:Number(ratio.toFixed(2))};
   }
   if (name === "sidebar-folded") {
+    // The rail of faces on a narrow window has no folder headings to press.
+    if (matchMedia('(max-width: 859px)').matches) return {check:name,compact:true};
     const folder = document.querySelector('.mb-sec[data-group="1"]');
     require(folder.dataset.open === "false" && folder.querySelector('.mb-gbody').inert, "collapsed folder excludes its rows from focus");
     require(JSON.parse(localStorage.getItem('raphael.sidebar.folders')).includes(1), "folder choice persists");
@@ -2606,7 +2713,8 @@ export function checkRendered(name, context = {}) {
     const composites=[...document.querySelectorAll('.room-avatar')].filter(visible);
     for (const composite of composites) {
       const box=composite.getBoundingClientRect();
-      require(Math.abs(box.width-40)<1&&Math.abs(box.height-40)<1,'composite stays in the sidebar avatar slot');
+      const slot=document.documentElement.hasAttribute('data-sidebar-collapsed')?36:40;
+      require(Math.abs(box.width-slot)<1&&Math.abs(box.height-slot)<1,'composite stays in the sidebar avatar slot');
       const faces=[...composite.children].map(face=>{const style=getComputedStyle(face),rect=face.getBoundingClientRect();require(style.overflow==='visible'&&style.backgroundColor==='rgba(0, 0, 0, 0)'&&style.borderRadius==='0px'&&style.filter==='none'&&style.boxShadow==='none','bare faces keep hats without discs, crop or effects');require(rect.left>=box.left-1&&rect.right<=box.right+1&&rect.top>=box.top-1&&rect.bottom<=box.bottom+1,'face slots stay inside the box');return rect;});
       if(faces.length>1)require(faces.some((face,i)=>faces.slice(i+1).some(other=>Math.min(face.right,other.right)>Math.max(face.left,other.left)+1&&Math.min(face.bottom,other.bottom)>Math.max(face.top,other.top)+1)),'the member faces form an overlapping cluster');
     }
@@ -6333,13 +6441,14 @@ export function checkRendered(name, context = {}) {
     }
     return { check: name, radius: getComputedStyle(modal).borderTopLeftRadius };
   }
+  if (name === "sidebar-hidden-folder-closed" || name === "sidebar-hidden-folder") if (matchMedia('(max-width: 859px)').matches) return {check:name,compact:true};
   if (name === "sidebar-hidden-folder-closed") {
     // R-UI-112: the folder starts closed, so hidden members stay hidden until its header is pressed.
     const folder = document.querySelector('.side .mb-hidden');
     require(visible(folder) && folder.dataset.open === 'false', 'the hidden folder starts closed');
     require(folder.querySelector('.mb-gbody').hasAttribute('inert') && folder.querySelector('[data-group-fold]').getAttribute('aria-expanded') === 'false', 'a closed folder is out of the keyboard\'s way');
     const body = folder.querySelector('.mb-gbody').getBoundingClientRect(), head = folder.querySelector('.mb-ghead').getBoundingClientRect();
-    require(body.height < 1 && folder.getBoundingClientRect().height <= head.height + 1, `no hidden member or group chat shows while it is closed: ${body.height}`);
+    require(body.height < 1 && folder.getBoundingClientRect().height <= head.height + parseFloat(getComputedStyle(folder.querySelector('.mb-ghead')).marginBottom) + 1, `no hidden member or group chat shows while it is closed: ${body.height}`);
     return { check: name };
   }
   if (name === "sidebar-hidden-folder") {
@@ -6429,8 +6538,10 @@ export function checkRendered(name, context = {}) {
       const rows = [...column.querySelectorAll(".mb-row[data-member]")], first = rows[0];
       require(first.dataset.member === "0", "Raphael is first");
       if (!column.classList.contains("is-collapsed")) {
-        require(Math.abs(first.querySelector(".av").getBoundingClientRect().width - 40) < 1, "the chief shares the conversation avatar size");
-        for (const row of rows.slice(1)) require(Math.abs(row.querySelector(".av").getBoundingClientRect().width - 40) < 1, "other members share 40px faces");
+        // 40 px faces in the list, 36 px on the rail of faces.
+        const face = document.documentElement.hasAttribute("data-sidebar-collapsed") ? 36 : 40;
+        require(Math.abs(first.querySelector(".av").getBoundingClientRect().width - face) < 1, "the chief shares the conversation avatar size");
+        for (const row of rows.slice(1)) require(Math.abs(row.querySelector(".av").getBoundingClientRect().width - face) < 1, `other members share ${face}px faces`);
       }
     }
     return { check: name, sidebarVisible: visible(column), fontSize: getComputedStyle(bubble).fontSize };
@@ -7955,8 +8066,8 @@ export function checkRendered(name, context = {}) {
       } else {
         require(watch.opens === 2, `Enter opened it once and Space once (${watch.opens} openings): the presses on the open menu's opener only close it`);
         await settle();
-        require(!menus().length && document.querySelector('.mb-col [data-col="add"][aria-expanded="false"]'), "the menu is closed and stays closed");
-        require(document.activeElement === document.querySelector('.mb-col [data-col="add"]'), "the focus is on the opener");
+        require(!menus().length && document.querySelector('#nav [data-col="add"][aria-expanded="false"]'), "the menu is closed and stays closed");
+        require(document.activeElement === document.querySelector('#nav [data-col="add"]'), "the focus is on the opener");
       }
       return { check: name, opens: watch.opens };
     })();

@@ -33,7 +33,7 @@ describe("the page's responsive sizes", () => {
   });
 
   test("the global sidebar is fixed and the details retain responsive width", () => {
-    expect(read("styles.css")).toContain("--sidebar-width: 296px;");
+    expect(read("styles.css")).toContain("--sidebar-width: min(348px, calc(100vw - 604px));");
     expect(block![2]).toContain("--pa-det: clamp(300px, 24vw, 460px);");
     expect(members).toContain(".page.page-agent { position: relative; max-width: none; height: 100%; padding: 0; display: grid; grid-template-columns: minmax(0, 1fr);");
     expect(members).toContain('.page.page-agent[data-det="open"]:not(.is-room) { grid-template-columns: minmax(0, 1fr) var(--pa-det); }');
@@ -73,10 +73,10 @@ describe("the page's responsive sizes", () => {
     }
   });
 
-  test("the panel overlays compact chat and the sidebar becomes a drawer under 860 px", () => {
+  test("the panel overlays compact chat and the sidebar becomes an 88 px rail of faces under 860 px", () => {
     expect(members).toMatch(/@media \(max-width: 1119px\) \{[^@]*\.mb-det \{ position: absolute;[^}]*width: var\(--pa-det\)/);
-    expect(read("sidebar.css")).toContain("@media (max-width: 859px)");
-    expect(read("sidebar.css")).toContain("transform: translateX(-100%)");
+    expect(read("sidebar.css")).toContain("@media (max-width: 859px) { :root { --sidebar-width: 88px; } }");
+    expect(read("sidebar.css")).not.toContain("translateX(-100%)");
   });
 
   test("icons stay at 16 or 20 px: they step at 1280 px wide instead of following the fluid sizes", () => {

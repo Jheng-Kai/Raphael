@@ -431,8 +431,7 @@ export function createMemberColumn(host: ColumnHost): MemberColumn {
     const input = panel.querySelector<HTMLInputElement>("input")!;
     input.placeholder = t("chat.searchAll"); input.setAttribute("aria-label", t("chat.searchAll"));
     const rows = panel.querySelector<HTMLElement>(".side-search-rows")!;
-    // What is chosen here takes the whole window: a drawer behind the card has no use any more.
-    const leave = (): void => { closeMenu(); window.dispatchEvent(new Event("raphael:close-sidebar")); };
+    const leave = (): void => closeMenu();
     const lookup = createMessageSearch(rows, {
       name: id => (id === 0 ? raphaelOf(host.view().list) : host.view().list?.members.find(member => member.id === id))?.name ?? "",
       face: id => {

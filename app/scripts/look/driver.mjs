@@ -159,18 +159,18 @@ export function findVisibleElement(selector) {
 }
 
 export async function perform(page, step, evidenceDirectory) {
+  // A step marked `wide` is for the full list: on a window narrower than 860 px the list is the rail of faces, which has
+  // no folder headings, no ⋯ and no edge to drag, so the step is left out there (its check returns at once the same way).
+  if (step.wide && await page.evaluate(() => matchMedia("(max-width: 859px)").matches)) return { action: step.action, skipped: "narrow" };
   let stableAssertion;
   // A collapsed work section can precede the visible reply with the same selector.
   const visible = async selector => {
-    const inDrawer = await page.evaluate(selector => matchMedia("(max-width: 859px)").matches && !document.documentElement.hasAttribute("data-sidebar-open") && [...document.querySelectorAll(selector)].some(el => el.closest("#nav")), selector);
-    if (inDrawer) await page.click('[data-sidebar="open"]');
     try { return (await page.waitForFunction(findVisibleElement, { timeout: 6000 }, selector)).asElement(); }
     catch (error) { throw new Error(`No visible match: ${selector}`, { cause: error }); }
   };
   const click = async selector => {
     // Rows keep their ⋯ out of sight: a step that names one presses it the way the
     // owner does, with a right click on its row (context-menu.ts), which presses the very same button.
-    if (await page.evaluate(selector => matchMedia("(max-width: 859px)").matches && !document.documentElement.hasAttribute("data-sidebar-open") && !!document.querySelector(selector)?.matches("[data-overflow]") && !!document.querySelector(selector)?.closest("#nav"), selector)) await page.click('[data-sidebar="open"]');
     const row = await page.evaluate(selector => {
       const button = document.querySelector(selector);
       if (!button?.matches("[data-overflow]") || button.getClientRects().length) return null;
@@ -533,8 +533,6 @@ export async function perform(page, step, evidenceDirectory) {
       const evidence = [];
       for (const target of step.selectors) {
         const selector = typeof target === 'string' ? target : target.selector;
-        const behindDrawer = await page.evaluate(selector => matchMedia('(max-width: 859px)').matches && document.documentElement.hasAttribute('data-sidebar-open') && [...document.querySelectorAll(selector)].some(el => !el.closest('#nav')), selector);
-        if (behindDrawer) await page.click('.sidebar-scrim');
         const element = await visible(selector);
         try {
           const snapshot = () => element.evaluate(button => {
@@ -623,8 +621,8 @@ export async function perform(page, step, evidenceDirectory) {
       break;
     }
     case "member-column": {
-      if (step.collapsed) throw new Error("Icon strips were removed; use sidebar drawer scenes");
-      if (await page.evaluate(() => matchMedia("(max-width: 859px)").matches && !document.documentElement.hasAttribute("data-sidebar-open"))) await page.click('[data-sidebar="open"]');
+      if (step.collapsed) throw new Error("Icon strips were removed; use the sidebar scenes");
+      // The list is always on screen: the rail of faces on a narrow window, the full list from 860 px.
       break;
     }
     case "settle-motion":
@@ -859,7 +857,6 @@ export async function perform(page, step, evidenceDirectory) {
     }
     // A press moved across in small steps and let go: a pane's edge resizes it as the owner's pointer would.
     case "drag": {
-      if (step.wide && await page.evaluate(() => matchMedia("(max-width: 859px)").matches)) break;
       const element = await visible(step.selector), box = await element.boundingBox(); await element.dispose();
       const x = box.x + box.width / 2, y = box.y + box.height / 2;
       await page.mouse.move(x, y); await page.mouse.down();
@@ -1025,7 +1022,7 @@ export async function perform(page, step, evidenceDirectory) {
       // The second press on the control that opened the thing, made with the real mouse at a point of that control that the pointer
       // reaches: on the control itself, or on the scrim that lies over it. A control the layout hides (a drawer that closed) is reported, not pressed.
       const point = await page.evaluate(selector => {
-        const scrims = ".modal-scrim, .mb-scrim, .cs-scrim, .sidebar-scrim, .mb-det-scrim";
+        const scrims = ".modal-scrim, .mb-scrim, .cs-scrim, .mb-det-scrim";
         const control = [...document.querySelectorAll(selector)].find(node => node.getClientRects().length && getComputedStyle(node).visibility !== "hidden");
         if (!control) return { pressed: false, reason: "the control is not drawn at this width" };
         const box = control.getBoundingClientRect(), centre = { x: box.left + box.width / 2, y: box.top + box.height / 2 };
@@ -1101,7 +1098,9 @@ export async function perform(page, step, evidenceDirectory) {
       await element.evaluate((element, options) => {
         const transfer = new DataTransfer();
         transfer.setData("application/x-raphael-member", String(options.memberId ?? element.dataset.memberItem));
-        element.dispatchEvent(new DragEvent(options.action === "drop" ? "drop" : options.action === "drag-over" ? "dragover" : "dragstart", { bubbles: true, cancelable: true, dataTransfer: transfer }));
+        // `edge: "top"` puts the pointer on the row's upper half, where a dragged row lands before it (member-column.ts landingAt).
+        const box = element.getBoundingClientRect(), clientY = options.edge === "top" ? box.top + 3 : options.edge === "bottom" ? box.bottom - 3 : box.top + box.height / 2;
+        element.dispatchEvent(new DragEvent(options.action === "drop" ? "drop" : options.action === "drag-over" ? "dragover" : "dragstart", { bubbles: true, cancelable: true, dataTransfer: transfer, clientX: box.left + box.width / 2, clientY }));
       }, step);
       await element.dispose(); }
       break;
