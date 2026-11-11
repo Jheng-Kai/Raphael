@@ -4,21 +4,22 @@ from raphael_core.computer.checkpoints import CheckpointStore
 from .test_vm import desktop, Bridge, EmptyHub
 
 
-async def test_full_permission_restores_without_confirmation_but_revocation_still_refuses(desktop, conn):
+async def test_restore_asks_for_confirmation_unless_the_owner_allows_everything(desktop, conn):
     from raphael_core.brain.settings import SettingsStore
-    from raphael_core.computer.grants import ComputerGrants
     from raphael_core.computer.checkpoint_service import Checkpoints
     from raphael_core.protocol import RpcError
     import pytest
     vm, _, _ = desktop
-    vm.grants = ComputerGrants(conn)
-    SettingsStore(conn).set("action_mode", "bypass")
+    vm.settings = SettingsStore(conn)
+    vm.settings.set("action_mode", "direct")
+    service = Checkpoints(vm, lambda member: member == 2)
+    assert (await service.call({"member_id": 2}))["confirmation_required"] is True
+    with pytest.raises(RpcError):
+        await service.call({"member_id": 2, "action": "restore", "id": "1" * 32})
+    vm.settings.set("action_mode", "bypass")
     service = Checkpoints(vm, lambda member: member == 2)
     assert (await service.call({"member_id": 2}))["confirmation_required"] is False
     await service.call({"member_id": 2, "action": "restore", "id": "1" * 32})
-    vm.grants.set(2, False)
-    with pytest.raises(RpcError):
-        await service.call({"member_id": 2, "action": "restore", "id": "1" * 32})
 
 
 async def test_workspace_commands_take_the_guest_checkpoint_path(desktop, tmp_path):
@@ -87,7 +88,7 @@ async def test_restore_is_an_owner_action_and_refuses_active_work():
     from raphael_core.protocol import RpcError
     calls = []
     async def checkpoint(*args, **kwargs): calls.append((args, kwargs)); return []
-    vm = SimpleNamespace(target=lambda _: SimpleNamespace(key="one"), grants=SimpleNamespace(allowed=lambda _: True, full_permission=lambda: False),
+    vm = SimpleNamespace(target=lambda _: SimpleNamespace(key="one"), full_permission=lambda: False,
                          active={"one": 1}, busy=lambda _: False, checkpoint=checkpoint)
     service = Checkpoints(vm, lambda member: member == 2)
     with pytest.raises(RpcError): await service.call({"member_id": 2, "action": "restore", "id": "1" * 32})

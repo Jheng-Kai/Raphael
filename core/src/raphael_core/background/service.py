@@ -2553,10 +2553,6 @@ class BackgroundService:
             return
         if (run.cancelled and not run.timed_out) or current.generation != run.generation:
             status = 'cancelled'
-        if status == "stopped" and reply.get("detail") == "computer_permission_required":
-            from ..computer.grants import refusal
-            self._conclude(task, run, "failed", negative, refusal(language), None, "computer_permission_required")
-            return
         if status == "done":
             from .final import validate_terminal
             names,wrapup=None,task.room_id is None

@@ -91,7 +91,7 @@ class Speaker:
     def uses_plugin(self, key: str) -> bool:
         """Respect owner-selected connections without restricting built-in harness tools."""
         server = plugin_server(key)
-        if self.tools is None or server is None or server in {"local", "computer", "media"} or server.startswith("computer-access-"):
+        if self.tools is None or server is None or server in {"local", "computer", "media"}:
             return True
         allowed = {(plugin_server(item) or item).casefold() for item in self.tools}
         return server.casefold() in allowed

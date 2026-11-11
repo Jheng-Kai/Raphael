@@ -359,7 +359,7 @@ class Snapshot:
                     self.refs[alias] = ToolRef(MCP, tool.key, tool.server, tool.name, tool.tier)
 
     def refresh_computer(self, plugins, member_id):
-        """Refresh this member's computer offer after a grant or driver discovery: the one change the
+        """Refresh this member's computer offer after driver discovery: the one change the
         list takes while a task runs, since the computer's tools are the member's own machine (for a CLI
         brain, a separate MCP server). Returns whether the listed tools changed."""
         if self.sealed:

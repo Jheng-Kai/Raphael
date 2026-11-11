@@ -218,15 +218,6 @@ async def test_member_deletion_always_asks_and_obeys_the_answer(setup, client, a
     assert (team.members.speaker(one.id) is None) == approved
 
 
-async def test_who_made_a_member_is_told_so_it_can_have_what_its_maker_has(setup):
-    rig, team = setup
-    one, made = member(team), []
-    team.members.member_made = lambda maker, new: made.append((maker, new))
-    team.members.store.set_primary(one.id)
-    created = await team.members.admin_tool(one.id, "member_create", {"name": "Added", "role": "COO"}, interactive=True)
-    assert made == [(one.id, created["member"]["id"])]
-
-
 async def test_nonprimary_keeps_work_tools_and_can_manage_in_the_owner_chat(setup, client):
     from raphael_core.management import MANAGEMENT_TOOLS
     from raphael_core.protocol import RpcError

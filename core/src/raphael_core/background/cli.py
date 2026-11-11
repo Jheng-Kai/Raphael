@@ -136,7 +136,7 @@ def member_loop(brains, quota, task, run, spec, *, wait_s, progress, sessions=No
             raise
         outcome = tool_outcome(result)
         if outcome.replace_tools:
-            # The member's computer changed (a grant, the driver's own catalog): the one change of the list a
+            # The member's computer changed (the driver's own catalog): the one change of the list a
             # task takes, and the CLI starts again in its own session to read it. What find_tools finds is
             # called with use_tool and changes nothing.
             listed()

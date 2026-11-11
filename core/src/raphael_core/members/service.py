@@ -299,8 +299,6 @@ class MembersService:
         self._memory = memory
         self._language = language
         self._notify = notify
-        # Told of each member made through the tools: who made it, and which it is.
-        self.member_made = lambda maker, made: None
         # The record of the computers (computer/removals.py `ComputerData`): who has one, and what a deleted member owes.
         self.computer_data = None
         self.remove_messaging = None
@@ -1824,7 +1822,6 @@ class MembersService:
             return read(self._conn, await self._list({}), zone, self._now_ms(),
                         arguments.get("member_id"), arguments.get("days", 14))
         if name == "team_overview":
-            from ..computer.grants import ComputerGrants
             roster = await self._list({})
             detail_id = arguments.get('member_id')
             if 'member_id' in arguments and (type(detail_id) is not int or not any(item['id'] == detail_id for item in roster['members'])):
@@ -1848,8 +1845,7 @@ class MembersService:
                 capabilities = getattr(self._background, "capabilities_for", lambda speaker: {"tools": [], "brain": {"model": model}})(speaker)
                 members.append({**{field: item[field] for field in ("id", "name", "role", "blurb")},
                                 **capabilities,
-                                "computer": {"allowed": ComputerGrants(self._conn).allowed(identifier),
-                                             "local_commands": self._settings.get("local_commands_mode")},
+                                "computer": {"local_commands": self._settings.get("local_commands_mode")},
                                 "group": groups.get(item["group_id"]),
                                 **counts, "model":model, "routines": routines})
             rooms = getattr(self, "rooms", None)
@@ -1902,8 +1898,6 @@ class MembersService:
                 params["group_id"] = group.id if group else created_group["id"] if created_group else None
             try:
                 result = await (self._create({**params, "greet": True}) if name == "member_create" else self._update(params))
-                if name == "member_create":
-                    self.member_made(member_id, result["member"]["id"])
                 return result
             except RpcError:
                 # Failed validation must not leave behind the automatically created group.

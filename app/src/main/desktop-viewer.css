@@ -1,5 +1,7 @@
 /* The panel previews the member's workspace; takeover carries that same stream. */
 .mb-det:not([data-details-tab="computer"]) .desktop-panel:not([data-expanded]) { display: none; }
+/* On Details the stream runs unseen, laid out off the window, so the computer's row has a picture of the screen to show. */
+.mb-det[data-details-tab="details"] .desktop-panel:not([data-expanded], [hidden]) { display: grid; position: fixed; top: 0; left: -10000px; width: 480px; visibility: hidden; pointer-events: none; }
 /* While the member's computer works, a small dot follows its name in the header: no button. */
 .conversation-trigger.is-computer-active .mb-pill::after { content: ""; flex: none; width: 8px; height: 8px; border-radius: var(--r-pill); background: var(--computer-active); }
 .desktop-wallpaper { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center bottom; }
@@ -135,6 +137,10 @@
 .desktop-mode .btn.sm { height: var(--h-ctl-sm); min-height: var(--h-ctl-sm); padding: 0 var(--sp-3); border: 1px solid var(--text); border-radius: var(--r-pill); background: var(--text); color: var(--content); font-size: var(--fs-sm); white-space: nowrap; }
 .desktop-mode .btn.sm:is(:hover, :active):not(:disabled) { border-color: color-mix(in srgb, var(--text) 86%, var(--content)); background: color-mix(in srgb, var(--text) 86%, var(--content)); color: var(--content); }
 .desktop-mode .btn.sm:active:not(:disabled) { border-color: color-mix(in srgb, var(--text) 76%, var(--content)); background: color-mix(in srgb, var(--text) 76%, var(--content)); }
+/* Watching offers Take control; in control offers Stop, quietly (the same two states as Grok Bot's pill). */
+.desktop-mode .btn.sm[data-desktop="return"] { border-color: var(--line); background: color-mix(in srgb, var(--text) 10%, var(--surface-2)); color: var(--text); }
+.desktop-mode .btn.sm[data-desktop="return"]:is(:hover, :active):not(:disabled) { border-color: var(--line); background: color-mix(in srgb, var(--text) 16%, var(--surface-2)); color: var(--text); }
+.desktop-mode .btn.sm[data-desktop="return"]:active:not(:disabled) { background: color-mix(in srgb, var(--text) 22%, var(--surface-2)); }
 .desktop-mode .btn.sm:disabled { border-color: color-mix(in srgb, var(--text) 40%, var(--content)); background: color-mix(in srgb, var(--text) 40%, var(--content)); }
 
 .desktop-location-header { display: flex; justify-content: flex-end; min-width: 0; }

@@ -18,7 +18,6 @@ async def shared(desktop, tmp_path, *, wait=0.3):
     hub.names = {0: "Raphael", 2: "Alice"}.get
     await hub.prepare()
     await hub._discover(target)
-    vm.grants.set(2, True)
     return vm, target, runtime, hub
 
 

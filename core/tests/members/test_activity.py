@@ -16,7 +16,6 @@ from raphael_core.worker.loop import Call, ToolOutcome, Turn, run_task
     ("Read", "searching"), ("webSearch", "searching"),
     ("computer__click", "computer"), ("mcp__computer__screenshot", "computer"),
     ("mcp:computer-shared/vm_exec", "computer"),
-    ("mcp:computer-access-5/request_computer", "working"),
     ("mcp:documents/read_document", "searching"),
 ])
 def test_single_tool_table(name, expected):

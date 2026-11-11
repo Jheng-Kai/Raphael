@@ -98,7 +98,7 @@ VM_CONTRACT = (
     "/home/cua/workspace: anything outside it is lost on image/timezone rebuilds."
 )
 
-RUN_STEPS = {"description": VM_CONTRACT + " Perform 1–10 short driver actions, then return one window/page observation. Every step uses the ordinary gate and current grant/control checks. Stop on the first failure; failed_step is one-based. Never batch shell commands, secrets, takeover or another composite.",
+RUN_STEPS = {"description": VM_CONTRACT + " Perform 1–10 short driver actions, then return one window/page observation. Every step uses the ordinary gate and current control checks. Stop on the first failure; failed_step is one-based. Never batch shell commands, secrets, takeover or another composite.",
     "parameters": {"type": "object", "properties": {
         "steps": {"type": "array", "minItems": 1, "maxItems": 10, "items": {"type": "object", "properties": {
             "name": {"type": "string", "enum": [name for name in DRIVER_TOOLS if name not in READS]},
@@ -113,8 +113,6 @@ EXEC = {"description": VM_CONTRACT + " Run a shell command inside the VM workspa
         "background": {"type": "boolean"}}, "required": ["command"], "additionalProperties": False}}
 ATTACH = {"description": "Copy an existing file from /home/cua/workspace or /home/cua/team into Raphael's attachment store and return its attachment ID. Paths elsewhere are refused.",
           "parameters": {"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"], "additionalProperties": False}}
-REQUEST = {"description": "Ask for a sandbox desktop when a task must be seen or clicked. Questions about the owner's own PC use local__local_exec first; service work uses its connected app. No sandbox starts before yes. On denial or expiry, say sandbox access was not granted. Routines cannot grant it; ask in private chat.",
-           "parameters": {"type": "object", "properties": {"reason": {"type": "string", "minLength": 1, "maxLength": 500}}, "required": ["reason"], "additionalProperties": False}}
 BROWSER_OPEN = {"description": VM_CONTRACT + " Open an http/https URL in the member's persistent browser and return its semantic page references without a screenshot. Use the typed browser tools for follow-ups.",
     "parameters": {"type": "object", "properties": {"url": {"type": "string", "pattern": "^https?://", "maxLength": 8192},
         "query": {"type": "string"}, "scope_ref": {"type": "string"}}, "required": ["url"], "additionalProperties": False}}
@@ -163,10 +161,6 @@ class VmTools:
         self.commands = {}  # the shell commands under way on each desktop: they are not input at the screen
         self.audit = AuditLog(conn) if conn is not None else None
         self.conn = conn
-        if conn is not None:
-            from .grants import ComputerGrants
-            self.vm.grants = ComputerGrants(conn)
-        self.requests = {}
         self.catalogs, self.tools, self.routes, self.locks, self.actions = {}, {}, {}, {}, {}
         self.schemas = {}
         self.problem = None
@@ -236,21 +230,22 @@ class VmTools:
         scope = _SCOPE.get()
         member, task_id = 0, None
         if not scope or not self.step_gate:
-            return PluginResult(False, "computer_permission_required")
+            return PluginResult(False, "blocked")
         if scope[0] == "turn":
             member = scope[1]
         elif scope[0] == "task" and self.conn is not None:
             task_id = scope[1]
             row = self.conn.execute("SELECT member_id FROM worker_tasks WHERE id=?", (task_id,)).fetchone()
             if row is None:
-                return PluginResult(False, "computer_permission_required")
+                return PluginResult(False, "blocked")
             member = row[0]
         else:
-            return PluginResult(False, "computer_permission_required")
-        if not self.vm.grants.allowed(member):
-            return PluginResult(False, "computer_permission_required")
+            return PluginResult(False, "blocked")
         await self.prepare(member)
         target = self.vm.target(member)
+        # No computer here (computer tools off, or no Docker on this PC): nothing to read the page with.
+        if not self.catalogs.get(target.key):
+            return PluginResult(False, "blocked")
         async def call(name, arguments):
             return await self.step_gate(tool_key(f"computer-{target.key}", name), arguments, task_id=task_id)
         opened = await call("browser_open", {"url": url})
@@ -295,7 +290,7 @@ class VmTools:
         return getattr(self.delegate, name)
 
     async def prepare(self, member_id=0):
-        if not self.vm.enabled or not self.vm.grants.allowed(member_id):
+        if not self.vm.enabled:
             return
         # Looking for the program runs nothing. With no Docker on this PC there is no computer to offer.
         if self.vm.desktop and not self.vm.desktop.installed():
@@ -386,34 +381,24 @@ class VmTools:
 
     def offered_for(self, member_id):
         target = self.vm.target(member_id)
-        if self.vm.grants.allowed(member_id):
-            native = [self.tools[key] for key in self.catalogs.get(target.key, []) if self.routes[key] == target] if self.vm.enabled else []
-        elif self.vm.grants.full_permission():
-            native = []  # Nobody would be asked, and the yes that gives itself would undo the owner's revoke.
-        else:
-            key = tool_key(f"computer-access-{member_id}", "request_computer")
-            self.requests[key] = member_id
-            native = [PluginTool(key, "computer", "request_computer", REQUEST["description"], REQUEST["parameters"], Tier.T2, pinned=True)]
+        # Every member has its computer for the work that needs one, as it has any tool: nothing asks the owner first.
+        native = [self.tools[key] for key in self.catalogs.get(target.key, []) if self.routes[key] == target] if self.vm.enabled else []
         return [*self.delegate.offered(), *native]
 
     def offered(self):
         return self.offered_for(0)
 
     def has_own_computer(self, member_id):
-        if self.vm.grants.state(member_id) is True:
-            return True
-        # Opened by 全部允許 on a PC with no Docker there is no computer of its own, so the owner's desktop stays offered.
-        return self.vm.grants.allowed(member_id) and bool(self.catalogs.get(self.vm.target(member_id).key))
+        # On a PC with no Docker there is no computer of its own, so the owner's desktop stays offered.
+        return self.vm.enabled and bool(self.catalogs.get(self.vm.target(member_id).key))
 
     def page_tool(self, server_id, name):
         return self.delegate.page_tool(server_id, name)
 
     def is_computer_tool(self, key):
-        return key in self.tools or key in self.requests
+        return key in self.tools
 
     def tier_of(self, key):
-        if key in self.requests:
-            return Tier.T2
         if key in self.tools:
             shared = self.vm.settings is not None and self.vm.settings.get("computer_vm_mode") == "shared"
             matches = (self.routes[key].key == "shared") == shared
@@ -439,10 +424,7 @@ class VmTools:
                 approver=approver, outcome=outcome if outcome in ("ok", "timeout", "denied", "expired", "blocked") else "error", task_id=task_id)
 
     def record_unrun(self, key, *, outcome, task_id=None):
-        if key in self.requests:
-            if self.audit:
-                self.audit.add(server="computer", tool="request_computer", tier="T2", approver="none", outcome=outcome, task_id=task_id)
-        elif key in self.tools:
+        if key in self.tools:
             self._audit(key, outcome, "none", task_id)
         else:
             self.delegate.record_unrun(key, outcome=outcome, task_id=task_id)
@@ -494,11 +476,11 @@ class VmTools:
                 if result.kind:
                     result.kind = self.logins.redact(identifier, result.kind)
         if (reading and result.ok) or result.blocks:
-            if not self.vm.grants.allowed(member) or picture_target != self.vm.target(member):
-                return PluginResult(False, "computer_permission_required")
+            if picture_target != self.vm.target(member):
+                return PluginResult(False, "computer_changed")
             private_after = await self._private_picture(picture_target, arguments)
-            if not self.vm.grants.allowed(member) or picture_target != self.vm.target(member):
-                return PluginResult(False, "computer_permission_required")
+            if picture_target != self.vm.target(member):
+                return PluginResult(False, "computer_changed")
             if private_before or private_after:
                 # A safe observation after capture cannot authorize pixels from before that observation.
                 tree = getattr(self, "private_tree", {}).get(picture_target.key, {})
@@ -592,28 +574,6 @@ class VmTools:
         return target.key in self.payment_holds or any(key in self.private_pages for key in keys)
 
     async def _call(self, key, arguments, *, approver, task_id=None, pool=None):
-        if key in self.requests:
-            member = self.requests[key]
-            if task_id:
-                return PluginResult(False, "computer_permission_required", "Computer access is not granted. Ask the owner in this member's private chat or press Start in its computer panel; this routine cannot start it.")
-            if approver != "user":
-                return PluginResult(False, "denied", "The owner did not grant computer access. Say plainly that you cannot use the computer.")
-            if not Draft202012Validator(REQUEST["parameters"]).is_valid(arguments):
-                return PluginResult(False, "bad_arguments")
-            scope = _SCOPE.get()
-            if scope is None or scope[0] != "turn" or scope[1] != member:
-                return PluginResult(False, "computer_permission_required")
-            if not _TURN.get()[1]:
-                return PluginResult(False, "private_only", "Request computer access in the owner's private chat.")
-            self.vm.grants.set(member, True)
-            if self.audit:
-                self.audit.add(server="computer", tool="request_computer", tier="T2", approver="user", outcome="ok")
-            await self.prepare(member)
-            if not self.vm.grants.allowed(member):
-                return PluginResult(False, "computer_permission_required", "The owner revoked computer access.")
-            if not self.catalogs.get(self.vm.target(member).key):
-                return PluginResult(False, "unavailable", "Computer access was granted, but this installation has not enabled computer tools. Ask an administrator to enable them before trying again; there is no setting here to add them.")
-            return PluginResult(True, text="Computer access granted. Computer tools are now available; continue the owner's task.")
         if key not in self.tools:
             return await self.delegate.call(key, arguments, approver=approver, task_id=task_id, pool=pool)
         tool, target = self.tools[key], self.routes[key]
@@ -631,10 +591,10 @@ class VmTools:
             if task_id and self.conn is not None:
                 row = self.conn.execute("SELECT member_id FROM worker_tasks WHERE id=?", (task_id,)).fetchone()
                 if row is None:
-                    return PluginResult(False, "computer_permission_required")
+                    return PluginResult(False, "blocked")
                 member = row[0]
-            if not self.vm.grants.allowed(member) or target != self.vm.target(member):
-                return PluginResult(False, "computer_permission_required", "The owner has not granted this member computer access.")
+            if target != self.vm.target(member):
+                return PluginResult(False, "computer_changed", "This computer is no longer the member's own. Read the refreshed computer tool catalog.")
             if self.tier_of(key) is None or approver == "none" or tool.tier >= Tier.T2 and approver != "user":
                 return result
             if target.key in self.vm.held:
@@ -706,12 +666,12 @@ class VmTools:
             if command:
                 self.commands[target.key] = self.commands.get(target.key, 0) + 1
             try:
-                # Only this granted member call may start Docker Desktop; a read or a viewer never does (R-PANEL-04).
+                # Only a member's own call that needs its computer may start Docker Desktop; a read or a viewer never does (R-PANEL-04).
                 with engine_start_allowed():
                     await self.vm.start(target)
                 await self._disk_notice(target)
-                if not self.vm.grants.allowed(member) or target != self.vm.target(member):
-                    return PluginResult(False, "computer_permission_required")
+                if target != self.vm.target(member):
+                    return PluginResult(False, "computer_changed")
                 # A hold may have arrived while the desktop was starting. Never queue actions.
                 if target.key in self.vm.held:
                     raise VmError("owner_holds_control")
@@ -719,8 +679,8 @@ class VmTools:
                     background = arguments.get("background", False)
                     wait = arguments.get("timeout_seconds", 3600 if background else 60)
                     await self._checkpoint(target, member, turn[0], owner, arguments["command"])
-                    if not self.vm.grants.allowed(member) or target != self.vm.target(member):
-                        return PluginResult(False, "computer_permission_required")
+                    if target != self.vm.target(member):
+                        return PluginResult(False, "computer_changed")
                     if target.key in self.vm.held:
                         raise VmError("owner_holds_control")
                     if background:
@@ -740,9 +700,6 @@ class VmTools:
                 elif tool.name in ("fill_contact", "fill_card"):
                     result = await self._fill_entry(target, member, arguments, "card" if tool.name == "fill_card" else "contact")
                 else:
-                    if not self.vm.grants.allowed(member):
-                        result = PluginResult(False, "computer_permission_required")
-                        return result
                     if target.key in self.vm.held:
                         raise VmError("owner_holds_control")
                     if self.tier_of(key) is None:
@@ -759,15 +716,15 @@ class VmTools:
                         from .lifecycle import repair_connection
                         self.vm.invalidate(target)
                         await self._disconnect(target.key)
-                        if not self.vm.grants.allowed(member) or target != self.vm.target(member):
-                            return PluginResult(False, "computer_permission_required")
+                        if target != self.vm.target(member):
+                            return PluginResult(False, "computer_changed")
                         await repair_connection(self.vm, target)
-                        # No owner action has been sent. Re-enter the same grant and hold checks.
+                        # No owner action has been sent. Re-enter the same target and hold checks.
                         client, session = await self._connection(target, member=member)
                     self._refresh(target)
                     await asyncio.sleep(0)
-                    if not self.vm.grants.allowed(member) or target != self.vm.target(member):
-                        return PluginResult(False, "computer_permission_required")
+                    if target != self.vm.target(member):
+                        return PluginResult(False, "computer_changed")
                     if target.key in self.vm.held:
                         raise VmError("owner_holds_control")
                     if self.tier_of(key) is None:
@@ -793,8 +750,8 @@ class VmTools:
                         self.vm.invalidate(target)
                         await self._disconnect(target.key)
                         if isinstance(error, ConnectionError) or isinstance(error, VmError) and str(error) in ("transport_closed", "unavailable", "viewer_tunnel_failed"):
-                            if not self.vm.grants.allowed(member) or target != self.vm.target(member):
-                                return PluginResult(False, "computer_permission_required")
+                            if target != self.vm.target(member):
+                                return PluginResult(False, "computer_changed")
                             from .lifecycle import repair_connection
                             try:
                                 await repair_connection(self.vm, target)
@@ -899,7 +856,7 @@ class VmTools:
 
     async def _browser_open(self, target, member, client, session, arguments):
         async def call(name, args):
-            if not self.vm.grants.allowed(member) or target != self.vm.target(member) or target.key in self.vm.held:
+            if target != self.vm.target(member) or target.key in self.vm.held:
                 raise VmError("owner_holds_control")
             key = tool_key(f"computer-{target.key}", name)
             if name.startswith("browser_") and "delivery_mode" in self.schemas.get(key, {}).get("properties", {}):
@@ -974,7 +931,7 @@ class VmTools:
                 page = state.get("structuredContent") or {}
                 url = page.get("url") or next((tab.get("url") for tab in page.get("tabs", []) if tab.get("active") is True), None)
                 if (state.get("isError") or page.get("target_id") != args["target_id"] or origin(url) != origin(args["site"])
-                        or not self.vm.grants.allowed(member) or target != self.vm.target(member) or target.key in self.vm.held):
+                        or target != self.vm.target(member) or target.key in self.vm.held):
                     raise ValueError()
                 self.logins.load(member, args["site"], args["reference"])
                 # Driver echoes and pictures are deliberately discarded, including errors.
@@ -1014,7 +971,7 @@ class VmTools:
                 page = state.get("structuredContent") or {}
                 url = page.get("url")
                 if (state.get("isError") or page.get("target_id") != args["target_id"] or origin(url) != origin(args["site"])
-                        or not self.vm.grants.allowed(member) or target != self.vm.target(member) or target.key in self.vm.held):
+                        or target != self.vm.target(member) or target.key in self.vm.held):
                     raise ValueError()
                 if not any(entry["id"] == args["reference"] and entry["label"] == args["label"]
                            for entry in self.logins.entries(member)):
@@ -1053,8 +1010,8 @@ class VmTools:
         try:
             for name, arguments in (("set_config", {"max_image_dimension": 1456}),
                                     ("set_agent_cursor_enabled", {"enabled": False, "cursor_id": session})):
-                if member is not None and (not self.vm.grants.allowed(member) or target != self.vm.target(member)):
-                    raise VmError("computer_permission_required")
+                if member is not None and target != self.vm.target(member):
+                    raise VmError("computer_changed")
                 if target.key in self.vm.held:
                     raise VmError("owner_holds_control")
                 reply = await client.request("tools/call", {"name": name, "arguments": {**arguments, "session": session}})

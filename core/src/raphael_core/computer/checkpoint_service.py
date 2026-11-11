@@ -15,10 +15,8 @@ class Checkpoints:
         if type(member) is not int or member < 0 or not self.member_exists(member) or action not in ("list", "restore"):
             raise invalid_params("unknown computer checkpoint action")
         target = self.vm.target(member)
-        if not self.vm.grants.allowed(member):
-            raise invalid_params("computer_permission_required")
         if action == "restore":
-            if params.get("confirmed") is not True and not self.vm.grants.full_permission():
+            if params.get("confirmed") is not True and not self.vm.full_permission():
                 raise invalid_params("restore requires the owner's confirmation")
             if self.vm.active.get(target.key) or self.vm.busy(target.key):
                 raise invalid_params("computer_busy")
@@ -36,4 +34,4 @@ class Checkpoints:
             checkpoints, warning = [], True
         return {"checkpoints": checkpoints, "coverage_warning": warning,
                 "busy": bool(self.vm.active.get(target.key) or self.vm.busy(target.key)),
-                "confirmation_required": not self.vm.grants.full_permission()}
+                "confirmation_required": not self.vm.full_permission()}
