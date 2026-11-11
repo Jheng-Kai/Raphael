@@ -541,11 +541,15 @@ export function installMock(fixture, config = {}, target = window) {
     data.turns.push(mail);
     if (!data.conversations.some(item => item.id === data.colleagueConversation.id)) data.conversations.push(structuredClone(data.colleagueConversation));
   }
+  // `pageNews`: a page far taller than its card (a day's Japanese news, 900 px), alone ("only") or after the product page ("both").
   if (variant.pageTurn) {
     const base = data.turns.find(turn => turn.member_id === 1);
-    data.turns.push({ ...structuredClone(base), id: 801, question: "幫我找一個輕量後背包。", text: "這款符合你的需求,可以直接在下面操作。", status: "done", route: "answer", steps: [],
+    if (variant.pageNews !== "only") data.turns.push({ ...structuredClone(base), id: 801, question: "幫我找一個輕量後背包。", text: "這款符合你的需求,可以直接在下面操作。", status: "done", route: "answer", steps: [],
       messages: [{ seq: 1, kind: "reply", text: "這款符合你的需求,可以直接在下面操作。", at_ms: data.now }], attachments: [],
       pages: [{ id: "page-product", title: "輕量後背包", rev: 1, height: 320, source: "html", server: null, fallback: "輕量後背包 NT$ 1,280,防潑水、重量 480 公克。" }] });
+    if (variant.pageNews) data.turns.push({ ...structuredClone(base), id: 803, question: "幫我整理今天的日文新聞。", text: "整理好了，點開就能讀。", status: "done", route: "answer", steps: [],
+      messages: [{ seq: 1, kind: "reply", text: "整理好了，點開就能讀。", at_ms: data.now }], attachments: [],
+      pages: [{ id: "page-news", title: "每日新聞日文學習 2026-11-11", rev: 1, height: 900, source: "html", server: null, fallback: "三則新聞、今日單字與練習問題。" }] });
   }
   // A member said a word first, then made the report (core agent/report_page.py) and sent it as a link card.
   if (variant.reportTurn) {
@@ -926,7 +930,8 @@ export function installMock(fixture, config = {}, target = window) {
           return { kind: "report", title, rev: 1, height: 320, source: "html", server: null, report: { as_of: new Date(data.now - 30 * 60000).toISOString().replace(/\.\d+Z$/, "Z"), sections: structuredClone(sections) } };
         }
         // Not a file of the dev server, which would write its own client into the page.
-        return { url: `data:text/html;charset=utf-8,${encodeURIComponent(data.pageProductHtml)}`, title: "輕量後背包", rev: 1, height: 320, source: "html", server: null };
+        if (p.id === "page-news") return { url: `data:text/html;charset=utf-8,${encodeURIComponent(data.pageNewsHtml.replace("__THEME__", p.theme === "dark" ? "dark" : ""))}`, title: "每日新聞日文學習 2026-11-11", rev: 1, height: 900, source: "html", server: null };
+        return { url: `data:text/html;charset=utf-8,${encodeURIComponent(data.pageProductHtml.replace("__THEME__", p.theme === "dark" ? "dark" : ""))}`, title: "輕量後背包", rev: 1, height: 320, source: "html", server: null };
       case "computer.wallpaper": return variant.ownWallpaper ? { image: variant.ownWallpaper } : {};
       case "computer.lifecycle": {
         if (p.target !== data.desktop.target || p.host !== data.desktop.host || p.action === 'reset' && p.confirmed !== true) throw new Error('Maintenance confirmation or target missing');

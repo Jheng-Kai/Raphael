@@ -1444,7 +1444,7 @@ export const zhTW = {
   "page.composerNote": "這段文字來自頁面，確認後再送出",
   "page.askOpen": "這個頁面想開啟這個連結",
   "page.askYes": "確定",
-  "page.expand": "放大",
+  "page.open": "打開「{title}」",
   "page.failed": "這個頁面打不開。",
   "page.waitingYes": "這個動作要先等你同意，請看對話裡的確認卡片。",
   "page.retry": "再試一次",

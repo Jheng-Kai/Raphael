@@ -849,6 +849,17 @@ await page.waitForFunction(role => document.querySelector('.ms-pane #ms-role')?.
     };
     const inFrame = (frame, id) => frame.$eval(id, el => el.textContent);
     const asked = async question => (await snapshot()).agent_turns.filter(row => row.question === question);
+    // A page in its card is only a preview (inert, R-PAGE-02): the owner presses the card, and only there the page takes a press or speaks.
+    const larger = async () => {
+      if (await page.$(".pg-view iframe")) return;
+      await click(page, ".pg-card .pg-body");
+      await wait(page, ".pg-view iframe");
+    };
+    const smaller = async () => {
+      if (!await page.$(".pg-view-dialog")) return;
+      await click(page, '.pg-view-dialog [data-dlg="close"]');
+      await page.waitForSelector(".pg-view-dialog", { hidden: true });
+    };
     const refuseAsk = async () => {
       if (await page.waitForSelector(".pg-ask", { timeout: 2500 }).catch(() => null)) {
         await click(page, '.pg-ask [data-dlg="cancel"]');
@@ -869,7 +880,9 @@ await page.waitForFunction(role => document.querySelector('.ms-pane #ms-role')?.
     result.page.fit = fit;
     if (fit.content > fit.inner) throw new Error(`The page scrolls inside its card: ${JSON.stringify(fit)}`);
     await capture("shown");
-    // Right after a press elsewhere in the app, a page that sends by itself has the app's activation, and takes the focus.
+    // Made larger by pressing its card, where the page works. Right after that press, a page that sends by itself has the app's activation, and takes the focus.
+    await larger();
+    frame = await frameNow();
     await pause(2500);
     result.page.autoSent = (await asked("Sent by the page alone")).length;
     if (result.page.autoSent) throw new Error("A page spoke for the owner with no press inside it");
@@ -891,17 +904,18 @@ await page.waitForFunction(role => document.querySelector('.ms-pane #ms-role')?.
     result.page.afterRedraw = { count: await inFrame(frame, "#count"), kept: await inFrame(frame, "#loaded") === loaded };
     if (!result.page.afterRedraw.kept || result.page.afterRedraw.count !== "2") throw new Error(`A redraw reloaded the page: ${JSON.stringify(result.page.afterRedraw)}`);
     await capture("after-press");
+    await larger();
+    frame = await frameNow();
     await pressInFrame(page, await frame.$("#later"));
     await pause(7500);
     result.page.lateSent = (await asked("Sent long after the press")).length;
     if (result.page.lateSent) throw new Error("A page spoke long after the owner's press");
-    await click(page, '.pg-card [data-page-act="expand"]');
-    await wait(page, ".pg-view iframe");
+    await smaller();
+    await larger();
     frame = await frameNow();
     if (await inFrame(frame, "#count") !== "2") throw new Error("Making the page larger lost what was in it");
     await capture("expanded");
-    await click(page, '.pg-view-dialog [data-dlg="close"]');
-    await page.waitForSelector(".pg-view-dialog", { hidden: true });
+    await smaller();
     frame = await frameNow();
     if (await inFrame(frame, "#count") !== "2") throw new Error("Closing the larger page lost what was in it");
     result.layout = [];

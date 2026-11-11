@@ -4924,15 +4924,60 @@ export function checkRendered(name, context = {}) {
     }
     return { check: name, members: members.length };
   }
-  if (name === "page-card") {
-    const card = document.querySelector(".pg-card"), frame = card?.querySelector("iframe");
-    require(frame?.getAttribute("sandbox") === "allow-scripts allow-forms", "the page runs sandboxed with an opaque origin");
-    require(card.querySelector(".pg-body").dataset.state === "ready", "the page has loaded");
-    const height = frame.getBoundingClientRect().height;
-    require(height >= 180 && height !== 320, `the page is as tall as its content, not the reserved height: ${height}`);
-    const line = card.closest(".tn, [data-key]").getBoundingClientRect(), box = card.getBoundingClientRect();
-    require(box.left >= line.left && box.right <= line.right + 1, "the page stays inside the reply");
-    return { check: name, height };
+  if (name === "page-card" || name === "page-collapsed" || name === "page-collapsed-two") {
+    // A page in a conversation is a card of one fixed height: its title row and only the top of the page, clipped, soft at the cut,
+    // nothing in it to press or scroll; the card is one control that opens the page whole (owner, 2026-11-11: a page shown whole
+    // made the conversation one very long block).
+    const cards = [...document.querySelectorAll(".pg-card")].filter(visible);
+    require(cards.length === (name === "page-collapsed-two" ? 2 : 1), `${cards.length} page cards in sight`);
+    const peek = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--h-page-peek"));
+    require(peek >= 120 && peek <= 200, `the preview is a modest height: ${peek}px`);
+    const heights = [];
+    for (const card of cards) {
+      const body = card.querySelector(".pg-body"), frame = body.querySelector("iframe"), clip = body.getBoundingClientRect(), box = card.getBoundingClientRect();
+      require(frame?.getAttribute("sandbox") === "allow-scripts allow-forms", "the page runs sandboxed with an opaque origin");
+      require(body.dataset.state === "ready", "the page has loaded");
+      require(Math.abs(clip.height - peek) <= 0.5 && getComputedStyle(body).overflow === "hidden", `the preview is ${peek}px and clips (${clip.height})`);
+      // Behind the clip the frame is as tall as the page says, from the page's own top, so there is no scrollbar and the cut is the clip.
+      const inner = frame.getBoundingClientRect(), said = parseFloat(card.style.getPropertyValue("--pg-h"));
+      require(Math.abs(inner.top - clip.top) <= 0.5 && Math.abs(inner.height - said) <= 1.5 && inner.width >= clip.width - 1, `the frame shows the top of the page at its own height (${Math.round(inner.height)} of ${said})`);
+      // Nothing in it can be pressed, focused or scrolled: it is inert, takes no pointer, and what is under the pointer is the preview.
+      require(frame.hasAttribute("inert") && getComputedStyle(frame).pointerEvents === "none", "the page in the card is inert and takes no pointer");
+      const x = clip.left + clip.width / 2, y = clip.top + Math.min(clip.height, innerHeight - clip.top) / 2;
+      if (y > clip.top && y < innerHeight) require(document.elementFromPoint(x, y)?.closest(".pg-body") === body, "a press in the preview reaches the card, not the page");
+      // One control with the page's name, reached by Tab; no expand button of its own under the page.
+      const title = card.querySelector(".card-title").textContent;
+      require(body.getAttribute("role") === "button" && body.tabIndex === 0 && body.getAttribute("aria-label")?.includes(title), `the preview is one focusable control named with the page: ${body.getAttribute("aria-label")}`);
+      require(![...card.querySelectorAll(".card-actions, .btn.icon, .pg-expand")].some(visible), "no button under the preview");
+      // The cut fades into the card's own surface, so there is no edge to it, light or dark.
+      const fade = getComputedStyle(body, "::after"), surface = getComputedStyle(card).backgroundColor;
+      require(fade.backgroundImage.startsWith("linear-gradient") && fade.backgroundImage.includes(surface) && fade.backgroundImage.includes("rgba(0, 0, 0, 0)"), `the cut fades into the card's surface ${surface}: ${fade.backgroundImage}`);
+      require(Math.abs(parseFloat(fade.height) - 56) <= 1 && fade.pointerEvents === "none", "the fade is soft and takes no press");
+      // Inside the reply, and the title row as a card's own: its title and the status chip on one line.
+      const line = card.closest(".tn, [data-key]");
+      if (line) { const room = line.getBoundingClientRect(); require(box.left >= room.left && box.right <= room.right + 1, "the page card stays inside the reply"); }
+      const chip = card.querySelector(".card-status").getBoundingClientRect(), head = card.querySelector(".card-title").getBoundingClientRect();
+      require(Math.abs((chip.top + chip.bottom) / 2 - (head.top + head.bottom) / 2) <= 3 && chip.right <= box.right, "the title and its chip stand on one line");
+      heights.push(Math.round(box.height * 10) / 10);
+    }
+    require(new Set(heights).size === 1, `every page card is as tall as the others: ${heights}`);
+    require(document.documentElement.scrollWidth <= innerWidth, "nothing runs out sideways");
+    return { check: name, cards: heights.length, card: heights[0], peek };
+  }
+  if (name === "page-opened-whole") {
+    // Pressing the card opened the page whole: the same frame, no longer inert, as tall as the page says (up to three quarters of the window),
+    // where it scrolls and its buttons work; the card behind it holds no frame.
+    const view = document.querySelector(".pg-view"), frame = view?.querySelector("iframe");
+    require(frame && !document.querySelector(".pg-card .pg-body iframe"), "the same page moved to the dialog: one frame");
+    require(!frame.hasAttribute("inert") && getComputedStyle(frame).pointerEvents !== "none", "the page works again where it is made larger");
+    const said = parseFloat(view.style.getPropertyValue("--pg-h")), peek = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--h-page-peek"));
+    const shown = frame.getBoundingClientRect();
+    require(Math.abs(shown.height - Math.min(said, innerHeight * 0.75)) <= 1, `as tall as the page says, up to three quarters of the window (${Math.round(shown.height)} of ${said})`);
+    require(shown.height > peek * 2, `far more of the page than the preview showed (${Math.round(shown.height)} against ${peek})`);
+    const close = view.closest(".mb-dialog").querySelector('[data-dlg="close"]').getBoundingClientRect();
+    require(close.bottom <= shown.top + 0.5 && close.top >= 0, "the × stands above the page, inside the window");
+    require(document.documentElement.scrollWidth <= innerWidth, "nothing runs out sideways");
+    return { check: name, height: shown.height, said };
   }
   if (name === "page-placed" || name === "page-appended") {
     const input = [...document.querySelectorAll('.composer .cmp-input')].find(visible);
@@ -5158,6 +5203,9 @@ export function checkRendered(name, context = {}) {
     require(Math.abs(right - retry.right) <= 1, `the retry stands at the card's right (${Math.round(right - retry.right)} px)`);
     require(bottom - retry.bottom <= 1, `nothing blank stands under the retry (${Math.round(bottom - retry.bottom)} px)`);
     require(![...card.querySelectorAll(":scope > .card-actions")].some(visible), "the failed page has no expand row");
+    // As tall as the preview it stands for, so a card that fails moves nothing in the thread (owner, 2026-11-11).
+    const peek = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--h-page-peek"));
+    require(Math.abs(failed.getBoundingClientRect().height - peek) <= 0.5, `the failed card is as tall as the preview (${failed.getBoundingClientRect().height} against ${peek})`);
     // R-UI-117: a failed card is put away by the × in its heading.
     const close = card.querySelector(":scope > .card-head > [data-card-failed-close]");
     require(close && visible(close), "the × that puts it away is in its heading");

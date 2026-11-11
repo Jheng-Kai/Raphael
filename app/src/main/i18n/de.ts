@@ -1718,7 +1718,7 @@ export const de = {
   "page.composerNote": "Dieser Text stammt von einer Seite. Prüfen Sie ihn vor dem Senden.",
   "page.askOpen": "Diese Seite möchte diesen Link öffnen",
   "page.askYes": "Fortfahren",
-  "page.expand": "Erweitern",
+  "page.open": "„{title}“ öffnen",
   "page.failed": "Diese Seite konnte nicht geöffnet werden.",
   "page.waitingYes": "Hierfür ist zuerst Ihre Zustimmung nötig: siehe Karte im Gespräch.",
   "slime.rimuru": "Rimuru",

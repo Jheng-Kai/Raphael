@@ -1718,7 +1718,7 @@ export const tr = {
   "page.composerNote": "Bu metin bir sayfadan geldi. Göndermeden önce inceleyin.",
   "page.askOpen": "Bu sayfa bu bağlantıyı açmak istiyor",
   "page.askYes": "Devam et",
-  "page.expand": "Genişlet",
+  "page.open": "“{title}” sayfasını aç",
   "page.failed": "Bu sayfa açılamadı.",
   "page.waitingYes": "Önce onayınız gerekiyor: konuşmadaki karta bakın.",
   "slime.rimuru": "Rimuru",

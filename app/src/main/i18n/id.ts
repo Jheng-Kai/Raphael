@@ -1718,7 +1718,7 @@ export const id = {
   "page.composerNote": "Teks ini berasal dari halaman. Tinjau sebelum mengirimnya.",
   "page.askOpen": "Halaman ini ingin membuka tautan ini",
   "page.askYes": "Lanjutkan",
-  "page.expand": "Perluas",
+  "page.open": "Buka “{title}”",
   "page.failed": "Halaman ini tidak dapat dibuka.",
   "page.waitingYes": "Ini memerlukan persetujuan Anda dahulu: lihat kartu dalam percakapan.",
   "slime.rimuru": "Rimuru",

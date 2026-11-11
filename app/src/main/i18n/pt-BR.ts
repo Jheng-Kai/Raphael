@@ -1718,7 +1718,7 @@ export const ptBR = {
   "page.composerNote": "Este texto veio de uma página. Revise antes de enviar.",
   "page.askOpen": "Esta página quer abrir este link",
   "page.askYes": "Continuar",
-  "page.expand": "Expandir",
+  "page.open": "Abrir “{title}”",
   "page.failed": "Não foi possível abrir esta página.",
   "page.waitingYes": "Isso precisa da sua aprovação: veja o cartão na conversa.",
   "slime.rimuru": "Rimuru",
