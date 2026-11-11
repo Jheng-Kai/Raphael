@@ -426,6 +426,9 @@ html[data-window-hidden] *, html[data-window-hidden] *::before, html[data-window
   .slime-loop { display: none !important; }
   .slime-surface > .slime, .slime .slime-body, .slime .slime-eyes, .slime .slime-back, .slime .slime-marks { visibility: visible !important; }
 }
+/* A group of the picker that is not the open one shows nothing, whatever the rules above say of a slime's own parts: with
+   reduced motion they made the slimes of every closed group show through the open one, one drawing on another (2026-11-11). */
+.mb-slime-group:not([data-active]) :is(.slime, .slime-body, .slime-eyes, .slime-back, .slime-marks, .slime-loop) { visibility: hidden !important; }
 /* Two keyframes and a steps() count slide a strip through its cels on the compositor, whatever their number. */
 @keyframes slime-loop-show {
   from { opacity: 0; }

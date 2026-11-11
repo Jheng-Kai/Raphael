@@ -1815,6 +1815,8 @@ export const fr = {
   "slime.candle": "Bougie",
   "slime.music-note": "Note de musique",
   "slime.group.characters": "Personnages",
+
+  "slime.group.fantasy": "Fantastique",
   "slime.group.animals": "Animaux",
   "slime.group.jobs": "Métiers",
   "slime.group.nature": "Nature",

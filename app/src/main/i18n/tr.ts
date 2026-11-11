@@ -1815,6 +1815,8 @@ export const tr = {
   "slime.candle": "Mum",
   "slime.music-note": "Nota",
   "slime.group.characters": "Karakterler",
+
+  "slime.group.fantasy": "Fantastik",
   "slime.group.animals": "Hayvanlar",
   "slime.group.jobs": "Meslekler",
   "slime.group.nature": "Doğa",

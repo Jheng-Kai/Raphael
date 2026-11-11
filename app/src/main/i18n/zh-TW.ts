@@ -1564,6 +1564,8 @@ export const zhTW = {
   "slime.candle": "燭火",
   "slime.music-note": "音符",
   "slime.group.characters": "角色",
+
+  "slime.group.fantasy": "奇幻",
   "slime.group.animals": "動物",
   "slime.group.jobs": "職業",
   "slime.group.nature": "自然",

@@ -1815,6 +1815,8 @@ export const zhCN = {
   "slime.candle": "烛火",
   "slime.music-note": "音符",
   "slime.group.characters": "角色",
+
+  "slime.group.fantasy": "奇幻",
   "slime.group.animals": "动物",
   "slime.group.jobs": "职业",
   "slime.group.nature": "自然",

@@ -1815,6 +1815,8 @@ export const id = {
   "slime.candle": "Lilin",
   "slime.music-note": "Not musik",
   "slime.group.characters": "Karakter",
+
+  "slime.group.fantasy": "Fantasi",
   "slime.group.animals": "Hewan",
   "slime.group.jobs": "Pekerjaan",
   "slime.group.nature": "Alam",

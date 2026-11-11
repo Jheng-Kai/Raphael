@@ -946,6 +946,11 @@ class Toaster implements Notifier {
    * time it has left (styles.css), so that its going is no surprise.
    */
   show(message: string, undo?: () => void): void {
+    // The same note again takes the place of the one on screen and starts its time over: six failures in a row are one
+    // note, not a pile of six (owner's screen, 2026-11-11).
+    for (const shown of [...this.messages.keys()]) {
+      if (shown !== this.undoToast && shown.querySelector("span")?.textContent === message) { shown.remove(); this.messages.delete(shown); }
+    }
     const toast = document.createElement("div");
     toast.className = "toast";
     toast.setAttribute("role", "status");

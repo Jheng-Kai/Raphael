@@ -1565,6 +1565,8 @@ export const en = {
   "slime.candle": "Candle",
   "slime.music-note": "Music note",
   "slime.group.characters": "Characters",
+
+  "slime.group.fantasy": "Fantasy",
   "slime.group.animals": "Animals",
   "slime.group.jobs": "Jobs",
   "slime.group.nature": "Nature",

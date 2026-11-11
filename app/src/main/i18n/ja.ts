@@ -1565,6 +1565,8 @@ export const ja = {
   "slime.candle": "ろうそく",
   "slime.music-note": "音符",
   "slime.group.characters": "キャラクター",
+
+  "slime.group.fantasy": "ファンタジー",
   "slime.group.animals": "動物",
   "slime.group.jobs": "職業",
   "slime.group.nature": "自然",

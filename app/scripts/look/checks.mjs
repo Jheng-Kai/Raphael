@@ -5699,7 +5699,9 @@ export function checkRendered(name, context = {}) {
       window.__look.pickerBox = { menu: box(menu), panels: box(panels), tabs: tabs.map(box) };
       return { check: name };
     }
-    require(tabs.length === 7 && menu.querySelector('[role="tablist"]'), "the groups are tabs of one tablist");
+    // 角色 is the story's characters alone; the archetypes from the red oni onward have the tab after it (owner, 2026-11-11).
+    require(tabs.map(tab => tab.dataset.slimeTab).join() === "characters,fantasy,animals,jobs,nature,seasonal,objects,colors" && menu.querySelector('[role="tablist"]'), `the groups are tabs of one tablist (${tabs.map(tab => tab.dataset.slimeTab).join()})`);
+    require(menu.querySelectorAll('[data-slime-group="characters"] button').length === 24 && menu.querySelector('[data-slime-group="fantasy"] button')?.dataset.slimeCharacter === "oni-red", "角色 holds the story's 24 characters, and the red oni leads the next tab");
     require(tabs.filter(tab => tab.getAttribute("aria-selected") === "true").length === 1, "exactly one tab is chosen");
     require(tabs.every(tab => visible(tab)) && tabs.every(tab => Math.abs(tab.getBoundingClientRect().top - tabs[0].getBoundingClientRect().top) <= 1), "the tabs stand in one row");
     require(tabs.every(tab => tab.getBoundingClientRect().bottom <= panels.getBoundingClientRect().top + 1), "the tabs are above the slimes");
@@ -5708,6 +5710,10 @@ export function checkRendered(name, context = {}) {
     require(tabs.every(tab => tab.getBoundingClientRect().right <= whole.right + 1) || menu.querySelector("[data-chip-row][data-more-after], [data-chip-row][data-more-before]"), "the tabs fit the picker, or the chip row scrolls with its arrows");
     const open = [...menu.querySelectorAll("[data-slime-group]")].filter(panel => getComputedStyle(panel).visibility !== "hidden" && !panel.hasAttribute("inert"));
     require(open.length === 1 && open[0].dataset.slimeGroup === menu.querySelector('[role="tab"][aria-selected="true"]').dataset.slimeTab, "only the chosen tab's slimes show");
+    // A closed group's panel being hidden is not enough: a rule that makes a slime's own parts visible (reduced motion had one)
+    // shows them through the open group, one drawing on another. Every drawn part of every closed group is out of sight.
+    const leaking = [...menu.querySelectorAll('[data-slime-group]:not([data-active]) :is(button, svg, svg *)')].filter(part => getComputedStyle(part).visibility !== "hidden");
+    require(leaking.length === 0, `nothing of a closed group shows through the open one (${leaking.length} parts of ${[...new Set(leaking.map(part => part.closest('[data-slime-group]').dataset.slimeGroup))].join()} do)`);
     require(!menu.querySelector("h1, h2, h3, h4"), "no heading inside the grid: the tab says it");
     const shown = [...open[0].querySelectorAll("button")];
     require(shown.length > 0 && shown.every(visible), "the group's slimes are all there");

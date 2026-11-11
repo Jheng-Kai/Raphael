@@ -1815,6 +1815,8 @@ export const ptBR = {
   "slime.candle": "Vela",
   "slime.music-note": "Nota musical",
   "slime.group.characters": "Personagens",
+
+  "slime.group.fantasy": "Fantasia",
   "slime.group.animals": "Animais",
   "slime.group.jobs": "Profissões",
   "slime.group.nature": "Natureza",
