@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { resolve, join } from "node:path";
-import ts from "typescript";
+// TypeScript 7 (the build) ships no compiler API; parsing uses the 6.x compatibility package it recommends for tools.
+import ts from "typescript-6";
 import { expect, it } from "vitest";
 
 const root = resolve(__dirname, "../..");

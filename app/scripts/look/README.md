@@ -291,7 +291,7 @@ rate (default 1). It leaves the interaction observer, timing interval and budget
 unchanged. Stress results are separate from ordinary machine timing; use the same
 rate before and after a performance change, and retain unthrottled acceptance too.
 
-Look needs an installed Edge/Chrome and the pinned **puppeteer-core@25.13.0** devDependency.
+Look needs an installed Edge/Chrome and the pinned **puppeteer-core** devDependency (the version `app/package.json` names).
 It never downloads a browser or installs packages. Preserve the package/lockfile pin.
 `LOOK_BROWSER` optionally selects an executable. Node 22 or later is required.
 
