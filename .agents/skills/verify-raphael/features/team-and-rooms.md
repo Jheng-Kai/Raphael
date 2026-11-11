@@ -171,7 +171,7 @@ Global folders, Everyone, group avatars, persistent room actions, mentions and w
 
 ## How to get to it (user POV)
 
-Open a room in the global sidebar; use the menu button in a compact window.
+Open a room in the global sidebar; in a compact window its face stands in the rail.
 
 ## Driving it with look
 

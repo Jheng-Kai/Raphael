@@ -7,7 +7,9 @@
 :root {
   --card-primary: #ffffff; --card-primary-ink: #171717; --card-primary-edge: #d6d6d6;
   --desktop-frame-bg: #171717; --desktop-frame-text: #f0f0f0;
-  --sidebar-width: 296px; --window-controls-height: 32px;
+  /* The list is as wide as Grok Bot's (348 px) from 952 px of window up, and gives way to the conversation below that so
+     that it never gets narrower than it is on a 900 px window (604 px); under 860 px it is a rail of faces (sidebar.css). */
+  --sidebar-width: min(348px, calc(100vw - 604px)); --window-controls-height: 32px;
   /* scale: spacing, type, radius, control heights (docs/ui.md) */
   --sp-1: 4px; --sp-2: 8px; --sp-3: 12px; --sp-4: 16px; --sp-5: 24px; --sp-6: 32px;
   /* Content measures: see the verification feature map's content-width contract. */

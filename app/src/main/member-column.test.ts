@@ -266,17 +266,13 @@ describe("the column, used", () => {
     } finally { setLocale("zh-TW"); }
   });
 
-  test("the search card from Ctrl+Shift+F opens a member, closes, and closes the drawer behind it", () => {
-    const column = mount(), anchor = document.createElement("button"), drawer = vi.fn();
-    window.addEventListener("raphael:close-sidebar", drawer);
-    try {
-      document.body.append(anchor); column.openSearch(anchor);
-      expect(document.activeElement).toBe(document.querySelector("#app-popover input"));
-      document.querySelector<HTMLButtonElement>('#app-popover [data-member="3"]')!.click();
-      expect(host.select).toHaveBeenCalledWith(3);
-      expect(document.getElementById("app-popover")).toBeNull();
-      expect(drawer).toHaveBeenCalledTimes(1);
-    } finally { window.removeEventListener("raphael:close-sidebar", drawer); }
+  test("the search card from Ctrl+Shift+F opens a member and closes", () => {
+    const column = mount(), anchor = document.createElement("button");
+    document.body.append(anchor); column.openSearch(anchor);
+    expect(document.activeElement).toBe(document.querySelector("#app-popover input"));
+    document.querySelector<HTMLButtonElement>('#app-popover [data-member="3"]')!.click();
+    expect(host.select).toHaveBeenCalledWith(3);
+    expect(document.getElementById("app-popover")).toBeNull();
   });
 
   test("＋ offers 新增成員 and 新增分組", () => {

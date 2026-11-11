@@ -1,7 +1,7 @@
 // The members of the 拉斐爾 page, put together: the list the core keeps (`members.list`), the column
 // on the left (member-column.ts), the details panel on the right (member-details.ts), the dialogs
 // (member-dialogs.ts) and the member identity used by the stacked conversation title.
-// The main window mounts this column globally; below 860 px it opens in the same sidebar drawer.
+// The main window mounts this column globally; below 860 px it is the rail of faces (sidebar.css).
 //
 // A new member of a group with places to look comes with the routine the core offers
 // (「每天早上的進度」): the owner is asked, and only 「加入」 makes it.
@@ -482,7 +482,6 @@ export function createMembers(host: MembersHost): MembersShell {
   }
 
   function newMember(groupId: number | null): void {
-    window.dispatchEvent(new Event("raphael:close-sidebar"));
     openMemberCreator({
       groupId,
       taken: (list?.members ?? []).map((m) => m.name),
@@ -565,12 +564,10 @@ export function createMembers(host: MembersHost): MembersShell {
 
   window.addEventListener("raphael:new-member", () => newMember(null));
   window.addEventListener("raphael:member-store", () => {
-    window.dispatchEvent(new Event("raphael:close-sidebar"));
     openMemberStore({ groupId: null, create: createMember });
   });
   // A template file opened from the file manager (template-open.ts): its import review, the same as the template gallery's 開啟.
   window.addEventListener("raphael:template-file", (event) => {
-    window.dispatchEvent(new Event("raphael:close-sidebar"));
     void previewTemplateFile(String((event as CustomEvent<string>).detail ?? ""), createMember, null, () => {});
   });
   onLocaleChange(() => { drawAll(); });
