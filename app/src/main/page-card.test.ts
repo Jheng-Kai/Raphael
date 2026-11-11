@@ -41,6 +41,9 @@ function fromFrame(frame: HTMLIFrameElement, data: unknown): void {
   window.dispatchEvent(event);
 }
 
+/** The page's own load: only then the card is a control, as in the app. */
+const loaded = (frame: HTMLIFrameElement): void => { frame.dispatchEvent(new Event("load")); };
+
 const setActivation = (isActive: boolean): void => {
   Object.defineProperty(navigator, "userActivation", { value: { isActive }, configurable: true });
 };
@@ -284,6 +287,7 @@ test("a new revision opens again in the same frame", async () => {
 test("expand takes the same frame to the large dialog and closing brings it back", async () => {
   const { thread, frame, pages } = mount();
   await flush();
+  loaded(frame);
   thread.querySelector<HTMLElement>('[data-page-act="expand"]')!.click();
   expect(document.querySelector(".pg-view iframe")).toBe(frame);
   pages.sync();
@@ -296,8 +300,9 @@ test("expand takes the same frame to the large dialog and closing brings it back
 
 test("a page made larger keeps its × outside the page: above its top right corner, on the scrim", async () => {
   // The × once lay over the page's top right corner (top: 12px; right: 16px), so whatever a page drew there was covered (2026-11-11).
-  const { thread } = mount();
+  const { thread, frame } = mount();
   await flush();
+  loaded(frame);
   thread.querySelector<HTMLElement>('[data-page-act="expand"]')!.click();
   const dialog = document.querySelector<HTMLElement>(".pg-view-dialog")!;
   const close = dialog.querySelector<HTMLElement>('[data-dlg="close"]')!;
@@ -318,6 +323,7 @@ test("a page made larger is as tall in its dialog as it says it is there, under 
   const { thread, frame } = mount();
   await flush();
   const card = thread.querySelector<HTMLElement>(".pg-card")!;
+  loaded(frame);
   thread.querySelector<HTMLElement>('[data-page-act="expand"]')!.click();
   // The title once, as the card has it (it was escaped twice and showed 「&lt;b&gt;」).
   expect(document.querySelector(".pg-view-dialog .mb-dlg-head h2")!.textContent).toBe("藍色背包 <b>");
@@ -383,4 +389,83 @@ test("oversized page text and a removed page never reach the composer", async ()
   thread.replaceChildren();
   fromFrame(frame, { raphaelPage: 1, type: "send", text: "Old page" });
   expect(place).not.toHaveBeenCalled();
+});
+
+/** The rule of a selector in page-card.css, comments stripped; "" when it has none. */
+const pageRule = (selector: string): string => {
+  const css = readFileSync(join(__dirname, "page-card.css"), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+  const at = css.indexOf(`\n${selector} {`);
+  return at < 0 ? "" : css.slice(at, css.indexOf("}", at));
+};
+
+test("a page is a card of one fixed height: its title row and a preview, no expand button under it", () => {
+  const thread = document.createElement("div");
+  thread.innerHTML = pageCardsHTML(turn([card]));
+  const body = thread.querySelector<HTMLElement>(".pg-card > .pg-body")!;
+  // One control, named with the page's title, not a loose icon button in a footer.
+  expect(body.getAttribute("role")).toBe("button");
+  expect(body.getAttribute("aria-label")).toBe(t("page.open", { title: card.title }));
+  expect(body.dataset.pageAct).toBe("expand");
+  expect(thread.querySelector(".pg-card > .card-actions, .pg-card .btn.icon")).toBeNull();
+  // The height is the shared token, the same for a loading, a ready and a failed card, so a change of state moves nothing.
+  expect(pageRule(".pg-body")).toContain("height: var(--h-page-peek); overflow: hidden;");
+  expect(pageRule(".pg-failed")).toContain("height: var(--h-page-peek);");
+  expect(readFileSync(join(__dirname, "styles.css"), "utf8")).toMatch(/--h-page-peek: \d+px;/);
+});
+
+test("the preview shows only the top of the page: the frame keeps the page's height behind the clip, takes no pointer and fades into the card", () => {
+  // The frame is as tall as the page says, so the page never scrolls inside the clip; the clip, not a scrollbar, cuts it.
+  expect(pageRule(".pg-body > .pg-frame")).toContain("height: var(--pg-h, 320px); pointer-events: none;");
+  expect(pageRule(".pg-body")).toContain("overflow: hidden;");
+  // The cut fades into the card's own surface (--panel, as the card), never to a colour of its own: no light edge in the dark theme.
+  expect(pageRule('.pg-body[data-state="ready"]::after')).toContain("linear-gradient(to bottom, transparent, var(--panel))");
+});
+
+test("a page in a card is inert: it cannot be pressed, focused or scrolled, and works again only when made larger", async () => {
+  const { thread, frame } = mount();
+  await flush();
+  loaded(frame);
+  expect(frame.hasAttribute("inert")).toBe(true);
+  thread.querySelector<HTMLElement>(".pg-body")!.click();
+  expect(frame.hasAttribute("inert")).toBe(false);
+  expect(document.querySelector(".pg-view iframe")).toBe(frame);
+  document.querySelector<HTMLElement>('.pg-view-dialog [data-dlg="close"]')!.click();
+  expect(frame.hasAttribute("inert")).toBe(true);
+});
+
+test("pressing the preview, its title row, or Enter or Space on it opens the page whole, and nothing opens before it is ready", async () => {
+  const { thread, frame } = mount();
+  const body = thread.querySelector<HTMLElement>(".pg-body")!;
+  const press = (key: string): void => { body.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true })); };
+  const shown = (): boolean => document.querySelector(".pg-view") !== null;
+  const close = (): void => { document.querySelector<HTMLElement>('.pg-view-dialog [data-dlg="close"]')!.click(); };
+  // Loading: a placeholder, not a control.
+  expect(body.hasAttribute("tabindex")).toBe(false);
+  expect(body.getAttribute("aria-disabled")).toBe("true");
+  body.click(); press("Enter");
+  expect(shown()).toBe(false);
+  await flush();
+  loaded(frame);
+  // Ready: one focusable control.
+  expect(body.tabIndex).toBe(0);
+  expect(body.hasAttribute("aria-disabled")).toBe(false);
+  press("a");
+  expect(shown()).toBe(false);
+  press("Enter"); expect(shown()).toBe(true); close();
+  press(" "); expect(shown()).toBe(true); close();
+  body.click(); expect(shown()).toBe(true); close();
+  thread.querySelector<HTMLElement>(".pg-card > .card-head .card-title")!.click();
+  expect(shown()).toBe(true); close();
+  expect(frame.getAttribute("sandbox")).toBe("allow-scripts allow-forms");
+});
+
+test("a failed page has no preview to press, and its card keeps 再試一次 and ×", async () => {
+  vi.mocked(api.pagesOpen).mockRejectedValueOnce(new Error("gone"));
+  const { thread } = mount();
+  await flush();
+  const body = thread.querySelector<HTMLElement>(".pg-body")!;
+  expect(body.hidden).toBe(true);
+  thread.querySelector<HTMLElement>(".pg-card > .card-head")!.click();
+  expect(document.querySelector(".pg-view")).toBeNull();
+  expect(thread.querySelector('[data-page-act="retry"]')).not.toBeNull();
 });

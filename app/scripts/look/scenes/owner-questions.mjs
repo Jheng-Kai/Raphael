@@ -11,7 +11,7 @@ export default [
     ...(kind === "connect" ? [click('[data-connector] [data-act="card-connect"]'), wait('[data-connector][data-card-state="authorizing"]')] :
       kind === "secret" ? [type('[data-secret-input]', "synthetic-room-key")] :
       kind === "mail" ? [type('[data-mail-field="subject"]', "Room report for review"), wait('[data-mail-card][data-version="2"]')] :
-      [{ action: "frame-wait", selector: "#buy" }, { action: "frame-click", selector: "#buy" }, check("page-placed"), click('.au-room-pane .cmp-send'), wait('[data-owner-question="room-page-q"][data-card-state="answered"]')]),
+      [{ action: "frame-wait", selector: "#buy" }, click(".pg-card .pg-body"), wait(".pg-view iframe"), { action: "frame-click", selector: "#buy" }, check("page-placed"), click('.au-room-pane .cmp-send'), wait('[data-owner-question="room-page-q"][data-card-state="answered"]')]),
     check(`owner-card-room-${kind}`)], { roomOwnerCard: kind, ...(kind === "page" ? { pageTurn: true } : {}) })),
   scene("owner-question-room", "The room uses the same durable card and answers through the shared controller", [room(1), wait('[data-owner-question="owner-choice"]'), check("owner-question-room"), click('[data-owner-option="星期二"]'), wait('[data-card-state="answered"]'), check("owner-question-answered")], { ownerQuestion: "room" }),
   // Where the card stands in its turn (owner, 2026-11-11): at the end while it waits, among the conversation once answered.

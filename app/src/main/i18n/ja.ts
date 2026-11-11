@@ -1445,7 +1445,7 @@ export const ja = {
   "page.composerNote": "この文章はページからのものです。確認してから送信してください。",
   "page.askOpen": "このページがこのリンクを開こうとしています",
   "page.askYes": "実行",
-  "page.expand": "拡大",
+  "page.open": "「{title}」を開く",
   "page.failed": "このページを開けませんでした。",
   "page.waitingYes": "先に確認が必要です。会話のカードをご覧ください。",
   "page.retry": "もう一度試す",

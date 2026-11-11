@@ -1445,7 +1445,7 @@ export const en = {
   "page.composerNote": "This text came from a page. Review it before sending.",
   "page.askOpen": "This page wants to open this link",
   "page.askYes": "Go ahead",
-  "page.expand": "Expand",
+  "page.open": "Open “{title}”",
   "page.failed": "This page could not open.",
   "page.waitingYes": "This needs your yes first: see the card in the conversation.",
   "page.retry": "Try again",
