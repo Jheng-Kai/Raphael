@@ -158,7 +158,8 @@ export const chatgptSignIn = (language: string): Promise<ChatGptStatus> => core(
 export const chatgptCancel = (): Promise<{ cancelled: boolean }> => core("chatgpt.cancel");
 export const chatgptSignOut = (): Promise<{ signed_out: boolean }> => core("chatgpt.sign_out");
 export const chatgptModels = (): Promise<{ models: unknown[] }> => core("chatgpt.models");
-export const brainsCliLogin = (id: CliBrainId): Promise<{ started: boolean; reconnected?: boolean }> => core("brains.cli_login", { id });
+/** `again` starts the CLI's sign-in even where its credentials exist (a session that ran out); `cancel` ends the one this app started. */
+export const brainsCliLogin = (id: CliBrainId, options: { again?: boolean; cancel?: boolean } = {}): Promise<{ started: boolean; reconnected?: boolean; running?: boolean }> => core("brains.cli_login", { id, ...options });
 export const brainsCliDisconnect = (id: CliBrainId): Promise<{ disconnected: true }> => core("brains.cli_disconnect", { id });
 
 // Model provider connections. Keys are write-only and are kept by the core's vault.
@@ -546,6 +547,11 @@ export const openExternalUrl = (url: string): Promise<void> => invoke("open_exte
 /** A sign-in in the browser has finished: the owner's way back is this window coming to the front. */
 export const mainWindowForward = (): Promise<void> => invoke("main_window_forward");
 export const pagesOpen = (id: string, theme: "dark" | "light"): Promise<PageOpened> => core("pages.open", { id, theme });
+/**
+ * Which page stands open beside the composer (null: none), told to the core just before a message is sent, so the member
+ * that answers knows what "here" and "this" mean and changes that page in place (core agent/pages.py `viewing`).
+ */
+export const pagesViewing = (id: string | null): Promise<{ viewing: string | null }> => core("pages.viewing", { id });
 /** A report page's checked content: the app draws it (report-page.ts), in whichever theme, with no frame. */
 export const reportOpen = (id: string): Promise<ReportOpened> => core("pages.open", { id, theme: "light" });
 /**

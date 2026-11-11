@@ -108,29 +108,34 @@ it("a question's answer button stands at the field height and shares the field's
   } finally { vi.unstubAllGlobals(); browser.happyDOM.abort(); }
 });
 
-it("a page made larger keeps its × outside the page, above its top right corner (2026-11-11)", () => {
-  // The × once lay over the page's own top right corner (8 px in), so whatever a page drew there was covered.
+it("a page open in the conversation's place has the arrow at the header's top left, the composer's column and no dialog (2026-11-11)", () => {
+  // The × once stood outside a dialog's page (2026-11-11); the page now replaces the conversation and the header's arrow goes back.
   const browser = new Window(), doc = browser.document;
-  doc.body.innerHTML = '<section class="pg-card"><b class="card-title">Page</b></section><div class="mb-scrim"><div class="mb-dialog pg-view-dialog" aria-labelledby="t">' +
-    '<div class="mb-dlg-head"><h2 id="t">Page</h2><button data-dlg="close"></button></div><div class="mb-dlg-body"><div class="pg-view" style="--pg-h:300px"><iframe></iframe></div></div></div></div>';
+  doc.body.innerHTML = '<div class="page-agent"><section class="mb-chat"><div class="mb-head"><span class="mb-head-l"><button class="icon" data-page-back aria-label="返回"><svg></svg></button></span>' +
+    '<span class="conversation-trigger"><span class="mb-pill">小晴</span></span></div>' +
+    '<div class="ra-stage is-page" data-page-kind="page"><div class="ra-scroll"></div><div class="pgv"><div class="pgv-body"><div class="pgv-page"><h2 class="pgv-title">輕量後背包</h2><div class="pgv-frame-box"><iframe class="pg-frame"></iframe></div></div></div><div class="pgv-status" hidden></div></div>' +
+    '<div class="ra-dock"><div class="composer"></div></div></div><section class="pg-card"><b class="card-title">輕量後背包</b></section></section></div>';
   const rect = (left, top, right, bottom) => ({ left, top, right, bottom, width: right - left, height: bottom - top });
-  const places = { "pg-card": rect(20, 20, 420, 200), "mb-dialog pg-view-dialog": rect(100, 200, 700, 500), "pg-view": rect(100, 200, 700, 500), h2: rect(100, 200, 101, 201), button: rect(664, 156, 700, 192) };
+  const places = { "mb-head": rect(300, 20, 1100, 60), icon: rect(310, 22, 346, 58), "mb-pill": rect(600, 22, 700, 58), "pgv-title": rect(340, 70, 700, 100), "composer": rect(340, 800, 1060, 880),
+    "pgv-frame-box": rect(340, 110, 1060, 780), "pg-frame": rect(340, 110, 1060, 780), "ra-dock": rect(300, 790, 1100, 890) };
   for (const element of doc.querySelectorAll('*')) {
     element.checkVisibility = () => true;
-    element.getBoundingClientRect = () => places[element.className || element.tagName.toLowerCase()] ?? (element.tagName === "IFRAME" ? rect(100, 200, 700, 500) : rect(0, 0, 10, 10));
+    element.getBoundingClientRect = () => places[element.className || element.tagName.toLowerCase()] ?? rect(0, 0, 10, 10);
   }
-  const tokens = { "--sp-2": "8px", "--window-controls-height": "32px" };
   vi.stubGlobal('document', doc);
-  vi.stubGlobal('innerHeight', 900); vi.stubGlobal('innerWidth', 1000);
-  vi.stubGlobal('getComputedStyle', () => ({ borderRadius: '999px', backgroundColor: 'rgb(31, 31, 31)', getPropertyValue: name => tokens[name] ?? '' }));
+  vi.stubGlobal('innerHeight', 900); vi.stubGlobal('innerWidth', 1100);
+  vi.stubGlobal('getComputedStyle', element => ({ visibility: element.className === "ra-scroll" ? "hidden" : "visible", pointerEvents: "auto", borderRadius: element.className === "pgv-frame-box" ? "16px" : "999px", borderTopWidth: "0px", backgroundColor: "rgb(31, 31, 31)", getPropertyValue: () => "" }));
   try {
-    expect(checkRendered('page-expanded').height).toBe(300);
-    places.button = rect(664, 208, 700, 244);
-    expect(() => checkRendered('page-expanded')).toThrow(/the × stands above the page's top edge/);
-    places.button = rect(656, 156, 692, 192);
-    expect(() => checkRendered('page-expanded')).toThrow(/right-aligned with the page/);
-    places.button = rect(664, 16, 700, 52); places["mb-dialog pg-view-dialog"] = rect(100, 60, 700, 360); places["pg-view"] = rect(100, 60, 700, 360); places.iframe = rect(100, 60, 700, 360);
-    expect(() => checkRendered('page-expanded')).toThrow(/inside the window, under its caption strip/);
+    expect(checkRendered('page-inplace').width).toBe(720);
+    // A dialog over the page, the arrow far from the header's left, a page narrower than the composer's column: each is refused.
+    doc.body.insertAdjacentHTML("beforeend", '<div class="mb-scrim"></div>');
+    expect(() => checkRendered('page-inplace')).toThrow(/no dialog, no scrim and no ×/);
+    doc.querySelector(".mb-scrim").remove();
+    places.icon = rect(700, 22, 736, 58);
+    expect(() => checkRendered('page-inplace')).toThrow(/at the header's top left/);
+    places.icon = rect(310, 22, 346, 58);
+    places["pgv-frame-box"] = rect(380, 110, 1020, 780);
+    expect(() => checkRendered('page-inplace')).toThrow(/as wide as the composer/);
   } finally { vi.unstubAllGlobals(); browser.happyDOM.abort(); }
 });
 

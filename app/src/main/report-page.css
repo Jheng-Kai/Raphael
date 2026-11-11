@@ -1,24 +1,15 @@
-/* A report page (report-page.ts): a link card in the reply, and the page in the thread's place with the composer below.
-   The thread stays laid out under it, hidden, so its place and its scroll are as they were when the report closes. */
-.ra-stage.is-report { display: grid; grid-template-rows: minmax(0, 1fr) auto; grid-template-columns: minmax(0, 1fr); }
-.ra-stage.is-report > :not(.ra-scroll, .rp-view, .ra-dock) { display: none; }
-.ra-stage.is-report > .ra-scroll { grid-area: 1 / 1; visibility: hidden; }
-.ra-stage.is-report > .rp-view { grid-area: 1 / 1; }
-.ra-stage.is-report > .ra-dock { grid-area: 2 / 1; }
+/* A report page (report-page.ts): a link card in the reply, and the page in the thread's place (page-view.css) with the
+   composer below. */
 .rp-view { position: relative; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); min-height: 0; background: var(--content); }
-.rp-view[hidden] { display: none; }
 /* The page scrolls as the thread does: what scrolls away fades before it meets the header, and at rest the title
    stands clear of the fade (conversations.css). Its sides are the composer's (`.ra-dock`, agent.css), so the report
    starts and ends where the composer does at every size, as the thread it stands for (R-UI-45). */
 .rp-scroll { position: relative; min-height: 0; overflow-x: hidden; overflow-y: auto; scrollbar-width: none; container-type: inline-size; padding-inline: var(--pa-dock-x); mask-image: linear-gradient(to bottom, transparent 16px, var(--text) 40px); }
 .rp-scroll::-webkit-scrollbar { display: none; }
 .rp-scroll:focus { outline: none; }
-/* Share and the × back to the conversation stay at the top right, out of the fade, while the page scrolls under them:
-   the window edge's round buttons, apart as the conversation header's are, ending where the composer ends. */
+/* Share stays at the top right, out of the fade, while the page scrolls under it: the window edge's round button, ending
+   where the composer ends. The way back is not here but at the conversation header's top left (page-view.css). */
 .rp-top { position: absolute; top: var(--sp-3); right: max(var(--pa-dock-x), calc((100% - var(--pa-colw)) / 2)); z-index: 2; display: flex; gap: var(--sp-1); }
-/* While a report is open its Share is the one share in sight, as a Grok Bot Page's: the member's own share in the
-   conversation header above it, the same icon for another thing, waits in its place until the report closes. */
-.page-agent:has(.ra-stage.is-report) .mb-head [data-act="share-member"] { visibility: hidden; }
 
 .rp-doc { max-width: var(--pa-colw); margin: 0 auto; padding: calc(var(--sp-6) + var(--sp-2)) 0 calc(2 * var(--sp-6)); }
 .rp-title { margin: 0; font: var(--weight-medium) var(--fs-h1)/1.35 var(--ui); overflow-wrap: anywhere; }
@@ -76,8 +67,8 @@
 .rp-notes dt { color: var(--text-3); }
 .rp-notes dd { margin: 0; color: var(--text-2); overflow-wrap: anywhere; }
 
-/* The title clears share and the ×, which stand over its column's top right (in the app: a file has neither). */
-.rp-view .rp-head { padding-inline-end: calc(2 * 36px + var(--sp-1) + var(--sp-4)); }
+/* The title clears share, which stands over its column's top right (in the app: a file has none). */
+.rp-view .rp-head { padding-inline-end: calc(36px + var(--sp-4)); }
 @container (max-width: 640px) {
   .rp-doc { padding-bottom: var(--sp-6); }
 }
@@ -92,7 +83,7 @@
   .rp-table td::before { content: attr(data-col); color: var(--text-3); font-size: var(--fs-xs); }
 }
 /* A page as wide as the composer's whole column (960 px, --layout-thread-max) keeps its contents in a column of their
-   own at the right, in sight while it scrolls, under share and the × (which then leave the title its width). */
+   own at the right, in sight while it scrolls, under share (which then leaves the title its width). */
 @container (min-width: 960px) {
   .rp-doc { display: grid; grid-template-columns: minmax(0, 1fr) calc(6 * var(--sp-6)); column-gap: var(--sp-6); align-items: start; }
   .rp-head, .rp-body { grid-column: 1; }

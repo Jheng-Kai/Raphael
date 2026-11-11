@@ -11,7 +11,7 @@ import re
 from httpx import ConnectError, TimeoutException
 
 from ..brain.openrouter import OpenRouterError
-from ..failures import KINDS as SHARED_KINDS
+from ..failures import CAUSES, KINDS as SHARED_KINDS
 
 # no_key: no OpenRouter key is stored. auth: OpenRouter does not accept it. budget: this month's
 # limit is used up. credits: the OpenRouter account has none left. offline: the network cannot
@@ -56,7 +56,11 @@ def public_failure(value):
     resets_at = value.get("resets_at")
     if type(resets_at) not in (int, float) or not 0 < resets_at <= 253402300799 or not math.isfinite(resets_at):
         resets_at = None
-    return {"kind": value["kind"], "provider": provider, "resets_at": resets_at}
+    public = {"kind": value["kind"], "provider": provider, "resets_at": resets_at}
+    # Only a subscription CLI's own sign-in or install is a cause the window can mend (it has the button for it).
+    if provider.startswith("cli:") and value.get("cause") in CAUSES:
+        public["cause"] = value["cause"]
+    return public
 
 
 def turn_failure(kind, model, diagnostic=None):
@@ -66,7 +70,8 @@ def turn_failure(kind, model, diagnostic=None):
     kind = diagnostic.kind if diagnostic is not None else aliases.get(kind, kind)
     kind = kind if kind in SHARED_KINDS else "unknown"
     return public_failure({"kind": kind, "provider": provider_of(model),
-                           "resets_at": diagnostic.resets_at if diagnostic is not None else None})
+                           "resets_at": diagnostic.resets_at if diagnostic is not None else None,
+                           "cause": getattr(diagnostic, "cause", None)})
 
 
 def provider_of(model):

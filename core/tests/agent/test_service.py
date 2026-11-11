@@ -21,7 +21,7 @@ from raphael_core.agent.history import AgentHistory
 from raphael_core.agent.policy import Tier
 from raphael_core.agent.routing import Router as Decider
 from raphael_core.agent.service import AgentService
-from raphael_core.failures import Failure
+from raphael_core.failures import Failure, Missing
 from raphael_core.brain.openrouter import ChatTurn, OpenRouterError, TextCompletion
 from raphael_core.brain.secrets import MemoryKeyStore
 from raphael_core.brain.settings import SettingsStore
@@ -55,6 +55,7 @@ METHODS = [
     "pages.export",
     "pages.open",
     "pages.tool_call",
+    "pages.viewing",
     "quota.list",
     "usage.allowances",
 ]
@@ -1041,7 +1042,12 @@ async def test_a_key_openrouter_refuses_is_still_auth_after_the_harness_attempt(
     client.decisions.append(OpenRouterError(401, "auth", "bad key"))
     client.chats.append(OpenRouterError(401, "auth", "bad key"))
     result = await rig.ask("你好")
-    assert result["text"] == Failure("auth_expired", "").sentence("openai/gpt-6-luna", "zh-TW") and client.json_calls == []
+    # An API model's refused key is the provider's card to put right (開啟設定), never a sign-in to do (owner, 2026-11-11).
+    assert result["text"] == Failure("auth_expired", "", missing=Missing("openrouter", "provider", "broken", "models")).sentence("openai/gpt-6-luna", "zh-TW") and client.json_calls == []
+    assert "更新憑證" in result["text"] and "還沒登入" not in result["text"]
+    (turn,) = await rig.turns()
+    assert turn["steps"][-1]["missing"] == Missing("openrouter", "provider", "broken", "models").wire()
+    assert turn["failure"] == {"kind": "auth_expired", "provider": "openrouter", "resets_at": None}
 
 
 async def test_a_model_that_fails_after_jev_decided_is_a_failure_but_jev_is_paid_for(

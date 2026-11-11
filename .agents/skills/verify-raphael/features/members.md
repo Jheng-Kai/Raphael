@@ -1130,6 +1130,34 @@ opens from the menu button in the caption first, which closes nothing; the press
 npm run look -- press-through-avatar-picker press-through-row-menu press-through-right-click press-through-delete-dialog press-through-model-menu --theme both --width 1120,720,1920x1080
 ```
 
+## The control that opened a thing is its toggle (2026-11-11)
+
+R-UI-124 (owner, 2026-11-11, after R-UI-121): with 「連接應用程式」 open, a press that lands on 「連接應用程式」 itself (it lies under the
+scrim) closed the dialog and was then handed down to the button, which opened it again, forever. The press on the opener now closes
+and does nothing else, for every opener. `app/src/main/dismissals.ts` keeps it: a panel records, when it registers, the control the
+last click activated (a menu item that has closed stands for the menu's own opener; a list drawn again is matched by its key; a field
+that takes typing is none), and `closeAndPress` is given the opener of a drawer's scrim. A press on that control closes the panel and its
+click is spent: through a scrim the press is not delivered to it, beside a popover or on a menu's anchor the click is swallowed, and
+Enter or Space on the focused control closes at the key's press (Space would otherwise act at its release, after the panel had gone).
+Every other control is pressed as before, and Escape is unchanged. A right click opens a row's menu from the row's ⋯, so the row is not
+its opener: a left press on that row closes the menu and opens the row, and a second right click takes the menu to the new point.
+
+Openers audited (a second press on each now closes it and it stays closed): the sidebar's 「連接應用程式」 and account button (Settings is a
+scrim dialog), the sidebar's + and search button, the composer's model and permission buttons, a message's ⋯ and react button and the
+emoji picker opened from the reaction bar, the slime picker's face button, a page card made larger, the header's conversation button
+(a drawer's scrim at drawer widths), the narrow sidebar's menu button (in the caption, above the drawer's scrim, and it toggles itself), row ⋯ menus (the ⋯ is not drawn until the row is right-clicked,
+so its toggle is proved in `dismissals.test.ts`), and every other `openMenu`, `openPopover`, `openDialog` and `registerDismissal` user
+by the same mechanism. The composer's + opens the system file picker, which no page can press behind.
+
+Each scene opens the thing once from its control, presses that control again with the real mouse at a point the pointer reaches (on the
+scrim for a dialog, on the control for a popover) and fails unless the thing is closed, stayed closed past a fade, and was opened exactly
+once (`watch-opens` counts the openings as the page makes them, so a close followed by an opening is seen). At drawer widths (720) the
+sidebar's 「連接應用程式」 is not reachable behind its own dialog and the scene says so instead of pressing.
+
+```text
+npm run look -- opener-toggle-connect-apps opener-toggle-settings opener-toggle-page-card opener-toggle-add-menu opener-toggle-search-card opener-toggle-model-menu opener-toggle-permission-menu opener-toggle-slime-picker opener-toggle-message-menu opener-toggle-reaction-bar opener-toggle-emoji-picker opener-toggle-details opener-toggle-row-menu opener-toggle-row-again opener-toggle-keyboard --theme both --width 1120,720,1920x1080
+```
+
 ## Sharing finished: cancelled saves, where the files are, files from the file manager, the store before it opens (2026-11-11)
 
 R-STORE-05, R-STORE-06, R-STORE-07, R-COLLEAGUE-07. The owner asked that everything about sharing be finished, remote computers included.

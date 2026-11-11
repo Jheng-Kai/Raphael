@@ -137,6 +137,9 @@ export interface CliBrain {
   login_command: string;
   models: CliModel[];
   notes?: string;
+  /** The CLI's own sign-in is open in its console now, and how the last one ended (`done`, or `stopped` when the console closed first). */
+  signing_in?: boolean;
+  login_result?: "done" | "stopped" | null;
 }
 
 export interface CliModel {
@@ -292,7 +295,7 @@ export interface MediaPayload {
 /** A turn of the conversation with Raphael (`agent.history.list`, newest first). */
 export interface AgentTurn {
   /** What kind of failure ended the turn and which brain it came from; null for a turn that did not fail. */
-  failure?: { kind: string; provider: string; resets_at: number | null } | null;
+  failure?: { kind: string; provider: string; resets_at: number | null; cause?: "expired" | "signed_out" | "not_installed" } | null;
   reactions?: Record<string, string[]>;
   routine?: Pick<Routine, "id" | "schedule" | "when" | "app_name">;
   handoffs?: HandoffView[];

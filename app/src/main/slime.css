@@ -357,25 +357,33 @@ html[data-window-hidden] *, html[data-window-hidden] *::before, html[data-window
   .slime[data-state="arriving"] .slime-motion { scale: 1.12 .82; }
 }
 
-/* The picture menu: a row of tabs for the groups, then ten choices across for the open one, with plain colours last. The
+/* The picture menu: a row of tabs for the groups, then six choices across for the open one, with plain colours last. The
    groups stand on one another in one cell, so the place is as big as the largest group and a press on a tab moves nothing
    (a control just pressed never moves). Where the largest group does not fit the window, only the place scrolls; the tabs
-   stay (owner, 2026-11-11: 「上面會有一些 tab、button 之類的，然後可以選擇」). */
-.menu.mb-avpop:has(.mb-slime-characters) { max-width: calc(100vw - 16px); }
-.menu.mb-avpop:has(.mb-slime-tabs) { display: flex; flex-direction: column; overflow: hidden; }
+   stay (owner, 2026-11-11: 「上面會有一些 tab、button 之類的，然後可以選擇」).
+   The menu is as wide as its row of tabs and no wider (owner, the same evening, of ten across with the tabs ending short of
+   the right edge: 「不要設計的這麼寬 上面 tab 右邊不要有空白」): the tabs hug their words and their row sets the width (six
+   tabs, about 300 px in Chinese, as Grok Bot's picture picker is 298), the slimes stand in six tracks that share it, and the
+   last tab and the last slime end at the same edge. In a language whose tabs are shorter than six slimes the tabs spread
+   to that edge; where they are longer than the menu may be, the row scrolls by its arrows. */
+/* The picker keeps one size in every window: its cells and gaps do not grow with the pane as the page's own do, so a large
+   window does not make it wide again. */
+.menu.mb-avpop:has(.mb-slime-tabs) { --pa-u: 0px; --pa-preset: 40px; display: flex; flex-direction: column; overflow: hidden; width: max-content; max-width: min(520px, calc(100vw - 16px)); }
 .mb-slime-tabs { flex: none; padding: 2px calc(6px + 4 * var(--pa-u)) 4px; }
-.mb-slime-tablist { display: flex; flex-wrap: nowrap; }
+.mb-slime-tabs > .mb-slime-tablist { display: flex; flex-wrap: nowrap; justify-content: space-between; width: 100%; }
 .menu.mb-avpop .mb-slime-tablist .tab { width: auto; flex: 0 0 auto; }
 .mb-slime-panels { display: grid; grid-template-columns: minmax(0, 1fr); flex: 1 1 auto; min-height: 0; overflow-x: hidden; overflow-y: auto; }
 .mb-slime-group { grid-area: 1 / 1; min-width: 0; }
 .mb-slime-group:not([data-active]) { visibility: hidden; }
-.mb-presets.mb-slime-characters { grid-template-columns: repeat(10, var(--pa-preset)); padding-top: 4px; padding-bottom: 2px; }
+.mb-presets.mb-slime-characters { grid-template-columns: repeat(6, minmax(var(--pa-preset), 1fr)); justify-items: center; padding-top: 4px; padding-bottom: 2px; }
 .menu.mb-avpop .mb-preset-slime { overflow: visible; border-radius: var(--r-md); }
 /* A press changes the picture and nothing more: no ring stays on the chosen one. */
 .menu.mb-avpop :is(.mb-preset-slime, .mb-slime-color)[aria-pressed="true"] { box-shadow: none; }
 .menu.mb-avpop .mb-preset-slime[aria-pressed="true"] { background: transparent; }
 .menu.mb-avpop .mb-preset-slime[aria-pressed="true"]:hover { background: var(--hover); }
-.mb-slime-colors { display: grid; grid-template-columns: repeat(10, var(--pa-preset)); gap: calc(6px + 4 * var(--pa-u)); padding: 4px calc(6px + 4 * var(--pa-u)) calc(6px + 4 * var(--pa-u)); justify-items: center; }
+/* The colours stand in the slimes' own six tracks, each dot in the middle of a cell as tall as a slime's. */
+.mb-slime-colors { display: grid; grid-template-columns: repeat(6, minmax(var(--pa-preset), 1fr)); gap: calc(6px + 4 * var(--pa-u)); padding: 4px calc(6px + 4 * var(--pa-u)) calc(6px + 4 * var(--pa-u)); justify-items: center; align-items: center; }
+.mb-slime-colors > .mb-slime-color { margin-block: calc(var(--pa-preset) * 0.19); }
 .menu.mb-avpop .mb-slime-color { width: calc(var(--pa-preset) * 0.62); height: calc(var(--pa-preset) * 0.62); min-height: 0; padding: 0; border-radius: var(--r-pill); background: var(--slime-color); box-shadow: 0 0 0 2px transparent; }
 .menu.mb-avpop .mb-slime-color:hover { background: var(--slime-color); box-shadow: 0 0 0 2px var(--hover-edge); }
 
@@ -426,6 +434,9 @@ html[data-window-hidden] *, html[data-window-hidden] *::before, html[data-window
   .slime-loop { display: none !important; }
   .slime-surface > .slime, .slime .slime-body, .slime .slime-eyes, .slime .slime-back, .slime .slime-marks { visibility: visible !important; }
 }
+/* A group of the picker that is not the open one shows nothing, whatever the rules above say of a slime's own parts: with
+   reduced motion they made the slimes of every closed group show through the open one, one drawing on another (2026-11-11). */
+.mb-slime-group:not([data-active]) :is(.slime, .slime-body, .slime-eyes, .slime-back, .slime-marks, .slime-loop) { visibility: hidden !important; }
 /* Two keyframes and a steps() count slide a strip through its cels on the compositor, whatever their number. */
 @keyframes slime-loop-show {
   from { opacity: 0; }

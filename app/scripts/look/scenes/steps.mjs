@@ -8,14 +8,25 @@ export const type = (selector, text) => ({ action: "type", selector, text });
 export const wait = selector => ({ action: "wait", selector });
 export const waitGone = selector => ({ action: "wait-gone", selector });
 export const codexArrives = () => ({ action: "codex-arrives" });
+// A CLI's sign-in console ended: `done`, or `stopped` as when its window was closed first.
+export const cliSigninEnds = (cli, outcome) => ({ action: "cli-signin-ends", cli, outcome });
 export const check = name => ({ action: "check", name });
 export const focus = selector => ({ action: "focus", selector });
 export const key = value => ({ action: "key", key: value });
 // What an input method hands the page, in order: `{ compose }` is a composition in progress, `{ commit }` the text it finishes with.
 export const ime = (selector, sequence) => ({ action: "ime", selector, sequence });
+// What the mock's core does while the scene waits (`window.__look[name](...args)`): `lookCall("updatePage", "page-news")`.
+export const lookCall = (name, ...args) => ({ action: "look-call", name, args });
+// A page open in the conversation's place: wheel over it, and what it must show once it has (frame-expect: its words, how far down it is).
+export const frameScroll = deltaY => ({ action: "frame-scroll", deltaY });
+export const frameExpect = (text, scrollAtLeast) => ({ action: "frame-expect", ...(text ? { text } : {}), ...(scrollAtLeast !== undefined ? { scrollAtLeast } : {}) });
 export const scroll = selector => ({ action: "scroll", selector });
 export const waitScrollEnd = selector => ({ action: "wait-scroll-end", selector });
 export const rightClick = selector => ({ action: "right-click", selector });
+// R-UI-124: count how many times a thing opens (`selector` drawn, `hidden` lifted, or `attribute` set on it), and press its opener a second time.
+// `gone` is what must be absent afterwards; `over` says where that second press should land: "scrim" (a layer over the control) or "control".
+export const watchOpens = (selector, options = {}) => ({ action: "watch-opens", selector, ...options });
+export const pressOpener = selector => ({ action: "press-opener", selector });
 export const page = name => click(name === "agent" ? ".mb-chief" : `#nav [data-go="${name}"]`);
 // 連結應用程式 is no tab of Settings: its one way in is the sidebar's button, which opens it as a dialog of its own (R-UI-111).
 // Appearance is a section of 一般 (the six settings tabs): its scenes open 一般 at that section. Messaging has no section

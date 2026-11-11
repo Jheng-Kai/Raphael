@@ -252,6 +252,33 @@ _ROWS = {
         "添加自定义连接", "사용자 지정 연결 추가", "Añadir una conexión personalizada", "Ajouter une connexion personnalisée", "Eine eigene Verbindung hinzufügen", "Adicionar uma conexão personalizada", "Aggiungere una connessione personalizzata", "Добавить собственное подключение", "Thêm kết nối tùy chỉnh", "เพิ่มการเชื่อมต่อแบบกำหนดเอง", "Tambahkan koneksi kustom", "Özel bir bağlantı ekle"),
     "No answer came in thirty minutes. That action was not done; ask again.": (
         "三十分钟内未获回应，该操作未执行，可再请我做一次。", "30분 안에 응답이 없어 해당 작업은 실행하지 않았습니다. 다시 요청하세요.", "Sin respuesta en treinta minutos. Esa acción no se hizo; vuelve a pedirla.", "Aucune réponse en trente minutes. Cette action n'a pas été faite ; redemandez-la.", "Keine Antwort in dreißig Minuten. Diese Aktion wurde nicht ausgeführt; bitte erneut anfordern.", "Sem resposta em trinta minutos. Essa ação não foi feita; peça de novo.", "Nessuna risposta in trenta minuti. Quell'azione non è stata eseguita; chiedila di nuovo.", "Ответа не было тридцать минут. Действие не выполнено; запросите его снова.", "Không có phản hồi trong ba mươi phút. Hành động đó chưa được thực hiện; hãy yêu cầu lại.", "ไม่มีการตอบกลับใน 30 นาที ยังไม่ได้ทำการนั้น ขอให้ทำอีกครั้งได้", "Tidak ada jawaban dalam tiga puluh menit. Tindakan itu tidak dilakukan; mintalah lagi.", "Otuz dakikada yanıt gelmedi. Bu eylem yapılmadı; yeniden isteyin."),
+    # A subscription CLI that cannot take a turn, told by its true cause (failures.py `_CAUSE_MESSAGES`, members/rooms.py).
+    "{name}'s sign-in has expired.": (
+        "{name} 的登录已过期。", "{name}의 로그인이 만료되었습니다.", "El inicio de sesión de {name} ha caducado.",
+        "La connexion de {name} a expiré.", "Die Anmeldung bei {name} ist abgelaufen.",
+        "O login de {name} expirou.", "L'accesso a {name} è scaduto.", "Вход в {name} истёк.",
+        "Phiên đăng nhập {name} đã hết hạn.", "การเข้าสู่ระบบ {name} หมดอายุแล้ว",
+        "Login {name} sudah kedaluwarsa.", "{name} oturumunun süresi doldu."),
+    "{name} is not signed in.": (
+        "{name} 尚未登录。", "{name}에 로그인되어 있지 않습니다.", "{name} no ha iniciado sesión.",
+        "{name} n'est pas connecté.", "{name} ist nicht angemeldet.",
+        "{name} não está conectado.", "{name} non ha effettuato l'accesso.", "Вход в {name} не выполнен.",
+        "{name} chưa đăng nhập.", "{name} ยังไม่ได้เข้าสู่ระบบ",
+        "{name} belum login.", "{name} oturumu açık değil."),
+    "{name} is not installed.": (
+        "{name} 尚未安装。", "{name}이(가) 설치되어 있지 않습니다.", "{name} no está instalado.",
+        "{name} n'est pas installé.", "{name} ist nicht installiert.",
+        "{name} não está instalado.", "{name} non è installato.", "{name} не установлен.",
+        "{name} chưa được cài đặt.", "{name} ยังไม่ได้ติดตั้ง",
+        "{name} belum terpasang.", "{name} yüklü değil."),
+    "CLI sign-in expired": (
+        "CLI 登录已过期", "CLI 로그인 만료", "Inicio de sesión de la CLI caducado", "Connexion CLI expirée",
+        "CLI-Anmeldung abgelaufen", "Login da CLI expirado", "Accesso alla CLI scaduto", "Вход в CLI истёк",
+        "Đăng nhập CLI đã hết hạn", "การเข้าสู่ระบบ CLI หมดอายุ", "Login CLI kedaluwarsa", "CLI oturumunun süresi doldu"),
+    "CLI not installed": (
+        "CLI 未安装", "CLI 미설치", "CLI no instalada", "CLI non installée", "CLI nicht installiert",
+        "CLI não instalada", "CLI non installata", "CLI не установлена", "Chưa cài CLI", "ยังไม่ได้ติดตั้ง CLI",
+        "CLI belum terpasang", "CLI yüklü değil"),
 }
 
 CARD_WORDS = {source: dict(zip(_ORDER, row, strict=True)) for source, row in _ROWS.items()}

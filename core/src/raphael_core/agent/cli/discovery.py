@@ -67,6 +67,11 @@ class CliBrains:
         # The window of each model (`cli:<brain>:<model>`) its CLI last reported, for the next loop of it (loop.py).
         self.context_windows = {}
         self._disconnected = set()
+        # A sign-in the owner is finishing in the CLI's own console, how the last one ended ("done" or "stopped"), and the
+        # ones this app ended itself.
+        self._signing = {}
+        self._signed = {}
+        self._cancelled = set()
         self._previous = None
         self._lock = asyncio.Lock()
         self._watcher = None
@@ -203,7 +208,8 @@ class CliBrains:
         models = self._known_models(name) if available else []
         item = {"id": name, "name": NAMES[name], "installed": bool(command),
                 "logged_in": logged_in, "disconnected": disconnected, "available": available,
-                "login_command": LOGIN[name], "models": models}
+                "login_command": LOGIN[name], "models": models,
+                "signing_in": self._signing_in(name), "login_result": self._signed.get(name)}
         if command:
             cached = self._versions.get(name)
             if cached and self._clock() < cached[0] and cached[1] == tuple(command):
@@ -305,14 +311,20 @@ class CliBrains:
             self.notify("brains.changed", {})
         return {"disconnected": True}
 
-    def login(self, name):
+    def login(self, name, *, again=False):
+        """Start the CLI's own sign-in in a console of its own. A sign-in that ran out leaves its credentials in place, so
+        `again` starts it even then (the file proves nothing about the session); without it a CLI that already has them is
+        only connected again. Raphael learns how it ended from the process (`signing_in`, `login_result`), never from
+        the CLI's credentials."""
         if name not in NAMES:
             raise ValueError("cli_unknown")
         self.invalidate(name)
         command = self.command(name)
         if not command:
             raise ValueError("cli_missing")
-        if self.logged_in(name) is True:
+        if self._signing_in(name):
+            return {"started": True, "running": True}
+        if self.logged_in(name) is True and not again:
             self._reconnect(name)
             if self.notify:
                 self.notify("brains.changed", {})
@@ -320,12 +332,65 @@ class CliBrains:
         if os.name != "nt":
             raise ValueError("cli_missing")
         arguments = {"claude": ["auth", "login"], "codex": ["login"], "gemini": []}[name]
-        subprocess.Popen([*command, *arguments], env=subscription_env(self.environ),
-                         creationflags=subprocess.CREATE_NEW_CONSOLE, close_fds=True)
+        process = subprocess.Popen([*command, *arguments], env=subscription_env(self.environ),
+                                   creationflags=subprocess.CREATE_NEW_CONSOLE, close_fds=True)
+        self._signing[name] = process
+        self._signed.pop(name, None)
         self._reconnect(name)
+        self._follow_login(name, process)
         if self.notify:
             self.notify("brains.changed", {})
         return {"started": True}
+
+    def cancel_login(self, name):
+        """End the sign-in this app started and is waiting for; the owner closed nothing, so no failure is told."""
+        if name not in NAMES:
+            raise ValueError("cli_unknown")
+        process = self._signing.get(name)
+        if process is not None and process.poll() is None:
+            self._cancelled.add(name)
+            process.terminate()
+        return {"cancelled": True}
+
+    def _signing_in(self, name):
+        process = self._signing.get(name)
+        return process is not None and process.poll() is None
+
+    def _follow_login(self, name, process):
+        """Wait for the sign-in's process off the loop, and settle it on the loop when it ends."""
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+
+        def wait():
+            code = process.wait()
+            if loop is None:
+                self._login_ended(name, process, code)
+            else:
+                try:
+                    loop.call_soon_threadsafe(self._login_ended, name, process, code)
+                except RuntimeError:  # the loop is closed with the app
+                    pass
+
+        threading.Thread(target=wait, name=f"{name}-sign-in", daemon=True).start()
+
+    def _login_ended(self, name, process, code):
+        if self._signing.get(name) is not process:
+            return
+        del self._signing[name]
+        self.invalidate(name)
+        if name in self._cancelled:
+            self._cancelled.discard(name)
+        else:
+            # The CLI's own verdict is its exit; Antigravity has no sign-in command, so it also has to hold a login afterwards.
+            done = code == 0 and (name != "gemini" or self.logged_in(name) is True)
+            self._signed[name] = "done" if done else "stopped"
+            if done:
+                self._reconnect(name)
+        self._previous = None
+        if self.notify:
+            self.notify("brains.changed", {})
 
     def _reconnect(self, name):
         self._set_disconnected(name, False)

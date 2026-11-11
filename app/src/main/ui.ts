@@ -3,7 +3,7 @@
 // the core wrote goes through `esc` first.
 
 import { onLocaleChange, t, translatedMessage } from "./i18n";
-import { pressWentThrough, registerDismissal } from "./dismissals";
+import { pressWentThrough, pressWithoutOpener, registerDismissal } from "./dismissals";
 
 import { type Notifier, UNDO_MS } from "./undo";
 import { ICON } from "./icon-set";
@@ -406,7 +406,8 @@ export function pressOverflow(button: HTMLElement, at?: { x: number; y: number }
   if (!menu?.el.contains(button)) closeMenu();
   if (at) pointedAt.set(button, { ...at, until: performance.now() + POINTED_GRACE_MS });
   else pointedAt.delete(button);
-  button.click();
+  // The row was pressed, not the ⋯: a press on the ⋯ afterwards moves the menu under it (R-UI-124 leaves it no opener).
+  pressWithoutOpener(() => button.click());
 }
 
 export function closeMenu(): void {
@@ -946,6 +947,11 @@ class Toaster implements Notifier {
    * time it has left (styles.css), so that its going is no surprise.
    */
   show(message: string, undo?: () => void): void {
+    // The same note again takes the place of the one on screen and starts its time over: six failures in a row are one
+    // note, not a pile of six (owner's screen, 2026-11-11).
+    for (const shown of [...this.messages.keys()]) {
+      if (shown !== this.undoToast && shown.querySelector("span")?.textContent === message) { shown.remove(); this.messages.delete(shown); }
+    }
     const toast = document.createElement("div");
     toast.className = "toast";
     toast.setAttribute("role", "status");
