@@ -15,6 +15,7 @@ import gc
 import os
 import sqlite3
 from collections.abc import Iterator
+from pathlib import Path
 
 import keyring
 import keyring.backend
