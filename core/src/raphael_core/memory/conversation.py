@@ -65,6 +65,7 @@ from ..brain.openrouter import OpenRouterError
 from ..brain.providers.base import ModelProvider
 from ..brain.providers.registry import for_purpose
 from ..clock import wall_clock_ms
+from ..worker.context import is_context_overflow
 from .terms import estimate_tokens
 from .compression import DEFAULT_THRESHOLD_CAP, PROTECT_LAST_MESSAGES, message_count, summary_budget, threshold_tokens
 
@@ -91,6 +92,13 @@ FOLD_MAX_TOKENS = 10_200
 SUMMARY_PURPOSE = "memory"
 DEFAULT_CONTEXT_WINDOW = 32_000
 KEEP_START_TURNS = 2
+# After the fold's input is too long for the summariser's window, it is asked again with this share of the input, each in
+# turn (whole turns, the oldest first, and a giant turn by its first part).
+OVERFLOW_SHARES = (.5, .25, .1)
+# After this many folds in a row failed, the summary is not written by a model at all: the turns due are left out of it
+# with a note, and the conversation goes on from its bounded recent window (the failed call never blocks it).
+FOLD_FALLBACK_AFTER = len(FOLD_PAUSES_S)
+LEFT_OUT = "Earlier turns were left out of this summary"
 
 # The words of a correction ("不對", "that's not what I meant", "違う"): a turn that holds one is
 # kept for the reflection pass before it is folded.
@@ -317,6 +325,8 @@ class Conversation:
         self.max_output_tokens = 0
         self.threshold_cap = DEFAULT_THRESHOLD_CAP
         self.summary_model: Callable[[str], str] = lambda model: model
+        # The window of the model that writes the summary, in tokens: the service sets it.
+        self.summary_window: Callable[[str], int] = lambda model: DEFAULT_CONTEXT_WINDOW
         # Says whether a step changed something (`ToolGate.step_changes`), for the note of a request
         # that did not finish; the service sets it. Without it every step counts as a change.
         self.changes: Callable[[Step], bool] | None = None
@@ -526,26 +536,10 @@ class Conversation:
             self._folding.cancel()
             await asyncio.gather(self._folding, return_exceptions=True)
 
-    async def fold(self, model: str, ledger: Ledger) -> bool:
-        """Fold the turns that are due into the summary with one call to `model`; whether it did.
-        A failure keeps the summary as it was, and pauses the next try."""
-        due = self.fold_due()
-        if due is None:
-            return False
-        folded, through = due
-        summary = self.summary()
-        clears = self._clears
-        if not folded:  # only turns that say nothing: the summary covers them as it is
-            self._save(summary.text, through)
-            return True
-        moment = time.strftime("%Y-%m-%d (%A)", time.localtime(self._now_ms() / 1000))
-        # Reserve room for the prior summary, bounded opening context, output and envelope.
-        start = self._worked([turn for turn in self._read() if is_readable(turn)][:KEEP_START_TURNS])
-        opening = '\n'.join(token_prefix(f'[{turn_time(turn.created_at_ms)}]\n{turn_text(turn, detail=True)}', 2000) for turn in start)
-        available = DEFAULT_CONTEXT_WINDOW - estimate_tokens(summary.text) - estimate_tokens(opening) - 1400
-        input_budget = min(FOLD_INPUT_TOKENS, max(1, min(available - 2000, int(available / 1.2))))
-        # Read the oldest contiguous batch. A giant turn advances a durable character offset
-        # but is not marked covered until its final fragment has actually been summarised.
+    def _batch(self, folded: list[Turn], input_budget: int):
+        """The oldest contiguous run of `folded` that fits `input_budget` tokens, as (turns, their text, tokens, the
+        progress into a giant turn). A giant turn advances a durable character offset but is not marked covered until
+        its final fragment has actually been summarised."""
         kept: list[Turn] = []
         tokens = 0
         rendered = []
@@ -569,49 +563,100 @@ class Conversation:
             kept.append(turn)
             rendered.append(body)
             tokens += cost
-        folded = kept
-        completed = folded[:-1] if progress[0] else folded
-        through = min(through, completed[-1].id) if completed else summary.through_turn_id
-        budget = summary_budget(tokens)
-        # Each turn with its own time: the relative dates in it are read against the day it was said.
-        turns = "\n\n".join(rendered)
-        user = (
-            f"Today: {moment}\n\n"
-            f"<summary_so_far>\n{summary.text or '(none yet)'}\n</summary_so_far>\n\n"
-            f"<turns>\n{turns}\n</turns>"
-        )
-        user += "\n\nVerbatim conversation start (bounded context, retained separately):\n" + opening
-        selected_model = self.summary_model(model)
-        async def request(chosen):
-            return await asyncio.wait_for(
-                self._client.complete_json(
-                    model=chosen,
-                    fallbacks=[],
-                    system=_SUMMARY_SYSTEM.format(max_tokens=budget),
-                    user=user,
-                    schema=_SUMMARY_SCHEMA,
-                    schema_name="raphael_summary",
-                    timeout_s=FOLD_TIMEOUT_S,
-                    max_tokens=budget + 200,
-                    reasoning_effort="none",
-                ),
-                FOLD_TIMEOUT_S,
-            )
-        try:
-            try:
-                completion = await request(selected_model)
-            except (OpenRouterError, TimeoutError, AgentFailure) as error:
-                if selected_model == model:
-                    raise
-                from .brain import failure_summary
-                kind, _ = failure_summary(error)
-                logger.warning("Memory auxiliary summariser failed; retaining member brain: %s", kind)
-                completion = await request(model)
-        except (OpenRouterError, TimeoutError, AgentFailure) as error:
-            self._failed(type(error).__name__)
+        return kept, rendered, tokens, progress
+
+    def _fall_back(self, summary: Summary, folded: list[Turn], through: int, why: str) -> bool:
+        """Cover the turns due without a model: the summary stays as it was, with one line that says earlier turns were
+        left out of it, and its progress moves past them. The conversation goes on from the bounded recent window; the
+        turns stay in the history and the search finds them."""
+        left_out = [turn for turn in folded if (turn.id or 0) <= through]
+        until = turn_time(left_out[-1].created_at_ms) if left_out else ""
+        kept = [line for line in summary.text.splitlines() if not line.startswith(LEFT_OUT)]
+        note = LEFT_OUT + (f" (up to {until})" if until else "") + "; they remain in the conversation history and can be searched."
+        self._save("\n".join([note, *kept]).strip(), through)
+        self._save_fragment(0, 0)
+        self._failures = 0
+        self._paused_until = 0.0
+        logger.warning("The conversation was folded without a model (%s): %d turns were left out of the summary", why, len(left_out))
+        return True
+
+    async def fold(self, model: str, ledger: Ledger) -> bool:
+        """Fold the turns that are due into the summary with one call to `model`; whether it did. A call whose input is
+        too long for the model's window is made again with less of it; a failure keeps the summary as it was and pauses
+        the next try, and after `FOLD_FALLBACK_AFTER` of them in a row (at once when even the least input is too long) the
+        turns due are covered without a model, so that a failed call never blocks the conversation."""
+        due = self.fold_due()
+        if due is None:
             return False
-        except Exception as exc:  # a fold that breaks must not break the conversation
-            self._failed(type(exc).__name__)
+        all_due, through = due
+        summary = self.summary()
+        clears = self._clears
+        if not all_due:  # only turns that say nothing: the summary covers them as it is
+            self._save(summary.text, through)
+            return True
+        moment = time.strftime("%Y-%m-%d (%A)", time.localtime(self._now_ms() / 1000))
+        selected_model = self.summary_model(model)
+        window = max(1, self.summary_window(selected_model))
+        # Reserve room for the prior summary, bounded opening context, output and envelope.
+        start = self._worked([turn for turn in self._read() if is_readable(turn)][:KEEP_START_TURNS])
+        opening = '\n'.join(token_prefix(f'[{turn_time(turn.created_at_ms)}]\n{turn_text(turn, detail=True)}', 2000) for turn in start)
+        available = min(DEFAULT_CONTEXT_WINDOW, window) - estimate_tokens(summary.text) - estimate_tokens(opening) - 1400
+        input_budget = min(FOLD_INPUT_TOKENS, max(1, min(available - 2000, int(available / 1.2))))
+        completion = None
+        error: BaseException | None = None
+        for share in (1, *OVERFLOW_SHARES):
+            folded, rendered, tokens, progress = self._batch(all_due, max(1, int(input_budget * share)))
+            completed = folded[:-1] if progress[0] else folded
+            batch_through = min(through, completed[-1].id) if completed else summary.through_turn_id
+            budget = summary_budget(tokens)
+            # Each turn with its own time: the relative dates in it are read against the day it was said.
+            turns = "\n\n".join(rendered)
+            user = (
+                f"Today: {moment}\n\n"
+                f"<summary_so_far>\n{summary.text or '(none yet)'}\n</summary_so_far>\n\n"
+                f"<turns>\n{turns}\n</turns>"
+            )
+            user += "\n\nVerbatim conversation start (bounded context, retained separately):\n" + opening
+
+            async def request(chosen):
+                return await asyncio.wait_for(
+                    self._client.complete_json(
+                        model=chosen,
+                        fallbacks=[],
+                        system=_SUMMARY_SYSTEM.format(max_tokens=budget),
+                        user=user,
+                        schema=_SUMMARY_SCHEMA,
+                        schema_name="raphael_summary",
+                        timeout_s=FOLD_TIMEOUT_S,
+                        max_tokens=budget + 200,
+                        reasoning_effort="none",
+                    ),
+                    FOLD_TIMEOUT_S,
+                )
+            try:
+                try:
+                    completion = await request(selected_model)
+                except (OpenRouterError, TimeoutError, AgentFailure) as first:
+                    if selected_model == model or is_context_overflow(first):
+                        raise
+                    from .brain import failure_summary
+                    kind, _ = failure_summary(first)
+                    logger.warning("Memory auxiliary summariser failed; retaining member brain: %s", kind)
+                    completion = await request(model)
+                break
+            except Exception as caught:  # a fold that breaks must not break the conversation
+                error = caught
+                if not is_context_overflow(caught):
+                    break
+                logger.info("The conversation's fold was given too much: asking again with less")
+        if completion is None:
+            assert error is not None
+            if is_context_overflow(error):
+                # No input is short enough, so asking again cannot help: the turns are left out of the summary.
+                return self._fall_back(summary, all_due, through, "context_overflow")
+            self._failed(getattr(error, "kind", None) or type(error).__name__)
+            if self._failures >= FOLD_FALLBACK_AFTER:
+                return self._fall_back(summary, all_due, through, f"failed {self._failures} times")
             return False
         ledger.add(
             model=completion.model,
@@ -628,7 +673,7 @@ class Conversation:
         # and nothing at all when it was cleared meanwhile (with the conversation, maybe).
         if self._clears != clears or self.summary() != summary:
             return False
-        self._save(cap_summary(text, budget), through)
+        self._save(cap_summary(text, budget), batch_through)
         self._save_fragment(*progress)
         self._failures = 0
         logger.info("The conversation was folded: %d turns", len(folded))

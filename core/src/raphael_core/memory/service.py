@@ -515,6 +515,8 @@ class MemoryService(Growth):
     def configure_conversation(self, conversation):
         conversation.threshold_cap = self._settings.get("memory_threshold_tokens_cap")
         conversation.summary_model = self.summary_model
+        from ..brain.windows import window_of
+        conversation.summary_window = window_of
 
     def may_spend(self, member_id: int = 0) -> bool:
         """Whether a call of the memory's own may be made: there is a key."""
@@ -745,7 +747,10 @@ class MemoryService(Growth):
         steps = self._history.steps([turn.id for turn in turns if turn.id is not None])
         outside = {turn.id for turn in turns if tainted_turn(turn, steps.get(turn.id, ()))}
         # Only what fits one pass: the newest turns; the watermark moves past the rest (memory/reflection.py).
-        turns = readable_turns(self._today(), own, self.shared, turns, outside, self._name_of(member_id))
+        from ..brain.windows import window_of
+        from .reflection import reflection_limit
+        turns = readable_turns(self._today(), own, self.shared, turns, outside, self._name_of(member_id),
+                               limit=reflection_limit(window_of(self._model(member_id))))
         private_request = any(keeps_private(turn.question) for turn in turns)
         applied = await Reflector(self._brain(member_id)).reflect(
             own, self.shared, turns,
@@ -764,6 +769,19 @@ class MemoryService(Growth):
             through = max(turns[-1].id or 0, self.reflected_through(member_id))
             self._set_state(_watermark(member_id), through)
         return applied
+
+    async def summarize_room(self, system: str, user: str, schema: dict) -> dict:
+        """The call that writes the summary of a room thread (members/room_summary.py): the owner's auxiliary model, else the
+        chief's own, as the conversation's fold chooses (`summary_model`). Nothing is asked without a model to ask."""
+        if not self.may_spend(0):
+            raise LookupError("no model to write the summary")
+        model = self.summary_model(self._model(0))
+        completion = await self._brain(0).complete_json(
+            model=model, fallbacks=[], system=system, user=user, schema=schema, schema_name="raphael_room_summary",
+            timeout_s=40.0, max_tokens=10_200, reasoning_effort="none")
+        self.ledger().add(model=completion.model, cost_usd=completion.cost_usd, usage=getattr(completion, "usage", None),
+                          prompt_tokens=completion.prompt_tokens, completion_tokens=completion.completion_tokens)
+        return completion.data
 
     async def consolidate(self) -> Applied:
         """The tidy of every file near or past its limit, each by itself; the next one is a day away

@@ -471,6 +471,7 @@ print(json.dumps({'type':'result', 'subtype':'success', 'session_id':'synthetic-
 
 @pytest.mark.parametrize("brain", ["claude", "codex", "gemini"])
 async def test_long_cli_room_keeps_answering_with_whole_recent_messages(meeting, monkeypatch, tmp_path, brain):
+    from raphael_core.agent.cli.context import fresh_budget, window_of
     rig, members, rooms, room, alice = meeting
     members.store.update_member(alice.id, model="cli:" + brain)
     rig.service.use_cli(Brains(tmp_path))
@@ -486,7 +487,11 @@ async def test_long_cli_room_keeps_answering_with_whole_recent_messages(meeting,
     prompts = []
     async def run(driver, **kwargs):
         prompts.append(kwargs["user"])
-        assert len(kwargs["fresh_context"]()) <= 16000
+        # A renewed session is given the newest whole messages that fit the model's window (R-CLI-10), not a cut transcript.
+        fresh = kwargs["fresh_context"]()
+        assert len(fresh.encode("utf-8")) <= fresh_budget(window_of("cli:" + brain), len(kwargs["system"].encode("utf-8")))[1]
+        for index, text in enumerate(old):
+            assert (f"SYNTHETIC-{index}-START" in fresh) == (f' END-{index}"' in fresh)
         yield Event("final", "The next step is documented.")
     monkeypatch.setattr("raphael_core.agent.cli.loop.Driver.run", run)
     for index in range(2):
@@ -504,9 +509,8 @@ async def test_long_cli_room_keeps_answering_with_whole_recent_messages(meeting,
     assert "PRIVATE" not in prompts[0] and not rig.client.chat_calls
 
 
-async def test_one_oversized_room_message_reports_overflow_and_does_not_poison_next_turn(meeting, monkeypatch, tmp_path):
+async def test_one_oversized_room_message_is_left_out_and_the_reply_still_goes_on(meeting, monkeypatch, tmp_path):
     from raphael_core.agent.cli.context import CONTEXT_HEADROOM, KNOWN_CONTEXT_TOKENS
-    from raphael_core.failures import classify
     rig, members, rooms, room, alice = meeting
     members.store.update_member(alice.id, model="cli:claude")
     rig.service.use_cli(Brains(tmp_path))
@@ -518,16 +522,15 @@ async def test_one_oversized_room_message_reports_overflow_and_does_not_poison_n
                                   (room["id"], "@Alice " + oversized)).lastrowid
     await rooms._exchanges.start(room, source, "en", ())
     await until(lambda: rooms._exchanges.latest(room["id"])["state"] in ("done", "stopped"))
-    assert not played
-    assert not rig.conn.execute("SELECT 1 FROM room_member_cursor WHERE room_id=? AND member_id=?", (room["id"], alice.id)).fetchone()
-    expected = classify("context_overflow").sentence("Claude Code", "en")
-    assert rooms._unfinished(source, "en") == [("Alice", expected)]
-    # The overflow is Alice's status line, with no close-out in the chief's name.
-    assert rig.conn.execute("SELECT reason FROM room_reply_intents WHERE origin_message_id=?", (source,)).fetchone()[0] == "cli_context_overflow"
+    # Length is never an error (owner, 2026-11-09): a message that alone is more than the window is left out and says so in
+    # its place, with its length; the reply is asked all the same and nothing fails.
+    [first] = played
+    assert "left out because it does not fit here" in first["user"] and "oversized oversized" not in first["user"]
+    assert rooms._unfinished(source, "en") == []
     assert rig.conn.execute("SELECT COUNT(*) FROM room_messages WHERE origin_message_id=? AND kind='wrapup'", (source,)).fetchone()[0] == 0
     await rooms._send({"room_id": room["id"], "text": "@Alice A smaller request", "request_id": "after-overflow", "ui_language": "en"})
     await until(lambda: rooms._exchanges.latest(room["id"])["state"] in ("done", "stopped"))
-    assert played and list(rig.conn.execute("SELECT state FROM worker_tasks ORDER BY id"))[-1][0] == "done"
+    assert len(played) == 2 and list(rig.conn.execute("SELECT state FROM worker_tasks ORDER BY id"))[-1][0] == "done"
     assert not rig.client.chat_calls
     assert not rooms._unfinished(rooms._exchanges.latest(room["id"])["origin_message_id"], "en")
     assert not rig.client.chat_calls

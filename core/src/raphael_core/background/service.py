@@ -466,6 +466,10 @@ class BackgroundService:
         # task id -> the files handed over with it, in memory only, until the task is taken up
         # (they then go with its run, and are gone when it ends). A task run again has none.
         self._attachments: dict[int, list[Attachment]] = {}
+        # task id -> what a room gave a CLI member's reply for going on in its own session there (members/rooms.py), in
+        # memory only: a reply that is taken up again after a restart starts that session over from its prompt.
+        self._room_context: dict[int, dict] = {}
+        self._room_cli_sessions = None
         self._cli_brains = None
         self._cli_quota = None
         self._cli_loops = {}
@@ -767,6 +771,7 @@ class BackgroundService:
         member_id: int = 0,
         routine_id: int | None = None,
         asked_by: Speaker | None = None,
+        room_context: dict | None = None,
     ) -> int:
         """Write a task down and queue it; its id. `Refused` when the worker is switched off. The
         task starts as soon as there is a place for it and its member has none under way. `model` is the model
@@ -795,6 +800,8 @@ class BackgroundService:
             self._chains[task_id] = (asked_by.depth, asked_by.chain)
         if attachments:
             self._attachments[task_id] = list(attachments)
+        if room_context:
+            self._room_context[task_id] = room_context
         self._queue.append(task_id)
         self._ensure_pump()
         self._changed(task_id, QUEUED)
@@ -1224,6 +1231,7 @@ class BackgroundService:
                 self._queue.remove(task_id)
                 self._models.pop(task_id, None)
                 self._attachments.pop(task_id, None)
+                self._room_context.pop(task_id, None)
                 self._store.delete(task_id)
             self._store.clear()
             for run in list(self._runs.values()):
@@ -1265,6 +1273,7 @@ class BackgroundService:
                     self._models.pop(task_id, None)
                     self._chains.pop(task_id, None)
                     self._attachments.pop(task_id, None)
+                    self._room_context.pop(task_id, None)
                     self._store.delete(task_id)
             for paused in list(self._paused.values()):
                 if paused.member_id == member_id:  # its question goes with it
@@ -1347,6 +1356,7 @@ class BackgroundService:
             if task is None or task.state != QUEUED:
                 self._queue.remove(task_id)
                 self._attachments.pop(task_id,None)
+                self._room_context.pop(task_id,None)
                 continue
             room_speech = task.scope == 'room'
             if room_speech:
@@ -1442,7 +1452,7 @@ class BackgroundService:
                 from .cli import member_loop
                 spec = {**spec,'user':spec['user']+'\n'+HANDOFF_RESULTS_NOTE+'\n'+json.dumps(results,ensure_ascii=False)}
                 self._cli_loops[task.id] = member_loop(self._cli_brains,self._cli_quota,task,run,spec,
-                    wait_s=CLI_QUESTION_WAIT_S,progress=lambda text:self._progress(task,text))
+                    wait_s=CLI_QUESTION_WAIT_S,progress=lambda text:self._progress(task,text),sessions=self.room_sessions())
                 await self._carry_cli(task,run,spec)
             else:
                 await self._carry(task,run,{**spec,'messages':messages})
@@ -1653,6 +1663,8 @@ class BackgroundService:
             },
             "context_window": self._context_window(model),
         }
+        if room_cli and task.scope == "room" and (given := self._room_context.pop(task.id, None)):
+            spec["room"] = given
         if recovered is not None and recovered.get("owner_wait"):
             from ..worker.loop import ToolOutcome
             from .run import result_text
@@ -1696,10 +1708,27 @@ class BackgroundService:
                 return
             from .cli import member_loop
             self._cli_loops[task.id] = member_loop(self._cli_brains, self._cli_quota, task, run, spec,
-                wait_s=CLI_QUESTION_WAIT_S, progress=lambda text: self._progress(task, text))
+                wait_s=CLI_QUESTION_WAIT_S, progress=lambda text: self._progress(task, text), sessions=self.room_sessions())
             await self._carry_cli(task, run, spec)
             return
         await self._carry(task, run, spec)
+
+    def room_sessions(self):
+        """The one store of the native sessions of room replies, shared by every reply (its locks are too)."""
+        if self._room_cli_sessions is None:
+            from .cli import RoomCliSessions
+            self._room_cli_sessions = RoomCliSessions(self._metrics_conn, self._now_ms)
+        return self._room_cli_sessions
+
+    def model_window(self, model: str) -> int:
+        """The window of `model` in tokens, for whoever budgets a prompt for it (a room's transcript): the catalog's, else
+        what its CLI is known to hold, else the default."""
+        from ..agent.cli.context import window_of
+        try:
+            entries = self._known_models()
+        except Exception:
+            entries = None
+        return window_of(model, entries)
 
     def _context_window(self, model: str) -> int | None:
         """The window of `model`, for the worker to keep the task inside. The catalog is a convenience

@@ -24,6 +24,16 @@ MAX_TURNS = 10
 MAX_HOPS = 3
 MAX_ROUNDS = 3
 MAX_PAIR_REPLIES = 2
+# A room thread stops asking its members after this many replies in a row failed for the same cause: the room's own
+# bounds are three (MAX_HOPS, MAX_ROUNDS), and each reply was already asked again 1, 3 and 8 seconds on the way. A pass is
+# no progress and does not break a run of failures; a reply with something said or started does.
+BREAKER_FAILURES = 3
+# How many of a thread's latest replies are looked at (passes among them are skipped).
+BREAKER_LOOK = 40
+# Why a reply did not finish, when that is not a failure of the model or the work (the owner's Stop, a message that took
+# over, a bound, a restart, a member who left, a pass the owner did not accept).
+_NOT_A_CAUSE = frozenset(('owner', 'interjection', 'reply_budget', 'revoked', 'restart', 'cost', 'membership',
+                          'no_reply', 'source_unavailable', 'removed', 'restart_retry', 'circuit_open'))
 # Leave room for the task wrapper, recovery receipts and the member's system prompt.
 ROOM_CONTEXT_CHARS = FRESH_CONTEXT_CHARS - 4000
 # A speech turn that ended without a word for this long, or whose provider gave up waiting, made no progress.
@@ -37,18 +47,39 @@ _NOT_FAILURES = ('owner', 'interjection', 'reply_budget')
 logger = logging.getLogger(__name__)
 
 
-def bounded_transcript(transcript, *, chars=ROOM_CONTEXT_CHARS, byte_limit=ROOM_CONTEXT_CHARS, required=()):
-    """Fold older records out of the prompt; preserve the source and newest messages whole."""
+def bounded_transcript(transcript, *, chars=ROOM_CONTEXT_CHARS, byte_limit=ROOM_CONTEXT_CHARS, required=(), hard=float("inf")):
+    """Fold older records out of the prompt; keep the source and the newest message whole. Length is never an error
+    (owner, 2026-11-09): whole messages, newest first. The older ones fill what `chars` and `byte_limit` leave; the
+    required ones (the message answered, the newest) are kept whole past them, up to `hard` bytes together, which is what
+    the model's window leaves. A required message that alone does not fit even that (a colleague's report of 100,000
+    characters) is left out and says so in its place, with its size; the log names it, and the others go on."""
     if not transcript:
         return [], 0
     required = {*required, transcript[-1]["id"]}
-    encoded = [(item["id"], neutralize(json.dumps(item, ensure_ascii=False))) for item in transcript]
-    mandatory = [text for identifier, text in encoded if identifier in required]
-    chars -= 2 + sum(len(text) + 2 for text in mandatory)
-    byte_limit -= 2 + sum(len(text.encode("utf-8")) + 2 for text in mandatory)
-    kept = required | {identifier for identifier, _ in recent_turns(
-        [(identifier, text) for identifier, text in encoded if identifier not in required], chars, byte_limit)}
-    result = [item for item in transcript if item["id"] in kept]
+    encoded = {item["id"]: neutralize(json.dumps(item, ensure_ascii=False)) for item in transcript}
+    skipped, mandatory, room = {}, [0, 0], hard - 2
+    for item in reversed(transcript):
+        if item["id"] not in required:
+            continue
+        text = encoded[item["id"]]
+        size = len(text.encode("utf-8")) + 2
+        if size > room:
+            logger.warning("A room message is too long for any reply to carry and was left out: message=%s chars=%d", item["id"], len(text))
+            skipped[item["id"]] = len(str(item.get("text") or ""))
+            continue
+        room -= size
+        mandatory[0] += len(text) + 2
+        mandatory[1] += size
+    kept = {identifier for identifier in required if identifier not in skipped} | {identifier for identifier, _ in recent_turns(
+        [(identifier, text) for identifier, text in encoded.items() if identifier not in required],
+        chars - 2 - mandatory[0], min(byte_limit - 2 - mandatory[1], room))}
+    result = []
+    for item in transcript:
+        if item["id"] in skipped:
+            note = f"(this message is {skipped[item['id']]} characters long and was left out because it does not fit here)"
+            result.append({**{key: item[key] for key in ("id", "member_id", "name", "role")}, "text": note, "attachments": [], "left_out": True})
+        elif item["id"] in kept:
+            result.append(item)
     return result, len(transcript) - len(result)
 
 
@@ -154,6 +185,38 @@ class RoomExchanges:
         reason = str(row[0]) if row and row[0] else ''
         return reason if reason.startswith('cli_') or reason in _NAMED else 'stalled' if reason in _STALLED else 'worker'
 
+    def breaker(self, room_id, thread_id):
+        """Whether the thread's latest replies, since the owner last wrote in it, were a run of failures of one cause: None,
+        or (cause, count, reason of the newest) with cause "overflow" (the model cannot read what it was given), "provider"
+        (the model or its service failed) or "handoff" (the hand-offs the replies made were refused). Read from the replies
+        themselves, so it holds across a restart and ends only when the owner writes in the thread again."""
+        last = self.conn.execute("SELECT COALESCE(MAX(id),0) FROM room_messages WHERE room_id=? AND thread_id=? AND member_id IS NULL",
+                                 (room_id, thread_id)).fetchone()[0]
+        rows = self.conn.execute(
+            "SELECT x.turn_id, x.state, m.id AS message_id, (SELECT reason FROM room_reply_intents i WHERE i.turn_id=x.turn_id "
+            "AND i.state='blocked' LIMIT 1) AS reason FROM room_exchange_turns x JOIN room_messages m ON m.turn_id=x.turn_id "
+            "WHERE m.room_id=? AND m.thread_id=? AND m.id>? AND x.state IN ('done','blocked') ORDER BY x.turn_id DESC LIMIT ?",
+            (room_id, thread_id, last, BREAKER_LOOK)).fetchall()
+        cause, count, newest = None, 0, ''
+        for row in rows:
+            if row['state'] == 'blocked':
+                reason = row['reason'] or 'worker'
+                if reason in _NOT_A_CAUSE:
+                    continue
+                this = 'overflow' if reason in ('context_overflow', 'cli_context_overflow') else 'provider'
+            else:
+                message = self.rooms._message(self.conn.execute('SELECT * FROM room_messages WHERE id=?', (row['message_id'],)).fetchone())
+                if is_pass(message['text']):
+                    continue
+                steps = [step[0] for step in self.conn.execute("SELECT outcome FROM agent_steps WHERE turn_id=? AND tool='handoff'", (row['turn_id'],))]
+                if not steps or 'ok' in steps:
+                    break
+                reason, this = 'worker', 'handoff'
+            if cause not in (None, this):
+                break
+            cause, count, newest = this, count + 1, newest or reason
+        return (cause, count, newest) if cause and count >= BREAKER_FAILURES else None
+
     def owner_addressed(self, turn_id):
         """Whether the owner addressed this reply's member by name (an @ or a reply to its message): such a member answers
         or says why it cannot, and may not pass."""
@@ -188,12 +251,15 @@ class RoomExchanges:
             return [chief]
         return ids[:1]
 
-    def transcript(self, room, thread_id=None, *, since=0, through=None):
+    def transcript(self, room, thread_id=None, *, since=0, through=None, newest=None):
+        """The thread's messages after `since` up to `through`, oldest first (with `newest`, only that many of the latest
+        rows are read: a long thread is not projected whole to take its end)."""
         people = {s.id:s for s in self.rooms._members.roster()}
         result = []
         thread_id = self.rooms._thread(room, thread_id)
         parent = self.conn.execute('SELECT m.* FROM room_threads t JOIN room_messages m ON m.id=t.parent_message_id AND m.room_id=t.room_id WHERE t.id=? AND t.room_id=?', (thread_id, room['id'])).fetchone()
-        rows = self.conn.execute("SELECT * FROM room_messages WHERE room_id=? AND thread_id=? AND id>? AND (? IS NULL OR id<=?) ORDER BY id", (room["id"],thread_id,since,through,through)).fetchall()
+        rows = self.conn.execute("SELECT * FROM (SELECT * FROM room_messages WHERE room_id=? AND thread_id=? AND id>? AND (? IS NULL OR id<=?) "
+                                 "ORDER BY id DESC LIMIT ?) ORDER BY id", (room["id"],thread_id,since,through,through,-1 if newest is None else newest)).fetchall()
         for row in ([parent] if parent else []) + rows:
             m = self.rooms._message(row)
             if m["status"] != "done" or (m["member_id"] is not None and is_pass(m["text"])):
@@ -357,6 +423,13 @@ class RoomExchanges:
                 if self._settle(exchange, room):
                     continue
                 exchange = self.get(exchange.origin_message_id)
+                thread = self.conn.execute('SELECT thread_id FROM room_messages WHERE id=?', (exchange.origin_message_id,)).fetchone()[0]
+                if (tripped := self.breaker(room_id, thread)) is not None:
+                    # A run of failures of one cause: no one is asked again until the owner writes here. The room says so once.
+                    self.block(exchange.origin_message_id, tripped[2], room)
+                    self.update(exchange.origin_message_id, state='stopped', pending='[]', reason='circuit_open')
+                    self.rooms._breaker_notice(room, thread, exchange.origin_message_id, exchange.language, *tripped[:2])
+                    continue
                 cap = float(self.rooms._settings.get('worker_cost_cap_usd'))
                 reason = ('membership' if room['membership_state'] != 'ready' else exchange.reason if exchange.stop_requested
                           else 'cost' if exchange.cost >= cap or self.spend.is_over(self.rooms._settings.get('monthly_limit_usd')) else '')
@@ -436,3 +509,7 @@ class RoomExchanges:
                                          "WHERE x.origin_message_id=? AND x.state='running' AND t.status='running'",(exchange.origin_message_id,)).fetchone():
                     self.schedule(room_id)
             self.rooms._close_stopped(room_id)
+            if not self.conn.execute("SELECT 1 FROM room_exchanges WHERE room_id=? AND state IN ('queued','running')", (room_id,)).fetchone():
+                # The discussion rests: what has fallen out of the members' recent window is folded into the thread's summary.
+                for thread in self.conn.execute("SELECT id FROM room_threads WHERE room_id=?", (room_id,)).fetchall():
+                    self.rooms.summaries.schedule(room_id, thread[0])

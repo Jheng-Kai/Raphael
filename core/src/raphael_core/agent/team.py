@@ -102,7 +102,8 @@ HANDOFF_REFUSALS = {
     "worker_disabled": "Background work is switched off, so nothing can be handed off; do the work yourself or tell the owner.",
     "source_unavailable": "Work cannot be handed off from this conversation; do it yourself or reply here.",
     "blocked": "Hand-offs are not allowed here; do the work yourself or reply here.",
-    "stage_conflict": "This stage_id already belongs to other work; use a new stage_id for different work.",
+    "stage_conflict": "This hand-off was refused: its stage already belongs to other work, or this work was already handed to that colleague. Do not send it again under another stage_id. Read the status board for who has it and wait for its result, or say in the room what is missing.",
+    "handoff_limit": "Enough work has been handed off in this room since the owner last wrote. Do not hand off more: wait for the results, or tell the room what is left.",
     "cancelled": "Your task was stopped, so it cannot hand work on; end your reply.",
 }
 
