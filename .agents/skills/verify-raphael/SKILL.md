@@ -118,6 +118,32 @@ a handoff. Stop only a native dev process that this task started; leave the user
 installed app and other worktrees untouched.
 
 
+## Real computer containers (explicit opt-in)
+
+From `app/`, run `npm run verify -- --computer` when `computer/image/`, `vm.py`'s
+container shape or the view path changes. It needs an already running Linux Docker
+engine and never starts Docker. It never runs implicitly, with `--core`, or in CI.
+An image build can download the base image and image dependencies; the host gets no
+new dependency. `RAPHAEL_CORE_PYTHON` can select an installed repository interpreter.
+
+This drives `LocalVm` and the image helper: 1, 3 and 6 outputs, panels, boot readiness,
+authenticated clipped RFB views, screen-local launcher input and raw pixels, restart,
+helper/view recovery, X-server loss, the core's `DesktopViewer` relay, and available
+layer 4 start/update/erase fixtures with preserved workspace files. It uses its own
+owner, data folder and `raphael-acceptance/cua-local-vm:<run id>` image tag; cleanup
+never touches another owner or the real image tag. `--keep` on the Python module
+retains its resources and prints them; interruption/failure otherwise cleans them.
+Missing/non-Linux Docker exits 2, a failed check exits 1, success exits 0. A missing
+layer 4 image is a named skip. Every failure includes expected/observed evidence.
+
+`computer.log` and `computer-acceptance.json` are in the verify run folder alongside
+`report.json`. Direct use from `core/` is
+`python -m raphael_core.evaluate.computer_acceptance --screens 1,4,6 --out <folder>`;
+omit `--out` to print only. Offline protocol/parser/isolation regressions are in
+`core/tests/evaluate/test_computer_acceptance.py`. Their fakes do not prove containers.
+Real container acceptance proves the core relay, not the native app's panel around
+it, a remote SSH host, or later stages' shared member seats. Keep those separate.
+
 ## Guardian hand-off gates
 
 Read [RULES.md](../../product/RULES.md) and [ARCHITECTURE.md](../../product/ARCHITECTURE.md).
