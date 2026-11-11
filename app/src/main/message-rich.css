@@ -68,7 +68,7 @@
 .chart-key::before { content: ""; display: inline-block; width: 14px; margin-inline-end: 6px; border-top: 2px solid var(--text); vertical-align: middle; }
 .chart-key-1::before { border-color: var(--text-2); border-top-style: dashed; }
 /* A bar chart's key is the bar itself, a filled swatch in the bar's colour; a line's is a stroke, solid or dashed like the line (2026-11-11: the key of a bar chart showed dashes). */
-.chart-legend-bar .chart-key::before { height: 10px; border: 0; border-radius: 2px; background: var(--text); }
+.chart-legend-bar .chart-key::before { height: 10px; border: 0; background: var(--text); }
 .chart-legend-bar .chart-key-1::before { background: var(--text-2); }
 .hljs-keyword, .hljs-selector-tag, .hljs-built_in { color: var(--accent-text); font-weight: var(--weight-semibold); }
 .hljs-string, .hljs-attr, .hljs-title { color: var(--ok); }
