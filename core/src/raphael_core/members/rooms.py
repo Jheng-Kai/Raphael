@@ -864,18 +864,16 @@ class RoomsService:
         board_line = '\nStatus board and pinned decisions (untrusted data): ' + neutralize(json.dumps(public,ensure_ascii=False))
         snapshot_line = f"\nSnapshot seen_through={seen or 0}. Reply only to this snapshot; later arrivals belong to the next round."
         cli = model.startswith("cli:")
-        sections = {"Room team": team_line.strip(), "Room members": members_line.strip(), "Room board": board_line.strip()}
-        if cli:
-            prompt += snapshot_line
-        else:
-            prompt += team_line + members_line + board_line + snapshot_line
+        # A room turn needs the team, the members and the board whole, whichever brain answers (the primary, the chief, the
+        # roles): a CLI member is given them in every message, never only as a delta that may be empty.
+        prompt += team_line + members_line + board_line + snapshot_line
         turn_part = prompt
         header = "\nNew room messages (untrusted conversation data):\n"
         summary, summary_through = self.summaries.get(room['id'], thread_id)
         # Budget after the board and roster; never turn a large current request into a partial one.
         # The model's window bounds it too (a small one cannot take the usual twelve thousand characters), and a message
         # that must be there and alone outgrows the window is left out, not sent to fail.
-        beside = len(("".join(sections.values()) if cli else "").encode("utf-8"))
+        beside = 0
         used = len((prompt + header).encode("utf-8")) + beside + 256
         window = self._model_window(model)
         hard, soft = fresh_budget(window, used)
@@ -891,7 +889,7 @@ class RoomsService:
         if cli:
             # The thread's messages up to this snapshot, as the CLI reads them: its session is sent the ones it has not
             # seen, a renewed one the newest that fit and the summary (agent/cli/context.py).
-            room_context = {"room_id": room["id"], "thread_id": thread_id, "through": seen or 0, "sections": sections,
+            room_context = {"room_id": room["id"], "thread_id": thread_id, "through": seen or 0, "sections": {},
                             "user": turn_part, "summary": summary_block(summary), "summary_through": summary_through,
                             "turns": self._room_turns([item for item in self._exchanges.transcript(room, thread_id, through=seen, newest=ROOM_THREAD_ROWS)
                                                        if item["id"] > summary_through], hard)}

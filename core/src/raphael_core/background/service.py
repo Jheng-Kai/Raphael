@@ -1714,7 +1714,10 @@ class BackgroundService:
             "context_window": self._context_window(model),
         }
         if room_cli and task.scope == "room" and (given := self._room_context.pop(task.id, None)):
-            spec["room"] = given
+            # A resumed session is sent this turn's message, so that message must carry what a first one does besides the
+            # room's own part: the time, the shared memory, the roster. Whatever wraps the request here wraps its turn part.
+            if request and request in user:
+                spec["room"] = {**given, "user": user.replace(request, given["user"], 1)}
         if recovered is not None and recovered.get("owner_wait"):
             from ..worker.loop import ToolOutcome
             from .run import result_text

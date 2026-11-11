@@ -30,7 +30,10 @@ def asked(user):
     """What a turn was asked: the owner's or a colleague's question, a task's request, or in a room the owner's
     latest message there."""
     task = between(user, "<task>", "</task>")
-    if "Full room transcript" in task or "New room messages" in task:
+    # A resumed native session is sent the room's new messages after the turn's own part (agent/cli/context.py resumed_user).
+    resumed = user.split("New conversation records since your last turn", 1)[1] if "New conversation records since your last turn" in user else ""
+    if "Full room transcript" in task or "New room messages" in task or resumed:
+        task = task + resumed
         said = re.findall(r'"name": "Owner", "role": "Owner", "text": "((?:[^"\\]|\\.)*)"', task)
         return json.loads(f'"{said[-1]}"') if said else ""
     return between(user, "<question>", "</question>") or task
