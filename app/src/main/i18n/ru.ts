@@ -2143,4 +2143,8 @@ export const ru = {
   "card.google.clientSecret": "Client secret (секрет клиента)",
   "store.googleAbout": "Gmail и Google Календарь через ваш собственный клиент Google Cloud. Ничего не идёт через Composio.",
   "store.googleSetUp": "Помоги подключить мою учётную запись Google",
+  "brains.signinWaiting": "Завершите вход в открывшемся окне",
+  "brains.signinDone": "Вход выполнен. Отправляю снова",
+  "brains.signinFailed": "Вход не завершён",
+  "brains.signinFirst": "Войти",
 } satisfies Messages;

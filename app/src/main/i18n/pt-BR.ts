@@ -2143,4 +2143,8 @@ export const ptBR = {
   "card.google.clientSecret": "Client secret (chave secreta do cliente)",
   "store.googleAbout": "Gmail e Google Agenda pelo seu próprio cliente do Google Cloud. Nada passa pelo Composio.",
   "store.googleSetUp": "Me ajude a conectar minha própria conta do Google",
+  "brains.signinWaiting": "Conclua o login na janela que foi aberta",
+  "brains.signinDone": "Login feito. Enviando de novo",
+  "brains.signinFailed": "O login não foi concluído",
+  "brains.signinFirst": "Entrar",
 } satisfies Messages;

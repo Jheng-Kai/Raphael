@@ -8,6 +8,8 @@ export const type = (selector, text) => ({ action: "type", selector, text });
 export const wait = selector => ({ action: "wait", selector });
 export const waitGone = selector => ({ action: "wait-gone", selector });
 export const codexArrives = () => ({ action: "codex-arrives" });
+// A CLI's sign-in console ended: `done`, or `stopped` as when its window was closed first.
+export const cliSigninEnds = (cli, outcome) => ({ action: "cli-signin-ends", cli, outcome });
 export const check = name => ({ action: "check", name });
 export const focus = selector => ({ action: "focus", selector });
 export const key = value => ({ action: "key", key: value });

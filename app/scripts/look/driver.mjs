@@ -651,6 +651,8 @@ export async function perform(page, step, evidenceDirectory) {
       return { action: "emit", events: step.events.map(event => event.type) };
     // The models of the CLI held back by the mock (`codexLate`) arrive now.
     case "codex-arrives": await page.evaluate(() => { window.__look.codexArrives(); }); break;
+    // The sign-in console of a CLI ended (cli-signin.ts): `done`, or `stopped` as when its window was closed first.
+    case "cli-signin-ends": await page.evaluate((id, outcome) => { window.__look.cliSigninEnds(id, outcome); }, step.cli, step.outcome); break;
     // From now on the roster answers after `ms` (the mock's rosterDelay): the thread is asked for first and the roster comes late.
     case "late-roster": await page.evaluate(ms => { window.__look.rosterDelay = ms; }, step.ms); break;
     case "send-probe": return await sendProbe(page, step);

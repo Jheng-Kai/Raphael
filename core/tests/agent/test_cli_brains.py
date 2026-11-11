@@ -673,10 +673,35 @@ async def test_private_files_are_removed_once_a_dying_child_lets_go(monkeypatch)
     assert len(attempts) == 2 and not Path(files.path).exists()
 
 
+class SignInProcess:
+    """The console a CLI's sign-in runs in: it ends when `finish(code)` says so, or when it is told to stop."""
+
+    def __init__(self, code=0, held=True):
+        import threading
+        self.code, self.ended, self.stopped = None, threading.Event(), False
+        if not held:
+            self.finish(code)
+
+    def finish(self, code):
+        self.code = code
+        self.ended.set()
+
+    def wait(self):
+        self.ended.wait(10)
+        return self.code
+
+    def poll(self):
+        return self.code
+
+    def terminate(self):
+        self.stopped = True
+        self.finish(1)
+
+
 def test_login_launches_only_the_unwrapped_command_in_a_visible_console(tmp_path, monkeypatch):
     from raphael_core.agent.cli import discovery
     calls = []
-    monkeypatch.setattr(discovery.subprocess, "Popen", lambda *args, **kwargs: calls.append((args, kwargs)))
+    monkeypatch.setattr(discovery.subprocess, "Popen", lambda *args, **kwargs: calls.append((args, kwargs)) or SignInProcess(held=False))
     brains = CliBrains(home=tmp_path, environ={"OPENAI_API_KEY": "secret", "PATH": "some-path"}, commands={"codex": ["fake-node", "fake-entry.js"]})
     if os.name != "nt":
         pytest.skip("Windows visible console contract")
@@ -775,7 +800,7 @@ async def test_disconnect_purges_raphael_credentials_hides_models_and_reconnects
         assert ("brains.changed", {}) in events
 
         popen_calls = []
-        monkeypatch.setattr(discovery.subprocess, "Popen", lambda *args, **kwargs: popen_calls.append((args, kwargs)))
+        monkeypatch.setattr(discovery.subprocess, "Popen", lambda *args, **kwargs: popen_calls.append((args, kwargs)) or SignInProcess(held=False))
 
         events.clear()
         assert brains.login("claude") == {"started": False, "reconnected": True}

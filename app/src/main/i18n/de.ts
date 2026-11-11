@@ -2143,4 +2143,8 @@ export const de = {
   "card.google.clientSecret": "Client-Secret",
   "store.googleAbout": "Gmail und Google Kalender über deinen eigenen Google-Cloud-Client. Nichts läuft über Composio.",
   "store.googleSetUp": "Hilf mir, mein eigenes Google-Konto zu verbinden",
+  "brains.signinWaiting": "Schließe die Anmeldung im geöffneten Fenster ab",
+  "brains.signinDone": "Angemeldet. Wird erneut gesendet",
+  "brains.signinFailed": "Die Anmeldung wurde nicht abgeschlossen",
+  "brains.signinFirst": "Anmelden",
 } satisfies Messages;

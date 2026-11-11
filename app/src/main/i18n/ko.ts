@@ -2143,4 +2143,8 @@ export const ko = {
   "card.google.clientSecret": "Client secret(클라이언트 보안 비밀)",
   "store.googleAbout": "내 Google Cloud 클라이언트로 Gmail과 캘린더를 사용합니다. Composio를 거치지 않습니다.",
   "store.googleSetUp": "내 Google 계정을 연결해 줘",
+  "brains.signinWaiting": "열린 창에서 로그인을 완료하세요",
+  "brains.signinDone": "로그인했습니다. 다시 보내는 중",
+  "brains.signinFailed": "로그인을 완료하지 못했습니다",
+  "brains.signinFirst": "로그인",
 } satisfies Messages;

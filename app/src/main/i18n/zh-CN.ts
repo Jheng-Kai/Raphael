@@ -2143,4 +2143,8 @@ export const zhCN = {
   "card.google.clientSecret": "Client secret（客户端密钥）",
   "store.googleAbout": "通过你自己的 Google Cloud 客户端使用 Gmail 与日历，数据不经过 Composio。",
   "store.googleSetUp": "帮我连接我自己的 Google 账号",
+  "brains.signinWaiting": "请在打开的窗口完成登录",
+  "brains.signinDone": "已登录，正在重新发送",
+  "brains.signinFailed": "没有完成登录",
+  "brains.signinFirst": "登录",
 } satisfies Messages;

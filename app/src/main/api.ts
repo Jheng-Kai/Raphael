@@ -155,7 +155,8 @@ export const chatgptSignIn = (language: string): Promise<ChatGptStatus> => core(
 export const chatgptCancel = (): Promise<{ cancelled: boolean }> => core("chatgpt.cancel");
 export const chatgptSignOut = (): Promise<{ signed_out: boolean }> => core("chatgpt.sign_out");
 export const chatgptModels = (): Promise<{ models: unknown[] }> => core("chatgpt.models");
-export const brainsCliLogin = (id: CliBrainId): Promise<{ started: boolean; reconnected?: boolean }> => core("brains.cli_login", { id });
+/** `again` starts the CLI's sign-in even where its credentials exist (a session that ran out); `cancel` ends the one this app started. */
+export const brainsCliLogin = (id: CliBrainId, options: { again?: boolean; cancel?: boolean } = {}): Promise<{ started: boolean; reconnected?: boolean; running?: boolean }> => core("brains.cli_login", { id, ...options });
 export const brainsCliDisconnect = (id: CliBrainId): Promise<{ disconnected: true }> => core("brains.cli_disconnect", { id });
 
 // Model provider connections. Keys are write-only and are kept by the core's vault.
