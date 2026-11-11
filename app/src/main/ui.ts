@@ -762,6 +762,8 @@ export interface MenuAction {
   label: string;
   desc?: string;
   icon?: IconName;
+  /** A mark drawn for this item alone, in the icon's place (trusted HTML: a member's faces, a tile). */
+  mark?: string;
   submenu?: boolean;
   /** What it does is under way: the item stays where it is but does nothing until it is done. */
   busy?: boolean;
@@ -824,7 +826,7 @@ export function openMenu(
       .map(
         (a, i) =>
           `<button type="button" role="${placement?.completion ? "option" : "menuitem"}"${placement?.completion ? ' aria-selected="false"' : ""} tabindex="-1" class="menu-action" data-action="${i}"${a.busy ? ' aria-disabled="true"' : ""}${a.submenu ? ' aria-haspopup="menu" aria-expanded="false"' : ""}>` +
-          `<span class="ck">${a.icon ? ico(a.icon) : ""}</span><span class="mtd"><span class="mt">${esc(a.label)}</span>${a.desc ? `<span class="mdesc">${esc(a.desc)}</span>` : ""}</span>${a.submenu ? ico("right") : ""}</button>`,
+          `${a.mark ? `<span class="mmark" aria-hidden="true">${a.mark}</span>` : `<span class="ck">${a.icon ? ico(a.icon) : ""}</span>`}<span class="mtd"><span class="mt">${esc(a.label)}</span>${a.desc ? `<span class="mdesc">${esc(a.desc)}</span>` : ""}</span>${a.submenu ? ico("right") : ""}</button>`,
       )
       .join("");
   const el = openPopover(anchor, html, {

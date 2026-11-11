@@ -9,7 +9,7 @@ import "./page-view.css";
 import { cancelGesture } from "../shared/cancel-gesture";
 import * as api from "./api";
 import { t } from "./i18n";
-import { esc, iconButton } from "./ui";
+import { type IconName, esc, iconButton } from "./ui";
 
 export interface PageViewOpen {
   id: string;
@@ -17,6 +17,12 @@ export interface PageViewOpen {
   kind: "page" | "report";
   /** What gets the focus back when the page is put away. */
   opener?: HTMLElement | null;
+  /**
+   * The one thing this page can be passed on by (a report is saved as a file). It stands at the header's top right, where
+   * the thread's own share stands, as the round button every header tool is: one place for what is on screen, as Grok
+   * Bot's share (owner, 2026-11-12: 「位置要特別設計過 外觀也是」). A page with none leaves that place empty.
+   */
+  action?: { icon: IconName; label: string; run(): void };
   /** The page's content is put away (a frame goes back to its card). The view itself is already closed. */
   leave(): void;
 }
@@ -55,6 +61,8 @@ export function mountPageView(stage: HTMLElement): PageView {
   let body: HTMLElement;
   let status: HTMLElement;
   let back: HTMLButtonElement | null = null;
+  let tools: HTMLElement | null = null;
+  let act: HTMLButtonElement | null = null;
   let current: PageViewOpen | null = null;
   /** A message was sent with this page open, and the reply that is not the last one yet is the answer. */
   let awaiting: { baseline: string } | null = null;
@@ -104,7 +112,19 @@ export function mountPageView(stage: HTMLElement): PageView {
       back = slot.querySelector<HTMLButtonElement>("[data-page-back]");
       back!.addEventListener("click", () => close());
     }
+    tools = pane?.querySelector<HTMLElement>(":scope > .mb-head .ra-tools") ?? null;
     return view;
+  }
+
+  /** The open page's own button, first in the header's tools at the right; none for a page that has nothing to pass on. */
+  function drawAction(): void {
+    act?.remove();
+    act = null;
+    const action = current?.action;
+    if (!action || !tools) return;
+    tools.insertAdjacentHTML("afterbegin", iconButton(action.icon, action.label, " data-page-act", "ra-tool pgv-act"));
+    act = tools.querySelector<HTMLButtonElement>(":scope > [data-page-act]");
+    act!.addEventListener("click", () => current?.action?.run());
   }
 
   function open(page: PageViewOpen): void {
@@ -121,6 +141,7 @@ export function mountPageView(stage: HTMLElement): PageView {
     stage.classList.add("is-page");
     stage.dataset.pageKind = page.kind;
     if (back) { back.hidden = false; back.setAttribute("aria-label", t("chooser.back")); back.title = t("chooser.back"); }
+    drawAction();
   }
 
   function close(): void {
@@ -138,6 +159,7 @@ export function mountPageView(stage: HTMLElement): PageView {
     stage.classList.remove("is-page");
     delete stage.dataset.pageKind;
     if (back) back.hidden = true;
+    drawAction();
     page.leave();
     if (page.opener?.isConnected) page.opener.focus({ preventScroll: true });
   }

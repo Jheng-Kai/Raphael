@@ -77,6 +77,7 @@ async def test_telegram_delivers_answers_without_event_transport(make_rig, kind,
     rig.history.add_message(turn_id, "event", raw)
     reply = {"status": "done", "prefix": "", "text": "Samples checked.", "turn_id": turn_id,
              "messages": [{"kind": "event", "text": raw}]}
-    app = SimpleNamespace(call=AsyncMock(return_value=reply), agent=rig.service, attachment_store=None)
+    # No background service stands behind this app: nothing can be waiting on the owner.
+    app = SimpleNamespace(call=AsyncMock(return_value=reply), agent=rig.service, attachment_store=None, background=None)
     answer = await App._ask_from_messaging(app, "telegram:sample", "Check samples", "en", "telegram")
     assert str(answer) == "Samples checked." and answer.files == []

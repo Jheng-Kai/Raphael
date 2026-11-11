@@ -115,8 +115,9 @@ export function core<T>(method: string, params: object = {}): Promise<T> {
   return answer;
 }
 
-export const ownerQuestionAnswer = (id: string, answer: string | null): Promise<{ status: string }> =>
-  core("owner_questions.answer", { id, answer });
+/** The answer of a card: the chosen or typed words, the chosen rows of a several-choice card, `null` to close it, or `{ skip: true }` for its skip row (an answer of its own, not a cancel). */
+export const ownerQuestionAnswer = (id: string, answer: string | string[] | null | { skip: true }): Promise<{ status: string }> =>
+  core("owner_questions.answer", answer !== null && typeof answer === "object" && !Array.isArray(answer) ? { id, skip: true } : { id, answer });
 export const ownerQuestionBring = (id: string): Promise<{ turn_id: number }> =>
   core("owner_questions.bring", { id });
 
@@ -287,7 +288,7 @@ export const membersGreet = (id: number): Promise<{ turn_id: number }> => core("
 /** Changes a member (never Raphael: the core refuses id 0 with the kind `raphael`). */
 export const membersUpdate = (id: number, patch: MemberPatch): Promise<{ member: Member }> => core("members.update", { id, ...patch });
 /** Deletes a member with its conversation, its memory and its routines. The page asks the owner first. */
-export const membersDelete = (id: number, remove_computer_data = false, computer_host?: string): Promise<{ deleted: boolean }> => core("members.delete", { id, remove_computer_data, ...(remove_computer_data ? { computer_host } : {}) });
+export const membersDelete = (id: number): Promise<{ deleted: boolean }> => core("members.delete", { id });
 
 export interface ComputerHostHealth { host: string; ok: boolean; checks: { kind: string; ok: boolean; architecture?: string; user?: string; command?: string }[] }
 export const desktopHostCheck = (alias: string): Promise<ComputerHostHealth> => core("computer.viewer_status", { check_host: true, alias });

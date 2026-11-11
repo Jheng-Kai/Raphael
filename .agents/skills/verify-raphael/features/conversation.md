@@ -1355,6 +1355,38 @@ Core contracts: core/tests/background/test_owner_cards.py and
 core/tests/agent/test_owner_questions.py. The shell allowlist and its existing
 allowlist test include owner_questions.answer.
 
+## The question card's shape (2026-11-11)
+
+Owner request of 2026-11-11: Raphael's flows work as Grok Bot's do, one form of choices for set-up and for everyday work
+(R-CARD-02, R-CARD-08, R-CARD-12, R-CARD-13, R-CARD-14). The reference is Grok Bot's card (the frames in
+bots/research/grokbot, read only: the first-conversation sheet around 01:30-02:20 and the collapsed row of `74-savio-up-e.png`); copy nothing from that folder.
+
+- Tool and storage: `ask_owner` also takes `subtitle`, options as a label or `{label, description}`, `multiple` and `skip`
+  (`core/src/raphael_core/agent/owner_questions.py` `question_input`; the schema in `harness_tools.py`). The card is the existing
+  `owner_questions.payload` (labels in `options`, `descriptions` beside them, `subtitle`, `multiple`, `skip`), so no migration. An answer is a string, a list
+  of labels (a several-choice card) or `{skip: true}` (`owner_questions.answer` takes `skip: true`); the member reads `{"state":"answered","answer":[...]}`, a skip as
+  an answer, or a card closed by a message as unanswered with the owner's words (`model_result`).
+- Card (`permission-card.ts` `ownerQuestionHTML`, `owner-questions.ts`, `owner-question-sync.ts`, `card.css`): title and ×, an optional grey sub-line, a well of rows (letter badge,
+  words, optional smaller grey line), a skip row lettered after the options, the own-answer row last (a textarea that grows to three lines, its pill hidden until something is typed),
+  a several-choice card's checks and one submit. Answered, one row under the title with a check at the right; the typed words on one line with an ellipsis, a press shows them whole.
+  Closed with the × is 已取消, closed by the owner writing something else is 未回答; neither has a row.
+- A card waiting makes the composer of its conversation say 「輸入你的回答，或聊點別的」 (private `pages/agent.ts` `drawComposer`, rooms `group-chats.ts`), and an ordinary message closes it:
+  `AgentService._close_waiting_question` for a typed or chat message, `rooms._send` for a room thread. In a Telegram, Slack or Discord chat the card is written as lettered lines
+  (`messaging/words.py` `question_text`) and a reply naming the letters, the words or the skip word answers it (`answer_from_text`).
+- Mock: `ownerQuestionShape` (`described`, `multiple`, `skip`) shapes the fixture card; `agent_ask_text` and `rooms.send` close a waiting card as the core does.
+
+Selected scenes (the new states first): question-card-described, question-card-skipped, question-card-multiple-asked, question-card-multiple-chosen,
+question-card-multiple-answered, question-card-long-typed, question-card-long-answered, question-card-long-open, question-card-composer-waiting,
+question-card-composer-after, question-card-message-closes, question-card-room-asked, question-card-room-answered; the unchanged consumers owner-question-*,
+card-question-*, routine-sentence-event. Both themes at 1120, 720 and 1920x1080; compare the badge column, row heights, the check's alignment, the collapsed row and the
+pill at the foot of a three-line field with the reference, and nothing clipped at 720.
+
+```powershell
+npm run look -- question-card-described question-card-skipped question-card-multiple-asked question-card-multiple-chosen question-card-multiple-answered question-card-long-typed question-card-long-answered question-card-long-open question-card-composer-waiting question-card-composer-after question-card-message-closes question-card-room-asked question-card-room-answered owner-question-asked owner-question-typed owner-question-answered owner-question-cancelled owner-question-room card-question-key --theme both --width 1120,720,1920x1080
+```
+
+Unverified by definition: a real model choosing the new fields, and a real Telegram chat answering a card.
+
 
 ## Owner input (2026-11-01)
 
@@ -2034,16 +2066,19 @@ The core stamps `as_of` (ISO text, never 13 digits of milliseconds, which can pa
   title and 「頁面」. No frame, no expand control.
 - **Open.** The card opens the report in the thread's place (`.ra-stage.is-report`): the thread
   stays laid out and hidden under it, so its scroll is kept; the composer stays below and the
-  owner can ask for changes. The × at the top right is the window edge's 36 px soft round button
-  (`.rp-top`, R-UI-16 list). Like the thread it stands for, the report's column starts and ends
-  where the composer does, and its top-right buttons end at the composer's right edge (R-UI-45;
+  owner can ask for changes. Nothing floats over the report: the way back is the header's arrow at
+  the top left and its one button stands in the header's tools at the top right (below). Like the
+  thread it stands for, the report's column starts and ends where the composer does (R-UI-45;
   `.rp-scroll` takes `--pa-dock-x`, `.rp-doc` `--pa-colw`; the contents become a right column once
   the column is the full 960 px). Sending, another conversation, or the card leaving the thread puts
   it away; the focus returns to the card. A changed revision is drawn again where it was read.
-- **Share** (owner, 2026-11-10, Grok Bot's Page has Share at its top right; of the three ways put
+- **存成檔案** (owner, 2026-11-10, Grok Bot's Page has Share at its top right; of the three ways put
   to the owner, save a file, open it in the browser or copy it as text, the owner chose 存成檔案).
-  Before the ×, 4 px apart as the conversation header's buttons: the same 36 px soft round button
-  with Lucide `share`, named 分享 (it has no words of its own, so its tooltip repeats nothing). A
+  Since 2026-11-12 it stands where a thread's share stands (owner: its place and look as Grok
+  Bot's): `page-view.ts` puts the open page's `action` first in the header's `.ra-tools`, the same
+  36 px soft round button, with Lucide `file-down` (`fileDown`) and the name 存成檔案 (it has no
+  words of its own, so its tooltip repeats nothing). The member's share (`share`, the arrow out of a
+  box) is `display: none` while any page is open, and an HTML page puts nothing there. A
   press saves the report as one HTML file of the app's own drawing (`reportFile`): its policy
   first (`default-src 'none'`, nothing in it runs or loads), the theme's words for light and for a
   dark screen (white on paper), the table with every row and no tabs, the team drawn at 704, 480
@@ -2053,8 +2088,11 @@ The core stamps `as_of` (ISO text, never 13 digits of milliseconds, which can pa
   named after the page as Windows takes a name, `(2)` and on, never over a file, in 設定 › 一般 ›
   輸出資料夾, or in Downloads when none is chosen or it takes nothing. The shell selects it in File
   Explorer; a toast says 已存到「下載」 or the output folder's name (a failure: 檔案沒有存成，請再試一次。),
-  and the report stays open. While a report is open the conversation header's own share (the
-  member's template, the same icon for another thing) is hidden, so one share is in sight.
+  and the report stays open.
+- **The share card** (`conversation-share`): the member's share opens one row, 建立副本 and what
+  follows it, whose mark is the member's own face twice (`.share-faces`: 20 px behind and above at
+  45 %, 24 px in front; each drawn at its own whole size, never scaled, R-UI-63), with no presence
+  and no stock icon. The card hangs under the button, right edges together.
 - **Page.** Title (`--fs-h1`), 「資料截至 <date time> · 只寫有紀錄的事實」, 「本頁內容」 (a row under
   the title; a sticky column at the right once the report's column is 960 px wide). Findings: a summary box
   (`--panel`, info icon) and rows with a status word in the theme's own colour (`--ok`,

@@ -306,6 +306,8 @@ _QUICK_SOURCES = (VOICE, "overlay")
 _AT_THIS_COMPUTER = frozenset({*_QUICK_SOURCES, TYPED})
 # Private owner management has the same offer across authenticated chat transports.
 _OWNER_CHAT_SOURCES = _AT_THIS_COMPUTER | {"telegram", "slack", "discord", RESUMED}
+# What the owner writes in a conversation with a member: typed in the app, or sent from a messaging chat.
+_OWNER_TEXT_SOURCES = frozenset({TYPED, "telegram", "slack", "discord"})
 # Routing and answering share this deadline while the voice overlay waits. A turn said into a conversation is not
 # waited on there, and has the time a typed one has: a brain thinking hard takes minutes, and the composer can stop it.
 VOICE_TURN_TIMEOUT_S = 180.0
@@ -1188,6 +1190,10 @@ class AgentService:
         if ask.attachments and not ask.text.strip():
             ask.text = _LOOK_AT_THIS[ask.language]
         self._last_language = ask.language
+        if resumption is None and not ask.quick and ask.source in _OWNER_TEXT_SOURCES and self._close_waiting_question(ask):
+            # A messaging chat's reply that answers the question waiting there is that answer, and nothing else to run.
+            self._record(ask, "owner_input", "", "", "done", None, Ledger(self._spend))
+            return {"status": "done", "turn_id": ask.turn_id, "prefix": "", "text": "", "steered": True}
         if ask.source == TYPED and not ask.quick and resumption is None:
             return await self._queue_ask(ask)
         if self._was_cancelled(ask.session_id):
@@ -1201,6 +1207,16 @@ class AgentService:
             self._record(ask, "owner_input", "", "", "done", None, Ledger(self._spend))
             return {"status": "done", "turn_id": ask.turn_id, "prefix": "", "text": "", "steered": True}
         return await self._run_ask(ask)
+
+    def _close_waiting_question(self, ask) -> bool:
+        """Something the owner wrote, in a conversation where a question card waits, closes that card unanswered (one
+        question is open at a time, and writing something else leaves it). The member that asked is told, with the owner's
+        words, when its task goes on. True when the words were the answer itself (a messaging chat's reply)."""
+        questions = getattr(self._background, "owner_questions", None)
+        if questions is None or ask.conversation_id is None:
+            return False
+        return questions.close_for_message(said=ask.original_text or ask.text, conversation_id=ask.conversation_id, member_id=ask.speaker.id,
+                                           source=None if ask.source == TYPED or ask.attachments else ask.source)
 
     async def _join_running_work(self, ask):
         """A quick question or a messaging app's message said while its conversation works goes to that work."""

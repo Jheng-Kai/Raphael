@@ -512,6 +512,11 @@ export function installMock(fixture, config = {}, target = window) {
   }
   if (variant.ownerQuestion) {
     const question = structuredClone(data.ownerQuestionCard);
+    // The shapes of the card the member may ask for (owner, 2026-11-11): a grey line, a grey line under some rows, several choices, a skip row.
+    Object.assign(question, {
+      described: { subtitle: "選最重要的一個。", descriptions: ["", "今天與本週的行程", "", "會議與待辦的紀錄"], skip: true },
+      multiple: { multiple: true }, skip: { skip: true },
+    }[variant.ownerQuestionShape] ?? {});
     const turn = { ...structuredClone(data.turns.find(turn => turn.member_id === 1 && turn.conversation_id === 11)),
       id: question.turn_id, session_id: "owner-question", question: "請幫我整理並寄出報告。", route: "delegate", source: variant.ownerQuestion === "background" ? "routine" : "app",
       text: "報告已整理完成，需要你決定寄出的日期。", detail: null, messages: [], steps: [], owner_questions: [question], status: variant.ownerQuestion === "background" ? "running" : "done",
@@ -1218,7 +1223,7 @@ export function installMock(fixture, config = {}, target = window) {
         for (let at = data.turns.length - 1; at >= 0; at--) if (data.turns[at].member_id === p.id && data.turns[at].route === "greeting" && data.turns[at].status === "error") data.turns.splice(at, 1);
         return { turn_id: greet(member).id };
       }
-      case "members.delete": data.members = data.members.filter(item => item.id !== p.id); if (p.id === data.primaryId) data.primaryId = 0; notify("MembersChanged", { member_id: p.id }); return { deleted: true };
+      case "members.delete": if (Object.keys(p).some(key => key !== "id")) throw new Error("Invalid params: members.delete takes only the member's id"); data.members =data.members.filter(item => item.id !== p.id); if (p.id === data.primaryId) data.primaryId = 0; notify("MembersChanged", { member_id: p.id }); return { deleted: true };
       case "members.skills.list": {
         if (p.marketplace) {
           const marketplace = structuredClone(data.skillMarketplaceCatalog);
@@ -1395,7 +1400,7 @@ export function installMock(fixture, config = {}, target = window) {
         if (!question) throw new Error("Unknown owner question");
         if (question.state !== "asked") return { status: question.state };
         question.state = p.answer === null ? "cancelled" : "answered";
-        question.result = p.answer === null ? { state: "cancelled" } : { state: "answered", answer: p.answer };
+        question.result = p.skip ? { state: "answered", skipped: true } : p.answer === null ? { state: "cancelled" } : { state: "answered", answer: p.answer };
         turn.task = { ...turn.task, state: "done", waiting_owner: 0, finished_at_ms: data.now };
         notify("AgentTurn", { turn_id: turn.id, member_id: turn.member_id });
         return { status: question.state };
@@ -1492,7 +1497,7 @@ export function installMock(fixture, config = {}, target = window) {
       }
       case "rooms.delete": data.rooms = data.rooms.filter(item => item.id !== p.room_id); return { deleted: true };
       case "rooms.stop": { for (const exchange of data.roomExchanges.filter(item => item.room_id === p.room_id && ["running", "queued"].includes(item.state))) exchange.stop_requested = 1; for(const exchange of data.roomExchanges.filter(item=>item.room_id===p.room_id)){exchange.state="stopped";exchange.active_turn=null;}for(const message of data.messages.filter(item=>item.room_id===p.room_id&&item.status==="running")){message.status="error";message.text="已停止工作。";}for(const task of data.roomHandoffs.filter(item=>["queued","running","waiting"].includes(item.state)))task.state="cancelled";data.messages.push({...data.roomWrapupMessage,id:nextId(data.messages),reply_to:null,reply_to_member:null,text:"### 結論\n已停止本次工作，已完成的動作保留。\n\n### 待決定\n尚未完成的工作已取消。\n\n### 下一步\n等待你的新指示。"});notify("RoomsChanged", { room_id: p.room_id }); return { stopped: true }; }
-      case "rooms.send": { const message = { thread_id:p.thread_id ?? 1, id: nextId(data.messages), room_id: p.room_id, member_id: null, text: p.text, request_id: p.request_id, status: "done", created: data.now, reply_to: p.reply_to ?? null, turn_id: null, reply_to_member: data.messages.find(item => item.id === p.reply_to)?.member_id ?? null, origin_message_id: nextId(data.messages), kind: "message", attachments: (p.attachments ?? []).map((file, index) => { const id = `${"f".repeat(30)}${String(index).padStart(2, "0")}.png`; (data.keptFiles ??= {})[id] = { mime: file.mime, data: file.data }; return { id, name: file.name, mime: file.mime }; }) }; data.messages.push(message); return { message_id: message.id, duplicate: false }; }
+      case "rooms.send": { if (variant.ownerQuestion) for (const turn of data.turns) for (const item of turn.owner_questions ?? []) if (item.state === "asked" && item.kind === "ask_owner") { item.state = "cancelled"; item.result = { state: "cancelled", by: "message", said: p.text }; turn.task = { ...turn.task, state: "done", waiting_owner: 0 }; } const message = { thread_id:p.thread_id ?? 1, id: nextId(data.messages), room_id: p.room_id, member_id: null, text: p.text, request_id: p.request_id, status: "done", created: data.now, reply_to: p.reply_to ?? null, turn_id: null, reply_to_member: data.messages.find(item => item.id === p.reply_to)?.member_id ?? null, origin_message_id: nextId(data.messages), kind: "message", attachments: (p.attachments ?? []).map((file, index) => { const id = `${"f".repeat(30)}${String(index).padStart(2, "0")}.png`; (data.keptFiles ??= {})[id] = { mime: file.mime, data: file.data }; return { id, name: file.name, mime: file.mime }; }) }; data.messages.push(message); return { message_id: message.id, duplicate: false }; }
       case "computer.revoke": if (data.desktop) data.desktop.granted = false; return { granted: false };
       case "brains.cli":
         // As the core does: a CLI's models come after the first read, in the background. With `codexLate` they come when the scene's
@@ -1903,6 +1908,22 @@ export function installMock(fixture, config = {}, target = window) {
               resolve(null);
             };
           });
+        }
+        // Writing in a conversation where a question card waits closes the card unanswered and is answered as an ordinary message (the core's close_for_message).
+        if (variant.ownerQuestion) {
+          const asked = data.turns.flatMap(turn => (turn.owner_questions ?? []).filter(item => item.state === "asked" && item.kind === "ask_owner").map(item => [turn, item]));
+          for (const [turn, item] of asked) {
+            item.state = "cancelled"; item.result = { state: "cancelled", by: "message", said: args.text };
+            turn.task = { ...turn.task, state: "done", waiting_owner: 0, finished_at_ms: data.now };
+            notify("AgentTurn", { turn_id: turn.id, member_id: turn.member_id });
+          }
+          if (asked.length) {
+            const base = asked[0][0], id = nextId(data.turns);
+            data.turns.push({ ...structuredClone(base), id, session_id: args.requestId, question: args.text, route: "answer", source: "app", status: "done", detail: null,
+              text: "好，先不處理這個問題。", messages: [{ seq: 1, kind: "reply", text: "好，先不處理這個問題。", at_ms: data.now }], owner_questions: [], task: null, steps: [], created_at_ms: data.now + 1 });
+            notify("AgentTurn", { turn_id: id, member_id: base.member_id });
+            return null;
+          }
         }
         // The native call stays pending until the reply ends, including before the first agent.turn.
         if (variant.stopPending) return new Promise(resolve => pendingReplies.set(args.requestId, resolve));

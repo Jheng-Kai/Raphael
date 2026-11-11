@@ -298,7 +298,10 @@ export default [
   scene("member-maker-x", "The × closes 新增成員 and nothing is made", [...makerOpen, type("#mb-new-name", "哥布達"), click('.cr-dialog .mb-dlg-head [data-dlg="close"]'), waitGone(".cr-dialog"), check("member-maker-closed")]),
   scene("member-maker-cancel", "取消 closes 新增成員 and nothing is made", [...makerOpen, type("#mb-new-name", "哥布達"), click('.cr-dialog [data-dlg="cancel"]'), waitGone(".cr-dialog"), check("member-maker-closed")]),
   // Complete workflows exercised through the real page.
-  scene("member-delete", "A member is deleted from its ⋯ menu after the confirmation: its row leaves and a notice says so", [
+  scene("member-delete-ask", "A member without a computer is asked about the same way: its name, one sentence, Cancel and Delete", [
+    member(2), { action: "member-column", collapsed: false }, click('.mb-col [data-member-more="2"]'), click('#app-popover [data-pick="delete"]'), wait(".mb-dialog.mb-confirm"),
+    check("member-delete-ask"), check("delete-confirmation")]),
+  scene("member-delete","A member is deleted from its ⋯ menu after the confirmation: its row leaves and a notice says so", [
     member(2), { action: "member-column", collapsed: false }, click('.mb-col [data-member-more="2"]'), click('#app-popover [data-pick="delete"]'), wait(".mb-dialog"),
     click('.mb-dialog [data-dlg="delete"]'), waitGone('.mb-col [data-member="2"]'), wait(".toast"), check("member-deleted")]),
   // The panel's close is one of the window edges' soft round buttons (R-UI-16), so it has a surface.

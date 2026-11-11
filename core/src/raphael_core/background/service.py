@@ -1725,7 +1725,8 @@ class BackgroundService:
             if question is None or question["result"] is None:
                 self._store.set_state(task.id, "waiting")
                 return
-            result = question["result"]
+            from ..agent.owner_questions import model_result
+            result = model_result(question["result"])
             # The card or question the run waited at was put to the owner (a page, a draft): it is made, and what the owner
             # answered, or whether they cancelled it, is their decision and no failure of the run (a routine's end is judged by it).
             run.succeeded.add(question["kind"])

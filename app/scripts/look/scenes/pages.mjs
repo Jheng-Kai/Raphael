@@ -9,7 +9,7 @@ const news = [member(1), wait('.pg-body[data-state="ready"] iframe'), { action: 
 const newsFixture = { pageTurn: true, pageNews: "only" };
 const roomShown = [room(1), wait('.pg-body[data-state="ready"] iframe'), { action: "frame-wait", selector: "#buy" }];
 const report = [member(1), wait(".pg-link"), click(".pg-link"), wait(".pgv:not([hidden]) .rp-team-draw")];
-const share = [click(".rp-view [data-report-act=share]"), wait(".toast")];
+const share = [click(".mb-head .ra-tools > [data-page-act]"), wait(".toast")];
 const draft = "還沒送出的草稿";
 
 export default [

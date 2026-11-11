@@ -81,7 +81,7 @@ import { menuReactionsHTML, mountMessageMetadata } from "../message-metadata";
 import { MORE_EMOJI, openEmojiPicker } from "../emoji-picker";
 import { mountMailActions } from "../mail-actions";
 import { mountGreeting } from "../member-greeting";
-import { answerOwnerPage, mountOwnerQuestions } from "../owner-questions";
+import { answerOwnerPage, mountOwnerQuestions, questionWaits } from "../owner-questions";
 import { mountPendingQuestions } from "../pending-questions";
 import { approvalCopy, permissionFor } from "../permission-card";
 import { memberAccent, memberColor, ownerBubble } from "../owner-bubble";
@@ -740,7 +740,9 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   function drawComposer(): void {
     const setup = waitingSetup();
     const brand: Record<string, string> = { telegram: "Telegram", slack: "Slack", discord: "Discord" };
-    const words = setup ? t("chat.askAboutSetup", { p0: brand[setup] ?? setup }) : inRaphael() ? t("home.askRaphael") : memberPlaceholder(members.member().name);
+    // While a question card waits the field says it takes the answer, or anything else (what is written closes the card, unanswered).
+    const asked = questionWaits(turns, pendingQuestions?.member === memberId() && pendingQuestions.conversation === conversationId() ? pendingQuestions.questions : []);
+    const words = setup ? t("chat.askAboutSetup", { p0: brand[setup] ?? setup }) : asked ? t("ownerQuestion.type") : inRaphael() ? t("home.askRaphael") : memberPlaceholder(members.member().name);
     if (input.placeholder !== words) input.placeholder = words;
     if (input.getAttribute("aria-label") !== words) input.setAttribute("aria-label", words);
     empty.classList.toggle("is-member", !inRaphael());
@@ -1229,6 +1231,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
         if (!earlier && !delta && staleVersion !== undefined && staleHistory.get(member) === staleVersion) staleHistory.delete(member);
         pendingQuestions = { member, conversation: chosen, questions: history.pending_questions ?? [] };
         floatingQuestions.sync();
+        drawComposer();
       }
       got = history.turns.filter(turn => !turn.session_id || !retracted.has(turn.session_id));
     } catch (err) {
@@ -2308,7 +2311,12 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       // One choice, 建立副本 with a line saying what follows (a file saved, or a publish request prepared on GitHub; never a link), and only that asks the member to package itself.
       case "share-member": {
         const member = memberId();
-        openMenu(act, [], "", () => {}, undefined, [{ label: t("template.copyTitle"), desc: t("template.copyHint"), icon: "copy", run() { closeMenu(); askInChat(member, "share-template"); } }]);
+        // Its mark is the member itself, twice: the copy that is about to be made (as Grok Bot's Create a copy; owner, 2026-11-12).
+        // A drawing, not the member at work: it takes no presence, so it never moves with what the member does.
+        // Each is drawn at a whole size of its own (a scaled slime lands on a fraction of a pixel and blurs, R-UI-63).
+        const face = (size: number): string => members.faceOf(member, size).replace(/ data-presence-member="\d+"/g, "");
+        openMenu(act, [], "", () => {}, undefined, [{ label: t("template.copyTitle"), desc: t("template.copyHint"), ...(face(24) ? { mark: `<span class="share-faces">${face(20)}${face(24)}</span>` } : { icon: "copy" as const }),
+          run() { closeMenu(); askInChat(member, "share-template"); } }], { className: "share-card" });
         break;
       }
       case "steps":

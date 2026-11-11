@@ -1,5 +1,41 @@
 # Member computer (Phases A and B)
 
+## Deleting a member removes its computer (2026-11-11)
+
+Owner, after deleting a member in the app: the dialog asked whether to delete the member's computer too, and
+ticking it hung. The app should know and do it, show nothing when there is no computer, and keep such things
+out of the front end (R-COMP-PERF-12, R-UI-27).
+
+What blocked: the old `members.delete` awaited `LocalVm.delete_member_data` before deleting anything. That
+stopped the computer through the per-computer lock that `_prepare_start` holds while it waits for Docker
+Desktop to launch (120 s) or pulls and builds the image (1800 s each), then ran up to five Docker calls of
+15-30 s each, with no bound over the whole and a dialog that had already closed over an unchanged window.
+With the engine off the same call raised `unavailable` and the member stayed. The core test
+`test_a_computer_still_starting_for_the_deleted_member_does_not_hold_the_deletion` is that case.
+
+The shape now: the dialog is the title, one sentence, Cancel and Delete (`members.deleteForever`), the same
+component as every compact delete question; `members.delete {id}` takes no computer parameter. In the core
+`MembersService._delete` reads the member's computers (`ComputerData.claim`: a record in `computer_data` or its
+folder here; nothing is contacted), deletes the member and writes the removal as owed in the same
+transaction, answers, and starts `ComputerData.settle` in the background (`computer/removals.py`).
+`LocalVm.erase` stops the container only if it carries this app's owner and target labels, removes it, then the
+folder or the host's volume; missing is success; the shared computer and foreign containers are refused. A pass
+is paid at the first answer of an engine (`LocalVm.available` tells `ComputerData.engine_up`), on the monitor's
+30 s tick and at the core's start, never starting Docker. Limits: 20 s to learn whether an engine answers,
+120 s per computer, six counted failures from the timer, a host that does not answer at most every 10
+minutes. Computers made before the record existed are found on a host by `LocalVm.recover` (its list of
+owned containers) the next time that host answers; a remote volume left with no container is not.
+
+Selected scenes (both themes, 1120,720,1920x1080): member-delete-ask (a member without a computer),
+member-delete-ask-computer (one with a computer on a host), member-delete (the result), press-through-delete-dialog,
+room-delete and quick-clear-confirm (the shared dialog). `member-delete-ask` asserts the member's name, one
+sentence, two buttons, no row, switch or field, and no word about a computer; `member-delete` asserts the call
+carries exactly `{"id":2}`. A real Docker engine and host are unverified: the tests use a fake engine.
+
+```powershell
+npm run look -- member-delete-ask member-delete-ask-computer member-delete press-through-delete-dialog room-delete quick-clear-confirm --theme both --width 1120,720,1920x1080
+```
+
 ## Viewer transport isolation, phase 1 (2026-11-09)
 
 `computer/viewer_relay.py` owns the loopback HTTP listener, both WebSocket pumps,
@@ -215,20 +251,20 @@ Idle/eviction and app shutdown only stop compatible owned computers; workspace
 mounts and browser profiles survive. A recognized v3-to-v4 rebuild announces its
 workspace/sign-in preservation before removal, never removes a volume and refuses
 foreign or weakened containers. Files/installs outside workspace are explicitly
-ephemeral in tool/persona text. Member deletion retains computer data by default;
-its unchecked option names the host, pins that host for the operation and excludes
-shared/team storage. No deletion/host operation was executed in this brief.
+ephemeral in tool/persona text. Deleting a member removes its computer data too (see
+[Deleting a member removes its computer](#deleting-a-member-removes-its-computer-2026-11-11)):
+the 2026-11-05 unchecked option that named the host is gone.
 
 Selected future look matrix (both themes, 1120,720,1920x1080): desktop-panel,
 desktop-watch, desktop-watch-collapse,
 desktop-watch-owner, desktop-takeover, desktop-takeover-owner,
 desktop-takeover-done, desktop-owner, desktop-host-remote, desktop-host-invalid,
-desktop-host-health, delete-member-computer. Compare Enlarge/collapse/Stop with
+desktop-host-health, member-delete-ask-computer. Compare Enlarge/collapse/Stop with
 the existing icon buttons and card Done/Skip with computer-card controls at the
 same theme/size. The owner-typing scene uses synthetic RFB input only.
 
 ```powershell
-npm run look -- desktop-panel desktop-watch desktop-watch-collapse desktop-watch-owner desktop-takeover desktop-takeover-owner desktop-takeover-done desktop-owner desktop-host-remote desktop-host-invalid desktop-host-health desktop-host-repair delete-member-computer --theme both --width 1120,720,1920x1080
+npm run look -- desktop-panel desktop-watch desktop-watch-collapse desktop-watch-owner desktop-takeover desktop-takeover-owner desktop-takeover-done desktop-owner desktop-host-remote desktop-host-invalid desktop-host-health desktop-host-repair member-delete-ask-computer --theme both --width 1120,720,1920x1080
 ```
 
 Native journeys: member-computer; computer-speed (explicit opt-in, never --all or

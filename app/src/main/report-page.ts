@@ -13,7 +13,7 @@ import { t } from "./i18n";
 import { ownerName } from "./owner-avatar";
 import type { Report, ReportEdge, ReportItem, ReportNode, ReportRow, ReportSection, ReportStatus } from "./types";
 import type { PageView } from "./page-view";
-import { esc, ico, iconButton, tabs, toaster } from "./ui";
+import { esc, ico, tabs, toaster } from "./ui";
 
 /** Who a member is on a report: its name and its colour, as the conversation's own roster has them now. */
 export interface ReportPeople {
@@ -528,7 +528,7 @@ export interface ReportView {
 /**
  * The report view of one conversation (a member's or a group's): it takes the thread's place in the conversation's page
  * view (`page-view.ts`, which keeps the thread's place and scroll under it and the composer where it is, so the owner can
- * ask for changes) and goes back with the header's arrow. Its Share stays at the page's top right.
+ * ask for changes) and goes back with the header's arrow. Saving it as a file is the header's button at the top right.
  */
 export function mountReportView(pages: PageView, people: () => ReportPeople): ReportView {
   let view: HTMLElement | null = null;
@@ -554,7 +554,7 @@ export function mountReportView(pages: PageView, people: () => ReportPeople): Re
   }
 
   /**
-   * Share (owner, 2026-11-10: 存成檔案): the report on screen saved as a file, in the owner's output folder or else in
+   * 存成檔案 (owner, 2026-11-10): the report on screen saved as a file, in the owner's output folder or else in
    * Downloads, shown selected in its folder, and a word of where it went.
    */
   async function share(): Promise<void> {
@@ -571,7 +571,7 @@ export function mountReportView(pages: PageView, people: () => ReportPeople): Re
     }
   }
 
-  /** What scrolls: the page under Share (`.rp-scroll`), never the view around it. */
+  /** What scrolls: the page (`.rp-scroll`), never the view around it. */
   const scroller = (): HTMLElement | null => view?.querySelector<HTMLElement>(":scope > .rp-scroll") ?? null;
 
   function element(): HTMLElement {
@@ -580,7 +580,6 @@ export function mountReportView(pages: PageView, people: () => ReportPeople): Re
     view.className = "rp-view";
     view.addEventListener("click", event => {
       const target = event.target as Element;
-      if (target.closest("[data-report-act=share]")) { void share(); return; }
       const goto = target.closest<HTMLAnchorElement>("[data-report-goto]");
       if (goto) {
         event.preventDefault();
@@ -621,12 +620,12 @@ export function mountReportView(pages: PageView, people: () => ReportPeople): Re
     if (mine !== generation || opened?.kind !== "report") return;
     const host = element(), place = keep ? scroller()?.scrollTop ?? 0 : 0;
     current = { id, rev: opened.rev, title: opened.title, report: opened.report };
-    // Only saving it as a file is the report's own: the way back is the conversation header's. Its icon is the arrow into a
-    // tray, never the header's arrow out of a box, which shares the member (owner, 2026-11-11: the two must not look alike).
-    host.innerHTML = `<div class="rp-scroll" tabindex="-1"><article class="rp-doc">${reportHTML(opened.title, opened.report, people())}</article></div>` +
-      `<div class="rp-top">${iconButton("download", t("page.report.share"), ' data-report-act="share"', "rp-share")}</div>`;
+    // Nothing floats over the report. Saving it as a file is the page's one action, and it stands where a thread's share
+    // stands, at the header's top right (page-view.ts), drawn as a file with an arrow into it: never the arrow out of a
+    // box, which shares a member (owner, 2026-11-11: the two must not look alike; 2026-11-12: its place and look as Grok Bot's).
+    host.innerHTML = `<div class="rp-scroll" tabindex="-1"><article class="rp-doc">${reportHTML(opened.title, opened.report, people())}</article></div>`;
     if (!host.isConnected) pages.body.replaceChildren(host);
-    pages.open({ id, title: opened.title, kind: "report", opener, leave });
+    pages.open({ id, title: opened.title, kind: "report", opener, leave, action: { icon: "fileDown", label: t("page.report.share"), run: () => { void share(); } } });
     layout(true);
     const page = scroller()!;
     page.scrollTop = place;
