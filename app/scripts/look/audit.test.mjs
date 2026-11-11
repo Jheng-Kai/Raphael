@@ -816,6 +816,19 @@ describe("rendered look checks", () => {
     window.document.querySelector('button').getBoundingClientRect = () => ({ left: 10, top: 10, right: 410, bottom: 40, width: 400, height: 30 });
     expect(audit().productRules).toEqual([]);
   });
+  it("holds an onboarding step's row to its two ends: the way back at the left edge and the primary at the right edge (R-UI-37)", () => {
+    const { window, audit } = productAudit('<div class="action-row ob-actions ob-ends"><button class="btn ob-prev" style="border:1px solid gray">Back</button><button class="btn pri" style="border:1px solid gray">Next</button></div>');
+    const row = window.document.querySelector('.ob-actions'), [back, primary] = window.document.querySelectorAll('button');
+    row.getBoundingClientRect = () => ({ left: 0, top: 0, right: 900, bottom: 44, width: 900, height: 44 });
+    back.getBoundingClientRect = () => ({ left: 0, top: 0, right: 128, bottom: 44, width: 128, height: 44 });
+    primary.getBoundingClientRect = () => ({ left: 772, top: 0, right: 900, bottom: 44, width: 128, height: 44 });
+    // A primary as wide as its words is right here: only the welcome's pill fills its row.
+    expect(audit().productRules).toEqual([]);
+    // Both in the middle, side by side, is the row of 2026-11-11 morning that the owner sent back.
+    back.getBoundingClientRect = () => ({ left: 270, top: 0, right: 314, bottom: 44, width: 44, height: 44 });
+    primary.getBoundingClientRect = () => ({ left: 322, top: 0, right: 630, bottom: 44, width: 308, height: 44 });
+    expect(audit().productRules.map(item => item.rule)).toEqual(['R-UI-37']);
+  });
   it("keeps an onboarding choice's control on the right of its name, inside its card (R-UI-35)", () => {
     const { window, audit } = productAudit('<div class="ob-item"><span class="ob-tx">Notion</span><span class="ob-ctl"><button class="btn" style="border:1px solid gray">Sign in</button></span></div>');
     const rect = (left, right, top = 0, bottom = 72) => () => ({ left, right, top, bottom, width: right - left, height: bottom - top });
@@ -904,11 +917,12 @@ describe("rendered look checks", () => {
     primary.getBoundingClientRect = () => ({ left: 0, top: 10, right: 50, bottom: 40, width: 50, height: 30 });
     expect(audit().productRules.map(item => item.rule)).toEqual(['R-UI-27', 'R-UI-27']);
   });
-  it("holds the guide's row to the rule: the round button at the left of the primary passes and a stack over it does not", () => {
-    const { window, audit } = productAudit('<div class="action-row ob-actions"><button class="btn ob-back" style="border:1px solid gray">Back</button><button class="btn pri" style="border:1px solid gray">Next</button></div>');
+  it("holds the guide's row to the rule: the way back at the left of the primary passes and a stack over it does not", () => {
+    const { window, audit } = productAudit('<div class="action-row ob-actions ob-ends"><button class="btn ob-prev" style="border:1px solid gray">Back</button><button class="btn pri" style="border:1px solid gray">Next</button></div>');
     const [back, primary] = window.document.querySelectorAll('button');
-    back.getBoundingClientRect = () => ({ left: 0, top: 0, right: 44, bottom: 44, width: 44, height: 44 });
-    primary.getBoundingClientRect = () => ({ left: 52, top: 0, right: 360, bottom: 44, width: 308, height: 44 });
+    window.document.querySelector('.ob-actions').getBoundingClientRect = () => ({ left: 0, top: 0, right: 900, bottom: 44, width: 900, height: 44 });
+    back.getBoundingClientRect = () => ({ left: 0, top: 0, right: 128, bottom: 44, width: 128, height: 44 });
+    primary.getBoundingClientRect = () => ({ left: 772, top: 0, right: 900, bottom: 44, width: 128, height: 44 });
     expect(audit().productRules.map(item => item.rule)).not.toContain('R-UI-27');
     back.getBoundingClientRect = () => ({ left: 0, top: 50, right: 300, bottom: 90, width: 300, height: 40 });
     primary.getBoundingClientRect = () => ({ left: 0, top: 0, right: 300, bottom: 40, width: 300, height: 40 });
