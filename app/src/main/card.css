@@ -104,5 +104,5 @@
 .template-facts { display: flex; flex-wrap: wrap; gap: var(--sp-1) var(--sp-3); color: var(--text-2); }
 /* A prepared publish request: the one next step, and where its files are (a path wraps at any width instead of cutting). */
 .template-next { margin: 0; }
-.template-where { margin: 0; display: grid; gap: var(--sp-1); color: var(--text-2); }
+.template-where { margin: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); color: var(--text-2); }
 .template-path { overflow-wrap: anywhere; user-select: text; }
