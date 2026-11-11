@@ -96,10 +96,14 @@ The window-owned settings button and visual/native acceptance remain an integrat
 
 ## One card, words and one press (2026-11-11)
 
-The changes that cannot be undone and that the model asks for in one turn are held until its turn is in and asked on one
-card (`management_batch`): a line each in the owner's language (target by name, effect in words, no ID and no JSON; the core
+The administrative changes (and readings) that the model asks for in one turn and that need a yes - the ones that cannot be
+undone, and any other that the mode that asks first or a rule asks about - are held until its turn is in and asked on one
+card (`management_batch`), with the asking member named on its first line when it is not Raphael; the editable team
+proposals (members, folders) keep their own card. That card has no timer in the conversation (R-AG-MGMT-04), so a CLI
+brain's tool call is never held open for it, and a yes of days later still applies; the yes of a reading brings its result
+to the turn. The card has a line each in the owner's language (target by name, effect in words, no ID and no JSON; the core
 words them in `management_words.py`, in every locale), one yes and one no. The yes is for exactly that list (its digest and
 its lines); each change is carried out in order under its own part of it (`Approval.covering`), one that fails does not stop
-the others and is said plainly, and a card nobody answered says that it ran out and what it was. The yes is one press, in the
-app and in the overlay. Verify with `core/tests/members/test_management_batch.py` and the scenes admin-delete-approval,
+the others and is said plainly, and a newer message cancels the card. The yes is one press, in the
+app and in the overlay. Verify with `core/tests/members/test_management_batch.py`, `core/tests/members/test_admin_proposals.py` and the scenes admin-delete-approval,
 admin-delete-approved, admin-delete-many and admin-delete-many-approved.

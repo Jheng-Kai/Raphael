@@ -338,16 +338,25 @@ def test_a_core_that_started_again_has_no_questions_so_an_old_yes_finds_nothing(
     assert after.resolve(pending.id, True, pending.digest).outcome is Outcome.UNKNOWN
 
 
-def test_a_question_nobody_sits_at_waits_ten_minutes_not_thirty_seconds(confirmations, clock):
-    assert UNATTENDED_WAIT_S == 600.0 and UNATTENDED_WAIT_MS == 600_000
+def test_a_question_nobody_sits_at_waits_thirty_minutes_not_thirty_seconds(confirmations, clock):
+    assert UNATTENDED_WAIT_S == 1800.0 and UNATTENDED_WAIT_MS == 1_800_000
     attended = open_one(confirmations, turn=1)
     unattended = confirmations.open("s1", 2, Action("write", {"text": "x"}), Tier.T2, "en", wait_s=UNATTENDED_WAIT_S)
     clock.now += CONFIRM_TIMEOUT_S + 1
     assert confirmations.sweep() == [attended]
     clock.now += UNATTENDED_WAIT_S - CONFIRM_TIMEOUT_S - 2
     result = confirmations.resolve(unattended.id, True, unattended.digest)
-    assert result.outcome is Outcome.APPROVED  # 599 s: still in time
+    assert result.outcome is Outcome.APPROVED  # 1799 s: still in time
     late = confirmations.open("s1", 3, Action("write", {"text": "y"}), Tier.T2, "en", wait_s=UNATTENDED_WAIT_S)
     clock.now += UNATTENDED_WAIT_S
     expired = confirmations.resolve(late.id, True, late.digest)
     assert expired.outcome is Outcome.EXPIRED and expired.approval is None
+
+
+def test_a_question_without_a_timer_never_runs_out(confirmations, clock):
+    from raphael_core.agent.policy import NO_TIMER_S
+
+    pending = confirmations.open("s1", 1, Action("write", {"text": "x"}), Tier.T2, "en", wait_s=NO_TIMER_S)
+    clock.now += 7 * 24 * 3600
+    assert confirmations.sweep() == []
+    assert confirmations.resolve(pending.id, True, pending.digest).outcome is Outcome.APPROVED

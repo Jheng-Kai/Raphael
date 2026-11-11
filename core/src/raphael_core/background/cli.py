@@ -73,7 +73,7 @@ def member_loop(brains, quota, task, run, spec, *, wait_s, progress):
                 called = arguments.get("name") if name == USE_TOOL and isinstance(arguments, dict) else name
                 ref = run.snapshot.refs.get(called) if isinstance(called, str) else None
                 if ref is not None and is_local(ref.key):
-                    loop.approval_wait_s = BACKGROUND_WAIT_S
+                    loop.approval_wait_s = BACKGROUND_WAIT_S + 60  # the question's own end (BackgroundService._expire) comes first
                 raise Stop(stop, data.get("detail")) from None
             raise
         outcome = tool_outcome(result)

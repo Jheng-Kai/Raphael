@@ -29,7 +29,7 @@ A run that carries on after the owner gave the computer back may still need a ye
 deletes or buys, the first use of another app, a rule that asks). Nobody is at that question, because the
 turn that began the run is over: it is shown in the chat of that turn as a permission card
 (`agent.permissions`), which the owner answers there with 允許一次, 一律允許 or 拒絕 and which waits as long
-as an unattended question does (about ten minutes). The run goes on with the approval that answer minted,
+as an unattended question does (thirty minutes). The run goes on with the approval that answer minted,
 for the digest of that very step, or stops when the answer is no or does not come. Without the cards
 (a core built without them) the step is not taken, as before.
 """

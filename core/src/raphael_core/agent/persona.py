@@ -183,7 +183,7 @@ class Phrases:
     # once, when the app is not in front. `{member}` is the member whose thread holds the question.
     worker_waiting: str
     worker_waiting_self: str  # ... the question is Raphael's own
-    worker_expired: str  # nobody answered in about ten minutes: the task ended without that action
+    worker_expired: str  # nobody answered in thirty minutes: the task went on without that action
 
 
 # Each phrase states the fact and, for a refusal, the reason or the one thing to do next, in the
@@ -264,7 +264,7 @@ PHRASES: dict[str, Phrases] = with_ui_words({
         protected_data="成員想用指令或檔案工具改 Raphael 的資料，不被允許，未執行。",
         worker_waiting="{member} 等你處理。",
         worker_waiting_self="有一件事等你處理。",
-        worker_expired="十分鐘內未獲回應。任務已結束，該操作未執行。",
+        worker_expired="三十分鐘內未獲回應，該操作未執行，可再請我做一次。",
     ),
     "en": Phrases(
         unclear="The instruction could not be recognized. Please repeat it.",
@@ -346,7 +346,7 @@ PHRASES: dict[str, Phrases] = with_ui_words({
         protected_data="A command or file tool may not change Raphael's own data. Nothing was run.",
         worker_waiting="{member} is waiting for you.",
         worker_waiting_self="Something is waiting for you.",
-        worker_expired="No answer came within ten minutes. The task ended without that action.",
+        worker_expired="No answer came in thirty minutes. That action was not done; ask again.",
     ),
     "ja": Phrases(
         unclear="指示を認識できませんでした。もう一度お願いします。",
@@ -421,7 +421,7 @@ PHRASES: dict[str, Phrases] = with_ui_words({
         protected_data="コマンドやツールで Raphael のデータは変更できません。未実行です。",
         worker_waiting="{member}があなたの対応を待っています。",
         worker_waiting_self="あなたの対応を待っている件があります。",
-        worker_expired="10分以内に応答がなかったため、その操作をせずにタスクを終えました。",
+        worker_expired="30分応答がなかったため、その操作は実行していません。再依頼できます。",
     ),
 })
 

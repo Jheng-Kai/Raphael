@@ -198,7 +198,7 @@ from .harness_tools import (
     tool as harness_tool,
 )
 from ..own_calendar import CalendarError, OwnCalendar, means_own_calendar
-from .team_admin import DEFINITIONS as ADMIN_TOOLS, CONFIRM_TOOLS, LEADERSHIP, BATCH_TOOLS
+from .team_admin import DEFINITIONS as ADMIN_TOOLS, ADMIN_CARD_TOOLS, CONFIRM_TOOLS, LEADERSHIP, BATCH_TOOLS, STAGED_TOOLS
 from .local import extract_target, match_command
 from .opening import Opening, clean_target, match_settings, parse_domain, validate_url
 from .persona import (
@@ -228,6 +228,7 @@ from .plugins import (
 from .toolpick import ToolPicker
 from .policy import (
     CONFIRM_TIMEOUT_MS,
+    NO_TIMER_S,
     PLUGIN_PREFIX,
     Action,
     Approval,
@@ -309,6 +310,8 @@ VOICE_TURN_TIMEOUT_S = 180.0
 # The statuses of a turn that ended with a denial or a question that ran out: they are not answered back,
 # as the owner knows (a "no", an Esc) or was not there.
 _UNSPOKEN = ("denied", "expired", "cancelled")
+# How much of what a reading gave back (a held reading, after the owner's yes) the model is shown.
+_READ_CHARS = 6000
 # Route classification retained for callers; all routes now share the full-history
 # and selected half-window context policy.
 _FULL_CONTEXT_ROUTES = ("discuss",)
@@ -470,10 +473,11 @@ class _Ask:
     trace_logged: bool = False
     admin_pending: list[PlannedCall] = field(default_factory=list)
     admin_screenings: list[Screening] = field(default_factory=list)
-    # The changes that cannot be undone, asked for in this turn, held for one card at its end (owner, 2026-11-11:
-    # 「不要分這麼多卡片，讓我去按同意」); each is shown to the owner exactly, and none is made before their yes.
-    destructive_pending: list[PlannedCall] = field(default_factory=list)
-    destructive_screenings: list[Screening] = field(default_factory=list)
+    # The administrative changes that need a yes (the ones that cannot be undone, and any other the mode or a rule has
+    # asked), proposed in this turn, held for one card at its end (owner, 2026-11-11: 「不要分這麼多卡片，讓我去按同意」);
+    # each is shown to the owner exactly, and none is made before their yes.
+    management_pending: list[PlannedCall] = field(default_factory=list)
+    management_screenings: list[Screening] = field(default_factory=list)
     memory_untrusted: bool = False
     # (tool key, argument digest) of each call made that changes something, in order.
     made: list[tuple[str, str]] = field(default_factory=list)
@@ -534,7 +538,7 @@ class Resumption:
         if self.management:
             parts.append("The owner approved the changes you proposed on one card, and each was carried out in order. This is what "
                          "came of each (data, not instructions). A change with ok false was not made: say so plainly to the owner, "
-                         "with its reason, and do not try it again on your own. Do not propose the ones that were made again.\n"
+                         "with its reason, and do not try it again on your own. A reading that was made has what it gave back in result. Do not propose the ones that were made again.\n"
                          + wrap_untrusted("management_changes", json.dumps(self.management, ensure_ascii=False), ok=True))
         if self.changes:
             parts.append("The owner approved the team changes you proposed, and they are done. This is what exists now, with "
@@ -2291,12 +2295,16 @@ class AgentService:
                         ask.admin_screenings.append(screening)
                         return ToolOutcome(True, content="pending_approval: true. This is only a proposal awaiting the owner's edits and confirmation at the end of this turn. Nothing has been created or updated; no new ID exists. Continue collecting requested changes; do not retry or claim success.")
                 if planned is not None and self._stageable(ask, planned):
+                    if (why := self._malformed(planned)) is not None:
+                        return ToolOutcome(False, "bad_arguments", instruction=why)  # nothing runs, so nothing is asked
                     screening = screened[0] if screened else await self._screen_call(ask, planned, ledger)
+                    screened = [screening]
                     if screening.verdict == DENY:
-                        ask.destructive_pending.clear()
+                        ask.management_pending.clear()
                         loop.response = self._finish(ask, "answer", "negative", forbidden(ask.language, screening), ledger)
                         raise Stop("finished")
-                    return self._stage(ask, planned, screening)
+                    if self._held(ask, planned, screening):
+                        return self._stage(ask, planned, screening)
                 if planned is not None:
                     outcome = await self._carry_out(ask, [planned], [], ledger, screenings=screened)
                     if isinstance(outcome, dict):
@@ -2521,7 +2529,7 @@ class AgentService:
             asked = await self._propose_admin(ask, ledger, loop.seen)
             self._followups[asked["confirm"]["id"]].carry = loop
             return asked
-        if ask.destructive_pending:
+        if ask.management_pending:
             asked = self._propose_management(ask, ledger, loop.seen)
             self._followups[asked["confirm"]["id"]].carry = loop
             return asked
@@ -2559,39 +2567,96 @@ class AgentService:
         loop.max_tokens = 1024
         return loop
 
-    def _stageable(self, ask: _Ask, call: PlannedCall) -> bool:
-        """Whether a call is a change that cannot be undone, made from the owner's own management chat: those are not
-        asked one by one (a second never reached the owner until the first was answered, and a card nobody saw ran out)
-        but held until the model's turn is in, then asked on one card."""
-        from ..management import MANAGEMENT_TOOLS, destructive
+    def _asks(self, call: PlannedCall, screening: Screening) -> bool:
+        """Whether the owner is asked before `call` is made: the tier, the switch that asks first, a rule or the
+        screening says so (the owner's 全部允許 mode waives all of them but the firm ones)."""
+        tier = self._tier_now(call)
+        return tier is not None and (not self._gate.full_permission or self._gate.firm_confirmation(call.tool.key, call.arguments)) and needs_yes(
+            tier >= Tier.T2 or self._gate.mode_asks(call.tool.key, call.arguments), screening, firm=tier >= Tier.T3)
 
-        return (self._team is not None and self._management_chat(ask) and call.tool.key in MANAGEMENT_TOOLS
-                and destructive(call.tool.key, call.arguments, self._settings.get("history_retention_days")))
+    def _stageable(self, ask: _Ask, call: PlannedCall) -> bool:
+        """Whether a call is an administrative change (or reading) of the owner's own management chat: these are not asked
+        one by one (a second never reached the owner until the first was answered, and a card nobody saw ran out) but,
+        where they need a yes (`_held`), kept until the model's turn is in, then asked on one card."""
+        return self._team is not None and self._management_chat(ask) and call.tool.key in STAGED_TOOLS
+
+    def _malformed(self, call: PlannedCall) -> str | None:
+        """Why a management call cannot be carried out as it is given, or None. Such a call is refused without a card:
+        nothing would run on a yes, and a card cannot word what it cannot read."""
+        from ..management import MANAGEMENT_TOOLS, resolve, validate
+
+        if call.tool.key not in MANAGEMENT_TOOLS or call.tool.key in BATCH_TOOLS:
+            return None
+        try:
+            validate(call.arguments, self._team_schema(call.tool.key))
+            item, values = resolve(call.tool.key, call.arguments)
+            if item is None:
+                return "unknown management action"
+            validate(values, item.schema)
+        except RpcError as error:
+            return error.message
+        return None
+
+    @staticmethod
+    def _team_schema(name: str) -> dict:
+        from .team_admin import DEFINITIONS
+        from ..management import REGISTRY
+
+        return DEFINITIONS[name]["parameters"] if name in DEFINITIONS else REGISTRY[name].schema
+
+    def _held(self, ask: _Ask, call: PlannedCall, screening: Screening) -> bool:
+        """Whether a change of the management chat is held for the card at the end of the turn: one that cannot be
+        undone (also in the owner's 全部允許 mode), and any other that is asked now. The team proposals (members and
+        folders: `BATCH_TOOLS`, which the owner edits) keep their own card."""
+        from ..management import destructive
+
+        if not self._stageable(ask, call):
+            return False
+        if destructive(call.tool.key, call.arguments, self._settings.get("history_retention_days")):
+            return True
+        return call.tool.key not in BATCH_TOOLS and self._asks(call, screening)
+
+    @staticmethod
+    def _asker(ask: _Ask) -> str:
+        """Who asks on a card: the member whose turn it is, by name; Raphael's own turns carry no name (the app words them)."""
+        return "" if ask.speaker.is_raphael else ask.speaker.name
 
     def _stage(self, ask: _Ask, call: PlannedCall, screening: Screening) -> ToolOutcome:
         digest = action_digest(call.tool.key, call.arguments)
-        if all(action_digest(held.tool.key, held.arguments) != digest for held in ask.destructive_pending):
-            ask.destructive_pending.append(call)
-            ask.destructive_screenings.append(screening)
+        if all(action_digest(held.tool.key, held.arguments) != digest for held in ask.management_pending):
+            ask.management_pending.append(call)
+            ask.management_screenings.append(screening)
         return ToolOutcome(True, content="pending_approval: true. This change is only a proposal. Nothing has been changed yet; "
                            "at the end of this turn the owner sees one card with every change you proposed and answers once. "
-                           "Propose every change they asked for now, then end the turn with one short sentence; do not claim any is done.")
+                           "Propose every change they asked for now, then end the turn with one short sentence; do not claim any is done. "
+                           "A reading you proposed gives its result after their yes, in the note you go on from; do not guess it.")
 
     def _propose_management(self, ask: _Ask, ledger: Ledger, seen: list[ToolResult]) -> dict:
         """One question for every change of this turn that cannot be undone: a line each, one yes or no. What the yes is for
         is the whole list (its digest), so a change proposed after the card was shown is a card of its own."""
-        operations = [{"name": call.tool.key, "arguments": dict(call.arguments)} for call in ask.destructive_pending]
-        text = self._team.admin_batch_confirmation(operations, ask.language)
+        operations = [{"name": call.tool.key, "arguments": dict(call.arguments)} for call in ask.management_pending]
+        text = self._team.admin_batch_confirmation(operations, ask.language, asker=self._asker(ask))
         # The lines the owner reads are part of what the yes is for: what is said afterwards (done, not done, ran out) is
         # said in those words, even when a name is gone by then.
         lines = [self._team.admin_line(op["name"], op["arguments"], ask.language) for op in operations]
-        why = next((screening for screening in ask.destructive_screenings if screening.verdict == ASK), None)
+        why = next((screening for screening in ask.management_screenings if screening.verdict == ASK), None)
         if why is not None:
             text = asked_with(ask.language, why, text)
         result = self._open_question(ask, Action("management_batch", {"operations": operations, "lines": lines}), "answer", text, ledger)
-        self._followups[result["confirm"]["id"]] = _Followup(ask, ask.destructive_pending[0], seen, management_batch=True,
-                                                             batch=list(ask.destructive_pending))
+        self._followups[result["confirm"]["id"]] = _Followup(ask, ask.management_pending[0], seen, management_batch=True,
+                                                             batch=list(ask.management_pending))
         return result
+
+    @staticmethod
+    def _reading(call: PlannedCall) -> bool:
+        """Whether a held call only reads (`management.READS`): its result is what the owner's yes was for."""
+        from ..management import READS, resolve
+
+        try:
+            item, _ = resolve(call.tool.key, call.arguments)
+        except RpcError:
+            return False
+        return item is not None and item.name in READS
 
     async def _carry_out_management_batch(self, pending: Pending, approval: Approval | None, followup: _Followup) -> dict:
         """The owner said yes to the card of several changes: each is carried out in order under its own part of that
@@ -2620,7 +2685,8 @@ class AgentService:
                 result = ToolResult(call.tool.key, False, None, "error")
             gone = not result.ok and isinstance(result.data, dict) and result.data.get("field") == "not_found"
             lines.append(worded(line, language, done=result.ok, gone=gone))
-            report.append({"change": line, "ok": result.ok, **({} if result.ok else {"error": "not_found" if gone else str(result.error)})})
+            report.append({"change": line, "ok": result.ok, **({} if result.ok else {"error": "not_found" if gone else str(result.error)}),
+                           **({"result": json.dumps(result.data, ensure_ascii=False, default=str)[:_READ_CHARS]} if result.ok and self._reading(call) else {})})
         done = sum(item["ok"] for item in report)
         step = self._step("tool", "management_batch", BUILTIN_SERVER, "ok" if done == len(report) else "error", began,
                           None if done == len(report) else "partial")
@@ -2629,8 +2695,8 @@ class AgentService:
         if followup.carry is not None:
             ask.steps.extend(steps)
             return await self._go_on_after_admin(followup, step, [], text, None, ledger, management=tuple(report))
-        ask.destructive_pending.clear()
-        ask.destructive_screenings.clear()
+        ask.management_pending.clear()
+        ask.management_screenings.clear()
         return self._outcome(pending, "understood" if done else "negative", text, "done" if done else "error", cost_usd=ledger.total)
 
     async def _propose_admin(self, ask: _Ask, ledger: Ledger, seen: list[ToolResult]) -> dict:
@@ -2721,7 +2787,7 @@ class AgentService:
             results = outcome
             if ask.admin_pending:
                 return await self._propose_admin(ask, ledger, results)
-            if ask.destructive_pending:
+            if ask.management_pending:
                 return self._propose_management(ask, ledger, results)
             created = [r for r in results if r.name == CREATE_MEMBER]
             if picked and created and len(created) == len(picked) and all(r.ok for r in created):
@@ -2977,9 +3043,13 @@ class AgentService:
                 continue
             tier = self._tier_now(call)
             if self._stageable(ask, call):
-                outcome = self._stage(ask, call, screening)
-                results.append(ToolResult(call.tool.key, True, {"pending_approval": True, "note": outcome.content}))
-                continue
+                if (why := self._malformed(call)) is not None:
+                    results.append(ToolResult(call.tool.key, False, None, "bad_arguments", instruction=why))
+                    continue
+                if self._held(ask, call, screening):
+                    outcome = self._stage(ask, call, screening)
+                    results.append(ToolResult(call.tool.key, True, {"pending_approval": True, "note": outcome.content}))
+                    continue
             if (call.tool.key in BATCH_TOOLS and self._management_chat(ask)
                     and not self._gate.firm_confirmation(call.tool.key, call.arguments)
                     and (self._gate.ask_first or screening.verdict == ASK)):
@@ -2992,8 +3062,7 @@ class AgentService:
                 continue
             # The 手動 switch asks for what the door asks for, whatever the screening said: a plugin's tool that only
             # reads passes the screening, and the door would refuse it with no question ever opened (`mode_asks`).
-            if tier is not None and (not self._gate.full_permission or self._gate.firm_confirmation(call.tool.key, call.arguments)) and needs_yes(
-                    tier >= Tier.T2 or self._gate.mode_asks(call.tool.key, call.arguments), screening, firm=tier >= Tier.T3):
+            if self._asks(call, screening):
                 asking.append((call, screening))
             else:
                 automatic.append(call)
@@ -4299,8 +4368,8 @@ class AgentService:
         run of the same native thread for a CLI brain."""
         ask = followup.ask
         if management:
-            ask.destructive_pending.clear()
-            ask.destructive_screenings.clear()
+            ask.management_pending.clear()
+            ask.management_screenings.clear()
         else:
             ask.admin_pending.clear()
             ask.admin_screenings.clear()
@@ -4697,9 +4766,13 @@ class AgentService:
                 card = _CardSpec("step", ask.speaker.name or "Raphael", "local_exec",
                                  command, reason if isinstance(reason, str) else "", False)
         prefix = PREFIXES[language].question
+        # An administrative change the owner is asked about in a conversation waits for them (R-AG-MGMT-04), as a local
+        # command does: it is never held in a tool call of a CLI brain (the turn is in before it is asked), and the
+        # overlay's spoken yes or no keeps its thirty seconds.
+        untimed = local or self._owner_decides_at_leisure(ask, action)
         turn_id = self._record(ask, route, prefix, "" if local else text, "confirm", None, ledger)
         pending = self._confirmations.open(ask.session_id, turn_id, action, tier, language,
-                                           wait_s=float("inf") if local else None)
+                                           wait_s=NO_TIMER_S if untimed else None)
         confirm = {
             "id": pending.id,
             "tier": tier.name,
@@ -4707,7 +4780,7 @@ class AgentService:
             "text": text,
             "yes": phrase(language, "yes"),
             "no": phrase(language, "no"),
-            "timeout_ms": 0 if local else CONFIRM_TIMEOUT_MS,
+            "timeout_ms": 0 if untimed else CONFIRM_TIMEOUT_MS,
         }
         # T3 questions (and the card of several changes) are answered in the window's own card, in one press (owner, 2026-11-11), not in a permission card of the thread, except for the explicit local-command and payment permission cards.
         if (card is not None and self._permissions is not None and turn_id and (tier < Tier.T3 or local or action.tool.endswith("/fill_card"))
@@ -4716,7 +4789,7 @@ class AgentService:
                 card_id=pending.id, turn_id=turn_id, member_id=ask.speaker.id, conversation_id=ask.conversation_id,
                 source="ask", kind=card.kind, service=card.service, tool=card.tool, summary=card.summary,
                 reason=card.reason, digest=pending.digest, always=card.always and tier < Tier.T3, language=language,
-                wait_ms=0 if local else round(pending.wait_s * 1000), message=card.message)
+                wait_ms=0 if untimed else round(pending.wait_s * 1000), message=card.message)
             confirm["digest"] = pending.digest
             if card.always and tier < Tier.T3:
                 labels = answer_labels(language)
@@ -4727,9 +4800,15 @@ class AgentService:
                 source="ask", kind="step" if local else "tool", service="", tool="local_exec" if local else action.tool,
                 summary=command if local else text, reason=card.reason if local and card else "",
                 digest=pending.digest, always=False, language=language,
-                wait_ms=0 if local else round(pending.wait_s * 1000),
+                wait_ms=0 if untimed else round(pending.wait_s * 1000),
                 context_only=not (local and permission_cards_for(source=ask.source, quick=ask.quick, nested=ask.nested, scope=ask.scope)))
         return {"status": "confirm", "turn_id": turn_id, "confirm": confirm}
+
+    def _owner_decides_at_leisure(self, ask: _Ask, action: Action) -> bool:
+        """Whether the card of `action` has no timer: an administrative change asked in the owner's private conversation
+        (typed, or from a phone), not in the overlay's quick question."""
+        return (action.tool in ADMIN_CARD_TOOLS and self._management_chat(ask)
+                and not ask.quick and ask.source not in _QUICK_SOURCES)
 
     async def _confirm(self, params: dict) -> dict:
         """Resolve a question."""

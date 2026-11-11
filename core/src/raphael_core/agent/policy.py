@@ -10,7 +10,9 @@ Every tool and command has a tier:
 
 T0 and T1 run at once. T2 and T3 are never run on the strength of a spoken request alone: the
 assistant asks, the overlay shows a yes and a no, and the action runs only when the answer is yes,
-within thirty seconds, for that one question. `ToolRegistry.check` is the single door the runner
+within thirty seconds, for that one question. A question the owner is asked in a conversation about a change to
+their team or settings (an administrative card) has no timer: it waits until they answer, stop the turn or write
+a new message (R-AG-MGMT-04). `ToolRegistry.check` is the single door the runner
 goes through: it refuses a T2 or T3 action that has no `Approval`, and an `Approval` can only come
 from `Confirmations.resolve`, for the action that was asked about, once.
 
@@ -19,7 +21,7 @@ taken when the question is opened. The `Approval` carries it and the door compar
 the action it is shown, so inputs that changed after the question, a replay, another question's yes, a
 yes after the core restarted (the questions live in memory only) or one that came too late never run
 anything. A question that waits while nobody is at the keyboard (a background task, a run that carries on
-after the owner gave the computer back) is given `UNATTENDED_WAIT_S` instead of thirty seconds.
+after the owner gave the computer back) is given `UNATTENDED_WAIT_S` (thirty minutes) instead of thirty seconds.
 """
 
 import enum
@@ -34,13 +36,16 @@ from typing import Any
 
 # The names of the tools of plugins begin with this (see ToolRegistry).
 PLUGIN_PREFIX = "mcp:"
-# How long a question waits for its answer; after this a yes is too late.
+# How long a question waits for its answer; after this a yes is too late. It is the overlay's spoken yes or no, the
+# attended run on the desktop and any card of a call a CLI brain holds open (a CLI's own tool call cannot wait long).
 CONFIRM_TIMEOUT_S = 30.0
+# A question that has no timer: it ends when it is answered, cancelled or replaced, never by the clock.
+NO_TIMER_S = float("inf")
 CONFIRM_TIMEOUT_MS = round(CONFIRM_TIMEOUT_S * 1000)
 # How long a question waits when nobody sits at the keyboard to answer it: the background worker's
 # questions and the questions of a run that carries on after the owner gave the computer back. After
-# this a yes finds nothing, and nothing the question was about has been done.
-UNATTENDED_WAIT_S = 10 * 60.0
+# this a yes finds nothing, and nothing the question was about has been done (R-PC-02, R-AG-MGMT-04).
+UNATTENDED_WAIT_S = 30 * 60.0
 UNATTENDED_WAIT_MS = round(UNATTENDED_WAIT_S * 1000)
 # Confirmations that ran out are remembered (so that a late yes is told it was late, in the
 # language it was asked in), but not for ever.
@@ -200,7 +205,8 @@ class Outcome(enum.Enum):
 @dataclass
 class Pending:
     """A question that waits for its yes or no. `digest` is that of its action when it was opened;
-    `wait_s` how long this question waits (`UNATTENDED_WAIT_S` when nobody sits at the keyboard)."""
+    `wait_s` how long this question waits (`UNATTENDED_WAIT_S` when nobody sits at the keyboard, `NO_TIMER_S` for a
+    card the owner answers in a conversation)."""
 
     id: str
     session_id: str
