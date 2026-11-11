@@ -6,14 +6,16 @@ import { t } from "./i18n";
 import { openDialog, type Dialog } from "./member-dialogs";
 import { faceHTML, routineSentenceHTML, routineStatus } from "./members";
 import type { Member, Routine } from "./types";
-import { esc } from "./ui";
+import { esc, st } from "./ui";
 
 export function routineViewHTML(routine: Routine, members: readonly Member[]): string {
   const member = members.find(item => item.id === routine.member_id);
   const status = routine.when || routine.last_error ? routineStatus(routine) : "";
+  // A run that did not work is said as one (owner, 2026-11-11): the view must not look as good as a routine that works.
+  const failed = !!(routine.last_failed && routine.last_error);
   const part = (label: string, html: string, cls: string): string => `<section class="rv-part ${cls}"><h3>${esc(label)}</h3>${html}</section>`;
   return `<div class="rv">` +
-    part(t("auto.when"), `<p>${routineSentenceHTML(routine)}</p>${status ? `<p class="rv-status">${esc(status)}</p>` : ""}`, "rv-when") +
+    part(t("auto.when"), `<p>${routineSentenceHTML(routine)}</p>${status ? `<p class="rv-status${failed ? " is-failed" : ""}">${failed ? st("err", status) : esc(status)}</p>` : ""}`, "rv-when") +
     (member ? `<p class="rv-who">${faceHTML(member, 20)}<span>${esc(member.name)}</span></p>` : "") +
     part(t("members.instructions"), `<p class="rv-prompt">${esc(routine.prompt)}</p>`, "rv-instructions") +
     `</div>`;

@@ -9,13 +9,19 @@ from pathlib import Path
 from urllib.parse import unquote, urlparse
 
 
+# What a run is told to use in place of a command: the floor keeps commands and file tools off Raphael's own folders, and
+# the tools meant for what a run needs there read it (owner, 2026-11-11: a routine could not read its page template or the log).
+READ_INSTEAD = (" To read a skill's own files (a page template, data) use skill_read with its name and reference; "
+                "to see the app's state, its log and recent failures use self_check.")
 # What the model is told. The owner reads other words (`persona.PHRASES.protected_data`), never this sentence.
 WRITE_REFUSAL = (
     "Commands, scripts and file tools cannot write Raphael's own data, database, credentials or core files. "
     "To change a skill use skill_manage; to change members, connections or settings use the member, connection or "
     "settings management tools instead (the owner approves their card). Do not try another command or path."
+    + READ_INSTEAD
 )
-READ_CONSENT = "Reading Raphael's own data requires the owner's consent for this call. Use management tools when possible."
+READ_CONSENT = ("Reading Raphael's own data requires the owner's consent for this call. Use management tools when possible."
+                + READ_INSTEAD)
 _ENV = re.compile(r"%([^%]+)%|\$\{(?:env:)?([\w]+)\}|\$(?:env:)?([\w]+)", re.I)
 _DATABASE = re.compile(r"(?:^|[\\/\s'\"])raphael\.db(?:-(?:wal|shm))?(?=$|[\s'\";,)?])", re.I)
 _PATH = re.compile(r"(?:[a-z]:[\\/]|\\\\|/mnt/[a-z]/)[^\s'\";,|<>]*", re.I)

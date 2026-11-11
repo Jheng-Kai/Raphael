@@ -204,6 +204,9 @@ MANAGEMENT_TOOLS = frozenset(REGISTRY) | {"create_member"}
 READS = frozenset({"conversation_list", "dictionary_list", "settings_read", "member_skills_list", "member_skill_read",
                    "member_commands_list", "member_routines_list", "memory_document_read"})
 BACKGROUND_MEMBER_TOOLS = frozenset(name for name in DEFINITIONS if name.startswith("member_")) | {"create_member"}
+# The reads of the owner's own data that a routine's run has as its member does in the conversation (the rest of READS are
+# member tools, which a run of a private task has with an approval card).
+BACKGROUND_READS = READS - BACKGROUND_MEMBER_TOOLS
 TIERS = {item.name: item.tier for item in ACTIONS}
 TIERS[SETTINGS_TOOL.name] = SETTINGS_TOOL.tier
 TIERS.update({name: item.tier for name, item in GROUPED_TOOLS.items()})
