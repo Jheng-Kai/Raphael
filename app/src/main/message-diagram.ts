@@ -8,10 +8,13 @@ export function diagramSourceAllowed(source: string): boolean {
 let serial = 0;
 export async function renderDiagram(source: string, colors: Record<string, string>): Promise<string | null> {
   if (!diagramSourceAllowed(source)) return null;
-  mermaid.initialize({ startOnLoad: false, securityLevel: "strict", htmlLabels: false, theme: "base", suppressErrorRendering: true,
+  // Mermaid 12 gives each diagram type its own defaults: the "redux-color" theme, the shadowed "neo" look, ELK layout for state
+  // diagrams, and 120px minimum nodes and labels wrapped at 120px (30% wider flowcharts). Keep the flat drawing Raphael designed for.
+  const flat = { theme: "base", look: "classic" } as const, dagre = { ...flat, layout: "dagre" } as const, nodes = { minNodeWidth: 0, wrappingWidth: 200 };
+  mermaid.initialize({ startOnLoad: false, securityLevel: "strict", htmlLabels: false, theme: "base", layout: "dagre", look: "classic", suppressErrorRendering: true,
     maxTextSize: 25000, maxEdges: 500, deterministicIds: false,
-    secure: ["securityLevel", "htmlLabels", "theme", "themeVariables", "maxTextSize", "maxEdges", "startOnLoad"],
-    flowchart: { htmlLabels: false },
+    secure: ["securityLevel", "htmlLabels", "theme", "layout", "look", "themeVariables", "maxTextSize", "maxEdges", "startOnLoad"],
+    flowchart: { htmlLabels: false, ...dagre, ...nodes }, state: { ...dagre, ...nodes }, class: dagre, er: dagre, sequence: flat,
     themeVariables: { background: colors.panel, primaryColor: colors.surface, primaryTextColor: colors.text, primaryBorderColor: colors.edge,
       secondaryColor: colors.surface, secondaryTextColor: colors.text, secondaryBorderColor: colors.edge,
       tertiaryColor: colors.panel, tertiaryTextColor: colors.text, tertiaryBorderColor: colors.edge,

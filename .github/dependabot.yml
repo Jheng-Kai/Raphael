@@ -26,6 +26,13 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 3
+    # windows-core and windows-future must be the versions the windows crate uses (see the comments
+    # in app/src-tauri/Cargo.toml). windows is at 0.62.x while these two have jumped to 0.100.0, and
+    # updating one of them alone puts two copies of the same types in the build: that is how the
+    # pull requests for them failed to compile. They move by hand, together with windows.
+    ignore:
+      - dependency-name: windows-core
+      - dependency-name: windows-future
     groups:
       cargo:
         update-types: [minor, patch]
@@ -36,5 +43,13 @@ updates:
       interval: weekly
     open-pull-requests-limit: 3
     groups:
+      # sherpa-onnx and sherpa-onnx-core are one release in two packages: the first loads the native
+      # libraries of the second, and each version of the first needs the same version of the second.
+      # So they get one pull request together, for every update type, major included. A dependency
+      # goes to the first group that matches it, so this one stays above the group below.
+      sherpa-onnx:
+        patterns:
+          - sherpa-onnx
+          - sherpa-onnx-core
       uv:
         update-types: [minor, patch]
