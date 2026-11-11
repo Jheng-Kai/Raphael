@@ -81,7 +81,7 @@ import { menuReactionsHTML, mountMessageMetadata } from "../message-metadata";
 import { MORE_EMOJI, openEmojiPicker } from "../emoji-picker";
 import { mountMailActions } from "../mail-actions";
 import { mountGreeting } from "../member-greeting";
-import { answerOwnerPage, mountOwnerQuestions } from "../owner-questions";
+import { answerOwnerPage, mountOwnerQuestions, questionWaits } from "../owner-questions";
 import { mountPendingQuestions } from "../pending-questions";
 import { approvalCopy, permissionFor } from "../permission-card";
 import { memberAccent, memberColor, ownerBubble } from "../owner-bubble";
@@ -740,7 +740,9 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   function drawComposer(): void {
     const setup = waitingSetup();
     const brand: Record<string, string> = { telegram: "Telegram", slack: "Slack", discord: "Discord" };
-    const words = setup ? t("chat.askAboutSetup", { p0: brand[setup] ?? setup }) : inRaphael() ? t("home.askRaphael") : memberPlaceholder(members.member().name);
+    // While a question card waits the field says it takes the answer, or anything else (what is written closes the card, unanswered).
+    const asked = questionWaits(turns, pendingQuestions?.member === memberId() && pendingQuestions.conversation === conversationId() ? pendingQuestions.questions : []);
+    const words = setup ? t("chat.askAboutSetup", { p0: brand[setup] ?? setup }) : asked ? t("ownerQuestion.type") : inRaphael() ? t("home.askRaphael") : memberPlaceholder(members.member().name);
     if (input.placeholder !== words) input.placeholder = words;
     if (input.getAttribute("aria-label") !== words) input.setAttribute("aria-label", words);
     empty.classList.toggle("is-member", !inRaphael());
@@ -1229,6 +1231,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
         if (!earlier && !delta && staleVersion !== undefined && staleHistory.get(member) === staleVersion) staleHistory.delete(member);
         pendingQuestions = { member, conversation: chosen, questions: history.pending_questions ?? [] };
         floatingQuestions.sync();
+        drawComposer();
       }
       got = history.turns.filter(turn => !turn.session_id || !retracted.has(turn.session_id));
     } catch (err) {

@@ -115,8 +115,9 @@ export function core<T>(method: string, params: object = {}): Promise<T> {
   return answer;
 }
 
-export const ownerQuestionAnswer = (id: string, answer: string | null): Promise<{ status: string }> =>
-  core("owner_questions.answer", { id, answer });
+/** The answer of a card: the chosen or typed words, the chosen rows of a several-choice card, `null` to close it, or `{ skip: true }` for its skip row (an answer of its own, not a cancel). */
+export const ownerQuestionAnswer = (id: string, answer: string | string[] | null | { skip: true }): Promise<{ status: string }> =>
+  core("owner_questions.answer", answer !== null && typeof answer === "object" && !Array.isArray(answer) ? { id, skip: true } : { id, answer });
 export const ownerQuestionBring = (id: string): Promise<{ turn_id: number }> =>
   core("owner_questions.bring", { id });
 

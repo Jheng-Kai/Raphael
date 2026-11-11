@@ -142,6 +142,22 @@ def test_every_window_card_has_a_safe_projection_and_owner_answers_are_untrusted
     assert text.count("</tool_result>") == 1 and "<question>" not in text
 
 
+def test_the_model_reads_how_a_question_card_ended_whether_chosen_skipped_or_left(conn):
+    history = AgentHistory(conn, lambda: NOW_MS)
+    identifier = turn(history)
+    task = TaskStore(conn, lambda: NOW_MS).create(session_id="synthetic", language="en", text="Synthetic task")
+    with conn:
+        conn.execute("UPDATE worker_tasks SET turn_id=? WHERE id=?", (identifier, task))
+    ended = {"chosen": {"state": "answered", "answer": ["Mail", "Notes"]}, "skipped": {"state": "answered", "skipped": True},
+             "left": {"state": "cancelled", "by": "message", "said": "Check my calendar"}}
+    for n, (name, result) in enumerate(ended.items()):
+        insert(conn, "owner_questions", id=name, task_id=task, turn_id=identifier, member_id=0, kind="ask_owner",
+               payload=json.dumps({"question": f"Question {name}"}), result=json.dumps(result), created_at_ms=NOW_MS + n)
+    text = outcomes_text(card_outcomes(conn, [identifier], NOW_MS)[identifier])
+    assert 'owner answer "Mail; Notes"' in text and "the owner skipped it" in text
+    assert "the owner wrote something else instead of answering" in text and "Check my calendar" not in text
+
+
 def test_pending_expiry_and_history_reads_are_fresh_scoped_and_read_only(conn):
     history = AgentHistory(conn, lambda: NOW_MS)
     identifier = turn(history, status="confirm")

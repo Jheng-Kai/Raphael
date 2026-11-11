@@ -17,7 +17,7 @@ export function mountGreeting(thread: HTMLElement, send: (text: string) => void)
   thread.addEventListener("input", event => {
     const field = (event.target as Element).closest<HTMLInputElement>("[data-greeting-answer-input]");
     const submit = field?.closest(".owner-question")?.querySelector<HTMLButtonElement>('[data-greeting-answer="text"]');
-    if (submit) submit.disabled = !field!.value.trim();
+    if (submit) { submit.disabled = !field!.value.trim(); submit.hidden = submit.disabled; }
   });
   thread.addEventListener("click", event => {
     const button = (event.target as Element).closest<HTMLButtonElement>("[data-greeting-option],[data-greeting-answer]");
@@ -31,7 +31,7 @@ export function mountGreeting(thread: HTMLElement, send: (text: string) => void)
     if (event.altKey || event.ctrlKey || event.metaKey || event.repeat) return;
     const target = event.target as Element, card = target.closest("[data-greeting-question]");
     if (!card) return;
-    if (target.matches("input") && event.key === "Enter") {event.preventDefault(); card.querySelector<HTMLButtonElement>('[data-greeting-answer="text"]')?.click();}
+    if (target.matches("input,textarea") && event.key === "Enter") {event.preventDefault(); card.querySelector<HTMLButtonElement>('[data-greeting-answer="text"]')?.click();}
     else if (!target.closest("input,textarea,[contenteditable=true]") && /^[a-d]$/i.test(event.key)) {
       event.preventDefault(); card.querySelectorAll<HTMLButtonElement>("[data-greeting-option]")[event.key.toUpperCase().charCodeAt(0) - 65]?.click();
     }

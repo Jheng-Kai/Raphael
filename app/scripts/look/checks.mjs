@@ -1845,6 +1845,9 @@ export function checkRendered(name, context = {}) {
         require(!pill, 'a waiting question uses its title without a redundant status pill');
         require(close?.parentElement?.matches('.card-head') && close === close.parentElement.lastElementChild, 'question close follows the heading at the far right');
         require(Math.abs(close.getBoundingClientRect().right - (box.right - parseFloat(style.paddingRight) - parseFloat(style.borderRightWidth))) < 1.5, 'question close aligns with the right padding');
+      } else if (card.matches('[data-owner-question][data-card-state="answered"]') && card.querySelector('.question-answer-line')) {
+        // An answered question is its title and one row: the check at the row's right says what a pill said.
+        require(!pill && !card.querySelector(':scope > .card-head > .card-close'), 'an answered question has no pill and no ×');
       } else if (card.matches('[data-member-template],[data-template-connection][data-connected="false"]')) {
         require(!pill, 'a template and its unconnected requests have no invented status');
       } else {
@@ -1899,14 +1902,118 @@ export function checkRendered(name, context = {}) {
       for (const button of [...card.querySelectorAll('.card-actions .btn:not(.icon),.question-submit .btn:not(.icon)')].filter(visible))
         require(button.getBoundingClientRect().height >= fieldHeight - 0.5, `a card's text button stands at the field height: ${button.textContent.trim()} is ${button.getBoundingClientRect().height} px against ${fieldHeight}`);
       for (const row of [...card.querySelectorAll('.question-submit')].filter(visible)) {
-        const field = row.querySelector('input'), button = row.querySelector('button');
-        if (!field || !button) continue;
+        const field = row.querySelector('input,textarea'), button = row.querySelector('button');
+        if (!field || !button || !visible(button)) continue;
         const a = field.getBoundingClientRect(), b = button.getBoundingClientRect();
-        require(Math.abs(a.height - b.height) <= 1 && Math.abs((a.top + a.bottom) / 2 - (b.top + b.bottom) / 2) <= 1, `the answer field and its button share one height and centre: ${a.height} px at ${Math.round(a.top)} against ${b.height} px at ${Math.round(b.top)}`);
+        // One line: the field and its button are one height with one centre. Longer, the button stays at the foot of the field.
+        if (a.height <= parseFloat(getComputedStyle(document.documentElement).getPropertyValue?.('--h-field') || 30) + 1) require(Math.abs(a.height - b.height) <= 2 && Math.abs((a.top + a.bottom) / 2 - (b.top + b.bottom) / 2) <= 2, `the answer field and its button share one height and centre: ${a.height} px at ${Math.round(a.top)} against ${b.height} px at ${Math.round(b.top)}`);
+        else require(Math.abs(a.bottom - b.bottom) <= 8, `a longer answer keeps its button at the foot of the field`);
       }
       require(card.scrollWidth <= card.clientWidth + 1, 'card never scrolls sideways');
     }
     return {check:name,cards:cards.length};
+  }
+  if (name.startsWith("question-card-")) {
+    // The question card in its new shape (owner, 2026-11-11): rows with hairlines, a letter badge, grey lines, the own-answer row, and the one collapsed row.
+    const card = document.querySelector('[data-owner-question="owner-choice"]'), calls = window.__look.calls.filter(call => call.method === "owner_questions.answer");
+    require(visible(card) && card.classList.contains("permission-card"), "the shared question card is visible");
+    const box = card.getBoundingClientRect(), column = card.parentElement.getBoundingClientRect();
+    require(box.width <= 480.5 && box.left >= column.left - 1 && box.right <= column.right + 1, "the card fits its column and is at most 480 px wide");
+    const rows = [...card.querySelectorAll('.question-choice')].filter(visible), line = card.querySelector('.question-answer-line');
+    const composer = [...document.querySelectorAll('.cmp-input')].find(visible);
+    const waitingWords = "輸入你的回答，或聊點別的";
+    const requireRows = () => {
+      require(rows.length >= 1, "the card has rows");
+      rows.forEach((row, index) => {
+        const badge = row.querySelector('[data-choice-letter]'), words = row.querySelector('.question-words');
+        require(badge && words && badge.getBoundingClientRect().right <= words.getBoundingClientRect().left, `row ${index} has its badge before its words`);
+        require(row.scrollWidth <= row.clientWidth + 1 && row.getBoundingClientRect().height >= 36, `row ${index} is not clipped and is at least 36 px tall`);
+        require(Math.abs(badge.getBoundingClientRect().left - rows[0].querySelector('[data-choice-letter]').getBoundingClientRect().left) < 1, "every badge stands in one column");
+      });
+      const inside = [...card.querySelectorAll('.question-choices > *')].filter(visible);
+      inside.slice(0, -1).forEach(node => require(parseFloat(getComputedStyle(node).borderBottomWidth) >= 1, "a hairline stands between the rows"));
+    };
+    const requireCollapsed = words => {
+      require(!card.querySelector('.card-status') && !card.querySelector('[data-owner-option],[data-owner-skip],[data-owner-answer],textarea,[data-card-disclosure]'), "the answered card keeps its title and one row only");
+      require(card.dataset.cardState === "answered" && card.querySelectorAll('.question-answer-line').length === 1, "one collapsed row under the title");
+      const text = line.querySelector('.question-answer-text'), mark = line.querySelector('svg'), lb = line.getBoundingClientRect(), tb = text.getBoundingClientRect(), mb = mark.getBoundingClientRect();
+      if (words) require(text.textContent === words, `the row says ${words}: ${text.textContent}`);
+      require(visible(mark) && mb.left >= tb.right - 1 && lb.right - mb.right <= 16 && lb.right - mb.right >= 8, `the check stands at the right of the row (${Math.round(lb.right - mb.right)} px from its edge)`);
+      require(getComputedStyle(text).color !== getComputedStyle(card.querySelector('.card-title')).color, "the answer is in the quiet colour, the title in the strong one");
+      const well = line.parentElement.getBoundingClientRect();
+      require((lb.height >= 34 && lb.height <= 46) || line.getAttribute('aria-expanded') === 'true', `the collapsed row is one line tall (${lb.height})`);
+      require(well.bottom <= box.bottom - 10 && well.left >= box.left + 10, "the row sits inside the card's padding");
+    };
+    const asked = () => card.dataset.cardState === "asked";
+    if (name === "question-card-described") {
+      require(asked(), "the card waits");
+      require(card.querySelector('.card-body').textContent === "選最重要的一個。", "the grey line stands under the title");
+      const notes = [...card.querySelectorAll('.question-note')].filter(visible);
+      require(notes.length === 2 && notes.every(note => note.getBoundingClientRect().top > note.parentElement.firstElementChild.getBoundingClientRect().bottom - 2), "two rows carry a second grey line under their words");
+      const wordsSize = getComputedStyle(rows[1].querySelector('.question-words > span')).fontSize, noteSize = getComputedStyle(notes[0]).fontSize;
+      require(parseFloat(noteSize) < parseFloat(wordsSize), `the grey line is smaller than the words (${noteSize} against ${wordsSize})`);
+      require(getComputedStyle(notes[0]).color !== getComputedStyle(rows[1].querySelector('.question-words > span')).color, "the grey line is in the quiet colour");
+      requireRows();
+      require([...card.querySelectorAll('[data-choice-letter]')].map(node => node.textContent).join('') === "ABCDE" && card.querySelector('[data-owner-skip]').textContent.includes("略過"), "the skip row is lettered after the four options");
+      require(visible(card.querySelector('textarea')) && !visible(card.querySelector('[data-owner-answer="text"]')), "the own-answer row shows its field and no pill yet");
+    } else if (name === "question-card-skipped") {
+      requireCollapsed("已略過");
+      require(calls.length === 1 && calls[0].params.skip === true && !('answer' in calls[0].params), "a skip is sent as a skip, not as words or a cancel");
+    } else if (name.startsWith("question-card-multiple-") || name.startsWith("question-card-room-")) {
+      const state = name.split('-').pop();
+      if (state === "answered") {
+        requireCollapsed("星期一、星期三");
+        require(calls.length === 1 && JSON.stringify(calls[0].params.answer) === JSON.stringify(["星期一", "星期三"]), "the chosen labels are sent once, as a list");
+      } else {
+        require(asked() && card.dataset.ownerMultiple === "true", "a several-choice card waits");
+        require(card.querySelector('.card-body').textContent === "可複選", "the grey line says it takes several");
+        requireRows();
+        const submit = card.querySelector('[data-owner-answer="choices"]');
+        require(visible(submit) && getComputedStyle(submit).backgroundColor === 'rgb(255, 255, 255)', "the submit is the white primary");
+        const end = box.right - parseFloat(getComputedStyle(card).paddingRight) - parseFloat(getComputedStyle(card).borderRightWidth);
+        require(Math.abs(submit.getBoundingClientRect().right - end) <= 1, "the submit stands at the card's right");
+        require(!card.querySelector('[data-owner-answer="text"]') && calls.length === 0, "nothing is sent while rows are marked");
+        const chosen = [...card.querySelectorAll('[aria-checked="true"]')];
+        if (state === "chosen") {
+          require(chosen.length === 2 && !submit.disabled, "two rows are marked and the submit is enabled");
+          chosen.forEach(row => { const badge = row.querySelector('[data-choice-letter]'); require(visible(badge.querySelector('svg')) && !visible(badge.querySelector('span')), "a chosen row shows a check in its badge, not its letter"); });
+          require(getComputedStyle(chosen[0].querySelector('[data-choice-letter]')).backgroundColor !== getComputedStyle(rows[1].querySelector('[data-choice-letter]')).backgroundColor, "a chosen badge differs from an unchosen one");
+        } else require(chosen.length === 0 && submit.disabled, "no row is marked and the submit waits");
+      }
+      if (name.startsWith("question-card-room-")) require(card.closest('.au-room-pane'), "the same card stands in the room");
+      if (name === "question-card-room-asked") require(composer.placeholder === waitingWords, `the room's composer says ${waitingWords}: ${composer.placeholder}`);
+    } else if (name === "question-card-long-typed") {
+      const field = card.querySelector('textarea'), pill = card.querySelector('[data-owner-answer="text"]'), lh = parseFloat(getComputedStyle(field).lineHeight);
+      const fb = field.getBoundingClientRect(), pb = pill.getBoundingClientRect();
+      require(visible(pill) && !pill.disabled, "the pill appears once something is typed");
+      require(field.clientHeight >= lh * 2.5 && field.clientHeight <= lh * 3 + 12, `the field grew to three lines (${field.clientHeight} px for ${lh} px lines)`);
+      require(field.scrollHeight <= field.clientHeight + 2, "three lines show whole, with no inner scroll");
+      require(fb.right <= pb.left && Math.abs(pb.bottom - fb.bottom) <= 8, "the pill stands at the right of the field, at its foot");
+      const end = box.right - parseFloat(getComputedStyle(card).paddingRight) - parseFloat(getComputedStyle(card).borderRightWidth);
+      require(pb.right <= end + 0.5 && end - pb.right <= 10, "the pill ends at the row's right padding");
+      require(calls.length === 0, "typing sends nothing");
+    } else if (name === "question-card-long-answered" || name === "question-card-long-open") {
+      requireCollapsed();
+      const text = line.querySelector('.question-answer-text');
+      if (name === "question-card-long-answered") {
+        require(line.getAttribute('aria-expanded') === "false" && text.scrollWidth > text.clientWidth + 1 && getComputedStyle(text).textOverflow === "ellipsis" && getComputedStyle(text).whiteSpace === "nowrap", "a long answer is one line ending in an ellipsis");
+      } else {
+        require(line.getAttribute('aria-expanded') === "true" && text.scrollWidth <= text.clientWidth + 1 && text.getBoundingClientRect().height > parseFloat(getComputedStyle(text).lineHeight) * 1.5, "pressed, the whole words show");
+      }
+      require(calls.length === 1 && typeof calls[0].params.answer === "string" && calls[0].params.answer.length > 40, "the whole typed words were sent");
+    } else if (name === "question-card-composer-waiting") {
+      require(asked() && composer.placeholder === waitingWords, `the composer says ${waitingWords}: ${composer.placeholder}`);
+    } else if (name === "question-card-composer-after") {
+      require(card.dataset.cardState === "answered" && composer.placeholder && composer.placeholder !== waitingWords, `the composer returns to its usual words: ${composer.placeholder}`);
+    } else if (name === "question-card-closed") {
+      const sent = window.__look.calls.filter(call => call.command === "agent_ask_text");
+      require(card.dataset.cardState === "cancelled" && card.querySelector('.card-status')?.textContent.trim() === "未回答", "the card shows closed, not answered");
+      require(!card.querySelector('.question-answer-line,[data-owner-option],textarea') && calls.length === 0, "a closed card has no row, no controls and was never answered");
+      require(sent.length === 1 && sent[0].text === "先看看今天的行事曆", "the words went as an ordinary message");
+      require(document.querySelector('.page-agent .thread').textContent.includes("好，先不處理這個問題。"), "the member answered the message");
+      require(composer.placeholder && composer.placeholder !== waitingWords, "the composer returned to its usual words");
+    }
+    return { check: name, state: card.dataset.cardState };
   }
   if (name.startsWith("owner-question-")) {
     const card = document.querySelector('[data-owner-question="owner-choice"]');
@@ -1914,22 +2021,24 @@ export function checkRendered(name, context = {}) {
     const waiting = ["owner-question-asked", "owner-question-typed", "owner-question-background", "owner-question-room"].includes(name);
     require(card.dataset.cardState === (waiting ? "asked" : name === "owner-question-cancelled" ? "cancelled" : "answered"), "the persisted state is shown");
     if (name === "owner-question-cancelled") require(card.querySelector('.card-status.is-ready') && !card.querySelector('[data-card-disclosure]'), 'a cancelled question has a neutral decision and no redundant disclosure');
+    if (!waiting && name !== "owner-question-cancelled") require(card.querySelector('.question-answer-line') && !card.querySelector('.card-status'), 'an answered question is its title and one row, with no pill');
     const asked = card.querySelector(".card-title");
     require(getComputedStyle(asked).whiteSpace !== "nowrap" && asked.scrollWidth <= asked.clientWidth + 1, "the whole question shows, wrapped, never cut to one line");
     require(card.querySelectorAll("[data-owner-option]").length === (waiting ? 4 : 0), "choices are real buttons only while waiting");
     require(!card.querySelector("select"), "a short list needs no dropdown");
     const box = card.getBoundingClientRect(), column = card.parentElement.getBoundingClientRect();
     require(box.left >= column.left - 1 && box.right <= column.right + 1, "the question fits its reply column");
-    for (const control of card.querySelectorAll("button,input")) {
+    for (const control of [...card.querySelectorAll("button,input,textarea")].filter(visible)) {
       const bounds = control.getBoundingClientRect();
       require(bounds.left >= box.left && bounds.right <= box.right + 1 && bounds.bottom <= box.bottom + 1, "every answer control fits the card");
     }
     const field = card.querySelector("[data-owner-answer-input]");
     if (field) {
-      require(field.classList.contains("mb-fin") && field.tagName === "INPUT", "the answer uses the shared form field");
+      require(field.classList.contains("mb-fin") && field.tagName === "TEXTAREA" && field.rows === 1, "the answer uses the shared form field, one line to start with");
       require(field.scrollHeight <= field.clientHeight + 2, "the answer field has no inner scroll");
       const submit = card.querySelector('[data-owner-answer="text"]');
-      require(visible(submit), 'the answer primary stays visible while empty or typed');
+      // The pill appears at the right of the own-answer row once something is typed (Grok Bot's card, 2026-11-11).
+      require(visible(submit) === !!field.value.trim(), 'the answer primary shows once something is typed, and not before');
       require(submit.disabled === !field.value.trim(), 'only a nonempty answer enables submit');
       if (name === "owner-question-typed") {
         require(field.value === "請先確認下週的範例排程。" && !submit.disabled, 'typed text remains in the card before sending');
