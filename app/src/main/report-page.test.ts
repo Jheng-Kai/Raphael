@@ -7,6 +7,7 @@ import { mountPages, pageCardsHTML } from "./page-card";
 import { mountPageView } from "./page-view";
 import { FILE_POLICY, fileStyle, layoutTeam, mountReportView, reportFile, reportHTML, themeWords, type TeamLayout } from "./report-page";
 import type { AgentTurn, PageCard, Report, ReportEdge, ReportNode } from "./types";
+import { ico } from "./ui";
 
 const people = { nameOf: (id: number) => ({ 0: "拉斐爾", 1: "小晴", 2: "小森" } as Record<number, string>)[id] ?? "", colorOf: (id: number) => `var(--m${id})` };
 const report: Report = {
@@ -335,7 +336,11 @@ test("share saves the report on screen as a file, once a press, says where it we
   const view = stage.querySelector<HTMLElement>(".rp-view")!;
   // Share alone at the top right (the way back is the header's arrow); its name is its only word, so its tooltip repeats nothing on screen.
   const buttons = [...view.querySelectorAll<HTMLButtonElement>(".rp-top > button.btn.icon")];
-  expect(buttons.map(button => [button.dataset.reportAct, button.getAttribute("aria-label"), button.textContent])).toEqual([["share", "分享", ""]]);
+  expect(buttons.map(button => [button.dataset.reportAct, button.getAttribute("aria-label"), button.textContent])).toEqual([["share", "存成檔案", ""]]);
+  // It saves a file, so it is drawn as that (an arrow into a tray), never as the header's Share of the member (owner, 2026-11-11).
+  const drawn = (html: string): string[] => [...html.matchAll(/ d="([^"]+)"/g)].map(found => found[1]!);
+  expect(drawn(buttons[0]!.innerHTML)).toEqual(drawn(ico("download")));
+  expect(drawn(ico("download"))).not.toEqual(drawn(ico("share")));
   buttons[0]!.click();
   buttons[0]!.click();
   await flush();

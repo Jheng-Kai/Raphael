@@ -290,7 +290,7 @@ export const ru = {
   "page.report.all": "Все",
   "page.report.status": "Статус",
   "page.report.gone": "Бывший участник",
-  "page.report.share": "Поделиться",
+  "page.report.share": "Сохранить как файл",
   "page.report.saved": "Сохранено в папке «{p0}»",
   "page.report.downloads": "Загрузки",
   "page.report.saveFailed": "Не удалось сохранить файл. Попробуйте ещё раз.",

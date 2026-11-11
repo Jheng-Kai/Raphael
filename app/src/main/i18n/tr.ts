@@ -290,7 +290,7 @@ export const tr = {
   "page.report.all": "Tümü",
   "page.report.status": "Durum",
   "page.report.gone": "Eski üye",
-  "page.report.share": "Paylaş",
+  "page.report.share": "Dosya olarak kaydet",
   "page.report.saved": "{p0} klasörüne kaydedildi",
   "page.report.downloads": "İndirilenler",
   "page.report.saveFailed": "Dosya kaydedilemedi. Tekrar deneyin.",

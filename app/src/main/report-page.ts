@@ -621,9 +621,10 @@ export function mountReportView(pages: PageView, people: () => ReportPeople): Re
     if (mine !== generation || opened?.kind !== "report") return;
     const host = element(), place = keep ? scroller()?.scrollTop ?? 0 : 0;
     current = { id, rev: opened.rev, title: opened.title, report: opened.report };
-    // Only Share is the report's own: the way back is the conversation header's.
+    // Only saving it as a file is the report's own: the way back is the conversation header's. Its icon is the arrow into a
+    // tray, never the header's arrow out of a box, which shares the member (owner, 2026-11-11: the two must not look alike).
     host.innerHTML = `<div class="rp-scroll" tabindex="-1"><article class="rp-doc">${reportHTML(opened.title, opened.report, people())}</article></div>` +
-      `<div class="rp-top">${iconButton("share", t("page.report.share"), ' data-report-act="share"', "rp-share")}</div>`;
+      `<div class="rp-top">${iconButton("download", t("page.report.share"), ' data-report-act="share"', "rp-share")}</div>`;
     if (!host.isConnected) pages.body.replaceChildren(host);
     pages.open({ id, title: opened.title, kind: "report", opener, leave });
     layout(true);

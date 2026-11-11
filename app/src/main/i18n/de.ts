@@ -290,7 +290,7 @@ export const de = {
   "page.report.all": "Alle",
   "page.report.status": "Status",
   "page.report.gone": "Ehemaliges Mitglied",
-  "page.report.share": "Teilen",
+  "page.report.share": "Als Datei speichern",
   "page.report.saved": "In „{p0}“ gespeichert",
   "page.report.downloads": "Downloads",
   "page.report.saveFailed": "Die Datei konnte nicht gespeichert werden. Bitte erneut versuchen.",

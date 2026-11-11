@@ -290,7 +290,7 @@ export const th = {
   "page.report.all": "ทั้งหมด",
   "page.report.status": "สถานะ",
   "page.report.gone": "อดีตสมาชิก",
-  "page.report.share": "แชร์",
+  "page.report.share": "บันทึกเป็นไฟล์",
   "page.report.saved": "บันทึกไว้ใน {p0} แล้ว",
   "page.report.downloads": "ดาวน์โหลด",
   "page.report.saveFailed": "บันทึกไฟล์ไม่ได้ ลองอีกครั้ง",

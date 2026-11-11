@@ -290,7 +290,7 @@ export const zhCN = {
   "page.report.all": "全部",
   "page.report.status": "状态",
   "page.report.gone": "已不在团队的成员",
-  "page.report.share": "分享",
+  "page.report.share": "存成文件",
   "page.report.saved": "已存到「{p0}」",
   "page.report.downloads": "下载",
   "page.report.saveFailed": "文件没有保存成功，请再试一次。",

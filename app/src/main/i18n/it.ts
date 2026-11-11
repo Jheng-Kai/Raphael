@@ -290,7 +290,7 @@ export const it = {
   "page.report.all": "Tutto",
   "page.report.status": "Stato",
   "page.report.gone": "Ex membro",
-  "page.report.share": "Condividi",
+  "page.report.share": "Salva come file",
   "page.report.saved": "Salvato in {p0}",
   "page.report.downloads": "Download",
   "page.report.saveFailed": "Impossibile salvare il file. Riprova.",

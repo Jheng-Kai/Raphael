@@ -1464,7 +1464,7 @@ export const en = {
   "page.report.all": "All",
   "page.report.status": "Status",
   "page.report.gone": "Former member",
-  "page.report.share": "Share",
+  "page.report.share": "Save as file",
   "page.report.saved": "Saved to {p0}",
   "page.report.downloads": "Downloads",
   "page.report.saveFailed": "The file couldn't be saved. Try again.",

@@ -290,7 +290,7 @@ export const vi = {
   "page.report.all": "Tất cả",
   "page.report.status": "Trạng thái",
   "page.report.gone": "Thành viên cũ",
-  "page.report.share": "Chia sẻ",
+  "page.report.share": "Lưu thành tệp",
   "page.report.saved": "Đã lưu vào {p0}",
   "page.report.downloads": "Tải xuống",
   "page.report.saveFailed": "Không lưu được tệp. Hãy thử lại.",

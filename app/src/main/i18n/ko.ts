@@ -290,7 +290,7 @@ export const ko = {
   "page.report.all": "전체",
   "page.report.status": "상태",
   "page.report.gone": "이전 멤버",
-  "page.report.share": "공유",
+  "page.report.share": "파일로 저장",
   "page.report.saved": "“{p0}”에 저장했습니다",
   "page.report.downloads": "다운로드",
   "page.report.saveFailed": "파일을 저장하지 못했습니다. 다시 시도해 주세요.",

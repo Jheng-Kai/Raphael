@@ -1464,7 +1464,7 @@ export const ja = {
   "page.report.all": "すべて",
   "page.report.status": "状態",
   "page.report.gone": "元メンバー",
-  "page.report.share": "共有",
+  "page.report.share": "ファイルに保存",
   "page.report.saved": "「{p0}」に保存しました",
   "page.report.downloads": "ダウンロード",
   "page.report.saveFailed": "ファイルを保存できませんでした。もう一度お試しください。",

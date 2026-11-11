@@ -290,7 +290,7 @@ export const ptBR = {
   "page.report.all": "Tudo",
   "page.report.status": "Status",
   "page.report.gone": "Ex-membro",
-  "page.report.share": "Compartilhar",
+  "page.report.share": "Salvar como arquivo",
   "page.report.saved": "Salvo em {p0}",
   "page.report.downloads": "Downloads",
   "page.report.saveFailed": "Não foi possível salvar o arquivo. Tente novamente.",

@@ -1463,7 +1463,7 @@ export const zhTW = {
   "page.report.all": "全部",
   "page.report.status": "狀態",
   "page.report.gone": "已不在團隊的成員",
-  "page.report.share": "分享",
+  "page.report.share": "存成檔案",
   "page.report.saved": "已存到「{p0}」",
   "page.report.downloads": "下載",
   "page.report.saveFailed": "檔案沒有存成，請再試一次。",

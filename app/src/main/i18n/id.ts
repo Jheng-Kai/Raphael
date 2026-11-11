@@ -290,7 +290,7 @@ export const id = {
   "page.report.all": "Semua",
   "page.report.status": "Status",
   "page.report.gone": "Mantan anggota",
-  "page.report.share": "Bagikan",
+  "page.report.share": "Simpan sebagai file",
   "page.report.saved": "Disimpan di {p0}",
   "page.report.downloads": "Unduhan",
   "page.report.saveFailed": "File tidak dapat disimpan. Coba lagi.",
