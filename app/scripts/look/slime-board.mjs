@@ -1,6 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { writeFile } from "node:fs/promises";
-import { transpileModule } from "typescript";
+// TypeScript 7 (the build) ships no compiler API; transpiling uses the 6.x compatibility package it recommends for tools.
+import { transpileModule } from "typescript-6";
 
 /** The actually painted cel, rather than its hidden vector fallback or another cell in the sheet. */
 export function paintedSlime(svg) {
