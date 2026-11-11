@@ -42,7 +42,7 @@ describe("the page's responsive sizes", () => {
   test("the columns and controls retain their responsive geometry", () => {
     const wanted: Record<string, [number, number]> = {
       "pa-tool": [30, 48], "pa-pill-h": [32, 52], "pa-pill-av": [22, 36],
-      "pa-cmp-btn": [36, 44], "pa-cmp-fs": [15.5, 17],
+      "pa-cmp-fs": [15.5, 17],
       "pa-det-av": [64, 96],
     };
     for (const [name, [small, big]] of Object.entries(wanted)) expect(ends(name), name).toEqual([small, big]);
@@ -96,6 +96,28 @@ describe("the page's responsive sizes", () => {
       expect(rule![2], selector).not.toMatch(/(^|[\s;])(background|border|box-shadow|outline|filter)[\w-]*\s*:/);
     }
   });
+});
+
+test("the composer is one 44 px pill at every window size, on one grid that ends at the row's bottom, 16 px above the window (owner, 2026-11-12: Grok Bot's one-row composer)", () => {
+  const css = strip(read("agent.css"));
+  expect(block![2]).toContain("--pa-cmp-h: 44px;");
+  expect(block![2]).toContain("--pa-cmp-ctl: 32px;");
+  expect(block![2]).toContain("--pa-dock-bottom: var(--sp-4);");
+  // Fixed numbers, not fluid ones: no size of the composer follows the window.
+  expect(block![2]).not.toMatch(/--pa-cmp-(btn|r|p|py):/);
+  // The corners are half the one row's height, and stay that when the draft grows.
+  expect(css).toMatch(/\.composer \{[^}]*border-radius: calc\(var\(--pa-cmp-h\) \/ 2\)/);
+  // One grid for the +, the words and the other controls, whose items end at its bottom: never one layout for one row and another for two.
+  expect(css).toMatch(/\.cmp-row \{[^}]*grid-template-columns: auto minmax\(200px, 1fr\) auto; align-items: end;/);
+  expect(css).not.toMatch(/\.cmp-row \{[^}]*(flex-wrap|display: flex)/);
+  // A narrow composer changes its own row by a query of its own, never by a second row.
+  expect(css).toMatch(/\.composer \{[^}]*container: cmp \/ inline-size/);
+  expect(css).toMatch(/@container cmp \(max-width: 452px\) \{[^@]*\.cb-depth \{ display: none; \}/);
+  expect(css).toMatch(/@container cmp \(max-width: 372px\) \{[^@]*\.cmp-row \{ grid-template-columns: auto minmax\(120px, 1fr\) auto; \}/);
+  // The words' line is the controls' height, so a one-line draft is the controls' row and the last line of a longer one is level with them.
+  expect(css).toMatch(/\.cmp-input \{[^}]*min-height: var\(--pa-cmp-ctl\)[^}]*padding: var\(--cmp-py\) 4px/);
+  // Nothing but the dock's own padding stands under it, at every window height.
+  expect(css).not.toMatch(/\.ra-dock \{[^}]*padding-bottom/);
 });
 
 test("the composer field sizes itself to its text, so a keystroke never lays out the thread from script", () => {
