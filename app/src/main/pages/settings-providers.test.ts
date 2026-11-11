@@ -40,6 +40,10 @@ let page: ReturnType<typeof createSettings>;
 const closeSettings = vi.fn();
 const go = vi.fn();
 async function mount(open: SettingsPane = "models") {
+  create();
+  await page.show(open); await flush();
+}
+function create() {
   page = createSettings({
     device: () => ({ dictation_keys: ["AltRight"], agent_keys: ["AltRight+Space"], ui_language: "en", dictation_mode: "hold" }),
     onEvent: (handler: (event: MainEvent) => void) => { listeners.add(handler); return () => { listeners.delete(handler); }; },
@@ -47,7 +51,6 @@ async function mount(open: SettingsPane = "models") {
     go, closeSettings, cleared: new Cleared(),
   } as unknown as AppContext);
   document.body.append(page.el); page.el.hidden = false;
-  await page.show(open); await flush();
 }
 const click = (selector: string) => { const button = document.querySelector<HTMLButtonElement>(selector); expect(button, selector).not.toBeNull(); button!.click(); };
 
@@ -241,7 +244,9 @@ test("Models contains no spending and Usage mounts its allowances once, plainly,
   expect(page.el.querySelector("#set-title")?.textContent).toBe("Models & usage");
   expect(page.el.querySelector('[data-row="openrouter-usage"]')).toBeNull();
   expect(page.el.querySelector('[data-row="raphael-spend"]')).toBeNull();
-  expect(api.usageAllowances).not.toHaveBeenCalled();
+  // Opening Settings read the allowances already, on the tab that was not the usage.
+  expect(mountAnalytics).toHaveBeenCalledTimes(1);
+  expect(api.usageAllowances).toHaveBeenCalledTimes(1);
   click('[data-models-tab="usage"]'); await flush();
   expect(mountAnalytics).toHaveBeenCalledTimes(1);
   expect(api.usageAllowances).toHaveBeenCalledTimes(1);
@@ -253,9 +258,10 @@ test("Models contains no spending and Usage mounts its allowances once, plainly,
   const node = page.el.querySelector(".usage-analytics")!;
   // This month's spending leads in a card, then the allowances, and nothing else is on the page.
   expect(spend.compareDocumentPosition(node) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-  // One refresh for the whole tab, at its top right: the allowances have none of their own.
+  // No refresh button anywhere on the tab, and nothing beside its name: opening Settings reads it all.
   expect(node.querySelector("button.icon")).toBeNull();
-  expect(page.el.querySelectorAll('.set-head [data-act="models-refresh"]')).toHaveLength(1);
+  expect(page.el.querySelector('[data-act="models-refresh"], .set-head, .models-refresh')).toBeNull();
+  expect(page.el.querySelector(".set-content > h1")?.nextElementSibling?.classList.contains("models-page")).toBe(true);
   expect(page.el.querySelector(".ua-chart, .run-tiles, .run-bill, [data-range], .foot")).toBeNull();
   setLocale("ja"); await flush();
   expect(page.el.querySelector(".usage-analytics")).toBe(node);
@@ -266,7 +272,7 @@ test("Models contains no spending and Usage mounts its allowances once, plainly,
   expect(mountAnalytics).toHaveBeenCalledTimes(1);
 });
 
-test("the allowances are read once and kept across tabs and Settings closing, refresh on completed activity while visible, and read again by the refresh", async () => {
+test("the allowances are kept across tabs and Settings closing, refresh on completed activity while visible, and are read again by the next opening", async () => {
   const mountAnalytics = vi.spyOn(analytics, "mountUsageAnalytics");
   await mount(); click('[data-models-tab="usage"]'); await flush();
   const first = mountAnalytics.mock.results[0].value;
@@ -278,36 +284,107 @@ test("the allowances are read once and kept across tabs and Settings closing, re
   click('[data-models-tab="models"]');
   send({ type: "AgentTurn", turn_id: 43 }); await flush();
   expect(api.usageAllowances).toHaveBeenCalledTimes(calls + 2);
-  // Leaving the tab or closing Settings keeps what was read: coming back reads nothing again.
+  // Leaving the tab or closing Settings keeps what was read: coming back soon shows it, and reads nothing again.
   click('[data-pane="general"]'); click('[data-pane="models"]'); click('[data-models-tab="usage"]'); await flush();
   page.hide(); await page.show("models"); click('[data-models-tab="usage"]'); await flush();
   expect(destroyed).not.toHaveBeenCalled();
   expect(mountAnalytics).toHaveBeenCalledTimes(1);
   expect(api.usageAllowances).toHaveBeenCalledTimes(calls + 2);
-  const providerReads = api.providersList.mock.calls.length;
-  // The refresh turns while it reads, keeps its place and focus, then is a check for a moment.
-  let finish!: (value: unknown) => void;
-  const settled = api.usageAllowances.getMockImplementation();
-  api.usageAllowances.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
-  const refresh = page.el.querySelector<HTMLButtonElement>('[data-act="models-refresh"]')!;
-  refresh.focus();
-  click('[data-act="models-refresh"]'); await flush();
-  expect(refresh.dataset.state).toBe("busy");
-  expect(refresh.getAttribute("aria-busy")).toBe("true");
-  expect(refresh.getAttribute("aria-label")).toBe(t("conn.refreshing"));
-  click('[data-act="models-refresh"]'); await flush();
-  expect(api.usageAllowances).toHaveBeenCalledTimes(calls + 3);
-  finish(settled ? await settled() : { brains: [] }); await flush();
-  expect(page.el.querySelector('[data-act="models-refresh"]')).toBe(refresh);
-  expect(document.activeElement).toBe(refresh);
-  expect(refresh.dataset.state).toBe("done");
-  expect(refresh.getAttribute("aria-label")).toBe(t("runs.refreshed"));
-  expect(refresh.querySelector("svg.i")).not.toBeNull();
-  expect(api.providersList.mock.calls.length).toBe(providerReads + 1);
   await page.show("general"); click('[data-pane="models"]'); await flush();
   expect(page.el.querySelector('[data-models-tab="usage"][aria-selected="true"]')).not.toBeNull();
   await page.show("models");
   expect(page.el.querySelector('[data-models-tab="models"][aria-selected="true"]')).not.toBeNull();
+});
+
+const cardsOf = (): string[] => [...document.querySelectorAll(".usage-analytics .run-subscription")].map(card => card.textContent ?? "");
+
+test("every opening of Settings reads the allowances again at once, on any tab, and none of it is seen", async () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  try {
+    const mountAnalytics = vi.spyOn(analytics, "mountUsageAnalytics");
+    const windowsOf = (left: number) => ({ brains: [{ id: "codex", name: "Codex", source: "live", windows: [{ period: "weekly", remaining_percent: left, resets_at: 1792900000 }] }] });
+    api.usageAllowances.mockResolvedValue(windowsOf(89));
+    // Opened on 一般: the reading starts with the opening, before the tab with the allowances is ever reached.
+    await mount("general");
+    expect(page.pane()).toBe("general");
+    expect(mountAnalytics).toHaveBeenCalledTimes(1);
+    expect(api.usageAllowances).toHaveBeenCalledTimes(1);
+    expect(page.el.querySelector('[data-act="models-refresh"]')).toBeNull();
+    click('[data-pane="models"]'); click('[data-models-tab="usage"]');
+    // The numbers are on the page the moment the tab is: nothing is waited for.
+    expect(cardsOf()).toHaveLength(1);
+    expect(cardsOf()[0]).toContain("89%");
+    expect(document.querySelector(".usage-analytics")!.getAttribute("aria-busy")).toBe("false");
+    expect(api.usageAllowances).toHaveBeenCalledTimes(1);
+
+    // Opened again soon after a good reading: that reading is the answer, and the core is not asked.
+    page.hide(); await page.show("safety"); await flush();
+    expect(api.usageAllowances).toHaveBeenCalledTimes(1);
+
+    // Later, on another tab, a new value replaces the old one in place: the same card, no busy state at any moment.
+    vi.setSystemTime(Date.now() + 31_000);
+    api.usageAllowances.mockResolvedValue(windowsOf(72));
+    page.hide(); await page.show("models"); click('[data-models-tab="usage"]');
+    const card = document.querySelector(".usage-analytics .run-subscription");
+    const busy: string[] = [];
+    const watch = new MutationObserver(() => busy.push(document.querySelector(".usage-analytics")!.getAttribute("aria-busy") ?? ""));
+    watch.observe(document.querySelector(".usage-analytics")!, { attributes: true, attributeFilter: ["aria-busy"], subtree: true });
+    await flush();
+    watch.disconnect();
+    expect(api.usageAllowances).toHaveBeenCalledTimes(2);
+    expect(busy).not.toContain("true");
+    expect(cardsOf()[0]).toContain("72%");
+    expect(document.querySelector(".usage-analytics .run-subscription")).toBe(card);
+    expect(document.querySelector(".toast, [role=status]")).toBeNull();
+    expect(mountAnalytics).toHaveBeenCalledTimes(1);
+  } finally { vi.useRealTimers(); }
+});
+
+test("a reading at an opening that finds the same numbers touches nothing, and one that fails keeps what is shown without a word", async () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  try {
+    await mount("models"); click('[data-models-tab="usage"]'); await flush();
+    const root = document.querySelector(".usage-analytics")!;
+    const before = root.innerHTML, card = root.querySelector(".run-subscription");
+    const touched: MutationRecord[] = [];
+    const watch = new MutationObserver(records => touched.push(...records));
+    watch.observe(root, { attributes: true, childList: true, characterData: true, subtree: true });
+    vi.setSystemTime(Date.now() + 31_000);
+    page.hide(); await page.show("models"); click('[data-models-tab="usage"]'); await flush();
+    expect(api.usageAllowances).toHaveBeenCalledTimes(2);
+    expect(touched).toEqual([]);
+    expect(root.innerHTML).toBe(before);
+    expect(root.querySelector(".run-subscription")).toBe(card);
+    // The core does not answer at the next opening: the page still shows what it last knew, and says nothing about it.
+    vi.setSystemTime(Date.now() + 31_000);
+    api.usageAllowances.mockRejectedValue(new Error("offline"));
+    page.hide(); await page.show("models"); click('[data-models-tab="usage"]'); await flush();
+    expect(api.usageAllowances).toHaveBeenCalledTimes(3);
+    watch.disconnect();
+    expect(touched).toEqual([]);
+    expect(document.querySelector(".usage-analytics")!.innerHTML).toBe(before);
+    expect(document.querySelector(".toast, [role=status]")).toBeNull();
+    // A failed reading is tried again at the very next opening, not kept for the reuse window.
+    api.usageAllowances.mockResolvedValue({ brains: [] });
+    page.hide(); await page.show("models"); await flush();
+    expect(api.usageAllowances).toHaveBeenCalledTimes(4);
+  } finally { vi.useRealTimers(); }
+});
+
+test("an opening while a reading is under way joins it instead of asking again", async () => {
+  let finish!: (value: unknown) => void;
+  const result = await api.usageAllowances();
+  api.usageAllowances.mockClear();
+  api.usageAllowances.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
+  await mount("general");
+  expect(api.usageAllowances).toHaveBeenCalledTimes(1);
+  page.hide(); await page.show("general"); page.hide(); await page.show("tools"); await flush();
+  expect(api.usageAllowances).toHaveBeenCalledTimes(1);
+  expect(api.modelsCatalog.mock.calls.length).toBe(1);
+  finish(result); await flush();
+  click('[data-pane="models"]'); click('[data-models-tab="usage"]'); await flush();
+  expect(cardsOf()).toHaveLength(1);
+  expect(api.usageAllowances).toHaveBeenCalledTimes(1);
 });
 
 test("the shared tabs support arrow keys, and Settings has no search", async () => {
@@ -321,11 +398,11 @@ test("the shared tabs support arrow keys, and Settings has no search", async () 
   expect(page.el.querySelector("#set-search")).toBeNull();
 });
 
-test("show awaits the initial allowance reading, and leaving during it keeps the reading off the page", async () => {
+test("opening on the allowances waits for their first reading, other tabs never do, and leaving during it keeps the reading off the page", async () => {
   const result = await api.usageAllowances();
-  await mount();
   let finish!: (value: unknown) => void;
   api.usageAllowances.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
+  create();
   let ready = false;
   const showing = Promise.resolve(page.show("usage")).then(() => { ready = true; });
   await flush();
@@ -337,6 +414,20 @@ test("show awaits the initial allowance reading, and leaving during it keeps the
   const requests = api.usageAllowances.mock.calls.length;
   send({ type: "AgentTurn", turn_id: 44 }); await flush();
   expect(api.usageAllowances).toHaveBeenCalledTimes(requests);
+  // Opened on another tab while the first reading is still out: the opening is not held up by it.
+  page.hide();
+  let pending!: (value: unknown) => void;
+  vi.useFakeTimers({ toFake: ["Date"] });
+  try {
+    vi.setSystemTime(Date.now() + 60_000);
+    api.usageAllowances.mockImplementationOnce(() => new Promise((resolve) => { pending = resolve; }));
+    let opened = false;
+    void Promise.resolve(page.show("general")).then(() => { opened = true; });
+    await flush();
+    expect(api.usageAllowances).toHaveBeenCalledTimes(requests + 1);
+    expect(opened).toBe(true);
+    pending(result); await flush();
+  } finally { vi.useRealTimers(); }
 });
 
 test("activity during the initial reading is coalesced into one refresh", async () => {

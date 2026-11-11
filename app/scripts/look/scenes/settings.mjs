@@ -166,6 +166,12 @@ export default [
   scene("usage", "Usage: this month's spending with a coloured bar, what each subscription has left, then the key", [...usage, wait(".run-subscription"), check("usage-plain")]),
   scene("usage-allowances-chatgpt", "ChatGPT sits with the other subscriptions, with the button to its own usage page", [...usage, wait('[data-allowance="chatgpt"]'), scroll('[data-allowance="chatgpt"]'), check("usage-plain")], { chatgptSignedIn: true }),
   scene("usage-empty", "With no subscription signed in, the rows of what was spent stand alone", [...usage, check("usage-plain")], { usageEmpty: true }),
+  scene("usage-opens-quietly", "Settings reads the allowances each time it opens, on any tab: no refresh button, the numbers already there, the same numbers touch nothing, a new number replaces the old in place", [
+    ...settings("general"), check("usage-open-general"),
+    click('.modal-scrim [data-pane="models"]'), click('[data-models-tab="usage"]'), wait(".run-subscription"), check("usage-plain"), check("usage-open-arm"),
+    click(".modal-x"), { action: "advance-time", ms: 31000 }, ...settings("models"), click('[data-models-tab="usage"]'), wait(".run-subscription"), check("usage-open-same"),
+    check("usage-open-lower"), click(".modal-x"), { action: "advance-time", ms: 31000 }, ...settings("models"), click('[data-models-tab="usage"]'), wait(".run-subscription"), check("usage-open-changed"), check("usage-plain"),
+  ]),
   ...["overview", "history", "dictionary"].map(tab => scene(`dictation-${tab}`, `Dictation ${tab}`, [...dictation(tab), ...(tab === "history" ? [wait(".hrow"), check("history-sent-to")] : []), ...(tab === "dictionary" ? [wait(".wrow"), click('[data-act="word-menu"]'), wait('#app-popover [data-pick="delete"]'), key("Escape")] : [])], tab === "dictionary" ? {
     dictionary: ["Raphael", "Methelia", "GitHub", "Composio", "OpenRouter", "Notion", "Slack", "Telegram", "Calendar", "Claude", "Codex", "Gemini"].map((word, index) => ({ id: index + 1, word, misheard: index === 0 ? ["Rafael"] : [], source: index % 2 ? "learned" : "manual", created_at_ms: 1792720800000 })),
   } : {})),

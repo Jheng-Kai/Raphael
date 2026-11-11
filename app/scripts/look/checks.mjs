@@ -6279,10 +6279,13 @@ export function checkRendered(name, context = {}) {
       const [r, g, b] = getComputedStyle(bar).backgroundColor.match(/[\d.]+/g).map(Number);
       require(Math.max(r, g, b) - Math.min(r, g, b) > 60, `the bar is a member's colour, not black or white: rgb(${r}, ${g}, ${b})`);
     }
-    // One refresh for the whole tab, at its top right, an icon with no words.
-    const refreshes = [...document.querySelectorAll('.set-content button')].filter(button => visible(button) && button.querySelector('svg.i') && /refresh|models-refresh/.test(button.dataset.act ?? button.dataset.runAct ?? ""));
-    require(refreshes.length === 1 && refreshes[0].closest('.set-head') && refreshes[0].classList.contains('icon') && !refreshes[0].textContent.trim(), `one refresh icon, beside the tab's name (${refreshes.length})`);
-    require(refreshes[0].dataset.state === "idle" && refreshes[0].getAttribute("aria-busy") === "false", "the refresh says it is idle when nothing is being read");
+    // No refresh anywhere: opening Settings reads the allowances (`usage-open-*`), so nothing stands beside the tab's name.
+    const heading = document.querySelector('.set-content > #set-title'), page = heading?.parentElement, first = page?.querySelector('.models-page');
+    require(heading && first, "the tab's name stands alone above its views");
+    const beside = [...page.children].slice(0, [...page.children].indexOf(first)).filter(child => child !== heading);
+    require(!document.querySelector('[data-act="models-refresh"], .models-refresh, .set-head') && beside.every(child => !child.matches('button') && !child.querySelector('button')), "no refresh button or icon beside the tab's name");
+    const refreshes = [...page.querySelectorAll('button')].filter(button => visible(button) && /refresh|reload|重新整理|重新讀取|更新/i.test(`${button.getAttribute('aria-label') ?? ''} ${button.textContent} ${button.dataset.act ?? ''} ${button.dataset.runAct ?? ''}`));
+    require(refreshes.length === 0, `no button on the tab refreshes anything (${refreshes.map(button => button.getAttribute('aria-label') || button.textContent.trim()).join(', ')})`);
     const cards = [...panel.querySelectorAll('.run-subscription')].filter(visible), allowance = panel.querySelector('.run-allowance');
     const subscriptions = window.__look.data.allowances.brains.length;
     if (subscriptions) {
@@ -6293,6 +6296,62 @@ export function checkRendered(name, context = {}) {
       }
     } else require(!visible(allowance), "with no subscription the allowance section stands aside");
     return { check: name, cards: cards.length };
+  }
+  if (name.startsWith("usage-open-")) {
+    // Settings reads the allowances each time it opens, on whatever tab and unseen: asked for once at the opening, the
+    // numbers already on their tab, a reading that finds the same numbers touches nothing, a new number replaces the old
+    // in the same card, and no busy state or message is ever drawn.
+    const stage = name.slice("usage-open-".length), asked = () => window.__look.calls.filter(call => call.method === "usage.allowances").length;
+    const root = () => document.querySelector('.usage-analytics'), keep = () => (window.__lookUsage ??= { touched: 0, busy: false });
+    const count = (state, records) => {
+      for (const record of records) {
+        state.touched++;
+        if (record.type === 'attributes' && record.attributeName === 'aria-busy' && (record.oldValue === 'true' || record.target.getAttribute('aria-busy') === 'true')) state.busy = true;
+      }
+    };
+    const watched = () => { const state = keep(); count(state, state.observer?.takeRecords() ?? []); return state; };
+    if (stage === "general") {
+      require(visible(document.querySelector('.modal-scrim [data-pane="general"][aria-current="page"]')) && !document.querySelector('[data-models-tab]'), "Settings is open on 一般, not on the allowances' tab");
+      require(asked() === 1, `the allowances were asked for once, at the opening (${asked()})`);
+      require(!document.querySelector('[data-act="models-refresh"]'), "no refresh button exists");
+      return { check: name, asked: asked() };
+    }
+    if (stage === "arm") {
+      require(asked() === 1, `reaching the tab asks for nothing more (${asked()})`);
+      const area = root(), card = area?.querySelector('.run-subscription');
+      require(visible(area) && card && area.getAttribute('aria-busy') === 'false', "the numbers are on the tab as it opens, none being waited for");
+      const state = keep();
+      state.card = card; state.html = area.innerHTML; state.touched = 0; state.busy = false; state.text = card.textContent;
+      state.observer?.disconnect();
+      state.observer = new MutationObserver(records => count(state, records));
+      state.observer.observe(area, { attributes: true, attributeOldValue: true, childList: true, characterData: true, subtree: true });
+      return { check: name, asked: asked() };
+    }
+    if (stage === "lower") {
+      // The next reading finds another number: the first window of the first subscription has less left.
+      const window0 = window.__look.data.allowances.brains[0].windows[0];
+      window0.remaining_percent = Math.max(0, window0.remaining_percent - 10);
+      return { check: name, remaining: window0.remaining_percent };
+    }
+    if (stage !== "same" && stage !== "changed") throw new Error(`${name}: unknown stage`);
+    return (async () => {
+      // The reading has answered (the mock stamps the end of each call), and the page has had a moment to draw it.
+      const answered = () => window.__look.calls.filter(call => call.method === "usage.allowances").every(call => call.t1 !== undefined);
+      for (let waited = 0; waited < 3000 && !(answered() && asked() >= (stage === "same" ? 2 : 3)); waited += 25) await new Promise(resolve => setTimeout(resolve, 25));
+      await new Promise(resolve => setTimeout(resolve, 150));
+      const state = watched(), area = root();
+      require(visible(area) && state.card && area.contains(state.card), "the card the numbers were shown in is still on the page");
+      if (stage === "same") {
+        require(asked() === 2, `the next opening asked again (${asked()})`);
+        require(state.touched === 0 && area.innerHTML === state.html, `a reading that found the same numbers touched nothing (${state.touched} changes)`);
+      } else {
+        require(asked() === 3, `the opening after asked again (${asked()})`);
+        require(state.card.textContent !== state.text && /\d+%/.test(state.card.textContent) && state.touched > 0, "the new number replaced the old in the same card");
+        require(!state.busy && area.getAttribute('aria-busy') === 'false', "no busy state was drawn while it read");
+      }
+      require(!document.querySelector('.toast'), "nothing was said about the reading");
+      return { check: name, asked: asked(), touched: state.touched };
+    })();
   }
   if (name === "overlay-percentage") {
     const caption = document.querySelector("#progress");

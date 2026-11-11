@@ -79,6 +79,24 @@ it("ChatGPT sits with the other subscriptions once signed in, and its button ope
   view.destroy();
 });
 
+it("a quiet reading that fails leaves the cards as they are, without a notice, and says so to its caller only", async () => {
+  const usageAllowances = vi.fn().mockResolvedValueOnce({ brains: [{ id: "codex", name: "Codex", source: "live", windows: [{ period: "weekly", remaining_percent: 89, resets_at: 1792900000 }] }] });
+  const { host, view } = await mount({ usageAllowances });
+  const root = host.querySelector(".usage-analytics")!, before = root.innerHTML, card = root.querySelector(".run-subscription");
+  const touched: MutationRecord[] = [];
+  const watch = new MutationObserver(records => touched.push(...records));
+  watch.observe(root, { attributes: true, childList: true, characterData: true, subtree: true });
+  usageAllowances.mockRejectedValueOnce(new Error("offline"));
+  await expect(view.refresh()).rejects.toThrow("allowance");
+  await Promise.resolve();
+  watch.disconnect();
+  expect(touched).toEqual([]);
+  expect(root.innerHTML).toBe(before);
+  expect(root.querySelector(".run-subscription")).toBe(card);
+  expect(root.getAttribute("aria-busy")).toBe("false");
+  view.destroy();
+});
+
 it("a failed reading says so, a quiet refresh that changes nothing touches nothing, and nothing lands after destroy", async () => {
   const usageAllowances = vi.fn().mockRejectedValueOnce(new Error("offline")).mockResolvedValue({ brains: [{ id: "codex", name: "Codex", windows: [] }] });
   const { host, view } = await mount({ usageAllowances });
