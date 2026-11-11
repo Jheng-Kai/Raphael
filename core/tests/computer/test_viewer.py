@@ -16,6 +16,23 @@ from raphael_core.protocol import RpcError
 from .test_vm import Runtime, container
 
 
+async def test_viewer_reports_its_connection_failure_independently_of_boot_mark(viewer):
+    bridge, runtime, _ = viewer
+    target = bridge.vm.target()
+    runtime.screens_ready = False
+    assert not (await bridge.vm.status(target))['ready']
+    runtime.calls.clear()
+    assert await bridge.read_status(target) == {'state': 'running', 'ready': True}
+    assert await bridge.vm.viewer_connection(target) == (6080, 'private')
+    assert not any(args[0] == 'exec' for args, _ in runtime.calls)
+    opened = await bridge.open({})
+    session = bridge.sessions[opened['session']]
+    bridge._peer_failed(opened['session'], session.revision)
+    assert session.error == 'viewer_unreachable'
+    with pytest.raises(VmError, match='^viewer_unreachable$'):
+        await bridge.connection_for(session)
+
+
 @pytest.fixture
 def wire_upstream():
     disconnected = threading.Event()
@@ -522,7 +539,8 @@ async def test_private_connection_uses_the_current_validated_container_after_res
         await bridge.vm.viewer_connection(target)
 
 
-async def test_persistent_websocket_gates_input_before_and_after_handback(viewer):
+@pytest.mark.parametrize('screen', [1, 4])
+async def test_persistent_websocket_gates_input_before_and_after_handback(viewer, screen):
     bridge, _, _ = viewer
     requests = []
 
@@ -543,6 +561,9 @@ async def test_persistent_websocket_gates_input_before_and_after_handback(viewer
     async def connection(target): return port, "never-in-websocket-url"
     bridge.vm.viewer_connection = connection
     opened = await bridge.open({})
+    from dataclasses import replace
+    session = bridge.sessions[opened['session']]
+    session.target = replace(session.target, screen=screen, screens=4 if screen > 1 else 1)
     await bridge.control({**opened, "held": True})
     from urllib.parse import urlsplit
     url = urlsplit(opened["url"])
@@ -565,7 +586,7 @@ async def test_persistent_websocket_gates_input_before_and_after_handback(viewer
         assert await exchange(handshake) == handshake
         pointer = b"\x05" + bytes(5)
         assert await exchange(pointer) == pointer
-        assert requests[0].startswith(b"GET /websockify HTTP/1.1")
+        assert requests[0].startswith(f"GET /websockify?token=screen-{screen} HTTP/1.1".encode())
         assert b"never-in-websocket-url" not in requests[0]
         await bridge.control({**opened, "held": False})
         assert bridge.sessions[opened["session"]].sockets

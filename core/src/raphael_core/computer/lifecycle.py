@@ -3,7 +3,7 @@
 import asyncio
 from pathlib import Path
 
-from .vm import GUEST, SOCKET, VmError, compatible, exec_args
+from .vm import GUEST, SOCKET, VmError, compatible, exec_args, known_previous
 
 
 async def repair_connection(vm, target):
@@ -48,7 +48,7 @@ async def maintain(vm, target, action, *, confirmed=False):
         if vm.active.get(target.key) or target.key in vm.held or vm.busy(target.key) or target.key in vm.preparing and not vm.preparing[target.key].done():
             raise VmError("busy")
         raw = await vm.inspect(target)
-        if raw and not compatible(raw, target, vm.owner, raw.get("Image")):
+        if raw and not (compatible(raw, target, vm.owner, raw.get("Image")) or known_previous(raw, target, vm.owner)):
             raise VmError("incompatible")
         # Validate the exact workspace before stopping or removing anything.
         workspace = Path(target.workspace) if not target.remote else None

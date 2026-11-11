@@ -5,10 +5,14 @@ COPY desktop/ /opt/raphael-desktop/
 RUN set -eux; \
     install -d -o cua -g cua /home/cua/team /home/cua/.config/xfce4/xfconf/xfce-perchannel-xml; \
     install -o cua -g cua /opt/raphael-desktop/xfce4-panel.xml /opt/raphael-desktop/xfce4-desktop.xml /home/cua/.config/xfce4/xfconf/xfce-perchannel-xml/; \
-    for item in '1 browser' '2 files' '3 terminal'; do \
-      set -- $item; \
-      install -d -o cua -g cua "/home/cua/.config/xfce4/panel/launcher-$1"; \
-      install -o cua -g cua "/opt/raphael-desktop/$2.desktop" "/home/cua/.config/xfce4/panel/launcher-$1/"; \
+    install -d -o cua -g cua /home/cua/.config/xfce4/panel; \
+    for panel in 0 1 2 3 4 5; do \
+      for item in '1 browser' '2 files' '3 terminal'; do \
+        set -- $item; \
+        launcher=$((panel * 3 + $1)); \
+        install -d -o cua -g cua "/home/cua/.config/xfce4/panel/launcher-$launcher"; \
+        install -o cua -g cua "/opt/raphael-desktop/$2.desktop" "/home/cua/.config/xfce4/panel/launcher-$launcher/"; \
+      done; \
     done; \
     install -m 0755 /opt/raphael-desktop/raphael-browser /usr/local/bin/raphael-browser; \
     install -m 0755 /opt/raphael-desktop/prepare-desktop /usr/local/bin/prepare-raphael-desktop; \
@@ -109,14 +113,35 @@ RUN printf '%s\n' \
       'priority=30' \
       >> /etc/supervisor/supervisord.conf
 # The driver's page tools drive a root-owned system Chromium. With every capability dropped it cannot make its own
-# sandbox, and the container is one already.
+# sandbox, and the container is one already. Chromium opens every new window beside its first, whatever screen the
+# pointer is on, and the driver has no tool that moves one: wmctrl puts a member's window on its own screen.
 RUN set -eux; \
     apt-get update; \
-    apt-get install -y --no-install-recommends chromium; \
+    apt-get install -y --no-install-recommends chromium tigervnc-scraping-server wmctrl; \
     rm -rf /var/lib/apt/lists/*; \
     printf 'export CHROMIUM_FLAGS="$CHROMIUM_FLAGS --no-sandbox --test-type"\n' > /etc/chromium.d/raphael-container; \
     chromium --version
+# The helper is standard library only: Debian's Python runs it without anything from /opt/venv.
+# Its X readiness wait also handles supervisor starting before the X socket is ready.
+# Without CAP_KILL, supervisor only restarts what exits; the helper ends its own children.
+# Nothing may call supervisorctl stop or restart in a computer.
+# A program that fails to start startretries times is FATAL for good, because nothing here can start it again:
+# the screens are retried for as long as the computer runs.
+RUN install -m 0755 /opt/raphael-desktop/start-novnc.sh /usr/local/bin/start-novnc.sh; \
+    printf '%s\n' \
+      '' \
+      '[program:raphael-screens]' \
+      'command=/usr/bin/python3 /opt/raphael-desktop/screens.py' \
+      'user=cua' \
+      'environment=HOME="/home/cua",USER="cua",DISPLAY=":1"' \
+      'autorestart=true' \
+      'startsecs=2' \
+      'startretries=1000000' \
+      'stdout_logfile=/var/log/supervisor/screens.log' \
+      'stderr_logfile=/var/log/supervisor/screens.error.log' \
+      'priority=25' \
+      >> /etc/supervisor/supervisord.conf
 LABEL org.raphael.computer="1" \
       org.raphael.computer.driver="0.37.0" \
       org.raphael.computer.base="docker.io/trycua/xfce-cua@sha256:274eb636f5cf3fc58f705916ee72b7a701270b3877369d08533a385c5325be9b" \
-      org.raphael.computer.layer="4"
+      org.raphael.computer.layer="5"

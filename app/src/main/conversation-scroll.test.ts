@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, expect, test, vi } from "vitest";
-import { mountConversationScroll } from "./conversation-scroll";
+import { mountConversationScroll, passWheelUnder } from "./conversation-scroll";
 import { setLocale } from "./i18n";
 
 afterEach(() => { document.body.innerHTML = ""; vi.unstubAllGlobals(); setLocale("zh-TW"); });
@@ -61,4 +61,27 @@ test("observer-driven latest visibility never measures container heights on cont
   expect(latest.hidden).toBe(true);
   scroller.dataset.windowLater = '20';
   await vi.waitFor(() => expect(latest.hidden).toBe(false));
+});
+
+test("a wheel turned over the header moves the thread under it, or the report open in its place, and leaves a zoom alone", () => {
+  document.body.innerHTML = '<section><header class="mb-head"></header><div class="ra-stage"><div class="ra-scroll"></div><div class="pgv"><div class="rp-scroll"></div></div></div></section>';
+  const head = document.querySelector<HTMLElement>(".mb-head")!, stage = document.querySelector<HTMLElement>(".ra-stage")!;
+  const thread = document.querySelector<HTMLElement>(".ra-scroll")!, report = document.querySelector<HTMLElement>(".rp-scroll")!;
+  for (const scroller of [thread, report]) { Object.defineProperty(scroller, "scrollHeight", { value: 2000 }); Object.defineProperty(scroller, "clientHeight", { value: 600 }); scroller.scrollTop = 500; }
+  passWheelUnder(head, stage);
+  const wheel = (init: WheelEventInit): WheelEvent => {
+    const event = new WheelEvent("wheel", { cancelable: true, bubbles: true, ...init });
+    if (init.ctrlKey) Object.defineProperty(event, "ctrlKey", { value: true });
+    head.dispatchEvent(event);
+    return event;
+  };
+  expect(wheel({ deltaY: -120 }).defaultPrevented).toBe(true);
+  expect(thread.scrollTop).toBe(380);
+  expect(wheel({ deltaY: 3, deltaMode: 1 }).defaultPrevented).toBe(true);
+  expect(thread.scrollTop).toBe(500);
+  expect(wheel({ deltaY: -120, ctrlKey: true }).defaultPrevented).toBe(false);
+  expect(thread.scrollTop).toBe(500);
+  stage.classList.add("is-page");
+  wheel({ deltaY: 100 });
+  expect([thread.scrollTop, report.scrollTop]).toEqual([500, 600]);
 });

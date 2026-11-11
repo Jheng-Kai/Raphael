@@ -179,9 +179,10 @@ templates are reached from the sidebar's + › 商店, R-STORE-08). `member-make
 measure it before and after a tab press, `member-maker-enter`, `-escape`, `-x`, `-cancel` and
 `opener-toggle-member-maker` (the + pressed again) are the ways it ends, `member-maker-taken` the refusal of a
 name another member has. The member opens and speaks first, typing while its own model writes the greeting (since
-2026-11-06, R-COLLEAGUE-02: no tools, at most two sentences, only known owner context; a
+2026-11-11, R-COLLEAGUE-02: its own line and ONE question card, the only tool it may call; a
 failed one is an ordinary failure line whose 重新產生 calls `members.greet`), and the
-owner's answer becomes its job through `set_my_job`, offered only while it has none. Whoever makes a
+owner's answer to the card starts the set-up (R-COLLEAGUE-08, below) that saves its job through
+`set_my_job`, offered only while it has none. Whoever makes a
 member greets the same way (owner, 2026-11-10: 「不管是誰創建的，應該都會自己傳訊息給我們」): the
 `member_create` tool Raphael or a member uses starts the greeting (core tests
 members/test_model_greeting.py, test_management.py; look admin-approved), and a member's conversation that is
@@ -1000,12 +1001,24 @@ member-profile-resources.test.ts. This presentation change adds no migration or 
 
 R-COLLEAGUE-01..03: New member > Start from a template opens eight shipped slime roles; Open template file uses the system file picker and previews profile, skill names, paused routines and one disabled connect card per app. Import creates the colleague without grants; only subsequent per-app Connect requests sign-in and member access. The member row menu exports one .raphael-member file without memory, pictures, credentials or model choices.
 
-Since 2026-11-06 a new member's greeting is written by its own model (see above) and carries no choice form; greetings stored earlier with locally computed suggestions still show them, and sending a choice uses the existing composer words and task route. The shared API/CLI prompt puts the one outcome question rule beside owner input before set_my_job saves the goal. Fake-brain tests prove routing and persistence, not a real model's judgment.
+Since 2026-11-11 a new member's greeting is its own model's line with ONE question card (R-COLLEAGUE-02, owner: 「他會直接給你一個選擇的表單，然後一件事慢慢設定完成」); the card is the ordinary `ask_owner` card, and the idle clone of 2026-11-06 (`member-greeting.ts`) is gone. Greetings stored earlier with locally computed suggestions read as the plain line they were. The shared API/CLI prompt puts the one outcome question rule beside owner input before set_my_job saves the goal. Fake-brain tests prove routing and persistence, not a real model's judgment.
+
+### A new member sets itself up by cards (2026-11-11, R-COLLEAGUE-08)
+
+One chain, one card at a time, no progress mark and no summary at the end:
+
+1. The greeting: one line in the member's own words and one question card (what to take on first: three or four options from what is known, else mail, schedule and reminders, research, documents; plus his own answer). `member-greeting-choices`, `member-maker-made`.
+2. His answer (or his own words) is the card's: it stands in the card, not as a bubble, and starts a turn of its own (`setup`). The member saves its job (`set_my_job`), says it in one sentence, and the thread shows one centred quiet line 「已設定職務：…」 (the skill-learned line; `job_set` event). There is no label place for the role in a sidebar row (R-UI-77), so none is added.
+3. If the job needs an app that is not connected: the existing connect card for that one app with one quiet line under it (「沒有你的同意，我不會寄出或更動任何東西。」). A connected app is never asked about. `member-setup-connect`.
+4. One more card: which first task (two or three concrete options plus his own answer). `member-greeting-goal` shows steps 2 and 4.
+5. The member starts the task he chooses. A clear job and task in the answer skip 3 and 4; a new name given in so many words is taken with `member_update` and shown as the first Bot's rename line. `member-setup-collapsed`.
+
+Typing instead of answering closes the card and is an ordinary message; closing the card (×) ends the set-up quietly. Core: `core/tests/members/test_setup_chain.py` (fake API and CLI brains; a real model following the chain is unverified until tried on a Codex member and an API member).
 
 The shared team mount /home/cua/team creates context/, meetings/ and projects/ on first computer use. Existing contents survive. Handoffs and requested wrap-ups may cite successful file writes there.
 
 ```powershell
-npm run look -- member-template-gallery member-template-preview member-template-imported member-template-export member-greeting-choices member-greeting-goal team-folder-handoff --theme both --width 1120,720,1920x1080
+npm run look -- member-template-gallery member-template-preview member-template-imported member-template-export member-greeting-choices member-greeting-goal member-setup-connect member-setup-collapsed team-folder-handoff --theme both --width 1120,720,1920x1080
 ```
 
 Core fakes cover export/import, no-side-effect preview, no grants, disabled routines, local suggestions, goal question/save and first-use directories. Native save/open dialogs, real VM/SSH mounts and real model behavior need separate authorized acceptance.

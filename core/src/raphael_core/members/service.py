@@ -15,8 +15,10 @@ The RPC methods (the main window only, through the shell's allow-list):
   `{member, routine_offer}`. `routine_offer` is the routine offered to a member of a group that
   has places to look (`sources`): `{title, prompt, schedule}` for 「每天早上的進度」 at 09:00, or
   null. It is offered, not made: `routines.create` makes it.
-- `members.greet {id}` -> `{turn_id}`: start another hidden, tool-free greeting before any owner
-  message, replacing failed greetings. Only the member's own interactive brain answers it.
+- `members.greet {id}` -> `{turn_id}`: start another hidden greeting before any owner message,
+  replacing failed greetings. Only the member's own interactive brain answers it, and the one tool
+  it may call is the question card that asks what to take on first (`agent.service.begin_setup`
+  carries on from the owner's answer).
 - `members.update {id, name?, role?, personality?, instructions?, group_id?, avatar?, tools?, model?, position?}`
   -> `{member}`. `avatar` here is "" or a slime, "slime:<character>" or "slime:color:<color>". Raphael (0) is not changed here: his picture is the app's to change.
 - `members.delete {id}` -> `{deleted}`: the member, its conversation (and the exchanges of other

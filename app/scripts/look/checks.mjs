@@ -199,10 +199,60 @@ export function checkRendered(name, context = {}) {
       const template = JSON.parse(window.__look.exportedTemplate);
       require(template.format === "raphael-member" && !template.memory && !template.tools && !template.avatar, "one recipe excludes private state and grants");
     }
-    if (name === "colleague-greeting") require(visible(document.querySelector('[data-greeting-question]')) && document.querySelectorAll('[data-greeting-option]').length === 3, "shared choice form and free text");
-    if (name === "colleague-goal") {
-      require(calls.some(call => call.command === "agent_ask_text" && call.text === window.__look.data.colleagueSample.options[0]), "choice submits exactly the owner's words");
-      require(document.querySelector('.ra-scroll').innerText.includes(window.__look.data.colleagueSample.outcomeQuestion), "one outcome question is visible");
+    if (name === "colleague-setup-card") {
+      // The first message of a new member: its own line and the one question card, read as one message.
+      const body = [...document.querySelectorAll(".page-agent .ra-body")].filter(visible);
+      require(body.length === 1, `the line and its card are one message: ${body.length} bodies`);
+      const card = body[0].querySelector('[data-owner-question="setup-first"][data-card-state="asked"]');
+      require(visible(card), "the question card stands in the same message");
+      const line = [...body[0].querySelectorAll("[data-seq]")].find(item => item.textContent.includes("很高興加入你的團隊"));
+      require(visible(line), "the member's own greeting line is there");
+      require(line.getBoundingClientRect().bottom <= card.getBoundingClientRect().top + 1, "the line stands above the card");
+      const options = [...card.querySelectorAll("[data-owner-option]")].filter(visible);
+      require(options.length === 4 && options.map(item => item.querySelector("[data-choice-letter]").textContent).join("") === "ABCD", "four options with their letters");
+      require(visible(card.querySelector("[data-owner-answer-input]")) && visible(card.querySelector('[data-owner-answer="cancel"]')), "the owner's own answer and the close are on the card");
+      require(![...document.querySelectorAll(".page-agent .owner-message")].some(visible), "nothing is put in the owner's mouth");
+      require(!document.querySelector("[data-greeting-question],[data-greeting-option]"), "the idle greeting clone is gone: the card is the ordinary one");
+      const wide = Math.max(...[line, card].map(item => item.getBoundingClientRect().width));
+      require(card.getBoundingClientRect().right <= document.querySelector(".page-agent .ra-scroll, .page-agent").getBoundingClientRect().right + 1, `the card stays inside the conversation: ${wide}`);
+    }
+    if (name === "colleague-setup-job") {
+      // The card answered and the job saved: the answer is the card's, one quiet line says the job, one sentence, then the first-task card.
+      const first = document.querySelector('[data-owner-question="setup-first"]');
+      require(first && first.dataset.cardState === "answered" && first.textContent.includes("整理 Gmail 信件，每天幫我回覆重要的信"), "the first card stands answered, with the owner's answer in it");
+      require(![...document.querySelectorAll(".page-agent .owner-message")].some(visible), "the answer is not said again as a message");
+      const line = [...document.querySelectorAll(".page-agent .conversation-event-line")].find(item => item.textContent.includes("已設定職務：信件管家"));
+      require(visible(line), "one quiet line says the job was set");
+      const ack = [...document.querySelectorAll("[data-seq]")].find(item => item.textContent.includes("我負責幫你整理信件"));
+      const card = document.querySelector('[data-owner-question="setup-task"][data-card-state="asked"]');
+      require(visible(ack) && visible(card), "the member's sentence and the first-task card are shown");
+      const order = [first, line, ack, card].map(item => item.getBoundingClientRect().top);
+      require(order.every((top, index) => index === 0 || top >= order[index - 1] - 1), `they read in order: ${order.join(",")}`);
+      require(card.querySelectorAll("[data-owner-option]").length === 2, "two concrete tasks, and the owner's own answer");
+      require(document.querySelectorAll('[data-card-state="asked"]').length === 1, "one open card at a time");
+      const box = line.getBoundingClientRect(), page = document.querySelector(".page-agent").getBoundingClientRect();
+      require(Math.abs((box.left + box.right) / 2 - (page.left + page.right) / 2) < page.width * 0.2, "the line is centred in the conversation");
+    }
+    if (name === "colleague-setup-connect") {
+      const card = document.querySelector("[data-connector]");
+      const note = document.querySelector("[data-setup-note]");
+      require(visible(card) && card.dataset.cardState === "pending", "the connect card for the one app");
+      require(visible(note) && note.textContent.includes("沒有你的同意，我不會寄出或更動任何東西"), "one quiet line says nothing is sent or changed without a yes");
+      require(card.getBoundingClientRect().bottom <= note.getBoundingClientRect().top + 1, "the line stands under the card");
+      require(card.getBoundingClientRect().left <= note.getBoundingClientRect().left + 1 && note.getBoundingClientRect().right <= card.getBoundingClientRect().right + 1, "the line stands within the card's width");
+      require(parseFloat(getComputedStyle(note).fontSize) <= parseFloat(getComputedStyle(document.body).fontSize), "and is quiet");
+      require(visible([...document.querySelectorAll(".conversation-event-line")].find(item => item.textContent.includes("已設定職務：信件管家"))), "the job line precedes it");
+      require(document.querySelectorAll('[data-owner-question][data-card-state="asked"]').length === 0, "no second question while the app is asked for");
+    }
+    if (name === "colleague-setup-collapsed") {
+      // A clear answer that gives a name, a job and a task: it renames, saves, says so and starts, with no card after.
+      const renamed = [...document.querySelectorAll(".bot-renamed")].find(item => item.textContent.trim() === "已重新命名為 阿信");
+      require(visible(renamed), "the rename stands as the first Bot's rename does");
+      require(visible([...document.querySelectorAll(".conversation-event-line")].find(item => item.textContent.includes("已設定職務：信件管家"))), "the job line");
+      require(visible([...document.querySelectorAll("[data-seq]")].find(item => item.textContent.includes("現在先整理今天的未讀信"))), "it says what it starts");
+      require(document.querySelectorAll('[data-owner-question][data-card-state="asked"]').length === 0, "no further card");
+      require(document.querySelector('[data-owner-question="setup-first"]').dataset.cardState === "answered", "the first card stays answered where it was asked");
+      require(![...document.querySelectorAll(".page-agent .owner-message")].some(visible), "the answer is not said again as a message");
     }
     if (name === "colleague-handoff") require(document.querySelector('.ra-scroll').innerText.includes('/home/cua/team/projects/'), "handoff cites a shared-team path");
     if (name === "colleague-accounts") require(document.querySelector('.cs-accts').textContent.includes('工作信箱') && document.querySelector('.cs-accts').textContent.includes('私人信箱'), "accounts have distinct public labels");
@@ -303,7 +353,7 @@ export function checkRendered(name, context = {}) {
     // The face sits inside the avatar button since 415811f0 (a bot opens from its name), so it is found beneath the identity.
     const face = panel.querySelector('.mb-panel-identity .av').getBoundingClientRect(), named = panel.querySelector('.mb-panel-identity > b').getBoundingClientRect();
     require(face.width >= 56 && face.bottom <= named.top + 1 && Math.abs(face.left + face.width / 2 - (named.left + named.width / 2)) <= 1, 'a large face stands centred above the name');
-    for (const button of [...panel.querySelectorAll('.mb-det-head .btn.icon'), ...document.querySelectorAll('.page-agent .mb-head .btn.icon, .page-agent .cmp-bar .cmp-attach')].filter(visible)) {
+    for (const button of [...panel.querySelectorAll('.mb-det-head .btn.icon'), ...document.querySelectorAll('.page-agent .mb-head .btn.icon, .page-agent .cmp-row .cmp-attach')].filter(visible)) {
       const style = getComputedStyle(button), box = button.getBoundingClientRect();
       require(parseFloat(style.borderRadius) >= box.width / 2 - 0.5 && Math.abs(box.width - box.height) < 1 && style.backgroundColor !== 'rgba(0, 0, 0, 0)', `the buttons on the window's edges are soft round buttons (${button.getAttribute('aria-label') ?? button.dataset.act})`);
     }
@@ -1791,10 +1841,10 @@ export function checkRendered(name, context = {}) {
       require(sends.length===(name.endsWith('retry')?2:1) && sends.every(call=>call.text==='Please review the project note.'), 'the exact restored words cross only the send boundary');
       if (name.endsWith('failed')) {
         require(document.querySelector('.cmp-input').value==='Please review the project note.' && visible(document.querySelector('.composer-failure [data-card-retry]')), 'failure keeps the draft and retry beside the composer');
-        const failed=document.querySelector('.composer-failure'), card=failed.querySelector('.conversation-card'), field=document.querySelector('.cmp-field')??document.querySelector('.cmp-input');
+        const failed=document.querySelector('.composer-failure'), card=failed.querySelector('.conversation-card'), field=failed.closest('.composer');
         require(failed.querySelectorAll('.card-status.is-failed').length===1 && !failed.querySelector('.card-failure p'), 'the failure is said once, in the status: no sentence repeats it');
         const box=card.getBoundingClientRect(), row=field.getBoundingClientRect();
-        require(Math.abs(box.left-row.left)<=8, `the failed card starts where the field starts, never centred between gutters (card ${Math.round(box.left)}, field ${Math.round(row.left)})`);
+        require(box.left-row.left>=0 && box.left-row.left<=14, `the failed card starts at the composer's left, inside its box, never centred between gutters (card ${Math.round(box.left)}, composer ${Math.round(row.left)})`);
       }
       else require(document.querySelector('.cmp-input').value==='' && !document.querySelector('.composer-failure'), 'successful retry clears the draft and failure');
     }
@@ -1849,8 +1899,8 @@ export function checkRendered(name, context = {}) {
       require(box.width <= 480.5, `card width is at most 480px: ${box.width}`);
       const draftHost = card.closest('.draft-panel');
       if (draftHost) require(parseFloat(getComputedStyle(draftHost).borderTopWidth) === 0 && parseFloat(getComputedStyle(draftHost).paddingLeft) === 0, 'the draft host adds no second card frame');
-      if (card.matches('[data-owner-question][data-card-state="asked"],[data-greeting-question][data-card-state="asked"]')) {
-        const close = card.querySelector('[data-owner-answer="cancel"],[data-greeting-answer="cancel"]');
+      if (card.matches('[data-owner-question][data-card-state="asked"]')) {
+        const close = card.querySelector('[data-owner-answer="cancel"]');
         require(!pill, 'a waiting question uses its title without a redundant status pill');
         require(close?.parentElement?.matches('.card-head') && close === close.parentElement.lastElementChild, 'question close follows the heading at the far right');
         require(Math.abs(close.getBoundingClientRect().right - (box.right - parseFloat(style.paddingRight) - parseFloat(style.borderRightWidth))) < 1.5, 'question close aligns with the right padding');
@@ -1879,7 +1929,7 @@ export function checkRendered(name, context = {}) {
         require(!turn?.hasAttribute('data-live'), 'the member is paused while waiting for computer handoff');
       }
       const taskLine = card.closest('.ra-body')?.querySelector(':scope > .task-actions');
-      if (card.matches('.task-result,[data-owner-question],[data-greeting-question],[data-permission-card],[data-secret-card],[data-connector]')) require(!taskLine || taskLine.hidden || !visible(taskLine), 'the card replaces a duplicate task state line');
+      if (card.matches('.task-result,[data-owner-question],[data-permission-card],[data-secret-card],[data-connector]')) require(!taskLine || taskLine.hidden || !visible(taskLine), 'the card replaces a duplicate task state line');
       for (const hint of [...card.querySelectorAll('.cn-hint')].filter(visible)) require(getComputedStyle(hint).whiteSpace === 'nowrap' && hint.getBoundingClientRect().height <= parseFloat(getComputedStyle(hint).lineHeight) + 1, 'field hints stay on one line');
         for (const well of [...card.querySelectorAll('.card-well')].filter(visible)) {
           const shade = value => value.match(/[\d.]+/g).slice(0, 3).reduce((sum, part) => sum + Number(part), 0);
@@ -5381,7 +5431,9 @@ export function checkRendered(name, context = {}) {
     require(back && visible(back) && !back.hidden, "the way back is in the header");
     require(back.classList.contains("icon") && back.getAttribute("aria-label") === "返回" && back.textContent.trim() === "" && back.querySelector("svg"), "a left arrow named 返回, no word on it");
     require(Math.round(arrow.width) === 36 && Math.round(arrow.height) === 36 && parseFloat(getComputedStyle(back).borderRadius) >= 18 && /^rgb\(/.test(getComputedStyle(back).backgroundColor), "the window edge's soft round button, 36 px, on its solid surface");
-    require(arrow.left - head.left <= 12 && arrow.top >= head.top - 1 && arrow.bottom <= head.bottom + 1, `at the header's top left (${Math.round(arrow.left - head.left)} px in)`);
+    // Under 860 px the sidebar's menu button stands at the window's top left and the row starts clear of it (`--pa-top-start`).
+    const lead = parseFloat(getComputedStyle(back.parentElement).marginLeft) || 0;
+    require(arrow.left - head.left <= 12 + lead && arrow.top >= head.top - 1 && arrow.bottom <= head.bottom + 1, `at the header's top left (${Math.round(arrow.left - head.left)} px in)`);
     const search = pane.querySelector('.mb-head [data-act="search"]');
     require(!search || !visible(search), "the thread's search waits where the arrow stands");
     require(!pane.querySelector(":scope > .ra-find") || !visible(pane.querySelector(":scope > .ra-find")), "and so does its bar");
@@ -5522,6 +5574,93 @@ export function checkRendered(name, context = {}) {
     require(!window.__look.calls.some(call => call.command === "agent_ask_text" || ["rooms.send", "owner_questions.answer"].includes(call.method)), "a page never sends an owner message or answers a question");
     return { check: name, text: input.value, note: note.textContent };
   }
+  // The composer's shape (owner, 2026-11-12: Grok Bot's one-row composer, 44 px, 16 px above the window). `composer-metrics:<state>` only
+  // measures; `composer-shape:<state>` measures and asserts: `empty` and `one-line` are one row of 44 px on one vertical centre, `grown`
+  // is a box that grew upward with the controls still on its last line, `files` has the files above a row that is still 44 px.
+  if (name.startsWith("composer-metrics:") || name.startsWith("composer-shape:")) {
+    const state = name.slice(name.indexOf(":") + 1), asserting = name.startsWith("composer-shape:");
+    const form = [...document.querySelectorAll('.composer')].find(el => visible(el) && !el.closest('[hidden]'));
+    require(form, "a composer is on screen");
+    const round = n => Math.round(n * 10) / 10;
+    const box = el => { const b = el.getBoundingClientRect(); return { top: round(b.top), bottom: round(b.bottom), height: round(b.height), left: Math.round(b.left), right: Math.round(b.right), cy: round((b.top + b.bottom) / 2) }; };
+    const own = selector => [...form.querySelectorAll(selector)].find(visible);
+    const parts = {};
+    for (const [key, selector] of [["field", ".cmp-input"], ["attach", ".cmp-attach"], ["mode", ".cmp-mode"], ["model", ".cmp-model .mp-trigger, .cmp-model"], ["send", ".cmp-send, .cmp-voice"]]) { const el = own(selector); if (el) parts[key] = box(el); }
+    const composer = box(form), under = round(innerHeight - form.getBoundingClientRect().bottom), row = box(form.querySelector(':scope > .cmp-row'));
+    const style = getComputedStyle(form), input = form.querySelector('.cmp-input'), lh = parseFloat(getComputedStyle(input).lineHeight), pad = parseFloat(getComputedStyle(input).paddingBottom);
+    // Where the last line of words stands: the field's bottom less its padding, half a line up.
+    const lastLine = round(parts.field.bottom - pad - lh / 2);
+    const controls = ["attach", "mode", "model", "send"].filter(key => parts[key]);
+    const measured = { check: name, composer, under, row, lastLine, viewport: [innerWidth, innerHeight], ...parts };
+    if (!asserting) return measured;
+    require(style.display === "grid", "the composer is one grid");
+    require(Math.abs(parseFloat(style.borderTopLeftRadius) - 22) <= 0.5 && Math.abs(parseFloat(style.borderBottomRightRadius) - 22) <= 0.5, `the corners are half a 44 px row, whatever the height: ${style.borderTopLeftRadius}`);
+    require(Math.abs(under - 16.5) <= 2, `16 or 17 px stand under it, as Grok Bot's: ${under}`);
+    require(controls.length >= 3 && parts.attach && parts.mode && parts.send, `the + , the permission and send are in the row (${controls})`);
+    // Every control stands on the row's bottom edge, whatever the words are: the same offset from the box's bottom at every state.
+    for (const key of controls) require(Math.abs(parts[key].cy - parts.attach.cy) <= 2, `${key} is level with the + : ${parts[key].cy} against ${parts.attach.cy}`);
+    for (const key of controls) require(parts[key].top >= row.top - 0.5 && parts[key].bottom <= row.bottom + 0.5, `${key} stays inside the one row (${parts[key].top}-${parts[key].bottom} in ${row.top}-${row.bottom})`);
+    require(controls.every((key, index) => index === 0 || parts[key].left >= parts[controls[index - 1]].right - 1), "the controls stand in the order + , permission, model, send, none over another");
+    require(parts.field.left >= parts.attach.right - 1 && parts.field.right <= parts.mode.left + 1, "the words are between the + and the permission");
+    const fieldMin = state === "narrow" ? 120 : 200;
+    require(parts.field.right - parts.field.left >= fieldMin - 1, `the field keeps its ${fieldMin} px: ${parts.field.right - parts.field.left}`);
+    // Words placed by a page are added on a new line, so that state has two lines and the controls on the last of them.
+    const grows = state === "grown" || state === "long", twoLines = state === "page-note";
+    if (!grows && !twoLines) {
+      // Whatever stands above the words, the row itself is the one row of 44 px, and the controls share the field's centre.
+      require(Math.abs(row.height - 32) <= 2, `the row is the 32 px controls inside the box's 5 px of air: ${row.height}`);
+      for (const key of controls) require(Math.abs(parts[key].cy - parts.field.cy) <= 2, `${key} shares the field's vertical centre: ${parts[key].cy} against ${parts.field.cy}`);
+    }
+    const above = selector => { const el = own(selector); require(el, `${selector} is shown`); require(el.getBoundingClientRect().bottom <= row.top + 1 && el.getBoundingClientRect().top >= composer.top - 0.5, `${selector} stands above the row, inside the box: ${box(el).top}-${box(el).bottom} against the row at ${row.top}`); return el; };
+    if (state === "empty" || state === "one-line") {
+      require(Math.abs(composer.height - 44) <= 2, `one row, 44 px tall (Grok Bot's): ${composer.height}`);
+      require(Math.abs(composer.cy - parts.field.cy) <= 2, `and the box's: ${composer.cy} against ${parts.field.cy}`);
+      window.__composerOne = measured;
+    } else if (grows) {
+      const one = window.__composerOne;
+      require(one, "a one-line state was measured first");
+      require(composer.height >= 44 + lh, `the box grew by lines (${composer.height})`);
+      require(Math.abs(composer.bottom - one.composer.bottom) <= 1 && composer.top < one.composer.top, "it grew upward, its bottom edge where it was");
+      for (const key of controls) require(Math.abs(parts[key].cy - one[key].cy) <= 1, `${key} did not move when the box grew: ${parts[key].cy} against ${one[key].cy}`);
+      for (const key of controls) require(Math.abs(parts[key].cy - lastLine) <= 2, `${key} is level with the last line of words: ${parts[key].cy} against ${lastLine}`);
+      if (state === "long") require(input.scrollHeight > input.clientHeight && parts.field.height <= 6 * lh + 3, `the field stops at its six lines and scrolls: ${parts.field.height} px`);
+    } else if (state === "files") {
+      const chips = [...form.querySelectorAll('.cmp-file .cmp-chip')].filter(visible);
+      require(chips.length >= 1, "a waiting file is shown");
+      above(".cmp-file");
+      require(chips.every(chip => chip.getBoundingClientRect().top >= composer.top && chip.getBoundingClientRect().bottom <= composer.bottom), "the files are inside the box");
+      require(composer.height > 44 + 40, `the box holds the files and the row (${composer.height})`);
+    } else if (state === "quote") {
+      above(".cmp-quote");
+      require(own(".cmp-quote .message-quote, .cmp-quote > span") && own('.cmp-quote .btn'), "the quote is shown with the button that removes it");
+    } else if (state === "page-note") {
+      const note = above(".cmp-page-note");
+      require(note.getBoundingClientRect().height <= parseFloat(getComputedStyle(note).lineHeight) * 1.2, "the note stays on one line");
+      require(input.value.length > 0, "the placed words are in the field");
+      for (const key of controls) require(Math.abs(parts[key].cy - lastLine) <= 2, `${key} is level with the last line of words: ${parts[key].cy} against ${lastLine}`);
+    } else if (state === "failure") {
+      const failed = above(".composer-failure");
+      require(failed.querySelector('[data-card-retry]') && visible(failed.querySelector('[data-card-retry]')), "the failure keeps its retry");
+      require(failed.getBoundingClientRect().left >= composer.left && failed.getBoundingClientRect().right <= composer.right, "the failure is inside the box's sides");
+    } else if (state === "recording") {
+      require(form.dataset.taskState === "recording" && own('.cmp-voice svg.cmp-plane') && !own('.cmp-send'), "recording shows the send glyph in the one slot");
+    } else if (state === "stop") {
+      require(["ack", "running", "waiting"].includes(form.dataset.taskState) && own('.cmp-voice svg') && !own('.cmp-send'), "a running task shows Stop in the one slot");
+      require(Math.abs(parts.send.right - parts.send.left - 32) <= 1 && Math.abs(parts.send.height - 32) <= 1, `and it is the same 32 px button: ${parts.send.right - parts.send.left} x ${parts.send.height}`);
+    } else if (state === "waiting") {
+      require(input.placeholder === "輸入你的回答，或聊點別的", `the field says it takes the answer: ${input.placeholder}`);
+    } else if (state === "narrow") {
+      require(parts.model && parts.model.right <= parts.send.left + 1, "the model button is still in the row, short, before send");
+      require(parts.send.right <= row.right + 1, `nothing runs out of the row at its right: ${parts.send.right} against ${row.right}`);
+    } else if (state === "menu") {
+      const menu = document.querySelector('#app-popover, .slash-menu');
+      require(menu && visible(menu), "the completion menu is open");
+      const at = menu.getBoundingClientRect();
+      require(at.bottom <= composer.top + 1 || at.top >= composer.bottom - 1 || at.bottom <= parts.field.top + 4, `the menu hangs above the line it completes (as it always did) and covers none of the controls: ${round(at.top)}-${round(at.bottom)} over the box at ${composer.top}`);
+    }
+    require(document.documentElement.scrollWidth <= innerWidth, "nothing runs out sideways");
+    return measured;
+  }
   if (name === "composer-grows-before" || name === "composer-grows-keeps-bottom") {
     // The composer grows under a thread whose last item is a card: the thread stays at its bottom and the card stays whole.
     const field = [...document.querySelectorAll('.page-agent .mb-chat .composer')].find(visible), thread = [...document.querySelectorAll('.page-agent .mb-chat .ra-scroll')].find(visible);
@@ -5611,7 +5750,7 @@ export function checkRendered(name, context = {}) {
     require(![...document.querySelectorAll(".mb-scrim, .mb-dialog")].some(layer => !layer.closest("[hidden]")), "no dialog, no scrim");
     // The way back is the conversation header's round arrow at its top left, the same one an HTML page has; no × over the report.
     const back = document.querySelector('.page-agent .mb-head [data-page-back]'), arrowBox = back?.getBoundingClientRect(), headBox = document.querySelector('.page-agent .mb-chat:not([hidden]) > .mb-head').getBoundingClientRect();
-    require(back && visible(back) && back.getAttribute("aria-label") === "返回" && Math.round(arrowBox.width) === 36 && Math.round(arrowBox.height) === 36 && arrowBox.left - headBox.left <= 12, "the arrow named 返回 at the header's top left, the window edge's round button");
+    require(back && visible(back) && back.getAttribute("aria-label") === "返回" && Math.round(arrowBox.width) === 36 && Math.round(arrowBox.height) === 36 && arrowBox.left - headBox.left <= 12 + (parseFloat(getComputedStyle(back.parentElement).marginLeft) || 0), "the arrow named 返回 at the header's top left, the window edge's round button");
     require(!view.querySelector(".rp-close, [data-report-act=close], .rp-top, .btn"), "nothing floats over the report: no × and no button");
     // 存成檔案 stands where a thread's share stands (owner, 2026-11-12: its place and look as Grok Bot's share): first of the header's
     // tools at its top right, the window edge's round button, level with the arrow, drawn as a file and not as the member's share.
@@ -5971,10 +6110,12 @@ export function checkRendered(name, context = {}) {
     require(!document.querySelector(".cr-dialog, .mb-scrim"), "the dialog closed at once");
     require(visible(document.querySelector(".composer .cmp-input")), "its conversation is open");
     const greeting = [...document.querySelectorAll(".page-agent .ra-body")].filter(visible);
-    require(greeting.length === 1 && greeting[0].textContent.includes("哥布達") && greeting[0].textContent.includes("？"), "it speaks first and asks what it is for");
+    require(greeting.length === 1 && greeting[0].textContent.includes("哥布達"), "it speaks first, in its own words");
+    const card = greeting[0].querySelector('[data-owner-question][data-card-state="asked"]');
+    require(visible(card) && card.textContent.includes("你想先讓我接手哪一件事？") && card.querySelectorAll("[data-owner-option]").length === 4, "and asks what to take on first on one question card, with four options");
+    require(visible(card.querySelector("[data-owner-answer-input]")), "the owner may answer in their own words");
     require(![...document.querySelectorAll(".page-agent .owner-message")].some(visible), "nothing is put in the owner's mouth");
     require(!visible(document.querySelector(".page-agent .work-toggle")), "no steps are claimed for what it said");
-    require(!document.querySelector(".page-agent [data-greeting-question]"), "a model-written greeting carries no choice form");
     return { check: name };
   }
   if (name === "member-maker-greeting") {
@@ -6702,6 +6843,102 @@ export function checkRendered(name, context = {}) {
     const first = document.querySelector('#app-popover[data-team-mentions] [data-value]');
     require(visible(first) && first.dataset.value === "Notion", `「@notoin」 finds Notion first (${first?.dataset.value})`);
     return { check: name };
+  }
+  // One row at the top of a conversation (owner, 2026-11-12, after Grok Bot, measured: the pill's centre 30 px from the window's top, the round
+  // buttons level with it and ending 14 px short of the window's buttons, the thread passing under the row): the header is the window's top
+  // row, nothing but it stands above the thread, the tools never meet the window's three buttons, and the empty parts of the row still move
+  // the window while the pill and the buttons still press. The numbers are returned so that a run shows them.
+  if (name === "conversation-top-row") {
+    const pane = [...document.querySelectorAll(".page-agent > .mb-chat")].find(visible), head = pane?.querySelector(":scope > .mb-head");
+    require(pane && visible(head), "a conversation with its header is on screen");
+    const stage = pane.querySelector(":scope > .ra-stage"), scroller = stage.querySelector(":scope > .ra-scroll"), find = pane.querySelector(":scope > .ra-find");
+    const controls = document.querySelector(".window-chrome .window-controls").getBoundingClientRect(), box = element => element.getBoundingClientRect();
+    const page = box(pane), row = box(head), mid = element => box(element).top + box(element).height / 2;
+    const who = head.querySelector(".conversation-trigger .mb-pill, .au-room-heading b, .au-room-heading");
+    require(visible(who), "the header names whose conversation it is");
+    const pillY = Math.round(mid(who));
+    require(Math.abs(pillY - 30) <= 2, `the pill's centre is 30 px from the window's top, as Grok Bot's: ${pillY}`);
+    require(row.top <= 1 && row.height <= 62, `the header is the window's top row: it starts at ${Math.round(row.top)} and is ${Math.round(row.height)} px high`);
+    // A button that keeps its place without showing (a room's search while a page stands in the thread's place) is not pressed.
+    const buttons = [...head.querySelectorAll(".btn.icon")].filter(button => visible(button) && getComputedStyle(button).visibility !== "hidden");
+    for (const button of buttons) require(Math.abs(mid(button) - pillY) <= 2, `a round button is level with the pill: ${Math.round(mid(button))} and ${pillY} (${button.getAttribute("aria-label")})`);
+    const findOpen = !!find && visible(find);
+    require(box(stage).top <= 1 || findOpen, `nothing but the row stands above the thread: the stage starts at ${Math.round(box(stage).top)}`);
+    require(!findOpen || box(find).top >= row.bottom - 1, "the search bar stands under the row, not over it");
+    const lead = parseFloat(getComputedStyle(scroller).paddingTop), visibleThread = getComputedStyle(scroller).visibility !== "hidden";
+    require(!visibleThread || findOpen || lead >= row.bottom - box(scroller).top - 1, `the first message stands clear of the row: ${Math.round(lead)} px of padding under a row ending at ${Math.round(row.bottom)}`);
+    require(!visibleThread || /linear-gradient/.test(getComputedStyle(scroller).maskImage), "what scrolls up fades out under the row");
+    const first = [...scroller.querySelectorAll(".thread > li")].find(visible);
+    // No tool meets the window's buttons: it ends 14 px short of them where the pane reaches the window's edge, and at its pane's edge where another pane stands to its right.
+    const tools = buttons.filter(button => button.closest(".ra-tools")), edge = tools.length ? Math.max(...tools.map(button => box(button).right)) : null;
+    const reaches = page.right >= innerWidth - 1 && !pane.classList.contains("has-side-thread") && !(pane.closest(".page-agent")?.dataset.det === "open" && !pane.classList.contains("au-room-pane") && innerWidth >= 1120);
+    if (edge !== null && reaches) require(Math.abs(controls.left - edge - 14) <= 2, `the tools end 14 px short of the window's buttons, as Grok Bot's: ${Math.round(controls.left - edge)} (${Math.round(edge)} and ${Math.round(controls.left)})`);
+    for (const button of tools) { const b = box(button); require(b.right <= page.right + 1, "a tool stays inside its pane"); }
+    // What the pointer reaches: the pill and every button press; the empty stretch of the row moves the window. Under 1120 px an open
+    // details panel lies over the chat with a dim over its header: nothing of the row presses, and the scrim's top row moves the window. A
+    // group's side thread lies over the pane's right under 1100 px, with its own row (its header moves the window too).
+    const at = (x, y) => document.elementFromPoint(x, y);
+    const dimmed = (pane.closest(".page-agent")?.dataset.det === "open" && !pane.classList.contains("au-room-pane") && innerWidth < 1120)
+      || (pane.classList.contains("has-side-thread") && innerWidth < 1100);
+    require(head.hasAttribute("data-window-drag"), "the header's empty stretch moves the window");
+    if (dimmed && !pane.classList.contains("au-room-pane")) {
+      const rowBox = box(pane.closest(".page-agent").querySelector(".mb-det-scrim-row")), grab = at(Math.round(page.left + 40), 14);
+      require(grab?.matches(".mb-det-scrim-row[data-window-drag]") && rowBox.height >= 59 && rowBox.top <= 1, `the dimmed row is draggable through the scrim's top row: ${grab?.className}`);
+    }
+    if (dimmed) return { check: name, pillY, rowTop: Math.round(row.top), rowHeight: Math.round(row.height), stageTop: Math.round(box(stage).top), threadHeight: Math.round(scroller.clientHeight), dimmed };
+    for (const target of [who.closest("button") ?? who, ...buttons]) {
+      const b = box(target), hit = at(b.left + b.width / 2, b.top + 6);
+      const why = () => { const root = document.documentElement; return `${hit?.className}; the strip's drag cell takes pointer events: ${getComputedStyle(document.querySelector(".window-drag")).pointerEvents}; layout ${root.dataset.windowLayout}, modal ${root.dataset.windowModal}, sidebar open ${root.hasAttribute("data-sidebar-open")}, header ${!!document.querySelector(".main > .page-agent:not([hidden]) > .mb-chat:not([hidden]) > .mb-head")}, settings page ${!!document.querySelector(".page-agent > .ms-pane:not([hidden])")}, dialog ${!!document.querySelector(".mb-scrim:not(.store-scrim)")}`; };
+      require(hit && target.contains(hit) && !hit.closest(".window-chrome"), `the pointer reaches ${target.getAttribute("aria-label") ?? target.className} at the top of the row (${why()})`);
+    }
+    const gapX = (() => { const a = box(who.closest("button") ?? who); return (a.right + (buttons.filter(b => box(b).left > a.right)[0]?.getBoundingClientRect().left ?? a.right + 40)) / 2; })();
+    const empty = at(gapX, 14);
+    require(empty?.closest(".mb-head") === head && !empty.closest("button"), `an empty part of the row is the header's own, under no strip of the window: ${empty?.className}`);
+    return { check: name, pillY, rowTop: Math.round(row.top), rowHeight: Math.round(row.height), stageTop: Math.round(box(stage).top), threadHeight: Math.round(scroller.clientHeight), firstMessageTop: first ? Math.round(box(first).top) : null, toolsGap: edge === null ? null : Math.round(controls.left - edge), findOpen };
+  }
+  // The details panel reaches the window's top: its own head is its top row, its round buttons level with the window's, its last one 14 px short of them.
+  if (name === "details-top-row") {
+    const panel = document.querySelector(".mb-det:not([hidden])"), head = panel?.querySelector(":scope > .mb-det-head");
+    require(visible(panel) && visible(head), "the details panel is open");
+    const controls = document.querySelector(".window-chrome .window-controls").getBoundingClientRect(), box = element => element.getBoundingClientRect();
+    require(Math.abs(box(panel).top) <= 1 && box(head).top <= 1 && Math.abs(box(head).height - 60) <= 2, `the panel's head is its top row: ${Math.round(box(head).top)} and ${Math.round(box(head).height)} px high`);
+    const buttons = [...head.querySelectorAll(".btn.icon")].filter(visible);
+    require(buttons.length >= 2, "the panel's gear and close stand in its row");
+    for (const button of buttons) require(Math.abs(box(button).top + box(button).height / 2 - 30) <= 2, `a panel button is level with the window's buttons' row, 30 px from the top: ${Math.round(box(button).top + box(button).height / 2)}`);
+    const last = Math.max(...buttons.map(button => box(button).right));
+    require(Math.abs(controls.left - last - 14) <= 2, `the panel's last button ends 14 px short of the window's buttons: ${Math.round(controls.left - last)}`);
+    require(head.hasAttribute("data-window-drag"), "the panel's row moves the window");
+    for (const button of buttons) { const b = box(button), hit = document.elementFromPoint(b.left + b.width / 2, b.top + 6); require(hit && button.contains(hit), `the pointer reaches the panel's ${button.getAttribute("aria-label")} at the top of the row`); }
+    const scroll = panel.querySelector(":scope > .mb-det-scroll");
+    require(box(scroll).top >= box(head).bottom - 1, "the panel's contents start under its row");
+    return { check: name, rowHeight: Math.round(box(head).height), closeGap: Math.round(controls.left - last) };
+  }
+  // The thread read higher up has messages under the row; they fade (the mask) and the pill and buttons stay on their own opaque surfaces.
+  if (name === "conversation-top-row-scrolled") {
+    const pane = [...document.querySelectorAll(".page-agent > .mb-chat")].find(visible), head = pane.querySelector(":scope > .mb-head"), scroller = pane.querySelector(":scope > .ra-stage > .ra-scroll");
+    const row = head.getBoundingClientRect(), lines = [...scroller.querySelectorAll(".thread > li")].filter(visible);
+    require(scroller.scrollTop > 0 && scroller.scrollHeight - scroller.clientHeight - scroller.scrollTop > 40, "the thread is read higher up");
+    require(lines.some(line => line.getBoundingClientRect().top < row.bottom - 8 && line.getBoundingClientRect().bottom > row.top + 8), "a message passes under the row");
+    const mask = getComputedStyle(scroller).maskImage;
+    require(/linear-gradient/.test(mask) && /rgba\(0, 0, 0, 0\)|transparent/.test(mask), `what reaches the row fades out: ${mask}`);
+    for (const button of [...head.querySelectorAll(".btn.icon")].filter(visible)) {
+      const style = getComputedStyle(button);
+      require(/^rgb\(/.test(style.backgroundColor) && style.opacity === "1", `a header button stands on its own opaque surface: ${style.backgroundColor}`);
+    }
+    const pillSurface = getComputedStyle(head.querySelector(".conversation-trigger .mb-pill") ?? head, "::before");
+    require(!head.querySelector(".conversation-trigger .mb-pill") || /^rgb\(/.test(pillSurface.backgroundColor), `the pill stands on its own opaque surface: ${pillSurface.backgroundColor}`);
+    return { check: name, under: lines.filter(line => line.getBoundingClientRect().top < row.bottom).length };
+  }
+  if (name === "conversation-top-row-wheel-before") {
+    const scroller = [...document.querySelectorAll(".page-agent > .mb-chat")].find(visible).querySelector(":scope > .ra-stage > .ra-scroll");
+    require(scroller.scrollHeight - scroller.clientHeight > 120, "the thread is long enough to turn");
+    window.__rowWheel = scroller.scrollTop;
+    return { check: name, top: Math.round(scroller.scrollTop) };
+  }
+  if (name === "conversation-top-row-wheel") {
+    const scroller = [...document.querySelectorAll(".page-agent > .mb-chat")].find(visible).querySelector(":scope > .ra-stage > .ra-scroll");
+    require(scroller.scrollTop < window.__rowWheel - 100, `a wheel over the header moved the thread up: ${Math.round(window.__rowWheel)} -> ${Math.round(scroller.scrollTop)}`);
+    return { check: name, moved: Math.round(window.__rowWheel - scroller.scrollTop) };
   }
   if (name === "conversation-share") {
     const head = document.querySelector('.mb-chat .mb-head'), share = head?.querySelector('[data-act="share-member"]'), search = head?.querySelector('[data-act="search"]');

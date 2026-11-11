@@ -276,3 +276,20 @@ test("a delivered paste starts the next draft filename at the base name", async 
  paste(view.input,[],'y'.repeat(2000));await new Promise(resolve=>setTimeout(resolve,0));await flush();
  expect(view.el.querySelector('.cmp-chip-t')!.textContent).toBe('Pasted text.txt');
 });
+
+test("the composer is one row: the + , the words, then the permission, the model and send, in that order, and the page note above them (owner, 2026-11-12)", () => {
+ const {view}=mount();
+ const row=view.el.querySelector<HTMLElement>(":scope > .cmp-row")!;
+ // The row's own children are the + , the field and the group of the other controls: no second row, no wrapper of a bar under the words.
+ expect([...row.children].map(child=>child.className.split(" ").find(name=>name.startsWith("cmp-")))).toEqual(["cmp-attach","cmp-field","cmp-end"]);
+ const end=row.querySelector<HTMLElement>(":scope > .cmp-end")!;
+ expect([...end.children].map(child=>child.className.split(" ").find(name=>name.startsWith("cmp-")))).toEqual(["cmp-mode","cmp-model","cmp-pair"]);
+ expect(view.el.querySelector(".cmp-bar")).toBeNull();
+ // What can stand over the words is a row of the box before the controls', so the controls stay on the box's last line.
+ const order=[...view.el.children].map(child=>child.className.split(" ").find(name=>name.startsWith("cmp-")));
+ expect(order.indexOf("cmp-quote")).toBeLessThan(order.indexOf("cmp-row"));
+ expect(order.indexOf("cmp-file")).toBeLessThan(order.indexOf("cmp-row"));
+ expect(order.indexOf("cmp-page-note")).toBeLessThan(order.indexOf("cmp-row"));
+ expect(order.indexOf("cmp-row")).toBe(order.length-2);
+ expect(order[order.length-1]).toBe("cmp-picker");
+});

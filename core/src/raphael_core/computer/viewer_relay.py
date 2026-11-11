@@ -265,7 +265,7 @@ class ViewerRelay:
                                        token=token, revision=revision)
                     return
                 remote, upstream = await asyncio.open_connection("127.0.0.1", port)
-                upgrade = f"GET /websockify HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n"
+                upgrade = f"GET /websockify?token=screen-{request['screen']} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n"
                 for key in ("upgrade", "connection", "sec-websocket-key", "sec-websocket-version", "sec-websocket-protocol"):
                     if key in headers:
                         upgrade += f"{key}: {headers[key]}\r\n"

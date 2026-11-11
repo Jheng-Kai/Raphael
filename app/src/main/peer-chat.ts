@@ -79,7 +79,7 @@ export function peerChatHTML(host: number, tasks: readonly HandoffView[], people
       `<span class="ra-face">${person.face}</span><div class="ra-body">` +
       `<b class="peer-who" style="--peer-accent:${esc(person.accent)}">${esc(person.name)}</b>${body}</div></div></li>`;
   }).join("");
-  return `<div class="peer-head"><span class="peer-pill" role="heading" aria-level="2" aria-label="${esc(title)}">${personHTML(who(host))}` +
+  return `<div class="peer-head" data-window-drag><span class="peer-pill" role="heading" aria-level="2" aria-label="${esc(title)}">${personHTML(who(host))}` +
     `<span class="peer-swap">${ico("swap")}</span>${others.map(id => personHTML(who(id))).join("")}</span></div>` +
     `<div class="peer-scroll"><ol class="thread peer-thread">${rows}</ol></div>` +
     // The same 「跳至最新訊息」 button the conversations have; shown once the view is scrolled up.

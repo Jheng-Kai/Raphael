@@ -2078,6 +2078,8 @@ export const zhCN = {
   "vault.cardNotice": "每次使用都会询问你；最后的付款或送出由你完成。",
   "vault.busy": "处理中…",
   "skills.updatedNotice": "更新了：{p0}",
+  "members.jobSetNotice": "已设置职务：{p0}",
+  "cards.connectYes": "没有你的同意，我不会发送或更改任何内容。",
   "lang.search": "搜索语言",
   "lang.none": "找不到这个语言",
   "onboarding.demo1Ask": "帮我整理今天的 Gmail",

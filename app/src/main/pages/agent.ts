@@ -58,7 +58,7 @@ import * as api from "../api";
 import { createLinkPreviews, type LinkPreview } from "../link-previews";
 import { messagePlainText } from "../message-content";
 import { mountRichContent, preserveRichScroll, richScrollFollows, followRichScroll, releaseRichScroll } from "../message-rich";
-import { mountConversationScroll } from "../conversation-scroll";
+import { mountConversationScroll, passWheelUnder } from "../conversation-scroll";
 import { openUnread, unreadInTail, unreadLine } from "../unread-divider";
 import { measureMessagePreviews, messagePreviewMeasure } from "../message-preview";
 import { messageTooltip } from "../message-tooltip";
@@ -80,7 +80,6 @@ import { mountPages } from "../page-card";
 import { menuReactionsHTML, mountMessageMetadata } from "../message-metadata";
 import { MORE_EMOJI, openEmojiPicker } from "../emoji-picker";
 import { mountMailActions } from "../mail-actions";
-import { mountGreeting } from "../member-greeting";
 import { answerOwnerPage, mountOwnerQuestions, questionWaits } from "../owner-questions";
 import { mountPendingQuestions } from "../pending-questions";
 import { approvalCopy, permissionFor } from "../permission-card";
@@ -243,7 +242,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   el.hidden = true;
   el.innerHTML =
     `<section class="mb-chat">` +
-    `<div class="page-head mb-head"><h1 class="mb-h1">${esc(t("agent.title"))}</h1><span class="mb-head-l">` +
+    `<div class="page-head mb-head" data-window-drag><h1 class="mb-h1">${esc(t("agent.title"))}</h1><span class="mb-head-l">` +
     iconButton("search", t("agent.search"), ' data-act="search" aria-expanded="false" hidden', "ra-tool") +
     // Search at the left and share at the right, symmetric.
     `</span><span class="mb-head-c"></span><div class="ra-tools">${iconButton("share", t("template.export"), ' data-act="share-member" aria-haspopup="menu" aria-expanded="false" hidden', "ra-tool")}</div></div>` +
@@ -350,6 +349,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   members.details.addEventListener('member-panel-tab', () => { if (visible && !roomPane.active) desktop.show(); desktop.sync(); });
   const detailsScrim = document.createElement("div");
   detailsScrim.className = "mb-det-scrim";
+  detailsScrim.innerHTML = '<span class="mb-det-scrim-row" data-window-drag></span>';
   detailsScrim.setAttribute("aria-hidden", "true");
   // The press that closes the panel goes on to what it was over (R-UI-121).
   // The header button opened it, and is not pressed again by the press that closes it (R-UI-124).
@@ -649,7 +649,6 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   const drawnHTML = new WeakMap<Element, string>();
   const pagesHost = mountPages(thread, { place: pageDraft.place, people: () => ({ nameOf: id => members.nameOf(id), colorOf: id => members.colorOf(id) }) });
   mountOwnerQuestions(thread, () => { void load(false); });
-  mountGreeting(thread, sendFromPage);
   const floatingQuestions = mountPendingQuestions(thread, scroller, () => load(false), () => pendingQuestions?.member === memberId() && pendingQuestions.conversation === conversationId() ? pendingQuestions.questions : [], revealTurn);
   /** The newest turn drawn: a turn after it comes in from below. */
   let newestDrawn = 0;
@@ -658,6 +657,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   /** The thread's own turns: what colleagues asked this member is drawn, never stopped or searched here. */
   const own = (): AgentTurn[] => turns.filter((turn) => !exchangeTurn(turn));
   mountConversationScroll(scroller);
+  passWheelUnder(el.querySelector<HTMLElement>(":scope > .mb-chat > .mb-head")!, scroller.parentElement!);
   const turnWindow = new TranscriptWindow();
   const windowMount = mountTranscriptWindow(scroller, thread, turnWindow, { draw: () => render(), older: () => load(true), canOlder: () => canLoadEarlier && !loadingEarlier && !searching });
   let drawingFollows = false;
@@ -673,7 +673,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   const look = (): TurnLook => {
     const latest = latestAnsweredId();
     const busy = pacing.active || regenerating.size > 0 || outgoing.some(belongs) || own().some(turn => turn.status === "running" || isLive(turn.task));
-    const shared = { greetingOpen: !turns.some(turn => !!turn.question.trim()) && !outgoing.some(belongs), regenerateTurnId: busy ? undefined : latest, revealing: (id: number) => pacing.waiting(id), waitingForOwner: desktop.waitingForOwner, memberName: members.nameOf, memberFace: (id: number, size = 18) => members.faceOf(id, size), mentions: members.mentionTargets(),
+    const shared = { regenerateTurnId: busy ? undefined : latest, revealing: (id: number) => pacing.waiting(id), waitingForOwner: desktop.waitingForOwner, memberName: members.nameOf, memberFace: (id: number, size = 18) => members.faceOf(id, size), mentions: members.mentionTargets(),
       // A permission card in the thread can be answered while the window holds its question and is not answering it.
       answerable: (cardId: string) => question?.id === cardId && !answering };
     if (inRaphael()) return { ...shared, face: moving => faceHTML(members.member(), 26, { moving }), liveFace: () => faceHTML(members.member(), 28, { moving: true }), activityLabel: members.member().activity_label };
@@ -940,7 +940,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
           const turn = item.turn, view = pacing.view(turn), task = turn.task?.id;
           const expanded = [...state.expandedMessages].filter(key => key.startsWith(`${turn.id}:`)).join("\0");
           const live = turn.status === "running" || turn.status === "confirm" || isLive(turn.task) || turn.task?.state === "waiting" || pacing.waiting(turn.id);
-          return renderedTurns.line(item.key, historyRevisions.get(turn) ?? turn, [presentationVersion, getLocale(), turn.route === "greeting" ? shape.greetingOpen : false, shape.mentions, turnLook.query ?? "", details.has(turn.id),
+          return renderedTurns.line(item.key, historyRevisions.get(turn) ?? turn, [presentationVersion, getLocale(), shape.mentions, turnLook.query ?? "", details.has(turn.id),
             state.open.get(turn.id), state.thinkingOpen.get(turn.id), expanded, task !== undefined && state.stopping.has(task), task !== undefined && state.rerunning.has(task),
             state.workStartedAt.get(turn.id), state.signin.get(turn.id), view.messages?.length, pacing.waiting(turn.id), desktop.waitingForOwner(turn.id),
             live ? turnLook.deferPresence : false, live ? shape.activityLabel : "", live ? members.member().activity ?? "" : "", turn.permissions?.some(card => shape.answerable?.(card.id)), turn.id === latestFailedTurnId, turn.id === signinTurnId,

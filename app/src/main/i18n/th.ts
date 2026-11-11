@@ -2078,6 +2078,8 @@ export const th = {
   "vault.cardNotice": "คุณอนุมัติการใช้ทุกครั้งและชำระเงินหรือส่งข้อมูลขั้นสุดท้ายด้วยตนเอง",
   "vault.busy": "กำลังทำงาน…",
   "skills.updatedNotice": "อัปเดตแล้ว: {p0}",
+  "members.jobSetNotice": "ตั้งหน้าที่แล้ว: {p0}",
+  "cards.connectYes": "จะไม่ส่งหรือเปลี่ยนแปลงอะไรโดยไม่ได้รับการอนุมัติจากคุณ",
   "lang.search": "ค้นหาภาษา",
   "lang.none": "ไม่มีภาษานี้",
   "onboarding.demo1Ask": "จัด Gmail ของวันนี้ให้หน่อย",

@@ -1,4 +1,5 @@
-"""First words use the member's own interactive brain without storing an owner request."""
+"""First words use the member's own interactive brain without storing an owner request. The card that comes with them
+and the steps after it are in test_setup_chain.py."""
 import asyncio
 import json
 
@@ -129,7 +130,7 @@ async def test_creation_returns_while_its_own_brain_writes_hidden_greeting(setup
     call = client.chat_calls[0]
     prompt = json.dumps(call['messages'], ensure_ascii=False)
     assert call['model'] == 'test/member-model' and not call['fallbacks'] and call['tools'] == []
-    for text in ('The interface language never selects', 'Filia', 'gardening', 'Manage appointments', 'Gmail', 'no tools'):
+    for text in ('The interface language never selects', 'Filia', 'gardening', 'Manage appointments', 'Gmail', 'call ask_owner once'):
         assert text in prompt
     instruction = call['messages'][0]['content']
     assert '- Owner enjoys gardening\n' in instruction
@@ -146,7 +147,7 @@ async def test_creation_returns_while_its_own_brain_writes_hidden_greeting(setup
     assert not rig.history.search('gardening', member_id=new['id'])
     client.chats = [live_said('Ready for your goal.')]
     await typed(rig, 'Help me with a goal', new['id'])
-    assert 'no tools' not in client.chat_calls[-1]['messages'][-1]['content']
+    assert 'call ask_owner once' not in client.chat_calls[-1]['messages'][-1]['content']
     assert saved.text in json.dumps(client.chat_calls[-1]['messages'], ensure_ascii=False)
 
 
@@ -254,7 +255,7 @@ async def test_owner_message_during_greeting_waits_for_a_separate_normal_turn(se
     release.set()
     await until(lambda: rig.history.get(result['turn_id']).status == 'done')
     assert len(client.chat_calls) == 2
-    assert 'no tools' not in client.chat_calls[1]['messages'][-1]['content']
+    assert 'call ask_owner once' not in client.chat_calls[1]['messages'][-1]['content']
 
 
 async def test_stop_before_the_greeting_task_starts_settles_its_running_turn(setup, client):
