@@ -327,13 +327,69 @@ describe("the column, used", () => {
     host.view = () => ({ list: { ...LIST, team_context: { primary_id: 1 } } as MembersList, current: 0, previews, fresh: new Set() });
     column = mount();
     column.el.querySelector<HTMLElement>('[data-member-more="1"]')!.click();
-    expect(shape()).toEqual(["pin", "unread", "|", "edit", "|", "export-template", "|", "hide", "primary"]);
+    expect(shape()).toEqual(["pin", "unread", "|", "edit", "|", "export-template", "|", "hide", "|", "primary"]);
     closeMenu();
     column.el.querySelector<HTMLElement>('[data-member-more="0"]')!.click();
     expect(shape()).toEqual(["pin"]);
     closeMenu();
     column.el.querySelector<HTMLElement>('[data-member-more="2"]')!.click();
     expect(shape()).not.toContain("primary");
+  });
+
+  describe("a pinned tile's menu", () => {
+    const shape = () => [...document.querySelector("#app-popover")!.children].map(node => node.matches('[role="separator"]') ? "|" : (node as HTMLElement).dataset.pick);
+    const pinned = (...ids: number[]) => { host.view = () => ({ list: { ...LIST, members: LIST.members.map(m => ids.includes(m.id) ? { ...m, pinned: true } : m) }, current: 0, previews, fresh: new Set() }); };
+
+    test("reads as Grok Bot's pinned bot: 取消釘選, 標為未讀, a line, then 換成其他成員 last, each with its own icon", () => {
+      pinned(3);
+      const column = mount();
+      column.el.querySelector<HTMLElement>('.mb-pinned [data-member-more="3"]')!.click();
+      expect(shape()).toEqual(["pin", "unread", "|", "edit", "|", "export-template", "|", "hide", "delete", "|", "replace-pinned"]);
+      const items = [...document.querySelectorAll<HTMLElement>("#app-popover [data-pick]")];
+      expect(items.map(item => item.textContent!.trim())).toEqual(["取消釘選", "標為未讀", "編輯成員", "分享為範本", "隱藏成員", "刪除成員", "換成其他成員"]);
+      expect(items.every(item => item.querySelector(".ck svg.i"))).toBe(true);
+      // A tile has no 移到分組: its folder is where it goes back to. Nothing offers an id (owner: never shown ids).
+      expect(shape()).not.toContain("move");
+      expect(document.querySelector("#app-popover")!.textContent).not.toMatch(/ID|id/);
+      document.querySelector<HTMLElement>('#app-popover [data-pick="replace-pinned"]')!.click();
+      expect(host.memberAction).toHaveBeenCalledWith(3, "replace-pinned");
+    });
+
+    test("a row in a folder says 釘選 where the tile says 取消釘選, with the same family of icons", () => {
+      pinned(3);
+      const column = mount();
+      column.el.querySelector<HTMLElement>('[data-member-more="2"]')!.click();
+      const row = [...document.querySelectorAll<HTMLElement>("#app-popover [data-pick]")];
+      expect(row.slice(0, 3).map(item => item.textContent!.trim())).toEqual(["釘選", "移到分組", "標為未讀"]);
+      const unreadIcon = row[2].querySelector(".ck")!.innerHTML;
+      closeMenu();
+      column.el.querySelector<HTMLElement>('.mb-pinned [data-member-more="3"]')!.click();
+      const tile = [...document.querySelectorAll<HTMLElement>("#app-popover [data-pick]")];
+      expect(tile[1].querySelector(".ck")!.innerHTML).toBe(unreadIcon);
+      // 取消釘選 is drawn with the unpinned pin, 釘選 with the plain one.
+      expect(tile[0].querySelector(".ck")!.innerHTML).not.toBe(row[0].querySelector(".ck")!.innerHTML);
+    });
+
+    test("without a member to put in its place the tile does not offer 換成其他成員, and the primary's own tile keeps handing the primary on", () => {
+      host.view = () => ({ list: { members: [member(0, { name: "拉斐爾" }), member(1, { pinned: true }), member(2, { pinned: true })], groups: [] }, current: 0, previews, fresh: new Set() });
+      let column = mount();
+      column.el.querySelector<HTMLElement>('.mb-pinned [data-member-more="2"]')!.click();
+      expect(shape()).not.toContain("replace-pinned");
+      column.el.remove(); closeMenu();
+      host.view = () => ({ list: { ...LIST, team_context: { primary_id: 1 }, members: LIST.members.map(m => m.id === 1 ? { ...m, pinned: true } : m) } as MembersList, current: 0, previews, fresh: new Set() });
+      column = mount();
+      column.el.querySelector<HTMLElement>('.mb-pinned [data-member-more="1"]')!.click();
+      expect(shape().slice(-2)).toEqual(["|", "primary"]);
+      expect(shape()).not.toContain("replace-pinned");
+    });
+
+    test("a hidden pinned member is a row of the hidden folder, not a tile, and keeps the row's menu", () => {
+      host.view = () => ({ list: { ...LIST, members: LIST.members.map(m => m.id === 3 ? { ...m, pinned: true, hidden: true } : m) }, current: 0, previews, fresh: new Set() });
+      const column = mount();
+      expect(column.el.querySelector(".mb-tile")).toBeNull();
+      column.el.querySelector<HTMLElement>('[data-member-more="3"]')!.click();
+      expect(shape()).not.toContain("replace-pinned");
+    });
   });
 
   test("a group's menu gives 重新命名, 看的地方 and 刪除", () => {

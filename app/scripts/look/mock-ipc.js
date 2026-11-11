@@ -225,6 +225,9 @@ export function installMock(fixture, config = {}, target = window) {
     const unit = { ...media, provider: "Example", input_per_mtok: null, output_per_mtok: null, image_output_per_mtok: null };
     data.catalog.image = [media, { ...unit, id: "test/image-unit", name: "圖片單價範例", per_image: .04 },
       { ...unit, id: "test/image-request", name: "請求單價範例", per_request: .025 }];
+    // The core's own drawing model on the owner's Codex subscription (agent/cli/images.py): a source of its own beside OpenRouter.
+    if (variant.mediaCodex) data.catalog.image.push({ ...media, id: "@codex:gpt-image-2", name: "Codex (subscription)", provider: "Codex", provider_id: "codex", provider_name: "Codex",
+      input_per_mtok: null, output_per_mtok: null, image_output_per_mtok: null });
     data.catalog.video = [];
     data.settings.image_model = ""; data.settings.video_model = "";
     if (variant.mediaModels === "set") {
@@ -259,6 +262,9 @@ export function installMock(fixture, config = {}, target = window) {
     data.members[1].last_at = data.now;
     data.messages.push({ ...data.messages.at(-1), id: Math.max(...data.messages.map(message => message.id)) + 1, room_id: data.rooms[0].id, text: "週五計畫已準備完成", created: data.now, status: "done" });
   }
+  // Pinned tiles (`pinnedTiles`: member ids, 0 is Raphael, who is pinned by his own setting): the core lists the pinned first, then by
+  // position, and a `position` written to a member is a place in the order of all of them, numbered again from 0.
+  if (variant.pinnedTiles) for (const id of variant.pinnedTiles) { if (id === 0) data.settings.chief_pinned = true; else data.members.find(member => member.id === id).pinned = true; }
   if (variant.onlyRaphael) data.members = data.members.filter(member => member.id === 0);
   if (variant.chatgptSignedIn) {
     data.chatgpt = { signed_in: true, email: "owner@example.test", plan_scope_granted: true };
@@ -1058,7 +1064,9 @@ export function installMock(fixture, config = {}, target = window) {
         }
         // the roster of every model carries the same inventory and the same count as the sidebar and the connections page
         const counted = inventory();
-        return { members: data.members.map(m => ({ ...m, chief: m.id === data.primaryId, pinned: m.id === 0 ? !!data.settings.chief_pinned : m.pinned })), groups: data.groups, team_context: {
+        const roster = data.members.map(m => ({ ...m, chief: m.id === data.primaryId, pinned: m.id === 0 ? !!data.settings.chief_pinned : m.pinned }));
+        if (variant.pinnedTiles) roster.sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || a.position - b.position || a.id - b.id);
+        return { members: roster, groups: data.groups, team_context: {
           schema_version: 1, revision: "fixture", self_id: 0, count: data.members.length, primary_id: data.primaryId, chief_id: data.primaryId,
           inventory_state: counted.state, room_member_ids: null,
           members: data.members.map(m => ({ id: m.id, name: m.name, role: m.role, blurb: m.blurb ?? "" })),
@@ -1073,7 +1081,17 @@ export function installMock(fixture, config = {}, target = window) {
         return {};
       }
       case "members.tool_choices": return { tools: [], connections: data.servers };
-      case "members.update": { const member = update(data.members, p.id, p); if (p.hidden && p.id === data.primaryId) data.primaryId = 0; notify("MembersChanged", { member_id: p.id }); return { member }; }
+      case "members.update": {
+        const member = update(data.members, p.id, p);
+        if (variant.pinnedTiles && p.position !== undefined) {
+          const order = data.members.filter(other => other.id !== p.id).sort((a, b) => a.position - b.position || a.id - b.id);
+          order.splice(Math.min(p.position, order.length), 0, member);
+          order.forEach((other, place) => { other.position = place; });
+        }
+        if (p.hidden && p.id === data.primaryId) data.primaryId = 0;
+        notify("MembersChanged", { member_id: p.id });
+        return { member };
+      }
       case "members.avatar_generate": {
         // As the core (brief 10): the owner's chosen image model draws one square candidate, not applied; without a model the
         // window is told so with the place that chooses one. The window reads the kind from the error text (window_error).
