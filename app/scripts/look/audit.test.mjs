@@ -816,17 +816,22 @@ describe("rendered look checks", () => {
     window.document.querySelector('button').getBoundingClientRect = () => ({ left: 10, top: 10, right: 410, bottom: 40, width: 400, height: 30 });
     expect(audit().productRules).toEqual([]);
   });
-  it("holds an onboarding step's row to its two ends: the way back at the left edge and the primary at the right edge (R-UI-37)", () => {
-    const { window, audit } = productAudit('<div class="action-row ob-actions ob-ends"><button class="btn ob-prev" style="border:1px solid gray">Back</button><button class="btn pri" style="border:1px solid gray">Next</button></div>');
-    const row = window.document.querySelector('.ob-actions'), [back, primary] = window.document.querySelectorAll('button');
-    row.getBoundingClientRect = () => ({ left: 0, top: 0, right: 900, bottom: 44, width: 900, height: 44 });
-    back.getBoundingClientRect = () => ({ left: 0, top: 0, right: 128, bottom: 44, width: 128, height: 44 });
-    primary.getBoundingClientRect = () => ({ left: 772, top: 0, right: 900, bottom: 44, width: 128, height: 44 });
-    // A primary as wide as its words is right here: only the welcome's pill fills its row.
+  it("holds an onboarding step's two round buttons together in the middle, the way back at the left of the primary (R-UI-37)", () => {
+    const { window, audit } = productAudit('<div class="ob-foot"><div class="action-row ob-actions ob-pair"><button class="btn icon ob-prev" aria-label="Back" title="Back" style="border:0"></button><button class="btn icon pri ob-go" aria-label="Next" title="Next" style="border:0"></button></div></div>');
+    const foot = window.document.querySelector('.ob-foot'), [back, primary] = window.document.querySelectorAll('button');
+    foot.getBoundingClientRect = () => ({ left: 0, top: 0, right: 1000, bottom: 84, width: 1000, height: 84 });
+    back.getBoundingClientRect = () => ({ left: 446, top: 12, right: 494, bottom: 60, width: 48, height: 48 });
+    primary.getBoundingClientRect = () => ({ left: 506, top: 12, right: 554, bottom: 60, width: 48, height: 48 });
+    // Two circles of one size, side by side in the middle: a primary as wide as its drawing is right here, since only the
+    // welcome's pill fills its row.
     expect(audit().productRules).toEqual([]);
-    // Both in the middle, side by side, is the row of 2026-11-11 morning that the owner sent back.
-    back.getBoundingClientRect = () => ({ left: 270, top: 0, right: 314, bottom: 44, width: 44, height: 44 });
-    primary.getBoundingClientRect = () => ({ left: 322, top: 0, right: 630, bottom: 44, width: 308, height: 44 });
+    // One at each end of the row is the foot of 2026-11-11 afternoon that the owner sent back.
+    back.getBoundingClientRect = () => ({ left: 50, top: 12, right: 98, bottom: 60, width: 48, height: 48 });
+    primary.getBoundingClientRect = () => ({ left: 902, top: 12, right: 950, bottom: 60, width: 48, height: 48 });
+    expect(audit().productRules.map(item => item.rule)).toEqual(['R-UI-37']);
+    // A wide pill beside a small circle is the foot of that morning.
+    back.getBoundingClientRect = () => ({ left: 320, top: 12, right: 364, bottom: 56, width: 44, height: 44 });
+    primary.getBoundingClientRect = () => ({ left: 372, top: 12, right: 680, bottom: 56, width: 308, height: 44 });
     expect(audit().productRules.map(item => item.rule)).toEqual(['R-UI-37']);
   });
   it("keeps an onboarding choice's control on the right of its name, inside its card (R-UI-35)", () => {
@@ -918,11 +923,11 @@ describe("rendered look checks", () => {
     expect(audit().productRules.map(item => item.rule)).toEqual(['R-UI-27', 'R-UI-27']);
   });
   it("holds the guide's row to the rule: the way back at the left of the primary passes and a stack over it does not", () => {
-    const { window, audit } = productAudit('<div class="action-row ob-actions ob-ends"><button class="btn ob-prev" style="border:1px solid gray">Back</button><button class="btn pri" style="border:1px solid gray">Next</button></div>');
+    const { window, audit } = productAudit('<div class="ob-foot"><div class="action-row ob-actions ob-pair"><button class="btn icon ob-prev" aria-label="Back" title="Back" style="border:0"></button><button class="btn icon pri ob-go" aria-label="Next" title="Next" style="border:0"></button></div></div>');
     const [back, primary] = window.document.querySelectorAll('button');
-    window.document.querySelector('.ob-actions').getBoundingClientRect = () => ({ left: 0, top: 0, right: 900, bottom: 44, width: 900, height: 44 });
-    back.getBoundingClientRect = () => ({ left: 0, top: 0, right: 128, bottom: 44, width: 128, height: 44 });
-    primary.getBoundingClientRect = () => ({ left: 772, top: 0, right: 900, bottom: 44, width: 128, height: 44 });
+    window.document.querySelector('.ob-foot').getBoundingClientRect = () => ({ left: 0, top: 0, right: 1000, bottom: 84, width: 1000, height: 84 });
+    back.getBoundingClientRect = () => ({ left: 446, top: 12, right: 494, bottom: 60, width: 48, height: 48 });
+    primary.getBoundingClientRect = () => ({ left: 506, top: 12, right: 554, bottom: 60, width: 48, height: 48 });
     expect(audit().productRules.map(item => item.rule)).not.toContain('R-UI-27');
     back.getBoundingClientRect = () => ({ left: 0, top: 50, right: 300, bottom: 90, width: 300, height: 40 });
     primary.getBoundingClientRect = () => ({ left: 0, top: 0, right: 300, bottom: 40, width: 300, height: 40 });
