@@ -36,7 +36,8 @@ describe("the page's responsive sizes", () => {
     expect(read("styles.css")).toContain("--sidebar-width: min(348px, calc(100vw - 604px));");
     expect(block![2]).toContain("--pa-det: clamp(300px, 24vw, 460px);");
     expect(members).toContain(".page.page-agent { position: relative; max-width: none; height: 100%; padding: 0; display: grid; grid-template-columns: minmax(0, 1fr);");
-    expect(members).toContain('.page.page-agent[data-det="open"]:not(.is-room) { grid-template-columns: minmax(0, 1fr) var(--pa-det); }');
+    expect(members).toContain('.page.page-agent[data-det="open"]:not(.is-room) { grid-template-columns: minmax(0, 1fr) max(300px, min(var(--pa-det), calc(100vw - var(--sidebar-width) - var(--pa-conv-min)))); }');
+    expect(block![2]).toContain("--pa-conv-min: 386px;");
   });
 
   test("the columns and controls retain their responsive geometry", () => {

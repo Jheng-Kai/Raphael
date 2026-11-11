@@ -11,7 +11,7 @@
 
 /* ---------- the page: the column, the chat, the panel ---------- */
 .page.page-agent { position: relative; max-width: none; height: 100%; padding: 0; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
-.page.page-agent[data-det="open"]:not(.is-room) { grid-template-columns: minmax(0, 1fr) var(--pa-det); }
+.page.page-agent[data-det="open"]:not(.is-room) { grid-template-columns: minmax(0, 1fr) max(300px, min(var(--pa-det), calc(100vw - var(--sidebar-width) - var(--pa-conv-min)))); }
 /* The chat has no strip above it: its header is the window's top row (`--pa-top`) and the thread passes under it. The header takes no
    room (its row is as tall as its negative margin), so the stage reaches the window's top; the thread keeps `--row-lead` of padding
    so that its first message stands clear of the row, and what scrolls up fades out as it reaches the row (conversations.css). */

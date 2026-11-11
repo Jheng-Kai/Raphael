@@ -31,6 +31,8 @@ import { mountEdge, savedWidth, saveWidth } from "./edge-drag";
 
 /** The details panel's widths (px): it opens at about 453 and drags to about 685; narrower than PANEL_CLOSE it closes. */
 const PANEL_MIN = 300, PANEL_MAX = 720, PANEL_CLOSE = 240;
+/** The conversation keeps at least this much (agent.css `--pa-conv-min`): a panel dragged wider gives way to it first. */
+const PANE_MIN = 386;
 const PANEL_KEY = "raphael.panel.width";
 import {
   askGroupName,
@@ -225,7 +227,9 @@ export function createMembers(host: MembersHost): MembersShell {
     width: () => details.el.getBoundingClientRect().width,
     resize: next => {
       if (next < PANEL_CLOSE) { setDetails(false); return false; }
-      panelWidth = Math.round(Math.min(PANEL_MAX, innerWidth * 0.6, Math.max(PANEL_MIN, next)));
+      // Beside the conversation (1120 px and wider) only; narrower, the panel lies over it.
+      const room = innerWidth >= 1120 ? innerWidth - (document.getElementById("nav")?.getBoundingClientRect().width ?? 0) - PANE_MIN : Infinity;
+      panelWidth = Math.round(Math.min(PANEL_MAX, innerWidth * 0.6, Math.max(PANEL_MIN, room), Math.max(PANEL_MIN, next)));
       placePanel();
     },
     done: () => saveWidth(PANEL_KEY, panelWidth),

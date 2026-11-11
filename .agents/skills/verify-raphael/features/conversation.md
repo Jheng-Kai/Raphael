@@ -2332,8 +2332,8 @@ while the search bar stands under the row) as its top padding, and its mask fade
 At the right the tools end 14 px short of the window's three buttons (`--pa-top-end`) where the pane reaches the window's edge. With the
 details panel open as a column (1120 and wider) the panel's own head (`.mb-det-head`) is the row over it, its last button 14 px short of the
 window's buttons, and the conversation's tools go to the pane's edge; under 1120 px the panel lies over the chat and its scrim dims the
-header. A group's side thread does the same with its header. Under 860 px the sidebar's menu button stands at the window's top left and the
-pill row starts clear of it (`--pa-top-start`).
+header. A group's side thread does the same with its header. Under 860 px the sidebar is the 88px rail of faces beside the pane (no menu button),
+so the pill row starts at the pane's own edge.
 
 Dragging: the header carries `data-window-drag` (and the panel's and the side thread's heads, and the peer view's), so its empty parts move
 the window and a double press maximises, as the strip does; while a conversation's header is shown the strip (`.window-chrome`, whose drag

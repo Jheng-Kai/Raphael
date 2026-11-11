@@ -950,7 +950,10 @@ export function checkRendered(name, context = {}) {
     return {check:name};
   }  if(name === "daily-newest") {const reads=window.__look.calls.filter(call=>call.method==='agent.history.list'&&!call.params?.member_id&&call.params?.conversation_id!==undefined);require(reads.length>0&&reads.every(call=>call.params.conversation_id===77),'the newest standard conversation (not the default one, not the quick questions) is the one read');require(document.querySelector('.conversation-caption').hidden,'the header names only the member while a standard conversation is open (R-UI-103)');return {check:name,reads:reads.map(call=>call.params.conversation_id)};}
   if(name === "daily-copy") {const copied={"zh-TW":"已複製",en:"Copied",ja:"コピーしました"}[document.documentElement.lang];const tick=[...document.querySelectorAll('.thread button, .cn-setup-dialog button, .au-routine-dialog button')].find(el=>el.getAttribute('aria-label')===copied);require(tick&&tick.querySelector('svg'),'the pressed copy control displays its tick and copied name');require(tick.scrollWidth<=tick.clientWidth,'copied words fit in the fixed button width');return {check:name};}
-  if(name === "daily-marks") {require(document.querySelectorAll('.sidebar-app-marks .mono').length===3,'three connected known apps show bare marks');return {check:name};}
+  if(name === "daily-marks") {
+    // The rail of faces (a window under 860px) has no room for marks: the Connections button is an icon there, named by its tooltip and still the door to the same dialog.
+    if(document.documentElement.hasAttribute('data-sidebar-collapsed')){const door=document.querySelector('#nav .sidebar-apps[data-connect-apps]'),box=door.getBoundingClientRect();require(visible(door)&&Math.abs(box.width-36)<1&&Math.abs(box.height-36)<1&&door.getAttribute('aria-label')&&door.dataset.tooltip&&!visible(door.querySelector('.nav-t'))&&![...door.querySelectorAll('.sidebar-app-marks .mono')].some(visible),'on the rail the Connections door is a 36px icon with its name as tooltip and no marks');return {check:name,rail:true};}
+    require(document.querySelectorAll('.sidebar-app-marks .mono').length===3,'three connected known apps show bare marks');return {check:name};}
   if(name === "daily-draft-member" || name === "daily-draft-room") {const input=document.querySelector(name.endsWith('room')?'#room-message':'.page-agent .mb-chat:not([hidden]) .cmp-input');require(input.value==='Unfinished sample draft','navigation restores this composer words');require(input.selectionStart===input.value.length,'caret returns to the end');return {check:name};}
   if (name === "group-live-line") {
     const row = document.querySelector('.au-room-thinking');
@@ -984,7 +987,8 @@ export function checkRendered(name, context = {}) {
     if (name === "presence-states-sidebar") for (const [id, state] of [[1,"thinking"],[2,"working"],[3,"blocked"]]) require(document.querySelector(`[data-member="${id}"] .slime`)?.dataset.state === state, `sidebar member ${id} shows ${state}`);
     if (["presence-hover-action", "presence-sidebar-hover", "presence-rail-hover"].includes(name)) {
       const tips = [...document.querySelectorAll('[role="tooltip"]')].filter(visible);
-      const nameFirst = document.documentElement.hasAttribute("data-sidebar-collapsed");
+      // A face of the rail is named before its action; the header's face is not in the rail.
+      const nameFirst = name !== "presence-hover-action" && document.documentElement.hasAttribute("data-sidebar-collapsed");
       const member = window.__look.data.members.find(member => member.id === 1);
       require(tips.length === 1 && tips[0].textContent === `${nameFirst ? member.name + "\n" : ""}Comparing sample sources`, "one open tooltip follows the public action, with the rail name first");
       const box = tips[0].getBoundingClientRect(), chrome = document.querySelector('.window-chrome').getBoundingClientRect();
@@ -2552,6 +2556,19 @@ export function checkRendered(name, context = {}) {
     require(Math.abs(main.left - width) <= 2, "the conversation starts where the list ends");
     require(!document.querySelector('[data-sidebar="collapse"]') && visible(nav.querySelector('.mb-top [data-col="search"]')), "no fold button, and search stands at the top of the wider list");
     return {check:name, width:Math.round(width)};
+  }
+  // The details panel dragged as wide as it goes beside the conversation: the panel gives way, so the conversation keeps its 386px
+  // (what it had beside the old 296px list and a 440px panel at 1120px) and the one-row composer keeps all its controls (R-UI-110).
+  if (name === "panel-widest") {
+    const nav = document.getElementById('nav').getBoundingClientRect(), panel = document.querySelector('.page-agent .mb-det').getBoundingClientRect();
+    const pane = document.querySelector('.page-agent .mb-chat').getBoundingClientRect(), composer = document.querySelector('.page-agent .composer')?.getBoundingClientRect();
+    const widths = { sidebar: Math.round(nav.width), pane: Math.round(pane.width), composer: composer && Math.round(composer.width), panel: Math.round(panel.width) };
+    if (innerWidth >= 1120) {
+      require(pane.width >= 385.5, `the conversation keeps 386px: ${JSON.stringify(widths)}`);
+      require(panel.width >= 299.5 && panel.width <= 720, `the panel keeps its own range: ${JSON.stringify(widths)}`);
+      require(Math.abs(nav.width - Math.min(348, innerWidth - 604)) < 1, `the list gave way last, not first: ${JSON.stringify(widths)}`);
+    }
+    return { check: name, ...widths };
   }
   if (name === "panel-width" || name === "panel-closed") {
     const page = document.querySelector('.page-agent'), panel = page.querySelector('.mb-det');
@@ -5457,7 +5474,7 @@ export function checkRendered(name, context = {}) {
     require(back && visible(back) && !back.hidden, "the way back is in the header");
     require(back.classList.contains("icon") && back.getAttribute("aria-label") === "返回" && back.textContent.trim() === "" && back.querySelector("svg"), "a left arrow named 返回, no word on it");
     require(Math.round(arrow.width) === 36 && Math.round(arrow.height) === 36 && parseFloat(getComputedStyle(back).borderRadius) >= 18 && /^rgb\(/.test(getComputedStyle(back).backgroundColor), "the window edge's soft round button, 36 px, on its solid surface");
-    // Under 860 px the sidebar's menu button stands at the window's top left and the row starts clear of it (`--pa-top-start`).
+    // Under 860 px the list is the rail beside the pane: the row starts at the pane's own edge, with nothing reserved for a menu button.
     const lead = parseFloat(getComputedStyle(back.parentElement).marginLeft) || 0;
     require(arrow.left - head.left <= 12 + lead && arrow.top >= head.top - 1 && arrow.bottom <= head.bottom + 1, `at the header's top left (${Math.round(arrow.left - head.left)} px in)`);
     const search = pane.querySelector('.mb-head [data-act="search"]');
