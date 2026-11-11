@@ -17,28 +17,94 @@ from ..brain.model_ref import split_api_ref
 from .attachments import Attachment, MAX_FILE_BYTES, sniff_ok
 from .common import ServiceError
 from .fetch import PageFetcher
+from .keys import credential_keys
+from . import media_backends
+from .backends import credential_service
+from .backend_http import response_failure
 
 
 class Generation:
     poll_seconds = 1
     timeout_seconds = 1800
 
-    def __init__(self, providers, store, *, fetcher=None):
+    def __init__(self, providers, store, *, fetcher=None, keys=None, transport=None, subscription_images=None):
         self.providers, self.store = providers, store
+        from ..agent.cli.images import CodexImages
+        self.subscriptions = subscription_images or CodexImages(settings=getattr(providers, "settings", None))
+        if providers is not None:
+            providers.image_subscriptions = self.subscriptions
+        self._keys = keys if keys is not None else credential_keys()
+        self._transport, self._http = transport, None
         self.fetcher = fetcher or PageFetcher(media=True, media_types=("image/png", "image/jpeg", "image/webp", "video/mp4"), max_bytes=MAX_FILE_BYTES, max_seconds=120)
 
     async def aclose(self):
-        # PageFetcher creates and closes its own bounded client for each fetch.
-        pass
+        http, self._http = self._http, None
+        if http is not None:
+            await http.aclose()
+
+    def media_choices(self, kind, selected_model=""):
+        rows = list(self.providers.media_choices(kind))
+        if kind == "image":
+            rows.extend(row for row in self.subscriptions.choices() if not any(
+                existing["reference"] == row["reference"] for existing in rows))
+        selected, _ = split_api_ref(selected_model)
+        extra = media_backends.choice(kind, selected)
+        if extra is not None:
+            rows.append(extra)
+        return rows
+
+    @staticmethod
+    def is_subscription_image(reference):
+        from ..agent.cli.images import REFERENCE
+        return reference == REFERENCE
+
+    async def refresh_image_choices(self, reference):
+        """Read missing image metadata once, without submitting a generation or changing the choice."""
+        selected, _ = split_api_ref(reference)
+        if self.is_subscription_image(selected):
+            if not await self.subscriptions.refresh():
+                raise ServiceError("auth_expired", service="codex")
+            return self.media_choices("image", reference)
+        pid, _ = self.providers.resolve(selected)
+        try:
+            await self.providers.discover(pid)
+            return self.media_choices("image", reference)
+        except OpenRouterError as error:
+            kind = "network" if error.kind in ("offline", "network") else error.kind if error.kind in (
+                "timeout", "auth", "credits", "rate_limit", "content_policy") else "catalog_unavailable"
+            raise ServiceError(kind) from None
+        except (TimeoutError, httpx.TimeoutException):
+            raise ServiceError("timeout") from None
+        except httpx.TransportError:
+            raise ServiceError("network") from None
+        except (ValueError, KeyError, TypeError, OSError):
+            raise ServiceError("catalog_unavailable") from None
+        except Exception:
+            raise ServiceError("catalog_unavailable") from None
+
+    def _client(self):
+        if self._http is None:
+            self._http = httpx.AsyncClient(transport=self._transport, trust_env=False)
+        return self._http
 
     async def make(self, kind, arguments, *, selected_model, progress=None, ledger=None):
-        choices = self.providers.media_choices(kind)
+        if kind == "image" and self.is_subscription_image(selected_model):
+            if arguments.get("model", selected_model) != selected_model or not isinstance(arguments.get("prompt"), str) or not 1 <= len(arguments["prompt"].strip()) <= 12000 or arguments.get("images"):
+                raise ServiceError("bad_arguments")
+            return await self._subscription(arguments, selected_model, ledger)
+        choices = self.media_choices(kind, selected_model)
         selected, _ = split_api_ref(selected_model)
         choice = next((row for row in choices if row["reference"] == selected), None)
         if choice is None:
             raise ServiceError("not_configured")
         if arguments.get("model", selected) != selected or not isinstance(arguments.get("prompt"), str) or not 1 <= len(arguments["prompt"].strip()) <= 12000:
             raise ServiceError("bad_arguments")
+        route = media_backends.selected(kind, selected)
+        if route is not None:
+            if arguments.get("images"):
+                raise ServiceError("bad_arguments", service=route[0])
+            return await self._backend(kind, route, selected, arguments["prompt"], progress, ledger,
+                                       square=arguments.get("square", False))
         ids = arguments.get("images", [])
         if not isinstance(ids, list) or len(ids) > 4 or ids and not choice.get("image_input"):
             raise ServiceError("bad_arguments")
@@ -74,7 +140,8 @@ class Generation:
                     attachment = await self._video(provider, model, arguments["prompt"], progress, charge=charge)
                 else:
                     attachment = await self._image(provider, model, arguments["prompt"], images,
-                                                   image_only=choice.get("generation_only", False), charge=charge)
+                                                   image_only=choice.get("generation_only", False), charge=charge,
+                                                   square=arguments.get("square", False))
                 # Cancellation before publication never creates a conversation artifact.
                 await asyncio.sleep(0)
                 saved = self.store.save(attachment)
@@ -96,20 +163,74 @@ class Generation:
                            prompt_tokens=billing["prompt_tokens"], completion_tokens=billing["completion_tokens"],
                            outcome="ok" if billing["cost_usd"] is not None else "cost_unknown")
 
+    async def _subscription(self, arguments, reference, ledger):
+        contacted, incoming, outgoing = False, 0, 0
+        def charge(usage):
+            nonlocal contacted, incoming, outgoing
+            contacted = True
+            incoming = token_count(usage.get("input_tokens")) or 0
+            outgoing = token_count(usage.get("output_tokens")) or 0
+        try:
+            attachment = await self.subscriptions.generate(arguments["prompt"], square=arguments.get("square", False), charge=charge)
+            await asyncio.sleep(0)
+            saved = self.store.save(attachment)
+            return {"attachment": saved.metadata(), "model": reference, "cost_usd": None,
+                    "billing_source": "subscription", "prompt_tokens": incoming, "completion_tokens": outgoing}
+        finally:
+            if contacted and ledger is not None:
+                ledger.add(model=reference, cost_usd=0, prompt_tokens=incoming, completion_tokens=outgoing,
+                           outcome="subscription", billing_source="subscription")
+
+    async def _backend(self, kind, route, reference, prompt, progress, ledger, *, square=False):
+        service, model = route
+        billing = {"cost_usd": None, "prompt_tokens": 0, "completion_tokens": 0}
+        contacted = False
+        def charge(data):
+            nonlocal contacted
+            contacted = True
+            found = media_cost(data, {})
+            if found["cost_usd"] is not None or billing["cost_usd"] is None:
+                billing.update(found)
+        try:
+            async with asyncio.timeout(self.timeout_seconds):
+                attachment = await media_backends.generate(kind, service, model, prompt,
+                    http=self._client(), key=self._keys.get(credential_service(service)), asset=self._asset, raw_asset=self._bytes,
+                    charge=charge, progress=progress, poll_seconds=self.poll_seconds, square=square)
+                await asyncio.sleep(0)
+                saved = self.store.save(attachment)
+                return {"attachment": saved.metadata(), "model": reference, **billing}
+        except ServiceError as error:
+            error.service = service
+            raise
+        except (ValueError, TypeError, KeyError, IndexError):
+            raise ServiceError("bad_response", service=service) from None
+        except TimeoutError:
+            raise ServiceError("timeout", service=service) from None
+        finally:
+            if contacted and ledger is not None:
+                ledger.add(model=reference, cost_usd=billing["cost_usd"] or 0,
+                    prompt_tokens=billing["prompt_tokens"], completion_tokens=billing["completion_tokens"],
+                    outcome="ok" if billing["cost_usd"] is not None else "cost_unknown")
+
     async def _json(self, provider, method, path, **kwargs):
         body = kwargs.pop("body", None)
         try:
             async with provider._client().stream(method, provider.base_url + path, headers=provider._headers(),
                     json=body, timeout=120, follow_redirects=False, **kwargs) as response:
-                if not response.is_success:
-                    raise ServiceError("auth" if response.status_code in (401, 403) else "rate_limit" if response.status_code == 429 else "tool_error")
                 raw = bytearray()
                 async for chunk in response.aiter_bytes():
                     raw.extend(chunk)
+                    if not response.is_success and len(raw) > 65536:
+                        raise ServiceError(response_failure(response.status_code))
                     if len(raw) > MAX_FILE_BYTES * 4 // 3 + 1024 * 1024:
                         raise ServiceError("too_large")
+                if not response.is_success:
+                    raise ServiceError(response_failure(response.status_code, raw))
             data = json.loads(raw)
-            if not isinstance(data, dict) or data.get("error"):
+            if isinstance(data, dict) and data.get("error"):
+                kind = response_failure(200, raw)
+                raise ServiceError("protocol" if kind == "http_error" else kind)
+            if not isinstance(data, dict):
                 raise ServiceError("protocol")
             return data
         except httpx.TimeoutException:
@@ -117,19 +238,26 @@ class Generation:
         except httpx.TransportError:
             raise ServiceError("network") from None
 
-    async def _image(self, provider, model, prompt, images, *, image_only=False, charge=lambda data: None):
+    async def _image(self, provider, model, prompt, images, *, image_only=False, charge=lambda data: None, square=False):
         if provider.kind == "openrouter":
             content = [{"type": "text", "text": prompt}, *({"type": "image_url", "image_url": {"url": image.data_url()}} for image in images)]
-            data = await self._json(provider, "POST", "/chat/completions", body={"model": model, "modalities": ["image"] if image_only else ["image", "text"], "messages": [{"role": "user", "content": content}]})
+            data = await self._json(provider, "POST", "/chat/completions", body={"model": model, "modalities": ["image"] if image_only else ["image", "text"], "messages": [{"role": "user", "content": content}],
+                **({"image_config": {"aspect_ratio": "1:1"}} if square else {})})
             charge(data)
+            if data["choices"][0]["message"].get("refusal"):
+                raise ServiceError("content_policy")
             value = data["choices"][0]["message"]["images"][0]["image_url"]["url"]
             return await self._asset(value, "image")
         if provider.kind == "google":
             parts = [{"text": prompt}, *({"inlineData": {"mimeType": image.mime, "data": base64.b64encode(image.data).decode()}} for image in images)]
             base = provider.base_url.removesuffix("/openai").rstrip("/")
             provider = CompatibleProvider("google", base if base.endswith("/v1beta") else base + "/v1beta", provider._key_provider, http=provider._client())
-            data = await self._json(provider, "POST", f"/models/{model}:generateContent", body={"contents": [{"parts": parts}], "generationConfig": {"responseModalities": ["TEXT", "IMAGE"]}})
+            data = await self._json(provider, "POST", f"/models/{model}:generateContent", body={"contents": [{"parts": parts}], "generationConfig": {"responseModalities": ["TEXT", "IMAGE"],
+                **({"imageConfig": {"aspectRatio": "1:1"}} if square else {})}})
             charge(data)
+            if data.get("promptFeedback", {}).get("blockReason") or any(
+                    candidate.get("finishReason") in ("SAFETY", "IMAGE_SAFETY", "PROHIBITED_CONTENT") for candidate in data.get("candidates", [])):
+                raise ServiceError("content_policy")
             image = next((p["inlineData"] for p in data["candidates"][0]["content"]["parts"] if "inlineData" in p), None)
             if image is None:
                 raise ServiceError("protocol")
@@ -139,6 +267,8 @@ class Generation:
                                     files=[("image[]", (image.name, image.data, image.mime)) for image in images])
         else:
             body = {"model": model, "prompt": prompt, "n": 1, "response_format": "b64_json"}
+            if square:
+                body.update({"aspect_ratio": "1:1"} if provider.kind == "xai" else {"size": "1024x1024"})
             if images:
                 if len(images) != 1:
                     raise ServiceError("bad_arguments")

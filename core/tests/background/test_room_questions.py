@@ -14,6 +14,24 @@ async def in_a_room(rig, plugins, conn):
     return room, asked
 
 
+async def test_side_thread_questions_and_stop_stay_in_their_thread(make_rig, plugins, conn):
+    rig = make_rig()
+    room, asked = await in_a_room(rig, plugins, conn)
+    main = conn.execute('SELECT id FROM room_threads WHERE room_id=?', (room,)).fetchone()[0]
+    with conn:
+        root = conn.execute('INSERT INTO room_messages(room_id,thread_id,text,created) VALUES(?,?,?,1)', (room,main,'Synthetic root')).lastrowid
+        side = conn.execute('INSERT INTO room_threads(room_id,created,parent_message_id) VALUES(?,1,?)', (room,root)).lastrowid
+        conn.execute('UPDATE worker_tasks SET thread_id=? WHERE id=?', (side,asked['task_id']))
+    assert (await rig.rpc.call('background.questions.list', {'room_id':room}))['questions'] == []
+    assert (await rig.rpc.call('background.questions.list', {'room_id':room,'thread_id':side}))['questions'][0]['id'] == asked['question_id']
+    task = rig.service._store.create(session_id='main-pending',language='en',text='Main room work')
+    with conn:
+        conn.execute("UPDATE worker_tasks SET scope='room',room_id=?,thread_id=? WHERE id=?", (room,main,task))
+    await rig.service.cancel_room(room, thread_id=side)
+    assert rig.task(task).state == 'queued'
+    assert rig.task(asked['task_id']).state == 'cancelled'
+
+
 async def test_a_question_of_a_rooms_turn_waits_in_the_room_and_not_on_the_members_page(make_rig, plugins, conn):
     rig = make_rig()
     room, asked = await in_a_room(rig, plugins, conn)

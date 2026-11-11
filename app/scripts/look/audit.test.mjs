@@ -11,6 +11,38 @@ import { LATIN_NAMES, needsDesktopFixture, sceneLatinNames } from "./runner.mjs"
 import { slimeParts } from "./slime-board.mjs";
 
 describe("rendered look checks", () => {
+  it("rejects short event actions, inline labels and misaligned confirmation", () => {
+    const browser = new Window();
+    browser.document.body.innerHTML = '<div class="au-event-fields"><label>Channel<input id="au-event-value" class="mb-fin" value="C012345"></label><label>Contains<input id="au-event-contains" class="mb-fin" value="&lt;@U012345&gt;"></label><button data-dlg="event-check">Check</button></div>';
+    browser.__look = {calls:[{method:'routines.list',params:{contains:'<@U012345>',value:'C012345'}}]};
+    let actionHeight = 36, actionBottom = 100, labelBottom = 56;
+    for (const input of browser.document.querySelectorAll('input')) input.getBoundingClientRect = () => ({top:64,bottom:100,height:36});
+    browser.document.querySelector('button').getBoundingClientRect = () => ({height:actionHeight,bottom:actionBottom});
+    browser.document.createRange = () => ({selectNodeContents() {},setEndBefore() {},getBoundingClientRect:()=>({bottom:labelBottom})});
+    vi.stubGlobal('document',browser.document); vi.stubGlobal('window',browser);
+    try {
+      expect(() => checkRendered('routine-trigger-slack')).not.toThrow();
+      actionHeight = 26; expect(() => checkRendered('routine-trigger-slack')).toThrow('share the control height'); actionHeight = 36;
+      labelBottom = 90; expect(() => checkRendered('routine-trigger-slack')).toThrow('above their fields'); labelBottom = 56;
+      actionBottom = 108; expect(() => checkRendered('routine-trigger-slack')).toThrow('aligns with the fields');
+    } finally { vi.unstubAllGlobals(); browser.happyDOM.abort(); }
+  });
+
+  it("rejects recipe frontmatter, raw service ids and an unfolded default skill", () => {
+    const browser = new Window();
+    browser.document.body.innerHTML = '<div class="template-preview"><div class="tpl-row" data-tpl-skill><div class="tpl-row-t"><b>Check sources</b><span>Check before publishing</span><div class="card-disclosure"><button data-card-disclosure aria-expanded="false"></button><div class="card-detail" hidden>Keep this body.</div></div></div></div><div data-template-connection="gmail"><b class="card-title">Gmail</b></div></div>';
+    vi.stubGlobal('document',browser.document);
+    try {
+      expect(() => checkRendered('template-content')).not.toThrow();
+      const detail = browser.document.querySelector('.card-detail');
+      detail.textContent = '---\nname: Check sources\ndescription: Check before publishing\n---\nKeep this body.';
+      expect(() => checkRendered('template-content')).toThrow('omits frontmatter'); detail.textContent = 'Keep this body.';
+      const title = browser.document.querySelector('.card-title');
+      title.textContent = 'gmail'; expect(() => checkRendered('template-content')).toThrow('catalogue display names'); title.textContent = 'Gmail';
+      detail.hidden = false; expect(() => checkRendered('template-content')).toThrow('disclosure state');
+    } finally { vi.unstubAllGlobals(); browser.happyDOM.abort(); }
+  });
+
   it("rejects split text edges, mismatched controls and centered location values", () => {
     const browser = new Window();
     browser.document.body.innerHTML = '<div class="computer-location-popover"><p class="computer-location-purpose">Shared scope</p><div class="lbl"><div class="t">Computer location</div></div><button class="sel"><span>Local</span></button><label class="field"><input></label></div>';
@@ -32,27 +64,43 @@ describe("rendered look checks", () => {
       textInset = 50; expect(() => checkRendered("host-settings-layout")).toThrow("left-aligned");
     } finally { vi.unstubAllGlobals(); browser.happyDOM.abort(); }
   });
-  it("rejects a low-contrast Docker download on the desktop wallpaper", () => {
+  it("rejects words, a face or a recovery button drawn over an absent computer's wallpaper", () => {
+    // An offline computer shows its wallpaper alone and the whole screen is the one press that starts it.
     const browser = new Window();
-    browser.document.body.innerHTML = '<section class="desktop-panel"><div class="desktop-message">Docker Desktop</div><button data-act="docker-download">Download Docker Desktop</button></section>';
+    const markup = extra => `<header class="desktop-location-header"><button data-computer-location>This computer</button></header><section class="desktop-panel"><div class="desktop-screen"><img class="desktop-wallpaper"><div class="desktop-placeholder">${extra}</div><button data-desktop="enlarge"><span class="desktop-open-pill">Open</span></button></div></section>`;
     browser.__look = { calls: [] };
-    for (const element of browser.document.querySelectorAll("*")) { element.checkVisibility = () => true; element.getBoundingClientRect = () => ({ width: 120, height: 32 }); }
-    let backgroundColor = "rgb(255, 255, 255)";
-    vi.stubGlobal("window", browser); vi.stubGlobal("document", browser.document);
-    vi.stubGlobal("getComputedStyle", () => ({ color: "rgb(240, 240, 240)", backgroundColor }));
+    const run = extra => {
+      browser.document.body.innerHTML = markup(extra);
+      for (const element of browser.document.querySelectorAll("*")) {
+        element.checkVisibility = () => !element.matches(".desktop-open-pill");
+        element.getBoundingClientRect = () => ({ width: 120, height: 32 });
+      }
+      return () => checkRendered("desktop-absent");
+    };
+    vi.stubGlobal("window", browser); vi.stubGlobal("document", browser.document); vi.stubGlobal("NodeFilter", browser.NodeFilter);
+    vi.stubGlobal("getComputedStyle", () => ({ color: "rgb(240, 240, 240)", backgroundColor: "rgb(23, 23, 23)" }));
     try {
-      expect(() => checkRendered("desktop-absent")).toThrow("readable contrast");
-      backgroundColor = "rgb(23, 23, 23)";
-      expect(() => checkRendered("desktop-absent")).not.toThrow();
+      expect(run("")).not.toThrow();
+      expect(run('<div class="desktop-message">Docker Desktop is missing</div>')).toThrow("carries no words");
+      expect(run('<div class="desktop-boot-face"></div>')).toThrow("draws no face");
+      expect(run('<button data-act="docker-download"></button>')).toThrow("draws no face, progress, sentence or recovery button");
+      expect(run('<button data-desktop="retry">Retry</button>')).toThrow("carries no words");
+      expect(run('<button class="other"></button>')).toThrow("no button but its own cover");
     } finally { vi.unstubAllGlobals(); browser.happyDOM.abort(); }
-  });
-  it("accepts a typed host name as data while still rejecting untranslated controls", () => {
+  });  it("accepts a typed host name as data while still rejecting untranslated controls", () => {
     const window = new Window();
     window.document.body.innerHTML = '<button data-computer-location><span>studio-mini</span></button><button>Save</button>';
     for (const element of window.document.querySelectorAll("*")) element.getBoundingClientRect = () => ({ x: 0, y: 0, left: 0, top: 0, right: 120, bottom: 32, width: 120, height: 32 });
     const scene = { fixture: {}, steps: [{ action: "type", selector: "#computer-ssh-alias", text: "studio-mini" }] };
     const result = auditDocument(window.document, { width: 1120, height: 900 }, [], sceneLatinNames(scene, "zh-TW", {}));
     expect(result.mixedLanguage.map(item => item.word)).toEqual(["Save"]);
+  });
+  it("accepts the complete 1Password brand while still rejecting an untranslated Password label", () => {
+    const window = new Window();
+    window.document.body.innerHTML = '<p>從 1Password 匯入</p><label>Password</label>';
+    for (const element of window.document.querySelectorAll("*")) element.getBoundingClientRect = () => ({ x: 0, y: 0, left: 0, top: 0, right: 120, bottom: 32, width: 120, height: 32 });
+    const result = auditDocument(window.document, { width: 1120, height: 900 }, [], sceneLatinNames({ fixture: {}, steps: [] }, "zh-TW", {}));
+    expect(result.mixedLanguage.map(item => [item.tag, item.word])).toEqual([["label", "Password"]]);
   });
   it("rejects permission field labels taller than one line", () => {
     const browser = new Window();
@@ -121,15 +169,17 @@ describe("rendered look checks", () => {
       expect(() => checkRendered("slime-marks-at-rest")).toThrow("idle has no running animation");
     } finally { vi.unstubAllGlobals(); browser.happyDOM.abort(); }
   });
-  it("requires a rounded square latest button with its own opaque surface (R-UI-98)", () => {
+  it("requires a rounded square latest button with its own opaque surface, centred just above the composer (R-UI-98, R-UI-105)", () => {
     const browser = new Window();
-    browser.document.body.innerHTML = '<div><div class="ra-scroll" style="scrollbar-width:none"></div><button class="conversation-latest" style="border:1px solid gray;border-radius:8px;background:white"></button></div>';
-    const scroll = browser.document.querySelector(".ra-scroll"), latest = browser.document.querySelector("button");
-    let width = 32;
+    browser.document.body.innerHTML = '<div><div class="ra-scroll" style="scrollbar-width:none"></div><button class="conversation-latest" style="border:1px solid gray;border-radius:8px;background:white"></button></div><form class="composer"></form>';
+    const scroll = browser.document.querySelector(".ra-scroll"), latest = browser.document.querySelector("button"), composer = browser.document.querySelector(".composer");
+    let width = 32, left = 84;
     for (const element of [scroll, latest]) {
       element.checkVisibility = () => true;
-      element.getBoundingClientRect = () => ({ width, height: 32 });
+      element.getBoundingClientRect = () => ({ width, height: 32, left, top: 520, bottom: 552 });
     }
+    composer.checkVisibility = () => true;
+    composer.getBoundingClientRect = () => ({ width: 200, height: 80, left: 0, top: 564, bottom: 644 });
     vi.stubGlobal("document", browser.document);
     vi.stubGlobal("getComputedStyle", element => browser.getComputedStyle(element));
     try {
@@ -142,24 +192,29 @@ describe("rendered look checks", () => {
       expect(() => checkRendered("conversation-up")).toThrow("rounded square button (R-UI-98)");
       width = 32; latest.style.backgroundColor = "rgba(0, 0, 0, 0)";
       expect(() => checkRendered("conversation-up")).toThrow("latest has its own opaque surface");
+      latest.style.backgroundColor = "white"; left = 150;
+      expect(() => checkRendered("conversation-up")).toThrow("latest sits centred just above the composer");
     } finally { vi.unstubAllGlobals(); browser.happyDOM.abort(); }
   });
-  it("rejects an event check button stretched to the labelled scope height", () => {
+  it("requires an event check button to match the scope control height and baseline", () => {
     const browser=new Window();
     browser.document.body.innerHTML='<section class="au-routine-dialog"><button data-dlg="trigger">Event</button><label><input id="au-event-value"></label><button data-dlg="event-check">Check event</button></section>';
     for(const element of browser.document.querySelectorAll('*')) element.getBoundingClientRect=()=>({left:10,top:10,right:110,bottom:40,width:100,height:30});
     const button=browser.document.querySelector('[data-dlg="event-check"]');
     button.getBoundingClientRect=()=>({left:10,top:10,right:110,bottom:78,width:100,height:68});
+    let labelBottom=8;
+    browser.document.createRange=()=>({selectNodeContents(){},setEndBefore(){},getBoundingClientRect:()=>({bottom:labelBottom})});
     vi.stubGlobal('document',browser.document);
     try {
-      expect(()=>checkRendered('moving-event-input')).toThrow('ordinary small button height');
+      expect(()=>checkRendered('moving-event-input')).toThrow('event scope and check share the control height');
       button.getBoundingClientRect=()=>({left:10,top:10,right:110,bottom:40,width:100,height:30});
       expect(()=>checkRendered('moving-event-input')).not.toThrow();
-      browser.document.querySelector('label').getBoundingClientRect=()=>({left:10,top:10,right:110,bottom:58,width:100,height:48});
-      expect(()=>checkRendered('moving-event-input')).toThrow('scope label stays on one line');
-      browser.document.querySelector('[data-dlg="trigger"]').getBoundingClientRect=()=>({left:10,top:10,right:110,bottom:54,width:100,height:44});
-      browser.document.querySelector('#au-event-value').getBoundingClientRect=()=>({left:10,top:10,right:110,bottom:54,width:100,height:44});
-      browser.document.querySelector('label').getBoundingClientRect=()=>({left:10,top:10,right:110,bottom:54,width:100,height:44});
+      labelBottom=24;
+      expect(()=>checkRendered('moving-event-input')).toThrow('event scope label stays above its input');
+      labelBottom=8;
+      button.getBoundingClientRect=()=>({left:10,top:15,right:110,bottom:45,width:100,height:30});
+      expect(()=>checkRendered('moving-event-input')).toThrow('event scope and check share a baseline');
+      button.getBoundingClientRect=()=>({left:10,top:10,right:110,bottom:40,width:100,height:30});
       expect(()=>checkRendered('moving-event-input')).not.toThrow();
     } finally {vi.unstubAllGlobals();browser.happyDOM.abort();}
   });
@@ -288,9 +343,10 @@ describe("rendered look checks", () => {
   });
   it("checks the takeover sidebar's CSS visibility rather than its reserved box", () => {
     const browser = new Window();
-    browser.document.body.innerHTML = '<button data-sidebar="open" style="visibility:hidden">Sidebar</button><aside class="mb-det"><section class="desktop-panel" data-expanded><div class="desktop-takeover-bar"><span class="av"></span><button data-desktop="return">Return</button></div><iframe></iframe></section></aside>';
+    browser.document.body.innerHTML = '<button data-sidebar="open" style="visibility:hidden">Sidebar</button><aside class="mb-det"><section class="desktop-panel" data-expanded><div class="desktop-takeover-bar"><div class="desktop-dock"><span class="desktop-mode-label">你正在操作</span><button data-desktop="return">Return</button></div></div><iframe></iframe></section></aside>';
     for (const element of browser.document.querySelectorAll('*')) element.getBoundingClientRect = () => ({width:720,height:40});
     const frame = browser.document.querySelector('iframe');
+    frame.getBoundingClientRect = () => ({width:700,height:492});
     Object.defineProperty(frame, 'contentWindow', {value:{__desktopConnections:1}});
     browser.__look = {calls:[{method:'computer.viewer_open',params:{member_id:1}}]};
     const previous = {document:globalThis.document,window:globalThis.window,innerWidth:globalThis.innerWidth};
@@ -542,6 +598,10 @@ describe("rendered look checks", () => {
     window.document.querySelector('style').textContent = '.vanish:hover{background-color:rgba(245,245,245,.14)}';
     expect(audit().productRules.filter(item => item.rule === 'R-UI-52')).toEqual([]);
   });
+  it("reads a hover inside :is() as a hover, so a later clear fill overrides a general one (R-UI-52)", () => {
+    const { audit } = productAudit('<div style="background-color:rgb(255,255,255)"><button class="btn stop" style="color:rgb(120,90,250)">Stop</button></div><style>.btn:hover:not(:disabled){background-color:rgb(120,90,250)}.btn.stop:is(:hover, :active):not(:disabled){background-color:transparent}</style>');
+    expect(audit().productRules.filter(item => item.rule === 'R-UI-52')).toEqual([]);
+  });
   it.each(["light", "dark"])("keeps the computer takeover preview icon readable on hover for every member colour in %s (R-UI-52)", theme => {
     const window = new Window();
     // happy-dom leaves colours and background-image: initial authored; the browser resolves RGB and none.
@@ -577,7 +637,8 @@ describe("rendered look checks", () => {
         expect(failures, colour).toEqual([]);
       }
     } finally { vi.unstubAllGlobals(); window.happyDOM.abort(); }
-  });
+  // It audits every member colour in four stylesheets: about 3 s alone, past the 5 s default when the whole suite runs.
+  }, 30000);
   it("rejects a disabled control whose reason exists only in a title (R-UI-69)", () => {
     const { window, audit } = productAudit('<div><button disabled title="Needs an API key">Add</button></div>');
     expect(audit().productRules.filter(item => item.rule === 'R-UI-69')).toHaveLength(1);
@@ -618,6 +679,18 @@ describe("rendered look checks", () => {
     expect(audit().productRules.filter(item => item.rule === 'R-UI-62')).toEqual([]);
     window.document.querySelector('.main').innerHTML = '<section class="page-agent">x</section>';
     expect(audit().productRules.filter(item => item.rule === 'R-UI-62').map(item => item.class)).toEqual(['main']);
+  });
+  it("rejects a main area that scrolls under an open conversation, even with an overlay scrollbar (R-UI-62)", () => {
+    const { window, audit } = productAudit('<div class="main" style="overflow-y:auto"><section class="page-agent">x</section></div>');
+    const main = window.document.querySelector('.main');
+    Object.defineProperty(main, 'clientHeight', { value: 800 });
+    Object.defineProperty(main, 'scrollHeight', { value: 1781, configurable: true });
+    expect(audit().productRules.filter(item => item.rule === 'R-UI-62').map(item => item.reason)).toEqual(['A conversation scrolls inside itself, yet the main area around it scrolls 981px']);
+    Object.defineProperty(main, 'scrollHeight', { value: 800, configurable: true });
+    expect(audit().productRules.filter(item => item.rule === 'R-UI-62')).toEqual([]);
+    main.querySelector('.page-agent').hidden = true;
+    Object.defineProperty(main, 'scrollHeight', { value: 1781 });
+    expect(audit().productRules.filter(item => item.rule === 'R-UI-62')).toEqual([]);
   });
   it("rejects a slime on a fraction of a pixel (R-UI-63)", () => {
     const { window, audit } = productAudit('<span class="mb-av-slime" style="overflow:visible"><svg></svg></span>');
@@ -691,6 +764,10 @@ describe("rendered look checks", () => {
     const { audit } = productAudit('<nav class="side"><button class="btn icon sidebar-home" style="border:0;background:gray"></button></nav><button class="btn icon" style="border:0;background:gray"></button>');
     expect(audit().productRules.filter(item => item.rule === 'R-UI-16')).toHaveLength(1);
   });
+  it("lets the guide's round arrow keep the grey surface of the pill it replaced, and no other icon (R-UI-16)", () => {
+    const { audit } = productAudit('<div class="ob-foot"><div class="action-row ob-actions"><button class="btn icon ob-back" style="border:0;background:gray"></button><button class="btn pri" style="border:1px solid gray">Next</button></div></div><button class="btn icon" style="border:0;background:gray"></button>');
+    expect(audit().productRules.filter(item => item.rule === 'R-UI-16')).toHaveLength(1);
+  });
   it("rejects icon surfaces, incorrect glyph sizing and off-center icons (R-UI-16/19)", () => {
     const { window, audit } = productAudit('<button class="btn icon" style="border:0;background:gray"><svg class="i"></svg></button>');
     const button = window.document.querySelector('button'), glyph = button.firstElementChild;
@@ -739,11 +816,18 @@ describe("rendered look checks", () => {
     window.document.querySelector('button').getBoundingClientRect = () => ({ left: 10, top: 10, right: 410, bottom: 40, width: 400, height: 30 });
     expect(audit().productRules).toEqual([]);
   });
-  it("requires a vertical onboarding ability checklist (R-UI-35)", () => {
-    const { window, audit } = productAudit('<div class="ob-abilities"><button class="btn" style="border:1px solid gray">Dictate</button><button class="btn" style="border:1px solid gray">Ask</button></div>');
+  it("keeps an onboarding choice's control on the right of its name, inside its card (R-UI-35)", () => {
+    const { window, audit } = productAudit('<div class="ob-item"><span class="ob-tx">Notion</span><span class="ob-ctl"><button class="btn" style="border:1px solid gray">Sign in</button></span></div>');
+    const rect = (left, right, top = 0, bottom = 72) => () => ({ left, right, top, bottom, width: right - left, height: bottom - top });
+    const item = window.document.querySelector('.ob-item');
+    item.getBoundingClientRect = rect(0, 400);
+    item.querySelector('.ob-tx').getBoundingClientRect = rect(40, 260, 20, 52);
+    item.querySelector('.ob-ctl').getBoundingClientRect = rect(200, 380, 20, 52);
     expect(audit().productRules.map(item => item.rule)).toEqual(['R-UI-35']);
-    window.document.querySelector('.ob-abilities').lastElementChild.getBoundingClientRect = () => ({ left: 10, top: 50, right: 110, bottom: 80, width: 100, height: 30 });
+    item.querySelector('.ob-ctl').getBoundingClientRect = rect(280, 380, 20, 52);
     expect(audit().productRules).toEqual([]);
+    item.querySelector('.ob-ctl').getBoundingClientRect = rect(280, 420, 20, 52);
+    expect(audit().productRules.map(item => item.rule)).toEqual(['R-UI-35']);
   });
   it("rejects duplicate custom and native tooltips", () => {
     const { audit } = productAudit('<button data-tooltip="Save" title="Save">Save</button><button data-tooltip="Open"><svg><title>Open</title></svg></button><button title="Native">Native</button>');
@@ -794,7 +878,8 @@ describe("rendered look checks", () => {
     expect(failedChecks({ ...result, runtimeErrors: [] })).toBe(true);
   });
   it("permits the scoped floating latest action without relaxing ordinary icon rules", () => {
-    const { audit } = productAudit('<div class="page-agent"><div class="ra-stage"><button class="btn icon conversation-latest" style="border:1px solid gray;background:white"></button></div></div><button class="btn icon conversation-latest" style="border:1px solid gray;background:white"></button>');
+    const { audit } = productAudit('<div class="page-agent"><div class="ra-stage"><button class="btn icon conversation-latest" style="border:1px solid gray;background:white"></button></div></div>' +
+      '<div class="peer-chat"><button class="btn icon conversation-latest peer-latest" style="border:1px solid gray;background:white"></button></div><button class="btn icon conversation-latest" style="border:1px solid gray;background:white"></button>');
     expect(audit().productRules.map(item => item.rule)).toEqual(['R-UI-16', 'R-UI-18']);
   });
   it("checks text frames and bare icon borders", () => {
@@ -819,15 +904,25 @@ describe("rendered look checks", () => {
     primary.getBoundingClientRect = () => ({ left: 0, top: 10, right: 50, bottom: 40, width: 50, height: 30 });
     expect(audit().productRules.map(item => item.rule)).toEqual(['R-UI-27', 'R-UI-27']);
   });
+  it("holds the guide's row to the rule: the round button at the left of the primary passes and a stack over it does not", () => {
+    const { window, audit } = productAudit('<div class="action-row ob-actions"><button class="btn ob-back" style="border:1px solid gray">Back</button><button class="btn pri" style="border:1px solid gray">Next</button></div>');
+    const [back, primary] = window.document.querySelectorAll('button');
+    back.getBoundingClientRect = () => ({ left: 0, top: 0, right: 44, bottom: 44, width: 44, height: 44 });
+    primary.getBoundingClientRect = () => ({ left: 52, top: 0, right: 360, bottom: 44, width: 308, height: 44 });
+    expect(audit().productRules.map(item => item.rule)).not.toContain('R-UI-27');
+    back.getBoundingClientRect = () => ({ left: 0, top: 50, right: 300, bottom: 90, width: 300, height: 40 });
+    primary.getBoundingClientRect = () => ({ left: 0, top: 0, right: 300, bottom: 40, width: 300, height: 40 });
+    expect(audit().productRules.map(item => item.rule)).toContain('R-UI-27');
+  });
   it("distinguishes date choices and navigation from ordinary text actions", () => {
-    const { audit } = productAudit('<div class="au-month-grid"><button class="btn" style="border:0">25</button></div><button class="btn mb-panel-back" style="border:0">Members</button><button class="btn mc-source" style="border:0">Provider</button><button class="btn cs-main" style="border:0">Notion service details</button><div class="ho-month"><button class="btn ho-day" style="border:0">30</button></div><button class="btn conversation-new" style="border:0">New conversation</button>');
+    const { audit } = productAudit('<div class="au-month-grid"><button class="btn" style="border:0">25</button></div><button class="btn mb-panel-back" style="border:0">Members</button><button class="btn mc-source" style="border:0">Provider</button><button class="btn cs-main" style="border:0">Notion service details</button><button class="btn ho-row" style="border:0">Dentist</button><button class="btn conversation-new" style="border:0">New conversation</button>');
     expect(audit().productRules.map(item => item.text)).toEqual(['New conversation']);
   });
   it.each(scenes.filter(scene => scene.name.endsWith("composer-learn")))("keeps $name correction data distinct from untranslated UI", scene => {
     const window = new Window(), { before, after } = scene.fixture.dictationText;
     expect(scene.steps.find(step => step.action === "dictation-paste").text).toBe(before);
     expect(scene.steps.find(step => step.action === "type").text).toBe(after);
-    window.document.body.innerHTML = `<p>${after}</p><p>OpenMausBot</p><button>Message</button>`;
+    window.document.body.innerHTML = `<p>${after}</p><p>SampleToolX</p><button>Message</button>`;
     for (const element of window.document.querySelectorAll("*")) element.getBoundingClientRect = () => ({ left: 10, top: 10, right: 100, bottom: 40, width: 90, height: 30 });
     const allowed = Object.values(scene.fixture.dictationText).flatMap(text => text.match(/[A-Za-z]{2,}/g) ?? []).map(word => word.toLowerCase());
     expect(auditDocument(window.document, { width: 1120, height: 900 }, [], allowed).mixedLanguage.map(item => item.word)).toEqual(["Message"]);
@@ -860,6 +955,12 @@ describe("rendered look checks", () => {
     window.document.body.innerHTML = '<textarea placeholder="Message">C:/Work/Team notes</textarea><textarea aria-label="名稱">User supplied text</textarea>';
     for (const element of window.document.querySelectorAll("*")) element.getBoundingClientRect = () => ({ left: 10, top: 10, right: 100, bottom: 40, width: 90, height: 30 });
     expect(auditDocument(window.document, { width: 1120, height: 900 }, [], []).mixedLanguage.map(item => item.word)).toEqual(["Message"]);
+  });
+  it("treats an IANA time-zone id as an identifier, not as English copy", () => {
+    const window = new Window();
+    window.document.body.innerHTML = '<p>台北 · Asia/Taipei</p><p>America/Argentina/Buenos_Aires</p><p>Asia required</p><p>Europe</p>';
+    for (const element of window.document.querySelectorAll("*")) element.getBoundingClientRect = () => ({ left: 10, top: 10, right: 100, bottom: 40, width: 90, height: 30 });
+    expect(auditDocument(window.document, { width: 1120, height: 900 }, [], []).mixedLanguage.map(item => item.word)).toEqual(["Asia", "required", "Europe"]);
   });
   it("allows complete product names without allowing their ordinary English words", () => {
     const window = new Window();
@@ -929,6 +1030,17 @@ describe("rendered look checks", () => {
     expect(result.horizontalOverflow.document).toBe(true);
     expect(failedChecks(result)).toBe(true);
   });
+  it("keeps what is below the fold of a document that scrolls as a whole, as a saved report, but never in the app's still body", () => {
+    const window = new Window();
+    window.document.body.innerHTML = '<p id="below">Team</p><button id="aside">Save</button>';
+    window.document.querySelector("#below").getBoundingClientRect = () => ({ left: 10, top: 1400, right: 300, bottom: 1430, width: 290, height: 30 });
+    window.document.querySelector("#aside").getBoundingClientRect = () => ({ left: 1100, top: 10, right: 1200, bottom: 40, width: 100, height: 30 });
+    Object.defineProperty(window.document.documentElement, "scrollHeight", { value: 2000 });
+    Object.defineProperty(window.document.documentElement, "clientHeight", { value: 900 });
+    expect(auditDocument(window.document, { width: 1120, height: 900 }, []).outsideViewport.map(item => item.id)).toEqual(["aside"]);
+    window.document.body.style.overflow = "hidden";
+    expect(auditDocument(window.document, { width: 1120, height: 900 }, []).outsideViewport.map(item => item.id)).toEqual(["below", "aside"]);
+  });
   it("excludes content deliberately outside a scrolling container", () => {
     const window = new Window();
     window.document.body.innerHTML = '<div style="overflow-y: auto"><button>Older item</button></div>';
@@ -952,7 +1064,8 @@ describe("rendered look checks", () => {
 
 it("rejects divergent store add classes, row markup and card styling", () => {
   const browser = new Window();
-  const row = `<div class="cs-card" style="display:grid;grid-template-columns:240px 64px;border-radius:12px;border-bottom:0px solid;border-left:0px solid"><button class="btn cs-main" data-conn="open-store"><span class="ic"></span><span class="tx"><span class="nm">App</span><span class="sub">Summary</span></span></button><button class="btn sm" data-conn="join">Add</button></div>`;
+  // Store rows: a name, and under it only what the app asks for.
+  const row = `<div class="cs-card" style="display:grid;grid-template-columns:240px 64px;border-radius:12px;border-bottom:0px solid;border-left:0px solid"><button class="btn cs-main" data-conn="open-store"><span class="ic"></span><span class="tx"><span class="nm">App</span><span class="sub"><b class="need">Needs a key</b></span></span></button><button class="btn sm" data-conn="join">Add</button></div>`;
   browser.document.body.innerHTML = row + row;
   // happy-dom has no pseudo-elements, so the divider line is stood in for by a data attribute.
   const own = browser.getComputedStyle.bind(browser);
@@ -962,6 +1075,10 @@ it("rejects divergent store add classes, row markup and card styling", () => {
   try {
     expect(checkRendered("plugins-store-rows")).toEqual({ check: "plugins-store-rows", rows: 2, addClass: "btn sm" });
     const first = browser.document.querySelector('.cs-card');
+    const line = first.querySelector('.sub'), need = line.innerHTML;
+    line.textContent = "What the app does";
+    expect(() => checkRendered("plugins-store-rows")).toThrow("only what the app asks for");
+    line.innerHTML = need;
     first.style.borderRadius = '0px';
     expect(() => checkRendered("plugins-store-rows")).toThrow("rounded hover");
     first.style.borderRadius = '12px'; first.style.borderBottom = '1px solid';

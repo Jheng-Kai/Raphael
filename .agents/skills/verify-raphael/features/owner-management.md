@@ -1,7 +1,22 @@
 # Owner management
 
-R-AG-MGMT-01 through 03: management belongs to the current primary contact,
-not Raphael by name. Other speakers retain the same work tools. API and CLI
+Owner follow-up (2026-11-08): ask_member and handoff refuse operational delegated
+member management before another member turn/task starts, with guidance to use
+the caller's own owner-private management tools. Since the fixed tool list (2026-11-10,
+below) a find_tools result is an ordinary tool result: the CLI never restarts for it.
+team_overview defaults to a compact complete roster with role, selected model and
+skill/command/routine counts; optional member_id returns one full detail record.
+DataFloor protects both Windows Raphael and Raphael Dev data roots, configured
+RAPHAEL_DATA_DIR/RAPHAEL_HOME and the directory of an active raphael.db, requiring
+single-call consent for reads and refusing writes regardless of action mode.
+Offline regressions: tests/members/test_meetings_followup.py,
+tests/members/test_answering.py, tests/background/test_handoff.py,
+tests/background/test_cli_found_tools.py and tests/agent/test_data_floor.py under core/.
+
+R-AG-MGMT-01 through 03: peer/shared management belongs to the current primary contact,
+not Raphael by name. Every member can manage its own profile, picture, skills, commands,
+voice and own memory in an interactive owner chat. Identity 0 can change its own voice
+settings. Other speakers retain the same work tools. API and CLI
 private owner chats use the same offer, registry, services and approval gate.
 Rooms, exchanges and background work cannot acquire administration. Quick voice
 creation retains its existing owner entry only when its speaker is the live primary.
@@ -23,7 +38,7 @@ Speaker parity excludes only management and existing coordination duties.
 
 Deferred selected look scope (both themes, 1120,720,1920x1080):
 admin-approval, admin-approval-batch, admin-approval-long, admin-delete-approval,
-admin-approved, admin-denied, member-draft, member-draft-edit, member-draft-done,
+admin-delete-approved, admin-delete-many, admin-delete-many-approved, admin-approved, admin-denied, member-draft, member-draft-edit, member-draft-done,
 primary-contact-set, room-question-card and card-background. Compare the T3 member-delete approval with each new
 destructive summary at identical theme and width; inspect complete target names,
 all profile fields, retention before/after and absence of an Always action.
@@ -38,14 +53,57 @@ Live/provider checks require separate authorization and prove a different bounda
 ## Management discovery follow-up
 
 The primary's default turn hides all 35 management definitions in Snapshot.management.
-The existing find_tools exposes matching native definitions; request-intent matching
-also adds the relevant areas before either the API or CLI turn starts. CLI MCP lists
-the same selected tools. Other speakers and non-owner scopes have no management
-catalog to discover, and the existing execution/approval checks remain authoritative.
+find_tools returns the matching definitions (name, description, input schema) and the
+model calls one with use_tool; the request's words only rank what find_tools returns
+and never list a tool (fixed tool list, below). Non-primary speakers discover only the
+narrowed self-management catalog; non-owner scopes have none. Exact target/field checks
+and the existing approval checks remain authoritative.
 
 tests/members/test_management_discovery.py pins the default widest native offer at
-51 (the feat/members baseline is 60), pins API/CLI default prompt budgets, discovers
-every management tool, and exercises folder deletion, room renaming and member-model
-changes with production API and authenticated loopback MCP paths. It also covers
-same-turn discovery/execution and non-owner refusal. Token figures use the existing
+43 (52 before the fixed list; the feat/members baseline is 60), pins API/CLI default
+prompt budgets, discovers every management tool, and exercises folder deletion, room
+renaming and member-model changes through use_tool with production API and
+authenticated loopback MCP paths, the list unchanged. It also covers same-turn
+discovery/execution and non-owner refusal. Token figures use the existing
 memory.terms.estimate_tokens estimator, not provider billing or latency measurements.
+
+## Fixed tool list (owner, 2026-11-09, decision 2; built 2026-11-10)
+
+Every member is listed one set of tools, sorted by name, byte for byte the same through a
+conversation and from task to task of one kind (core/src/raphael_core/background/snapshot.py).
+What is listed follows the member and the path (owner's private chat, background, room), never
+the request, its files, a find_tools search or a connection that comes or goes. A connection's
+tools, management, the commands for this PC except `open`, the desktop `computer`,
+`generate_audio` and `slack_draft` are found with find_tools and called with use_tool, down the
+same gate, steps, audit and guardrails as a direct call. `open` and `update_page` stay listed: a
+model picks a listed look-alike (`show`, `show_page`) over searching for a hidden tool. The core's
+pinned tools (local commands, the member's computer, media models, Composio's router) stay listed.
+The member's computer catalog (a grant, the driver's own catalog) is the one change a task's list
+can still take. Offline: core/tests/members/test_fixed_tools.py (three turns, API and CLI MCP,
+identical lists; find and use in one turn) and core/tests/background/test_fixed_tools.py (worker,
+TaskRun, CLI member loop, connections changing mid-task). Live (Codex subscription, 2026-11-10):
+Guardian cells members, approval-yes, approval-no (find_tools then use_tool), open and
+routine-create pass on cli:codex:gpt-6-luna?effort=low.
+
+## Settings panel intent (2026-11-07)
+
+The window may send setup-telegram, setup-slack, setup-discord, share-template or settings.
+Settings is valid for member 0; share-template still requires a nonzero member. The trusted
+rule travels beside the owner message, never inside the visible history. Tests in
+core/tests/members/test_chat_settings.py cover API/CLI self scope, peer refusal, real
+profile/command/skill/voice/memory writes and exact-action deletion approval.
+The window-owned settings button and visual/native acceptance remain an integration handoff.
+
+## One card, words and one press (2026-11-11)
+
+The administrative changes (and readings) that the model asks for in one turn and that need a yes - the ones that cannot be
+undone, and any other that the mode that asks first or a rule asks about - are held until its turn is in and asked on one
+card (`management_batch`), with the asking member named on its first line when it is not Raphael; the editable team
+proposals (members, folders) keep their own card. That card has no timer in the conversation (R-AG-MGMT-04), so a CLI
+brain's tool call is never held open for it, and a yes of days later still applies; the yes of a reading brings its result
+to the turn. The card has a line each in the owner's language (target by name, effect in words, no ID and no JSON; the core
+words them in `management_words.py`, in every locale), one yes and one no. The yes is for exactly that list (its digest and
+its lines); each change is carried out in order under its own part of it (`Approval.covering`), one that fails does not stop
+the others and is said plainly, and a newer message cancels the card. The yes is one press, in the
+app and in the overlay. Verify with `core/tests/members/test_management_batch.py`, `core/tests/members/test_admin_proposals.py` and the scenes admin-delete-approval,
+admin-delete-approved, admin-delete-many and admin-delete-many-approved.

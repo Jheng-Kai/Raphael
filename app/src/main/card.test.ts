@@ -8,7 +8,7 @@ import { backgroundQuestionHTML } from "./background-questions";
 import { mountOwnerQuestions } from "./owner-questions";
 import { setLocale } from "./i18n";
 import type { OwnerQuestion } from "./types";
-import { cardHTML, cardDisclosureHTML } from "./card";
+import { cardHTML, cardDisclosureHTML, cardFailure } from "./card";
 
 vi.mock("./api", () => ({ ownerQuestionAnswer: vi.fn(async () => ({ status: "answered" })) }));
 afterEach(() => { document.body.replaceChildren(); vi.clearAllMocks(); setLocale("zh-TW"); });
@@ -93,9 +93,33 @@ test("settled permission keeps its decision in the pill and folds the original a
 test("a failed card can be closed locally without changing the saved action", () => {
   document.body.innerHTML = cardHTML({ title: "Sample action", status: "failed", actions: '<button type="button" class="btn pri">Retry</button>' });
   const card = document.querySelector<HTMLElement>(".conversation-card")!;
-  const close = card.querySelector<HTMLButtonElement>("[data-card-failed-close]");
+  // The × at its top right, with no 「關閉」 text button in its footer.
+  const close = card.querySelector<HTMLButtonElement>(".card-head [data-card-failed-close]");
   expect(close).not.toBeNull();
+  expect(close!.textContent).toBe("");
+  expect(card.querySelector("footer [data-card-failed-close]")).toBeNull();
   close!.click();
   expect(card.hidden).toBe(true);
   expect(card.querySelector(".pri")?.textContent).toBe("Retry");
+});
+
+test("a card drawn as failed keeps one × when its failure is shown, and that × puts it away", () => {
+  // A message that could not be sent is drawn failed and then given its retry (agent.ts, chat-composer.ts): it once had two ×.
+  document.body.innerHTML = `<div class="composer-failure">${cardHTML({ title: "Not sent", status: "failed" })}</div>`;
+  const card = document.querySelector<HTMLElement>(".conversation-card")!;
+  let dismissed = 0;
+  expect(cardFailure(card, () => undefined, () => { dismissed++; })).toBe(true);
+  const closes = card.querySelectorAll<HTMLButtonElement>(".card-head .card-close");
+  expect(closes).toHaveLength(1);
+  closes[0]!.click();
+  expect(dismissed).toBe(1);
+});
+
+test("a card drawn as failed keeps its own status word, and a null message adds no sentence beside 重試", () => {
+  document.body.innerHTML = cardHTML({ title: "Your message", status: "failed", statusText: "Could not send" });
+  const card = document.querySelector<HTMLElement>(".conversation-card")!;
+  cardFailure(card, () => undefined, undefined, null);
+  expect(card.querySelector(".card-status")!.textContent).toBe("Could not send");
+  expect(card.querySelector(".card-failure p")).toBeNull();
+  expect(card.querySelector(".card-failure [data-card-retry]")).not.toBeNull();
 });

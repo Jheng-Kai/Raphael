@@ -1,31 +1,39 @@
 """Keep a CLI and its MCP requests alive across the existing inline approval cards."""
 
+from raphael_core.ui_words import ui_word, with_ui_words
 import asyncio
 import json
+import sqlite3
 import logging
 import re
 import traceback
 import time
 from collections import Counter
 from contextlib import aclosing
+from dataclasses import replace
 
-from ...worker.loop import Call, Outcome, Stop, ToolOutcome, WAITING
+from ...worker.loop import Call, Outcome, Stop, ToolOutcome, WAITING, FINAL_REPORT, called
 from ...members.activity import StreamSteps, current, tool_step
 from ...worker.guards import wrap_untrusted
 from ...worker.tool_guardrails import ToolGuardrails
-from ..answers import MESSAGE_BREAK, parse_reply
+from ..answers import MESSAGE_RULES, MESSAGE_BREAK, message_parts, parse_reply, public_reply, pending_replies
 from ..conversations import Conversations
 from ..mcp_server import RaphaelMcp
+from ...brain.meter import Usage, claude_code_model, claude_code_rows, codex as codex_usage, gemini as gemini_usage
+from ...brain.reasoning import split_reasoning
 from ...brain.textnorm import public_line
 from ..narration import PUBLIC_PROGRESS_RULES
+from ..owner_questions import OWNER_CARDS
 from ..policy import CONFIRM_TIMEOUT_S
 from ..persona import phrase
 from .discovery import NAMES, brain_ref, brain_effort
 from .drivers import Driver
+from .context import (KNOWN_CONTEXT_TOKENS, context_tokens, fresh_user, line_hashes, resumed_user,
+                      should_compact, window_tokens)
 from .process import secure_directory
 from .native_diagnostics import capture as native_capture, directory as native_directory
 from ...failures import Failure, KINDS, TRANSIENT, RETRY_WAITS, PATIENT_WAITS, classify, tool_failure
-from ...retry_utils import Outage
+from ...retry_utils import MODEL_SILENCE_S, Outage
 
 logger = logging.getLogger(__name__)
 
@@ -33,13 +41,21 @@ logger = logging.getLogger(__name__)
 RATE_LIMIT_WAITS_S = RETRY_WAITS
 # A room or background turn has no one sitting on it: it rides out a throttle of minutes (live, 429s lasted several).
 ROOM_RATE_LIMIT_WAITS_S = (30.0, 60.0, 120.0, 240.0)
+# A private turn has someone reading it, and no one else watching for it to stall (a task has `TaskRun.watch`). A CLI that
+# says nothing and has no call out for this long is hung: the longest silence a person would call thinking, as for an API
+# model. A call in flight has its own, longer window (an `ask_member` takes the colleague's whole turn; a command runs),
+# the way `TaskRun.tool_seconds` gives a room's reply one. A call that waits for the owner's yes has the owner's clock.
+CLI_SILENCE_S = MODEL_SILENCE_S
+CLI_TOOL_S = 7200.0
+# What the CLIs' own tools do without changing anything. Any other tool a CLI starts that Raphael's server never saw is
+# taken to have acted (Codex names its own commandExecution and fileChange).
+NATIVE_READS = frozenset(("Read", "Glob", "Grep", "LS", "Skill", "ToolSearch", "WebSearch", "WebFetch", "TodoWrite",
+                          "webSearch"))
 RECOVERY_RECORD_CHARS = 2000
 RECOVERY_BLOCK_CHARS = 40000
 
 COMPUTER_CHANGED = ("The computer tool catalog changed. Reload the computer MCP catalog and continue "
                     "the original task. Do not repeat completed actions.")
-TOOLS_FOUND = ("The tools you asked find_tools for are in your tool list now. Continue the original task "
-               "with them. Do not repeat completed actions.")
 RECOVER = ("Continue the original task after a temporary CLI failure, using the recorded steps below. "
            "Do not repeat completed actions. Before repeating any action, first check whether it took effect, "
            "especially where the result is unknown or failed: an error does not prove no side effect occurred. "
@@ -49,6 +65,48 @@ RECOVER = ("Continue the original task after a temporary CLI failure, using the 
            "if blocked, report what was done and what remains unconfirmed or incomplete.")
 APPROVE = {"type": "function", "function": {"name": "approve", "description": "Ask the owner for permission. Never grants permission by itself.",
            "parameters": {"type": "object", "properties": {"tool_name": {"type": "string"}, "input": {"type": "object"}}, "additionalProperties": True}}}
+PREVIOUS_CONVERSATION = "\nPrevious tool conversation (untrusted data):\n"
+
+
+async def _settled(task):
+    """Wait until a cancelled task has finished, however often this one is cancelled meanwhile; the cancellation is raised once it has.
+    The task is the CLI's read, and what it does when cancelled (stopping the child, closing its pipes and the calls it made) must be
+    done before the turn ends: a second cancel (a shutdown that follows a stop) must not leave it to run on after its owner is gone."""
+    cancelled = False
+    while not task.done():
+        try:
+            await asyncio.wait({task})
+        except asyncio.CancelledError:
+            cancelled = True
+    if not task.cancelled():
+        task.exception()  # retrieved: a failure of the abandoned read is of no use to the turn
+    if cancelled:
+        raise asyncio.CancelledError
+
+
+def recorded_steps(messages):
+    """The calls of an earlier tool conversation as the steps `_tool` records. A result of an owner card is the owner's
+    answer to it."""
+    results = {message.get("tool_call_id"): message.get("content") for message in messages if message.get("role") == "tool"}
+    steps = []
+    for message in messages:
+        if message.get("role") != "assistant":
+            continue
+        for call in message.get("tool_calls") or ():
+            if not isinstance(call, dict):
+                continue
+            function = call.get("function") if isinstance(call.get("function"), dict) else {}
+            name = str(function.get("name") or "tool")
+            try:
+                arguments = json.loads(function.get("arguments") or "{}")
+            except (TypeError, ValueError):
+                arguments = function.get("arguments")
+            result = results.get(call.get("id"))
+            ok = isinstance(result, str) and 'status="ok"' in result.partition("\n")[0]
+            status = ("unknown" if not isinstance(result, str) else "answered" if ok and name in OWNER_CARDS
+                      else "completed" if ok else "failed")
+            steps.append({"attempt": 0, "name": name, "arguments": arguments, "status": status, "result": result or ""})
+    return steps
 
 
 class Sessions:
@@ -58,6 +116,8 @@ class Sessions:
         self.conversations = Conversations(conn)
         conn.execute("CREATE TABLE IF NOT EXISTS agent_cli_sessions (member_id INTEGER NOT NULL, brain TEXT NOT NULL, session_id TEXT NOT NULL, PRIMARY KEY(member_id, brain))")
         conn.execute("CREATE TRIGGER IF NOT EXISTS delete_member_cli_sessions AFTER DELETE ON members BEGIN DELETE FROM agent_cli_sessions WHERE member_id=OLD.id; END")
+        conn.execute("CREATE TABLE IF NOT EXISTS agent_conversation_cli_contexts (conversation_id INTEGER NOT NULL REFERENCES conversations(id) ON DELETE CASCADE, brain TEXT NOT NULL, session_id TEXT NOT NULL, state TEXT NOT NULL, PRIMARY KEY(conversation_id, brain))")
+        conn.execute("CREATE TRIGGER IF NOT EXISTS delete_native_cli_context AFTER DELETE ON agent_conversation_cli_sessions BEGIN DELETE FROM agent_conversation_cli_contexts WHERE conversation_id=OLD.conversation_id AND brain=OLD.brain; END")
         # Existing native resume IDs belong only to the member's default conversation.
         with conn:
             conn.execute("INSERT OR IGNORE INTO agent_conversation_cli_sessions SELECT c.id, s.brain, s.session_id FROM agent_cli_sessions s JOIN conversations c ON c.member_id=s.member_id AND c.is_default=1")
@@ -80,8 +140,18 @@ class Sessions:
 
     def clear(self):
         with self.conn:
+            self.conn.execute("DELETE FROM agent_conversation_cli_contexts")
             self.conn.execute("DELETE FROM agent_conversation_cli_sessions")
             self.conn.execute("DELETE FROM agent_cli_sessions")
+            self._clear_rooms()
+
+    def _clear_rooms(self, member_id=None):
+        """The room sessions go with the others (a database before the room sessions has no table: nothing to clear)."""
+        try:
+            self.conn.execute("DELETE FROM room_cli_sessions" + ("" if member_id is None else " WHERE member_id=?"),
+                              () if member_id is None else (member_id,))
+        except sqlite3.OperationalError:
+            pass
 
     def forget(self, member, brain, conversation_id=None):
         if conversation_id is None:
@@ -99,49 +169,96 @@ class Sessions:
                 (member_id,),
             )
             self.conn.execute("DELETE FROM agent_cli_sessions WHERE member_id = ?", (member_id,))
+            self._clear_rooms(member_id)
+
+    def get_context(self, member, brain, session, conversation_id=None):
+        if conversation_id is None:
+            conversation_id = self.conversations.main(member)
+        if self.get(member, brain, conversation_id) != session:
+            return None
+        row = self.conn.execute("SELECT state FROM agent_conversation_cli_contexts WHERE conversation_id=? AND brain=? AND session_id=?",
+                                (conversation_id, brain, session)).fetchone()
+        return json.loads(row[0]) if row else None
+
+    def put_context(self, member, brain, session, state, conversation_id=None):
+        if conversation_id is None:
+            conversation_id = self.conversations.main(member)
+        if self.get(member, brain, conversation_id) != session:
+            return
+        with self.conn:
+            self.conn.execute("INSERT OR REPLACE INTO agent_conversation_cli_contexts VALUES (?, ?, ?, ?)",
+                              (conversation_id, brain, session, json.dumps(state)))
 
 
 class CliLoop:
     def __init__(self, *, brains, sessions, member_id, model, ledger, language, plain,
-                 system, user, tools, progress, thinking, event, execute, expire=None, spoken=False,
+                 system, user, tools, progress, thinking, event, execute, expire=None,
                  conversation_id=None, quota=None, attachments=(), wait_timeout_s=None, resume_session=True,
-                 rate_limit_waits=None, structured=None, alive=lambda: None, skills=()):
+                 rate_limit_waits=None, structured=None, alive=lambda waiting=0.0: None, skills=(), no_tools=False, reply=None,
+                 owner_text=None, resume_user=None, context_sections=None, context_turns=(), context_summary="",
+                 context_summary_through=0, context_owner_words=(), turn_id=None, tool_conversation=(), steps=(),
+                 acted=None, stall_s=None, tool_s=None):
         self.brains, self.sessions, self.member_id, self.model = brains, sessions, member_id, model
-        # Told whenever the CLI does anything (a word, a tool): whoever watches for a stalled turn hears it.
+        # Told whenever the CLI does anything (a word, a tool): whoever watches for a stalled turn hears it. Told too before
+        # a wait the loop chooses (`waiting`, in seconds), which is no stall.
         self.alive = alive
+        # Whether the turn has done something outside, by the owner's tools (a call that succeeded and was not a read:
+        # the conversation's `made`, a task's `acted`). A CLI's own commands and file changes count too (`acted`).
+        self._made = acted if acted is not None else (lambda: False)
+        # The silence this loop ends a turn at (None: someone else watches, as for a task) and the longer window of a
+        # call in flight (`CLI_SILENCE_S`, `CLI_TOOL_S`).
+        self.stall_s, self.tool_s = stall_s, tool_s
         self.conversation_id = sessions.conversations.resolve(member_id, conversation_id) if sessions else conversation_id
         self.quota = quota
         self.resume_session = resume_session
         self.structured = structured
+        self.no_tools = no_tools
         self.skills = skills
         # The waits before running a rate-limited request again: None waits as for a turn someone is reading
         # (RATE_LIMIT_WAITS_S), () never waits.
         self.rate_limit_waits = rate_limit_waits
         self.ledger, self.language, self.plain = ledger, language, plain
-        self.spoken = spoken
         mcp_names = "Raphael and computer" if any(item["function"]["name"].startswith("computer__") for item in tools) else "Raphael"
         self.system = system + "\n" + PUBLIC_PROGRESS_RULES + f"\nUse only {mcp_names} MCP tools for actions and lookups. "
         self.system += (
-            'For the spoken reply only, return one JSON object with text, messages (usually one; several only '
-            'when naturally separate, at most four), '
-            'and say_ja (the Japanese rendering for the voice). No other fields or prose.'
-            if spoken else (
-                "Reply in plain text (Markdown is fine). It is one chat message unless it is naturally "
-                "several (an answer, then a separate exercise or question): then put a line with only "
-                f"{MESSAGE_BREAK} between them, at most four. Never split one thought or pad to fill. "
-                "Never output a JSON reply envelope."
-            )
+            "Reply in plain text (Markdown is fine). It is one chat message unless it is naturally "
+            "several (an answer, then a separate exercise or question): then put a line with only "
+            f"{MESSAGE_BREAK} between them. Preserve the complete answer. Never split one thought or pad to fill. "
+            "Never output a JSON reply envelope."
         )
         # Only Claude Code asks through `approve` (its --permission-prompt-tool); Codex and Antigravity ask natively. Live,
         # a Codex model offered it called it itself to ask for permission: a question about no action at all.
         if structured is not None:
-            self.system = system + "\nThis is a tool-less memory pass. Return only JSON matching this schema:\n" + json.dumps(structured)
+            self.system = system + "\nThis is a tool-less structured turn. Return only JSON matching this schema:\n" + json.dumps(structured)
+        if no_tools and structured is None:
+            self.system = system + MESSAGE_RULES
         from ...worker.owner_input import OwnerInput
         self.owner_input = OwnerInput()
         self._steering = set()
+        self.owner_text = user if owner_text is None else owner_text
+        # A task that waited for the owner goes on from what it did: the tool conversation since its last wait
+        # (`tool_conversation`), which this run reads, and the steps of its runs before that (`steps`). All of them are
+        # recorded steps, so a fresh context or a recovery still holds the owner's answers, and a later wait carries them.
+        if tool_conversation:
+            user += PREVIOUS_CONVERSATION + json.dumps(list(tool_conversation), ensure_ascii=False)
+        self.steps = [*map(dict, steps), *recorded_steps(tool_conversation)]
         self.user = user
         self._original_user = user
-        self.tools = list(tools) + ([APPROVE] if structured is None and (brain_ref(model) or ("",))[0] == "claude" else [])
+        self.attachments = attachments
+        self.resume_user = resume_user
+        self.context_sections = context_sections or {}
+        self.context_turns, self.context_summary, self.turn_id = context_turns, context_summary, turn_id
+        self.context_summary_through = context_summary_through
+        self.context_owner_words = context_owner_words
+        self._context_state = {}
+        self._context_window = None
+        # Claude Code's per-model running totals after each session's latest run, and whether a run reported any
+        # usage (brain/meter.py).
+        self._usage_marks: dict[str, dict] = {}
+        self._metered = False
+        self._submitted_user = user
+        self._turn_user = user
+        self.tools = [] if no_tools else list(tools) + ([APPROVE] if structured is None and (brain_ref(model) or ("",))[0] == "claude" else [])
         self.images = [attachment for attachment in attachments if attachment.is_image]
         self.progress, self.thinking, self.event, self.execute = progress, thinking, event, execute
         self.seen, self.batch_calls = [], []
@@ -158,12 +275,24 @@ class CliLoop:
         self._serial = asyncio.Lock()
         self._handoff_pending = False
         self._buffer = ""
+        self._publish_reply, self._published, self._message_ids = reply, [], set()
+        self._completed_buffer, self._separated = False, []
+        # Speech not yet shown (`_release_held`), whether the one opening was shown, and whether a step has started.
+        self._held, self._opened, self._worked = [], False, False
         self._thought = ""
+        self._final_nudged = False
         self._calls = 0
-        self._acted = False
+        # Hearing the CLI (an event, a call back) starts the stall window again. Calls out, and those that wait for the
+        # owner, stretch or stop it; a stalled attempt says so.
+        self._heard_at = 0.0
+        self._flights = 0
+        self._open_calls = set()
+        self._owner_waits = 0
+        self._stalled = False
+        self._stalled_in_flight = False
         self._session = None
         self._attempts = 0
-        self._receipts = []
+        self._receipts = list(self.steps)
         self._stream_records = []
         self._usage = {}
         self._guardrails = ToolGuardrails()
@@ -177,6 +306,9 @@ class CliLoop:
         self.on_done = None
         self.activity_turn = None
         self.expire = expire
+        # How long a card held in a tool call of the CLI waits: a CLI cannot hold a call open for long, so it is the thirty seconds
+        # (a local command, `approval_wait_s`, is the exception). The cards of administrative changes are never held here:
+        # the turn is in before they are asked (R-AG-MGMT-04).
         self.wait_timeout_s = CONFIRM_TIMEOUT_S if wait_timeout_s is None else wait_timeout_s
         self.approval_wait_s = None
 
@@ -189,17 +321,75 @@ class CliLoop:
         effort = brain_effort(self.model)
         return f"cli:{brain_ref(self.model)[0]}:{self.actual_model}" + (f"?effort={effort}" if effort else "")
 
+    def _publish(self, text, *, final=False, previous=(), settled=False):
+        """Show public speech. A message the CLI marks as its answer (`settled`) or the terminal result
+        (`final`) is shown at once, after anything held; other speech waits for the next event."""
+        if self._publish_reply is None:
+            return
+        reply = (self._written_reply(text)
+                 if text.strip() and self.structured is None
+                 else public_reply(text, self.language, plain=self.plain))
+        if reply is None:
+            return
+        lines = reply.messages or [reply.text]
+        lines = pending_replies(self._published if final else previous, lines)
+        if lines and not (final or settled):
+            # Speech before the outcome waits for the CLI's next event: work after it makes it progress.
+            self._held.append((reply, lines))
+        elif lines:
+            self._release_held(answer=True)
+            self._show(reply, lines)
+        return lines
+
+    def _unthought(self, text):
+        """`text` without reasoning the CLI wrote into its answer, which is shown as thinking (brain/reasoning.py)."""
+        words, thought = split_reasoning(text)
+        if thought := " ".join(thought.split()):
+            self.thinking(thought[-240:])
+        return words
+
+    def _show(self, reply, lines):
+        self._publish_reply(replace(reply, messages=lines, text="\n\n".join(lines)))
+        self._published.extend(lines)
+
+    def _release_held(self, *, answer):
+        """What the model said since its last step. Followed by the end of its turn (`answer`), it stands as
+        said. Followed by more work, it was said while working: only one short opening before the first step
+        reaches the owner, as Grok Bot's 「可以，我先…」, and the rest is progress in the folded work (owner,
+        2026-11-09: 「不會太多不重要的思考文字 然後重點都有說到」)."""
+        held, self._held = self._held, []
+        for reply, lines in held:
+            if answer:
+                self._show(reply, lines)
+                continue
+            for line in lines:
+                if not self._worked and not self._opened:
+                    self._opened = True
+                    self._show(reply, [line])
+                elif text := public_line(line, "auto"):
+                    self.progress(text[:400])
+
     def _progress(self):
-        if line := public_line(self._buffer, self.language):
+        if line := public_line(self._buffer, "auto"):
             self.progress(line[:400])
         self._buffer = ""
+        self._completed_buffer, self._separated = False, []
+
+    def _mcp_tools(self):
+        tools = getattr(self, 'refresh_tools', lambda: self.tools)()
+        # Claude's permission-prompt flag must always name a mounted callback, even after a catalog refresh.
+        if (not self.no_tools and self.structured is None and (brain_ref(self.model) or ('',))[0] == 'claude'
+                and not any(item['function']['name'] == 'approve' for item in tools)):
+            self.tools[:] = [*tools, APPROVE]
+            return self.tools
+        return tools
 
     @tool_step(lambda self, identifier, name, args: name,
                scope=lambda self, *args: self.activity_turn)
     async def _tool(self, identifier, name, args):
+        if self.no_tools:
+            return ToolOutcome(False, "tools_disabled")
         async with self._serial:
-            if getattr(self, 'speech_only', False) and name == 'approve':
-                return ToolOutcome(False, 'room_speech_only', content='Start this as private work with handoff.')
             # Every hand-off of a turn starts now; anything else waits for the delegated work.
             if self._handoff_pending and name != "handoff":
                 return ToolOutcome(False, 'waiting_for_handoff')
@@ -210,7 +400,7 @@ class CliLoop:
             if name == "approve":
                 decision = await self._permission(args)
                 if decision in ("deny", "expired"):
-                    answer = {"behavior": "deny", "message": phrase(self.language, "expired") if decision == "expired" else "The owner did not approve this action."}
+                    answer = {"behavior": "deny", "message": phrase(self.language, "expired") if decision == "expired" else self._permission_denial}
                 else:
                     answer = {"behavior": "allow", "updatedInput": args.get("input", args.get("tool_input", {}))}
                     if decision == "always" and isinstance(args.get("tool_name"), str):
@@ -220,7 +410,8 @@ class CliLoop:
                 return ToolOutcome(True, content=json.dumps(answer))
             previous_tools = list(self.tools)
             result = await self._execute(identifier, name, args)
-            self._computer_check.after(name, args, result.ok, result.kind)
+            tool, arguments = called(name, args)  # what a use_tool call ran, for what watches tools by name
+            self._computer_check.after(tool, arguments, result.ok, result.kind)
             refresh = getattr(self, "refresh_tools", None)
             if refresh is not None and previous_tools != refresh() and not self.catalog_changed:
                 self.reload_note = ("The connected tools changed. Read the current tool list and continue the original task "
@@ -228,7 +419,7 @@ class CliLoop:
                 self.catalog_changed = True
             if not result.ok:
                 result.content = json.dumps(tool_failure(result.kind, result.content).wire(), ensure_ascii=False)
-            note = self._guardrails.after_call(name, args, result).note
+            note = self._guardrails.after_call(tool, arguments, result).note
             if result.ok and result.kind == 'handoff':
                 self._handoff_pending = True
             shown = wrap_untrusted(name, result.instruction or result.content or result.kind or "", ok=result.ok)
@@ -244,6 +435,8 @@ class CliLoop:
     async def _execute(self, identifier, name, args):
         self.batch_calls = [Call(identifier, name, args)]
         self.approval_wait_s = None
+        # A call out is no silence: the stall window watches the CLI, and a call in flight has its own (`_window`).
+        self._flights += 1
         try:
             return await self.execute(identifier, name, args)
         except Stop as stop:
@@ -252,6 +445,8 @@ class CliLoop:
                 return ToolOutcome(False, "stopped")
             self._resume = asyncio.get_running_loop().create_future()
             self._queue.put_nowait(Outcome("stopped", kind=WAITING))
+            # The owner's yes takes as long as the owner takes (`wait_timeout_s` ends the wait): no stall meanwhile.
+            self._owner_waits += 1
             try:
                 wait_s = self.wait_timeout_s if self.approval_wait_s is None else self.approval_wait_s
                 return await asyncio.wait_for(self._resume, wait_s + .1)
@@ -259,16 +454,39 @@ class CliLoop:
                 if self.expire:
                     self.expire()
                 return ToolOutcome(False, "expired", phrase(self.language, "expired"))
+            finally:
+                self._owner_waits -= 1
         except Exception as exc:
             failure = classify(exc)
             return ToolOutcome(False, failure.kind, json.dumps(failure.wire()))
+        finally:
+            self._flights -= 1
+            self._heard()
 
     async def _permission(self, args):
         self._progress()
+        self._permission_denial = 'The owner did not approve this action.'
+        name = args.get('tool_name')
+        if isinstance(name, str) and name.startswith('mcp__'):
+            alias = (name.removeprefix('mcp__raphael__') if name.startswith('mcp__raphael__') else
+                     'computer__' + name.removeprefix('mcp__computer__') if name.startswith('mcp__computer__') else None)
+            if name.startswith('mcp__raphael__computer__'):
+                alias = None
+            offered = {item['function']['name'] for item in self._mcp_tools()}
+            # This only admits the MCP call; its execution still enters Raphael's context-specific tool gate.
+            if alias in offered and alias != 'approve':
+                return 'once'
+            self._permission_denial = 'This MCP tool is not offered in this turn. Use the current tool list.'
+            return 'deny'
+        if getattr(self, 'speech_only', False):
+            self._permission_denial = 'Room speech only uses the offered meeting tools. Start private work with handoff for other actions.'
+            return 'deny'
         outcome = await self._execute("permission", "cli_permission", args)
+        if not outcome.ok and outcome.kind not in ('denied', 'expired'):
+            self._permission_denial = outcome.instruction or 'This native action was refused by the permission policy. Use Raphael MCP tools.'
         if outcome.kind == "expired":
             return "expired"
-        return ("always" if self.permission_always else "once") if outcome.ok else "deny"
+        return "once" if outcome.ok else "deny"  # Native permissions must be rechecked for protected data each time.
 
     def continue_with(self, outcome):
         self.response = None
@@ -378,7 +596,7 @@ class CliLoop:
         self._queue.put_nowait(Outcome("done", final=message))
 
     def _unfinished(self):
-        if not (self._acted or self._calls):
+        if not (self._worked or self._calls):
             return ""
         completed = sum(item["status"] in ("completed", "answered") for item in self._receipts)
         failed = sum(item["status"] == "failed" for item in self._receipts)
@@ -417,9 +635,16 @@ class CliLoop:
             return wrap_untrusted("CLI recovery records", json.dumps(records, ensure_ascii=False), ok=True, limit=limit)
 
         block = render()
-        # Uncertain effects get space before completed work, newest first within either group.
-        ordered = sorted(enumerate(sources), key=lambda entry: (
-            entry[1][1]["status"] not in ("failed", "unknown"), -entry[1][1]["attempt"], -entry[0]))
+
+        def rank(item):
+            # The owner's answers first: whatever is cut, a recovery never asks again. Then effects that may or may
+            # not have happened, then completed work.
+            if item["status"] == "answered" and item["name"] in OWNER_CARDS:
+                return 0
+            return 1 if item["status"] in ("failed", "unknown") else 2
+
+        # Newest first within each group.
+        ordered = sorted(enumerate(sources), key=lambda entry: (rank(entry[1][1]), -entry[1][1]["attempt"], -entry[0]))
         for _, (group, item) in ordered:
             arguments = json.dumps(item["arguments"], ensure_ascii=False) if "arguments" in item else ""
             result = item.get("result", "")
@@ -441,8 +666,84 @@ class CliLoop:
 
     def _recovery_user(self):
         owner_messages = [message["content"] for message in self.tool_messages if message["role"] == "user"]
-        request = "\n\n".join([self._original_user, *owner_messages])
+        base = f"<question>\n{self.owner_text}\n</question>" if self._session else self._turn_user
+        request = "\n\n".join([base, *owner_messages])
         return request + "\n\n" + RECOVER + "\n" + self._recovery_block()
+
+    def _known_window(self):
+        """The window of this loop's model before it measures one: what its CLI reported to an earlier loop of the
+        model, else what that CLI's models are known to hold."""
+        reported = getattr(self.brains, "context_windows", None)
+        return ((reported.get(self.model.partition("?")[0]) if isinstance(reported, dict) else None)
+                or KNOWN_CONTEXT_TOKENS.get((brain_ref(self.model) or ("",))[0]))
+
+    def _fresh_user(self):
+        window = window_tokens(self._usage.get("context_window"), self._context_state.get("window"), self._context_window)
+        self._context_window = window
+        user = fresh_user(self.owner_text, self.attachments,
+            [message["content"] for message in self.tool_messages if message["role"] == "user"],
+            RECOVER, self._recovery_block(8000), turns=self.context_turns,
+            summary=self.context_summary, sections=self.context_sections,
+            owner_words=self.context_owner_words, current_user=self.resume_user,
+            window=window, reserve=len(self.system.encode("utf-8")))
+        self._fresh_sections = {name: text for name, text in self.context_sections.items() if text and text in user}
+        return user
+
+    def _save_context(self):
+        if not self.resume_session or not self._session or self.resume_user is None:
+            return
+        state = {"turn": max([self.turn_id or 0, *(identifier for identifier, _ in self.context_turns)]),
+                 "sections": {name: line_hashes(text) for name, text in getattr(self, "_fresh_sections", self.context_sections).items()},
+                 "tokens": context_tokens(self._usage),
+                 "estimated_tokens": self._context_state.get("estimated_tokens", 0) + len(self._submitted_user.encode("utf-8")),
+                 "window": self._usage.get("context_window") or self._context_state.get("window") or self._context_window}
+        # What the session has used so far, so that its next run counts only its own calls (brain/meter.py).
+        if marks := self._usage_marks.get(self._session) or self._context_state.get("model_usage"):
+            state["model_usage"] = marks
+        self.sessions.put_context(self.member_id, self.model, self._session, state, self.conversation_id)
+
+    @property
+    def acted(self):
+        """Whether the turn has done something outside: a call of the owner's tools that succeeded and was not a read
+        (`_made`), or something the CLI started that none of those calls accounts for (its own command or file change, a
+        call that never arrived): that may have changed something whether or not it ended well. A turn that only read has
+        done nothing yet."""
+        return bool(self._made()) or any(item["name"] not in NATIVE_READS for item in self._native_records())
+
+    def _heard(self):
+        self._heard_at = asyncio.get_running_loop().time()
+
+    def _window(self):
+        """How long the CLI may now stay silent: a call out has the longer window."""
+        return (self.tool_s or self.stall_s) if self._flights or self._open_calls else self.stall_s
+
+    async def _events(self, stream):
+        """The CLI's events, as they come, until it stalls: with `stall_s`, silence for the window ends them (`_stalled`),
+        and `Driver.run` stops the child as the abandoned read is cancelled. Hearing anything starts the window again."""
+        events = stream.__aiter__()
+        clock = asyncio.get_running_loop().time
+        self._heard()
+        pending = None
+        try:
+            while True:
+                pending = asyncio.ensure_future(events.__anext__())
+                while not pending.done():
+                    # An owner's yes is waited for without a clock; look again soon, since it may have come.
+                    left = 1.0 if self._owner_waits else self._heard_at + self._window() - clock()
+                    if left <= 0:
+                        self._stalled, self._stalled_in_flight = True, bool(self._flights or self._open_calls)
+                        return
+                    await asyncio.wait({pending}, timeout=min(left, 1.0) if self._owner_waits else left)
+                try:
+                    event = pending.result()
+                except StopAsyncIteration:
+                    return
+                self._heard()
+                yield event
+        finally:
+            if pending is not None and not pending.done():
+                pending.cancel()
+                await _settled(pending)
 
     def _handed_off(self):
         """Whether the turn handed work off. If so, the task now waits for that work, however the turn ended:
@@ -480,52 +781,113 @@ class CliLoop:
             try:
                 # A stable, empty workspace keeps native CLI resume independent of turn temp files.
                 workspace_root = native_directory("workspaces") or self.brains.home / ".raphael" / "cli-workspaces"
-                workspace = workspace_root / str(self.member_id) / str(self.conversation_id) / name
+                # Claude Code shares a cached prefix only within one working directory, which its own system prompt
+                # names: one per member (owner, 2026-11-09, decision 3), so all the member's conversations and tasks
+                # start from the same cached prefix. Codex keys its cache by thread and keeps its login beside its
+                # workspace, and Gemini rewrites its instructions there every turn: one per conversation for them.
+                member_root = workspace_root / str(self.member_id)
+                workspace = member_root / name if name == "claude" else member_root / str(self.conversation_id) / name
                 workspace.mkdir(parents=True, exist_ok=True)
                 await secure_directory(workspace)
-                async with RaphaelMcp(lambda: getattr(self, "refresh_tools", lambda: self.tools)(), self._tool) as server:
+                async with RaphaelMcp(self._mcp_tools, self._tool) as server:
                     self._session = self.sessions.get(self.member_id, self.model, self.conversation_id) if self.resume_session else None
+                    if self.context_sections:
+                        self.user += "\n\n" + "\n\n".join(self.context_sections.values())
+                    if self._session and self.resume_user is not None:
+                        self._context_state = self.sessions.get_context(self.member_id, self.model, self._session, self.conversation_id) or {}
+                        self._context_window = self._context_state.get("window")
+                        # Old mappings have no delivery cursor. Rebuild once rather than replaying history into them.
+                        if not self._context_state:
+                            self.sessions.forget(self.member_id, self.model, self.conversation_id)
+                            self._session = None
+                        else:
+                            self.user = resumed_user(self.resume_user, self.context_sections, self.context_turns, self._context_state,
+                                                     summary=self.context_summary, summary_through_turn_id=self.context_summary_through)
+                    self._submitted_user = self.user
+                    self._turn_user = self.user
+                    # A new loop has measured nothing yet: the model's own window, not a guess, decides (a 64K guess
+                    # cut a continued task of a 200K model back to a short work record).
+                    self._context_window = self._context_window or self._known_window()
+                    if should_compact(self._context_state, self.system, self.user, window=self._context_window):
+                        self.sessions.forget(self.member_id, self.model, self.conversation_id)
+                        self._session = None
+                        self._context_state = {}
+                        self._fresh_context = True
                     quick = tuple(RATE_LIMIT_WAITS_S if self.rate_limit_waits is None else self.rate_limit_waits)
                     outage = Outage(quick, (), patient_ok=False)
                     recovery_outage = None
                     told = False
                     recovering = False
-                    fresh_context = False
+                    stalls = 0
+                    fresh_context = getattr(self, "_fresh_context", False)
                     while True:
                         resumed = self._session is not None
                         failure = await self._attempt(name, command, model, server, self._session, workspace, recovering=recovering)
-                        if failure == "context_overflow" and resumed and not fresh_context:
+                        if self._final_nudged and failure not in (None, "tools_changed", "owner_input"):
+                            self._missing_terminal()
+                            failure = None
+                            break
+                        missing_session = bool(failure and self.failure_reason and re.search(
+                            r"no conversation found with session id|(?:session|conversation|thread)[^\n]{0,120}(?:not found|does not exist)",
+                            self.failure_reason.detail or self.failure_reason.reason, re.I))
+                        if missing_session:
+                            if not resumed or fresh_context:
+                                break
+                            # A deleted native history gets one fresh attempt with bounded receipts.
+                            self.sessions.forget(self.member_id, self.model, self.conversation_id)
+                            self._session = None
+                            self._context_state = {}
+                            fresh_context = self._fresh_context = True
+                            recovering = True
+                            continue
+                        if failure == "context_overflow" and not fresh_context:
                             # One bounded fresh attempt can escape an oversized native history without replaying effects.
                             self.sessions.forget(self.member_id, self.model, self.conversation_id)
                             self._session = None
+                            self._context_state = {}
                             fresh_context = self._fresh_context = True
                             recovering = True
-                            self.progress({
-                                'zh-TW': '續接的對話內容過長，正在以簡短工作紀錄啟動新的工作階段。',
-                                'ja': '再開する履歴が長すぎるため、短い作業記録で新しいセッションを開始します。',
-                            }.get(self.language, 'The resumed history is too long; starting a fresh session with a short work record.'))
+                            if resumed:
+                                self.progress(with_ui_words({
+                                    'zh-TW': '續接的對話內容過長，正在以簡短工作紀錄啟動新的工作階段。',
+                                    'ja': '再開する履歴が長すぎるため、短い作業記録で新しいセッションを開始します。',
+                                    "en": 'The resumed history is too long; starting a fresh session with a short work record.'}, lambda _ui_language: ui_word('The resumed history is too long; starting a fresh session with a short work record.', _ui_language)).get(self.language, 'The resumed history is too long; starting a fresh session with a short work record.'))
                             continue
                         if failure in ("tools_changed", "owner_input"):
                             self.catalog_changed = False
-                            if failure == "tools_changed" and not self.user.startswith(self.reload_note):
-                                self.user = self.reload_note + "\n" + self.user
+                            if failure == "tools_changed":
+                                self.user = (FINAL_REPORT + "\n" + self._recovery_user() if self._final_nudged else
+                                    self.reload_note + "\n" + (RECOVER + "\n" + self._recovery_block() if self._session else self.user))
                             continue
+                        if self._stalled and failure == "timeout":
+                            # A CLI that went silent is asked again once, and only while nothing outside was done: after
+                            # an action, or with a call out that may have been made, it is never run again. The turn ends
+                            # and says what was done (`_unfinished`) and that it stopped.
+                            stalls += 1
+                            if stalls > 1 or self.acted or self._stalled_in_flight:
+                                break
                         if failure not in TRANSIENT:
                             break
-                        recovering = bool(self._acted or self._calls)
-                        if recovering and recovery_outage is None:
+                        # What was done goes with the next attempt (receipts, the owner's answers); how long to go on asking
+                        # depends on whether something was done outside: after reads alone it is a question's 3 tries.
+                        recovering = bool(self._worked or self._calls)
+                        patient = self.acted
+                        if patient and recovery_outage is None:
                             # Use the API's patient waits once each, never its unbounded post-action tail.
                             recovery_outage = Outage(tuple(RATE_LIMIT_WAITS_S) + tuple(PATIENT_WAITS) if quick else (), (), patient_ok=False)
-                        wait = (recovery_outage if recovering else outage).wait(self.failure_reason.retry_after if self.failure_reason else None)
+                        wait = (recovery_outage if patient else outage).wait(self.failure_reason.retry_after if self.failure_reason else None)
                         if wait is None:
                             break
-                        if recovering:
+                        if patient:
                             self.progress((self.failure_reason or Failure(failure, failure)).waiting(NAMES[name], self.language, wait))
                         elif not told:
                             told = True
+                            # While it still asks again it says that it waits. A busy or unreachable CLI used to get
+                            # the sentence of a turn that has failed ("choose another model") for a call about to be repeated.
                             self.progress(self._rate_limit_wait(NAMES[name], wait) if failure == "rate_limit" else
-                                          self.failure_reason.waiting(NAMES[name], self.language, wait) if failure == "cli_stopped" and self.failure_reason else
-                                          Failure(failure, self.failure_reason.reason if self.failure_reason else failure).sentence(NAMES[name], self.language))
+                                          (self.failure_reason or Failure(failure, failure)).waiting(NAMES[name], self.language, wait))
+                        # The next attempt has all of its own time, after a wait that is no stall (Hermes's delegate heartbeat).
+                        self.alive(wait)
                         await asyncio.sleep(wait)
                         self.alive()
                 if failure:
@@ -538,21 +900,21 @@ class CliLoop:
                 frame = traceback.extract_tb(error.__traceback__)[-1]
                 logger.warning("CLI turn failed: %s at %s:%d", type(error).__name__, frame.name, frame.lineno)
                 if not self._handed_off():
-                    self.failure_reason = classify(error)
-                    self._failure(self.failure_reason.kind, NAMES[name])
+                    if self._final_nudged:
+                        self._missing_terminal()
+                    else:
+                        self.failure_reason = classify(error)
+                        self._failure(self.failure_reason.kind, NAMES[name])
             finally:
                 if self.driver:
                     await self.driver.interrupt()
-                def tokens(*keys):
-                    value = next((self._usage[key] for key in keys if key in self._usage), 0)
-                    return value if type(value) is int and 0 <= value < 10**10 else 0
-                self.ledger.add(model=self.answered_by, cost_usd=0,
-                    ms=int((time.perf_counter() - began) * 1000),
-                    prompt_tokens=tokens("input_tokens", "inputTokens", "promptTokenCount"),
-                    completion_tokens=tokens("output_tokens", "outputTokens", "candidatesTokenCount"))
+                if not self._metered:
+                    # A turn whose CLI never reported usage is still one call of its model, for the history.
+                    self.ledger.add(model=self.answered_by, cost_usd=0, ms=int((time.perf_counter() - began) * 1000))
 
     async def _attempt(self, name, command, model, server, session, workspace, *, recovering=False):
         try:
+            self._stalled = False
             # A child may die while an MCP request is still returning. Settle it before building the next prompt.
             async with self._serial:
                 self._attempts += 1
@@ -561,13 +923,26 @@ class CliLoop:
                 if pending:
                     self.user += "\n\n" + "\n\n".join(message["content"] for message in pending)
                 if getattr(self, '_fresh_context', False):
-                    owner = '\n\n'.join(message['content'] for message in self.tool_messages if message['role'] == 'user')
-                    user = self._original_user[-4000:] + '\n\n' + owner[-4000:] + "\n\n" + RECOVER + "\n" + self._recovery_block(8000)
+                    user = self._fresh_user()
+                    if self._final_nudged:
+                        user = FINAL_REPORT + "\n\n" + user
                 else:
                     user = self._recovery_user() if recovering else self.user
+                self._submitted_user = user
             with StreamSteps(lambda: self.activity_turn) as steps:
                 self.catalog_changed = False
-                return await self._stream_attempt(name, command, model, server, session, workspace, steps, user=user)
+                began = time.perf_counter()
+                try:
+                    return await self._stream_attempt(name, command, model, server, session, workspace, steps, user=user)
+                finally:
+                    # Speech no step followed when an attempt ends (a failure, a restart, a hand-off) stands as said.
+                    self._release_held(answer=True)
+                    self._meter(name, resumed=session is not None, ms=int((time.perf_counter() - began) * 1000))
+        except ValueError as error:
+            if str(error) != "context_overflow":
+                raise
+            self.failure_reason = classify("context_overflow")
+            return "context_overflow"
         except (EOFError, ConnectionError, asyncio.IncompleteReadError) as error:
             if self._handed_off():
                 return None
@@ -575,20 +950,57 @@ class CliLoop:
             self.failure_reason = Failure(kind, type(error).__name__)
             return kind
 
+    def _meter(self, name, *, resumed, ms):
+        """Write down what one run of the CLI used, a row for each model (brain/meter.py): Claude Code's per-model
+        totals less what the session had used before, a Codex turn's growth of its thread's total, Gemini's own
+        counts. Every input token is counted, cached or not; a run that reported nothing writes nothing here."""
+        usage = self._usage if isinstance(self._usage, dict) else {}
+        if not usage:
+            return
+        main = self.answered_by
+        if name == "claude":
+            actual = self.actual_model or ""
+            marks = self._usage_marks.get(self._session) if resumed and self._session else None
+            if marks is None and resumed:
+                marks = self._context_state.get("model_usage") or {}
+            totals = usage.get("model_usage") if isinstance(usage.get("model_usage"), dict) else {}
+            # The CLI names its main model; without a name, the one that wrote the most is it.
+            primary = actual if actual in totals else max(totals, key=lambda key: claude_code_model(totals[key]).output, default=actual)
+            rows, kept = claude_code_rows(usage, totals, marks or {}, main_model=primary, resumed=resumed)
+            if self._session and kept:
+                self._usage_marks[self._session] = kept
+            rows = [(main if model == primary else f"cli:claude:{model}", row) for model, row in rows]
+        elif name == "codex":
+            rows = [(main, Usage.from_dict(usage.get("meter")) or codex_usage(usage))]
+        else:
+            rows = [(main, gemini_usage(usage))]
+        # The main model goes last: the ledger's model is the one the history says answered.
+        rows = sorted(((model, row) for model, row in rows if row), key=lambda item: item[0] == main)
+        for index, (model, row) in enumerate(rows):
+            self.ledger.add(model=model, cost_usd=0, usage=row, ms=ms if index == len(rows) - 1 else 0)
+        self._metered = self._metered or bool(rows)
+
     async def _stream_attempt(self, name, command, model, server, session, workspace, steps, *, user):
         """Run the CLI once for this turn: None once its answer is queued, else why it failed."""
         self._buffer = self._thought = ""
+        self._completed_buffer, self._separated = False, []
+        self._usage = {}
+        self._stalled = self._stalled_in_flight = False
+        self._open_calls.clear()
         if getattr(self,"speech_only",False) and name == "claude":
             command = [*command,"--max-turns",str(getattr(self,"speech_max_turns",4))]
         self.driver = Driver(name, command, model=model, effort=brain_effort(self.model), environ=self.brains.environ, quota=self.quota, home=self.brains.home)
         stream_records = {}
         async with aclosing(self.driver.run(user=user, system=self.system, endpoint=server.url,
+                fresh_context=self._fresh_user,
                 **({"skills": self.skills} if self.skills else {}),
                 **({"structured": self.structured} if self.structured is not None else {}),
+                **({"no_tools": True} if self.no_tools else {}),
                 token=server.token, session=session, permission=self._native_permission,
                 **({"computer_endpoint": server.computer_url} if server.computer_url else {}),
-                cwd=str(workspace), images=self.images if name in ("codex", "claude") else ())) as stream:
-            async for event in stream:
+                cwd=str(workspace), images=self.images if name in ("codex", "claude") else ())) as stream, \
+                aclosing(self._events(stream) if self.stall_s else stream) as events:
+            async for event in events:
                 self.alive()
                 if self.catalog_changed and event.kind in ("tool_end", "text_delta", "final"):
                     await self.driver.interrupt()
@@ -597,16 +1009,41 @@ class CliLoop:
                     self._session = event.text
                     if self.resume_session:
                         self.sessions.put(self.member_id, self.model, event.text, self.conversation_id)
+                elif event.kind == "context_reset":
+                    self._context_state = {}
+                    self._submitted_user = self._fresh_user()
                 elif event.kind == "model":
                     self.actual_model = event.text
                 elif event.kind == "text_delta":
-                    self._buffer = (self._buffer + event.text)[-64000:]
+                    if self._completed_buffer:
+                        self._buffer = ""
+                        self._completed_buffer = False
+                    self._buffer += event.text
+                    if self._publish_reply is not None:
+                        # An explicit message separator completes the preceding message, not a token chunk.
+                        parts = message_parts(self._buffer)
+                        for complete in parts[:-1]:
+                            self._separated.extend(self._publish(complete) or [])
+                        self._buffer = parts[-1]
+                elif event.kind == "message" and self._publish_reply is not None:
+                    key = (self._attempts, event.data.get("id"))
+                    words = self._unthought(event.text)
+                    public = bool(event.data.get("final") or public_reply(words, self.language, plain=self.plain, explicit=True))
+                    if not key[1] or key not in self._message_ids:
+                        if public:
+                            self._publish(words, previous=self._separated, settled=bool(event.data.get("final")))
+                        self._message_ids.add(key)
+                    self._buffer = "" if public else words
+                    self._completed_buffer, self._separated = True, []
                 elif event.kind == "thinking":
                     self._thought = (self._thought + event.text)[-240:]
                 elif event.kind in ("tool_start", "permission"):
+                    self._release_held(answer=False)
+                    self._worked = True
                     if event.kind == "tool_start":
                         steps.start(event.data)
                         key = event.data.get("id") or event.data.get("name")
+                        self._open_calls.add(key)
                         if key not in stream_records:
                             tool_name = event.data.get("name", "tool")
                             if event.data.get("server") == "computer" and not tool_name.startswith("computer__"):
@@ -614,16 +1051,21 @@ class CliLoop:
                             record = {"attempt": self._attempts, "name": tool_name, "status": "unknown"}
                             stream_records[key] = record
                             self._stream_records.append(record)
-                    self._acted = True
                     self._progress()
-                    if line := public_line(self._thought, self.language):
+                    if line := public_line(self._thought, "auto"):
                         self.thinking(line[:240])
                     self._thought = ""
                 elif event.kind == "usage":
                     self._usage = event.data
+                    window = event.data.get("context_window") if isinstance(event.data, dict) else None
+                    reported = getattr(self.brains, "context_windows", None)
+                    if isinstance(reported, dict) and type(window) is int and window > 0:
+                        # The next loop of this model starts from the window its CLI reported (`_known_window`).
+                        reported[self.model.partition("?")[0]] = window
                 elif event.kind == "tool_end":
                     steps.end(event.data)
                     key = event.data.get("id") or event.data.get("name")
+                    self._open_calls.discard(key)
                     if key in stream_records:
                         stream_records[key]["status"] = "completed" if event.data.get("ok") else "failed"
                     if event.data.get("effect") and event.data.get("ok"):
@@ -638,7 +1080,7 @@ class CliLoop:
                 elif event.kind == "final":
                     if self._handed_off():
                         return None
-                    final = event.text.strip()
+                    final = self._unthought(event.text).strip()
                     if final:
                         if check := self._computer_check.finishing():
                             if check == "stop":
@@ -647,20 +1089,47 @@ class CliLoop:
                             self.reload_note = check
                             self.catalog_changed = True
                             return "tools_changed"
+                        self._release_held(answer=True)
+                        self._publish(final, final=True)
+                        self._save_context()
+                        self._buffer = ""
                         self.owner_input.closed = True
                         self._queue.put_nowait(Outcome("done", final=final))
                         return None
                     self._progress()
-                    self.failure_reason = classify("CLI ended without an answer")
-                    return self.failure_reason.kind
+                    return self._missing_terminal()
         if self._handed_off():
             return None
+        if self._stalled:
+            # Said nothing for the whole window, with no call out that it could be waiting for: the child is stopped.
+            self.failure_reason = Failure("timeout", "CLI stalled")
+            return "timeout"
         if self.catalog_changed:
             return "tools_changed"
+        if self._final_nudged:
+            return self._missing_terminal()
         self.failure_reason = Failure("cli_stopped", "CLI stream ended before completion")
         return "cli_stopped"
 
+    def _missing_terminal(self):
+        self._release_held(answer=True)
+        if not self._final_nudged:
+            self._final_nudged = True
+            self.no_tools, self.tools = True, []
+            self.reload_note = FINAL_REPORT
+            self.catalog_changed = True
+            return "tools_changed"
+        self.owner_input.closed = True
+        if self._published:
+            self._save_context()
+            self._queue.put_nowait(Outcome("done", final="\n<<<next message>>>\n".join(self._published)))
+            return None
+        self._queue.put_nowait(Outcome("stopped", kind="missing_terminal"))
+        return None
+
     async def _native_permission(self, args):
+        if self.no_tools:
+            return "deny"
         async with self._serial:
             receipt = {"attempt": self._attempts, "name": "cli_permission", "arguments": args, "status": "unknown"}
             self._receipts.append(receipt)
@@ -669,4 +1138,16 @@ class CliLoop:
             return decision
 
     def reply(self, outcome):
-        return parse_reply(outcome.final, self.language, plain=self.plain, long=True)
+        text = outcome.final
+        if outcome.kind == "missing_terminal" and not text:
+            self.failure = "cli_stopped"
+            text = Failure("cli_stopped", "CLI ended without an answer after the wrap-up ask").sentence(
+                NAMES[brain_ref(self.model)[0]], self.language)
+        return self._written_reply(text)
+
+    def _written_reply(self, text):
+        literal = self.structured is None
+        if literal and len(parts := message_parts(text)) > 1:
+            # Split authored boundaries before normalizing each persona frame. Authored JSON and code stay literal.
+            text = {"messages": parts}
+        return parse_reply(text, self.language, plain=self.plain, long=True, literal=literal)

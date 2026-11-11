@@ -1,0 +1,84 @@
+.member-store { width: min(960px, 100%); min-width: 0; }
+.member-store[hidden], .cr-maker[hidden] { display: none; }
+.store-categories { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0 24px; }
+.store-categories [aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
+.store-grid, .store-featured { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.store-featured { margin-bottom: 24px; }
+.store-entry { display: flex; align-items: flex-start; gap: 12px; padding: 16px; border: 1px solid var(--line); border-radius: var(--r-lg); }
+.store-entry > div { flex: 1; min-width: 0; }
+.store-entry svg { flex-shrink: 0; }
+.store-entry h3, .store-entry p { margin: 0 0 6px; overflow-wrap: anywhere; }
+.store-entry .store-summary { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.store-entry > button { align-self: center; }
+.template-text { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; margin: 0; }
+/* A narrow template review dialog. */
+.template-preview { width: min(calc(480px + 2 * var(--pa-dlg-pad)), calc(100vw - 32px)); }
+.template-preview .mb-dlg-body { align-content: start; }
+.template-section { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); }
+.template-field { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); }
+.template-section h3, .template-section h4, .template-section p { margin: 0; }
+.template-section h4 { font-size: var(--fs-sm); font-weight: 500; }
+.template-section .list { margin: 0; }
+.template-skill .card-detail { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); }
+.template-skill .card-detail[hidden] { display: none; }
+.template-warnings { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); }
+.template-warnings p { margin: 0; }
+.cr-tabs { width: min(460px, 100%); }
+@media (max-width: 760px) { .store-grid, .store-featured { grid-template-columns: minmax(0, 1fr); } }
+/* A member template review shows who it is, then short cards of rows. */
+.tpl-hero { display: grid; grid-template-columns: minmax(0, 1fr); justify-items: center; gap: 2px; text-align: center; }
+.tpl-face { display: flex; justify-content: center; margin-bottom: var(--sp-2); }
+.tpl-hero b { font: 500 var(--fs-md)/1.35 var(--display); color: var(--text); }
+.tpl-hero span { font-size: var(--fs-sm); color: var(--text-2); }
+.tpl-alert { display: flex; align-items: flex-start; gap: var(--sp-2); padding: var(--sp-3); border-radius: var(--r-md); background: var(--surface-2); color: var(--text-2); font-size: var(--fs-sm); line-height: 1.55; }
+.tpl-alert > .i { flex: none; width: 16px; height: 16px; margin-top: 2px; color: var(--text-3); }
+.tpl-alert.is-risk { background: var(--warn-soft); }
+.tpl-alert.is-risk > .i { color: var(--warn); }
+.tpl-alert p { margin: 0; }
+.tpl-sec { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); }
+.tpl-sec > h4 { display: flex; align-items: baseline; gap: var(--sp-2); margin: 0; font-size: var(--fs-sm); font-weight: var(--weight-semibold); color: var(--text-2); }
+.tpl-count { font-weight: var(--weight-regular); color: var(--text-3); }
+.tpl-card { display: grid; grid-template-columns: minmax(0, 1fr); padding: var(--sp-1) var(--sp-3); border-radius: var(--r-lg); background: var(--surface-2); }
+.tpl-quote { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 4; overflow: hidden; margin: var(--sp-2) 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: var(--fs-sm); line-height: 1.6; color: var(--text); }
+.tpl-quote[data-open] { display: block; -webkit-line-clamp: unset; }
+.btn.tpl-more { justify-self: start; min-height: var(--h-ctl-sm); margin: 0 0 var(--sp-2) calc(-1 * var(--sp-2)); padding: 0 var(--sp-2); font-size: var(--fs-sm); color: var(--text-2); }
+.tpl-row { display: flex; align-items: flex-start; gap: var(--sp-3); padding: var(--sp-3) 0; }
+.tpl-row + .tpl-row { border-top: 1px solid var(--edge); }
+.tpl-row > .i { flex: none; width: 16px; height: 16px; margin-top: 2px; color: var(--text-3); }
+.tpl-row-t { display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px; min-width: 0; flex: 1; }
+.tpl-row-t > b { font-size: var(--fs-sm); font-weight: var(--weight-semibold); color: var(--text); overflow-wrap: anywhere; }
+.tpl-row-t > span { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; font-size: var(--fs-sm); color: var(--text-2); }
+.tpl-row-t .card-disclosure { margin-top: var(--sp-1); }
+.tpl-row-t .card-detail { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); margin-top: var(--sp-2); }
+.tpl-row-t .card-detail[hidden] { display: none; }
+.tpl-foot { margin: 0; font-size: var(--fs-xs); color: var(--text-3); }
+.tpl-apps { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+.tpl-app { display: inline-flex; align-items: center; gap: var(--sp-2); min-height: 32px; padding: 0 var(--sp-3) 0 var(--sp-2); border-radius: var(--r-pill); background: var(--surface-2); font-size: var(--fs-sm); color: var(--text); }
+.tpl-import { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--pa-dlg-gap, var(--sp-4)); }
+/* The row's own mark already says it repeats; the schedule line keeps only its words. */
+.tpl-row-t > span .i { display: none; }
+/* A template reviewed as separate pages (template-review.ts): the first page is the face, the
+   name, when it was last updated and what it is for, then one tinted card of rows that open pages; a page has a back
+   arrow and its title in the head, and its parts are labelled tinted boxes. Nothing scrolls inside but the dialog body. */
+.mb-dialog.tpr[data-page="main"] .mb-dlg-head h2 { visibility: hidden; }
+.mb-dialog.tpr:not([data-page="main"]) .mb-dlg-head { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; }
+.mb-dialog.tpr:not([data-page="main"]) .mb-dlg-head h2 { text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tpr .mb-dlg-body { display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; gap: var(--sp-4); }
+.tpr-hero { display: grid; grid-template-columns: minmax(0, 1fr); justify-items: center; gap: 2px; text-align: center; }
+.tpr-face { display: flex; justify-content: center; margin-bottom: var(--sp-2); }
+.tpr-face.is-small { margin: 0 auto; transform: scale(.75); transform-origin: top center; }
+.tpr-hero b { font: 500 var(--fs-md)/1.35 var(--display); color: var(--text); }
+.tpr-hero p { margin: var(--sp-2) 0 0; max-width: 52ch; font-size: var(--fs-sm); line-height: 1.55; color: var(--text-2); text-wrap: pretty; }
+.tpr-list { display: grid; grid-template-columns: minmax(0, 1fr); padding: var(--sp-1); border-radius: var(--r-lg); background: var(--surface-2); }
+.tpr-row.btn { display: grid; grid-template-columns: minmax(0, 1fr) 16px; align-items: center; gap: var(--sp-3); min-height: 52px; padding: var(--sp-2) var(--sp-3); border: 0; border-radius: var(--r-md); background: transparent; text-align: left; }
+.tpr-row.btn:hover:not(:disabled) { background: var(--hover); }
+.tpr-row.btn + .tpr-row.btn { box-shadow: 0 -1px 0 var(--line); }
+.tpr-row .i { width: 16px; height: 16px; color: var(--text-3); }
+.tpr-row-t { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 1px; }
+.tpr-row-t b { font-size: var(--fs-sm); font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tpr-row-t span { font-size: var(--fs-xs); color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tpr-field { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); }
+.tpr-field h4 { margin: 0; font-size: var(--fs-xs); font-weight: 500; color: var(--text-3); }
+.tpr-box { padding: var(--sp-3); border-radius: var(--r-lg); background: var(--surface-2); font-size: var(--fs-sm); line-height: 1.6; color: var(--text); white-space: pre-wrap; overflow-wrap: anywhere; }
+.tpr-app { display: flex; align-items: center; gap: var(--sp-2); min-height: 44px; padding: 0 var(--sp-3); font-size: var(--fs-sm); }
+.tpr-app + .tpr-app { box-shadow: 0 -1px 0 var(--line); }

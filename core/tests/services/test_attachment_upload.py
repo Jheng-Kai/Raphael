@@ -6,8 +6,28 @@ import pytest
 
 from raphael_core.protocol import RpcError
 from raphael_core.services.attachment_store import AttachmentStore
-from raphael_core.services.attachments import MAX_ATTACHMENTS, from_wire
+from raphael_core.services.attachments import MAX_ATTACHMENTS, checked, from_wire
 from raphael_core.services.file_reader import read_text
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("suffix", ["msc", "pif", "scf", "sct", "wsc", "application", "gadget", "diagcab", "unknown"])
+async def test_native_open_refuses_unreviewed_file_associations(tmp_path, suffix):
+    store = AttachmentStore(tmp_path)
+    file = store.save(checked(f"invoice.{suffix}", "application/octet-stream", b"synthetic attachment"))
+    with pytest.raises(RpcError, match="cannot be opened"):
+        await store.open_path({"id": file.stored_id})
+    # Refusing native execution does not prevent attaching or reading the file.
+    assert (await store.get({"id": file.stored_id}))["data"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("suffix", ["txt", "html", "pdf", "png", "mp4", "flac", "zip", "docx"])
+async def test_native_open_retains_reviewed_document_media_and_archive_types(tmp_path, suffix):
+    from raphael_core.services.attachments import Attachment
+    store = AttachmentStore(tmp_path)
+    file = store.save(Attachment(f"report.{suffix}", "application/octet-stream", b"synthetic attachment"))
+    assert (await store.open_path({"id": file.stored_id}))["path"] == str(store.path(file.stored_id))
 
 
 @pytest.mark.asyncio

@@ -1,5 +1,6 @@
 import { t } from "./i18n";
 import { closeMenu, esc, openPopover } from "./ui";
+import { findsName } from "./find-match";
 
 function shortcutOverlayOpen(allowPalette = false): boolean {
   return Array.from(document.querySelectorAll('.mb-scrim, [role="dialog"], #app-popover')).some(element =>
@@ -12,14 +13,17 @@ export function shortcut(event: KeyboardEvent): string | null {
   if (event.defaultPrevented || event.isComposing || event.keyCode === 229 || event.repeat || event.metaKey) return null;
   const key = event.key.toLowerCase();
   if (event.ctrlKey && !event.altKey && !event.shiftKey && key === "k") return shortcutOverlayOpen(true) ? null : "palette";
-  const target = event.target instanceof Element ? event.target : document.activeElement;
-  if (target?.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="textbox"]')) return null;
   if (shortcutOverlayOpen()) return null;
+  // Ctrl+F, Ctrl+Shift+F, Ctrl+B, Ctrl+N and Ctrl+1..9 type nothing, so they also work while a text field has the focus.
+  // Every combination a field uses itself (A, C, V, X, Z, Y, Enter, the arrows) is not in this list and stays with the field.
   if (event.ctrlKey && !event.altKey) {
     if (key === "f") return event.shiftKey ? "search" : "find";
     if (!event.shiftKey && ["b", "n"].includes(key)) return key === "b" ? "sidebar" : "new";
     if (!event.shiftKey && /^[1-9]$/.test(key)) return `member:${key}`;
   }
+  // Alt+arrows move the caret by a paragraph on some systems, so a text field keeps them.
+  const target = event.target instanceof Element ? event.target : document.activeElement;
+  if (target?.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="textbox"]')) return null;
   if (event.altKey && !event.ctrlKey && !event.shiftKey && ["arrowup", "arrowdown"].includes(key)) return key === "arrowup" ? "previous" : "next";
   return null;
 }
@@ -43,7 +47,7 @@ export function openCommandPalette(anchor: HTMLElement, commands: Command[]): vo
   const results = panel.querySelector<HTMLElement>(".command-results")!;
   const draw = (): void => {
     const query = input.value.trim().toLocaleLowerCase();
-    const found = commands.filter(command => `${command.label} ${command.keys ?? ""}`.toLocaleLowerCase().includes(query));
+    const found = commands.filter(command => `${command.label} ${command.keys ?? ""}`.toLocaleLowerCase().includes(query) || findsName([command.label], query));
     results.innerHTML = found.map(command => `<button type="button" class="menu-action" data-command="${esc(command.id)}"><span class="mt">${esc(command.label)}</span>${command.keys ? `<span class="note">${esc(command.keys)}</span>` : ""}</button>`).join("") || `<p class="note">${esc(t("shortcuts.empty"))}</p>`;
   };
   input.addEventListener("input", draw);

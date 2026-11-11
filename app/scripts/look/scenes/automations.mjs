@@ -1,44 +1,33 @@
 import { scene, click, hover, type, wait, waitGone, page, key, scroll, room, newRoom, check, rightClick, member } from "./steps.mjs";
 
-const auto = [page("home"), { action: "click-position", selector: ".ho-calendar", x: 0.02, y: 0.02, expect: ".au-toolbar" }, wait(".au-toolbar")];
+const auto = [page("home"), click('.ho-schedule header [data-home-go="calendar"]'), wait(".au-toolbar")];
 const calendar = [...auto, wait(".au-occurrence"), check("calendar-chips"), check("calendar-shell")];
 const view = name => [click('[data-au="view"]'), click(`#app-popover [data-value="${name}"]`)];
-const dialog = [...auto, click('[data-au="new"]'), wait(".au-pop-editor"), click('[data-pop="routine"]'), wait(".mb-dialog")];
 const routineDetail = [...auto, wait(".au-occurrence"), click('.au-occurrence[data-au="entry"]'), wait('[data-pop="open-routine"]')];
 const ownChip = '.cal-chip.is-own[data-entry="own:1"]', slotAt = (day, hour) => `.au-slot[data-slot="${day}"][data-hour="${hour}"]`;
 const today = "2026-10-24";
-const more = [...dialog, click('[data-dlg="more"]')];
 const tools = [...calendar, { action: "calendar-tools" }, check("calendar-tools")];
 const eventRoutine = { id: 90, member_id: 1, title: "客戶來信草稿", prompt: "整理來信，準備草稿交給我。", schedule: null, enabled: true, last_run: 1792803600000, next_run: 1792807380000, last_checked: 1792807200000,
   when: { app: "Gmail", event: { tool: "mcp:Gmail/messages", arguments: { limit: 50 }, items: "messages", id: "id" }, filter: { field: "sender", equals: "client@example.com" } } };
+const failedRoutine = { id: 2, member_id: 1, title: "每日新聞", prompt: "每天早上整理日本語的新聞，做成一個網頁。", schedule: { kind: "daily", time: "08:00" }, enabled: true,
+  last_run: 1792803600000, next_run: 1792890000000, last_error: "這次執行需要的一個步驟被拒絕了，沒有完成。", last_failed: true };
 const eventDetails = [member(1), { action: "open-details" },  wait('[data-routine="90"]')];
-const eventDialog = [...eventDetails, hover('[data-routine="90"]'), check("routine-event-menu"), click('[data-det="routine-open"][data-id="90"]'), wait('#au-filter')];
 const rhythm = {calendarRhythm:true};
 const rhythmDetail = [...auto, ...view("day"), wait('.au-all-day-row .is-rhythm'), click('.au-all-day-row .is-rhythm'), wait('.au-rhythm-runs')];
-const windowDialog = [...rhythmDetail, click('[data-pop="open-routine"]'), wait('[data-dlg="window-from"]')];
-const sentenceRoundTrip = [member(1),wait('[data-act="open-routine"]'),check('moving-sentence'),click('[data-act="open-routine"]'),wait('.au-routine-dialog'),click('.au-routine-dialog [data-dlg="close"]'),waitGone('.au-routine-dialog')];
-const pickedEvent = (id,title,prompt,createdCheck) => [...dialog,type('#au-title',title),type('#au-prompt',prompt),click('[data-dlg="trigger"]'),click('#app-popover [data-value="event"]'),wait('[data-dlg="event"]'),click('[data-dlg="event"]'),click(`#app-popover [data-value="${id}"]`),wait('.au-event-status[role="status"]'),check('moving-event'),click('[data-dlg="save"]'),waitGone('.au-routine-dialog'),check(createdCheck),member(0),{action:'open-details'},wait('[data-routine="1"]'),hover('[data-routine="1"]'),click('[data-det="routine-open"][data-id="1"]'),wait('.au-event')];
+const sentenceRoundTrip = [member(1),wait('[data-act="open-routine"]'),check('moving-sentence'),click('[data-act="open-routine"]'),wait('.mb-dialog.rv-dialog'),check('routine-view'),click('.rv-dialog [data-dlg="close"]'),waitGone('.rv-dialog')];
 export default [
   scene("room-concurrent-replies", "Two members speak on one snapshot beside private work", [room(1), wait(".au-room-thinking"), check("room-meeting")], {roomMeeting: "concurrent"}),
   scene("room-status-board", "Computed work and pinned decisions use the shared disclosure", [room(1), wait("[data-room-board-toggle]"), click("[data-room-board-toggle]"), wait("[data-room-board]"), check("room-meeting-board")], {roomMeeting: "reports"}),
   scene("room-report-card", "A short report opens the member's private work", [room(1), wait("[data-room-report]"), check("room-meeting-report")], {roomMeeting: "reports"}),
 
-  scene("automation-monthly", "Monthly dates use the existing editor and clamp at month end", [...dialog, click('[data-kind="monthly"]'), type('#au-month-day','31'), check('moving-monthly')]),
-  scene("automation-minutes", "Short rhythms keep the existing daily window controls", [...dialog,click('[data-kind="every"]'),click('[data-dlg="hours"]'),click('#app-popover [data-value="m30"]'),check('moving-minutes')]),
-  scene("automation-event-pick", "An observed read condition is picked, created and reopened", pickedEvent('gmail-mail','郵件待辦','整理新郵件並準備草稿','moving-event-created'),{routines:[]}),
-  scene("automation-event-calendar", "Calendar's moving window survives creation and reopening", pickedEvent('calendar-event','行程待辦','整理新行程並準備提醒','moving-event-created-calendar'),{routines:[]}),
-  scene("automation-event-undetectable", "An empty reply retains its event choice and retry", [...dialog,click('[data-dlg="trigger"]'),click('#app-popover [data-value="event"]'),wait('[data-dlg="event"]'),click('[data-dlg="event"]'),click('#app-popover [data-value="gmail-mail"]'),wait('.au-event [role="alert"]'),click('[data-dlg="event-check"]'),wait('.au-event [role="alert"]'),check('moving-event-undetectable')],{eventUndetectable:true}),
-  ...[['repository','github-failure'],['channel','slack-message']].map(([input,id])=>scene(`automation-event-${input}`, "Event scope is a plain field in the same row", [...dialog,click('[data-dlg="trigger"]'),click('#app-popover [data-value="event"]'),wait('[data-dlg="event"]'),click('[data-dlg="event"]'),click(`#app-popover [data-value="${id}"]`),wait('#au-event-value'),type('#au-event-value',input==='repository' ? 'sample/repository' : 'C012345'),check('moving-event-input')])),
-  scene("automation-event-none-connected", "An empty connection inventory offers the existing settings entry", [...dialog,click('[data-dlg="trigger"]'),click('#app-popover [data-value="event"]'),wait('[data-missing-repair="connections"]'),check('moving-event-none')], {noEventApps:true}),
-  scene("automation-webhook", "A local signed POST has a masked vault secret", [...eventDetails,hover('[data-routine="90"]'),click('[data-det="routine-open"][data-id="90"]'),wait('.au-hook-address'),check('moving-webhook')], {routines:[{...eventRoutine,title:"Sample webhook",when:{webhook:true}}]}),
-  scene("automation-webhook-address-changed", "An occupied saved port explains the replacement address", [...eventDetails,hover('[data-routine="90"]'),click('[data-det="routine-open"][data-id="90"]'),wait('.au-webhook [role="status"]'),check('moving-webhook-changed')], {hookAddressChanged:true,routines:[{...eventRoutine,title:"Sample webhook",when:{webhook:true}}]}),
-  scene("automation-webhook-reveal", "A requested secret stays on its existing card", [...eventDetails,hover('[data-routine="90"]'),click('[data-det="routine-open"][data-id="90"]'),wait('.au-hook-address'),click('[data-dlg="hook-show"]'),wait('.au-hook-secret[type="text"]'),check('moving-webhook-reveal')], {routines:[{...eventRoutine,title:"Sample webhook",when:{webhook:true}}]}),
   scene("routine-sentence", "The transcript names its trigger and opens that exact routine", sentenceRoundTrip, {routineSentence:true}),
   scene("routine-sentence-event", "An event run retains its trigger beside the existing owner question", [...sentenceRoundTrip,check('owner-question-background')], {routineSentence:"waiting",ownerQuestion:"background",routines:[eventRoutine]}),
   scene("routine-sentence-webhook", "A failed webhook run keeps its readable trigger and routine link", sentenceRoundTrip, {routineSentence:true,routines:[{...eventRoutine,when:{webhook:true}}]}),
+  scene("routine-view-failed", "A routine whose last run did not work says so with the reason, as a status with a dot", [member(1),{action:"open-details"},wait('.mb-det [data-det="routine-open"]'),click('.mb-det [data-det="routine-open"]'),wait('.mb-dialog.rv-dialog'),check('routine-view-failed')], {routines:[failedRoutine]}),
+  scene("routine-running", "A routine that is running shows the member's working line in its conversation", [member(1),wait('.tn[data-live="true"] .live-presence'),check('routine-running')], {routineRunning:true}),
   scene("automation-monthly-calendar", "A date 31 appears on the last day of November", [...auto,...view('month'),click('[data-au="next"]'),wait('[data-month-day="2026-11-30"] .is-routine'),check('moving-monthly-calendar')], {routines:[{...eventRoutine,title:"每月範例",when:null,schedule:{kind:"monthly",day:31,time:"08:00"},next_run:1793404800000}],routineRuns:[]}),
   scene("automation-minutes-calendar", "Five-minute runs stay in one rhythm bar", [...auto,...view('day'),wait('.au-all-day-row .is-rhythm'),check('moving-minutes-calendar')], {routines:[{...eventRoutine,title:"分鐘範例",when:null,schedule:{kind:"every",minutes:5},next_run:1792800000000}],routineRuns:[]}),
-  scene("automation-offer", "A suggested routine shares the trigger sentence", [{action:"key",key:"n",ctrl:true},wait('.cr-dialog'),type('#mb-new-name','範例成員'),click('.cr-dialog [data-dlg="create"]'),wait('.mb-offer-t .routine-sentence'),check('moving-offer')], {routineOffer:true}),
+  scene("automation-offer", "A suggested routine shares the trigger sentence", [{action:"member-column",collapsed:false},click('[data-col="add"]'),click('#app-popover [data-pick="member"]'),wait('.cr-dialog'),type('#mb-new-name','範例成員'),click('.cr-dialog [data-dlg="create"]'),wait('.mb-offer-t .routine-sentence'),check('moving-offer')], {routineOffer:true}),
   scene("calendar-remember", "Home and conversation returns preserve the date and chosen view", [...auto,...view("month"),click('[data-au="next"]'),check("calendar-remember-save"),...auto,check("calendar-remember-return"),member(1),...auto,check("calendar-remember-return")], rhythm),
   scene("calendar-view-reload", "Reload keeps the view preference and starts on today", [...auto,...view("month"),click('[data-au="next"]'),check("calendar-view-stored"),{action:"reload"},...auto,check("calendar-view-reload")], rhythm),
   scene("calendar-week-fit", "Seven week columns and aligned all-day bars fit the available width", [...auto,check("calendar-shell"),check("calendar-week-fit")], rhythm),
@@ -48,17 +37,10 @@ export default [
   scene("calendar-rhythm-month", "At most one rhythm line per day, without a clock", [...auto,...view("month"),check("calendar-rhythm-month")], rhythm),
   scene("calendar-rhythm-popover", "Today's runs, icon statuses, next run, edit and off", [...rhythmDetail,check("calendar-rhythm-popover")], rhythm),
   scene("calendar-rhythm-hidden", "The member checkbox hides rhythm and exceptions together", [...auto,{action:"calendar-tools"},click('[data-source="member:1"]'),check("calendar-rhythm-hidden")], rhythm),
-  scene("automation-window", "One every routine keeps its daytime window", [...windowDialog,check("routine-window"),check("dialog-caption")], rhythm),
-  scene("automation-window-menu", "The daytime window uses the shared time menu", [...windowDialog,click('[data-dlg="window-from"]'),wait('#app-popover')], rhythm),
-  scene("automation-window-saved", "One save preserves the full daytime rhythm", [...windowDialog,click('[data-dlg="window-from"]'),click('#app-popover [data-value="07:00"]'),click('[data-dlg="save"]'),waitGone('.au-routine-dialog'),...rhythmDetail.slice(auto.length),click('[data-pop="open-routine"]'),wait('[data-dlg="window-from"]'),check("routine-window-saved")], rhythm),
+  scene("routine-event-profile", "The panel's Details lists an event routine with the app and its times, and its own switch", [...eventDetails, check("routine-event-profile")], { routines: [eventRoutine] }),
   scene("routine-event-row", "An event and its check/fire times share the existing routine row and switch", [...eventDetails, check("routine-event-row")], { routines: [eventRoutine] }),
-  scene("routine-event-edit", "A readable event filter in the shared routine editor", [...eventDialog, check("routine-event-edit")], { routines: [eventRoutine] }),
-  scene("routine-event-saved", "A changed event filter is saved and shown in the same list", [...eventDialog, type("#au-filter", "owner@example.com"), click('[data-dlg="save"]'), waitGone('.au-routine-dialog'), check("routine-event-saved")], { routines: [eventRoutine] }),
-  scene("routine-event-missing", "A stopped trigger names its connection and offers the existing connection settings", [...eventDialog, check("routine-event-missing")], { routines: [{ ...eventRoutine, enabled: false, last_error: "Gmail 連接無法使用。請到設定 › 連接重新連接。" }] }),
-  scene("routine-event-reconnect", "The stopped trigger opens the existing Connections pane", [...eventDialog, click('[data-missing-repair="connections"]'), wait('.modal-scrim [data-pane="connections"][aria-current="page"]'), check("settings-shell")], { routines: [{ ...eventRoutine, enabled: false, last_error: "Gmail 連接無法使用。請到設定 › 連接重新連接。" }] }),
-  scene("routine-event-profile", "The member profile shares readable event rows and switches", [member(1), { action: "open-details" }, click('[data-det="gear"]'),click('[data-det="edit"]'), wait('#mp-tab-routines'), click('#mp-tab-routines'), wait('.mp-routine-list .tg'), check("routine-event-profile")], { routines: [eventRoutine] }),
 
-  scene("room-workflow-blocked", "Missing artifact has a named incomplete reason", [room(1),click('[data-handoff] summary'),check('p04-blocked')], {p04Blocked:true}),
+  scene("room-workflow-blocked", "Missing artifact has a named incomplete reason", [room(1),click('[data-handoff]'),wait('.peer-chat'),check('p04-blocked')], {p04Blocked:true}),
   scene("room-final-owner", "Chief is last after delivered work", [room(1),check('room-wrapup'),check('p04-chief-last')], {p03Handoff:'done',roomWrapup:true}),
   scene("room-progress-status-only", "Work progress stays in its status row", [room(1),check('room-thinking'),check('p04-status-only')], {roomThinking:true}),
   scene("room-no-dangling-mention", "Published final has no incomplete address", [room(1),check('p04-addresses')]),
@@ -67,12 +49,12 @@ export default [
   ...["queued", "running", "result", "failed"].map(state => scene(`room-handoff-${state}`, `Durable work ${state}`, [room(1), wait("[data-handoff]"), check("p03-handoff")], { p03Handoff: state === "result" ? "done" : state })),
   scene("room-immediate-work", "Assigned work starts immediately", [room(1), wait("[data-handoff]"), check("p03-handoff")], { p03Handoff: "running" }),
   scene("room-source-dates-not-schedule", "Document deadlines never defer assigned work", [room(1), wait("[data-handoff]"), check("p03-handoff")], { p03Handoff: "running", p03SourceDates: true }),
-  scene("handoff-centred-line", "Private receipt expands its real result without public message history", [wait("[data-handoff]"), check("p03-handoff"), click("[data-handoff] summary"), wait(".handoff-event[open]"), check("p03-handoff-expanded")], { p03Handoff: "done", p03Private: true }),
+  scene("handoff-centred-line", "A private receipt opens the members' conversation with its real result", [wait("[data-handoff]"), check("p03-handoff"), click("[data-handoff]"), wait(".peer-chat"), check("p03-handoff-expanded")], { p03Handoff: "done", p03Private: true }),
   scene("mentions-bots-apps", "Bots and connected apps share the mention inventory", [room(1), type("#room-message", "@"), wait("#app-popover"), check("p02-mentions")]),
   scene("member-mentions-bots-apps", "Private composer shares the current team and app inventory", [type(".composer .cmp-input", "@"), wait("#app-popover"), check("p02-mentions")]),
   scene("plus-create-room", "Plus opens a room picker with selected chips", [click('[data-col="add"]'), click('[data-pick="group-chat"]'), wait(".mb-dialog"), click('[data-dlg="member"][data-member="1"]'), check("p02-picker")]),
   scene("room-mentions", "Room mention menu follows the typed character", [room(1), type("#room-message", "@"), wait("#app-popover"), check("p02-room-mentions")]),
-  scene("room-routing-fallback", "The saved routing fallback is visible", [room(1), check("p02-fallback")], { p02Fallback: true }),
+  scene("room-routing-fallback", "A saved routing fallback adds no line to the room", [room(1), check("p02-fallback")], { p02Fallback: true }),
   scene("meeting-open-room", "A centered chief event opens the meeting", [wait("[data-meeting-room]"), check("p02-meeting-event"), click("[data-meeting-room]"), wait(".au-room-heading b"), check("p02-meeting-open")], { p02Meeting: true }),
   scene("meeting-chief-event", "The chief private chat has one centered meeting link", [wait("[data-meeting-room]"), check("p02-meeting-event")], { p02Meeting: true }),
   scene("room-role-assignment", "Room roles use shared dropdowns and save", [room(1), click("[data-room-menu]"), click('[data-pick="roles"]'), wait(".mb-dialog"), click('[data-dlg="role"][data-member="1"]'), click('[data-value="moderator"]'), click('[data-dlg="save"]'), wait(".au-room-heading b"), check("p02-roles"), click("[data-room-menu]"), click('[data-pick="roles"]'), wait(".mb-dialog")]),
@@ -80,6 +62,7 @@ export default [
   scene("room-mention-after-hop-limit", "Completed explicit mentions survive four handoffs", [room(1), check("p02-long-exchange")], { p02LongExchange: true, roomDiscussion: true }),
   scene("room-mention-after-turn-limit", "Replies survive the seventh turn", [room(1), check("p02-long-exchange")], { p02LongExchange: true, roomDiscussion: true }),
   scene("room-mention-blocked", "Rate-limited and stopped replies stand in the thread where their exchange stopped", [room(1), check("p02-blocked")], { p02Blocked: true }),
+  scene("room-reply-status", "A stalled reply and a named member that passed are status lines saying why, never bubbles", [room(1), check("p02-reply-status")], { roomReplyStatus: true }),
   scene("room-wrapup-after-replies", "Chief conclusion follows completed reply intents", [room(1), check("room-wrapup"), check("p02-long-exchange")], { p02LongExchange: true, roomWrapup: true }),
   scene("automations-hover", "Calendar chip hover", [...calendar, hover('.au-occurrence')]),
   scene("automations-empty", "An empty week stays calm and offers 建立", [...auto, check("calendar-shell"), check("calendar-empty")], { routines: [], homeEmpty: true }),
@@ -103,7 +86,9 @@ export default [
   scene("automations-create-saved", "Saving draws it at once", [...auto, click('[data-au="new"]'), wait(".au-pop-editor"), type("#cal-title", "拜訪客戶"), click('.au-pop-editor [data-pop="save"]'), waitGone(".au-pop-editor"), { action: "wait-text", selector: ".cal-chip.is-own b", text: "拜訪客戶" }, check("calendar-saved")]),
   scene("automations-detail-own", "An own event: its time, notes, who added it, edit and ⋯", [...auto, click(ownChip), wait(".au-pop-detail"), check("calendar-detail-own")]),
   scene("automations-detail-member", "An event a member added names the member", [...auto, { action: "calendar-date", date: "2026-10-23" }, click('.cal-chip.is-own[data-entry="own:2"]'), wait(".au-pop-detail"), check("calendar-detail-own")]),
-  scene("automations-detail-routine", "A routine is read here, says whose it is and opens its editor", [...routineDetail, check("calendar-detail-read")]),
+  // A member dropped on a time asks it for a routine in its conversation: the calendar fills in nothing itself (owner, 2026-11-09).
+  scene("automation-drag-asks", "A member dropped on a time opens its conversation with the owner's words for a routine then", [...tools, { action: "drag-start", selector: '[data-drag-member="2"]' }, { action: "drop", selector: '[data-slot][data-hour="9"]', memberId: 2 }, wait('.page-agent:not([hidden]) .composer textarea'), check("routine-asked")]),
+  scene("automations-detail-routine", "A routine is read here, says whose it is and opens to read", [...routineDetail, check("calendar-detail-read")]),
   scene("automations-detail-google", "A Google event is read here and says where it comes from", [...auto, click('.au-calendar-event[data-au="entry"]'), wait(".au-pop-detail"), check("calendar-detail-read")]),
   scene("automations-edit-own", "Edit opens the same form with the event in it", [...auto, click(ownChip), wait(".au-pop-detail"), click('[data-pop="edit"]'), wait(".au-pop-editor"), check("calendar-editor")]),
   scene("automations-delete-own", "Delete waits in the ⋯, asks once more and returns to the calendar", [...auto, click(ownChip), wait(".au-pop-detail"), click('[data-pop="more"]'), wait("#app-popover"), click("#app-popover [data-confirm-item]"), click("#app-popover [data-confirm-item]"), wait(".toast"), check("calendar-deleted")]),
@@ -118,20 +103,9 @@ export default [
   scene("automations-tools-month", "Calendar tools navigate mini months", [...tools, click('[data-au="month-next"]'), check("calendar-tools")]),
   scene("automations-tools-date", "Calendar tools select a date and return to the grid", [...tools, click('[data-mini-date="2026-10-28"]'), wait('.au-day-col[data-day="2026-10-28"]'), check("calendar-shell")]),
   scene("automations-tools-awake", "Calendar tools preserve the keep-awake switch", [...tools, click('[data-au="awake"]'), wait('[data-au="awake"][aria-checked="true"]'), check("calendar-tools-awake")]),
-  ...["once", "daily", "weekdays", "weekly", "every"].map(kind => scene(`automation-${kind}`, `${kind} automation dialog`, [...dialog, click(`[data-kind="${kind}"]`)])),
-  scene("automation-hours-menu", "Every-hours menu", [...dialog, click('[data-kind="every"]'), click('[data-dlg="hours"]')]),
-  scene("automation-destination", "Automation destination menu", [...more, click('[data-dlg="destination"]')]),
-  scene("automation-end-menu", "Automation end menu", [...more, click('[data-dlg="end"]')]),
-  scene("automation-max-runs", "Automation maximum run count", [...more, click('[data-dlg="end"]'), click('[data-value="after"]')]),
-  scene("automation-until", "Automation end date picker", [...more, click('[data-dlg="end"]'), click('[data-value="until"]'), click('[data-dlg="until"]')]),
-  scene("automation-edit", "Edit an automation", [...routineDetail, click('[data-pop="open-routine"]'), wait(".au-routine-dialog")]),
-  scene("automation-delete", "Deleting an edited routine returns to the calendar with a success notice", [...routineDetail, click('[data-pop="open-routine"]'), click('[data-dlg="delete"]'), check("delete-confirmation"),click('.mb-confirm [data-dlg="delete"]'),wait(".toast"),check("deleted-view")]),
-  scene("automation-drag-prefill", "Calendar drop opens a prefilled automation", [...tools, { action: "drag-start", selector: '[data-drag-member="2"]' }, { action: "drop", selector: '[data-slot][data-hour="9"]', memberId: 2 }]),
-  scene("automation-more-bottom", "Scrollable automation advanced fields", [...more, click('[data-dlg="end"]'), click('[data-value="after"]'), scroll(".au-more")]),
   scene("primary-room-picker", "Room choices require the current chief after the display swap", [newRoom(), check("primary-room-picker"), click('[data-dlg="member"][data-member="0"]'), check("primary-room-picker"), click('[data-dlg="responder"]'), check("room-responder")], { primaryMember: 1 }),
   scene("primary-room-members", "Room membership editor keeps the current chief required", [room(1), click('[data-room-menu]'), click('[data-pick="members"]'), check("primary-room-picker")], { primaryMember: 1 }),
   scene("primary-calendar-members", "Calendar member tools use primary display order", [...tools, check("primary-calendar")], { primaryMember: 1 }),
-  scene("primary-routine-members", "Routine choices change display order without changing their selection", [...dialog, check("primary-routine-picker")], { primaryMember: 1 }),
   scene("compact-rooms", "Rooms in the compact picker", [{ action: "rooms-menu" }]),
   scene("new-room", "New room dialog", [newRoom()]),
   scene("room-group-menu", "New room group menu", [newRoom(), click('[data-dlg="group"]')]),
@@ -146,6 +120,8 @@ export default [
   scene("room-private-isolation", "Room delivery stays outside private history", [room(1), type('#room-message', 'roomnonce-private-isolation'), key('Enter'), check('room-isolation-send'), { action: "member", id: 1 }, check('room-private-isolation')]),
   scene("room-reply-owner", "Member answers identify the owner source", [room(1), check("room-reply-owner")]),
   scene("room-reply-peer", "Peer replies identify the source author", [room(1), check("room-reply-peer")], { roomDiscussion: true }),
+  // Owner 2026-11-09: in a long room ending in reply chips the wheel scrolled the whole conversation away into an empty main area.
+  scene("room-long-reply-wheel", "A long room ending in reply chips scrolls only inside its thread", [room(1), { action: "wheel", selector: ".au-room-pane .ra-scroll", deltaY: 4000 }, { action: "wheel", selector: ".au-room-pane .ra-scroll", deltaY: 4000 }, check("room-contained-scroll")], { longRoomMessages: true, roomDiscussion: true }),
   scene("room-reply-source-missing", "Deleted reply source stays unavailable", [room(1), check("room-reply-source-missing")], { roomMissingSource: true }),
   scene("room-reply-send", "Reply to a specific member through the composer", [room(1), hover('[data-room-message="2"] .chat-message'), click('[data-room-message="2"] [data-room-act="reply"]'), click('[data-room-act="cancel-reply"]'), check("room-reply-cancel"), click('[data-room-message="2"] [data-room-act="reply"]'), type('#room-message', '請補充檢查結果。'), key("Enter"), check("room-reply-send")]),
   scene("room-thinking", "One speaking row for queued member replies", [room(1), wait(".au-room-thinking"), check("room-thinking")], { roomThinking: true }),

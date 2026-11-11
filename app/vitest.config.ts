@@ -10,8 +10,10 @@ export default defineConfig({
   test: {
     fsModuleCachePath: ".look/vitest-modules",
     include: ["src/**/*.test.ts", "scripts/**/*.test.mjs"],
+    // Stylesheets are empty in tests, but for the report page's: a shared report carries its rules (report-page.ts).
+    css: { include: [/report-page\.css/] },
     // Bound process startup and native locale initialization on shared CI runners.
     // Keep per-file isolation and the default test deadline intact.
-    maxWorkers: process.env.CI ? 2 : undefined,
+    maxWorkers: process.env.CI ? 3 : undefined,
   },
 });

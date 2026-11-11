@@ -104,6 +104,8 @@ export function createAttachmentMedia(root: HTMLElement, read: (id: string) => P
       const id = button.dataset.attachment;
       if (id) return loaded.get(id)?.url;
       const src = button.querySelector("img")?.getAttribute("src");
+      // A draft's thumbnail was set from its own bytes or its stored copy (agent.ts, chat-composer.ts).
+      if (src && button.classList.contains("cmp-pic")) return src;
       return src && /^data:image\/(png|jpeg|webp|gif|avif|bmp);base64,/.test(src) ? src : undefined;
     },
     reset(): void {

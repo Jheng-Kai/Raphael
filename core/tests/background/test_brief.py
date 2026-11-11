@@ -119,5 +119,6 @@ def test_what_the_user_said_and_the_report_cannot_close_the_block(make_rig):
 def test_a_long_text_and_report_are_cut(make_rig):
     brief = TaskBrief(1, "a" * 5000, "done", 1, (), "b" * 5000, 1)
     block = background_block([brief])
-    assert len(block) < 1500
+    assert "b" * 5000 in block
+    assert "a" * 5000 not in block
 

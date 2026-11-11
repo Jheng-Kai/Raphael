@@ -12,6 +12,8 @@ from urllib.parse import parse_qs, quote, urlencode, urlsplit
 from .http import ConnectorFailure, PrivateHttp
 
 PREFIX = "connectors:google:"
+# The return address of the sign-in: a Desktop client accepts any port of it, so nothing has to be registered in Google Cloud.
+LOOPBACK = "http://127.0.0.1"
 SCOPE = "https://www.googleapis.com/auth/"
 AUTH = "https://accounts.google.com/o/oauth2/v2/auth"
 TOKEN = "https://oauth2.googleapis.com/token"
@@ -50,7 +52,8 @@ class Loopback:
         for writer in list(self.writers):
             writer.close()
             with contextlib.suppress(Exception):
-                await writer.wait_closed()
+                async with asyncio.timeout(5):
+                    await writer.wait_closed()
         if not self.done.done():
             self.done.cancel()
         elif not self.done.cancelled():
@@ -68,8 +71,6 @@ class Loopback:
         try:
             if self.claimed:
                 return
-            self.claimed = True
-            self.server.close()
             async with asyncio.timeout(5):
                 head = (await reader.readuntil(b"\r\n\r\n")).decode("latin-1")
             lines = head.split("\r\n")
@@ -83,6 +84,12 @@ class Loopback:
                     or len(query.get("state", [])) != 1
                     or not secrets.compare_digest(query["state"][0], self.state)):
                 raise ConnectorFailure("state")
+            # An unauthenticated request must not end the owner's sign-in.
+            # Another callback may have won while this request was being read.
+            if self.claimed:
+                return
+            self.claimed = True
+            self.server.close()
             if "error" in query:
                 raise ConnectorFailure("denied")
             if len(query.get("code", [])) != 1:
@@ -91,14 +98,16 @@ class Loopback:
             body = b"Sign-in complete. You can close this tab and return to Raphael."
             writer.write(b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nCache-Control: no-store\r\n"
                          b"Connection: close\r\nContent-Length: " + str(len(body)).encode() + b"\r\n\r\n" + body)
-            await writer.drain()
+            async with asyncio.timeout(5):
+                await writer.drain()
         except Exception as error:
-            if not self.done.done():
+            if self.claimed and not self.done.done():
                 self.done.set_exception(error if isinstance(error, ConnectorFailure) else ConnectorFailure("protocol"))
         finally:
             writer.close()
             with contextlib.suppress(Exception):
-                await writer.wait_closed()
+                async with asyncio.timeout(5):
+                    await writer.wait_closed()
             self.writers.discard(writer)
 
 
@@ -147,15 +156,20 @@ class GoogleClient:
         verifier = secrets.token_urlsafe(64)
         challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode("ascii")).digest()).decode().rstrip("=")
         state = secrets.token_urlsafe(32)
-        async with self.listener(state, timeout) as listener:
-            params = {"client_id": client["client_id"], "redirect_uri": listener.redirect_uri,
-                      "response_type": "code", "scope": " ".join(scopes), "state": state,
-                      "code_challenge": challenge, "code_challenge_method": "S256",
-                      "access_type": "offline", "prompt": "consent"}
-            await open_browser(AUTH + "?" + urlencode(params))
-            code = await listener.wait()
-            data = await self.http.json("POST", TOKEN, data={**client, "grant_type": "authorization_code",
-                                       "code": code, "code_verifier": verifier, "redirect_uri": listener.redirect_uri})
+        try:
+            async with asyncio.timeout(timeout):
+                async with self.listener(state, timeout) as listener:
+                    params = {"client_id": client["client_id"], "redirect_uri": listener.redirect_uri,
+                              "response_type": "code", "scope": " ".join(scopes), "state": state,
+                              "code_challenge": challenge, "code_challenge_method": "S256",
+                              "access_type": "offline", "prompt": "consent"}
+                    await open_browser(AUTH + "?" + urlencode(params))
+                    code = await listener.wait()
+                    data = await self.http.json("POST", TOKEN, data={**client, "grant_type": "authorization_code",
+                                               "code": code, "code_verifier": verifier, "redirect_uri": listener.redirect_uri},
+                                               hide=(client.get("client_secret"), code, verifier))
+        except TimeoutError:
+            raise ConnectorFailure("timeout") from None
         # Missing granted scopes is not evidence of a grant. Fail closed until re-consent.
         if not isinstance(data.get("scope"), str):
             raise ConnectorFailure("missing_scopes")
@@ -170,13 +184,29 @@ class GoogleClient:
             if not refresh:
                 raise ConnectorFailure("reconnect")
             try:
-                data = await self.http.json("POST", TOKEN, data={**self._client(), "grant_type": "refresh_token",
-                                                               "refresh_token": refresh})
+                client = self._client()
+                data = await self.http.json("POST", TOKEN, data={**client, "grant_type": "refresh_token", "refresh_token": refresh},
+                                            hide=(client.get("client_secret"), refresh))
                 self._accept(data)
             except ConnectorFailure:
                 self.forget_access()
                 raise
             return self._access
+
+    async def account_address(self) -> str:
+        """The address of the Google account that just signed in, from Gmail's profile: "" when the grant has no Gmail
+        scope or Google would not say. A 403 with the Gmail scope granted means the Gmail API is not turned on in the
+        owner's Google Cloud project, which every Gmail tool would meet too: `api_disabled`."""
+        if not {SCOPE + "gmail.readonly", SCOPE + "gmail.modify"} & set(self.scopes or []):
+            return ""
+        try:
+            data = await self.http.json("GET", GMAIL + "/profile", headers={"Authorization": "Bearer " + await self.access_token()})
+        except ConnectorFailure as error:
+            if error.kind == "auth" and error.status == 403:
+                raise ConnectorFailure("api_disabled", 403) from None
+            return ""
+        address = data.get("emailAddress")
+        return address if isinstance(address, str) and 0 < len(address) <= 100 else ""
 
     async def revoke(self) -> None:
         token = self.vault.get(PREFIX + "refresh_token")

@@ -35,7 +35,9 @@ describe("a secret card", () => {
     expect(host.querySelector('[data-act="card-resume"]')).not.toBeNull();
     const footer = host.querySelector("footer.card-actions");
     expect(footer?.querySelector('[data-act="card-resume"]')).not.toBeNull();
-    expect(footer?.querySelector("[data-card-failed-close]")).not.toBeNull();
+    // Putting it away is the × at the card's top right, not a 「關閉」 beside the action.
+    expect(footer?.querySelector("[data-card-failed-close]")).toBeNull();
+    expect(host.querySelector(".card-head [data-card-failed-close]")).not.toBeNull();
     expect(host.querySelector("input")).toBeNull();
   });
   test("shows the connection's own mark, bare, its secret's name, a masked field and a disabled framed Save", () => {

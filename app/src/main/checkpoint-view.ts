@@ -90,7 +90,9 @@ export function mountCheckpoints(panel: HTMLElement, member: () => number): { up
   });
   return { show, hide() { requested = false; review.hidden = true; }, update(available) {
     if (current !== member()) { current = member(); generation++; requested = false; kept = []; review.hidden = true; review.innerHTML = ""; }
-    open.textContent = t("files.changes"); open.hidden = !available && !requested;
+    // R-UI-71: an unchanged renewal writes nothing.
+    if (open.textContent !== t("files.changes")) open.textContent = t("files.changes");
+    if (open.hidden !== (!available && !requested)) open.hidden = !available && !requested;
     if (!available && !requested) review.hidden = true;
   } };
 }

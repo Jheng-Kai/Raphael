@@ -13,18 +13,35 @@ from dataclasses import replace
 from pathlib import Path
 
 from ..protocol import invalid_params
+from ..paths import local_storage_root
 from .attachments import Attachment, AttachmentError, MAX_VIDEO_BYTES, checked, file_limit
 
 ID = re.compile(r"[a-f0-9]{32}\.[a-z0-9]{1,12}")
-EXECUTABLE = {"exe", "com", "bat", "cmd", "ps1", "vbs", "vbe", "js", "jse", "wsf", "wsh", "msi", "msp", "scr", "hta", "lnk", "url", "reg", "cpl", "dll", "sh", "py", "jar", "appref-ms"}
+# Native opening invokes the owner's file association. Unknown extensions must not
+# acquire execution permission merely because they are missing from a denylist.
+OPENABLE = frozenset("""
+    txt md markdown csv tsv json jsonl xml yaml yml toml ini cfg conf log
+    html htm pdf rtf doc docx xls xlsx ppt pptx odt ods odp
+    png jpg jpeg gif webp avif bmp svg tif tiff ico
+    mp3 wav m4a aac ogg oga opus flac wma
+    mp4 webm mov m4v mkv avi wmv ogv
+    zip 7z rar tar gz bz2 xz
+""".split())
 
 
 class AttachmentStore:
     def __init__(self, root: Path):
-        self.root = root / "attachments"
+        self.root = root.resolve() / "attachments"
         self.uploads = {}
 
+    def checked_root(self):
+        try:
+            return local_storage_root(self.root)
+        except (OSError, ValueError):
+            raise invalid_params("attachment is unavailable") from None
+
     def save(self, attachment: Attachment) -> Attachment:
+        self.checked_root()
         if attachment.stored_id:
             self.path(attachment.stored_id)
             return attachment
@@ -40,8 +57,9 @@ class AttachmentStore:
     def path(self, key) -> Path:
         if not isinstance(key, str) or not ID.fullmatch(key):
             raise invalid_params("invalid attachment ID")
-        target = (self.root / key).resolve()
-        if target.parent != self.root.resolve() or not target.is_file() or target.stat().st_size > MAX_VIDEO_BYTES:
+        root = self.checked_root()
+        target = (root / key).resolve()
+        if target.parent != root or not target.is_file() or target.stat().st_size > MAX_VIDEO_BYTES:
             raise invalid_params("attachment is unavailable")
         return target
 
@@ -71,6 +89,7 @@ class AttachmentStore:
 
     async def upload(self, params):
         """Sequential 1 MiB chunks, a bounded transfer table, and atomic publication."""
+        self.checked_root()
         action, token = params.get("action"), params.get("token")
         now = time.monotonic()
         for old, entry in list(self.uploads.items()):
@@ -140,6 +159,6 @@ class AttachmentStore:
 
     async def open_path(self, params):
         path = self.path(params.get("id"))
-        if path.suffix.lstrip(".") in EXECUTABLE:
-            raise invalid_params("executable attachments cannot be opened")
+        if path.suffix.lstrip(".").lower() not in OPENABLE:
+            raise invalid_params("unreviewed attachment types cannot be opened")
         return {"path": str(path)}

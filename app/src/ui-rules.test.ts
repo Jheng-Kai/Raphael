@@ -31,6 +31,50 @@ test("copy controls use the shared in-place feedback", () => {
 });
 const i18nFiles = mainFiles.filter((f) => f.includes(`${sep}i18n${sep}`) && !f.endsWith(".test.ts"));
 
+test("every button and every menu row takes its height from the shared controls, never a number of its own", () => {
+  // Rows and tiles built from a button (a list row, a card, a day of the calendar, an emoji) and the round edge controls
+  // keep their own sizes. Frozen: it may shrink, never grow.
+  const TILES = /\.(?:conversation-latest|peer-latest|peer-close|draft-av-btn|attachment-file|reaction|au-day-num|cal-more|gr|cs-open|cs-main|conversation-trigger|ho-event|ho-stat|lib-row|ms-open|tpr-row|mb-fold-head|mb-panel-row|mb-chat-choice|mb-rt|question-choices|mc-source|ghost|owner-photo|pv-create|mb-tool|mb-more|mb-avbtn|sidebar-toggle|cmp-pair|cmp-attach|ra-tool|au-members|au-month-grid|ob-foot|room-row)\b|::(?:before|after)/;
+  // The guide's `.ob-foot` keeps its own wide pills.
+  const bad: string[] = [];
+  for (const file of mainFiles.filter((f) => f.endsWith(".css"))) {
+    for (const [, selector, body] of read(file).matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+      // The rule must style the button itself (its last compound), not an icon inside it.
+      const last = (part: string): string => { const compounds = part.trim().split(/[\s>+~]+/); return compounds[compounds.length - 1] ?? ""; };
+      const targets = selector!.split(",").filter((part) => /\.btn\b|^button\b|menu-choice|menu-action/.test(last(part)) && /\.btn\b|\.menu\b|menu-choice|menu-action/.test(part) && !TILES.test(part) && !/\.icon\b/.test(part));
+      if (!targets.length) continue;
+      for (const [, prop, value] of body!.matchAll(/(?:^|;)\s*(min-height|height)\s*:\s*([^;]+)/g)) {
+        if (!/^(?:auto|0|100%|var\(--h-[\w-]+\))$/.test(value!.trim())) bad.push(`${rel(file)}: ${targets.join(",").trim()} { ${prop}: ${value!.trim()} }`);
+      }
+      // Nor does a padding above and below make it taller than its words: at most 3 px (a menu row's 4 px is its 28 px).
+      const menu = targets.every((part) => /\.menu\b/.test(part));
+      for (const [, prop, value] of body!.matchAll(/(?:^|;)\s*(padding(?:-block|-top|-bottom)?)\s*:\s*([^;]+)/g)) {
+        const vertical = value!.trim().split(/\s+(?![^(]*\))/)[0]!;
+        if (!(menu ? /^(?:0|0px|[1-4]px|var\(--sp-1\))$/ : /^(?:0|0px|[1-3]px)$/).test(vertical)) bad.push(`${rel(file)}: ${targets.join(",").trim()} { ${prop}: ${value!.trim()} }`);
+      }
+    }
+  }
+  expect(bad).toEqual([]);
+});
+
+test("no picture can be dragged out of the window (owner, 2026-11-09: 「這個圖片放進去不要可以拖拉出來」)", () => {
+  const css = (file: string): string => read(file).replace(/\/\*[\s\S]*?\*\//g, "");
+  const base = [...css(join(MAIN, "styles.css")).matchAll(/([^{}]+)\{([^{}]*)\}/g)].filter(([, selector]) => selector!.trim() === "img");
+  expect(base.map(([, , body]) => body!.trim())).toEqual(["-webkit-user-drag: none;"]);
+  // No stylesheet hands a picture back to the pointer.
+  const loose = mainFiles.filter((f) => f.endsWith(".css") && /-webkit-user-drag\s*:\s*(?:auto|element)/.test(css(f))).map(rel);
+  expect(loose).toEqual([]);
+});
+
+test("closing is a ×, never a 「關閉」 text button", () => {
+  for (const file of sources) {
+    const text = read(file);
+    // A text button or a dialog action labelled with the close words.
+    expect(text, rel(file)).not.toMatch(/\bbtn\(\s*(?:esc\()?\s*t\(\s*"(?:common|providers)\.close"\s*\)/);
+    expect(text, rel(file)).not.toMatch(/label:\s*(?:esc\()?\s*t\(\s*"(?:common|providers)\.close"\s*\)/);
+  }
+});
+
 describe("action rows", () => {
   test("primary is last, Cancel immediately precedes it, and destruction is first", () => {
     const html = actionRow({
@@ -58,9 +102,9 @@ describe("action rows", () => {
 
   test("form footers use the shared row instead of hand-written button containers", () => {
     // Provider/model-picker work is owned by another branch; gold approval cards keep their product order.
-    const rows = /<(?:div|span) class="(?:mb-dlg-act|mb-ract|av-crop-act|cs-acts|cs-device-acts|add-acts|svc-acts|mem-edit-actions|addword-actions|rules-acts)"/;
+    const rows = /<(?:div|span) class="(?:mb-dlg-act|mb-ract|av-crop-act|cs-acts|cs-device-acts|add-acts|svc-acts|addword-actions|rules-acts)"/;
     expect(sources.filter((f) => !["providers.ts", "model-picker.ts"].includes(rel(f)) && rows.test(read(f))).map(rel)).toEqual([]);
-    for (const file of ["member-dialogs.ts", "avatar-settings.ts", "connections.ts", "services.ts", "messaging.ts", "memory-view.ts", "pages/dictionary.ts", "setup-rows.ts", "onboarding/mount.ts", "safety-rules.ts", "local-models.ts"]) {
+    for (const file of ["member-dialogs.ts", "avatar-settings.ts", "connections.ts", "services.ts", "messaging.ts", "pages/dictionary.ts", "setup-rows.ts", "onboarding/mount.ts", "safety-rules.ts", "local-models.ts"]) {
       expect(read(join(MAIN, file)), file).toContain("actionRow(");
     }
   });
@@ -69,7 +113,7 @@ describe("action rows", () => {
 describe("buttons", () => {
   // Every <button> is one of the shapes of the component inventory (docs/ui.md), or a part of a menu / list / dialog.
   const ALLOWED_CLASS = [
-    "btn", "sel", "tg", "tab", "nav", "usage-box", "menu-choice", "menu-action", "lang-item", "lm-main", "mp-star", "mp-opt", "mp-dd", "chip-x", "sess", "mb-preset", "mb-slime-color",
+    "btn", "sel", "tg", "tab", "nav", "usage-box", "menu-choice", "menu-action", "lang-item", "lm-main", "mp-star", "mp-opt", "mp-dd", "chip-x", "sess", "mb-preset", "mb-slime-color", "message-quote",
   ];
   const ALLOWED_ROLE = ["option", "menuitem", "menuitemradio", "radio", "checkbox", "switch", "tab"];
   const classOf = (tag: string): string[] => (/\bclass="([^"]*)"/.exec(tag)?.[1] ?? "").split(/\s+/).filter(Boolean);
@@ -122,15 +166,28 @@ describe("buttons", () => {
       }
     }
     for (const modifier of ["pri", "sm", "row", "danger", "btn"]) classes.delete(modifier);
-    // Owner-approved caption hover exception (2026-10-25); ordinary icon controls stay frameless.
+    // Caption controls use native hover surfaces; ordinary icon controls stay frameless.
     const allowlist: readonly string[] = [
-      // Daily sidebar controls share the owner's requested round soft press surface.
+      // Daily sidebar controls share the round soft press surface.
       'sidebar.css: .side .side-foot .btn.icon[aria-current="page"]:active:not(:disabled)',
       "sidebar.css: .side .btn.icon:hover:not(:disabled)", "sidebar.css: .side .btn.icon:active:not(:disabled)",
+      // Search and plus, and the buttons on the window's edges, are soft round buttons.
+      "sidebar.css: .side .btn.icon.mb-tool[data-col]:hover:not(:disabled)", "sidebar.css: .side .btn.icon.mb-tool[data-col]:active:not(:disabled)",
+      ...[':is(:hover, [aria-expanded="true"]):not(:disabled)', ":active:not(:disabled)"].flatMap(state => [
+        `styles.css: :is(.page-agent .mb-det-head, .page-agent .mb-head .ra-tools, .page-agent .mb-head .mb-head-l, .mb-dlg-head, .cs-dlg-head, .lb-head, .room-side-thread > header, .desktop-panel[data-expanded] .desktop-dock, .rp-top, .ms-bar, .ms-cover) .btn.icon${state}`,
+        `styles.css: .page-agent .cmp-bar .btn.cmp-attach${state}`,
+      ]),
+      "styles.css: .btn.icon.modal-x:hover:not(:disabled)", "styles.css: .btn.icon.modal-x:active:not(:disabled)",
+      // The larger view's fold back and Back live in the window strip and fill as its own buttons do (R-COMP-PERF-07).
+      'desktop-viewer.css: .window-chrome > .btn.icon:is([data-desktop="collapse"], [data-desktop="back"]):is(:hover, :active):not(:disabled)',
+      'desktop-viewer.css: .window-chrome > .btn.icon:is([data-desktop="collapse"], [data-desktop="back"]):active:not(:disabled)',
       "styles.css: .window-button:hover", "styles.css: .window-button:active",
       "styles.css: .window-close:hover", "styles.css: .window-close:active",
+      // The guide's round arrow keeps the grey surface its 上一步 pill had, lighter under the pointer (owner, 2026-11-11).
+      "styles.css: .ob-foot .ob-back:is(:hover, :active):not(:disabled)",
       // R-UI-50: the contextual latest action floats over messages and needs an opaque surface.
       "agent.css: .page-agent .btn.conversation-latest:hover:not(:disabled)",
+      "conversations.css: .peer-chat > .btn.peer-latest:hover:not(:disabled)",
     ];
     const violations = (css: string): string[] => [...strip(css).matchAll(/([^{}]+)\{([^{}]*)\}/g)].flatMap(([, selectors, body]) => {
       const surfaces = [...body!.matchAll(/(?:^|;)\s*background(?:-color|-image)?\s*:\s*([^;]+)/g)]
@@ -153,6 +210,32 @@ describe("buttons", () => {
     // nothing else writes the class by hand
     const byHand = sources.filter((f) => rel(f) !== "ui.ts" && /class="btn icon/.test(read(f))).map(rel);
     expect(byHand).toEqual([]);
+  });
+});
+
+describe("type weight", () => {
+  const stripComments = (css: string): string => css.replace(/\/\*[\s\S]*?\*\//g, "");
+  const sheets = (): [string, string][] => mainFiles.filter((f) => f.endsWith(".css")).map((f) => [rel(f), stripComments(read(f))]);
+
+  // Typography uses one quiet weight: emphasis is size and colour (white or grey), never heavier type.
+  test("weights come from the tokens, and nothing is heavier than medium", () => {
+    const bad: string[] = [];
+    for (const [file, css] of sheets()) {
+      for (const m of css.matchAll(/font-weight:\s*([^;}\s]+)/g)) if (!/^(var\(--weight-(regular|medium|semibold)\)|400|500|inherit|100)$/.test(m[1])) bad.push(`${file}: ${m[0]}`);
+      for (const m of css.matchAll(/\bfont:\s*(\d{3}|bold)\b/g)) if (!/^(400|500)$/.test(m[1])) bad.push(`${file}: ${m[0]}`);
+    }
+    expect(bad).toEqual([]);
+    expect(read(join(MAIN, "styles.css"))).toMatch(/--weight-semibold:\s*500;/);
+  });
+
+  test("a chosen, current or pressed item changes its background or colour, never its weight", () => {
+    const bad: string[] = [];
+    for (const [file, css] of sheets()) {
+      for (const m of css.matchAll(/([^{}]+)\{([^}]*)\}/g)) {
+        if (/aria-(current|selected|pressed|checked)|\.is-(today|live|active|wait)\b/.test(m[1]) && /font-weight/.test(m[2])) bad.push(`${file}: ${m[1].trim().slice(0, 90)}`);
+      }
+    }
+    expect(bad).toEqual([]);
   });
 });
 
@@ -194,9 +277,10 @@ describe("colours", () => {
 });
 
 describe("tabs", () => {
-  test("the segmented filter is used by History and Dictionary only", () => {
+  // The member Library sorts its deliverables by kind with the same filter.
+  test("the segmented filter is used by History, Dictionary and the member Library only", () => {
     const users = sources.filter((f) => /kind: "filter"|\btabs seg\b/.test(read(f))).map(rel).sort();
-    expect(users).toEqual(["pages/dictionary.ts", "pages/history.ts", "ui.ts"]);
+    expect(users).toEqual(["member-panel-work.ts", "pages/dictionary.ts", "pages/history.ts", "ui.ts"]);
   });
 
   test("there is one tab implementation: the old class names are gone", () => {
@@ -239,11 +323,11 @@ describe("translations", () => {
 });
 
 describe("icons", () => {
-  // The icons are drawn on a 16 x 16 grid with a 1.5 stroke (ui.ts ICON): at 16 px one edge of each
-  // straight line falls on a whole pixel; at 12 to 15 px none does and they blur. So an icon is shown
-  // at 16 px, or 20 where a larger one is meant, and keeps its stroke. The window's own minimise,
-  // maximise and close are Windows' caption glyphs, drawn for 12 px: not icons of the set.
-  const SIZES = new Set(["16px", "20px"]);
+  // The icons are Lucide's 24 x 24 drawings with their stroke of 2 (icon-set.ts): shown
+  // at 16 px, 18 on the round edge buttons (1.5 px lines) or 20 where a larger one is meant; at 12 to 15 px
+  // their lines thin out and blur. The window's own minimise, maximise and close are Windows' caption glyphs, drawn for
+  // 12 px: not icons of the set.
+  const SIZES = new Set(["16px", "18px", "20px"]);
   const NOT_ICONS = new Set([".slime-cels > svg", ".slime-prop-cels > svg", ".slime-blink-cels > svg", ".window-button svg"]);
   const strip = (css: string): string => css.replace(/\/\*[\s\S]*?\*\//g, "");
   const cssFiles = [...mainFiles, ...walk(join(SRC, "overlay"))].filter((f) => f.endsWith(".css"));
@@ -261,7 +345,7 @@ describe("icons", () => {
   test("an icon is shown at 16 or 20 px, never 12 to 15", () => {
     const bad = iconRules().flatMap(({ file, selector, body }) =>
       [...body.matchAll(/(?:^|;)\s*(width|height)\s*:\s*([^;]+)/g)]
-        // The owner requested the send glyph match the adjacent voice portrait exactly.
+        // The send glyph matches the adjacent voice portrait exactly.
         .filter(([, , value]) => !SIZES.has(value.trim()) && !(file === "sidebar.css" && selector === ".room-avatar > .av > svg.i" && value.trim() === "100%") && !(file === "sidebar.css" && selector === ".sidebar-app-marks :is(svg" && value.trim() === "18px") && !(file === "agent.css" && ((selector === ".attachment-drop > .i" && value.trim() === "28px") || (selector === ".composer .cmp-pair .cmp-send .i" && value.trim() === "32px"))))
         .map(([, prop, value]) => `${file}: ${selector} { ${prop}: ${value.trim()} }`),
     );
@@ -269,15 +353,17 @@ describe("icons", () => {
     expect(bad).toEqual([]);
   });
 
-  test("an icon keeps the 1.5 stroke it is drawn for", () => {
+  test("an icon keeps the stroke of 2 it is drawn for", () => {
     const bad = iconRules()
-      .filter(({ body }) => [...body.matchAll(/stroke-width\s*:\s*([^;]+)/g)].some(([, value]) => value.trim() !== "1.5"))
+      .filter(({ body }) => [...body.matchAll(/stroke-width\s*:\s*([^;]+)/g)].some(([, value]) => value.trim() !== "2"))
       .map(({ file, selector }) => `${file}: ${selector}`);
     expect(bad).toEqual([]);
   });
 
-  test("no page keeps a copy of an icon: every 16 x 16 drawing comes from ui.ts", () => {
-    const copies = sources.filter((f) => rel(f) !== "ui.ts" && read(f).includes('viewBox="0 0 16 16"')).map(rel);
+  test("no page keeps a copy of an icon: every drawing of the set comes from icon-set.ts", () => {
+    const drawings = [...read(join(SRC, "main/icon-set.ts")).matchAll(/d=\\"([^\\"]{12,})\\"/g)].map(([, d]) => d);
+    expect(drawings.length).toBeGreaterThan(50);
+    const copies = sources.filter((f) => !["ui.ts", "icon-set.ts"].includes(rel(f)) && (read(f).includes('viewBox="0 0 16 16"') || drawings.some((d) => read(f).includes(d)))).map(rel);
     expect(copies).toEqual([]);
   });
 });

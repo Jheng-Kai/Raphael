@@ -44,11 +44,11 @@ import { eventRead } from '../event-read';
 import { cancelGesture } from "../../shared/cancel-gesture";
 import { openActions } from "../member-column";
 import { mountConversationFind } from "../conversation-find";
-import { confirmDelete } from "../member-dialogs";
-import { openRoutineDialog } from "../routine-dialog";
+import { openRoutineView } from "../routine-view";
 import { createAttachmentMedia } from "../attachment-media";
 import { ATTACH_MAX, FILE_MAX_BYTES, TOTAL_MAX_BYTES, attachmentLimit, readComposerFile, attachRefusal, base64Of, bindFilePaste, draftFileHTML, fileMime, fileKind, mountStageDrop } from "../attachments";
 import { closeMediaLightbox, openMediaLightbox } from "../media-lightbox";
+import { keepBottomOnResize, keepReadingPlace } from "../reading-place";
 import { wholeLinks } from "../composer-links";
 import { mountSlashMenu } from "../slash-menu";
 import { getLocale, onLocaleChange, t } from "../i18n";
@@ -59,30 +59,36 @@ import { createLinkPreviews, type LinkPreview } from "../link-previews";
 import { messagePlainText } from "../message-content";
 import { mountRichContent, preserveRichScroll, richScrollFollows, followRichScroll, releaseRichScroll } from "../message-rich";
 import { mountConversationScroll } from "../conversation-scroll";
-import { openUnread, unreadLine } from "../unread-divider";
+import { openUnread, unreadInTail, unreadLine } from "../unread-divider";
 import { measureMessagePreviews, messagePreviewMeasure } from "../message-preview";
 import { messageTooltip } from "../message-tooltip";
 import { quoteHTML, selectionQuote } from "../message-quote";
 import { ReplyPacing } from "../reply-pacing";
-import { avatarHTML, onAvatarChange } from "../avatar";
+import { avatarHTML, currentAvatar, onAvatarChange } from "../avatar";
 import "../background-questions.css";
 import type { BackgroundQuestions } from "../background-questions";
 import { RAPHAEL_ID, faceHTML, memberPlaceholder } from "../members";
 import { createMembers } from "../members-shell";
 import { createDraftPanel, hasDrafts } from "../member-draft";
 import { mountBackgroundQuestions } from "../background-mount";
-import { TYPED, VOICE, exchangeTurn, mergeTurns, oldestId, refreshTurns, sourceOf, threadItems, visibleTurn } from "../conversation";
+import { TYPED, VOICE, delegatedTurn, exchangeTurn, mergeTurns, oldestId, refreshTurns, sourceOf, threadItems, visibleTurn } from "../conversation";
 import { carryTyped } from "../secret-card";
+import { chatCardAction } from "../chat-cards";
 import { carryInlineSetup, mountInlineConnectionSetup } from "../connection-setup";
 import { carryMail } from "../mail-card";
 import { mountPages } from "../page-card";
+import { menuReactionsHTML, mountMessageMetadata } from "../message-metadata";
+import { MORE_EMOJI, openEmojiPicker } from "../emoji-picker";
 import { mountMailActions } from "../mail-actions";
+import { mountGreeting } from "../member-greeting";
 import { answerOwnerPage, mountOwnerQuestions } from "../owner-questions";
 import { mountPendingQuestions } from "../pending-questions";
 import { approvalCopy, permissionFor } from "../permission-card";
-import { memberAccent, ownerBubble } from "../owner-bubble";
-import { slimeColorOf } from "../slime";
+import { memberAccent, memberColor, ownerBubble } from "../owner-bubble";
+import { openPeerChat, type PeerChatView } from "../peer-chat";
+import { exchangeView } from "../exchange-line";
 import { dayLabel, describeError } from "../format";
+import { CHATGPT_USAGE_URL } from "../cli-brains";
 import { loadingHTML } from "../loading";
 import {
   type TimelineState,
@@ -108,9 +114,11 @@ import {
   wantsRefresh,
 } from "../timeline";
 import type { PageArgument, AgentQuestion, AgentTurn, AppContext, GroupDraft, MemberDraft, MessageQuote, OwnerQuestion, Page, TurnAttachment, WireAttachment } from "../types";
-import { copyButton, esc, ico, iconButton, patchHTML, toaster } from "../ui";
+import { closeAndPress } from "../dismissals";
+import { closeMenu, copyButton, esc, ico, iconButton, openMenu, patchHTML, toaster } from "../ui";
+import { askInChat } from "../chat-ask";
 import { createRoomPane } from "../group-chats";
-import { bindActionMode, composerHTML, drawTaskSlot } from "../chat-composer";
+import { bindActionMode, bindPageComposer, composerHTML, drawTaskSlot } from "../chat-composer";
 import { mountComposerBrain } from "../composer-brain";
 import { bindComposerHistory } from "../composer-history";
 import { bindComposerLearning, learnComposerCorrections } from "../composer-learning";
@@ -157,11 +165,6 @@ export function askLabels(q: AgentQuestion | null): { yes: string; no: string; a
     no: (always !== null && q?.no) || t("perm.deny"),
     always,
   };
-}
-
-/** Retain the legacy settings link; Settings resolves the former agent pane to Tools. */
-export function openRaphaelSettings(app: Pick<AppContext, "go">): void {
-  app.go("settings", "agent");
 }
 
 /** The words of the empty page: the overlay's greeting to a question, without its last stop. */
@@ -224,6 +227,7 @@ interface Outgoing {
 
 interface ComposerDraft {
   dictation?: DictationBaseline;
+  pageId?: string;
   text: string;
   files: ComposerFile[];
   missing: TurnAttachment[];
@@ -231,7 +235,7 @@ interface ComposerDraft {
   quote?: MessageQuote;
 }
 
-export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loadSidebar(): Promise<void> } {
+export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loadSidebar(): Promise<void>; settingsOf(): number | null; showSettings(id: number | null): void } {
   const el = document.createElement("div");
   el.className = "page page-agent";
   el.dataset.page = "agent";
@@ -240,10 +244,8 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     `<section class="mb-chat">` +
     `<div class="page-head mb-head"><h1 class="mb-h1">${esc(t("agent.title"))}</h1><span class="mb-head-l">` +
     iconButton("search", t("agent.search"), ' data-act="search" aria-expanded="false" hidden', "ra-tool") +
-    `</span><span class="mb-head-c"></span><div class="ra-tools">` +
-    iconButton("monitor", t("card.pcTitle"), ' data-act="computer"', "ra-tool") +
-    iconButton("gear", t("agent.settings"), ' data-act="settings"', "ra-tool") +
-    `</div></div>` +
+    // Search at the left and share at the right, symmetric.
+    `</span><span class="mb-head-c"></span><div class="ra-tools">${iconButton("share", t("template.export"), ' data-act="share-member" aria-haspopup="menu" aria-expanded="false" hidden', "ra-tool")}</div></div>` +
     `<div class="ra-find" hidden></div>` +
     `<div class="ra-stage">` +
     `<div class="ra-scroll"><div class="ra-col"><div class="ra-older" hidden></div><ol class="thread"></ol><p class="ra-none" hidden></p></div></div>` +
@@ -254,14 +256,18 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     `</section>`;
   const heading = el.querySelector<HTMLElement>("h1")!;
   const searchButton = el.querySelector<HTMLElement>('[data-act="search"]')!;
-  const computerButton = el.querySelector<HTMLElement>('[data-act="computer"]')!;
-  const settingsButton = el.querySelector<HTMLElement>('[data-act="settings"]')!;
+  const shareButton = el.querySelector<HTMLElement>('[data-act="share-member"]')!;
+  /** Whether the open member's computer is working now: a dot beside its name in the header says so. */
+  let computerActive = false;
   const find = el.querySelector<HTMLElement>(".ra-find")!;
 
   const stage = el.querySelector<HTMLElement>(".ra-stage")!;
   const scroller = el.querySelector<HTMLElement>(".ra-scroll")!;
   const older = el.querySelector<HTMLElement>(".ra-older")!;
   const thread = el.querySelector<HTMLOListElement>(".thread")!;
+  // A panel dragged wider or narrower, or a dock that grows under it, leaves the reading place where it was (reading-place.ts).
+  keepReadingPlace(scroller, ".thread > li");
+  keepBottomOnResize(scroller, () => followRichScroll(scroller));
   const none = el.querySelector<HTMLElement>(".ra-none")!;
   const wait = el.querySelector<HTMLElement>(".ra-wait")!;
   const empty = el.querySelector<HTMLElement>(".ra-empty")!;
@@ -299,13 +305,17 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
         }
         finishOpening();
       }
+      holdOpening();
     },
     focusHeader: () => conversationButton.focus({ preventScroll: true }),
     onDetailsChange: open => { conversationButton.setAttribute("aria-expanded", String(open)); queueMicrotask(() => open && visible && !roomPane.active ? desktop.show() : desktop.sync()); },
     onSelect: (_id, sameThread) => {
+      // Another member's thread is switched to before the page is shown, so the page asks for that thread once,
+      // before anything else (owner, 2026-11-10: 開啟對話太慢); show() then joins the read under way.
+      if (!sameThread) { switchThread(); app.go("agent"); return; }
       app.go("agent");
-      if (sameThread) { roomPane.close(); void load(false); focusComposer(); }
-      else switchThread();
+      if (openingThread) openedAt = Date.now();
+      roomPane.close(); void load(false); focusComposer();
     },
     onUpdate: () => {
       composerBrain?.draw();
@@ -313,20 +323,25 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       drawDock();
       drawFaces();
       drawConversation();
-      hi.textContent = emptyLine();
+      sayHi(emptyLine());
       draftPanel.redraw();
       if (visible && !scroller.hidden) drawThread();
     },
   });
   el.prepend(members.column);
   el.append(members.details);
+  el.append(members.settings.el);
   const desktop = mountDesktopViewer(members.details, () => members.current(), {
     timeline: el.querySelector<HTMLElement>(".thread")!, conversation: () => conversationId(),
     name: () => members.nameOf(members.current()),
     face: () => members.faceOf(members.current(), 22),
     closePanel: () => members.setDetails(false),
     openPanel: () => members.computer(), panelVisible: () => members.detailsOpen() && members.details.dataset.detailsTab === 'computer',
-    status: active => el.querySelector('[data-act="computer"]')!.classList.toggle('is-computer-active', active),
+    status: active => {
+      computerActive = active;
+      const trigger = el.querySelector<HTMLElement>(".mb-chat .conversation-trigger");
+      if (trigger) { trigger.classList.toggle("is-computer-active", active); drawConversation(); }
+    },
     changed: () => { if (visible && !scroller.hidden) drawThread(); },
     trySkill: text => sendFromPage(text),
     stop: turnId => { const turn = turns.find(turn => turn.id === turnId); return turn?.task ? api.workerCancel(turn.task.id) : turn?.session_id ? api.agentStop(turn.session_id, memberId()) : Promise.resolve(); },
@@ -335,7 +350,8 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   const detailsScrim = document.createElement("div");
   detailsScrim.className = "mb-det-scrim";
   detailsScrim.setAttribute("aria-hidden", "true");
-  detailsScrim.addEventListener("click", () => members.setDetails(false));
+  // The press that closes the panel goes on to what it was over (R-UI-121).
+  detailsScrim.addEventListener("click", event => closeAndPress(event, detailsScrim, () => members.setDetails(false)));
   el.insertBefore(detailsScrim, members.details);
   if (members.detailsOpen()) el.dataset.det = "open";
   el.querySelector(".mb-head-l")!.append(members.picker);
@@ -363,15 +379,22 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     conversation === undefined ? {} : { conversationId: conversation,
       ...(conversationCache.get(member)?.find(c => c.id === conversation)?.kind === "quick" ? { destination: "quick" as const } : {}) };
 
+  /** The header names only the member; Raphael's quick questions say so under it. */
   function drawConversation(): void {
     const selected = conversationCache.get(memberId())?.find(c => c.id === conversationId());
-    const title = conversationTitle(selected);
+    const title = selected?.kind === "quick" ? conversationTitle(selected) : "";
     composerBrain?.draw();
     caption.textContent = title;
-    conversationButton.setAttribute("aria-label", `${members.member().name}: ${title}`); conversationButton.title = title;
+    caption.hidden = !title;
+    const name = members.member().name;
+    const working = computerActive ? ` · ${t("desktop.working")}` : "";
+    conversationButton.setAttribute("aria-label", (title ? `${name}: ${title}` : name) + working); conversationButton.title = (title || name) + working;
+    conversationButton.classList.toggle("is-computer-active", computerActive);
   }
 
   const conversationsDirty = new Set<number>();
+  /** The member changed while the page was not on screen: its commands and skills are read when it shows. */
+  let slashStale = false;
   async function readConversations(member: number, fromEvent = false): Promise<void> {
     conversationsDirty.delete(member);
     try {
@@ -421,23 +444,8 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     window.dispatchEvent(new CustomEvent("conversation-opened", { detail: member }));
   }
 
-  window.addEventListener("conversation-deleted", event => {
-    const {member,id}=(event as CustomEvent<{member:number;id:number}>).detail;
-    discardComposerDraft(draftKey(member, id));
-    const remaining=(conversationCache.get(member)??[]).filter(c=>c.id!==id);
-    conversationCache.set(member,remaining);
-    conversationsDirty.add(member);
-    if(chosenConversations.get(member)!==id)return;
-    if (composerKey === draftKey(member, id)) { composerKey = "deleted"; clearTimeout(draftTimer); }
-    // Read activity again before history; the core's stable default is not the window's selection.
-    chosenConversations.delete(member);
-    if(member===memberId())switchThread();
-  });
   conversationButton.addEventListener("click", () => {
     members.setDetails(!members.detailsOpen());
-  });
-  el.querySelector('[data-act="computer"]')!.addEventListener("click", () => {
-    members.computer();
   });
   window.addEventListener("conversations-changed", (event) => {
     const member = (event as CustomEvent<number>).detail;
@@ -454,10 +462,10 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     const names: Record<string, string> = { codex: "Codex", claude: "Claude", gemini: "Antigravity" };
     const time = (ms: number): string => new Intl.DateTimeFormat(getLocale(), { hour: "numeric", minute: "2-digit" })
       .formatToParts(new Date(ms)).map(part => part.type === "dayPeriod" ? `${part.value} ` : part.value).join("").trim();
-    quotaHost.innerHTML = quotas.map(q => `<span class="quota-chip" role="status">${ico("clock")}<span>${esc(t("chat.quota", { p0: names[q.provider] ?? q.provider }))}${q.reset_at_ms ? esc(t("chat.quotaReset", { p0: time(q.reset_at_ms) })) : ""}</span></span>`).join("");
+    patchHTML(quotaHost, quotas.map(q => `<span class="quota-chip" role="status">${ico("clock")}<span>${esc(t("chat.quota", { p0: names[q.provider] ?? q.provider }))}${q.reset_at_ms ? esc(t("chat.quotaReset", { p0: time(q.reset_at_ms) })) : ""}</span></span>`).join(""));
     quotaHost.hidden = quotas.length === 0;
     if (quotaHost.hidden) quotaHost.remove();
-    else composer.before(quotaHost);
+    else if (quotaHost.nextElementSibling !== composer) composer.before(quotaHost);
     const next = Math.min(...quotas.map(q => q.reset_at_ms ?? Infinity));
     if (Number.isFinite(next)) quotaTimer = setTimeout(drawQuotas, Math.min(2_147_483_647, Math.max(1, next - now)));
   }
@@ -470,6 +478,8 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   drawConversation();
 
   const memberChat = el.querySelector<HTMLElement>(".mb-chat")!;
+  /** The conversation between members a centred line opened over the thread (peer-chat.ts). */
+  let peer: PeerChatView | null = null;
   const roomPane = createRoomPane(app, () => {
     el.classList.remove("is-room"); memberChat.hidden = false;
     el.querySelector(".mb-head-l")!.append(members.picker);
@@ -497,6 +507,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   composer.noValidate = true;
   composer.innerHTML = composerHTML();
   const input = composer.querySelector<HTMLTextAreaElement>(".cmp-input")!;
+  const pageDraft = bindPageComposer(input);
   const correctionLearning = bindComposerLearning(input);
   const slashMenu = mountSlashMenu(input, { memberId, scope: app });
   const attachButton = composer.querySelector<HTMLElement>(".cmp-attach")!;
@@ -519,7 +530,8 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   askCard.setAttribute("role", "group");
   askCard.innerHTML = cardHTML({ title: t("cards.permission", { p0: t("agent.title") }), status: "waiting", statusText: cardPromptText("permission"), cls: "ask-card",
     body: t("perm.title"),
-    content: cardDisclosureHTML("approval", `<p class="ask-q card-body"></p>`),
+    // A local command is shown itself, never behind a disclosure: the owner allows what they can read.
+    content: `<pre class="local-command ask-cmd" hidden></pre>` + cardDisclosureHTML("approval", `<p class="ask-q card-body"></p>`),
     actions: `<button type="button" class="btn sm pri ask-yes" data-act="yes"><span class="ask-yes-t"></span></button>` +
       `<button type="button" class="btn sm ask-always" data-act="always" hidden></button>` +
       `<button type="button" class="btn sm ask-no" data-act="no"></button>`,
@@ -584,10 +596,10 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   function saveComposerDraft(): void {
     clearTimeout(draftTimer);
     if (composerKey === "deleted") return;
-    const draft: ComposerDraft = { text: input.value, files: [...files], missing: [...missingFiles], replacing, quote: composerQuote, dictation: correctionLearning.snapshot() };
+    const draft: ComposerDraft = { text: input.value, files: [...files], missing: [...missingFiles], replacing, quote: composerQuote, dictation: correctionLearning.snapshot(), pageId: pageDraft.pageId };
     if (draft.text || draft.files.length || draft.missing.length || draft.quote || draft.replacing !== undefined) restored.set(composerKey, draft);
     else restored.delete(composerKey);
-    writeDraftWords(`member:${composerKey}`, { text: wholeLinks(draft.text), quote: draft.quote });
+    writeDraftWords(`member:${composerKey}`, { text: wholeLinks(draft.text), quote: draft.quote, pageId: draft.pageId });
   }
   function loadComposerDraft(): void {
     composerKey = draftKey();
@@ -623,8 +635,9 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   let searching = false;
   /** What each line of the thread was drawn from, so that a line whose HTML is the same stays as it is. */
   const drawnHTML = new WeakMap<Element, string>();
-  const pagesHost = mountPages(thread, { send: text => sendFromPage(text), answer: (id, text) => answerOwnerPage(thread, id, text, () => { void load(false); }) });
+  const pagesHost = mountPages(thread, { place: pageDraft.place, people: () => ({ nameOf: id => members.nameOf(id), colorOf: id => members.colorOf(id) }) });
   mountOwnerQuestions(thread, () => { void load(false); });
+  mountGreeting(thread, sendFromPage);
   const floatingQuestions = mountPendingQuestions(thread, scroller, () => load(false), () => pendingQuestions?.member === memberId() && pendingQuestions.conversation === conversationId() ? pendingQuestions.questions : [], revealTurn);
   /** The newest turn drawn: a turn after it comes in from below. */
   let newestDrawn = 0;
@@ -644,14 +657,14 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     !turns.some(visibleTurn) && !outgoing.some(belongs) && !hearingBelongs();
 
   const look = (): TurnLook => {
-    const latest = turns.filter(turn => turn.question.trim() && sourceOf(turn) !== "routine" && sourceOf(turn) !== "member" && turn.route !== "exchange" && (turn.text.trim() || turn.messages?.some(m => m.kind === "reply"))).reduce((id, turn) => Math.max(id, turn.id), 0);
+    const latest = turns.filter(turn => turn.question.trim() && sourceOf(turn) !== "routine" && sourceOf(turn) !== "member" && turn.route !== "exchange" && !delegatedTurn(turn) && (turn.text.trim() || turn.messages?.some(m => m.kind === "reply"))).reduce((id, turn) => Math.max(id, turn.id), 0);
     const busy = pacing.active || regenerating.size > 0 || outgoing.some(belongs) || own().some(turn => turn.status === "running" || isLive(turn.task));
-    const shared = { regenerateTurnId: busy ? undefined : latest, revealing: (id: number) => pacing.waiting(id), waitingForOwner: desktop.waitingForOwner, memberName: members.nameOf, memberFace: (id: number, size = 18) => members.faceOf(id, size), mentions: members.mentionTargets(),
+    const shared = { greetingOpen: !turns.some(turn => !!turn.question.trim()) && !outgoing.some(belongs), regenerateTurnId: busy ? undefined : latest, revealing: (id: number) => pacing.waiting(id), waitingForOwner: desktop.waitingForOwner, memberName: members.nameOf, memberFace: (id: number, size = 18) => members.faceOf(id, size), mentions: members.mentionTargets(),
       // A permission card in the thread can be answered while the window holds its question and is not answering it.
       answerable: (cardId: string) => question?.id === cardId && !answering };
-    if (inRaphael()) return { ...shared, face: (loop) => avatarHTML({ size: 26, loop }), liveFace: () => faceHTML(members.member(), 28, {loop: true}), activityLabel: members.member().activity_label };
+    if (inRaphael()) return { ...shared, face: moving => faceHTML(members.member(), 26, { moving }), liveFace: () => faceHTML(members.member(), 28, { moving: true }), activityLabel: members.member().activity_label };
     const member = members.member();
-    return { ...shared, face: () => faceHTML(member, 26), liveFace: () => faceHTML(member, 28), activityLabel: member.activity_label };
+    return { ...shared, face: moving => faceHTML(member, 26, { moving }), liveFace: () => faceHTML(member, 28, { moving: true }), activityLabel: member.activity_label };
   };
   /**
    * The question that waits now (null: none), and whose thread it is in: the member a typed or
@@ -679,6 +692,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     composer: () => (composer.isConnected && !composer.hidden ? composer : null),
     target: () => (empty.hidden || !inRaphael() ? null : hero.querySelector<HTMLElement>(".av")),
     face: () => avatarHTML({ size: 132, loop: true }),
+    live: () => currentAvatar() === null,
     onClick: () => void endVoice(),
   });
 
@@ -690,31 +704,37 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
    */
   function drawFaces(): void {
     drawComposerTask();
-    if (inRaphael()) {
-      patchHTML(hero, avatarHTML({ size: 132, loop: true }));
-      delete memberChat.dataset.memberBubble;
-    } else {
-      const member = members.member();
-      patchHTML(hero, faceHTML(member, 96));
-      const bubble = ownerBubble(slimeColorOf(member));
-      memberChat.dataset.memberBubble = bubble.words;
-      memberChat.style.setProperty("--member-bubble", bubble.fill);
-      memberChat.style.setProperty("--member-accent", memberAccent(slimeColorOf(member)));
-    }
+    // Each conversation wears its member's colour, Raphael's his first blue slime's (R-UI-81).
+    const member = members.member(), color = memberColor(member);
+    patchHTML(hero, faceHTML(member, inRaphael() ? 132 : 96));
+    const bubble = ownerBubble(color);
+    memberChat.dataset.memberBubble = bubble.words;
+    memberChat.style.setProperty("--member-bubble", bubble.fill);
+    memberChat.style.setProperty("--member-accent", memberAccent(color));
     voice.redraw();
   }
 
-  /** The thread's prompt in the window's language. */
+  /** A bot whose setup waits for its token in this conversation (the card's platform), newest first; null for none. */
+  function waitingSetup(): string | null {
+    for (const turn of [...turns].reverse()) for (const card of turn.secrets ?? []) {
+      if (card.platform && card.secret === "bot_token" && (card.state === "pending" || card.state === "failed")) return card.platform;
+    }
+    return null;
+  }
+
+  /** The thread's prompt in the window's language; while a bot's setup waits here it asks about that. */
   function drawComposer(): void {
-    const words = inRaphael() ? t("home.askRaphael") : memberPlaceholder(members.member().name);
-    input.placeholder = words;
-    input.setAttribute("aria-label", words);
-    settingsButton.hidden = !inRaphael();
+    const setup = waitingSetup();
+    const brand: Record<string, string> = { telegram: "Telegram", slack: "Slack", discord: "Discord" };
+    const words = setup ? t("chat.askAboutSetup", { p0: brand[setup] ?? setup }) : inRaphael() ? t("home.askRaphael") : memberPlaceholder(members.member().name);
+    if (input.placeholder !== words) input.placeholder = words;
+    if (input.getAttribute("aria-label") !== words) input.setAttribute("aria-label", words);
     empty.classList.toggle("is-member", !inRaphael());
   }
 
   /** The words of the empty page: Raphael's greeting, or the member's name. */
   const emptyLine = (): string => (inRaphael() ? greetingLine() : members.member().name);
+  const sayHi = (words: string): void => { if (hi.textContent !== words) hi.textContent = words; };
 
   /** The words of the composer, the card and the search, in the language of the window. */
   function drawWords(): void {
@@ -724,15 +744,13 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     // The voice slot's tooltip is the custom one drawTaskSlot keeps (voice or Stop); a native title would double it.
     voiceButton.setAttribute("aria-label", t("agent.voice"));
     for (const [button, label] of [
-      [computerButton, t("card.pcTitle")],
-      [settingsButton, t("agent.settings")],
       [searchButton, t("agent.search")],
       [attachButton, t("agent.attach")],
     ] as const) {
       button.setAttribute("aria-label", label);
       button.title = label;
     }
-    hi.textContent = emptyLine();
+    sayHi(emptyLine());
     drawAskLabels();
     drawConversation();
     askCard.setAttribute("aria-label", t("agent.asking"));
@@ -849,13 +867,32 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     askCard.dataset.id = q.id;
     askCard.dataset.tier = q.tier;
     askText.textContent = q.text;
-    const copy = approvalCopy(q.text, inRaphael() ? t("agent.title") : members.nameOf(memberId()));
+    const asker = inRaphael() ? t("agent.title") : members.nameOf(memberId());
+    // The core asks a local command as its word (本機指令) and, on the next lines, the command itself.
+    const [lead = "", ...rest] = q.text.split("\n");
+    const command = lead.trim() === t("local.title") ? rest.join("\n").trim() : "";
+    const copy = command ? { title: t("cards.localCommand", { p0: asker }), body: t("cards.localReview") } : approvalCopy(q.text, asker);
     askCard.querySelector(".card-title")!.textContent = copy.title;
     askCard.querySelector(".card-body.cc-state")!.textContent = copy.body;
-    askCard.querySelector<HTMLElement>(".card-disclosure")!.hidden = q.text.trim() === copy.body || copy.title.includes(q.text.trim());
+    const commandBox = askCard.querySelector<HTMLElement>(".ask-cmd")!;
+    commandBox.textContent = command;
+    commandBox.hidden = !command;
+    const disclosure = askCard.querySelector<HTMLElement>(".card-disclosure")!;
+    // What cannot be undone is read before it is agreed to: its lines (what is deleted, by name, one line for each change on
+    // a card of several) stand open under the heading instead of behind 顯示 (owner, 2026-11-11: 「不要分這麼多卡片」).
+    const readable = q.text.split("\n").slice(1).join("\n").trim();
+    const reads = q.tier === "T3" && !command;
+    if (reads && copy.body === lead.trim() && readable !== "") askText.textContent = readable;
+    disclosure.hidden = !!command || q.text.trim() === copy.body || copy.title.includes(q.text.trim());
+    const toggle = disclosure.querySelector<HTMLElement>("[data-card-disclosure]")!;
+    const open = reads && !disclosure.hidden;
+    disclosure.querySelector<HTMLElement>(".card-detail")!.hidden = !open;
+    toggle.setAttribute("aria-expanded", String(open));
+    toggle.dataset.closedLabel = t("cards.show");
+    const toggleLabel = toggle.querySelector("span");
+    if (toggleLabel) toggleLabel.textContent = open ? t("cards.hide") : t("cards.show");
     drawAskLabels();
     noButton.disabled = alwaysButton.disabled = yesButton.disabled = answering;
-    yesButton.dataset.hold = "idle";
   }
 
   /** One line of the thread as HTML, with the key it keeps across draws. */
@@ -868,7 +905,9 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     const additions = sentHere.length > 1 || active && (sentHere.length > 0 || turns.some(turn => turn.id > active.id && (turn.route === "owner_input" || turn.status === "queued")));
     const turnLook = additions ? { ...shape, deferPresence: true } : shape;
     const chronological = [...turns].sort((a, b) => a.created_at_ms - b.created_at_ms || a.id - b.id);
-    const openingTarget = targetTurn ?? (openingThread && unreadFrom !== null ? chronological.find(turn => turn.id >= unreadFrom!)?.id : undefined);
+    // A first unseen turn inside the newest window leaves that window alone (unreadInTail); a farther one centres it.
+    const unseen = openingThread && unreadFrom !== null ? chronological.findIndex(turn => turn.id >= unreadFrom!) : -1;
+    const openingTarget = targetTurn ?? (unseen >= 0 && !unreadInTail(unseen, chronological.length) ? chronological[unseen]!.id : undefined);
     if (openingTarget !== undefined && openingTarget !== openingWindowTarget && chronological.some(turn => turn.id === openingTarget)) {
       turnWindow.focus(String(openingTarget), chronological.map(turn => String(turn.id))); openingWindowTarget = openingTarget;
     }
@@ -883,11 +922,12 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
           const turn = item.turn, view = pacing.view(turn), task = turn.task?.id;
           const expanded = [...state.expandedMessages].filter(key => key.startsWith(`${turn.id}:`)).join("\0");
           const live = turn.status === "running" || turn.status === "confirm" || isLive(turn.task) || turn.task?.state === "waiting" || pacing.waiting(turn.id);
-          return renderedTurns.line(item.key, historyRevisions.get(turn) ?? turn, [presentationVersion, getLocale(), shape.mentions, turnLook.query ?? "", details.has(turn.id),
+          return renderedTurns.line(item.key, historyRevisions.get(turn) ?? turn, [presentationVersion, getLocale(), turn.route === "greeting" ? shape.greetingOpen : false, shape.mentions, turnLook.query ?? "", details.has(turn.id),
             state.open.get(turn.id), state.thinkingOpen.get(turn.id), expanded, task !== undefined && state.stopping.has(task), task !== undefined && state.rerunning.has(task),
             state.workStartedAt.get(turn.id), view.messages?.length, pacing.waiting(turn.id), desktop.waitingForOwner(turn.id),
-            live ? turnLook.deferPresence : false, live ? shape.activityLabel : "", turn.permissions?.some(card => shape.answerable?.(card.id)), turn.id === latestFailedTurnId],
-            () => turnHTML(view, state, details.has(turn.id), { ...turnLook, regenerateTurnId: turn.id, latestFailedTurnId }));
+            live ? turnLook.deferPresence : false, live ? shape.activityLabel : "", live ? members.member().activity ?? "" : "", turn.permissions?.some(card => shape.answerable?.(card.id)), turn.id === latestFailedTurnId,
+            item.together?.map(earlier => `${earlier.id}:${earlier.status}:${earlier.messages?.length ?? 0}`).join(",") ?? ""],
+            () => turnHTML(view, state, details.has(turn.id), { ...turnLook, regenerateTurnId: turn.id, latestFailedTurnId, exchangeTogether: item.together }));
         })(), turnId: item.turn.id },
     );
     renderedTurns.retain(new Set(out.map(line => line.key)));
@@ -914,8 +954,10 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
    */
   function sendFromPage(text: string): void {
     const typed = input.value;
+    const sourcePage = pageDraft.pageId;
     input.value = text;
-    void send().finally(() => { if (typed && !input.value) { input.value = typed; fit(); } });
+    pageDraft.restore();
+    void send().finally(() => { if (typed && !input.value) { input.value = typed; pageDraft.restore(sourcePage); fit(); } });
   }
 
   let renderedThread: ReturnType<typeof lines> = [];
@@ -975,17 +1017,24 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     [...state.stopping], [...state.rerunning], answering, searching]);
   function render(follow = false): void {
     renderedPage = pageStamp();
+    drawComposer();
+    // An open conversation between members follows the turns it is read from, and closes with its conversation.
+    if (peer) queueMicrotask(() => peer?.update());
     stage.setAttribute("aria-busy", String(pending));
-    if (pending && isEmpty()) {
+    // Only a thread not read yet says it is loading: a refresh of an empty one keeps its empty state (R-UI-71).
+    if (pending && isEmpty() && !loadedThread) {
       wait.innerHTML = loadingHTML();
       wait.hidden = false;
       scroller.hidden = empty.hidden = dock.hidden = true;
       searchButton.hidden = true;
+      shareButton.hidden = true;
       return;
     }
     wait.hidden = true;
     const shown = turns;
     searchButton.hidden = shown.length === 0;
+    // Raphael is the app's own: he is not shared as a template.
+    shareButton.hidden = inRaphael();
     if (shown.length === 0 && searching) closeSearch(false);
     if (isEmpty()) {
       thread.replaceChildren();
@@ -993,7 +1042,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       scroller.hidden = dock.hidden = true;
       empty.hidden = false;
       empty.classList.toggle("is-failed", failure !== null);
-      hi.textContent = failure ? `${t("agent.loadFailed")} ${failure()}` : emptyLine();
+      sayHi(failure ? `${t("agent.loadFailed")} ${failure()}` : emptyLine());
       drawDock();
       stopTicker();
       return;
@@ -1015,11 +1064,15 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     markSeen(shown, state);
     none.hidden = true;
     finder.refresh();
-    older.hidden = !loadingEarlier;
-    older.innerHTML = loadingEarlier ? loadingHTML() : "";
+    // Written only when loading starts or stops: a draw that changes nothing touches nothing (R-SLIME-02).
+    if (older.hidden === loadingEarlier) {
+      older.hidden = !loadingEarlier;
+      older.innerHTML = loadingEarlier ? loadingHTML() : "";
+    }
     if (keepUp && (follow || wasEmpty)) followRichScroll(scroller);
     if (thread.querySelector(".work-section.is-live")) startTicker();
     else stopTicker();
+    holdOpening();
     // A first page that does not fill the window has no scrolling to bring the earlier ones.
     if (wasEmpty && canLoadEarlier && !turnWindow.before && !loadingEarlier && !searching && scroller.scrollHeight <= scroller.clientHeight) void load(true);
   }
@@ -1048,13 +1101,61 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   /** Loads the newest turns, or with `earlier` the ones before what is loaded, keeping the reader's place. */
   let activeRead: { key: string; promise: Promise<void> } | null = null;
   const dirtyTurnIds = new Set<number>();
+  const OPEN_HANDOFF = new Set(["queued", "running", "waiting"]);
+  // A delta read never names turns a clear or delete removed; after a conversation change the
+  // next read is whole. The version keeps a read started before the change from settling it.
+  const staleHistory = new Map<number, number>();
   let newestReadId = 0;
   let readAgain = false;
   const needsUnreadHistory = (): boolean => openingThread && unreadFrom !== null && canLoadEarlier && (oldestId(turns) ?? 0) > unreadFrom;
   function finishOpening(): void {
-    if (!openingThread || !unreadCaptured || pending || needsUnreadHistory() || !visible || scroller.hidden || targetTurn !== undefined) return;
+    // The member settings page hides the conversation, so there is no geometry to place by; the way back places it.
+    if (!openingThread || !unreadCaptured || pending || needsUnreadHistory() || !visible || scroller.hidden || targetTurn !== undefined || members.settings.isOpen()) return;
     openingThread = false;
-    openUnread(scroller);
+    // Opening at the first unread line is navigation: the first draw's follow must not pull it to the bottom.
+    releaseRichScroll(scroller);
+    if (!openUnread(scroller)) followRichScroll(scroller);
+    holdOpening();
+  }
+  /**
+   * The first placement is the final one (owner, 2026-11-11: the conversation opened and then jumped up). While the
+   * unread boundary is not known (a roster still on its way) or its history pages are still coming, the thread is drawn
+   * but not shown, so it is never seen at the bottom and then moved to the line. It shows after OPEN_HOLD_MS at the latest.
+   */
+  const OPEN_HOLD_MS = 1500;
+  let openedAt = 0;
+  let holdTimer: ReturnType<typeof setTimeout> | undefined;
+  function holdOpening(): void {
+    const waiting = visible && openingThread && (!unreadCaptured || needsUnreadHistory()) && Date.now() - openedAt < OPEN_HOLD_MS;
+    scroller.classList.toggle("is-opening", waiting);
+    clearTimeout(holdTimer);
+    holdTimer = undefined;
+    if (waiting) holdTimer = setTimeout(() => {
+      holdTimer = undefined;
+      if (!unreadCaptured) { unreadCaptured = true; unreadFrom = null; }
+      holdOpening();
+      finishOpening();
+    }, OPEN_HOLD_MS - (Date.now() - openedAt) + 1);
+  }
+  /** Where the thread stood when the member settings page took its place: at the bottom, or at `top`. */
+  let chatPlace: { bottom: boolean; top: number } | null = null;
+  function restoreChatPlace(): void {
+    const place = chatPlace;
+    chatPlace = null;
+    if (!place || scroller.hidden) return;
+    if (openingThread) { finishOpening(); return; }
+    if (place.bottom) { followRichScroll(scroller); scroller.scrollTop = scroller.scrollHeight; }
+    else { releaseRichScroll(scroller); scroller.scrollTop = place.top; }
+  }
+  /** A visit begins: its boundary is the one of the roster already loaded, else of the one on its way (onReadThread). */
+  function beginOpening(): void {
+    const known = members.loaded();
+    unreadFrom = known ? members.member().unread_from ?? null : null;
+    unreadCaptured = known;
+    openingThread = true;
+    openingWindowTarget = undefined;
+    turnWindow.latest();
+    openedAt = Date.now();
   }
   async function load(earlier: boolean, fromEvent = false): Promise<void> {
     if (earlier) return readPage(true);
@@ -1079,8 +1180,10 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     if (turns.length === 0 && !earlier) render();
     else stage.setAttribute("aria-busy", "true");
     let got: AgentTurn[];
-    const deltaRead = fromEvent && loadedThread && turns.length > 0 && targetTurn === undefined;
-    const requestedIds = deltaRead ? [...new Set([...dirtyTurnIds, ...turns.filter(turn => turn.status === "running" || turn.status === "confirm" || isLive(turn.task) || turn.task?.state === "waiting").map(turn => turn.id)])].slice(0, 50) : [];
+    const staleVersion = staleHistory.get(memberId());
+    const deltaRead = fromEvent && loadedThread && turns.length > 0 && targetTurn === undefined && staleVersion === undefined;
+    // A turn whose colleagues still work can gain a receipt or change one after the turn itself ended.
+    const requestedIds = deltaRead ? [...new Set([...dirtyTurnIds, ...turns.filter(turn => turn.status === "running" || turn.status === "confirm" || isLive(turn.task) || turn.task?.state === "waiting" || turn.handoffs?.some(handoff => OPEN_HANDOFF.has(handoff.state))).map(turn => turn.id)])].slice(0, 50) : [];
     requestedIds.forEach(id => dirtyTurnIds.delete(id));
     let delta = false, more = false, removed: number[] = [];
     try {
@@ -1107,6 +1210,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       if (mine === loads) {
         // Invalidated rows can be newer than this forward page; only its cursor advances paging.
         newestReadId = delta && history.next_after_id !== undefined ? history.next_after_id : Math.max(newestReadId, ...history.turns.map(turn => turn.id));
+        if (!earlier && !delta && staleVersion !== undefined && staleHistory.get(member) === staleVersion) staleHistory.delete(member);
         pendingQuestions = { member, conversation: chosen, questions: history.pending_questions ?? [] };
         floatingQuestions.sync();
       }
@@ -1179,12 +1283,28 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     if (mine !== loads) return;
     if (more || dirtyTurnIds.size) scheduleRefresh();
     finishOpening();
+    greetIfSilent();
     if (targetTurn !== undefined) {
       openingThread = false;
+      holdOpening();
       const target = thread.querySelector<HTMLElement>(`[data-id="${targetTurn}"]`);
       if (target) { target.scrollIntoView?.({ block: "center" }); target.classList.add("is-search-target"); setTimeout(() => target.classList.remove("is-search-target"), 2400); }
       targetTurn = undefined;
     }
+  }
+
+  /** The members asked this session to open their own conversation: once each; the core decides the rest. */
+  const greetAsked = new Set<number>();
+  /**
+   * A member's conversation is never an empty page (owner, 2026-11-10: 「理論上我們不應該會看到這個畫面」): a member made
+   * without its greeting (by a way of making members that did not greet yet) is asked once to write it. The core starts
+   * it only while the owner has written nothing there and no greeting runs (members.greet); it refuses otherwise.
+   */
+  function greetIfSilent(): void {
+    const member = memberId();
+    if (member === RAPHAEL_ID || greetAsked.has(member) || canLoadEarlier || searching || !isEmpty() || turns.some(turn => turn.route === "greeting")) return;
+    greetAsked.add(member);
+    void api.membersGreet(member).then(() => { if (visible && memberId() === member) void load(false); }, () => undefined);
   }
 
   /** The questions in the history now are no longer waited for: a typed one by its words, a spoken one by any new turn of the voice. */
@@ -1267,14 +1387,23 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       if (input.value.trim() !== "") toaster.info(t("agent.tooLong"));
       return;
     }
+    if (pageDraft.pageId && !files.length && !composerQuote && replacing === undefined && answerOwnerPage(thread, pageDraft.pageId, text, () => { void load(false); })) {
+      clearTimeout(draftTimer); discardComposerDraft(composerKey);
+      input.value = "";
+      input.dispatchEvent(new Event("composer-draft-restored"));
+      fit();
+      return;
+    }
     composer.querySelector(".composer-failure")?.remove();
+    // What is sent shows in the thread, so a report open in its place goes away.
+    pagesHost.closeReport();
     const sending = files;
     const dictation = correctionLearning.snapshot();
     const corrections = correctionLearning.take(input.value);
     const member = memberId();
     const sentConversation = conversationId();
     const requestId = crypto.randomUUID();
-    const draft: ComposerDraft = { text: input.value, files: sending, missing: [], replacing, quote: composerQuote, dictation };
+    const draft: ComposerDraft = { text: input.value, files: sending, missing: [], replacing, quote: composerQuote, dictation, pageId: pageDraft.pageId };
     rememberDraft(requestId, draft);
     clearTimeout(draftTimer); discardComposerDraft(composerKey);
     const mine: Outgoing = { key: `out:${++sent}`, requestId, member, conversationId: sentConversation, text, sentAt: Date.now(), files: sending.map(({ name, mime, data, size }) => ({ name, mime, size, preview: fileKind(mime) !== "file" ? `data:${mime};base64,${data}` : undefined })), quote: composerQuote };
@@ -1301,10 +1430,12 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       if (memberId() === member && conversationId() === sentConversation && input.value === "" && !files.length) restoreDraft(draft);
       else restored.set(draftKey(member, sentConversation), draft);
       if (memberId() === member && conversationId() === sentConversation) {
-        const failed = document.createElement("div"); failed.className = "composer-failure";
-        failed.innerHTML = cardHTML({ title: t("cards.sendFailed"), status: "failed" });
+        // Said once: the title names the message, its status says it was not sent, and no sentence repeats either; the
+        // words themselves are back in the field below.
+        const failed = document.createElement("div"); failed.className = "composer-failure"; failed.setAttribute("role", "alert");
+        failed.innerHTML = cardHTML({ title: t("cards.yourMessage"), status: "failed", statusText: t("cards.sendFailed") });
         composer.querySelector(".composer-failure")?.remove(); composer.prepend(failed);
-        cardFailure(failed.firstElementChild, () => { failed.remove(); void send(); }, () => failed.remove());
+        cardFailure(failed.firstElementChild, () => { failed.remove(); void send(); }, () => failed.remove(), null);
       }
       render();
       return;
@@ -1432,18 +1563,19 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
    * else, say), it comes back down.
    */
   let taskStopPressed=false;
-  function voiceDown(): void {
+  function voiceDown(member = memberId(), conversation = conversationId()): void {
+    const here = member === memberId() && conversation === conversationId();
     // Recording clicks release/send audio through the native key path; only Escape cancels it.
-    if(!(listening && voiceMember === memberId()) && composer.dataset.taskState && composer.dataset.taskState!=="idle"){taskStopPressed=true;void stopComposerTask().catch(error=>toaster.info(describeError(error)));return;}
-    if (question) return;
-    pressedMember = memberId();
+    if(here && !(listening && voiceMember === memberId()) && composer.dataset.taskState && composer.dataset.taskState!=="idle"){taskStopPressed=true;void stopComposerTask().catch(error=>toaster.info(describeError(error)));return;}
+    if (here && question) return;
+    pressedMember = member;
     const starting = !listening;
     if (starting) {
       voiceMember = pressedMember;
-      rememberVoiceBoundary(pressedMember, conversationId());
+      rememberVoiceBoundary(pressedMember, conversation);
       voiceRequested = true;
     }
-    if (voiceMember === memberId()) voice.up();
+    if (here && voiceMember === memberId()) voice.up();
     if (starting) {
       listening = false;
       clearTimeout(listenTimer);
@@ -1607,7 +1739,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       manageLocal: () => app.go("settings", "safety"),
       asker: () => {
         const member = members.member();
-        return inRaphael() ? { face: avatarHTML({ size: 22, cls: "bgq-face" }), name: null } : { face: faceHTML(member, 22, { cls: "bgq-face" }), name: member.name };
+        return { face: faceHTML(member, 22, { cls: "bgq-face" }), name: inRaphael() ? null : member.name };
       },
       changed: () => {
         members.changed();
@@ -1625,11 +1757,10 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     unreadFrom = members.member().unread_from ?? null;
     unreadCaptured = true;
     openingThread = true;
+    openedAt = Date.now();
     if (composerKey !== "deleted") saveComposerDraft();
-    desktop.refresh();
     drawConversation();
     if (roomPane.active) roomPane.close();
-    void slashMenu.refresh();
     hideTooltip();
     hideSelection();
     pacing.flush();
@@ -1663,10 +1794,11 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     fit();
     drawComposer();
     drawFaces();
-    hi.textContent = emptyLine();
+    sayHi(emptyLine());
     // the card of another thread's question goes, and this thread's comes
     delete askCard.dataset.id;
-    drawBackgroundQuestions();
+    // The thread is asked for first: the core answers in order, and the rest of the page can wait for it (owner,
+    // 2026-11-10: 開啟對話太慢). A page that is not on screen reads it, and the rest, as it shows (show()).
     render();
     if (listening && voiceMember === memberId() && !question) drawComposerTask();
     if (visible) {
@@ -1674,8 +1806,11 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       void load(false).then(() => {
         if (generation === loads && visible && !scroller.hidden && !thread.querySelector(".is-search-target")) finishOpening();
       });
+      desktop.refresh();
+      void slashMenu.refresh();
+      drawBackgroundQuestions();
       focusComposer();
-    }
+    } else slashStale = true;
   }
 
   function toggleDraftDone(button: HTMLElement): void {
@@ -1706,18 +1841,6 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     rememberLine(button);
   }
 
-  function toggleThinking(button: HTMLElement): void {
-    const box = button.closest<HTMLElement>(".tn")?.querySelector<HTMLElement>(".think-box");
-    const body = box?.querySelector<HTMLElement>(".think-body");
-    if (!box || !body) return;
-    const id = Number(box.dataset.thinkingTurn ?? button.closest<HTMLElement>(".tn")?.dataset.id);
-    const next = Boolean(body.hidden);
-    body.hidden = !next;
-    box.classList.toggle("is-open", next);
-    button.closest(".tn")?.querySelectorAll('[data-act="thinking"]').forEach(control => control.setAttribute("aria-expanded", String(next)));
-    if (!Number.isNaN(id)) state.thinkingOpen.set(id, next);
-    rememberLine(button);
-  }
 
   function togglePdfExpand(button: HTMLElement): void {
     const card = button.closest<HTMLElement>(".media-pdf");
@@ -1792,28 +1915,42 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     drawQuote(); focusComposer();
   }
 
-  async function messageMenu(control: HTMLElement): Promise<void> {
+  /**
+   * The ⋯ of a message and a right click on it open one menu: beside the bubble only react, reply and ⋯
+   * show, so everything else is here. A colleague's message has its reactions above Reply, Copy, its work and Regenerate
+   * on the latest answer; the owner's has Reply, Copy and Edit or Cancel; a message still being sent has Copy and Cancel.
+   */
+  function messageMenu(control: HTMLElement): void {
     const source = messageSource(control);
-    if (!source) return;
-    const member = memberId(), conversation = conversationId();
-    let speaks = false;
-    try { speaks = (await api.core<{ ready: boolean }>("agent.speech.status")).ready; } catch { /* Reading and deletion remain available without speech. */ }
-    if (!control.isConnected || member !== memberId() || conversation !== conversationId()) return;
+    const pending = !source && outgoing.some(item => item.requestId === control.closest<HTMLElement>("[data-session]")?.dataset.session);
+    if (!source && !pending) return;
+    const owner = !source || source.key === "question";
+    const message = control.closest<HTMLElement>(".chat-message");
     const items: Parameters<typeof openActions>[1][number][] = [];
-    if (control.dataset.regenerate === "true" && look().regenerateTurnId === source.turn.id) items.push({ id: "regenerate", label: t("chat.regenerate"), icon: "refresh" });
-    if (speaks) items.push({ id: "speak", label: t("chat.readAloud"), icon: "voice" });
-    items.push({ id: "delete", label: t("chat.deleteTurn"), icon: "trash" });
+    if (source) items.push({ id: "reply", label: t("chat.reply"), icon: "reply" });
+    items.push({ id: "copy", label: t("chat.copy"), icon: "copy" });
+    // No 「查看過程」: how a reply was worked out is not shown (owner, 2026-11-10: 「不用有查看過程」).
+    // A greeting that came through stays: only a failed one is written again (its rerun button), never a second.
+    if (source && !owner && control.dataset.regenerate === "true" && look().regenerateTurnId === source.turn.id && source.turn.route !== "greeting") items.push({ id: "regenerate", label: t("chat.regenerate"), icon: "refresh" });
+    const ownerAct = pending ? "cancel" : control.dataset.ownerAct;
+    if (ownerAct === "edit") items.push({ id: "edit", label: t("chat.edit"), icon: "pencil" });
+    if (ownerAct === "cancel") items.push({ id: "cancel", label: t("common.cancel"), icon: "x" });
+    const reactions = source && !owner && message?.querySelector('[data-act="react-message"]') ? source.turn.reactions?.[source.key] ?? [] : null;
     openActions(control, items, pick => {
-      if (pick === "regenerate") { void regenerate(control); return; }
-      const params = { member_id: member, conversation_id: conversation, turn_id: source.turn.id };
-      if (pick === "speak") {
-        void api.core("agent.speak", { ...params, ...(source.key !== "reply" ? { message_seq: Number(source.key) } : {}) }).catch(err => toaster.info(describeError(err)));
-      } else void confirmDelete(t("chat.deleteTurn")).then(async yes => {
-        if (!yes) return;
-        await api.core("agent.history.delete", params);
-        if (member === memberId() && conversation === conversationId()) await load(false);
-      }).catch(err => toaster.info(describeError(err)));
-    });
+      if (pick === "regenerate") void regenerate(control);
+      else if (pick === "reply") replyMessage(control);
+      else if (pick === "edit") void editMessage(control);
+      else if (pick === "cancel") void cancelMessage(control);
+      else void copyMessage(message?.querySelector<HTMLElement>('[data-act="copy-message"]') ?? control);
+    }, reactions && source ? { html: menuReactionsHTML(reactions), onPick: lead => {
+      const react = (emoji: string): void => {
+        const scope = { member_id: source.turn.member_id ?? 0, conversation_id: source.turn.conversation_id, turn_id: source.turn.id };
+        void api.core("agent.react", { ...scope, message_key: source.key, emoji, active: !reactions.includes(emoji) })
+          .then(() => { if (visible) void load(false); }).catch(err => toaster.info(describeError(err)));
+      };
+      if (lead === MORE_EMOJI) openEmojiPicker(control, reactions, react);
+      else react(lead);
+    } } : undefined);
   }
 
   async function regenerate(control: HTMLElement): Promise<void> {
@@ -1821,6 +1958,17 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     const latest = look().regenerateTurnId;
     if (!source || latest === undefined || latest !== source.turn.id && !(source.turn.status === "error" && control.classList.contains("rerun"))) return;
     const member = memberId(), turn = source.turn;
+    // A greeting has no question to send again: the core writes it again with the member's own model.
+    if (turn.route === "greeting") {
+      if (turn.status !== "error") return;
+      regenerating.add(turn.id); render(true);
+      try {
+        await api.membersGreet(member);
+        if (visible && memberId() === member) await load(false);
+      } catch (err) { toaster.info(describeError(err)); }
+      finally { regenerating.delete(turn.id); render(true); }
+      return;
+    }
     const sentConversation = conversationId();
     const requestId = crypto.randomUUID();
     const epoch = attachmentEpoch;
@@ -1882,6 +2030,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   function restoreDraft(draft: ComposerDraft, focus = true): void {
     correctionLearning.restore(draft.dictation);
     input.value = draft.text;
+    pageDraft.restore(draft.pageId);
     attachmentEpoch++;
     files = [...draft.files];
     missingFiles = draft.missing.map(file => ({ ...file }));
@@ -1960,7 +2109,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   async function cancelMessage(control?: HTMLElement): Promise<void> {
     const source = control ? messageSource(control) : null;
     const pending = control ? outgoing.find(item => item.requestId === control.closest<HTMLElement>("[data-session]")?.dataset.session) : [...outgoing].reverse().find(item => item.member === memberId());
-    const turn = pending ? turns.find(turn => turn.session_id === pending.requestId) : source?.turn ?? (!control ? own().find(turn => sourceOf(turn) !== "routine" && sourceOf(turn) !== "member" && (turn.status === "running" || turn.status === "confirm" || isLive(turn.task) || turn.task?.state === "waiting")) : undefined);
+    const turn = pending ? turns.find(turn => turn.session_id === pending.requestId) : source?.turn ?? (!control ? own().find(turn => sourceOf(turn) !== "routine" && sourceOf(turn) !== "member" && !delegatedTurn(turn) && (turn.status === "running" || turn.status === "confirm" || isLive(turn.task) || turn.task?.state === "waiting")) : undefined);
     const session = pending?.requestId ?? turn?.session_id;
     if (!session || retracting.has(session)) return;
     const member = memberId(), sentConversation = conversationId();
@@ -2080,6 +2229,14 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
 
   const taskResults = mountTaskResults(thread, memberId, () => { desktop.files(); });
 
+  mountMessageMetadata(thread, control => {
+    const source = messageSource(control);
+    if (!source) return null;
+    const { turn, key } = source, messageKey = key === "question" ? "owner" : key;
+    const scope = { member_id: turn.member_id ?? 0, conversation_id: turn.conversation_id, turn_id: turn.id };
+    return { reactions: turn.reactions?.[messageKey] ?? [],
+      react: (emoji, active) => api.core("agent.react", { ...scope, message_key: messageKey, emoji, active }) };
+  }, () => { if (visible) void load(false); }, error => toaster.info(describeError(error)));
   mountMailActions(thread, (err) => toaster.info(describeError(err)), (words) => toaster.info(words));
 
   thread.addEventListener("input", (e) => {
@@ -2114,19 +2271,23 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       case "open-routine":
         void Promise.all([api.routinesList(Number(act.dataset.routineMember ?? memberId())), api.membersList()]).then(([routines, team]) => {
           const routine = routines.routines.find(r => r.id === Number(act.dataset.routine));
-          if (routine) openRoutineDialog({members:team.members, routine});
+          // To read: its member changes it in the conversation (owner, 2026-11-09).
+          if (routine) openRoutineView(routine, team.members);
           else toaster.info(t("members.profile.noRoutines"));
         }).catch(error => toaster.info(describeError(error)));
         break;
       case "local-settings":
         app.go("settings", "safety");
         break;
-      case "settings":
-        openRaphaelSettings(app);
-        break;
       case "search":
       case "search-close":
         break;
+      // One choice, 建立副本 with a line saying what follows (a file saved, or a publish request prepared on GitHub; never a link), and only that asks the member to package itself.
+      case "share-member": {
+        const member = memberId();
+        openMenu(act, [], "", () => {}, undefined, [{ label: t("template.copyTitle"), desc: t("template.copyHint"), icon: "copy", run() { closeMenu(); askInChat(member, "share-template"); } }]);
+        break;
+      }
       case "steps":
         toggleSteps(act);
         break;
@@ -2136,15 +2297,18 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       case "detail":
         toggleDetail(act);
         break;
-      case "thinking":
-        toggleThinking(act);
-        break;
       case "open-url": {
         e.preventDefault();
         const url = safeHttpUrl(act.dataset.url);
         if (url) void api.openExternalUrl(url).catch(err => toaster.info(describeError(err)));
         break;
       }
+      case "peer-chat":
+        peer?.close();
+        // What this member sent colleagues, and what colleagues said to it (its exchange turns), are one conversation.
+        peer = openPeerChat(memberChat, act, () => turns.flatMap(turn => [...(turn.handoffs ?? []), ...(exchangeTurn(turn) ? [exchangeView(turn)] : [])]),
+          (id, fallback) => ({ name: members.nameOf(id) || fallback, face: members.faceOf(id, 28), accent: members.accentOf(id) }), () => { peer = null; });
+        break;
       case "copy-message":
         void copyMessage(act);
         break;
@@ -2212,6 +2376,9 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       case "rerun":
         void rerun(act);
         break;
+      case "manage-usage":
+        void api.openExternalUrl(CHATGPT_USAGE_URL).catch((error) => toaster.info(describeError(error)));
+        break;
       case "attach":
         picker.value = ""; picker.click();
         break;
@@ -2231,6 +2398,16 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
         break;
       case "card-settings":
         app.go("settings", "repair:store:composio");
+        break;
+      case "bot-link":
+      case "pairing-allow":
+      case "pairing-deny":
+      case "template-view":
+      case "template-save":
+      case "template-publish":
+      case "template-folder":
+      case "template-open":
+        chatCardAction(act);
         break;
       case "card-save":
         void secretSave(act);
@@ -2284,14 +2461,31 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   });
   bindFilePaste(input, pasted => { void attachAll(pasted); }, fit, () => files.map(file => file.name));
 
-  // The voice button is the question key: down when it is pressed, up when it is let go.
+  // The voice button records while held. Capture the destination on press, before navigation can change it.
+  let voicePointer: { id: number; member: number; conversation?: number } | null = null;
+  let suppressVoiceClick = false;
   voiceButton.addEventListener("pointerdown", (e) => {
-    if (e.button !== 0) return;
+    if (e.button !== 0 || voicePointer) return;
     voiceButton.setPointerCapture(e.pointerId);
-    voiceDown();
+    suppressVoiceClick = true;
+    const press = { id: e.pointerId, member: memberId(), conversation: conversationId() };
+    voicePointer = press;
+    voiceDown(press.member, press.conversation);
   });
-  voiceButton.addEventListener("pointerup", voiceUp);
-  voiceButton.addEventListener("pointercancel", voiceUp);
+  const releasePointer = (): void => {
+    const press = voicePointer;
+    if (!press) return;
+    voicePointer = null;
+    suppressVoiceClick = true;
+    voiceUp();
+  };
+  voiceButton.addEventListener("pointerup", e => { if (e.pointerId === voicePointer?.id) releasePointer(); });
+  voiceButton.addEventListener("pointercancel", e => { if (e.pointerId === voicePointer?.id) releasePointer(); });
+  voiceButton.addEventListener("lostpointercapture", e => { if (e.pointerId === voicePointer?.id) releasePointer(); });
+  voiceButton.addEventListener("click", e => {
+    // A browser click follows pointerup even after a hold. Keyboard/assistive clicks stay usable.
+    if (e.detail > 0 && suppressVoiceClick) { e.preventDefault(); e.stopImmediatePropagation(); }
+  }, { capture: true });
   // A key held on the button is let go wherever the focus is by then: the release is heard on the
   // whole page, for the key that pressed it, once; a window that loses the focus lets it go too.
   // (The button stays where it is while the picture is up, but the focus may still move: the
@@ -2302,9 +2496,9 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     voiceUp();
   };
   voiceButton.addEventListener("keydown", (e) => {
-    if ((e.key === "Enter" || e.key === " ") && !e.repeat) {
+    if (e.key === "Enter" || e.key === " ") {
       e.preventDefault();
-      if (heldKey !== null) return;
+      if (e.repeat || heldKey !== null || voicePointer) return;
       heldKey = e.key;
       voiceDown();
     }
@@ -2313,6 +2507,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     if (heldKey !== null && e.key === heldKey) releaseKey();
   });
   window.addEventListener("blur", () => {
+    releasePointer();
     if (heldKey !== null) releaseKey();
   });
 
@@ -2348,14 +2543,14 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     if (event.type === "Hotkey" && event.kind === "cancel_key" && visible ) cancelGesture().press();
     if (event.type === "Hotkey" && event.kind === "cancel_reset") cancelGesture().clear();
     members.follow(event);
-    if (event.type === "ConversationsChanged") { conversationsDirty.add(event.member_id); conversationChange(event.member_id); }
+    if (event.type === "ConversationsChanged") { conversationsDirty.add(event.member_id); staleHistory.set(event.member_id, (staleHistory.get(event.member_id) ?? 0) + 1); conversationChange(event.member_id); }
     if (event.type === "AgentTurn") { conversationsDirty.add(event.member_id ?? RAPHAEL_ID); conversationChange(event.member_id ?? RAPHAEL_ID); }
     if (event.type === "QuotaChanged") void readQuotas();
-    if (event.type === "MembersChanged") void slashMenu.refresh(true);
+    if (event.type === "MembersChanged") slashMenu.invalidate();
     if (wantsRefresh(event)) {
       // a turn of another thread changes only that member's row
       if (event.type === "WorkerChanged") {
-        for (const turn of turns) if (turn.task?.id === event.task_id) dirtyTurnIds.add(turn.id);
+        for (const turn of turns) if (turn.task?.id === event.task_id || turn.handoffs?.some(handoff => handoff.task_id === event.task_id)) dirtyTurnIds.add(turn.id);
         const loaded=hasWorkerTask(turns,event.task_id);
         if (!loaded && visible && !roomPane.active && renderedPage!==pageStamp()) render();
         scheduleRefresh(loaded ? 0 : 1000+REFRESH_DELAY_MS);
@@ -2436,10 +2631,12 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     if (!el.isConnected) return;
     if (roomPane.active) roomPane.close();
     const jump = ++memberJump;
-    const { memberId, turnId, files } = (event as CustomEvent<{ memberId: number; turnId?: number; files?: boolean }>).detail;
+    const { memberId, turnId, files, draft } = (event as CustomEvent<{ memberId: number; turnId?: number; files?: boolean; draft?: string }>).detail;
     void members.load().then(async () => {
       members.select(memberId);
       if (files) { desktop.files(); }
+      // Words handed with the member (the calendar's ask for a routine) wait in its composer once it is the open one.
+      if (typeof draft === "string" && jump === memberJump && memberId === members.current()) { putDraft(draft.slice(0, TYPED_MAX_CHARS)); focusComposer(); }
       if (!turnId) return;
       await load(false);
       const generation = loads;
@@ -2461,11 +2658,37 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     el,
     sidebar: members.column,
     loadSidebar: () => members.load(),
+    settingsOf: () => members.settings.isOpen() ? members.current() : null,
+    showSettings(id) { if (id !== null && id === members.current()) members.openSettings(); else members.closeSettings(); },
     show(arg) {
       const wasVisible = visible;
-      if (!wasVisible) { unreadFrom = null; unreadCaptured = false; openingThread = true; }
+      // The member settings page (member-settings.ts) is asked for by the gear; any other way here is the conversation.
+      const settingsFor = typeof arg === "string" && arg.startsWith("member-settings:") ? Number(arg.slice("member-settings:".length)) : null;
+      // The settings page hides the conversation, and a hidden scroller forgets its place: it is remembered as the page
+      // opens and put back as the page is left (owner, 2026-11-11: back from the settings the thread was not at the bottom).
+      if (settingsFor !== null && !members.settings.isOpen() && !roomPane.active) chatPlace = wasVisible && !scroller.hidden ? { bottom: atBottom(), top: scroller.scrollTop } : { bottom: true, top: 0 };
+      const leavingSettings = settingsFor === null && members.settings.isOpen();
+      if (settingsFor === null) members.closeSettings();
+      if (leavingSettings) restoreChatPlace();
+      if (!wasVisible) beginOpening();
       visible = true;
       if (arg === "computer") { if (roomPane.active) roomPane.close(); members.computer(); }
+      // The thread is asked for before anything else on the page: the core answers in order (owner, 2026-11-10).
+      const draft = draftText(arg);
+      const refocus = (): void => {
+        if (!members.settings.isOpen() && (!wasVisible || draft !== null)) focusComposer();
+      };
+      // The page opens at the newest turn, and with the question that waits, if one does.
+      void load(false).then(() => {
+        if (visible && !scroller.hidden && (!wasVisible || draft !== null)) {
+          // A page just opened is placed once, by finishOpening, when its thread and its boundary are both known.
+          if (openingThread) finishOpening();
+          else if (unreadFrom === null) scroller.scrollTop = scroller.scrollHeight;
+        }
+        if (visible && listening && voiceMember === memberId() && !question) drawComposerTask();
+        refocus();
+      });
+      if (slashStale) { slashStale = false; void slashMenu.refresh(); }
       if (!wasVisible) members.show();
       if (!roomPane.active) desktop.show();
       else void roomPane.refresh();
@@ -2475,17 +2698,13 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       dropResize?.observe(composer);
       dropResize?.observe(askCard);
       dropResize?.observe(draftPanel.el);
-      void members.load();
+      // The roster is read as the page comes on screen; while it stays there, the core's events keep it current.
+      if (!wasVisible) void members.load();
       void readQuotas();
       // A draft goes into the field at once; the composer may then move (the empty page has it
       // under Raphael, the thread under the turns) or give way to a question, which takes the
       // focus away: it is given back once each of those is known.
-      const draft = draftText(arg);
       if (draft !== null) putDraft(draft);
-      const refocus = (): void => {
-        if (!wasVisible || draft !== null) focusComposer();
-      };
-      // The page opens at the newest turn, and with the question that waits, if one does.
       void api
         .agentQuestionOpen()
         .then((open) => {
@@ -2494,17 +2713,12 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
           refocus();
         })
         .catch(() => {});
-      void load(false).then(() => {
-        if (visible && !scroller.hidden && (!wasVisible || draft !== null)) {
-          if (unreadFrom !== null) finishOpening();
-          else scroller.scrollTop = scroller.scrollHeight;
-        }
-        if (visible && listening && voiceMember === memberId() && !question) drawComposerTask();
-        refocus();
-      });
       drawBackgroundQuestions();
+      if (settingsFor !== null && settingsFor === members.current()) { if (roomPane.active) roomPane.close(); members.openSettings(); }
     },
     hide() {
+      releasePointer();
+      if (heldKey !== null) releaseKey();
       saveComposerDraft();
       desktop.hide();
       hideTooltip();
@@ -2523,6 +2737,8 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       members.hide();
       input.dispatchEvent(new Event("blur"));
       clearTimeout(listenTimer);
+      clearTimeout(holdTimer);
+      scroller.classList.remove("is-opening");
       loads++;
       loadingEarlier = false;
       stopTicker();

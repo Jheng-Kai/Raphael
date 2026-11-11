@@ -23,7 +23,7 @@ describe("the page's responsive sizes", () => {
   test("the tokens are on the page and what it opens at the body, never on :root", () => {
     expect(block).not.toBeNull();
     const selectors = block![1].split(",").map((s) => s.trim());
-    expect(selectors).toEqual([".page-agent", ".side", ".mb-scrim", ".menu.mb-avpop", ".menu.mb-menu", ".menu.mb-toolpop", ".toasts"]);
+    expect(selectors).toEqual([".page-agent", ".side", ".mb-scrim", ".menu.mb-avpop", ".menu.mb-menu", ".menu.mb-toolpop", ".menu.side-search", ".toasts"]);
     expect(/(^|[\s,])(:root|html|body|\*)([\s,{]|$)/.test(block![1])).toBe(false);
   });
 
@@ -43,14 +43,15 @@ describe("the page's responsive sizes", () => {
     const wanted: Record<string, [number, number]> = {
       "pa-tool": [30, 48], "pa-pill-h": [32, 52], "pa-pill-av": [22, 36],
       "pa-cmp-btn": [36, 44], "pa-cmp-fs": [15.5, 17],
-      "pa-dclose": [34, 48], "pa-det-av": [64, 96],
+      "pa-det-av": [64, 96],
     };
     for (const [name, [small, big]] of Object.entries(wanted)) expect(ends(name), name).toEqual([small, big]);
   });
 
   test("the conversation's thread measure stops growing with the window", () => {
     expect(block![2]).toContain("--pa-colw: var(--layout-thread-max);");
-    expect(read("styles.css")).toContain("--layout-thread-max: calc(28 * var(--sp-6));");
+    // The 960 px message column.
+    expect(read("styles.css")).toContain("--layout-thread-max: calc(30 * var(--sp-6));");
     expect(agent).toMatch(/\.ra-col \{ max-width: var\(--pa-colw\)/);
     expect(agent).toMatch(/\.composer \{[^}]*max-width: var\(--layout-thread-max\)/);
   });
@@ -107,6 +108,6 @@ test("the composer field sizes itself to its text, so a keystroke never lays out
 test("a member's conversation wears its colour on selected words in the owner's bubble, send, stop and its computer", () => {
   const css = read("agent.css");
   expect(css).toContain(".mb-chat[data-member-bubble] .owner-message :is(.bubble, .bubble *)::selection { background: var(--on-bubble); color: var(--member-bubble); }");
-  expect(css).toContain('.mb-chat[data-member-bubble] :is(.composer .cmp-pair, .btn.ra-tool[data-act="computer"]) { --accent-icon: var(--member-accent); --accent-text: var(--member-accent); }');
-  expect(read("pages/agent.ts")).toContain('memberChat.style.setProperty("--member-accent", memberAccent(slimeColorOf(member)));');
+  expect(css).toContain('.mb-chat[data-member-bubble] .composer .cmp-pair { --accent-icon: var(--member-accent); --accent-text: var(--member-accent); }');
+  expect(read("pages/agent.ts")).toContain('memberChat.style.setProperty("--member-accent", memberAccent(color));');
 });

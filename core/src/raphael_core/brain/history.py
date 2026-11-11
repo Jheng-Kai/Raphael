@@ -15,7 +15,7 @@ from .stats import record_dictation
 class HistoryItem:
     id: int | None
     created_at_ms: int
-    kind: str  # "dictation"
+    kind: str  # "dictation" or "ask" (speech sent to a member)
     raw_text: str  # the speech-to-text result, before cleanup
     text: str  # the final text: cleaned, or the raw text when cleanup fell back
     cleaned: bool
@@ -128,9 +128,10 @@ class HistoryStore:
             cursor = self._conn.execute("DELETE FROM history")
         return cursor.rowcount
 
-    def latest(self) -> HistoryItem | None:
+    def latest(self, *, kind: str | None = None) -> HistoryItem | None:
+        where = " WHERE kind = ?" if kind is not None else ""
         row = self._conn.execute(
-            f"SELECT {_COLUMNS} FROM history {_NEWEST_FIRST} LIMIT 1"
+            f"SELECT {_COLUMNS} FROM history{where} {_NEWEST_FIRST} LIMIT 1", () if kind is None else (kind,)
         ).fetchone()
         return None if row is None else _to_item(row)
 

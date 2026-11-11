@@ -82,6 +82,13 @@ def cells(registry=(), catalog=(), *, servers=()):
         SCENARIOS[13].assertions, 'P08a', 'connect-gmail'))
     result.append(ScenarioCell('S14.instagram', 'Connect Instagram in chat (P08d scope)', SCENARIOS[13].prompt,
         SCENARIOS[13].assertions, 'P08d'))
+    for platform in ("telegram", "slack", "discord"):
+        result.append(ScenarioCell("S14.messaging." + platform, "Set up " + platform + " in chat",
+                                  "Help me set up my bot.", ("messaging_card", "owner_text_preserved"),
+                                  "chat-setup-share", "panel-" + platform))
+    result.append(ScenarioCell("S21.templates.share", "Share a member recipe in chat",
+                              "Help me share my member recipe.", ("template_snapshot", "owner_text_preserved"),
+                              "chat-setup-share", "panel-share"))
     # S05's halves: the draft of a mail edited, handed to a colleague and sent once on the generic send path, every send
     # recorded and never real (P08c), and Gmail's own draft and send (P08d), which keeps the parent open until it has a driver.
     result.append(ScenarioCell('S05.draft-handoff', 'Email draft hand-off (P08c scope)',
@@ -89,6 +96,9 @@ def cells(registry=(), catalog=(), *, servers=()):
         ('editable_email', 'version_bound_send', 'cancel_zero_send', 'one_receipt', 'handoff_never_sends'), 'P08c', 'draft-handoff'))
     result.append(ScenarioCell('S05.gmail', 'Gmail draft and send (P08d scope)', SCENARIOS[4].prompt,
         SCENARIOS[4].assertions, 'P08d'))
+    result.append(ScenarioCell('S05.slack-draft', 'Slack draft edited and sent once',
+        'Prepare a Slack reply for my review before sending it.',
+        ('editable_slack', 'version_bound_send', 'cancel_zero_send', 'one_receipt'), 'P08c', 'slack-draft'))
     # S15's halves: a key saved in a card and the owner's turn at the computer (P08b), and the permission card of an
     # action that needs the owner's yes (P08c).
     result.append(ScenarioCell('S15.secret', 'Secret saved in chat (P08b scope)',
@@ -138,7 +148,7 @@ def cells(registry=(), catalog=(), *, servers=()):
         "members-groups": ("draft-confirm", "rename", "regroup", "archive", "delete", "overview", "command-save", "skill-import", "set-my-job"),
         "meetings": ("create-reuse", "list", "post", "roles", "agenda", "mentions", "dispatch", "result", "chief-wrapup", "consult"),
         "web-open": ("search", "read", "show", "show-page", "update-page", "url", "app", "settings", "weather", "local-time"),
-        "files": ("create-html", "create-xlsx", "create-pdf", "create-audio", "attachment-inventory"),
+        "files": ("create-html", "create-xlsx", "create-pdf", "attachment-inventory"),
         "computer": ("operate", "take-over", "done", "stop", "apps", "open", "look", "act", "hand-over"),
         "settings-quick": ("settings-inventory", "confirm", "deny", "expired", "edited-inputs", "quick-model", "approve", "ask-owner"),
         "diagnostics": ("self-check", "help"),

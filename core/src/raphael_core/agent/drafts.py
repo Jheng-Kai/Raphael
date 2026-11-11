@@ -31,6 +31,7 @@ A draft holds the owner's own words for the mail; they are shown in their chat a
 like the rest of the conversation, and never logged.
 """
 
+from raphael_core.ui_words import ui_word, with_ui_words
 import hashlib
 import json
 import logging
@@ -65,7 +66,7 @@ _DRAFT = re.compile(r"draft", re.IGNORECASE)
 RECIPIENT = ("to", "recipient_email")
 _ADDRESS = re.compile(r"[^@\s,;]+@[^@\s,;]+\.[^@\s,;]+")
 _CONTROL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
-_COLUMNS = ("id, author_id, holder_id, conversation_id, turn_id, origin_turn_id, language, state, version, digest,"
+_COLUMNS = ("kind, id, author_id, holder_id, conversation_id, turn_id, origin_turn_id, language, state, version, digest,"
             " send_via, to_addr, cc_addr, subject, body, offer_to, offer_state, error, sent_digest, created_at_ms,"
             " updated_at_ms, sent_at_ms")
 
@@ -88,6 +89,21 @@ def is_mail_sender(tool: PluginTool) -> bool:
         return False
     text = lambda name: isinstance(props.get(name), dict) and props[name].get("type") == "string"  # noqa: E731
     return any(text(name) for name in RECIPIENT) and text("subject") and text("body")
+
+
+def is_slack_sender(tool: PluginTool) -> bool:
+    props = tool.schema.get('properties', {}) if isinstance(tool.schema, dict) else {}
+    if not isinstance(props, dict):
+        return False
+    name = f'{tool.server} {tool.name}'.lower()
+    return ('slack' in name and any(word in name for word in ('send', 'post_message', 'postmessage'))
+            and not _DRAFT.search(tool.name) and all(isinstance(props.get(key), dict) and props[key].get('type') == 'string' for key in ('channel', 'text')))
+
+
+def slack_arguments(tool, to, body):
+    if not to.strip() or not body.strip():
+        raise DraftError('empty')
+    return {'channel': to.strip(), 'text': body}
 
 
 def draft_digest(send_via: str, to: str, cc: str, subject: str, body: str) -> str:
@@ -156,13 +172,14 @@ class Draft:
     created_at_ms: int
     updated_at_ms: int
     sent_at_ms: int | None
+    kind: str = "email"
 
 
 def _draft(row: sqlite3.Row) -> Draft:
     return Draft(row["id"], row["author_id"], row["holder_id"], row["conversation_id"], row["turn_id"],
                  row["origin_turn_id"], row["language"], row["state"], row["version"], row["digest"], row["send_via"],
                  row["to_addr"], row["cc_addr"], row["subject"], row["body"], row["offer_to"], row["offer_state"],
-                 row["error"], row["sent_digest"], row["created_at_ms"], row["updated_at_ms"], row["sent_at_ms"])
+                 row["error"], row["sent_digest"], row["created_at_ms"], row["updated_at_ms"], row["sent_at_ms"], row["kind"])
 
 
 class DraftStore:
@@ -177,7 +194,7 @@ class DraftStore:
                          (now_ms(),))
 
     def create(self, *, author_id: int, turn_id: int, conversation_id: int | None, language: str, send_via: str, to: str,
-               cc: str, subject: str, body: str, offer_to: int | None) -> Draft:
+               cc: str, subject: str, body: str, offer_to: int | None, kind: str = "email") -> Draft:
         """A new draft, version 1, held by its author's chat, with a choice card when it is offered to a colleague."""
         draft_id, now = secrets.token_hex(8), self._now_ms()
         digest = draft_digest(send_via, to, cc, subject, body)
@@ -185,9 +202,9 @@ class DraftStore:
             self._conn.execute(
                 "INSERT INTO email_drafts (id, author_id, holder_id, conversation_id, turn_id, origin_turn_id, language,"
                 " state, version, digest, send_via, to_addr, cc_addr, subject, body, offer_to, offer_state, created_at_ms,"
-                " updated_at_ms) VALUES (?, ?, ?, ?, ?, ?, ?, 'draft', 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                " updated_at_ms, kind) VALUES (?, ?, ?, ?, ?, ?, ?, 'draft', 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (draft_id, author_id, author_id, conversation_id, turn_id, turn_id, language, digest, send_via, to, cc,
-                 subject, body, offer_to, "pending" if offer_to is not None else "", now, now))
+                 subject, body, offer_to, "pending" if offer_to is not None else "", now, now, kind))
             self._version(draft_id, 1, digest, send_via, to, cc, subject, body, by_owner=False)
         return self.get(draft_id)  # type: ignore[return-value]
 
@@ -225,12 +242,13 @@ class DraftStore:
                     found.setdefault(turn_id, []).append(draft)
         return found
 
-    def open_in_chat(self, holder_id: int, conversation_id: int | None) -> Draft | None:
+    def open_in_chat(self, holder_id: int, conversation_id: int | None, kind: str | None = None) -> Draft | None:
         """The draft still waiting for the owner in this chat (the latest), if any: what a member's revision replaces."""
         row = self._conn.execute(
             f"SELECT {_COLUMNS} FROM email_drafts WHERE holder_id=? AND conversation_id IS ? AND state='draft'"
+            " AND (? IS NULL OR kind=?)"
             " AND NOT EXISTS (SELECT 1 FROM agent_turns WHERE id=email_drafts.turn_id AND scope='room')"
-            " ORDER BY created_at_ms DESC, rowid DESC LIMIT 1", (holder_id, conversation_id)).fetchone()
+            " ORDER BY created_at_ms DESC, rowid DESC LIMIT 1", (holder_id, conversation_id, kind, kind)).fetchone()
         return None if row is None else _draft(row)
 
     def open_in_room(self, holder_id: int, room_id: int, thread_id: int | None) -> Draft | None:
@@ -332,12 +350,12 @@ class EmailDrafts:
 
     # --- the apps that send mail ---------------------------------------------------------------------------
 
-    def senders(self) -> list[PluginTool]:
+    def senders(self, kind: str | None = None) -> list[PluginTool]:
         """The tools of the owner's connections that send mail, as they are now (on, of a connection that is on)."""
         if self._plugins is None:
             return []
         try:
-            return [tool for tool in self._plugins.offered() if is_mail_sender(tool)]
+            return [tool for tool in self._plugins.offered() if (is_mail_sender(tool) and kind != "slack") or (is_slack_sender(tool) and kind != "email")]
         except Exception as exc:  # a connection that breaks leaves its tools out
             logger.warning("Could not list the tools that send mail: %s", type(exc).__name__)
             return []
@@ -345,10 +363,10 @@ class EmailDrafts:
     def sender(self, key: str) -> PluginTool | None:
         return next((tool for tool in self.senders() if tool.key == key), None)
 
-    def choose_sender(self, via: str | None) -> str:
+    def choose_sender(self, via: str | None, kind: str = "email") -> str:
         """The key of the tool that will send a draft: the one the model named (its connection's name or id, or the tool's key),
         else the first there is (a connection called Gmail first). "" when nothing sends mail."""
-        found = self.senders()
+        found = self.senders(kind)
         if via:
             wanted = via.strip().casefold()
             named = [tool for tool in found if wanted in (tool.key.casefold(), tool.server.casefold(), tool.name.casefold())
@@ -361,29 +379,32 @@ class EmailDrafts:
     # --- what the agent does --------------------------------------------------------------------------------
 
     def write(self, *, author_id: int, turn_id: int, conversation_id: int | None, language: str, to: str, cc: str, subject: str,
-              body: str, via: str | None, hand_to: str | None, revise: bool) -> tuple[Draft, str]:
+              body: str, via: str | None, hand_to: str | None, revise: bool, kind: str = "email") -> tuple[Draft, str]:
         """The draft a member wrote, shown in its chat: a new one, or with `revise` a new version of the draft still waiting
         there. The second value says what the card asks, for the member's note: "" or the name of the colleague it is offered to.
         DraftError("unknown_member") for a colleague nobody is."""
+        origin = self._history.get(turn_id)
+        if kind not in ('email', 'slack') or (kind == 'slack' and (origin is None or origin.scope != 'private')):
+            raise DraftError('private_chat_only')
         offer = None
         if hand_to:
             offer = self.colleague(hand_to)
             if offer is None or offer == author_id:
                 raise DraftError("unknown_member")
-        send_via = self.choose_sender(via)
+        send_via = self.choose_sender(via, kind)
         existing = None
         if revise:
             origin = self._history.get(turn_id)
             existing = (self.store.open_in_room(author_id, origin.room_id, origin.thread_id)
                         if origin is not None and origin.scope == "room"
-                        else self.store.open_in_chat(author_id, conversation_id))
+                        else self.store.open_in_chat(author_id, conversation_id, kind))
         draft = None
-        if existing is not None and existing.author_id == author_id:
+        if existing is not None and existing.author_id == author_id and existing.kind == kind:
             draft = self.store.revise(existing, send_via=send_via or existing.send_via, to=to, cc=cc, subject=subject, body=body,
                                       by_owner=False, turn_id=turn_id)
         if draft is None:
             draft = self.store.create(author_id=author_id, turn_id=turn_id, conversation_id=conversation_id, language=language,
-                                      send_via=send_via, to=to, cc=cc, subject=subject, body=body, offer_to=offer)
+                                      send_via=send_via, to=to, cc=cc, subject=subject, body=body, offer_to=offer, kind=kind)
         self._changed(draft)
         return draft, self.names(offer) if offer is not None and draft.offer_state == "pending" else ""
 
@@ -405,13 +426,15 @@ class EmailDrafts:
         return shown
 
     def _card(self, draft: Draft, senders: list[dict]) -> dict:
+        keys = {tool.key for tool in self.senders(draft.kind)}
+        senders = [sender for sender in senders if sender['key'] in keys]
         names = {sender["key"]: sender["name"] for sender in senders}
         offer = None
         if draft.offer_state == "pending" and draft.offer_to is not None:
             offer = {"member_id": draft.offer_to, "name": self.names(draft.offer_to)}
         # Who wrote it, when it was handed on: the colleague's card says whose draft it is.
         author = self.names(draft.author_id) if draft.holder_id != draft.author_id else ""
-        return {"id": draft.id, "mode": "card", "state": draft.state, "version": draft.version, "digest": draft.digest,
+        return {"kind": draft.kind, "id": draft.id, "mode": "card", "state": draft.state, "version": draft.version, "digest": draft.digest,
                 "from": {"key": draft.send_via, "name": names.get(draft.send_via, "")}, "senders": senders, "to": draft.to,
                 "cc": draft.cc, "subject": draft.subject, "body": draft.body, "offer": offer,
                 "error": draft.error or None, "holder_id": draft.holder_id, "author_name": author}
@@ -423,6 +446,9 @@ class EmailDrafts:
         draft = self.store.get(draft_id) if isinstance(draft_id, str) and draft_id else None
         if draft is None or self._conn.execute("SELECT 1 FROM agent_turns WHERE id=?", (draft.turn_id,)).fetchone() is None:
             raise invalid_params("There is no such draft")
+        origin = self._history.get(draft.turn_id)
+        if draft.kind == 'slack' and origin.scope != 'private':
+            raise invalid_params('Slack drafts require a private conversation')
         return draft
 
     def _view(self, draft_id: str) -> dict | None:
@@ -438,8 +464,8 @@ class EmailDrafts:
         fields = {name: clean_field(name, params[name]) if name in params else getattr(draft, name)
                   for name in ("to", "cc", "subject", "body")}
         via = params.get("via", draft.send_via)
-        if not isinstance(via, str) or (via and self.sender(via) is None and via != draft.send_via):
-            raise invalid_params("via must be an app that sends mail")
+        if not isinstance(via, str) or (via and via not in {tool.key for tool in self.senders(draft.kind)} and via != draft.send_via):
+            raise invalid_params("via must send this draft's message type")
         if draft.state not in ("draft", "failed") or base != draft.digest:
             return {"draft": self._view(draft.id), "saved": False}
         unchanged = fields == {"to": draft.to, "cc": draft.cc, "subject": draft.subject, "body": draft.body} and via == draft.send_via
@@ -508,10 +534,10 @@ class EmailDrafts:
         if digest != draft.digest or draft.state != "draft":
             return {"draft": self._view(draft.id), "sent": False}
         tool = self.sender(draft.send_via)
-        if tool is None:
+        if tool is None or (draft.kind == "slack" and not is_slack_sender(tool)) or (draft.kind == "email" and not is_mail_sender(tool)):
             return await self._refused(draft, "no_sender")
         try:
-            arguments = mail_arguments(tool, draft.to, draft.cc, draft.subject, draft.body)
+            arguments = slack_arguments(tool, draft.to, draft.body) if draft.kind == "slack" else mail_arguments(tool, draft.to, draft.cc, draft.subject, draft.body)
         except DraftError as error:
             return await self._refused(draft, error.kind)
         if not self.store.claim_send(draft.id, digest):
@@ -560,8 +586,8 @@ class EmailDrafts:
 
 
 # What a colleague's chat says (to the model, never as a bubble) when a draft was handed to it.
-_RECEIVED: Mapping[str, str] = {
+_RECEIVED: Mapping[str, str] = with_ui_words({
     "zh-TW": "{name}把一封郵件草稿「{subject}」交給你，等主人編輯後寄出。",
     "en": "{name} handed you an email draft, \"{subject}\", for the owner to edit and send.",
     "ja": "{name}からメールの下書き「{subject}」が届きました。オーナーが編集して送信します。",
-}
+})

@@ -61,8 +61,10 @@ async def test_a_request_to_add_to_todays_schedule_lands_in_the_store_and_on_hom
     assert [row["title"] for row in value["calendar_items"]] == ["牙醫"]
     assert value["calendar_counts"] == {TODAY: 1} and TODAY in value["calendar_days"]
     assert [row["title"] for row in value["calendar"]] == ["牙醫"]
-    # Home's inbox is what needs the owner; an event on the calendar is not.
-    assert value["today"] == []
+    # Today's agenda includes calendar events as well as work waiting for the owner.
+    assert [row["title"] for row in value["today"]] == ["牙醫"]
+    assert value["counts"]["today"] == 1
+    assert any(row["id"] == item["id"] for row in value["today_plan"]["items"])
     [turn] = (await rig.call("agent.history.list", {"member_id": secretary.id}))["turns"]
     assert [json.loads(m["text"]) for m in turn["messages"] if m["kind"] == "event" and not is_action(m["text"])] == [{
         "type": "calendar", "action": "created", "id": item["event_id"], "name": "牙醫", "date": TODAY,
@@ -374,7 +376,7 @@ def test_find_tools_finds_the_calendar_by_the_plain_words_the_owner_would_use(wo
         def offered(self):
             return [PluginTool(f"mcp:s:t{n}", "Service", f"tool_{n}", "Something else entirely", {"type": "object"}, Tier.T1) for n in range(60)]
 
-    snapshot = take_snapshot(Many(), "something", interactive=True, max_tier=Tier.T3)
+    snapshot = take_snapshot(Many(), interactive=True, max_tier=Tier.T3)
     assert "find_tools" in snapshot.refs and snapshot.hidden()
     _, lines = snapshot.find(words)
     assert [line for line in lines if line.startswith("calendar_")], (words, lines)

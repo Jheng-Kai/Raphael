@@ -22,16 +22,34 @@ module brings in OpenCC, and its start-up thread ONNX Runtime and PortAudio. Wha
 fd 1 goes to stderr, with the log.
 """
 
-import logging
+from raphael_core.startup import elapsed_ms
+
 import faulthandler
+import logging
 import os
 import sys
+import threading
 from pathlib import Path
 
 from raphael_core.stdio_server import claim_stdout, run_stdio
 
 # Long enough for numpy to load from a cold disk; past this the core serves without it.
 LIBRARIES_TIMEOUT_S = 60.0
+
+
+def import_speech_libraries() -> None:
+    """Import what `app._import_kit` imports (numpy, sherpa-onnx, PortAudio). Start-up runs it while
+    the application module is imported: on a cold disk each of the two takes seconds, and one after
+    the other they were most of the wait for the first `core.hello` (owner, 2026-11-11)."""
+    from raphael_core.device import audio, dictation, stt, vad  # noqa: F401
+
+
+def load_application() -> object:
+    """The application module: the slow part of start-up besides the speech libraries. A plain import
+    statement, not a name looked up at run time: the frozen build bundles only the modules its analysis can see."""
+    from raphael_core import app
+
+    return app
 
 
 def main() -> None:
@@ -56,7 +74,12 @@ def main() -> None:
         delay_ms = min(10000, max(0, int(os.environ.get("RAPHAEL_TEST_NATIVE_CORE_DELAY_MS", "0"))))
         logging.info("Native startup core delay_ms=%s", delay_ms)
         time.sleep(delay_ms / 1000)
-    from raphael_core import app as app_module  # native libraries: only after the claim
+    # The speech libraries load on a thread of their own while the application is imported and built.
+    # They are joined before the first read of stdin (below), which is the rule they stand for.
+    preload = threading.Thread(target=import_speech_libraries, name="raphael-preload", daemon=True)
+    preload.start()
+    app_module = load_application()  # native libraries: only after the claim
+    logging.info("Startup phase=app_import since_process_start_ms=%.1f", elapsed_ms())
 
     data_dir = os.environ.get("RAPHAEL_DATA_DIR")
     fake_audio = os.environ.get("RAPHAEL_FAKE_AUDIO")
@@ -66,6 +89,7 @@ def main() -> None:
         fake_llm=os.environ.get("RAPHAEL_FAKE_LLM") == "1",
     )
     # numpy hangs on Windows if it first loads while stdin is being read: see app.py.
+    preload.join(LIBRARIES_TIMEOUT_S)
     app.wait_for_libraries(LIBRARIES_TIMEOUT_S)
     # Until stdin closes or core.shutdown is answered; either way the app is closed on the way out.
     run_stdio(app, on_close=app.aclose, output=protocol, stop=app.wait_for_shutdown)

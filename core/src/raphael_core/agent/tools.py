@@ -62,7 +62,10 @@ logging.getLogger("httpx").addFilter(_KeepPlacesOutOfTheLog())
 GEOCODING_URL = "https://geocoding-api.open-meteo.com/v1/search"
 FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
 # The language Open-Meteo names the place in, for each language Raphael speaks.
-_GEOCODING_LANGUAGE = {"zh-TW": "zh", "en": "en", "ja": "ja"}
+_GEOCODING_LANGUAGE = {
+    "zh-TW": "zh", "zh-CN": "zh", "en": "en", "ja": "ja", "ko": "ko", "es": "es", "fr": "fr",
+    "de": "de", "pt-BR": "pt", "it": "it", "ru": "ru", "vi": "vi", "th": "th", "id": "id", "tr": "tr",
+}
 # The kind of failure of a tool whose capability the owner turned off.
 DISABLED = "disabled"
 # The weather, both requests together, and each stage of a request.
@@ -136,6 +139,21 @@ def sky_of(code: Any) -> str | None:
     return SKIES.get(code)
 
 
+# The system's own numbers for a piece of work. No tool takes them and the owner is never told them: a model that is
+# shown one quotes it, so what a model is shown of a result leaves them out (`ToolResult.shown`).
+INTERNAL_KEYS = frozenset(("task_id", "root_task_id", "parent_task_id", "work_turn_id", "source_turn_id", "exchange_turn_id",
+                           "conversation_id", "report_task_id"))
+
+
+def without_internal_ids(value: Any) -> Any:
+    """`value` (JSON-like) without the system's numbers for work."""
+    if isinstance(value, dict):
+        return {key: without_internal_ids(item) for key, item in value.items() if key not in INTERNAL_KEYS}
+    if isinstance(value, list):
+        return [without_internal_ids(item) for item in value]
+    return value
+
+
 @dataclass
 class ToolResult:
     name: str
@@ -153,6 +171,12 @@ class ToolResult:
     # it is shown in place of `error` (that stays in logs and receipts).
     instruction: str | None = None
     blocks: list[dict] | None = None
+
+    @property
+    def shown(self) -> dict | None:
+        """`data` as the model is shown it: a hand-off or a status board names its work by title and its colleague by
+        name, never by the system's numbers."""
+        return without_internal_ids(self.data) if self.name in ("handoff", "work_status") else self.data
 
 
 def _number(value: Any) -> float | int | None:
@@ -330,7 +354,7 @@ class Tools:
         ledger.add(
             model=found.model,
             cost_usd=found.cost_usd,
-            prompt_tokens=found.prompt_tokens,
+            usage=getattr(found, "usage", None), prompt_tokens=found.prompt_tokens,
             completion_tokens=found.completion_tokens,
             ms=found.latency_ms,
         )
@@ -408,23 +432,6 @@ class Tools:
             return self._failed("read_attachment", error.kind, kind)
         data = {"file": number, "kind": kind, **found}
         return ToolResult("read_attachment", True, data, untrusted=True, detail=found.get("limitation_kind", kind))
-
-    async def generate_audio(self, arguments: dict, store) -> ToolResult:
-        from ..services.tts import MAX_TEXT_CHARS
-        text, voice = arguments.get("text"), arguments.get("voice")
-        if (not isinstance(text, str) or not text.strip() or len(text) > MAX_TEXT_CHARS
-                or (voice is not None and (not isinstance(voice, str) or not voice.strip() or len(voice) > 200))):
-            return self._failed("generate_audio", "bad_arguments")
-        if self.services is None or store is None:
-            return self._failed("generate_audio", "not_configured")
-        try:
-            file = await asyncio.wait_for(self.services.audio_file(text, voice=voice), 120)
-            saved = await asyncio.to_thread(store.save, file)
-        except TimeoutError:
-            return self._failed("generate_audio", "timeout", self.services.tts_service())
-        except ServiceError as error:
-            return self._failed("generate_audio", error.kind, self.services.tts_service())
-        return ToolResult("generate_audio", True, {"attachment": saved.metadata()}, detail=self.services.tts_service())
 
     async def look(
         self,

@@ -82,15 +82,16 @@ async def test_a_running_tool_finishes_once_before_owner_input_reaches_the_model
 async def test_input_after_admission_closes_becomes_a_new_turn_even_before_the_old_rpc_returns(make_rig, client, monkeypatch):
     rig = make_rig()
     finalizing, release = asyncio.Event(), asyncio.Event()
-    said = rig.service._said
+    answer = rig.service._answer
 
-    async def hold(reply, *args):
+    async def hold(*args, **kwargs):
+        reply = await answer(*args, **kwargs)
         if reply.get("text") == "First answer":
             finalizing.set()
             await release.wait()
-        return await said(reply, *args)
+        return reply
 
-    monkeypatch.setattr(rig.service, "_said", hold)
+    monkeypatch.setattr(rig.service, "_answer", hold)
     client.chats = [chat("First answer"), chat("Second answer")]
     first = asyncio.create_task(typed(rig, "First request"))
     await asyncio.wait_for(finalizing.wait(), 2)

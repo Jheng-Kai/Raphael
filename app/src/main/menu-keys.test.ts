@@ -107,6 +107,8 @@ class FakeElement extends FakeNode {
     return node === this || this.children.some((child) => child.contains(node));
   }
   closest(selector: string): FakeElement | null {
+    // The menu steps past a button inside an inert part; the stand-in has none.
+    if (selector === "[inert]") return null;
     if (selector !== ".sel") throw new Error(`the stand-in only knows ".sel", not ${selector}`);
     for (let node: FakeElement | null = this; node; node = node.parent) {
       if (node.className.split(" ").includes("sel")) return node;

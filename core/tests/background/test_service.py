@@ -23,14 +23,15 @@ from raphael_core.brain.openrouter import OpenRouterError
 from raphael_core.brain.settings import SettingsStore
 from raphael_core.protocol import INVALID_PARAMS, RpcError
 
-from .conftest import ARGUMENT, RESULT, TASK_TEXT, Links, call, report, turn, until
+from .conftest import ARGUMENT, RESULT, TASK_TEXT, Links, call, report, turn, until, use
+from .test_snapshot import BARE
 
 
 async def look_twice_then_report(rig):
     """The model asks for `look` once and reports; the plugin is connected at T0."""
     await rig.plugins.connect(look="T0")
     rig.client.replies = [
-        turn("Looking.", [call("Notes__look", {"topic": ARGUMENT}, "c1")], cost=0.002),
+        turn("Looking.", [use("Notes__look", {"topic": ARGUMENT}, "c1")], cost=0.002),
         report("All looked up.", detail="Two things were found.", cost=0.003),
     ]
 
@@ -79,14 +80,15 @@ async def test_the_model_is_given_the_task_the_tools_of_the_snapshot_and_the_res
     assert f"{limits.model_calls} model calls" in system["content"] and f"{limits.tool_calls} tool calls" in system["content"]
     assert "no deadline" in system["content"]
     assert user["role"] == "user" and f"<task>\n{TASK_TEXT}\n</task>" in user["content"]
-    assert "2026-10-21 14:05" in user["content"] and user["content"].rstrip().endswith("English only.")
-    assert [t["function"]["name"] for t in first["tools"]] == [
-        "weather", "web_search", "local_time", "web_read", "generate_audio", "self_check", "raphael_help",
-        "calendar_list", "calendar_add", "calendar_update", "calendar_delete", "connections_list", "ask_owner", "connect_app", "email_draft", "find_app", "request_secret", "show_page", "update_page", "routine_create", "routine_delete", "routine_list", "routine_update", "Notes__look",
-    ]  # fmt: skip
+    assert "2026-10-21 14:05" in user["content"]
+    assert "The interface language never selects your speaking language" in user["content"]
+    assert "English only." not in user["content"]
+    # The fixed list, sorted by name: the connection's tool is found and called through use_tool.
+    assert [t["function"]["name"] for t in first["tools"]] == BARE
+    assert second["tools"] == first["tools"]
     result = second["messages"][-1]
     assert result["role"] == "tool" and result["tool_call_id"] == "c1"
-    assert result["content"].startswith('<tool_result untrusted="true" tool="Notes__look"')
+    assert result["content"].startswith('<tool_result untrusted="true" tool="use_tool"')
     assert RESULT in result["content"]
 
 
@@ -177,24 +179,59 @@ async def test_retracting_a_running_turn_cannot_write_its_late_report_into_a_reu
     assert history.messages([new]) == {}
 
 
-async def test_the_report_is_in_the_language_of_the_request(make_rig):
+async def test_the_report_language_follows_the_owner_request_not_the_interface(make_rig):
     rig = make_rig()
     await look_twice_then_report(rig)
     rig.client.replies[-1] = report("已整理完畢。", prefix="Notice")
-    rig.submit(language="zh-TW")
+    rig.submit(text="請整理這段內容。", language="en")
     [done] = await rig.wait_for_reports()
-    assert (done["prefix"], done["text"]) == ("告", "已整理完畢。")
-    assert "Traditional Chinese" in rig.client.chat_calls[0]["messages"][0]["content"]
+    assert (done["prefix"], done["text"]) == ("Notice", "已整理完畢。")
+    system, user = rig.client.chat_calls[0]["messages"][:2]
+    assert "請整理這段內容。" in user["content"]
+    assert "Otherwise follow the language of the owner's message or established conversation" in system["content"]
+    assert "Reply ONLY in" not in system["content"]
 
 
-async def test_public_progress_reaches_status_only_before_the_next_model_call(make_rig, conn):
+@pytest.mark.parametrize(("variant", "authored", "expected"), [
+    ("zh-TW", "软件资料已检查。", "軟體資料已檢查。"),
+    ("zh-HK", "软件资料已检查。", "軟件資料已檢查。"),
+    ("zh-CN", "資料已檢查。", "资料已检查。"),
+    ("zh-TW", "日本の学校へ行きます。", "日本の学校へ行きます。"),
+    ("zh-TW", "The result is ready.", "The result is ready."),
+])
+async def test_background_report_and_progress_use_owner_script(make_rig, conn, variant, authored, expected):
+    rig = make_rig()
+    SettingsStore(conn).set("languages", [variant])
+    history = AgentHistory(conn, rig.wall)
+    turn_id = history.add(session_id="script", question="Please check", route="delegate", prefix="",
+                          text="", status="running")
+
+    async def finish(**kwargs):
+        progress = [data["text"] for method, data in rig.notifications if method == "worker.progress"]
+        assert progress == [expected]
+        assert rig.service.tasks_for_turns([turn_id])[turn_id][0]["progress"] == expected
+        return turn(json.dumps({"text": authored, "messages": [authored, "学校へ行きます。"], "detail": authored}))
+
+    rig.client.replies = [turn(authored, [call("local_time", {}, "t")]), finish]
+    task_id = rig.submit(language="en", session="script")
+    rig.service.attach_turn(task_id, turn_id)
+    [done] = await rig.wait_for_reports()
+    expected_text = expected + "\n\n学校へ行きます。"
+    assert done["text"] == expected + " 学校へ行きます。"
+    assert rig.task(task_id).report_text == history.get(turn_id).text == expected_text
+    assert rig.task(task_id).report_detail == history.get(turn_id).detail == expected
+    replies = [m["text"] for m in history.messages([turn_id])[turn_id] if m["kind"] == "reply"]
+    assert expected in replies[0] and "学校へ行きます。" in replies[1]
+
+
+async def test_public_replies_reach_history_while_progress_still_reaches_status(make_rig, conn):
     rig = make_rig()
     history = AgentHistory(conn, rig.wall)
     turn_id = history.add(session_id="s", question=TASK_TEXT, route="delegate", prefix="",
                           text="", status="running")
 
     async def finish(**kwargs):
-        assert not [m for m in history.messages([turn_id])[turn_id] if not is_action(m["text"])]
+        assert [m["kind"] for m in history.messages([turn_id])[turn_id] if not is_action(m["text"])] == []
         assert any(is_action(m["text"]) for m in history.messages([turn_id])[turn_id])
         assert any(method == "worker.progress" and data["turn_id"] == turn_id for method, data in rig.notifications)
         assert rig.service.tasks_for_turns([turn_id])[turn_id][0]["progress"] == "I will check the time."
@@ -257,8 +294,11 @@ async def test_the_context_of_a_task_holds_the_request_that_failed_just_before(m
     [
         ('{"prefix": "告", "text": "Done.", "detail": ""}', ("Notice", "Done.", None)),
         ('```json\n{"prefix": "Answer", "text": "Fenced.", "detail": "More."}\n```', ("Answer", "Fenced.", "More.")),
-        ('Here it is: {"prefix": "否", "text": "Cannot.", "detail": ""} Bye.', ("Negative", "Cannot.", None)),
+        ('Here it is: {"prefix": "否", "text": "Cannot.", "detail": ""} Bye.', ("Notice", 'Here it is: {"prefix": "否", "text": "Cannot.", "detail": ""} Bye.', None)),
         ("A plain sentence.", ("Notice", "A plain sentence.", None)),
+        ("42", ("Notice", "42", None)),
+        ("true", ("Notice", "true", None)),
+        ('"quoted answer"', ("Notice", '"quoted answer"', None)),
         ('{"text": "No prefix."}', ("Answer", "No prefix.", None)),
         ('"text"：「收到。」\n"messages":["收到。"],"need":}', ("Answer", "收到。", None)),
     ],
@@ -276,7 +316,7 @@ def test_a_report_that_says_nothing_usable_is_none(final):
 
 def test_a_long_report_is_one_line_and_the_rest_goes_to_the_detail():
     reply = report_from(json.dumps({"prefix": "告", "text": "字" * 200, "detail": ""}), "zh-TW")
-    assert len(reply.text) <= 81 and reply.detail == "字" * 200
+    assert reply.text == "字" * 200 and reply.detail is None
 
 
 async def test_a_report_with_no_words_is_incomplete_instead_of_claiming_success(make_rig):
@@ -284,7 +324,7 @@ async def test_a_report_with_no_words_is_incomplete_instead_of_claiming_success(
     rig.client.replies = [turn("   ")]
     task_id = rig.submit()
     [done] = await rig.wait_for_reports()
-    assert (done["state"], done["text"]) == ("failed", phrase("en", "error"))
+    assert (done["state"], done["text"]) == ("failed", phrase("en", "no_answer"))
     assert rig.task(task_id).reason == 'missing_terminal'
 
 
@@ -452,8 +492,8 @@ async def test_a_task_the_user_stops_ends_at_once_with_what_was_done(make_rig, c
     rig = make_rig()
     await rig.plugins.connect(look="T0", slow="T0")
     rig.client.replies = [
-        turn("", [call("Notes__look", {"topic": "a"}, "c1")]),
-        turn("", [call("Notes__slow", {}, "c2")]),
+        turn("", [use("Notes__look", {"topic": "a"}, "c1")]),
+        turn("", [use("Notes__slow", {}, "c2")]),
         report("never"),
     ]
     task_id = rig.submit()
@@ -784,8 +824,8 @@ async def test_a_task_carried_out_by_a_real_worker_process(make_rig, plugins, ca
     rig = make_rig(host=WorkerHost(grace_s=1.0))
     await plugins.connect(look="T0")
     rig.client.replies = [
-        turn("", [call("Notes__look", {"topic": "alpha"}, "c1")]),
-        turn("", [call("Notes__look", {"topic": "beta"}, "c2")]),
+        turn("", [use("Notes__look", {"topic": "alpha"}, "c1")]),
+        turn("", [use("Notes__look", {"topic": "beta"}, "c2")]),
         report("Both looked up."),
     ]
     task_id = rig.submit()
@@ -806,7 +846,7 @@ async def test_nothing_of_a_task_is_logged_whichever_way_it_ends(make_rig, caplo
     secret_text = "PRIVATE-TASK-TEXT window title: Secret Plans - Notepad"
     scripts = [
         # done
-        [turn("PRIVATE-THOUGHT", [call("Notes__look", {"topic": ARGUMENT}, "c1"), call("Notes__broken", {}, "c2")]),
+        [turn("PRIVATE-THOUGHT", [use("Notes__look", {"topic": ARGUMENT}, "c1"), use("Notes__broken", {}, "c2")]),
          report("PRIVATE-REPORT", detail="PRIVATE-DETAIL")],
         # a model that fails
         [OpenRouterError(500, "server", "Service unavailable")] * 4,
@@ -840,7 +880,7 @@ async def test_closing_the_service_interrupts_the_task_that_runs_and_the_ones_th
 ):
     rig = make_rig()
     await rig.plugins.connect(slow="T0")
-    rig.client.replies = [turn("", [call("Notes__slow", {}, "c1")])]
+    rig.client.replies = [turn("", [use("Notes__slow", {}, "c1")])]
     running, waiting = rig.submit(), rig.submit()
     await until(lambda: "slow" in calls)
     await asyncio.wait_for(rig.service.aclose(), 10)

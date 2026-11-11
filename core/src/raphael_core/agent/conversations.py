@@ -1,8 +1,7 @@
-"""Named conversations, with a stable default entry for voice, routines and messaging.
+"""One persistent main conversation per member for chat, voice, routines and messaging.
 
-Conversation IDs are never reused. A formal request that omits an ID writes to the member's
-default; creating another conversation does not silently redirect unattended work into that
-context. Raphael's quick conversation is reached only by naming it (`QUICK`), never by default.
+The main conversation is created lazily and cannot be replaced through public actions.
+Raphael also keeps one quick conversation, reached only explicitly (`QUICK`), never by default.
 """
 
 import sqlite3
@@ -35,13 +34,12 @@ class Conversations:
 
     def main(self, member_id: int = 0) -> int:
         row = self.conn.execute(
-            "SELECT id FROM conversations WHERE member_id = ? AND is_default = 1"
+            "SELECT id FROM conversations WHERE member_id = ? AND kind = 'standard' AND is_default = 1"
             " ORDER BY updated_at_ms DESC, id DESC LIMIT 1", (member_id,),
         ).fetchone()
         if row is not None:
             return row[0]
-        # A deleted default hands over to the member's latest conversation; an empty new one would look as if
-        # the delete had not happened.
+        # Adopt a legacy standard conversation if it has not been marked as default.
         row = self.conn.execute(
             "SELECT id FROM conversations WHERE member_id = ? AND kind = 'standard'"
             " ORDER BY updated_at_ms DESC, id DESC LIMIT 1", (member_id,),
@@ -50,14 +48,14 @@ class Conversations:
             with self.conn:
                 self.conn.execute("UPDATE conversations SET is_default = 1 WHERE id = ?", (row[0],))
             return row[0]
-        return self.create(member_id, default=True)["id"]
+        return self._create_main(member_id)
 
     def resolve(self, member_id: int, conversation_id: int | None = None) -> int:
         return self.main(member_id) if conversation_id is None else self.get(conversation_id, member_id)["id"]
 
     def destination(self, member_id: int, conversation_id: int | None, *, quick: bool) -> int:
         """Where a request is written. A quick request goes to Raphael's quick conversation and a
-        formal one to the member's named or main conversation; an ID that names the other kind is
+        formal one to the member's main conversation; an ID that names the other kind is
         refused, never routed elsewhere."""
         if quick:
             if member_id != 0:
@@ -84,17 +82,19 @@ class Conversations:
             )
         return self.conn.execute("SELECT id FROM conversations WHERE kind = 'quick'").fetchone()[0]
 
-    def create(self, member_id: int, *, default: bool = False) -> dict:
+    def _create_main(self, member_id: int) -> int:
         now = self.now_ms()
         with self.conn:
-            cursor = self.conn.execute(
-                "INSERT INTO conversations (member_id, title, created_at_ms, updated_at_ms, is_default)"
-                " VALUES (?, '', ?, ?, ?)", (member_id, now, now, int(default)),
+            self.conn.execute(
+                "INSERT OR IGNORE INTO conversations (member_id, title, created_at_ms, updated_at_ms, is_default)"
+                " VALUES (?, '', ?, ?, 1)", (member_id, now, now),
             )
-        return self.get(cursor.lastrowid)
+        return self.conn.execute("SELECT id FROM conversations WHERE member_id = ? AND kind = 'standard'", (member_id,)).fetchone()[0]
 
     def list(self, member_id: int, query: str = "") -> list[dict]:
         self.main(member_id)
+        if member_id == 0:
+            self.quick()
         rows = self.conn.execute(
             "SELECT c.*, (SELECT COUNT(*) FROM agent_turns t WHERE t.conversation_id = c.id AND t.member_id = c.member_id) AS turn_count FROM conversations c WHERE member_id = ? ORDER BY (kind = 'quick') DESC, updated_at_ms DESC, id DESC", (member_id,),
         )
@@ -105,13 +105,3 @@ class Conversations:
             "UPDATE conversations SET updated_at_ms = ?, title = CASE WHEN title = '' THEN ? ELSE title END WHERE id = ?",
             (self.now_ms(), short_title(question), conversation_id),
         )
-
-    def rename(self, conversation_id: int, title: str) -> dict:
-        if self.get(conversation_id)["kind"] == "quick":
-            raise invalid_params("the quick conversation has a fixed localized title")
-        if not isinstance(title, str) or not title.strip() or len(title.strip()) > TITLE_MAX:
-            raise invalid_params(f"title must be 1 to {TITLE_MAX} characters")
-        with self.conn:
-            self.conn.execute("UPDATE conversations SET title = ?, updated_at_ms = ? WHERE id = ?",
-                              (title.strip(), self.now_ms(), conversation_id))
-        return self.get(conversation_id)

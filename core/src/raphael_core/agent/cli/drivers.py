@@ -9,6 +9,7 @@ import asyncio
 import base64
 import hashlib
 import json
+import re
 import os
 import logging
 import uuid
@@ -19,12 +20,28 @@ from pathlib import Path
 from .process import Child, PrivateFiles, secure_directory
 from .native_diagnostics import capture as native_capture, directory as native_directory, enabled as native_enabled
 from ..quota import parse_quota
+from ...brain.meter import codex as codex_usage, delta as usage_delta
 from ...failures import classify, redact
 from ...clock import wall_clock_ms
 
 logger = logging.getLogger(__name__)
 
 CODEX_SESSION_PREFIX = "raphael-codex-v1:"
+# The longest the child may say nothing at all before a read gives up on it. A loop with a watchdog of its own (`CliLoop`
+# stall_s) decides far sooner; this is for the rest, so that no read waits for ever. It is above the longest window the
+# loops give a call in flight (`CLI_TOOL_S`), since a CLI waiting for a tool of ours says nothing meanwhile.
+READ_LIMIT_S = 3 * 3600.0
+
+
+def toml_value(value) -> str:
+    """`value` as Codex's `-c key=value` reads it: TOML. A JSON object is not TOML, and Codex then
+    takes the whole value as one string (`skills.config` failed with "expected a sequence")."""
+    if isinstance(value, dict):
+        return "{" + ", ".join(f"{json.dumps(str(key))} = {toml_value(item)}" for key, item in value.items()) + "}"
+    if isinstance(value, (list, tuple)):
+        return "[" + ", ".join(toml_value(item) for item in value) + "]"
+    # Booleans, numbers and strings share one spelling in JSON and TOML (ASCII escapes included).
+    return json.dumps(value)
 # Verified against the installed Codex 0.159.3 config types and strict-config parser.
 CODEX_ISOLATION = {
     "project_doc_max_bytes": 0,
@@ -57,6 +74,16 @@ class Event:
     data: dict = field(default_factory=dict)
 
 
+def assistant_error(packet):
+    """Provider-generated assistant placeholders are diagnostics, never authored speech."""
+    message = packet.get("message") or packet
+    if (packet.get("isApiErrorMessage") or message.get("isApiErrorMessage")
+            or message.get("model") == "<synthetic>" or packet.get("model") == "<synthetic>"
+            or message.get("status") in ("failed", "ERROR") or message.get("state") == "ERROR" or message.get("error")):
+        return message.get("error") or message.get("content") or message.get("text") or "CLI assistant error"
+    return None
+
+
 class Driver:
     def __init__(self, name, command, *, model=None, effort=None, environ=None, quota=None, home=None):
         self.name, self.command, self.model = name, list(command), model
@@ -71,6 +98,9 @@ class Driver:
         self.reset_at_ms = None
         self._diagnostic_secrets = []
         self._steers = {}
+        self._last_tool_error = None
+        # A Codex thread's token total before this turn's first call (brain/meter.py).
+        self._turn_base = None
 
     async def steer(self, text):
         if self.name != "codex" or not self.child or not self.session or not self.turn or not text.strip():
@@ -99,14 +129,24 @@ class Driver:
 
     def _event(self, kind, text):
         if kind == "error":
-            failure = classify(text, secrets=self._diagnostic_secrets)
             tail = getattr(self.child, "stderr_tail", b"") or b""
-            original = failure.detail.split("\n\nstderr:\n", 1)[0] if failure.detail else (text.get("error", text) if isinstance(text, dict) else str(text))
+            source = text
+            diagnostic = str(text) + '\n' + tail.decode('utf-8', errors='replace') + '\n' + str(self._last_tool_error or '')
+            missing = re.search(r'(?:unknown|unrecognized|no such|missing) (?:method or )?(?:MCP )?tool|(?:MCP |permission.prompt )?tool[^\n]{0,160}(?:not found|not available|not registered|does not exist)', diagnostic, re.I)
+            broken = self._last_tool_error or re.search(r'error (?:calling|executing|running) (?:the )?(?:MCP )?tool|MCP tool (?:call )?(?:failed|error)|tool_error', diagnostic, re.I)
+            if (missing or broken) and classify(text, secrets=self._diagnostic_secrets, record=False).kind in ('cli_stopped', 'unknown', 'tool_broken', 'not_found'):
+                text = {'kind': 'tool_broken', 'message': 'CLI tool is missing' if missing else 'CLI tool failed'}
+            failure = classify(text, secrets=self._diagnostic_secrets)
+            original = failure.detail.split("\n\nstderr:\n", 1)[0] if failure.detail else (source.get("error", source) if isinstance(source, dict) else str(source))
             if isinstance(original, dict):
                 original = original.get("message") or original.get("reason") or json.dumps(original, ensure_ascii=False, default=str)
             detail = "\n".join(redact(line, secrets=self._diagnostic_secrets, limit=1800) for line in str(original).splitlines())[:1800]
             if tail:
                 detail += "\n\nstderr:\n" + "\n".join(redact(line, secrets=self._diagnostic_secrets, limit=160) for line in tail.decode("utf-8", errors="replace").splitlines()[-12:])
+            if self._last_tool_error:
+                detail += '\n\ntool:\n' + redact(self._last_tool_error, secrets=self._diagnostic_secrets, limit=1000)
+            # The stderr tail stays in the turn's private detail; the log only gets the classified kind
+            # (private diagnostics reach the log only with the native opt-in, `native_diagnostic`).
             failure = classify({**failure.wire(), "detail": detail[:4000]}, secrets=self._diagnostic_secrets, record=False)
             if self.exhausted and failure.kind not in ("credits", "auth_expired", "refused"):
                 failure = classify({**failure.wire(), "kind": "usage_limit", "message": failure.reason})
@@ -129,7 +169,7 @@ class Driver:
             await self.child.kill()
         self._close_steers()
 
-    async def run(self, *, user, system, endpoint, token, session=None, permission, cwd=None, images=(), computer_endpoint=None, structured=None, skills=()):
+    async def run(self, *, user, system, endpoint, token, session=None, permission, cwd=None, images=(), computer_endpoint=None, structured=None, skills=(), no_tools=False, fresh_context=None):
         files = PrivateFiles()
         codex_auth = None
         self._diagnostic_secrets = [token]
@@ -178,7 +218,7 @@ class Driver:
                     command += ["--disable-slash-commands"]
                 if structured is not None:
                     command += ["--json-schema", json.dumps(structured)]
-                else:
+                elif not no_tools:
                     command += ["--permission-prompt-tool", "mcp__raphael__approve"]
                 if session:
                     command += ["--resume", session]
@@ -199,6 +239,9 @@ class Driver:
                         json.dump(auth, stream)
                 child_cwd = str(home / "workspace")
                 # Only sessions issued by the isolated driver may cross this boundary.
+                if session and not session.startswith(CODEX_SESSION_PREFIX) and fresh_context is not None:
+                    user = fresh_context()
+                    yield Event("context_reset")
                 session = session.removeprefix(CODEX_SESSION_PREFIX) if session and session.startswith(CODEX_SESSION_PREFIX) else None
                 overrides = {**CODEX_ISOLATION, "mcp_servers.raphael.url": endpoint,
                              "mcp_servers.raphael.bearer_token_env_var": "RAPHAEL_MCP_TOKEN"}
@@ -212,7 +255,7 @@ class Driver:
                         "mcp_servers.computer.omit_tools_from": ["deferred", "code_mode"]})
                 command += ["app-server", "--strict-config"]
                 for key, value in overrides.items():
-                    command += ["-c", f"{key}={json.dumps(value)}"]
+                    command += ["-c", f"{key}={toml_value(value)}"]
             elif self.name == "gemini":
                 # Google's Antigravity CLI (`agy`; Gemini CLI was retired). It reads MCP servers and
                 # rules only from its home folder, so it runs with a private home inside the
@@ -265,7 +308,7 @@ class Driver:
                     path = files.path / f"image-{number}{suffix}"
                     path.write_bytes(image.data)
                     image_paths.append(str(path.resolve()))
-                async for event in self._rpc(user, system, endpoint, token, session, permission, image_paths):
+                async for event in self._rpc(user, system, endpoint, token, session, permission, image_paths, fresh_context=fresh_context):
                     if event.kind == "error":
                         await self.interrupt()
                         event = self._event("error", event.data)
@@ -289,7 +332,8 @@ class Driver:
                     forget_antigravity_server(cwd or str(files.path))
 
     async def _read(self):
-        line = await self.child.process.stdout.readline()
+        # TimeoutError ends the run as a failed read (`run`), classified as a timeout.
+        line = await asyncio.wait_for(self.child.process.stdout.readline(), READ_LIMIT_S)
         if not line:
             raise EOFError("cli_exited")
         value = json.loads(line)
@@ -325,7 +369,7 @@ class Driver:
                     self.quota(self.name, data)
 
     async def _claude(self):
-        partial = False
+        partial, text, completed = False, "", 0
         while True:
             packet = await self._read()
             kind = packet.get("type")
@@ -337,27 +381,53 @@ class Driver:
                 delta = event.get("delta", {})
                 if delta.get("type") == "text_delta":
                     partial = True
+                    text += delta.get("text", "")
                     yield Event("text_delta", delta.get("text", ""))
+                elif event.get("type") == "content_block_stop" and text:
+                    yield Event("message", text)
+                    text = ""
+                    completed += 1
                 elif event.get("type") == "content_block_start":
                     block = event.get("content_block", {})
                     if block.get("type") == "tool_use":
                         yield Event("tool_start", data={"id": block.get("id"), "name": block.get("name", "tool")})
             elif kind == "assistant":
+                if error := assistant_error(packet):
+                    yield self._event("error", error)
+                    return
                 for block in packet.get("message", {}).get("content", []):
-                    if block.get("type") == "text" and not partial:
-                        yield Event("text_delta", block.get("text", ""))
+                    if block.get("type") == "text":
+                        if not partial:
+                            yield Event("text_delta", block.get("text", ""))
+                        if completed:
+                            completed -= 1
+                        else:
+                            yield Event("message", block.get("text", ""))
                     elif block.get("type") == "tool_use":
                         yield Event("tool_start", data={"id": block.get("id"), "name": block.get("name", "tool")})
-                partial = False
+                if packet.get("message", {}).get("stop_reason") == "end_turn":
+                    answer = "\n\n".join(block.get("text", "") for block in packet["message"].get("content", []) if block.get("type") == "text")
+                    if answer:
+                        yield Event("message", answer, data={"id": packet["message"].get("id"), "final": True})
+                partial, text, completed = False, "", 0
             elif kind == "user":
                 for block in packet.get("message", {}).get("content", []):
                     if isinstance(block, dict) and block.get("type") == "tool_result":
+                        self._last_tool_error = redact(block.get('content') or 'CLI tool failed', secrets=self._diagnostic_secrets, limit=1800) if block.get('is_error') else None
                         yield Event("tool_end", data={"id": block.get("tool_use_id"), "ok": not block.get("is_error", False)})
             elif kind == "result":
                 if packet.get("session_id"):
                     self.session = packet["session_id"]
                     yield Event("session", self.session)
-                yield Event("usage", data=packet.get("usage", {}))
+                usage = dict(packet.get("usage") or {})
+                windows = [value.get("contextWindow") for value in (packet.get("modelUsage") or {}).values()
+                           if isinstance(value, dict) and type(value.get("contextWindow")) is int]
+                if windows:
+                    usage["context_window"] = min(windows)
+                # Every model's running total for the session, subagents' included (brain/meter.py `claude_code_rows`).
+                if isinstance(packet.get("modelUsage"), dict):
+                    usage["model_usage"] = packet["modelUsage"]
+                yield Event("usage", data=usage)
                 if packet.get("is_error") or packet.get("subtype") != "success":
                     # api_error_status is the HTTP status of the API error that ended the turn.
                     yield self._event("error", {"error": packet.get("result") or packet.get("errors") or "CLI failed",
@@ -368,6 +438,7 @@ class Driver:
                 return
 
     async def _antigravity(self):
+        text = ""
         while True:
             packet = await self._read()
             kind = packet.get("event")
@@ -376,13 +447,23 @@ class Driver:
                 yield Event("session", self.session)
             elif kind == "step_update":
                 step = packet.get("step_update") or {}
-                if step.get("step_type") == "agent_response" and step.get("text_delta"):
-                    yield Event("text_delta", step["text_delta"])
+                if step.get("step_type") == "agent_response":
+                    if error := assistant_error(step):
+                        yield self._event("error", error)
+                        return
+                    if step.get("text_delta"):
+                        text += step["text_delta"]
+                        yield Event("text_delta", step["text_delta"])
+                    if step.get("state") in ("DONE", "COMPLETED"):
+                        yield Event("message", step.get("text") or text, data={"id": step.get("id")})
+                        text = ""
                 elif step.get("step_type") == "tool":
                     name = step.get("tool_name") or "tool"
                     if step.get("state") == "ACTIVE":
+                        text = ""
                         yield Event("tool_start", data={"name": name})
                     elif step.get("state") in ("DONE", "ERROR"):
+                        self._last_tool_error = redact(step.get('error') or step.get('text') or 'CLI tool failed', secrets=self._diagnostic_secrets, limit=1800) if step.get('state') == 'ERROR' else None
                         yield Event("tool_end", data={"name": name, "ok": step.get("state") == "DONE"})
             elif kind == "result":
                 result = packet.get("result") or {}
@@ -396,7 +477,7 @@ class Driver:
                     yield self._event("final", result.get("response") or "")
                 return
 
-    async def _rpc(self, user, system, endpoint, token, session, permission, image_paths=()):
+    async def _rpc(self, user, system, endpoint, token, session, permission, image_paths=(), *, fresh_context=None):
         """Codex app-server: JSON-RPC over stdio."""
         pending = {}
         sequence = 0
@@ -428,6 +509,9 @@ class Driver:
                     if label == "session" and session:
                         # A removed private home must not send us looking in the owner's sessions.
                         session = None
+                        if fresh_context is not None:
+                            user = fresh_context()
+                            yield Event("context_reset")
                         arguments.pop("threadId", None)
                         await request("thread/start", arguments, "session")
                         continue
@@ -437,7 +521,8 @@ class Driver:
                 if label == "initialize":
                     await self.child.send({"jsonrpc": "2.0", "method": "initialized", "params": {}})
                     arguments = {"developerInstructions": system, "approvalPolicy": "untrusted",
-                                 "sandbox": "read-only", "cwd": self.child.cwd}
+                                 "sandbox": "read-only", "cwd": self.child.cwd,
+                                 "config": {"features.shell_tool": False, "features.apply_patch_freeform": False}}
                     if self.model:
                         arguments["model"] = self.model
                     if session:
@@ -480,12 +565,18 @@ class Driver:
             elif method in ("item/started", "item/completed"):
                 item = params.get("item", {})
                 if item.get("type") == "agentMessage":
+                    if error := assistant_error(item):
+                        yield self._event("error", error)
+                        return
                     if method == "item/started":
                         final_text = ""
                     else:
                         # Phase-less legacy messages are answers only after the most recent tool.
                         final_text = "" if item.get("phase") == "commentary" else item.get("text", "")
+                        yield Event("message", item.get("text", ""), data={"id": item.get("id"), "final": item.get("phase") == "final_answer"})
                 if item.get("type") in ("commandExecution", "fileChange", "mcpToolCall", "webSearch"):
+                    if item.get('type') == 'mcpToolCall' and method == 'item/completed':
+                        self._last_tool_error = redact(item.get('error') or 'CLI tool failed', secrets=self._diagnostic_secrets, limit=1800) if item.get('status') == 'failed' else None
                     if method == "item/started":
                         final_text = ""
                     yield Event("tool_start" if method.endswith("started") else "tool_end", data={
@@ -493,9 +584,20 @@ class Driver:
                         "name": item.get("tool", item["type"]), "effect": item["type"] == "fileChange",
                         "ok": item.get("status") == "completed"})
             elif method == "thread/tokenUsage/updated":
-                yield Event("usage", data=(params.get("tokenUsage") or {}).get("last", {}))
+                usage = params.get("tokenUsage") or {}
+                total, last = codex_usage(usage.get("total")), codex_usage(usage.get("last"))
+                # The thread's total adds up every turn it ever had; what it held before this turn's first call
+                # is the base the turn's usage is counted from (brain/meter.py).
+                if self._turn_base is None:
+                    self._turn_base = usage_delta(total, last)
+                # Native context accounting, including history, is separate from ledger's last call.
+                yield Event("usage", data={**usage.get("last", {}),
+                    "context_tokens": (usage.get("last") or {}).get("totalTokens", 0),
+                    "context_window": usage.get("modelContextWindow"),
+                    "meter": usage_delta(total, self._turn_base).as_dict()})
             elif method == "turn/started":
                 self.turn = (params.get("turn") or {}).get("id")
+                self._turn_base = None
             elif method == "turn/completed":
                 self._close_steers()
                 turn = params.get("turn") or {}
@@ -509,34 +611,6 @@ class Driver:
                     continue  # Codex retries the turn itself; its outcome still comes as turn/completed
                 yield self._event("error", params.get("error") or "CLI error")
                 return
-
-
-_STATUS_KEYS = frozenset({"httpStatusCode", "http_status_code", "statusCode", "status_code", "status"})
-
-
-def too_many_requests(error):
-    """Whether a CLI's error object carries HTTP 429 or "Too Many Requests" at any depth."""
-    if isinstance(error, dict):
-        return any(key in _STATUS_KEYS and value in (429, "429") or too_many_requests(value) for key, value in error.items())
-    if isinstance(error, list):
-        return any(too_many_requests(value) for value in error)
-    return isinstance(error, str) and "too many requests" in error.lower()
-
-
-def server_overloaded(error):
-    """Whether a CLI's error object says the model is at capacity for now (Codex's `serverOverloaded`)."""
-    if isinstance(error, dict):
-        return any(server_overloaded(key) or server_overloaded(value) for key, value in error.items())
-    if isinstance(error, list):
-        return any(server_overloaded(value) for value in error)
-    return isinstance(error, str) and (error.replace("_", "").casefold() == "serveroverloaded"
-                                       or "at capacity" in error.casefold())
-
-
-def passing_limit(error):
-    """A limit that passes if the turn waits: HTTP 429, or a model at capacity. Live, a Codex turn that resumed a
-    task got "Selected model is at capacity", and the owner was told to check the CLI's login."""
-    return too_many_requests(error) or server_overloaded(error)
 
 
 async def codex_home(workspace, environ, *, owner=None):

@@ -259,3 +259,73 @@ async def test_google_text_only_response_is_a_protocol_failure_without_a_file(tm
         assert not store.root.exists()
     finally:
         await http.aclose()
+
+
+@pytest.mark.parametrize('status,error,expected', [
+    (400, {'code': 'content_policy_violation'}, 'content_policy'),
+    (429, {'code': 'insufficient_quota'}, 'credits'),
+    (429, {}, 'rate_limit'), (401, {}, 'auth'), (500, {}, 'http_error'),
+])
+async def test_avatar_provider_refusals_keep_safe_codes_and_make_one_request(tmp_path, status, error, expected):
+    from raphael_core.services.generation import Generation
+    from raphael_core.services.common import ServiceError
+    requests = []
+    def respond(request):
+        requests.append(request)
+        return httpx.Response(status, json={'error': {**error, 'message': 'secret provider content'}})
+    providers, http = registry([{'reference': '@chosen:picture', 'media': ['image']}], respond)
+    generation = Generation(providers, AttachmentStore(tmp_path))
+    try:
+        with pytest.raises(ServiceError) as caught:
+            await generation.make('image', {'prompt': 'A square avatar', 'square': True}, selected_model='@chosen:picture')
+        assert caught.value.kind == expected and str(caught.value) == expected
+        assert len(requests) == 1
+        assert not generation.store.root.exists()
+    finally:
+        await generation.aclose()
+        await http.aclose()
+
+
+@pytest.mark.parametrize('kind', ['openai', 'google', 'openrouter', 'xai'])
+async def test_avatar_requests_one_square_image_on_each_compatible_provider(kind):
+    from raphael_core.services.generation import Generation
+    from raphael_core.brain.providers.clients import CompatibleProvider
+    encoded = base64.b64encode(PNG).decode()
+    requests = []
+    def respond(request):
+        body = json.loads(request.content)
+        requests.append(body)
+        if kind == 'google':
+            assert body['generationConfig']['imageConfig'] == {'aspectRatio': '1:1'}
+            return httpx.Response(200, json={'candidates': [{'content': {'parts': [{'inlineData': {'mimeType': 'image/png', 'data': encoded}}]}}]})
+        if kind == 'openrouter':
+            assert body['image_config'] == {'aspect_ratio': '1:1'}
+            return httpx.Response(200, json={'choices': [{'message': {'images': [{'image_url': {'url': 'data:image/png;base64,' + encoded}}]}}]})
+        assert body['n'] == 1
+        assert body.get('aspect_ratio') == '1:1' if kind == 'xai' else body['size'] == '1024x1024'
+        return httpx.Response(200, json={'data': [{'b64_json': encoded}]})
+    http = httpx.AsyncClient(transport=httpx.MockTransport(respond))
+    provider = CompatibleProvider(kind, 'https://chosen.example/v1beta/openai' if kind == 'google' else 'https://chosen.example', lambda: 'fake', http=http)
+    try:
+        assert (await Generation(None, None)._image(provider, 'picture', 'Avatar', [], square=True)).data == PNG
+        assert len(requests) == 1
+    finally:
+        await http.aclose()
+
+
+@pytest.mark.parametrize('kind,payload', [
+    ('google', {'promptFeedback': {'blockReason': 'SAFETY'}}),
+    ('google', {'candidates': [{'finishReason': 'IMAGE_SAFETY'}]}),
+    ('openrouter', {'choices': [{'message': {'refusal': 'Provider private refusal'}}]}),
+])
+async def test_success_status_safety_refusals_are_not_protocol_errors(kind, payload):
+    from raphael_core.services.generation import Generation
+    from raphael_core.services.common import ServiceError
+    from raphael_core.brain.providers.clients import CompatibleProvider
+    http = httpx.AsyncClient(transport=httpx.MockTransport(lambda request: httpx.Response(200, json=payload)))
+    provider = CompatibleProvider(kind, 'https://chosen.example/v1beta/openai', lambda: 'fake', http=http)
+    try:
+        with pytest.raises(ServiceError, match='content_policy'):
+            await Generation(None, None)._image(provider, 'picture', 'Avatar', [], square=True)
+    finally:
+        await http.aclose()

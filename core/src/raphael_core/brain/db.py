@@ -6,12 +6,24 @@ use it, so open it on the thread that runs the brain's handlers.
 
 import json
 import sqlite3
+import logging
+import time
 from collections.abc import Callable
 from pathlib import Path
 
 from .mishearing import may_become_rule
 from .room_scope import migrate as _migrate_room_scope
 from .textnorm import replacement_key
+
+logger = logging.getLogger(__name__)
+
+
+def rows_for_turns(conn, table, turn_ids, *, order="rowid"):
+    """Read a projection's rows in bounded batches; identifiers are internal SQL constants."""
+    ids = sorted({int(identifier) for identifier in turn_ids if identifier is not None})
+    for start in range(0, len(ids), 500):
+        chunk = ids[start:start + 500]
+        yield from conn.execute(f"SELECT * FROM {table} WHERE turn_id IN ({','.join('?' for _ in chunk)}) ORDER BY {order}", chunk)
 
 # A migration is one transaction that also sets user_version, so a failure cannot leave half a
 # schema behind with the version still saying "empty". One that has to look at the data is a
@@ -1492,6 +1504,476 @@ PRAGMA user_version = 62;
 COMMIT;
 """
 
+_MIGRATIONS[63] = """
+BEGIN;
+CREATE TABLE vault_entries (
+    id TEXT PRIMARY KEY,
+    kind TEXT NOT NULL CHECK(kind IN ('login','contact','card')),
+    label TEXT NOT NULL,
+    hint TEXT NOT NULL DEFAULT '',
+    origin TEXT NOT NULL DEFAULT '',
+    members TEXT NOT NULL,
+    credential TEXT NOT NULL
+);
+CREATE TABLE computer_payment_holds (target TEXT PRIMARY KEY);
+INSERT INTO vault_entries(id,kind,label,origin,members,credential)
+SELECT reference,'login',origin,origin,json_array(member_id),'computer-login:' || reference FROM computer_logins;
+PRAGMA user_version = 63;
+COMMIT;
+"""
+
+_MIGRATIONS[64] = """
+BEGIN;
+ALTER TABLE room_threads ADD COLUMN parent_message_id INTEGER REFERENCES room_messages(id) ON DELETE SET NULL;
+CREATE UNIQUE INDEX room_thread_parent ON room_threads(parent_message_id) WHERE parent_message_id IS NOT NULL;
+CREATE TABLE message_reactions (
+    turn_id INTEGER NOT NULL REFERENCES agent_turns(id) ON DELETE CASCADE,
+    message_key TEXT NOT NULL,
+    emoji TEXT NOT NULL CHECK(emoji IN ('👍','❤','✓','?')),
+    PRIMARY KEY(turn_id, message_key, emoji)
+);
+CREATE TABLE room_reactions (
+    message_id INTEGER NOT NULL REFERENCES room_messages(id) ON DELETE CASCADE,
+    emoji TEXT NOT NULL CHECK(emoji IN ('👍','❤','✓','?')),
+    PRIMARY KEY(message_id, emoji)
+);
+CREATE TRIGGER clear_message_reactions AFTER DELETE ON agent_turns BEGIN
+    DELETE FROM message_reactions WHERE turn_id=OLD.id;
+END;
+CREATE TRIGGER clear_room_reactions AFTER DELETE ON room_messages BEGIN
+    DELETE FROM room_reactions WHERE message_id=OLD.id;
+    UPDATE room_threads SET parent_message_id=NULL WHERE parent_message_id=OLD.id;
+END;
+ALTER TABLE email_drafts ADD COLUMN kind TEXT NOT NULL DEFAULT 'email' CHECK(kind IN ('email','slack'));
+ALTER TABLE members ADD COLUMN voice_memo INTEGER NOT NULL DEFAULT 0;
+PRAGMA user_version = 64;
+COMMIT;
+"""
+
+_MIGRATIONS[67] = """
+BEGIN;
+CREATE TABLE voice_calls (
+    id TEXT PRIMARY KEY,
+    member_id INTEGER NOT NULL,
+    conversation_id INTEGER NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+    started_at_ms INTEGER NOT NULL,
+    ended_at_ms INTEGER,
+    summary_id INTEGER REFERENCES agent_turns(id) ON DELETE CASCADE,
+    failure TEXT,
+    rating TEXT CHECK(rating IN ('good','bad'))
+);
+CREATE TABLE voice_call_turns (
+    call_id TEXT NOT NULL REFERENCES voice_calls(id) ON DELETE CASCADE,
+    turn_id INTEGER NOT NULL UNIQUE REFERENCES agent_turns(id) ON DELETE CASCADE,
+    PRIMARY KEY(call_id,turn_id)
+);
+CREATE TRIGGER clear_conversation_voice_calls AFTER DELETE ON conversations BEGIN
+    DELETE FROM voice_calls WHERE conversation_id=OLD.id;
+END;
+CREATE TRIGGER clear_voice_call_turns AFTER DELETE ON voice_calls BEGIN
+    DELETE FROM voice_call_turns WHERE call_id=OLD.id;
+END;
+CREATE TRIGGER clear_turn_voice_calls AFTER DELETE ON agent_turns BEGIN
+    DELETE FROM voice_call_turns WHERE turn_id=OLD.id;
+    DELETE FROM voice_calls WHERE summary_id=OLD.id;
+END;
+PRAGMA user_version = 67;
+COMMIT;
+"""
+
+# Each member keeps one standard conversation; the quick conversation is independent.
+_MIGRATIONS[68] = """
+BEGIN;
+CREATE TEMP TABLE conversation_fold AS
+SELECT id AS source_id, member_id,
+       FIRST_VALUE(id) OVER (
+           PARTITION BY member_id ORDER BY is_default DESC, updated_at_ms DESC, id DESC
+       ) AS target_id
+FROM conversations WHERE kind = 'standard';
+
+-- Prefer the target's admission, then the earliest admitted folded request.
+CREATE TEMP TABLE conversation_fold_cancelled AS
+SELECT turn_id FROM (
+    SELECT i.turn_id, ROW_NUMBER() OVER (
+        PARTITION BY i.member_id, f.target_id, i.request_id
+        ORDER BY (f.source_id = f.target_id) DESC, i.turn_id
+    ) AS position
+    FROM agent_inbox i JOIN conversation_fold f ON f.source_id = i.conversation_id
+    WHERE i.state != 'terminal'
+) WHERE position > 1;
+INSERT INTO conversation_fold_cancelled
+SELECT turn_id FROM (
+    SELECT i.turn_id, ROW_NUMBER() OVER (
+        PARTITION BY i.member_id, f.target_id
+        ORDER BY (f.source_id = f.target_id) DESC, i.turn_id
+    ) AS position
+    FROM agent_inbox i JOIN conversation_fold f ON f.source_id = i.conversation_id
+    WHERE i.state = 'started' AND i.turn_id NOT IN (SELECT turn_id FROM conversation_fold_cancelled)
+) WHERE position > 1;
+UPDATE agent_turns SET status = 'denied'
+WHERE id IN (SELECT turn_id FROM conversation_fold_cancelled);
+UPDATE agent_inbox SET state = 'terminal', outcome = 'cancelled',
+    settled_at_ms = CAST(strftime('%s', 'now') AS INTEGER) * 1000
+WHERE turn_id IN (SELECT turn_id FROM conversation_fold_cancelled);
+
+-- Per-conversation sequence numbers overlap; retain admission order in the merged FIFO.
+CREATE TEMP TABLE conversation_fold_sequence AS
+SELECT i.turn_id, ROW_NUMBER() OVER (PARTITION BY i.member_id, f.target_id ORDER BY i.turn_id) AS seq
+FROM agent_inbox i JOIN conversation_fold f ON f.source_id = i.conversation_id
+WHERE f.target_id IN (SELECT target_id FROM conversation_fold WHERE source_id != target_id);
+UPDATE agent_inbox SET seq = (SELECT seq FROM conversation_fold_sequence s WHERE s.turn_id = agent_inbox.turn_id)
+WHERE turn_id IN (SELECT turn_id FROM conversation_fold_sequence);
+
+UPDATE agent_turns SET conversation_id = (SELECT target_id FROM conversation_fold WHERE source_id = conversation_id)
+WHERE conversation_id IN (SELECT source_id FROM conversation_fold WHERE source_id != target_id);
+UPDATE voice_calls SET conversation_id = (SELECT target_id FROM conversation_fold WHERE source_id = conversation_id)
+WHERE conversation_id IN (SELECT source_id FROM conversation_fold WHERE source_id != target_id);
+UPDATE connect_cards SET conversation_id = (SELECT target_id FROM conversation_fold WHERE source_id = conversation_id)
+WHERE conversation_id IN (SELECT source_id FROM conversation_fold WHERE source_id != target_id);
+UPDATE secret_cards SET conversation_id = (SELECT target_id FROM conversation_fold WHERE source_id = conversation_id)
+WHERE conversation_id IN (SELECT source_id FROM conversation_fold WHERE source_id != target_id);
+UPDATE handback_cards SET conversation_id = (SELECT target_id FROM conversation_fold WHERE source_id = conversation_id)
+WHERE conversation_id IN (SELECT source_id FROM conversation_fold WHERE source_id != target_id);
+UPDATE permission_cards SET conversation_id = (SELECT target_id FROM conversation_fold WHERE source_id = conversation_id)
+WHERE conversation_id IN (SELECT source_id FROM conversation_fold WHERE source_id != target_id);
+UPDATE email_drafts SET conversation_id = (SELECT target_id FROM conversation_fold WHERE source_id = conversation_id)
+WHERE conversation_id IN (SELECT source_id FROM conversation_fold WHERE source_id != target_id);
+UPDATE pages SET conversation_id = (SELECT target_id FROM conversation_fold WHERE source_id = conversation_id)
+WHERE conversation_id IN (SELECT source_id FROM conversation_fold WHERE source_id != target_id);
+UPDATE connection_proposals SET conversation_id = (SELECT target_id FROM conversation_fold WHERE source_id = conversation_id)
+WHERE conversation_id IN (SELECT source_id FROM conversation_fold WHERE source_id != target_id);
+UPDATE agent_inbox SET conversation_id = (SELECT target_id FROM conversation_fold WHERE source_id = conversation_id)
+WHERE conversation_id IN (SELECT source_id FROM conversation_fold WHERE source_id != target_id);
+
+DELETE FROM conversation_context_summaries
+WHERE conversation_id IN (SELECT source_id FROM conversation_fold WHERE source_id != target_id);
+DELETE FROM agent_conversation_cli_sessions
+WHERE conversation_id IN (SELECT source_id FROM conversation_fold WHERE source_id != target_id);
+UPDATE conversations SET is_default = 1, updated_at_ms = (
+    SELECT MAX(c.updated_at_ms) FROM conversations c
+    JOIN conversation_fold f ON f.source_id = c.id WHERE f.target_id = conversations.id
+)
+WHERE id IN (SELECT target_id FROM conversation_fold);
+DELETE FROM conversations WHERE id IN (SELECT source_id FROM conversation_fold WHERE source_id != target_id);
+CREATE UNIQUE INDEX one_standard_conversation ON conversations(member_id) WHERE kind = 'standard';
+DROP TABLE conversation_fold_sequence;
+DROP TABLE conversation_fold_cancelled;
+DROP TABLE conversation_fold;
+PRAGMA user_version = 68;
+COMMIT;
+"""
+
+# Keep existing reactions and their parent cleanup semantics; validation belongs to set_reaction.
+_MIGRATIONS[69] = """
+BEGIN;
+DROP TRIGGER clear_message_reactions;
+DROP TRIGGER clear_room_reactions;
+CREATE TABLE message_reactions_v69 (
+    turn_id INTEGER NOT NULL REFERENCES agent_turns(id) ON DELETE CASCADE,
+    message_key TEXT NOT NULL,
+    emoji TEXT NOT NULL,
+    PRIMARY KEY(turn_id, message_key, emoji)
+);
+INSERT INTO message_reactions_v69 SELECT turn_id,message_key,emoji FROM message_reactions;
+DROP TABLE message_reactions;
+ALTER TABLE message_reactions_v69 RENAME TO message_reactions;
+CREATE TABLE room_reactions_v69 (
+    message_id INTEGER NOT NULL REFERENCES room_messages(id) ON DELETE CASCADE,
+    emoji TEXT NOT NULL,
+    PRIMARY KEY(message_id, emoji)
+);
+INSERT INTO room_reactions_v69 SELECT message_id,emoji FROM room_reactions;
+DROP TABLE room_reactions;
+ALTER TABLE room_reactions_v69 RENAME TO room_reactions;
+CREATE TRIGGER clear_message_reactions AFTER DELETE ON agent_turns BEGIN
+    DELETE FROM message_reactions WHERE turn_id=OLD.id;
+END;
+CREATE TRIGGER clear_room_reactions AFTER DELETE ON room_messages BEGIN
+    DELETE FROM room_reactions WHERE message_id=OLD.id;
+    UPDATE room_threads SET parent_message_id=NULL WHERE parent_message_id=OLD.id;
+END;
+PRAGMA user_version = 69;
+COMMIT;
+"""
+
+# Conversation cards retain only nonsecret account links and immutable recipe snapshots.
+_MIGRATIONS[70] = """
+BEGIN;
+DROP TRIGGER clear_secret_cards;
+ALTER TABLE secret_cards RENAME TO secret_cards_previous;
+CREATE TABLE secret_cards (
+    id TEXT PRIMARY KEY,
+    turn_id INTEGER NOT NULL,
+    member_id INTEGER NOT NULL,
+    conversation_id INTEGER,
+    server_id TEXT NOT NULL,
+    kind TEXT NOT NULL CHECK(kind IN ('env','header','login','messaging')),
+    secret TEXT NOT NULL,
+    name TEXT NOT NULL,
+    language TEXT NOT NULL,
+    state TEXT NOT NULL CHECK(state IN ('pending','failed','saved','resuming','resumed','cancelled','expired')),
+    error TEXT NOT NULL DEFAULT '',
+    attempts INTEGER NOT NULL DEFAULT 0,
+    done TEXT NOT NULL DEFAULT '[]',
+    created_at_ms INTEGER NOT NULL,
+    updated_at_ms INTEGER NOT NULL,
+    expires_at_ms INTEGER NOT NULL,
+    resumed_at_ms INTEGER,
+    UNIQUE(turn_id, server_id, kind, secret)
+);
+INSERT INTO secret_cards SELECT * FROM secret_cards_previous;
+DROP TABLE secret_cards_previous;
+CREATE TRIGGER clear_secret_cards AFTER DELETE ON agent_turns BEGIN
+  DELETE FROM secret_cards WHERE turn_id=OLD.id;
+END;
+CREATE TABLE messaging_card_accounts (
+    account TEXT PRIMARY KEY,
+    card_id TEXT NOT NULL REFERENCES secret_cards(id) ON DELETE CASCADE
+);
+CREATE TABLE messaging_pairing_cards (
+    id TEXT PRIMARY KEY,
+    card_id TEXT NOT NULL REFERENCES secret_cards(id) ON DELETE CASCADE,
+    account TEXT NOT NULL,
+    platform TEXT NOT NULL,
+    member_id INTEGER NOT NULL,
+    code TEXT NOT NULL,
+    who TEXT NOT NULL,
+    expires_at_ms INTEGER NOT NULL,
+    state TEXT NOT NULL CHECK(state IN ('pending','approved','rejected','expired'))
+);
+CREATE TABLE member_template_cards (
+    id TEXT PRIMARY KEY,
+    turn_id INTEGER NOT NULL REFERENCES agent_turns(id) ON DELETE CASCADE,
+    member_id INTEGER NOT NULL,
+    template TEXT NOT NULL,
+    findings TEXT NOT NULL,
+    avatar TEXT NOT NULL,
+    state TEXT NOT NULL CHECK(state IN ('draft','saved','published')),
+    url TEXT
+);
+CREATE TRIGGER clear_conversation_cards AFTER DELETE ON agent_turns BEGIN
+    DELETE FROM messaging_pairing_cards WHERE card_id IN (SELECT id FROM secret_cards WHERE turn_id=OLD.id);
+    DELETE FROM messaging_card_accounts WHERE card_id IN (SELECT id FROM secret_cards WHERE turn_id=OLD.id);
+    DELETE FROM member_template_cards WHERE turn_id=OLD.id;
+END;
+CREATE TRIGGER clear_messaging_card_links AFTER DELETE ON secret_cards BEGIN
+    DELETE FROM messaging_card_accounts WHERE card_id=OLD.id;
+    DELETE FROM messaging_pairing_cards WHERE card_id=OLD.id;
+END;
+PRAGMA user_version = 70;
+COMMIT;
+"""
+
+_MIGRATIONS[71] = """
+BEGIN;
+DROP TRIGGER clear_conversation_cards;
+DROP TRIGGER clear_messaging_card_links;
+ALTER TABLE messaging_card_accounts RENAME TO messaging_card_accounts_previous;
+ALTER TABLE messaging_pairing_cards RENAME TO messaging_pairing_cards_previous;
+CREATE TABLE messaging_card_accounts (
+    account TEXT PRIMARY KEY,
+    turn_id INTEGER NOT NULL REFERENCES agent_turns(id) ON DELETE CASCADE
+);
+INSERT INTO messaging_card_accounts
+    SELECT a.account,c.turn_id FROM messaging_card_accounts_previous a JOIN secret_cards c ON c.id=a.card_id;
+CREATE TABLE messaging_pairing_cards (
+    id TEXT PRIMARY KEY,
+    turn_id INTEGER NOT NULL REFERENCES agent_turns(id) ON DELETE CASCADE,
+    account TEXT NOT NULL,
+    platform TEXT NOT NULL,
+    member_id INTEGER NOT NULL,
+    code TEXT NOT NULL,
+    who TEXT NOT NULL,
+    expires_at_ms INTEGER NOT NULL,
+    state TEXT NOT NULL CHECK(state IN ('pending','approved','rejected','expired'))
+);
+INSERT INTO messaging_pairing_cards
+    SELECT p.id,c.turn_id,p.account,p.platform,p.member_id,p.code,p.who,p.expires_at_ms,p.state
+    FROM messaging_pairing_cards_previous p JOIN secret_cards c ON c.id=p.card_id;
+DROP TABLE messaging_card_accounts_previous;
+DROP TABLE messaging_pairing_cards_previous;
+CREATE TRIGGER clear_conversation_cards AFTER DELETE ON agent_turns BEGIN
+    DELETE FROM messaging_pairing_cards WHERE turn_id=OLD.id;
+    DELETE FROM messaging_card_accounts WHERE turn_id=OLD.id;
+    DELETE FROM member_template_cards WHERE turn_id=OLD.id;
+END;
+PRAGMA user_version = 71;
+COMMIT;
+"""
+
+# Gold YES/NO confirmations use the same durable decisions without duplicating the window card.
+_MIGRATIONS[72] = """
+BEGIN;
+ALTER TABLE permission_cards ADD COLUMN context_only INTEGER NOT NULL DEFAULT 0 CHECK(context_only IN (0,1));
+PRAGMA user_version = 72;
+COMMIT;
+"""
+
+# Private tool transcripts and one persistent recall index.
+_MIGRATIONS[73] = """
+BEGIN;
+CREATE TABLE turn_tool_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    turn_id INTEGER NOT NULL REFERENCES agent_turns(id) ON DELETE CASCADE,
+    call_id TEXT NOT NULL,
+    tool TEXT NOT NULL,
+    redacted_args TEXT NOT NULL,
+    redacted_result TEXT NOT NULL,
+    outcome TEXT NOT NULL,
+    external INTEGER NOT NULL DEFAULT 0 CHECK(external IN (0,1)),
+    created_at_ms INTEGER NOT NULL,
+    UNIQUE(turn_id,call_id)
+);
+CREATE INDEX turn_tool_events_by_turn ON turn_tool_events(turn_id,id);
+CREATE TRIGGER clear_turn_tool_events AFTER DELETE ON agent_turns BEGIN
+    DELETE FROM turn_tool_events WHERE turn_id=OLD.id;
+END;
+CREATE TABLE memory_search_documents (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    kind TEXT NOT NULL CHECK(kind IN ('log','room')),
+    source_key TEXT NOT NULL,
+    member_id INTEGER NOT NULL DEFAULT -1,
+    room_id INTEGER,
+    body TEXT NOT NULL,
+    updated_at_ms INTEGER NOT NULL,
+    UNIQUE(kind,source_key,member_id)
+);
+CREATE INDEX memory_search_documents_by_owner ON memory_search_documents(member_id,kind);
+CREATE TRIGGER memory_document_insert AFTER INSERT ON memory_search_documents BEGIN
+    INSERT INTO agent_turns_fts(rowid,pairs,chars)
+        VALUES(-NEW.id,raphael_search_pairs(NEW.body),raphael_search_chars(NEW.body));
+END;
+CREATE TRIGGER memory_document_update AFTER UPDATE ON memory_search_documents BEGIN
+    DELETE FROM agent_turns_fts WHERE rowid=-OLD.id;
+    INSERT INTO agent_turns_fts(rowid,pairs,chars)
+        VALUES(-NEW.id,raphael_search_pairs(NEW.body),raphael_search_chars(NEW.body));
+END;
+CREATE TRIGGER memory_document_delete AFTER DELETE ON memory_search_documents BEGIN
+    DELETE FROM agent_turns_fts WHERE rowid=-OLD.id;
+END;
+CREATE TRIGGER memory_room_insert AFTER INSERT ON room_messages BEGIN
+    INSERT INTO memory_search_documents(kind,source_key,room_id,body,updated_at_ms)
+        VALUES('room',CAST(NEW.id AS TEXT),NEW.room_id,NEW.text,NEW.created);
+END;
+CREATE TRIGGER memory_room_update AFTER UPDATE OF text,room_id,created ON room_messages BEGIN
+    UPDATE memory_search_documents SET body=NEW.text,room_id=NEW.room_id,updated_at_ms=NEW.created
+        WHERE kind='room' AND source_key=CAST(NEW.id AS TEXT);
+END;
+CREATE TRIGGER memory_room_delete AFTER DELETE ON room_messages BEGIN
+    DELETE FROM memory_search_documents WHERE kind='room' AND source_key=CAST(OLD.id AS TEXT);
+END;
+INSERT INTO memory_search_documents(kind,source_key,room_id,body,updated_at_ms)
+    SELECT 'room',CAST(id AS TEXT),room_id,text,created FROM room_messages;
+CREATE TABLE memory_entry_metadata (
+    scope TEXT NOT NULL,
+    entry_id TEXT NOT NULL,
+    until_date TEXT,
+    created_at_ms INTEGER NOT NULL,
+    last_recalled_at_ms INTEGER,
+    PRIMARY KEY(scope,entry_id)
+);
+PRAGMA user_version = 73;
+COMMIT;
+"""
+
+# Public turn failure metadata is nullable for all existing rows.
+_MIGRATIONS[74] = """
+BEGIN;
+ALTER TABLE agent_turns ADD COLUMN failure TEXT;
+PRAGMA user_version = 74;
+COMMIT;
+"""
+
+# A work hand-off's reply to whoever handed it over (background/handback.py), kept apart from the
+# report the owner reads in the worker's own conversation. Existing rows have none.
+_MIGRATIONS[75] = """
+BEGIN;
+ALTER TABLE worker_tasks ADD COLUMN handback TEXT;
+PRAGMA user_version = 75;
+COMMIT;
+"""
+
+# Every model call's exact usage (brain/meter.py), internal only: what kind of work it was, whether it was billed
+# to an API key or a subscription, the input the provider's cache read and wrote (five-minute and one-hour
+# writes apart), the reasoning part of the output, the cost the provider reported, and the member. Rows written
+# before have zeros and nulls: their split was never known.
+_MIGRATIONS[76] = """
+BEGIN;
+ALTER TABLE spend ADD COLUMN job TEXT;
+ALTER TABLE spend ADD COLUMN billing TEXT;
+ALTER TABLE spend ADD COLUMN cache_read_tokens INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE spend ADD COLUMN cache_write_tokens INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE spend ADD COLUMN cache_write_long_tokens INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE spend ADD COLUMN reasoning_tokens INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE spend ADD COLUMN reported_cost_usd REAL;
+ALTER TABLE spend ADD COLUMN member_id INTEGER;
+PRAGMA user_version = 76;
+COMMIT;
+"""
+
+# History and member activity must not read every task's large report on each lookup.
+_MIGRATIONS[77] = """
+BEGIN;
+CREATE INDEX worker_tasks_source_handoff ON worker_tasks(source_turn_id) WHERE mode IS NOT NULL;
+CREATE INDEX worker_tasks_member_state ON worker_tasks(member_id, state);
+CREATE INDEX worker_tasks_turn ON worker_tasks(turn_id);
+CREATE INDEX worker_tasks_room_handoff ON worker_tasks(COALESCE(report_room_id,room_id), COALESCE(report_thread_id,thread_id)) WHERE mode IS NOT NULL;
+PRAGMA user_version = 77;
+COMMIT;
+"""
+
+# Home counts completion metadata without visiting large task/turn report pages.
+_MIGRATIONS[78] = """
+BEGIN;
+CREATE INDEX routine_runs_turn ON routine_runs(turn_id);
+CREATE INDEX routine_runs_home_finished ON routine_runs(status,finished,turn_id,routine_id);
+CREATE INDEX worker_tasks_home_finished ON worker_tasks(state,finished_at_ms,member_id,turn_id);
+CREATE INDEX agent_turns_home_status ON agent_turns(status,source,created_at_ms,member_id);
+PRAGMA user_version = 78;
+COMMIT;
+"""
+
+# One native CLI session for each member and room thread (background/cli.py `RoomCliSessions`): a CLI member that speaks
+# in a room goes on in its own session and is sent only what is new, where each reply used to start a session and read
+# the messages after the member's cursor. `state` is the session's delivery cursor (agent/cli/context.py). The rolling
+# summary of a room thread (members/room_summary.py) is what a renewed session is given of the messages it no longer
+# holds. Both go with their room, their thread and their member.
+_MIGRATIONS[79] = """
+BEGIN;
+CREATE TABLE room_cli_sessions (
+    room_id INTEGER NOT NULL,
+    thread_id INTEGER NOT NULL,
+    member_id INTEGER NOT NULL,
+    brain TEXT NOT NULL,
+    session_id TEXT NOT NULL,
+    state TEXT,
+    updated_at_ms INTEGER NOT NULL,
+    PRIMARY KEY(room_id, thread_id, member_id, brain)
+);
+CREATE TABLE room_thread_summaries (
+    room_id INTEGER NOT NULL,
+    thread_id INTEGER NOT NULL,
+    text TEXT NOT NULL,
+    through_message_id INTEGER NOT NULL,
+    updated_at_ms INTEGER NOT NULL,
+    PRIMARY KEY(room_id, thread_id)
+);
+CREATE INDEX room_cli_sessions_member ON room_cli_sessions(member_id);
+CREATE TRIGGER room_sessions_with_room AFTER DELETE ON rooms BEGIN
+    DELETE FROM room_cli_sessions WHERE room_id=OLD.id;
+    DELETE FROM room_thread_summaries WHERE room_id=OLD.id;
+END;
+CREATE TRIGGER room_sessions_with_thread AFTER DELETE ON room_threads BEGIN
+    DELETE FROM room_cli_sessions WHERE thread_id=OLD.id;
+    DELETE FROM room_thread_summaries WHERE thread_id=OLD.id;
+END;
+CREATE TRIGGER room_sessions_with_member AFTER DELETE ON members BEGIN
+    DELETE FROM room_cli_sessions WHERE member_id=OLD.id;
+END;
+PRAGMA user_version = 79;
+COMMIT;
+"""
+
 LATEST_VERSION = max(_MIGRATIONS)
 
 
@@ -1517,9 +1999,13 @@ def migrate(conn: sqlite3.Connection) -> None:
     A database that is already current is left alone, so reopening a file is safe. Each migration
     is its own transaction: one that fails leaves the database at the version before it.
     """
+    from ..memory.terms import index_terms
+    conn.create_function("raphael_search_pairs", 1, lambda text: index_terms(text or "", "", "").pairs, deterministic=True)
+    conn.create_function("raphael_search_chars", 1, lambda text: index_terms(text or "", "", "").chars, deterministic=True)
     (version,) = conn.execute("PRAGMA user_version").fetchone()
     for target in sorted(target for target in _MIGRATIONS if version < target <= LATEST_VERSION):
         step = _MIGRATIONS[target]
+        began = time.perf_counter()
         try:
             if callable(step):
                 step(conn)
@@ -1528,3 +2014,4 @@ def migrate(conn: sqlite3.Connection) -> None:
         except BaseException:
             conn.rollback()  # a failed statement leaves the script's transaction open
             raise
+        logger.info("Startup migration=%d elapsed_ms=%.1f", target, (time.perf_counter() - began) * 1000)

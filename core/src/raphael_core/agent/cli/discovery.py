@@ -5,17 +5,20 @@ import os
 import re
 import shutil
 import subprocess
+import threading
+import time
 from pathlib import Path
 
 from .process import Child, subscription_env
 from .models import claude_cli_models, claude_models, codex_models, antigravity_models
+from ...brain.model_ref import CLI_NAMES as NAMES
 
 # "gemini" is Google's Antigravity CLI (`agy`), which replaced Gemini CLI.
-NAMES = {"claude": "Claude Code", "codex": "Codex CLI", "gemini": "Antigravity"}
 LOGIN = {"claude": "claude auth login", "codex": "codex login", "gemini": "agy"}
 EXECUTABLE = {"claude": "claude", "codex": "codex", "gemini": "agy"}
 # The CLIs asked for their models in the background.
 MODEL_LISTS = ("claude", "codex", "gemini")
+DISCOVERY_TTL_S = 60
 
 
 def brain_ref(value):
@@ -55,12 +58,14 @@ def resolve_command(path, environ=None):
 
 
 class CliBrains:
-    def __init__(self, *, home=None, environ=None, commands=None, notify=None, settings=None):
+    def __init__(self, *, home=None, environ=None, commands=None, notify=None, settings=None, clock=time.monotonic):
         self.home = Path.home() if home is None else Path(home)
         self.environ = dict(os.environ if environ is None else environ)
         self.commands = commands
         self.notify = notify
         self.settings = settings
+        # The window of each model (`cli:<brain>:<model>`) its CLI last reported, for the next loop of it (loop.py).
+        self.context_windows = {}
         self._disconnected = set()
         self._previous = None
         self._lock = asyncio.Lock()
@@ -69,8 +74,31 @@ class CliBrains:
         self._models = {}
         self._model_refresh = None
         self._models_at = {}
+        self._clock = clock
+        self._commands_cache = {}
+        self._versions = {}
+        self._discovery_generation = {}
+        self._command_lock = threading.RLock()
 
     def command(self, name):
+        # Cache misses too: an uninstalled CLI must not rescan all roots on every Home read.
+        with self._command_lock:
+            cached = self._commands_cache.get(name)
+            if cached and self._clock() < cached[0]:
+                return list(cached[1]) if cached[1] is not None else None
+            command = self._find_command(name)
+            self._commands_cache[name] = (self._clock() + DISCOVERY_TTL_S, tuple(command) if command else None)
+            return list(command) if command else None
+
+    def invalidate(self, name=None):
+        """Forget executable/version discovery after an app-controlled install, login or removal."""
+        with self._command_lock:
+            for identifier in (NAMES if name is None else (name,)):
+                self._commands_cache.pop(identifier, None)
+                self._versions.pop(identifier, None)
+                self._discovery_generation[identifier] = self._discovery_generation.get(identifier, 0) + 1
+
+    def _find_command(self, name):
         if self.commands is not None:
             return self.commands.get(name)
         executable = EXECUTABLE.get(name, name)
@@ -168,28 +196,40 @@ class CliBrains:
         return entry.get("effort_models", {}).get(chosen) or f"{base}?effort={chosen}"
 
     async def _one(self, name):
-        command = self.command(name)
+        command = await asyncio.to_thread(self.command, name)
         logged_in = self.logged_in(name) if command else False
         disconnected = self.disconnected(name)
-        available = self.available(name, command=command, logged_in=logged_in)
+        available = cli_available(command, logged_in, disconnected)
         models = self._known_models(name) if available else []
         item = {"id": name, "name": NAMES[name], "installed": bool(command),
                 "logged_in": logged_in, "disconnected": disconnected, "available": available,
                 "login_command": LOGIN[name], "models": models}
         if command:
-            child = Child([*command, "--version"], environ=self.environ)
-            try:
-                async with asyncio.timeout(2):
-                    await child.start()
-                    line = await child.process.stdout.readline()
-                    await child.process.wait()
-                if child.process.returncode == 0:
-                    item["version"] = " ".join(line.decode("utf-8", errors="replace").split())[:120]
-            except (OSError, ValueError, TimeoutError):
-                item["notes"] = "Version check unavailable"
-            finally:
-                await child.kill()
+            cached = self._versions.get(name)
+            if cached and self._clock() < cached[0] and cached[1] == tuple(command):
+                version = cached[2]
+            else:
+                generation = self._discovery_generation.get(name, 0)
+                version = await self._read_version(name, command)
+                if generation == self._discovery_generation.get(name, 0):
+                    self._versions[name] = (self._clock() + DISCOVERY_TTL_S, tuple(command), version)
+            item.update(version)
         return item
+
+    async def _read_version(self, name, command):
+        child = Child([*command, "--version"], environ=self.environ)
+        try:
+            async with asyncio.timeout(2):
+                await child.start()
+                line = await child.process.stdout.readline()
+                await child.process.wait()
+            if child.process.returncode == 0:
+                return {"version": " ".join(line.decode("utf-8", errors="replace").split())[:120]}
+        except (OSError, ValueError, TimeoutError):
+            return {"notes": "Version check unavailable"}
+        finally:
+            await child.kill()
+        return {}
 
     async def list(self, _params=None):
         self._last_used = asyncio.get_running_loop().time()
@@ -209,7 +249,7 @@ class CliBrains:
         return name not in self._models_at or self._last_used - self._models_at[name] > lifetime
 
     async def _refresh_one(self, name):
-        command = self.command(name)
+        command = await asyncio.to_thread(self.command, name)
         if not self._needs_models(name) or not self.available(name, command=command):
             return
         try:
@@ -257,6 +297,7 @@ class CliBrains:
             path.unlink(missing_ok=True)
 
     def disconnect(self, name):
+        self.invalidate(name)
         self._set_disconnected(name, True)
         self._purge_raphael_credentials(name)
         self._previous = None
@@ -267,6 +308,7 @@ class CliBrains:
     def login(self, name):
         if name not in NAMES:
             raise ValueError("cli_unknown")
+        self.invalidate(name)
         command = self.command(name)
         if not command:
             raise ValueError("cli_missing")

@@ -32,10 +32,10 @@ test("an outside press closes a menu first and never also closes its dialog", ()
   expect(dialog.el.isConnected).toBe(false);
 });
 
-test("a press on the page behind closes only the top dialog and restores focus", () => {
+test("a press on the scrim of the top dialog closes only that dialog and restores focus", () => {
   const lower = open(), input = lower.el.querySelector<HTMLInputElement>("input")!; input.focus();
   const upper = open();
-  press(document.body);
+  press(upper.el.parentElement!);
   expect(upper.el.isConnected).toBe(false); expect(lower.el.isConnected).toBe(true);
   expect(document.activeElement).toBe(input);
 });
@@ -62,7 +62,7 @@ test("a cancelled pointer gesture never dismisses the dialog", () => {
   expect(dialog.el.isConnected).toBe(true);
 });
 
-test("releasing an outside press dismisses immediately and consumes the following background click", () => {
+test("releasing an outside press dismisses immediately and the following click reaches the control once", () => {
   const background = document.createElement("button"), action = vi.fn();
   document.body.append(background); background.addEventListener("click", action);
   const dialog = open();
@@ -70,5 +70,5 @@ test("releasing an outside press dismisses immediately and consumes the followin
   background.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, button: 0, pointerId: 1, isPrimary: true }));
   expect(dialog.el.isConnected).toBe(false);
   background.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, detail: 1 }));
-  expect(action).not.toHaveBeenCalled();
+  expect(action).toHaveBeenCalledTimes(1);
 });

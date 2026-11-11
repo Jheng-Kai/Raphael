@@ -4,7 +4,8 @@ import json
 import asyncio
 from dataclasses import replace
 
-import httpx
+from urllib.parse import urlsplit
+
 import pytest
 
 from raphael_core.agent.cli.drivers import Event
@@ -24,7 +25,30 @@ from test_guardian import FakeBrains, FakeClient as GuardianFakeClient
 HANG_GUARD_S = 60
 
 
+async def mcp_call(endpoint, token, name, arguments, *, request_id=1):
+    """A fake CLI's tools/call to the turn's MCP, on a connection closed whatever happens. With httpx, a turn the
+    scenario cancelled while connecting left a socket open: anyio's connect_tcp drops one cancelled at that moment."""
+    address = urlsplit(endpoint)
+    body = json.dumps({"jsonrpc": "2.0", "id": request_id, "method": "tools/call",
+                       "params": {"name": name, "arguments": arguments}}, ensure_ascii=False).encode()
+    reader, writer = await asyncio.open_connection(address.hostname, address.port)
+    try:
+        writer.write((f"POST {address.path} HTTP/1.1\r\nHost: {address.netloc}\r\nAuthorization: Bearer {token}\r\n"
+                      f"Content-Type: application/json\r\nContent-Length: {len(body)}\r\n\r\n").encode() + body)
+        await writer.drain()
+        _, _, payload = (await reader.read()).partition(b"\r\n\r\n")
+    finally:
+        writer.close()
+    return json.loads(payload)
+
+
 class FakeClient(GuardianFakeClient):
+    async def complete_json(self, **kwargs):
+        from raphael_core.brain.openrouter import Completion
+        from test_chat_setup_share import public_recipe
+        assert kwargs["schema_name"] == "public_member_template" and kwargs["fallbacks"] == []
+        return Completion(public_recipe(), kwargs["model"], .001, 10, 10, 1)
+
     async def decide(self, **kwargs):
         from raphael_core.brain.openrouter import Decision
         return Decision(answers={key: {"type": "noul", "noul": 0.0} for key in kwargs["questions"]},
@@ -53,18 +77,24 @@ async def test_p03_immediate_start_uses_production_rpc_worker_and_mcp(tmp_path,m
     from raphael_core.background.host import WorkerHost
     from background.conftest import Links
     model='cli:codex:owner-model?effort=high' if brain=='cli' else 'fake/model'
+    def already_assigned(user):
+        # Report delivery wakes participants with the owner's old instruction still in context.
+        _, marker, public = user.rpartition('Status board and pinned decisions (untrusted data): ')
+        board = json.JSONDecoder().raw_decode(public.lstrip())[0]['board'] if marker else []
+        return any(item['stage_id']=='mail-triage' and item['member_id']==2 for item in board)
     class Client(FakeClient):
         async def chat_tools(self,**kwargs):
             messages=kwargs['messages']
-            child='Acceptance criteria' in messages[0]['content']
+            child='Acceptance criteria' in messages[1]['content']  # what the work must deliver comes with the task
             from test_p14_scenarios import asked
             speech = 'You are speaking in a meeting' in messages[0]['content']
             if child:
-                calls=[] if any(m['role']=='tool' for m in messages) else [('Guardian__read',{})]
+                calls=[] if any(m['role']=='tool' for m in messages) else [('use_tool',{'name':'Guardian__read','arguments':{}})]
             elif speech and 'handoff 立即交給' not in asked(str(messages[-1]['content'])):
                 calls=[]
             else:
-                calls=[] if any(m['role']=='tool' for m in messages) or 'handoff_results' in str(messages) or 'where this has landed' in messages[0]['content'] or 'where this has landed' in str(messages) else [('handoff',arguments())]
+                context='\n'.join(str(message.get('content') or '') for message in messages[1:])
+                calls=[] if any(m['role']=='tool' for m in messages) or 'handoff_results' in str(messages) or 'where this has landed' in messages[0]['content'] or 'where this has landed' in str(messages) or already_assigned(context) else [('handoff',arguments())]
             self.turns=iter([('已讀取信件。'+driver.nonce if not calls else '',calls)])
             return await super().chat_tools(**kwargs)
     def arguments():
@@ -75,20 +105,15 @@ async def test_p03_immediate_start_uses_production_rpc_worker_and_mcp(tmp_path,m
             pass
         async def run(self,*,endpoint,token,system,user,**kwargs):
             yield Event('model','owner-model')
-            if 'Return only your speak choice' in system:
-                yield Event('final','{"speak":false,"urgency":0}')
-                return
             from test_p14_scenarios import asked
-            child='Acceptance criteria' in system
+            child='Acceptance criteria' in user
             if 'You are speaking in a meeting' in system and 'handoff 立即交給' not in asked(user):
                 yield Event('final','已核對目前狀態。')
                 return
-            if child or ('Delegated work results' not in user and 'where this has landed' not in user):
-                async with httpx.AsyncClient() as http:
-                    response=await http.post(endpoint,headers={'Authorization':'Bearer '+token},json={
-                        'jsonrpc':'2.0','id':1,'method':'tools/call','params':{
-                            'name':'Guardian__read' if child else 'handoff','arguments':{} if child else arguments()}})
-                    assert not response.json()['result']['isError'],response.text
+            if child or ('Delegated work results' not in user and 'where this has landed' not in user and not already_assigned(user)):
+                result=await mcp_call(endpoint,token,'use_tool' if child else 'handoff',
+                    {'name':'Guardian__read','arguments':{}} if child else arguments())
+                assert not result['result']['isError'],result
             yield Event('final','已讀取信件。'+driver.nonce)
         async def interrupt(self):
             pass
@@ -118,15 +143,15 @@ async def test_a_primary_contact_that_does_not_dispatch_what_it_is_given_fails_s
     # reading the mail, or sending the work round by Raphael, is not the primary dispatching.
     from raphael_core.background.host import WorkerHost
     from background.conftest import Links
-    read=('Guardian__read',{})
+    read=('use_tool',{'name':'Guardian__read','arguments':{}})  # a connection's tool: found, not listed (decision 2)
     def handoff(member):
         return ('handoff',{'member_id':member,'request':'Use Guardian to read the test mail now.','stage_id':'mail-triage',
                            'done_when':'Read the test mail and report its nonce.'})
     class Client(FakeClient):
         async def chat_tools(self,**kwargs):
             messages=kwargs['messages']
-            system=messages[0]['content']
-            me=json.loads(system.split('<team_roster>')[-1].split('</team_roster>')[0])['self_id']
+            # The team comes with the first message, after the rules.
+            me=json.loads(str(messages[1]['content']).split('<team_roster>')[-1].split('</team_roster>')[0])['self_id']
             done=any(m['role']=='tool' for m in messages)
             calls=[]
             if not done and me==1:
@@ -153,7 +178,7 @@ async def test_room_work_done_without_a_handoff_fails_at_once(tmp_path):
     class Client(FakeClient):
         async def chat_tools(self,**kwargs):
             messages=kwargs['messages']
-            calls=[] if any(m['role']=='tool' for m in messages) or 'where this has landed' in str(messages) else [('Guardian__read',{})]
+            calls=[] if any(m['role']=='tool' for m in messages) or 'where this has landed' in str(messages) else [('use_tool',{'name':'Guardian__read','arguments':{}})]
             self.turns=iter([('已讀取信件。' if not calls else '',calls)])
             return await super().chat_tools(**kwargs)
     driver=RpcDriver(tmp_path,'fake/model',Client([]),Budget(40))
@@ -167,21 +192,25 @@ async def test_room_work_done_without_a_handoff_fails_at_once(tmp_path):
 
 @pytest.mark.parametrize("brain", ["A", "C"])
 async def test_s01_edits_cancels_and_applies_once_on_both_production_brains(tmp_path, monkeypatch, brain):
-    calls = [("group_create", {"name": "驗證團隊"}), *[("member_create", {
+    # Management is found, not listed (decision 2): both brains call it through use_tool.
+    calls = [("use_tool", {"name": "group_create", "arguments": {"name": "驗證團隊"}}), *[("use_tool", {"name": "member_create", "arguments": {
         "name": name, "role": name, "instructions": "Review evidence for " + name, "group": "驗證團隊"
-    }) for name in ("行銷", "信件助理", "HiKari", "PM", "RD")]]
+    }}) for name in ("行銷", "信件助理", "HiKari", "PM", "RD")]]
     # The last reply is the turn going on after the owner's yes to the second draft.
     client = FakeClient([("", calls), ("等待確認。", []), ("", calls), ("等待確認。", []), ("團隊已建立。", [])])
     if brain == "C":
         from raphael_core.agent.cli.drivers import Driver
 
         async def run(driver, **kwargs):
+            # A new member's greeting is offered no tools, as the real CLI is.
+            if kwargs.get("no_tools"):
+                yield Event("model", "test-model")
+                yield Event("final", "你好，我準備好了。")
+                return
             if "team_changes" not in kwargs["user"]:
-                async with httpx.AsyncClient(headers={"Authorization": "Bearer " + kwargs["token"]}, trust_env=False) as http:
-                    for index, (name, arguments) in enumerate(calls):
-                        response = await http.post(kwargs["endpoint"], json={"jsonrpc": "2.0", "id": index,
-                            "method": "tools/call", "params": {"name": name, "arguments": arguments}})
-                        assert not response.json()["result"]["isError"]
+                for index, (name, arguments) in enumerate(calls):
+                    result = await mcp_call(kwargs["endpoint"], kwargs["token"], name, arguments, request_id=index)
+                    assert not result["result"]["isError"]
             yield Event("model", "test-model")
             yield Event("final", "團隊已建立。" if "team_changes" in kwargs["user"] else "等待確認。")
         monkeypatch.setattr(Driver, "run", run)
@@ -321,7 +350,9 @@ async def test_rpc_driver_uses_real_routine_mutation_and_readback(tmp_path, oper
         args["schedule"] = {"kind": "daily", "time": "09:00"}
     if operation in ("pause", "resume"):
         args["enabled"] = operation == "resume"
-    client.turns = iter([("", [(tool, args)]), ("已完成。" if operation != "list" else "驗證寫作" + driver.nonce, [])])
+    said = "已完成。" if operation != "list" else "驗證寫作" + driver.nonce
+    # A delete is asked on a card: the turn ends with the proposal, and goes on, with the model's word, after the yes.
+    client.turns = iter([("", [(tool, args)]), (said, []), *([(said, [])] if operation == "delete" else [])])
     try:
         reasons, turns = await driver.execute(selected("S21.routines." + operation))
         assert not reasons, (reasons, turns)
@@ -334,7 +365,7 @@ async def test_rpc_driver_uses_real_routine_mutation_and_readback(tmp_path, oper
 
 @pytest.mark.parametrize("kind", ["missing-connection", "missing-permission"])
 async def test_failure_honesty_checks_observed_failure_and_owner_reply(tmp_path, kind):
-    client = FakeClient([("", [("Guardian__read", {})]), ("需要重新登入並授予讀取權限。", [])])
+    client = FakeClient([("", [("use_tool", {"name": "Guardian__read", "arguments": {}})]), ("需要重新登入並授予讀取權限。", [])])
     driver = RpcDriver(tmp_path, "fake/model", client, Budget(20))
     try:
         reasons, _ = await driver.execute(selected("S17." + kind))
@@ -347,7 +378,7 @@ async def test_failure_honesty_checks_observed_failure_and_owner_reply(tmp_path,
 
 @pytest.mark.parametrize("approved", [True, False])
 async def test_recording_executor_is_after_real_approval_gate(tmp_path, approved):
-    client = FakeClient([("", [("Guardian__write", {})]), ("已完成。", [])])
+    client = FakeClient([("", [("use_tool", {"name": "Guardian__write", "arguments": {}})]), ("已完成。", [])])
     driver = RpcDriver(tmp_path, "fake/model", client, Budget(20))
     try:
         await driver.install_fixture(write=True)
@@ -366,7 +397,7 @@ async def test_recording_executor_is_after_real_approval_gate(tmp_path, approved
 
 
 async def test_expired_owner_approval_has_zero_recording_receipts(tmp_path):
-    client = FakeClient([("", [("Guardian__write", {})])])
+    client = FakeClient([("", [("use_tool", {"name": "Guardian__write", "arguments": {}})])])
     driver = RpcDriver(tmp_path, "fake/model", client, Budget(20))
     clock = [0.0]
     driver.app.agent._confirmations._clock = lambda: clock[0]
@@ -382,7 +413,7 @@ async def test_expired_owner_approval_has_zero_recording_receipts(tmp_path):
         await driver.aclose()
 
 
-@pytest.mark.parametrize("text,calls", [("需要重新登入並授予讀取權限。", []), ("已完成。", [("Guardian__read", {})])])
+@pytest.mark.parametrize("text,calls", [("需要重新登入並授予讀取權限。", []), ("已完成。", [("use_tool", {"name": "Guardian__read", "arguments": {}})])])
 async def test_failure_honesty_needs_a_real_failed_call_and_no_false_completion(tmp_path, text, calls):
     client = FakeClient([("", calls), (text, [])] if calls else [(text, [])])
     driver = RpcDriver(tmp_path, "fake/model", client, Budget(20))
@@ -396,7 +427,7 @@ async def test_failure_honesty_needs_a_real_failed_call_and_no_false_completion(
 async def test_report_keeps_verified_schema_and_redacts_provider_errors(tmp_path):
     registry = await inventory()
     result = await run_cell(selected("S17.missing-connection"), "A", "fake/model", tmp_path / "good",
-                            client=FakeClient([("", [("Guardian__read", {})]), ("需要重新登入並授予讀取權限。", [])]),
+                            client=FakeClient([("", [("use_tool", {"name": "Guardian__read", "arguments": {}})]), ("需要重新登入並授予讀取權限。", [])]),
                             brains=None, budget=Budget(20), seconds=3, run_id="run", head="head", registry=registry)
     assert result["status"] == "PASS", result
     assert result["actual_model"] == "fake/model" and result["evidence_paths"]
@@ -414,7 +445,7 @@ async def test_report_keeps_verified_schema_and_redacts_provider_errors(tmp_path
 
 async def test_mid_turn_budget_exhaustion_is_skip_and_retains_trace(tmp_path):
     result = await run_cell(selected("S17.missing-connection"), "A", "fake/model", tmp_path,
-                            client=FakeClient([("", [("Guardian__read", {})])]), brains=None,
+                            client=FakeClient([("", [("use_tool", {"name": "Guardian__read", "arguments": {}})])]), brains=None,
                             budget=Budget(1), seconds=3, run_id="run", head="head", registry=await inventory())
     assert result["status"] == "SKIP" and result["reason"] == "total_turn_cap"
     assert result["tools"][0]["outcome"] == "auth" and not result["tools"][0]["assertions"]
@@ -439,7 +470,7 @@ async def test_unknown_api_cost_is_null_instead_of_fake_zero(tmp_path):
             turn.usage_known = False
             return turn
     result = await run_cell(selected("S17.missing-connection"), "A", "fake/model", tmp_path,
-                            client=UnknownCostClient([("", [("Guardian__read", {})]), ("需要重新登入並授予讀取權限。", [])]),
+                            client=UnknownCostClient([("", [("use_tool", {"name": "Guardian__read", "arguments": {}})]), ("需要重新登入並授予讀取權限。", [])]),
                             brains=None, budget=Budget(20), seconds=3, run_id="run", head="head", registry=await inventory())
     assert result["status"] == "PASS"
     assert result["cost"]["amount"] is None and result["cost"]["source"] == "unavailable"
@@ -531,12 +562,9 @@ async def test_rpc_cli_brain_reaches_the_production_authenticated_mcp(tmp_path, 
 
         async def run(self, *, endpoint, token, **kwargs):
             yield Event("model", "owner-model")
-            async with httpx.AsyncClient() as http:
-                response = await http.post(endpoint, headers={"Authorization": "Bearer " + token},
-                    json={"jsonrpc": "2.0", "id": 1, "method": "tools/call",
-                          "params": {"name": "routine_create", "arguments": {
-                              "title": title, "prompt": "練習寫作", "schedule": {"kind": "daily", "time": "08:00"}}}})
-                assert not response.json()["result"]["isError"]
+            result = await mcp_call(endpoint, token, "routine_create", {
+                "title": title, "prompt": "練習寫作", "schedule": {"kind": "daily", "time": "08:00"}})
+            assert not result["result"]["isError"]
             yield Event("final", "已建立例行任務。")
 
         async def interrupt(self):
@@ -586,11 +614,9 @@ async def test_the_real_app_wires_the_calendar_to_a_cli_brain_and_to_home(tmp_pa
 
         async def run(self, *, endpoint, token, **kwargs):
             yield Event("model", "owner-model")
-            async with httpx.AsyncClient() as http:
-                response = await http.post(endpoint, headers={"Authorization": "Bearer " + token},
-                    json={"jsonrpc": "2.0", "id": 1, "method": "tools/call",
-                          "params": {"name": "calendar_add", "arguments": {"title": title, "start": datetime.now().strftime("%Y-%m-%dT15:00")}}})
-                assert not response.json()["result"]["isError"]
+            result = await mcp_call(endpoint, token, "calendar_add",
+                                    {"title": title, "start": datetime.now().strftime("%Y-%m-%dT15:00")})
+            assert not result["result"]["isError"]
             yield Event("final", "已加到今天的行程。")
 
         async def interrupt(self):
@@ -630,7 +656,7 @@ async def test_a_stop_cell_without_its_held_call_fails_at_once(tmp_path,calls,re
             else:
                 call = not any(m['role']=='tool' for m in messages) and len(made)<calls
                 made.extend([1] if call else [])
-                tools = [('Guardian__read',{})] if call else []
+                tools = [('use_tool',{'name':'Guardian__read','arguments':{}})] if call else []
             self.turns=iter([('' if tools else '好了。',tools)])
             return await super().chat_tools(**kwargs)
     driver=RpcDriver(tmp_path,'fake/model',Client([]),Budget(40))
@@ -660,28 +686,23 @@ async def test_p04_short_wrapup_and_stop_through_production_paths(tmp_path,monke
                 calls = [('handoff', {'member_id':2,'stage_id':stage,'request':'Read Guardian once.',
                                      'done_when':'Read the test mail.'})]
             else:
-                calls = [('Guardian__read',{})] if stopping and not speech and not tools else []
+                calls = [('use_tool',{'name':'Guardian__read','arguments':{}})] if stopping and not speech and not tools else []
             self.turns=iter([('已核對目前沒有交付成果。' if not calls else '',calls)])
             return await super().chat_tools(**kwargs)
     class Driver:
         def __init__(self,*args,**kwargs):
             pass
         async def run(self,*,endpoint,token,system,user,**kwargs):
-            if 'Return only your speak choice' in system:
-                yield Event('final','{"speak":false,"urgency":0}')
-                return
             if stopping:
                 speech = 'You are speaking in a meeting' in system
                 if speech and 'stage_id=' not in user:
                     yield Event('final','收到。')
                     return
                 stage = 'second-read' if 'stage_id=second-read' in user else 'first-read'
-                async with httpx.AsyncClient() as http:
-                    response = await http.post(endpoint,headers={'Authorization':'Bearer '+token},json={
-                        'jsonrpc':'2.0','id':1,'method':'tools/call',
-                        'params':{'name':'handoff' if speech else 'Guardian__read','arguments':
-                            {'member_id':2,'stage_id':stage,'request':'Read Guardian once.','done_when':'Read the test mail.'} if speech else {}}})
-                    assert not response.json()['result']['isError'], response.text
+                result = await mcp_call(endpoint,token,'handoff' if speech else 'use_tool',
+                    {'member_id':2,'stage_id':stage,'request':'Read Guardian once.','done_when':'Read the test mail.'} if speech
+                    else {'name':'Guardian__read','arguments':{}})
+                assert not result['result']['isError'], result
             yield Event('final','已核對目前沒有交付成果。')
         async def interrupt(self):
             pass
@@ -693,5 +714,21 @@ async def test_p04_short_wrapup_and_stop_through_production_paths(tmp_path,monke
         assert not reasons,(reasons,driver.events[-3:])
         if stopping:
             assert any(event[0]=='guardian.stop_timings' for event in driver.events)
+    finally:
+        await driver.aclose()
+
+
+@pytest.mark.parametrize("operation", ["telegram", "slack", "discord", "share"])
+async def test_panel_card_contracts_use_production_intents_and_snapshot_readback(tmp_path, operation):
+    sharing = operation == "share"
+    identifier = "S21.templates.share" if sharing else "S14.messaging." + operation
+    tool = "share_template" if sharing else "connect_messaging"
+    arguments = {"description": "I clarify public guides."} if sharing else {"platform": operation}
+    driver = RpcDriver(tmp_path, "fake/model",
+                       FakeClient([("", [(tool, arguments)]), ("請使用對話中的卡片。", [])]), Budget(5))
+    try:
+        reasons, turns = await driver.execute(selected(identifier))
+        assert not reasons, reasons
+        assert turns and driver.recorder.receipts == []
     finally:
         await driver.aclose()

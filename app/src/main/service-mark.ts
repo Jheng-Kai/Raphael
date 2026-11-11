@@ -12,9 +12,13 @@ export function iconHTML(_name: string, icon: ServiceIconId | null, size: "md" |
     : `<span class="mono ${size}" aria-hidden="true">${ico("plug")}</span>`;
 }
 
+/** A service the app knows is drawn with its own mark in its brand colour; a catalogue's picture is only for the rest
+ */
 export function entryIcon(entry: { name: string; icon?: string | null; logo?: string }, size: "md" | "xl"): string {
+  const known = isIcon(entry.icon) ? entry.icon : serviceIconOf({ name: entry.name });
+  if (known) return iconHTML(entry.name, known, size);
   const logo = pluginLogoURL(entry.logo);
   return logo
     ? `<span class="mono ${size} logo-art"><img class="logo" src="${esc(logo)}" alt="" referrerpolicy="no-referrer" loading="lazy"></span>`
-    : iconHTML(entry.name, isIcon(entry.icon) ? entry.icon : serviceIconOf({ name: entry.name }), size);
+    : iconHTML(entry.name, null, size);
 }

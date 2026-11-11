@@ -31,7 +31,8 @@ async def test_cli_member_in_ask_mode_makes_a_t1_call_after_a_yes(setup, plugins
     teacher = member(team, model="cli:claude:opus?effort=high")
     await plugins.connect(look="T1", note="T1")
     rig.settings.set("action_mode", "ask")
-    fake_mcp(rig, tmp_path, [(name, arguments)])
+    # A connection's tool is found, not listed (decision 2): the CLI calls it through use_tool.
+    fake_mcp(rig, tmp_path, [("use_tool", {"name": name, "arguments": arguments})])
     pending = await asyncio.wait_for(typed(rig, "Use the tool", teacher.id, language="en"), 30)
     assert pending["status"] == "confirm", pending
     assert calls == []

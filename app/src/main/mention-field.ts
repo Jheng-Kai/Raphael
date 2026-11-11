@@ -3,13 +3,22 @@
 // it with each address as a chip (`.cmp-mirror`, aria-hidden, never taking a click); the caret, selection and input method are the
 // textarea's own. A chip is derived from the words, not stored: change a letter of it and it is plain text again, which is the
 // rule the core applies. Deleting, moving over and selecting treat it as one unit. A link is the same kind of chip: the words hold
-// its short name (composer-links.ts), and copying or sending gives the whole address back.
+// its whole address (composer-links.ts), drawn in the link colour, and copying or sending gives the same text.
 import { esc } from "./ui";
 import { linkRanges, shortenLinks, wholeLinks } from "./composer-links";
 import { mentionChipHTML, mentionRanges, type MentionTarget } from "./mention-text";
 
-/** A stretch of the words drawn as a chip: an address when it has a target, otherwise a link. */
+/** A stretch of the words drawn as a chip: an address when it has a target, otherwise a link or a skill. */
 interface ChipRange { start: number; end: number; target?: MentionTarget }
+
+/** A skill or command called by its name, `/name`, at the start of the words or after a space, in any script (「/每日新聞摘要」 too) and with a plugin's prefix (`/field-notes:review`). A path
+ * such as /usr/bin is not one: the name ends at a space or the end of the words, and holds no other slash. */
+export function skillRanges(text: string): ChipRange[] {
+  return [...text.matchAll(/(^|\s)(\/[\p{L}\p{N}][\p{L}\p{N}_:-]{0,63})(?=\s|$)/gu)].map(match => {
+    const start = match.index! + match[1]!.length;
+    return { start, end: start + match[2]!.length };
+  });
+}
 
 export interface MentionField { refresh(): void }
 
@@ -34,7 +43,9 @@ export function bindMentionField(input: HTMLTextAreaElement, targets: () => read
     // Long restored/typed drafts use the textarea's own paint instead of a second large DOM.
     if (text.length >= 2000) { ranges = []; field.classList.remove("has-mentions"); mirror.textContent = ""; return; }
     const links = linkRanges(text), mentions = /[@＠]/u.test(text) ? mentionRanges(text, targets()) : [];
-    ranges = [...links, ...mentions.filter(item => !links.some(link => link.start < item.end && item.start < link.end))].sort((a, b) => a.start - b.start);
+    const free = (item: ChipRange, taken: readonly ChipRange[]): boolean => !taken.some(other => other.start < item.end && item.start < other.end);
+    const chips = [...links, ...mentions.filter(item => free(item, links))];
+    ranges = [...chips, ...(text.includes("/") ? skillRanges(text).filter(item => free(item, chips)) : [])].sort((a, b) => a.start - b.start);
     field.classList.toggle("has-mentions", ranges.length > 0);
     if (!ranges.length) { mirror.textContent = ""; return; }
     let html = "", at = 0;

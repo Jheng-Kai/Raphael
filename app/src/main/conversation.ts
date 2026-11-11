@@ -20,11 +20,28 @@ export const sourceOf = (turn: AgentTurn): string => turn.source || VOICE;
 /** One line of the thread: the heading of a day, a turn, or what one colleague asked in a row. */
 export type ThreadItem =
   | { kind: "day"; key: string; label: string }
-  | { kind: "turn"; key: string; turn: AgentTurn };
+  /** `together`: the earlier exchanges with the same colleague in a row, drawn in this turn's one line. */
+  | { kind: "turn"; key: string; turn: AgentTurn; together?: AgentTurn[] };
+
+/** An exchange that is only its line: nothing waits for the owner under it. */
+const bareExchange = (turn: AgentTurn): boolean => exchangeTurn(turn) && turn.status !== "confirm" &&
+  !turn.permissions?.length && !turn.connectors?.length && !turn.secrets?.length && !turn.computers?.length;
 
 /** Whether a turn is a colleague's question or hand-off to this member, not the owner's own words. */
 export const exchangeTurn = (turn: AgentTurn): boolean =>
   turn.scope === "exchange" || turn.route === "exchange" || sourceOf(turn) === "member";
+
+/**
+ * Whether another member handed this turn's words to the member that answers it: a brief the member works on in its own
+ * conversation (`route` "worker" or "delegate", `peer_id` the member who handed it over). Those words are that member's, never
+ * the owner's: no owner bubble (owner, 2026-11-11: Raphael's brief stood in a member's conversation as the owner's message).
+ */
+export const delegatedTurn = (turn: AgentTurn): boolean =>
+  (turn.route === "worker" || turn.route === "delegate") && turn.peer_id != null && turn.peer_id !== turn.member_id;
+
+/** Whether the owner wrote the words of a turn: not a routine's, a colleague's or a hand-off's. */
+export const ownerTurn = (turn: AgentTurn): boolean =>
+  sourceOf(turn) !== "routine" && sourceOf(turn) !== "member" && turn.route !== "exchange" && !delegatedTurn(turn);
 
 /** Empty historical records have nothing to say, including under their date heading. */
 export function visibleTurn(turn: AgentTurn): boolean {
@@ -34,6 +51,8 @@ export function visibleTurn(turn: AgentTurn): boolean {
   return !!(turn.question.trim() || turn.text.trim() || turn.detail?.trim() ||
     turn.messages?.some(message => message.text.trim()) || turn.attachments?.length || turn.handoffs?.length ||
     turn.connectors?.length || turn.secrets?.length || turn.computers?.length || turn.permissions?.length || turn.drafts?.length || turn.pages?.length ||
+    // A pairing code that came later is a turn with its card and no words; a template card too.
+    turn.pairings?.length || turn.templates?.length ||
     turn.status === "running" || turn.status === "confirm" || turn.task || turn.steps?.length);
 }
 
@@ -51,6 +70,13 @@ export function threadItems(turns: readonly AgentTurn[], nowMs: number): ThreadI
     if (previous === null || new Date(previous).toDateString() !== new Date(turn.created_at_ms).toDateString()) {
       const label = dayLabel(turn.created_at_ms, nowMs);
       items.push({ kind: "day", key: `time:${turn.id}`, label });
+    }
+    // The same colleague again, right after its last exchange on the same day: one line 「與 X 的 4 則訊息」.
+    const last = items[items.length - 1];
+    if (last?.kind === "turn" && bareExchange(turn) && bareExchange(last.turn) && (last.turn.peer_id ?? 0) === (turn.peer_id ?? 0)) {
+      items[items.length - 1] = { kind: "turn", key: `turn:${turn.id}`, turn, together: [...(last.together ?? []), last.turn] };
+      previous = turn.created_at_ms;
+      continue;
     }
     items.push({ kind: "turn", key: `turn:${turn.id}`, turn });
     previous = turn.created_at_ms;

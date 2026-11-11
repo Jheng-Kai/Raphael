@@ -1,43 +1,27 @@
-import { scene, click, wait, check, scroll, page, key, hover } from "./steps.mjs";
+import { scene, click, wait, check, hover } from "./steps.mjs";
 
-const ready = [wait(".page-home:not([hidden]) .ho-hero"), check("home-hero"), check("home-overview"), check("home-redesign"), check("home-month")];
+// Home: Raphael's live emblem beside the greeting and his line, four figures, today's hours as a band
+// over today's schedule as a table, and the last two weeks as a chart. No members, open items, yesterday or health check.
+const ready = [wait(".page-home:not([hidden]) .ho-hero"), check("home-hero"), check("home-overview")];
 export default [
-  scene("home-calendar-rhythm", "Home shares the quiet rhythm, member face and timing", [page("home"),scroll('.ho-calendar'),check("home-calendar-rhythm")], {calendarRhythm:true}),
-  scene("home", "Home briefing with reports, pending items, calendar and usage", ready),
-  scene("home-empty", "Home without pending work, reports, events or usage", ready, { homeEmpty: true }),
-  scene("home-sparse", "Four stable summaries with no events/reports, some spend, one CLI with windows and one without", ready, { homeSparse: true }),
-  scene("home-720", "Home responsive layout, scrolled to the charts", [...ready, scroll(".ho-dictation"), check("home-overview")]),
-  scene("home-report", "A member report opens its conversation at the reported turn", [...ready, click('.ho-row[data-home-item="report:2"]'), wait('.page-agent:not([hidden]) .tn[data-id="2"]'), check("home-report")]),
-  scene("home-routine", "A marked calendar day opens the full calendar", [...ready, {action:'home-day',date:'2026-10-24',open:true}, wait('.au-page:not([hidden]) .au-day-col'), check("calendar-shell")]),
-  scene("home-calendar", "The mini calendar opens the full calendar", [...ready, {action:'home-day',date:'2026-10-30',open:true}, wait('.au-page:not([hidden]) .au-day-col'), check("calendar-shell"), check("home-calendar-day")]),
-  scene("home-adaptive-calendar", "Available width and height choose compact agenda or full event grid", [...ready, scroll('.ho-calendar'), check('home-month')]),
-  scene("home-selected-day", "A date opens that day on the Calendar page, in every layout", [...ready, {action:'home-day',date:'2026-10-30'}]),
-  scene("home-own-events", "Home's calendar is a small view of the same calendar: its chip, time and today mark", [...ready, scroll('.ho-calendar'), check("home-calendar-language")], { homeOwnEvents: true }),
-  scene("home-create", "An empty day offers 建立, which opens the Calendar's form on that day", [...ready, click('[data-home-create]'), wait(".au-pop-editor"), check("calendar-editor")], { homeEmpty: true, routines: [] }),
+  scene("home", "Raphael greets the owner with his line, then four figures, today's band and table, and the last two weeks as a chart", [...ready, check("home-figures"), check("home-band"), check("home-trend")]),
+  // Start-up reads (owner, 2026-11-11): the first view's reads are answered before any optional read starts, and the optional ones run one at a time.
+  scene("home-startup-order", "At start-up the Home overview and the roster are answered before the model, app and settings reads start, and those never overlap", [...ready, { action: "startup-order",
+    firstView: ["home.overview", "members.list", "rooms.list"], heavy: ["models.catalog", "brains.cli"] }], { coreLatencyMs: 60 }),
+  scene("home-trend-tip", "A day's bar shows its figures under the pointer, beside the bar and inside the window", [...ready, hover(".ho-col.is-today"), check("home-trend-tip")]),
+  scene("home-empty", "Nothing scheduled or finished yet: zeros said plainly, 建立 for today, and the chart's quiet note", [...ready, check("home-empty-day")], { homeEmpty: true }),
+  scene("home-many", "Many waiting questions are all counted, the newest named", [...ready, check("home-questions")], { homeManyQuestions: true }),
+  scene("home-problem", "A report that needs fixing speaks under his line with its one fix", [...ready, check("home-problem")], { problem: true }),
+  scene("home-calendar-rhythm", "Today's rhythm keeps its title and whose routine it is, and a failed run is marked", [...ready, check("home-calendar-rhythm"), check("home-band")], { calendarRhythm: true }),
+  scene("home-own-events", "Today's own event reads in the calendar's ink and time", [...ready, check("home-calendar-language")], { homeOwnEvents: true }),
+  scene("home-calendar", "The schedule's calendar icon opens the full calendar", [...ready, click('.ho-schedule header [data-home-go="calendar"]'), wait('.au-page:not([hidden]) .au-day-col'), check("calendar-shell")]),
+  scene("home-more", "A day of more than eight items: every row shows, with nothing to press for more", [...ready, check("home-all-rows")], { homeMore: true }),
+  scene("home-event-chip", "A schedule row opens and focuses its event on Calendar", [...ready, click('.ho-schedule [data-home-event^="event:"]'), wait('.au-page:not([hidden]) .au-day-col'), wait('.is-home-focus, .au-occurrence[aria-current="true"]'), check('calendar-shell')]),
+  scene("home-create", "An empty day offers 建立, which opens the Calendar's form on today", [...ready, click('[data-home-create]'), wait(".au-pop-editor"), check("calendar-editor")], { homeEmpty: true, routines: [] }),
   scene("home-google-off", "Google not connected: one quiet line with the place to connect it", [...ready, check("home-google-off")], { calendarGoogle: "not_connected" }),
   scene("home-google-closed", "Closed, it stays closed", [...ready, click("[data-home-dismiss]"), check("home-google-closed")], { calendarGoogle: "not_connected" }),
   scene("home-google-failed", "Google could not be read: said, with where to check", [...ready, check("home-google-failed")], { calendarGoogle: "unreadable" }),
-  scene("home-event-chip", "A day event opens and receives focus on Calendar", [...ready, click('[data-home-event^="event:"]'), wait('.au-page:not([hidden]) .au-day-col'), wait('.is-home-focus, .au-occurrence[aria-current="true"]'), check('calendar-shell')]),
-  scene("home-month", "The whole month fits without an inner scroll", [...ready, scroll('.ho-calendar'), check('home-month')]),
-  { ...scene("home-month-navigation", "Arrows and Today change month without moving the controls", [...ready, click('[data-home-month="1"]'), wait('.ho-calendar[data-month="2026-11"]'), check('home-month'), click('[data-home-month="-1"]'), wait('.ho-calendar[data-month="2026-10"]'), check('home-month'), click('[data-home-month="1"]'), click('[data-home-today]'), wait('.ho-calendar[data-month="2026-10"]'), scroll('.ho-calendar'), check('home-month')]), motion: true },
-  scene("home-month-swipe", "Horizontal trackpad and touch swipes change month without navigating away", [...ready, {action:'wheel',selector:'.ho-calendar',deltaX:100,deltaY:0}, wait('.ho-calendar[data-month="2026-11"]'), {action:'touch-swipe',selector:'.ho-calendar',dx:120}, wait('.ho-calendar[data-month="2026-10"]'), check('home-month')]),
-  scene("home-calendar-background", "A click outside the dates still opens the full calendar", [...ready, {action:'click-position',selector:'.ho-calendar',x:.02,y:.02,expect:'.au-page:not([hidden]) .au-day-col'}, check('calendar-shell')]),
-  scene("home-many", "Many pending questions stay within their card", ready, { homeManyQuestions: true }),
-  scene("home-block-navigation", "Every Home block navigates from both distant corners, preserving inner report controls", [
-    ...ready,
-    ...[
-      ['.ho-inbox', '.page-agent:not([hidden]) .composer', false],
-      ['.ho-spend', '.modal-scrim #models-tab-usage[aria-selected="true"]', true],
-      ['.ho-allowance', '.modal-scrim #models-tab-usage[aria-selected="true"]', true],
-      ['.ho-dictation', '.page-dictation:not([hidden])', false],
-    ].flatMap(([selector, expect, modal]) => [[.02, .98], [.98, .02]].flatMap(([x, y]) => [
-      { action: 'click-position', selector, expect, x, y }, ...(modal ? [key('Escape')] : [page('home')]), ...ready,
-    ])),
-    click('.ho-row[data-home-item="report:2"]'), wait('.page-agent:not([hidden]) .tn[data-id="2"]'), check('home-report'),
-  ]),
-  scene("home-block-interactions", "Whole Home blocks show edge-only hover and keyboard-only focus states", [
-    ...ready, ...['.ho-inbox', '.ho-spend', '.ho-allowance', '.ho-dictation', '.ho-calendar'].map(selector => ({ action: 'surface-interactions', selector: `${selector} > .ho-target` })),
-  ]),
-  scene("home-hover", "Hover lights only the edge, preserving the background and every inner element", [...ready, ...[".ho-inbox", ".ho-spend", ".ho-allowance", ".ho-dictation", ".ho-calendar"].map(selector => ({ action: "surface-interactions", selector: `${selector} > .ho-target`, hoverOnly: true }))]),
-  { ...scene("home-motion", "Raphael's emblem turns on Home when motion is allowed: the loop plays, and the hero has no ask icon", [wait(".page-home:not([hidden]) .ho-hero"), { action: "freeze-motion", at: 600 }, check("home-emblem-motion"), check("home-overview")]), motion: true },
+  scene("home-row-hover", "A row lights its own background under the pointer, with no frame", [...ready, hover(".ho-schedule .ho-event"), check("home-row-hover")]),
+  // With motion allowed he appears, then turns and speaks his line.
+  { ...scene("home-motion", "With motion allowed the emblem is the desktop's own, drawn alive on a canvas", [wait(".page-home:not([hidden]) .ho-hero"), { action: "freeze-motion", at: 2000 }, check("home-emblem-live"), check("home-overview")]), motion: true },
 ];

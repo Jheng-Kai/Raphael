@@ -45,6 +45,18 @@ const NEWEST_FIRST = [
 ];
 
 describe("one thread", () => {
+  test("the same colleague several times in a row on one day is one line; another colleague, the owner or a new day starts a new one", () => {
+    const ask = (id: number, when: string, peer: number, more: Partial<AgentTurn> = {}) => turn(id, when, { source: "member", scope: "exchange", peer_id: peer, ...more });
+    const items = threadItems([
+      ask(1, "2026-10-20T08:00:00+08:00", 0), ask(2, "2026-10-20T08:05:00+08:00", 0), ask(3, "2026-10-20T08:06:00+08:00", 0),
+      ask(4, "2026-10-20T08:07:00+08:00", 2),
+      turn(5, "2026-10-20T08:08:00+08:00"),
+      ask(6, "2026-10-20T08:09:00+08:00", 2),
+      ask(7, "2026-10-20T08:10:00+08:00", 2, { status: "confirm" }),
+    ], now).filter(item => item.kind === "turn");
+    expect(items.map(item => item.kind === "turn" ? [item.key, (item.together ?? []).map(t => t.id)] : [])).toEqual([
+      ["turn:3", [1, 2]], ["turn:4", []], ["turn:5", []], ["turn:6", []], ["turn:7", []]]);
+  });
   test("empty exchanges and empty finished turns leave neither event lines nor date separators", () => {
     const empty = { question: " ", text: "", detail: null, messages: [] };
     expect(threadItems([
@@ -80,10 +92,10 @@ describe("one thread", () => {
     expect(threadItems([], now)).toEqual([]);
   });
 
-  test("work a colleague handed over is a turn of its own in this member's chat, each piece of it", () => {
+  test("work a colleague handed over twice in a row is one line in this member's chat, counting both", () => {
     const handed = (id: number, when: string) => turn(id, when, { route: "exchange", source: "member", scope: "exchange", peer_id: 1 });
     const items = threadItems([handed(6, "2026-10-20T09:10:00+08:00"), handed(5, "2026-10-20T09:05:00+08:00")], now);
-    expect(items.flatMap((item) => (item.kind === "turn" ? [item.key] : []))).toEqual(["turn:5", "turn:6"]);
+    expect(items.flatMap((item) => (item.kind === "turn" ? [[item.key, (item.together ?? []).map(t => t.id)]] : []))).toEqual([["turn:6", [5]]]);
   });
 
   test("a turn from a core that keeps no source is a spoken one", () => {

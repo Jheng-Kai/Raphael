@@ -6,31 +6,29 @@
 // The rules for every row: a choice among options is a dropdown (`sel`, never the options
 // in a row), an action is a button with a shape (`btn`, never a word that can be clicked), and a
 // line under a row's name only where the setting would otherwise be set wrong. Each tab opens with
-// its name and one line on what it is for, then its rows in a few named groups.
+// its name, then its rows in a few named sections, each a rounded card.
 //
-// The tabs sit on the left in four groups: basics, team, integrations and account (Models & usage, Data, About).
-// Settings search finds a row in any tab by its name in any of the three languages, and jumps to
-// it (`SEARCH_INDEX`, `searchSettings`).
+// Six tabs sit flat on the left: 一般 (account, appearance, the bot's timezone and folder, messaging),
+// 工具, 安全, 模型與用量, 聽寫與快捷鍵 and 關於. No group names, no search, no line under a tab's name. No tab shows
+// memory (owner, 2026-11-11: 「可以像 Hermes Agent 一樣，都不要讓我們看到記憶好了…」); the core keeps it.
 
-import { catalogs, t } from "../i18n";
+
+import { LOCALES, t } from "../i18n";
 import { updateHTML } from "../updates";
-import { createMemoryImport } from "../memory-import";
 import { detectedTimezone, zoneLabel } from "../timezones";
 import { ownerProfileHTML } from "../owner-settings";
-import type { MessageKey } from "../i18n/zh-TW";
 
 import { brandIcon } from "../brand";
-import { type ConnectionsView, connectionsAddHTML, connectionsHTML } from "../connections";
+import { type ConnectionsView, connectionsHTML } from "../connections";
 import { DICTATION_MODES } from "../dictation";
-import { KEEP_FOREVER_DAYS, formatClock, formatShortDateTime, formatRetention, formatUsd } from "../format";
+import { KEEP_FOREVER_DAYS, formatClock, formatRetention, formatUsd } from "../format";
 import { type LanguageGroup, languageSelectHTML, normalizeLanguages } from "../languages";
 import { bindingLabels } from "../keys";
-import { type MessagingView, messagingHTML } from "../messaging";
-import { type MemoryView, memoryHTML } from "../memory-view";
 import { type RulesView, rulesHTML } from "../safety-rules";
+import { type VaultView, emptyVaultView, vaultHTML } from "../vault";
 import { AUTO_MICROPHONE, microphoneChoices } from "../microphone";
 import type { LocalView } from "../local-models";
-import { type ModelPickerLook, modelPickerHTML, modelsFor, planRef, priceDescription, splitEffort } from "../model-picker";
+import { type ModelPickerLook, modelPickerHTML, modelsFor, onPlan, planRef, priceDescription, splitEffort } from "../model-picker";
 import { type ServicesView, servicesHTML } from "../services";
 import { type ProvidersView, providersHTML, providersAddHTML, emptyProvidersView } from "../providers";
 import { type CliBrainsView, cliBrainsHTML, cliModels, emptyCliBrainsView } from "../cli-brains";
@@ -38,7 +36,7 @@ import { pricingNote } from "../pricing";
 import type { HotkeyField } from "../hotkey-recording";
 import type { AudioDevices, BrainSettings, DeviceSettings, LocalModel, ModelCatalog, ModelRole, SettingsPane, Status } from "../types";
 import { keyEntryRow, micRow } from "../setup-rows";
-import { type Choice, type IconName, actionRow, btn, esc, fieldHTML, ico, iconBtn, iconButton, keys, note, row, sel, st, tabs, tg } from "../ui";
+import { type Choice, type IconName, actionRow, btn, esc, ico, iconBtn, iconButton, keys, note, row, sel, st, tabs } from "../ui";
 
 /** The models the core reads when none is chosen (brain/settings.py), shown while it does not answer. */
 const DEFAULT_MODELS = { cleanup: "openai/gpt-6-luna", answer: "openai/gpt-6-luna", stt: "elevenlabs/scribe-v2" } as const;
@@ -65,11 +63,7 @@ export const SIZES: Choice[] = [
   { value: "150", get label() { return t("settings.019"); }, get desc() { return t("settings.020"); } },
   { value: "194", get label() { return t("settings.021"); }, get desc() { return t("settings.022"); } },
 ];
-export const UI_LANGUAGES: Choice[] = [
-  { value: "zh-TW", get label() { return t("settings.023"); } },
-  { value: "en", get label() { return t("locale.english"); } },
-  { value: "ja", get label() { return t("settings.024"); } },
-];
+export const UI_LANGUAGES: Choice[] = LOCALES.map(({ id, native, english }) => ({ value: id, label: native, desc: english }));
 
 /** How long the dictation history is kept: at least a day (the core only checks that it is a number); "keep" is a hundred years. */
 export const RETENTIONS: Choice[] = [1, 7, 30, 365, KEEP_FOREVER_DAYS].map((days) => ({
@@ -79,181 +73,35 @@ export const RETENTIONS: Choice[] = [1, 7, 30, 365, KEEP_FOREVER_DAYS].map((days
 
 const PRICES_LOADING = () => t("settings.026");
 
-/** Settings groups follow their shared purpose. */
-export type PaneGroup = "basics" | "team" | "integrations" | "account";
-
-/** The localized group names above their tabs. */
-export const PANE_GROUPS: Record<PaneGroup, () => string> = {
-  basics: () => t("settings.navBasics"),
-  team: () => t("settings.navTeam"),
-  integrations: () => t("settings.navIntegrations"),
-  account: () => t("settings.navAccount"),
-};
-
 /**
- * The tabs on the left of the panel, in order and in their groups, each with the line under its name
- * that says what it is for. Shared services and safety belong to the team.
+ * The tabs on the left of the panel, flat and in order: appearance and messaging
+ * are sections of 一般 now, and 連結應用程式 is no tab.
  */
-export const PANES: { id: SettingsPane; group: PaneGroup; icon: IconName; title: () => string; purpose: (d: DeviceSettings) => string }[] = [
-  { id: "general", group: "basics", icon: "gear", title: () => t("settings.paneGeneral"), purpose: () => t("settings.purposeGeneral") },
-  { id: "appearance", group: "basics", icon: "grid", title: () => t("skin.title"), purpose: () => t("skin.about") },
-  { id: "dictation", group: "basics", icon: "mic", title: () => t("settings.paneDictation"), purpose: () => t("settings.purposeDictation") },
-  { id: "tools", group: "team", icon: "steps", title: () => t("settings.paneTools"), purpose: () => t("settings.purposeTools") },
-  { id: "safety", group: "team", icon: "lock", title: () => t("settings.paneSafety"), purpose: () => t("settings.purposeSafety") },
-  { id: "connections", group: "integrations", icon: "plug", title: () => t("settings.paneConnections"), purpose: () => t("settings.purposeConnections") },
-  { id: "messaging", group: "integrations", icon: "send", title: () => t("settings.paneMessaging"), purpose: () => t("settings.purposeMessaging") },
-  { id: "models", group: "account", icon: "bot", title: () => t("settings.paneUsage"), purpose: () => t("providers.about") },
-  { id: "data", group: "account", icon: "database", title: () => t("settings.paneData"), purpose: () => t("settings.purposeData") },
-  { id: "about", group: "account", icon: "info", title: () => t("common.about"), purpose: () => t("settings.purposeAbout") },
+export const PANES: { id: SettingsPane; icon: IconName; title: () => string }[] = [
+  { id: "general", icon: "gear", title: () => t("settings.paneGeneral") },
+  { id: "tools", icon: "steps", title: () => t("settings.paneTools") },
+  { id: "safety", icon: "lock", title: () => t("settings.paneSafety") },
+  { id: "models", icon: "bot", title: () => t("settings.paneUsage") },
+  // Dictation and its keys are not what most people come here for: under the models (owner, 2026-11-10).
+  { id: "dictation", icon: "mic", title: () => t("settings.paneDictation") },
+  { id: "about", icon: "info", title: () => t("common.about") },
+  // Not a tab: the sidebar's 連結應用程式 opens it as a dialog of its own, its only way in (R-UI-111).
+  { id: "connections", icon: "plug", title: () => t("nav.apps") },
 ];
+
+/** The pane that is not a tab of Settings but a dialog of its own, opened only from the sidebar. */
+export const STANDALONE_PANE: SettingsPane = "connections";
 
 /** The button of a tab in the list on the left. */
 const paneButton = (p: (typeof PANES)[number]): string =>
   `<button type="button" class="nav" data-pane="${p.id}" aria-current="false">${ico(p.icon)}<span>${esc(p.title())}</span></button>`;
 
-/** The tabs in their groups, each group under its small grey name. */
-export const paneListHTML = (): string =>
-  (Object.keys(PANE_GROUPS) as PaneGroup[])
-    .map((group) => {
-      const name = PANE_GROUPS[group]();
-      return (name ? `<div class="nav-group">${esc(name)}</div>` : "") + PANES.filter((p) => p.group === group).map(paneButton).join("");
-    })
-    .join("");
+/** The flat list of tabs. */
+export const paneListHTML = (): string => PANES.filter((p) => p.id !== STANDALONE_PANE).map(paneButton).join("");
 
-// ---------- 搜尋設定 ----------
-
-/**
- * A row the search can find: its tab, the key of its name (found by that name in every language,
- * and on the page by the name in the window's language) and, for a row whose name is not what one
- * would type ("快捷鍵" for 聽寫's keys), a key of more words to find it by, or words that are the
- * same in every language (a brand). A row with no `label` is the tab itself.
- */
-export interface SearchEntry {
-  pane: SettingsPane;
-  target?: "computer";
-  label?: MessageKey;
-  also?: MessageKey;
-  words?: string[];
-}
-
-/**
- * Everything 「搜尋設定」 can find: every tab, and the rows of each. A row added to a tab is one more
- * entry here (its name's key), or the search does not know it.
- */
-export const SEARCH_INDEX: readonly SearchEntry[] = [
-  { pane: "general", label: "owner.name" },
-  { pane: "general", label: "import.title" },
-  { pane: "about", label: "update.title" },
-  { pane: "about", label: "update.auto" },
-  { pane: "general", label: "output.folder" },
-  { pane: "general", label: "zone.title" },
-  ...PANES.map((p) => ({ pane: p.id })),
-  { pane: "appearance", label: "settings.059" },
-  { pane: "appearance", label: "settings.067", words: ["dark", "light"] },
-  { pane: "general", label: "settings.069" },
-  { pane: "general", label: "settings.071" },
-  { pane: "general", label: "settings.073" },
-  { pane: "general", label: "settings.rerunGuide" },
-  { pane: "dictation", label: "home.020", also: "settings.searchShortcut" },
-  { pane: "dictation", label: "home.021", also: "settings.searchShortcut" },
-  { pane: "dictation", label: "settings.055" },
-  { pane: "dictation", label: "transcription.title" },
-  { pane: "dictation", label: "common.microphone", words: ["mic"] },
-  { pane: "dictation", label: "settings.agentKeys", also: "settings.searchShortcut" },
-  { pane: "general", label: "settings.agentCity" },
-  { pane: "general", label: "mem.shared", also: "settings.searchMemory" },
-  { pane: "safety", label: "rules.title" },
-  { pane: "safety", label: "settings.computerUse" },
-  { pane: "safety", target: "computer", label: "desktop.host", also: "desktop.remoteSearch" },
-  { pane: "safety", label: "local.title" },
-  { pane: "tools", label: "services.title" },
-  { pane: "tools", label: "services.search", words: ["Brave", "Tavily", "Exa", "SearXNG"] },
-  { pane: "tools", label: "services.read", words: ["Jina", "Firecrawl"] },
-  { pane: "tools", label: "services.vision" },
-  { pane: "tools", label: "services.pdf", words: ["PDF"] },
-  { pane: "tools", label: "services.voice", words: ["Fish Audio", "TTS"] },
-  { pane: "messaging", words: ["Telegram"] },
-  { pane: "models", label: "providers.add", words: ["OpenAI", "Anthropic", "Gemini", "Azure", "Bedrock", "Ollama", "LM Studio", "OpenRouter", "LiteLLM", "Portkey", "Vercel", "Nebius", "Bifrost", "Groq", "DeepSeek", "Mistral"] },
-  { pane: "usage", label: "common.apiKey", words: ["OpenRouter"] },
-  { pane: "usage", label: "settings.050" },
-  { pane: "usage", label: "settings.usageMonthly" },
-  { pane: "models", label: "settings.031", also: "settings.searchModel" },
-  { pane: "models", label: "settings.035", also: "settings.searchModel" },
-  { pane: "models", label: "settings.quickModel", also: "settings.searchModel", words: ["Alt", "Space"] },
-  { pane: "models", label: "media.image", words: ["image", "drawing"] },
-  { pane: "models", label: "media.video", words: ["video"] },
-  { pane: "data", label: "data.retention", also: "settings.searchHistory" },
-  { pane: "data", label: "data.groupDictation", also: "data.clearDictation" },
-  { pane: "data", label: "data.groupConversation", also: "data.clearConversation" },
-  { pane: "about", label: "settings.078" },
-  { pane: "about", label: "nav.help" },
-  { pane: "about", label: "settings.079" },
-];
-
-/** A row the search found: where it is, and its name in the window's language. */
-export interface SearchHit {
-  pane: SettingsPane;
-  target?: "computer";
-  /** The key of the row's name; none for a tab itself. */
-  label?: MessageKey;
-  /** What the hit says: the row's name, or the tab's. */
-  text: string;
-}
-
-/** How many hits are listed at most. */
-const SEARCH_SHOWN = 12;
-
-/** `t` for a key chosen at run time, with no placeholders. */
-const tr = t as unknown as (key: MessageKey) => string;
-
-/** The texts of `key` in every language, for the search. */
-const allLanguages = (key: MessageKey): string[] => Object.values(catalogs).map((catalog) => catalog[key]);
-
-/** The keys of the tabs' names, in every language. */
-const PANE_TITLE_KEYS: Record<SettingsPane, MessageKey> = {
-  appearance: "skin.title",
-  general: "settings.paneGeneral", dictation: "settings.paneDictation", agent: "settings.paneTools", tools: "settings.paneTools", safety: "settings.paneSafety", connections: "settings.paneConnections",
-  messaging: "settings.paneMessaging", models: "settings.paneUsage", usage: "settings.paneUsage", data: "settings.paneData", about: "common.about",
-};
-
-/**
- * The rows and tabs whose name (in any of the three languages), extra words or brand contain
- * `query`, ignoring case: the tabs first, then the rows, in the order of the tabs.
- */
-export function searchSettings(query: string): SearchHit[] {
-  const q = query.trim().toLowerCase();
-  if (!q) return [];
-  const found = SEARCH_INDEX.filter((entry) => {
-    const texts = [
-      ...allLanguages(entry.label ?? PANE_TITLE_KEYS[entry.pane]),
-      ...(entry.also ? allLanguages(entry.also) : []),
-      ...(entry.words ?? []),
-    ];
-    return texts.some((text) => text.toLowerCase().includes(q));
-  });
-  return found.slice(0, SEARCH_SHOWN).map((entry) => ({
-    pane: entry.pane,
-    target: entry.target,
-    label: entry.label,
-    text: entry.label ? tr(entry.label) : paneTitle(entry.pane),
-  }));
-}
-
-/** What the search found, as buttons in place of the tabs (each names its tab under it), or that it found nothing. */
-export function searchResultsHTML(hits: SearchHit[]): string {
-  if (!hits.length) return `<p class="set-none" role="status">${esc(t("settings.searchNone"))}</p>`;
-  return hits
-    .map(
-      (hit, i) =>
-        `<button type="button" class="nav set-hit" data-hit="${i}"><span class="hit-t">${esc(hit.text)}</span>` +
-        (hit.label ? `<span class="hit-p">${esc(hit.target === "computer" ? t("card.pcTitle") : paneTitle(hit.pane))}</span>` : "") +
-        `</button>`,
-    )
-    .join("");
-}
-
-/** Legacy links select Models or the shared Tools pane. */
-export const canonicalPane = (id: SettingsPane): SettingsPane => id === "usage" ? "models" : id === "agent" ? "tools" : id;
+/** Where a link to a tab of before lands: Models for usage, Tools for the agent, 聽寫 for data, 一般 for appearance, messaging and the memory tab that is gone. */
+export const canonicalPane = (id: SettingsPane): SettingsPane =>
+  id === "usage" ? "models" : id === "agent" ? "tools" : id === "data" ? "dictation" : id === "appearance" || id === "messaging" || id === "memory" ? "general" : id;
 /** The name of a tab, in the language of the window. */
 export const paneTitle = (id: SettingsPane): string => PANES.find((p) => p.id === canonicalPane(id))!.title();
 export type ModelsTab = "models" | "usage";
@@ -264,9 +112,9 @@ export const HOTKEY_ROWS: Record<HotkeyField, string> = { dictation_keys: "hotke
 /** Everything a tab is drawn from: what the panel has read, and what is being typed or done. */
 export interface SettingsView {
   update?: import("../api").UpdateView | null;
-  memoryImportHTML?: string;
-  data?: { items: import("../types").HistoryItem[]; total: number; conversations: number; more: boolean; busy?: boolean; error?: string };
   modelsTab?: ModelsTab;
+  /** What the refresh of 模型與用量 is doing. */
+  modelsRefresh?: "idle" | "busy" | "done";
   pane: SettingsPane;
   device: DeviceSettings;
   /** The brain's settings; null while the core does not answer. */
@@ -290,14 +138,11 @@ export interface SettingsView {
   limitDraft: string | null;
   limitError: (() => string) | null;
   /** What is typed in the weather city while it is not saved, and what is wrong with it. */
-  cityDraft: string | null;
-  cityError: (() => string) | null;
   /** Telegram, in the 訊息平台 tab. */
-  messaging: MessagingView;
+  /** Members with a bot of their own, set up in each member's panel. */
   /** The shared safety rules, in Safety (none: not drawn). */
   rules?: RulesView;
-  /** Shared owner memory, in General (none: not drawn). */
-  memoryShared?: MemoryView;
+  vault?: VaultView;
   /** Shared services, in Tools: who searches, reads pages and PDFs, and looks at images (none: not drawn). */
   services?: ServicesView;
   providers?: ProvidersView;
@@ -351,7 +196,6 @@ export const quickPickerLook = (v: SettingsView): ModelPickerLook => ({
 const quickRow = (v: SettingsView): string =>
   row(t("settings.quickModel"), priceSpan(v, "quick-model", "price num"),
     modelPickerHTML(quickPickerLook(v)), { cls: "row-model", attrs: ' data-row="quick-model"' });
-export const agentCity = (v: SettingsView): string => v.brain?.agent_city ?? "";
 /** What one background task may spend, as the value of its dropdown (the core's default is 0.2). */
 export const workerCostCap = (v: SettingsView): string => String(v.brain?.worker_cost_cap_usd ?? 0.2);
 /** The catalog once it is read. */
@@ -460,6 +304,7 @@ export function mediaRowPrice(v: SettingsView, role: "image" | "video"): string 
   const chosen = v.brain?.[role === "image" ? "image_model" : "video_model"] ?? "";
   const models = catalogOf(v) ? modelsFor(catalogOf(v)!, role) : [];
   const model = models.find(m => m.id === chosen);
+  if (model && onPlan(model)) return t("brains.subscription");
   return `${model ? priceDescription(model, role) : chosen ? t("media.unavailable") : t("media.unset")} · ${t("media.paid")}` +
     (!chosen && !models.length && v.catalog !== "loading" ? ` · ${t("media.none")}` : "");
 }
@@ -496,7 +341,8 @@ function keyRow(v: SettingsView): string {
       keyStatus(v),
       actionRow({
         secondary: btn(v.checkingOpenrouter ? t("common.checking") : t("settings.046"), "", ` data-act="or-check"${v.checkingOpenrouter ? " disabled" : ""}`) +
-          btn(t("home.018"), "", ' data-act="key-replace" data-k="key"'),
+          // Changing it is the pencil, as everywhere.
+          iconBtn("pencil", t("home.018"), ' data-act="key-replace" data-k="key"'),
       }) + iconButton("more", t("members.more", { p0: t("common.apiKey") }), ' data-act="key-menu" aria-haspopup="menu" aria-expanded="false"'),
       { attrs, cls: "row-key" },
     );
@@ -513,37 +359,22 @@ function keyRow(v: SettingsView): string {
   });
 }
 
-/** This month's recorded spend, independent of the retired spending caps. */
-function spendRow(v: SettingsView): string {
-  const attrs = ' data-row="raphael-spend"';
+/**
+ * What this app spent this month, in a card: the amount, how much of the monthly limit
+ * it is, as a bar in a member's colour, and where the month ends at this pace. Only the app's own spending: an OpenRouter
+ * account's usage is the owner's to read on OpenRouter.
+ */
+function spendCardHTML(v: SettingsView): string {
   const { spend } = v;
-  if (!spend) return row(t("settings.050"), "", esc(t("settings.usageUnavailable")), { attrs });
-  return row(t("settings.050"), "", `<span class="val num">${esc(formatUsd(spend.month_usd))}</span>`, { attrs });
-}
-
-/** Key-wide usage is separate from Raphael's local spending and its editable limit. */
-function usageRow(v: SettingsView): string {
-  const { hasKey, openrouter, checkingOpenrouter } = v;
-  const usage = hasKey ? openrouter?.usage : null;
-  const monthly = usage?.monthly;
-  const available = monthly != null && Number.isFinite(monthly);
-  const state = !hasKey ? "no-key" : available ? (openrouter?.state === "error" ? "stale" : "ready") : checkingOpenrouter ? "loading" : "unavailable";
-  const details: string[] = [];
-  if (usage?.limit != null && Number.isFinite(usage.limit)) {
-    details.push(`<span data-usage="limit">${esc(t("settings.usageLimit", { p0: formatUsd(usage.limit) }))}</span>`);
-  }
-  if (usage?.limit_remaining != null && Number.isFinite(usage.limit_remaining)) {
-    details.push(`<span data-usage="remaining">${esc(t("settings.usageRemaining", { p0: formatUsd(usage.limit_remaining) }))}</span>`);
-  }
-  if (state === "stale") details.push(esc(t("settings.usageCached")));
-  const value = available ? formatUsd(monthly) : !hasKey ? t("settings.usageNoKey") : checkingOpenrouter ? t("common.loading") :
-    openrouter?.state === "unknown" ? t("settings.usageUnchecked") : t("settings.usageUnavailable");
-  return row(
-    t("settings.usageMonthly"),
-    details.join(" · "),
-    `<span class="${available ? "val num" : "val"}" data-usage="monthly">${esc(value)}</span>`,
-    { attrs: ` data-row="openrouter-usage" data-usage-state="${state}"` },
-  );
+  if (!spend) return `<section class="spend-card" data-row="raphael-spend"><h2>${esc(t("settings.050"))}</h2><p class="spend-note">${esc(t("settings.usageUnavailable"))}</p></section>`;
+  const limit = Number.isFinite(spend.limit_usd) && spend.limit_usd > 0 ? spend.limit_usd : null;
+  const share = limit ? Math.round(Math.max(0, Math.min(100, spend.month_usd / limit * 100))) : null;
+  const forecast = Number.isFinite(spend.forecast_usd) && spend.forecast_usd > spend.month_usd ? spend.forecast_usd : null;
+  return `<section class="spend-card" data-row="raphael-spend"><h2>${esc(t("settings.050"))}</h2>` +
+    `<p class="spend-value"><strong class="num">${esc(formatUsd(spend.month_usd))}</strong>${share !== null ? `<small>${esc(t("overview.used", { p0: share }))}</small>` : ""}</p>` +
+    (share !== null ? `<div class="spend-bar" role="progressbar" aria-label="${esc(t("settings.050"))}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${share}"><i style="width:${share}%"></i></div>` : "") +
+    `<p class="spend-note">${[limit ? esc(t("settings.spendLimit", { p0: formatUsd(limit) })) : "", forecast ? esc(t("settings.spendForecast", { p0: formatUsd(forecast) })) : ""].filter(Boolean).join(" · ")}</p>` +
+    `</section>`;
 }
 
 // ---------- the parts of every tab ----------
@@ -555,7 +386,7 @@ const section = (title: string, rows: string[], foot = ""): string =>
   `</section>`;
 
 /**
- * A shortcut: its keys as caps and, for one that can be changed here, a 「變更」 button that records
+ * A shortcut: its keys as caps and, for one that can be changed here, a pencil (「變更」) that records
  * new ones (`change` names the button for the click handler and the focus).
  */
 function shortcutRow(name: string, bindings: readonly string[], change?: { act: string; field: HotkeyField }): string {
@@ -565,7 +396,7 @@ function shortcutRow(name: string, bindings: readonly string[], change?: { act: 
   return row(
     name,
     "",
-    `<span class="caps">${caps}</span>` + (change ? btn(t("home.018"), "", ` data-act="${change.act}" data-k="${change.act}"`) : ""),
+    `<span class="caps">${caps}</span>` + (change ? iconBtn("pencil", t("home.018"), ` data-act="${change.act}" data-k="${change.act}"`) : ""),
     { cls: "row-shortcut", attrs: change ? ` data-row="${HOTKEY_ROWS[change.field]}"` : "" },
   );
 }
@@ -578,9 +409,9 @@ const altgrNote = (v: SettingsView, bindings: readonly string[]): string[] =>
  * The pane title receives focus when settings open. Actions share its row.
  */
 export const headingHTML = (v: SettingsView, actions = ""): string => {
+  // A tab is its name alone: no line under it.
   const title = `<h1 id="set-title" tabindex="-1">${esc(paneTitle(v.pane))}</h1>`;
-  return (actions ? `<div class="set-head">${title}${actions}</div>` : title) +
-    `<p class="set-purpose">${esc(PANES.find(p => p.id === canonicalPane(v.pane))!.purpose(v.device))}</p>`;
+  return actions ? `<div class="set-head">${title}${actions}</div>` : title;
 };
 
 /** What the tabs that need the core say when it does not answer. */
@@ -588,26 +419,41 @@ const coreNote = (v: SettingsView): string => (v.brain === null ? `<div class="a
 
 // ---------- the tabs ----------
 
-/** 一般: the language of the window, and how Raphael looks and starts on this computer. */
+/**
+ * The output folder as a native folder picker: no text field. Unset, it is 選擇資料夾 alone;
+ * set, the button names the folder and the whole path stands under the row's name, so where it is stays plain.
+ */
+function outputFolderRow(v: SettingsView): string {
+  const folder = v.brain?.owner_output_folder ?? "", off = v.brain === null ? " disabled" : "";
+  if (!folder) return row(t("output.folder"), esc(t("output.helpPick")), btn(ico("folder") + esc(t("output.pick")), "sm", ` data-act="output-pick"${off}`), { attrs: ' data-row="output-folder"' });
+  const name = folder.replace(/[\\/]+$/, "").split(/[\\/]/).pop() || folder;
+  return row(t("output.folder"), `<span class="output-path">${esc(folder)}</span>`,
+    btn(ico("folder") + `<span class="output-name">${esc(name)}</span>`, "sm output-chosen", ` data-act="output-pick" aria-label="${esc(t("output.change", { p0: name }))}"${off}`),
+    { attrs: ' data-row="output-folder"' });
+}
+
+/**
+ * 一般, in a fixed order of sections: who you are, how the window looks, what Raphael works with (the timezone of
+ * routines and the folder of what is delivered), and the guide. What he remembers is the 記憶 tab.
+ */
 function generalHTML(v: SettingsView): string {
-  const d = v.device;
   return (
     headingHTML(v) +
-    coreNote(v) + `<section class="sgroup"><h2>${esc(t("settings.ownerSection"))}</h2>` + ownerProfileHTML(v.brain) +
-    `<div class="slist">` + row(t("settings.agentCity"), "", fieldHTML(t("settings.agentCityHint"), v.cityDraft ?? agentCity(v), { w: 200, label: t("settings.agentCity"), id: "agent-city", invalid: v.cityError !== null, disabled: v.brain === null })) +
-    (v.cityError ? note(st("err", v.cityError()), ' role="alert"') : "") +
-    row(t("zone.title"), t("zone.help"), sel([{value:v.brain?.routine_timezone ?? "",label:v.brain?.routine_timezone ? zoneLabel(v.brain.routine_timezone) : `${t("zone.auto")} · ${zoneLabel(detectedTimezone())}`}], v.brain?.routine_timezone ?? "", t("zone.title"), ' data-k="routine-timezone"' + (v.brain === null ? ' disabled' : ''))) +
-    row(t("output.folder"), t("output.help"), fieldHTML(t("output.empty"), v.brain?.owner_output_folder ?? "", { id: "owner-output-folder", label: t("output.folder"), w: 200, disabled: v.brain === null })) + `</div>` +
-    (v.memoryShared ? memoryHTML(v.memoryShared) : "") +
-    (v.memoryImportHTML ?? createMemoryImport(() => {}).html()) + `</section>` +
-    section(t("settings.groupAppearance"), [
-      row(t("settings.069"), "", sel(SIZES, String(d.emblem_size), t("settings.069"), ' data-k="size"')),
-      row(t("settings.071"), "", tg(d.subtitles !== "off", t("settings.071"), ' data-k="subtitles"')),
+    coreNote(v) + `<section class="sgroup set-account"><h2>${esc(t("settings.ownerSection"))}</h2>` + ownerProfileHTML(v.brain) + `</section>` +
+    `<div class="appearance-settings">` + section(t("skin.title"), [
+      row(t("settings.067"), "", sel(APPEARANCES, v.device.appearance, t("settings.067"), ' data-k="appearance"')),
+      row(t("settings.059"), "", sel(UI_LANGUAGES, v.device.ui_language, t("settings.059"), ' data-k="ui-language"')),
+    ]) + `</div>` +
+    section(t("agent.title"), [
+      row(t("zone.title"), t("zone.help"), sel([{value:v.brain?.routine_timezone ?? "",label:v.brain?.routine_timezone ? zoneLabel(v.brain.routine_timezone) : `${t("zone.auto")} · ${zoneLabel(detectedTimezone())}`}], v.brain?.routine_timezone ?? "", t("zone.title"), ' data-k="routine-timezone"' + (v.brain === null ? ' disabled' : ''))),
+      outputFolderRow(v),
     ]) +
-    section(t("settings.groupStartup"), [
-      row(t("settings.073"), "", tg(d.autostart, t("settings.073"), ' data-k="autostart"')),
-      row(t("settings.rerunGuide"), "", btn(esc(t("settings.rerunGuideButton")), "", ' data-act="rerun-guide"')),
-    ]) + `<section class="mb-hidden-list" data-hidden-members></section>`
+    // Telegram, Slack and Discord moved to each member's panel, Raphael's too, and are set up in the conversation
+    // Nothing of them is set here.
+    // The emblem's size, its subtitles and starting with Windows are fixed (device-fixed.ts), and the
+    // weather city is the member's to ask when it needs it: none of them is a setting any more.
+    // The tour, as one button named 導覽.
+    `<section class="sgroup"><h2>${esc(t("settings.groupStartup"))}</h2><div class="sgroup-act">${btn(esc(t("settings.rerunGuide")), "", ' data-act="rerun-guide"')}</div></section>`
   );
 }
 
@@ -642,7 +488,9 @@ function dictationHTML(v: SettingsView): string {
         meter: { place: "after", segments: MIC_METER_SEGMENTS },
         row: { cls: "row-mic" },
       }),
-    ])
+    ]) +
+    // How long the history is kept lives with dictation; there is no separate Data page.
+    section(t("data.groupDictation"), [row(t("data.retention"), "", sel(retentionChoices(v), retentionOf(v), t("data.retention"), ` data-k="retention"${v.brain === null ? " disabled" : ""}`))])
   );
 }
 
@@ -675,17 +523,12 @@ function toolsHTML(v: SettingsView): string {
 
 /** Shared safety rules and local command permissions. */
 function safetyHTML(v: SettingsView): string {
-  return headingHTML(v) + coreNote(v) + (v.rules ? rulesHTML(v.rules) : "") + section(t("settings.computerUse"), computerRows(v));
+  return headingHTML(v) + coreNote(v) + vaultHTML(v.vault ?? emptyVaultView()) + (v.rules ? rulesHTML(v.rules) : "") + section(t("settings.computerUse"), computerRows(v));
 }
 
-/** 連接: the services Raphael is connected to and the store that adds them, under the heading and its 「新增」. */
+/** 連接: the services Raphael is connected to and the store that adds them; 「新增」 stands on the row of the two views. */
 function connectionsTabHTML(v: SettingsView): string {
-  return headingHTML(v, connectionsAddHTML()) + connectionsHTML(v.connections);
-}
-
-/** 訊息平台: Telegram, where Raphael can be reached from a phone (Slack and Discord to come here too). */
-function messagingTabHTML(v: SettingsView): string {
-  return headingHTML(v) + messagingHTML(v.messaging);
+  return headingHTML(v) + connectionsHTML(v.connections);
 }
 
 /** The dictation history's retention: the choices, with the one in force too if it is none of them. */
@@ -697,36 +540,34 @@ export function retentionChoices(v: SettingsView): Choice[] {
 /** How long the dictation history is kept, as the value of its dropdown (30 days until the core says). */
 export const retentionOf = (v: SettingsView): string => String(v.brain?.history_retention_days ?? 30);
 
-function dataHTML(v: SettingsView): string {
-  const data = v.data;
-  const clear = (what: string, count: number) => count > 0 ? btn(esc(t("data.deleteAll")), "sm", ` data-act="data-clear" data-what="${what}"${data?.busy ? " disabled" : ""}`) : "";
-  const records = data?.items.map(item => `<div class="data-record" data-record="${item.id}"><time class="num" datetime="${new Date(item.created_at_ms).toISOString()}">${esc(formatShortDateTime(item.created_at_ms, v.now))}</time><div class="data-record-text">${esc(item.text)}</div></div>`).join("");
-  return headingHTML(v) + coreNote(v) +
-    `<section class="sgroup data-section"><div class="data-heading"><h2>${esc(t("data.groupDictation"))}</h2>${clear("dictation", data?.total ?? 0)}</div><div class="slist">` +
-    row(t("data.retention"), "", sel(retentionChoices(v), retentionOf(v), t("data.retention"), ` data-k="retention"${v.brain === null ? " disabled" : ""}`)) +
-    (records || `<p class="note">${esc(t(data ? "data.emptyDictation" : "settings.loading"))}</p>`) +
-    (data?.more ? btn(esc(t("history.009")), "sm", ` data-act="data-more"${data.busy ? " disabled" : ""}`) : "") + `</div></section>` +
-    `<section class="sgroup data-section"><div class="data-heading"><h2>${esc(t("data.groupConversation"))}</h2>${clear("conversation", data?.conversations ?? 0)}</div><p class="note">${esc(data ? t("data.conversationCount", {p0:data.conversations}) : t("settings.loading"))}</p></section>` +
-    (data?.error ? `<p class="note" role="alert">${esc(data.error)}</p>` : "");
+/**
+ * One page with model connections and usage in separate views. Legacy ids choose their own view. Usage is as plain as
+ * Usage: what each subscription has left, then the key and what was spent, with no charts.
+ */
+/**
+ * The one refresh of 模型與用量 and what it is doing: it turns while it
+ * reads, then is a check for a moment. It stays a button that keeps the focus; a press while it reads does nothing.
+ */
+export function modelsRefreshHTML(state: "idle" | "busy" | "done"): string {
+  const label = t(state === "busy" ? "conn.refreshing" : state === "done" ? "runs.refreshed" : "runs.refresh");
+  return iconBtn(state === "done" ? "check" : "refresh", label, ` data-act="models-refresh" data-state="${state}" aria-busy="${state === "busy"}"${state === "busy" ? ' aria-disabled="true"' : ""}`, "models-refresh");
 }
 
-/** One page with model connections and usage in separate views. Legacy ids choose their own view. */
 function modelsHTML(v: SettingsView): string {
   const providers = v.providers ?? emptyProvidersView();
   const selected = v.modelsTab ?? (v.pane === "usage" ? "usage" : "models");
   const content = selected === "models" ? section(t("models.used"), [quickRow(v), ...MODEL_ROWS.slice(1).map(r => modelRow(v, r))], v.catalog === "failed" ? priceSpan(v, "note") : "") +
     cliBrainsHTML(v.cliBrains ?? emptyCliBrainsView()) + providersHTML(providers) + providersAddHTML(providers) :
-    `<div data-usage-host></div><section class="sgroup" aria-label="${esc(t("models.usage"))}"><div class="slist">` + [
+    spendCardHTML(v) + `<div data-usage-host></div>` + section(t("common.apiKey"), [
       keyRow(v),
       ...(v.keyError ? [note(st("err", v.keyError()), ' role="alert"')] : []),
-      spendRow(v),
-      usageRow(v),
-    ].join("") + `</div><p class="foot">${esc(t("settings.usageDifference"))}</p></section>`;
-  return headingHTML(v) + coreNote(v) + `<div class="models-page">` +
+    ]);
+  // Read once while the app runs; this reads it all again.
+  return headingHTML(v, modelsRefreshHTML(v.modelsRefresh ?? "idle")) + coreNote(v) + `<div class="models-page">` +
     tabs((["models", "usage"] as const).map((id) => ({
       id, label: id === "models" ? t("providers.title") : t("models.usage"),
       attrs: ` id="models-tab-${id}" data-models-tab="${id}" data-k="models-tab:${id}" aria-controls="models-panel-${id}" tabindex="${id === selected ? 0 : -1}"`,
-    })), selected, { label: t("settings.paneUsage"), kind: "nav", plain: true, fill: true }) +
+    })), selected, { label: t("settings.paneUsage"), kind: "nav", plain: true }) +
     (["models", "usage"] as const).map((id) => `<div class="models-content" id="models-panel-${id}" role="tabpanel" aria-labelledby="models-tab-${id}"${id === selected ? "" : " hidden"}>${id === selected ? content : ""}</div>`).join("") + `</div>`;
 }
 
@@ -737,8 +578,10 @@ function aboutHTML(v: SettingsView): string {
     `<div class="about-brand">${brandIcon("about-icon")}<span class="about-name">Raphael</span></div>` +
     `<div class="slist about">` +
     row(t("settings.078"), "", `<span class="val num">${esc(v.version)}</span>`) +
-    row(t("nav.help"), "", btn(t("nav.help"), "", ' data-act="help"')) +
-    row(t("settings.079"), t("settings.080"), btn(t("settings.081"), "", ' data-act="license"')) +
+    // The row names it; its control is an icon, never the same words again:
+    // a page out of the app has the outward arrow, one inside it the chevron.
+    row(t("nav.help"), "", iconBtn("external", t("desktop.openShort"), ' data-act="help"')) +
+    row(t("settings.079"), t("settings.080"), iconBtn("right", t("settings.081"), ' data-act="license"')) +
     `</div>` +
     updateHTML(v.update ?? null, v.device.auto_update ?? false, v.version) +
     t("settings.082")
@@ -749,12 +592,12 @@ function aboutHTML(v: SettingsView): string {
 export function paneHTML(v: SettingsView): string {
   switch (v.pane) {
     case "appearance":
-      return headingHTML(v) + coreNote(v) + `<div class="appearance-settings">` + section("", [
-        row(t("settings.067"), "", sel(APPEARANCES, v.device.appearance, t("settings.067"), ' data-k="appearance"')),
-        row(t("settings.059"), "", sel(UI_LANGUAGES, v.device.ui_language, t("settings.059"), ' data-k="ui-language"')),
-      ]) + `</div>`;
+    case "messaging":
+    // The old memory tab is gone: a link to it lands here (canonicalPane), so nothing draws memory.
+    case "memory":
     case "general":
       return generalHTML(v);
+    case "data":
     case "dictation":
       return dictationHTML(v);
     case "agent":
@@ -764,13 +607,9 @@ export function paneHTML(v: SettingsView): string {
       return safetyHTML(v);
     case "connections":
       return connectionsTabHTML(v);
-    case "messaging":
-      return messagingTabHTML(v);
     case "usage":
     case "models":
       return modelsHTML(v);
-    case "data":
-      return dataHTML(v);
     case "about":
       return aboutHTML(v);
   }

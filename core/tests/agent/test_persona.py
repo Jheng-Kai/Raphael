@@ -39,7 +39,7 @@ def test_all_system_contracts_require_owner_approval_for_outward_vm_actions(lang
 
 
 def test_raphael_speaks_traditional_chinese_english_and_japanese():
-    assert LANGUAGES == ("zh-TW", "en", "ja")
+    assert LANGUAGES == ("zh-TW", "en", "ja", "zh-CN", "ko", "es", "fr", "de", "pt-BR", "it", "ru", "vi", "th", "id", "tr")
     assert DEFAULT_LANGUAGE == "zh-TW"
 
 
@@ -63,7 +63,7 @@ def test_a_ui_language_is_taken_for_the_one_of_the_three_it_stands_for(given, la
     assert normalize_language(given) == language
 
 
-@pytest.mark.parametrize("given", ["", "fr", "ko-KR", "klingon", "x"])
+@pytest.mark.parametrize("given", ["", "ar", "he", "klingon", "x"])
 def test_an_unknown_ui_language_is_english(given):
     assert normalize_language(given) == "en"
 
@@ -117,6 +117,9 @@ def test_every_language_has_every_phrase():
     names = {field.name for field in dataclasses.fields(persona.Phrases)}
     assert names  # the dataclass is not empty
     assert set(PHRASES) == set(LANGUAGES)
+    for language in LANGUAGES:
+        for name in names:
+            assert phrase(language, name) == getattr(PHRASES[persona.fixed_language(language)], name)
     for language, phrases in PHRASES.items():
         for name in names:
             text = getattr(phrases, name)
@@ -189,7 +192,7 @@ def test_only_a_question_asks_and_every_other_line_states(language):
         if name in _QUESTIONS:
             assert text.endswith(("？", "?")), name
         else:
-            assert text.endswith(("。", ".")), name
+            assert language == "th" or text.endswith(("。", ".")), name
             assert "？" not in text and "?" not in text, name
 
 
@@ -205,7 +208,7 @@ def test_the_fixed_lines_leave_the_address_to_the_greeting_and_the_model():
 
 
 def test_the_hand_off_names_the_owner_in_the_word_of_its_language():
-    for language in LANGUAGES:
+    for language in ("zh-TW", "en", "ja"):
         assert persona.ADDRESS[language] in phrase(language, "computer_handoff")
     assert phrase("zh-TW", "computer_handoff") == "這一步需要主人親自操作。"
 
@@ -215,8 +218,15 @@ def test_the_fixed_lines_are_brief(language):
     for name in _LINES:
         text = phrase(language, name)
         repair = name in {"budget", "credits", "worker_model", "worker_limit_model", "worker_limit_tool", "worker_limit_time", "worker_limit_cost", "worker_limit_month", "vision_off", "pdf_off", "failed", "open_not_found", "computer_watch", "computer_unavailable", "computer_refused_app"}
-        if language == "en":
+        if language == "vi":
+            # Vietnamese spaces separate syllables as well as words.
+            assert len(text.split()) <= (90 if repair else 40), name
+        elif language not in ("zh-TW", "zh-CN", "ja", "ko", "th"):
             assert len(text.split()) <= (45 if repair else 16), name
+        elif language == "ko":
+            assert len(text) <= (190 if repair else 90), name
+        elif language == "th":
+            assert len(text) <= (260 if repair else 150), name
         else:
             assert len(text) <= (140 if repair else 40), name
 
@@ -298,25 +308,26 @@ def test_nothing_is_nothing():
 
 @pytest.mark.parametrize("language", LANGUAGES)
 @pytest.mark.parametrize("route", ["answer", "discuss", "chat"])
-def test_the_system_prompt_names_the_language_the_prefixes_and_the_limit(language, route):
+def test_the_system_prompt_names_the_language_prefixes_and_complete_reply(language, route):
     prompt = persona.system_prompt(language, route)
-    assert "Reply ONLY in" in prompt
+    assert persona.REPLY_LANGUAGE in prompt
     for prefix in PREFIXES[language]:
         assert f'"{prefix}"' in prompt
-    assert persona._LIMIT_WORDS[language] in prompt
+    assert "your complete reply" in prompt
+    assert "optional work receipts only" in prompt
+    assert 'put anything longer in "detail"' not in prompt
     from raphael_core.agent.self_check import DOCTRINE
     without_schema = prompt.replace(DOCTRINE, "")
     assert "{" not in without_schema and "}" not in without_schema  # every placeholder was filled
     assert persona.system_prompt(language, route) == prompt  # the same every time
 
 
-def test_the_system_prompt_of_each_language_asks_for_that_language_and_no_other():
-    assert "Traditional Chinese as written in Taiwan" in persona.system_prompt("zh-TW", "chat")
-    assert "never Simplified" in persona.system_prompt("zh-TW", "chat")
-    assert "Reply ONLY in English" in persona.system_prompt("en", "chat")
-    assert "Reply ONLY in Japanese" in persona.system_prompt("ja", "chat")
-    other = persona.system_prompt("en", "chat")
-    assert "答" not in other and "Answer" in other  # the prefixes of the others are not offered
+def test_interface_language_only_selects_fixed_prefixes():
+    for language in LANGUAGES:
+        prompt = persona.system_prompt(language, "chat")
+        assert persona.REPLY_LANGUAGE in prompt
+        assert "Reply ONLY in" not in prompt and "never Simplified" not in prompt
+        assert f'"{PREFIXES[language].answer}"' in prompt
 
 
 def test_the_system_prompt_has_the_character_and_the_rules_about_facts():
@@ -345,30 +356,25 @@ def test_the_system_prompt_names_the_master_in_the_word_of_its_language_to_use_s
 ):
     prompt = persona.system_prompt(language, "chat")
     assert persona.ADDRESS[language] == address
-    assert f'You call your master "{address}".' in prompt
+    assert address in prompt and "according to the reply language" in prompt
     assert "sparingly" in prompt and "most replies not at all" in prompt
     for other in persona.ADDRESS.values():
-        if other != address:
-            assert f'"{other}"' not in prompt
+        assert other in prompt
 
 
-def test_the_system_prompt_of_each_language_has_no_word_of_another():
-    assert persona.system_prompt("en", "discuss").isascii()
+def test_persona_is_identical_across_interface_languages():
     for route in ("answer", "discuss", "chat"):
-        zh = persona.system_prompt("zh-TW", route)
-        ja = persona.system_prompt("ja", route)
-        assert not any("぀" <= ch <= "ヿ" for ch in zh)  # no kana in the Chinese prompt
-        assert "主人" not in ja and "啦" not in ja
-        assert convert_leftover_simplified(zh) == zh
+        personas = [persona.system_prompt(language, route).split("</persona>")[0] for language in LANGUAGES]
+        assert len(set(personas)) == 1
 
 
 @pytest.mark.parametrize("language", LANGUAGES)
-def test_the_system_prompt_sets_the_register_and_the_tone_of_its_language(language):
+def test_the_system_prompt_keeps_its_register_across_interface_languages(language):
     prompt = persona.system_prompt(language, "answer")
-    assert persona._REGISTER[language] in prompt
-    assert persona._TONE[language] in prompt
+    assert "same formal, concise register in whichever language" in prompt
+    assert persona._TONE["en"] in prompt
     assert "For the tone only, never for the content" in prompt
-    tone = persona._TONE[language]
+    tone = persona._TONE["en"]
     assert "!" not in tone and "！" not in tone
 
 
@@ -397,88 +403,14 @@ def test_the_answer_rules_refuse_only_when_nothing_useful_can_be_said(language):
     assert "use only the tool results and the conversation" not in prompt
 
 
-# --- what the voice speaks -----------------------------------------------------------------------
-
-
-@pytest.mark.parametrize("language", ["zh-TW", "en"])
-def test_every_fixed_phrase_is_found_again_in_its_japanese_wording(language):
-    fields = {"server": "S", "tool": "T", "what": "W", "steps": "3", "member": "小行程", "rule": "R",
-              "app": "A", "target": "G", "keys": "K"}  # fmt: skip
-    for name in persona.Phrases.__dataclass_fields__:
-        shown = phrase(language, name, **{k: v for k, v in fields.items() if "{" + k + "}" in getattr(PHRASES[language], name)})
-        expected = phrase("ja", name, **{k: v for k, v in fields.items() if "{" + k + "}" in getattr(PHRASES["ja"], name)})
-        assert persona.fixed_line(language, shown, "ja") == expected, name
-
-
-def test_a_line_that_is_no_fixed_phrase_has_no_japanese_wording():
-    assert persona.fixed_line("zh-TW", "台北現在 24 度。", "ja") is None
-    assert persona.fixed_line("en", "It is 24 degrees.", "ja") is None
-
-
-def test_a_fixed_phrase_keeps_the_words_of_its_fields():
-    shown = phrase("en", "worker_cancelled", steps="7")
-    assert persona.fixed_line("en", shown, "ja") == phrase("ja", "worker_cancelled", steps="7")
-
-
-def test_in_the_voice_language_a_line_is_spoken_as_it_is_shown():
-    assert persona.spoken_line("ja", "解", "二十四度です。") == ("解", "二十四度です。")
-
-
-@pytest.mark.parametrize(
-    ("language", "shown", "spoken"),
-    [("zh-TW", "答", "解"), ("zh-TW", "告", "告"), ("zh-TW", "否", "否"), ("zh-TW", "了", "了"),
-     ("zh-TW", "問", "問"), ("en", "Answer", "解"), ("en", "Notice", "告"), ("en", "Negative", "否"),
-     ("en", "Understood", "了"), ("en", "Question", "問")],
-)  # fmt: skip
-def test_the_prefix_is_spoken_as_its_japanese_counterpart(language, shown, spoken):
-    assert persona.spoken_line(language, shown, "x", "はい。") == (spoken, "はい。")
-
-
-def test_a_line_is_spoken_as_the_models_japanese_when_it_is_no_fixed_phrase():
-    assert persona.spoken_line("zh-TW", "答", "台北現在 24 度。", "二十四度です。") == ("解", "二十四度です。")
-
-
-def test_a_line_with_no_japanese_is_not_spoken():
-    assert persona.spoken_line("zh-TW", "答", "台北現在 24 度。", "") is None
-    assert persona.spoken_line("en", "Answer", "It is 24 degrees.", "  ") is None
-
-
-def test_a_fixed_phrase_is_spoken_in_japanese_even_if_the_model_wrote_a_japanese_line():
-    shown = phrase("zh-TW", "denied")
-    assert persona.spoken_line("zh-TW", "了", shown, "別の文") == ("了", phrase("ja", "denied"))
-
-
-def test_the_system_prompt_asks_for_the_japanese_line_only_when_told_to():
-    plain = persona.system_prompt("zh-TW", "chat")
-    asking = persona.system_prompt("zh-TW", "chat", say_ja=True)
-    assert "say_ja" not in plain and asking.startswith(plain)
-    assert '"say_ja"' in asking and "200 characters" in asking and "brackets" in asking
-    assert persona.system_prompt("zh-TW", "chat", "index", say_ja=True).endswith(
-        persona.memory_rules("index")
-    )  # the memory's rules stay last
-    assert persona.system_prompt("zh-TW", "chat", say_ja=True) == persona.system_prompt(
-        "zh-TW", "chat", say_ja=True
-    )
-
-
-def test_the_language_reminder_names_the_japanese_field_only_when_there_is_one():
-    assert persona.language_reminder("en") == "Reply in English only."
-    assert 'except the field "say_ja"' in persona.language_reminder("en", say_ja=True)
-
-
 @pytest.mark.parametrize("language", LANGUAGES)
 @pytest.mark.parametrize("narrated", [False, True])
-def test_every_speaker_knows_audio_and_optional_read_aloud_are_available(language, narrated):
+def test_every_speaker_knows_that_replies_are_text_and_has_no_audio_tool(language, narrated):
     prompts = [persona.system_prompt(language, "answer", narrated=narrated),
                persona.member_system_prompt(language, "answer", name="Tutor", role="Teacher",
                                             instructions="Teach examples.", narrated=narrated)]
-    for rule in (
-        "You have a voice",
-        "generate_audio",
-        "enabled read-aloud voice",
-        "never claim that you cannot play audio or speak",
-    ):
-        assert all(rule in prompt for prompt in prompts)
+    assert all("Replies are text" in prompt for prompt in prompts)
+    assert not any("generate_audio" in prompt or "spoken answers" in prompt for prompt in prompts)
 
 
 @pytest.mark.parametrize("language", LANGUAGES)

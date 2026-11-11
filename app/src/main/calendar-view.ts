@@ -8,7 +8,7 @@ import { faceHTML, RAPHAEL_ID, scheduleText } from "./members";
 import { dateKey, localDay, shiftDay } from "./schedule-picker";
 import { occurrences } from "./automation-calendar";
 import { iconHTML } from "./service-mark";
-import { slimeColorOf } from "./slime";
+import { RAPHAEL_COLOR, slimeColorOf } from "./slime";
 import type { Routine, RoutineRun } from "./types";
 import { btn, esc, ico, iconButton } from "./ui";
 import "./calendar-view.css";
@@ -72,9 +72,9 @@ export const ROUTINE_DRAWN_MS = HOUR;
 
 export const googleMark = (): string => `<span class="cal-mark" aria-hidden="true">${iconHTML("Google Calendar", "googlecalendar", "md")}</span>`;
 
-/** The colour of a chip that stands for someone. Raphael has his emblem and no slime: his chips stay neutral. */
+/** The colour of a chip that stands for someone: its slime's, Raphael's first blue one included. */
 export const chipColor = (member: CalendarPerson | undefined): string =>
-  member && member.id !== RAPHAEL_ID ? ` style="--chip:${slimeColorOf(member)}"` : "";
+  member ? ` style="--chip:${member.id === RAPHAEL_ID ? RAPHAEL_COLOR : slimeColorOf(member)}"` : "";
 
 /** The time an entry shows on a chip. */
 export const chipClock = (entry: { allDay: boolean; start: number }): string => (entry.allDay ? t("auto.allDay") : formatClock(entry.start));
@@ -82,10 +82,13 @@ export const chipClock = (entry: { allDay: boolean; start: number }): string => 
 /** The inside of a chip: its time and title, then who it is about. */
 type ChipEntry = Pick<CalendarEntry, "kind" | "title" | "allDay" | "start" | "member" | "rhythm" | "timing"> & {run?: Pick<RoutineRun,"status">};
 export const isRunException = (entry: Pick<ChipEntry,"run">): boolean => !!entry.run && ["error","confirm"].includes(entry.run.status);
+/** The mark of a run that failed or waits for the owner; nothing for any other. */
+export const runMarkHTML = (entry: Pick<ChipEntry,"run">): string => entry.run && isRunException(entry)
+  ? `<span class="cal-run-mark" data-status="${entry.run.status}" aria-label="${esc(t(entry.run.status === "error" ? "auto.error" : "auto.waiting"))}">${ico(entry.run.status === "error" ? "x" : "info")}</span>` : "";
 export function chipBody(entry: ChipEntry, o: { clock?: boolean; face?: number; timing?: boolean } = {}): string {
   const time = o.clock === false || entry.rhythm ? "" : `<time>${esc(chipClock(entry))}</time>`;
   const lead = entry.kind === "event" ? googleMark() : entry.member && o.face ? faceHTML(entry.member, o.face) : "";
-  const status = entry.run && ["error","confirm"].includes(entry.run.status) ? `<span class="cal-run-mark" data-status="${entry.run.status}" aria-label="${esc(t(entry.run.status === "error" ? "auto.error" : "auto.waiting"))}">${ico(entry.run.status === "error" ? "x" : "info")}</span>` : "";
+  const status = runMarkHTML(entry);
   const copy = `<span class="cal-chip-copy">${time}<b>${esc(entry.title)}</b>${entry.rhythm && entry.timing && o.timing !== false ? `<small>&#160;${esc(entry.timing)}</small>` : ""}</span>`;
   return entry.rhythm ? `${lead}${copy}` : `${copy}${status}${lead}`;
 }

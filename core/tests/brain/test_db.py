@@ -1,4 +1,5 @@
 import json
+import logging
 import sqlite3
 
 import pytest
@@ -9,6 +10,45 @@ from raphael_core.brain.history import HistoryStore
 from raphael_core.brain.settings import SettingsStore
 
 from .conftest import item
+
+
+def test_startup_migration_logging_only_records_executed_steps(caplog, tmp_path):
+    path = tmp_path / 'startup.db'
+    with caplog.at_level(logging.INFO, logger=db.__name__):
+        conn = db.connect(path)
+        conn.close()
+        logs = [record for record in caplog.records if record.msg.startswith('Startup migration=')]
+        assert [record.args[0] for record in logs] == sorted(db._MIGRATIONS)
+        assert all(record.args[1] >= 0 for record in logs)
+        caplog.clear()
+        conn = db.connect(path)
+        conn.close()
+        assert not caplog.records
+
+
+@pytest.mark.parametrize('query,params', [
+    ("SELECT id FROM worker_tasks WHERE mode IS NOT NULL AND source_turn_id IN (?,?) ORDER BY id", (1, 2)),
+    ("SELECT id FROM worker_tasks WHERE mode IS NOT NULL AND source_turn_id=? ORDER BY id", (1,)),
+    ("SELECT id FROM worker_tasks WHERE member_id=? AND state IN ('queued','running','waiting')", (1,)),
+    ("SELECT id FROM worker_tasks WHERE member_id IN (?,?) AND state IN ('queued','running','waiting') ORDER BY id", (0, 1)),
+    ("SELECT id FROM worker_tasks WHERE mode IS NOT NULL AND COALESCE(report_room_id,room_id)=? ORDER BY id", (1,)),
+    ("SELECT id FROM worker_tasks WHERE mode IS NOT NULL AND COALESCE(report_room_id,room_id)=? AND COALESCE(report_thread_id,thread_id)=? ORDER BY id", (1, 2)),
+    ("SELECT id FROM worker_tasks WHERE turn_id IN (?,?)", (1, 2)),
+])
+def test_startup_task_lookups_use_indexes_after_upgrade(monkeypatch, query, params):
+    with monkeypatch.context() as old:
+        old.setattr(db, 'LATEST_VERSION', 76)
+        conn = db.connect(':memory:')
+    with conn:
+        conn.execute("INSERT INTO worker_tasks(created_at_ms,state,session_id,language,text) VALUES (1,'done','synthetic','en','untouched')")
+    db.migrate(conn)
+    try:
+        plan = [row['detail'] for row in conn.execute('EXPLAIN QUERY PLAN ' + query, params)]
+        assert any('SEARCH worker_tasks USING' in detail for detail in plan), plan
+        assert not any('SCAN worker_tasks' in detail for detail in plan), plan
+        assert conn.execute('SELECT text FROM worker_tasks').fetchone()[0] == 'untouched'
+    finally:
+        conn.close()
 
 
 def test_unread_boundary_migration_preserves_existing_unread_members(monkeypatch, tmp_path):
@@ -361,7 +401,7 @@ SCHEMA_V27 = {
         "stop_requested INTEGER NOT NULL DEFAULT 0", "wrapup_sent INTEGER NOT NULL DEFAULT 0", "reason TEXT NOT NULL DEFAULT ''",
     ],
 }
-LATEST = 62
+LATEST = 79
 
 
 def test_v59_existing_tasks_default_to_no_artifact_and_keep_their_reports(monkeypatch, tmp_path):
@@ -593,6 +633,108 @@ SCHEMA_V62 = {
     "skill_sets": ["id INTEGER PK", "identity TEXT NOT NULL", "name TEXT NOT NULL", "version TEXT NOT NULL", "source TEXT NOT NULL", "description TEXT NOT NULL", "folder TEXT NOT NULL", "metadata TEXT NOT NULL"],
     "member_skills": [*SCHEMA_V61["member_skills"], "set_id INTEGER", "set_key TEXT", "set_kind TEXT"],
 }
+SCHEMA_V63 = {
+    **SCHEMA_V62,
+    "vault_entries": ["id TEXT PK", "kind TEXT NOT NULL", "label TEXT NOT NULL", "hint TEXT NOT NULL DEFAULT ''",
+                      "origin TEXT NOT NULL DEFAULT ''", "members TEXT NOT NULL", "credential TEXT NOT NULL"],
+    "computer_payment_holds": ["target TEXT PK"],
+}
+SCHEMA_V64 = {
+    **SCHEMA_V63,
+    "room_threads": [*SCHEMA_V63["room_threads"], "parent_message_id INTEGER"],
+    "message_reactions": ["turn_id INTEGER PK NOT NULL", "message_key TEXT PK NOT NULL", "emoji TEXT PK NOT NULL"],
+    "room_reactions": ["message_id INTEGER PK NOT NULL", "emoji TEXT PK NOT NULL"],
+    "email_drafts": [*SCHEMA_V63["email_drafts"], "kind TEXT NOT NULL DEFAULT 'email'"],
+    "members": [*SCHEMA_V63["members"], "voice_memo INTEGER NOT NULL DEFAULT 0"],
+}
+
+
+SCHEMA_V67 = {
+    **SCHEMA_V64,
+    "voice_calls": ["id TEXT PK", "member_id INTEGER NOT NULL", "conversation_id INTEGER NOT NULL",
+                    "started_at_ms INTEGER NOT NULL", "ended_at_ms INTEGER", "summary_id INTEGER", "failure TEXT", "rating TEXT"],
+    "voice_call_turns": ["call_id TEXT PK NOT NULL", "turn_id INTEGER PK NOT NULL"],
+}
+
+
+SCHEMA_V70 = {
+    **SCHEMA_V67,
+    "messaging_card_accounts": ["account TEXT PK", "card_id TEXT NOT NULL"],
+    "messaging_pairing_cards": ["id TEXT PK", "card_id TEXT NOT NULL", "account TEXT NOT NULL", "platform TEXT NOT NULL",
+                              "member_id INTEGER NOT NULL", "code TEXT NOT NULL", "who TEXT NOT NULL",
+                              "expires_at_ms INTEGER NOT NULL", "state TEXT NOT NULL"],
+    "member_template_cards": ["id TEXT PK", "turn_id INTEGER NOT NULL", "member_id INTEGER NOT NULL", "template TEXT NOT NULL",
+                              "findings TEXT NOT NULL", "avatar TEXT NOT NULL", "state TEXT NOT NULL", "url TEXT"],
+}
+
+
+SCHEMA_V71 = {
+    **SCHEMA_V70,
+    "messaging_card_accounts": ["account TEXT PK", "turn_id INTEGER NOT NULL"],
+    "messaging_pairing_cards": ["id TEXT PK", "turn_id INTEGER NOT NULL", *SCHEMA_V70["messaging_pairing_cards"][2:]],
+}
+
+
+SCHEMA_V72 = {**SCHEMA_V71, "permission_cards": [*SCHEMA_V71["permission_cards"], "context_only INTEGER NOT NULL DEFAULT 0"]}
+
+SCHEMA_V73 = {
+    **SCHEMA_V72,
+    "turn_tool_events": ["id INTEGER PK", "turn_id INTEGER NOT NULL", "call_id TEXT NOT NULL", "tool TEXT NOT NULL",
+                         "redacted_args TEXT NOT NULL", "redacted_result TEXT NOT NULL", "outcome TEXT NOT NULL",
+                         "external INTEGER NOT NULL DEFAULT 0", "created_at_ms INTEGER NOT NULL"],
+    "memory_search_documents": ["id INTEGER PK", "kind TEXT NOT NULL", "source_key TEXT NOT NULL",
+                                "member_id INTEGER NOT NULL DEFAULT -1", "room_id INTEGER", "body TEXT NOT NULL", "updated_at_ms INTEGER NOT NULL"],
+    "memory_entry_metadata": ["scope TEXT PK NOT NULL", "entry_id TEXT PK NOT NULL", "until_date TEXT",
+                              "created_at_ms INTEGER NOT NULL", "last_recalled_at_ms INTEGER"],
+}
+
+
+SCHEMA_V74 = {**SCHEMA_V73, "agent_turns": [*SCHEMA_V73["agent_turns"], "failure TEXT"]}
+SCHEMA_V75 = {**SCHEMA_V74, "worker_tasks": [*SCHEMA_V74["worker_tasks"], "handback TEXT"]}
+SCHEMA_V76 = {**SCHEMA_V75, "spend": [*SCHEMA_V75["spend"], "job TEXT", "billing TEXT", "cache_read_tokens INTEGER NOT NULL DEFAULT 0", "cache_write_tokens INTEGER NOT NULL DEFAULT 0", "cache_write_long_tokens INTEGER NOT NULL DEFAULT 0", "reasoning_tokens INTEGER NOT NULL DEFAULT 0", "reported_cost_usd REAL", "member_id INTEGER"]}
+
+SCHEMA_V79 = {**SCHEMA_V76,
+    "room_cli_sessions": ["room_id INTEGER PK NOT NULL", "thread_id INTEGER PK NOT NULL", "member_id INTEGER PK NOT NULL", "brain TEXT PK NOT NULL",
+                          "session_id TEXT NOT NULL", "state TEXT", "updated_at_ms INTEGER NOT NULL"],
+    "room_thread_summaries": ["room_id INTEGER PK NOT NULL", "thread_id INTEGER PK NOT NULL", "text TEXT NOT NULL",
+                              "through_message_id INTEGER NOT NULL", "updated_at_ms INTEGER NOT NULL"]}
+
+@pytest.mark.parametrize("start_version, expected_steps", [(version, [step for step in (63, 64, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79) if step > version]) for version in (62, 63, 64, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78)])
+def test_latest_upgrade_runs_only_pending_migrations_and_preserves_vault_entries(monkeypatch, tmp_path, start_version, expected_steps):
+    path = tmp_path / f"v{start_version}-to-latest.db"
+    with monkeypatch.context() as old:
+        old.setattr(db, "LATEST_VERSION", 62)
+        conn = db.connect(path)
+    with conn:
+        conn.execute("INSERT INTO computer_logins(member_id,origin,reference) VALUES (7,'https://login.example.invalid','legacy-login')")
+    if start_version >= 63:
+        with monkeypatch.context() as old:
+            old.setattr(db, "LATEST_VERSION", start_version)
+            db.migrate(conn)
+        with conn:
+            conn.execute("UPDATE vault_entries SET label='Owner label',hint='Owner hint' WHERE id='legacy-login'")
+            conn.execute("INSERT INTO computer_payment_holds(target) VALUES ('pending-payment')")
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == start_version
+    steps = []
+    conn.set_trace_callback(lambda sql: steps.append(int(sql.strip().rstrip(';').split('=')[1]))
+                            if sql.strip().startswith('PRAGMA user_version =') else None)
+    db.migrate(conn)
+    assert steps == expected_steps
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == LATEST
+    for table, columns in SCHEMA_V79.items():
+        if table != "agent_turns_fts":
+            assert describe_columns(conn, table) == columns
+    entry = conn.execute("SELECT kind,label,hint,origin,members,credential FROM vault_entries WHERE id='legacy-login'").fetchone()
+    assert tuple(entry) == ("login", "Owner label" if start_version >= 63 else "https://login.example.invalid",
+                            "Owner hint" if start_version >= 63 else "", "https://login.example.invalid", "[7]", "computer-login:legacy-login")
+    assert conn.execute("SELECT COUNT(*) FROM computer_payment_holds").fetchone()[0] == (start_version >= 63)
+    db.migrate(conn)
+    assert steps == expected_steps
+    conn.close()
+    reopened = db.connect(path)
+    assert reopened.execute("PRAGMA user_version").fetchone()[0] == LATEST
+    assert reopened.execute("SELECT COUNT(*) FROM vault_entries").fetchone()[0] == 1
+    reopened.close()
 
 
 def test_v48_adds_the_calendar_without_changing_existing_members_and_keeps_events_on_reopen(tmp_path):
@@ -749,7 +891,7 @@ def describe_columns(conn, table):
 
 
 def test_connect_creates_the_latest_schema(conn):
-    assert schema_names(conn, "table") == set(SCHEMA_V62) | FTS_SHADOWS | SEQUENCE
+    assert schema_names(conn, "table") == set(SCHEMA_V79) | FTS_SHADOWS | SEQUENCE
     assert {
         "history_created",
         "agent_turns_created",
@@ -767,9 +909,10 @@ def test_connect_creates_the_latest_schema(conn):
         "owner_question_turn",
         "agent_inbox_scope",
         "agent_inbox_started",
+        "one_standard_conversation",
     } <= schema_names(conn, "index")
     assert conn.execute("PRAGMA user_version").fetchone()[0] == LATEST
-    for table, columns in SCHEMA_V62.items():
+    for table, columns in SCHEMA_V79.items():
         if table != "agent_turns_fts":
             assert describe_columns(conn, table) == columns
     assert [c["name"] for c in conn.execute("PRAGMA table_info(agent_turns_fts)")] == [
@@ -831,7 +974,7 @@ def test_the_v3_migration_turns_learned_rules_that_fail_the_test_into_hints(tmp_
         [
             ("手機", ["首機"], "learned"),  # two CJK characters: too short for a rule
             ("Claude", ["cloud", "to"], "learned"),  # one fit form, one that is not
-            ("Typeless", ["type less"], "learned"),
+            ("Typepad", ["type pad"], "learned"),
             ("meeting", ["workshop"], "learned"),  # not alike
             ("拉斐爾", ["拉菲爾", "拉非爾"], "manual"),  # typed by the user: left alone
             ("Tailscale", ["tail"], "suggested"),
@@ -844,14 +987,14 @@ def test_the_v3_migration_turns_learned_rules_that_fail_the_test_into_hints(tmp_
     assert forms == {
         "手機": [],
         "Claude": ["cloud"],
-        "Typeless": ["type less"],
+        "Typepad": ["type pad"],
         "meeting": [],
         "拉斐爾": ["拉菲爾", "拉非爾"],
         "Tailscale": ["tail"],
     }
     assert {pair for pair in store.replacements()} == {
         ("cloud", "Claude"),
-        ("type less", "Typeless"),
+        ("type pad", "Typepad"),
         ("拉菲爾", "拉斐爾"),
         ("拉非爾", "拉斐爾"),
         ("tail", "Tailscale"),
@@ -867,7 +1010,7 @@ def test_the_v3_migration_turns_learned_rules_that_fail_the_test_into_hints(tmp_
         ("手機", "首機", 1, "pending"),
         ("claude", "cloud", 1, "rule"),
         ("claude", "to", 1, "pending"),
-        ("typeless", "type less", 1, "rule"),
+        ("typepad", "type pad", 1, "rule"),
         ("meeting", "workshop", 1, "pending"),
     }
     conn.close()
@@ -972,7 +1115,7 @@ def test_a_v4_database_gets_the_turns_table_at_v5_and_keeps_its_rows(tmp_path):
 
     conn = db.connect(path)
     assert conn.execute("PRAGMA user_version").fetchone()[0] == LATEST
-    assert describe_columns(conn, "agent_turns") == SCHEMA_V29["agent_turns"]
+    assert describe_columns(conn, "agent_turns") == SCHEMA_V76["agent_turns"]
     assert conn.execute("SELECT count(*) FROM agent_turns").fetchone()[0] == 0
     assert HistoryStore(conn).latest().text == "A"
     assert [e.word for e in DictionaryStore(conn).list()] == ["拉斐爾"]
@@ -1583,14 +1726,17 @@ def test_v24_assigns_each_legacy_member_a_stable_default_conversation(tmp_path, 
 
 def test_v52_login_cards_preserve_pending_cards_and_the_turn_delete_trigger(tmp_path):
     from raphael_core.connectors.secret_cards import SecretCardStore
-    from raphael_core.agent.history import AgentHistory
     path = tmp_path / "v51.db"
     raw = sqlite3.connect(path)
     raw.row_factory = sqlite3.Row
     for version in range(1, 52):
         step = db._MIGRATIONS[version]
         step(raw) if callable(step) else raw.executescript(step)
-    turn = AgentHistory(raw).add(session_id="test", question="Test", route="answer", prefix="", text="", status="running", source="app", member_id=0)
+    with raw:
+        turn = raw.execute(
+            "INSERT INTO agent_turns (created_at_ms,session_id,question,route,prefix,text,status,source)"
+            " VALUES (1,'test','Test','answer','','','running','app')"
+        ).lastrowid
     original = SecretCardStore(raw).open(turn_id=turn, member_id=0, conversation_id=None, server_id="connection",
         kind="header", secret="Authorization", name="Example", language="en")
     raw.close()
@@ -1610,7 +1756,6 @@ def test_v52_login_cards_preserve_pending_cards_and_the_turn_delete_trigger(tmp_
 
 
 def test_v53_follows_v52_and_keeps_login_references_and_both_card_tables(tmp_path):
-    from raphael_core.agent.history import AgentHistory
     from raphael_core.connectors.secret_cards import SecretCardStore
 
     path = tmp_path / "login-before-proposals.db"
@@ -1620,7 +1765,11 @@ def test_v53_follows_v52_and_keeps_login_references_and_both_card_tables(tmp_pat
         step = db._MIGRATIONS[version]
         step(raw) if callable(step) else raw.executescript(step)
     assert raw.execute("PRAGMA user_version").fetchone()[0] == 52
-    turn = AgentHistory(raw).add(session_id="sample", question="Connect", route="answer", prefix="", text="", status="running", source="app")
+    with raw:
+        turn = raw.execute(
+            "INSERT INTO agent_turns (created_at_ms,session_id,question,route,prefix,text,status,source)"
+            " VALUES (1,'sample','Connect','answer','','','running','app')"
+        ).lastrowid
     login = SecretCardStore(raw).open(turn_id=turn, member_id=0, conversation_id=None, server_id="sample-reference",
         kind="login", secret="login", name="https://example.invalid", language="en")
     with raw:
@@ -1641,3 +1790,37 @@ def test_v53_follows_v52_and_keeps_login_references_and_both_card_tables(tmp_pat
     assert reopened.execute("SELECT reference FROM computer_logins").fetchone()[0] == "sample-reference"
     assert {"computer_logins", "connection_proposals"} <= schema_names(reopened, "table")
     reopened.close()
+
+
+def test_v71_preserves_pairing_states_and_separates_them_from_secret_cards(tmp_path, monkeypatch):
+    from raphael_core.agent.history import AgentHistory
+    from raphael_core.connectors.secret_cards import SecretCardStore
+
+    with monkeypatch.context() as old:
+        old.setattr(db, "LATEST_VERSION", 70)
+        conn = db.connect(tmp_path / "v70-pairings.db")
+    history = AgentHistory(conn)
+    with conn:
+        turn_id = conn.execute(
+            "INSERT INTO agent_turns (created_at_ms,session_id,question,route,prefix,text,status)"
+            " VALUES (1,'setup','Connect','answer','','','done')"
+        ).lastrowid
+    secret = SecretCardStore(conn).open(turn_id=turn_id, member_id=0, conversation_id=None, server_id="telegram",
+                                       kind="messaging", secret="bot_token", name="Telegram", language="en")
+    with conn:
+        conn.execute("INSERT INTO messaging_card_accounts VALUES (?,?)", ("telegram", secret.id))
+        for state in ("pending", "approved", "rejected", "expired"):
+            conn.execute("INSERT INTO messaging_pairing_cards VALUES (?,?,?,?,?,?,?,?,?)",
+                         (state, secret.id, "telegram", "telegram", 0, "CODE-" + state, "Owner", 123456, state))
+    db.migrate(conn)
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == LATEST
+    assert tuple(conn.execute("SELECT * FROM messaging_card_accounts").fetchone()) == ("telegram", turn_id)
+    rows = conn.execute("SELECT id,turn_id,code,state FROM messaging_pairing_cards ORDER BY id").fetchall()
+    assert [tuple(row) for row in rows] == [(state, turn_id, "CODE-" + state, state) for state in sorted(("pending", "approved", "rejected", "expired"))]
+    with conn:
+        conn.execute("DELETE FROM secret_cards WHERE id=?", (secret.id,))
+    assert conn.execute("SELECT COUNT(*) FROM messaging_pairing_cards").fetchone()[0] == 4
+    history.delete(turn_id)
+    assert not conn.execute("SELECT * FROM messaging_pairing_cards").fetchall()
+    assert not conn.execute("SELECT * FROM messaging_card_accounts").fetchall()
+    conn.close()

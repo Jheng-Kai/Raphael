@@ -1,5 +1,105 @@
 # Group chats and folders
 
+## No listener; a reply that does not finish is a status line (core, 2026-11-10)
+
+Harness step 4 of the backend design (「群組與交辦」「失敗與可靠性」), after Hermes
+`gateway/hosted_room_discussion.py` and `tools/delegate_tool.py`. R-ROOM-02.
+
+- Nothing asks a member beforehand whether it will speak: `members/exchanges.py` has no `listen`, and
+  `Router.room_listener` and the CLI listener are gone. An @ or a reply to a member's message goes to
+  whoever it names. A message that names no one goes to the room's default responder first (the chief,
+  a saved member, or everyone at once), and every other member then reads that answer in a speech turn
+  of its own and speaks or replies exactly `(pass)`. Each member costs one model call per message;
+  before, every member was asked first and the speakers then spoke.
+- A member the owner names may not pass: its turn says so, and a pass that started no work is the
+  blocked reason `no_reply` (「小晴 未能回覆：沒有給出回答」). A colleague's @ may still be passed.
+- A pass in any usual form (`(pass)`, `（pass）`, `Pass.`, bold, code) leaves nothing: no bubble,
+  preview, side-thread count or line in a colleague's transcript. Words before a trailing pass stay.
+- A reply has no total clock. `ROOM_STALL_S` (180 s, `background/service.py`) is its no-progress window:
+  every CLI event, model reply or tool result starts it again, each model attempt has all of it, and a
+  chosen wait before the next attempt is no stall. An attempt that hears nothing for the whole window
+  ends the reply (`limit_time`, shown as `stalled`, 「太久沒有進展」) with no retry and no wrap-up call. A
+  room reply rides no outage out (no patient waits), and the worker keeps only its default net for it.
+- A reply that does not finish is its status line (the blocked intent) and nothing else:
+  `rooms.messages` lists no bubble for a failed, cut-off or incomplete reply, and an exchange a failure
+  stopped gets no close-out in the chief's name (the owner's Stop and the reply budget keep theirs). A
+  message whose speakers were never chosen still names the default responder that did not answer (a
+  budget stop, say), and speech a restart cut off is a `restart` line that does not run again. The
+  provider's or the CLI's own words stay in the task's private record; the exchange logs only the kind.
+  The line is a size larger (`--fs-sm`) and a step darker (`--text-2`, the name in `--text`) than the quiet event
+  lines, still one centred line: the owner needs to see it (owner, 2026-11-10, after the judge read it as small
+  and faint).
+
+## A room stops a spiral by itself; length is no error; a CLI member keeps its session (core, 2026-11-11)
+
+From the owner's own data of 2026-11-09 to 11-11 (a meeting of 330 member turns in 70 minutes, 97 failed for length,
+nothing stopped it). R-ROOM-10 to R-ROOM-13, R-MEM-11. No screen changes: the one new line is the existing close-out
+bubble (`kind: wrapup`) in the chief's name, the only words a failure puts in the room.
+
+- What a reply is given of the discussion follows the model's window (`fresh_budget`) as well as `ROOM_CONTEXT_CHARS`.
+  A message that must be there and alone outgrows the window is left out and says how long it was.
+- `RoomExchanges.breaker` reads the thread's replies since the owner last wrote: 3 failures in a row of one cause
+  (overflow, provider, refused hand-offs) stop the room (`reason: circuit_open`) and `RoomsService._breaker_notice`
+  posts one line, in the owner's language, once. A pass neither counts nor breaks the run. The owner writing in the
+  thread ends it.
+- Hand-offs from a room: at most 6 for a reply and 24 for a thread between two owner messages; the same work for the same
+  colleague under another stage_id is the stage conflict (`TaskStore.accept_handoff`).
+- A CLI member's reply resumes its own native session for the thread (`room_cli_sessions`, migration 79,
+  `background/cli.py RoomCliSessions`) and is sent only what is new; the team, the members and the board are sections
+  sent again when they change. `room_thread_summaries` holds the thread's rolling summary (`members/room_summary.py`),
+  folded after the discussion rests, and given to a renewed session before the newest messages.
+- Memory passes (`reflect`, `consolidate`) and the conversation's fold are asked again with less when the model says
+  the input is too long, skip an item that alone is too long, and never block: a fold that cannot be written is covered
+  without a model (`Conversation._fall_back`).
+
+Offline evidence: `core/tests/members/test_room_breaker.py`, `test_room_length.py`, `test_room_summary.py`,
+`core/tests/background/test_room_handoff_bounds.py`, `test_room_sessions.py`, `core/tests/memory/test_length_is_no_error.py`.
+Not proven offline: a real CLI resuming a real session by its id in a room, and a real model writing the summary.
+
+Offline evidence, written first: `core/tests/members/test_room_turns.py` (all 24 failed on the old code)
+and `core/tests/background/test_room_attempts.py` (2 of 5 failed; the other 3 guard what already held),
+then `app/src/main/group-chats.test.ts`. Scenes:
+
+```powershell
+npm run look -- room-reply-status room-mention-blocked room-discussion room-concurrent-replies room-routing-fallback --theme both --width 1120,720,1920x1080
+```
+
+Not shown offline: a live room on the installed Claude Code or Codex where a reply takes longer than
+60 s; only a live run on the owner's brains shows it.
+
+## Room CLI permission callback (core, 2026-11-09)
+
+R-ROOM-01 / R-CLI-07: Claude Code's permission-prompt callback `approve` remains mounted
+beside the four speech tools after every MCP catalog refresh. It is a permission decision,
+not an additional room action. Permission for an offered Raphael/computer MCP tool admits
+only that call to its existing context-specific gate; a board read needs no owner prompt.
+Unknown tools, callback recursion and wrong server namespaces are denied. Native shell/file
+actions remain denied in speech, including bypass mode, with guidance to hand off private work.
+Private/background tool execution still uses exact owner cards and existing protected-data rules.
+Codex uses its native permission callback; Antigravity permits only configured MCP servers in
+print mode. Neither is offered Claude's approve tool; both keep the same room/private scope.
+
+CLI termination with observed missing-tool or tool-error evidence is tool_broken with a fixed,
+localized explanation and bounded redacted private details, rather than a no-response retry.
+Bare EOF remains cli_stopped; explicit provider/auth/quota/refusal/network failures retain their
+classification. No new RPC, worker, model, schema or approval engine is introduced.
+
+Offline coverage: core/tests/background/test_room_cli.py (real room, authenticated MCP,
+three CLI brains, owner approve/deny and a synthetic Claude subprocess checking the actual
+permission-prompt flag), core/tests/agent/test_cli_failure_detail.py and existing CLI/security
+consumers. Report: app/.look/briefs/room-cli-approve-report.md. Synthetic CLI/MCP evidence does
+not establish installed Claude Code, native window or live/provider acceptance.
+
+Live proof on the installed Claude Code (owner's subscription, Haiku at low effort, isolated data):
+
+```powershell
+$env:RAPHAEL_NATIVE_BINARY = "<a --debug build of this commit>"; npm run native -- room-cli
+```
+
+A room with Raphael and a new member, both addressed, must finish both turns `done` with their words in the room
+and no 「暫時沒有回應」. First run 2026-11-09 on 6e371c0c: both answered in 6 s, but the member's words were stored
+as the raw `{"text","detail"}` envelope (app/.look/briefs/room-cli-json-envelope.md).
+
 Owner decision 2026-10-30 removes the Team page, route and spatial canvas.
 The global sidebar owns folder creation, rename, collapse, member moves and order.
 Member brain display remains in the details panel. The plus offers new members
@@ -13,10 +113,28 @@ Keep header and sidebar geometry identical; never crop the composite as one circ
 Keep the existing room composer, mentions, roles, Stop, reply references, source
 events and durable handoffs. The same AgentService owns member work.
 
-Everyone in a room reads each message and decides for themselves, on their own model, through
-one small question (`room_listener`); a CLI or local brain reads an owner's message in a real turn
-and may pass. An address is always answered. Nothing hands out the floor or sums up unasked, and no
-turn is given a template: a meeting closes and finished work reports back in plain words (R-AG-02).
+A room message carries no speaker name (owner, 2026-11-09: 「開會的時候不用有名字…不用顯示拉菲爾」):
+the face beside it says who spoke, its name in the face's tooltip and for a screen reader (the author
+stays in the markup, visually hidden); a message with nothing else in its meta line has no meta line.
+The face stands beside the message, never above it (owner, 2026-11-09), small (24 px) at its lower left, by its last
+bubble, as Grok Bot's group (owner, 2026-11-10: 「每一個 bots 都是比較小一個，然後是放在對話的左下角」). Whom a message answers is quoted at the top of its bubble
+(owner, 2026-11-09: 「回覆 小晴」 above it did not show who answered whom): the shared conversation quote, the
+source's name over its first words (two lines at most, Markdown marks dropped), a press jumps to it; a source that
+is gone says so without a name. The side thread lays its replies out the same way. Checks: `room-discussion`,
+`room-replies`, `room-reply-owner`, `room-reply-peer`, `room-reply-source-missing`.
+That hidden name is placed absolutely, so the thread (`.ra-scroll`) is its box: before 2026-11-09 it took the
+stage instead, escaped the clip at its depth in a long room and stretched the main area, and the wheel past
+the last message scrolled the whole room away (owner screenshot). Scene: `room-long-reply-wheel`; R-UI-62.
+The room's right-click dialogs 參與成員 and 房內角色 (and the new room dialog) are one list of rows
+(`.room-list`, owner 2026-11-09): each member's face and name, a check on the right of a chosen member,
+a pressed state for a reader; in 房內角色 each row carries its role as a bare dropdown on the right.
+No separate list of picked names. Scenes: `primary-room-members`, `room-role-assignment`, `new-room`,
+`plus-create-room`, `room-replies`.
+
+Everyone in a room reads each message and decides for themselves, on their own model, in a speech
+turn of their own: no one is asked beforehand (see "No listener" below). An address is always
+answered. Nothing hands out the floor or sums up unasked, and no turn is given a template: a meeting
+closes and finished work reports back in plain words (R-AG-02).
 A member's question waits above the room's composer, the room's row says so, and
 `question-reminder.ts` says it once when the owner is elsewhere (R-AG-34).
 
@@ -38,7 +156,7 @@ heavy process at a time.
 
 Owner review regression scenes: sidebar-group-avatar-hover, sidebar-group-avatar-pair,
 sidebar-room-home and sidebar-unread. Run every sidebar-prefixed scene plus home,
-home-hover and chat in both themes at 1120, 720 and 1920x1080. The native
+home-row-hover and chat in both themes at 1120, 720 and 1920x1080. The native
 readable-layout journey checks two- and three-face rooms, production RPC summaries,
 and selection after leaving each room for Home. Inspect contact sheets and full-size
 images separately from automated assertions.
@@ -71,14 +189,18 @@ npm run look -- room-handoff-running room-handoff-result room-handoff-failed roo
 npm run look -- room-routing-fallback room-role-assignment room-round-typing room-mention-after-hop-limit room-mention-after-turn-limit room-mention-blocked room-wrapup-after-replies compact-rooms --theme both --width 1120,720,1920x1080
 npm run look -- new-room room-group-menu room-draft room-menu room-replies room-discussion room-wrapup new-room-responder --theme both --width 1120,720,1920x1080
 npm run look -- room-required-chief room-generated-name room-private-isolation room-reply-owner room-reply-peer room-reply-source-missing room-reply-send room-thinking --theme both --width 1120,720,1920x1080
-npm run look -- room-stop room-row-menu room-rename room-members room-delete room-hover esc-room-armed --theme both --width 1120,720,1920x1080
+npm run look -- room-stop room-row-menu room-rename room-members room-delete room-hover esc-room-armed room-long-reply-wheel --theme both --width 1120,720,1920x1080
 ```
 
 The following retained room and sidebar journeys cover their shared consumers:
 
 ```powershell
-npm run look -- sidebar-owner-upload --theme both --width 1120,720,1920x1080
+npm run look -- sidebar-owner-upload sidebar-owner-crop sidebar-owner-crop-held --theme both --width 1120,720,1920x1080
 ```
+
+The picture crop dialog (owner photo and Raphael's picture share it) shows the whole picture under a
+square frame: the left button drags the picture or, on a corner, resizes the frame; the wheel zooms;
+the thirds show only while the button is held; there is no slider (owner, 2026-11-07).
 
 ## Gotchas
 
@@ -86,7 +208,7 @@ Synthetic IPC does not establish native persistence, provider or design acceptan
 
 ## Folded room receipts (2026-11-02)
 
-R-UI-72 groups consecutive handoff rows using the same renderer as private turns. handoff-group-room places a message between two receipt runs and requires two groups; handoff-group-open verifies disclosure identity during WorkerChanged delivery and arriving data. See conversation.md for the selected shared matrix. Individual receipt and room workflow checks retain their request/result/artifact protections.
+R-UI-72 groups consecutive handoff rows using the same renderer as private turns. handoff-group-room places a message between two receipt runs and requires two groups; handoff-group-open keeps the line node and the open conversation between members through WorkerChanged delivery and arriving data. See conversation.md for the selected shared matrix. Room workflow checks read the request, result, files and reason in that conversation (peer-chat.ts, 2026-11-07).
 ## Send while rooms work (2026-11-03)
 
 R-QUEUE-06 uses the shared chat composer: clear the submitted draft immediately,
@@ -97,6 +219,24 @@ consumers and the selected matrix are in conversation.md#durable-owner-inbox-202
 
 
 ## Meetings and private work (2026-11-04)
+
+Owner follow-up (2026-11-08, meetings-and-delegation): an explicit meeting keeps
+meeting=1 and gives every participant a speech turn in order, even when earlier
+members pass. The agenda author also receives a review turn. Owner corrections re-open
+that ordered queue; an explicitly addressed follow-up schedules only its recipients.
+Serial meeting rounds use the existing turn budget, including follow-up mentions,
+so the smaller parallel-round cap cannot truncate a normal meeting. Ordinary room chats
+no longer have listeners (superseded 2026-11-10, "No listener" below). Persistent turns
+sharing a member and conversation serialize through the existing session lock. An early CLI exit retains
+bounded, scrubbed stderr in private failure details; normal logs retain only the kind.
+A missing resume session gets one fresh attempt
+with bounded recovery receipts, without replaying completed tool effects.
+Completed room rows preserve authored text with a trailing (pass) suffix removed;
+an exact pass stays silent. Fresh TeamContextSnapshot.meetings and work_status
+carry persisted exchange state so a finished meeting cannot be reported as running.
+Regression evidence: core/tests/members/test_meetings_followup.py,
+core/tests/background/test_room_meeting.py and core/tests/agent/test_cli_brains.py.
+Core-only behavior; no new UI scene or provider acceptance is claimed.
 
 R-ROOM-01 through R-ROOM-07 supersede sequential-speech/normal-room-tools clauses.
 Selected speakers share one snapshot. Their private work can continue beside speech;
@@ -111,12 +251,16 @@ app/src/main/room-meeting.test.ts and group-chats.test.ts.
 The existing Guardian driver reads private work/report destinations and report_task_id,
 seeds meetings from actual private chief turns, and stops self-handoff work through
 the same production path. Its fake CLI listeners return their own structured choice.
+The driver also verifies the work turn belongs to the assignee's main private conversation even
+when the hand-off started in another member's private chat. The exchange remains an audit.
+Owner-private management discovery is shared by members; it does not authorize
+delegating member management through handoff or ask_member, which remains refused.
 guardian_manifest.json maps the read-only work_status tool to S08.completion.
 
 Follow-up 1 authorizes the selected offline look matrix below. Network and paid APIs
 remain forbidden. The status board is a compact pending-question-style row pinned
 under the header, outside the scrolling thread. It opens the shared popover with
-member faces, current stages, shared state pills and plain decision lines. Empty
+member faces, the title of each member's current work (never its stage_id or a task number, R-TEXT-02), shared state pills and plain decision lines. Empty
 meetings hide the row. Report cards reuse conversation-card and the shared file chip,
 never display digests, and retain the private work destination. A chip uses an opaque
 task/evidence handle through the existing native open_team_file boundary; TaskStore

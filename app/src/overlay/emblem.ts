@@ -100,7 +100,8 @@ export function params(phase: Phase, pt: number, lvl: number): Params | null {
     coreR: 0.08 + 0.03 * lvl,
     coreA: 1,
     ringR: RING_R,
-    ringW: 0.012 + lvl * 0.062,
+    // At rest the stroke is a twentieth of the radius.
+    ringW: 0.06 + lvl * 0.05,
     ringA: 1,
     glyphR: 0.86,
     glyphA: 1,
@@ -160,11 +161,18 @@ function mulberry32(seed: number): () => number {
 
 // ---------- the glyph texture ----------
 
-// The ring texture is app/public/brand/glyph-ring.png. If it fails to load, a plain vector ring is drawn.
+/** How Raphael feels: calm, or angry (red) while he refuses. */
+export type Mood = "calm" | "angry";
+
+// The ring texture is app/public/brand/glyph-ring.png, the runes of the owner's own picture, kept soft as they always were
+// If it fails to load, a plain vector ring is drawn.
 let glyph: HTMLImageElement | null = null;
 let tintCanvas: HTMLCanvasElement | null = null;
-let cleanTint: { source: HTMLImageElement; mix: number; canvas: HTMLCanvasElement } | null = null;
 let completedGlyph: { source: HTMLImageElement; canvas: HTMLCanvasElement } | null = null;
+const inkedGlyphs = new Map<Mood, { source: HTMLImageElement; canvas: HTMLCanvasElement }>();
+
+/** Whether the texture is there to draw with. */
+export const glyphTextureReady = (): boolean => !!glyph?.naturalWidth;
 /** Redraw requests for the emblems when the texture arrives (set by the emblem loop below). */
 let onTextureLoaded: () => void = () => {};
 
@@ -216,40 +224,53 @@ function completeGlyph(tex: HTMLImageElement): CanvasImageSource {
   return canvas;
 }
 
-/** Preserve the repaired texture's alpha while removing matte colors on light or unknown backgrounds. */
-function cleanGlyph(tex: HTMLImageElement, mix: number): CanvasImageSource {
-  const colorMix = Math.round(clamp(mix) * 255) / 255;
-  if (cleanTint?.source === tex && cleanTint.mix === colorMix) return cleanTint.canvas;
-  const canvas = cleanTint?.source === tex ? cleanTint.canvas : document.createElement("canvas");
+/**
+ * The photo's colours on the texture, made once per mood: its dark brown matte goes, and its letters, whose soft edges are
+ * a little lighter than their middles, take the photo's golden yellow at the edges and its orange in the middle (red when
+ * he is angry). The letters' shapes and softness are the texture's own.
+ */
+const INK = { calm: { middle: [236, 104, 26], edge: [247, 198, 28] }, angry: { middle: [170, 18, 32], edge: [255, 96, 72] } } as const;
+function inkedGlyph(tex: HTMLImageElement, mood: Mood): CanvasImageSource {
+  const kept = inkedGlyphs.get(mood);
+  if (kept?.source === tex) return kept.canvas;
+  if (typeof document === "undefined") return completeGlyph(tex);
+  const canvas = document.createElement("canvas");
   canvas.width = tex.naturalWidth;
   canvas.height = tex.naturalHeight;
   const ctx = canvas.getContext("2d");
-  if (!ctx) return tex;
-  ctx.globalAlpha = 1;
-  ctx.globalCompositeOperation = "source-over";
+  if (!ctx) return completeGlyph(tex);
   ctx.drawImage(completeGlyph(tex), 0, 0);
-  ctx.globalCompositeOperation = "source-in";
-  ctx.fillStyle = `rgb(211,${Math.round(185 - 31 * colorMix)},${Math.round(80 - 29 * colorMix)})`;
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-  ctx.globalCompositeOperation = "source-over";
-  cleanTint = { source: tex, mix: colorMix, canvas };
+  try {
+    const image = ctx.getImageData(0, 0, canvas.width, canvas.height), d = image.data, { middle, edge } = INK[mood];
+    for (let i = 0; i < d.length; i += 4) {
+      if (!d[i + 3]) continue;
+      const light = 0.299 * d[i]! + 0.587 * d[i + 1]! + 0.114 * d[i + 2]!;
+      if (light < 100) { d[i + 3] = 0; continue; }
+      const t = clamp((light - 162) / 24);
+      for (let c = 0; c < 3; c++) d[i + c] = middle[c]! + (edge[c]! - middle[c]!) * t;
+    }
+    ctx.putImageData(image, 0, 0);
+  } catch {
+    // A canvas that cannot be read back keeps the texture's own colours.
+  }
+  inkedGlyphs.set(mood, { source: tex, canvas });
   return canvas;
 }
 
-/** The texture, tinted from yellow (mix 0) to its own orange (mix 1) while it grows. */
-function tinted(tex: HTMLImageElement, mix: number, clean = false): CanvasImageSource {
-  if (clean) return cleanGlyph(tex, mix);
-  if (mix >= 0.999) return completeGlyph(tex);
+/** The texture in the photo's colours, tinted yellow while it grows (mix 0) up to its own colours (mix 1). */
+function tinted(tex: HTMLImageElement, mix: number, mood: Mood): CanvasImageSource {
+  const inked = inkedGlyph(tex, mood);
+  if (mix >= 0.999) return inked;
   if (!tintCanvas) tintCanvas = document.createElement("canvas");
   if (tintCanvas.width !== tex.naturalWidth) {
     tintCanvas.width = tex.naturalWidth;
     tintCanvas.height = tex.naturalHeight;
   }
   const g = tintCanvas.getContext("2d");
-  if (!g) return tex;
+  if (!g) return inked;
   g.globalCompositeOperation = "source-over";
   g.clearRect(0, 0, tintCanvas.width, tintCanvas.height);
-  g.drawImage(completeGlyph(tex), 0, 0);
+  g.drawImage(inked, 0, 0);
   g.globalCompositeOperation = "source-atop";
   g.fillStyle = "rgba(255,240,90," + ((1 - mix) * 0.85).toFixed(3) + ")";
   g.fillRect(0, 0, tintCanvas.width, tintCanvas.height);
@@ -260,26 +281,23 @@ function tinted(tex: HTMLImageElement, mix: number, clean = false): CanvasImageS
  * The glyph ring at the context's current transform: the texture (with the appear animation's
  * glow on top) or plain strokes.
  */
-function glyphRing(ctx: CanvasRenderingContext2D, R: number, p: Params, base: number, dim: number, surface: EmblemSurface = "dark"): void {
-  const light = surface === "light";
-  const clean = surface !== "dark";
-  if (light) ctx.globalCompositeOperation = "source-over";
+function glyphRing(ctx: CanvasRenderingContext2D, R: number, p: Params, base: number, dim: number, surface: EmblemSurface = "dark", mood: Mood = "calm"): void {
   ctx.globalAlpha = base * p.glyphA * dim;
   if (p.glyphBlur > 0) ctx.filter = "blur(" + (p.glyphBlur * R).toFixed(2) + "px)";
-  const tex = glyph;
-  if (tex && tex.naturalWidth) {
+  const tex = glyph && glyph.naturalWidth ? glyph : null;
+  if (tex) {
     const half = TEX_HALF * R * (p.glyphR / 0.86);
-    const img = tinted(tex, p.glyphMix, clean);
+    const img = tinted(tex, p.glyphMix, mood);
     ctx.drawImage(img, -half, -half, half * 2, half * 2);
     ctx.filter = "none";
     if (p.glyphGlow > 0.01) {
-      ctx.globalCompositeOperation = light ? "source-over" : "lighter";
+      ctx.globalCompositeOperation = "lighter";
       ctx.globalAlpha = base * p.glyphGlow * 0.9;
       ctx.filter = "blur(" + (1 + R * 0.025 * (p.glyphR / 0.86)).toFixed(2) + "px)";
       ctx.drawImage(img, -half, -half, half * 2, half * 2);
     }
   } else {
-    plainGlyphs(ctx, R, p, clean);
+    plainGlyphs(ctx, R, p, surface === "transparent");
   }
 }
 
@@ -334,9 +352,12 @@ function dot(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, sty
 /** Transparent overlays cannot assume that the desktop behind them is dark. */
 export type EmblemSurface = "light" | "dark" | "transparent";
 
+/** The dark background under the emblem keeps its appearance consistent on light and dark pages. */
+export const BACKDROP = { inner: "#222724", outer: "#2c312d", r: 1.035 } as const;
+
 /** What the renderer needs besides the look of the frame. */
 export interface DrawOptions {
-  /** Light surfaces use warm ink; transparent surfaces keep white light with a clean gold texture. */
+  /** A light page lays the photo's dark ground under the emblem; a transparent overlay keeps firmer edges over any desktop. */
   surface?: EmblemSurface;
   /** The effect clock, quantized to 24 fps (seeds the wobble of the ring and the rays). */
   tq: number;
@@ -350,6 +371,8 @@ export interface DrawOptions {
   lvl: number;
   /** Extra light on the glyph ring while the user speaks, 0 to `BOOST_MAX` (see `boostAmount`). */
   boost?: number;
+  /** Calm in gold, or angry in red: the ring, its rays and its centre. */
+  mood?: Mood;
 }
 
 /** Draws one frame, centered on the context's origin, `R` pixels in outer radius. */
@@ -361,7 +384,22 @@ export function drawEmblem(
 ): void {
   if (!p) return;
   const base = ctx.globalAlpha;
-  const lightSurface = o.surface === "light";
+  const angry = o.mood === "angry";
+  const unknown = o.surface === "transparent";
+  // On a light page the emblem stands on the photo's dark ground and is drawn exactly as on a dark one.
+  const surface: EmblemSurface = o.surface === "light" ? "dark" : o.surface ?? "dark";
+  if (o.surface === "light" && (p.glyphA > 0.003 || p.ringA > 0.01 || p.coreA > 0.01)) {
+    ctx.save();
+    ctx.globalAlpha = base * Math.max(p.glyphA, Math.min(1, p.ringA), clamp(p.coreA));
+    const ground = ctx.createRadialGradient(0, 0, 0, 0, 0, R * BACKDROP.r);
+    ground.addColorStop(0, BACKDROP.inner);
+    ground.addColorStop(1, BACKDROP.outer);
+    ctx.fillStyle = ground;
+    ctx.beginPath();
+    ctx.arc(0, 0, R * BACKDROP.r, 0, TAU);
+    ctx.fill();
+    ctx.restore();
+  }
 
   if (p.glyphA > 0.003) {
     // While the user speaks the ring gets a little brighter: drawn once more, added on top.
@@ -369,29 +407,41 @@ export function drawEmblem(
     const s = p.glyphR / 0.86;
     ctx.save();
     ctx.rotate(o.rot);
-    glyphRing(ctx, R, p, base, o.dim, o.surface);
+    glyphRing(ctx, R, p, base, o.dim, surface, o.mood);
     if (boost > 0.003) {
       // Added on top at full brightness (not the listening dim), with a soft golden glow when
       // the texture is there.
       ctx.filter = "none";
-      ctx.globalCompositeOperation = lightSurface ? "source-over" : "lighter";
-      glyphRing(ctx, R, p, base * boost, 1, o.surface);
+      ctx.globalCompositeOperation = "lighter";
+      glyphRing(ctx, R, p, base * boost, 1, surface, o.mood);
       if (glyph && glyph.naturalWidth) {
-        ctx.globalCompositeOperation = lightSurface ? "source-over" : "lighter";
+        ctx.globalCompositeOperation = "lighter";
         ctx.filter = "blur(" + (1 + R * 0.03 * s).toFixed(2) + "px)";
-        glyphRing(ctx, R, p, base * boost * 0.8, 1, o.surface);
+        glyphRing(ctx, R, p, base * boost * 0.8, 1, surface, o.mood);
         ctx.filter = "none";
       }
     }
     ctx.restore();
   }
 
+  // The photo's thin faint yellow circle just inside the letters' feet.
+  if (p.glyphA > 0.003) {
+    ctx.save();
+    ctx.globalAlpha = base * p.glyphA * o.dim;
+    ctx.strokeStyle = angry ? "rgba(255,96,70,0.4)" : "rgba(242,200,40,0.4)";
+    ctx.lineWidth = Math.max(0.5, R * 0.004);
+    ctx.beginPath();
+    ctx.arc(0, 0, R * 0.745 * (p.glyphR / 0.86), 0, TAU);
+    ctx.stroke();
+    ctx.restore();
+  }
+
   if (p.haloA > 0.01) {
     ctx.save();
-    ctx.globalCompositeOperation = lightSurface ? "source-over" : "lighter";
-    ctx.strokeStyle = "rgba(255,225,90," + (p.haloA * 0.9).toFixed(3) + ")";
+    ctx.globalCompositeOperation = "lighter";
+    ctx.strokeStyle = (angry ? "rgba(255,120,90," : "rgba(255,225,90,") + (p.haloA * 0.9).toFixed(3) + ")";
     ctx.lineWidth = Math.max(1.5, R * 0.03);
-    ctx.shadowColor = "rgba(255,220,80,0.9)";
+    ctx.shadowColor = angry ? "rgba(255,90,60,0.9)" : "rgba(255,220,80,0.9)";
     ctx.shadowBlur = R * 0.04;
     ctx.beginPath();
     ctx.arc(0, 0, R * 0.12, 0, TAU);
@@ -399,17 +449,50 @@ export function drawEmblem(
     ctx.restore();
   }
 
-  // The white ring: an irregular 15-gon with rounded corners, redrawn every tick.
+  // Forty thin yellow-green rays extend from the centre, most reaching the white ring,
+  // some passing through it to the letters' feet and a few out past the letters: his light shines out.
+  // They go under the white ring, which hides them where they cross it.
+  if (p.rays > 0.01) {
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    const rnd = mulberry32(5000 + Math.round(o.tq * 24));
+    const n = Math.round(36 + 10 * o.lvl * o.calm);
+    // Over an unknown desktop a deeper yellow that reads on white as on black; red when he is angry.
+    const rgb = angry ? (unknown ? "236,70,48" : "255,138,108") : unknown ? "222,196,24" : "228,242,96";
+    for (let i = 0; i < n; i++) {
+      const a = ((i + (rnd() - 0.5) * 0.9) / n) * TAU;
+      const pick = rnd();
+      const reach = pick < 0.55 ? 0.5 + rnd() * 0.1 : pick < 0.85 ? 0.62 + rnd() * 0.16 : 0.8 + rnd() * 0.35;
+      const len = R * p.raysScale * reach * (0.94 + 0.12 * o.lvl * o.calm);
+      const al = clamp((0.5 + 0.45 * rnd()) * p.rays * (0.55 + 0.45 * o.calm) * (unknown ? 1.4 : 1));
+      const half = Math.max(0.45, R * 0.0045 * (0.6 + rnd()));
+      const x = Math.cos(a), y = Math.sin(a);
+      const g = ctx.createLinearGradient(0, 0, x * len, y * len);
+      g.addColorStop(0, `rgba(${rgb},${al.toFixed(3)})`);
+      g.addColorStop(0.6, `rgba(${rgb},${(al * 0.7).toFixed(3)})`);
+      g.addColorStop(1, `rgba(${rgb},${(al * 0.12).toFixed(3)})`);
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.moveTo(-y * half, x * half);
+      ctx.lineTo(x * len, y * len);
+      ctx.lineTo(y * half, -x * half);
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  // The white ring: an irregular 13-gon of the photo's pale blue-white, a corner at the top, redrawn every tick.
   if (p.ringA > 0.01 && p.ringR > 0.005) {
     const rnd = mulberry32(1000 + Math.round(o.tq * 24));
-    const N = 15;
-    const jit = 0.025;
+    const N = 13;
+    const jit = 0.03;
     const r0 = R * p.ringR;
-    const rot0 = (rnd() * TAU) / N;
+    const rot0 = -Math.PI / 2 + (rnd() - 0.5) * 0.12;
     ctx.save();
     ctx.beginPath();
     for (let i = 0; i < N; i++) {
-      const a = rot0 + (i / N) * TAU;
+      const a = rot0 + ((i + (i ? (rnd() - 0.5) * 0.5 : 0)) / N) * TAU;
       const rr = r0 * (1 + (rnd() - 0.5) * 2 * jit);
       if (i) ctx.lineTo(Math.cos(a) * rr, Math.sin(a) * rr);
       else ctx.moveTo(Math.cos(a) * rr, Math.sin(a) * rr);
@@ -417,43 +500,29 @@ export function drawEmblem(
     ctx.closePath();
     ctx.lineJoin = "round";
     const w = Math.max(1, R * p.ringW);
-    if (lightSurface) ctx.globalCompositeOperation = "source-over";
-    ctx.lineWidth = w + 1.5;
-    ctx.strokeStyle = lightSurface || o.surface === "transparent" ? "rgba(168,105,20,0.3)" : "rgba(30,14,0,0.2)";
+    // Over an unknown desktop the white ring keeps a firm warm edge, so a white window behind it never swallows it.
+    ctx.lineWidth = w + (unknown ? 3 : 1.5);
+    ctx.strokeStyle = unknown ? "rgba(120,70,0,0.55)" : "rgba(8,14,18,0.3)";
     ctx.stroke();
-    ctx.shadowColor = lightSurface ? "rgba(233,175,67,0.4)" : "rgba(255,255,255,0.75)";
-    ctx.shadowBlur = R * 0.025;
+    ctx.shadowColor = angry ? "rgba(255,110,90,0.8)" : "rgba(214,232,244,0.55)";
+    ctx.shadowBlur = R * 0.02;
     ctx.lineWidth = w;
-    ctx.strokeStyle = lightSurface ? "rgb(211,154,51)" : "#ffffff";
+    ctx.strokeStyle = "#dde9f1";
     ctx.stroke();
     ctx.restore();
   }
 
   ctx.save();
-  ctx.globalCompositeOperation = lightSurface ? "source-over" : "lighter";
-  if (p.rays > 0.01) {
-    const rnd = mulberry32(5000 + Math.round(o.tq * 24));
-    const n = Math.round(18 + 14 * o.lvl * o.calm);
-    for (let i = 0; i < n; i++) {
-      const a = rnd() * TAU;
-      const len = R * p.raysScale * Math.min(0.95, 0.22 + rnd() * (0.33 + 0.3 * o.lvl * o.calm));
-      const al = (0.25 + 0.5 * rnd()) * p.rays * (0.5 + 0.5 * o.calm);
-      ctx.strokeStyle = (lightSurface ? "rgba(193,132,32," : "rgba(255,240,185,") + clamp(al).toFixed(3) + ")";
-      ctx.lineWidth = Math.max(0.8, R * 0.007 * (0.6 + rnd()));
-      ctx.beginPath();
-      ctx.moveTo(Math.cos(a) * R * 0.02, Math.sin(a) * R * 0.02);
-      ctx.lineTo(Math.cos(a) * len, Math.sin(a) * len);
-      ctx.stroke();
-    }
-  }
+  ctx.globalCompositeOperation = "lighter";
+  // The centre: a small white-blue point in a yellow-green glow.
   if (p.coreA > 0.01) {
     const a = clamp(p.coreA);
-    const gr = R * p.coreR * 2.2 * Math.max(1, p.coreA);
+    const gr = R * p.coreR * 1.4 * Math.max(1, p.coreA);
     const g = ctx.createRadialGradient(0, 0, 0, 0, 0, gr);
-    g.addColorStop(0, (lightSurface ? "rgba(227,170,48," : "rgba(255,255,255,") + a.toFixed(3) + ")");
-    g.addColorStop(0.22, (lightSurface ? "rgba(241,190,73," : "rgba(255,244,190,") + (0.95 * a).toFixed(3) + ")");
-    g.addColorStop(0.55, (lightSurface ? "rgba(236,173,50," : "rgba(255,214,100,") + (0.35 * a).toFixed(3) + ")");
-    g.addColorStop(1, "rgba(255,200,80,0)");
+    g.addColorStop(0, (angry ? "rgba(255,240,234," : "rgba(236,248,255,") + a.toFixed(3) + ")");
+    g.addColorStop(0.12, (angry ? "rgba(255,196,180," : "rgba(226,246,214,") + (0.9 * a).toFixed(3) + ")");
+    g.addColorStop(0.4, (angry ? "rgba(255,96,70," : "rgba(210,232,92,") + (0.42 * a).toFixed(3) + ")");
+    g.addColorStop(1, angry ? "rgba(255,80,60,0)" : "rgba(200,224,60,0)");
     ctx.fillStyle = g;
     ctx.beginPath();
     ctx.arc(0, 0, gr, 0, TAU);
@@ -466,7 +535,7 @@ export function drawEmblem(
       const rr = (0.62 + rs() * 0.22) * R;
       const life = clamp((p.sparkT - 0.2 - k * 0.03) / 0.2);
       if (life > 0 && life < 1) {
-        dot(ctx, Math.cos(a) * rr, Math.sin(a) * rr, Math.max(0.8, R * 0.012), (lightSurface ? "rgba(227,170,48," : "rgba(255,255,240,") + (1 - life).toFixed(3) + ")");
+        dot(ctx, Math.cos(a) * rr, Math.sin(a) * rr, Math.max(0.8, R * 0.012), "rgba(255,255,240," + (1 - life).toFixed(3) + ")");
       }
     }
   }
@@ -637,6 +706,7 @@ export class Emblem {
   private steps = 0;
   /** The extra light on the glyph ring at the last tick: only a recording has any. */
   private shownBoost = 0;
+  private _mood: Mood = "calm";
   /**
    * The person's picture, in a circle in the emblem's place, or null for the emblem. `layer`, when
    * there is one, shows the picture itself over the canvas (see `setPicture`).
@@ -660,6 +730,18 @@ export class Emblem {
   /** What is on screen now. */
   get phase(): Phase {
     return this._phase;
+  }
+
+  /** Calm in gold or angry in red; a change shows on the next frame. */
+  get mood(): Mood {
+    return this._mood;
+  }
+
+  set mood(mood: Mood) {
+    if (mood === this._mood) return;
+    this._mood = mood;
+    this.dirty = true;
+    wake();
   }
 
   /** The angle of the glyph ring, radians. */
@@ -837,6 +919,7 @@ export class Emblem {
       lvl: this._lvl,
       boost: this.shownBoost,
       surface: this.surface ?? (this.canvas.ownerDocument?.documentElement.dataset.theme === "light" ? "light" : "dark"),
+      mood: this._mood,
     });
   }
 

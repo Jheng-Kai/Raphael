@@ -45,17 +45,14 @@ METHODS = [
     "agent.history.search",
     "agent.history.sent",
     "agent.history.stop",
-    "agent.speak",
-    "agent.speech.status",
+    "agent.react",
     "brains.cli",
     "brains.cli_disconnect",
     "brains.cli_login",
     "conversations.clear",
-    "conversations.create",
-    "conversations.delete",
     "conversations.list",
-    "conversations.rename",
     "messages.search",
+    "pages.export",
     "pages.open",
     "pages.tool_call",
     "quota.list",
@@ -260,9 +257,9 @@ async def test_the_other_methods_check_their_params(rig, method, params):
 @pytest.mark.parametrize(
     ("given", "prefix"),
     [("zh-TW", "了"), ("zh", "了"), ("zh-Hant-TW", "了"), ("ja", "了"), ("en", "Understood"),
-     ("en-US", "Understood"), ("fr", "Understood")],
+     ("en-US", "Understood"), ("fr", "Compris")],
 )  # fmt: skip
-async def test_the_ui_language_is_taken_for_one_of_the_three(rig, client, given, prefix):
+async def test_the_ui_language_selects_its_translated_words(rig, client, given, prefix):
     client.decisions.append(decision("command", "volume_mute"))
     assert (await rig.ask("mute", language=given))["prefix"] == prefix
 
@@ -287,6 +284,7 @@ async def test_a_command_is_done_at_once_and_answered_with_the_fixed_reply(rig, 
         "text": "",
         "detail": None,
         "status": "done",
+        "failure": None,
         "session_id": "s1",
         "source": "voice",
         "cost_usd": 0.00004,
@@ -298,6 +296,7 @@ async def test_a_command_is_done_at_once_and_answered_with_the_fixed_reply(rig, 
         "thread_id": None,
         "peer_id": None,
         "attachments": [],
+        "reactions": {},
         "steps": [
             {
                 "kind": "command",
@@ -831,12 +830,32 @@ async def test_a_tool_that_fails_does_not_stop_the_answer_which_is_told_it_is_mi
     assert "weather: unavailable (network)" in client.json_calls[0]["user"]
 
 
-async def test_an_answer_is_worded_in_the_ui_language(rig, client):
+async def test_an_answer_follows_owner_words_instead_of_the_ui_language(rig, client):
     client.decisions.append(decision("answer", time=0.9))
     client.replies.append(spoken("Answer", "It is 14:05.", ""))
-    result = await rig.ask("what time is it", language="en")
-    assert result["prefix"] == "Answer"
-    assert "Reply ONLY in English" in client.json_calls[0]["system"]
+    result = await rig.ask("what time is it", language="ja")
+    assert result["prefix"] == "解" and result["text"] == "It is 14:05."
+    system = client.json_calls[0]["system"]
+    assert "Reply ONLY in" not in system
+    assert "Otherwise follow the language of the owner's message or established conversation" in system
+    assert "The interface language never selects your speaking language" in system
+
+
+@pytest.mark.parametrize("ui", ["zh-TW", "en", "ja"])
+@pytest.mark.parametrize(("variant", "authored", "expected"), [
+    ("zh-TW", "软件资料已检查。", "軟體資料已檢查。"),
+    ("zh-HK", "软件资料已检查。", "軟件資料已檢查。"),
+    ("zh-CN", "資料已檢查。", "资料已检查。"),
+    ("zh-TW", "日本の学校へ行きます。", "日本の学校へ行きます。"),
+])
+async def test_structured_api_answer_uses_owner_script_independently_of_ui(rig, client, ui, variant, authored, expected):
+    rig.settings.set("languages", [variant])
+    client.decisions.append(decision("answer", time=0.9))
+    client.replies.append(spoken("Answer", authored, authored))
+    result = await rig.ask("Please explain", language=ui)
+    assert len(client.json_calls) == 1
+    saved = rig.history.get(result["turn_id"])
+    assert result["text"] == saved.text == expected
 
 
 async def test_an_answer_keeps_complete_history_below_half_window(rig, client):
@@ -971,17 +990,17 @@ async def test_without_a_key_the_commands_still_work_and_the_rest_is_refused_wit
     assert [t["status"] for t in await rig.turns()] == ["error", "done"]
 
 
-async def test_over_the_monthly_limit_answers_are_still_available(
+async def test_over_the_monthly_limit_free_commands_work_but_paid_answers_are_blocked(
     rig, client, actions
 ):
     rig.settings.set("monthly_limit_usd", 1)
     rig.spend.record(purpose="cleanup", model="m", cost_usd=1.0, prompt_tokens=1, completion_tokens=1)
     assert (await rig.ask("open youtube.com", language="en"))["prefix"] == "Understood"
     assert did(actions) == [("open_url", "https://youtube.com/")]
-    client.replies.extend([completion(classification()), completion({"prefix": "Answer", "text": "Still here.", "detail": ""})])
     result = await rig.ask("hello", language="en")
-    assert result["text"] == "Still here."
-    assert client.calls > 0
+    assert rig.history.get(result["turn_id"]).status == "error" and "monthly spending limit of US$1" in result["text"]
+    assert "Settings > Models & usage" in result["text"]
+    assert client.calls == 0
 
 
 async def test_offline_the_commands_still_work_and_the_rest_is_refused_with_the_reason(
@@ -1477,6 +1496,7 @@ async def test_the_history_lists_the_newest_turn_first_with_the_fields_the_app_r
         "id", "created_at_ms", "question", "route", "prefix", "text", "detail", "status",
         "session_id", "source", "cost_usd", "model", "attachments", "steps", "task", "member_id",
         "peer_id", "messages", "conversation_id", "scope", "room_id", "thread_id", "pages",
+        "reactions", "failure",
     }  # fmt: skip
 
 

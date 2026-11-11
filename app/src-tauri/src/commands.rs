@@ -40,8 +40,7 @@
 //! hotkeys or the overlay may not be there, and the settings page still has to work.
 //!
 //! The window may also read and set the services of Raphael's tools (`services.status`,
-//! `services.set_key`, `services.clear_key`), try Raphael's voice (`tts.preview`, `tts.stop`), and
-//! a typed question may carry images and PDFs
+//! `services.set_key`, `services.clear_key`), and a typed question may carry images and PDFs
 //! (`agent_ask_text`'s `attachments`, which go on to `agent.ask` untouched).
 //!
 //! Never log the params of a call: `secrets.set_openrouter_key` carries the OpenRouter key,
@@ -70,6 +69,7 @@ use crate::mic_access::{self, MicAccess};
 use crate::notices::LanguageCell;
 use crate::overlay::{AskPrompt, ConfirmSender, Confirmation, Overlay};
 use crate::rpc::{CORE_EXITED, Notification, RpcError, TIMEOUT};
+use crate::template_file;
 
 /// What `core_call` says when there is no core to call.
 const CORE_NOT_RUNNING: &str = "Raphael's core is not running";
@@ -215,12 +215,24 @@ pub enum MainEvent {
         member_id: u64,
     },
     QuotaChanged,
+    /// A subscription window is nine-tenths used (`quota.warning`, told once per window by the core): the window says
+    /// which one, what is left and when it resets (`resets_at`, unix seconds). Only these known identifiers and numbers
+    /// pass, never a provider's words.
+    QuotaWarning {
+        provider: String,
+        period: String,
+        remaining_percent: f64,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        resets_at: Option<u64>,
+    },
     ActionModeChanged,
     /// Data changed: the window re-reads it without receiving private content.
     RoutinesChanged {
         member_id: u64,
     },
     CalendarChanged,
+    /// Home's daily summaries were written: the window reads the overview again.
+    HomeChanged,
     RoomsChanged {
         room_id: u64,
     },
@@ -275,6 +287,9 @@ pub enum MainEvent {
     VoiceLevel {
         value: f32,
     },
+    /// A member template file was opened from the file manager (`template_file`): the window asks for its text with
+    /// `member_template_pending` and shows the import review. The file is not in the event.
+    TemplateFile,
 }
 
 impl From<QuestionNews> for MainEvent {
@@ -474,9 +489,6 @@ const ALLOWED_METHODS: &[&str] = &[
     "chatgpt.sign_out",
     "chatgpt.models",
     "stats.summary",
-    "usage.analytics",
-    "usage.runs",
-    "usage.export",
     "usage.allowances",
     "messaging.telegram.status",
     "messaging.telegram.connect",
@@ -485,6 +497,15 @@ const ALLOWED_METHODS: &[&str] = &[
     "messaging.telegram.reject",
     "messaging.telegram.remove_user",
     "messaging.telegram.disconnect",
+    "messaging.member.status",
+    "messaging.member.connect",
+    "messaging.member.set_enabled",
+    "messaging.member.approve",
+    "messaging.member.reject",
+    "messaging.member.remove_user",
+    "messaging.member.disconnect",
+    "messaging.accounts",
+    "messaging.pairing.answer",
     "messaging.slack.status",
     "messaging.slack.connect",
     "messaging.slack.set_enabled",
@@ -500,6 +521,13 @@ const ALLOWED_METHODS: &[&str] = &[
     "messaging.discord.remove_user",
     "messaging.discord.disconnect",
     "computer.checkpoints",
+    "vault.list",
+    "vault.add",
+    "vault.update",
+    "vault.remove",
+    "vault.preview",
+    "vault.cancel",
+    "vault.import",
     // The conversation view stops the task it shows, by its id (`validate_core_call`). The other
     // methods of the worker stay closed (a task's question is answered by `background.answer`).
     "worker.cancel",
@@ -509,7 +537,6 @@ const ALLOWED_METHODS: &[&str] = &[
     // one by one, like the messaging methods: a method added to the memory later stays closed.
     "memory.get",
     "memory.update",
-    "memory.import",
     "memory.clear",
     "memory.summary_clear",
     // The services of the tools, in the settings: what is chosen and whether each key is stored
@@ -526,20 +553,24 @@ const ALLOWED_METHODS: &[&str] = &[
     // is asked something only by `agent_ask_text`, like Raphael: `agent.ask` stays closed.
     "members.list",
     "conversations.list",
-    "conversations.create",
-    "conversations.rename",
-    "conversations.delete",
     "conversations.clear",
     "agent.history.delete",
     "messages.search",
     "quota.list",
-    "agent.speech.status",
-    "agent.speak",
+    "agent.react",
     "members.create",
+    "members.greet",
     "members.update",
     "members.delete",
     "members.set_primary",
     "members.set_avatar",
+    "members.set_cover",
+    // A member's picture by its revision: the roster names it and does not carry it.
+    "members.picture",
+    // One picture candidate from the owner's image model, and what a member delivered (its Library and a file of it).
+    "members.avatar_generate",
+    "members.library",
+    "members.library_file",
     "members.read",
     "members.viewing",
     "members.tool_choices",
@@ -551,8 +582,12 @@ const ALLOWED_METHODS: &[&str] = &[
     "members.commands.list",
     "members.commands.save",
     "members.commands.delete",
-    "members.voices",
     "members.duplicate",
+    "members.template",
+    "members.template_card",
+    "members.template_card_export",
+    "members.template_card_publish",
+    "connectors.label",
     "members.mark_all_read",
     "members.unread",
     "groups.create",
@@ -573,6 +608,8 @@ const ALLOWED_METHODS: &[&str] = &[
     "rooms.create",
     "rooms.delete",
     "rooms.messages",
+    "rooms.react",
+    "rooms.thread_open",
     "rooms.send",
     "rooms.stop",
     "rooms.transcribe",
@@ -588,10 +625,6 @@ const ALLOWED_METHODS: &[&str] = &[
     "background.questions.list",
     "background.waiting.list",
     "background.answer",
-    // Raphael's voice, in the settings: the 「Try it」 line is spoken in the voice that is set up,
-    // and stopped by `tts.stop`. His answers are spoken by the core itself and need neither.
-    "tts.preview",
-    "tts.stop",
 ];
 
 /// The most a memory document may hold, in characters (the core's limit; it checks it again).
@@ -620,7 +653,7 @@ fn validate_history_search(params: &Value) -> Result<(), String> {
 /// The params of a memory method: for `memory.update`, the `text` of the document within the limit
 /// and the `revision` of the copy it was made from, if given.
 fn validate_memory_call(method: &str, params: &Value) -> Result<(), String> {
-    if method != "memory.update" && method != "memory.import" {
+    if method != "memory.update" {
         return Ok(());
     }
     match params.get("text").and_then(Value::as_str) {
@@ -641,6 +674,38 @@ fn validate_memory_call(method: &str, params: &Value) -> Result<(), String> {
 /// stopping a background task, the owner's safety rules, the questions a background task waits on
 /// and the answer to one, and the few device methods the settings page needs. Everything else
 /// is refused, the dictation methods and the ones that ask Raphael something above all.
+/// The text of a failed call for the window: `[code] message`. A generated picture's failure is acted on (a button to
+/// the image model, the key it needs, try again later), so for that call alone the kind and the place to fix it follow
+/// as JSON, and nothing else the core's handler put in `data`.
+pub fn window_error(method: &str, err: &crate::rpc::RpcError) -> String {
+    let text = err.to_string();
+    if method != "members.avatar_generate" {
+        return text;
+    }
+    fn word(value: Option<&Value>) -> Option<&str> {
+        value.and_then(Value::as_str).filter(|word| {
+            !word.is_empty()
+                && word.len() <= 64
+                && word
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || "_-:.".contains(c))
+        })
+    }
+    let Some(data) = err.data.as_ref() else {
+        return text;
+    };
+    let Some(kind) = word(data.get("kind")) else {
+        return text;
+    };
+    let missing = data.get("missing");
+    let safe = json!({
+        "kind": kind,
+        "repair": word(missing.and_then(|m| m.get("repair"))),
+        "resource": word(missing.and_then(|m| m.get("resource"))),
+    });
+    format!("{text} {safe}")
+}
+
 pub fn is_allowed_method(m: &str) -> bool {
     ALLOWED_METHODS.contains(&m)
         || ALLOWED_PREFIXES
@@ -791,7 +856,7 @@ pub async fn core_call(
     let result = core
         .call(&method, params)
         .await
-        .map_err(|err| err.to_string())?;
+        .map_err(|err| window_error(&method, &err))?;
     if method == "dictionary.learn" {
         let words = result
             .get("learned")
@@ -821,35 +886,112 @@ pub async fn core_call(
     Ok(result)
 }
 
-/// Saves an already exported CSV only at the location chosen in the native save dialog. The
-/// webview cannot supply a path. Cancel is a normal result and writes nothing.
+/// Return only the folder explicitly chosen by the owner; cancelling changes nothing.
 #[tauri::command]
-pub async fn save_usage_csv(app: AppHandle, webview: Webview, csv: String) -> Result<bool, String> {
+pub async fn pick_output_folder(
+    app: AppHandle,
+    webview: Webview,
+) -> Result<Option<String>, String> {
     require_main(&webview)?;
-    if csv.len() > 32 * 1024 * 1024 || !csv.starts_with("time,member,title,model,provider,") {
-        return Err("invalid usage CSV".to_owned());
+    let window = webview.window();
+    tauri::async_runtime::spawn_blocking(move || {
+        use tauri_plugin_dialog::DialogExt;
+        app.dialog()
+            .file()
+            .set_parent(&window)
+            .blocking_pick_folder()
+            .map(|chosen| {
+                chosen
+                    .into_path()
+                    .map(|path| path.to_string_lossy().into_owned())
+                    .map_err(|_| "invalid folder location".to_owned())
+            })
+            .transpose()
+    })
+    .await
+    .map_err(|err| format!("a background task failed: {err}"))?
+}
+
+/// Member recipes cross only an owner-selected file, never a caller-supplied path.
+#[tauri::command]
+pub async fn member_template_file(
+    app: AppHandle,
+    webview: Webview,
+    action: String,
+    text: String,
+) -> Result<Option<String>, String> {
+    require_main(&webview)?;
+    if !matches!(action.as_str(), "open" | "save") || text.len() > 512 * 1024 {
+        return Err("invalid member template request".to_owned());
     }
     let window = webview.window();
     tauri::async_runtime::spawn_blocking(move || {
         use tauri_plugin_dialog::DialogExt;
-        let chosen = app
+        let picker = app
             .dialog()
             .file()
             .set_parent(&window)
-            .add_filter("CSV", &["csv"])
-            .set_file_name("raphael-usage.csv")
-            .blocking_save_file();
+            .add_filter("Raphael member", &[template_file::EXTENSION]);
+        let chosen = if action == "open" {
+            picker.blocking_pick_file()
+        } else {
+            picker
+                .set_file_name("colleague.raphael-member")
+                .blocking_save_file()
+        };
         let Some(chosen) = chosen else {
-            return Ok(false);
+            return Ok(None);
         };
         let path = chosen
             .into_path()
-            .map_err(|_| "invalid save location".to_owned())?;
-        std::fs::write(path, format!("\u{feff}{csv}")).map_err(|err| err.to_string())?;
-        Ok(true)
+            .map_err(|_| "invalid template location".to_owned())?;
+        if path.extension().and_then(|ext| ext.to_str()) != Some(template_file::EXTENSION) {
+            return Err("choose a .raphael-member file".to_owned());
+        }
+        if action == "save" {
+            std::fs::write(path, text).map_err(|_| "could not save member template".to_owned())?;
+            Ok(Some(String::new()))
+        } else {
+            template_file::read(&path).map(Some)
+        }
     })
     .await
     .map_err(|err| format!("a background task failed: {err}"))?
+}
+
+/// The text of the template file the app was opened with, once (`template_file`): what the owner double-clicked in the
+/// file manager. The window shows its import review; it names no path.
+#[tauri::command]
+pub fn member_template_pending(webview: Webview) -> Result<Option<String>, String> {
+    require_main(&webview)?;
+    Ok(template_file::take())
+}
+
+/// Shows the files of a publish request the app prepared in the file manager, at the owner's press. The window names only
+/// the folder's 16 characters (`folder_id` of the answer to a publish); the core finds the file by them and by nothing else,
+/// so a press never opens a place the window chose.
+#[tauri::command]
+pub async fn show_template_export(
+    app: AppHandle,
+    webview: Webview,
+    folder_id: String,
+) -> Result<(), String> {
+    require_main(&webview)?;
+    let core = app
+        .try_state::<Arc<CoreProcess>>()
+        .ok_or(CORE_NOT_RUNNING)?;
+    let result = core
+        .call(
+            "members.template",
+            json!({"action": "folder", "folder_id": folder_id}),
+        )
+        .await
+        .map_err(|_| "folder unavailable".to_owned())?;
+    let found = result
+        .get("path")
+        .and_then(Value::as_str)
+        .ok_or("folder unavailable")?;
+    show_in_folder(found)
 }
 
 // ---------- questions to Raphael from the window ----------
@@ -965,6 +1107,7 @@ pub async fn agent_ask_text(
     quote: Option<Value>,
     conversation_id: Option<u64>,
     destination: Option<String>,
+    intent: Option<String>,
 ) -> Result<(), String> {
     require_main(&webview)?;
     if request_id.as_deref().is_some_and(|id| !is_question_id(id)) {
@@ -981,6 +1124,7 @@ pub async fn agent_ask_text(
     let turn = desk
         .0
         .ask_conversation(TypedQuestion {
+            intent,
             text,
             attachments,
             member: member_id.unwrap_or(0),
@@ -1148,6 +1292,7 @@ pub fn main_event_from(notification: &Notification, monitoring: bool) -> Option<
             member_id: params.get("member_id")?.as_u64()?,
         }),
         "calendar.changed" => Some(MainEvent::CalendarChanged),
+        "home.changed" => Some(MainEvent::HomeChanged),
         "rooms.changed" => Some(MainEvent::RoomsChanged {
             room_id: params.get("room_id")?.as_u64()?,
         }),
@@ -1156,14 +1301,24 @@ pub fn main_event_from(notification: &Notification, monitoring: bool) -> Option<
             member_id: params.get("member_id").and_then(Value::as_u64).unwrap_or(0),
         }),
         "quota.changed" => Some(MainEvent::QuotaChanged),
-        "setup.missing" => {
-            let resource = params.get("resource")?.as_str()?;
-            let requirement = params.get("requirement")?.as_str()?;
-            if resource != "fish" || !["setup", "key"].contains(&requirement) {
+        "quota.warning" => {
+            let provider = params.get("provider")?.as_str()?;
+            let period = params.get("period")?.as_str()?;
+            let remaining = params.get("remaining_percent")?.as_f64()?;
+            if !matches!(provider, "codex" | "claude" | "gemini")
+                || !matches!(
+                    period,
+                    "fiveHour" | "weekly" | "weeklyOpus" | "weeklySonnet"
+                )
+                || !(0.0..=100.0).contains(&remaining)
+            {
                 return None;
             }
-            Some(MainEvent::SetupMissing {
-                missing: json!({"resource": "fish", "requirement": requirement, "state": "missing", "repair": "voice"}),
+            Some(MainEvent::QuotaWarning {
+                provider: provider.to_owned(),
+                period: period.to_owned(),
+                remaining_percent: remaining,
+                resets_at: params.get("resets_at").and_then(Value::as_u64),
             })
         }
         "action_mode.changed" => Some(MainEvent::ActionModeChanged),
@@ -1824,6 +1979,76 @@ pub async fn open_team_file(app: AppHandle, webview: Webview, path: String) -> R
     show_in_folder(found)
 }
 
+/// Open a file a member delivered (its Library) at the owner's press. The core resolves only a handle of that member's
+/// Library to a checked file of a type it opens (`members.library_file`); anything else is refused there.
+#[tauri::command]
+pub async fn open_library_file(
+    app: AppHandle,
+    webview: Webview,
+    member_id: u64,
+    id: String,
+) -> Result<(), String> {
+    require_main(&webview)?;
+    let core = app
+        .try_state::<Arc<CoreProcess>>()
+        .ok_or(CORE_NOT_RUNNING)?;
+    let result = core
+        .call(
+            "members.library_file",
+            json!({"member_id": member_id, "id": id}),
+        )
+        .await
+        .map_err(|_| "file unavailable".to_owned())?;
+    let found = result
+        .get("path")
+        .and_then(Value::as_str)
+        .ok_or("file unavailable")?;
+    launch_link(found)
+}
+
+/// The largest file a report is saved as (`FILE_BYTES` of the core's agent/report_page.py).
+const REPORT_FILE_MAX: usize = 2 * 1024 * 1024;
+
+/// Saves a report the owner shares as one HTML file (owner, 2026-11-10: 存成檔案) and shows it selected in its folder.
+/// The window gives the page's id and the document it drew of it; the core checks both, names the file after the page
+/// and writes it in the owner's output folder, or in Downloads (`pages.export`), so no path comes from the window.
+/// The file is saved even where its folder cannot be shown.
+#[tauri::command]
+pub async fn report_save(
+    app: AppHandle,
+    webview: Webview,
+    id: String,
+    html: String,
+) -> Result<Value, String> {
+    require_main(&webview)?;
+    if id.is_empty() || id.len() > 128 || html.len() > REPORT_FILE_MAX {
+        return Err("invalid report file".to_owned());
+    }
+    let core = app
+        .try_state::<Arc<CoreProcess>>()
+        .ok_or(CORE_NOT_RUNNING)?;
+    let downloads = app
+        .path()
+        .download_dir()
+        .ok()
+        .map(|dir| dir.to_string_lossy().into_owned());
+    let saved = core
+        .call(
+            "pages.export",
+            json!({"id": id, "html": html, "downloads": downloads}),
+        )
+        .await
+        .map_err(|err| err.to_string())?;
+    let path = saved
+        .get("path")
+        .and_then(Value::as_str)
+        .ok_or("report file unavailable")?;
+    if let Err(error) = show_in_folder(path) {
+        log::warn!("the saved report could not be shown in its folder: {error}");
+    }
+    Ok(json!({"place": saved.get("place"), "folder": saved.get("folder")}))
+}
+
 fn show_in_folder(path: &str) -> Result<(), String> {
     #[cfg(windows)]
     {
@@ -2120,6 +2345,26 @@ mod tests {
     // ---- which window may call a command ----
 
     #[test]
+    fn conversation_setup_and_template_card_methods_are_main_window_only() {
+        for method in [
+            "messaging.pairing.answer",
+            "members.template_card",
+            "members.template_card_export",
+            "members.template_card_publish",
+        ] {
+            assert!(is_allowed_method(method));
+        }
+        for method in [
+            "messaging.pairing",
+            "messaging.pairing.send",
+            "members.template_card_delete",
+            "members.template_card_publish_extra",
+        ] {
+            assert!(!is_allowed_method(method));
+        }
+    }
+
+    #[test]
     fn floating_controls_are_allowlisted_only_for_their_own_passive_windows() {
         for label in ["overlay", "learned"] {
             assert!(floating_controls_allowed(label));
@@ -2201,17 +2446,30 @@ mod tests {
                 "keyboard_has_altgr",
                 "main_events",
                 "main_window_forward",
+                "member_template_file",
+                "member_template_pending",
                 "mic_access",
                 "open_attachment",
                 "open_external_url",
+                "open_library_file",
                 "open_link",
                 "open_team_file",
-                "save_usage_csv",
+                "pick_output_folder",
+                "report_save",
                 "schedule_keep_awake_get",
                 "schedule_keep_awake_set",
+                "show_template_export",
                 "window_hotkey",
             ]
         );
+    }
+
+    #[test]
+    fn a_report_is_saved_through_its_own_command_alone() {
+        // `report_save` gives the core the shell's Downloads folder: the window may not call `pages.export` with a
+        // folder of its own.
+        assert!(!is_allowed_method("pages.export"));
+        assert!(is_allowed_method("pages.open"));
     }
 
     // ---- the window's own way to Raphael ----
@@ -2376,7 +2634,6 @@ mod tests {
             "members.commands.list",
             "members.commands.save",
             "members.commands.delete",
-            "members.voices",
             "members.duplicate",
             "members.mark_all_read",
             "members.list",
@@ -2385,6 +2642,8 @@ mod tests {
             "members.delete",
             "members.set_primary",
             "members.set_avatar",
+            "members.set_cover",
+            "members.picture",
             "members.read",
             "members.viewing",
             "members.tool_choices",
@@ -2427,16 +2686,6 @@ mod tests {
             "services.get_key",
             "Services.status",
         ] {
-            assert!(!is_allowed_method(method), "{method}");
-        }
-    }
-
-    #[test]
-    fn the_main_window_tries_the_voice_by_its_two_names_only() {
-        for method in ["tts.preview", "tts.stop"] {
-            assert!(is_allowed_method(method), "{method}");
-        }
-        for method in ["tts.", "tts", "tts.say", "Tts.preview", "xtts.stop"] {
             assert!(!is_allowed_method(method), "{method}");
         }
     }
@@ -2491,6 +2740,32 @@ mod tests {
     }
 
     #[test]
+    fn vault_owner_methods_never_expose_private_value_reads_or_exports() {
+        for method in [
+            "vault.list",
+            "vault.add",
+            "vault.update",
+            "vault.remove",
+            "vault.preview",
+            "vault.cancel",
+            "vault.import",
+        ] {
+            assert!(is_allowed_method(method), "{method}");
+        }
+        for method in [
+            "vault",
+            "vault.",
+            "vault.get",
+            "vault.read",
+            "vault.values",
+            "vault.export",
+            "vault.execute",
+        ] {
+            assert!(!is_allowed_method(method), "{method}");
+        }
+    }
+
+    #[test]
     fn desktop_viewer_exposes_only_named_main_window_operations() {
         assert!(is_allowed_method("computer.teach"));
         assert!(!is_allowed_method("computer.teach_input"));
@@ -2512,14 +2787,18 @@ mod tests {
     }
 
     #[test]
-    fn usage_analytics_is_a_named_read_of_the_main_window_only() {
+    fn usage_is_a_named_read_of_the_main_window_only() {
         assert!(is_allowed_method("home.overview"));
         assert!(validate_core_call("home.overview", &json!({"tz": "Asia/Taipei"})).is_ok());
-        assert!(is_allowed_method("usage.analytics"));
-        assert!(validate_core_call("usage.analytics", &json!({"range": "7d"})).is_ok());
-        assert!(!is_allowed_method("usage.clear"));
-        assert!(is_allowed_method("usage.export"));
-        assert!(is_allowed_method("usage.runs"));
+        // The usage page shows only subscription allowances: the analytics, runs and CSV reads are closed.
+        for retired in [
+            "usage.analytics",
+            "usage.runs",
+            "usage.export",
+            "usage.clear",
+        ] {
+            assert!(!is_allowed_method(retired), "{retired}");
+        }
         assert!(is_allowed_method("usage.allowances"));
         assert!(ensure_caller(crate::MAIN_WINDOW, crate::MAIN_WINDOW).is_ok());
         assert!(ensure_caller("overlay", crate::MAIN_WINDOW).is_err());
@@ -2654,6 +2933,30 @@ mod tests {
             "Messaging.telegram.status",
         ] {
             assert!(!is_allowed_method(method), "{method:?}");
+        }
+    }
+
+    #[test]
+    fn member_messaging_has_only_named_owner_window_methods() {
+        for method in [
+            "status",
+            "connect",
+            "disconnect",
+            "set_enabled",
+            "approve",
+            "reject",
+            "remove_user",
+        ] {
+            assert!(is_allowed_method(&format!("messaging.member.{method}")));
+        }
+        assert!(is_allowed_method("messaging.accounts"));
+        for method in [
+            "messaging.member",
+            "messaging.member.send",
+            "messaging.member.connectx",
+            "messaging.accounts.delete",
+        ] {
+            assert!(!is_allowed_method(method));
         }
     }
 
@@ -2898,7 +3201,6 @@ mod tests {
             "models.local_delete",
             "models.catalog",
             "stats.summary",
-            "usage.analytics",
             "languages.list",
             "agent.history.list",
             "agent.history.clear",
@@ -2929,6 +3231,10 @@ mod tests {
             "members.update",
             "members.delete",
             "members.set_avatar",
+            "members.set_cover",
+            "members.avatar_generate",
+            "members.library",
+            "members.library_file",
             "members.read",
             "members.viewing",
             "members.tool_choices",
@@ -3154,48 +3460,6 @@ mod tests {
     }
 
     #[test]
-    fn missing_setup_forwards_only_fixed_voice_metadata() {
-        for requirement in ["setup", "key"] {
-            let params = json!({"resource": "fish", "requirement": requirement,
-                "state": "broken", "repair": "https://untrusted.invalid", "token": "never-forward"});
-            let event = main_event_from(&notification("setup.missing", params), false);
-            assert_eq!(
-                event,
-                Some(MainEvent::SetupMissing {
-                    missing: json!({
-                        "resource": "fish", "requirement": requirement, "state": "missing", "repair": "voice"
-                    })
-                })
-            );
-            assert!(
-                !serde_json::to_string(&event)
-                    .unwrap()
-                    .contains("never-forward")
-            );
-        }
-        assert_eq!(
-            main_event_from(
-                &notification(
-                    "setup.missing",
-                    json!({"resource": "other", "requirement": "setup"})
-                ),
-                true
-            ),
-            None
-        );
-        assert_eq!(
-            main_event_from(
-                &notification(
-                    "setup.missing",
-                    json!({"resource": "fish", "requirement": "raw-error"})
-                ),
-                true
-            ),
-            None
-        );
-    }
-
-    #[test]
     fn levels_are_kept_between_0_and_1() {
         let level = |v: Value| notification("audio.level", json!({"session_id": null, "level": v}));
         assert_eq!(
@@ -3331,6 +3595,37 @@ mod tests {
     }
 
     #[test]
+    fn a_generated_picture_failure_tells_the_window_its_kind_and_fix_and_nothing_else() {
+        let err = crate::rpc::RpcError {
+            code: 1001,
+            message: "Avatar generation failed".into(),
+            data: Some(
+                json!({"kind": "image_model_missing", "reason": "secret words",
+                "missing": {"resource": "image", "requirement": "image_generation", "repair": "models"},
+                "target": {"pane": "models", "field": "image-model"}}),
+            ),
+        };
+        let text = window_error("members.avatar_generate", &err);
+        assert_eq!(
+            text,
+            r#"[1001] Avatar generation failed {"kind":"image_model_missing","repair":"models","resource":"image"}"#
+        );
+        assert!(!text.contains("secret"));
+        assert_eq!(
+            window_error("members.update", &err),
+            "[1001] Avatar generation failed"
+        );
+        let odd = crate::rpc::RpcError {
+            data: Some(json!({"kind": "<b>x</b>"})),
+            ..err
+        };
+        assert_eq!(
+            window_error("members.avatar_generate", &odd),
+            "[1001] Avatar generation failed"
+        );
+    }
+
+    #[test]
     fn data_changes_are_forwarded_without_private_fields() {
         for (method, params, expected) in [
             (
@@ -3342,6 +3637,11 @@ mod tests {
                 "calendar.changed",
                 json!({"title": "private"}),
                 json!({"type": "CalendarChanged"}),
+            ),
+            (
+                "home.changed",
+                json!({"narrative": "private"}),
+                json!({"type": "HomeChanged"}),
             ),
             (
                 "members.changed",
@@ -3379,6 +3679,43 @@ mod tests {
             ),
         ] {
             assert_eq!(main_event_from(&notification(method, params), false), None);
+        }
+    }
+
+    #[test]
+    fn a_quota_warning_carries_only_its_window_and_numbers() {
+        let warning = notification(
+            "quota.warning",
+            json!({"provider": "codex", "period": "fiveHour", "remaining_percent": 8,
+                   "resets_at": 1_792_818_900_u64, "detail": "private"}),
+        );
+        for monitoring in [false, true] {
+            assert_eq!(
+                serde_json::to_value(main_event_from(&warning, monitoring)).unwrap(),
+                json!({"type": "QuotaWarning", "provider": "codex", "period": "fiveHour",
+                       "remaining_percent": 8.0, "resets_at": 1_792_818_900_u64})
+            );
+        }
+        let unknown_reset = notification(
+            "quota.warning",
+            json!({"provider": "claude", "period": "weeklyOpus", "remaining_percent": 7.5, "resets_at": null}),
+        );
+        assert_eq!(
+            serde_json::to_value(main_event_from(&unknown_reset, false)).unwrap(),
+            json!({"type": "QuotaWarning", "provider": "claude", "period": "weeklyOpus", "remaining_percent": 7.5})
+        );
+        for broken in [
+            json!({"provider": "openrouter", "period": "fiveHour", "remaining_percent": 8}),
+            json!({"provider": "codex", "period": "daily", "remaining_percent": 8}),
+            json!({"provider": "codex", "period": "fiveHour", "remaining_percent": 120}),
+            json!({"provider": "codex", "period": "fiveHour", "remaining_percent": "8"}),
+            json!({"provider": "codex", "period": "fiveHour"}),
+        ] {
+            assert_eq!(
+                main_event_from(&notification("quota.warning", broken.clone()), false),
+                None,
+                "{broken}"
+            );
         }
     }
 
@@ -3459,6 +3796,11 @@ mod tests {
             })
             .unwrap(),
             r#"{"type":"TrayOpen","page":"history"}"#
+        );
+        // A template file that was opened carries no text or path: the window asks for it.
+        assert_eq!(
+            serde_json::to_string(&MainEvent::TemplateFile).unwrap(),
+            r#"{"type":"TemplateFile"}"#
         );
     }
 

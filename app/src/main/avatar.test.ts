@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { avatarHTML, cleanCrop, cropStyle, currentAvatar, loadAvatar, onAvatarChange, readAvatar, setAvatar } from "./avatar";
-import { cropDialog, dragCrop } from "./avatar-settings";
+import { cropDialog, frameCrop, moveCrop, resizeCrop, startView, zoomCrop } from "./avatar-settings";
 import { openDialog } from "./member-dialogs";
 import { pictureRect } from "../overlay/emblem";
 import { setLocale, t } from "./i18n";
@@ -10,17 +10,28 @@ const PNG = "data:image/png;base64,iVBORw0KGgo=";
 
 afterEach(() => setAvatar(null));
 
+/** The open dialog's picture, as if a `w` × `h` file had loaded. */
+function loaded(w: number, h: number): HTMLElement {
+  const img = document.querySelector<HTMLImageElement>(".av-crop-view img")!;
+  Object.defineProperty(img, "naturalWidth", { value: w, configurable: true });
+  Object.defineProperty(img, "naturalHeight", { value: h, configurable: true });
+  img.dispatchEvent(new Event("load"));
+  return document.querySelector<HTMLElement>(".av-crop-view")!;
+}
+
 test("a language change translates the open crop dialog without losing its crop", async () => {
   const result = cropDialog(PNG);
-  const zoom = document.querySelector<HTMLInputElement>(".av-crop-zoom")!;
-  zoom.value = "2";
-  zoom.dispatchEvent(new Event("input"));
+  const stage = loaded(400, 200);
+  stage.dispatchEvent(new KeyboardEvent("keydown", { key: "+", bubbles: true }));
   setLocale("en");
   expect(document.querySelector("#av-crop-title")!.textContent).toBe(t("settings.avatar"));
-  expect(zoom.getAttribute("aria-label")).toBe(t("settings.avatarZoom"));
+  expect(stage.getAttribute("aria-label")).toBe(t("settings.avatarFrame"));
   expect(document.querySelector('[data-act="crop-done"]')!.textContent).toBe(t("settings.avatarDone"));
   document.querySelector<HTMLElement>('[data-act="crop-done"]')!.click();
-  expect(await result).toEqual({ x: 0.5, y: 0.5, zoom: 2 });
+  const crop = (await result)!;
+  expect(crop.zoom).toBeCloseTo(1.08);
+  expect(crop.x).toBeCloseTo(0.5);
+  expect(crop.y).toBeCloseTo(0.5);
   setLocale("zh-TW");
 });
 
@@ -96,44 +107,85 @@ describe("Raphael's face", () => {
 });
 
 describe("the crop dialog", () => {
-  test("a drag moves the picture with the pointer: the overlay's rectangle moves by as much", () => {
-    const start = { x: 0.5, y: 0.5, zoom: 1 };
-    // a wide picture in a 100 px circle: it can move sideways only
-    const moved = dragCrop(start, 30, 40, 200, 100, 100);
-    expect(moved.y).toBe(0.5);
-    const before = pictureRect(200, 100, 100, start);
-    const after = pictureRect(200, 100, 100, moved);
-    expect(after.x - before.x).toBeCloseTo(30);
-    // enlarged, it moves both ways, and as far as the pointer
-    const zoomed = { x: 0.5, y: 0.5, zoom: 2 };
-    const both = dragCrop(zoomed, -20, 10, 100, 100, 100);
-    expect(pictureRect(100, 100, 100, both).x - pictureRect(100, 100, 100, zoomed).x).toBeCloseTo(-20);
-    expect(pictureRect(100, 100, 100, both).y - pictureRect(100, 100, 100, zoomed).y).toBeCloseTo(10);
+  // A wide picture, 400 × 200, fitted in the 320 px stage with 16 px of air: 288 × 144 at (16, 88).
+  const W = 400, H = 200;
+
+  test("it opens on the whole picture with the frame over its middle square, which is the uncut picture", () => {
+    const view = startView(W, H);
+    expect(view).toMatchObject({ s: 0.72, ox: 16, oy: 88, f: 144, fx: 88, fy: 88 });
+    expect(frameCrop(view, W, H)).toEqual({ x: 0.5, y: 0.5, zoom: 1 });
   });
 
-  test("the picture never leaves the circle uncovered, and one that fits exactly does not move", () => {
-    expect(dragCrop({ x: 0.5, y: 0.5, zoom: 1 }, 50, 50, 100, 100, 100)).toEqual({ x: 0.5, y: 0.5, zoom: 1 });
-    expect(dragCrop({ x: 0.5, y: 0.5, zoom: 1 }, 5000, 0, 300, 100, 100).x).toBe(0);
-    expect(dragCrop({ x: 0.5, y: 0.5, zoom: 1 }, 1, 1, 0, 0, 100)).toEqual({ x: 0.5, y: 0.5, zoom: 1 });
-    for (const crop of [{ x: 0, y: 0, zoom: 1 }, { x: 1, y: 1, zoom: 3 }, { x: 0.2, y: 0.9, zoom: 1.7 }]) {
-      const r = pictureRect(160, 90, 100, crop);
-      expect(r.x).toBeLessThanOrEqual(1e-9);
-      expect(r.y).toBeLessThanOrEqual(1e-9);
-      expect(r.x + r.w).toBeGreaterThanOrEqual(100 - 1e-9);
-      expect(r.y + r.h).toBeGreaterThanOrEqual(100 - 1e-9);
-    }
+  test("the circle shows exactly what the frame showed: the cut maps back onto the same rectangle", () => {
+    let view = startView(W, H);
+    view = zoomCrop(view, 1.6, 120, 140, W, H);
+    view = moveCrop(view, -25, 12, W, H);
+    view = resizeCrop(view, "se", view.fx + 100, view.fy + 100, W, H);
+    const rect = pictureRect(W, H, view.f, frameCrop(view, W, H));
+    expect(rect.x).toBeCloseTo(view.ox - view.fx);
+    expect(rect.y).toBeCloseTo(view.oy - view.fy);
+    expect(rect.w).toBeCloseTo(W * view.s);
+    expect(rect.h).toBeCloseTo(H * view.s);
+  });
+
+  test("a drag moves the picture as far as the pointer, and never uncovers the frame", () => {
+    const view = startView(W, H);
+    expect(moveCrop(view, -30, 0, W, H).ox).toBeCloseTo(-14);
+    expect(frameCrop(moveCrop(view, -5000, 0, W, H), W, H).x).toBe(1);
+    expect(frameCrop(moveCrop(view, 5000, 0, W, H), W, H).x).toBe(0);
+    // the frame covers the picture's full height, so it cannot move up or down
+    expect(moveCrop(view, 0, 40, W, H).oy).toBe(88);
+  });
+
+  test("the wheel zooms about the pointer, never below the frame nor past the most enlargement", () => {
+    const view = startView(W, H);
+    const closer = zoomCrop(view, 2, view.fx, view.fy, W, H);
+    expect(closer.fx - closer.ox).toBeCloseTo((view.fx - view.ox) * 2);
+    expect(frameCrop(zoomCrop(view, 0.1, 160, 160, W, H), W, H).zoom).toBe(1);
+    expect(frameCrop(zoomCrop(view, 100, 160, 160, W, H), W, H).zoom).toBe(4);
+  });
+
+  test("a corner resizes the square frame about the opposite corner, inside the picture and never tiny", () => {
+    const view = startView(W, H);
+    const smaller = resizeCrop(view, "se", 180, 200, W, H);
+    expect(smaller).toMatchObject({ fx: 88, fy: 88, f: 112 });
+    const nw = resizeCrop(view, "nw", 150, 140, W, H);
+    expect(nw.fx + nw.f).toBe(232);
+    expect(nw.fy + nw.f).toBe(232);
+    expect(nw.f).toBe(92);
+    // outward it stops at the picture's edge, inward at 64 px
+    expect(resizeCrop(view, "se", 400, 400, W, H).f).toBe(144);
+    expect(resizeCrop(view, "se", 90, 90, W, H).f).toBe(64);
+  });
+
+  test("only the left button moves the picture; the thirds show while it is held", async () => {
+    document.body.innerHTML = "";
+    const done = cropDialog(PNG);
+    const stage = loaded(W, H);
+    const press = (button: number) => stage.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, cancelable: true, button, pointerId: 1, clientX: 100, clientY: 100 }));
+    press(2);
+    expect(stage.hasAttribute("data-pressed")).toBe(false);
+    press(0);
+    expect(stage.hasAttribute("data-pressed")).toBe(true);
+    stage.dispatchEvent(new PointerEvent("pointermove", { bubbles: true, pointerId: 1, clientX: 70, clientY: 100 }));
+    stage.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, button: 0, pointerId: 1 }));
+    expect(stage.hasAttribute("data-pressed")).toBe(false);
+    expect(document.querySelector<HTMLElement>(".av-crop-view img")!.style.left).toBe("-14px");
+    expect(document.querySelector(".av-crop-zoom, input[type=range]")).toBeNull();
+    document.querySelector<HTMLElement>('[data-act="crop-done"]')!.click();
+    expect((await done)!.x).toBeGreaterThan(0.5);
   });
 
   test("traps Tab focus inside the crop dialog and Escape closes only the crop dialog when stacked over another dialog", async () => {
     document.body.innerHTML = "";
     const under = openDialog({ title: "Under", body: '<input id="u">', actions: {}, onAct: () => {} });
     const done = cropDialog(PNG);
-    const zoom = document.querySelector<HTMLInputElement>(".av-crop-zoom")!;
+    const stage = document.querySelector<HTMLElement>(".av-crop-view")!;
     const doneBtn = document.querySelector<HTMLButtonElement>('[data-act="crop-done"]')!;
     expect(document.activeElement).toBe(doneBtn);
     doneBtn.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true }));
-    expect(document.activeElement).toBe(zoom);
-    zoom.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", shiftKey: true, bubbles: true }));
+    expect(document.activeElement).toBe(stage);
+    stage.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", shiftKey: true, bubbles: true }));
     expect(document.activeElement).toBe(doneBtn);
 
     document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
@@ -151,9 +203,11 @@ describe("the crop dialog", () => {
       end.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, button: 0, pointerId: 1, isPrimary: true }));
       end.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, detail: 1 }));
     };
-    press(document.querySelector(".av-crop h2")!, document.body);
+    const scrim = document.querySelector(".av-crop-scrim")!;
+    press(document.querySelector(".av-crop h2")!, scrim);
     expect(document.querySelector(".av-crop")).not.toBeNull();
-    press(document.body); expect(await done).toBeNull();
+    // The crop's scrim hides the dialog under it, so the press is spent on the crop alone.
+    press(scrim); expect(await done).toBeNull();
     expect(under.el.isConnected).toBe(true); expect(document.activeElement).toBe(under.el.querySelector("input"));
     under.close();
   });

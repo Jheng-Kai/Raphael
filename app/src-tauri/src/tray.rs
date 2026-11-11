@@ -35,7 +35,7 @@ fn tray_icon() -> tauri::image::Image<'static> {
 pub const TRAY_ID: &str = "raphael";
 
 // ---------- the words ----------
-// A [`Notice`] is a text in the three interface languages; the menu uses it for its labels.
+// A [`Notice`] supplies fixed text for every interface locale; the menu uses it for its labels.
 
 const OPEN: Notice = Notice {
     zh: "打開 Raphael 首頁",
@@ -630,14 +630,39 @@ mod tests {
     }
 
     #[test]
-    fn a_language_the_menu_does_not_have_is_chinese() {
+    fn an_unknown_menu_language_uses_english() {
         let microphones = listed(&["Headset"], None);
-        for language in ["", "fr", "zh-CN", "EN", "zh"] {
+        for language in ["", "ar", "EN", "zh"] {
             assert_eq!(
                 model(language, "0.1.0", &microphones, true),
-                model("zh-TW", "0.1.0", &microphones, true),
+                model("en", "0.1.0", &microphones, true),
                 "{language:?}"
             );
+        }
+    }
+
+    #[test]
+    fn every_new_interface_locale_has_translated_menu_words() {
+        let microphones = listed(&["Headset"], None);
+        for language in [
+            "zh-CN", "ko", "es", "fr", "de", "pt-BR", "it", "ru", "vi", "th", "id", "tr",
+        ] {
+            let menu = model(language, "0.1.0", &microphones, true);
+            assert_ne!(menu, model("en", "0.1.0", &microphones, true), "{language}");
+            for word in [
+                OPEN,
+                HISTORY,
+                ADD_WORD,
+                STOP_BACKGROUND,
+                SETTINGS,
+                MICROPHONE,
+                AUTOMATIC,
+                QUIT,
+            ] {
+                assert_ne!(word.text(language), word.en, "{language}: {}", word.en);
+            }
+            assert!(DISCONNECTED.text(language).contains("{name}"));
+            assert!(VERSION.text(language).contains("{version}"));
         }
     }
 

@@ -1,4 +1,4 @@
-import { scene, click, check, hover, member, wait } from "./steps.mjs";
+import { scene, click, check, hover, member, type, wait, waitGone } from "./steps.mjs";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 const fixture = JSON.parse(readFileSync(resolve(import.meta.dirname, "../fixture.json"), "utf8"));
@@ -39,8 +39,19 @@ export default [
   { ...scene("slime-states", "Each member's slime moves with what that member is doing", [{ action: "member-column", collapsed: false }, doing(1, "thinking"), doing(2, "working"), doing(3, "computer"),
     { action: "event-storm", selector: ".mb-chat:not([hidden]) .ra-scroll", roster: true, wheelBy: 0, measure: { name: "roster-motion", enforce: false }, limits: { replacedFaces: 0, allReads: 24, longTaskMs: 600 } },
     check("slime-states"), { action: "freeze-motion", at: 450 }]), motion: true },
-  scene("slime-picker", "A member's slime is a character or a colour, tried in a menu that stays open", [member(1), { action: "open-details" }, wait(".mb-det:not([hidden])"), click('[data-det="gear"]'), click(".mb-avbtn"), wait(".mb-avpop"), click('.mb-avpop [data-slime-color="coral"]'), click('.mb-avpop [data-slime-character="shion"]'), check("slime-picker")]),
-  scene("slime-sizes", "A slime at every size the app draws it, at rest, as sharp as the icon beside it", [board([sizes("素色", SKY), sizes("角", SHION), sizes("帽", SKY, true)])]),
+  // R-SLIME-01 (owner, 2026-11-11): a working member moves in the list and in the thinking line, and is a picture everywhere else.
+  { ...scene("slime-places", "A member works: its slime moves in the member list and the thinking line only, and is a still picture in the header, the panel and every other place", [{ action: "member-column", collapsed: false }, member(1), wait('.tn[data-id="651"] .live-presence'), { action: "open-details" }, wait(".mb-det:not([hidden])"),
+    { action: "slime-places", expect: { list: true, line: true } }], { presence: "working" }), motion: true },
+  { ...scene("slime-places-settings", "On the member settings page a working member still moves in the list only", [{ action: "member-column", collapsed: false }, member(1), { action: "open-details" }, click('.mb-det [data-det="gear"]'), wait(".ms-pane:not([hidden]) .ms-name"),
+    { action: "slime-places", expect: { list: true } }], { presence: "working", memberSettings: true }), motion: true },
+  // R-SLIME-02: steps and words from the core change only the words that changed.
+  { ...scene("busy-team-calm", "A member's steps and the words for them change only those words: no element is replaced, no text blinks, nothing scrolls and only the list and the thinking line move", [{ action: "member-column", collapsed: false }, member(1), wait('.tn[data-id="651"] .live-presence'), { action: "open-details" }, wait(".mb-det:not([hidden])"),
+    { action: "event-storm", selector: ".mb-chat:not([hidden]) .ra-scroll", seconds: 5, wheelBy: 0, calm: true, measure: { name: "calm-storm", enforce: false }, limits: { replacedLines: 0, replacedCards: 0, longTaskMs: 600 } }], { presence: "working" }), motion: true },
+  scene("slime-picker", "A member's slime is a character or a colour, tried in a menu of tabs that stays open on the group of the face", [member(1), { action: "open-details" }, wait(".mb-det:not([hidden])"), click('.mb-panel-identity [data-det="avatar"]'), wait(".mb-avpop"), check("slime-picker-shape"), click('.mb-avpop [data-slime-color="coral"]'), click('.mb-avpop [data-slime-tab="characters"]'), click('.mb-avpop [data-slime-character="shion"]'), check("slime-picker"), check("slime-picker-shape")]),
+  scene("slime-picker-tab", "Pressing another tab shows its group in the same place: the picker and its tabs do not move or change size", [member(1), { action: "open-details" }, wait(".mb-det:not([hidden])"), click('.mb-panel-identity [data-det="avatar"]'), wait(".mb-avpop"), check("slime-picker-box"), click('.mb-avpop [data-slime-tab="animals"]'), check("slime-picker-tab")]),
+  scene("member-face-hover", "Under the pointer the panel's face shows a pencil on a dimmed circle, as the owner's photo in Settings", [member(1), { action: "open-details" }, wait(".mb-det:not([hidden])"), hover('.mb-panel-identity [data-det="avatar"]'), check("member-face-hover")]),
+  // The picker's 生成 tab: off until an image model is chosen, then one picture to use.
+  scene("slime-sizes","A slime at every size the app draws it, at rest, as sharp as the icon beside it", [board([sizes("素色", SKY), sizes("角", SHION), sizes("帽", SKY, true)])]),
   { ...scene("slime-gallery", "Every state at the sidebar's size and the large one", [board(gallery(SHION), 2)]), motion: true },
   { ...scene("slime-characters-at-rest", "Every character keeps what it wears while it rests, at the sizes the sidebar and groups draw it", [board([40, 28, 20].map(size => ({ label: `${size}`, cells: CHARACTERS.map(character => ({ size, slime: { character }, state: "idle", at: 3000 })) })), 1), hover(".look-slime-board > div > span:first-child"), { action: "settle-motion" }, check("slime-marks-at-rest")]), motion: true },
   scene("sidebar-characters-at-rest", "The sidebar's real rows show each character's marks at rest", [{ action: "member-column", collapsed: false }, check("sidebar-shell")], { members: fixture.members.map(item => ({ ...item, avatar: { 1: "slime:diablo", 2: "slime:rigurd", 3: "slime:souei" }[item.id] ?? item.avatar })) }),
@@ -74,7 +85,7 @@ export default [
     change("閒→等", "idle", 8050, "waiting"),
   ]), check("slime-handover")]), motion: true },
   { ...scene("slime-sharp", "Running idle, active and transitioning poses retain the static vector's sharp edge", [board([{ label: "閒置", cells: sharp }, { label: "動作", cells: TELLING.slice(1).flatMap(([caption, state, at]) => [40, 96].map(size => ({ size, slime: SKY, state, at, caption }))) }, { label: "轉場", cells: [40, 72, 96].map(size => ({ size, slime: SKY, state: "working", at: 150, then: "thinking", after: 90 })) }]), { action: "slime-sharp" }]), motion: true },
-  { ...scene("slime-pointer", "Under the pointer a slime wiggles, and a press squashes it until it is let go", [{ action: "member-column", collapsed: false }, { action: "slime-pointer", selector: '.mb-row[data-member="1"]' }]), motion: true },
+  { ...scene("slime-pointer", "A resting slime in the member list glances aside, looks back under the pointer without wiggling, and a press squashes it until it is let go", [{ action: "member-column", collapsed: false }, { action: "slime-pointer", selector: '.mb-row[data-member="1"]' }]), motion: true },
   { ...scene("slime-cost", "The same sidebar of twelve slimes, original and current idle CPU", [{ action: "member-column", collapsed: false }, { action: "idle-cost", seconds: 12, revision: "a47aa935" }, { action: "idle-cost", seconds: 12 }], { sidebarMany: true, rooms: fixture.rooms.slice(0, 1) }), motion: true },
   { ...scene('motion-idle-cost', 'Repeat twelve resting members against this unit’s starting revision', [{action:'member-column',collapsed:false}, ...[1,2].map(()=>({action:'idle-cost',seconds:5,revision:'e2143ec7'})), ...[1,2].map(()=>({action:'idle-cost',seconds:5}))], {sidebarMany:true, rooms:fixture.rooms.slice(0,1)}), motion:true },
 ];

@@ -15,6 +15,7 @@ from raphael_core.worker.loop import Stop, ToolOutcome, WAITING
 def recovery_rig(monkeypatch, tmp_path, play, *, brain="codex", **options):
     calls, effects, lines, events, interrupted = [], [], [], [], []
     loops = []
+    made = []
 
     class Driver:
         def __init__(self, name, command, **kwargs):
@@ -30,6 +31,8 @@ def recovery_rig(monkeypatch, tmp_path, play, *, brain="codex", **options):
 
     async def execute(identifier, name, arguments):
         effects.append((name, arguments))
+        if not name.endswith("_look"):  # a tool that ends in _look only reads; any other changes something
+            made.append(name)
         return ToolOutcome(True, content="Saved receipt 17; file draft.txt exists.")
 
     monkeypatch.setattr(cli, "Driver", Driver)
@@ -42,7 +45,7 @@ def recovery_rig(monkeypatch, tmp_path, play, *, brain="codex", **options):
         ledger=SimpleNamespace(add=lambda **kwargs: None), language="en", plain=True,
         system="Keep the owner's scope.", user="Save a draft, then check it.", tools=[],
         progress=lines.append, thinking=lambda text: None, event=events.append,
-        execute=execute, **options)
+        execute=execute, acted=lambda: bool(made), **options)
     loops.append(loop)
     return SimpleNamespace(loop=loop, calls=calls, effects=effects, lines=lines,
                            events=events, interrupted=interrupted)
@@ -89,7 +92,8 @@ async def test_oversized_resumed_history_gets_one_fresh_bounded_attempt(monkeypa
 
     rig = recovery_rig(monkeypatch, tmp_path, play)
     rig.loop.sessions.put(5, rig.loop.model, "oversized-session", 7)
-    rig.loop.user = rig.loop._original_user = "Earlier context. " * 100000 + " Check the saved draft."
+    rig.loop.owner_text = "Check the saved draft."
+    rig.loop.user = rig.loop._original_user = "Earlier context. " * 1000 + " Check the saved draft."
     result = await rig.loop.run()
     assert len(rig.calls) == 2 and len(rig.effects) == 1
     assert rig.calls[0]["session"] == "oversized-session" and rig.calls[1]["session"] is None
@@ -99,6 +103,61 @@ async def test_oversized_resumed_history_gets_one_fresh_bounded_attempt(monkeypa
     assert (rig.loop.failure == "context_overflow") == fails_again
     if not fails_again:
         assert result.final == "Checked the saved draft."
+
+
+@pytest.mark.parametrize("fails_again", [False, True])
+async def test_missing_claude_resume_gets_one_fresh_bounded_attempt(monkeypatch, tmp_path, fails_again):
+    async def play(loop, attempt):
+        if attempt == 1:
+            await loop._tool("save", "save_draft", {"path": "draft.txt"})
+        if attempt == 1 or fails_again:
+            yield Event("error", {"kind": "cli_stopped", "message": "CLI process ended before completion",
+                "detail": "stderr:\nNo conversation found with session ID: missing"})
+        else:
+            yield Event("final", "Checked the saved draft.")
+
+    rig = recovery_rig(monkeypatch, tmp_path, play, brain="claude")
+    rig.loop.sessions.put(5, rig.loop.model, "missing", 7)
+    rig.loop.owner_text = "Check the saved draft."
+    rig.loop.user = rig.loop._original_user = "Earlier context. " * 1000 + rig.loop.owner_text
+    result = await rig.loop.run()
+    assert len(rig.calls) == 2 and len(rig.effects) == 1
+    assert rig.calls[0]["session"] == "missing" and rig.calls[1]["session"] is None
+    assert rig.loop.sessions.get(5, rig.loop.model, 7) is None
+    prompt = rig.calls[1]["user"]
+    assert len(prompt) < 18000
+    assert all(text in prompt for text in ("Check the saved draft.", "Saved receipt 17", "Do not repeat"))
+    assert (rig.loop.failure == "cli_stopped") == fails_again
+    if not fails_again:
+        assert result.final == "Checked the saved draft."
+
+
+async def test_turns_sharing_a_native_session_are_serialized(monkeypatch, tmp_path):
+    entered, release = asyncio.Event(), asyncio.Event()
+
+    async def play(loop, attempt):
+        if attempt == 1:
+            entered.set()
+            await release.wait()
+        yield Event("final", "Finished.")
+
+    rig = recovery_rig(monkeypatch, tmp_path, play, brain="claude")
+    second_loop = cli.CliLoop(
+        brains=rig.loop.brains, sessions=rig.loop.sessions, member_id=5, conversation_id=7,
+        model="cli:claude:fake", ledger=SimpleNamespace(add=lambda **kwargs: None), language="en", plain=True,
+        system="Keep the owner's scope.", user="A second task.", tools=[], progress=lambda text: None,
+        thinking=lambda text: None, event=lambda value: None, execute=rig.loop.execute)
+    first = asyncio.create_task(rig.loop.run())
+    await asyncio.wait_for(entered.wait(), 5)
+    # Two turns for the same persistent session cannot start native children concurrently.
+    second = asyncio.create_task(second_loop.run())
+    try:
+        await asyncio.sleep(.05)
+        assert len(rig.calls) == 1
+    finally:
+        release.set()
+        await asyncio.gather(first, second)
+    assert len(rig.calls) == 2
 
 
 async def test_recovery_lists_current_connections_without_replaying_a_completed_call(monkeypatch, tmp_path):
@@ -147,7 +206,7 @@ async def test_recovery_is_bounded_and_final_failure_accounts_for_work(monkeypat
     assert rig.events == [] and rig.loop.failure == "overloaded"
 
 
-@pytest.mark.parametrize("failure", ["auth_expired", "usage_limit", "credits", "context_overflow"])
+@pytest.mark.parametrize("failure", ["auth_expired", "usage_limit", "credits"])
 async def test_permanent_failure_after_work_stops_immediately(monkeypatch, tmp_path, failure):
     async def play(loop, attempt):
         await loop._tool("save", "save_draft", {})
@@ -250,6 +309,30 @@ async def test_recovery_uses_api_waits_and_preserves_provider_delay(monkeypatch,
     assert all(44 <= seconds <= 46 for seconds in waited[:4])
     assert all(step <= seconds <= step * 1.2 for step, seconds in zip((60, 120, 300), waited[4:]))
     assert len(rig.lines) == 7
+
+
+async def test_after_reads_alone_a_failing_cli_has_done_nothing_and_gets_only_the_quick_waits(monkeypatch, tmp_path):
+    async def play(loop, attempt):
+        await loop._tool("look", "notes_look", {"topic": "tea"})
+        yield Event("error", "network")
+
+    rig = recovery_rig(monkeypatch, tmp_path, play)
+    monkeypatch.setattr(cli, "RATE_LIMIT_WAITS_S", (0., 0., 0.))
+    monkeypatch.setattr(cli, "PATIENT_WAITS", (0., 0., 0., 0.))
+    result = await rig.loop.run()
+    # The first try and the three of a question that has done nothing; what it read goes with each of them.
+    assert len(rig.calls) == 4 and not rig.loop.acted and rig.loop.failure == "network"
+    assert "notes_look" in rig.calls[3]["user"] and "Recorded steps: 4 completed" in result.final
+
+    async def writes(loop, attempt):
+        await loop._tool("save", "save_draft", {})
+        yield Event("error", "network")
+
+    rig = recovery_rig(monkeypatch, tmp_path, writes)
+    monkeypatch.setattr(cli, "RATE_LIMIT_WAITS_S", (0., 0., 0.))
+    monkeypatch.setattr(cli, "PATIENT_WAITS", (0., 0., 0., 0.))
+    await rig.loop.run()
+    assert len(rig.calls) == 8 and rig.loop.acted  # the quick waits, then the patient ones
 
 
 async def test_original_answer_is_published_and_unread_addition_stays_ticketed(monkeypatch, tmp_path):
@@ -360,7 +443,7 @@ async def test_large_recovery_context_is_bounded_and_preserves_uncertain_steps(m
                 "status": "unknown" if index == 0 else "failed" if index < uncertain_count else "completed",
                 "arguments": {"draft": payload}, "result": payload,
             } for index in range(200))
-            loop._acted = True
+            loop._worked = True
             yield Event("error", "network")
         else:
             yield Event("final", "Checked the uncertain actions and finished.")

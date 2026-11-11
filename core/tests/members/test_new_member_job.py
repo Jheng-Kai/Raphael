@@ -16,17 +16,21 @@ def member_rpc(setup):
 
 
 async def made(rig, **fields):
-    return (await rig.call("members.create", {"greet": True, **fields}))["member"]
+    return (await rig.call("members.create", fields))["member"]
 
 
 @pytest.mark.parametrize("language,words", [("zh-TW", "你想請我"), ("en", "What would you like"), ("ja", "お手伝い")])
-async def test_it_speaks_first_in_the_window_language_without_a_model(setup, client, language, words):
+async def test_it_speaks_first_with_its_model_in_the_window_language(setup, client, language, words):
+    from agent.test_service import until
     rig, team = setup
-    new = await made(rig, name="Mia", ui_language=language)
+    client.chats = [live_said(f"Mia: {words}")]
+    new = await made(rig, name="Mia", ui_language=language, greet=True)
+    [running] = await rig.turns(member_id=new["id"])
+    await until(lambda: rig.history.get(running["id"]).status == "done")
     [turn] = await rig.turns(member_id=new["id"])
     assert "Mia" in turn["text"] and words in turn["text"]
-    assert turn["question"] == "" and turn["status"] == "done" and turn["cost_usd"] == 0
-    assert client.chat_calls == []
+    assert turn["question"] == "" and turn["status"] == "done" and turn["cost_usd"] == 0.3
+    assert client.chat_calls[0]["tools"] == []
     [conversation] = (await rig.call("conversations.list", {"member_id": new["id"]}))["conversations"]
     assert conversation["title"] == ""
 
@@ -35,6 +39,29 @@ async def test_a_member_the_chief_makes_says_nothing_of_itself(setup):
     rig, team = setup
     new = (await rig.call("members.create", {"name": "Mia"}))["member"]
     assert await rig.turns(member_id=new["id"]) == []
+
+
+async def test_chores_ask_one_outcome_question_then_save_the_agreed_goal(setup, client):
+    rig, team = setup
+    new = await made(rig, name="Mia")
+    client.chats = [live_said("這些工作希望達成什麼成果？")]
+    await typed(rig, "每天整理郵件和列出待辦", new["id"])
+    beside_owner = client.chat_calls[0]["messages"][-1]["content"]
+    assert "<new_member_step>" in beside_owner and "first ask one question" in beside_owner
+    assert team.members.store.member(new["id"]).instructions == ""
+    client.chats = [chat("", ("set_my_job", {"role": "信箱夥伴", "instructions": "讓重要客戶的問題在當天得到回覆"})), live_said("我會以重要客戶當天得到回覆為目標。")]
+    await rig.call("agent.ask", {"session_id": "goal-answer", "text": "讓重要客戶的問題在當天得到回覆", "ui_language": "zh-TW", "source": "app", "member_id": new["id"]})
+    assert team.members.store.member(new["id"]).instructions == "讓重要客戶的問題在當天得到回覆"
+
+
+async def test_member_shared_contract_requires_named_account_disambiguation(setup, client):
+    rig, team = setup
+    new = await made(rig, name="Mia", role="Inbox colleague", instructions="Keep important customer mail answered today")
+    client.chats = [live_said("要使用工作信箱還是私人信箱？")]
+    await typed(rig, "整理我的信件", new["id"])
+    prompt = client.chat_calls[0]["messages"][0]["content"]
+    assert "multiple named accounts" in prompt and "ask which account" in prompt
+    assert not team.background.submitted
 
 
 def test_only_a_member_with_no_job_is_offered_the_tool():

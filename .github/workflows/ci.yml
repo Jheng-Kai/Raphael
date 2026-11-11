@@ -27,10 +27,12 @@ jobs:
     timeout-minutes: 5
     permissions:
       contents: read
+      pull-requests: read
     outputs:
       frontend: ${{ steps.pick.outputs.frontend }}
       python: ${{ steps.pick.outputs.python }}
       rust: ${{ steps.pick.outputs.rust }}
+      packaging: ${{ steps.packaging.outputs.packaging }}
     steps:
       - name: Pick the layers for this event
         id: pick
@@ -45,6 +47,30 @@ jobs:
           esac
           # Every PR checks repository contracts and all three implementation layers.
           out true true true
+
+      # The three layers above always run. The frozen-core smoke test is slower and needs a Windows
+      # build, so it runs only when the change can break the freeze.
+      - name: Does the change touch the Python packaging
+        id: packaging
+        env:
+          EVENT: ${{ github.event_name }}
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PULL_REQUEST: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          hit=false
+          case "$EVENT" in
+            push) ;;
+            pull_request)
+              files=$(gh api "repos/$GH_REPO/pulls/$PULL_REQUEST/files" --paginate --jq '.[].filename')
+              for file in $files; do
+                case "$file" in core/packaging/*|core/pyproject.toml|core/uv.lock|core/.python-version) hit=true; break ;; esac
+              done ;;
+            *) hit=true ;;
+          esac
+          echo "packaging=$hit" >> "$GITHUB_OUTPUT"
+          echo "packaging=$hit"
 
   frontend:
     name: Frontend tests and build
@@ -89,12 +115,19 @@ jobs:
           include-hidden-files: true
           retention-days: 14
 
+  # One machine took 42 minutes over the suite, so eight share it. conftest deals whole test files
+  # to the shares (keep_this_share); the required gate passes only when every share does.
   python:
-    name: Python tests
+    name: Python tests (${{ matrix.share }} of 8)
     needs: changes
     if: needs.changes.outputs.python == 'true'
     runs-on: windows-2025
-    timeout-minutes: 45
+    timeout-minutes: 25
+    strategy:
+      # Every share reports, so one red run names all the failures.
+      fail-fast: false
+      matrix:
+        share: [1, 2, 3, 4, 5, 6, 7, 8]
     defaults:
       run:
         shell: pwsh
@@ -103,6 +136,7 @@ jobs:
       RAPHAEL_TEST_MODELS: "0"
       # Subprocesses also fail closed; conftest installs a fresh memory keyring per test.
       PYTHON_KEYRING_BACKEND: keyring.backends.fail.Keyring
+      RAPHAEL_TEST_SHARE: ${{ matrix.share }}/8
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -126,8 +160,23 @@ jobs:
       - name: Install locked Python dependencies
         run: uv sync --locked --dev
 
+      # The slowest tests are listed so the next thing to speed up is named in the log.
+      # Each machine also writes the seconds of the files it ran. conftest deals the files by the
+      # record in core/tests/shard-durations.json; core/tests/shard_durations.py says how to refresh it
+      # from these artifacts.
       - name: Run Python tests with warnings denied
-        run: uv run --locked --no-sync pytest -q -ra -W error
+        env:
+          RAPHAEL_RECORD_DURATIONS: durations-out/share-${{ matrix.share }}.json
+        run: uv run --locked --no-sync pytest -q -ra -W error --durations=25 --durations-min=2
+
+      - name: Upload the seconds of this share
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: python-durations-${{ matrix.share }}
+          path: core/durations-out/share-${{ matrix.share }}.json
+          if-no-files-found: warn
+          retention-days: 14
 
   windows-shell:
     name: Windows Rust and Tauri shell
@@ -140,7 +189,8 @@ jobs:
         shell: pwsh
         working-directory: app/src-tauri
     env:
-      CARGO_BUILD_JOBS: "2"
+      # The hosted Windows runner is expected to have 4 cores, which a Rust build has to itself.
+      CARGO_BUILD_JOBS: "4"
       CARGO_INCREMENTAL: "0"
       CARGO_TERM_COLOR: always
       RUST_BACKTRACE: "1"
@@ -203,6 +253,50 @@ jobs:
 
       - name: Run Clippy with warnings denied
         run: cargo clippy --locked --all-targets -- -D warnings
+
+  # The frozen core builds and starts from the PyInstaller bundle, as in a release. It is not one of
+  # the required gates: it runs only for changes that can break the freeze (see above).
+  packaging:
+    name: Frozen core smoke test
+    needs: changes
+    if: needs.changes.outputs.packaging == 'true'
+    runs-on: windows-2025
+    timeout-minutes: 25
+    defaults:
+      run:
+        shell: pwsh
+        working-directory: core
+    env:
+      RAPHAEL_TEST_MODELS: "0"
+      PYTHON_KEYRING_BACKEND: keyring.backends.fail.Keyring
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          version: "0.12.11"
+          working-directory: core
+          enable-cache: true
+          cache-dependency-glob: |
+            uv.lock
+            pyproject.toml
+            .python-version
+
+      - name: Install pinned Python and the packaging dependencies
+        run: |
+          uv python install
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          uv sync --locked --group packaging
+
+      - name: Freeze Python core
+        run: uv run --locked --no-sync python packaging/build.py
+
+      - name: Verify frozen core
+        run: uv run --locked --no-sync python packaging/smoke.py --core dist/raphael-core/raphael-core.exe
 
   required:
     name: Guardian required gates

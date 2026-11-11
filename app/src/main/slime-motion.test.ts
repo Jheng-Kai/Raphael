@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { LOOPS, eyeStyle, loopState, sample } from './slime-motion';
+import { CEL_RATE, GAZE_ROWS, LOOPS, MAX_CELS, MIN_CELS, PROP_ROWS, celCount, celsOf, eyeStyle, gazeRows, loopState, sample } from './slime-motion';
 import raw from './slime-motion-data';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -8,8 +8,8 @@ import { motionSource } from '../../scripts/slime-cels.mjs';
 test('the loop reserve retains the body and accessory envelope at every sampled pose', () => {
   // Includes the outermost wings/hat, with padding for their independent mark rotation.
   for (const state of Object.keys(LOOPS) as (keyof typeof LOOPS)[]) {
-    for (let cel = 0; cel < 12; cel++) {
-      const pose = sample(`slime-${state}-body`, cel/12, LOOPS[state].ease);
+    for (let cel = 0; cel < celCount(state); cel++) {
+      const pose = sample(`slime-${state}-body`, cel/celCount(state), LOOPS[state].ease);
       if (state === 'error') pose.scale = [1.08,.62];
       const angle = pose.rotate[0]! * Math.PI/180;
       for (const x of [-4,104]) for (const y of [0,96]) {
@@ -49,7 +49,31 @@ test('samples the segment easing instead of linearly flattening the approved pos
   expect(sample('slime-thinking-body',.5).rotate[0]).toBe(6);
 });
 
-test('the twelve working poses retain the original 900ms knead without droplet tracks', () => {
+test('the working poses retain the original 900ms knead without droplet tracks', () => {
   expect(LOOPS.working.body).toBe(.9);
-  expect(new Set(Array.from({length:12},(_,i)=>JSON.stringify(sample('slime-working-body',i/12)))).size).toBeGreaterThan(8);
+  const cels = celCount('working');
+  expect(new Set(Array.from({length:cels},(_,i)=>JSON.stringify(sample('slime-working-body',i/cels)))).size).toBeGreaterThan(12);
+});
+
+test('every loop carries cels for about 24 frames a second, within the strip limits', () => {
+  expect(celCount('thinking')).toBe(48);
+  expect(celCount('searching')).toBe(48);
+  expect(celCount('waiting')).toBe(48);
+  expect(celCount('error')).toBe(48);
+  expect(celCount('working')).toBe(22);
+  expect(celCount('computer')).toBe(41);
+  expect(celCount('blocked')).toBe(43);
+  for (const state of Object.keys(LOOPS) as (keyof typeof LOOPS)[]) {
+    const cels = celCount(state);
+    expect(cels, state).toBeGreaterThanOrEqual(MIN_CELS);
+    expect(cels, state).toBeLessThanOrEqual(MAX_CELS);
+    // Below the cap the loop shows its target rate, within a frame of rounding.
+    if (cels < MAX_CELS) expect(Math.abs(cels / LOOPS[state].body - CEL_RATE) * LOOPS[state].body, state).toBeLessThanOrEqual(.5);
+    expect(celsOf(state, 'body'), state).toBe(cels);
+    expect(celsOf(state, 'eyes'), state).toBe(gazeRows(state));
+  }
+  expect(celsOf('thinking', 'mark')).toBe(PROP_ROWS);
+  expect(celsOf('working', 'mark')).toBe(celCount('working'));
+  expect(gazeRows('thinking')).toBe(GAZE_ROWS);
+  expect(gazeRows('working')).toBe(1);
 });

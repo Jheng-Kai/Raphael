@@ -6,11 +6,12 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { setLocale } from "./i18n";
 
-const api = vi.hoisted(() => ({ servicesStatus: vi.fn(), servicesSetKey: vi.fn(), servicesClearKey: vi.fn(), ttsPreview: vi.fn() }));
+const api = vi.hoisted(() => ({ servicesStatus: vi.fn(), servicesSetKey: vi.fn(), servicesClearKey: vi.fn() }));
 vi.mock("./api", () => api);
 vi.mock("./ui", async (original) => ({ ...(await original<typeof import("./ui")>()), toaster: { info: vi.fn() } }));
 
 import {
+  CAPABILITIES,
   type Capability,
   type ServicesView,
   canTurnOn,
@@ -18,11 +19,9 @@ import {
   emptyServicesView,
   isOn,
   isServiceUrl,
-  isVoiceId,
   keyInputId,
   serviceRows,
   servicesHTML,
-  voiceLineHTML,
 } from "./services";
 import type { BrainSettings, ServicesStatus } from "./types";
 import { ico, toaster } from "./ui";
@@ -33,14 +32,12 @@ interface Over {
   braveKey?: boolean;
   jinaKey?: boolean;
   urlSet?: boolean;
-  fishKey?: boolean;
-  voiceSet?: boolean;
   model?: string;
   sees?: boolean;
   enabled?: Partial<Record<Capability, boolean>>;
 }
 
-/** A status of the core: Brave chosen for the search, with no key; Jina for the pages; PDFs read here; Fish Audio with nothing set yet. */
+/** A status of the core: Brave chosen for the search, with no key; Jina for the pages; PDFs read here. */
 function status(over: Over = {}): ServicesStatus {
   const on = (kind: Capability, fallback = true): boolean => over.enabled?.[kind] ?? fallback;
   return {
@@ -73,20 +70,14 @@ function status(over: Over = {}): ServicesStatus {
         { id: "openrouter", needs_key: false, has_key: false, key_optional: false },
       ],
     },
-    voice: {
-      enabled: on("voice", false),
-      service: "fish",
-      options: [{ id: "fish", needs_key: true, has_key: over.fishKey ?? false, key_optional: false }],
-      fish_voice_set: over.voiceSet ?? false,
-    },
     vision: { enabled: on("vision"), model: over.model ?? "", resolved_model: over.model || "openai/gpt-6-luna", supports_images: over.sees ?? true },
   };
 }
 
 test("every service row has its brand mark or a meaningful local icon, never an initial", () => {
-  const brands = ["openrouter", "brave", "tavily", "exa", "searxng", "jina", "firecrawl", "fish"];
+  const brands = ["openrouter", "brave", "tavily", "exa", "searxng", "jina", "firecrawl"];
   const seen = new Set<string>();
-  for (const kind of ["search", "read", "pdf", "voice", "vision"] as const) {
+  for (const kind of ["search", "read", "pdf", "vision"] as const) {
     const host = document.createElement("div");
     host.innerHTML = dialog(kind);
     for (const row of serviceRows(kind, status(), BRAIN)) {
@@ -98,7 +89,8 @@ test("every service row has its brand mark or a meaningful local icon, never an 
         seen.add(row.id);
       } else {
         const expected = ico(row.id === "builtin" ? "monitor" : row.id === "same" ? "sparkle" : "bot");
-        expect(picture.querySelector("path")?.getAttribute("d"), row.id).toBe(/d="([^"]+)"/.exec(expected)![1]);
+        const drawn = document.createElement("template"); drawn.innerHTML = expected;
+        expect(picture.querySelector("svg")?.innerHTML, row.id).toBe(drawn.content.querySelector("svg")!.innerHTML);
       }
     }
   }
@@ -106,8 +98,7 @@ test("every service row has its brand mark or a meaningful local icon, never an 
 });
 
 const PICKER = '<span class="mp-slot" data-model-picker="vision"></span>';
-const VOICE_ID = "0123456789abcdef0123456789abcdef";
-const BRAIN = { agent_model: "openai/gpt-6-luna", searxng_url: "https://searx.example", tts_fish_voice: VOICE_ID } as BrainSettings;
+const BRAIN = { agent_model: "openai/gpt-6-luna", searxng_url: "https://searx.example" } as BrainSettings;
 const view = (over: Partial<ServicesView> = {}): ServicesView => ({ ...emptyServicesView(), status: status(), ...over });
 const draw = (over: Partial<ServicesView> = {}, brain: BrainSettings | null = BRAIN): string => servicesHTML(view(over), PICKER, brain);
 const dialog = (kind: Capability, service: string | null = null, over: Partial<ServicesView> = {}, brain: BrainSettings | null = BRAIN): string =>
@@ -151,30 +142,32 @@ describe("the list", () => {
   const html = draw();
   const rows = (out: string): string[] => out.split('<div class="cs-item svc-item').slice(1);
 
-  test("is titled 服務, with one rounded list of five rows in order, as 「連接」 draws its own", () => {
+  test("is titled 服務, with one rounded list of four rows in order, as 「連接」 draws its own", () => {
     expect(html).toMatch(/^<section class="sgroup svc" data-svc-section><h2>服務<\/h2><div class="cs-list" data-stagger="svc">/);
-    expect(rows(html)).toHaveLength(5);
+    expect(rows(html)).toHaveLength(4);
     const names = [...html.matchAll(/<span class="nm">(.*?)<\/span>/g)].map((m) => m[1]);
-    expect(names).toEqual(["搜尋網路", "讀網頁", "看圖片", "讀 PDF", "語音服務"]);
+    expect(names).toEqual(["搜尋網路", "讀網頁", "看圖片", "讀 PDF"]);
   });
 
   test("a row is an icon, the name and a muted line, the service in use, a switch and a chevron; the row opens the dialog", () => {
     const [search] = rows(html);
     expect(search).toMatch(/^[^>]*data-svc="open" data-id="search">/);
-    expect(search).toMatch(/<button type="button" class="btn cs-open" data-svc="open" data-id="search" data-k="svc-open:search" aria-haspopup="dialog" title="查看 搜尋網路">/);
+    expect(search).toMatch(/<button type="button" class="btn cs-open" data-svc="open" data-id="search" data-k="svc-open:search" aria-haspopup="dialog">/);
     expect(search).toMatch(/<span class="ic svc-ic" aria-hidden="true"><svg/);
     expect(search).toContain('<span class="ds">查詢最新的資料</span>');
-    expect(search).toContain('<span class="svc-now">Brave</span>');
+    // the service in use is a whole line under the name, never a cut label beside the switch
+    expect(search).toContain('<span class="svc-now">正在用 Brave</span>');
     expect(search).toMatch(/class="tg" role="switch" aria-checked="true" aria-label="開啟 搜尋網路" data-svc="toggle" data-id="search" data-k="svc-toggle:search"/);
     // the chevron is a picture of where the row goes, not a second button
     expect(search).toMatch(/<span class="chev" aria-hidden="true"><svg/);
     expect(search.match(/<button/g)).toHaveLength(2);
   });
 
-  test("says which service is in use for each, small and muted", () => {
+  test("says which service is in use for each; for images, the model that really reads them, never a raw brain id", () => {
     const now = [...html.matchAll(/<span class="svc-now">(.*?)<\/span>/g)].map((m) => m[1]);
-    expect(now).toEqual(["Brave", "Jina", "與拉斐爾相同", "內建", "Fish Audio"]);
-    expect(draw({ status: status({ model: "anthropic/claude-haiku-5.5" }) })).toContain('<span class="svc-now">claude-haiku-5.5</span>');
+    expect(now).toEqual(["正在用 Brave", "正在用 Jina", "正在用 gpt-6-luna", "正在用 內建"]);
+    expect(draw({ status: status({ model: "anthropic/claude-haiku-5.5" }) })).toContain('<span class="svc-now">正在用 claude-haiku-5.5</span>');
+    expect(draw({}, { ...BRAIN, agent_model: "cli:claude:opus" })).not.toContain("cli:");
   });
 
   test("is clean: no dropdown, no field, no text button, no helper paragraph, and no key or address anywhere", () => {
@@ -191,16 +184,16 @@ describe("the list", () => {
 
   test("the switches show what is on: the core's word, and the settings' where the window has them", () => {
     const states = (out: string): string[] => [...out.matchAll(/aria-checked="(true|false)"/g)].map((m) => m[1]);
-    expect(states(html)).toEqual(["true", "true", "true", "true", "false"]); // the voice is off until it is turned on
-    expect(states(draw({ status: status({ enabled: { search: false, pdf: false, voice: true } }) }))).toEqual(["false", "true", "true", "false", "true"]);
+    expect(states(html)).toEqual(["true", "true", "true", "true"]);
+    expect(states(draw({ status: status({ enabled: { search: false, pdf: false } }) }))).toEqual(["false", "true", "true", "false"]);
     // the settings are the freshest: a switch just turned shows at once, before the status is read again
-    expect(states(draw({}, { ...BRAIN, web_read_enabled: false, tts_enabled: true }))).toEqual(["true", "false", "true", "true", "true"]);
+    expect(states(draw({}, { ...BRAIN, web_read_enabled: false }))).toEqual(["true", "false", "true", "true"]);
     expect(draw({ status: status({ enabled: { search: false } }) })).toContain('svc-item off" data-svc="open" data-id="search"');
   });
 
   test("while the core has not said, the rows are there, from the settings, and the switches wait", () => {
-    const loading = servicesHTML(emptyServicesView(), PICKER, { ...BRAIN, web_search_service: "tavily", tts_enabled: true });
-    expect(loading).toContain('<span class="svc-now">Tavily</span>');
+    const loading = servicesHTML(emptyServicesView(), PICKER, { ...BRAIN, web_search_service: "tavily" });
+    expect(loading).toContain('<span class="svc-now">正在用 Tavily</span>');
     expect([...loading.matchAll(/class="tg"[^>]*>/g)].every((m) => m[0].includes(" disabled"))).toBe(true);
     expect(visible(servicesHTML({ ...emptyServicesView(), status: "failed" }, PICKER, null))).toContain("無法讀取服務設定");
   });
@@ -208,11 +201,11 @@ describe("the list", () => {
   test("is named in the three languages", () => {
     setLocale("en");
     expect(draw()).toContain("<h2>Services</h2>");
-    expect([...draw().matchAll(/<span class="nm">(.*?)<\/span>/g)].map((m) => m[1])).toEqual(["Web search", "Read web pages", "Images", "PDFs", "Speech service"]);
+    expect([...draw().matchAll(/<span class="nm">(.*?)<\/span>/g)].map((m) => m[1])).toEqual(["Web search", "Read web pages", "Images", "PDFs"]);
     expect(draw()).toContain('aria-label="Turn on Web search"');
     setLocale("ja");
     expect(draw()).toContain("<h2>サービス</h2>");
-    expect(draw()).toContain('aria-label="音声サービス をオンにする"');
+    expect(draw()).toContain('aria-label="ウェブ検索 をオンにする"');
   });
 
   test("never shows a key: whatever the status holds besides, no key is drawn", () => {
@@ -223,14 +216,26 @@ describe("the list", () => {
   });
 });
 
+test("Settings offers no voice service and no Fish Audio", () => {
+  expect(CAPABILITIES.map((entry) => entry.kind)).toEqual(["search", "read", "vision", "pdf"]);
+  expect(CAPABILITIES.some((entry) => (entry.kind as string) === "voice")).toBe(false);
+  const html = servicesHTML(view(), PICKER, BRAIN);
+  expect(html).not.toMatch(/data-id="voice"|svc-open:voice|svc-toggle:voice/);
+  expect(html).not.toMatch(/Fish ?Audio|語音服務|Speech service/i);
+  const opened = servicesHTML(view({ open: { kind: "search", service: null } }), PICKER, BRAIN);
+  expect(opened).not.toMatch(/fish|svc-voice-id|data-svc="try"/i);
+  for (const kind of CAPABILITIES.map((entry) => entry.kind)) {
+    const list = servicesHTML(view({ open: { kind, service: null } }), PICKER, BRAIN);
+    expect(list, kind).not.toMatch(/fish/i);
+  }
+});
+
 describe("what a capability stands on", () => {
-  test("a service is usable when it has what it needs: a key, SearXNG's address, the voice's key and model", () => {
+  test("a service is usable when it has what it needs: a key or SearXNG's address", () => {
     const search = (over: Over) => serviceRows("search", status(over), BRAIN);
     expect(search({}).map((r) => [r.id, r.usable])).toEqual([["openrouter", true], ["brave", false], ["tavily", false], ["exa", false], ["searxng", false]]);
     expect(search({ braveKey: true, urlSet: true }).filter((r) => r.usable).map((r) => r.id)).toEqual(["openrouter", "brave", "searxng"]);
     expect(serviceRows("read", status(), BRAIN).find((r) => r.id === "jina")!.usable).toBe(true); // its key is optional
-    const voice = (over: Over) => serviceRows("voice", status(over), BRAIN)[0].usable;
-    expect([voice({}), voice({ fishKey: true }), voice({ voiceSet: true }), voice({ fishKey: true, voiceSet: true })]).toEqual([false, false, false, true]);
   });
 
   test("the vision has 「與拉斐爾相同」 and 「指定模型」, which is usable once a model is chosen and reads images", () => {
@@ -243,15 +248,12 @@ describe("what a capability stands on", () => {
   test("the switch can turn on only what is usable", () => {
     expect(canTurnOn("search", status(), BRAIN)).toBe(false);
     expect(canTurnOn("search", status({ braveKey: true }), BRAIN)).toBe(true);
-    expect(canTurnOn("voice", status({ fishKey: true }), BRAIN)).toBe(false);
-    expect(canTurnOn("voice", status({ fishKey: true, voiceSet: true }), BRAIN)).toBe(true);
     expect(canTurnOn("pdf", status(), BRAIN)).toBe(true);
     expect(canTurnOn("search", null, BRAIN)).toBe(false);
   });
 
-  test("on is the settings' word, else the core's, else the default (the voice is off)", () => {
+  test("on is the settings' word, else the core's, else the default (on)", () => {
     expect(isOn("search", null, null)).toBe(true);
-    expect(isOn("voice", null, null)).toBe(false);
     expect(isOn("pdf", status({ enabled: { pdf: false } }), null)).toBe(false);
     expect(isOn("pdf", status({ enabled: { pdf: false } }), { ...BRAIN, pdf_enabled: true })).toBe(true);
   });
@@ -274,12 +276,15 @@ describe("the dialog of a capability", () => {
     expect(d).toMatch(/<button type="button" class="btn icon" aria-label="關閉" title="關閉" data-svc="close" data-k="svc-close"/);
   });
 
-  test("lists the services under 「已安裝」, each a mark, a name, a note, a chevron; a check on the one in use only", () => {
+  test("lists the services under 「已安裝」, each a mark, a name with its state, what choosing it means, a chevron; a check on the one in use only", () => {
     const d = inDialog(dialog("search"));
     expect(d).toContain('<h3 class="svc-h">已安裝</h3>');
     const rows = d.split('<div class="cs-item svc-srv"').slice(1);
-    expect(rows.map((r) => /<span class="nm">(.*?)<\/span>/.exec(r)![1])).toEqual(["OpenRouter", "Brave", "Tavily", "Exa", "SearXNG"]);
-    expect(rows.map((r) => /<span class="ds">(.*?)<\/span>/.exec(r)?.[1])).toEqual(["共用金鑰", "需要金鑰", "需要金鑰", "需要金鑰", "需要網址"]);
+    expect(rows.map((r) => /<span class="nm">([^<]*)/.exec(r)![1])).toEqual(["OpenRouter", "Brave", "Tavily", "Exa", "SearXNG"]);
+    expect(rows.map((r) => /<span class="svc-tag">(.*?)<\/span>/.exec(r)?.[1])).toEqual(["共用金鑰", "需要金鑰", "需要金鑰", "需要金鑰", "需要網址"]);
+    // every choice says in one line what it costs and needs
+    expect(rows.every((r) => /<span class="ds">[^<]{8,}<\/span>/.test(r))).toBe(true);
+    expect(rows[0]).toContain("不用另外申請");
     expect(rows[0]).toMatch(/^ data-svc="service" data-service="openrouter">/);
     expect(rows[0]).toMatch(/<button type="button" class="btn cs-open" data-svc="service" data-service="openrouter" data-k="svc-svc:openrouter"/);
     expect(rows[0]).toContain('class="mono md logo-mono"');
@@ -291,19 +296,18 @@ describe("the dialog of a capability", () => {
   });
 
   test("a note says 已設定 for a service that has its key, and 免金鑰 for Jina without one", () => {
-    expect(inDialog(dialog("search", null, { status: status({ braveKey: true, urlSet: true }) }))).toMatch(/Brave<\/span><span class="ds">已設定<\/span>[\s\S]*SearXNG<\/span><span class="ds">已設定</);
+    expect(inDialog(dialog("search", null, { status: status({ braveKey: true, urlSet: true }) }))).toMatch(/Brave<span class="svc-tag">已設定<\/span>[\s\S]*SearXNG<span class="svc-tag">已設定</);
     const read = inDialog(dialog("read"));
-    expect(read).toMatch(/內建<\/span><span class="ds">本機</);
-    expect(read).toMatch(/Jina<\/span><span class="ds">免金鑰</);
+    expect(read).toMatch(/內建<span class="svc-tag">本機</);
+    expect(read).toMatch(/Jina<span class="svc-tag">免金鑰</);
   });
 
-  test("the pages, PDFs and voice list their own services", () => {
-    const names = (kind: Capability): string[] => [...inDialog(dialog(kind)).matchAll(/class="cs-item svc-srv"[\s\S]*?<span class="nm">(.*?)<\/span>/g)].map((m) => m[1]);
+  test("the pages, PDFs and images list their own services", () => {
+    const names = (kind: Capability): string[] => [...inDialog(dialog(kind)).matchAll(/class="cs-item svc-srv"[\s\S]*?<span class="nm">([^<]*)/g)].map((m) => m[1]);
     expect(names("read")).toEqual(["內建", "Jina", "Firecrawl", "Tavily"]);
     expect(names("pdf")).toEqual(["內建", "OpenRouter"]);
-    expect(names("voice")).toEqual(["Fish Audio"]);
     expect(names("vision")).toEqual(["與拉斐爾相同", "指定模型"]);
-    expect(inDialog(dialog("vision"))).toMatch(/與拉斐爾相同<\/span><span class="ds">gpt-6-luna<\/span>/);
+    expect(inDialog(dialog("vision"))).toMatch(/與拉斐爾相同<span class="svc-tag">gpt-6-luna<\/span>/);
   });
 
   test("is in the three languages", () => {
@@ -362,21 +366,6 @@ describe("the page of one service", () => {
     expect(searx).not.toContain('type="password"');
   });
 
-  test("Fish Audio service setup retains only its shared key and Use action", () => {
-    const html = inDialog(dialog("voice", "fish"));
-    expect(html).toContain(`id="${keyInputId("fish")}" type="password"`);
-    expect(html).not.toContain('id="svc-voice-id"');
-    expect(html).not.toContain('data-svc="try"');
-    expect(html).toContain('data-svc="use"');
-  });
-
-  test("the member voice controls retain the existing setting and preview actions", () => {
-    const html = voiceLineHTML(emptyServicesView(), VOICE_ID);
-    expect(html).toContain(`value="${VOICE_ID}"`);
-    expect(html).toContain('data-svc="voice"');
-    expect(html).toContain('data-svc="try"');
-  });
-
   test("「使用」 is disabled while the service is in use (and the capability on) or cannot be used", () => {
     const use = (html: string): string => /<button[^>]*data-svc="use"[^>]*>/.exec(inDialog(html))![0];
     // Brave has no key: not usable
@@ -391,9 +380,12 @@ describe("the page of one service", () => {
     expect(use(dialog("search", "openrouter", { busy: "switch" }))).toContain(" disabled");
   });
 
-  test("看圖片's pages: 「與拉斐爾相同」 has 「使用」; 「指定模型」 has the picker and no field", () => {
+  test("看圖片's pages: 「與拉斐爾相同」 says what it means and has 「改用 與拉斐爾相同」; 「指定模型」 has the picker and no field", () => {
     const same = inDialog(dialog("vision", "same", { status: status({ model: "anthropic/claude-haiku-5.5" }) }));
-    expect(same).toMatch(/data-svc="use" data-service="same"[^>]*>使用</);
+    expect(same).toMatch(/data-svc="use" data-service="same"[^>]*>改用 與拉斐爾相同</);
+    expect(same).toContain('<p class="cs-desc svc-why">');
+    // the one in use says so on its button
+    expect(inDialog(dialog("vision", "same"))).toMatch(/data-svc="use" data-service="same"[^>]*>使用中</);
     expect(same).not.toContain("data-model-picker");
     const model = inDialog(dialog("vision", "model"));
     expect(model).toContain(`<div class="svc-pick">${PICKER}</div>`);
@@ -402,7 +394,7 @@ describe("the page of one service", () => {
   });
 
   test("only real buttons: a bordered text button or a borderless icon one", () => {
-    for (const d of [dialog("search", "brave"), dialog("voice", "fish"), dialog("search", "searxng")]) {
+    for (const d of [dialog("search", "brave"), dialog("search", "searxng")]) {
       for (const tag of buttons(inDialog(d))) expect(tag).toMatch(/class="btn(?: icon| pri| danger)?"/);
     }
   });
@@ -423,7 +415,7 @@ describe("what the section does", () => {
       visible: () => true,
       redraw: () => {
         // the panel's drawing, as settings.ts does it: the HTML anew (a field's draft is not kept here)
-        host.innerHTML = servicesHTML(panel.view(), PICKER, brain) + voiceLineHTML(panel.view(), brain.tts_fish_voice ?? "");
+        host.innerHTML = servicesHTML(panel.view(), PICKER, brain);
       },
       brain: () => brain,
       changeSetting: change,
@@ -448,7 +440,7 @@ describe("what the section does", () => {
     api.servicesStatus.mockResolvedValue(status());
     const { host, panel } = mount();
     await panel.load();
-    expect(host.querySelectorAll(".cs-item.svc-item")).toHaveLength(5);
+    expect(host.querySelectorAll(".cs-item.svc-item")).toHaveLength(4);
     expect(dlg(host)).toBeNull();
   });
 
@@ -592,11 +584,6 @@ describe("what the section does", () => {
     expect(changeSetting).not.toHaveBeenCalled();
     expect(titleOf(host)).toBe("Brave");
     expect(host.querySelector(`#${keyInputId("brave")}`)).not.toBeNull();
-    // the voice: Fish Audio has no key and no voice model yet
-    press(host, '[data-svc="close"]');
-    press(host, '[data-k="svc-toggle:voice"]');
-    expect(titleOf(host)).toBe("Fish Audio");
-    expect(changeSetting).not.toHaveBeenCalled();
   });
 
   test("the switch in the dialog does the same, in the dialog", async () => {
@@ -735,100 +722,6 @@ describe("what the section does", () => {
     expect(api.servicesSetKey).not.toHaveBeenCalled();
   });
 
-  test("the key of Fish Audio goes to the vault like the others", async () => {
-    const { host } = await opened("voice");
-    press(host, '[data-k="svc-svc:fish"]');
-    api.servicesSetKey.mockResolvedValue({ ok: true });
-    host.querySelector<HTMLInputElement>(`#${keyInputId("fish")}`)!.value = "fish-typed-key";
-    press(host, '[data-svc="save"][data-service="fish"]');
-    expect(api.servicesSetKey).toHaveBeenCalledWith("fish", "fish-typed-key");
-    await flush();
-    expect(host.innerHTML).not.toContain("fish-typed-key");
-  });
-
-  async function voiceDetails(over: Over = {}) {
-    api.servicesStatus.mockResolvedValue(status(over));
-    const mounted = mount();
-    await mounted.panel.load();
-    return mounted;
-  }
-
-  test("the voice model id is saved with settings.set tts_fish_voice, and only 32 hexadecimal characters or none", async () => {
-    const { host, changeSetting } = await voiceDetails();
-    const field = (): HTMLInputElement => host.querySelector<HTMLInputElement>("#svc-voice-id")!;
-    field().value = "not-an-id";
-    press(host, '[data-svc="voice"]');
-    await flush();
-    expect(changeSetting).not.toHaveBeenCalled();
-    expect(toaster.info).toHaveBeenCalledWith("聲音模型 ID 是 32 個十六進位字元");
-    field().value = `  ${VOICE_ID.toUpperCase()}  `;
-    field().dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
-    await flush();
-    expect(changeSetting).toHaveBeenCalledWith("tts_fish_voice", VOICE_ID.toUpperCase());
-    field().value = "";
-    press(host, '[data-svc="voice"]');
-    await flush();
-    expect(changeSetting).toHaveBeenLastCalledWith("tts_fish_voice", "");
-  });
-
-  test("「Try it」 saves the id, then has Raphael say the sample line of the window's language", async () => {
-    const { host, changeSetting } = await voiceDetails({ fishKey: true, voiceSet: true });
-    api.ttsPreview.mockResolvedValue({ ok: true });
-    press(host, '[data-svc="try"]');
-    await flush();
-    expect(changeSetting).toHaveBeenCalledWith("tts_fish_voice", VOICE_ID);
-    expect(api.ttsPreview).toHaveBeenCalledWith("告。主人，請下達指示。");
-    expect(toaster.info).not.toHaveBeenCalled();
-    setLocale("en");
-    press(host, '[data-svc="try"]');
-    await flush();
-    expect(api.ttsPreview).toHaveBeenLastCalledWith("Notice. Master, please give your instructions.");
-    setLocale("ja");
-    press(host, '[data-svc="try"]');
-    await flush();
-    expect(api.ttsPreview).toHaveBeenLastCalledWith("告。マスター、ご指示をお願いします。");
-  });
-
-  test("a refused voice save releases busy state and never previews", async () => {
-    const { host, panel } = mount({}, async () => { throw new Error("Synthetic save refusal"); });
-    await panel.load();
-    api.ttsPreview.mockResolvedValue({ ok: true });
-    press(host, '[data-svc="try"]'); await flush();
-    expect(api.ttsPreview).not.toHaveBeenCalled();
-    expect(panel.view().busy).toBeNull();
-    expect(host.querySelector<HTMLButtonElement>('[data-svc="try"]')!.disabled).toBe(false);
-  });
-
-  test("「Try it」 with a bad id previews nothing", async () => {
-    const { host } = await voiceDetails();
-    host.querySelector<HTMLInputElement>("#svc-voice-id")!.value = "zzz";
-    press(host, '[data-svc="try"]');
-    await flush();
-    expect(api.ttsPreview).not.toHaveBeenCalled();
-  });
-
-  test.each([
-    ["not_configured", "先填入聲音模型 ID"],
-    ["missing_secret", "先儲存 API 金鑰"],
-    ["auth", "Fish Audio 不接受這把金鑰"],
-    ["network", "Fish Audio 試聽未成功，無法確認原因，請確認音訊輸出後再試，仍失敗時檢查服務狀態。"],
-    [undefined, "Fish Audio 試聽未成功，無法確認原因，請確認音訊輸出後再試，仍失敗時檢查服務狀態。"],
-  ])("a voice that could not be played (%s) is said in a few words", async (kind, words) => {
-    const { host } = await voiceDetails();
-    api.ttsPreview.mockResolvedValue({ ok: false, kind });
-    press(host, '[data-svc="try"]');
-    await flush();
-    expect(toaster.info).toHaveBeenCalledWith(words);
-  });
-
-  test("a call that fails is told by the error", async () => {
-    const { host } = await voiceDetails();
-    api.ttsPreview.mockRejectedValue("the core is not running");
-    press(host, '[data-svc="try"]');
-    await flush();
-    expect(toaster.info).toHaveBeenCalled();
-  });
-
   test("reset drops the dialog, and a status that comes in late is ignored", async () => {
     const { host, panel } = await opened("search");
     panel.reset();
@@ -842,17 +735,12 @@ describe("what the section does", () => {
     expect(host.innerHTML).toContain("Brave");
   });
 
-  test("an address is blank or http(s), and a voice id is blank or 32 hexadecimal characters", () => {
+  test("an address is blank or http(s)", () => {
     expect(isServiceUrl("")).toBe(true);
     expect(isServiceUrl("https://searx.example/search")).toBe(true);
     expect(isServiceUrl("http://localhost:8888")).toBe(true);
     expect(isServiceUrl("searx.example")).toBe(false);
     expect(isServiceUrl("javascript:alert(1)")).toBe(false);
     expect(isServiceUrl("file:///C:/x")).toBe(false);
-    expect(isVoiceId("")).toBe(true);
-    expect(isVoiceId(` ${VOICE_ID} `)).toBe(true);
-    expect(isVoiceId(VOICE_ID.slice(1))).toBe(false);
-    expect(isVoiceId(`${VOICE_ID}0`)).toBe(false);
-    expect(isVoiceId("g".repeat(32))).toBe(false);
   });
 });

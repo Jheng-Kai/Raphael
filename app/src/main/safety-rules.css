@@ -13,7 +13,7 @@
 .rules-head { padding: 0 0 var(--sp-1); font-size: var(--fs-xs); color: var(--text-3); }
 .rules-row { min-height: 44px; padding: var(--sp-1) 0; border-top: 1px solid var(--line); font-size: var(--fs-sm); }
 .rules-what { min-width: 0; color: var(--text); overflow-wrap: anywhere; }
-.rules-how { font-weight: 600; color: var(--text); }
+.rules-how { font-weight: var(--weight-semibold); color: var(--text); }
 .rules-tools { display: flex; justify-content: flex-end; gap: var(--sp-1); }
 .rules-tools .btn.icon { width: 32px; min-height: 32px; padding: 0; }
 /* a rule being changed: its words in a field, its dropdown, then 取消 and 儲存 */

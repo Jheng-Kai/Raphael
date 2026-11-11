@@ -1,14 +1,15 @@
 """Cloud speech-to-text on the device side: a stretch of speech goes to the brain's
-`stt.transcribe`, and the local engine, when there is one, takes over whenever that does not work.
+`stt.transcribe`. Rate limits retain audio on that model; other failures may use the local engine.
 
 `CloudSttEngine` has the interface of the local engines (`transcribe(samples, hints=, language=)`),
 so the dictation service uses it like any of them. It runs on the dictation's worker thread and
 reaches the brain only through the router, with JSON params: the app hands it a `call(method,
 params, timeout)` that runs `router.call` on the event loop and waits for it.
 
-A refusal that passes (too many requests, a server error) is tried again after a short wait. Any
-other failure (no key, the monthly limit, no network, a timeout, an error), or one that does not
-pass, makes the segment go to the local engine, and the rest of that dictation too: a dictation
+A refusal that passes (too many requests, a server error) is tried again within one segment's
+existing time budget, honoring Retry-After. A rate limit keeps audio pending on the selected model.
+Other failures (no key, the monthly limit, no network, a timeout, an error), or a server failure
+that does not pass, make the segment go to the local engine, and the rest of that dictation too: a dictation
 should not wait for a cloud that has just failed once per segment. Without a local engine the next
 segment goes to the cloud again, since there is nothing else to hear it. Each kind of failure is
 logged as a warning once per process (the app passes the same `warned` set to every engine), at
@@ -21,6 +22,7 @@ import base64
 import concurrent.futures
 import io
 import logging
+import math
 import threading
 import time
 import wave
@@ -115,10 +117,14 @@ class CloudSttEngine:
         fallback: Callable[[], Any],
         warned: set[str],
         sleep: Callable[[float], None] = time.sleep,
+        now: Callable[[], float] = time.monotonic,
         race_local: bool = False,
     ) -> None:
         self._call = call
         self._sleep = sleep
+        self._now = now
+        self._cooldown_until = 0.0
+        self._rate_error: Exception | None = None
         self._fallback = fallback
         self._warned = warned
         self._failed: str | None = None
@@ -164,14 +170,12 @@ class CloudSttEngine:
     def transcribe_final(
         self, samples: np.ndarray, *, hints: Sequence[str] = (), language: str = "auto"
     ) -> str:
-        """One final cloud attempt, then local, even if this session previously fell back.
-
-        Backoff already happened while recording. Do not add another pair of retry sleeps to
-        the delivery path for every retained segment.
-        """
+        """Retry retained audio within the original final-call budget, respecting rate limits."""
         try:
-            return self._cloud(samples, hints, language)
-        except Exception:
+            return self._cloud_with_retries(samples, hints, language)
+        except Exception as error:
+            if _kind(error) == "rate_limit":
+                raise
             return self._local(samples, hints, language)
 
     def transcribe(
@@ -188,6 +192,9 @@ class CloudSttEngine:
             return self._cloud_with_retries(samples, hints, language)
         except Exception as error:
             kind = _kind(error)
+            if kind == "rate_limit":
+                # Keep this audio pending on the selected model instead of silently changing engines.
+                raise
         try:
             text = self._local(samples, hints, language)
         except RpcError as error:
@@ -201,23 +208,44 @@ class CloudSttEngine:
         return text
 
     def _cloud_with_retries(self, samples: np.ndarray, hints: Sequence[str], language: str) -> str:
-        for wait in _RETRY_WAITS_S:
+        deadline = self._now() + wait_for(samples.size / SAMPLE_RATE)
+        for attempt in range(len(_RETRY_WAITS_S) + 1):
+            cooldown = max(0.0, self._cooldown_until - self._now())
+            if cooldown:
+                if cooldown >= deadline - self._now():
+                    raise self._rate_error
+                self._sleep(cooldown)
+            remaining = deadline - self._now()
+            if remaining <= 0:
+                if self._rate_error is not None:
+                    raise self._rate_error
+                raise TimeoutError("Cloud speech-to-text retry budget exhausted")
             try:
-                return self._cloud(samples, hints, language)
+                return self._cloud(samples, hints, language, timeout=remaining)
             except Exception as error:
                 if _kind(error) not in _PASSING:
                     raise
+                delay = error.data.get("retry_after") if isinstance(error, RpcError) and isinstance(error.data, dict) else None
+                delay = float(delay) if type(delay) in (int, float) and math.isfinite(delay) and delay > 0 else 0.0
+                wait = max(_RETRY_WAITS_S[min(attempt, len(_RETRY_WAITS_S) - 1)], delay)
+                if _kind(error) == "rate_limit":
+                    self._rate_error = error
+                    self._cooldown_until = self._now() + wait
+                if attempt == len(_RETRY_WAITS_S) or wait >= deadline - self._now():
+                    raise
                 logger.debug("Cloud speech-to-text refused (%s); trying again", _kind(error))
-            self._sleep(wait)
-        return self._cloud(samples, hints, language)
+                self._sleep(wait)
+                # Test clocks and production clocks share the same elapsed-time accounting.
+                if _kind(error) == "rate_limit":
+                    self._cooldown_until = 0.0
 
-    def _cloud(self, samples: np.ndarray, hints: Sequence[str], language: str) -> str:
+    def _cloud(self, samples: np.ndarray, hints: Sequence[str], language: str, *, timeout: float | None = None) -> str:
         params = {
             "audio": base64.b64encode(encode_wav(samples)).decode("ascii"),
             "hints": list(hints),
             "language": language,
         }
-        result = self._call("stt.transcribe", params, wait_for(samples.size / SAMPLE_RATE))
+        result = self._call("stt.transcribe", params, wait_for(samples.size / SAMPLE_RATE) if timeout is None else timeout)
         text = result.get("text") if isinstance(result, dict) else None
         if not isinstance(text, str) or not text.strip():
             raise RpcError(0, "The reply has no speech text", {"kind": "bad_response"})

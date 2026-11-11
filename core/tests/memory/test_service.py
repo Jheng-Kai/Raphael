@@ -48,25 +48,11 @@ def rpc(memory):
     return router
 
 
-@pytest.mark.asyncio
-async def test_owner_import_uses_shared_writer_and_redacts_secret_refusals(memory):
-    result = await memory._import({"text":"I prefer tea in the morning.\n\npassword is sample123\n\nI write weekly research notes."})
-    assert result["kept"] == ["I prefer tea in the morning.", "I write weekly research notes."]
-    assert result["refused"] == [{"index":2,"reason":"secret"}]
-    shared = memory.space("shared",0).read()
-    assert "tea" in shared and "weekly" in shared and "sample123" not in shared
-    assert memory.space("own",0).read() == ""
-    again = await memory._import({"text":"I prefer tea in the morning."})
-    assert again["kept"] == ["I prefer tea in the morning."]
-    assert memory.space("shared",0).read().count("tea") == 1
-
-
 # --- the RPC methods ------------------------------------------------------------------------------
 
 
 async def test_the_four_methods_are_registered(rpc):
-    for method in ("memory.get", "memory.update", "memory.clear", "memory.summary_clear"):
-        assert method in rpc.methods(), method
+    assert set(rpc.methods()) == {"memory.get", "memory.update", "memory.clear", "memory.summary_clear"}
 
 
 async def test_the_owner_can_confirm_a_claim_in_the_existing_document_editor(memory):
@@ -184,7 +170,7 @@ async def test_memory_work_keeps_the_selected_brain(memory, history, model, conn
     settings.set("agent_model", model_id)
     settings.set("assistant_model", "anthropic/claude-haiku-5.5")
     if work == "fold":
-        memory.conversation.context_window = 300
+        memory.conversation.context_window = 200
         from raphael_core.memory.conversation import FOLD_AT_TURNS
         for number in range(FOLD_AT_TURNS + 1):
             add_turn(history, f"Question {number}")
@@ -213,6 +199,20 @@ async def test_the_pass_runs_after_ten_turns_and_moves_its_watermark(memory, his
     assert memory.reflected_through() == ids[-1]
     assert [tuple(r) for r in conn.execute("SELECT purpose FROM spend")] == [("memory",)]
     assert memory.reflection_due() is False
+
+
+async def test_a_long_backlog_is_read_newest_first_within_one_pass_and_the_watermark_moves(memory, history, model):
+    # 2026-11-09: a pass shown more than a CLI brain's fresh context failed, kept its watermark and stopped learning.
+    from raphael_core.memory.reflection import REFLECTION_CHARS
+    model.replies.append(PLAN)
+    ids = [add_turn(history, f"q{n} " + "long words " * 300) for n in range(REFLECT_AFTER_TURNS * 3)]
+    memory.after_turn()
+    await memory.wait_idle()
+    shown = model.calls[0]["user"]
+    assert len(shown) <= REFLECTION_CHARS
+    # The newest turns are read whole; the oldest are left behind, and the watermark is past all of them.
+    assert f"[turn {ids[-1]}," in shown and f"[turn {ids[0]}," not in shown
+    assert memory.reflected_through() == ids[-1] and SECRET_WORDS in memory.own(0).read()
 
 
 async def test_the_pass_runs_once_the_conversation_is_quiet(memory, history, model, clock):

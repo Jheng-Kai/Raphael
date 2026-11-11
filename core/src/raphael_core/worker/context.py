@@ -48,8 +48,7 @@ CONTEXT_OVERFLOW = "context_overflow"
 DEFAULT_WINDOW = 32_000
 # The reply's room in the window.
 OUTPUT_RESERVE = 4_000
-# Windows under 512K are used up to 75% of what the reply leaves, larger ones to 50% (Hermes,
-# `_effective_threshold_percent`): a prompt of half a million tokens is slow and dear on its own.
+# Reserve more headroom for large windows to bound input cost and latency.
 LARGE_WINDOW = 512_000
 SHARE_OF_WINDOW, SHARE_OF_LARGE_WINDOW = 0.75, 0.50
 # Results are kept in the newest half of the trigger; shorter than this share of it, no summary is due.
@@ -64,7 +63,7 @@ DUPLICATE = "(shortened) same output as a later call of this tool"
 REASON_CHARS = 240
 ARGUMENT_CHARS = 80
 
-# The summary: a fifth of what it covers, within these (Hermes, `_compute_summary_budget`).
+# Bound summary size to a share of the context it covers.
 SUMMARY_SHARE, SUMMARY_MIN = 0.20, 2_000
 SUMMARY_WINDOW_SHARE, SUMMARY_CEILING = 0.05, 10_000
 # What the summariser reads of one message and of one call's arguments, and at most in all.

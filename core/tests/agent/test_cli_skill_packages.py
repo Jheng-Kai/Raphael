@@ -18,7 +18,7 @@ async def test_only_assigned_packages_enter_the_native_skill_mechanism(tmp_path,
     (folder / "scripts/task.py").write_text("print('assigned')", encoding="utf-8")
     record = tmp_path / "record.json"
     script = tmp_path / "cli.py"
-    script.write_text('''import json, sys, os
+    script.write_text('''import json, sys, os, tomllib
 from pathlib import Path
 args = sys.argv[2:]
 if "--plugin-dir" in args:
@@ -38,7 +38,7 @@ else:
     assert options["features.plugins"] == "false"
     assert options["features.shell_tool"] == "false"
     assert options["skills.include_instructions"] == "true"
-    paths = [Path(item["path"]) for item in json.loads(options["skills.config"]) if item["enabled"]]
+    paths = [Path(item["path"]) for item in tomllib.loads("v = " + options["skills.config"])["v"] if item["enabled"]]
 Path(sys.argv[1]).write_text(json.dumps({"documents": [p.read_text() for p in paths],
     "scripts": [(p.parent / "scripts/task.py").read_text() for p in paths]}))
 def send(value): print(json.dumps(value), flush=True)

@@ -91,7 +91,7 @@ async def test_room_roles_keep_shared_notes_and_normal_tools_without_rounds(make
     memory.shared.edit_document("SHARED-REPORT\n", None)
     memory.own(alice.id).edit_document("PRIVATE-REPORT\n", None)
     rig.client.replies.extend(report(text) for text in (
-        "Who reads today's mail? @Bob", "I can read it.",
+        "(pass)", "Who reads today's mail? @Bob", "I can read it.",
     ))
     try:
         source = rooms._history.add(session_id="meeting",question="Meet",route="answer",prefix="",text="",status="running")
@@ -101,7 +101,7 @@ async def test_room_roles_keep_shared_notes_and_normal_tools_without_rounds(make
         messages = (await rig.rpc.call("rooms.messages", {"room_id": room["room_id"]}))["messages"]
         assert [message["member_id"] for message in messages] == [0, alice.id, bob.id]
         assert all(message["kind"] == "message" for message in messages)
-        assert len(rig.client.chat_calls) == 2 and not rig.client.replies
+        assert len(rig.client.chat_calls) == 3 and not rig.client.replies
         for request in rig.client.chat_calls:
             tools = {tool["function"]["name"] for tool in request["tools"]}
             assert tools == {"handoff","room_post","ask_member","work_status"}

@@ -7,7 +7,7 @@
 
 /* ---------- the size of the page ---------- */
 /* Layout geometry follows the window: a small window keeps the compact sizes of the first design,
-   a maximised one the roomier ones of a desktop messenger (Grok's: a flexible column and
+   a maximised one the roomier ones of a desktop messenger (a flexible column and
    composer), while typography uses the shared scale; geometry is interpolated, so nothing jumps at a breakpoint.
      --pa-t   how far the window is past 960 px wide, held between 0 and 960 px (so 0 up to 960 px
               wide, and the full 960 px from 1920 px on);
@@ -17,7 +17,7 @@
    (its dialogs and menus), so no other page changes with them (they are not in :root). The faces
    are drawn by the markup at `--av: <px>` (members.ts, avatar.ts); the rules below set `--av` again
    with !important where a face must follow these sizes, which the inline value would otherwise win. */
-.page-agent, .side, .mb-scrim, .menu.mb-avpop, .menu.mb-menu, .menu.mb-toolpop, .toasts {
+.page-agent, .side, .mb-scrim, .menu.mb-avpop, .menu.mb-menu, .menu.mb-toolpop, .menu.side-search, .toasts {
   --pa-t: clamp(0px, calc(100vw - 960px), 960px);
   --pa-u: calc(var(--pa-t) / 960);
   /* the three columns */
@@ -25,13 +25,15 @@
   /* the member column */
   --pa-pad: var(--sp-2);
   --pa-tool: calc(30px + 18 * var(--pa-u));
-  --pa-gh-h: calc(30px + 10 * var(--pa-u));
+  /* A folder's heading is one quiet line: the members are what matters. */
+  --pa-gh-h: 24px;
   --pa-gh-fs: var(--fs-2xs);
-  --pa-gh-btn: calc(24px + 8 * var(--pa-u));
+  --pa-gh-btn: 20px;
   --pa-row-h: 64px;
   --pa-row-av: 40px;
   --pa-row-gap: var(--sp-2);
-  --pa-row-name: var(--fs-sm);
+  /* Shared typography: a sidebar name 15 px bold, its preview 13. */
+  --pa-row-name: var(--fs-md);
   --pa-row-role: var(--fs-2xs);
   --pa-row-pv: var(--fs-xs);
   --pa-row-r: var(--r-sm);
@@ -41,21 +43,26 @@
   --pa-chat-pad: calc(24px + 8 * var(--pa-u));
   --pa-colw: var(--layout-thread-max);
   --pa-bw: 60ch;
-  --pa-ctl: calc(34px + 10 * var(--pa-u));
+  --pa-ctl: calc(30px + 4 * var(--pa-u));
   --pa-pill-h: calc(32px + 20 * var(--pa-u));
   --pa-pill-av: calc(22px + 14 * var(--pa-u));
   --pa-pill-fs: var(--fs-sm);
   --pa-gap: var(--sp-5);
   --pa-gap-in: var(--sp-3);
+  /* Messages are 15 px on a 22 px line. */
   --pa-fs-b: var(--fs-md);
-  --pa-lh-b: 24px;
+  --pa-lh-b: 22px;
   --pa-fs-a: var(--fs-md);
-  --pa-lh-a: 24px;
-  --pa-bpy: var(--sp-3);
-  --pa-bpx: var(--sp-4);
+  --pa-lh-a: 22px;
+  /* Bubbles as slim as Grok Bot's: a one-line message is a 38 px pill, and longer ones keep its corners
+     (owner, 2026-11-09: 「我們的太胖了」 beside Grok Bot's 36 px pill; ours was 46 px). */
+  --pa-bpy: var(--sp-2);
+  --pa-bpx: var(--sp-3);
+  --pa-br: calc(var(--pa-lh-b) / 2 + var(--pa-bpy));
   --pa-ra-face: calc(26px + 10 * var(--pa-u));
   --pa-ra-gap: calc(10px + 4 * var(--pa-u));
-  --pa-sys: var(--fs-xs);
+  /* System lines and day dividers are 12 px grey. */
+  --pa-sys: var(--fs-2xs);
   --pa-sys-face: calc(18px + 6 * var(--pa-u));
   --pa-day: var(--fs-2xs);
   --pa-fs-d: var(--fs-sm);
@@ -74,33 +81,29 @@
   --pa-dock-bottom: calc(28px + 8 * var(--pa-u));
   --pa-ask-face: calc(30px + 14 * var(--pa-u));
   --pa-ask-fs: var(--fs-md);
-  --pa-ask-btn: calc(32px + 12 * var(--pa-u));
   --pa-ask-r: var(--r-lg);
   --pa-hi: var(--fs-h1);
   --pa-hero-m: calc(96px + 24 * var(--pa-u));
   /* the details panel */
   --pa-dpad: var(--sp-4);
   --pa-dgap: var(--sp-5);
-  --pa-dclose: calc(34px + 14 * var(--pa-u));
   --pa-det-av: calc(64px + 32 * var(--pa-u));
   --pa-dname: var(--fs-lg);
   --pa-drole: var(--fs-xs);
-  --pa-dtab: var(--fs-sm);
-  --pa-dtab-h: calc(30px + 12 * var(--pa-u));
+  --pa-dtab: var(--fs-xs);
+  --pa-dtab-h: calc(var(--h-tab) + 4 * var(--pa-u));
   --pa-dlabel: var(--fs-xs);
   --pa-dfs: var(--fs-sm);
-  --pa-dctl: calc(32px + 12 * var(--pa-u));
   --pa-rt-t: var(--fs-sm);
   --pa-rt-s: var(--fs-xs);
   /* the dialogs and the menus */
   --pa-dlg-w: calc(420px + 100 * var(--pa-u));
   --pa-dlg-pad: calc(18px + 8 * var(--pa-u));
-  --pa-dlg-h2: var(--fs-lg);
+  /* Dialog titles 16 px, weight 600. */
+  --pa-dlg-h2: 16px;
   --pa-dlg-lab: calc(76px + 28 * var(--pa-u));
   --pa-new-av: calc(64px + 24 * var(--pa-u));
   --pa-preset: calc(40px + 12 * var(--pa-u));
-  --pa-menu-fs: var(--fs-sm);
-  --pa-menu-h: calc(34px + 10 * var(--pa-u));
 }
 
 /* The page's columns (the members, the chat, the details) are in members.css; the chat holds the
@@ -113,7 +116,8 @@
 .page-agent .btn.ra-tool[aria-expanded="true"] { background: transparent; color: var(--text); }
 .page-agent .btn.ra-tool:active:not(:disabled) { color: color-mix(in srgb, var(--text) 85%, transparent); }
 
-.ra-find { display: flex; align-items: center; gap: var(--sp-2); max-width: var(--pa-colw); width: 100%; margin: var(--sp-2) auto 0; padding: 0 6px 0 calc(12px + 4 * var(--pa-u)); min-height: calc(40px + 12 * var(--pa-u)); border: 1px solid var(--edge); border-radius: var(--r-pill); background: var(--panel); }
+/* The search field is as wide as the thread under it: the composer's sides, up to the same column. */
+.ra-find { display: flex; align-items: center; gap: var(--sp-2); max-width: var(--pa-colw); width: calc(100% - 2 * var(--pa-dock-x)); margin: var(--sp-2) auto 0; padding: 0 6px 0 calc(12px + 4 * var(--pa-u)); min-height: calc(40px + 12 * var(--pa-u)); border: 1px solid var(--edge); border-radius: var(--r-pill); background: var(--panel); }
 .ra-find-ic { display: inline-grid; place-items: center; width: 18px; color: var(--text-3); }
 .ra-find-input { flex: 1; min-width: 0; height: calc(34px + 10 * var(--pa-u)); border: 0; outline: 0; background: transparent; font-size: var(--fs-sm); }
 .ra-find-input::-webkit-search-cancel-button { display: none; }
@@ -121,11 +125,17 @@
    ring of styles.css, which loads later, would draw a box inside the pill. */
 .ra-find-input:focus-visible { outline: 0; }
 .ra-find-count { font-size: var(--pa-sys); color: var(--text-3); }
-.page-agent .ra-find .btn.ra-tool { width: calc(30px + 8 * var(--pa-u)); min-height: calc(30px + 8 * var(--pa-u)); }
+.page-agent .ra-find .btn.ra-tool { width: var(--h-ctl); min-height: var(--h-ctl); }
 
 /* ---------- the stage ---------- */
 .ra-stage { grid-row: 3; position: relative; display: flex; flex-direction: column; min-height: 0; }
-.ra-scroll { flex: 1; min-height: 0; overflow-x: hidden; overflow-y: auto; scrollbar-width: none; overflow-anchor: none; padding: var(--sp-1) var(--sp-1) var(--sp-4); }
+/* The thread is the box of what it scrolls: without `position` an absolutely placed node in it (a room
+   author's screen-reader name) took the stage as its box, escaped the clip and stretched the main area. Its sides are the
+   composer's (`.ra-dock`), so the messages start and end where the composer does at every size (R-UI-45; the judge on
+   2d5e3cf8: at 720 the thread began at 20 px and the composer at 32). */
+.ra-scroll { position: relative; flex: 1; min-height: 0; overflow-x: hidden; overflow-y: auto; scrollbar-width: none; overflow-anchor: none; padding: var(--sp-1) var(--pa-dock-x) var(--sp-4); }
+/* A thread whose unread boundary is still on its way is drawn but not shown, so it is placed once, where it will stay (agent.ts holdOpening). */
+.ra-scroll.is-opening { visibility: hidden; }
 .thread-window-sentinel { height: 1px; pointer-events: none; }
 .ra-col { max-width: var(--pa-colw); margin: 0 auto; }
 .ra-older { display: flex; justify-content: center; padding: var(--sp-1) 0 var(--sp-1); }
@@ -147,27 +157,39 @@
 .message-actions:has(.queued-mark) { opacity: 1; }
 .tn.is-new { animation: ra-turn-in 0.22s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
 .me { display: flex; align-items: flex-end; justify-content: flex-end; gap: var(--sp-1); }
-.bubble { max-width: min(var(--pa-bw), 78%); padding: var(--pa-bpy) var(--pa-bpx); border-radius: var(--r-lg); background: var(--bubble); color: var(--on-bubble); font: var(--pa-fs-b)/var(--pa-lh-b) var(--voice); white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; }
+.bubble { max-width: min(var(--pa-bw), 78%); padding: var(--pa-bpy) var(--pa-bpx); border-radius: var(--pa-br); background: var(--bubble); color: var(--on-bubble); font: var(--pa-fs-b)/var(--pa-lh-b) var(--voice); white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; }
 .ra { display: grid; grid-template-columns: var(--pa-ra-face) minmax(0, 1fr); gap: var(--pa-ra-gap); align-items: start; max-width: 88%; }
 .ra-face { display: block; width: var(--pa-ra-face); height: var(--pa-ra-face); margin-top: var(--sp-1); }
 .ra-face .av { --av: var(--pa-ra-face) !important; }
 .ra-body { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); min-width: 0; }
 .ans { margin: 0; font: var(--pa-fs-a)/var(--pa-lh-a) var(--voice); color: var(--text); overflow-wrap: anywhere; user-select: text; }
-.ra-body > .ans { justify-self: start; max-width: 100%; padding: var(--pa-bpy) var(--pa-bpx); border: 0; border-radius: var(--r-lg); background: var(--panel); white-space: pre-wrap; }
+.ra-body > .ans { justify-self: start; max-width: 100%; padding: var(--pa-bpy) var(--pa-bpx); border: 0; border-radius: var(--pa-br); background: var(--panel); white-space: pre-wrap; }
 .ans.progress { color: var(--text-2); }
-.chat-message { display: flex; flex-direction: column; align-items: flex-start; width: fit-content; min-width: 0; max-width: 100%; position: relative; }
+/* A message's actions sit beside its bubble, centred on it: the message is one column of its parts with
+   the actions in a second (a first, for the owner's), on the bubble's row. */
+/* The first column stops at the bubble's own limit: a long paragraph would otherwise stretch the message to the whole
+   column, so the empty room beside the bubble answered the pointer and a right click, and the actions stood far from it
+   (measured: 900 px for a 500 px bubble). */
+.chat-message { display: grid; grid-template-columns: fit-content(60ch) auto; column-gap: var(--sp-1); justify-items: start; align-items: start; width: fit-content; min-width: 0; max-width: 100%; position: relative; }
+.chat-message > * { grid-column: 1; min-width: 0; max-width: 100%; }
+.chat-message > .message-actions { grid-column: 2; grid-row: 1; align-self: center; }
+/* A message with no actions beside it (a conversation between members) keeps no gap for them. */
+.chat-message:not(:has(> .message-actions)) { column-gap: 0; }
+.chat-message:has(> .routine-origin) > .message-actions { grid-row: 2; }
 .chat-message > .turn-event { width: fit-content; max-width: 100%; margin-inline: auto; }
-.owner-message { align-items: flex-end; margin-inline-start: auto; max-width: min(var(--pa-bw), 78%); }
+.owner-message { grid-template-columns: auto fit-content(var(--pa-bw)); justify-items: end; margin-inline-start: auto; max-width: min(var(--pa-bw), 78%); }
+.owner-message > * { grid-column: 2; }
+.owner-message > .message-actions { grid-column: 1; }
 .owner-message .bubble { box-sizing: border-box; max-width: 100%; }
 .mb-chat[data-member-bubble] .owner-message { --bubble: var(--member-bubble); }
 .mb-chat[data-member-bubble="light"] .owner-message { --on-bubble: var(--on-tint-light); }
 .mb-chat[data-member-bubble="dark"] .owner-message { --on-bubble: var(--on-tint-dark); }
 /* Words selected in the owner's coloured bubble invert it, as the bubble's own colours do; a member's answers keep the shared selection. */
 .mb-chat[data-member-bubble] .owner-message :is(.bubble, .bubble *)::selection { background: var(--on-bubble); color: var(--member-bubble); }
-/* The member's colour also marks the controls of its conversation: send, stop and its computer (memberAccent in owner-bubble.ts). */
-.mb-chat[data-member-bubble] :is(.composer .cmp-pair, .btn.ra-tool[data-act="computer"]) { --accent-icon: var(--member-accent); --accent-text: var(--member-accent); }
-.mb-chat[data-member-bubble] .btn.ra-tool[data-act="computer"] { color: var(--member-accent); }
-.chat-message > .ans { padding: var(--pa-bpy) var(--pa-bpx); border: 0; border-radius: var(--r-lg); background: var(--panel); }
+/* The member's colour also marks the controls of its conversation: send and stop (memberAccent in owner-bubble.ts). */
+.mb-chat[data-member-bubble] .composer .cmp-pair { --accent-icon: var(--member-accent); --accent-text: var(--member-accent); }
+/* A reply is a fill with a barely seen edge; drawn inside, so no size changes. */
+.chat-message > .ans { padding: var(--pa-bpy) var(--pa-bpx); border: 0; border-radius: var(--pa-br); background: var(--panel); box-shadow: inset 0 0 0 1px var(--ans-edge); }
 .message-text { white-space: pre-wrap; overflow-wrap: anywhere; }
 .ans .message-text { white-space: normal; }
 .owner-message .message-text { white-space: pre-wrap; }
@@ -184,41 +206,54 @@
 .message-code pre { margin: 0; padding: 34px var(--sp-3) var(--sp-3); border-radius: var(--r-sm); background: var(--surface-2); white-space: pre-wrap; overflow-wrap: anywhere; }
 .message-code pre code { padding: 0; background: transparent; }
 .message-code > .btn.icon { position: absolute; inset-block-start: 3px; inset-inline-end: 3px; }
-.message-link { overflow-wrap: anywhere; color: var(--accent-text); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.message-link { overflow-wrap: anywhere; color: var(--link); text-decoration: none; cursor: pointer; }
+.message-link:hover { text-decoration: underline; text-underline-offset: 3px; }
 :root[data-keys] .message-link:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; border-radius: var(--r-sm); }
 .message-actions { display: flex; flex: none; align-items: center; justify-content: flex-start; gap: var(--sp-1); height: 28px; opacity: 0; }
-.owner-message > .message-actions { align-self: flex-end; }
 .message-tooltip { position: fixed; z-index: 100; pointer-events: none; max-width: calc(100vw - 16px); padding: var(--sp-1) var(--sp-2); border: 1px solid var(--edge); border-radius: var(--r-sm); background: var(--panel); color: var(--text); box-shadow: var(--pop); font: var(--fs-2xs)/1.5 var(--ui); }
 .message-tooltip { white-space: pre-line; overflow-wrap: anywhere; }
 .message-tooltip[hidden], :has([data-cancel-armed="true"]) > .message-tooltip { display: none; }
-.page-agent .btn.quote-pill { position: fixed; z-index: 99; width: auto; min-height: 32px; padding: var(--sp-1) var(--sp-3); gap: var(--sp-1); border: 1px solid var(--edge); border-radius: var(--r-pill); background: var(--panel); color: var(--text); box-shadow: var(--pop); font: var(--fs-xs)/1.5 var(--ui); }
+.page-agent .btn.quote-pill { position: fixed; z-index: 99; width: auto; min-height: var(--h-ctl); padding: 3px var(--sp-3); gap: var(--sp-1); border: 1px solid var(--edge); border-radius: var(--r-pill); background: var(--panel); color: var(--text); box-shadow: var(--pop); font: var(--fs-xs)/calc(var(--h-ctl) - 8px) var(--ui); }
 .page-agent .btn.quote-pill[hidden], .cmp-quote[hidden] { display: none; }
+/* A reply that failed on a plan's usage limit leads with that plan's Manage usage, under its words. */
+.chat-message > .turn-usage { display: flex; margin-top: var(--sp-2); }
 .message-quote { display: block; min-width: 0; max-width: 100%; padding: 0; padding-inline-start: 10px; border: 0; border-inline-start: 2px solid var(--accent-text); margin-block-end: 8px; white-space: normal; color: var(--text-2); font: var(--fs-xs)/1.5 var(--ui); }
 button.message-quote { width: 100%; text-align: start; background: none; cursor: pointer; }
-.quote-author { display: block; color: var(--accent-text); font-weight: 600; }
+.quote-author { display: block; color: var(--accent-text); font-weight: var(--weight-semibold); }
 .quote-text { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; white-space: pre-wrap; overflow-wrap: anywhere; }
 .cmp-quote { display: flex; align-items: flex-start; gap: var(--sp-2); padding: var(--sp-2) var(--sp-3) 0; }
 .cmp-quote > .message-quote { flex: 1; margin: 0; }
 .cmp-quote > .btn { flex: none; }
-.message-actions time { color: var(--text-3); font: var(--fs-2xs)/1.4 var(--ui); margin-inline-end: 5px; }
-.message-actions .btn.icon { width: 28px; height: 28px; min-height: 28px; padding: var(--sp-1); }
+.message-actions .btn.icon { width: 28px; height: 28px; min-height: 28px; padding: var(--sp-1); color: var(--text-3); }
 .message-actions .i, .message-code .i { width: 16px; height: 16px; }
 .chat-message:hover > .message-actions, .chat-message:focus-within > .message-actions { opacity: 1; }
 .ra-scroll::-webkit-scrollbar { display: none; }
-.page-agent .btn.conversation-latest { position: absolute; right: var(--sp-4); z-index: 2; width: 36px; height: 36px; min-height: 36px; border-radius: var(--r-sm); background: var(--panel); border: 1px solid var(--edge); box-shadow: var(--pop); }
+/* Centred just above the composer. */
+.page-agent .btn.conversation-latest { position: absolute; left: 50%; transform: translateX(-50%); z-index: 2; width: 36px; height: 36px; min-height: 36px; border-radius: var(--r-sm); background: var(--panel); border: 1px solid var(--edge); box-shadow: var(--pop); }
 .page-agent .btn.conversation-latest:hover:not(:disabled) { background: var(--surface-2); border-color: var(--edge); color: var(--text); }
 .page-agent .btn.conversation-latest:active:not(:disabled) { color: color-mix(in srgb, var(--text) 85%, transparent); }
 .bubble > .btn.message-expand { margin-top: var(--sp-1); margin-inline-start: calc(-1 * var(--sp-2)); align-self: flex-start; font: inherit; color: inherit; border-color: transparent; background: transparent; padding-inline: var(--sp-2); }
 .bubble > .btn.message-expand:hover:not(:disabled) { background: color-mix(in srgb, currentColor 14%, transparent); border-color: transparent; }
 .bubble > .btn.message-expand:active:not(:disabled) { background: color-mix(in srgb, currentColor 22%, transparent); border-color: transparent; }
-.chat-message:has(> .preview-cards) { width: 100%; }
-.preview-cards { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); width: min(calc(440px + 120 * var(--pa-u)), 100%); min-width: 0; }
-/* Every link card has one height, whatever its page gave: cards of two heights under one reply looked uneven. */
-.page-agent .btn.preview-card { display: flex; align-items: center; justify-content: flex-start; gap: var(--sp-3); width: 100%; height: 88px; min-height: 88px; padding: var(--sp-2) var(--sp-3); text-align: start; white-space: normal; border-inline-start: 3px solid var(--accent-text); background: var(--surface-2); border-radius: var(--r-sm); overflow: hidden; }
+/* White words on a member's colour: the press darkens, since lightening the colour would wash the words out (R-UI-52). */
+.mb-chat[data-member-bubble="light"] .owner-message .bubble > .btn.message-expand:hover:not(:disabled) { background: color-mix(in srgb, black 16%, transparent); }
+.mb-chat[data-member-bubble="light"] .owner-message .bubble > .btn.message-expand:active:not(:disabled) { background: color-mix(in srgb, black 24%, transparent); }
+/* A link is a chip in the words: the site's mark, then its name. */
+.link-chip { font-weight: var(--weight-medium); }
+.link-chip .link-mark { display: inline-flex; vertical-align: -3px; margin-inline-end: var(--sp-1); color: inherit; }
+.link-chip .link-mark .i, .link-chip .link-mark .logo { display: block; width: 16px; height: 16px; }
+.link-chip .link-mark.logo-mono[style] { color: var(--brand); }
+.link-chip .link-mark.logo-art .lg-d { display: none; }
+:root[data-theme="dark"] .link-chip .link-mark.logo-art .lg-d { display: block; }
+:root[data-theme="dark"] .link-chip .link-mark.logo-art .lg-l:has(+ .lg-d) { display: none; }
+/* The page's preview, under the pointer only, drawn as a menu is: it never takes a row of the conversation. It lives on
+   <body>, outside the page that sets --pa-u, so its width must not lean on it: without a width the card stretched across
+   the window to fit a whole description (owner, 2026-11-09: 「可以就用 .. 就好」). Each line ends in an ellipsis. */
+.link-hover { position: fixed; z-index: 130; display: flex; align-items: center; gap: var(--sp-3); width: min(400px, calc(100vw - 16px)); padding: var(--sp-2) var(--sp-3); border-radius: var(--r-md); background: var(--menu); border: 1px solid var(--edge); box-shadow: var(--pop); pointer-events: none; }
 .preview-image { flex: none; width: 64px; height: 64px; object-fit: cover; border-radius: var(--r-sm); }
 .preview-meta { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); flex: 1; }
 .preview-site { font: var(--fs-2xs)/1.5 var(--ui); color: var(--accent-text); }
-.preview-title { font: 600 var(--fs-md)/1.6 var(--ui); color: var(--text); }
+.preview-title { font: 500 var(--fs-md)/1.6 var(--ui); color: var(--text); }
 .preview-description { font: var(--fs-xs)/1.6 var(--ui); color: var(--text-2); }
 .preview-meta > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 @media (hover: none) { .message-actions { opacity: 1; } }
@@ -237,14 +272,14 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 .media-link-main > .media-meta { flex: 1; min-width: 0; }
 .media-link-main > .media-thumb, .media-link-main > .media-foot { flex: none; }
 .media-meta { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); min-width: 0; }
-.media-site { font-size: var(--pa-sys); font-weight: 600; color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.media-title { font-size: var(--pa-fs-d); font-weight: 600; line-height: 1.35; color: var(--text); overflow-wrap: anywhere; }
+.media-site { font-size: var(--pa-sys); font-weight: var(--weight-semibold); color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.media-title { font-size: var(--pa-fs-d); font-weight: var(--weight-semibold); line-height: 1.35; color: var(--text); overflow-wrap: anywhere; }
 .media-desc { font-size: var(--pa-sys); line-height: 1.4; color: var(--text-2); display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
 .media-thumb { width: calc(68px + 18 * var(--pa-u)); height: calc(50px + 12 * var(--pa-u)); border-radius: var(--r-sm); object-fit: cover; background: var(--surface-2); }
 .media-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--sp-2); min-width: 0; }
 .media-bar > .media-meta { flex: 1 1 180px; }
 .media-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--sp-1); }
-.page-agent .btn.sm.media-open, .page-agent .btn.sm.media-expand { gap: var(--sp-1); min-height: calc(26px + 6 * var(--pa-u)); padding: var(--sp-1) var(--sp-2); font-size: var(--pa-sys); }
+.page-agent .btn.sm.media-open, .page-agent .btn.sm.media-expand { gap: var(--sp-1); }
 .media-open .i { width: 16px; height: 16px; }
 .page-agent .btn.media-img-btn { display: block; width: 100%; padding: 0; border: 0; border-radius: var(--r-sm); background: var(--surface-2); overflow: hidden; cursor: zoom-in; }
 .page-agent .btn.media-img-btn:hover:not(:disabled) { background: var(--hover); filter: brightness(0.98); }
@@ -261,7 +296,7 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 .connector-card { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; column-gap: calc(10px + 4 * var(--pa-u)); justify-self: start; width: min(calc(300px + 80 * var(--pa-u)), 100%); padding: calc(8px + 3 * var(--pa-u)) calc(10px + 4 * var(--pa-u)); border-radius: var(--r-lg); background: var(--panel); }
 .connector-card > .mono { width: 28px; height: 28px; }
 .cc-meta { display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px; min-width: 0; }
-.cc-name { font-size: var(--pa-fs-d); font-weight: 600; line-height: 1.35; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cc-name { font-size: var(--pa-fs-d); font-weight: var(--weight-semibold); line-height: 1.35; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cc-state { display: flex; align-items: center; gap: var(--sp-1); min-width: 0; font-size: var(--pa-sys); line-height: 1.4; color: var(--text-2); }
 .cc-state > span:last-child { min-width: 0; overflow-wrap: anywhere; }
 .connector-card[data-connector] .cc-state > span:last-child { flex: 1; }
@@ -320,7 +355,7 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 .mail-card { display: grid; grid-template-columns: minmax(0, 1fr); row-gap: var(--sp-2); justify-self: start; width: min(calc(500px + 140 * var(--pa-u)), 100%); padding: calc(8px + 3 * var(--pa-u)) calc(10px + 4 * var(--pa-u)); border-radius: var(--r-lg); background: var(--panel); }
 .mail-head { display: flex; align-items: center; gap: calc(8px + 2 * var(--pa-u)); min-width: 0; }
 .mail-head > .mono { width: 24px; height: 24px; flex: none; }
-.mail-title { font-size: var(--pa-fs-d); font-weight: 600; line-height: 1.35; color: var(--text); }
+.mail-title { font-size: var(--pa-fs-d); font-weight: var(--weight-semibold); line-height: 1.35; color: var(--text); }
 .mail-ver, .mail-by { font-size: var(--pa-sys); color: var(--text-3); }
 .mail-by { margin-left: auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mail-rows { display: grid; grid-template-columns: minmax(0, 1fr); row-gap: var(--sp-1); }
@@ -341,10 +376,10 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 .mail-done > .mono { align-self: center; }
 
 /* image lightbox */
-.media-lightbox .lb-card { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); width: min(860px, 100%); max-height: 100%; padding: var(--sp-3); border-radius: var(--r-lg); background: var(--panel); box-shadow: var(--pop); }
-.media-lightbox .lb-head { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); }
-.media-lightbox .lb-title { font-size: var(--pa-fs-d); font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.media-lightbox .lb-img { display: block; width: 100%; max-height: 76vh; object-fit: contain; border-radius: var(--r-sm); background: var(--surface-2); }
+/* Only the picture, as large as the window allows; its close button sits inside it on the photo scrim. */
+.media-lightbox .lb-card { position: relative; max-width: 100%; max-height: 100%; overflow: hidden; border-radius: var(--r-lg); background: var(--surface-2); box-shadow: var(--pop); }
+.media-lightbox .lb-img { display: block; min-width: 160px; min-height: 120px; max-width: min(1400px, calc(100vw - 2 * var(--sp-4))); max-height: calc(100vh - var(--window-controls-height) - 3 * var(--sp-4)); object-fit: contain; }
+.media-lightbox .lb-card > .btn.icon.lb-close { position: absolute; top: var(--sp-2); right: var(--sp-2); width: 32px; min-height: 32px; border-radius: var(--r-pill); background: var(--photo-dim); color: var(--photo-mark); }
 .tn[data-status="error"] .ans, .tn[data-status="denied"] .ans, .tn[data-status="expired"] .ans { color: var(--text-2); }
 .tn mark { background: var(--selection); color: var(--on-selection); border-radius: var(--r-sm); padding: 0 var(--sp-1); }
 .tn-detail { padding: var(--sp-2) var(--sp-3); border-radius: var(--r-lg); background: var(--surface-2); font-size: var(--pa-fs-d); line-height: 1.75; color: var(--text-2); white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; }
@@ -359,7 +394,7 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 
 /* what was done: one line that opens on the steps */
 .steps { display: grid; grid-template-columns: minmax(0, 1fr); }
-.page-agent .btn.steps-sum { justify-self: start; gap: var(--sp-1); min-height: var(--pa-small-btn); padding: var(--sp-1) var(--sp-2) var(--sp-1) var(--sp-1); margin-left: -4px; border-color: transparent; background: transparent; border-radius: var(--r-sm); font-size: var(--pa-sys); color: var(--text-3); }
+.page-agent .btn.steps-sum { justify-self: start; gap: var(--sp-1); min-height: var(--h-ctl-sm); padding: 1px var(--sp-2) 1px var(--sp-1); margin-left: -4px; border-color: transparent; background: transparent; border-radius: var(--r-sm); font-size: var(--pa-sys); color: var(--text-3); }
 .page-agent .btn.steps-sum:hover:not(:disabled) { background: var(--hover); border-color: transparent; color: var(--text-2); }
 .page-agent .btn.steps-sum:active:not(:disabled) { background: var(--pressed); }
 .steps-chev { display: inline-grid; place-items: center; width: 16px; }
@@ -389,12 +424,12 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 .step-mark { display: inline-grid; place-items: center; width: 16px; height: 16px; }
 .step.is-ok .step-mark { color: var(--ok); }
 .step.is-bad .step-mark { color: var(--err); }
-.step.is-live { color: var(--text); font-weight: 600; }
+.step.is-live { color: var(--text); }
 
 /* a background task: a card that changes where it is */
 .task { border: 1px solid var(--edge); background: var(--panel); border-radius: var(--r-lg); padding: var(--sp-1) var(--sp-2) var(--sp-1) var(--sp-1); }
 .task-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-1); }
-.page-agent .btn.task-sum { flex: 1; justify-content: flex-start; gap: var(--sp-2); min-width: 0; min-height: calc(30px + 8 * var(--pa-u)); padding: var(--sp-1) var(--sp-1); border-color: transparent; background: transparent; font-size: var(--pa-fs-d); font-weight: 600; color: var(--text); }
+.page-agent .btn.task-sum { flex: 1; justify-content: flex-start; gap: var(--sp-2); min-width: 0; min-height: var(--h-ctl); padding: 3px var(--sp-1); border-color: transparent; background: transparent; font-size: var(--pa-fs-d); font-weight: var(--weight-semibold); color: var(--text); }
 .page-agent .btn.task-sum:hover:not(:disabled) { background: var(--hover); border-color: transparent; }
 .page-agent .btn.task-sum:active:not(:disabled) { background: var(--pressed); }
 .task-mark { display: inline-grid; place-items: center; width: 16px; height: 16px; color: var(--text-3); }
@@ -407,7 +442,7 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 .task-sum .steps-chev .i { transform: rotate(-90deg); }
 .task[data-open="true"] .task-sum .steps-chev .i { transform: none; }
 .task .steps-list { margin: var(--sp-1) 0 var(--sp-1) var(--sp-1); }
-.page-agent .btn.sm.stop, .page-agent .btn.sm.rerun { min-height: calc(26px + 6 * var(--pa-u)); padding: var(--sp-1) var(--sp-3); font-size: var(--pa-sys); }
+.page-agent .btn.sm.stop, .page-agent .btn.sm.rerun { padding-inline: var(--sp-3); }
 
 /* under way: a turning ring, and light passing over what is being done */
 .spin { display: inline-block; flex: none; width: 12px; height: 12px; border-radius: var(--r-pill); border: 2px solid var(--track); border-top-color: var(--accent-text); animation: ra-spin 0.8s linear infinite; }
@@ -425,15 +460,19 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 .ra-dock { flex: none; padding: var(--pa-dock-top) var(--pa-dock-x) var(--pa-dock-bottom); }
 .ra-dock > .composer, .ra-dock > .ask-card { max-width: var(--pa-colw); margin: 0 auto; }
 .page-agent .ask-card { width: 100%; max-width: var(--layout-reading-max); margin-inline: auto; }
-.composer { width: 100%; max-width: var(--layout-thread-max); margin-inline: auto; display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); background: var(--panel); border: 1px solid var(--edge); border-radius: var(--pa-cmp-r); padding: var(--pa-cmp-p) calc(var(--pa-cmp-p) + 1px) var(--pa-cmp-p) calc(var(--pa-cmp-p) + 2px); box-shadow: 0 6px 20px color-mix(in srgb, var(--text) 6%, transparent); transition: border-color 0.16s ease, box-shadow 0.16s ease; }
-/* Typing into it deepens its shadow a little; its edge keeps its colour, as no frame shows where the focus is. */
-.composer:focus-within { box-shadow: 0 6px 24px color-mix(in srgb, var(--text) 10%, transparent); }
+/* In the thread the question is the member's own line: it starts where its replies start and is as wide as a permission
+   card, never centred under the owner's message. */
+.page-agent [data-question-turn] .ask-card { width: min(calc(400px + 100 * var(--pa-u)), 100%); margin-inline: 0 auto; }
+.composer { width: 100%; max-width: var(--layout-thread-max); margin-inline: auto; display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); background: var(--panel); border: 1px solid var(--edge); border-radius: var(--pa-cmp-r); padding: var(--pa-cmp-p) calc(var(--pa-cmp-p) + 1px) var(--pa-cmp-p) calc(var(--pa-cmp-p) + 2px); box-shadow: var(--composer-shadow); transition: border-color 0.16s ease; }
+/* The shadow is always black and focus changes nothing, so opening a conversation (which focuses the field)
+   lights no halo around it in the dark theme (owner, 2026-11-09: 「跳轉的時候…不用有亮光」). */
 .cmp-row { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); }
+.composer .cmp-page-note { display: block; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* Under the words: what to add and how it acts on the left, which model and send on the right. */
 .cmp-bar { display: flex; align-items: center; gap: var(--sp-1); min-width: 0; }
 .cmp-bar-fill { flex: 1; min-width: 0; }
 .cmp-model:empty { display: none; }
-.composer .btn.cmp-mode { gap: var(--sp-1); min-height: 32px; padding-inline: var(--sp-2); border-color: transparent; background: transparent; color: var(--text-2); font-size: var(--fs-xs); white-space: nowrap; }
+.composer .btn.cmp-mode { gap: var(--sp-1); min-height: var(--h-ctl); padding-inline: var(--sp-2); border-color: transparent; background: transparent; color: var(--text-2); font-size: var(--fs-xs); white-space: nowrap; }
 .composer .btn.cmp-mode:hover:not(:disabled) { color: var(--text); }
 .composer .btn.cmp-mode:active:not(:disabled) { color: color-mix(in srgb, var(--text) 85%, transparent); }
 .composer .btn.cmp-mode .i { width: 16px; height: 16px; }
@@ -463,12 +502,13 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 .cmp-field.has-mentions > .cmp-input::selection { color: transparent; }
 .cmp-composing { text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 3px; }
 /* A mention, in the field and in the owner's bubble: its mark stands where the @ is (the @ keeps its width, unseen), then the
-   name, in a quiet pill. In the field the pill's padding is cancelled by its margin, so a line wraps exactly as plain words do. */
-.mention-chip { padding: 1px 2px; margin: 0 1px; border-radius: var(--r-sm); background: color-mix(in srgb, currentColor 9%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 16%, transparent); }
-.cmp-mirror .mention-chip { margin: 0 -2px; }
-.cmp-mirror .url-chip { color: var(--accent-text); }
+   name: the logo and the words alone, with no frame or fill. The words keep the field's
+   own metrics, so the caret and a wrapping line fall exactly as for plain words. */
+.cmp-mirror .url-chip { color: var(--link); }
 .mention-at { position: relative; -webkit-text-fill-color: transparent; }
-.mention-ico { position: absolute; inset: 0; display: grid; place-items: center; -webkit-text-fill-color: currentColor; }
+/* The 16 px mark is wider than the @ it covers, so it starts 3 px left of it: a little air before the name,
+   without changing the words' metrics. The box is the mark's own width, so that a narrower @ does not make it overflow sideways. */
+.mention-ico { position: absolute; inset-block: 0; inset-inline-start: 0; width: 16px; display: grid; place-items: center; translate: -3px 0; -webkit-text-fill-color: currentColor; }
 .mention-ico .i, .mention-ico .mono { width: 16px; height: 16px; margin: 0; }
 /* One slot: 拉斐爾大師 (voice) while the draft is empty; once there is something to send he turns
    into a bare send icon (a level paper plane, no background), as Telegram does. */
@@ -490,9 +530,14 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 .me-file-t, .cmp-chip-t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cmp-chip .chip-x { display: inline-grid; place-items: center; flex: 0 0 20px; width: 20px; height: 20px; padding: 0; border: 0; border-radius: var(--r-pill); background: transparent; color: var(--text-3); }
 .cmp-chip .chip-x:hover { background: transparent; color: var(--text); }
+/* A picture is only its thumbnail, which opens it large; the remove button sits inside its corner. */
+.cmp-chip:has(> .cmp-pic) { position: relative; flex: 0 0 auto; width: 56px; height: 56px; padding: 0; overflow: hidden; }
+.btn.cmp-pic { display: block; width: 100%; height: 100%; min-height: 0; padding: 0; border: 0; border-radius: inherit; background: transparent; }
+.cmp-pic .cmp-thumb { width: 100%; height: 100%; }
+.cmp-chip > .cmp-pic + .chip-x { position: absolute; top: 3px; right: 3px; width: 20px; height: 20px; flex: none; background: var(--photo-dim); color: var(--photo-mark); }
 
 /* The drop target ends above whichever composer or approval card is visible. */
-.attachment-drop { position: absolute; inset: 12px; z-index: 12; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--sp-3); border: 2px dashed var(--accent-text); border-radius: var(--r-lg); background: color-mix(in srgb, var(--accent-soft) 94%, transparent); color: var(--accent-text); font-size: var(--fs-md); font-weight: 600; pointer-events: none; }
+.attachment-drop { position: absolute; inset: 12px; z-index: 12; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--sp-3); border: 2px dashed var(--accent-text); border-radius: var(--r-lg); background: color-mix(in srgb, var(--accent-soft) 94%, transparent); color: var(--accent-text); font-size: var(--fs-md); font-weight: var(--weight-semibold); pointer-events: none; }
 .attachment-drop[hidden] { display: none; }
 /* The review calls for a larger pictogram on this full-thread drop target. */
 .attachment-drop > .i { width: 28px; height: 28px; }
@@ -500,11 +545,14 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 .attachment-name small { color: var(--text-3); font-size: var(--fs-xs); }
 .attachment-file:disabled .attachment-name small { white-space: normal; overflow-wrap: anywhere; }
 .attachment-icon { display: inline-flex; flex-direction: column; align-items: center; flex-shrink: 0; gap: var(--sp-1); }
-.attachment-icon small { font-size: var(--fs-2xs); font-weight: 600; line-height: 1.2; }
+.attachment-icon small { font-size: var(--fs-2xs); font-weight: var(--weight-semibold); line-height: 1.2; }
 
 /* Media stand on their own; only the owner's words receive a text bubble. */
 .owner-content { display: flex; flex-direction: column; align-items: flex-end; gap: var(--sp-2); min-width: 0; max-width: min(var(--pa-bw), 78%); }
+/* Files give the message its width; the content column takes what is left, so no room stays empty beyond the actions
+   at its side (R-UI-104). */
 .me > .owner-content:has(.me-files), .owner-message:has(.me-files) { width: min(420px, 78%); }
+.owner-message:has(.me-files) { grid-template-columns: auto minmax(0, 1fr); }
 .owner-message > .owner-content { max-width: 100%; }
 .owner-content > .bubble { max-width: 100%; }
 .me-files { display: flex; flex-direction: column; align-items: flex-end; gap: var(--sp-2); width: 100%; min-width: 0; white-space: normal; }
@@ -516,11 +564,11 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 .attachment-picture img { display: block; width: 100%; max-height: 300px; object-fit: contain; }
 .attachment-video video { display: block; width: 100%; max-height: 300px; border-radius: var(--r-lg); background: var(--surface-2); }
 .attachment-grid.is-multiple .attachment-picture img, .attachment-grid.is-multiple video { aspect-ratio: 4 / 3; object-fit: cover; }
-.btn.attachment-open { position: absolute; top: 6px; right: 6px; width: 28px; min-height: 28px; border-radius: var(--r-sm); background: var(--panel); color: var(--text); opacity: 0; pointer-events: none; transition: opacity 0.12s ease; }
+.btn.attachment-open { position: absolute; top: 6px; right: 6px; width: var(--h-ctl); min-height: var(--h-ctl); border-radius: var(--r-sm); background: var(--panel); color: var(--text); opacity: 0; pointer-events: none; transition: opacity 0.12s ease; }
 .me-file:hover > .attachment-open, .me-file:focus-within > .attachment-open { opacity: 1; pointer-events: auto; }
 .attachment-audio { display: flex; align-items: center; gap: var(--sp-2); width: 320px; height: 64px; padding: var(--sp-1) var(--sp-3) var(--sp-1) var(--sp-2); border-radius: var(--r-pill); background: var(--surface-2); }
 .attachment-audio audio { display: none; }
-.btn.attachment-play { flex: 0 0 32px; width: 32px; min-height: 32px; border-radius: var(--r-sm); background: var(--panel); }
+.btn.attachment-play { flex: 0 0 var(--h-ctl); width: var(--h-ctl); min-height: var(--h-ctl); border-radius: var(--r-sm); background: var(--panel); }
 .attachment-audio-body { display: flex; flex-direction: column; gap: var(--sp-1); flex: 1; min-width: 0; padding-right: var(--sp-5); }
 .attachment-audio .attachment-name { font-size: var(--fs-xs); }
 .attachment-audio input { width: 100%; height: 12px; margin: 0; padding: 0; accent-color: var(--accent-text); }
@@ -532,19 +580,15 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 .ask-card { display: grid; grid-template-columns: var(--pa-ask-face) minmax(0, 1fr); align-items: center; gap: calc(12px + 4 * var(--pa-u)); padding: calc(12px + 4 * var(--pa-u)) calc(14px + 6 * var(--pa-u)) calc(12px + 4 * var(--pa-u)) calc(12px + 6 * var(--pa-u)); border: 1px solid var(--rg-edge); background: var(--rg-bg); border-radius: var(--pa-ask-r); box-shadow: 0 0 0 3px var(--rg-glow), 0 10px 30px var(--rg-glow); }
 .ask-face { display: block; width: var(--pa-ask-face); height: var(--pa-ask-face); }
 .ask-face .av { --av: var(--pa-ask-face) !important; }
-.ask-q { margin: 0; max-height: min(42vh, 320px); overflow-y: auto; white-space: pre-wrap; font: 600 var(--pa-ask-fs)/1.6 var(--voice); color: var(--rg-ink); overflow-wrap: anywhere; }
+.ask-q { margin: 0; max-height: min(42vh, 320px); overflow-y: auto; white-space: pre-wrap; font: 500 var(--pa-ask-fs)/1.6 var(--voice); color: var(--rg-ink); overflow-wrap: anywhere; }
 .ask-row { grid-column: 1 / -1; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--sp-2); }
-.page-agent .btn.ask-no, .page-agent .btn.ask-always { min-height: var(--pa-ask-btn); padding: 4px calc(14px + 4 * var(--pa-u)); border-color: var(--rg-edge); background: transparent; color: var(--rg-ink); font-size: var(--fs-xs); font-weight: 600; }
+.page-agent .btn.ask-no, .page-agent .btn.ask-always { min-height: var(--h-ctl); padding: 3px calc(14px + 4 * var(--pa-u)); border-color: var(--rg-edge); background: transparent; color: var(--rg-ink); font-size: var(--fs-xs); font-weight: var(--weight-semibold); }
 .page-agent .btn.ask-no:hover:not(:disabled), .page-agent .btn.ask-always:hover:not(:disabled) { background: var(--rg-glow); border-color: var(--rg-edge); }
 .page-agent .btn.ask-no:active:not(:disabled), .page-agent .btn.ask-always:active:not(:disabled) { background: var(--pressed); }
-.page-agent .btn.ask-yes { position: relative; overflow: hidden; min-height: var(--pa-ask-btn); padding: 4px calc(16px + 6 * var(--pa-u)); border-color: var(--rg-btn); background: var(--rg-btn); color: var(--rg-on); font-size: var(--fs-xs); font-weight: 600; }
+.page-agent .btn.ask-yes { position: relative; overflow: hidden; min-height: var(--h-ctl); padding: 3px calc(16px + 6 * var(--pa-u)); border-color: var(--rg-btn); background: var(--rg-btn); color: var(--rg-on); font-size: var(--fs-xs); font-weight: var(--weight-semibold); }
 .page-agent .btn.ask-yes:hover:not(:disabled) { background: var(--rg-btn); border-color: var(--rg-btn); filter: brightness(1.05); }
 .page-agent .btn.ask-yes:active:not(:disabled) { background: color-mix(in srgb, var(--rg-btn) 85%, var(--text)); filter: none; }
 .ask-yes-t { position: relative; z-index: 1; }
-/* the YES of what cannot be undone is held: a line fills under it */
-.ask-fill { position: absolute; left: 0; bottom: 0; height: 3px; width: 0; background: var(--rg-on); opacity: 0.55; }
-.ask-yes[data-hold="holding"] .ask-fill { width: 100%; transition: width 0.6s linear; }
-.ask-yes[data-hold="armed"] .ask-fill { width: 100%; opacity: 0.9; }
 
 /* ---------- nothing yet: Raphael in the middle, his line, the composer under him ---------- */
 .ra-empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--sp-3); min-height: 0; padding: var(--sp-4) var(--sp-4) 48px; text-align: center; }
@@ -557,6 +601,9 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 /* ---------- the voice mode: Raphael flies up over the conversation ---------- */
 .ra-flyer { position: absolute; left: 0; top: 0; z-index: 5; width: 132px; height: 132px; transform-origin: 50% 50%; cursor: pointer; }
 .ra-flyer > .av { width: 132px; height: 132px; }
+/* The emblem in voice is the corner's renderer (its canvas is wider than the ring for the light around it), centred. */
+.ra-flyer > .ra-flyer-emblem { position: absolute; left: 50%; top: 50%; translate: -50% -50%; pointer-events: none; }
+.ra-flyer:has(> .ra-flyer-emblem) { overflow: clip; overflow-clip-margin: 24px; }
 /* the person's picture in a circle: a thin ring around it brightens with the voice (--lvl, 0 to 1) */
 .ra-flyer:has(> .av-custom)::after { content: ""; position: absolute; inset: -5px; border-radius: var(--r-pill); border: 2px solid var(--accent-text); opacity: calc(0.35 + 0.65 * var(--lvl, 0)); pointer-events: none; }
 /* the voice mode writes no words: the empty page's line steps aside, its place kept */
@@ -578,7 +625,6 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 @media (prefers-reduced-motion: reduce) {
   .tn.is-new, .step.is-new, .task-check.is-pop, .spin, .shimmer-mask::after, .think i, .ask-card::before { animation: none !important; }
   .steps-body, .steps-chev .i, .tn-more .i, .composer, .btn.cmp-voice { transition: none !important; }
-  .ask-yes[data-hold="holding"] .ask-fill { transition: none; }
 }
 
 /* The icons are drawn on a 16 px grid and are shown at 16 or 20 px, never between (ui-rules.test.ts): so
@@ -599,8 +645,8 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 }
 
 @media (max-height: 860px) {
-  .page-agent { --pa-gap: var(--sp-5); --pa-gap-in: var(--sp-3); --pa-bpy: var(--sp-3); }
-  .ra-scroll { padding: var(--sp-1) var(--sp-1) var(--sp-2); }
+  .page-agent { --pa-gap: var(--sp-5); --pa-gap-in: var(--sp-3); }
+  .ra-scroll { padding: var(--sp-1) var(--pa-dock-x) var(--sp-2); }
   .ra-body { gap: var(--sp-1); }
   .ra-dock { padding-top: var(--sp-1); padding-bottom: var(--sp-3); }
   .media-card { padding: var(--sp-1) var(--sp-2); gap: var(--sp-1); }
@@ -608,9 +654,13 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 
 /* Keep the conversation surface flat and opaque through its parent. */
 .mb-chat { background: none; }
-.ra-body > .ans, .chat-message > .ans { max-width: min(60ch, 100%); border: 0; border-radius: var(--r-lg); }
+.ra-body > .ans { max-width: min(60ch, 100%); border: 0; border-radius: var(--pa-br); }
+/* The message's first column holds the 60ch limit (one font for it), so the bubble and its actions meet. */
+.chat-message > .ans { max-width: 100%; border: 0; border-radius: var(--pa-br); }
 
-.bubble .message-quote, .bubble .quote-author, .bubble .message-link { color: var(--on-bubble); border-color: currentColor; }
+.bubble .message-quote, .bubble .quote-author { color: var(--on-bubble); border-color: currentColor; }
+/* A link in a neutral bubble stays in the link colour; only a bubble that wears a member's colour needs its own words colour to read. */
+.mb-chat[data-member-bubble] .owner-message .bubble .message-link { color: var(--on-bubble); }
 /* Send and Raphael voice form one quiet, equal-sized pair in every composer. */
 .cmp-pair { display: inline-flex; flex: none; align-items: center; gap: var(--sp-1); }
 .composer .cmp-pair .btn { width: 32px; height: 32px; min-height: 32px; padding: 0; border: 0; border-radius: var(--r-sm); background: transparent; }
@@ -622,14 +672,14 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 .draft-panel { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); width: 100%; min-width: 0; padding: var(--sp-2); border: 1px solid var(--edge); border-radius: var(--r-lg); background: var(--panel); }
 .draft-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); min-width: 0; }
 .draft-face { display: inline-flex; width: 28px; height: 28px; flex: none; }
-.draft-title { font-size: var(--fs-sm); font-weight: 600; color: var(--text); }
+.draft-title { font-size: var(--fs-sm); font-weight: var(--weight-semibold); color: var(--text); }
 .draft-group-pill { display: inline-flex; align-items: center; gap: var(--sp-1); padding: 2px var(--sp-2); border-radius: var(--r-pill); background: var(--surface-2); color: var(--text-2); font-size: var(--fs-2xs); }
 .draft-group-name { width: 140px; min-width: 0; font-size: var(--fs-xs); }
 .draft-list { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); max-height: min(52vh, 440px); overflow-x: hidden; overflow-y: auto; padding-right: 2px; }
 .draft-card { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; min-width: 0; padding: var(--sp-2); border: 1px solid var(--edge); border-radius: var(--r-md); background: var(--content); }
 .draft-card-top { display: grid; grid-template-columns: 40px minmax(0, 1fr) auto; align-items: start; gap: 6px; min-width: 0; }
 .page-agent .btn.draft-av-btn { width: 40px; height: 40px; min-height: 40px; padding: 0; border-color: transparent; background: transparent; border-radius: var(--r-pill); }
-.page-agent .btn.draft-av-btn:hover:not(:disabled) { border-color: var(--hover-edge); background: transparent; }
+.page-agent .btn.draft-av-btn:hover:not(:disabled) { background: var(--hover); }
 .page-agent .btn.draft-av-btn:active:not(:disabled) { background: var(--pressed); }
 .draft-card-ident { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; min-width: 0; }
 .draft-card .mb-fin { width: 100%; min-height: 32px; padding: 4px 6px; font-size: var(--fs-xs); }
@@ -644,7 +694,7 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 .page-agent .btn.icon.draft-remove:active:not(:disabled) { color: color-mix(in srgb, var(--text) 85%, transparent); }
 .draft-card-blurb { min-width: 0; }
 .draft-more { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); min-width: 0; }
-.page-agent .btn.draft-more-toggle { justify-self: start; display: inline-flex; align-items: center; gap: var(--sp-1); max-width: 100%; min-height: 26px; padding: 2px var(--sp-2) 2px var(--sp-1); border-color: transparent; background: transparent; border-radius: var(--r-sm); color: var(--text-2); font-size: var(--fs-2xs); font-weight: 500; }
+.page-agent .btn.draft-more-toggle { justify-self: start; display: inline-flex; align-items: center; gap: var(--sp-1); max-width: 100%; min-height: var(--h-ctl-sm); padding: 1px var(--sp-2) 1px var(--sp-1); border-color: transparent; background: transparent; border-radius: var(--r-sm); color: var(--text-2); font-size: var(--fs-2xs); font-weight: 500; }
 .page-agent .btn.draft-more-toggle:hover:not(:disabled) { background: var(--hover); border-color: transparent; color: var(--text); }
 .page-agent .btn.draft-more-toggle:active:not(:disabled) { background: var(--pressed); }
 .draft-more.is-open .draft-more-toggle .steps-chev .i { transform: rotate(90deg); }
@@ -657,8 +707,8 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 
 /* settled one-line summary in conversation */
 .draft-done { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); justify-self: start; max-width: 100%; min-width: 0; }
-.page-agent .btn.draft-done-sum { justify-self: start; display: inline-flex; align-items: center; gap: var(--sp-2); max-width: 100%; min-height: 36px; padding: var(--sp-1) var(--sp-3); border: 1px solid var(--edge); border-radius: var(--r-lg); background: var(--panel); color: var(--text); font-size: var(--fs-sm); font-weight: 500; }
-.page-agent .btn.draft-done-sum:hover:not(:disabled) { background: var(--hover); border-color: var(--hover-edge); }
+.page-agent .btn.draft-done-sum { justify-self: start; display: inline-flex; align-items: center; gap: var(--sp-2); max-width: 100%; min-height: var(--h-ctl); padding: 3px var(--sp-3); border: 1px solid var(--edge); border-radius: var(--r-lg); background: var(--panel); color: var(--text); font-size: var(--fs-sm); font-weight: 500; }
+.page-agent .btn.draft-done-sum:hover:not(:disabled) { background: var(--hover); }
 .page-agent .btn.draft-done-sum:active:not(:disabled) { background: var(--pressed); }
 .draft-done-mark { display: inline-grid; place-items: center; width: 16px; height: 16px; color: var(--ok); flex: none; }
 .draft-done-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -688,3 +738,51 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 .thread mark[data-find-match] { padding: 0; background: var(--hover); color: var(--text); text-decoration: underline dotted; text-underline-offset: 2px; }
 .thread mark.is-current { outline: 2px solid var(--text); outline-offset: 1px; text-decoration: underline; text-decoration-thickness: 2px; background: var(--text); color: var(--content); }
 .chat-message.is-search-expanded .message-text { max-height: none; -webkit-line-clamp: unset; mask-image: none; }
+/* Reactions sit on the bubble's bottom-right corner, half over its edge, and add no height to the conversation. A ring of the page's own colour parts them from the bubble. */
+.message-reactions { display: flex; gap: 2px; margin-block: -11px; }
+.chat-message > .message-reactions { justify-self: end; position: relative; z-index: 1; margin-inline-end: var(--sp-2); }
+.message-reactions .btn.reaction { min-width: 22px; height: 22px; min-height: 22px; padding: 0 6px; border: 1px solid var(--btn-edge); border-radius: var(--r-pill); background: var(--surface-2); color: var(--text); font-size: var(--fs-xs); line-height: 1; box-shadow: 0 0 0 2px var(--content); }
+/* A message menu opens with its reactions in one quiet row. */
+.menu-reactions { display: flex; justify-content: space-between; gap: 2px; padding: 2px 2px var(--sp-1); margin-bottom: var(--sp-1); border-bottom: 1px solid var(--line); }
+.menu-reactions .btn.reaction { flex: 1; justify-content: center; min-height: 32px; padding: 0; border-color: transparent; background: transparent; font-size: var(--fs-lg); border-radius: var(--r-sm); }
+.menu-reactions .btn.reaction:hover:not(:disabled) { border-color: transparent; background: var(--surface-2); }
+.menu-reactions .btn.reaction:active:not(:disabled) { border-color: transparent; background: color-mix(in srgb, var(--text) 12%, transparent); }
+.menu-reactions .btn.reaction[aria-pressed="true"] { border-color: transparent; background: color-mix(in srgb, var(--text) 8%, transparent); }
+/* The last slot opens every emoji: a smiley with a plus, drawn as a line icon beside the emoji. */
+.btn.reaction-more .i { width: 20px; height: 20px; color: var(--text-3); }
+/* The react button opens a pill of the quick reactions (emoji-picker.ts). */
+.menu.reaction-bar { display: flex; gap: 2px; min-width: 0; padding: var(--sp-1); border-radius: var(--r-pill); }
+.reaction-bar .btn.reaction { width: 36px; min-height: 36px; padding: 0; justify-content: center; border-color: transparent; background: transparent; font-size: var(--fs-lg); border-radius: var(--r-pill); }
+.reaction-bar .btn.reaction:hover:not(:disabled) { border-color: transparent; background: var(--surface-2); }
+.reaction-bar .btn.reaction:active:not(:disabled) { border-color: transparent; background: color-mix(in srgb, var(--text) 12%, transparent); }
+.reaction-bar .btn.reaction[aria-pressed="true"] { border-color: transparent; background: color-mix(in srgb, var(--text) 8%, transparent); }
+/* Every emoji in one card: a search field, one scrolling grid of eight columns under small section labels, and a footer that names the emoji under the pointer. */
+.menu.emoji-picker { display: flex; flex-direction: column; width: min(304px, calc(100vw - 16px)); max-width: none; height: min(340px, calc(100vh - 16px)); padding: 0; overflow: hidden; }
+.emoji-find { display: flex; flex: none; align-items: center; gap: var(--sp-2); margin: var(--sp-2); padding: 0 var(--sp-2); min-height: 32px; border-radius: var(--r-sm); background: var(--surface-2); color: var(--text-3); }
+.emoji-find input { flex: 1; min-width: 0; padding: 0; border: 0; background: transparent; color: var(--text); font: inherit; font-size: var(--fs-sm); outline: none; }
+.emoji-find input::-webkit-search-cancel-button { display: none; }
+.emoji-grid { flex: 1; min-height: 0; overflow-y: auto; padding: 0 var(--sp-2) var(--sp-1); scrollbar-width: thin; }
+/* A section out of sight is neither laid out nor painted: hundreds of colour glyphs cost most of opening the picker. */
+.emoji-block { content-visibility: auto; contain-intrinsic-size: auto calc(4 * 34px); }
+.emoji-sec h4 { margin: var(--sp-2) 2px var(--sp-1); font-size: var(--fs-xs); font-weight: 500; color: var(--text-3); }
+.emoji-sec:first-child h4 { margin-top: 0; }
+.emoji-cells { display: grid; grid-template-columns: repeat(8, 34px); }
+.emoji-picker .emoji-cell { display: grid; place-items: center; width: 34px; min-height: 0; height: 34px; padding: 0; border: 0; border-radius: var(--r-sm); background: transparent; font-size: var(--fs-h1); line-height: 1; cursor: pointer; }
+.emoji-picker .emoji-cell:hover, .emoji-picker .emoji-cell:focus-visible { background: var(--surface-2); outline: none; }
+.emoji-picker .emoji-cell[aria-selected="true"] { background: color-mix(in srgb, var(--text) 8%, transparent); }
+.emoji-none { margin: var(--sp-4) var(--sp-2); color: var(--text-3); font-size: var(--fs-sm); text-align: center; }
+.emoji-foot { display: flex; flex: none; align-items: center; gap: var(--sp-2); min-height: 36px; padding: 0 var(--sp-3); border-top: 1px solid var(--line); color: var(--text-2); font-size: var(--fs-sm); }
+.emoji-foot-char { font-size: var(--fs-lg); line-height: 1; }
+.emoji-foot-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.room-thread-chip { color: var(--text-2); margin-top: var(--sp-1); }
+.au-room-pane.has-side-thread { position: relative; }
+.room-side-thread { position: absolute; z-index: 12; inset: 0 0 0 auto; width: min(440px, 100%); display: flex; flex-direction: column; background: var(--content); border-left: 1px solid var(--edge); padding-top: var(--sp-3); }
+.room-side-thread > header { display: flex; align-items: center; justify-content: space-between; padding: var(--sp-3) var(--sp-5); }
+.room-side-scroll { flex: 1; min-height: 0; overflow-y: auto; padding: var(--sp-4) var(--sp-5); }
+.room-thread-origin { border-bottom: 1px solid var(--edge); margin-bottom: var(--sp-4); padding-bottom: var(--sp-3); }
+.room-side-thread .thread { list-style: none; padding: 0; margin: 0; }
+.room-side-thread .tn { margin-block: var(--sp-3); }
+/* The side thread's composer keeps the sides of its messages and its header (R-UI-45). */
+.room-thread-dock { padding: var(--sp-3) var(--sp-5); }
+.room-side-thread .chat-message { max-width: 100%; }
+@media (min-width: 1100px) { .au-room-pane.has-side-thread > .ra-stage, .au-room-pane.has-side-thread > .page-head { margin-right: 440px; } }

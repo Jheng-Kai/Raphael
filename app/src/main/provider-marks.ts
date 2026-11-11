@@ -10,6 +10,8 @@ const MARKS: Record<string, ServiceIconId> = {
   deepseek: "deepseek", mistral: "mistral", googlegemini: "googlegemini", googlecloud: "googlecloud",
   google_gemini: "googlegemini", google_cloud: "googlecloud", lm_studio: "lmstudio", azure: "azure",
   amazon_bedrock: "aws", ollama_cloud: "ollama", vertex: "vertex",
+  // The subscription tools wear their makers' marks wherever they stand as a source (the drawing model of Codex, owner 2026-11-11).
+  codex: "openai", claude: "anthropic", claude_code: "anthropic", gemini: "googlegemini", antigravity: "googlegemini",
 };
 
 /** The makers of models by the author of a model's id ("qwen/qwen3-…", "~openai/…"), where it is not the mark's own id. */
@@ -19,7 +21,7 @@ const MAKERS: Record<string, ServiceIconId> = {
   "ibm-granite": "ibm", rekaai: "reka", "dots-studio": "dotsstudio", cognitivecomputations: "dolphin", "nex-agi": "nex_agi",
   "xingchen-agi": "xingchen_agi", "prism-ml": "prism_ml", "anthracite-org": "anthracite", "black-forest-labs": "bfl",
   kwaivgi: "kling", voyageai: "voyage", "nace-ai": "nace_ai", "sentence-transformers": "sentence_transformers",
-  "fish-audio": "fish", togethercomputer: "together",
+  togethercomputer: "together",
 };
 
 const markOf = (key: string): ServiceIconId | null =>

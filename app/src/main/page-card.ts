@@ -3,23 +3,43 @@
 // core: it can only post messages to the frame's parent, and everything it asks for is checked here. A thread redraw
 // moves the live frame to the new card, so a page does not reload and lose what the owner did in it.
 import "./page-card.css";
-import { cardFailure, cardHTML, cardStatusHTML } from "./card";
+import { cardFailure, cardHTML, cardStatusHTML, failedClose } from "./card";
 import * as api from "./api";
 import { describeError } from "./format";
 import { t } from "./i18n";
 import { openDialog } from "./member-dialogs";
+import { mountReportView, type ReportPeople, type ReportView } from "./report-page";
 import type { AgentTurn, PageCard, PageOpened } from "./types";
-import { btn, esc, iconButton } from "./ui";
+import { btn, esc, ico } from "./ui";
 
 const MIN_HEIGHT = 80, MAX_HEIGHT = 2400;
 const SEND_LIMIT = 4000, SEND_GAP_MS = 1000;
 const MCP_PROTOCOL = "2026-01-26";
 
-/** The cards a turn shows, below what it said. A card holds no frame: `mountPages` brings it. */
+/** A report's link card, as Grok Bot's Page: the same card as a file a member made, its icon, its title and 「頁面」. */
+const reportLinkHTML = (page: PageCard): string =>
+  `<button type="button" class="btn attachment-file pg-link" data-page-act="report" data-page="${esc(page.id)}" data-page-rev="${page.rev}">` +
+  `${ico("report")}<span class="attachment-name"><span class="me-file-t">${esc(page.title)}</span><small>${esc(t("page.kind"))}</small></span></button>`;
+
+/** A page that failed reads as a failed mail card: what failed in the card's body line, then what it knows of the page
+ *  (the member's plain words) in a well where the page stood, then 再試一次 below (the judge on page-gone, 2026-11-10). */
+function failedHTML(page: PageCard): string {
+  const words = page.fallback?.trim();
+  return `<div class="pg-failed" hidden><p class="card-body cc-state" role="alert">${esc(t("page.failed"))}</p>` +
+    (words ? `<p class="card-well pg-fallback">${esc(words)}</p>` : "") +
+    `<div class="card-actions">${btn(esc(t("page.retry")), "sm pri", ' data-page-act="retry"')}</div></div>`;
+}
+
+/** The cards a turn shows, below what it said. A card holds no frame: `mountPages` brings it. A report is a link card.
+ *  A page is a card of one fixed height (`--h-page-peek`) whatever it holds or whether it is loading, ready or failed: its
+ *  title row and, under it, only the top of the page, clipped and faded into the card (owner, 2026-11-11: a page shown
+ *  whole made one very long block). The preview is one control: pressing it, or Enter or Space on it, opens the page whole
+ *  (`expand`), where it scrolls and its buttons work. It is a control only once the page is ready. */
 export function pageCardsHTML(turn: AgentTurn): string {
-  return (turn.pages ?? []).map(page => cardHTML({ title: page.title, status: "ready",
-    content: `<div class="pg-body" data-state="loading"></div><div class="pg-failed" hidden><p>${esc(page.fallback || t("page.failed"))}</p><div class="card-actions">${btn(esc(t("page.retry")), "sm pri", ' data-page-act="retry"')}${btn(esc(t("common.close")), "sm", " data-card-failed-close")}</div></div>`,
-    actions: iconButton("expand", t("page.expand"), ' data-page-act="expand"', "pg-expand"), cls: "pg-card",
+  return (turn.pages ?? []).map(page => page.kind === "report" ? reportLinkHTML(page) : cardHTML({ title: page.title, status: "ready",
+    content: `<div class="pg-body" data-state="loading" data-page-act="expand" role="button" aria-disabled="true" aria-label="${esc(t("page.open", { title: page.title }))}">` +
+      `<span class="pg-more" aria-hidden="true">${ico("expand")}</span></div>${failedHTML(page)}`,
+    cls: "pg-card",
     attrs: ` data-page="${esc(page.id)}" data-page-rev="${page.rev}" style="--pg-h:${clampHeight(page.height)}px"`,
   })).join("");
 }
@@ -67,28 +87,39 @@ interface Live {
   height: number | null;
   opened: PageOpened | null;
   ready: boolean;
+  /** It could not open: a redraw of its line shows that again, not an empty box that never loads. */
+  failed: boolean;
   expanded: boolean;
-  /** The owner said no to what it wanted to send: from now on only a sure press speaks, and it does not ask again. */
+  closeExpanded?: () => void;
+  /** A declined external link asks no more without a sure press. */
   refused: boolean;
 }
 
-/** Only an atomic move keeps a frame running; a plain append reloads it, which is still better than losing it. */
+/** Only an atomic move keeps a frame running; a plain append reloads it, which is still better than losing it. A frame in
+ *  a card is only a preview: nothing in it can be pressed, focused or scrolled; it works only where the page is made larger. */
 function moveFrame(frame: HTMLIFrameElement, target: HTMLElement): void {
+  frame.toggleAttribute("inert", !target.closest(".pg-view"));
   if (target.moveBefore && frame.isConnected) target.moveBefore(frame, null);
   else target.append(frame);
 }
 
 export interface PagesHost {
-  /** Every card in the thread has its frame. */
+  /** Every card in the thread has its frame; an open report follows its card. */
   sync(): void;
   /** Before a line is replaced: moves its frames to the new line, once that line is in the document. */
   carry(from: Element, to: Element): () => void;
+  /** Puts an open report away, so the thread is in sight again (the owner sent something, or left the conversation). */
+  closeReport(): void;
 }
 
-export function mountPages(thread: HTMLElement, o: { send(text: string): void; answer?(pageId: string, text: string): boolean }): PagesHost {
+export function mountPages(thread: HTMLElement, o: { place(pageId: string, text: string): boolean; people?: () => ReportPeople }): PagesHost {
   const frames = new Map<string, Live>();
   let lastSend = 0, asking = false;
   hearInput();
+  // A report opens in the thread's place: in the conversation's stage, above the composer that stays below it.
+  let reports: ReportView | null = null;
+  const reportView = (): ReportView => reports ??= mountReportView(thread.closest<HTMLElement>(".ra-stage") ?? thread.parentElement!,
+    o.people ?? (() => ({ nameOf: () => "", colorOf: () => "var(--text-3)" })));
 
   const cardOf = (live: Live): HTMLElement | null => thread.querySelector<HTMLElement>(`.pg-card[data-page="${CSS.escape(live.id)}"]`);
 
@@ -98,17 +129,29 @@ export function mountPages(thread: HTMLElement, o: { send(text: string): void; a
     const pill = card.querySelector(".card-status")!;
     const next = state === "failed" ? "failed" : "ready";
     if (!pill.classList.contains(`is-${next}`)) pill.outerHTML = cardStatusHTML(next);
-    card.querySelector<HTMLElement>(".pg-body")!.dataset.state = state;
-    card.querySelector<HTMLElement>(".pg-body")!.hidden = state === "failed";
+    const body = card.querySelector<HTMLElement>(".pg-body")!;
+    body.dataset.state = state;
+    body.hidden = state === "failed";
+    // The preview is a control only once there is a page to open.
+    if (state === "ready") { body.tabIndex = 0; body.removeAttribute("aria-disabled"); }
+    else { body.removeAttribute("tabindex"); body.setAttribute("aria-disabled", "true"); }
     card.querySelector<HTMLElement>(".pg-failed")!.hidden = state !== "failed";
+    // The × that puts a failed page away (R-UI-117) is in the heading only while it failed: a hidden one was taken by the
+    // shared failure of a link the page could not open, which was then left with no × to put it away.
+    const head = card.querySelector<HTMLElement>(":scope > .card-head")!, close = head.querySelector(":scope > [data-card-failed-close]");
+    if (state === "failed" && !close) head.insertAdjacentHTML("beforeend", failedClose());
+    else if (state !== "failed") close?.remove();
   }
 
+  /** A page is as tall as it says. Made larger, it says again once it is wider, and only its dialog follows: the card
+   *  keeps its own height behind it until the page is back and says so there. */
   function applyHeight(live: Live): void {
-    if (live.height !== null) cardOf(live)?.style.setProperty("--pg-h", `${live.height}px`);
+    if (live.height !== null) (live.frame.closest<HTMLElement>(".pg-view") ?? cardOf(live))?.style.setProperty("--pg-h", `${live.height}px`);
   }
 
   async function open(live: Live): Promise<void> {
     live.ready = false;
+    live.failed = false;
     setBodyState(live, "loading");
     try {
       const opened = await api.pagesOpen(live.id, themeNow());
@@ -117,7 +160,9 @@ export function mountPages(thread: HTMLElement, o: { send(text: string): void; a
       live.frame.title = opened.title;
       live.frame.src = opened.url;
     } catch {
-      if (frames.get(live.id) === live) setBodyState(live, "failed");
+      if (frames.get(live.id) !== live) return;
+      live.failed = true;
+      setBodyState(live, "failed");
     }
   }
 
@@ -126,7 +171,8 @@ export function mountPages(thread: HTMLElement, o: { send(text: string): void; a
     frame.setAttribute("sandbox", "allow-scripts allow-forms");
     frame.setAttribute("referrerpolicy", "no-referrer");
     frame.className = "pg-frame";
-    const live: Live = { id, rev, frame, height: null, opened: null, ready: false, expanded: false, refused: false };
+    frame.setAttribute("inert", "");
+    const live: Live = { id, rev, frame, height: null, opened: null, ready: false, failed: false, expanded: false, refused: false };
     frame.addEventListener("load", () => { if (live.opened) setBodyState(live, "ready"); });
     frames.set(id, live);
     return live;
@@ -147,11 +193,24 @@ export function mountPages(thread: HTMLElement, o: { send(text: string): void; a
       }
       if (!live.expanded && live.frame.parentElement !== body) body.append(live.frame);
       applyHeight(live);
-      if (live.ready || live.opened) setBodyState(live, "ready");
+      if (live.failed) setBodyState(live, "failed");
+      else if (live.ready || live.opened) setBodyState(live, "ready");
       if (live.rev !== rev) { live.rev = rev; void open(live); }
     }
     for (const id of [...frames.keys()]) if (!seen.has(id)) frames.delete(id);
+    followReport();
   }
+
+  /** An open report closes when its card left the thread (another conversation, or none), and follows its member's changes. */
+  function followReport(): void {
+    const shown = reports?.shown();
+    if (!shown) return;
+    const link = thread.querySelector<HTMLElement>(`.pg-link[data-page="${CSS.escape(shown.id)}"]`);
+    if (!link) reports!.close();
+    else if (Number(link.dataset.pageRev) !== shown.rev) void reports!.refresh();
+  }
+  // A thread emptied or redrawn without a sync (a conversation that is loading, empty or failed) is followed too.
+  new MutationObserver(followReport).observe(thread, { childList: true });
 
   function carry(from: Element, to: Element): () => void {
     const moves = [...from.querySelectorAll<HTMLElement>(".pg-card[data-page]")].flatMap(card => {
@@ -164,13 +223,13 @@ export function mountPages(thread: HTMLElement, o: { send(text: string): void; a
   }
 
   /** A press that cannot be told from the page acting alone is the owner's to confirm, with the words in front of them. */
-  function whenPressed(live: Live, title: string, shown: string, act: () => void): void {
+  function whenPressed(live: Live, title: "page.askOpen", shown: string, act: () => void): void {
     const press = pressOf(live.frame);
     if (press === "sure") { act(); return; }
     if (press === "none" || asking || live.refused) return;
     asking = true;
     openDialog({
-      title: t(title as "page.askSend"), body: `<p class="pg-ask-words">${esc(shown)}</p>`, cls: "mb-confirm pg-ask",
+      title: t(title), body: `<p class="pg-ask-words">${esc(shown)}</p>`, cls: "mb-confirm pg-ask",
       actions: { secondary: btn(esc(t("common.cancel")), "", ' data-dlg="cancel"'), primary: { label: esc(t("page.askYes")), attrs: ' data-dlg="yes"' } },
       onAct(action, _target, dialog) {
         if (action === "yes") act(); else live.refused = true;
@@ -180,12 +239,14 @@ export function mountPages(thread: HTMLElement, o: { send(text: string): void; a
     });
   }
 
-  function speak(live: Live, text: unknown): void {
-    if (typeof text !== "string" || !text.trim() || text.length > SEND_LIMIT) return;
+  function placeText(live: Live, text: unknown): boolean {
+    if (typeof text !== "string" || !text.trim() || text.length > SEND_LIMIT) return false;
     const now = Date.now();
-    if (now - lastSend < SEND_GAP_MS) return;
-    const words = text.trim();
-    whenPressed(live, "page.askSend", words, () => { lastSend = Date.now(); if (!o.answer?.(live.id, words)) o.send(words); });
+    if (now - lastSend < SEND_GAP_MS || pressOf(live.frame) === "none" || !cardOf(live)) return false;
+    if (!o.place(live.id, text.trim())) return false;
+    live.closeExpanded?.();
+    lastSend = now;
+    return true;
   }
 
   function openLink(live: Live, url: unknown): void {
@@ -225,8 +286,8 @@ export function mountPages(thread: HTMLElement, o: { send(text: string): void; a
         return answer({});
       case "ui/message": {
         const content = Array.isArray(params.content) ? params.content : [params.content];
-        speak(live, content.map((part: { type?: string; text?: string } | undefined) => (part?.type === "text" ? part.text ?? "" : "")).join("\n"));
-        return answer({});
+        const words = content.map(part => part && typeof part === "object" && part.type === "text" && typeof part.text === "string" ? part.text : "").join("\n");
+        return placeText(live, words) ? answer({ status: "placed" }) : refuse(-32000, "The page text was not placed in the composer.");
       }
       case "tools/call":
         if (typeof params.name !== "string" || !params.name) return refuse(-32602, "tools/call needs {name, arguments?}.");
@@ -252,34 +313,55 @@ export function mountPages(thread: HTMLElement, o: { send(text: string): void; a
     }
     if (data.raphaelPage !== 1) return;
     if (data.type === "height") { live.height = clampHeight(data.height); applyHeight(live); }
-    else if (data.type === "send") speak(live, data.text);
+    else if (data.type === "send" && placeText(live, data.text)) post(live, { raphaelPage: 1, type: "result", status: "placed" });
     else if (data.type === "open") openLink(live, data.url);
   });
 
-  /** Larger in the shared dialog, the frame moved there and back, so nothing the owner did in it is lost. */
+  /** Larger in the shared dialog, the frame moved there and back, so nothing the owner did in it is lost. The dialog is
+   *  as tall as the card until the page, now wider, says how tall it is there (applyHeight). */
   function expand(live: Live, card: HTMLElement): void {
-    const title = card.getAttribute("aria-label") ?? "";
     const dialog = openDialog({
-      title: esc(title), body: `<div class="pg-view"></div>`, cls: "rich-view-dialog pg-view-dialog",
-      actions: { primary: { label: esc(t("common.close")), attrs: ' data-dlg="close"' } },
+      // openDialog escapes the title itself: escaping it here too showed a title's & or < as an entity.
+      title: card.getAttribute("aria-label") ?? "", body: `<div class="pg-view"></div>`, cls: "pg-view-dialog",
+      // Its × closes it, with no 「關閉」 under it.
+      actions: {},
       onAct(_act, _target, shown) { shown.close(); },
       onClosing() {
         live.expanded = false;
+        live.closeExpanded = undefined;
         const home = cardOf(live)?.querySelector<HTMLElement>(".pg-body");
         if (home) moveFrame(live.frame, home);
       },
     });
+    const view = dialog.el.querySelector<HTMLElement>(".pg-view")!;
+    view.style.setProperty("--pg-h", card.style.getPropertyValue("--pg-h") || "320px");
     live.expanded = true;
-    moveFrame(live.frame, dialog.el.querySelector<HTMLElement>(".pg-view")!);
+    live.closeExpanded = () => dialog.close();
+    moveFrame(live.frame, view);
+  }
+
+  /** A ready page opens whole; one still loading or failed has nothing to open. */
+  function enlarge(card: HTMLElement): void {
+    const live = frames.get(card.dataset.page!);
+    if (live && card.querySelector<HTMLElement>(".pg-body")?.dataset.state === "ready") expand(live, card);
   }
 
   thread.addEventListener("click", event => {
-    const target = (event.target as Element).closest<HTMLElement>("[data-page-act]");
-    const card = target?.closest<HTMLElement>(".pg-card");
+    const from = event.target as Element;
+    const target = from.closest<HTMLElement>("[data-page-act]");
+    if (target?.dataset.pageAct === "report") { void reportView().open(target.dataset.page!, target); return; }
+    const card = (target ?? from).closest<HTMLElement>(".pg-card");
     const live = card ? frames.get(card.dataset.page!) : undefined;
-    if (!target || !card || !live) return;
-    if (target.dataset.pageAct === "expand") expand(live, card);
-    else void open(live);
+    if (!card || !live) return;
+    if (target?.dataset.pageAct === "retry") void open(live);
+    // The title row is part of the same card: pressing it opens the page too (not a button of its own, such as the failed card's ×).
+    else if (target?.dataset.pageAct === "expand" || (!target && from.closest(".pg-card > .card-head") && !from.closest("button"))) enlarge(card);
+  });
+  thread.addEventListener("keydown", event => {
+    const body = event.target as Element;
+    if ((event.key !== "Enter" && event.key !== " ") || !body.matches('.pg-body[data-page-act="expand"]')) return;
+    event.preventDefault();
+    enlarge(body.closest<HTMLElement>(".pg-card")!);
   });
 
   // A page draws in the app's theme, which it is told when it opens.
@@ -291,7 +373,7 @@ export function mountPages(thread: HTMLElement, o: { send(text: string): void; a
     for (const live of frames.values()) void open(live);
   }).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
 
-  return { sync, carry };
+  return { sync, carry, closeReport: () => reports?.close() };
 }
 
 export type { PageCard };

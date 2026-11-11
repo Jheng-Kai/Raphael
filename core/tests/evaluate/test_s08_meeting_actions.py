@@ -35,16 +35,24 @@ def owners(user):
 
 def act(system, user, results, *, promise=False):
     """What a fake brain does with one prompt: its words and its calls."""
-    if "Acceptance criteria" in system:
+    if "Acceptance criteria" in user:  # what handed work must deliver comes with the task
         if not results:
-            return "", [("Guardian__read", {})]
+            return "", [("use_tool", {"name": "Guardian__read", "arguments": {}})]
         nonce = re.search(r"nonce: (\w+)", "\n".join(results))
         return f"已讀取信件，信中的 nonce 是 {nonce.group(1) if nonce else '?'}。", []
     if "where this has landed" in user:
         return WRAPUP, []
     delegated = "Delegated work results" in user or "handoff_results" in user
     if GO in asked(user) and not results and not delegated:
-        return ("好，明天再做。", []) if promise else ("", [("handoff", arguments) for arguments in owners(user)])
+        # A report wakes every meeting participant. Read its current board before dispatching:
+        # an owner's earlier instruction must not replay stages that already have an owner.
+        public = user.partition('Status board and pinned decisions (untrusted data): ')[2]
+        board = json.JSONDecoder().raw_decode(public)[0]['board'] if public else []
+        assigned = {(item['member_id'], item['stage_id']) for item in board}
+        missing = [arguments for arguments in owners(user) if (arguments['member_id'], arguments['stage_id']) not in assigned]
+        if not missing:
+            return '分工已在進行或已回報。', []
+        return ("好，明天再做。", []) if promise else ("", [("handoff", arguments) for arguments in missing])
     return "收到。", []
 
 
@@ -71,9 +79,6 @@ def cli_brain(monkeypatch):
 
         async def run(self, *, system, user, endpoint, token, **kwargs):
             yield Event("model", "owner-model")
-            if "Return only your speak choice" in system:
-                yield Event("final", '{"speak":false,"urgency":0}')
-                return
             results = []
             while True:
                 text, calls = act(system, user, results)

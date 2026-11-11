@@ -61,6 +61,14 @@
         "connector_card"
       ]
     },
+    "raphael/core/connect_messaging": {
+      "scenario_ids": ["S14.messaging.telegram", "S14.messaging.slack", "S14.messaging.discord"],
+      "expected_assertions": ["messaging_card", "owner_text_preserved"]
+    },
+    "raphael/core/share_template": {
+      "scenario_ids": ["S21.templates.share"],
+      "expected_assertions": ["template_snapshot", "owner_text_preserved"]
+    },
     "raphael/core/request_secret": {
       "scenario_ids": [
         "S15.secret"
@@ -76,6 +84,10 @@
       "expected_assertions": [
         "editable_email"
       ]
+    },
+    "raphael/core/slack_draft": {
+      "scenario_ids": ["S05.slack-draft"],
+      "expected_assertions": ["editable_slack", "version_bound_send", "cancel_zero_send", "one_receipt"]
     },
     "raphael/core/computer_act": {
       "scenario_ids": [
@@ -134,6 +146,14 @@
       ]
     },
     "raphael/core/find_tools": {
+      "scenario_ids": [
+        "S18.catalog-unavailable"
+      ],
+      "expected_assertions": [
+        "complete_catalog"
+      ]
+    },
+    "raphael/core/use_tool": {
       "scenario_ids": [
         "S18.catalog-unavailable"
       ],
@@ -251,10 +271,6 @@
     },
     "raphael/core/ask_owner": {
       "scenario_ids": ["S21.settings-quick.ask-owner"],
-      "expected_assertions": ["production_state"]
-    },
-    "raphael/core/generate_audio": {
-      "scenario_ids": ["S21.files.create-audio"],
       "expected_assertions": ["production_state"]
     },
     "raphael/core/memory_log": {
@@ -385,6 +401,10 @@
         "production_state"
       ]
     },
+    "raphael/core/team_work": {
+      "scenario_ids": ["S21.members-groups.overview"],
+      "expected_assertions": ["production_state"]
+    },
     "raphael/core/team_overview": {
       "scenario_ids": [
         "S21.members-groups.overview"
@@ -460,9 +480,6 @@
     "raphael/core/members_mark_all_read": {"scenario_ids": ["S21.management.members_mark_all_read"], "expected_assertions": ["production_state", "primary_only"]},
     "raphael/core/group_update": {"scenario_ids": ["S21.management.group_update"], "expected_assertions": ["production_state", "primary_only"]},
     "raphael/core/group_delete": {"scenario_ids": ["S21.management.group_delete"], "expected_assertions": ["production_state", "primary_only"]},
-    "raphael/core/conversation_create": {"scenario_ids": ["S21.management.conversation_create"], "expected_assertions": ["production_state", "primary_only"]},
-    "raphael/core/conversation_rename": {"scenario_ids": ["S21.management.conversation_rename"], "expected_assertions": ["production_state", "primary_only"]},
-    "raphael/core/conversation_delete": {"scenario_ids": ["S21.management.conversation_delete"], "expected_assertions": ["production_state", "primary_only"]},
     "raphael/core/conversation_clear": {"scenario_ids": ["S21.management.conversation_clear"], "expected_assertions": ["production_state", "primary_only"]},
     "raphael/core/conversation_list": {"scenario_ids": ["S21.management.conversation_list"], "expected_assertions": ["production_state", "primary_only"]},
     "raphael/core/settings_read": {"scenario_ids": ["S21.management.settings_read"], "expected_assertions": ["production_state", "primary_only"]},

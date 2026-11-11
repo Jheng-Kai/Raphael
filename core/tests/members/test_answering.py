@@ -76,9 +76,9 @@ def said(text, *, detail="", memory=None, search=""):
     return completion(data)
 
 
-def raphael_said(text, prefix="答", say_ja="台北です。"):
+def raphael_said(text, prefix="答"):
     return completion(
-        {"prefix": prefix, "text": text, "detail": "", "say_ja": say_ja, "memory": [],
+        {"prefix": prefix, "text": text, "detail": "", "memory": [],
          "need": {"search": ""}}
     )  # fmt: skip
 
@@ -138,17 +138,17 @@ async def test_a_teacher_keeps_each_reply_and_replays_the_whole_lesson(setup, cl
     client.decisions = [decision("chat"), decision("chat")]
     client.chats = [live_said("ignored", messages=["Correction.", "Example.", "Try this.", "Your answer?", "Dropped."]), live_said("Next lesson.")]
     first = await typed(rig, "Start a lesson", one.id, language="en")
-    assert first["text"] == "Your answer?" and first["prefix"] == ""
+    assert first["text"] == "\n\n".join(["Correction.", "Example.", "Try this.", "Your answer?", "Dropped."]) and first["prefix"] == ""
     [turn] = (await rig.call("agent.history.list", {"member_id": one.id}))["turns"]
-    assert [m["text"] for m in turn["messages"]] == ["Correction.", "Example.", "Try this.", "Your answer?"]
+    assert [m["text"] for m in turn["messages"]] == ["Correction.", "Example.", "Try this.", "Your answer?", "Dropped."]
     await typed(rig, "My answer", one.id, language="en")
     context = str(client.chat_calls[1]["messages"])
     assert all(line in context for line in ["Correction.", "Example.", "Try this.", "Your answer?"])
-    assert "Dropped." not in context
+    assert "Dropped." in context
 
 
 async def test_a_member_answers_with_its_selected_model(setup, client):
-    # The member brain overrides the global setting (owner, 2026-10-29).
+    # The member brain overrides the global setting.
     rig, team = setup
     one = team.members.store.create_member(name="舊的", role="r", instructions="i", model="own/model")
     client.decisions.append(decision("chat"))
@@ -158,19 +158,18 @@ async def test_a_member_answers_with_its_selected_model(setup, client):
 
 
 @pytest.mark.parametrize("source", ["voice", None])
-async def test_a_spoken_question_reaches_the_named_member(voiced, client, source):
-    rig, team, voice = voiced
+async def test_a_spoken_question_reaches_the_named_member(setup, client, source):
+    rig, team = setup
     one = member(team, model="own/model")
     client.chats.append(live_said("Your next lesson.", messages=["Example.", "Your next lesson."]))
     result = await typed(rig, "Teach me", one.id, source=source, language="en")
-    assert result["text"] == "Your next lesson." and result["prefix"] == ""
+    assert result["text"] == "Example.\n\nYour next lesson." and result["prefix"] == ""
     [turn] = (await rig.call("agent.history.list", {"member_id": one.id}))["turns"]
     assert (turn["member_id"], turn["source"], turn["question"]) == (one.id, "voice", "Teach me")
     assert [m["text"] for m in turn["messages"] if m["kind"] == "reply"] == ["Example.", "Your next lesson."]
     assert (await rig.call("agent.history.list", {}))["turns"] == []
     assert client.chat_calls[0]["model"] == "own/model"
     assert "You are 小行程" in client.chat_calls[0]["messages"][0]["content"]
-    assert voice.said == []
 
 
 async def test_requests_and_history_reject_an_unknown_member(setup):
@@ -184,10 +183,13 @@ async def test_requests_and_history_reject_an_unknown_member(setup):
 async def test_a_member_has_the_same_desktop_tools(setup, client):
     rig, team = setup
     one = member(team)
-    client.chats.append(live_said("我來打開計算機。"))
+    client.chats += [chat("先找工具。", ("find_tools", {"query": "operate the computer"})), live_said("我來打開計算機。")]
     result = await typed(rig, "打開小算盤算 12 乘 34", one.id)
     assert (result["prefix"], result["text"]) == ("", "我來打開計算機。")
-    assert {"computer", "open"} <= {t["function"]["name"] for t in client.chat_calls[0]["tools"]}
+    listed = {t["function"]["name"] for t in client.chat_calls[0]["tools"]}
+    # For a member as for Raphael: `open` is listed, the desktop is found (decision 2).
+    assert "open" in listed and "computer" not in listed and {"find_tools", "use_tool"} <= listed
+    assert '"name": "computer"' in client.chat_calls[1]["messages"][-1]["content"]
     assert rig.actions.calls == []
 
 
@@ -246,30 +248,43 @@ async def test_raphael_asks_a_member_and_exchange_is_audit_only(setup, client, c
 
 
 @pytest.mark.parametrize("raphael", [True, False])
-@pytest.mark.parametrize("named", [True, False])
-async def test_composer_voice_stays_in_the_selected_default_or_named_conversation(setup, client, raphael, named):
+@pytest.mark.parametrize("explicit", [True, False])
+async def test_composer_voice_stays_in_main_with_or_without_an_id(setup, client, raphael, explicit):
     rig, team = setup
     person = member(team, name="Researcher")
     who = 0 if raphael else person.id
     default = rig.service.conversations.main(who)
-    selected = rig.service.conversations.create(who)["id"] if named else default
+    selected = default if explicit else None
     quick = rig.service.conversations.quick()
     client.decisions.append(decision("unclear"))
     client.chats.append(live_said("The selected conversation's answer."))
+    if raphael and not explicit:
+        # The hotkey must explicitly select quick; a composer's spoken question names main.
+        with pytest.raises(RpcError, match="must name its destination"):
+            await rig.call("agent.ask", {"session_id": "composer-voice", "text": "Review this", "source": "voice", "ui_language": "en"})
+        assert not client.chat_calls
+        return
     result = await rig.call("agent.ask", {"session_id": "composer-voice", "text": "Review this", "source": "voice",
         "ui_language": "en", "member_id": who, "conversation_id": selected})
     assert result["status"] == "done"
     turns = (await rig.call("agent.history.list", {"member_id": who, "conversation_id": selected}))["turns"]
-    assert [(turn["conversation_id"], turn["source"]) for turn in turns] == [(selected, "voice")]
+    assert [(turn["conversation_id"], turn["source"]) for turn in turns] == [(default, "voice")]
     assert (await rig.call("agent.history.list", {"conversation_id": quick}))["turns"] == []
-    if named:
-        assert (await rig.call("agent.history.list", {"member_id": who, "conversation_id": default}))["turns"] == []
 
 
-async def test_member_exchange_returns_to_the_named_conversation_that_asked(setup, client, conn):
+async def test_member_conversation_list_returns_its_one_main(setup):
+    rig, team = setup
+    person = member(team, name="Researcher")
+    main = rig.service.conversations.main(person.id)
+    for _ in range(2):
+        rows = (await rig.call("conversations.list", {"member_id": person.id}))["conversations"]
+        assert [(row["id"], row["kind"]) for row in rows] == [(main, "standard")]
+
+
+async def test_member_exchange_returns_to_the_main_conversation_that_asked(setup, client, conn):
     rig, team = setup
     one = member(team, name="Researcher")
-    conversation = (await rig.call("conversations.create", {"member_id": 0}))["conversation"]
+    conversation = rig.service.conversations.get(rig.service.conversations.main())
     client.decisions.append(decision("answer"))
     client.chats.append(chat("I will ask Researcher.", ("ask_member", {"member": "Researcher", "request": "Compare the reports"})))
     client.decisions.append(decision("answer"))
@@ -280,7 +295,7 @@ async def test_member_exchange_returns_to_the_named_conversation_that_asked(setu
     assert result["status"] == "done"
     selected = (await rig.call("agent.history.list", {"conversation_id": conversation["id"]}))["turns"]
     assert {turn["route"] for turn in selected} == {"answer"}
-    assert (await rig.call("agent.history.list"))["turns"] == []
+    assert (await rig.call("agent.history.list"))["turns"] == selected
     assert AgentHistory(conn).list(member_id=one.id) == []
     [theirs] = [AgentHistory(conn).get(r[0]) for r in conn.execute("SELECT id FROM agent_turns WHERE member_id=? AND scope='exchange'", (one.id,))]
     assert theirs.conversation_id == rig.service.conversations.main(one.id)
@@ -315,10 +330,10 @@ async def test_a_colleague_that_is_still_answering_is_waited_for(setup, client, 
     assert "The reports agree." in given and "timeout" not in given
 
 
-async def test_deleting_a_member_removes_named_conversation_context(setup, conn):
+async def test_deleting_a_member_removes_main_conversation_context(setup, conn):
     rig, team = setup
     one = member(team, name="Researcher")
-    conversation = (await rig.call("conversations.create", {"member_id": one.id}))["conversation"]
+    conversation = rig.service.conversations.get(rig.service.conversations.main(one.id))
     id = conversation["id"]
     rig.service._cli_sessions.put(one.id, "cli:codex", "native-session", id)
     with conn:
@@ -377,62 +392,6 @@ async def test_voice_picked_members_share_one_proposal(setup, client):
     # The overlay confirms the complete proposal without sending edited drafts.
     await rig.confirm(asked["confirm"]["id"])
     assert len(team.members.store.members()) == 3
-
-
-class _Voice:
-    """Raphael's voice, as a note of what he was told to say and how often he was stopped."""
-
-    def __init__(self):
-        self.said = []
-
-    def speaks(self):
-        return True
-
-    async def say(self, prefix, text, *, turn_id=None):
-        self.said.append((prefix, text))
-
-    def stop(self):
-        pass
-
-
-@pytest.fixture
-async def voiced(conn, tmp_path, client):
-    team = Team(conn, tmp_path)
-    voice = _Voice()
-    rig = Rig(conn, client, FakeActions(), team=team.members, memory=team.memory, speaker=voice)
-    yield rig, team, voice
-    await rig.aclose()
-    await team.memory.aclose()
-
-
-async def test_a_members_reply_is_not_spoken(voiced, client):
-    """Only Raphael's own replies are said aloud: what a member answers in its thread is written."""
-    rig, team, voice = voiced
-    one = member(team)
-    client.decisions.append(decision("chat"))
-    client.chats.append(live_said("明天早上九點開會。"))
-    result = await typed(rig, "明天有什麼行程", one.id)
-    assert result["text"] == "明天早上九點開會。"
-    assert voice.said == []
-    # ... and Raphael's own, typed at this computer in his thread, is.
-    client.decisions.append(decision("chat"))
-    client.chats.append(live_said("台北。", prefix="答", say_ja="台北です。"))
-    await typed(rig, "主人住哪裡", 0)
-    assert voice.said == [("解", "台北です。")]  # in Japanese: the voice speaks nothing else
-
-
-async def test_an_exchange_between_members_is_never_spoken_only_raphaels_final_reply(voiced, client):
-    rig, team, voice = voiced
-    member(team, name="小研究")
-    client.decisions.append(decision("answer"))  # Raphael's request
-    client.chats.append(chat("先問小研究。", ("ask_member", {"member": "小研究", "request": "上季的數字"})))
-    client.decisions.append(decision("answer"))  # the member's flags
-    client.chats.append(live_said("PRIVATE-ANSWER 上季營收兩百萬。"))
-    client.chats.append(
-        live_said("小研究說上季營收兩百萬。", prefix="答", say_ja="小研究によると、前期の売上は二百万です。")
-    )  # Raphael, to the owner
-    await typed(rig, "問小研究上季的數字", 0)
-    assert voice.said == [("解", "小研究によると、前期の売上は二百万です。")]
 
 
 async def test_a_member_asks_raphael_who_answers_as_himself(setup, client, conn):
@@ -502,8 +461,8 @@ async def test_a_consultation_stays_out_of_pages_but_the_respondent_can_search_i
     assert (asked["mode"], asked["member_id"], asked["state"], asked["request"], asked["result"], asked["task_id"]) == (
         "consult", b.id, "done", "上季的數字是多少？", "上季營收兩百萬。", None)
     # Pages and previews stay private; recall includes only B's own exchange.
-    named = (await rig.call("conversations.create", {"member_id": b.id}))["conversation"]
-    assert (await rig.call("agent.history.list", {"member_id": b.id, "conversation_id": named["id"]}))["turns"] == []
+    main = rig.service.conversations.main(b.id)
+    assert (await rig.call("agent.history.list", {"member_id": b.id, "conversation_id": main}))["turns"] == [own]
     assert AgentHistory(conn).latest_by_member()[b.id].scope == "private"
     found = (await rig.call("agent.history.search", {"query": "上季的數字", "member_id": b.id}))["turns"]
     [exchange] = found
@@ -513,6 +472,19 @@ async def test_a_consultation_stays_out_of_pages_but_the_respondent_can_search_i
     recalled = team.memory.search(asked["request"], member_id=b.id)
     assert recalled.untrusted
     assert [turn["turn"] for turn in recalled.data["turns"]] == [exchange["id"]]
+
+
+@pytest.mark.parametrize('management_request', ['Update member 2 instructions.', '請修改成員的模型。'])
+async def test_management_consultation_is_refused_before_answering_for_a_colleague(setup, management_request, monkeypatch):
+    rig, team = setup
+    a, b = (member(team, name=n).speaker() for n in ('Manager', 'Writer'))
+    async def forbidden(*args, **kwargs):
+        pytest.fail('a management consultation must not start another member turn')
+    monkeypatch.setattr(rig.service, 'answer_for', forbidden)
+    result = await rig.service.team_tool(a, 'ask_member', {'member':b.name, 'request':management_request},
+                                         language='en', ledger=None, session_id='s')
+    assert not result.ok and result.error == 'delegated_management'
+    assert "yourself" in result.instruction and "private chat" in result.instruction
 
 
 async def test_a_chain_is_at_most_two_deep_and_never_comes_back(setup):
@@ -553,7 +525,7 @@ async def test_a_chain_is_at_most_two_deep_and_never_comes_back(setup):
         a, "create_member", {"name": "x", "role": "", "instructions": ""},
         language="zh-TW", ledger=None, session_id="s",
     )  # fmt: skip
-    assert not created.ok and team.members.find("x") is None  # only the primary in an interactive owner turn may create
+    assert not created.ok and team.members.find("x") is None  # creation still requires a trusted interactive owner turn
 
 
 async def test_the_fast_tier_separates_durable_handoffs_from_bounded_consultation(setup):
@@ -563,7 +535,7 @@ async def test_the_fast_tier_separates_durable_handoffs_from_bounded_consultatio
     assert team_tools_for(team.members, a, "問小財務") == []  # itself
     assert team_tools_for(team.members, b.asked_by(a), "問小財務") == ["handoff"]  # a work graph has its own durable bound
     assert team_tools_for(team.members, a, "今天天氣") == []
-    assert team_tools_for(team.members, a, always=True) == ["skill_read", "skills_list", "skill_manage", "handoff", "room_list", "room_post", "ask_member"]
+    assert team_tools_for(team.members, a, always=True) == ["skill_read", "skills_list", "skill_manage", "handoff", "room_list", "room_post", "ask_member", "create_member", "room_meeting"]
     assert team_tools_for(team.members, b.asked_by(a), always=True) == ["skill_read", "skills_list", "skill_manage", "handoff", "room_list", "room_post", "ask_member"]
 
 
@@ -596,13 +568,20 @@ async def test_a_decision_in_one_members_thread_never_reaches_another(setup, cli
     rig, team = setup
     a = member(team, name="小財務")
     b = member(team, name="小研究")
-    # In A's thread the owner decides something, and asks A to remember it for everyone.
+    # The model proposes shared storage, but this thread's decision must stay with A.
     client.decisions.append(decision("chat"))
-    note = {"target": "user", "action": "add", "content": "我們決定預算是三萬元。", "old_text": ""}
-    client.chats.append(live_said("", memory=[note]))
-    await typed(rig, "記住，我們決定預算是三萬", a.id)
+    client.chats.extend([
+        chat("I will save the decision.", ("memory_update", {"target": "user", "operations": [
+            {"action": "add", "content": "我們決定預算是三萬元。"}]})),
+        live_said("已記下。"),
+    ])
+    result = await typed(rig, "記住，我們決定預算是三萬", a.id)
+    assert result["status"] == "done"
     assert team.memory.shared.read() == ""  # a decision is not macro knowledge: it stayed with A
     assert "三萬" in team.memory.own(a.id).read()
+    assert team.memory.own(b.id).read() == ""
+    assert any(step.tool == "memory_update" and step.outcome == "ok"
+               for step in AgentHistory(conn).steps([result["turn_id"]])[result["turn_id"]])
     # B is asked, and looks back in its past: none of it is there.
     client.decisions.append(decision("discuss"))
     client.chats.append(chat("先找找之前的決定。", ("history_search", {"query": "預算"})))

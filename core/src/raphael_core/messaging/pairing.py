@@ -26,14 +26,17 @@ class Pairing:
     """The codes that strangers were given and the owner has not yet approved. They live in memory
     only: a restart forgets them, and the stranger asks again."""
 
-    def __init__(self, clock: Callable[[], float] = time.monotonic) -> None:
+    def __init__(self, clock: Callable[[], float] = time.monotonic, *, changed=None) -> None:
         self._clock = clock
+        self._changed = changed
         self._by_code: dict[str, PendingPairing] = {}
 
     def _sweep(self) -> None:
         now = self._clock()
         for code in [c for c, p in self._by_code.items() if p.expires_at <= now]:
-            del self._by_code[code]
+            pairing = self._by_code.pop(code)
+            if self._changed:
+                self._changed("expired", pairing)
 
     def issue(self, user: str, chat: str, name: str) -> str | None:
         """A new code for a stranger, or None when one was already given to that user (a code is
@@ -50,6 +53,8 @@ class Pairing:
         self._by_code[code] = PendingPairing(
             code, user, chat, name[:_NAME_CHARS], self._clock() + CODE_TTL_SECONDS
         )
+        if self._changed:
+            self._changed("issued", self._by_code[code])
         return code
 
     def pending(self) -> list[tuple[PendingPairing, float]]:

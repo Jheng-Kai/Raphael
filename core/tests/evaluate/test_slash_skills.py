@@ -68,6 +68,20 @@ async def test_namespaces_keep_plugin_collisions_and_member_scope_distinct(tmp_p
         await owner.aclose()
 
 
+async def test_a_custom_command_wins_over_a_skill_of_the_same_name(tmp_path, monkeypatch):
+    owner = Stage(tmp_path, monkeypatch, "A", lambda user, tools, results: ("Finished", []))
+    try:
+        cap = owner.app.members.capabilities
+        cap.keep_skill(0, "owner", "---\nname: outline\ndescription: Outline notes\n---\nSKILL-BODY-5518")
+        assert "SKILL-BODY-5518" in cap.expand(0, "/outline first draft")
+        cap.save_command(0, None, "outline", "Outline template", "TEMPLATE-ONLY {input}")
+        assert cap.resolve_slash(0, "/outline first draft") == ("TEMPLATE-ONLY first draft", False)
+        await owner.driver.ask("/outline second draft", session="same-name")
+        assert "TEMPLATE-ONLY second draft" in owner.prompts[-1] and "SKILL-BODY-5518" not in owner.prompts[-1]
+    finally:
+        await owner.aclose()
+
+
 @pytest.mark.parametrize("brain", ["A", "C"])
 async def test_explicit_skill_keeps_the_skill_read_untrusted_boundary(tmp_path, monkeypatch, brain):
     def act(user, tools, results):

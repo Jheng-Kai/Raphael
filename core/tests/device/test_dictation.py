@@ -1705,6 +1705,63 @@ async def test_unrecoverable_gap_is_marked_in_pasted_text_for_any_engine_error(
     assert result["ui_language"] == language
 
 
+async def test_rate_limited_middle_audio_is_retained_through_final_retry_and_heard_regions_are_cleaned(
+    rig, router, conn,
+):
+    from raphael_core.brain.openrouter import Completion
+    from raphael_core.brain.secrets import MemoryKeyStore
+    from raphael_core.brain.service import Brain
+
+    before = "um schedule the review for tomorrow at four"
+    after = "uh send the summary to the review team"
+    missing_audio = []
+    calls = []
+
+    class Client:
+        async def complete_json(self, **kwargs):
+            calls.append(kwargs)
+            user = kwargs["user"]
+            assert "this part was not heard" not in user
+            if before in user:
+                assert after not in user
+                text = "Schedule the review for tomorrow at four."
+            else:
+                assert after in user and before not in user
+                text = "Send the summary to the review team."
+            return Completion({"text": text}, "synthetic-cleanup", .0002, 120, 30, 10)
+
+    class Engine:
+        name, gate = "synthetic-stt", None
+
+        def transcribe(self, samples, **kwargs):
+            if samples.size == RATE:
+                missing_audio.append(samples)
+                raise RpcError(INTERNAL_ERROR, "Synthetic rate limit", {"kind": "rate_limit"})
+            return before if samples.size == 2 * RATE else after
+
+    keys = MemoryKeyStore()
+    keys.set("synthetic-key")
+    core = Brain(conn, Client(), keys)
+    await core._settings_set({"key": "languages", "value": ["en-US"]})
+    router._handlers["brain.finalize_dictation"] = core._finalize_dictation
+    rig.engine = Engine()
+    rig.recorder.chunks = [chunk(2), chunk(1), chunk(3)]
+    try:
+        await router.call("dictation.start", {"session_id": "s1", "ui_language": "en"})
+        await rig.recorder.fed(3)
+        result = await stop(router)
+        assert result["text"] == "Schedule the review for tomorrow at four. (this part was not heard) Send the summary to the review team."
+        assert result["incomplete"] and not result["cleaned"]
+        assert result["fallback_reason"] == "incomplete_stt"
+        assert len(missing_audio) >= 2 and all(audio is missing_audio[0] for audio in missing_audio)
+        assert len(calls) == 2
+        item = core._history.latest()
+        assert item.fallback_reason == "incomplete_stt" and not item.cleaned
+        assert item.text == result["text"] and item.cost_usd == pytest.approx(.0004)
+    finally:
+        await core.aclose()
+
+
 async def test_a_segmenter_that_fails_ends_the_recording_with_an_error(rig, router):
     rig.segmenter.fail_on_accept = True
     rig.recorder.chunks = [chunk(1.0)] * 2
@@ -2514,11 +2571,23 @@ async def test_an_engine_that_changes_model_per_segment_is_reported_in_order(rig
 #
 # A session started with purpose "agent" records and transcribes like any other, but what comes
 # back is polished text to ask the assistant, not text to paste. Cleanup and spend accounting
-# share the dictation path, while agent text never enters dictation history.
+# share the dictation path; the brain stores agent text as ask history.
 
 
 async def start_agent(router, session_id="s1"):
     return await router.call("dictation.start", {"session_id": session_id, "purpose": "agent"})
+
+
+@pytest.mark.parametrize("at_start", [False, True])
+async def test_agent_destination_is_forwarded_to_finalize(rig, router, brain, at_start):
+    rig.engine.texts = ["請幫忙"]
+    rig.recorder.chunks = [chunk(1.0)] * 2
+    recipient = {"member_id": 3, "target_name": "小晴"}
+    await router.call("dictation.start", {"session_id": "s1", "purpose": "agent", **(recipient if at_start else {})})
+    await rig.recorder.fed(2)
+    await router.call("dictation.stop", {"session_id": "s1", **({} if at_start else recipient)})
+    assert brain.finalize_params[0]["member_id"] == 3
+    assert brain.finalize_params[0]["target_app"] == "小晴"
 
 
 async def test_an_agent_session_answers_with_polished_text_and_nothing_to_paste(
@@ -2608,6 +2677,22 @@ async def test_an_agent_session_whose_cleanup_and_normalizing_fail_keeps_the_wor
         r = await stop(router)
     assert r["text"] == "打開 YouTube" and r["purpose"] == "agent"
     assert "秘密" not in caplog.text and "打開 YouTube" not in caplog.text  # type of error only
+
+
+@pytest.mark.parametrize("purpose", ["agent", "voice_chat"])
+async def test_a_conversation_never_submits_a_transcript_with_an_unrecoverable_gap(rig, router, brain, purpose):
+    def decode(samples, **kwargs):
+        if samples.size == RATE:
+            raise RuntimeError("provider unavailable")
+        return "Heard before the gap"
+    rig.engine.transcribe = decode
+    rig.recorder.chunks = [chunk(2.0), chunk(1.0)]
+    await router.call("dictation.start", {"session_id": "s1", "purpose": purpose})
+    await rig.recorder.fed(2)
+    with pytest.raises(RpcError) as error:
+        await stop(router)
+    assert error.value.code == INTERNAL_ERROR
+    assert brain.finalize_calls == 0
 
 
 async def test_an_agent_session_that_is_cancelled_while_recording_is_gone(rig, router, brain):

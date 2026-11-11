@@ -11,6 +11,61 @@ from .test_answering import client, setup, member, typed  # noqa: F401
 
 
 @pytest.mark.parametrize("member_id", [0, 1])
+async def test_native_service_sends_only_new_context_after_restart(setup, tmp_path, member_id):
+    from raphael_core.agent.cli.loop import Sessions
+
+    rig, team = setup
+    if member_id:
+        assert member(team, model="cli:claude").id == member_id
+    else:
+        rig.settings.set("agent_model", "cli:claude")
+    record = tmp_path / "prompts.jsonl"
+    fake_brain(rig, tmp_path, '''import json, sys
+from pathlib import Path
+packet = json.loads(sys.stdin.readline())
+with Path(RECORD).open("a", encoding="utf-8") as out:
+    out.write(json.dumps(packet["message"]["content"]) + "\\n")
+print(json.dumps({"type":"result", "subtype":"success", "session_id":"same", "result":"Complete."}), flush=True)
+'''.replace("RECORD", repr(str(record))))
+    await typed(rig, "First synthetic request", member_id, language="en")
+    rig.service._cli_sessions = Sessions(rig.conn)
+    await typed(rig, "Second synthetic request", member_id, language="en")
+    rig.service._cli_sessions.clear_member(member_id)
+    await typed(rig, "Third synthetic request", member_id, language="en")
+    first, resumed, fresh = [json.loads(line) for line in record.read_text(encoding="utf-8").splitlines()]
+    assert "First synthetic request" in first
+    assert "Second synthetic request" in resumed and "First synthetic request" not in resumed
+    assert all(marker not in resumed for marker in (
+        "Memory: unchanged.", "Team: unchanged.", "Memory (current snapshot", "Team (current snapshot",
+        "Memory changed", "Team changed",
+    ))
+    assert "Third synthetic request" in fresh and "First synthetic request" in fresh
+
+
+@pytest.mark.parametrize("member_id", [0, 1])
+async def test_synthetic_cli_error_never_becomes_a_stored_reply(setup, tmp_path, member_id):
+    rig, team = setup
+    if member_id:
+        assert member(team, model="cli:claude").id == member_id
+    else:
+        rig.settings.set("agent_model", "cli:claude")
+    fake_brain(rig, tmp_path, '''import json, sys
+json.loads(sys.stdin.readline())
+print(json.dumps({"type":"assistant", "isApiErrorMessage":True, "message":{"model":"<synthetic>",
+    "content":[{"type":"text", "text":"Prompt is too long"}], "stop_reason":"end_turn"}}), flush=True)
+print(json.dumps({"type":"result", "is_error":True, "subtype":"error_during_execution",
+    "result":"Prompt is too long"}), flush=True)
+''')
+    result = await typed(rig, "Compare the synthetic outline", member_id, language="en")
+    assert "Prompt is too long" not in result["text"]
+    loop = next(iter(rig.service._cli_sessions.locks))
+    assert loop[0] == member_id
+    [turn] = (await rig.call("agent.history.list", {"member_id": member_id}))["turns"]
+    assert turn["status"] == "error"
+    assert not any(message["kind"] == "reply" and "Prompt is too long" in message["text"] for message in turn["messages"])
+
+
+@pytest.mark.parametrize("member_id", [0, 1])
 async def test_claude_progress_is_stored_with_one_prefix(setup, tmp_path, member_id):
     rig, team = setup
     if member_id:
@@ -78,7 +133,7 @@ else:
 
 
 @pytest.mark.parametrize("answer", ["", "The final answer."])
-async def test_progress_only_turn_fails_and_terminal_answer_is_authoritative(setup, tmp_path, monkeypatch, answer):
+async def test_completed_narration_stays_progress_and_the_terminal_answer_is_authoritative(setup, tmp_path, monkeypatch, answer):
     rig, team = setup
     teacher = member(team, model="cli:claude")
     monkeypatch.setattr("raphael_core.agent.cli.loop.RATE_LIMIT_WAITS_S", ())
@@ -95,8 +150,9 @@ print(json.dumps({"type":"result", "subtype":"success", "result":ANSWER}),flush=
     else:
         assert turn["status"] == "error"
         assert result["text"] == "Claude Code stopped before finishing its answer."
-        assert [message["text"] for message in turn["messages"] if message["kind"] == "progress"] == ["Still checking."]
-        assert "Still checking." not in replies
+        # The one wrap-up ask runs the fake once more; neither narration is a public reply.
+        assert [message["text"] for message in turn["messages"] if message["kind"] == "progress"] == ["Still checking."] * 2
+        assert replies == [result["text"]]
 
 
 async def test_cli_failure_detail_is_saved_without_a_duplicate_public_event(setup, tmp_path, monkeypatch):
@@ -137,7 +193,9 @@ print(json.dumps({"type":"result","subtype":"success","result":ANSWER}),flush=Tr
     assert [message["text"] for message in turn["messages"] if message["kind"] == "reply"] == [
         f"《{prefix}First.", "Second.", "Last.》",
     ]
-    assert result["text"] == "Last."
+    assert result["text"] == "First.\n\nSecond.\n\nLast."
+    # A caller that sends the answer on (a messaging chat) gets every message, unframed.
+    assert result["messages"] == ["First.", "Second.", "Last."]
 
 
 def fake_brain(rig, tmp_path, script, *, name="claude"):
@@ -190,7 +248,7 @@ print(json.dumps({"type":"result","subtype":"success","session_id":"thread-one",
 ''')
     for _ in range(2):
         result = await typed(rig, "Teach me", teacher.id)
-        assert result["text"] == "Next lesson."
+        assert result["text"] == "Hello\n\nNext lesson."
     turns = (await rig.call("agent.history.list", {"member_id": teacher.id}))["turns"]
     assert all(turn["model"] == "cli:claude:sonnet" for turn in turns)
     assert [message["text"] for message in turns[0]["messages"] if message["kind"] == "reply"] == ["Hello", "Next lesson."]
@@ -199,7 +257,7 @@ print(json.dumps({"type":"result","subtype":"success","session_id":"thread-one",
     assert client.calls == 0 and not client.chat_calls
 
 
-async def test_named_cli_conversations_resume_only_their_own_native_session(setup, tmp_path):
+async def test_members_main_cli_conversations_resume_only_their_own_native_session(setup, tmp_path):
     rig, team = setup
     teacher = member(team, model="cli:claude")
     record = tmp_path / "native-sessions.jsonl"
@@ -214,22 +272,25 @@ with Path(RECORD).open("a", encoding="utf-8") as stream:
     stream.write(json.dumps({"workspace":str(workspace), "resume":resume, "native":native}) + "\\n")
 print(json.dumps({"type":"result", "subtype":"success", "session_id":native, "result":"Finished."}), flush=True)
 '''.replace("RECORD", repr(str(record))))
-    first = (await rig.call("conversations.create", {"member_id": teacher.id}))["conversation"]["id"]
-    second = (await rig.call("conversations.create", {"member_id": teacher.id}))["conversation"]["id"]
-    for number, conversation in enumerate([first, second, first]):
+    other = member(team, name="Researcher", model="cli:claude")
+    first = rig.service.conversations.main(teacher.id)
+    second = rig.service.conversations.main(other.id)
+    for number, (who, conversation) in enumerate([(teacher.id, first), (other.id, second), (teacher.id, first)]):
         result = await rig.call("agent.ask", {"session_id": f"named-{number}", "text": "Teach me",
-                                             "source": "app", "ui_language": "en", "member_id": teacher.id,
+                                             "source": "app", "ui_language": "en", "member_id": who,
                                              "conversation_id": conversation})
         assert result["text"] == "Finished."
     assert (await typed(rig, "Hello", teacher.id))["text"] == "Finished."
     rows = [json.loads(line) for line in record.read_text(encoding="utf-8").splitlines()]
-    assert [row["resume"] for row in rows] == [None, None, f"native-{first}", None]
+    # Claude Code keeps one working directory per member (decision 3, 2026-11-09): the fake names its session after
+    # the member's directory, and only the teacher's own conversation resumes it.
+    assert [row["resume"] for row in rows] == [None, None, f"native-{teacher.id}", f"native-{teacher.id}"]
     assert rows[0]["workspace"] == rows[2]["workspace"]
-    assert len({row["workspace"] for row in rows}) == 3
+    assert len({row["workspace"] for row in rows}) == 2
 
 
 async def test_a_cli_reply_is_one_message_unless_the_model_breaks_it(setup, tmp_path, client):
-    # paragraphs are one message: only the model's own break makes several (owner, 2026-10-24)
+    # paragraphs are one message: only the model's own break makes several
     rig, team = setup
     teacher = member(team, model="cli:claude:sonnet")
     fake_brain(rig, tmp_path, """import json, sys
@@ -285,7 +346,7 @@ for line in sys.stdin:
     pending = await typed(rig, "Say hello", teacher.id)
     assert pending["status"] == "confirm", pending
     result = await rig.call("agent.confirm", {"id": pending["confirm"]["id"], "approved": decision != "no", "always": decision == "always"})
-    assert result["text"] == {"yes": "accept", "no": "decline", "always": "acceptForSession"}[decision]
+    assert result["text"] == {"yes": "accept", "no": "decline", "always": "accept"}[decision]
     turn = (await rig.call("agent.history.list", {"member_id": teacher.id}))["turns"][0]
     assert turn["id"] == pending["turn_id"] and turn["status"] == "done"
     assert any(step["tool"] == "cli_permission" for step in turn["steps"])
@@ -301,7 +362,11 @@ async def test_mcp_routine_call_keeps_member_scope_and_safety_approval(setup, tm
     fake_brain(rig, tmp_path, '''import json, sys, urllib.request
 from pathlib import Path
 config=json.loads(Path(sys.argv[sys.argv.index("--mcp-config")+1]).read_text())["mcpServers"]["raphael"]
-json.loads(sys.stdin.readline())
+line=sys.stdin.readline()
+json.loads(line)
+if "management_changes" in line:  # the turn going on after the owner's yes: the routine was made, only the answer is left
+    print(json.dumps({"type":"result","subtype":"success","result":"Lesson ready."}),flush=True)
+    sys.exit(0)
 print(json.dumps({"type":"assistant","message":{"content":[{"type":"text","text":"Preparing the lesson."}]}}),flush=True)
 packet={"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"routine_create","arguments":{"title":"Lesson","prompt":"Teach Japanese","schedule":{"kind":"daily","time":"08:00"}}}}
 request=urllib.request.Request(config["url"],data=json.dumps(packet).encode(),headers={**config["headers"],"Content-Type":"application/json"})
@@ -437,9 +502,7 @@ for number, (name, arguments) in enumerate(CALLS,1):
     if name=="approve":
         content=json.loads(response["result"]["content"][0]["text"])
         assert content["behavior"]==("allow" if ALLOWED else "deny")
-        if ALLOWED=="always":
-            assert content["updatedPermissions"][0]["destination"]=="session"
-            assert content["updatedPermissions"][0]["rules"]==[{"toolName":arguments["tool_name"]}]
+        assert "updatedPermissions" not in content  # Recheck the app-data floor on every native call.
     else:
         assert response["result"]["isError"] is (not ALLOWED)
 print(json.dumps({"type":"result","subtype":"success","result":"Finished."}),flush=True)
@@ -496,6 +559,55 @@ async def test_member_cli_recovers_after_an_answered_card_and_write(setup, tmp_p
     assert any("try again" in message["text"] for message in turn["messages"] if message["kind"] == "progress")
     assert team.memory.own(teacher.id).read().count("Use examples.") == 1
     assert not client.chat_calls and not client.json_calls
+
+
+def hanging_mcp(rig, tmp_path, calls):
+    """A CLI that makes `calls` through the MCP server and then says nothing. A second launch answers."""
+    launches = tmp_path / "launches.txt"
+    fake_brain(rig, tmp_path, '''import json, sys, time, urllib.request
+from pathlib import Path
+def send(value): print(json.dumps(value), flush=True)
+launches = Path(LAUNCHES)
+json.loads(sys.stdin.readline())
+with launches.open("a", encoding="utf-8") as out:
+    out.write("x")
+send({"type":"system", "session_id":"hung-session"})
+if len(launches.read_text(encoding="utf-8")) == 1:
+    config = json.loads(Path(sys.argv[sys.argv.index("--mcp-config")+1]).read_text())["mcpServers"]["raphael"]
+    for number, (name, arguments) in enumerate(CALLS, 1):
+        packet = {"jsonrpc":"2.0", "id":number, "method":"tools/call", "params":{"name":name, "arguments":arguments}}
+        request = urllib.request.Request(config["url"], data=json.dumps(packet).encode(), headers={**config["headers"], "Content-Type":"application/json"})
+        assert not json.load(urllib.request.urlopen(request, timeout=15))["result"]["isError"]
+    time.sleep(600)
+send({"type":"result", "subtype":"success", "result":"Asked again, and finished."})
+'''.replace("LAUNCHES", repr(str(launches))).replace("CALLS", repr(calls)))
+    return launches
+
+
+async def test_a_private_cli_that_goes_silent_after_a_write_is_not_run_again_and_the_owner_is_told(setup, tmp_path, client, monkeypatch):
+    rig, team = setup
+    teacher = member(team, model="cli:claude")
+    monkeypatch.setattr("raphael_core.agent.service.CLI_SILENCE_S", 1.0)
+    monkeypatch.setattr("raphael_core.agent.service.CLI_TOOL_S", 5.0)
+    monkeypatch.setattr("raphael_core.agent.cli.loop.RATE_LIMIT_WAITS_S", (0.0,))
+    launches = hanging_mcp(rig, tmp_path, [("memory_update", {"target": "memory", "operations": [{"action": "add", "content": "Use examples."}]})])
+    result = await asyncio.wait_for(typed(rig, "Remember that I prefer examples", teacher.id, language="en"), 30)
+    assert launches.read_text() == "x"  # one launch: the write was made, and nothing runs again after it
+    assert "took too long" in result["text"] and "1 completed or answered" in result["text"]
+    [turn] = (await rig.call("agent.history.list", {"member_id": teacher.id}))["turns"]
+    assert turn["status"] == "error"
+    assert team.memory.own(teacher.id).read().count("Use examples.") == 1
+
+
+async def test_a_private_cli_that_goes_silent_after_reading_is_asked_again(setup, tmp_path, client, monkeypatch):
+    rig, team = setup
+    teacher = member(team, model="cli:claude")
+    monkeypatch.setattr("raphael_core.agent.service.CLI_SILENCE_S", 1.0)
+    monkeypatch.setattr("raphael_core.agent.service.CLI_TOOL_S", 5.0)
+    monkeypatch.setattr("raphael_core.agent.cli.loop.RATE_LIMIT_WAITS_S", (0.0,))
+    launches = hanging_mcp(rig, tmp_path, [("local_time", {})])
+    result = await asyncio.wait_for(typed(rig, "What time is it?", teacher.id, language="en"), 30)
+    assert launches.read_text() == "xx" and result["text"] == "Asked again, and finished."
 
 
 async def test_cli_web_search_uses_auxiliary_api_model(setup, tmp_path, client):
@@ -660,18 +772,6 @@ print(json.dumps({"type":"result","subtype":"success","result":"Finished after t
             assert rig.service._history.get(pending["turn_id"]).status == "done"
     finally:
         await active.aclose()
-
-
-async def test_spoken_cli_reply_retains_japanese_without_showing_json(setup, tmp_path):
-    from raphael_core.agent.cli.loop import CliLoop
-    from raphael_core.worker.loop import Outcome
-    # Exercise the same reply boundary used by Raphael's optional voice renderer.
-    loop = CliLoop(brains=None, sessions=None, member_id=0, model="cli:claude", ledger=None,
-                   language="zh-TW", plain=False, system="persona", user="hello", tools=[],
-                   progress=lambda _: None, thinking=lambda _: None, event=lambda _: None,
-                   execute=None, spoken=True)
-    reply = loop.reply(Outcome("done", final=json.dumps({"text": "明天練習。", "messages": ["明天練習。"], "say_ja": "明日練習します。"})))
-    assert reply.text == "明天練習。" and reply.say_ja == "明日練習します。"
 
 
 async def test_mcp_memory_update_in_ask_first_is_audited_as_user(setup, tmp_path):

@@ -5,7 +5,8 @@ memory."""
 from test_app import make_app  # noqa: F401  (the fixture)
 
 MEMBER_METHODS = {
-    "members.list", "members.create", "members.update", "members.delete", "members.set_avatar",
+    "members.avatar_generate", "members.library", "members.library_file",
+    "members.list", "members.create", "members.update", "members.delete", "members.set_avatar", "members.set_cover",
     "members.read", "members.viewing", "members.tool_choices", "groups.create",
     "groups.update", "groups.delete", "routines.list", "routines.create", "routines.update",
     "routines.delete", "routines.template", "memory.update",
@@ -29,7 +30,7 @@ async def test_a_member_made_by_rpc_answers_in_its_thread(make_app):  # noqa: F8
     turns = (await app.call("agent.history.list", {"member_id": member["id"]}))["turns"]
     assert [t["member_id"] for t in turns] == [member["id"]]
     assert (await app.call("agent.history.list", {}))["turns"] == []
-    assert ("agent.turn", {"turn_id": turns[0]["id"], "member_id": member["id"]}) in heard
+    assert ("agent.turn", {"turn_id": turns[0]["id"], "member_id": member["id"], "failure": None}) in heard
     # Nobody viewed the thread: it is news.
     listed = {m["id"]: m for m in (await app.call("members.list", {}))["members"]}
     assert listed[member["id"]]["unread"] is True

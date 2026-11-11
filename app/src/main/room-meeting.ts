@@ -17,7 +17,7 @@ export function roomBoardHTML(tasks: readonly HandoffView[], decisions: readonly
     if (!previous || priority(task.state) >= priority(previous.state)) latest.set(task.member_id,task);
   }
   const rows = [...latest.values()].map(task => `<div class="room-board-member">${face(task.member_id, task.member_name)}` +
-    `<div class="room-board-stage"><b>${esc(task.member_name)}</b><span>${esc(task.stage_id)}</span></div>` +
+    `<div class="room-board-stage"><b>${esc(task.member_name)}</b><span>${esc(task.title ?? "")}</span></div>` +
     cardStatusHTML(task.state === "done" ? "done" : ["queued","running","waiting"].includes(task.state) ? "waiting" : "failed", stateLabel(task)) + `</div>`).join("");
   return `<div data-room-board>${rows}` + (decisions.length ? `<div class="room-board-decisions"><b>${esc(t("rooms.decisions"))}</b>${decisions.map(decision => `<p>${esc(decision.text)}</p>`).join("")}</div>` : "") + `</div>`;
 }
@@ -27,7 +27,7 @@ export function roomReportHTML(message: RoomMessage): string {
   if (!task) return "";
   const files = task.evidence.filter(item => item.verdict === "verified" && item.kind === "artifact" && item.uri).slice(-4).map(item =>
     fileChipHTML(esc(item.uri!.split(/[\\/]/).pop()!), ` data-room-act="artifact-open" data-task="${task.task_id}" data-evidence="${item.id ?? ""}"${item.id ? "" : " disabled"}`)).join("");
-  return cardHTML({ title: `${task.member_name} · ${task.stage_id}`, status: task.state === "done" ? "done" : "failed",
+  return cardHTML({ title: [task.member_name, task.title].filter(Boolean).join(" · "), status: task.state === "done" ? "done" : "failed",
     statusText: stateLabel(task), body: message.text,
     content: files ? `<div class="room-report-files">${files}</div>` : "",
     actions: btn(esc(t("rooms.privateWork")), "sm", ` data-room-act="private-work" data-member="${task.member_id}" data-turn="${task.work_turn_id}"`),

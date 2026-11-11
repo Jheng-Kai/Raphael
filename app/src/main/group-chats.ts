@@ -1,3 +1,5 @@
+import { openRoomThread } from "./room-thread";
+import { mountMessageMetadata, reactionControlHTML, reactionRowHTML } from "./message-metadata";
 import { roomBoardHTML, roomReportHTML } from "./room-meeting";
 import { openMemberThread } from "./team-navigation";
 import { wholeLinks } from "./composer-links";
@@ -13,7 +15,7 @@ import { eventRead } from './event-read';
 import { visibilityGate } from "./window-visibility";
 import { onAvatarChange } from "./avatar";
 import { ownerFaceHTML } from "./owner-avatar";
-import { describeError, formatClock } from "./format";
+import { describeError } from "./format";
 import { getLocale, onLocaleChange, t } from "./i18n";
 import { askGroupName, confirmDelete, openDialog } from "./member-dialogs";
 import { openActions } from "./member-column";
@@ -27,6 +29,7 @@ import { bindComposerMentions, mentionTargets } from "./team-mentions";
 import { createAttachmentMedia } from "./attachment-media";
 import { mountStageDrop } from "./attachments";
 import { openMediaLightbox } from "./media-lightbox";
+import { keepReadingPlace } from "./reading-place";
 import { createBackgroundQuestions } from "./background-questions";
 import { conversationCardsHTML, filesHTML, latestProgress, livePresenceHTML, messageActionsHTML, updateLiveTimes, waitsAtCard } from "./timeline";
 import { mountConversationCardActions } from "./conversation-card-actions";
@@ -37,9 +40,11 @@ import { mountTaskResults } from "./task-result";
 import { mountPages } from "./page-card";
 import { carryTyped } from "./secret-card";
 import { carryMail } from "./mail-card";
-import { plainLine, primaryFirst, primaryIdOf, memberRole, faceHTML } from "./members";
+import { plainLine, primaryFirst, primaryIdOf, memberRole, faceHTML, memberOf } from "./members";
 import { NAME, eventLineHTML } from "./event-line";
-import { handoffGroupHTML } from "./handoff-line";
+import { handoffRun, roomHandoffHTML } from "./handoff-line";
+import { memberColor, nameAccent } from "./owner-bubble";
+import { openPeerChat, type PeerChatView } from "./peer-chat";
 import type { WireAttachment, HandoffView } from "./types";
 import type { AppContext, MembersList, Room, RoomMessage, RoomExchange, MainEvent } from "./types";
 import { btn, closeMenu, copyButton, esc, ico, iconButton, openMenu, openPopover, patchHTML, sel, toaster } from "./ui";
@@ -51,6 +56,11 @@ const BLOCKED = {
   worker: "rooms.blockedWorker", source_unavailable: "rooms.blockedSource", cli_rate_limited: "rooms.blockedRateLimited",
   cli_quota: "rooms.blockedQuota", cli_login: "rooms.blockedLogin", cli_missing: "rooms.blockedLogin", cli_busy: "rooms.blockedBusy",
   cli_error: "rooms.blockedWorker",
+  // A member the owner named that passed anyway, and a reply that went silent for the room's whole stall time.
+  no_reply: "rooms.blockedNoReply", stalled: "rooms.blockedStalled",
+  // The same reasons from an API brain, and a request too long to read: the line is all the room shows of a failure.
+  rate_limit: "rooms.blockedRateLimited", usage_limit: "rooms.blockedQuota",
+  cli_context_overflow: "rooms.blockedTooLong", context_overflow: "rooms.blockedTooLong",
 } as const;
 
 let context: AppContext | undefined;
@@ -72,7 +82,17 @@ const responderChoices = (list: MembersList, selected: Set<number>) => [
   ...primaryFirst(list.members, primaryIdOf(list)).filter(m => selected.has(m.id)).map(m => ({ value: `member:${m.id}`, label: m.name })),
   { value: "everyone", label: t("team.everyone") },
 ];
-const responderField = (list: MembersList, selected: Set<number>, value: string) => `<div class="au-field"><span>${esc(t("rooms.responder"))}</span><span data-responder>${sel(responderChoices(list,selected),value,t("rooms.responder"),' data-dlg="responder"')}</span></div>`;
+/**
+ * A group's people as one tinted list of rows (the member settings page's lists): a face, the name and, at the right,
+ * a round check (who takes part) or a bare dropdown (a role, who answers first). The chief is always in and cannot be
+ * taken out.
+ */
+const memberRowsHTML = (list: MembersList, selected: Set<number>): string =>
+  `<div class="room-list" role="group" aria-label="${esc(t("rooms.members"))}">${primaryFirst(list.members, primaryIdOf(list)).map(m =>
+    btn(faceHTML(m, 28) + `<span class="room-row-name">${esc(m.name)}</span><span class="room-row-mark" data-check aria-hidden="true">${selected.has(m.id) ? ico("check") : ""}</span>`,
+      "room-row", ` data-dlg="member" data-member="${m.id}" aria-pressed="${selected.has(m.id)}"${m.id === primaryIdOf(list) ? " disabled" : ""}`)).join("")}</div>`;
+const responderField = (list: MembersList, selected: Set<number>, value: string) =>
+  `<div class="room-list"><div class="room-row is-static"><span class="room-row-name">${esc(t("rooms.responder"))}</span><span data-responder>${sel(responderChoices(list,selected),value,t("rooms.responder"),' data-dlg="responder"')}</span></div></div>`;
 
 export async function openRoomsMenu(anchor: HTMLElement): Promise<void> {
   try {
@@ -93,11 +113,11 @@ export async function openNewGroupChat(opts: { onCreated?(room: Room): void } = 
     const dialog = openDialog({ title: t("rooms.new"), cls: "au-group-dialog", body:
       `<label class="au-field"><span>${esc(t("rooms.name"))}</span><input id="room-name" class="mb-fin" maxlength="24" autocomplete="off" value="${esc(list.members.find(m=>m.id===primaryIdOf(list))?.name??"Raphael")}" placeholder="${esc(t("rooms.namePlaceholder"))}" aria-label="${esc(t("rooms.name"))}"></label>` +
       `<div class="au-field"><span>${esc(t("rooms.group"))}</span>${sel(choices, group, t("rooms.group"), ' data-dlg="group"')}</div>` +
-      `<section class="au-field"><span>${esc(t("rooms.members"))}</span><div class="au-members au-room-members">${primaryFirst(list.members, primaryIdOf(list)).map(m => btn(faceHTML(m,30)+`<span>${esc(m.name)}</span><span data-check>${m.id===primaryIdOf(list)?ico("check"):""}</span>`, "", ` data-dlg="member" data-member="${m.id}" aria-pressed="${m.id===primaryIdOf(list)}"${m.id===primaryIdOf(list)?" disabled":""}`)).join("")}</div></section>` + `<div class="room-picked" data-picked>${primaryFirst(list.members, primaryIdOf(list)).filter(m=>selected.has(m.id)).map(m=>`<span>${esc(m.name)}</span>`).join("")}</div>` + responderField(list,selected,responder),
+      `<section class="au-field"><span>${esc(t("rooms.members"))}</span>${memberRowsHTML(list, selected)}</section>` + responderField(list,selected,responder),
       actions: { secondary: btn(esc(t("common.cancel")), "", ' data-dlg="cancel"'), primary: { label: esc(t("rooms.create")), attrs: ' data-dlg="create"' } }, canClose: () => !saving,
       onEnter: () => void save(), onAct(act, target) {
         if (act === "cancel") dialog.close();
-        else if (act === "member") { const id=Number(target.dataset.member);if(id===primaryIdOf(list))return;if(selected.has(id))selected.delete(id);else {if(selected.size>=6){toaster.info(t("rooms.memberCount"));return;}selected.add(id);}target.setAttribute("aria-pressed",String(selected.has(id)));target.querySelector("[data-check]")!.innerHTML=selected.has(id)?ico("check"):"";if(responder===`member:${id}`&&!selected.has(id))responder="auto";dialog.el.querySelector('[data-responder]')!.innerHTML=sel(responderChoices(list,selected),responder,t("rooms.responder"),' data-dlg="responder"');dialog.el.querySelector('[data-picked]')!.innerHTML=primaryFirst(list.members, primaryIdOf(list)).filter(m=>selected.has(m.id)).map(m=>`<span>${esc(m.name)}</span>`).join("");if(!nameEdited)nameInput.value=list.members.filter(m=>selected.has(m.id)).map(m=>m.name).join(" · ").slice(0,24); }
+        else if (act === "member") { const id=Number(target.dataset.member);if(id===primaryIdOf(list))return;if(selected.has(id))selected.delete(id);else {if(selected.size>=6){toaster.info(t("rooms.memberCount"));return;}selected.add(id);}target.setAttribute("aria-pressed",String(selected.has(id)));target.querySelector("[data-check]")!.innerHTML=selected.has(id)?ico("check"):"";if(responder===`member:${id}`&&!selected.has(id))responder="auto";dialog.el.querySelector('[data-responder]')!.innerHTML=sel(responderChoices(list,selected),responder,t("rooms.responder"),' data-dlg="responder"');if(!nameEdited)nameInput.value=list.members.filter(m=>selected.has(m.id)).map(m=>m.name).join(" · ").slice(0,24); }
         else if (act === "create") void save();
         else if (act === "group") openMenu(target, choices, group, value => { group = value; target.querySelector("span")!.textContent = choices.find(c => c.value === value)!.label; });
         else if (act === "responder") { const choices=responderChoices(list,selected);openMenu(target,choices,responder,value=>{responder=value;target.querySelector('span')!.textContent=choices.find(c=>c.value===value)!.label;}); }
@@ -136,7 +156,7 @@ async function editRoomMembers(room: Room, saved: () => void): Promise<void> {
     const list = await api.membersList(getLocale()), selected = new Set([primaryIdOf(list),...room.member_ids]);
     let saving = false, responder = room.default_responder ?? "auto";
     const dialog = openDialog({ title: t("rooms.members"), cls: "au-group-dialog",
-      body: `<div class="au-members">${primaryFirst(list.members, primaryIdOf(list)).map(m => btn(faceHTML(m,30) + `<span>${esc(m.name)}</span><span data-check>${selected.has(m.id) ? ico("check") : ""}</span>`, "", ` data-dlg="member" data-member="${m.id}" aria-pressed="${selected.has(m.id)}"${m.id===primaryIdOf(list)?" disabled":""}`)).join("")}</div>` + responderField(list,selected,responder),
+      body: memberRowsHTML(list, selected) + responderField(list,selected,responder),
       actions: { secondary: btn(esc(t("common.cancel")), "", ' data-dlg="cancel"'), primary: { label: esc(t("members.save")), attrs: ' data-dlg="save"' } },
       canClose: () => !saving,
       onAct(act, target) {
@@ -170,7 +190,11 @@ async function editRoomRoles(room: Room, saved: () => void): Promise<void> {
       { value: "pro", label: t("rooms.pro") }, { value: "con", label: t("rooms.con") }];
     let saving = false;
     const dialog = openDialog({ title: t("rooms.roles"), cls: "au-group-dialog",
-      body: primaryFirst(room.member_ids.map(id => ({ id })), primaryIdOf(list)).map(({ id }) => `<div class="au-field"><span>${esc(list.members.find(m => m.id === id)?.name ?? "")}</span>${sel(choices, roles[id] ?? "participant", t("rooms.roles"), ` data-dlg="role" data-member="${id}"`)}</div>`).join(""),
+      // The same list as the members': each person's face and name, the role as a bare dropdown at the right.
+      body: `<div class="room-list">${primaryFirst(room.member_ids.map(id => ({ id })), primaryIdOf(list)).map(({ id }) => {
+        const member = list.members.find(m => m.id === id);
+        return `<div class="room-row is-static">${member ? faceHTML(member, 28) : ""}<span class="room-row-name">${esc(member?.name ?? "")}</span>${sel(choices, roles[id] ?? "participant", `${t("rooms.roles")} ${member?.name ?? ""}`, ` data-dlg="role" data-member="${id}"`)}</div>`;
+      }).join("")}</div>`,
       actions: { secondary: btn(esc(t("common.cancel")), "", ' data-dlg="cancel"'), primary: { label: esc(t("members.save")), attrs: ' data-dlg="save"' } },
       canClose: () => !saving,
       onAct(action, target) {
@@ -198,7 +222,7 @@ async function editRoomRoles(room: Room, saved: () => void): Promise<void> {
 
 function roomActions(anchor: HTMLElement, room: Room, saved: () => void = () => {}, deleted: () => void = () => {}): void {
   openActions(anchor, [
-    { id: "pin", label: t(room.pinned ? "members.sideUnpin" : "members.sidePin"), icon: "pin" },
+    { id: "pin", label: t(room.pinned ? "members.sideUnpin" : "members.sidePin"), icon: room.pinned ? "pinOff" : "pin" },
     { id: "hide", label: room.hidden ? t("sidebar.show") : t("members.sideHide"), icon: "eyeOff" },
     { id: "rename", label: t("members.rename"), icon: "pencil" },
     ...(!room.is_team ? [{ id: "members", label: t("rooms.members"), icon: "grid" as const }] : []),
@@ -222,9 +246,12 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
   const el=document.createElement("section");el.className="mb-chat au-room-pane";el.hidden=true;
   el.innerHTML=`<header class="page-head mb-head"><span class="room-picker"></span><div class="au-room-heading"></div><div class="ra-tools">${iconButton("search",t("agent.search"), ' data-room-search')}${iconButton("more",t("members.more",{p0:t("rooms.title")}), ' data-room-menu')}</div></header><div class="ra-find" hidden></div><div class="ra-stage"><div class="ra-scroll"><div class="ra-col"><div class="ra-older"></div><ol class="thread au-room-thread"></ol></div></div><div class="ra-dock"></div></div>`;
   const thread=el.querySelector<HTMLElement>(".thread")!,scroll=el.querySelector<HTMLElement>(".ra-scroll")!,older=el.querySelector<HTMLElement>(".ra-older")!;
+  keepReadingPlace(scroll, ".thread > *");
   let room:Room|undefined,list:MembersList={members:[],groups:[]},messages:RoomMessage[]=[],generation=0,opened=false,canOlder=false,loadingOlder=false;
   // Navigation identity remains available while the complete room is loading.
   let roomId: number | undefined;
+  let closeSideThread: (() => void) | undefined;
+  let sideOpening = false;
   let pendingQuestions: { room: number; questions: import("./types").OwnerQuestion[] } | undefined;
   const failedRequests = new Map<string, string>();
   const deliveries = new Map<number, Promise<void>>();
@@ -235,14 +262,14 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
   let newestMessage = 0, drewOnce = false, refreshTimer: ReturnType<typeof setTimeout> | undefined;
   let rosterDirty = true;
   let snapshot: unknown;
-  const drafts=new Map<number,{text:string;files:WireAttachment[];quote?:RoomMessage}>();
+  const drafts=new Map<number,{text:string;files:WireAttachment[];quote?:RoomMessage;pageId?:string}>();
   let draftTimer: ReturnType<typeof setTimeout> | undefined;
   function saveRoomDraft(): void {
     clearTimeout(draftTimer);
     if (roomId === undefined) return;
     const value = {...composer.snapshot(), quote: replyTo};
     if (value.text || value.files.length || value.quote) drafts.set(roomId, value); else drafts.delete(roomId);
-    writeDraftWords(`room:${roomId}`, {text:wholeLinks(value.text), quote:value.quote ? {id:value.quote.id,member_id:value.quote.member_id,text:value.quote.text} : undefined});
+    writeDraftWords(`room:${roomId}`, {text:wholeLinks(value.text), pageId:value.pageId, quote:value.quote ? {id:value.quote.id,member_id:value.quote.member_id,text:value.quote.text} : undefined});
   }
   function deliveredDraft(id: number, text: string, files: WireAttachment[], quoteId?: number): void {
     const draft = drafts.get(id);
@@ -253,7 +280,7 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
       if (!draft.text && !draft.files.length && !draft.quote) drafts.delete(id);
     }
     const remaining = drafts.get(id);
-    writeDraftWords(`room:${id}`, remaining && {text:wholeLinks(remaining.text),quote:remaining.quote});
+    writeDraftWords(`room:${id}`, remaining && {text:wholeLinks(remaining.text),quote:remaining.quote,pageId:remaining.pageId});
   }
   function forgetRoomDraft(id: number): void {
     if (roomId === id) { roomId = undefined; close(); }
@@ -266,6 +293,10 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
   const windowMount = mountTranscriptWindow(scroll, thread, roomWindow, { draw, older: loadRoomEarlier, canOlder: () => canOlder && !loadingOlder });
   mountConversationScroll(scroll);
   mountRichContent(scroll);
+  mountMessageMetadata(thread, control => {
+    const message = messages.find(item => item.id === Number(control.closest<HTMLElement>("[data-room-message]")?.dataset.roomMessage));
+    return message && roomId ? { reactions: message.reactions ?? [], react: (emoji, active) => api.core("rooms.react", { room_id: roomId, message_id: message.id, emoji, active }) } : null;
+  }, () => { void refresh(); }, error => toaster.info(describeError(error)));
   mountOwnerQuestions(thread, () => { void refresh(); });
   const floatingQuestions = mountPendingQuestions(thread, scroll, () => refresh(), () => pendingQuestions && pendingQuestions.room === roomId ? pendingQuestions.questions : [], async turn => {
     let message = messages.find(message => message.turn_id === turn || message.turn?.id === turn);
@@ -294,9 +325,8 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
   });
   const resultCards = new WeakMap<HTMLElement, { sync(): void }>();
   mountConversationCardActions(thread, () => _app.go("settings", "connections"));
-  const pagesHost = mountPages(thread, { send: text => {
-    if (roomId) void api.roomSend(roomId, text, crypto.randomUUID(), getLocale()).then(() => refresh());
-  }, answer: (id, text) => answerOwnerPage(thread, id, text, () => { void refresh(); }) });
+  const pagesHost = mountPages(thread, { place: (id, text) => composer.placePageText(id, text),
+    people: () => ({ nameOf: id => memberOf(list, id)?.name ?? "", colorOf: id => memberColor(memberOf(list, id) ?? { id }) }) });
   const measureAllMessages = messagePreviewMeasure(thread);
   const messageResize = typeof ResizeObserver === "function" ? new ResizeObserver(measureAllMessages) : null;
   messageResize?.observe(thread);
@@ -319,8 +349,10 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
     scroll.scrollTop=top+scroll.scrollHeight-height;
   }});
   const sendingRooms=new Set<number>(),pendingStops=new Set<number>();
-  const composer=createChatComposer({stopTask:stopRoom,placeholder:()=>t("rooms.message"),transcriptTarget(){const id=roomId;return text=>{if(roomId===id){composer.input.value+=(composer.input.value?" ":"")+text;composer.seedDictation(text);}else if(id){const draft=drafts.get(id)??{text:"",files:[]};draft.text+=(draft.text?" ":"")+text;drafts.set(id,draft);writeDraftWords(`room:${id}`,{text:draft.text,quote:draft.quote});}};},async send(text,files){
+  const composer=createChatComposer({stopTask:stopRoom,placeholder:()=>t("rooms.message"),answerPage:(id,text)=>!replyTo && answerOwnerPage(thread,id,text,()=>{void refresh();}),transcriptTarget(){const id=roomId;return text=>{if(roomId===id){composer.input.value+=(composer.input.value?" ":"")+text;composer.seedDictation(text);}else if(id){const draft=drafts.get(id)??{text:"",files:[]};draft.text+=(draft.text?" ":"")+text;drafts.set(id,draft);writeDraftWords(`room:${id}`,{text:draft.text,quote:draft.quote,pageId:draft.pageId});}};},async send(text,files){
     if (!roomId) return;
+    // What is sent shows in the thread, so a report open in its place goes away.
+    pagesHost.closeReport();
     const id = roomId, sentQuote = replyTo?.id, key = JSON.stringify([id,text,files,sentQuote]);
     const requestId = failedRequests.get(key) ?? crypto.randomUUID();
     failedRequests.delete(key);
@@ -365,19 +397,23 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
   });
   const questionSlot = document.createElement("div"); questionSlot.className = "ra-bgq"; questionSlot.append(questions.element); status.after(questionSlot);
   const person=(id:number|null)=>list.members.find(m=>m.id===id);
-  const boardHTML = (): string => roomBoardHTML(handoffs, decisions, (id, name) => faceHTML(person(id) ?? {id, name}, 28));
+  /** The conversation between members a centred line opened over the room (peer-chat.ts). */
+  let peer: PeerChatView | null = null;
+  const boardHTML =(): string => roomBoardHTML(handoffs, decisions, (id, name) => faceHTML(person(id) ?? {id, name}, 28));
   const roomStamp = (): unknown => [list, room, exchange, messages.slice(), handoffs.slice(), decisions.slice(), replyTo, sendingRooms.has(roomId!), stopping, loadingOlder];
   function draw():void {
+    if (peer) queueMicrotask(() => peer?.update());
     if(!room)return;
-    const follows = !drewOnce || (!roomWindow.after && richScrollFollows(scroll));
+    const follows =!drewOnce || (!roomWindow.after && richScrollFollows(scroll));
     snapshot = roomStamp();
-    patchHTML(el.querySelector('.au-room-heading')!,`<b>${esc(room.is_team ? t("rooms.team") : room.name)}</b><div class="au-room-faces">${primaryFirst(room.member_ids.map(id => ({ id })), primaryIdOf(list)).map(({ id })=>{const m=person(id);return m?`<span class="au-room-participant" data-tooltip="${esc(memberRole(m)?`${m.name} · ${memberRole(m)}`:m.name)}">${faceHTML(m,24)}${id===primaryIdOf(list)?`<span class="au-room-crown" role="img" aria-label="${esc(t("rooms.chief"))}">${ico("crown")}</span>`:""}</span>`:"";}).join("")}</div>`);
+    // The chief's crown is the gold one its slime already wears (crown.ts, same member as primaryIdOf); a second crown
+    // icon over a 24 px face hid it (judge, 2026-11-10), so only its name for screen readers stays here.
+    patchHTML(el.querySelector('.au-room-heading')!,`<b>${esc(room.is_team ? t("rooms.team") : room.name)}</b><div class="au-room-faces">${primaryFirst(room.member_ids.map(id => ({ id })), primaryIdOf(list)).map(({ id })=>{const m=person(id);return m?`<span class="au-room-participant" data-tooltip="${esc(memberRole(m)?`${m.name} · ${memberRole(m)}`:m.name)}">${faceHTML(m,24)}${id===primaryIdOf(list)?`<span class="au-room-crown" role="img" aria-label="${esc(t("rooms.chief"))}"></span>`:""}</span>`:"";}).join("")}</div>`);
     const active=exchange&&["queued","running"].includes(exchange.state);
     composer.setTaskState(active || handoffs.some(task=>["queued","running","waiting"].includes(task.state)) ? "running" : sendingRooms.has(room.id) ? "ack" : "idle");
     let statusHTML=room.membership_state==="needs_adjustment"?btn(esc(t("rooms.adjustMembers")),"sm",' data-room-act="members"'):"";
     const quote=composer.el.querySelector<HTMLElement>('.cmp-quote')!;quote.hidden=!replyTo;
     patchHTML(quote, replyTo?`<span>${esc(t("rooms.replyTo",{p0:person(replyTo.member_id)?.name??t("members.title")}))}</span>${iconButton("x",t("common.cancel"),' data-room-act="cancel-reply"')}`:"");
-    if (exchange?.routing?.fallback) statusHTML += `<span role="status">${esc(t("rooms.routingFallback"))}</span>`;
     patchHTML(status, statusHTML);
     patchHTML(older, canOlder?btn(esc(t("rooms.older")),"sm",` data-room-act="older"${loadingOlder?" disabled":""}`):"");
     meetingRow.hidden = !handoffs.length && !decisions.length;
@@ -394,15 +430,38 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
     const entries=[...messages.map(message=>({created:message.created,order:0,message})),...handoffs.filter(task=>!messages.some(message=>message.report?.task_id===task.task_id)).map(task=>({created:task.created_at_ms,order:0,task})),...blocked]
       .sort((a,b)=>a.created-b.created||a.order-b.order);
     const addressable=mentionTargets(list);
+    // What a quote shows of a message: its first words as plain text, without Markdown's marks (two lines are drawn).
+    const quoteWords = (message: RoomMessage): string => {
+      const text = message.member_id === null ? message.text : plainReplies(replyMessages(message.text)).join("\n");
+      return text.replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1").replace(/[*_`#>~|]+/g, "").replace(/\s+/g, " ").trim().slice(0, 200);
+    };
+    const replyQuoteHTML = (source: RoomMessage["reply_reference"]): string => {
+      if (!source) return "";
+      if (source.unavailable) return `<span class="message-quote room-quote is-missing"><span class="quote-text">${esc(t("rooms.sourceMissing"))}</span></span>`;
+      const author = source.author_kind === "owner" ? t("rooms.owner") : person(source.author_member_id ?? null)?.name ?? t("rooms.sourceMissing");
+      const original = messages.find(item => item.id === source.message_id);
+      const words = original ? quoteWords(original) : "";
+      return `<button type="button" class="message-quote room-quote" data-room-act="jump-reply" data-message="${source.message_id}" aria-label="${esc(t("rooms.replyTo", { p0: author }) + (words ? `: ${words}` : ""))}">` +
+        `<span class="quote-author">${esc(author)}</span>${words ? `<span class="quote-text">${esc(words)}</span>` : ""}</button>`;
+    };
+    /** A quote opens a reply's first bubble; a reply that opens with a card carries it just above. */
+    const quoted = (html: string, quote: string): string => {
+      const opening = '<div class="ans"><div class="message-text">';
+      return !quote ? html : html.startsWith(opening) ? `<div class="ans">${quote}<div class="message-text">${html.slice(opening.length)}` : quote + html;
+    };
     const presentation = JSON.stringify([getLocale(), list.members.map(member => [member.id, member.name, member.avatar])]);
     const entryKey = (entry: typeof entries[number]): string => "message" in entry ? `message:${entry.message.id}` : "task" in entry ? `task:${entry.task.task_id ?? entry.task.work_turn_id}` : `intent:${entry.intent.id}`;
     const mounted = roomWindow.select(entries, entryKey, follows && !finder.isOpen());
     windowMount.sync();
+    // Hand-offs in a row are one line per pair of members, and each piece of a member's own work is a line of its own
+    // (handoff-line.ts): a line never mixes exchanges between different members.
+    const runOf = (item: typeof mounted[number] | undefined): string | undefined => item && "task" in item ? handoffRun(item.task) : undefined;
     const grouped = mounted.flatMap<{ entry: typeof entries[number]; tasks: HandoffView[] }>((entry, index) => {
       if (!("task" in entry)) return [{ entry, tasks: [] as HandoffView[] }];
-      if (index && "task" in mounted[index - 1]) return [];
+      const run = handoffRun(entry.task);
+      if (runOf(mounted[index - 1]) === run) return [];
       const tasks: HandoffView[] = [];
-      for (let i = index; i < mounted.length && "task" in mounted[i]; i++) tasks.push((mounted[i] as { task: HandoffView }).task);
+      for (let i = index; runOf(mounted[i]) === run; i++) tasks.push((mounted[i] as { task: HandoffView }).task);
       return [{ entry, tasks }];
     });
     preserveRichScroll(scroll, () => { const wanted = entries.length ? grouped.map(({ entry, tasks }) => ({
@@ -410,30 +469,31 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
       turnId: "message" in entry ? entry.message.id : undefined,
       html: renderedMessages.line("message" in entry ? `message:${entry.message.id}` : "task" in entry ? `task:${entry.task.task_id ?? entry.task.work_turn_id}` : `intent:${entry.intent.id}`,
         "task" in entry ? tasks : entry, [presentation, addressable, "message" in entry && expandedMessages.has(entry.message.id),
-          "message" in entry && entry.message.status === "running" ? person(entry.message.member_id)?.activity_label : ""], () => {
+          "message" in entry && entry.message.status === "running" ? person(entry.message.member_id)?.activity_label : "",
+          "message" in entry ? replyQuoteHTML(entry.message.reply_reference) : ""], () => {
       if("intent" in entry){
         const intent=entry.intent,name=person(intent.recipient_id)?.name??intent.recipient_name;
         return `<li class="tn room-intent-blocked" role="status">${eventLineHTML(t("rooms.intentBlocked",{p0:NAME,p1:t(BLOCKED[intent.reason as keyof typeof BLOCKED]??"rooms.blockedWorker")}),faceOf(intent.recipient_id,name),name)}</li>`;
       }
       if("task" in entry){
-        return `<li class="tn handoff-row">${handoffGroupHTML(tasks.map(task => {
-          const source=messages.find(m=>m.turn_id===task.source_turn_id&&m.member_id===task.from_member_id&&m.kind!=="wrapup");
-          return { task, face: faceOf(task.member_id,task.member_name), name: person(task.member_id)?.name,
-            request: source && {author:person(source.member_id)?.name??"",text:source.text} };
-        }))}</li>`;
+        return `<li class="tn handoff-row">${roomHandoffHTML(tasks, (id, fallback) => { const member = person(id) ?? { id, name: id === 0 ? t("agent.title") : fallback }; return { name: member.name || fallback, face: faceHTML(member, 20) }; })}</li>`;
       }
       const m=entry.message;
       if (m.kind === "report" && m.report) return `<li class="tn" data-room-message="${m.id}">${roomReportHTML(m)}</li>`;
       if(m.member_id!==null&&m.status==="running"&&!m.text.trim()&&(!m.turn||!waitsAtCard(m.turn))) {
         const member=person(m.member_id);
-        return `<li class="tn au-room-thinking" data-room-message="${m.id}" role="status"><div class="ra-body"><b class="au-room-author">${esc(member?.name??t("members.title"))}</b>${livePresenceHTML({face:()=>member?faceHTML(member,28):"",activityLabel:member?.activity_label},m.turn?latestProgress(m.turn):undefined)}</div></li>`;
+        return `<li class="tn au-room-thinking" data-room-message="${m.id}" role="status"><div class="ra-body"><b class="au-room-author">${esc(member?.name??t("members.title"))}</b>${livePresenceHTML({face:()=>member?faceHTML(member,28,{moving:true}):"",activityLabel:member?.activity_label},m.turn?latestProgress(m.turn):undefined)}</div></li>`;
       }
       const member=person(m.member_id),owner=m.member_id===null,parts=owner?[m.text]:plainReplies(replyMessages(m.text)).map(text=>composioText(text,composioAction(m.turn))),words=parts.join("\n\n")||(owner?"":t(m.status==="error"?"auto.error":"auto.running"));
       const source=m.reply_reference;
-      const reply=source?`<${source.unavailable ? 'span' : `button type="button" data-room-act="jump-reply" data-message="${source.message_id}"`} class="au-room-reply">${esc(source.unavailable?t("rooms.sourceMissing"):t("rooms.replyTo",{p0:source.author_kind==="owner"?t("rooms.owner"):person(source.author_member_id??null)?.name??t("rooms.sourceMissing")}))}</${source.unavailable ? 'span' : 'button'}>`:"";
-      const actions= messageActionsHTML(m.created, false, undefined, false).replace('</div>',(!owner?iconButton("reply",t("rooms.reply"),` data-room-act="reply" data-message="${m.id}"`).replace(" title="," data-tooltip="):"")+"</div>");
+      // Whom a message answers is quoted at the top of its bubble, as a quote is in a private conversation: the author's name over
+      // the first lines of the message it answers, which a press jumps to.
+      const reply=replyQuoteHTML(source);
+      const actions= messageActionsHTML(m.created, false, undefined, false).replace('</div>',reactionControlHTML() + iconButton("chat", t("rooms.thread"), ` data-room-act="thread" data-message="${m.id}"`).replace(" title=", " data-tooltip=") + (!owner?iconButton("reply",t("rooms.reply"),` data-room-act="reply" data-message="${m.id}"`).replace(" title="," data-tooltip="):"")+"</div>");
+      const reactions = reactionRowHTML(m.reactions);
+      const metadata = (m.reply_count ? `<button type="button" class="btn sm room-thread-chip" data-room-act="thread" data-message="${m.id}">${esc(t("rooms.threadCount", { p0: m.reply_count }))}</button>` : "");
       const preview = ` data-expandable="true"`, expanded = expandedMessages.has(m.id) ? " is-expanded" : "";
-      return `<li class="tn au-room-message${m.kind==="wrapup"?" au-room-wrapup":""}" data-room-message="${m.id}">${owner?`<div class="me">${ownerFaceHTML()}<div class="chat-message owner-message${expanded}"${preview}>${reply}${filesHTML(m.attachments)}${words?`<div class="bubble"><div class="message-text">${messageHTML(words, "", false, addressable)}</div>${messageExpandHTML(words, expandedMessages.has(m.id))}</div>`:""}${actions}</div></div>`:`<div class="ra"><span class="ra-face">${member?faceHTML(member,30):""}</span><div class="ra-body"><div class="au-room-meta"><b class="au-room-author">${esc(member?.name??t("members.title"))}</b>${reply}</div>${(parts.some(part=>part.trim())?parts:[words]).map((part,index)=>`<div class="chat-message" data-room-part="${index}">${replyContentHTML(part,"",m.status==="running")}${index===parts.length-1?actions:""}</div>`).join("")}${m.turn ? conversationCardsHTML(m.turn, m.member_id ? member?.name : t("agent.title")) : ""}</div></div>`}</li>`;
+      return `<li class="tn au-room-message${m.kind==="wrapup"?" au-room-wrapup":""}" data-room-message="${m.id}">${owner?`<div class="me">${ownerFaceHTML()}<div class="chat-message owner-message${expanded}"${preview}>${words?"":reply}${filesHTML(m.attachments)}${words?`<div class="bubble">${reply}<div class="message-text">${messageHTML(words, "", false, addressable)}</div>${messageExpandHTML(words, expandedMessages.has(m.id))}</div>`:""}${reactions}${actions}${metadata}</div></div>`:`<div class="ra"><span class="ra-face"${member?` data-tooltip="${esc(member.name)}"`:""}>${member?faceHTML(member,30):""}</span><div class="ra-body"><b class="au-room-author">${esc(member?.name??t("members.title"))}</b>${(parts.some(part=>part.trim())?parts:[words]).map((part,index)=>`<div class="chat-message" data-room-part="${index}">${index===0?quoted(replyContentHTML(part,"",m.status==="running"),reply):replyContentHTML(part,"",m.status==="running")}${index===parts.length-1?reactions+actions+metadata:""}</div>`).join("")}${m.turn ? conversationCardsHTML(m.turn, m.member_id ? member?.name : t("agent.title")) : ""}</div></div>`}</li>`;
     }), })).filter(line => line.html) : [{ key: "empty", html: `<li class="au-empty">${esc(t("rooms.empty"))}</li>`, turnId: undefined }];
     renderedMessages.retain(new Set(grouped.map(({entry}) => entryKey(entry))));
     const changed = patchThread(thread, wanted, drawn, {
@@ -501,10 +561,11 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
     } catch (error) { toaster.info(describeError(error)); }
     finally { loadingOlder = false; if (opened) draw(); }
   }
-  function close():void{if(!opened)return;if(meetingPanel?.isConnected)closeMenu();finder.close(false);saveRoomDraft();composer.stopVoice();drop.reset();attachmentMedia.reset();questions.reset();opened=false;roomId=undefined;generation++;clearTimeout(refreshTimer);refreshTimer=undefined;el.hidden=true;composer.setTaskState("idle");clearRoomSelection();onClose();}
+  function close():void{if(!opened)return;closeSideThread?.();closeSideThread=undefined;if(meetingPanel?.isConnected)closeMenu();finder.close(false);saveRoomDraft();composer.stopVoice();drop.reset();attachmentMedia.reset();questions.reset();opened=false;roomId=undefined;generation++;clearTimeout(refreshTimer);refreshTimer=undefined;el.hidden=true;composer.setTaskState("idle");clearRoomSelection();onClose();}
   el.querySelector('[data-room-menu]')!.addEventListener('click',e=>{if(room)roomActions(e.currentTarget as HTMLElement,room,()=>void refresh(),close);});
   el.addEventListener('click',e=>{const target=(e.target as Element).closest<HTMLElement>('[data-room-act],[data-act]');if(!target)return;const act=target.dataset.roomAct??target.dataset.act;if(["turn","copy-message","copy-code","attachment-open","attachment-image","older"].includes(act??""))e.stopPropagation();
     if(act==="private-work") openMemberThread(_app,Number(target.dataset.member),Number(target.dataset.turn));
+    else if(act==="peer-chat"){peer?.close();peer=openPeerChat(el,target,()=>handoffs,(id,fallback)=>{const member=person(id)??{id,name:id===0?t("agent.title"):fallback};return{name:member.name||fallback,face:faceHTML(member,28),accent:nameAccent(member)};},()=>{peer=null;});}
     else if(act==="members"&&room)void editRoomMembers(room,()=>void refresh());
     else if(act==="expand-message") {
       e.stopPropagation();
@@ -516,6 +577,14 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
       measureAllMessages();
     }
     else if(act==="stop"&&room&&!stopping){stopping=true;const id=room.id;draw();void api.roomStop(id).then(()=>refresh()).catch(error=>toaster.info(describeError(error))).finally(()=>{stopping=false;if(opened)draw();});}
+    else if(act==="thread" && roomId && !sideOpening){
+      sideOpening = true;
+      const current = roomId, message = Number(target.dataset.message);
+      closeSideThread?.(); closeSideThread = undefined;
+      void openRoomThread(el, _app, current, message, list, () => { if (opened) void refresh(); }).then(close => {
+        if (!opened || current !== roomId) close(); else closeSideThread = close;
+      }).catch(error => toaster.info(describeError(error))).finally(() => { sideOpening = false; });
+    }
     else if(act==="reply"){replyTo=messages.find(m=>m.id===Number(target.dataset.message));draw();composer.input.focus();}
     else if(act==="jump-reply") void (async () => {
       const id = Number(target.dataset.message), current = roomId;
@@ -549,6 +618,7 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
   };listeners.add(listener);onLocaleChange(()=>{if(opened)draw();});
   onAvatarChange(()=>{if(opened && el.isConnected)draw();});
   return {el,close,refresh,async open(id:number){
+    closeSideThread?.(); closeSideThread = undefined;
     if (meetingPanel?.isConnected) closeMenu();
     meetingRow.hidden = true;
     decisions = [];
@@ -558,7 +628,7 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
     roomWindow.reset(); renderedMessages.clear();
     opened=true;generation++;rosterDirty=true;snapshot="";newestMessage=0;drewOnce=false;roomId=id;room=undefined;messages=[];handoffs=[];exchange=undefined;replyTo=undefined;stopping=false;canOlder=false;
     el.querySelector('.au-room-heading')!.replaceChildren();thread.replaceChildren();older.replaceChildren();status.replaceChildren();
-    composer.setTaskState("idle");const draft=drafts.get(id)??readDraftWords<RoomMessage>(`room:${id}`);replyTo=draft?.quote;composer.setDraft(draft?.text??"",drafts.get(id)?.files??[]);el.hidden=false;
+    composer.setTaskState("idle");const draft=drafts.get(id)??readDraftWords<RoomMessage>(`room:${id}`);replyTo=draft?.quote;composer.setDraft(draft?.text??"",drafts.get(id)?.files??[],draft?.pageId);el.hidden=false;
     await refresh();void questions.load();
     if(opened&&roomId===id&&room){canOlder=messages.length===100;draw();scroll.scrollTop=scroll.scrollHeight;composer.input.focus();}
   },get active(){return opened;}};
@@ -566,25 +636,36 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
 
 export function createRoomsSection(active: () => boolean = () => true): HTMLElement {
   const el = document.createElement("section"); el.className = "au-rooms-section";
-  let rooms: Room[] = [], list: MembersList = { members: [], groups: [] }, generation = 0, query = "";
-  let drawnQuery = "", drawnSelection: number | null = null, drawnRows = "";
+  let rooms: Room[] = [], list: MembersList = { members: [], groups: [] }, generation = 0;
+  let drawnSelection: number | null = null, drawnRows = "";
   let rosterDirty = true, timer: ReturnType<typeof setTimeout> | undefined;
   let loaded = false, retry = 0;
   const retryDelays = [100, 250, 500, 1000, 2000];
   const draw = (): void => {
-    drawnQuery = query; drawnSelection = active() ? selectedRoom : null;
+    drawnSelection = active() ? selectedRoom : null;
     // Groups are the owner's own; a former team room stays only for the conversation it already holds.
-    const html = rooms
-      .filter(room => (!room.is_team || room.last_at) && (!room.hidden || query) && (!query || `${room.is_team ? t("rooms.team") : room.name} ${room.preview ?? ""}`.toLocaleLowerCase().includes(query)))
-      .map(room => {
-        const date = new Date(room.last_at ?? NaN), name = room.is_team ? t("rooms.team") : room.name;
-        return `<div class="au-room-row"><button type="button" class="nav mb-row" data-room="${room.id}" aria-current="${active() && selectedRoom === room.id}">${roomAvatarHTML(room,list,40)}<span class="mb-row-main"><span class="mb-row-t"><b>${esc(name)}</b>${room.pinned ? ico("pin") : ""}${Number.isFinite(date.getTime()) ? `<time class="mb-row-time" datetime="${date.toISOString()}">${formatClock(date.getTime())}</time>` : ""}</span><span class="mb-row-p${room.waiting ? " is-wait" : ""}">${esc(room.waiting ? t("members.waitingShort") : ((room.preview && room.preview_member_id !== undefined ? `${room.preview_member_id === null ? t("rooms.owner") : list?.members.find(m => m.id === room.preview_member_id)?.name ?? t("members.title")}：` : "") + plainLine(replyBody(room.preview ?? ""))))}</span></span>${room.waiting ? `<span class="mb-dot is-wait" role="img" aria-label="${esc(t("members.waitingShort"))}"></span>` : room.unread ? `<span class="mb-dot is-unread" role="img" aria-label="${esc(t("members.unread"))}"></span>` : ""}</button>${room.id ? iconButton("more", t("members.more",{p0:name}), ` data-room-more="${room.id}" aria-haspopup="menu" aria-expanded="false"`, "au-room-more") : ""}</div>`;
-      }).join("");
+    const shown = rooms.filter(room => (!room.is_team || room.last_at));
+    const html = shown.filter(room => !room.hidden).map(rowOf).join("");
+    fillHidden(shown.filter(room => room.hidden).map(rowOf).join(""));
     const rows = html.replace(/--slime-(?:delay|since):-?[\d.]+ms;?| data-slime-mounted="[\d.]+"/g, "");
     if (rows === drawnRows) return;
     drawnRows = rows;
     patchHTML(el, html);
   };
+  /** A group chat's row in the sidebar, the hidden ones' too. */
+  function rowOf(room: Room): string {
+        const name = room.is_team ? t("rooms.team") : room.name;
+        return `<div class="au-room-row"><button type="button" class="nav mb-row" data-room="${room.id}" aria-current="${active() && selectedRoom === room.id}">${roomAvatarHTML(room,list,40)}<span class="mb-row-main"><span class="mb-row-t"><b>${esc(name)}</b>${room.pinned ? ico("pin") : ""}</span><span class="mb-row-p${room.waiting ? " is-wait" : ""}">${esc(room.waiting ? t("members.waitingShort") : ((room.preview && room.preview_member_id !== undefined ? `${room.preview_member_id === null ? t("rooms.owner") : list?.members.find(m => m.id === room.preview_member_id)?.name ?? t("members.title")}：` : "") + plainLine(replyBody(room.preview ?? ""))))}</span></span>${room.waiting ? `<span class="mb-dot is-wait" role="img" aria-label="${esc(t("members.waitingShort"))}"></span>` : room.unread ? `<span class="mb-dot is-unread" role="img" aria-label="${esc(t("members.unread"))}"></span>` : ""}</button>${room.id ? iconButton("more", t("members.more",{p0:name}), ` data-room-more="${room.id}" aria-haspopup="menu" aria-expanded="false"`, "au-room-more") : ""}</div>`;
+  }
+  /** The hidden group chats wait in the sidebar's hidden folder (member-column.ts), drawn again with it (R-UI-112). */
+  let hiddenRows = "";
+  function fillHidden(html = hiddenRows): void {
+    hiddenRows = html;
+    const slot = el.closest(".mb-scroll")?.querySelector<HTMLElement>("[data-hidden-rooms]");
+    if (!slot) return;
+    if (slot.innerHTML !== html) patchHTML(slot, html);
+    slot.onclick = onRoomClick;
+  }
   const load = async (fromEvent=false, readRooms=true): Promise<void> => {
     clearTimeout(timer); timer = undefined;
     readRooms ||= !loaded;
@@ -608,14 +689,17 @@ export function createRoomsSection(active: () => boolean = () => true): HTMLElem
     if (!event || event.type === "MembersChanged" || ["CoreReady"].includes(event.type)) rosterDirty = true;
     clearTimeout(timer); timer = undefined; void load(true,!event || event.type==='RoomsChanged' || ['CoreReady'].includes(event.type));
   }); onLocaleChange(() => { draw(); void load(); });
-  el.addEventListener("sidebar-search", event => { query = (event as CustomEvent<string>).detail.trim().toLocaleLowerCase(); if (query !== drawnQuery || drawnSelection !== (active() ? selectedRoom : null)) draw(); });
+  // The member column draws on every page change: the row of the open room follows it.
+  // The column draws its hidden folder anew each time, so the hidden group chats go back into it.
+  el.addEventListener("sidebar-draw", () => { if (drawnSelection !== (active() ? selectedRoom : null)) draw(); else fillHidden(); });
   onAvatarChange(()=>{if(el.isConnected)draw();});
-  el.addEventListener("click", e => {
+  function onRoomClick(e: MouseEvent): void {
     const target = (e.target as Element).closest<HTMLElement>("[data-room], [data-room-new], [data-room-more]");
     if (!target) return;
     if (target.hasAttribute("data-room-new")) void openNewGroupChat();
     else if (target.dataset.room) void openGroupChat(Number(target.dataset.room));
     else { const room = rooms.find(r => r.id === Number(target.dataset.roomMore)); if (room) roomActions(target,room); }
-  });
+  }
+  el.addEventListener("click", onRoomClick);
   draw(); void load(); return el;
 }

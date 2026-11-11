@@ -13,13 +13,14 @@ test("legacy home returns to conversation; dictation deep links select their tab
   expect(resolvePage("dictionary")).toEqual({ page: "dictation", tab: "dictionary" });
   expect(samePage({ page: "dictation", tab: "overview" }, { page: "dictation", tab: "history" })).toBe(false);
 });
-test("dictation mounts the existing pages, hides inactive tabs and remembers the last tab", () => {
+test("dictation mounts the existing pages, hides inactive tabs and opens on its overview each time", () => {
   const make = (id: Page["id"]): Page => ({ id, el: document.createElement("section"), show: vi.fn(), hide: vi.fn() });
   const overview = make("dictation"), history = make("history"), dictionary = make("dictionary");
   const app = { go: vi.fn(), onEvent: () => () => {} } as unknown as AppContext;
   const page = createDictation(app, { overview, history, dictionary });
   document.body.append(page.el); page.show();
-  expect(page.el.querySelector('[role="tablist"]')?.getAttribute("aria-orientation")).toBe("horizontal");
+  // A tab list is horizontal unless it says otherwise (ARIA): the shared tabs say nothing.
+  expect(page.el.querySelector('[role="tablist"]')?.getAttribute("aria-orientation") ?? "horizontal").toBe("horizontal");
   expect(page.el.querySelector(".dictation-content")?.contains(history.el)).toBe(true);
   expect(overview.el.hidden).toBe(false);
   expect(history.el.hidden).toBe(true);
@@ -44,6 +45,6 @@ test("dictation mounts the existing pages, hides inactive tabs and remembers the
   page.setTab("history");
   page.hide();
   const reopened = createDictation(app, { overview, history, dictionary });
-  expect(reopened.tab()).toBe("history");
+  expect(reopened.tab()).toBe("overview");
   reopened.show(); reopened.hide();
 });

@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { finiteMotionSettled, settleMotion, findVisibleElement, perform } from "./driver.mjs";
+import { finiteMotionSettled, settleMotion, findVisibleElement, perform, startupOrderProblem } from "./driver.mjs";
 import { requestDisposition } from "./requests.mjs";
 
 describe("look browser interaction contracts", () => {
@@ -163,5 +163,25 @@ describe("look browser interaction contracts", () => {
     } finally {
       vi.unstubAllGlobals(); vi.restoreAllMocks();
     }
+  });
+});
+
+describe("start-up order", () => {
+  const step = { firstView: ["home.overview", "members.list"], heavy: ["models.catalog", "brains.cli"] };
+  const call = (method, t0, t1) => ({ command: "core_call", method, t0, t1 });
+  it("accepts the first view answered before the optional reads, which then run one at a time", () => {
+    expect(startupOrderProblem([call("members.list", 0, 60), call("home.overview", 5, 70), call("models.catalog", 400, 460), call("brains.cli", 470, 520)], step)).toBe("");
+  });
+  it("rejects an optional read that begins while the first view is still waiting (the burst that slowed Home to 4 s)", () => {
+    expect(startupOrderProblem([call("home.overview", 5, 700), call("members.list", 0, 60), call("models.catalog", 300, 360), call("brains.cli", 400, 450)], step))
+      .toBe("models.catalog began while home.overview was still waiting for its answer");
+  });
+  it("rejects optional reads that overlap each other", () => {
+    expect(startupOrderProblem([call("members.list", 0, 60), call("home.overview", 5, 70), call("models.catalog", 400, 460), call("brains.cli", 430, 500)], step))
+      .toBe("brains.cli began before models.catalog was answered");
+  });
+  it("rejects a missing or unanswered read", () => {
+    expect(startupOrderProblem([call("members.list", 0, 60), call("models.catalog", 400, 460), call("brains.cli", 470, 520)], step)).toBe("home.overview was never asked for");
+    expect(startupOrderProblem([call("members.list", 0, 60), call("home.overview", 5, 70), call("models.catalog", 400, 460), call("brains.cli", 470)], step)).toBe("brains.cli was never answered");
   });
 });

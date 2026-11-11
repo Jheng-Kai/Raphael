@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="app/src-tauri/icons/128x128@2x.png" width="112" alt="Raphael">
+  <img src="app/public/brand/raphael-portrait.png" width="112" alt="Raphael">
 </p>
 
 <h1 align="center">Raphael</h1>
@@ -52,16 +52,18 @@ Development builds keep their data in `Raphael Dev` folders, apart from an insta
 Run the checks from `app/`:
 
 ```powershell
-npm run verify             # TypeScript, unit tests, contrast
-npm run verify -- --core   # plus the Python core
+npm run verify             # TypeScript, unit tests, contrast, Rust formatting
+npm run verify -- --contract   # plus the core's scenario and prompt-budget tests (CI runs the whole core suite)
 npm run verify -- --rust   # plus the Rust shell
 ```
 
 ### Windows releases
 
 The manually dispatched Windows release workflow builds and verifies the installer,
-dependency notices, `BUILD-INFO.txt` and `SHA256SUMS.txt`. Publishing requires the
-explicit `publish` input and a main-branch or tag build.
+dependency notices, `BUILD-INFO.txt` and `SHA256SUMS.txt`. It starts only when the CI
+workflow has passed on the same commit (run CI manually on that commit when no pull
+request did), so the test suites run once, in CI. Publishing requires the explicit
+`publish` input and a main-branch or tag build.
 
 With both `TAURI_SIGNING_PRIVATE_KEY` and `RAPHAEL_UPDATER_PUBLIC_KEY` repository
 secrets, it also signs the installer with a version-bound trusted comment and

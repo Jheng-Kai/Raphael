@@ -138,6 +138,67 @@ async def test_brain_catalog_and_settings_use_provider_references_without_legacy
     conn.close()
 
 
+async def test_models_catalog_answers_from_the_saved_lists_and_renews_them_after_the_answer():
+    import asyncio
+
+    from raphael_core.brain.db import connect
+    from raphael_core.brain.openrouter import OpenRouterClient
+    from raphael_core.brain.providers.registry import ProviderRegistry, ProviderRouter
+    from raphael_core.brain.secrets import MemoryKeyStore
+    from raphael_core.brain.service import Brain
+    from raphael_core.router import Router
+
+    listed, gate, asked = ["old-model"], asyncio.Event(), []
+    status = [200]
+    async def handler(request):
+        if request.url.host == "openrouter.ai":
+            return httpx.Response(503)
+        asked.append(request.url.path)
+        await gate.wait()  # the provider answers only when the test lets it
+        if status[0] != 200:
+            return httpx.Response(status[0])
+        return httpx.Response(200, json={"data": [{"id": name, "supported_parameters": ["tools"]} for name in listed]})
+    conn, keys, notices = connect(":memory:"), MemoryKeyStore(), []
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http:
+        legacy = OpenRouterClient(keys.get, http=http)
+        registry = ProviderRegistry(conn, legacy, keys, credential=lambda _: keys, http=http)
+        brain, router = Brain(conn, ProviderRouter(registry, legacy), keys, providers=registry), Router()
+        router.set_notifier(lambda method, params: notices.append(method))
+        brain.register(router)
+        registry.register(router)
+        gate.set()
+        pid = (await router.call("providers.add", {"kind": "ollama"}))["provider"]["id"]
+        # First use: no list is saved yet, so the answer waits for the provider, as it always did.
+        first = await router.call("models.catalog")
+        assert f"@{pid}:old-model" in {e["id"] for e in first["llm"]}
+        assert brain._provider_refresh is None  # it was waited for, not renewed
+        gate.clear(); asked.clear(); notices.clear()
+
+        # The list is saved: the answer comes at once, with the provider still holding its reply.
+        listed[:] = ["old-model", "new-model"]
+        again = await asyncio.wait_for(router.call("models.catalog"), 2)
+        assert {e["id"] for e in again["llm"] if e["provider_id"] == pid} == {f"@{pid}:old-model"}
+        await asyncio.sleep(0.05)
+        assert asked and notices == []  # renewal is under way, nothing to tell yet
+        gate.set()
+        await brain._provider_refresh
+        assert notices == ["providers.changed"]
+        renewed = await router.call("models.catalog")
+        assert {e["id"] for e in renewed["llm"] if e["provider_id"] == pid} == {f"@{pid}:old-model", f"@{pid}:new-model"}
+
+        # A renewal that changes nothing says nothing, and one that fails keeps the saved list.
+        await brain._provider_refresh
+        notices.clear()
+        await router.call("models.catalog"); await brain._provider_refresh
+        status[0] = 503
+        kept = await router.call("models.catalog"); await brain._provider_refresh
+        assert notices == []
+        assert {e["id"] for e in kept["llm"] if e["provider_id"] == pid} == {f"@{pid}:old-model", f"@{pid}:new-model"}
+        await brain.aclose()
+        await registry.aclose()
+    conn.close()
+
+
 async def test_anthropic_tools_vision_and_json():
     from raphael_core.brain.providers.clients import AnthropicProvider
 

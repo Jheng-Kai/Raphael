@@ -23,8 +23,8 @@
   --ask-gap: 10px;
   --ask-bottom: calc(var(--margin) + var(--e) * 0.2 - 6px);
 
-  --ui: "Inter", "Microsoft JhengHei UI", "Microsoft JhengHei", "PingFang TC", "Noto Sans TC", system-ui, sans-serif;
-  --zh-sub: "Microsoft JhengHei UI", "Microsoft JhengHei", "PingFang TC", "Noto Sans TC", sans-serif;
+  --ui: "Inter", "Noto Sans TC", "PingFang TC", "Microsoft JhengHei UI", "Microsoft JhengHei", system-ui, sans-serif;
+  --zh-sub: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei UI", "Microsoft JhengHei", sans-serif;
   --ja: "Yu Gothic UI", "Yu Gothic", "Meiryo UI", "Meiryo", "Hiragino Sans", "Noto Sans JP", sans-serif;
 }
 
@@ -197,67 +197,10 @@ body {
   opacity: 1;
 }
 
-/* The YES of a T3 question: a track under the word, which the hold fills. */
-.ask-fill {
-  position: absolute;
-  left: 16px;
-  right: 16px;
-  bottom: 5px;
-  height: 3px;
-  border-radius: 2px;
-  background: var(--on-accent);
-  transform: scaleX(0);
-  transform-origin: left center;
-  pointer-events: none;
-}
-
-.ask[data-tier="T3"] .ask-yes::after {
-  content: "";
-  position: absolute;
-  left: 16px;
-  right: 16px;
-  bottom: 5px;
-  height: 3px;
-  border-radius: 2px;
-  background: color-mix(in srgb, var(--on-accent) 28%, transparent);
-  pointer-events: none;
-}
-
-.ask-yes[data-hold="idle"] .ask-fill {
-  transition: transform 0.15s ease-out;
-}
-
-.ask-yes[data-hold="holding"] .ask-fill {
-  transform: scaleX(1);
-  transition: transform var(--hold-ms, 600ms) linear;
-}
-
-/* The pointer is on the button while it is held, so this has to win over the hover colour. */
-.ask-yes[data-hold="armed"],
-.ask-yes[data-hold="armed"]:hover:not(:disabled) {
-  background: var(--accent-hover);
-  border-color: var(--accent-hover);
-  box-shadow: 0 0 0 2px rgba(200, 224, 248, 0.6), 0 1px 8px rgba(0, 0, 0, 0.5);
-}
-
-.ask-yes[data-hold="armed"] .ask-fill {
-  transform: scaleX(1);
-}
-
 @media (prefers-reduced-motion: reduce) {
   .subs,
   .ask,
   .ask-btn {
     transition: none;
-  }
-
-  /* No filling: half the track while the pointer is held, all of it once armed. */
-  .ask-yes[data-hold="idle"] .ask-fill,
-  .ask-yes[data-hold="holding"] .ask-fill {
-    transition: none;
-  }
-
-  .ask-yes[data-hold="holding"] .ask-fill {
-    transform: scaleX(0.5);
   }
 }

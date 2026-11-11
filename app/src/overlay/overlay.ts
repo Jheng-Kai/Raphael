@@ -16,12 +16,10 @@ import { cancelGesture } from "../shared/cancel-gesture";
 import "../shared/cancel-gesture.css";
 import "../shared/task-action.css";
 import { ico } from "../main/ui";
-import { en } from "../main/i18n/en";
-import { ja } from "../main/i18n/ja";
-import { zhTW } from "../main/i18n/zh-TW";
+import { catalogs, isUiLocale, type UiLocale } from "../main/i18n";
 import { replyLine } from "../shared/anime";
 import { captionLines } from "./caption";
-import { Emblem, canvasSize, loadGlyphTexture, pictureStyle, type Mode, type Phase, type PictureCrop } from "./emblem";
+import { Emblem, canvasSize, loadGlyphTexture, pictureStyle, type Mode, type Mood, type Phase, type PictureCrop } from "./emblem";
 import { noticeDurationMs } from "./notice";
 import type { ProgressReport, Stage } from "./progress";
 import { ProgressArc } from "./progress";
@@ -30,9 +28,9 @@ import { WAITING_LINE_MS, nextWaitingLine } from "./waiting-lines";
 import { EntranceTimer, FrameWatch, describeError, guardHandler, subscribeWithRetry, type LogLevel, type PageLog } from "./diagnostics";
 
 /** The language of every subtitle: the interface language of the app. */
-export type UiLanguage = "zh-TW" | "en" | "ja";
+export type UiLanguage = UiLocale;
 
-const isLanguage = (value: unknown): value is UiLanguage => value === "zh-TW" || value === "en" || value === "ja";
+const isLanguage = isUiLocale;
 
 /** The words of an event, which come over the IPC: a field that is not text is no words. */
 const words = (value: unknown): string => (typeof value === "string" ? value : "");
@@ -64,7 +62,7 @@ export type OverlayEvent =
   | { type: "step"; text: string; language: string }
   | { type: "notice"; text: string }
   | { type: "learned"; text: string }
-  | { type: "say"; prefix: string; text: string; hold?: boolean }
+  | { type: "say"; prefix: string; text: string }
   /**
    * `always`: the label of a third answer, 「一律允許」, in the interface language. Only a question
    * about letting Raphael operate an app has it (the other questions have two answers); such a
@@ -79,8 +77,6 @@ export type OverlayEvent =
    */
   | { type: "operate"; line: string }
   | { type: "complete" }
-  /** The voice ended: let the held answer give way to any queued reports, then vanish. */
-  | { type: "release" }
   | { type: "hide" }
   | { type: "settings"; px: number; subtitles: string; language: string }
   /** Raphael's picture changed: the page asks for it again (`avatar_get`). */
@@ -97,10 +93,15 @@ export interface EmblemControl {
   set(mode: Mode): void;
   speak(seconds: number): void;
   size(px: number): void;
+  /** Gold, or red while Raphael refuses (a 否 line). */
+  mood?: Mood;
 }
 
-/** How far a pointer hold on the YES of a T3 question has come. */
-export type HoldState = "idle" | "holding" | "armed";
+/**
+ * Whether a line is one of Raphael's refusals: his notices and answers start with 告 (report) or 否 (refusal) in Chinese
+ * and Japanese and `Notice.` or `Negative.` in English (notices.rs). A refusal is when he is angry.
+ */
+export const isRefusal = (text: string): boolean => /^\s*《?\s*(?:否|Negative|No|거절|Non|Nein|Não|Нет|Không|ไม่|Tidak|Hayır)[。.]/u.test(text);
 
 /** What the buttons of a question say, and how strict the question is. */
 export interface AskButtons {
@@ -126,17 +127,11 @@ export interface OverlayView {
   showWaiting(text: string | null, language: UiLanguage): void;
   /** The buttons (two, or three with `always`) come in under the line. */
   showAsk(buttons: AskButtons): void;
-  /** The filling underline of the YES button of a T3 question. */
-  setHold(state: HoldState): void;
   /** An answer was sent: the buttons stop taking clicks and the chosen one stays pressed; null takes it back. */
   setChoice(choice: "yes" | "no" | "always" | null): void;
   hideAsk(): void;
 }
 
-/** How long the pointer must stay down on the YES of a T3 question before it is armed. */
-export const HOLD_MS = 600;
-/** An armed button whose release never comes (the window went click-through again) is disarmed after this. */
-const ARMED_MAX_MS = 5000;
 /** The app answers a question that ran out itself; the page lets go of it this long after. */
 const ASK_GRACE_MS = 1500;
 /** Used when a question does not say how long it waits. */
@@ -149,8 +144,8 @@ interface Notice {
    * own answers (`say`) are written whatever the subtitles setting says.
    */
   kind: "notice" | "learned" | "say";
-  /** The app owns the lifetime of a voiced answer, including a delayed first sound. */
-  hold?: boolean;
+  /** A refusal (《否。…》 / 《Negative. …》): Raphael's emblem is red while it shows. */
+  angry?: boolean;
 }
 
 /** A question that is on screen, or about to be. */
@@ -166,7 +161,6 @@ interface Ask {
   timeoutMs: number;
   /** The words and the buttons are on screen (the appear animation has played). */
   shown: boolean;
-  hold: HoldState;
   /** The question's own words, to show the card again if the answer could not be sent. */
   text: string;
   /** The answer that was sent while the app has not yet replaced the question.*/
@@ -193,7 +187,6 @@ export class OverlayController {
   private readonly queue: Notice[] = [];
   /** A line is on screen, or about to be (or a question is). */
   private busy = false;
-  private heldSay = false;
   /** A show owns the emblem until a hide or notice takes over, regardless of renderer state. */
   private activeShow = false;
   private timer: ReturnType<typeof setTimeout> | undefined;
@@ -202,7 +195,6 @@ export class OverlayController {
   /** Raphael's greeting is on screen (or about to be) while he listens for a question. */
   private greeting = false;
   private greetTimer: ReturnType<typeof setTimeout> | undefined;
-  private holdTimer: ReturnType<typeof setTimeout> | undefined;
   private readonly progress = new ProgressArc();
   private progressTimer: ReturnType<typeof setInterval> | undefined;
   private progressClock = 0;
@@ -288,9 +280,7 @@ export class OverlayController {
       case "say":
         // Raphael's answer comes before the learned words that wait: it is what was asked for.
         if (words(event.prefix) !== "" || words(event.text) !== "") {
-          // Voice is already playing: it cannot wait behind a timed background report.
-          if (event.hold) this.cancelNotices();
-          this.speak({ text: replyLine(words(event.prefix), words(event.text)), kind: "say", hold: event.hold }, true);
+          this.speak({ text: replyLine(words(event.prefix), words(event.text)), kind: "say" }, true);
         }
         break;
       case "ask":
@@ -298,16 +288,6 @@ export class OverlayController {
         break;
       case "operate":
         this.operate(words(event.line));
-        break;
-      case "release":
-        // The voice ended before the last page of its answer came: the pages left are timed instead.
-        for (const queued of this.queue) queued.hold = undefined;
-        if (!this.heldSay) break;
-        clearTimeout(this.timer);
-        this.timer = undefined;
-        this.heldSay = false;
-        this.view.clearLine();
-        this.next();
         break;
       case "hide":
         this.activeShow = false;
@@ -336,70 +316,19 @@ export class OverlayController {
   }
 
   /**
-   * A click on a button. The YES of a T3 question is answered by `holdEnd`, never by a click. The
-   * `always` button exists only on a question that has the label (always T2); without it a click
-   * on it is ignored.
+   * A click on a button: one press answers, for every tier (owner, 2026-11-11: 「長按才會繼續，點一下就可以了，不用這麼複雜」;
+   * it was a press held for 0.6 s on the YES of a T3 question until then). The `always` button exists only on a question
+   * that has the label (always T2); without it a click on it is ignored. A second press finds the question answered.
    */
   clickAsk(button: "yes" | "no" | "always"): void {
     const ask = this.open();
-    if (!ask || (button === "yes" && ask.tier === "T3")) return;
+    if (!ask) return;
     if (button === "always" && ask.always === null) return;
     this.choose(ask, button !== "no", button === "always");
   }
 
-  /** The pointer went down on the YES button: for a T3 question the hold begins (true). */
-  holdStart(): boolean {
-    const ask = this.open();
-    if (!ask || ask.tier !== "T3") return false;
-    this.resetHold(ask);
-    ask.hold = "holding";
-    this.view.setHold("holding");
-    this.holdTimer = setTimeout(() => {
-      ask.hold = "armed";
-      this.view.setHold("armed");
-      // A release that never comes must not leave the button armed for good.
-      this.holdTimer = setTimeout(() => this.resetHold(ask), ARMED_MAX_MS);
-    }, HOLD_MS);
-    return true;
-  }
-
-  /** The pointer came up. On the button, after a full hold, the answer is YES; otherwise the hold is dropped. */
-  holdEnd(onButton: boolean): void {
-    const ask = this.open();
-    if (!ask || ask.tier !== "T3") return;
-    if (ask.hold === "armed" && onButton) {
-      clearTimeout(this.holdTimer);
-      this.holdTimer = undefined;
-      this.choose(ask, true);
-    } else {
-      this.resetHold(ask);
-    }
-  }
-
-  /** The pointer was taken away (the system cancelled it): nothing was confirmed. */
-  holdCancel(): void {
-    const ask = this.open();
-    if (ask) this.resetHold(ask);
-  }
-
-  private resetHold(ask: Ask): void {
-    clearTimeout(this.holdTimer);
-    this.holdTimer = undefined;
-    if (ask.hold !== "idle") {
-      ask.hold = "idle";
-      this.view.setHold("idle");
-    }
-  }
-
   /** Sends the answer, and the card goes at once: waiting for the app to replace it left a pressed card on screen. */
   private choose(ask: Ask, approved: boolean, always = false): void {
-    // A hold that was still going (NO was clicked meanwhile) must not arm a button that is dead now.
-    clearTimeout(this.holdTimer);
-    this.holdTimer = undefined;
-    if (!approved && ask.hold !== "idle") {
-      ask.hold = "idle";
-      this.view.setHold("idle");
-    }
     ask.chosen = always ? "always" : approved ? "yes" : "no";
     this.view.setChoice(ask.chosen);
     this.view.hideAsk();
@@ -415,7 +344,6 @@ export class OverlayController {
       // The question is still there for another try, unless something replaced it meanwhile.
       if (this.ask === ask) {
         ask.chosen = null;
-        this.resetHold(ask);
         this.view.showLine(ask.line, this.language);
         this.view.showQuestion?.(ask.text, this.language);
         this.view.showAsk({ yes: ask.yes, no: ask.no, ...(ask.always !== null ? { always: ask.always } : {}), tier: ask.tier, language: this.language });
@@ -444,7 +372,6 @@ export class OverlayController {
       always,
       timeoutMs: Number.isFinite(event.timeout_ms) && event.timeout_ms > 0 ? event.timeout_ms : DEFAULT_ASK_TIMEOUT_MS,
       shown: false,
-      hold: "idle",
       chosen: null,
     };
     this.ask = ask;
@@ -480,8 +407,6 @@ export class OverlayController {
   private dropAsk(): void {
     clearTimeout(this.askTimer);
     this.askTimer = undefined;
-    clearTimeout(this.holdTimer);
-    this.holdTimer = undefined;
     if (this.ask) {
       this.ask = null;
       this.view.hideAsk();
@@ -621,9 +546,10 @@ export class OverlayController {
     this.stopWaiting();
     if (this.progress.active) this.stopProgress();
     if (this.ask) this.cancelNotices();
-    // Told in pages without addresses (`captionLines`); a voiced answer holds only its last page.
+    // Told in pages without addresses (`captionLines`).
     const lines = captionLines(notice.text, this.language);
-    const pages = lines.map((text, i) => ({ ...notice, text, hold: i === lines.length - 1 ? notice.hold : undefined }));
+    const angry = isRefusal(notice.text);
+    const pages = lines.map((text) => ({ ...notice, text, angry }));
     // Before the learned words that wait, but behind the lines of Raphael's that came earlier.
     const at = first ? this.queue.findIndex((queued) => queued.kind === "learned") : -1;
     if (at >= 0) this.queue.splice(at, 0, ...pages);
@@ -634,13 +560,14 @@ export class OverlayController {
   /** Shows the next line, or lets the emblem vanish when none is left. */
   private next(): void {
     const notice = this.queue.shift();
-    this.heldSay = notice?.hold === true;
     if (!notice) {
       this.busy = false;
       this.emblem.vanish();
       return;
     }
     this.busy = true;
+    // Red for a refusal from its first frame, gold again for any other line.
+    this.emblem.mood = notice.angry ? "angry" : "calm";
     this.appearIfHidden();
     this.emblem.set("steady");
     // The words come when the appear animation has played (at once if already visible).
@@ -649,7 +576,6 @@ export class OverlayController {
     this.timer = setTimeout(() => {
       this.showLine(notice);
       this.emblem.speak(duration / 1000);
-      if (notice.hold) return;
       this.timer = setTimeout(() => {
         this.view.clearLine();
         this.next();
@@ -674,8 +600,9 @@ export class OverlayController {
       if (this.queue[i].kind !== "learned") this.queue.splice(i, 1);
     }
     this.busy = false;
-    this.heldSay = false;
     this.view.clearLine();
+    // Whatever takes the emblem next (a dictation, a question) starts in his gold.
+    this.emblem.mood = "calm";
   }
 }
 
@@ -731,7 +658,6 @@ class DomView implements OverlayView {
     this.always.hidden = always === undefined;
     this.question.lang = language;
     this.question.dataset.tier = tier;
-    this.setHold("idle");
     this.setChoice(null);
     this.question.hidden = false;
     this.box.classList.add("asking");
@@ -760,10 +686,6 @@ class DomView implements OverlayView {
     requestAnimationFrame(() => { expand.hidden = details.scrollHeight <= details.clientHeight + 1; });
   }
 
-  setHold(state: HoldState): void {
-    this.yes.dataset.hold = state;
-  }
-
   setChoice(choice: "yes" | "no" | "always" | null): void {
     this.question.dataset.choice = choice ?? "";
     this.yes.disabled = this.no.disabled = this.always.disabled = choice !== null;
@@ -773,7 +695,6 @@ class DomView implements OverlayView {
     this.question.classList.remove("on");
     this.question.hidden = true;
     this.box.classList.remove("asking");
-    this.setHold("idle");
     this.setChoice(null);
   }
 }
@@ -790,7 +711,7 @@ export function confirmationParts(text: string): { title: string; details: strin
 }
 
 const questionLabels = (language: UiLanguage) => {
-  const messages = language === "en" ? en : language === "ja" ? ja : zhTW;
+  const messages = catalogs[language];
   return {more:messages["common.showAll"],less:messages["common.showLess"],stop:messages["rooms.stop"],hint:messages["common.cancelAgain"]};
 };
 
@@ -824,35 +745,16 @@ function reportUncaught(): void {
   });
 }
 
-/** Whether a pointer event ended on `button` (a captured pointer reports the button even when it left it). */
-function onButton(button: HTMLElement, event: PointerEvent): boolean {
-  const r = button.getBoundingClientRect();
-  return event.clientX >= r.left && event.clientX <= r.right && event.clientY >= r.top && event.clientY <= r.bottom;
-}
-
-/** The pointer on the buttons of a question, handed to the controller. */
+/** The buttons of a question, handed to the controller: one click answers. */
 function wireQuestion(
   controller: OverlayController,
   yes: HTMLButtonElement,
   no: HTMLButtonElement,
   always: HTMLButtonElement,
 ): void {
-  yes.style.setProperty("--hold-ms", `${HOLD_MS}ms`);
   yes.addEventListener("click", () => controller.clickAsk("yes"));
   no.addEventListener("click", () => controller.clickAsk("no"));
   always.addEventListener("click", () => controller.clickAsk("always"));
-  yes.addEventListener("pointerdown", (event) => {
-    if (event.button !== 0 || !controller.holdStart()) return;
-    // A hold goes on if the pointer strays; where it ends is decided on release. (A click is not
-    // captured: pressing, moving off and letting go is how one changes one's mind.)
-    try {
-      yes.setPointerCapture(event.pointerId);
-    } catch {
-      // not capturable: the release still arrives while the pointer is over the button
-    }
-  });
-  yes.addEventListener("pointerup", (event) => controller.holdEnd(onButton(yes, event)));
-  yes.addEventListener("pointercancel", () => controller.holdCancel());
 }
 
 async function start(): Promise<void> {
@@ -929,7 +831,7 @@ async function start(): Promise<void> {
     if (event.type === "cancelkey") { if(event.reset)gesture.clear();else gesture.press();return; }
     if (event.type === "settings" && isLanguage(event.language)) { language=event.language; document.documentElement.lang=language; labelStop(language); }
     if (event.type === "show" || event.type === "mode") { taskRun++;taskActive=true;stop.hidden=true; }
-    if (["hide","complete","release","notice","operate"].includes(event.type) || event.type === "say" && !event.hold) { taskActive=false;stop.hidden=true; }
+    if (["hide","complete","notice","operate"].includes(event.type) || event.type === "say") { taskActive=false;stop.hidden=true; }
     // A question answers yes or no here; stopping the work is done in the app.
     if (event.type === "ask") { taskRun++;taskActive=true;stop.hidden=true; }
     gesture.sync();

@@ -14,7 +14,7 @@ from raphael_core.brain.settings import SettingsStore
 from raphael_core.integrations.client import CallOutcome
 from raphael_core.worker import loop as worker_loop
 
-from .conftest import call, report, turn, until
+from .conftest import call, report, turn, until, use
 from .test_handoff import args, setup, team_of, unused
 from .test_run import MESSAGES
 from .test_run import Rig as RunRig
@@ -42,6 +42,39 @@ async def test_every_reply_and_every_tool_moves_the_stall_deadline(conn, plugins
     await rig.tool("local_time", call_id="c2")
     rig.clock.now += 1801
     assert await stop_of(rig.chat()) == ("limit_time", None)
+    await rig.meteo.http.aclose()
+
+
+async def test_a_tool_in_flight_is_no_stall_for_a_reply_with_a_short_window(conn, plugins):
+    """Live, a reply in a group that asked a colleague (ask_member) could be ended as stalled: the colleague's
+    whole turn took longer than the reply's own 180 seconds of silence."""
+    rig = RunRig(conn, plugins)
+    rig.run.limits = RunLimits(seconds=180)
+    rig.run.tool_seconds = 1800  # a task's own window, as the service gives a reply
+    rig.run.touch()
+    left, call_tool = [], rig.run._tool
+
+    async def slow(name, arguments, call_id=""):
+        left.append(rig.run.remaining_s())
+        rig.clock.now += 600  # the tool is out for ten minutes
+        left.append(rig.run.remaining_s())
+        return await call_tool(name, arguments, call_id)
+
+    rig.run._tool = slow
+    await rig.tool("local_time")
+    assert left == [1800, 1200]
+    # Back from the tool, the reply's own short window watches the model's silence again.
+    assert rig.run.remaining_s() == 180
+    rig.clock.now += 181
+    assert await stop_of(rig.chat()) == ("limit_time", None)
+    # Out of time, a call does not bring the reply back: it is refused, as any step is.
+    assert await stop_of(rig.tool("local_time", call_id="late")) == ("limit_time", None)
+    # A task whose window is already as long gets nothing more.
+    rig.run.limits, rig.run.tool_seconds = RunLimits(), 1800
+    rig.run._tool = call_tool
+    rig.run.touch()
+    await rig.tool("local_time", call_id="c2")
+    assert rig.run.remaining_s() == 1800
     await rig.meteo.http.aclose()
 
 
@@ -247,7 +280,7 @@ def workspace_writing(rig, monkeypatch, directory, *, writes=True):
 
 async def make_office(rig, source, target, done_when="office.html exists in the workspace and opens", *, requires_artifact=True):
     await rig.plugins.connect(look="T1")
-    rig.client.replies.extend([turn(calls=[call("Notes__look", {"topic": "office"})]), report("office.html is written")])
+    rig.client.replies.extend([turn(calls=[use("Notes__look", {"topic": "office"})]), report("office.html is written")])
     receipt = rig.service.handoff(RAPHAEL, args(target, request="Build office.html", done_when=done_when, requires_artifact=requires_artifact),
                                   source_turn_id=source.id, language="en")
     task_id = receipt.data["task_id"]

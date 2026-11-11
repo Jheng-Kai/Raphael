@@ -68,7 +68,7 @@ async def test_routine_command_waits_thirty_minutes_and_resumes_only_from_app(ma
     assert "Get-Process" in question["permission"]["summary"]
     assert "Get-Process" not in question["text"]
     if brain == "cli":
-        assert rig.service._cli_loops[task_id].approval_wait_s == 1800
+        assert rig.service._cli_loops[task_id].approval_wait_s == 1800 + 60  # the question's own end (30 minutes) comes first
     host.execute.assert_not_awaited()
     with pytest.raises(RpcError):
         rig.service.answer(task_id, question["id"], True, source="telegram")

@@ -6,15 +6,35 @@ Owner-only boundaries live beside the registry so new UI mutations require a dec
 
 from dataclasses import dataclass
 from contextvars import ContextVar
+from contextlib import contextmanager
 import json
 import re
 from typing import Any
 
 from .agent.policy import Tier
+from .members.skill_names import SKILL_NAME_RULE
 
 # Trusted execution context, never an RPC/model argument. Clearing the very chat
 # that requested a change must not cancel or await its own executing tool.
 ORIGIN_TURN = ContextVar("management_origin_turn", default=None)
+_BACKGROUND_MEMBER = ContextVar("background_management_member", default=None)
+
+
+@contextmanager
+def background_management(member_id):
+    token = _BACKGROUND_MEMBER.set(member_id)
+    try:
+        yield
+    finally:
+        _BACKGROUND_MEMBER.reset(token)
+
+
+def background_actor():
+    return _BACKGROUND_MEMBER.get()
+
+
+def background_requires_approval(name, arguments):
+    return background_actor() is not None and name in BACKGROUND_MEMBER_TOOLS
 
 
 def obj(properties=None, required=()):
@@ -29,8 +49,9 @@ STRINGS = {"type": "array", "items": TEXT}
 IDS = {"type": "array", "items": MEMBER_ID}
 NULL_ID = {"type": ["integer", "null"], "minimum": 1}
 PROFILE = {
-    **{key: TEXT for key in ("name", "role", "blurb", "personality", "instructions", "group", "avatar_preset", "model", "voice")},
-    **{key: BOOL for key in ("read_aloud", "notify", "ask_before_members", "draft_first", "pinned", "hidden")},
+    "tools": {"type": ["array", "null"], "items": TEXT},
+    **{key: TEXT for key in ("name", "role", "blurb", "personality", "instructions", "group", "avatar_preset", "model")},
+    **{key: BOOL for key in ("notify", "ask_before_members", "draft_first", "pinned", "hidden")},
     "reply_style": {"type": "string", "enum": ["full", "conversational"]},
     "effort": {"type": "string", "enum": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]},
     "position": {"type": "integer"}, "group_id": NULL_ID,
@@ -65,14 +86,15 @@ def row(name, rpc, description, properties=None, required=(), *, destructive=Fal
 
 
 ACTIONS = (
-    row("member_create", "members.create", "Create a member with the same defaults as the UI. Use its returned ID.", PROFILE, ("name", "role"), service="member"),
-    row("member_update", "members.update", "Edit supplied profile fields, preferences, model/effort, pin/hide, folder or position. ID 0 is the first Bot. Change models only when the owner explicitly requests it.", {"id": MEMBER_ID, **PROFILE}, ("id",), service="member"),
+    row("member_create", "members.create", "Create a member with the same defaults as the UI. Use its returned ID. Templates' CreateAgent maps to this tool.", PROFILE, ("name", "role"), service="member"),
+    row("member_update", "members.update", "Edit supplied profile fields, preferences, model/effort, pin/hide, folder or position. ID 0 is the first Bot. Change models only when the owner explicitly requests it.", {"id": MEMBER_ID, **PROFILE, "cover": {"type": ["string", "null"], "pattern": "^pattern:[a-z0-9-]{1,24}$"}}, ("id",), service="member"),
     row("member_delete", "members.delete", "Permanently delete a member, conversations, memories, routines and resources.", {"id": ID}, ("id",), destructive=True),
-    row("member_primary", "members.set_primary", "Move the primary contact and management authority to this member.", {"id": MEMBER_ID}, ("id",), destructive=True),
+    row("member_primary", "members.set_primary", "Make this member the default primary contact; all members retain the same owner-private management abilities.", {"id": MEMBER_ID}, ("id",), destructive=True),
     row("member_duplicate", "members.duplicate", "Duplicate a member using the UI service.", {"id": ID}, ("id",)),
     row("member_read", "members.read", "Mark a member's conversation read.", {"id": MEMBER_ID}, ("id",)),
     row("members_mark_all_read", "members.mark_all_read", "Mark every member read."),
-    row("member_avatar", "members.set_avatar", "Set a member's image through the same checked image upload as the UI.", {"id": ID, "name": TEXT, "mime": TEXT, "data": TEXT}, ("id", "name", "mime", "data")),
+    row("member_avatar", "members.set_avatar", "Set a member's image through the same checked image upload as the UI.", {"id": MEMBER_ID, "name": TEXT, "mime": TEXT, "data": TEXT}, ("id", "name", "mime", "data")),
+    row("member_cover", "members.set_cover", "Set a member cover through the same checked image upload as its avatar; keep its original aspect ratio.", {"id": MEMBER_ID, "name": TEXT, "mime": TEXT, "data": TEXT}, ("id", "name", "mime", "data")),
     row("member_history_clear", "agent.history.clear", "Clear all recorded conversations of the named member.", {"member_id": MEMBER_ID}, ("member_id",), destructive=True),
     row("member_history_delete", "agent.history.delete", "Delete a recorded conversation turn.", {"turn_id": ID, "member_id": MEMBER_ID, "conversation_id": ID}, ("turn_id", "member_id", "conversation_id"), destructive=True),
     row("group_create", "groups.create", "Create a sidebar folder.", {"name": TEXT}, ("name",)),
@@ -86,12 +108,9 @@ ACTIONS = (
     row("room_members", "rooms.update", "Replace group chat membership. The card names the complete new membership.", {"room_id": ID, "member_ids": IDS}, ("room_id", "member_ids"), destructive=True),
     row("room_stop", "rooms.stop", "Stop all work belonging to a group chat.", {"room_id": ID}, ("room_id",)),
     row("room_delete", "rooms.delete", "Delete a group chat, messages and associated room state.", {"room_id": ID}, ("room_id",), destructive=True),
-    row("conversation_create", "conversations.create", "Create a member conversation.", {"member_id": MEMBER_ID}, ("member_id",)),
-    row("conversation_rename", "conversations.rename", "Rename a conversation.", {"id": ID, "title": TEXT}, ("id", "title")),
-    row("conversation_delete", "conversations.delete", "Delete a conversation and its recorded turns.", {"id": ID}, ("id",), destructive=True),
     row("conversation_clear", "conversations.clear", "Clear the selected conversation. Read conversations.list for the permanent quick conversation ID.", {"id": ID}, ("id",), destructive=True),
-    row("member_skill_import", "members.skills.import", "Import a member's skill package through the UI importer.", {"member_id": MEMBER_ID, "shared": BOOL, "source": TEXT}, ("member_id", "source")),
-    row("member_skill_update", "members.skills.update", "Edit a member skill document or turn it on/off.", {"member_id": MEMBER_ID, "shared": BOOL, "id": ID, "enabled": BOOL, "text": TEXT, "expected_hash": TEXT}, ("member_id", "id")),
+    row("member_skill_import", "members.skills.import", "Import a member's skill package through the UI importer. " + SKILL_NAME_RULE + ".", {"member_id": MEMBER_ID, "shared": BOOL, "source": TEXT}, ("member_id", "source")),
+    row("member_skill_update", "members.skills.update", "Edit a member skill document or turn it on/off. " + SKILL_NAME_RULE + ". Keep an existing name unchanged when editing.", {"member_id": MEMBER_ID, "shared": BOOL, "id": ID, "enabled": BOOL, "text": TEXT, "expected_hash": TEXT}, ("member_id", "id")),
     row("member_skill_undo", "members.skills.update", "Undo the last skill document change at the specified revision.", {"member_id": MEMBER_ID, "shared": BOOL, "undo": TEXT}, ("member_id", "undo"), destructive=True),
     row("member_skill_delete", "members.skills.delete", "Delete a member or shared skill package and grants.", {"member_id": MEMBER_ID, "shared": BOOL, "id": ID}, ("member_id", "id"), destructive=True),
     row("member_command_save", "members.commands.save", "Save a member's slash command template containing {input}.", {"member_id": MEMBER_ID, "id": ID, **{key: TEXT for key in ("name", "description", "template")}}, ("member_id", "name", "template")),
@@ -143,14 +162,12 @@ ACTIONS = (
           ("first_bot_profile", obj({key: TEXT for key in ("name", "role", "personality", "instructions")}), "Edit the first Bot's profile."),
           ("raphael_draft_first", BOOL, "Set the first Bot's mail draft preference."),
           ("chief_pinned", BOOL, "Pin/unpin the primary contact."),
-          ("tts_enabled", BOOL, "Enable/disable the first Bot's read-aloud voice."),
-          ("tts_fish_voice", TEXT, "Set the first Bot's read-aloud voice ID."),
           *((key, TEXT, "Choose this model only when the owner explicitly requests it; never recover a failure by changing it.")
             for key in ("cleanup_model", "stt_cloud_model", "assistant_model", "router_model", "memory_model", "pdf_model", "vision_model")),
           *((key, STRINGS, "Edit the model fallback list only when explicitly requested by the owner.")
             for key in ("agent_fallbacks", "cleanup_fallbacks", "router_fallbacks", "vision_fallbacks", "pdf_fallbacks", "stt_fallbacks", "memory_fallbacks")),
           *((key, TEXT, "Choose the service used by this capability.")
-            for key in ("web_search_service", "web_read_service", "pdf_service", "searxng_url", "tts_service", "tts_fish_model", "tts_language")),
+            for key in ("web_search_service", "web_read_service", "pdf_service", "searxng_url")),
           *((key, BOOL, "Enable or disable this shared work capability.")
             for key in ("web_search_enabled", "web_read_enabled", "vision_enabled", "pdf_enabled")),
       )),
@@ -182,6 +199,14 @@ DEFINITIONS = {item.name: item.definition for item in ACTIONS if not item.settin
 DEFINITIONS[SETTINGS_TOOL.name] = SETTINGS_TOOL.definition
 DEFINITIONS.update({name: item.definition for name, item in GROUPED_TOOLS.items()})
 MANAGEMENT_TOOLS = frozenset(REGISTRY) | {"create_member"}
+# What these actions give back is the owner's own data and nothing changes; in the mode that asks first they still
+# ask, and the owner's yes then covers the reading (`ManagementAction.tier` is T1 for every action that is not destructive).
+READS = frozenset({"conversation_list", "dictionary_list", "settings_read", "member_skills_list", "member_skill_read",
+                   "member_commands_list", "member_routines_list", "memory_document_read"})
+BACKGROUND_MEMBER_TOOLS = frozenset(name for name in DEFINITIONS if name.startswith("member_")) | {"create_member"}
+# The reads of the owner's own data that a routine's run has as its member does in the conversation (the rest of READS are
+# member tools, which a run of a private task has with an approval card).
+BACKGROUND_READS = READS - BACKGROUND_MEMBER_TOOLS
 TIERS = {item.name: item.tier for item in ACTIONS}
 TIERS[SETTINGS_TOOL.name] = SETTINGS_TOOL.tier
 TIERS.update({name: item.tier for name, item in GROUPED_TOOLS.items()})
@@ -190,7 +215,7 @@ TIERS.update({name: item.tier for name, item in GROUPED_TOOLS.items()})
 # Like team_tools_for, use the owner's request to offer only relevant areas.
 # The full catalog remains discoverable; these words never grant authority.
 _AREA_WORDS = {
-    "members": r"\b(?:members?|assistants?|teammates?|teams?|company|roles?|profiles?|skills?|commands?|routines?|first bot)\b|\b(?:name|rename|call)\s+yourself\b|成員|助手|隊員|團隊|公司|技能|例行|メンバー|スキル",
+    "members": r"\b(?:members?|assistants?|bots?|createagent|teammates?|teams?|company|roles?|profiles?|covers?|skills?|commands?|routines?|first bot)\b|\b(?:name|rename|call)\s+yourself\b|成員|助手|隊員|團隊|公司|技能|例行|封面|メンバー|スキル|カバー",
     "folders": r"\b(?:folders?|company|teams?)\b|\bgroups?\b(?!\s+chats?\b)|資料夾|文件夾|團隊|公司|フォルダ",
     "rooms": r"\b(?:group chats?|rooms?)\b|群聊|群組|グループ",
     "conversations": r"\b(?:conversations?|quick chat|chat history)\b|對話|交談|聊天紀錄|会話",
@@ -281,6 +306,8 @@ def validate(value, schema):
 def destructive(name, arguments, retention=None):
     # Tier discovery must remain total for malformed model arguments; the
     # service rejects them with a readable schema error before any mutation.
+    if name in {"member_create", "member_update", "create_member"} and "tools" in arguments:
+        return True
     key = arguments.get("key")
     item = (SETTINGS.get(key) if isinstance(key, str) else None) if name == "settings_update" else REGISTRY.get(name)
     if name in GROUPS:
@@ -303,7 +330,15 @@ def destructive(name, arguments, retention=None):
 # These are UI-controlled boundaries, never direct management tools. Work tools may
 # propose a card, but may not answer it or handle its credentials.
 OWNER_ONLY = {
-    "memory.import": "Only the owner explicitly imports outside memory through the checked shared-memory writer.",
+    "members.avatar_generate": "Only an explicit owner press requests one paid image candidate using the chosen image model.",
+    "members.template": "The owner previews, imports and exports portable member recipes.",
+    **dict.fromkeys(("members.template_card", "members.template_card_export", "members.template_card_publish"),
+                   "Only the owner reviews, saves and publishes member recipe snapshot cards."),
+    "messaging.pairing.answer": "Only the owner approves or rejects a messaging pairing card.",
+    "connectors.label": "The owner names a connected account after sign-in.",
+    "pages.export": "Only the owner's press saves a report as a file, through the shell, which names no folder the window gives.",
+    **dict.fromkeys(("vault.list", "vault.add", "vault.update", "vault.remove", "vault.preview", "vault.cancel", "vault.import"),
+                   "Owner-only vault metadata, private value writes, sharing and transient CSV import; no private value read or export RPC exists."),
     **dict.fromkeys(("owner_questions.answer", "owner_questions.bring", "background.answer", "pages.tool_call",
                      "integrations.card_connect", "integrations.card_cancel", "integrations.card_save", "integrations.card_resume",
                      "integrations.card_done", "integrations.card_stop", "integrations.card_allow", "integrations.card_always", "integrations.card_deny",
@@ -317,7 +352,7 @@ OWNER_ONLY = {
                      "integrations.add", "integrations.update", "integrations.import", "integrations.test"),
                    "Sign-in and custom MCP activation use the existing owner-controlled card."),
     **dict.fromkeys(("safety.rules.create", "safety.rules.update", "safety.rules.delete"), "Safety rules cannot be changed by a model."),
-    **dict.fromkeys((f"messaging.{kind}.{action}" for kind in ("telegram", "slack", "discord")
+    **dict.fromkeys((f"messaging.{kind}.{action}" for kind in ("telegram", "slack", "discord", "member")
                     for action in ("connect", "set_enabled", "approve", "reject", "remove_user", "disconnect")),
                    "Messaging authentication and access approval belong to the owner."),
     **dict.fromkeys(("computer.viewer_open", "computer.viewer_renew", "computer.viewer_control", "computer.viewer_close",
@@ -327,11 +362,13 @@ OWNER_ONLY = {
                    "Device and downloaded speech-model settings belong to the owner."),
 }
 INTERACTION_RPCS = {
+    **dict.fromkeys(("agent.react", "rooms.react", "rooms.thread_open"),
+                   "Owner-authored message metadata and room thread navigation; never approval or model administration."),
     **dict.fromkeys(("attachments.info", "attachments.upload"),
                    "Owner composer file selection and bounded upload; not model management tools."),
     "routines.run": "Only the owner's explicit routine test starts a manual run through the existing worker.",
-    **dict.fromkeys(("members.viewing", "rooms.send", "rooms.transcribe", "agent.history.stop", "agent.history.retract",
-                     "worker.cancel", "worker.rerun", "agent.speak", "tts.preview", "tts.stop", "pages.open"),
+    **dict.fromkeys(("members.viewing", "members.greet", "rooms.send", "rooms.transcribe", "agent.history.stop", "agent.history.retract",
+                     "worker.cancel", "worker.rerun", "pages.open"),
                    "Existing owner conversation, work or presentation entry; not team administration."),
     **dict.fromkeys(("calendar.add", "calendar.update", "calendar.delete"), "Shared calendar work tools retain their existing gate for every member."),
 }
@@ -339,6 +376,10 @@ INTERACTION_RPCS = {
 # Native device settings such as auto_update stay owner-only in DeviceStore;
 # they are not core settings or accepted by the model's settings_update tool.
 OWNER_ONLY_SETTINGS = {
+    **dict.fromkeys(("raphael_tools", "raphael_notify"),
+                   "First Bot preferences use member_update validation; tool access retains exact-action approval instead of a generic setting write."),
+    "memory_threshold_tokens_cap": "Conversation compression policy is chosen by the owner.",
+    "memory_max_unused_days": "Automatic forgetting policy is chosen by the owner.",
     "routine_timezone": "The owner's routine time zone preference is never model-editable.",
     "routine_detected_timezone": "Internal detected device time zone, never model-editable.",
     "chatgpt.registrations.v1": "Internal provider registration state, never model-editable.",
@@ -355,16 +396,73 @@ OWNER_ONLY_SETTINGS = {
 # Explicit reads, not a suffix heuristic: a newly named RPC is unclassified until
 # reviewed. routines.webhook is owner-only because it can reveal a secret.
 READ_ONLY_RPCS = frozenset("""
-agent.history.list agent.history.search agent.history.sent agent.speech.status
+agent.history.list agent.history.search agent.history.sent
 attachments.get audio.devices background.questions.list background.waiting.list
 brains.cli chatgpt.models chatgpt.status computer.viewer_status computer.wallpaper
 connectors.catalog connectors.categories connectors.status connectors.toolkit connectors.tools
 history.list home.overview integrations.audit integrations.catalog integrations.discover
-integrations.inventory integrations.preview languages.list links.preview members.list
-members.tool_choices members.unread members.voices messages.search messaging.discord.status
-messaging.slack.status messaging.telegram.status models.catalog models.local models.status
+integrations.inventory integrations.preview languages.list links.preview members.list members.library members.library_file
+members.picture members.tool_choices members.unread messages.search messaging.discord.status
+messaging.slack.status messaging.telegram.status messaging.member.status messaging.accounts models.catalog models.local models.status
 providers.kinds providers.list providers.models quota.list rooms.list rooms.messages
 routines.runs routines.template safety.rules.list secrets.status services.status stats.summary
 status.check_openrouter status.get toolsets.list usage.allowances usage.analytics usage.export usage.runs
 """.split())
 OWNER_ONLY["routines.webhook"] = "Webhook addresses and secrets are owner-only."
+
+
+SELF_ACTIONS = frozenset({
+    "member_update", "member_avatar", "member_cover", "member_skill_import", "member_skill_update",
+    "member_skill_delete", "member_skill_read", "member_command_save", "member_command_delete",
+    "memory_document_read", "memory_document_update", "member_skills_list", "member_commands_list",
+})
+SELF_PROFILE_FIELDS = frozenset({"id", "name", "role", "personality", "instructions", "cover"})
+
+
+def self_action(member_id, name, arguments):
+    """Self administration never grants authority over peers, shared resources or permissions."""
+    item, values = resolve(name, arguments)
+    if item is None:
+        return False
+    if item.setting:
+        return False
+    if item.name not in SELF_ACTIONS or values.get("shared") or values.get("space", "own") != "own":
+        return False
+    target = values.get("id") if item.name in {"member_update", "member_avatar", "member_cover"} else values.get("member_id", 0)
+    return (type(target) is int and target == member_id
+            and (item.name != "member_update" or not set(values) - SELF_PROFILE_FIELDS))
+
+
+def self_definitions(member_id):
+    """Offer the same generated tools with only the speaker-owned actions and fields."""
+    from copy import deepcopy
+
+    result = {}
+    for name, definition in DEFINITIONS.items():
+        if name in GROUPS:
+            items = [item for item in GROUPS[name] if item.name in SELF_ACTIONS]
+            if not items:
+                continue
+            definition = deepcopy(definition)
+            definition["parameters"]["properties"]["action"]["enum"] = [item.name for item in items]
+            definition["description"] = "Manage only your own skills, commands, picture and cover. Deletions require the owner's yes.\n" + "\n".join(
+                item.name + ": " + item.description + " Schema: " + json.dumps(item.schema) for item in items)
+        elif name in SELF_ACTIONS:
+            definition = deepcopy(definition)
+            if name == "member_update":
+                schema = definition["parameters"]
+                schema["properties"] = {key: value for key, value in schema["properties"].items() if key in SELF_PROFILE_FIELDS}
+        else:
+            continue
+        definition = deepcopy(definition)
+        props = definition["parameters"]["properties"]
+        key = "id" if name in {"member_update", "member_avatar", "member_cover"} else "member_id"
+        if key in props:
+            props[key] = {"type": "integer", "enum": [member_id]}
+        if "shared" in props:
+            props["shared"] = {"type": "boolean", "enum": [False]}
+        if "space" in props:
+            props["space"] = {"type": "string", "enum": ["own"]}
+        definition["description"] += f" Target only yourself (member_id {member_id}); never another member or shared resources."
+        result[name] = definition
+    return result

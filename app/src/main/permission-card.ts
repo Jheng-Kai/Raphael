@@ -81,7 +81,8 @@ export function permissionCardHTML(card: PermissionCard, answerable = true, memb
   if (isComposioTool(card.service, card.tool)) card = { ...card, summary: composioText(card.summary, card.tool, "tool") };
   const waiting = waitsForYes(card);
   const actor = memberName || (localCard(card) ? nameOf(card) : t("agent.title"));
-  const body = waiting ? localCard(card) ? t(card.kind === "local_access" ? "local.consent" : "cards.localReview") : card.reason || undefined : undefined;
+  const payment = card.kind === "tool" && card.tool === "fill_card";
+  const body = waiting ? payment ? card.summary : localCard(card) ? t(card.kind === "local_access" ? "local.consent" : "cards.localReview") : card.reason || undefined : undefined;
   let title = t("cards.useApp", { p0: actor, p1: nameOf(card) });
   if (localCard(card)) title = t("cards.localCommand", { p0: actor });
   else if (card.message) title = /^GMAIL_/i.test(card.tool) || /gmail/i.test(card.service)
@@ -98,7 +99,8 @@ export function permissionCardHTML(card: PermissionCard, answerable = true, memb
     status: waiting ? "waiting" : card.state === "allowed" || card.state === "always" ? "done" : "ready",
     statusText: waiting ? cardPromptText("permission") : t(({ allowed: "cards.allowed", always: "cards.always", denied: "cards.denied", expired: "cards.expired", cancelled: "cards.cancelled", pending: "cards.waiting" } as const)[card.state]),
     body,
-    content: !waiting || card.message || localCard(card) || !body?.includes(card.summary) ? cardDisclosureHTML(card.id, details) : "",
+    // A command that waits is shown itself, not behind a disclosure: the owner allows what they can read. Once answered it folds away with the rest.
+    content: waiting && localCard(card) ? details : !waiting || card.message || !body?.includes(card.summary) ? cardDisclosureHTML(card.id, details) : "",
     actions: actionHTML(card, answerable), cls: "permission-card",
     attrs: ` data-permission-card="${esc(card.id)}" data-card-state="${esc(card.state)}" data-source="${esc(card.source)}" data-kind="${esc(card.kind)}" data-digest="${esc(card.digest)}"`,
   });
@@ -110,6 +112,23 @@ export function permissionCardsHTML(turn: AgentTurn, answerable: (id: string) =>
 }
 
 /** Owner questions share the conversation card, with choices instead of permission controls. */
+/**
+ * The cards of the questions a turn's owner has settled, in the order they were asked, as a function from a time to the
+ * cards due by then: the replies of a turn are drawn in turn, and before each one the cards asked before it. A card
+ * whose time is not known (the core does not send it yet, see OwnerQuestion.created_at_ms) was asked before the replies it led
+ * to, the way a settled permission card is; the call with `Infinity` gives the cards asked after the last reply.
+ */
+export function settledQuestions(turn: AgentTurn): (until: number) => string {
+  const pending = (turn.owner_questions ?? []).filter(question => question.state !== "asked" && (question.kind === "ask_owner" || question.kind === "show_page"))
+    .map((question, index) => ({ question, index, at: question.created_at_ms ?? -Infinity }))
+    .sort((a, b) => (a.at === b.at ? a.index - b.index : a.at < b.at ? -1 : 1));
+  return until => {
+    const due: string[] = [];
+    while (pending.length && pending[0]!.at <= until) due.push(ownerQuestionHTML(pending.shift()!.question));
+    return due.join("");
+  };
+}
+
 export function ownerQuestionHTML(question: OwnerQuestion): string {
   const waiting = question.state === "asked", id = esc(question.id);
   const choices = question.options.map((option, index) => btn(`<span data-choice-letter>${String.fromCharCode(65 + index)}</span><span>${esc(option)}</span>`, "question-choice", ` data-owner-option="${esc(option)}"`)).join("");
@@ -126,7 +145,14 @@ export function ownerQuestionHTML(question: OwnerQuestion): string {
   });
 }
 
-export const ownerQuestionsHTML = (turn: AgentTurn): string => (turn.owner_questions ?? []).map(question =>
+/**
+ * A question card stands at the end of the thread only while it waits for the owner (owner, 2026-11-11: 「它那個回答的卡片
+ * 不是永遠都會在最下面，它會跑到下面的情況就只有我還沒有回答的時候。如果已回答的話，就會跟正常的對話一模一樣」). Once answered,
+ * cancelled or expired it is part of the conversation and stands where it was asked (settledQuestions).
+ * `settled` picks the cards that no longer wait (true), the ones that wait (false) or all of them (undefined).
+ */
+export const ownerQuestionsHTML = (turn: AgentTurn, settled?: boolean): string => (turn.owner_questions ?? [])
+  .filter(question => settled === undefined || (question.state !== "asked") === settled).map(question =>
   question.kind === "ask_owner" || question.kind === "show_page" ? ownerQuestionHTML(question) :
     question.state === "asked" ? `<div class="cc-actions" data-owner-question="${esc(question.id)}">` +
       btn(esc(t("common.cancel")), "sm", ' data-owner-answer="cancel"') + `<div role="alert" hidden></div></div>` : "").join("");

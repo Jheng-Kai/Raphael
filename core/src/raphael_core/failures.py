@@ -3,6 +3,7 @@
 Adapted from NousResearch/hermes-agent (MIT); see core/packaging/licenses.
 """
 
+from raphael_core.ui_words import ui_word, with_ui_words
 import json
 import logging
 import math
@@ -24,6 +25,8 @@ TRANSIENT = frozenset(("rate_limit", "overloaded", "server", "network", "timeout
 # was done yet, and he learns in seconds. After something was done it goes on at the patient pace until he stops it.
 RETRY_WAITS = (1.0, 3.0, 8.0)
 PATIENT_WAITS = (30.0, 60.0, 120.0, 300.0)
+# How a CLI says a tool server it needs did not start.
+_MCP_START = r"required MCP servers failed to initialize"
 RECENT = deque(maxlen=40)
 logger = logging.getLogger(__name__)
 
@@ -114,14 +117,16 @@ _OWNER_MESSAGES["ja"].update({
     "content_policy": "{name} のコンテンツフィルターがこのリクエストを止めました。表現を変えるか、別のモデルを選んでください。",
 })
 
+_OWNER_MESSAGES = with_ui_words(_OWNER_MESSAGES)
+
 # When the provider says a usage limit lifts, the owner is told when (`{when}` is `_when`).
-_RESET_MESSAGES = {
+_RESET_MESSAGES = with_ui_words({
     "en": "{name} has reached its usage limit; it resets {when}. Wait for it or choose another model.",
     "zh-TW": "{name} 的用量已達上限，預計{when}重設。請等額度重設或選擇其他模型。",
     "ja": "{name} の利用上限に達しました。{when}にリセットされます。リセットを待つか、別のモデルを選んでください。",
-}
+})
 # The one line a run says while it waits to ask again: what is wrong, that the work is intact, and when it asks.
-_WAITING_MESSAGES = {
+_WAITING_MESSAGES = with_ui_words({
     "en": {
         "rate_limit": "{name} is limiting requests right now. The work is intact, and I try again {when}.",
         "busy": "{name} is having trouble right now. The work is intact, and I try again {when}.",
@@ -137,11 +142,12 @@ _WAITING_MESSAGES = {
         "busy": "{name} で一時的な問題が起きています。作業はそのままで、{when}再試行します。",
         "silent": "{name} から応答がありません。作業はそのままで、{when}再試行します。",
     },
-}
+})
 
 
 def _language(language):
-    return "zh-TW" if language == "zh-TW" else "ja" if str(language).startswith("ja") else "en"
+    from .ui_languages import normalize_language
+    return normalize_language(language)
 
 
 def _when(at, language, now=None):
@@ -151,32 +157,33 @@ def _when(at, language, now=None):
     if left < 90 * 60:
         seconds = max(1, round(left))
         count, unit = (seconds, "s") if seconds < 90 else (math.ceil(seconds / 60), "min")
-        return {"en": f"in about {count} {unit}",
+        return with_ui_words({"en": f"in about {count} {unit}",
                 "zh-TW": f"約 {count} {'秒' if unit == 's' else '分鐘'}後",
-                "ja": f"約{count}{'秒' if unit == 's' else '分'}後"}[language]
+                "ja": f"約{count}{'秒' if unit == 's' else '分'}後"}, lambda _ui_language: ui_word('in about {p0} {p1}', _ui_language).format(p0=count, p1=ui_word(unit, _ui_language)))[language]
     moment = datetime.fromtimestamp(at)
     clock = moment.strftime("%H:%M")
     today = moment.date() == datetime.fromtimestamp(now).date()
     date = moment.strftime("%m/%d")
-    return {"en": f"at {clock}" if today else f"on {date} at {clock}",
+    return with_ui_words({"en": f"at {clock}" if today else f"on {date} at {clock}",
             "zh-TW": f"於 {clock}" if today else f"於 {date} {clock}",
-            "ja": clock if today else f"{date} {clock}"}[language]
+            "ja": clock if today else f"{date} {clock}"}, lambda _ui_language: ui_word('at {p0}', _ui_language).format(p0=clock) if today else ui_word('on {p0} at {p1}', _ui_language).format(p0=date, p1=clock))[language]
 
 
 def scrub(text: str) -> str:
     """`text` without what looks like a credential, and otherwise as it was: addresses, paths and
     long ids stay, for a text that has to keep them (a run's summary), unlike `redact`."""
-    text = re.sub(r"(?i)\b(?:bearer\s+)[^\s,;\"']+", "[redacted]", text)
-    text = re.sub(r"(?i)(?<![\w-])([\"']?(?:[\w-]*(?:key|token|secret|password|authorization|cookie))[\"']?\s*[:=]\s*)(?:[\"'][^\"']*[\"']|[^\s,;}]+)", r"\1[redacted]", text)
+    text = re.sub(r"(?i)\b(?:bearer|basic)\s+[^\s,;\"']+", "[redacted]", text)
+    text = re.sub(r'''(?ix)(?<![\w-])(["']?(?:[\w-]*(?:key|token|secret|password|authorization|cookie))["']?\s*[:=]\s*)(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[^\s,;}]+)''', r"\1[redacted]", text)
     text = re.sub(r"(?i)\b(?:sk[-_]|ak_|lt_|gh[pousr]_|eyJ)[A-Za-z0-9_.-]+", "[redacted]", text)
     return re.sub(r"(?i)\b(?:refresh_token|access_token|id_token)\b", "[credential]", text)
 
 
 def redact(value: object, *, secrets=(), limit=240) -> str:
     text = str(value)
-    for secret in secrets:
+    for secret in sorted((item for item in secrets if isinstance(item, str) and item), key=len, reverse=True):
         if isinstance(secret, str) and secret:
-            text = text.replace(secret, "[redacted]")
+            for representation in {secret, json.dumps(secret)[1:-1], json.dumps(secret, ensure_ascii=False)[1:-1]}:
+                text = text.replace(representation, "[redacted]")
             if secret.lower().startswith("bearer "):
                 text = text.replace(secret[7:], "[redacted]")
     text = scrub(text)
@@ -206,38 +213,40 @@ class Missing:
             return None
         if any(not isinstance(value[k], str) or not re.fullmatch(r"[a-z0-9_-]{1,64}", value[k]) for k in ("resource", "requirement")):
             return None
-        if value["repair"] not in (None, "models", "connections", "store", "search", "read", "vision", "pdf", "voice", "computer", "dictation"):
+        if value["repair"] not in (None, "models", "connections", "store", "search", "read", "vision", "pdf", "computer", "dictation"):
             return None
         return cls(**value)
 
     def sentence(self, language):
         language = _language(language)
-        paths = {
-            "zh-TW": {"models": "設定 › 模型與用量 › 模型", "connections": "設定 › 連接", "store": "設定 › 連接 › 商店", "search": "設定 › 拉斐爾 › 服務 › 搜尋網路", "read": "設定 › 拉斐爾 › 服務 › 讀網頁", "vision": "設定 › 拉斐爾 › 服務 › 看圖片", "pdf": "設定 › 拉斐爾 › 服務 › 讀 PDF", "voice": "設定 › 拉斐爾 › 服務 › 拉斐爾的聲音", "computer": "設定 › 拉斐爾 › 電腦操作", "dictation": "設定 › 聽寫"},
-            "en": {"models": "Settings > Models & usage > Models", "connections": "Settings > Connections", "store": "Settings > Connections > Store", "search": "Settings > Raphael > Services > Search the web", "read": "Settings > Raphael > Services > Read web pages", "vision": "Settings > Raphael > Services > See images", "pdf": "Settings > Raphael > Services > Read PDF", "voice": "Settings > Raphael > Services > Raphael's voice", "computer": "Settings > Raphael > Computer operation", "dictation": "Settings > Dictation"},
-            "ja": {"models": "設定 › モデルと使用量 › モデル", "connections": "設定 › 接続", "store": "設定 › 接続 › ストア", "search": "設定 › ラファエル › サービス › ウェブ検索", "read": "設定 › ラファエル › サービス › ウェブページを読む", "vision": "設定 › ラファエル › サービス › 画像を見る", "pdf": "設定 › ラファエル › サービス › PDF を読む", "voice": "設定 › ラファエル › サービス › ラファエルの声", "computer": "設定 › ラファエル › PC 操作", "dictation": "設定 › ディクテーション"},
-        }
-        name = {"searxng": "SearXNG", "chatgpt": "ChatGPT", "composio": "Composio", "fish": "Fish Audio", "search": "Search", "read": "Page reader", "vision": "Image reading", "pdf": "PDF", "computer": "Computer"}.get(self.resource, {"zh-TW": "這項功能", "en": "This feature", "ja": "この機能"}[language])
+        paths = with_ui_words({
+            "zh-TW": {"models": "設定 › 模型與用量 › 模型", "connections": "設定 › 連接", "store": "設定 › 連接 › 商店", "search": "設定 › 拉斐爾 › 服務 › 搜尋網路", "read": "設定 › 拉斐爾 › 服務 › 讀網頁", "vision": "設定 › 拉斐爾 › 服務 › 看圖片", "pdf": "設定 › 拉斐爾 › 服務 › 讀 PDF", "computer": "設定 › 拉斐爾 › 電腦操作", "dictation": "設定 › 聽寫"},
+            "en": {"models": "Settings > Models & usage > Models", "connections": "Settings > Connections", "store": "Settings > Connections > Store", "search": "Settings > Raphael > Services > Search the web", "read": "Settings > Raphael > Services > Read web pages", "vision": "Settings > Raphael > Services > See images", "pdf": "Settings > Raphael > Services > Read PDF", "computer": "Settings > Raphael > Computer operation", "dictation": "Settings > Dictation"},
+            "ja": {"models": "設定 › モデルと使用量 › モデル", "connections": "設定 › 接続", "store": "設定 › 接続 › ストア", "search": "設定 › ラファエル › サービス › ウェブ検索", "read": "設定 › ラファエル › サービス › ウェブページを読む", "vision": "設定 › ラファエル › サービス › 画像を見る", "pdf": "設定 › ラファエル › サービス › PDF を読む", "computer": "設定 › ラファエル › PC 操作", "dictation": "設定 › ディクテーション"},
+        })
+        name = {"searxng": "SearXNG", "chatgpt": "ChatGPT", "composio": "Composio", "search": "Search", "read": "Page reader", "vision": "Image reading", "pdf": "PDF", "computer": "Computer"}.get(self.resource, with_ui_words({"zh-TW": "這項功能", "en": "This feature", "ja": "この機能"})[language])
+        if self.resource in ("search", "read", "vision", "computer"):
+            name = ui_word(name, language)
         path = paths[language].get(self.repair, "")
         if self.state == "unknown":
             return _OWNER_MESSAGES[language]["unknown"].format(name=name)
         if self.requirement in ("audio_transcriber", "audio_ffmpeg", "audio_decode"):
-            return {"zh-TW": "影音附件無法轉錄，請改附 WAV 音訊或文字稿，並聯絡管理者檢查語音辨識與解碼元件；這裡沒有可新增的設定。", "en": "Media transcription is unavailable. Attach WAV audio or a transcript and ask an administrator to check speech recognition and decoding; no setting here can add them.", "ja": "音声を書き起こせません。WAV 音声か文字起こしを添付し、管理者に音声認識と解読機能を確認してください。ここで追加できる設定はありません。"}[language]
+            return with_ui_words({"zh-TW": "影音附件無法轉錄，請改附 WAV 音訊或文字稿，並聯絡管理者檢查語音辨識與解碼元件；這裡沒有可新增的設定。", "en": "Media transcription is unavailable. Attach WAV audio or a transcript and ask an administrator to check speech recognition and decoding; no setting here can add them.", "ja": "音声を書き起こせません。WAV 音声か文字起こしを添付し、管理者に音声認識と解読機能を確認してください。ここで追加できる設定はありません。"})[language]
         if self.requirement in ("encrypted", "bad_pdf", "no_text"):
-            return {"encrypted": {"zh-TW": "這份 PDF 受密碼保護，請在自己的電腦解鎖並另存可讀取副本後重新附加。", "en": "This PDF is password protected. Unlock it on your computer, save a readable copy and attach it again.", "ja": "PDF はパスワードで保護されています。PC で解除し、読めるコピーを添付し直してください。"}, "bad_pdf": {"zh-TW": "這份檔案無法當作 PDF 讀取，請確認原檔並重新匯出 PDF 後附加。", "en": "This file could not be read as a PDF. Check the original and attach a newly exported PDF.", "ja": "PDF として読めません。元のファイルを確認し、書き出し直した PDF を添付してください。"}, "no_text": {"zh-TW": f"這份 PDF 需要圖片辨識，請到「{path}」選擇支援圖片的模型。", "en": f"This PDF needs image recognition. Choose an image-capable model in {path}.", "ja": f"この PDF には画像認識が必要です。「{path}」で画像対応モデルを選んでください。"}}[self.requirement][language]
+            return {"encrypted": with_ui_words({"zh-TW": "這份 PDF 受密碼保護，請在自己的電腦解鎖並另存可讀取副本後重新附加。", "en": "This PDF is password protected. Unlock it on your computer, save a readable copy and attach it again.", "ja": "PDF はパスワードで保護されています。PC で解除し、読めるコピーを添付し直してください。"}), "bad_pdf": with_ui_words({"zh-TW": "這份檔案無法當作 PDF 讀取，請確認原檔並重新匯出 PDF 後附加。", "en": "This file could not be read as a PDF. Check the original and attach a newly exported PDF.", "ja": "PDF として読めません。元のファイルを確認し、書き出し直した PDF を添付してください。"}), "no_text": with_ui_words({"zh-TW": f"這份 PDF 需要圖片辨識，請到「{path}」選擇支援圖片的模型。", "en": f"This PDF needs image recognition. Choose an image-capable model in {path}.", "ja": f"この PDF には画像認識が必要です。「{path}」で画像対応モデルを選んでください。"}, lambda _ui_language: ui_word('This PDF needs image recognition. Choose an image-capable model in {p0}.', _ui_language).format(p0=path))}[self.requirement][language]
         if self.requirement == "url" and self.resource == "searxng":
-            return {"zh-TW": f"尚未設定 SearXNG 網址，請到「{path} › SearXNG」填入服務網址並儲存。", "en": f"SearXNG has no service URL. Enter and save it in {path} > SearXNG.", "ja": f"SearXNG の URL が未設定です。「{path} › SearXNG」で入力して保存してください。"}[language]
+            return with_ui_words({"zh-TW": f"尚未設定 SearXNG 網址，請到「{path} › SearXNG」填入服務網址並儲存。", "en": f"SearXNG has no service URL. Enter and save it in {path} > SearXNG.", "ja": f"SearXNG の URL が未設定です。「{path} › SearXNG」で入力して保存してください。"}, lambda _ui_language: ui_word('SearXNG has no service URL. Enter and save it in {p0} > SearXNG.', _ui_language).format(p0=path))[language]
         if not path:
-            return {"zh-TW": f"{name} 缺少安裝元件，這裡沒有可修復的設定，請聯絡管理者檢查安裝。", "en": f"{name} needs an installation component. There is no setting here to fix it; ask an administrator to check the installation.", "ja": f"{name} のインストールに必要な機能がありません。ここで修復できる設定はないため、管理者に確認してください。"}[language]
+            return with_ui_words({"zh-TW": f"{name} 缺少安裝元件，這裡沒有可修復的設定，請聯絡管理者檢查安裝。", "en": f"{name} needs an installation component. There is no setting here to fix it; ask an administrator to check the installation.", "ja": f"{name} のインストールに必要な機能がありません。ここで修復できる設定はないため、管理者に確認してください。"}, lambda _ui_language: ui_word('{p0} needs an installation component. There is no setting here to fix it; ask an administrator to check the installation.', _ui_language).format(p0=name))[language]
         if self.state == "off":
-            return {"zh-TW": f"{name} 已關閉，若你要使用，請到「{path}」開啟後再試。", "en": f"{name} is turned off. If you want to use it, enable it in {path} and try again.", "ja": f"{name} はオフです。利用する場合は「{path}」で有効にしてください。"}[language]
+            return with_ui_words({"zh-TW": f"{name} 已關閉，若你要使用，請到「{path}」開啟後再試。", "en": f"{name} is turned off. If you want to use it, enable it in {path} and try again.", "ja": f"{name} はオフです。利用する場合は「{path}」で有効にしてください。"}, lambda _ui_language: ui_word('{p0} is turned off. If you want to use it, enable it in {p1} and try again.', _ui_language).format(p0=name, p1=path))[language]
         if self.resource == "chatgpt" and self.requirement == "provider":
-            return {"zh-TW": f"ChatGPT 登入已失效，請到「{path} › 訂閱帳號 › ChatGPT」重新登入。", "en": f"ChatGPT sign-in has expired. Sign in again in {path} > Subscription accounts > ChatGPT.", "ja": f"ChatGPT のログインが無効です。「{path} › アカウント › ChatGPT」で再ログインしてください。"}[language]
+            return with_ui_words({"zh-TW": f"ChatGPT 登入已失效，請到「{path} › 訂閱帳號 › ChatGPT」重新登入。", "en": f"ChatGPT sign-in has expired. Sign in again in {path} > Subscription accounts > ChatGPT.", "ja": f"ChatGPT のログインが無効です。「{path} › アカウント › ChatGPT」で再ログインしてください。"}, lambda _ui_language: ui_word('ChatGPT sign-in has expired. Sign in again in {p0} > Subscription accounts > ChatGPT.', _ui_language).format(p0=path))[language]
         if self.requirement == "provider" and self.state == "broken":
-            return {"zh-TW": f"所選模型的供應商無法驗證這份登入資料，請到「{path}」開啟該供應商並更新憑證。", "en": f"The selected model's provider could not verify its credentials. Open its card in {path} and update the credentials.", "ja": f"モデルのプロバイダーが認証情報を確認できません。「{path}」で該当カードを開いて更新してください。"}[language]
+            return with_ui_words({"zh-TW": f"所選模型的供應商無法驗證這份登入資料，請到「{path}」開啟該供應商並更新憑證。", "en": f"The selected model's provider could not verify its credentials. Open its card in {path} and update the credentials.", "ja": f"モデルのプロバイダーが認証情報を確認できません。「{path}」で該当カードを開いて更新してください。"}, lambda _ui_language: ui_word("The selected model's provider could not verify its credentials. Open its card in {p0} and update the credentials.", _ui_language).format(p0=path))[language]
         if self.requirement == "provider":
-            return {"zh-TW": f"所選模型的供應商尚未連線，請到「{path}」開啟該供應商並補齊登入資料。", "en": f"The selected model's provider is not connected. Open its card in {path} and complete sign-in or credentials.", "ja": f"選択したモデルのプロバイダーに接続できません。「{path}」の該当カードで接続を完了してください。"}[language]
-        return {"zh-TW": f"{name} 尚未設定完成，請到「{path}」補齊所需設定後再試。", "en": f"{name} is not ready. Complete its required setup in {path} and try again.", "ja": f"{name} の設定が完了していません。「{path}」で必要な設定を完了してください。"}[language]
+            return with_ui_words({"zh-TW": f"所選模型的供應商尚未連線，請到「{path}」開啟該供應商並補齊登入資料。", "en": f"The selected model's provider is not connected. Open its card in {path} and complete sign-in or credentials.", "ja": f"選択したモデルのプロバイダーに接続できません。「{path}」の該当カードで接続を完了してください。"}, lambda _ui_language: ui_word("The selected model's provider is not connected. Open its card in {p0} and complete sign-in or credentials.", _ui_language).format(p0=path))[language]
+        return with_ui_words({"zh-TW": f"{name} 尚未設定完成，請到「{path}」補齊所需設定後再試。", "en": f"{name} is not ready. Complete its required setup in {path} and try again.", "ja": f"{name} の設定が完了していません。「{path}」で必要な設定を完了してください。"}, lambda _ui_language: ui_word('{p0} is not ready. Complete its required setup in {p1} and try again.', _ui_language).format(p0=name, p1=path))[language]
 
 
 def missing_for(kind, tool, detail=None):
@@ -251,10 +260,10 @@ def missing_for(kind, tool, detail=None):
         return Missing("audio", detail, "missing" if detail != "audio_decode" else "broken", None)
     if tool == "read_attachment" and kind in ("encrypted", "bad_pdf", "no_text"):
         return Missing("pdf", kind, "broken", "vision" if kind == "no_text" else None)
-    repair = {"web_search": "search", "web_read": "read", "read_attachment": "pdf" if detail == "pdf" else "vision", "tts": "voice", "generate_audio": "voice", "computer": "computer"}.get(tool)
+    repair = {"web_search": "search", "web_read": "read", "read_attachment": "pdf" if detail == "pdf" else "vision", "computer": "computer"}.get(tool)
     if not repair or kind not in ("not_configured", "missing_secret", "no_key", "disabled", "vision_unsupported", "unavailable"):
         return None
-    resource = detail if detail in ("searxng", "tavily", "brave", "exa", "jina", "firecrawl", "openrouter", "fish") else repair
+    resource = detail if detail in ("searxng", "tavily", "brave", "exa", "jina", "firecrawl", "openrouter") else repair
     requirement = "url" if detail == "searxng" and kind == "not_configured" else "key" if kind in ("missing_secret", "no_key") else "model" if kind == "vision_unsupported" else "installation" if kind == "unavailable" else "setup"
     return Missing(resource, requirement, "off" if kind == "disabled" else "missing", None if requirement == "installation" else repair)
 
@@ -289,9 +298,17 @@ class Failure:
 
     def sentence(self, name, language="en", *, now=None):
         language = _language(language)
-        if self.kind == "cli_stopped" and (server := re.search(r"required MCP servers failed to initialize:\s*([\w., -]+)", self.reason, re.I)):
+        if self.kind == 'tool_broken' and self.reason in ('CLI tool is missing', 'CLI tool failed'):
+            messages = (with_ui_words({'zh-TW': '{name} 找不到這次工作需要的工具，請更新拉斐爾；若已是最新版，請保留對話並回報問題。',
+                'en': '{name} could not find a required tool. Update Raphael; if it is current, keep this conversation and report the problem.',
+                'ja': '{name} は必要なツールを見つけられませんでした。ラファエルを更新し、最新版ならこの会話を残して問題を報告してください。'})
+                if self.reason == 'CLI tool is missing' else with_ui_words({'zh-TW': '{name} 呼叫工具時發生錯誤，請查看工作詳情並保留對話以供檢查。',
+                'en': '{name} encountered a tool error. Check the work details and keep this conversation for diagnosis.',
+                'ja': '{name} のツール呼び出しでエラーが発生しました。作業の詳細を確認し、この会話を残してください。'}))
+            return messages[language].format(name=name)
+        if self.kind in ("tool_broken", "cli_stopped") and (server := re.search(_MCP_START + r":\s*([\w., -]+)", self.reason, re.I)):
             servers = server[1].strip()[:100]
-            return {"zh-TW": "{name} 無法啟動必要的 MCP 伺服器：{servers}。", "en": "{name} could not start the required MCP server: {servers}.", "ja": "{name} は必須の MCP サーバーを起動できませんでした：{servers}。"}[language].format(name=name, servers=servers)
+            return with_ui_words({"zh-TW": "{name} 無法啟動必要的 MCP 伺服器：{servers}。", "en": "{name} could not start the required MCP server: {servers}.", "ja": "{name} は必須の MCP サーバーを起動できませんでした：{servers}。"})[language].format(name=name, servers=servers)
         if self.missing is not None:
             text = _OWNER_MESSAGES[language][self.kind].format(name=name) if self.kind.startswith("chatgpt_") else self.missing.sentence(language)
             return f"{name}: {text}" if self.missing.requirement == "provider" and not self.kind.startswith("chatgpt_") else text
@@ -393,16 +410,28 @@ def classify(value: object, *, secrets=(), record=True) -> Failure:
     said = f"{reason} {code}" if isinstance(code, str) and kind not in KINDS else str(reason)
     if kind not in KINDS or kind in ("unknown", "tool_broken", "refused", "invalid_request"):
         kind = _turned_down(status, said) or kind
+    if status == 429 and kind not in KINDS:
+        # A provider that sends no kind of its own (Google's, through CompatibleProvider) is told by its status.
+        kind = "rate_limit"
     if kind == "rate_limit":
-        # A 429 is a throttle that passes, unless it says the money or the plan's allowance is spent.
-        if re.search(_CREDITS, said, re.I):
+        # A 429 is a throttle that passes, unless it says the money or the plan's allowance is spent. A spent allowance
+        # names no short wait: "retry in 12s" is a per-minute limit, whatever else the words say of the quota.
+        soon = bool(wait and wait <= RETRY_AFTER_CAP_S)
+        if re.search(_CREDITS, said, re.I) and not soon:
             kind = "credits"
-        elif re.search(_QUOTA_WALL, said, re.I) and not re.search(_THROTTLE, said, re.I) and not (wait and wait <= RETRY_AFTER_CAP_S):
+        elif re.search(_QUOTA_WALL, said, re.I) and not re.search(_THROTTLE, said, re.I) and not soon:
             kind = "usage_limit"
     if kind not in KINDS or kind in ("unknown", "tool_broken", "server"):
         fallback = kind if kind in KINDS else "unknown"
         patterns = (
-            ("cli_stopped", r"CLI (?:process|stream) ended before completion|CLI ended without an answer|required MCP servers failed to initialize"),
+            # Docker Desktop is the member computer's engine (owner, 2026-11-11): still starting is a wait, not a defect.
+            ("timeout", r"docker_start_timeout"),
+            ("tool_broken", r"docker_(?:stopped|start_failed|missing)"),
+            ('tool_broken', r'\bCLI tool (?:is missing|failed)\b'),
+            # A server that cannot start does not start on a second try: a setting is wrong, and the owner is told
+            # which server rather than kept waiting through retries (design, 2026-11-09).
+            ("tool_broken", _MCP_START),
+            ("cli_stopped", r"CLI (?:process|stream) ended before completion|CLI ended without an answer"),
             ("credits", _CREDITS),
             ("usage_limit", _QUOTA),
             ("refused", r"safety|policy violation|refusal|owner.{0,20}(?:denied|said no)"),

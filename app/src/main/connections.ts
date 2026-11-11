@@ -1,6 +1,7 @@
-// One connected view joins managed toolkits, private Google, custom MCP servers and the members' private skills:
+// One connected view joins managed toolkits, private Google and custom MCP servers; it holds connectors only, since a
+// member's skills are managed in that member's own panel:
 // the apps that can be called now first (their number is the core's, the one the sidebar and every model's roster
-// show), then the ones that cannot, and the skills. Details group tool switches by write/read and say how many are
+// show), then the ones that cannot. Details group tool switches by write/read and say how many are
 // on; removal stays in the overflow menu. The store starts with built-in services and offers Composio as an optional catalog.
 // Existing custom MCP setup and device reauthentication stay available.
 // Secrets go directly to the core vault and never enter the render snapshot.
@@ -8,18 +9,15 @@
 import { noticeHTML } from "./missing";
 import * as api from "./api";
 import { type InventoryView, appOf, countText, isConnected, whyNot } from "./apps-inventory";
-import {
-  type SkillItem, type SkillPage, type LocalSkillSource, skillImportsHTML, loadSkillItems, skillListItems, sameSkill, skillChanged, skillDialogHTML, skillErrorText, skillPage, skillsSectionHTML,
-} from "./connection-skills";
 import { openConnectionSetup } from "./connection-setup";
-import { confirmDelete } from "./member-dialogs";
+import { openDialog as openMemberDialog } from "./member-dialogs";
 import { managedGroup, pluginTool, storePlugin, type ManagedConnector } from "./plugins-data";
 import { openMcpImport } from "./mcp-import";
-import { type SkillSet, type SkillMarketplace, skillSetDialogHTML } from "./skill-sets";
 import { isTopLayer, registerDismissal } from "./dismissals";
 import { dayLabel, describeError, formatClock } from "./format";
 import { getLocale, t } from "./i18n";
-import { STORE_GROUPS, STORE_PAGE_SIZE, popularApp, storeGroup, storeMatches } from "./store-finder";
+import { STORE_GROUPS, STORE_PAGE_SIZE, popularApp, storeGroup, storeMatches, storeNear } from "./store-finder";
+import { findsName } from "./find-match";
 import type { MessageKey } from "./i18n/zh-TW";
 import { serviceIconOf } from "./service-icons";
 import { chipSteps, revealChip } from "./chip-scroll";
@@ -82,6 +80,8 @@ export interface ConnectionForm {
   command: string;
   args: string;
   url: string;
+  /** The example address an app of `PRESET_FORMS` shows in the empty address field. */
+  urlHint?: string;
   busy: boolean;
   error: (() => string) | null;
 }
@@ -115,15 +115,6 @@ export interface ConnectionsView {
   inventory: InventoryView;
   /** Which section each row took when this visit first read it. */
   placed?: ReadonlyMap<string, boolean | null>;
-  /** The private skills of the members, beside the apps. */
-  skills: SkillItem[] | "loading" | "failed";
-  /** The page of a skill that is open over the list. */
-  skill: SkillPage | null;
-  skillSources?: LocalSkillSource[] | "loading" | "failed";
-  skillSets?: SkillSet[];
-  skillSet?: number | null;
-  skillMarketplaces?: SkillMarketplace[];
-  skillActionBusy?: boolean;
   audit: AuditEntry[];
   tab: Tab;
   /** What was typed in the search box. */
@@ -156,8 +147,6 @@ export const emptyConnectionsView = (): ConnectionsView => ({
   catalog: "loading",
   composioCatalog: "loading",
   inventory: "loading",
-  skills: "loading",
-  skill: null,
   audit: [],
   tab: "installed",
   search: "",
@@ -184,6 +173,61 @@ const emptyForm = (): ConnectionForm => ({
   busy: false,
   error: null,
 });
+
+/**
+ * Apps the store offers as the owner's own server, filled in. n8n runs at each owner's own address and has no Composio
+ * toolkit, so the built-in catalogue (fixed official addresses only) cannot carry it; its 加入 opens the server form with the type, name and header already there.
+ */
+const PRESET_FORMS: Record<string, Pick<ConnectionForm, "type" | "name" | "pairLines" | "urlHint">> = {
+  n8n: { type: "http", name: "n8n", pairLines: "Authorization=Bearer ", urlHint: "https://n8n.example.com/mcp-server/http" },
+};
+
+/**
+ * The store entries of `PRESET_FORMS`, in the current language; `serverOf` names the connection that already is the app.
+ * The guide offers them too, with the address and the key typed in the tile (onboarding/screens.ts).
+ */
+export function ownServerApps(serverOf: (icon: string) => string | null = () => null): StoreService[] {
+  // Drawn again for each language: the three required languages carry the current one's words.
+  const said = (key: "store.n8nSummary" | "store.n8nAbout"): Words => { const text = t(key); return { "zh-TW": text, en: text, ja: text }; };
+  const examples = [t("store.n8nTry")];
+  return [{
+    id: "n8n", name: "n8n", publisher: "n8n", url: "", category: "productivity", icon: "n8n", popular: false, auth: "none",
+    summary: said("store.n8nSummary"), about: said("store.n8nAbout"), examples: { "zh-TW": examples, en: examples, ja: examples },
+    server_id: serverOf("n8n"),
+  }];
+}
+
+/** How an own-server app is reached: the name it is added as, its address's example, and its key's header with what goes before the key. */
+export function ownServerForm(id: string): { name: string; urlHint: string; header: string; prefix: string } | null {
+  const preset = PRESET_FORMS[id];
+  if (!preset) return null;
+  const [header = "Authorization", prefix = ""] = (preset.pairLines ?? "").split(/=(.*)/s);
+  return { name: preset.name, urlHint: preset.urlHint ?? "", header, prefix };
+}
+
+/**
+ * The owner's own Google: the store's row for Gmail and Calendar through a Google Cloud client of their own, no Composio. Like n8n it
+ * is set up in the conversation (the member shows the card that walks the steps and takes the Client ID and Client secret), so its
+ * 加入 leaves for the composer; it is marked added once that connection exists. It is the store's only, never the guide's.
+ */
+export const OWN_GOOGLE = "google";
+export function ownGoogleEntry(googleId: string | null): StoreService {
+  const said = (key: "plugins.googleDescription" | "store.googleAbout"): Words => { const text = t(key); return { "zh-TW": text, en: text, ja: text }; };
+  const examples = [t("store.googleSetUp")];
+  return {
+    id: OWN_GOOGLE, name: t("plugins.privateGoogle"), publisher: "Google", url: "", category: "productivity", icon: "gmail", popular: false, auth: "none",
+    summary: said("plugins.googleDescription"), about: said("store.googleAbout"), examples: { "zh-TW": examples, en: examples, ja: examples },
+    server_id: googleId,
+  };
+}
+
+/** The store entries of `PRESET_FORMS` and the owner's own Google, marked added when a connection already is that app. */
+function presetEntries(v: ConnectionsView): StoreService[] {
+  if (!Array.isArray(v.catalog)) return [];
+  const groups = Array.isArray(v.groups) ? v.groups : [];
+  return [...ownServerApps((icon) => groups.find((g) => serviceIconOf({ name: g.name, url: g.url }) === icon)?.id ?? null),
+    ownGoogleEntry(groups.find((g) => g.source === "google")?.id ?? null)];
+}
 
 // ---------- words ----------
 
@@ -244,7 +288,9 @@ export function examplePrompt(s: StoreService | undefined): string | null {
 
 function groupIcon(g: ConnectionGroup, v: ConnectionsView, size: "md" | "xl"): string {
   const entry = entryOf(g, v);
-  return entryIcon({ name: g.name, logo: g.logo, icon: entry?.icon ?? serviceIconOf({ name: g.name, command: g.command, args: g.args, url: g.url }) }, size);
+  // The private Google connection is Gmail and its calendar: it wears Gmail's mark, never a generic plug (R-UI-28).
+  const icon = g.source === "google" ? "gmail" : entry?.icon ?? serviceIconOf({ name: g.name, command: g.command, args: g.args, url: g.url });
+  return entryIcon({ name: g.name, logo: g.logo, icon }, size);
 }
 
 /** The command or URL of a custom service; the row ellipsizes it and its title keeps it whole. */
@@ -267,12 +313,13 @@ function lineOf(g: ConnectionGroup, v: ConnectionsView): string {
 
 const matches = (query: string, ...texts: string[]): boolean => {
   const q = query.trim().toLowerCase();
-  return !q || texts.some((text) => text.toLowerCase().includes(q));
+  // As typed anywhere in its words, or its name nearly spelled (`find-match.ts`).
+  return !q || texts.some((text) => text.toLowerCase().includes(q)) || findsName(texts.slice(0, 1), q);
 };
 
 // ---------- the bar: the two views and the search; the menu that adds, beside the tab's name ----------
 
-/** 「新增 ▾」, the menu beside the tab's name that adds a server of the user's own (settings-view.ts puts it there). */
+/** 「新增 ▾」, the menu that adds a server of the user's own: on the row of the two views, clear of the dialog's ✕. */
 export const connectionsAddHTML = (): string =>
   `<button type="button" class="sel cs-add" aria-haspopup="menu" aria-expanded="false" data-k="conn-add">` +
   `<span>${esc(t("conn.addMenu"))}</span>${ico("down")}</button>`;
@@ -285,6 +332,7 @@ function barHTML(v: ConnectionsView, entries: StoreEntries): string {
   return (
     `<div class="cs-bar">` +
     tabs([tab("installed", t("conn.tab.installed"), installed), tab("store", t("conn.tab.store"), store)], v.tab, { label: t("conn.tabs"), kind: "nav", plain: true }) +
+    connectionsAddHTML() +
     `<div class="cs-find">${fieldHTML(t("conn.search"), v.search, { id: "conn-search", icon: "search", label: t("conn.search") })}</div></div>`
   );
 }
@@ -315,19 +363,12 @@ function itemHTML(g: ConnectionGroup, v: ConnectionsView): string {
   );
 }
 
-/** The private skills the search leaves: none while they are read, and the failure to read them is told where they would be. */
-function skillItems(v: ConnectionsView): SkillItem[] {
-  return Array.isArray(v.skills) ? skillListItems(v.skills).filter(({ member, skill, grants }) => matches(v.search, skill.name, skill.description, member.name, ...(grants ?? []).map(each => each.member.name))) : [];
-}
-
 function installedHTML(v: ConnectionsView): string {
   if (v.groups === "loading") return `<p class="settings-loading" role="status">${esc(t("conn.loading"))}</p>`;
   if (v.groups === "failed") return `<div class="alert core-note">${st("err", t("conn.loadFailed"))}${btn(esc(t("plugins.retry")), "sm", ' data-conn="retry-connections"')}</div>`;
   const shown = v.groups.filter((g) => matches(v.search, g.name, g.description ?? "", entryOf(g, v) ? words(entryOf(g, v)!.summary) : where(g)));
-  const skills = skillItems(v);
-  const skillsFailed = v.skills === "failed";
-  if (!v.groups.length && !skillsFailed && !(Array.isArray(v.skills) && v.skills.length) && !v.skillSets?.length) return noticeHTML("emptyApps", "store", "apps") + skillsSectionHTML([]);
-  if (!shown.length && !skills.length && !skillsFailed && !v.skillSets?.length) return `<p class="cs-none">${esc(t("conn.noMatch"))}</p>` + skillsSectionHTML([]);
+  if (!v.groups.length) return noticeHTML("emptyApps", "store", "apps");
+  if (!shown.length) return `<p class="cs-none">${esc(t("conn.noMatch"))}</p>`;
   // The apps that can be called now first, then the ones that cannot (waiting for a sign-in, failed, off, a second way to an app already
   // counted): each still has its switch and its dialog. While the inventory is not read, or cannot be, they are one list as before.
   // A row keeps its section for the whole visit: flipping its switch must not move it from under the pointer.
@@ -335,12 +376,11 @@ function installedHTML(v: ConnectionsView): string {
   const counted = shown.filter(connected);
   const others = shown.filter((g) => !connected(g));
   const list = (groups: ConnectionGroup[], key: string): string => `<div class="cs-list" data-stagger="${key}">${groups.map((g) => itemHTML(g, v)).join("")}</div>`;
-  const named = others.length > 0 || skills.length > 0 || skillsFailed;
+  const named = others.length > 0;
   const section = (title: string, body: string): string => `<section class="cs-sec"><h2>${esc(title)}</h2>${body}</section>`;
   return (
     (counted.length ? (named ? section(t("conn.apps"), list(counted, "installed")) : list(counted, "installed")) : "") +
-    (others.length ? section(t("conn.notConnected"), list(others, "installed-not")) : "") +
-    skillsSectionHTML(skills, skillsFailed, v.skillSets)
+    (others.length ? section(t("conn.notConnected"), list(others, "installed-not")) : "")
   );
 }
 
@@ -425,18 +465,18 @@ const accountStatus = (status: string): { kind: "ok" | "warn" | "err" | "idle"; 
 };
 
 /**
- * The account(s) a service is signed in with, by status only (the core keeps no name or address of an account in what it lists):
+ * The account(s) a service is signed in with, using public owner labels and status:
  * a row for each account of a managed service (two when one was signed in again and the first has not gone), the owner's own Google as
  * one, and a signed-in server as one. A server that needs no sign-in has none.
  */
 function accountsHTML(g: ConnectionGroup): string {
   const rows: { label: string; kind: "ok" | "warn" | "err" | "idle"; text: string }[] =
-    g.source === "composio" ? (g.accounts ?? []).map((account, n) => ({ label: t("conn.accountN", { p0: n + 1 }), ...accountStatus(account.status) }))
-    : g.source === "google" ? [{ label: t("conn.googleAccount"), ...accountStatus(g.accounts?.[0]?.status ?? (g.status === "ready" ? "ACTIVE" : "INACTIVE")) }]
+    g.source === "composio" ? (g.accounts ?? []).map((account, n) => ({ label: account.label || t("conn.accountN", { p0: n + 1 }), ...accountStatus(account.status) }))
+    : g.source === "google" ? [{ label: g.accounts?.[0]?.label || t("conn.googleAccount"), ...accountStatus(g.accounts?.[0]?.status ?? (g.status === "ready" ? "ACTIVE" : "INACTIVE")) }]
     : g.auth !== "none" ? [{ label: t("conn.account"), ...(needsLogin(g) ? { kind: "err" as const, text: t("conn.status.relogin") } : { kind: "ok" as const, text: t("conn.signedIn") }) }]
     : [];
   if (!rows.length) return "";
-  return `<div class="cs-accts">${rows.map((r) => `<div class="cs-acct">${ico("person")}<span class="nm">${esc(r.label)}</span>${st(r.kind, r.text)}</div>`).join("")}</div>`;
+  return `<div class="cs-accts">${rows.map((r, n) => `<div class="cs-acct">${ico("person")}<span class="nm">${esc(r.label)}</span>${st(r.kind, r.text)}${g.accounts?.[n]?.id ? btn(esc(t("account.label")), "sm", ` data-conn="account-label" data-id="${esc(g.id)}" data-account="${esc(g.accounts[n].id!)}"`) : ""}</div>`).join("")}${g.source === "composio" ? btn(esc(t("account.add")), "sm", ` data-conn="add-account" data-id="${esc(g.id)}"`) : ""}</div>`;
 }
 
 /** The dialog's first view: what the service is and holds, what to try, and the rarer actions. */
@@ -520,15 +560,24 @@ function joinControl(s: StoreService, v: ConnectionsView, deferIcon = false): st
   return btn(`${deferIcon ? '<span class="i" aria-hidden="true"></span>' : ico("plus")}${esc(t("conn.join"))}`, "sm", ` data-conn="join" data-id="${esc(s.id)}" aria-label="${esc(t("conn.joinAria", { p0: s.name }))}"${v.login ? " disabled" : ""}`);
 }
 
-/** What adding the entry asks of the owner, in words, for the row and the page to show before anything is pressed. */
-const needWords = (s: StoreService): string => s.needs === "key" ? t("setup.needsKey") : s.needs === "own_app" ? t("setup.needsOwnApp") : "";
+/** An app set up in the conversation rather than here: a server of the owner's own, or a developer app of theirs. */
+const inChat = (s: StoreService): boolean => !!PRESET_FORMS[s.id] || s.id === OWN_GOOGLE || s.needs === "own_app";
+
+/**
+ * What adding the entry asks of the owner, in words, for the row and the page to show before anything is pressed: only a key.
+ * What an app set up in the conversation needs is said there, so its row shows nothing it would have to explain.
+ */
+const needWords = (s: StoreService): string => (s.needs === "key" && !inChat(s) ? t("setup.needsKey") : "");
 const needHTML = (text: string): string => `<b class="need">${esc(text)}</b>`;
 
-/** The line under an entry's name: what adding it asks first, in words, then what it does; or the wait for its login. */
+/**
+ * The line under an entry's name: what adding it asks, in
+ * words, or the wait for its login. What the app does is on its own page and in the row's title.
+ */
 function subLine(s: StoreService, here: boolean): string {
-  const line = here ? t(s.auth === "none" ? "conn.connecting" : "conn.loggingIn") : words(s.summary);
-  const need = here ? "" : needWords(s);
-  return need ? `${needHTML(need)}${line ? ` · ${esc(line)}` : ""}` : esc(line);
+  if (here) return esc(t(s.auth === "none" ? "conn.connecting" : "conn.loggingIn"));
+  const need = needWords(s);
+  return need ? needHTML(need) : "";
 }
 
 const storeMark = (s: StoreService): string => entryIcon(s, "md").replace(/<img /g, '<img decoding="async" ');
@@ -558,6 +607,11 @@ function keyErrorMessage(kind: ConnectionsView["keyError"]): string {
   }
 }
 
+/** What a Composio key that was not saved is told as, from the core's word for why (the store and the guide alike). */
+export function composioKeyProblem(kind: string): string {
+  return keyErrorMessage(kind === "openrouter_key" || kind === "consumer_key" || kind === "auth" ? kind : kind === "network" || kind === "timeout" ? "unreachable" : "unknown");
+}
+
 /** Built-in apps win over matching managed slugs or names, regardless of the current filter. */
 function uniqueComposio(v: ConnectionsView): StoreService[] {
   if (!v.configured || !Array.isArray(v.composioCatalog)) return [];
@@ -579,17 +633,24 @@ interface StoreEntries {
 
 /** One filtered snapshot counts and pages every addable app, including popular apps. */
 function storeEntries(v: ConnectionsView): StoreEntries {
-  const found = (s: StoreService): boolean => storeMatches(s, v.search) && (!v.category || storeGroup(s) === v.category);
-  const builtin = (Array.isArray(v.catalog) ? v.catalog : []).filter(found);
-  const managed = uniqueComposio(v).filter(found);
-  const all = [...builtin, ...managed].sort((a, b) => a.name.localeCompare(b.name));
+  const inGroup = (s: StoreService): boolean => !v.category || storeGroup(s) === v.category;
+  const every = [...(Array.isArray(v.catalog) ? v.catalog : []), ...presetEntries(v), ...uniqueComposio(v)].filter(inGroup);
+  const all = every.filter(s => storeMatches(s, v.search)).sort((a, b) => a.name.localeCompare(b.name));
+  // After what the search finds as typed come the apps whose names it only nearly spells, nearest first.
+  if (v.search.trim()) {
+    const found = new Set(all);
+    const near = every.filter(s => !found.has(s)).map(s => [s, storeNear(s, v.search)] as const).filter(([, score]) => score < Infinity);
+    all.push(...near.sort((a, b) => a[1] - b[1] || a[0].name.localeCompare(b[0].name)).map(([s]) => s));
+  }
   const connected = all.filter(s => s.server_id);
   const available = all.filter(s => !s.server_id);
   if (!v.search.trim() && !v.category) available.sort((a, b) => Number(popularApp(b)) - Number(popularApp(a)));
   return { connected, available, count: available.length };
 }
 
-const composioMark = (): string => `<span class="cs-icon md cs-composio-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h6v10H4zM14 7h6v10h-6zM10 10h4m-4 4h4"/></svg></span>`;
+/** Composio's mark, drawn in the text's colour: the store and the guide's services step both show it. */
+export const COMPOSIO_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h6v10H4zM14 7h6v10h-6zM10 10h4m-4 4h4"/></svg>`;
+const composioMark = (): string => `<span class="cs-icon md cs-composio-mark" aria-hidden="true">${COMPOSIO_SVG}</span>`;
 
 function keyDialogHTML(v: ConnectionsView): string {
   return `<div class="cs-scrim" data-conn="scrim" data-dialog="composio-key"><div class="cs-dialog" id="cs-dialog" role="dialog" aria-modal="true" aria-labelledby="cs-dlg-title" tabindex="-1" data-trap>` +
@@ -614,22 +675,19 @@ function storeHTML(v: ConnectionsView, entries: StoreEntries = storeEntries(v), 
     list.length ? `<section class="cs-sec"><h2>${esc(title)}</h2><div class="cs-grid" data-stagger="store:${key}">${list.map(card).join("")}</div></section>` : "";
   const retry = (action: string): string => `<div class="alert core-note" role="alert">${st("err", t("conn.loadFailed"))}${btn(esc(t("plugins.retry")), "sm", ` data-conn="${action}"`)}</div>`;
   const loading = `<p class="settings-loading" role="status">${esc(t("conn.loading"))}</p>`;
-  const browsing = !v.search.trim() && !v.category;
-  const connected = entries.connected.slice(0, 12);
+  // The store is only what is not added yet, in one list; popular apps still come first while browsing.
   const page = Math.min(v.storePage ?? 0, Math.max(0, Math.ceil(entries.count / STORE_PAGE_SIZE) - 1));
   const shown = entries.available.slice(page * STORE_PAGE_SIZE, (page + 1) * STORE_PAGE_SIZE);
-  const popular = browsing ? shown.filter(popularApp) : [];
-  const rest = shown.filter(s => !popular.includes(s));
   const chips = `<div class="cs-store-groups-row" data-chip-row><div class="cs-store-groups" data-chip-scroll role="group" aria-label="${esc(t("plugins.category"))}">${["", ...STORE_GROUPS].map(group =>
     btn(esc(group ? tr(STORE_GROUP_LABELS[group]) : t("conn.all")), "sm", ` data-conn="store-group" data-id="${group}" aria-pressed="${v.category === group}"`)).join("")}</div>${chipSteps()}</div>`;
   let html = (v.catalog === "loading" ? loading : v.catalog === "failed" ? retry("retry-builtin-store") : "") +
-    section("connected", t("conn.tab.installed"), connected) + section("hot", t("store.popular"), popular) +
-    section("all", t("conn.all"), rest);
+    // Under a chosen chip the list is that group, so it is named for it rather than 「全部」.
+    section("all", v.category ? tr(STORE_GROUP_LABELS[v.category]) : t("conn.all"), shown);
   if (entries.count > STORE_PAGE_SIZE) html += `<nav class="cs-store-pages" aria-label="${esc(t("conn.all"))}">` +
     btn(esc(t("store.previous")), "sm", ` data-conn="store-page" data-id="${page - 1}"${page === 0 ? " disabled" : ""}`) +
     `<span class="num" role="status">${page * STORE_PAGE_SIZE + 1}–${Math.min((page + 1) * STORE_PAGE_SIZE, entries.count)} / ${entries.count}</span>` +
     btn(esc(t("store.next")), "sm", ` data-conn="store-page" data-id="${page + 1}"${(page + 1) * STORE_PAGE_SIZE >= entries.count ? " disabled" : ""}`) + `</nav>`;
-  if (!connected.length && !entries.count && Array.isArray(v.catalog) && (!v.configured || Array.isArray(v.composioCatalog))) html += `<p class="cs-none" role="status">${esc(t("conn.noMatch"))}</p>`;
+  if (!entries.count && Array.isArray(v.catalog) && (!v.configured || Array.isArray(v.composioCatalog))) html += `<p class="cs-none" role="status">${esc(t("conn.noMatch"))}</p>`;
   if (v.configured) {
     if (v.composioCatalog === "loading") html += loading;
     else if (v.composioCatalog === "failed") html += retry("retry-store");
@@ -651,7 +709,7 @@ function storePageHTML(s: StoreService, v: ConnectionsView): string {
       : btn(`${ico("plus")}${esc(t("conn.join"))}`, "pri", ` data-conn="join" data-id="${esc(s.id)}"${v.login ? " disabled" : ""}`);
   const failed = loginErrorHTML(v, s.id);
   const need = s.server_id ? "" : needWords(s);
-  const needs = need ? `<p class="cs-needs"><b>${esc(need)}</b> · ${esc(t(s.needs === "own_app" ? "setup.leadOwnApp" : "setup.leadKey", { p0: s.name }))}</p>` : "";
+  const needs = need ? `<p class="cs-needs"><b>${esc(need)}</b> · ${esc(t("setup.leadKey", { p0: s.name }))}</p>` : "";
   const examples = (s.examples[getLocale()] ?? s.examples.en ?? []).map((text) => `<li>${ico("chat")}<span>${esc(text)}</span></li>`).join("");
   return (
     backHTML() +
@@ -685,7 +743,7 @@ function formHTML(f: ConnectionForm): string {
         fld(t("conn.form.command"), fieldHTML(t("conn.form.commandHint"), f.command, { id: "conn-command", label: t("conn.form.command"), disabled: off }), "", "conn-command") +
         fld(t("mcp.args"), `<textarea class="field mcp-lines" id="conn-args" rows="4" ${off ? "disabled" : ""}>${esc(f.args)}</textarea>`, "", "conn-args") +
         `</div>`
-      : fld(t("conn.form.url"), fieldHTML(t("conn.form.urlHint"), f.url, { id: "conn-url", label: t("conn.form.url"), disabled: off }), "", "conn-url");
+      : fld(t("conn.form.url"), fieldHTML(f.urlHint ?? t("conn.form.urlHint"), f.url, { id: "conn-url", label: t("conn.form.url"), disabled: off }), "", "conn-url");
   const error = f.error ? `<div class="note" role="alert">${st("err", f.error())}</div>` : "";
   const typeSel = sel(typeChoices(), f.type, t("conn.form.type"), ` data-k="conn-type"${off ? " disabled" : ""}`);
   return (
@@ -725,7 +783,19 @@ function deviceHTML(v: ConnectionsView): string {
 
 /** What is under the bar: the list, or the store. */
 export function bodyHTML(v: ConnectionsView, entries?: StoreEntries, pending?: StoreService[]): string {
-  return v.tab === "installed" ? installedHTML(v) : storeHTML(v, entries, pending);
+  return v.tab === "installed" ? installedHTML(v) + recommendedHTML(v, entries ?? storeEntries(v)) : storeHTML(v, entries, pending);
+}
+
+/** Under the apps already there, a few popular ones not added yet, each addable in place. Hidden while searching; the store keeps the whole catalogue. */
+function recommendedHTML(v: ConnectionsView, entries: StoreEntries): string {
+  if (v.search.trim() || !Array.isArray(v.groups)) return "";
+  // Never an app already there, however it was added (Notion directly, Gmail through the Google connection).
+  const fold = (text: string): string => text.toLowerCase().replace(/[^a-z0-9]/g, "");
+  const present = v.groups.map((g) => fold(`${g.id} ${g.name} ${g.description ?? ""} ${entryOf(g, v)?.id ?? ""}`));
+  const added = (s: StoreService): boolean => [fold(s.id.replace(/^composio:/i, "")), fold(s.name)].some((key) => key.length > 2 && present.some((text) => text.includes(key)));
+  const picks = entries.available.filter((s) => popularApp(s) && !added(s)).slice(0, 6);
+  return picks.length ? `<section class="cs-sec cs-recommended"><h2>${esc(t("conn.recommended"))}</h2>` +
+    `<div class="cs-grid" data-stagger="installed:recommended">${picks.map((s) => cardHTML(s, v)).join("")}</div></section>` : "";
 }
 
 /** The connected service whose dialog is open, if it is still there. */
@@ -736,30 +806,15 @@ const openGroup = (v: ConnectionsView): ConnectionGroup | undefined =>
 export function connectionsHTML(v: ConnectionsView): string {
   if (v.form) return `<div class="cs cs-form">${formHTML(v.form)}</div>`;
   if (v.open?.tab === "store") {
-    const s = [...(Array.isArray(v.catalog) ? v.catalog : []), ...uniqueComposio(v)].find(x => x.id === v.open!.id);
+    const s = [...(Array.isArray(v.catalog) ? v.catalog : []), ...presetEntries(v), ...uniqueComposio(v)].find(x => x.id === v.open!.id);
     if (s) return `<div class="cs cs-page">${deviceHTML(v)}${storePageHTML(s, v)}</div>`;
   }
   const g = openGroup(v);
   // A device login started from a service's dialog shows its code there instead.
   const device = g && v.login?.target === g.id ? "" : deviceHTML(v);
-  const skill = openSkill(v);
-  const set = v.skillSets?.find(item => item.id === v.skillSet);
   const entries = storeEntries(v);
-  return `<div class="cs${v.tab === "store" ? " cs-store" : ""}">${device}${barHTML(v, entries)}<div class="cs-body" data-cs-body>${bodyHTML(v, entries)}</div></div>` + (v.skillSources !== undefined ? `<div class="cs-scrim" data-conn="scrim" data-dialog="skill-import"><div class="cs-dialog wide cs-skill-import" id="cs-dialog" role="dialog" aria-modal="true" aria-labelledby="cs-dlg-title" tabindex="-1" data-trap>${skillImportsHTML(v.skillSources, closeButton(), dialogNoticeHTML(v), v.skillMarketplaces, v.skillActionBusy)}</div></div>` : set ? `<div class="cs-scrim" data-conn="scrim" data-dialog="skill-set:${set.id}"><div class="cs-dialog wide" id="cs-dialog" role="dialog" aria-modal="true" aria-labelledby="cs-dlg-title" tabindex="-1" data-trap>${skillSetDialogHTML(set, closeButton(), dialogNoticeHTML(v), !!v.skillActionBusy)}</div></div>` : v.keyOpen ? keyDialogHTML(v) : g ? dialogHTML(g, v) : skill ? skillScrimHTML(skill.item, skill.page, dialogNoticeHTML(v)) : "");
+  return `<div class="cs${v.tab === "store" ? " cs-store" : ""}">${device}${barHTML(v, entries)}<div class="cs-body" data-cs-body>${bodyHTML(v, entries)}</div></div>` + (v.keyOpen ? keyDialogHTML(v) : g ? dialogHTML(g, v) : "");
 }
-
-/** The skill whose page is open, if it is still there. */
-const openSkill = (v: ConnectionsView): { item: SkillItem; page: SkillPage } | undefined => {
-  const page = v.skill;
-  const item = page && Array.isArray(v.skills) ? skillListItems(v.skills).find((each) => sameSkill(each, page.memberId, page.id)) : undefined;
-  return page && item ? { item, page } : undefined;
-};
-
-/** The page of a skill over the tab, in the dialog an app has (wider: it holds a document). */
-const skillScrimHTML = (item: SkillItem, page: SkillPage, notice: string): string =>
-  `<div class="cs-scrim" data-conn="scrim" data-dialog="skill:${item.member.id}:${item.skill.id}">` +
-  `<div class="cs-dialog wide" id="cs-dialog" role="dialog" aria-modal="true" aria-labelledby="cs-dlg-title" tabindex="-1" data-trap>` +
-  skillDialogHTML(item, page, closeButton(), btn(esc(t("plugins.retry")), "sm", ' data-conn="skill-retry"'), notice) + `</div></div>`;
 
 // ---------- doing ----------
 
@@ -818,12 +873,6 @@ export function createConnections(host: ConnectionsHost): Connections {
   let composioCatalog: ConnectionsView["composioCatalog"] = "loading";
   let inventory: InventoryView = "loading";
   const placed = new Map<string, boolean | null>();
-  let skills: ConnectionsView["skills"] = "loading";
-  let skill: SkillPage | null = null;
-  let skillSources: ConnectionsView["skillSources"];
-  let skillSets: SkillSet[] = [], skillMarketplaces: SkillMarketplace[] = [];
-  let skillSet: number | null = null, skillActionBusy = false, skillRequest = 0;
-  let skillLoads = 0;
   let audit: AuditEntry[] = [];
   let tab: Tab = "installed";
   let search = "";
@@ -848,19 +897,12 @@ export function createConnections(host: ConnectionsHost): Connections {
   let closing = false;
   let stopOutside: (() => void) | null = null;
 
-  /** A dialog is over the list: an app's, or a skill's. */
-  const dialogOpen = (): boolean => skillSources !== undefined || skillSet !== null || keyOpen || open?.tab === "installed" || skill !== null;
+  /** A dialog is over the list: an app's or the key's. */
+  const dialogOpen = (): boolean => keyOpen || open?.tab === "installed";
 
   const redraw = (): void => {
     storePaint++;
-    // The page is drawn again whole: the document that is being edited keeps its caret, its selection and its scroll.
-    const area = typeof document !== "undefined" ? document.querySelector<HTMLTextAreaElement>("#skill-text") : null;
-    const kept = area && document.activeElement === area ? { start: area.selectionStart, end: area.selectionEnd, top: area.scrollTop } : null;
     if (host.visible()) host.redraw();
-    if (kept) {
-      const next = document.querySelector<HTMLTextAreaElement>("#skill-text");
-      if (next) { next.focus(); next.setSelectionRange(kept.start, kept.end); next.scrollTop = kept.top; }
-    }
     if (dialogOpen() && !stopOutside && typeof document !== "undefined") {
       const root = host.root ?? document.querySelector("#cs-dialog")?.parentElement?.parentElement;
       if (root) stopOutside = registerDismissal(() => root.querySelector<HTMLElement>("#cs-dialog"), closeDialog);
@@ -875,7 +917,7 @@ export function createConnections(host: ConnectionsHost): Connections {
 
   const view = (): ConnectionsView => ({
     configured, categories, category, keyOpen, keyBusy, keyError,
-    groups, catalog, composioCatalog, inventory, placed, skills, skill, skillSources, skillSets, skillSet, skillMarketplaces, skillActionBusy, audit, tab, search, storePage, open, toolsOpen, auditOpen, confirmingDisconnect: confirming, busy, login, device, loginError, dialogNotice, form, now: Date.now(),
+    groups, catalog, composioCatalog, inventory, placed, audit, tab, search, storePage, open, toolsOpen, auditOpen, confirmingDisconnect: confirming, busy, login, device, loginError, dialogNotice, form, now: Date.now(),
   });
 
   /** Prepare the default first screen while the installed catalog is being read. */
@@ -912,9 +954,12 @@ export function createConnections(host: ConnectionsHost): Connections {
   }
 
   const groupById = (id: string): ConnectionGroup | undefined => (Array.isArray(groups) ? groups.find((g) => g.id === id) : undefined);
-  const entryById = (id: string): StoreService | undefined => ([...(Array.isArray(catalog) ? catalog : []), ...uniqueComposio(view())].find(s => s.id === id));
+  const entryById = (id: string): StoreService | undefined => {
+    const v = view();
+    return [...(Array.isArray(catalog) ? catalog : []), ...presetEntries(v), ...uniqueComposio(v)].find(s => s.id === id);
+  };
 
-  async function load(withSkills = true): Promise<void> {
+  async function load(): Promise<void> {
     const mine = ++loads;
     const [list, status, recent, counted, builtins] = await Promise.allSettled([api.toolsetsList(), api.connectorsStatus(), api.integrationsAudit(AUDIT_READ), api.integrationsInventory(), api.integrationsCatalog()]);
     if (mine !== loads) return;
@@ -937,33 +982,15 @@ export function createConnections(host: ConnectionsHost): Connections {
     if (recent.status === "fulfilled") audit = recent.value.entries;
     // what is open is gone (removed from elsewhere): back to the list
     if (open && !(open.tab === "installed" ? groupById(open.id) : entryById(open.id))) open = null;
-    // Nothing connected yet: the store is where there is something to do.
-    if (firstLoad && Array.isArray(groups)) {
+    // Nothing connected yet: the store is where there is something to do. A read before the page is shown (the launch
+    // warm-up) leaves that choice to the opening, in reset().
+    if (firstLoad && Array.isArray(groups) && host.visible()) {
       firstLoad = false;
       if (!groups.length) tab = "store";
     }
     prepareStore();
     redraw();
-    if (withSkills) void loadSkills();
     if (configured && status.status === "fulfilled" && !Array.isArray(composioCatalog)) await loadCatalog();
-  }
-
-  /** The private skills of the members: read again whenever the list is, and when a skill is changed anywhere (`MembersChanged`). */
-  async function loadSkills(): Promise<void> {
-    const mine = ++skillLoads;
-    try {
-      const { items, sets } = await loadSkillItems();
-      if (mine !== skillLoads) return;
-      skills = items;
-      skillSets = sets;
-      if (skillSet !== null && !sets.some(set => set.id === skillSet)) skillSet = null;
-    } catch {
-      if (mine !== skillLoads) return;
-      if (!Array.isArray(skills)) skills = "failed";
-    }
-    // the page that is open belongs to a skill that is gone (deleted elsewhere): back to the list
-    if (skill && Array.isArray(skills) && !skills.some((item) => sameSkill(item, skill!.memberId, skill!.id))) skill = null;
-    redraw();
   }
 
   async function loadCatalog(): Promise<void> {
@@ -1040,7 +1067,7 @@ export function createConnections(host: ConnectionsHost): Connections {
       notify(describeError(err), "err");
     }
     busy.delete(id);
-    await load(false);
+    await load();
     if (open?.id === id) await loadTools(id);
   }
 
@@ -1066,31 +1093,9 @@ export function createConnections(host: ConnectionsHost): Connections {
     if (closing) return;
     loginError = null;
     dialogNotice = null;
-    if (skillSources !== undefined) {
-      skillSources = undefined;
-      skillRequest++; skillActionBusy = false;
-      redraw(); focusOn('[data-conn="skill-discover"]'); return;
-    }
-    if (skillSet !== null) {
-      skillSet = null; skillRequest++; skillActionBusy = false;
-      redraw(); return;
-    }
     if (keyOpen) {
       keyOpen = false; keyError = ""; keySaves++; keyBusy = false;
       redraw(); focusOn('[data-conn="configure-composio"]'); return;
-    }
-    if (skill && open?.tab !== "installed") {
-      // The page of a skill goes the same way: the document that was being edited is dropped with it.
-      const page = skill;
-      closing = true;
-      leave(typeof document !== "undefined" ? document.querySelector<HTMLElement>(".cs-scrim") : null, DIALOG_OUT_MS, () => {
-        closing = false;
-        if (skill !== page) return;
-        skill = null;
-        redraw();
-        focusOn(`[data-k="cs-skill:${page.memberId}:${page.id}"]`);
-      });
-      return;
     }
     if (!open || open.tab !== "installed") return;
     const id = open.id;
@@ -1107,114 +1112,6 @@ export function createConnections(host: ConnectionsHost): Connections {
       redraw();
       focusOn(`[data-k="cs-open:${typeof CSS !== "undefined" ? CSS.escape(id) : id}"]`);
     });
-  }
-
-  // ---------- the private skills ----------
-
-  const skillOf = (memberId: number, id: number): SkillItem | undefined =>
-    Array.isArray(skills) ? skills.find((each) => sameSkill(each, memberId, id)) : undefined;
-
-  async function skillAction(work: () => Promise<void>): Promise<void> {
-    if (skillActionBusy) return;
-    const request = skillRequest;
-    skillActionBusy = true; dialogNotice = null; redraw();
-    try { await work(); }
-    catch (error) { if (request === skillRequest) dialogNotice = { text: skillErrorText(error), kind: "err" }; }
-    finally { if (request === skillRequest) { skillActionBusy = false; redraw(); } }
-  }
-
-  async function readMarketplace(repo: string): Promise<void> {
-    const request = skillRequest;
-    await skillAction(async () => {
-      const result = await api.core<{ marketplace: SkillMarketplace; sets: SkillSet[] }>("members.skills.list", { member_id: 0, marketplace: repo });
-      if (request !== skillRequest) return;
-      skillMarketplaces = [...skillMarketplaces.filter(m => m.repo !== result.marketplace.repo), result.marketplace];
-      skillSets = result.sets;
-    });
-  }
-
-  async function importSet(params: Record<string, unknown>): Promise<void> {
-    const request = skillRequest;
-    await skillAction(async () => {
-      await api.core("members.skills.import", { member_id: 0, shared: true, ...params });
-      await loadSkills();
-      if (request === skillRequest && skillSources !== undefined) closeDialog();
-    });
-  }
-
-  /** Opens the page of a skill, with the focus in it; its document is read for it. */
-  function openSkillPage(memberId: number, id: number): void {
-    dialogNotice = null;
-    skill = skillPage(memberId, id);
-    redraw();
-    focusOn("#cs-dialog");
-    void readSkill();
-  }
-
-  async function readSkill(): Promise<void> {
-    const page = skill;
-    if (!page) return;
-    page.state = "loading";
-    page.error = null;
-    redraw();
-    try {
-      const { text } = await api.membersSkillsRead(page.memberId, page.id);
-      if (skill !== page) return;
-      page.saved = page.draft = text;
-      page.state = "ready";
-    } catch {
-      if (skill !== page) return;
-      page.state = "failed";
-    }
-    redraw();
-  }
-
-  /** Keeps the edited document. The name and the line under it follow it, so the skills are read again. */
-  async function saveSkill(): Promise<void> {
-    const page = skill;
-    if (!page || page.busy || !skillChanged(page)) return;
-    page.busy = true;
-    page.error = null;
-    dialogNotice = null;
-    redraw();
-    try {
-      await api.membersSkillsEdit(page.memberId, page.id, page.draft);
-      if (skill === page) page.saved = page.draft = page.draft.replace(/\r\n/g, "\n");
-      notify(t("conn.skill.saved"));
-    } catch (err) {
-      if (skill === page) page.error = skillErrorText(err);
-    }
-    if (skill === page) page.busy = false;
-    redraw();
-    await loadSkills();
-  }
-
-  /** The owner asks to delete a skill: after the shared question, it and its trigger are gone. */
-  async function deleteSkill(memberId: number, id: number): Promise<void> {
-    const item = skillOf(memberId, id);
-    if (!item || !(await confirmDelete(item.skill.name))) return;
-    try {
-      await api.membersSkillsDelete(memberId, id);
-      skill = null;
-      dialogNotice = null;
-      notify(t("conn.skill.deleted", { p0: item.skill.name }));
-    } catch (err) {
-      notify(describeError(err), "err");
-      return;
-    }
-    await loadSkills();
-  }
-
-  /** The switch of a skill: on, the member is told when to use it; off, it is not. */
-  async function toggleSkill(memberId: number, id: number): Promise<void> {
-    const item = skillOf(memberId, id);
-    if (!item) return;
-    try {
-      await api.membersSkillsUpdate(memberId, id, !item.skill.enabled);
-    } catch (err) {
-      notify(describeError(err), "err");
-    }
-    await loadSkills();
   }
 
   function disconnect(id: string): void {
@@ -1238,16 +1135,33 @@ export function createConnections(host: ConnectionsHost): Connections {
     });
   }
 
+  function nameAccount(id: string, account: { id?: string; label?: string }): void {
+    if (!account.id) return;
+    const dialog = openMemberDialog({title: t("account.label"), body: `<label class="mp-label">${esc(t("account.labelHelp"))}<input class="mb-fin" data-account-name maxlength="100" value="${esc(account.label || "")}" autocomplete="off"></label><p role="alert" hidden></p>`,
+      actions: {secondary: btn(esc(t("common.cancel")), "", ' data-dlg="cancel"'), primary: {label: esc(t("members.save")), attrs: ' data-dlg="save"'}},
+      onAct(action, button) {
+        if (action === "cancel") return dialog.close();
+        const label = dialog.el.querySelector<HTMLInputElement>("[data-account-name]")!.value.trim();
+        if (!label) return;
+        button.setAttribute("disabled", "");
+        void api.core("connectors.label", {id, account_id: account.id, label}).then(() => {dialog.close(); return load();}).catch(error => {
+          const notice = dialog.el.querySelector<HTMLElement>('[role="alert"]')!; notice.textContent = describeError(error); notice.hidden = false; button.removeAttribute("disabled");
+        });
+      }});
+    dialog.el.querySelector<HTMLInputElement>("[data-account-name]")?.focus();
+  }
+
   /** Opens the browser login for a store entry (`catalog_id`) or for a service that must sign in again (`id`). */
   async function signIn(target: { catalog_id: string } | { id: string }, name: string, again: boolean): Promise<void> {
     if (login) return;
     const key = "catalog_id" in target ? target.catalog_id : target.id;
+    const previousAccounts = new Set((Array.isArray(groups) ? groups : []).flatMap(group => (group.accounts ?? []).map(account => account.id)));
     const fromDialog = open?.tab === "installed" && open.id === key ? open : null;
     dialogNotice = null;
     login = { target: key, name };
     loginError = null;
     redraw();
-    let result: { connected: boolean; error?: string };
+    let result: { connected: boolean; error?: string; connector?: ManagedConnector };
     try {
       result = ("catalog_id" in target ? !entryById(target.catalog_id)?.source : !groupById(target.id)?.source) ? await api.integrationsConnect(target)
         : "id" in target && groupById(target.id)?.source === "google"
@@ -1270,7 +1184,12 @@ export function createConnections(host: ConnectionsHost): Connections {
       if (!fromDialog || (open === fromDialog && !closing)) loginError = { target: key, kind: result.error ?? "error" };
       if (!fromDialog) notify(result.error === "toolkit_not_allowed" ? failureText(result.error) : t("plugins.connectFailed"), "err");
     }
-    await load(false);
+    await load();
+    if (result.connected) {
+      const group = groupById(result.connector?.id || (key.startsWith("composio:") || key === "google" ? key : "composio:" + key));
+      const account = result.connector?.accounts?.find(account => !previousAccounts.has(account.id)) || group?.accounts?.find(account => !previousAccounts.has(account.id));
+      if (group && account) nameAccount(group.id, account);
+    }
   }
 
   /**
@@ -1300,13 +1219,11 @@ export function createConnections(host: ConnectionsHost): Connections {
       open = null;
       notify(t("conn.connected", { p0: entry.name }));
     }
-    await load(false);
+    await load();
   }
 
   function followEvent(event: MainEvent): void {
-    if (event.type === "ConnectionsChanged" && host.visible()) { void load(false); return; }
-    // a skill was imported, switched, edited or deleted, in the member's own tab or by Raphael: the list follows it
-    if (event.type === "MembersChanged" && host.visible()) { void loadSkills(); return; }
+    if (event.type === "ConnectionsChanged" && host.visible()) { void load(); return; }
     if (event.type !== "DeviceCode" || !login) return;
     device = { catalog_id: event.catalog_id, user_code: event.user_code, verification_uri: event.verification_uri };
     redraw();
@@ -1356,14 +1273,14 @@ export function createConnections(host: ConnectionsHost): Connections {
       form = null; // the values were sent to the core's vault: nothing of them stays here
       tab = "installed";
       notify(t("conn.connected", { p0: request.name }));
-      await load(false);
+      await load();
       return;
     } catch (err) {
       f.busy = false;
       const text = describeError(err);
       f.error = () => text;
     }
-    await load(false);
+    await load();
     redraw();
   }
 
@@ -1565,8 +1482,11 @@ export function createConnections(host: ConnectionsHost): Connections {
       case "join": {
         const entry = entryById(id);
         if (!entry || entry.server_id) break;
-        // An app that asks for the owner's own key or developer app asks in its form first; the rest sign in at once.
-        if (entry.needs === "key" || entry.needs === "own_app") void addWithForm(entry, entry.needs);
+        // A sign-in, or one key, is done here at once. Anything more (a server of the owner's own, a developer app) is set
+        // up in the conversation, where the member says what it needs and explains it (owner, 2026-11-09: 「一律全部都在對話中
+        // 進行…除非真的是登入就結束 或是輸入金鑰匙就結束」).
+        if (inChat(entry)) { host.tryPrompt(entry.id === OWN_GOOGLE ? t("store.googleSetUp") : t("store.setUpInChat", { p0: entry.name })); break; }
+        if (entry.needs === "key") void addWithForm(entry, entry.needs);
         else void signIn({ catalog_id: entry.id }, entry.name, false);
         break;
       }
@@ -1596,58 +1516,14 @@ export function createConnections(host: ConnectionsHost): Connections {
         break;
       case "configure-composio": keyOpen = true; keyError = ""; redraw(); focusOn("#conn-key"); break;
       case "save-key": void saveKey(); break;
-      case "skill-discover":
-        skillRequest++; skillActionBusy = false; dialogNotice = null; skillSet = null;
-        skillSources = "loading"; redraw(); focusOn("#cs-dialog");
-        { const request = skillRequest; void api.core<{ sources: LocalSkillSource[]; marketplaces?: SkillMarketplace[] }>("members.skills.list", { member_id: 0, discover: true }).then(result => { if (request === skillRequest && skillSources === "loading") { skillSources = result.sources; skillMarketplaces = result.marketplaces ?? []; redraw(); } }, () => { if (request === skillRequest && skillSources === "loading") { skillSources = "failed"; redraw(); } }); }
-        break;
-      case "marketplace-add": void readMarketplace(document.querySelector<HTMLInputElement>("#skill-marketplace")?.value.trim() ?? ""); break;
-      case "marketplace-refresh": { const repo = skillMarketplaces[Number(button.dataset.market)]?.repo; if (repo) void readMarketplace(repo); break; }
-      case "marketplace-install": {
-        const market = skillMarketplaces[Number(button.dataset.market)];
-        const plugin = market?.plugins[Number(button.dataset.plugin)];
-        if (market && plugin?.installable) void importSet({ marketplace: market.repo, name: plugin.name });
+      case "account-label": {
+        const account = groupById(id)?.accounts?.find(a => a.id === button.dataset.account);
+        if (account) nameAccount(id, account);
         break;
       }
-      case "set-open": skillSet = Number(id); skill = null; skillSources = undefined; skillRequest++; dialogNotice = null; redraw(); focusOn("#cs-dialog"); break;
-      case "set-update": void importSet({ set_id: Number(id) }); break;
-      case "set-delete": {
-        const set = skillSets.find(item => item.id === Number(id));
-        if (set) void (async () => { if (await confirmDelete(set.name)) await skillAction(async () => { await api.core("members.skills.delete", { member_id: 0, shared: true, set_id: set.id }); skillSet = null; await loadSkills(); }); })();
-        break;
-      }
-      case "set-mcp": {
-        const server = skillSets.find(item => item.id === Number(id))?.mcp_servers[Number(button.dataset.server)];
-        if (!server) break;
-        const card = button.closest("[data-set-mcp]");
-        const field = (name: string, fallback: string): string => card?.querySelector<HTMLInputElement | HTMLTextAreaElement>(`[data-mcp-field="${name}"]`)?.value ?? fallback;
-        form = { ...emptyForm(), type: server.transport, name: field("name", server.name), command: field("command", server.command), args: field("args", server.args.join("\n")), url: field("url", server.url), pairLines: field(server.transport === "http" ? "headers" : "env", (server.transport === "http" ? server.headers : server.env).join(", ")).split(",").map(name => name.trim()).filter(Boolean).map(name => `${name}=`).join("\n") };
-        skillSet = null; redraw(); focusOn("#conn-name"); break;
-      }
-      case "skill-import-alone": {
-        const source = Array.isArray(skillSources) ? skillSources[Number(button.dataset.source)]?.skills?.[Number(button.dataset.child)]?.source : undefined;
-        if (source) void skillAction(async () => { await api.membersSkillsImport(-1, source); await loadSkills(); closeDialog(); });
-        break;
-      }
-      case "skill-import-local": {
-        const source = Array.isArray(skillSources) ? skillSources[Number(button.dataset.source)] : undefined;
-        if (source?.kind === "plugin") void importSet({ source: source.source, plugin: true });
-        else if (source) void skillAction(async () => { await api.membersSkillsImport(-1, source.source); await loadSkills(); closeDialog(); });
-        break;
-      }
-      case "skill-reimport": {
-        const item = skillOf(Number(button.dataset.member), Number(id));
-        if (item) void api.membersSkillsImport(item.member.id, item.skill.source).then(() => loadSkills()).catch(error => notify(skillErrorText(error)));
-        break;
-      }
-      case "skill-open": openSkillPage(Number(button.dataset.member), Number(id)); break;
-      case "skill-enable": void toggleSkill(Number(button.dataset.member), Number(id)); break;
-      case "skill-save": void saveSkill(); break;
-      case "skill-delete": void deleteSkill(Number(button.dataset.member), Number(id)); break;
-      case "skill-retry": void readSkill(); break;
-      case "retry-skills": void loadSkills(); break;
+      case "add-account": { const group = groupById(id); if (group) void signIn({id}, group.name, true); break; }
       case "retry-connections": void load(); break;
-      case "retry-builtin-store": void load(false); break;
+      case "retry-builtin-store": void load(); break;
       case "store-group":
         if (id === category && storePage === 0) { revealChip(button); break; }
         category = id; storePage = 0; repaintBody(); break;
@@ -1668,16 +1544,6 @@ export function createConnections(host: ConnectionsHost): Connections {
       return true;
     }
     if (el.id === "conn-key") return true;
-    if (el.id === "skill-text") {
-      // The document is edited in place: only the button that keeps it changes, so that the caret stays where it is.
-      if (skill?.state === "ready") {
-        skill.draft = el.value;
-        skill.error = null;
-        const save = typeof document !== "undefined" ? document.querySelector<HTMLButtonElement>('[data-conn="skill-save"]') : null;
-        if (save) save.disabled = !skillChanged(skill) || skill.busy;
-      }
-      return true;
-    }
     if (!form || !el.id.startsWith("conn-")) return false;
     switch (el.id) {
       case "conn-pairs": form.pairLines = el.value; break;
@@ -1723,7 +1589,7 @@ export function createConnections(host: ConnectionsHost): Connections {
           choices: [{ value: "custom", label: t("mcp.add") }, { value: "paste", label: t("mcp.paste") }, { value: "import", label: t("mcp.fromApps") }],
           current: "", // nothing is checked: it is an act, not a state
           pick: (value) => {
-            if (value === "paste" || value === "import") { openMcpImport(value === "import", () => void load(false)); return; }
+            if (value === "paste" || value === "import") { openMcpImport(value === "import", () => void load()); return; }
             if (value !== "custom" || form?.busy) return;
             open = null;
             form = emptyForm();
@@ -1762,12 +1628,12 @@ export function createConnections(host: ConnectionsHost): Connections {
     confirming = null;
     form = null;
     open = null;
-    skill = null; // a document that was being edited is dropped with the page
     toolsOpen = false;
     auditOpen = false;
     closing = false;
     search = "";
     tab = "installed";
+    if (firstLoad && Array.isArray(groups)) { firstLoad = false; if (!groups.length) tab = "store"; }
     loginError = null;
     dialogNotice = null;
     // the code stays: the login still waits for it in the core, which does not send it again

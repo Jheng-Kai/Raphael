@@ -6,7 +6,7 @@ from ..clock import wall_clock_ms
 from ..protocol import invalid_params
 
 ASK_OWNER = "ask_owner"
-OWNER_CARDS = frozenset((ASK_OWNER, "connect_app", "request_secret", "email_draft", "show_page"))
+OWNER_CARDS = frozenset((ASK_OWNER, "connect_app", "connect_messaging", "request_secret", "email_draft", "slack_draft", "show_page"))
 BACKGROUND_TOOLS = OWNER_CARDS | {"update_page", "find_app"}
 
 
@@ -39,7 +39,14 @@ class OwnerQuestions:
         return self.view(row) if row else None
 
     def for_turn(self, turn_id):
-        return [self.view(row) for row in self.conn.execute("SELECT * FROM owner_questions WHERE turn_id=? ORDER BY created_at_ms, rowid", (turn_id,))]
+        return self.for_turns([turn_id]).get(turn_id, [])
+
+    def for_turns(self, turn_ids):
+        from ..brain.db import rows_for_turns
+        found = {}
+        for row in rows_for_turns(self.conn, "owner_questions", turn_ids, order="created_at_ms, rowid"):
+            found.setdefault(row["turn_id"], []).append(self.view(row))
+        return found
 
     def pending(self):
         return [{**self.view(row), "room_id": row["room_id"]} for row in self.conn.execute(

@@ -5,7 +5,7 @@ import { slimeSVG } from './slime';
 
 test('an unchanged generated face is reused before its cel markup is parsed', () => {
   const root=document.createElement('div');
-  const picture=slimeSVG({character:'shion'},{state:'thinking',member:3});
+  const picture=slimeSVG({character:'shion'},{state:'thinking',member:3,moving:true});
   patchHTML(root,`<button data-k="3">${picture}<b>Old</b></button>`);
   const surface=root.querySelector('.slime-surface');
   const template=document.createElement('template');
@@ -32,7 +32,7 @@ test('inserting a generated cel subtree does not allocate a second copy for garb
 
 test('generated face reuse follows keyed reorders and still updates a changed identity or state', () => {
   const root=document.createElement('div');
-  const row=(id:number,state:'thinking'|'working',color:'sky'|'coral'='sky')=>`<button data-k="${id}">${slimeSVG({color},{state,member:id})}</button>`;
+  const row=(id:number,state:'thinking'|'working',color:'sky'|'coral'='sky')=>`<button data-k="${id}">${slimeSVG({color},{state,member:id,moving:true})}</button>`;
   patchHTML(root,row(1,'thinking')+row(2,'working'));
   const [one,two]=[...root.querySelectorAll('svg.slime')];
   patchHTML(root,row(2,'working')+row(1,'thinking'));
@@ -40,7 +40,7 @@ test('generated face reuse follows keyed reorders and still updates a changed id
   patchHTML(root,row(2,'thinking','coral')+row(1,'thinking'));
   expect(root.querySelector('svg.slime')).toBe(two);
   expect(two?.getAttribute('data-state')).toBe('thinking');
-  expect((two as SVGElement).style.getPropertyValue('--slime-color')).toBe('#D4556D');
+  expect((two as SVGElement).style.getPropertyValue('--slime-color')).toBe('#FC2C3E');
   expect(root.querySelectorAll('.slime-loop-body[data-state="thinking"]')).toHaveLength(2);
 });
 
@@ -114,4 +114,31 @@ test("a changed row preserves its slime clock and active transition", async () =
   expect(svg.classList.contains("is-delighted")).toBe(true); expect(svg.getAttribute("data-moved")).toBe("working");
   expect(part.classList.contains("slime-in-between")).toBe(true); expect(root.querySelector("b")!.textContent).toBe("New reply");
   expect(records).toHaveLength(0);
+});
+
+test("a face never becomes another member's: Raphael's face where Testarossa's stood is a new one, so her bow cannot move on him", () => {
+  const root=document.createElement('div');
+  patchHTML(root,`<button>${slimeSVG({character:'testarossa'},{state:'idle',member:7,moving:true})}</button>`);
+  const before=root.querySelector('svg.slime');
+  patchHTML(root,`<button>${slimeSVG({character:'rimuru'},{state:'working',member:0,crown:true,moving:true})}</button>`);
+  const after=root.querySelector('svg.slime')!;
+  expect(after).not.toBe(before);
+  expect(after.getAttribute('data-slime-member')).toBe('0');
+  expect(root.querySelectorAll('.slime-surface')).toHaveLength(1);
+  expect(root.innerHTML).not.toContain('#3FBF94');
+});
+
+
+test('a picture of a slime is kept as it is by a redraw, and another member takes a fresh one (owner, 2026-11-11)', () => {
+  const root = document.createElement('div');
+  const picture = (id: number, color: 'sky' | 'coral' = 'sky'): string => `<button data-k="${id}">${slimeSVG({ color }, { member: id })}</button>`;
+  patchHTML(root, picture(1) + picture(2, 'coral'));
+  const [one, two] = [...root.querySelectorAll('.slime-surface')];
+  expect(one?.hasAttribute('data-slime-still')).toBe(true);
+  patchHTML(root, picture(1) + picture(2, 'coral'));
+  expect([...root.querySelectorAll('.slime-surface')]).toEqual([one, two]);
+  // Another member's picture where this one stood is a new element, as a moving face is.
+  patchHTML(root, `<div>${slimeSVG({ color: 'sky' }, { member: 5 })}</div>`);
+  expect(root.querySelector('.slime-surface')).not.toBe(one);
+  expect(root.querySelector('.slime-surface')?.getAttribute('data-slime-still')).toBe('5');
 });

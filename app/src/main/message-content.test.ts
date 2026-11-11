@@ -2,16 +2,16 @@
 import { expect, test } from "vitest";
 import { messageHTML, messagePlainText, messageUrls, shortUrl } from "./message-content";
 
-test("URLs stop at CJK punctuation and retain complete targets behind short labels", () => {
+test("URLs stop at CJK punctuation, and a bare link is a chip that says its site", () => {
   const url = "https://www.cwa.gov.tw/V8/C/P/Typhoon/TY_WARN.html?lang=zh-TW&full=1";
   const text = `《答。${url}（颱風警報）。「https://example.com/a_(b)」》`;
   expect(messageUrls(text)).toEqual([url, "https://example.com/a_(b)"]);
   const el = document.createElement("div"); el.innerHTML = messageHTML(text);
   expect([...el.querySelectorAll("a")].map(a => a.dataset.url)).toEqual(messageUrls(text));
-  expect(el.querySelector("a")!.textContent).toContain("www.cwa.gov.tw/");
-  expect(el.querySelector("a")!.textContent!.length).toBeLessThan(url.length);
-  expect(el.querySelector("a")!.textContent).toBe("www.cwa.gov.tw/V8/C/P/Typhoon/T…");
+  expect([...el.querySelectorAll("a")].map(a => a.textContent)).toEqual(["cwa.gov.tw", "example.com"]);
+  expect(el.querySelector("a")!.classList.contains("link-chip")).toBe(true);
   expect(el.querySelector("a")!.getAttribute("href")).toBe(url);
+  expect(el.querySelector("a")!.classList.contains("message-link")).toBe(true);
   expect(el.querySelector("a")!.hasAttribute("title")).toBe(false);
   expect(el.querySelector("a")!.hasAttribute("aria-label")).toBe(false);
   expect(el.textContent).toContain("（颱風警報）。");
@@ -35,13 +35,27 @@ test("a file in the team folder is a real button that opens it, however the repl
   expect(el.querySelector("code")!.textContent).toBe("/home/cua/workspace/a.png");
 });
 
-test("visible URL labels contain only host and path, capped at 32 characters, while copying retains the complete URL", () => {
+test("a long bare link says its site on screen, opens its whole address and copies it whole, once", () => {
+  const url = "https://example.com/" + "a".repeat(60) + "?secret=full#target";
+  const el = document.createElement("div"); el.innerHTML = messageHTML(`See ${url}（資料）`);
+  expect(el.querySelector("a")!.textContent).toBe("example.com");
+  expect(el.querySelector("a")!.dataset.url).toBe(url);
+  expect(messagePlainText(`See ${url}（資料）`, true)).toBe(`See ${url}（資料）`);
+});
+
+test("a link with its own label keeps the label and copies as label plus address", () => {
+  const el = document.createElement("div");
+  el.innerHTML = messageHTML("[官網](https://example.com/a?x=1)", "", true);
+  expect(el.querySelector("a")!.textContent).toBe("官網");
+  expect(messagePlainText("看 [官網](https://example.com/a?x=1)", true)).toBe("看 官網 (https://example.com/a?x=1)");
+});
+
+test("shortUrl still names a page by host and path, capped at 32 characters, for the places that need a short name", () => {
   expect(shortUrl("https://example.com/forecast?city=Taipei#today")).toBe("example.com/forecast");
   expect(shortUrl("https://example.com/?city=Taipei#today")).toBe("example.com");
   const url = "https://example.com/" + "a".repeat(60) + "?secret=full#target";
   expect(shortUrl(url)).toBe("example.com/" + "a".repeat(19) + "…");
   expect(shortUrl(url)).toHaveLength(32);
-  expect(messagePlainText(`See ${url}（資料）`, true)).toBe(`See ${url}（資料）`);
 });
 
 test("reply markdown renders lists, emphasis, breaks and copyable code without interpreting HTML", () => {

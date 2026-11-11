@@ -23,17 +23,13 @@ export const OVERFLOW_ROWS: readonly OverflowRow[] = [
   { more: "[data-room-menu]", row: ".au-room-pane > .page-head" },
   { more: '[data-desktop="menu"]', row: ".desktop-takeover-bar" },
   { more: '[data-computer-menu]', row: ".desktop-location-header" },
-  { more: '[data-panel-task-menu]', row: '.mb-task-row' },
-  { more: '[data-dlg="routine-menu"]', row: ".mp-resource" },
-  { more: '[data-det="routine-menu"]', row: ".mb-routine-row" },
   { more: '[data-res="skill-menu"]', row: ".mp-resource" },
   { more: '[data-res="command-menu"]', row: ".mp-resource" },
-  { more: '[data-mem="section-more"]', row: ".mem-head" },
-  { more: '[data-mem="summary-more"]', row: ".mem-summary" },
   { more: '[data-act="key-menu"]', row: ".row-key" },
   { more: '[data-msg="user-menu"]', row: ".msg-sub" },
   { more: '[data-act="local-menu"]', row: ".lm-row" },
   { more: '[data-rule="more"]', row: ".rules-row" },
+  { more: '[data-vault="menu"]', row: ".vault-row" },
   { more: '[data-act="word-menu"]', row: ".wrow" },
   { more: '[data-act="history-menu"]', row: ".hrow" },
   { more: '[data-act="computer-menu"]', row: "div.row" },
@@ -43,6 +39,8 @@ export const OVERFLOW_ROWS: readonly OverflowRow[] = [
   { more: '[data-act="more-message"]', row: ".chat-message" },
   { more: '[data-au="event-more"]', row: ".au-event" },
   { more: '[data-pop="more"]', row: ".au-pop-detail" },
+  { more: '[data-ms="skill-more"]', row: ".ms-subhead" },
+  { more: '[data-ms="command-more"]', row: ".ms-subhead" },
 ];
 
 /** The ⋯ of the innermost row around `target`, with that row; a ⋯ that cannot be pressed (disabled) has no menu to open. */

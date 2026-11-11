@@ -4,6 +4,36 @@ Owner decision 2026-10-30: Settings > Connections is the only connected-app entr
 The sidebar has no app entry or badge. The installed tab retains the shared inventory
 count and its unknown/loading state; connection and permission behavior is unchanged.
 
+## Setup in the conversation (owner, 2026-11-09)
+
+Owner: 「這種設定不管是 composio 還是甚麼的 一律全部都在對話中進行…除非真的是登入就結束 或是輸入金鑰匙就結束」. In the
+store, a sign-in or one key is still done at once; 加入 on anything more (a server of the owner's own such as n8n, a
+developer app of theirs) puts the owner's words 「幫我連接 <name>」 in the conversation's composer (`store.setUpInChat`)
+and its row says nothing it would have to explain. The member answers with a connect card (`connect_app`): a server
+card has `needs: "own_server"` and carries its own `fields` (n8n: `url`, `token`), which the card's inline form shows
+with no catalog read; `integrations.card_connect {id, fields}` takes them, the token field is emptied on submit, and
+the member explains each field in its reply. Scenes: store-n8n and plugins-setup-own-app (`store-in-chat`).
+
+```powershell
+npm run look -- store-n8n plugins-setup-own-app plugins-store-needs --theme both --width 1120,720,1920x1080
+```
+## The store is only what is not added yet; n8n is a preset (owner, 2026-11-08)
+
+The store is one list, 「全部」 (or the chosen chip's name), of the apps not added yet: no 已連結 and no 常用
+sections. Popular apps still lead it while browsing, in bounded 18-card pages. n8n is offered as the owner's
+own server (`PRESET_FORMS` in `connections.ts`): it runs at each owner's own address and has no Composio
+toolkit, so the built-in catalogue (fixed official addresses only) cannot carry it. Its row says 「需要自己的
+伺服器」; 加入 opens the server form with type http, name n8n and `Authorization=Bearer ` filled in and the
+address field focused (placeholder `https://n8n.example.com/mcp-server/http`). A connection whose name or host
+is n8n takes it out of the store.
+
+```powershell
+npm run look -- store-n8n plugins-store plugins-store-key plugins-store-all --theme both --width 1120,720,1920x1080
+```
+
+`plugins-store` requires the single section and no 已安裝 state; `store-n8n` and `store-n8n-form` check the mark,
+the need words, the filled form and the focus.
+
 
 ## Owner round 10 connected apps and chosen models
 
@@ -73,25 +103,25 @@ CARGO_TARGET_DIR apply.
 ## Sub-features
 
 Settings > Connections contains one connected view (the tab 已連結) for Composio
-toolkits, private Google, custom MCP servers and the members' private skills. Every
-row has a bare service mark (or a generic plug, or the member's face for a skill),
+toolkits, private Google and custom MCP servers: connectors only (owner, 2026-11-07).
+A member's skills, their sharing and their import are managed in that member's own
+panel, never here; the dialog has no skills section, no import button and no skill
+rows. Every row has a bare service mark (or a generic plug),
 name, one-line description, switch and detail chevron. Managed bridge
 servers are not duplicate rows. Tool switches are grouped by write/read in the
 detail. Disconnect lives in the detail overflow with a second-press confirmation.
 Custom MCP add/edit/test, command/HTTP, JSON paste and local discovery stay reachable.
 
-The rows sit under three headings: 應用程式 (their tools can be called now), 尚未連結
+The rows sit under two headings: 應用程式 (their tools can be called now) and 尚未連結
 (waiting for sign-in, failed, a duplicate of another connection, all tools off or
-unreadable, each with its reason) and 私人技能. An app is connected only when its tools
+unreadable, each with its reason). An app is connected only when its tools
 can be called now, and the core defines that once (`integrations/inventory.py`); the
 Settings > Connections tab's number and its installed rows
 all show that one count. An unreadable inventory shows 「—」 instead of a number (the
 entry's accessible name says it cannot be read), and an app whose state cannot be read
 says 「無法讀取」 on its row.
 An app's detail shows its account(s) by status, `已開啟 N/M 個工具` with a switch per
-tool, signing in again and, in the overflow, disconnect. A private skill's page shows
-its name, who has it, its description (when it is used), a switch, the whole
-SKILL.md as editable text and 刪除技能. Sharing an app or a skill is not offered
+tool, signing in again and, in the overflow, disconnect. Sharing an app is not offered
 until members can share across users (P13).
 
 The Store always reads Raphael's built-in services from integrations.catalog, with
@@ -126,18 +156,24 @@ and does not prove remote image availability.
 ## How to get to it (user POV)
 
 Open Settings > Connections from the account footer. Use 已連結 to open a service
-detail or a private skill, change their switches or open an overflow. Add offers custom command/URL, pasted JSON and import.
+detail, change its switch or open an overflow. Add offers custom command/URL, pasted JSON and import.
 Use Store to search and Add a built-in service without configuring Composio;
 complete its existing login, then return to 已連結. Optionally use the setup row at
 the end to save a Composio project key and add its extra apps.
 
+Under the 已連結 list a 推薦 section (owner, 2026-11-08: the page looked empty) shows up to six popular store apps not
+added yet as the store's own cards with 加入 in place; an app already there is never recommended, however it was added
+(matched by id, name, description and its store entry: Notion directly, Gmail through the Google connection). It hides
+while searching; the store tab keeps the whole catalogue. Scene: connections-recommended.
+
 ## Driving it with look
 
 ```powershell
+npm run look -- connections-recommended connections --theme both --width 1120,720,1920x1080
 npm run look -- plugins-installed plugins-detail plugins-store plugins-store-category plugins-store-key plugins-store-key-openrouter plugins-store-key-consumer plugins-connecting --theme both --width 1120,720,1920x1080
 npm run look -- connections connections-hover server-menu connections-add-menu connections-command connections-test connections-url connections-edit connections-delete --theme both --width 1120,720,1920x1080
 npm run look -- connections-paste connections-paste-preview connections-discover connections-empty connections-discover-empty --theme both --width 1120,720,1920x1080
-npm run look -- connect-apps-categories connected-apps-skills connected-apps-unreadable connections-app-switch connector-many-tools connector-account-tools connector-uninstalled skill-private-detail --theme both --width 1120,720,1920x1080
+npm run look -- connect-apps-categories connected-apps-only connected-apps-unreadable connections-app-switch connector-many-tools connector-account-tools connector-uninstalled --theme both --width 1120,720,1920x1080
 ```
 
 For this local store change, the selected acceptance matrix is:
@@ -168,10 +204,13 @@ failures, local search/count, category isolation and late replies after reset.
 Core tests cover cursor paging, concurrent cache reads, one-hour expiry, atomic
 failure fallback, key invalidation, repeated cursors and the 3,000-entry cap.
 
-The last command in the broader list above is the apps and skills set (`scenes/apps.mjs`). Each scene enters
+The last command in the broader list above is the apps set (`scenes/apps.mjs`). Each scene enters
 through Settings > Connections; `apps-count` compares the tab's
-number, the rows and the roster, and `apps-unreadable` checks that an unreadable
-inventory shows no count.
+number, the rows and the roster, `apps-unreadable` checks that an unreadable
+inventory shows no count, and `connectors-only` (scene `connected-apps-only`, whose fixture
+gives the members skills) requires no skills section, import button, skill row, plugin set or word of skills (connections.test.ts pins that the dialog never reads a member's skills; the open member panel behind it may).
+The scenes `connected-apps-skills`, `skill-private-detail` and the `skills-*` import, grant, source and plugin scenes were
+retired on 2026-11-07 with the dialog's skills section; the member panel's skills are covered by `details-skills` and the members map.
 
 All switches in Connections are binary (owner, 2026-10-28). The app switch reflects
 only its enabled flag; turning it off or on preserves every tool exclusion. A
@@ -200,7 +239,7 @@ RPCs and then expands the individual list. Its sign-in failure step checks the
 dedicated toolkit-not-allowed words. All scenes retain the shared real entry and
 synthetic IPC boundary.
 
-`skill-page` checks the action order and that the document is whole and starts at its first line. Also run `home` (the global sidebar on the wide
+Also run `home` (the global sidebar on the wide
 and compact layouts) and the `plugins-*` scenes above for regressions.
 
 Inspect every contact sheet and detail/store/key/menu full-size image, especially
@@ -273,7 +312,7 @@ Count the connected apps by hand against Settings: connect one, let a sign-in ex
 the same service twice and uninstall one, and watch the number follow each time; ask a CLI
 and an API brain how many apps are connected. Switch a tool off, start a new turn and a
 running one, and confirm neither brain offers or runs it; do the same after uninstalling,
-once with 一律允許 chosen earlier. Edit a private skill's document, ask for what its
+once with 一律允許 chosen earlier. Edit a skill in the member's own panel (not here), ask for what its
 description names and see it used; delete it and see that it is not.
 
 ## UI audit regression coverage
@@ -297,25 +336,23 @@ A failed sign-in or re-link started in an app dialog uses the Store's same local
 loginFailure copy in a note with role=alert after the account rows. It does not
 raise a toast. Retry, close and success clear the error; a pending failure from a
 closed or replaced dialog is discarded. Other connections-owned feedback raised
-while an app, skill or project-key dialog is open stays inside that dialog:
-re-login success, skill save/toggle/delete errors, tool/app operation errors,
-custom server test/refresh and device/browser/cancellation errors. Skill save uses
-role=status immediately before its actions. Successful removal closes its dialog
+while an app or project-key dialog is open stays inside that dialog:
+re-login success, tool/app operation errors,
+custom server test/refresh and device/browser/cancellation errors. Successful removal closes its dialog
 before showing the usual list-level toast.
 
 The selected regression matrix for this change is:
 
 ~~~powershell
-npm run look -- connector-account-tools connector-many-tools connections-app-switch plugins-detail plugins-store plugins-store-category plugins-store-key skill-private-detail connector-uninstalled --theme both --width 1120,720,1920x1080
+npm run look -- connector-account-tools connector-many-tools connections-app-switch plugins-detail plugins-store plugins-store-category plugins-store-key connector-uninstalled --theme both --width 1120,720,1920x1080
 ~~~
 
 connector-account-tools checks the refusal inline with no refusal toast, then
 connections-dialog-actions calls elementFromPoint at EVERY footer button centre
 and requires the button or its child. It checks both the folded and expanded tool
-states. connector-many-tools and skill-private-detail run the same footer check;
-the skill scene also checks inline save feedback without a save toast. Happy-dom
+states. connector-many-tools runs the same footer check. Happy-dom
 tests cover refusal/denial/timeout/network copy, retry/success/close, stale replies
-after reopening, skill save feedback and the footer check's covered-button failure.
+after reopening and the footer check's covered-button failure.
 
 ## Shared content measures (2026-10-28)
 
@@ -423,7 +460,8 @@ search and fully visible chips while results scroll independently.
 
 The mouse wheel scrolls the chip row sideways and hands the page back at either
 end. An arrow button and a fade stand only at an end with more chips behind it
-(`chip-scroll.ts`, shared by any `[data-chip-row]`). `plugins-store-wheel` turns
+(`chip-scroll.ts`, shared by any `[data-chip-row]`). The ten chips fit the sheet
+from 1120 px up, so `plugins-store-wheel` measures it at 720 px, where they overflow. It turns
 a real wheel over the chips, checks the left arrow can be pressed and the page
 did not scroll, then presses it and checks the row is back at its start with
 only the right arrow.
@@ -581,6 +619,44 @@ npm run look -- plugins-store-needs plugins-store-needs-page plugins-setup-key p
 fields, the guide or its fallback, the redirect address for a developer app, a key that is in no page text and no call
 but the one that adds the app, and an emptied masked field after a refusal; `card-*` checks require the same for the chat.
 
+An app on the owner's own server (n8n) is set up in the conversation (owner, 2026-11-09: setup happens in the chat
+unless it ends at a sign-in or a key). Its card (`needs: "own_server"`) says 需要自己的伺服器 and carries the fields
+the core declared: the address plain, the token masked, one 安全儲存, no modal and no catalog guide. Both values leave
+in the card's one `integrations.card_connect` call and in no page text.
+
+```powershell
+npm run look -- connector-server connector-server-sent --theme both --width 1120,720,1920x1080
+```
+
+## A card says why it did not connect, and the owner's own Google (2026-11-11, R-CONNECT-01 to 03)
+
+Owner's open task since 2026-10-25 (「接上 Composio 與自己的 Google 授權」). Two behaviours, one machine (`connectors/cards.py`):
+
+- A failed connection card is always a named cause (`CAUSES`: busy, vault, browser, network, no_answer, service_down, rate_limit,
+  refused, invalid_request, not_found, bad_response, address, not_allowed, key_refused, needs_*, client_rejected, denied, timeout,
+  state, scope, signin_failed, signin_expired, no_refresh, api_disabled, mcp_unavailable, interrupted, unknown). The view carries
+  `error` (the cause), `retry`, `fix` (`settings` or `form`) and `detail` (the service's short words for `refused`, the technical
+  reason for `unknown`). The member gets `cause <name>: ...` as the failure's reason. The attempt that used to be bare is `busy`:
+  `connectors.connect` answers `busy` before it sends anything while another sign-in or `connectors.*` work holds its lock.
+- The owner's own Google is the app `google` (`apps.OWN_GOOGLE`): `connect_app google`, or 加入 on 「Google（私人連接）」 in the store,
+  which leaves for the composer with 「幫我連接我自己的 Google 帳號」. Its card (`needs: "own_google"`) walks five steps (open), gives
+  the scopes and the return address as text to copy, asks for the Client ID (plain) and the Client secret (masked) and signs in with
+  one 連接 Google. The two values leave in `integrations.card_connect` and reach the vault through `connectors.google.configure`.
+  With a Client ID kept the card has no fields: one button signs in. Connected, it says the account (Gmail's profile) and the tool count.
+- A card of an older core (no `retry`, `fix`, `detail`) keeps the actions it had.
+
+```powershell
+npm run look -- connector-cause-busy connector-cause-refused connector-cause-unknown connector-google-steps connector-google-filled connector-google-authorizing connector-google-connected connector-google-kept connector-google-rejected store-google store-google-in-chat --theme both --width 1120,720,1920x1080
+npm run look -- connector-invalid-request connector-failed-continued connector-server connector-key-form plugins-store --theme both --width 1120,720,1920x1080
+```
+
+`connector-cause-*` require the cause's own sentence (never 沒有連上), one 再試一次 only where it can help, the × to put the card away,
+no technical reason on the card's face and, for `unknown`, the reason folded under 詳細資料. `connector-google-*` require five open
+steps, the two texts to copy, a plain Client ID and a masked Client secret, one primary 連接 Google, a secret that is in no page text
+and in no call but the card's own, the sign-in waiting with only 取消, and the account on the connected card. What only a real Google
+client proves: that Google accepts a Desktop client with no registered return address, the real consent screens (including the
+unverified-app warning), the 7-day expiry of a project left in Testing, and that `access_type=offline` returns a refresh token.
+
 ## Executable round 10 matrix
 
 ```powershell
@@ -608,13 +684,25 @@ npm run look -- mcp-proposal-edit mcp-proposal-tested mcp-proposal-enabled mcp-p
 
 Offline contracts: core/tests/integrations/test_chat_connections.py, core/tests/agent/test_connection_management.py, core/tests/background/test_connection_offers.py, core/tests/test_connect_cards.py, core/tests/test_secret_cards.py, core/tests/brain/test_db.py, app/src/main/mcp-proposal.test.ts. Native provider/OAuth/stdio processes, Rust, live and judge remain separately authorized checks.
 
+
+## Named connected accounts (2026-11-05)
+
+R-COLLEAGUE-04: Connections > an app shows each public account label; Account label edits that exact account. Add another account reuses existing sign-in and asks for a label afterward. A returned email is the default; provider refresh retains owner labels by account ID. Members and connections_list receive public labels and the shared instruction to ask which account unless specified.
+
+```powershell
+npm run look -- account-labels account-label-edit output-folder-picker output-folder-picker-cancel --theme both --width 1120,720,1920x1080
+```
+
+Core fakes prove persistence and projection. IPC fixtures never prove OAuth or provider metadata. Custom MCP services without multiple managed account identities retain their service identity.
+
 ## Primary management intent regression (2026-11-05)
 
 Connection management is offered only to the current primary in an interactive
 owner private chat. Connect, enable/disable and turn on/off requests select the
 connection area, alongside disconnect/reconnect and explicit connection/MCP terms.
-Other requests keep management hidden until find_tools; the default primary
-snapshot remains at most 49 tools. Discovery never widens nonprimary or worker
+Since the fixed tool list (2026-11-10, owner-management.md) every request keeps
+management out of the list: find_tools returns it and use_tool calls it, and the
+words above only rank what find_tools returns. The default primary snapshot lists 43. Discovery never widens nonprimary or worker
 access, and execution rechecks the live primary and exact-action owner approval.
 Disconnect asks even under bypass. Local reconnect still requires proposal testing
 and the existing local-command consent before launching a server; ask mode also

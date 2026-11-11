@@ -171,6 +171,120 @@ def test_compose_adds_detail_only_when_it_says_more():
     assert compose("", "好的", None) == "好的"
 
 
+# --- formatting and sending ---
+
+
+class RecordingApi:
+    """A Bot API whose sendMessage can be told to refuse: records (text, parse_mode)."""
+
+    def __init__(self, refuse=()):
+        self.sent: list[tuple[str, str | None]] = []
+        self.refuse = list(refuse)  # errors raised by the next calls, in order
+
+    async def send_message(self, chat_id, text, *, parse_mode=None):
+        if self.refuse:
+            error = self.refuse.pop(0)
+            if error is not None:
+                raise error
+        self.sent.append((text, parse_mode))
+
+
+def test_markdown_becomes_telegram_html():
+    from raphael_core.messaging.channels.telegram_format import markdown_to_html
+
+    html = markdown_to_html(
+        "# Plan\n**bold** *it* `a<b` [site](https://x.io/?a=1&b=2) snake_case_word\n- one\n```py\nx = 1 < 2\n```"
+    )
+    assert html == (
+        "<b>Plan</b>\n<b>bold</b> <i>it</i> <code>a&lt;b</code> "
+        '<a href="https://x.io/?a=1&amp;b=2">site</a> snake_case_word\n- one\n'
+        '<pre><code class="language-py">x = 1 &lt; 2</code></pre>'
+    )
+
+
+async def test_text_is_sent_as_html_and_falls_back_to_plain_on_a_400():
+    api = RecordingApi(refuse=[ChannelError("bad_request")])
+    await TelegramChannel(api).send("5", "**bold** & <tag>")
+    assert api.sent == [("bold & <tag>", None)]
+    ok = RecordingApi()
+    await TelegramChannel(ok).send("5", "**bold** & <tag>")
+    assert ok.sent == [("<b>bold</b> &amp; &lt;tag&gt;", "HTML")]
+
+
+async def test_parse_mode_reaches_the_bot_api(fake, http):
+    await TelegramApi(TOKEN, http).send_message(OWNER, "<b>x</b>", parse_mode="HTML")
+    await TelegramApi(TOKEN, http).send_message(OWNER, "x")
+    sends = [p for m, p in fake.requests if m == "sendMessage"]
+    assert sends[0]["parse_mode"] == "HTML" and "parse_mode" not in sends[1]
+
+
+async def test_a_long_code_block_is_split_without_breaking_it():
+    code = "\n".join(f"line {i} <x>" for i in range(1500))
+    api = RecordingApi()
+    await TelegramChannel(api).send("5", f"Intro\n\n```python\n{code}\n```\n\nThe end.")
+    assert len(api.sent) > 1
+    assert all(telegram._units(text) <= 4096 and mode == "HTML" for text, mode in api.sent)
+    for text, _ in api.sent:
+        # tags are balanced in every message
+        assert text.count("<pre>") == text.count("</pre>") and text.count("<code") == text.count("</code>")
+    joined = "\n".join(text for text, _ in api.sent)
+    assert all(f"line {i} &lt;x&gt;" in joined for i in (0, 750, 1499))
+    assert api.sent[-1][0].endswith("The end.")
+    assert api.sent[1][0].startswith('<pre><code class="language-python">')  # reopened
+
+
+async def test_a_rate_limit_is_waited_out_and_the_rest_still_goes_out():
+    waits = []
+
+    async def nap(seconds):
+        waits.append(seconds)
+
+    api = RecordingApi(refuse=[None, ChannelError("rate_limited", 2.0)])  # 1st ok, 2nd limited once
+    channel = TelegramChannel(api, sleep=nap)
+    await channel.send("5", ("word " * 1500).strip())  # two messages
+    assert waits == [2.0]
+    assert len(api.sent) == 2
+
+
+async def test_a_rate_limit_that_never_lifts_gives_up():
+    async def nap(seconds):
+        pass
+
+    api = RecordingApi(refuse=[ChannelError("rate_limited", 1.0)] * 5)
+    with pytest.raises(ChannelError):
+        await TelegramChannel(api, sleep=nap).send("5", "hi")
+    assert api.sent == [] and len(api.refuse) == 2  # three tries
+
+
+async def test_the_switchboard_retries_a_rate_limited_message_and_goes_on():
+    from raphael_core.messaging.core import Switchboard
+
+    sent, waits = [], []
+
+    class Channel:
+        kind = "slack"
+        error = None
+        refuse = [ChannelError("rate_limited", 1.5)]
+
+        async def send(self, chat, text):
+            if text == "two" and self.refuse:
+                raise self.refuse.pop()
+            sent.append(text)
+
+    async def nap(seconds):
+        waits.append(seconds)
+
+    async def never(*args, **kwargs):
+        return ""
+
+    board = Switchboard(
+        Channel(), ask=never, stop=never, is_allowed=lambda u: True, chat_allowed=lambda c: True,
+        language=lambda: "en", sleep=nap,
+    )
+    await board.tell("c", ["one", "two", "three"])
+    assert sent == ["one", "two", "three"] and waits == [1.5]
+
+
 # --- pairing ---
 
 

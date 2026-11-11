@@ -10,11 +10,12 @@ from .conftest import call, report, turn, until
 
 
 def test_worker_prompt_names_earlier_files_with_the_shared_budget():
-    from types import SimpleNamespace
+    from raphael_core.agent.history import Turn
     from raphael_core.background.service import _prompts
     from raphael_core.background.run import RunLimits
-    turns = [SimpleNamespace(question="Read the file", text="Read", prefix="", status="done",
-                             attachments=[{"id": "stored-sample", "name": "sample.txt", "mime": "text/plain"}])]
+    turns = [Turn(id=1, created_at_ms=1000, session_id="synthetic", route="answer",
+                  question="Read the file", text="Read", prefix="", detail=None, status="done",
+                  attachments=[{"id": "stored-sample", "name": "sample.txt", "mime": "text/plain"}])]
     _, user = _prompts("en", "Continue", {}, turns, RunLimits())
     assert "stored-sample" in user and "read_attachment" in user
     assert '<tool_result untrusted="true"' in user

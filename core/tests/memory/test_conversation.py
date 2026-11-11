@@ -16,7 +16,6 @@ from raphael_core.memory.conversation import (
     FOLD_AT_TURNS,
     KEEP_OWNER_TURNS,
     KEEP_TURNS,
-    QUICK_TURNS,
     SUMMARY_MAX_TOKENS,
     Conversation,
     asks_to_remember,
@@ -45,52 +44,48 @@ def ids(turns):
 # --- when to fold, and what -----------------------------------------------------------------------
 
 
-def test_nothing_is_folded_until_the_turns_pass_thirty_or_twelve_thousand_tokens():
+def test_short_turns_are_not_folded_only_because_thirty_turns_passed():
     assert plan_fold([turn(n) for n in range(1, FOLD_AT_TURNS + 1)], set()) is None
-    folded, through = plan_fold([turn(n) for n in range(1, FOLD_AT_TURNS + 2)], set())
-    # Thirty-one turns: the newest sixteen stay as they were said.
-    assert ids(folded) == list(range(1, FOLD_AT_TURNS + 2 - KEEP_TURNS))
-    assert through == FOLD_AT_TURNS + 1 - KEEP_TURNS
+    assert plan_fold([turn(n) for n in range(1, FOLD_AT_TURNS + 2)], set()) is None
 
 
-def test_long_turns_are_folded_by_their_tokens_down_to_six_thousand():
+def test_folding_keeps_twenty_recent_messages_even_above_the_tail_token_budget():
     long = "字" * 1500  # about 1,500 tokens a turn
-    turns = [turn(n, long) for n in range(1, 10)]  # about 13,500 tokens
-    folded, through = plan_fold(turns, set())
-    # Kept: the newest that make 6,000 tokens (four turns), and never fewer than the last four.
+    turns = [turn(n, long) for n in range(1, 16)]
+    folded, through = plan_fold(turns, set(), context_window=20000)
     assert through == 5 and ids(folded) == [1, 2, 3, 4, 5]
 
 
 def test_the_owner_s_last_four_turns_are_always_kept():
     huge = "字" * 13_000
-    turns = [turn(n, huge) for n in range(1, 6)]
+    turns = [turn(n, huge) for n in range(1, 16)]
     folded, through = plan_fold(turns, set())
-    assert through == 1 and len(turns) - through == KEEP_OWNER_TURNS
+    assert through == 5 and len(turns) - through >= KEEP_OWNER_TURNS
 
 
 def test_the_fold_stops_before_a_protected_turn():
     turns = [turn(n) for n in range(1, 40)]
-    folded, through = plan_fold(turns, {5})
+    folded, through = plan_fold(turns, {5}, context_window=100)
     assert through == 4 and ids(folded) == [1, 2, 3, 4]
-    assert plan_fold(turns, {1}) is None  # nothing before it to fold
+    assert plan_fold(turns, {1}, context_window=100) is None  # nothing before it to fold
 
 
 def test_turns_that_say_nothing_are_covered_but_not_given_to_the_model():
     # A question that waits for a yes and a request still running say nothing yet.
     turns = [turn(n, status="confirm" if n % 2 else "done") for n in range(1, 70)]
-    folded, through = plan_fold(turns, set())
+    folded, through = plan_fold(turns, set(), context_window=100)
     assert all(t.status == "done" for t in folded) and through > ids(folded)[-1] - 2
 
 
 def test_a_request_that_did_not_finish_is_folded_with_the_turns_around_it():
     turns = [turn(n, status="error" if n == 3 else "done") for n in range(1, 40)]
-    folded, _ = plan_fold(turns, set())
+    folded, _ = plan_fold(turns, set(), context_window=100)
     assert 3 in ids(folded)
 
 
 def test_a_failed_request_counts_toward_the_time_to_fold():
     failures = [turn(n, status="error") for n in range(1, FOLD_AT_TURNS + 2)]
-    assert plan_fold(failures, set()) is not None
+    assert plan_fold(failures, set(), context_window=100) is not None
 
 
 # --- which turns are protected ---------------------------------------------------------------------
@@ -105,7 +100,7 @@ def conversation(conn, clock):
     )  # fmt: skip
     made.reflected = reflected
     # A deliberately small model window exercises folding without a huge fixture.
-    made.context_window = 400
+    made.context_window = 200
     return made
 
 
@@ -159,11 +154,10 @@ def test_the_context_is_the_summary_and_the_answered_turns_after_it(conversation
     assert [t.question for t in context.turns] == ["q0", "q1", "q2", "q3", "q4"]
 
 
-def test_a_quick_route_keeps_all_turns_below_half_the_model_window(conversation, history):
+def test_context_keeps_all_turns_below_the_model_budget(conversation, history):
     for n in range(10):
         add_turn(history, f"q{n}")
-    assert [t.question for t in conversation.context(quick=True).turns] == [f"q{n}" for n in range(10)]
-    assert len(conversation.context(quick=True).turns) == 10
+    assert [t.question for t in conversation.context().turns] == [f"q{n}" for n in range(10)]
     assert len(conversation.context().turns) == 10
 
 
@@ -380,22 +374,22 @@ def test_the_summary_can_be_cleared(conversation):
 
 
 def test_the_thresholds_are_the_approved_ones():
-    assert conversation_module.FOLD_AT_TOKENS == 12_000
-    assert conversation_module.KEEP_TOKENS == 6_000
-    assert SUMMARY_MAX_TOKENS == 1_500
+    assert conversation_module.FOLD_AT_TOKENS == 24_000
+    assert conversation_module.KEEP_TOKENS == 4_800
+    assert SUMMARY_MAX_TOKENS == 10_000
 
 
-async def test_a_long_backlog_is_folded_from_its_newest_turns(conversation, history, conn, clock):
+async def test_a_long_backlog_covers_only_its_oldest_read_batch(conversation, history, conn, clock):
     for n in range(300):
         add_turn(history, f"turn{n} " + "x" * 400)
     conversation._client.replies.append({"summary": "Context:\n..."})
     assert await conversation.fold("m", Ledger(SpendTracker(conn, clock.ms))) is True
     user = conversation._client.calls[0]["user"]
     middle = user.split("Verbatim conversation start", 1)[0]
-    assert "turn283 " in middle and "turn0 " not in middle
+    assert "turn2 " in middle and "turn283 " not in middle
     assert "turn0 " in user  # the beginning stays verbatim outside the folded middle
     assert estimate_tokens(user) < 20_000
-    assert conversation.summary().through_turn_id == 300 - KEEP_TURNS
+    assert 2 < conversation.summary().through_turn_id < 300 - KEEP_TURNS
 
 
 async def test_a_fold_that_was_waiting_when_the_conversation_was_cleared_writes_nothing(conversation, history, conn, clock):

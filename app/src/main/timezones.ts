@@ -1,5 +1,6 @@
 import { getLocale, t } from "./i18n";
 import { closeMenu, esc, openPopover } from "./ui";
+import { findsName } from "./find-match";
 
 export const detectedTimezone = (): string => Intl.DateTimeFormat().resolvedOptions().timeZone;
 export function zonedParts(at: number, zone?: string): { date: string; time: string } {
@@ -34,7 +35,8 @@ export function openTimezoneMenu(anchor: HTMLElement, current: string, pick: (va
   const input = panel.querySelector<HTMLInputElement>("input")!;
   const draw = (): void => {
     const choices = [{ value: "", label: t("zone.auto") }, ...zones.map(value => ({ value, label: zoneLabel(value) === value ? value : `${zoneLabel(value)} · ${value}` }))];
-    const found = choices.filter(choice => `${choice.label} ${choice.value}`.toLocaleLowerCase().includes(input.value.trim().toLocaleLowerCase()));
+    const query = input.value.trim().toLocaleLowerCase();
+    const found = choices.filter(choice => `${choice.label} ${choice.value}`.toLocaleLowerCase().includes(query) || findsName([choice.label, choice.value.replace(/[/_]/g, " ")], query));
     panel.querySelector("[data-timezones]")!.innerHTML = found.map(choice => `<button type="button" class="menu-action" data-zone="${esc(choice.value)}" aria-current="${current === choice.value}"><span class="mt">${esc(choice.label)}</span></button>`).join("") || `<p class="note">${esc(t("zone.empty"))}</p>`;
   };
   input.addEventListener("input", draw);

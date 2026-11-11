@@ -15,11 +15,11 @@ from raphael_core.agent.actions import is_action
 from raphael_core.agent.history import AgentHistory
 from raphael_core.agent.speaker import Speaker
 from raphael_core.agent.tools import ToolResult
-from raphael_core.background.run import OWNER_SAID_NO, OWNER_SAID_NO_BEFORE
+from raphael_core.background.run import NO_ANSWER, NO_ANSWER_BEFORE, OWNER_SAID_NO, OWNER_SAID_NO_BEFORE
 from raphael_core.background.service import QUESTION_WAIT_S, continued
 from raphael_core.protocol import INVALID_PARAMS, RpcError
 
-from .conftest import ARGUMENT, TASK_TEXT, Clock, call, report, turn, until
+from .conftest import ARGUMENT, TASK_TEXT, Clock, call, report, turn, until, use
 
 
 class ScriptedJudge:
@@ -62,7 +62,7 @@ async def paused(rig, task_id):
 
 def note_then_report(rig, text="Noted."):
     rig.client.replies = [
-        turn("Noting.", [call("Notes__note", {"text": ARGUMENT}, "c1")], cost=0.002),
+        turn("Noting.", [use("Notes__note", {"text": ARGUMENT}, "c1")], cost=0.002),
         report(text, cost=0.003),
     ]
 
@@ -191,10 +191,10 @@ async def test_after_a_no_the_task_gets_round_it_with_no_other_tool_and_asks_not
     rig = make_rig(clock=clock)
     await plugins.connect(look="T0", note="T2", wipe="T2")
     rig.client.replies = [
-        turn("Noting.", [call("Notes__note", {"text": ARGUMENT}, "c1")], cost=0.002),
+        turn("Noting.", [use("Notes__note", {"text": ARGUMENT}, "c1")], cost=0.002),
         # Another way to the same end: the tool again, a synonym that also changes something, and a lookup.
-        turn("Another way.", [call("Notes__note", {"text": ARGUMENT}, "c2"), call("Notes__wipe", {}, "c3"),
-                              call("Notes__look", {"topic": "milk"}, "c4")], cost=0.002),
+        turn("Another way.", [use("Notes__note", {"text": ARGUMENT}, "c2"), use("Notes__wipe", {}, "c3"),
+                              use("Notes__look", {"topic": "milk"}, "c4")], cost=0.002),
         report("Did not note it.", cost=0.003),
     ]
     task_id = rig.submit()
@@ -212,32 +212,42 @@ async def test_after_a_no_the_task_gets_round_it_with_no_other_tool_and_asks_not
     assert ("Notes", "wipe", None, "none", "blocked", task_id) in plugins.audit()
 
 
-async def test_a_question_nobody_answers_in_ten_minutes_ends_the_task_politely(make_rig, plugins, calls, clock):
+async def test_a_question_waits_thirty_minutes_and_its_end_leaves_the_rest_of_the_task_alone(make_rig, plugins, calls, clock):
+    # R-AG-MGMT-04: nobody at the keyboard; the card waits as long as a local command does, and what needed no yes goes on.
     rig = make_rig(clock=clock)
-    await plugins.connect(note="T2")
-    note_then_report(rig)
+    await plugins.connect(look="T0", note="T2")
+    rig.client.replies = [
+        turn("Noting.", [use("Notes__note", {"text": ARGUMENT}, "c1")], cost=0.002),
+        # The task goes on without the call: a lookup is made, the same tool is not asked about again.
+        turn("Another way.", [use("Notes__look", {"topic": "milk"}, "c2"), use("Notes__note", {"text": "again"}, "c3")], cost=0.002),
+        report("Looked up milk; the note was not made and can be asked again.", cost=0.003),
+    ]
     task_id = rig.submit()
     asked = await paused(rig, task_id)
+    assert QUESTION_WAIT_S == 30 * 60
     clock.now += QUESTION_WAIT_S - 1
     rig.service.sweep_questions()
     assert rig.task(task_id).state == "waiting"
     clock.now += 2
     rig.service.sweep_questions()
-    [ended] = rig.reports()
-    assert (ended["state"], ended["text"]) == (
-        "cancelled",
-        "No answer came within ten minutes. The task ended without that action.",
-    )
-    task = rig.task(task_id)
-    assert (task.state, task.reason) == ("cancelled", "expired") and calls == []
+    [done] = await rig.wait_for_reports()
+    assert (done["state"], done["text"]) == ("done", "Looked up milk; the note was not made and can be asked again.")
+    assert calls == ["look"] and {params["question_id"] for params in questions(rig)} == {asked["question_id"]}
     assert questions(rig)[-1]["state"] == "expired"
+    told = [message["content"] for message in rig.client.chat_calls[1]["messages"] if message["role"] == "tool"]
+    assert any(NO_ANSWER in text for text in told)
+    later = [message["content"] for message in rig.client.chat_calls[2]["messages"] if message["role"] == "tool"]
+    assert sum(NO_ANSWER_BEFORE in text for text in later) == 1 and sum("found milk" in text for text in later) == 1
     assert ("Notes", "note", None, "none", "expired", task_id) in plugins.audit()
+    steps = [(s.tool, s.outcome, s.reason) for s in rig.steps(task_id) if s.kind == "tool"]
+    assert steps[0] == ("note", "blocked", "expired")
+    # A yes that comes after that finds nothing, and nothing more is spent on it.
     answer = {"task_id": task_id, "question_id": asked["question_id"], "approved": True}
     assert await rig.rpc.call("background.answer", answer) == {"status": "expired"}
-    assert len(rig.client.chat_calls) == 1  # nothing more was spent
+    assert len(rig.client.chat_calls) == 3
 
 
-async def test_a_question_that_ran_out_while_another_was_answered_still_ends_its_task(
+async def test_a_question_that_ran_out_while_another_was_answered_still_goes_on_without_its_call(
     make_rig, plugins, clock
 ):
     rig = make_rig(clock=clock)
@@ -245,14 +255,15 @@ async def test_a_question_that_ran_out_while_another_was_answered_still_ends_its
     note_then_report(rig)
     first = rig.submit()
     await paused(rig, first)
-    rig.client.replies = [turn("", [call("Notes__note", {"text": "x"}, "c9")])]
+    rig.client.replies = [turn("", [use("Notes__note", {"text": "x"}, "c9")]), report("Done without it.", cost=0.001)]
     second = rig.submit("another task")
     await paused(rig, second)
     clock.now += QUESTION_WAIT_S + 1
     # Stopping the second answers its question, which sweeps the first one's out of the way.
     await rig.rpc.call("worker.cancel", {"task_id": second})
     rig.service.sweep_questions()
-    assert (rig.task(first).state, rig.task(first).reason) == ("cancelled", "expired")
+    await until(lambda: rig.task(first).state != "waiting")
+    assert rig.task(first).state != "cancelled" or rig.task(first).reason != "expired"
 
 
 async def test_a_yes_from_a_chat_app_is_never_taken(make_rig, plugins, calls, clock):
@@ -381,7 +392,7 @@ async def test_a_tool_that_only_reads_is_not_judged_in_the_background(make_rig, 
     judge = ScriptedJudge({1})
     rig = make_rig(clock=clock, safety=SafetyGuard(rules, judge))
     await plugins.connect(look="T0")
-    rig.client.replies = [turn("", [call("Notes__look", {"topic": "x"}, "c1")]), report("Found.")]
+    rig.client.replies = [turn("", [use("Notes__look", {"topic": "x"}, "c1")]), report("Found.")]
     rig.submit()
     await rig.wait_for_reports()
     assert calls == ["look"] and judge.shown == []

@@ -1,7 +1,39 @@
 export interface ThreadLine { key: string; html: string; turnId?: number }
 
-/** Face animation timing is sampled on mount, outside the line's content identity. */
-export const threadLineIdentity = (html: string): string => html.replace(/--slime-(?:delay|since):-?[\d.]+ms;?| data-slime-mounted="[\d.]+"/g, "");
+const MOVING_FACE = '<span class="slime-surface" data-slime-drawing=';
+const FACE_TAG = /<\/?span\b[^>]*>/g;
+
+/**
+ * A moving face is not part of its line's content: what it does follows the member's activity by itself (slime.ts
+ * `setSlimeState` hands every live face over), so its state, strips and clock, which change with every step a member
+ * takes, are left out. Its drawing and member stay: another slime or another member is another line. Without this a step
+ * from thinking to working made the line unequal to what is on screen and the whole turn was replaced, its words and
+ * cards with it (owner, 2026-11-11: 「它有時候更新字幕…就會閃現，就會亂跳一通，可能文字會突然看不到」).
+ */
+function withoutMovingFaces(html: string): string {
+  let out = "", from = 0, at: number;
+  while ((at = html.indexOf(MOVING_FACE, from)) >= 0) {
+    FACE_TAG.lastIndex = at;
+    let depth = 0, end = -1, tag: RegExpExecArray | null;
+    while ((tag = FACE_TAG.exec(html))) {
+      depth += tag[0][1] === "/" ? -1 : 1;
+      if (depth === 0) { end = FACE_TAG.lastIndex; break; }
+    }
+    if (end < 0) break;
+    out += html.slice(from, at) + `<!--face:${/data-slime-reuse="([^"]+)"/.exec(html.slice(at, at + 400))?.[1] ?? ""}-->`;
+    from = end;
+  }
+  return from ? out + html.slice(from) : html;
+}
+
+/**
+ * What a line is, for telling whether the one on screen is still it. Face animation timing is sampled on mount, outside
+ * the line's content identity, and so is what a face does and says about its member's work: its state and strips (above)
+ * and the hover words `setSlimeState` keeps current on every face.
+ */
+export const threadLineIdentity = (html: string): string => withoutMovingFaces(html)
+  .replace(/--slime-(?:delay|since):-?[\d.]+ms;?| data-slime-mounted="[\d.]+"/g, "")
+  .replace(/(data-presence-member="\d+") data-tooltip="[^"]*"/g, "$1");
 
 const eventKey = (node: HTMLElement): string => node.dataset.eventGroup !== undefined ? `events:${node.dataset.eventGroup}` : node.dataset.timelineEvent !== undefined ? `event:${node.dataset.timelineEvent}` : node.dataset.handoffGroup !== undefined ? `group:${node.dataset.handoffGroup}` :
   node.dataset.handoff !== undefined ? `task:${node.dataset.handoff}` : `exchange:${node.dataset.exchange}`;
@@ -104,7 +136,7 @@ export function patchThread(thread: HTMLElement, wanted: readonly ThreadLine[], 
       drawn.set(made, identity);
       if (!node && options.arrives?.(line)) made.classList.add("is-new");
       if (node) {
-        if (previous && /class="(?:handoff-event|conversation-event-line timeline-event)/.test(previous) && handoffSkeleton(previous) === handoffSkeleton(identity)) {
+        if (previous && /class="(?:[^"]*\bhandoff-event\b|conversation-event-line timeline-event)/.test(previous) && handoffSkeleton(previous) === handoffSkeleton(identity)) {
           const old = new Map(outerEvents(node).map(event => [eventKey(event), event]));
           for (const event of outerEvents(made)) updateEvent(old.get(eventKey(event))!, event);
           drawn.set(node, identity);

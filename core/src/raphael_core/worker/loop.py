@@ -38,6 +38,7 @@ result.
 """
 
 import asyncio
+import json
 import math
 import time
 from collections.abc import Awaitable, Callable, Sequence
@@ -79,6 +80,17 @@ MORE_ROOM = 2
 
 # What the model is told for a call that was not made.
 UNKNOWN_TOOL = "There is no such tool. Use only the tools you are offered."
+# With find_tools and use_tool offered, a tool that is not listed may still be the task's.
+NOT_LISTED = ("That tool is not in your list. Find it with find_tools, then call it with use_tool: "
+              '{"name": "<name>", "arguments": {...}}.')
+
+
+def called(name: str, arguments: Any) -> tuple[str, Any]:
+    """The tool a call runs and its arguments: the one a use_tool call names (`background.snapshot`), else
+    the call's own. What watches calls by their tool (the guardrails, the computer's check) sees that tool."""
+    if name == "use_tool" and isinstance(arguments, dict) and isinstance(arguments.get("name"), str):
+        return arguments["name"], arguments.get("arguments", {})
+    return name, arguments
 BAD_ARGUMENTS = "The arguments are not a JSON object. Call the tool again with a JSON object."
 CUT_OFF = (
     "Your reply reached the output limit while you wrote this call, so it was cut off and not made. "
@@ -109,8 +121,13 @@ UNLIMITED = Limits(math.inf, math.inf, math.inf)
 # What a task that reached a ceiling is asked, once and with no tools: where it stands.
 WRAP_UP = (
     "This task has reached a limit and stops here; you can use no more tools. Reply once, in plain text and in the "
-    "language of the request, with three short parts: what is done (name the files, ids or links that show it), "
+    "language of the request, with the complete work result and three parts: what is done (name the files, ids or links that show it), "
     "what is not done, and the next step to take."
+)
+FINAL_REPORT = (
+    "Write your final report now from the work already done, in the requested reply language. "
+    "Use no tools and do not repeat actions. Say what was completed, what remains incomplete, and any evidence. "
+    "Reply once in plain text."
 )
 # The longest that one call may take, and the most of the conversation it is shown beyond the first two messages.
 WRAP_UP_S = 120.0
@@ -376,6 +393,11 @@ async def _run_task(
                 if pending:
                     messages.extend(pending)
                     continue
+                if _missing_words(said):
+                    said = await _wrap_up(host, messages, cancelled, clock, instruction=FINAL_REPORT)
+                    model_calls += 1
+                    if cancelled.is_set():
+                        raise Stop("cancelled")
                 return Outcome("done", said, None, None, model_calls, tool_calls)
             last_failed = False
             dispatched = False
@@ -401,7 +423,8 @@ async def _run_task(
                             messages=list(messages), waiting_call=call.id,
                         )  # fmt: skip
                     content = result_text(call.name, outcome, keeper.window)
-                    computer_check.after(call.name, call.arguments, outcome.ok, outcome.kind)
+                    tool, arguments = called(call.name, call.arguments)
+                    computer_check.after(tool, arguments, outcome.ok, outcome.kind)
                     images.extend(image_parts(outcome))
                     if not outcome.ok:
                         last_failed = True
@@ -409,7 +432,7 @@ async def _run_task(
                             "denied", "declined", "cancelled", "owner_denied", "forbidden",
                             "presence_required", "private_chat_only", "member_create_limit")
                         tool_failure(outcome.kind, outcome.content)  # noted for self_check
-                    verdict = guardrails.after_call(call.name, call.arguments, outcome)
+                    verdict = guardrails.after_call(tool, arguments, outcome)
                     if verdict.halt:
                         raise Stop("failed", "tool_loop")
                     if verdict.note:  # after the result, outside the wrapper that marks it as data
@@ -464,14 +487,34 @@ def _settled(messages: Sequence[dict]) -> list[dict]:
     return out
 
 
+def _missing_words(text):
+    if not text.strip():
+        return True
+    candidate = text.strip()
+    for opening in ("```json\n", "```\n"):
+        if candidate.startswith(opening) and candidate.endswith("```"):
+            candidate = candidate[len(opening):-3].strip()
+            break
+    try:
+        value = json.loads(candidate)
+    except ValueError:
+        return False
+    if isinstance(value, dict):
+        messages = value.get('messages')
+        return not (isinstance(value.get('text'), str) and value['text'].strip()
+                    or isinstance(messages, list) and any(isinstance(item, str) and item.strip() for item in messages))
+    return isinstance(value, list)
+
+
 async def _wrap_up(
-    host: Host, messages: Sequence[dict], cancelled: asyncio.Event, clock: Callable[[], float]
+    host: Host, messages: Sequence[dict], cancelled: asyncio.Event, clock: Callable[[], float],
+    *, instruction: str = WRAP_UP,
 ) -> str:
     """What a task that reached a ceiling says of where it stands: one more model call with no
     tools. "" when none could be had (the owner stopped it, the model failed): the ceiling stays the end."""
     if cancelled.is_set():
         return ""
-    asked = [*_settled(messages), {"role": "user", "content": WRAP_UP}]
+    asked = [*_settled(messages), {"role": "user", "content": instruction}]
     try:
         turn = await _until(host.chat(asked, []), cancelled, clock() + WRAP_UP_S, clock)
     except Exception:  # a Stop of the host, or whatever else went wrong: not a second failure
@@ -491,7 +534,7 @@ def _refusal(call: Call, offered: set[str], *, cut: bool) -> str | None:
     """Why a call is not made, in the words the model is told, or None when it may be. `cut` is
     whether the reply it came in ended at the output limit."""
     if call.name not in offered:
-        return UNKNOWN_TOOL
+        return NOT_LISTED if "use_tool" in offered else UNKNOWN_TOOL
     if not isinstance(call.arguments, dict):
         return CUT_OFF if cut else BAD_ARGUMENTS
     if len(canonical(call.arguments)) > MAX_ARGUMENT_CHARS:

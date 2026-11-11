@@ -6,6 +6,7 @@ import type { AgentTurn, AppContext, MainEvent } from "../types";
 
 const api = vi.hoisted(() => ({
   agentHistoryList: vi.fn(),
+  membersGreet: vi.fn(async () => ({ turn_id: 1 })),
   agentHistoryClear: vi.fn(),
   agentHistorySearch: vi.fn(),
   agentAskText: vi.fn(),
@@ -16,6 +17,7 @@ const api = vi.hoisted(() => ({
   workerRerun: vi.fn(),
   openLink: vi.fn(),
   openExternalUrl: vi.fn(),
+  pagesOpen: vi.fn(),
   core: vi.fn(),
 }));
 vi.mock("../api", () => api);
@@ -84,26 +86,52 @@ beforeEach(() => {
   api.agentVoice.mockResolvedValue(undefined);
 });
 
-test("the header computer button updates its accessible label and title when the locale changes", async () => {
+test("a sure page gesture appends a draft and sends nothing until the owner submits", async () => {
+  const page = { id: "page-draft", title: "Sample page", rev: 0, height: 320, source: "html", server: null, fallback: "Sample fallback" } as const;
+  api.pagesOpen.mockResolvedValue({ ...page, url: "http://127.0.0.1:9/page-draft" });
+  api.agentHistoryList.mockResolvedValue({ turns: [turn(1, { pages: [page] })] });
+  api.agentAskText.mockResolvedValue(undefined);
+  const agent = mount(); await flush();
+  const input = agent.el.querySelector<HTMLTextAreaElement>(".cmp-input")!;
+  input.value = "My existing draft"; input.dispatchEvent(new Event("input", { bubbles: true }));
+  const frame = agent.el.querySelector<HTMLIFrameElement>(".pg-frame")!;
+  Object.defineProperty(navigator, "userActivation", { value: { isActive: true }, configurable: true });
+  Object.defineProperty(frame, "contentWindow", { value: { postMessage: vi.fn() }, configurable: true });
+  const focus = vi.spyOn(document, "activeElement", "get").mockReturnValue(frame);
+  window.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab" }));
+  const event = new MessageEvent("message", { data: { raphaelPage: 1, type: "send", text: "Page-provided words" } });
+  Object.defineProperty(event, "source", { value: frame.contentWindow });
+  window.dispatchEvent(event); focus.mockRestore(); await flush();
+  expect(api.agentAskText).not.toHaveBeenCalled();
+  expect(input.value).toBe("My existing draft\nPage-provided words");
+  expect(document.activeElement).toBe(input);
+  const note = agent.el.querySelector<HTMLElement>(".cmp-page-note")!;
+  expect(note.hidden).toBe(false);
+  expect(note.textContent).toBe("這段文字來自頁面，確認後再送出");
+  agent.el.querySelector<HTMLFormElement>("form.composer")!.requestSubmit(); await flush();
+  expect(api.agentAskText).toHaveBeenCalledExactlyOnceWith("My existing draft\nPage-provided words", [], 0, expect.any(Object));
+  expect(note.hidden).toBe(true);
+  agent.hide(); Reflect.deleteProperty(navigator, "userActivation");
+});
+
+test("the header has no computer button, and an idle computer adds nothing to the name", async () => {
   const previous = getLocale();
   setLocale("zh-TW");
   api.agentHistoryList.mockResolvedValue({ turns: [] });
   const agent = mount();
   try {
     await flush();
-    const button = agent.el.querySelector<HTMLButtonElement>('.mb-head [data-act="computer"]')!;
-    for (const [locale, label] of [["zh-TW", "電腦"], ["en", "Computer"], ["ja", "コンピューター"], ["zh-TW", "電腦"]] as const) {
-      setLocale(locale);
-      expect(button.getAttribute("aria-label"), locale).toBe(label);
-      expect(button.title, locale).toBe(label);
-    }
+    expect(agent.el.querySelector('.mb-head [data-act="computer"], .mb-head .btn.ra-tool:not([hidden])')).toBeNull();
+    const title = agent.el.querySelector<HTMLElement>(".conversation-trigger")!;
+    expect(title.classList.contains("is-computer-active")).toBe(false);
+    expect(title.getAttribute("aria-label")).not.toContain("正在使用電腦");
   } finally {
     agent.hide();
     setLocale(previous);
   }
 });
 
-test("message links and preview cards use the safe opener with the full target; only replies get previews", async () => {
+test("message link chips use the safe opener with the full target, and no row of cards repeats them", async () => {
   const url = "https://www.cwa.gov.tw/V8/C/P/Typhoon/TY_WARN.html?lang=zh-TW&full=1";
   api.agentHistoryList.mockResolvedValue({ turns: [turn(1, { question: `看 ${url}（颱風）`, messages: [
     { seq: 1, kind: "progress", text: `檢查 ${url}。`, at_ms: 1 },
@@ -111,11 +139,11 @@ test("message links and preview cards use the safe opener with the full target; 
   ] })] });
   api.core.mockResolvedValue(null); api.openExternalUrl.mockResolvedValue(undefined);
   const agent = mount(); await flush();
-  expect(document.querySelectorAll(".message-link")).toHaveLength(3);
-  expect(document.querySelectorAll(".preview-card")).toHaveLength(1);
+  expect(document.querySelectorAll(".message-link.link-chip")).toHaveLength(3);
+  expect(document.querySelectorAll(".preview-card, .preview-cards")).toHaveLength(0);
   document.querySelector<HTMLAnchorElement>(".bubble a")!.click();
   expect(api.openExternalUrl).toHaveBeenLastCalledWith(url);
-  document.querySelector<HTMLButtonElement>(".preview-card")!.click();
+  document.querySelector<HTMLAnchorElement>(".ra .chat-message[data-reply] a.link-chip")!.click();
   expect(api.openExternalUrl).toHaveBeenLastCalledWith(url);
   const middle = new MouseEvent("auxclick", { button: 1, bubbles: true, cancelable: true });
   document.querySelector(".bubble a")!.dispatchEvent(middle);
@@ -125,21 +153,18 @@ test("message links and preview cards use the safe opener with the full target; 
   agent.hide();
 });
 
-test("each reply control reflects the shared work detail expansion", async () => {
+// Owner, 2026-11-10: 「查看過程那個可以拿掉 不用有查看過程」.
+test("a reply offers no way to view its work: no control and no 查看過程 in its menu", async () => {
   api.agentHistoryList.mockResolvedValue({ turns: [turn(1, { messages: [
     { seq: 1, kind: "progress", text: "Checking the sample.", at_ms: 1 },
     { seq: 2, kind: "reply", text: "First sample reply.", at_ms: 2 },
     { seq: 3, kind: "reply", text: "Second sample reply.", at_ms: 3 },
   ] })] });
   const agent = mount(); await flush();
-  const buttons = [...document.querySelectorAll<HTMLButtonElement>('.tn[data-id="1"] .message-work')];
-  expect(buttons).toHaveLength(2);
-  buttons[0].click();
-  expect(document.querySelector<HTMLElement>('.tn[data-id="1"] .think-body')!.hidden).toBe(false);
-  expect(buttons.map(button => button.getAttribute("aria-expanded"))).toEqual(["true", "true"]);
-  buttons[1].click();
+  expect(document.querySelectorAll('.tn[data-id="1"] .message-work, .tn[data-id="1"] [data-act="thinking"]')).toHaveLength(0);
   expect(document.querySelector<HTMLElement>('.tn[data-id="1"] .think-body')!.hidden).toBe(true);
-  expect(buttons.map(button => button.getAttribute("aria-expanded"))).toEqual(["false", "false"]);
+  document.querySelector<HTMLElement>('.tn[data-id="1"] [data-act="more-message"]')!.click();
+  expect(document.querySelector("#app-popover")?.textContent ?? "").not.toContain("查看過程");
   agent.hide();
 });
 
@@ -150,20 +175,23 @@ test("messages copy plain text, code copies exactly, only the latest reply regen
   const copy = vi.spyOn(ui, "copyButton").mockResolvedValue(true);
   const agent = mount(); await flush();
   const latest = document.querySelector<HTMLElement>('.tn[data-id="2"]')!;
-  document.querySelector<HTMLButtonElement>('.tn[data-id="1"] [data-act="more-message"]')!.click();
+  document.querySelector<HTMLButtonElement>('.tn[data-id="1"] .ra [data-act="more-message"]')!.click();
   await flush(); expect(document.querySelector('[data-pick="regenerate"]')).toBeNull();
   document.dispatchEvent(new KeyboardEvent('keydown', {key:'Escape', bubbles:true}));
-  latest.querySelector<HTMLButtonElement>('.owner-message [data-act="copy-message"]')!.click();
-  await flush(); expect(copy).toHaveBeenLastCalledWith(expect.any(HTMLElement), "問題 2");
-  latest.querySelector<HTMLButtonElement>('.ra [data-act="copy-message"]')!.click();
-  await flush(); expect(copy.mock.lastCall?.[1]).toContain("bold\na < b\n");
+  // Copy lives in each message's ⋯ menu (R-UI-104).
+  const copyFrom = async (scope: string): Promise<void> => {
+    latest.querySelector<HTMLButtonElement>(`${scope} [data-act="more-message"]`)!.click(); await flush();
+    document.querySelector<HTMLButtonElement>('#app-popover [data-pick="copy"]')!.click(); await flush();
+  };
+  await copyFrom('.owner-message'); expect(copy).toHaveBeenLastCalledWith(expect.any(HTMLElement), "問題 2");
+  await copyFrom('.ra'); expect(copy.mock.lastCall?.[1]).toContain("bold\na < b\n");
   expect(copy.mock.lastCall?.[1]).not.toContain("**");
   latest.querySelector<HTMLButtonElement>('[data-act="copy-code"]')!.click();
   await flush(); expect(copy).toHaveBeenLastCalledWith(expect.any(HTMLElement), "a < b");
   expect(latest.querySelector('.ra [data-act="expand-message"]')).toBeNull();
   expect([...latest.querySelectorAll('.ra .message-text')].map(node => node.textContent).join("\n")).toContain("line 34");
   expect(latest.querySelector('.ans .message-code')).toBeNull();
-  latest.querySelector<HTMLButtonElement>('[data-act="more-message"]')!.click();
+  latest.querySelector<HTMLButtonElement>('.ra [data-act="more-message"]')!.click();
   await flush(); document.querySelector<HTMLButtonElement>('[data-pick="regenerate"]')!.click();
   await flush(); expect(api.agentAskText).toHaveBeenCalledExactlyOnceWith("問題 2", [], 0, expect.objectContaining({ requestId: expect.any(String) }));
   copy.mockRestore(); agent.hide();
@@ -413,8 +441,8 @@ describe("a continuous typed turn", () => {
               text: JSON.stringify({
                 type: "image",
                 url: "https://example.com/photo.png",
-                title: "東京鐵塔",
-                site: "NHK",
+                title: "範例展館",
+                site: "Example News",
               }),
               at_ms: 2000,
             },
@@ -425,7 +453,7 @@ describe("a continuous typed turn", () => {
                 type: "pdf",
                 url: "https://example.com/doc.pdf",
                 title: "報告.pdf",
-                site: "NHK",
+                site: "Example News",
               }),
               at_ms: 3000,
             },
@@ -437,16 +465,9 @@ describe("a continuous typed turn", () => {
     mount();
     await flush();
 
-    // Thinking block starts collapsed on a done turn, and expands on click
-    const thinkBtn = document.querySelector<HTMLButtonElement>('[data-act="thinking"]')!;
-    const thinkBody = document.querySelector<HTMLElement>(".think-body")!;
-    expect(thinkBtn.getAttribute("aria-expanded")).toBe("false");
-    expect(thinkBody.hidden).toBe(true);
-    thinkBtn.click();
-    expect(thinkBtn.getAttribute("aria-expanded")).toBe("true");
-    expect(thinkBody.hidden).toBe(false);
-    thinkBtn.click();
-    expect(thinkBody.hidden).toBe(true);
+    // The work of a done turn stays closed, with no control that opens it (owner, 2026-11-10).
+    expect(document.querySelector('[data-act="thinking"]')).toBeNull();
+    expect(document.querySelector<HTMLElement>(".think-body")!.hidden).toBe(true);
 
     // Clicking image opens in-app lightbox, Escape closes it
     document.querySelector<HTMLButtonElement>('[data-act="lightbox"]')!.click();

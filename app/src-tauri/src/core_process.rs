@@ -30,6 +30,9 @@ use std::time::{Duration, Instant};
 use serde_json::{Value, json};
 use tokio::sync::broadcast;
 
+#[path = "core_stderr.rs"]
+mod stderr;
+
 pub use crate::rpc::CoreApi;
 use crate::rpc::{CORE_EXITED, Notification, RpcClient, RpcError, lock};
 
@@ -86,6 +89,8 @@ pub fn timeout_for(method: &str) -> Duration {
         | "connectors.set_key" => 120,
         // Downloads speech models.
         "models.ensure" | "models.local_use" => 3600,
+        // One picture from the owner's image model; an asynchronous provider is polled until it is drawn.
+        "members.avatar_generate" => 300,
         _ => 15,
     };
     Duration::from_secs(seconds)
@@ -119,21 +124,28 @@ const PYTHON_OVERRIDE: &str = "RAPHAEL_CORE_PYTHON";
 /// `core/.venv/Scripts/python.exe -m raphael_core` from this checkout; `RAPHAEL_CORE_PYTHON`
 /// can replace that development interpreter.
 pub fn resolve_app_core_command(app: &tauri::AppHandle) -> Result<CoreCommand, String> {
-    #[cfg(debug_assertions)]
-    {
-        let _ = app;
-        resolve_core_command()
-    }
-    #[cfg(not(debug_assertions))]
-    {
-        use tauri::Manager;
+    use tauri::Manager;
 
+    #[cfg(debug_assertions)]
+    let mut command = resolve_core_command()?;
+    #[cfg(not(debug_assertions))]
+    let mut command = {
         let resources = app
             .path()
             .resource_dir()
             .map_err(|err| format!("could not locate the packaged core's resources: {err}"))?;
-        packaged_command_in(&resources)
-    }
+        packaged_command_in(&resources)?
+    };
+    // Use this app's resolved log directory, including native-journey overrides.
+    let logs = app
+        .path()
+        .app_log_dir()
+        .map_err(|err| format!("could not locate this app's logs: {err}"))?;
+    command.env.push((
+        "RAPHAEL_LOG_PATH".to_owned(),
+        logs.join("raphael.log").display().to_string(),
+    ));
+    Ok(command)
 }
 
 /// Resolves a development checkout's core command. This entry point is absent from release apps.
@@ -177,13 +189,20 @@ fn command_in(repo: &Path, python: Option<OsString>) -> Result<CoreCommand, Stri
             venv_python
         }
     };
+    // The core's source of this checkout comes first on Python's path. A venv installs the core
+    // editable from whichever checkout ran `uv sync`, so a build made in another worktree would
+    // otherwise run that checkout's core, not its own (a staged build can otherwise run old code).
+    let source = core_dir.join("src").display().to_string();
     Ok(CoreCommand {
         program,
         args: vec!["-m".to_owned(), "raphael_core".to_owned()],
         cwd: core_dir,
         // Python encodes what it writes to a pipe in the machine's code page (cp950 on a Taiwan
         // Windows) unless told otherwise; its log is read here as UTF-8.
-        env: vec![("PYTHONIOENCODING".to_owned(), "utf-8".to_owned())],
+        env: vec![
+            ("PYTHONIOENCODING".to_owned(), "utf-8".to_owned()),
+            ("PYTHONPATH".to_owned(), source),
+        ],
     })
 }
 
@@ -521,15 +540,57 @@ fn spawn_core(shared: &Arc<Shared>, exits: &mpsc::Sender<()>) -> Result<(), Stri
     Ok(())
 }
 
+const MAX_RPC_LINE: usize = 64 * 1024 * 1024;
+
+#[derive(Debug, PartialEq)]
+enum PipeLine {
+    End,
+    Complete,
+    Oversized,
+}
+
+fn read_pipe_line(
+    reader: &mut impl BufRead,
+    line: &mut Vec<u8>,
+    limit: usize,
+) -> std::io::Result<PipeLine> {
+    line.clear();
+    let read = std::io::Read::take(&mut *reader, limit as u64 + 1).read_until(b'\n', line)?;
+    if read == 0 {
+        return Ok(PipeLine::End);
+    }
+    if read <= limit {
+        return Ok(PipeLine::Complete);
+    }
+    let mut ended = line.last() == Some(&b'\n');
+    line.clear();
+    // Drain without allocating or exposing a fragment as another protocol message.
+    while !ended {
+        let (used, found) = {
+            let bytes = reader.fill_buf()?;
+            if bytes.is_empty() {
+                break;
+            }
+            match bytes.iter().position(|byte| *byte == b'\n') {
+                Some(at) => (at + 1, true),
+                None => (bytes.len(), false),
+            }
+        };
+        reader.consume(used);
+        ended = found;
+    }
+    Ok(PipeLine::Oversized)
+}
+
 /// Feeds the core's stdout to the RPC client until it ends, then cleans up after the core.
 fn read_stdout(shared: &Shared, stdout: ChildStdout, exits: &mpsc::Sender<()>) {
     let mut lines = BufReader::new(stdout);
     let mut line = Vec::new();
     loop {
-        line.clear();
-        match lines.read_until(b'\n', &mut line) {
-            Ok(0) => break,
-            Ok(_) => shared.rpc.handle_line(&String::from_utf8_lossy(&line)),
+        match read_pipe_line(&mut lines, &mut line, MAX_RPC_LINE) {
+            Ok(PipeLine::End) => break,
+            Ok(PipeLine::Complete) => shared.rpc.handle_line(&String::from_utf8_lossy(&line)),
+            Ok(PipeLine::Oversized) => log::warn!("discarded an oversized core protocol line"),
             Err(err) => {
                 log::error!("could not read the core's output: {err}");
                 break;
@@ -555,21 +616,11 @@ fn read_stdout(shared: &Shared, stdout: ChildStdout, exits: &mpsc::Sender<()>) {
 
 /// Passes the core's stderr, which is where it logs, on to our log.
 fn log_stderr(stderr: ChildStderr) {
-    let mut lines = BufReader::new(stderr);
-    let mut line = Vec::new();
-    loop {
-        line.clear();
-        match lines.read_until(b'\n', &mut line) {
-            Ok(0) | Err(_) => break,
-            Ok(_) => {
-                let text = String::from_utf8_lossy(&line);
-                let text = text.trim_end();
-                if !text.is_empty() {
-                    log::info!("core: {text}");
-                }
-            }
+    let _ = stderr::read_lines(BufReader::new(stderr), |text| {
+        if !text.is_empty() {
+            log::info!("core: {text}");
         }
-    }
+    });
 }
 
 /// Asks the core for its protocol version and logs the answer.
@@ -743,6 +794,57 @@ mod tests {
     use std::time::{Duration, Instant};
     use tokio::sync::broadcast::{Receiver, error::RecvError, error::TryRecvError};
 
+    #[test]
+    fn pipe_lines_bound_allocation_discard_oversized_content_and_resume() {
+        let mut terminated = vec![b'x'; 100_000];
+        terminated.extend_from_slice(b"\nOK\n");
+        for input in [terminated, vec![b'x'; 100_000]] {
+            let resumes = input.ends_with(b"OK\n");
+            let mut reader = BufReader::with_capacity(3, std::io::Cursor::new(input));
+            let mut line = Vec::new();
+            assert_eq!(
+                read_pipe_line(&mut reader, &mut line, 8).unwrap(),
+                PipeLine::Oversized
+            );
+            assert!(
+                line.is_empty(),
+                "oversized private content must not reach parsers or logs"
+            );
+            assert!(
+                line.capacity() <= 16,
+                "a long line must not grow the allocation without bound"
+            );
+            let next = read_pipe_line(&mut reader, &mut line, 8).unwrap();
+            if resumes {
+                assert_eq!(next, PipeLine::Complete);
+                assert_eq!(line, b"OK\n");
+            } else {
+                assert_eq!(next, PipeLine::End);
+            }
+        }
+    }
+
+    #[test]
+    fn pipe_lines_preserve_the_exact_limit_final_fragments_and_utf8_bytes() {
+        for input in [
+            b"1234567\n".as_slice(),
+            b"12345678".as_slice(),
+            "hello\u{4f60}".as_bytes(),
+        ] {
+            let mut reader = BufReader::new(std::io::Cursor::new(input));
+            let mut line = Vec::new();
+            assert_eq!(
+                read_pipe_line(&mut reader, &mut line, 8).unwrap(),
+                PipeLine::Complete
+            );
+            assert_eq!(line, input);
+            assert_eq!(
+                read_pipe_line(&mut reader, &mut line, 8).unwrap(),
+                PipeLine::End
+            );
+        }
+    }
+
     // ---- the command that starts the core ----
 
     #[test]
@@ -784,6 +886,9 @@ mod tests {
                 .env
                 .contains(&("PYTHONIOENCODING".to_owned(), "utf-8".to_owned()))
         );
+        // This checkout's core source, never the one the venv was installed from.
+        let source = core_dir.join("src").display().to_string();
+        assert!(command.env.contains(&("PYTHONPATH".to_owned(), source)));
     }
 
     #[test]
@@ -794,6 +899,9 @@ mod tests {
         assert_eq!(command.program, PathBuf::from(r"C:\Python312\python.exe"));
         assert_eq!(command.args, ["-m", "raphael_core"]);
         assert_eq!(command.cwd, repo.path().join("core"));
+        // Another interpreter still runs this checkout's core.
+        let source = repo.path().join("core").join("src").display().to_string();
+        assert!(command.env.contains(&("PYTHONPATH".to_owned(), source)));
     }
 
     #[test]

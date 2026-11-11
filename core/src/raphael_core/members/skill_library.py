@@ -217,7 +217,6 @@ class SkillLibrary:
         folder, root = location(self.skill_home, source)
         folder = newest(folder, root)
         files = package(folder)
-        candidate = describe(folder, root, document=files["SKILL.md"])
         if any(name.casefold() == ".raphael-source.json" for name in files):
             raise MemberError("source", "reserved skill metadata filename")
         text = files.pop("SKILL.md").decode("utf-8-sig")
@@ -231,6 +230,9 @@ class SkillLibrary:
                 if identity(old_folder, old_root) == identity(folder, root):
                     previous = skill
                     break
+        from .capabilities import skill_metadata
+        skill_metadata(text, writing=True, previous_name=previous["name"] if previous else None)
+        candidate = describe(folder, root, document=text.encode("utf-8"))
         skill = (self.rewrite_skill(member_id, previous["id"], text) if previous else
                  self.keep_skill(member_id, candidate["source"], text))
         if previous:

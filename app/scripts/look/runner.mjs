@@ -15,8 +15,12 @@ import { saveReport } from "./report.mjs";
 import { navigationRequests, warmupEntries } from "./navigation.mjs";
 
 /** Product, model, unit, key names and external menu paths that stay in Latin letters in every language. */
-// Docker is an installed product name, including its unavailable-engine state.
-export const LATIN_NAMES = ["Raphael", "Docker", "Docker Desktop", "Rimuru", "Google", "Gmail", "Calendar", "Composio", "OpenRouter", "OpenAI", "ChatGPT", "Anthropic", "Claude", "Codex", "Gemini", "GPT", "Grok", "Telegram", "Slack", "Discord", "Notion", "GitHub", "MCP", "API", "URL", "CLI", "STT", "PDF", "WAV", "CSV", "JSON", "US", "KB", "MB", "GB", "GMT", "AM", "PM", "Alt", "AltGr", "Ctrl", "Shift", "Space", "Esc", "Enter", "Tab", "Win", "Windows", "Fn", "Edge", "Chrome", "macOS", "Whisper", "Typeless", "Webhook", "HMAC", "SHA", "Signature", "Hermes", "Simple", "Icons", "Bearer", "mcpServers", "Ollama", "Linear", "BotFather", "newbot", "English", "MIT", "JPG", "WebP", "GIF", "UTF", "Big", "txt", "px", "token", "Claude Code", "Antigravity", "KEY=value", "Settings → Project Settings → API Keys"];
+// Integrated model and service names, and bundled license attributions, stay in Latin letters.
+export const LATIN_NAMES = ["Raphael", "Docker", "Docker Desktop", "Rimuru", "Google", "Gmail", "Calendar", "Composio", "OpenRouter", "OpenAI", "ChatGPT", "Anthropic", "Claude", "Codex", "Gemini", "GPT", "Grok", "Telegram", "Slack", "Discord", "Notion", "GitHub", "Mobbin", "MCP", "API", "URL", "CLI", "SSH", "STT", "PDF", "WAV", "CSV", "JSON", "US", "KB", "MB", "GB", "GMT", "AM", "PM", "Alt", "AltGr", "Ctrl", "Shift", "Space", "Esc", "Enter", "Tab", "Win", "Windows", "Fn", "Edge", "Chrome", "macOS", "Whisper", "Wordnote", "Tailscale", "Funnel", "Cloudflare", "Tunnel", "ngrok", "Webhook", "HMAC", "SHA", "Signature", "Hermes", "Simple", "Icons", "Bearer", "mcpServers", "Ollama", "Linear", "BotFather", "newbot", "English", "MIT", "JPG", "WebP", "GIF", "UTF", "Big", "txt", "px", "token", "Claude Code", "Opus", "Sonnet", "Antigravity", "KEY=value", "Settings → Project Settings → API Keys"];
+
+LATIN_NAMES.push("1Password");
+// The shell a host repair is pasted into on Windows is named as Windows names it.
+LATIN_NAMES.push("PowerShell");
 
 /** Typed owner values are synthetic data, just like the initial fixture's values. */
 export function sceneLatinNames(scene, locale, fixture) {
@@ -215,29 +219,31 @@ export async function run(options) {
         });
         const actualLocale = await page.evaluate(() => document.documentElement.lang || "zh-TW");
         result.locale = actualLocale;
-        const englishUI = actualLocale === "zh-TW" && !scene.name.startsWith("overlay-") ? await page.evaluate(async () => {
+        // A scene marked `file` ends on a file the app saved, opened on its own (the `saved-file` step): none of the
+        // app's own checks reach into it, and its boundary was read before it was left.
+        const englishUI = actualLocale === "zh-TW" && !scene.name.startsWith("overlay-") && !scene.file ? await page.evaluate(async () => {
           const [{ en }, { zhTW }] = await Promise.all([import('/src/main/i18n/en.ts'), import('/src/main/i18n/zh-TW.ts')]);
           // Brand/key names and deliberately shared CTA decisions have identical values.
           return [...new Set(Object.entries(en).filter(([key, value]) => typeof value === 'string' && /[A-Za-z]/.test(value) && !/[<{}]/.test(value) && /[\u3400-\u9fff]/.test(zhTW[key] ?? '') && value !== zhTW[key]).map(([, value]) => value.trim()))];
         }) : [];
         // The ⋯ buttons that no row of the app's own table (context-menu.ts) reaches with a right click: R-UI-44.
-        const unreached = scene.entry ? [] : await page.evaluate(async () => {
+        const unreached = scene.entry || scene.file ? [] : await page.evaluate(async () => {
           const { uncoveredOverflows } = await import('/src/main/context-menu.ts');
           return uncoveredOverflows(document).map(button => ({ tag: "button", id: button.id, class: button.className, text: button.getAttribute("aria-label") ?? "" }));
         });
         result.viewport=page.viewport();
         Object.assign(result, await page.evaluate(auditDocument, undefined, result.viewport, namespaces, latinFor(scene, actualLocale), englishUI, unreached));
-        if (!scene.entry) {
-          for (const name of ["content-width", "message-no-inner-scroll", "message-no-raw-envelope"]) {
+        if (!scene.entry && !scene.file) {
+          for (const name of ["content-width", "thread-edges", "message-no-inner-scroll", "message-no-raw-envelope"]) {
             try { (result.assertions ??= []).push(await page.evaluate(checkRendered, name)); }
             catch (value) { error("layout", value.message); }
           }
         }
-        if (!scene.entry && await page.evaluate(() => [...document.querySelectorAll('.conversation-card')].some(card => !card.closest('[hidden]')))) {
+        if (!scene.entry && !scene.file && await page.evaluate(() => [...document.querySelectorAll('.conversation-card')].some(card => !card.closest('[hidden]')))) {
           try { (result.assertions ??= []).push(await page.evaluate(checkRendered, "card-shell")); }
           catch (value) { error("layout", value.message); }
         }
-        const mockErrors = await page.evaluate(() => window.__look?.errors ?? ["Mock boundary was not installed"]);
+        const mockErrors = scene.file ? [] : await page.evaluate(() => window.__look?.errors ?? ["Mock boundary was not installed"]);
         for (const message of mockErrors) error("ipc", message);
         const image = `${scene.name}-${theme}-${width}.png`;
         await page.screenshot({ path: join(directory, image), type: "png" });

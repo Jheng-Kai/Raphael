@@ -211,7 +211,7 @@ def test_the_count_of_a_pair_survives_reopening_the_database(tmp_path):
 @pytest.mark.parametrize(
     ("word", "misheard", "sentence"),
     [
-        ("parser", "py", "Run py today."),
+        ("parser", "widget", "Run widget today."),
         ("轉錄", "轉入", "我想把錢轉入帳戶"),
         ("workshop", "meeting", "Join the meeting."),
     ],
@@ -230,7 +230,7 @@ def test_pairs_that_may_not_be_rules_stay_hints_however_often_they_are_seen(
 
 @pytest.mark.parametrize(("word", "misheard"), [
     ("two", "to"), ("them", "the"), ("which", "this"),
-    ("他", "我"), ("後天", "明天"), ("服務器", "電腦網"),
+    ("他", "我"), ("後天", "明天"),
     ("但是", "單是"), ("今天", "津天"),
     ("release", "release，please review the remaining notes"),
     ("明日再討論", "等待完成後再來討論"),
@@ -249,6 +249,9 @@ def test_automatic_learning_rejects_common_words_clauses_punctuation_and_shorten
     ("Composio", "Compose"), ("cron", "Chrome"), ("HiKari", "Kari"), ("bot", "box"),
     ("Notion", "noting"), ("Canva", "kanva"), ("STT", "CTT"), ("token", "偷看"),
     ("平假名", "評價"), ("額度", "耳朵"), ("Claude Code", "Cloud Code"),
+    ("服務器", "電腦網"), ("拉斐爾", "拉菲爾"), ("ラファエル", "ラファエロ"),
+    ("OpenRouter", "open router"), ("A四模型", "A三模型"),
+    ("Alpha Beta Gamma", "alpha beta gammo"), ("v２", "v one"),
 ])
 def test_automatic_learning_keeps_corrected_names_and_technical_terms(conn, word, misheard):
     d = DictionaryStore(conn)
@@ -529,20 +532,20 @@ def test_a_rule_added_by_hand_overrides_a_blocked_pair_and_a_hint(conn):
 def test_hint_words_put_what_the_user_chose_before_what_was_learned(conn):
     d = DictionaryStore(conn, now_ms=ticking_clock())
     d.add("OpenRouter")
-    learn(d, "Typeless", "type list")
+    learn(d, "Typepad", "type pat")
     d.add("Tailscale", source="suggested")
     learn(d, "Gemini", "gem mini")
     # A list of hints is cut off at its end, so the learned words go there.
-    assert d.hint_words() == ["Tailscale", "OpenRouter", "Gemini", "Typeless"]
-    assert [e.word for e in d.list()] == ["Gemini", "Tailscale", "Typeless", "OpenRouter"]
+    assert d.hint_words() == ["Tailscale", "OpenRouter", "Gemini", "Typepad"]
+    assert [e.word for e in d.list()] == ["Gemini", "Tailscale", "Typepad", "OpenRouter"]
 
 
 def test_hint_forms_are_the_rules_and_then_the_newest_hints_first(conn):
     d = DictionaryStore(conn, now_ms=ticking_clock())
     d.add("拉斐爾", ["拉菲爾"])
     learn(d, "Claude", "cloud")
-    learn(d, "Typeless", "type list")
-    assert d.hint_forms() == [("拉菲爾", "拉斐爾"), ("type list", "Typeless"), ("cloud", "Claude")]
+    learn(d, "Typepad", "type pat")
+    assert d.hint_forms() == [("拉菲爾", "拉斐爾"), ("type pat", "Typepad"), ("cloud", "Claude")]
     assert d.replacements() == [("拉菲爾", "拉斐爾")]
 
 

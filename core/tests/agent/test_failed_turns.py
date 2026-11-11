@@ -41,7 +41,7 @@ async def test_try_again_reaches_the_answer_and_the_tool_picking_with_the_reques
         assert sent.index("Collect every receipt") < sent.index("<question>")
 
 
-async def test_a_failed_request_and_an_answer_of_other_brains_reach_the_cli_brain_that_resumes(
+async def test_cross_brain_history_rebuilds_a_legacy_cli_session_once_then_resumes(
     make_rig, client, tmp_path, monkeypatch
 ):
     from raphael_core.agent.cli import loop as production
@@ -85,10 +85,26 @@ async def test_a_failed_request_and_an_answer_of_other_brains_reach_the_cli_brai
     })  # fmt: skip
 
     assert result["text"] == "Picking it up again."
-    assert runs[0]["session"] == "native-1"  # the CLI's own thread was resumed, and still is told all of it
+    assert runs[0]["session"] is None  # A legacy mapping has no delivery cursor; rebuild its context once.
     sent = runs[0]["user"]
     assert sent.index("Which backup disk") < sent.index("Get the 2 TB one.") < sent.index("Move every project note")
     assert sent.index("Move every project note") < sent.index("<question>\ncan you try that again?")
     assert "did not finish" in sent and "update-page (Notion) x3" in sent
     assert "Raphael: The reply took too long." not in sent
     assert rig.service._cli_sessions.get(0, model, formal) == "native-2"
+    rig.history.add(
+        session_id="intervening", question="SYNTHETIC_NEW_API_QUESTION", route="answer", prefix="Answer",
+        text="SYNTHETIC_NEW_API_ANSWER", status="done", model="@chatgpt:gpt-6-sol", conversation_id=formal,
+    )
+    fail(rig, "SYNTHETIC_NEW_FAILED_REQUEST", model="cli:claude:sonnet?effort=high",
+         steps=[tool("update-page", "Notion")] * 2, conversation_id=formal)
+    resumed = await rig.call("agent.ask", {
+        "session_id": "resumed", "text": "Continue the new failed request", "ui_language": "en", "source": "app",
+        "conversation_id": formal,
+    })
+    assert resumed["text"] == "Picking it up again." and runs[1]["session"] == "native-2"
+    sent = runs[1]["user"]
+    assert "SYNTHETIC_NEW_API_QUESTION" in sent and "SYNTHETIC_NEW_API_ANSWER" in sent
+    assert "SYNTHETIC_NEW_FAILED_REQUEST" in sent and "update-page (Notion) x2" in sent
+    assert "did not finish" in sent and "Raphael: The reply took too long." not in sent
+    assert "Which backup disk" not in sent and "Move every project note" not in sent

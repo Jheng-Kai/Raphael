@@ -1,3 +1,4 @@
+# Adapted from NousResearch/hermes-agent (MIT); see core/packaging/licenses.
 """Provider wire formats. Only configured endpoints are reached; credentials never enter errors."""
 
 import asyncio
@@ -509,7 +510,10 @@ class AnthropicProvider(CompatibleProvider):
             "finish_reason": "length" if data.get("stop_reason") == "max_tokens" else "stop",
             "message": {"content": json_content if json_content is not None else "".join(content), "tool_calls": calls}}],
             "usage": {"prompt_tokens": prompt_tokens,
-                      "completion_tokens": usage.get("output_tokens", 0), "cost": usage.get("cost")}}
+                      "completion_tokens": usage.get("output_tokens", 0), "cost": usage.get("cost"),
+                      # What Anthropic's cache read and wrote, in Chat Completions' words (brain/meter.py `chat`).
+                      "prompt_tokens_details": {"cached_tokens": int(amount(usage.get("cache_read_input_tokens")) or 0),
+                                                "cache_write_tokens": int(amount(usage.get("cache_creation_input_tokens")) or 0)}}}
         self._usage(normalized, body["model"])
         return _Reply(reply.status, normalized, reply.latency_ms)
 

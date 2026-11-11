@@ -2,9 +2,10 @@ import { installedUpdateNotice } from "./updates";
 import { watchWindowVisibility } from "./window-visibility";
 import { onLocaleChange, setLocale, t } from "./i18n";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
-import { getCurrentWindow } from "@tauri-apps/api/window";
+import { currentMonitor, getCurrentWindow } from "@tauri-apps/api/window";
 
 import { loadGlyphTexture } from "../overlay/emblem";
+import { dropEchoTitles } from "./message-tooltip";
 import * as api from "./api";
 import { createAutomationsPage } from "./pages/automations";
 import { createHome } from "./pages/home";
@@ -21,15 +22,19 @@ import { applyAppearance } from "./owner-settings";
 import { DeviceState } from "./device";
 import { resumeModels } from "./models";
 import { mountOnboarding } from "./onboarding";
+import { fitGuideWindow, releaseGuideWindow } from "./guide-window";
 import { Navigation, type Place, samePage } from "./nav-history";
 import { installNavInput } from "./nav-input";
 import { createSidebar } from "./sidebar";
 import { setOwnerProfile } from "./owner-avatar";
-import { loadAvatar } from "./avatar";
+import { emblemTextureArrived, loadAvatar } from "./avatar";
 import { followDictation, installWindowHotkeys } from "./window-hotkeys";
 import { installFocusKeys } from "./focus-keys";
 import { installContextMenus } from "./context-menu";
+import { prefetchEmojiWhenIdle } from "./emoji-data";
+import { fixedDevicePatch } from "./device-fixed";
 import { followTray } from "./tray-open";
+import { followTemplateFile, openPendingTemplate, type TemplateOpenTarget } from "./template-open";
 import { installWindowChrome, labelWindowControls, showMaximized } from "./window-chrome";
 import { installWindowZoom } from "./window-zoom";
 import { stopOffscreenSlimes } from "./slime-offscreen";
@@ -38,7 +43,9 @@ import type { PageArgument, AppContext, DeviceSettings, MainEvent, MainPageId, P
 import { Undoable } from "./undo";
 import { Cleared } from "./cleared";
 import { leave, toaster } from "./ui";
+import { firstViewShown, holdOptionalReads, optionalRead } from "./startup-reads";
 import { bindMissing, missingHTML, noticeHTML } from "./missing";
+import { warnQuota } from "./quota-warning";
 import "./styles.css";
 import "./sidebar.css";
 
@@ -52,12 +59,12 @@ const DEFAULT_DEVICE: DeviceSettings = {
   paste_last_keys: ["AltRight+V"],
   agent_keys: ["AltRight+Space"],
   microphone: null,
-  emblem_size: 150,
+  emblem_size: 120,
   subtitles: "on",
   appearance: "system",
   ui_language: "zh-TW",
   autostart: true,
-  auto_update: false,
+  auto_update: true,
   onboarded: false,
   computer_apps: [],
 };
@@ -118,6 +125,7 @@ function mountWindowChrome(): void {
 let startupHasSettings = false;
 
 async function start(): Promise<void> {
+  holdOptionalReads();
   applyTheme();
   // Focus rings only while Tab moves the focus (focus-keys.ts); a click or the caret shows the rest.
   installFocusKeys(document);
@@ -128,11 +136,17 @@ async function start(): Promise<void> {
   } catch (err) {
     console.error("main: could not read the device settings", err);
   }
+  const fixed = deviceRead ? fixedDevicePatch(device.get()) : null;
+  if (fixed) void device.set(fixed).catch((err) => console.error("main: could not keep the fixed device settings", err));
   installWindowHotkeys(() => device.get());
-  void loadGlyphTexture(GLYPH_URL);
+  // The emblem's runes are the texture app/public/brand/glyph-ring.png; the faces draw again once it is there.
+  void loadGlyphTexture(GLYPH_URL).then(image => emblemTextureArrived(!!image));
 
   // A right click presses the ⋯ of the row under it; elsewhere the browser's own menu has no place in an app. Text fields keep theirs.
   installContextMenus(document);
+  // A title that only repeats the words under it never shows.
+  dropEchoTitles(document);
+  prefetchEmojiWhenIdle();
 
   const listeners = new Set<(event: MainEvent) => void>();
   const ctx: AppContext = {
@@ -177,6 +191,8 @@ watchChipRows(document.body);
   void loadAvatar(api.avatarGet);
   void agent.loadSidebar();
   nav.addEventListener("click", (e) => {
+    // 連結應用程式 is no page of Settings: it opens its own dialog (R-UI-111).
+    if ((e.target as Element).closest("[data-connect-apps]")) { go("settings", "connections"); return; }
     const target = (e.target as Element).closest<HTMLElement>("[data-go]");
     if (target) go(target.dataset.go as PageId, target.dataset.pane as SettingsPane | undefined);
   });
@@ -184,7 +200,10 @@ watchChipRows(document.body);
     try {
       const { settings: value } = await api.settingsGet();
       setOwnerProfile(value);
-      void settings.preload();
+      // Settings and Connect apps read ahead once the first view is shown and answered, one read at a time: the core
+      // answers on one loop, so a read ahead at start-up keeps the owner waiting for the page in front of them
+      // (owner, 2026-11-10 and 2026-11-11). The time since launch plays no part: a slow core start used to let it pass.
+      void optionalRead(() => settings.preload());
     } catch {
       // The core can be restarting: keep asking, or the owner's face and name stay blank.
       setTimeout(() => void refreshOwner(), 1000);
@@ -207,11 +226,11 @@ watchChipRows(document.body);
   let agentPageTold = false;
   /**
    * Tells the app whether the 拉斐爾 page is what the window shows: the page is the current one,
-   * with no settings over it and no guide in its place. While it is and the window is in front, a
+   * with no settings over it, no member settings page over its conversation and no guide in its place. While it is and the window is in front, a
    * question to Raphael is shown here alone, and the overlay at the bottom right stays empty.
    */
   function tellAgentPage(): void {
-    const shown = current === "agent" && !settingsOpen && guide.hidden !== false;
+    const shown = current === "agent" && !settingsOpen && guide.hidden !== false && agent.settingsOf() === null;
     if (shown === agentPageTold) return;
     agentPageTold = shown;
     void api.agentPageShown(shown).catch(() => {});
@@ -223,6 +242,8 @@ watchChipRows(document.body);
     const place: Place = { page: current };
     if (settingsOpen) place.pane = settings.pane();
     if (current === "dictation") place.tab = dictation.tab();
+    const settingsMember = current === "agent" ? agent.settingsOf() : null;
+    if (settingsMember !== null) place.member = settingsMember;
     const day = current === "dictation" && dictation.tab() === "history" ? history.day() : null;
     if (day !== null) place.day = day;
     return place;
@@ -243,6 +264,8 @@ watchChipRows(document.body);
         if (place.tab === "history" || place.page === "history") history.setDay(place.day ?? null);
         showPage(place.page);
       }
+      // A step to or from a member's settings page opens or closes it, never recording another step.
+      if (place.page === "agent") agent.showSettings(place.member ?? null);
       if (place.pane !== undefined) openSettings(place.pane);
       else closeSettings();
     },
@@ -256,7 +279,7 @@ watchChipRows(document.body);
   function go(id: PageId, arg?: PageArgument): void {
     navigation.visit(() => {
       if (id === "settings") openSettings(arg?.startsWith("draft:") ? undefined : (arg as SettingsPane | undefined));
-      else showPage(id, id === "automations" || arg?.startsWith("draft:") || id === "agent" && arg === "computer" ? arg : undefined);
+      else showPage(id, id === "automations" || arg?.startsWith("draft:") || id === "agent" && (arg === "computer" || arg?.startsWith("member-settings:")) ? arg : undefined);
     });
   }
 
@@ -338,9 +361,20 @@ watchChipRows(document.body);
   // The tray's menu asks for a page. Rust sends this before it shows the window.
   ctx.onEvent((event) => followTray(event, { inGuide: () => !guide.hidden, go, addWord: () => dictionary.addWord() }));
 
+  // A member template file double-clicked in the file manager: the shell keeps its text, and the members page shows the import
+  // review of it, once the guide (if any) is done and when the window has started.
+  const templateFile: TemplateOpenTarget = {
+    inGuide: () => !guide.hidden,
+    take: api.memberTemplatePending,
+    go,
+    review: (text) => void window.dispatchEvent(new CustomEvent("raphael:template-file", { detail: text })),
+  };
+  ctx.onEvent((event) => followTemplateFile(event, templateFile));
+
   api.subscribeMainEvents((event) => {
     if (event.type === "CoreReady") console.info("main page: CoreReady");
     if (event.type === "SetupMissing") toaster.notice(() => missingHTML(event.missing));
+    if (event.type === "QuotaWarning") warnQuota(event);
     if (event.type === "Dictation") followDictation(event.phase, event.agent);
     if (event.type === "DictationPasted" && document.activeElement instanceof HTMLTextAreaElement) {
       document.activeElement.dispatchEvent(new CustomEvent("dictation-pasted", { detail: event.text }));
@@ -360,17 +394,27 @@ watchChipRows(document.body);
     document.documentElement.dataset.windowLayout = "onboarding";
     document.querySelector<HTMLElement>(".wbody")!.hidden = true;
     guide.hidden = false;
+    // The window becomes the guide's card until it is done (guide-window.ts).
+    const strip = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--window-controls-height")) || 32;
+    const room = async (): Promise<{ width: number; height: number } | null> => {
+      const screen = await currentMonitor();
+      return screen ? { width: screen.workArea.size.width / screen.scaleFactor, height: screen.workArea.size.height / screen.scaleFactor } : null;
+    };
+    try { void fitGuideWindow(getCurrentWindow(), strip, document.documentElement, room).catch((err) => console.warn("main: the guide window keeps its size", err)); }
+    catch (err) { console.warn("main: no native window for the guide", err); }
     tellAgentPage();
     mountOnboarding(
       guide,
       {
         mode,
-        onDone: (result) => {
+        onDone: () => {
+          void releaseGuideWindow().catch((err) => console.warn("main: the window did not get its size back", err));
           guide.hidden = true;
           showPages();
           tellAgentPage();
           if (mode === "first" || !current) go(START_PAGE);
-          if (result.toSettings) go("settings", "usage");
+          firstViewShown();
+          void openPendingTemplate(templateFile).catch((err) => console.warn("main: the opened template file was not shown", err));
           // The speech models that the guide did not wait for come on in the background.
           void resumeModels({ status: api.modelsStatus, ensure: api.modelsEnsure }, (message) => console.warn("main:", message));
         },
@@ -389,6 +433,8 @@ watchChipRows(document.body);
   } else {
     showPages();
     go(START_PAGE);
+    firstViewShown();
+    void openPendingTemplate(templateFile).catch((err) => console.warn("main: the opened template file was not shown", err));
     // A guide that was left before the speech models were all there: fetch what is missing.
     void resumeModels({ status: api.modelsStatus, ensure: api.modelsEnsure }, (message) => console.warn("main:", message));
   }
@@ -406,6 +452,7 @@ function showPages(): void {
 mountWindowChrome();
 start().catch((err) => {
   console.error("main: could not start", err);
+  firstViewShown();
   // Whatever went wrong, the window must not stay blank.
   document.getElementById("ob")!.hidden = true;
   showPages();

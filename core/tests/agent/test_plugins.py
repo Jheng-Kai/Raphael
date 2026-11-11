@@ -415,6 +415,20 @@ async def test_the_cost_of_wording_the_answer_after_a_yes_is_added_to_the_turn(
     ]
 
 
+@pytest.mark.parametrize(("authored", "expected"), [
+    ("软件资料已记录。", "軟體資料已記錄。"),
+    ("日本の学校へ行きます。", "日本の学校へ行きます。"),
+])
+async def test_confirmed_tool_reply_uses_owner_script_on_an_english_interface(rig, plugins, client, authored, expected):
+    rig.settings.set("languages", ["zh-TW"])
+    asked = await ask_for_note(rig, plugins, client, language="en")
+    client.replies.append(spoken("Understood", authored, detail=authored + "\nEvidence."))
+    done = await rig.confirm(asked["confirm"]["id"], True)
+    saved = rig.history.get(done["turn_id"])
+    assert done["text"] == saved.text == expected
+    assert saved.detail == expected + "\nEvidence."
+
+
 async def test_a_no_runs_nothing_and_is_written_down(rig, plugins, client, calls):
     asked = await ask_for_note(rig, plugins, client)
     done = await rig.confirm(asked["confirm"]["id"], False)

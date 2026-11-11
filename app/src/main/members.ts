@@ -9,12 +9,24 @@
 
 import { zoneLabel } from "./timezones";
 import { presenceAttrs, slimeFaceHTML } from "./slime";
-import { avatarHTML } from "./avatar";
+import { avatarHTML, currentAvatar } from "./avatar";
 import { catalogs, t } from "./i18n";
 import { esc, ico } from "./ui";
 import { formatClock, formatDate } from "./format";
 import type { MessageKey } from "./i18n/zh-TW";
 import type { Member, MemberGroup, MemberSource, MembersList, Routine, RoutineSchedule } from "./types";
+import { findsName } from "./find-match";
+
+/**
+ * A member as a page about it draws it: without what changes with each word it says or step it takes (its last line,
+ * its time, its unread mark, its activity and the words for it). The panel and the settings page compare this, not the
+ * whole row, so a reply that streams in or a worker that moves on does not draw them again (owner, 2026-11-11: 「更新…
+ * 就會閃現」). Its face carries the rest of it (a long silence, a wait) in its own markup.
+ */
+export function stableMember<T extends Partial<Member>>(member: T): Omit<T, "preview" | "last_at" | "unread" | "unread_from" | "waiting" | "activity" | "activity_label"> {
+  const { preview: _preview, last_at: _lastAt, unread: _unread, unread_from: _unreadFrom, waiting: _waiting, activity: _activity, activity_label: _label, ...rest } = member;
+  return rest;
+}
 
 /** Raphael's id among the members: member 0 everywhere in the core's API. */
 export const RAPHAEL_ID = 0;
@@ -29,9 +41,6 @@ export const ROLE_MAX = 24;
 export const PERSONALITY_MAX = 2000;
 export const INSTRUCTIONS_MAX = 2000;
 export const GROUP_NAME_MAX = 24;
-/** The longest title and prompt of a routine (routines.*). */
-export const ROUTINE_TITLE_MAX = 40;
-export const ROUTINE_PROMPT_MAX = 1000;
 
 /** The composer's placeholder in a member's thread: the same English words in every language, as "Ask Raphael" is. */
 export const memberPlaceholder = (name: string): string => t("members.placeholder", { p0: name });
@@ -52,7 +61,8 @@ const fold = (text: string): string => text.normalize("NFKC").toLocaleLowerCase(
 /** Whether a member answers the column's search: in its name or its role. Blank matches all. */
 export function memberMatches(member: Pick<Member, "id" | "name" | "role" | "blurb">, query: string): boolean {
   const q = fold(query.trim());
-  return q === "" || fold(member.name).includes(q) || fold(memberRole(member)).includes(q) || fold(member.blurb ?? "").includes(q);
+  return q === "" || fold(member.name).includes(q) || fold(memberRole(member)).includes(q) || fold(member.blurb ?? "").includes(q) ||
+    findsName([member.name, memberRole(member)], q); // a name or role nearly spelled
 }
 
 /** A section of the column: a group (null: 未分組) and its members that answer the search. */
@@ -125,6 +135,16 @@ export function orderedMembers(list: MembersList | null): Member[] {
 }
 
 /**
+ * Who 換成其他成員 on a pinned tile offers (owner, 2026-11-11, after Grok Bot's 「Replace with different Bot」): the members
+ * that are not pinned, in the column's order. Not Raphael (he is pinned by his own setting and holds the top slot), nobody
+ * hidden from the sidebar, and not the primary, who already has the top slot and would stand there twice.
+ */
+export function pinReplacements(list: MembersList | null): Member[] {
+  const primary = primaryIdOf(list);
+  return orderedMembers(list).filter(m => m.id !== RAPHAEL_ID && m.id !== primary && !m.pinned && !m.hidden);
+}
+
+/**
  * A row's second line: the last line of its thread (`preview`), or, while a question waits for the
  * owner there, that line in gold after 「等你處理：」 (the waiting turn is the thread's last, so its
  * line is what is asked), 「等你處理」 alone when there is none.
@@ -161,14 +181,28 @@ export const isPictureUrl = (url: unknown): url is string => typeof url === "str
 /** The placeholder's character: the first of the name (a whole character, an emoji too), or nothing. */
 export const initialOf = (name: string): string => Array.from(name.trim())[0] ?? "";
 
+/** Raphael's slime in the main window: the very first one, the cute blue slime. */
+export const RAPHAEL_SLIME = "slime:rimuru";
+
 /**
- * A face at `size` px: Raphael's emblem or picture (avatar.ts, bare, never cut into a frame of
- * ours), a member's picture in a circle, or a neutral person silhouette.
- * Decorative: whoever shows it names it.
+ * A face at `size` px: a member's slime; for Raphael the owner's own picture when one is chosen (avatar.ts), else the
+ * first blue slime. His emblem shows only in voice (the voice screen and its button, avatar.ts). Decorative: whoever
+ * shows it names it.
+ *
+ * A face is a picture of the slime unless `moving`. Exactly two places move (owner, 2026-11-11: 「工作的時候，只要有左邊的…讓它有動畫就可以了。
+ * 還有…在對話框思考那個，也要有動畫。其他…都不用有動畫」): a member's row in the left list, and the conversation's thinking line.
+ * They pass `moving`; nothing else does.
  */
-export function faceHTML(member: { id: number; name: string; avatar?: string | null; avatar_url?: string | null }, size: number, o: { loop?: boolean; cls?: string } = {}): string {
-  if (member.id === RAPHAEL_ID) return avatarHTML({ size, loop: o.loop, cls: o.cls }).replace("<span", `<span${presenceAttrs(member.id)}`);
-  return slimeFaceHTML(member, size, o.cls);
+export function faceHTML(member: { id: number; name: string; avatar?: string | null; avatar_url?: string | null }, size: number, o: { moving?: boolean; cls?: string } = {}): string {
+  if (member.id === RAPHAEL_ID) {
+    if (currentAvatar()) return avatarHTML({ size, cls: o.cls, still: !o.moving }).replace("<span", `<span${presenceAttrs(member.id)}`);
+    return slimeFaceHTML({ ...member, avatar: RAPHAEL_SLIME }, size, o.cls, o.moving);
+  }
+  // A generated member picture replaces the slime face.
+  if (member.avatar?.startsWith("file:") && member.avatar_url?.startsWith("data:image/"))
+    return `<span class="av mb-av mb-av-pic${o.cls ? ` ${o.cls}` : ""}" data-presence-member="${member.id}" style="--av:${Math.round(size)}px" aria-hidden="true">` +
+      `<img src="${member.avatar_url.replace(/"/g, "%22")}" alt="" draggable="false"></span>`;
+  return slimeFaceHTML(member, size, o.cls, o.moving);
 }
 
 // ---------- routines ----------
@@ -178,9 +212,6 @@ const tr = t as unknown as (key: MessageKey) => string;
 
 /** The name of day `n` of the week, 0 being Sunday. */
 export const dayName = (n: number): string => tr(DAY_KEYS[((n % 7) + 7) % 7]);
-
-/** A time of day as the core keeps it: `HH:MM`, 24 hours. */
-export const isTime = (text: string): boolean => /^([01]\d|2[0-3]):[0-5]\d$/.test(text);
 
 /** How a routine's schedule is said in a row: 「每天 09:00」, 「每週日 20:00」, 「每 3 小時」. */
 export type RoutineTrigger = Pick<Routine, "schedule"> & Partial<Pick<Routine, "when" | "app_name">>;
@@ -227,9 +258,6 @@ export function routineStatus(routine: Routine): string {
   const date = (value: number | null | undefined): string => value ? `${formatDate(value)} ${formatClock(value)}` : t("auto.notYet");
   return t("auto.triggerStatus", { p0: date(routine.last_checked), p1: date(routine.last_run) }) + (routine.last_error ? `\n${routine.last_error}` : "");
 }
-
-/** The intervals the 每隔幾小時 dropdown offers, in hours. */
-export const HOUR_STEPS: readonly number[] = [1, 2, 3, 4, 6, 8, 12, 24];
 
 // ---------- group sources ----------
 

@@ -73,8 +73,8 @@ async def test_clear_member_history_preserves_other_threads_and_own_notes(setup)
     team.memory.own(one.id).edit_document("Topic details\n", None)
     rig.service._cli_sessions.put(one.id, "claude", "old-session")
     rig.service._cli_sessions.put(other.id, "claude", "other-session")
-    named = rig.service.conversations.create(one.id)
-    other_named = rig.service.conversations.create(other.id)
+    named = rig.service.conversations.get(rig.service.conversations.main(one.id))
+    other_named = rig.service.conversations.get(rig.service.conversations.main(other.id))
     for person, conversation in ((one, named), (other, other_named)):
         rig.service._cli_sessions.put(person.id, "claude", "named-session", conversation["id"])
         rig.service._conversation_of(person.id, conversation["id"])
@@ -87,7 +87,7 @@ async def test_clear_member_history_preserves_other_threads_and_own_notes(setup)
     assert len(history.list(member_id=other.id)) == 1
     assert team.memory.own(one.id).read().strip() == "Topic details"
     assert rig.service._cli_sessions.get(one.id, "claude") is None
-    assert rig.service._cli_sessions.get(other.id, "claude") == "other-session"
+    assert rig.service._cli_sessions.get(other.id, "claude") == "named-session"
 
     assert rig.service._cli_sessions.get(one.id, "claude", named["id"]) is None
     assert rig.service._cli_sessions.get(other.id, "claude", other_named["id"]) == "named-session"

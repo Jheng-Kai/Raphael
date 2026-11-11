@@ -1,17 +1,18 @@
-import { perform, pressInFrame } from "../driver.mjs";
+import { perform, pressInFrame, settleMotion } from "../driver.mjs";
 import { checkRendered } from "../checks.mjs";
 import { deletionAudit, privateTimeline } from "./deletion-audit.mjs";
 import { idleCost, slimeSharp } from "../slime-board.mjs";
 import { readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { typingJourney } from "./typing.mjs";
+import { UI_LOCALES } from "../locales.mjs";
 
 export const journeys = [
   { name: "computer-speed", description: "Five warm first observations, browser opens and five-step forms; isolated disposable container, median/worst budgets, no paid model" },
   { name: "typing", description: "200 human-paced keys on 150 persisted rich turns with concurrent offline brains; Event Timing, long frames and CPU profile" },
   { name: "appearance", description: "Real Appearance dropdown, theme persistence and narrow rows at three native sizes" },
   { name: "owner-face", description: "A window that may load before the core still hears it: a saved owner photo reaches the sidebar" },
-  { name: "sidebar-home", description: "Inspect the Grok-style sidebar, in-place search and Home emblem in the real WebView" },
+  { name: "sidebar-home", description: "Inspect the resizable sidebar, in-place search and Home emblem in the real WebView" },
   { name: "rich-content", description: "Persisted rich reply renders tables, highlighted code and SVG; remote images require consent" },
   { name: "owner-round10", description: "Native learned batch Undo, hover/expiry, passive window and stable conversation controls" },
   { name: "home-timing", description: "Measure first painted Home against a two-second offline CLI allowance read" },
@@ -36,6 +37,7 @@ export const journeys = [
   { name: "voice-keys", description: "The real worker: after the composer's microphone the dictation key works during the answer, one Esc ends it, the recognising light shows, and a slow brain at high depth finishes" },
   { name: "long-think", description: "The real core: a model that thinks past the old 60 second deadline finishes its turn, and the answer reaches the window" },
   { name: "every-source", description: "One real turn on every signed-in CLI: Claude Code, Codex, Antigravity, with Claude's models as the CLI lists them" },
+  { name: "room-cli", description: "The real core and the real Claude Code CLI in a group: both members addressed answer, with no 「暫時沒有回應」" },
   { name: "openrouter-turn", description: "One real turn through the owner's OpenRouter key on a free model: no other paid request" },
   { name: "delete-conversation", description: "Delete conversations/member after real exchanges and room reports; detect stale timeline rows" },
   { name: "gmail-connect", description: "Owner-only Composio card sign-in; stop before approving Google consent" },
@@ -103,8 +105,9 @@ async function keepFocus(page) {
 
 async function details(page) {
   if (await page.$('.conversation-trigger[aria-expanded="false"]')) await click(page, ".conversation-trigger");
-  for (let back; (back = await page.$('.mb-det [data-det="back"]:not([hidden])')); await pause(50)) { await back.click(); await back.dispose(); }
-  await wait(page, "[data-conversation-new]");
+  // A member settings page the last step left open gives way to the conversation.
+  for (let back; (back = await page.$('.ms-pane:not([hidden]) [data-ms="back"]')); await pause(50)) { await back.click(); await back.dispose(); }
+  await wait(page, '.mb-det[data-details-tab="details"] [data-det="gear"]');
 }
 async function chat(page) {
   await click(page, '.mb-chief');
@@ -149,6 +152,8 @@ export function wrongLanguage(locale, otherPhrases, deviceNames = []) {
     if (text.trim() === "Raphael") return;
     // Device names come from the OS, but surrounding application labels must still translate.
     let checked = text;
+      const rule = element.closest(".rules-row")?.querySelector(".rules-what")?.textContent.trim();
+      if (rule) checked = checked.split(rule).join("");
     if (element.closest('[data-k="mic"], [data-ob="mic"], .mic-ctl')) {
       // Closed controls abbreviate an OS name to its kind before the device parentheses.
       // Match only known device text; the application's Automatic/Disconnected wording stays checked.
@@ -277,7 +282,7 @@ export async function drive(name, context) {
         await page.evaluate(() => clearInterval(window.__nativeWindowProbe.timer));
       }
       // A return that races the suspension (minimized, then back before or while it settles) must
-      // still leave a visible page that runs: the owner found the window frozen after one.
+      // still leave a responsive page after it stops.
       result.windowSleep.rapid = [];
       await page.evaluate(() => {
         window.__nativeWindowProbe = { ticks: [] };
@@ -309,7 +314,7 @@ export async function drive(name, context) {
   }
   if (name === "appearance") {
     await click(page, '#nav [data-go="settings"]');
-    await click(page, '.modal-scrim [data-pane="appearance"]');
+    await click(page, '.modal-scrim [data-pane="general"]');
     await wait(page, '.appearance-settings');
     result.appearance = [];
     for (const width of [1120, 720, 1920]) {
@@ -345,9 +350,10 @@ export async function drive(name, context) {
       if (width === 720) { await click(page, '[data-sidebar="open"]'); await pause(300); }
       result.layout.push(await page.evaluate(checkRendered, "sidebar-shell"));
       await page.evaluate(checkRendered, "sidebar-search-before");
-      await click(page, '.mb-find-input');
+      await click(page, '[data-col="search"]');
       result.layout.push(await page.evaluate(checkRendered, "sidebar-search-open"));
       await capture(`home-sidebar-${width}`);
+      await page.keyboard.press('Escape'); await pause(150);
       if (width === 720) await click(page, '.sidebar-scrim');
     }
     return;
@@ -381,11 +387,8 @@ export async function drive(name, context) {
     await page.waitForFunction(() => window.__homeTiming?.firstPaintMs !== null);
     result.homeTiming = await page.evaluate(() => window.__homeTiming);
     await capture("first-paint");
-    await page.waitForFunction(() => document.querySelector('.ho-allowance')?.textContent.includes('40%'), { timeout: 15000 });
-    result.homeTiming.liveVisibleMs = await page.evaluate(() => performance.now());
-    await capture("live-allowance");
+    // Home shows no allowances, but the core still reads them for its overview: that read must not hold Home up.
     if (result.homeTiming.firstPaintMs >= 1500) throw new Error(`Home waited for CLI allowances: ${result.homeTiming.firstPaintMs.toFixed(1)} ms`);
-    if (!result.homeTiming.firstAllowance?.includes('25%')) throw new Error("Home did not first paint the stored allowance before the live 40% window");
     return;
   }
   if (name === "voice-keys") {
@@ -520,6 +523,46 @@ export async function drive(name, context) {
     const broken = outcomes.filter(outcome => outcome.status !== "done" && outcome.status !== "not available");
     if (broken.length) throw new Error(`Sources that did not answer: ${JSON.stringify(broken)}`);
     if (!outcomes.some(outcome => outcome.status === "done")) throw new Error("No source was available");
+    return;
+  }
+  if (name === "room-cli") {
+    // Room tool lists must retain the permission callback named on the CLI command line to avoid premature EOF.
+    await keepFocus(page);
+    let cli;
+    for (let i = 0; i < 300; i++) {
+      cli = (await context.rpc("brains.cli", {})).clis.find(row => row.id === "claude");
+      if (cli?.available && cli.models.length) break;
+      await pause(200);
+    }
+    if (!cli?.available || !cli.models.length) throw new Error(`Claude Code is not ready: ${JSON.stringify({ installed: cli?.installed, logged_in: cli?.logged_in })}`);
+    const model = cli.models.find(row => /haiku$/.test(row.id)) ?? cli.models.at(-1);
+    const effort = model.reasoning_efforts?.includes("low") ? "low" : "";
+    const ref = model.effort_models?.[effort] ?? (effort ? `${model.id}?effort=${effort}` : model.id);
+    await context.rpc("settings.set", { key: "agent_model", value: ref });
+    const { member } = await context.rpc("members.create", { name: "NativeRoom", role: "Group check" });
+    await context.rpc("members.update", { id: member.id, model: ref });
+    const { room } = await context.rpc("rooms.create", { name: "Native CLI room", member_ids: [0, member.id] });
+    const began = Date.now();
+    await context.rpc("rooms.send", { room_id: room.id, text: "@Raphael @NativeRoom Each of you, answer in one short sentence: are you here?", request_id: `room-cli-${began}` });
+    const both = [0, member.id];
+    let turns = [];
+    for (let i = 0; i < 1440; i++) {
+      turns = (await snapshot()).agent_turns.filter(row => row.room_id === room.id && row.scope === "room");
+      if (both.every(id => turns.some(row => row.member_id === id && ["done", "error"].includes(row.status)))) break;
+      await pause(250);
+    }
+    const { messages } = await context.rpc("rooms.messages", { room_id: room.id });
+    result.roomCli = {
+      model: ref, seconds: Math.round((Date.now() - began) / 1000),
+      turns: turns.map(row => ({ member: row.member_id, status: row.status, model: row.model, text: String(row.text ?? "").slice(0, 120) })),
+      said: messages.filter(row => row.member_id !== null).map(row => ({ member: row.member_id, kind: row.kind, text: String(row.text ?? "").slice(0, 120) })),
+    };
+    await capture("room-cli");
+    const silent = messages.some(row => /暫時沒有回應|not responding|応答がありません/.test(String(row.text ?? "")));
+    const answered = both.every(id => turns.some(row => row.member_id === id && row.status === "done") && messages.some(row => row.member_id === id && String(row.text ?? "").trim()));
+    // Member replies display their text rather than the reply envelope.
+    const envelope = messages.some(row => row.member_id !== null && /^\s*(?:```(?:json)?\s*)?\{\s*"(?:text|detail|prefix|messages)"\s*:/.test(String(row.text ?? "")));
+    if (silent || !answered || envelope) throw new Error(`The group on Claude Code did not answer in words: ${JSON.stringify(result.roomCli)}`);
     return;
   }
   if (name === "model-sync") {
@@ -756,13 +799,23 @@ export async function drive(name, context) {
     const member = (await context.rpc("members.list", {})).members.find(row => row.name === "NativeJob");
     if (!member) throw new Error("The member was not made");
     if (member.avatar !== "slime:gobta") throw new Error(`The member lost its slime: ${member.avatar}`);
-    const greeting = await page.$eval(".page-agent .ra-body", el => el.textContent);
-    result.greeting = greeting;
-    if (!greeting.includes("NativeJob") || !greeting.includes("？")) throw new Error(`It did not speak first: ${greeting}`);
+    const conversation = (await snapshot()).conversations.find(row => row.member_id === member.id);
+    if (!conversation) throw new Error("The member has no conversation");
+    // The member's own model writes its first words (R-COLLEAGUE-02), so the greeting is a hidden turn to wait for.
+    let greet;
+    for (let i = 0; i < 900 && !greet; i++) {
+      greet = (await snapshot()).agent_turns.find(row => row.conversation_id === conversation.id && row.question === "" && ["done", "error"].includes(row.status));
+      if (!greet) await pause(200);
+    }
+    if (!greet) throw new Error("The greeting on the real Codex did not finish");
+    result.greeting = { status: greet.status, model: greet.model, text: greet.text.slice(0, 200) };
+    if (greet.status !== "done" || !greet.text.trim()) throw new Error(`It did not speak first: ${JSON.stringify(result.greeting)}`);
+    const opening = greet.text.replace(/[*_`#>[\]]/g, "").trim().slice(0, 8);
+    await page.waitForFunction(text => document.querySelector(".page-agent .ra-body")?.textContent.includes(text), { timeout: 15000 }, opening)
+      .catch(() => { throw new Error(`The greeting is not on the page: ${opening}`); });
     if (await page.$(".page-agent .owner-message")) throw new Error("A message was put in the owner's mouth");
     if (member.role || member.instructions) throw new Error("A job was made up before the owner said one");
     await capture("greeting");
-    const conversation = (await snapshot()).conversations.find(row => row.member_id === member.id);
     const text = "幫我看我貼給你的發布說明，每次都整理成三行重點。";
     await type(page, ".composer .cmp-input", text);
     await click(page, ".cmp-send");
@@ -779,8 +832,8 @@ export async function drive(name, context) {
     result.job = { role: saved.role, instructions: saved.instructions };
     if (!saved.role || !saved.instructions) throw new Error(`The owner's answer did not become its job: ${JSON.stringify(result.job)}`);
     await details(page);
-await click(page, '[data-det="gear"]');
-await page.waitForFunction(role => document.querySelector('#mb-det-role')?.value === role, { timeout: 10000 }, saved.role);
+await click(page, '.mb-det [data-det="gear"]');
+await page.waitForFunction(role => document.querySelector('.ms-pane #ms-role')?.value === role, { timeout: 10000 }, saved.role);
     await capture("job-saved");
     return;
   }
@@ -795,6 +848,17 @@ await page.waitForFunction(role => document.querySelector('#mb-det-role')?.value
     };
     const inFrame = (frame, id) => frame.$eval(id, el => el.textContent);
     const asked = async question => (await snapshot()).agent_turns.filter(row => row.question === question);
+    // A page in its card is only a preview (inert, R-PAGE-02): the owner presses the card, and only there the page takes a press or speaks.
+    const larger = async () => {
+      if (await page.$(".pg-view iframe")) return;
+      await click(page, ".pg-card .pg-body");
+      await wait(page, ".pg-view iframe");
+    };
+    const smaller = async () => {
+      if (!await page.$(".pg-view-dialog")) return;
+      await click(page, '.pg-view-dialog [data-dlg="close"]');
+      await page.waitForSelector(".pg-view-dialog", { hidden: true });
+    };
     const refuseAsk = async () => {
       if (await page.waitForSelector(".pg-ask", { timeout: 2500 }).catch(() => null)) {
         await click(page, '.pg-ask [data-dlg="cancel"]');
@@ -815,7 +879,9 @@ await page.waitForFunction(role => document.querySelector('#mb-det-role')?.value
     result.page.fit = fit;
     if (fit.content > fit.inner) throw new Error(`The page scrolls inside its card: ${JSON.stringify(fit)}`);
     await capture("shown");
-    // Right after a press elsewhere in the app, a page that sends by itself has the app's activation, and takes the focus.
+    // Made larger by pressing its card, where the page works. Right after that press, a page that sends by itself has the app's activation, and takes the focus.
+    await larger();
+    frame = await frameNow();
     await pause(2500);
     result.page.autoSent = (await asked("Sent by the page alone")).length;
     if (result.page.autoSent) throw new Error("A page spoke for the owner with no press inside it");
@@ -837,17 +903,18 @@ await page.waitForFunction(role => document.querySelector('#mb-det-role')?.value
     result.page.afterRedraw = { count: await inFrame(frame, "#count"), kept: await inFrame(frame, "#loaded") === loaded };
     if (!result.page.afterRedraw.kept || result.page.afterRedraw.count !== "2") throw new Error(`A redraw reloaded the page: ${JSON.stringify(result.page.afterRedraw)}`);
     await capture("after-press");
+    await larger();
+    frame = await frameNow();
     await pressInFrame(page, await frame.$("#later"));
     await pause(7500);
     result.page.lateSent = (await asked("Sent long after the press")).length;
     if (result.page.lateSent) throw new Error("A page spoke long after the owner's press");
-    await click(page, '.pg-card [data-page-act="expand"]');
-    await wait(page, ".pg-view iframe");
+    await smaller();
+    await larger();
     frame = await frameNow();
     if (await inFrame(frame, "#count") !== "2") throw new Error("Making the page larger lost what was in it");
     await capture("expanded");
-    await click(page, '.pg-view-dialog [data-dlg="close"]');
-    await page.waitForSelector(".pg-view-dialog", { hidden: true });
+    await smaller();
     frame = await frameNow();
     if (await inFrame(frame, "#count") !== "2") throw new Error("Closing the larger page lost what was in it");
     result.layout = [];
@@ -863,7 +930,7 @@ await page.waitForFunction(role => document.querySelector('#mb-det-role')?.value
     await page.setViewport({ width: 1120, height: 900 });
     await click(page, '#nav [data-go="settings"]');
     await perform(page, { action: "settle-motion" });
-    await click(page, '.modal-scrim [data-pane="appearance"]');
+    await click(page, '.modal-scrim [data-pane="general"]');
     frame = await frameNow();
     if (await inFrame(frame, "#loaded") !== loaded) throw new Error("Opening Settings reloaded the page");
     await click(page, '[data-k="appearance"]');
@@ -1005,7 +1072,9 @@ await page.waitForFunction(role => document.querySelector('#mb-det-role')?.value
     result.computer.timezone = { ...clock, ownerZone, expected, checks: timezoneChecks };
     if (clock?.offset !== expected) throw new Error(`VM UTC offset ${clock?.offset ?? "unavailable"} differs from host ${expected}`);
     await chat(page);
-    await click(page, '[data-act="computer"]');  // the panel shows the computer on demand, until something is at work on it
+    // The panel's Computer tab shows the computer on demand (no header button), until something is at work on it.
+    if (await page.$eval('.mb-chat .conversation-trigger', button => button.getAttribute('aria-expanded') !== 'true')) await click(page, '.mb-chat .conversation-trigger');
+    await click(page, '#member-tab-computer');
     await wait(page, ' .desktop-panel:not([hidden])');
     await capture("entry");
     await page.waitForSelector('.desktop-panel[data-desktop-state="member"]', { visible: true, timeout: 60000 });
@@ -1025,6 +1094,9 @@ await page.waitForFunction(role => document.querySelector('#mb-det-role')?.value
     };
     await inspectDesktop("viewer");
     await capture("viewer");
+    // The preview opens the larger view, and Take control is there.
+    await click(page, '[data-desktop="enlarge"]');
+    await page.waitForSelector('.desktop-panel[data-expanded] [data-desktop="take"]:not(:disabled)', { visible: true, timeout: 60000 });
     await click(page, '[data-desktop="take"]');
     await page.waitForSelector('.desktop-panel[data-interactive="true"]', { visible: true, timeout: 60000 });
     const state = await context.rpc("computer.viewer_status", { member_id: 0 });
@@ -1048,6 +1120,8 @@ await page.waitForFunction(role => document.querySelector('#mb-det-role')?.value
     await capture("takeover");
     const auditBefore = (await snapshot()).tool_audit.filter(row => row.server === "computer").length;
     await page.waitForSelector('.desktop-panel iframe:not([hidden])', {visible:true,timeout:60000});
+    await click(page, '[data-desktop="enlarge"]');
+    await page.waitForSelector('.desktop-panel[data-expanded] [data-desktop="take"]:not(:disabled)', { visible: true, timeout: 60000 });
     await click(page, '[data-desktop="take"]');
     await page.waitForSelector('.desktop-panel[data-interactive="true"][data-control-latency-ms]', { visible: true, timeout: 60000 });
     const ownerFrame = await (await page.$('.desktop-panel iframe')).contentFrame();
@@ -1091,12 +1165,13 @@ await page.waitForFunction(role => document.querySelector('#mb-det-role')?.value
     await chat(page);
     await perform(page, { action: "member", id: colleague.id });
     await details(page);
-    await click(page, '[data-det="gear"]');
-    await click(page, '[data-det="tab"][data-tab="memory"]');
-    await page.waitForSelector('[data-mem-space="own"]');
-    result.memoryHeading = await page.$eval('[data-mem-space="own"]', el => el.getAttribute("aria-label"));
-    await capture("memory-heading");
-    if (result.memoryHeading !== `${colleague.name}的記憶`) throw new Error(`Memory heading has unwanted spacing: ${result.memoryHeading}`);
+    await click(page, '.mb-det [data-det="gear"]');
+    // The page holds no memory (owner, 2026-11-11: 「都不要讓我們看到記憶」); the core keeps it.
+    await page.waitForSelector('.ms-pane .ms-nav [data-cat="tools"]');
+    result.memoryShown = await page.$$eval('.ms-pane [data-cat="memory"], .ms-pane [data-mem-space]', elements => elements.length);
+    await capture("member-page");
+    if (result.memoryShown) throw new Error("The member page shows memory");
+    await click(page, '.ms-pane [data-ms="back"]');
     await click(page, '.mb-det [data-det="close"]');
     const send = async (text, expected) => {
       const before = (await snapshot()).agent_turns.length;
@@ -1134,10 +1209,16 @@ await page.waitForFunction(role => document.querySelector('#mb-det-role')?.value
     if (audit.agent_turns.some(t => t.cost_usd !== 0)) throw new Error("The fake skill journey recorded nonzero spend");
     await capture("learned-skill-reused");
     await details(page);
-    await click(page, '[data-det="gear"]');
-    await click(page, '[data-det="tab"][data-tab="skills"]');
-    await page.waitForSelector('.mp-resource');
-    result.skillDate = await page.$eval('.mp-resource', el => el.textContent);
+    await click(page, '.mb-det [data-det="gear"]');
+    await page.waitForSelector('.ms-pane [data-ms="skill-open"]');
+    // The learned skill is the one whose view says so, with its date.
+    for (const id of await page.$$eval('.ms-pane [data-ms="skill-open"]', rows => rows.map(row => row.dataset.id))) {
+      await click(page, `.ms-pane [data-ms="skill-open"][data-id="${id}"]`);
+      await page.waitForSelector('.ms-pane .ms-meta');
+      result.skillDate = await page.$eval('.ms-pane .ms-meta', el => el.textContent);
+      if (/自行學會/.test(result.skillDate)) break;
+      await click(page, '.ms-pane [data-ms="back"]');
+    }
     await capture("learned-skill-date");
     if (!/自行學會 · \d{4}\/\d{2}\/\d{2}/.test(result.skillDate)) throw new Error("The learned-skill date does not follow the Chinese UI");
   }
@@ -1198,9 +1279,7 @@ await page.waitForFunction(role => document.querySelector('#mb-det-role')?.value
         await page.waitForFunction(() => !!document.querySelector('[data-connector][data-card-state="cancelled"]'));
       }
     }
-    await click(page, '#nav [data-go="settings"]');
-    await click(page, '.modal-scrim [data-pane="connections"]');
-    await click(page, '[data-conn="tab"][data-id="store"]');
+    // 連結應用程式 opens from the sidebar only, as a dialog of its own (R-UI-111).2    await click(page, '#nav .sidebar-apps');2    await click(page, '[data-conn="tab"][data-id="store"]');
     await type(page, '#conn-search', app);
     const previousAccounts = new Set((await pendingAccounts()).map(account => account.id));
     await page.waitForSelector(`[data-conn="join"][data-id="${app}"]`, { timeout: 30000 });
@@ -1219,9 +1298,7 @@ await page.waitForFunction(role => document.querySelector('#mb-det-role')?.value
     return;
   }
   if (name === "store-finder") {
-    await click(page, '#nav [data-go="settings"]');
-    await click(page, '.modal-scrim [data-pane="connections"]');
-    await click(page, '[data-conn="tab"][data-id="store"]');
+    // 連結應用程式 opens from the sidebar only, as a dialog of its own (R-UI-111).2    await click(page, '#nav .sidebar-apps');2    await click(page, '[data-conn="tab"][data-id="store"]');
     const catalog = await context.rpc("connectors.catalog", {});
     result.catalog = catalog;
     if (catalog.ok === false) throw new Error(`Real catalog unavailable: ${catalog.error}`);
@@ -1355,21 +1432,12 @@ await page.waitForFunction(role => document.querySelector('#mb-det-role')?.value
     }
     await scrim?.dispose();
     await click(page, '#nav [data-go="home"]'); await wait(page, '.ho-hero h1');
-    await inspect("home-720", ["sidebar-shell", "home-lead-width", "home-overview", "home-redesign"]);
-    const originalMonth = await page.$eval('.ho-calendar', node => node.dataset.month);
-    await click(page, '[data-home-month="1"]');
-    await page.waitForFunction(month => document.querySelector('.ho-calendar')?.dataset.month !== month, {}, originalMonth);
-    await click(page, '[data-home-month="-1"]');
-    await page.waitForFunction(month => document.querySelector('.ho-calendar')?.dataset.month === month, {}, originalMonth);
-    await perform(page, {action:'scroll',selector:'.ho-calendar'});
-    await inspect("home-month-720", ["home-month"]);
-    await click(page, '[data-home-today]');
+    await inspect("home-720", ["sidebar-shell", "home-hero", "home-overview"]);
     await page.setViewport({ width: 1920, height: 1080 });
-    await inspect("home-month-full-1920", ["home-month", "home-redesign"]);
+    await inspect("home-1920", ["home-hero", "home-overview"]);
     await page.setViewport({ width: 1280, height: 800 });
-    await perform(page, {action:'scroll',selector:'.ho-calendar'});
-    await inspect("home-month-compact-1280", ["home-month"]);
-    await perform(page, {action:'click-position',selector:'.ho-calendar',x:.02,y:.02,expect:'.au-day-col'}); await pause(200);
+    await inspect("home-1280", ["home-hero", "home-overview"]);
+    await click(page, '.ho-schedule header [data-home-go="calendar"]'); await wait(page, '.au-day-col'); await pause(200);
     await inspect("calendar-week-1280", ["calendar-shell"]);
     await click(page, '[data-au="view"]'); await click(page, '#app-popover [data-value="day"]');
     await inspect("calendar-day-1280", ["calendar-shell"]);
@@ -1404,7 +1472,7 @@ await page.waitForFunction(role => document.querySelector('#mb-det-role')?.value
     };
     const inspectPage = async (label, checks) => { await pause(200); for (const check of checks) await page.evaluate(checkRendered, check); await capture(label); };
     await page.setViewport({ width: 1280, height: 800 });
-    await perform(page, { action: "click-position", selector: ".ho-calendar", x: .02, y: .02, expect: ".au-day-col" });
+    await click(page, '.ho-schedule header [data-home-go="calendar"]'); await wait(page, ".au-day-col");
     await inspectPage("week-empty", ["calendar-shell", "calendar-now"]);
     // The owner, by hand: 建立, then the small form beside the placeholder.
     await click(page, '[data-au="new"]');
@@ -1449,7 +1517,7 @@ await page.waitForFunction(role => document.querySelector('#mb-det-role')?.value
     // Home draws both, and a click on the member's event opens it on the Calendar page.
     await perform(page, { action: "click", selector: '#nav [data-go="home"]' });
     await wait(page, ".ho-hero h1");
-    const eventOnHome = `.ho-calendar [data-home-event="own:${added.id}"]`;
+    const eventOnHome = `.ho-schedule [data-home-event="own:${added.id}"]`;
     await wait(page, eventOnHome);
     await inspectPage("home", ["home-calendar-language"]);
     await click(page, eventOnHome);
@@ -1515,14 +1583,17 @@ await page.waitForFunction(role => document.querySelector('#mb-det-role')?.value
     const devices = await context.rpc("audio.devices", { refresh: false });
     const deviceNames = [...new Set([devices.automatic_device, devices.selected, ...devices.devices.map(device => device.name)].filter(Boolean))];
     result.deviceNames = deviceNames;
-    for (const locale of ["en", "ja", "zh-TW"]) {
+    for (const locale of UI_LOCALES) {
       await click(page, '#nav [data-go="settings"]');
-      await click(page, '.modal-scrim [data-pane="appearance"]');
+        await settleMotion(page);
+      await click(page, '.modal-scrim [data-pane="general"]');
       await click(page, '[data-k="ui-language"]');
       await click(page, `#app-popover [data-value="${locale}"]`);
       await page.waitForFunction(locale => document.documentElement.lang === locale, {}, locale);
       await pause(250);
-      for (const pane of ["general", "appearance", "connections", "models", "dictation", "tools", "safety", "messaging", "data", "about"]) {
+      const panes = await page.$$eval('.modal-scrim .nav[data-pane]', nodes => nodes.map(node => node.dataset.pane));
+      if (!panes.includes("general")) throw new Error("Settings navigation is unavailable in the locale sweep");
+      for (const pane of panes) {
         await click(page, `.modal-scrim [data-pane="${pane}"]`); await pause(180);
         const issues = await page.evaluate(wrongLanguage, locale, phrases[locale], deviceNames);
         result.visits.push({ locale, page: `settings/${pane}`, issues });

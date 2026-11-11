@@ -25,6 +25,26 @@ async def unused(*args,**kwargs):
     pytest.fail('handoff must use the shared background contract')
 
 
+@pytest.mark.parametrize('management_request', ['Update member 2 model to cli:claude.', '請幫成員修改模型與指令。',
+                                    'Call member_update for member 2.', 'Call member_create to add Amber.'])
+@pytest.mark.parametrize('room', [False, True])
+async def test_member_management_is_refused_before_a_delegate_task_exists(make_rig, management_request, room):
+    rig = make_rig()
+    target, source = setup(rig, room=room)
+    before = rig.conn.execute('SELECT COUNT(*) FROM worker_tasks').fetchone()[0]
+    result = rig.service.handoff(RAPHAEL, args(target, request=management_request), source_turn_id=source.id, language='en')
+    assert not result.ok and result.error == 'delegated_management'
+    assert "Every member" in result.instruction and "yourself" in result.instruction and "private chat" in result.instruction
+    assert rig.conn.execute('SELECT COUNT(*) FROM worker_tasks').fetchone()[0] == before
+
+
+@pytest.mark.parametrize('work_request', ['Implement member_update validation and add regression tests.',
+    'Write documentation about member_update.', 'Read the launch notes; do not change any members.'])
+def test_member_management_guidance_does_not_block_ordinary_work(work_request):
+    from raphael_core.agent.team_admin import delegated_management
+    assert not delegated_management(work_request)
+
+
 def team_of(target,*others):
     found = {person.id:person for person in (RAPHAEL,target,*others)}
     return SimpleNamespace(speaker=found.get,roster=lambda:list(found.values()),has_members=lambda:True,
@@ -101,7 +121,7 @@ async def test_one_undeliverable_result_leaves_the_others_and_is_delivered_once_
     target,source=setup(rig)
     rig.client.replies.extend([report('First answer'),report('Second answer'),report('Later task')])
     first=rig.service.handoff(RAPHAEL,args(target,mode='consult',stage_id='one'),source_turn_id=source.id,language='en').data['task_id']
-    second=rig.service.handoff(RAPHAEL,args(target,mode='consult',stage_id='two'),source_turn_id=source.id,language='en').data['task_id']
+    second=rig.service.handoff(RAPHAEL,args(target,mode='consult',stage_id='two',request='Another question for the writer.'),source_turn_id=source.id,language='en').data['task_id']
     rig.conn.execute(f"CREATE TRIGGER fail_delivery BEFORE INSERT ON room_messages WHEN NEW.request_id='handoff-{first}' "
                      "BEGIN SELECT RAISE(ABORT,'fixture delivery failure'); END")
     later=rig.submit()  # Raphael's own task runs beside the Writer's two, which follow one another
@@ -243,7 +263,7 @@ async def test_parent_releases_slot_real_file_result_and_resume_once(make_rig,tm
     rig.service.attach_turn(parent,source.id)
     if brain=='api':
         rig.client.replies.extend([turn(calls=[call('handoff',args(target,request='Produce the file. '+deadline))]),
-            turn(calls=[call('Notes__look',{'topic':nonce})]),report('已產生驗收檔 '+nonce),report('已核對成果 '+nonce)])
+            turn(calls=[call('use_tool',{'name':'Notes__look','arguments':{'topic':nonce}})]),report('已產生驗收檔 '+nonce),report('已核對成果 '+nonce)])
     else:
         rig.service.use_cli(object())
         async def work(loop):
@@ -254,7 +274,7 @@ async def test_parent_releases_slot_real_file_result_and_resume_once(make_rig,tm
                 assert not unmade.ok and unmade.kind=='waiting_for_handoff'
                 assert loop._handed_off()
             elif loop.member_id==target.id:
-                assert (await loop._tool('file','Notes__look',{'topic':nonce})).ok
+                assert (await loop._tool('file','use_tool',{'name':'Notes__look','arguments':{'topic':nonce}})).ok
                 loop._queue.put_nowait(Outcome('done',final='已產生驗收檔 '+nonce))
             else:
                 assert nonce in loop.user
@@ -273,7 +293,8 @@ async def test_parent_releases_slot_real_file_result_and_resume_once(make_rig,tm
     assert rig.conn.execute('SELECT COUNT(*) FROM task_executions WHERE task_id=?',(parent,)).fetchone()[0]==2
     rig.service._deliver_handoffs()
     assert not rig.service._store.resume_from_inbox(parent)
-    assert AgentHistory(rig.conn).list(10,member_id=target.id)==[]
+    assert [t.id for t in AgentHistory(rig.conn).list(10,member_id=target.id)] == [child.turn_id]
+    assert AgentHistory(rig.conn).get(child.turn_id).question == ''
     assert '已核對成果' in AgentHistory(rig.conn).get(source.id).text
 
 
@@ -411,9 +432,9 @@ async def test_a_chat_that_handed_out_work_keeps_going_until_the_job_is_done(mak
             return reply
         return woken
     whole='頁面放在 /home/cua/team/office/index.html。\n\nWriter 做了頁面，Checker 打開頁面驗收。'+'每個按鈕都試過了。'*30
-    rig.client.replies.extend([report('頁面做好了，尚未驗收。'),
+    rig.client.replies.extend([report('頁面做好了，尚未驗收。' + 'The written page includes the requested sections and their complete contents. ' * 4),
         chief(turn(calls=[call('handoff',args(checker,stage_id='check',request='打開頁面驗收',done_when='A written check.'))])),
-        report('驗收通過 CHECK-OK。'),chief(report(whole))])
+        report('驗收通過 CHECK-OK。' + 'The check covers the required controls, visible result and acceptance conditions. ' * 4),chief(report(whole))])
     receipt=rig.service.handoff(RAPHAEL,args(target,stage_id='page',request='做頁面',done_when='A written page.'),
                                 source_turn_id=source.id,language='zh-TW')
     asker=rig.task(rig.task(receipt.data['task_id']).parent_task_id)
@@ -471,7 +492,7 @@ async def test_a_stopped_conversation_turn_stops_the_questions_it_sent(make_rig,
 
 
 @pytest.mark.parametrize('room',[True,False])
-async def test_assigned_work_reads_the_shared_notes_but_never_the_assignees_private_ones(make_rig,tmp_path,room):
+async def test_assigned_work_reads_its_own_private_context_and_shared_notes(make_rig,tmp_path,room):
     # Hand-offs read no memory at all, so a fact the owner gave the whole team never reached the work.
     rig=make_rig()
     target,source=setup(rig,room=room)
@@ -482,9 +503,9 @@ async def test_assigned_work_reads_the_shared_notes_but_never_the_assignees_priv
     [assigned]=rig.client.chat_calls
     shown=json.dumps(assigned['messages'],ensure_ascii=False)
     assert '品牌主色是金色' in shown
-    assert ('PRIVATE-CHAT' in shown) is room and ('PRIVATE-NOTE' in shown) is room
+    assert 'PRIVATE-CHAT' in shown and 'PRIVATE-NOTE' in shown
     tools=[tool['function']['name'] for tool in assigned['tools']]
-    assert 'memory_read' not in tools and ('history_search' in tools) is room
+    assert 'memory_read' not in tools and 'history_search' in tools
 
 
 @pytest.mark.parametrize('room',[True,False])
@@ -652,7 +673,8 @@ async def test_a_written_deliverable_is_work_done_and_says_why_when_it_is_not(ma
     await until(lambda:rig.task(result.data['task_id']).state in ('done','failed'))
     task=rig.task(result.data['task_id'])
     assert (task.state,task.reason)==('failed','work_without_action')
-    assert '只有回覆' in task.report_text and task.report_detail=='明早我會完成。'
+    assert '只有回覆' in task.report_text and '明早我會完成。' in task.report_text
+    assert task.report_detail is None
 
 
 async def test_a_file_left_in_the_team_folder_counts_as_the_work_it_was_to_leave(make_rig,tmp_path):
@@ -799,3 +821,35 @@ async def test_failed_terminal_transaction_never_emits_a_success_event(make_rig,
     assert store.get(task_id).state=='queued'
     assert not rig.notifications[before:]
     assert not rig.conn.execute("SELECT 1 FROM task_outbox WHERE task_id=? AND type='result'",(task_id,)).fetchone()
+
+
+async def test_batched_handoffs_preserve_literal_views_order_and_room_scoping(make_rig):
+    rig = make_rig()
+    target, room = setup(rig, room=True)
+    history = AgentHistory(rig.conn, rig.wall)
+    private = history.get(history.add(session_id='synthetic-private', question='Synthetic private request',
+        route='answer', source='app', prefix='', text='', status='done'))
+    store = rig.service._store
+    for source in (private, room):
+        for index, mode in enumerate(('work', 'consult', 'consult')):
+            task_id, _ = store.accept_handoff(source=source, parent=None, assignee=target.id,
+                model='fake/model', request=f'Synthetic request {index}', stage=f'batch-{index}',
+                mode=mode, done_when='Verified report', language='en')
+            with rig.conn:
+                rig.conn.execute("UPDATE worker_tasks SET state='done',report_text=?,handback=? WHERE id=?",
+                    ('Synthetic report. ' * 80, 'Short handback.', task_id))
+    expected = {source.id: rig.service.handoff_views(source_turn_id=source.id) for source in (private, room)}
+    statements = []
+    rig.conn.set_trace_callback(statements.append)
+    try:
+        actual = rig.service.handoff_views_for_turns([room.id, private.id, room.id])
+    finally:
+        rig.conn.set_trace_callback(None)
+    assert json.dumps(actual, sort_keys=True) == json.dumps(expected, sort_keys=True)
+    assert len([sql for sql in statements if 'mode IS NOT NULL AND source_turn_id IN' in sql]) == 1
+    scoped = rig.service.handoff_views(room_id=room.room_id, thread_id=room.thread_id)
+    assert [view['task_id'] for view in scoped] == [view['task_id'] for view in expected[room.id]]
+    assert all(len(view['result']) <= 600 for view in scoped if view['mode'] == 'consult')
+    both = rig.service.handoff_views(room_id=room.room_id, source_turn_id=private.id)
+    assert [view['task_id'] for view in both] == sorted(view['task_id'] for views in expected.values() for view in views)
+    assert rig.service.handoff_views() == []

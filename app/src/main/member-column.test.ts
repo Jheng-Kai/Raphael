@@ -6,6 +6,7 @@ import { type ColumnHost, columnHTML, createMemberColumn, memberRowHTML } from "
 import { openNewGroupChat } from "./group-chats";
 import { installContextMenus } from "./context-menu";
 import { setLocale, t } from "./i18n";
+import { closeMenu } from "./ui";
 vi.mock("./group-chats", () => ({ createRoomsSection: () => document.createElement("section"), openNewGroupChat: vi.fn() }));
 import type { Member, MembersList } from "./types";
 
@@ -28,7 +29,7 @@ const LIST: MembersList = {
 };
 const previews = new Map([[1, "PR #17 已開"], [2, "移動 12 個檔案"], [3, "今天的 10 題單字已送出"], [4, "明天 10:00 有會議"]]);
 const view = (over: Partial<Parameters<typeof columnHTML>[0]> = {}) => ({
-  list: LIST, current: 0, previews, query: "", folded: new Set<number>(), fresh: new Set<number>(), ...over,
+  list: LIST, current: 0, previews, folded: new Set<number>(), fresh: new Set<number>(), ...over,
 });
 const dom = (html: string): HTMLElement => {
   const div = document.createElement("div");
@@ -37,25 +38,35 @@ const dom = (html: string): HTMLElement => {
 };
 
 describe("the column, drawn", () => {
+  test("hidden members wait in the last folder and are brought back from their own menu", () => {
+    const list = { ...LIST, members: LIST.members.map(m => m.id === 3 ? { ...m, hidden: true } : m) };
+    const el = dom(columnHTML(view({ list })));
+    const sections = [...el.querySelectorAll(".mb-sec")];
+    const folder = sections[sections.length - 1]!;
+    expect(folder.classList.contains("mb-hidden")).toBe(true);
+    expect(folder.hasAttribute("data-empty")).toBe(false);
+    expect(folder.querySelector(".mb-gname")?.textContent).toBe("隱藏的成員");
+    expect([...folder.querySelectorAll("[data-member]")].map(row => row.getAttribute("data-member"))).toEqual(["3"]);
+    expect(el.querySelectorAll('[data-member="3"]')).toHaveLength(1);
+    expect(folder.querySelector("[data-hidden-rooms]")).not.toBeNull();
+    // Hidden stays hidden until the owner presses the header: the folder starts closed and out of the keyboard's way.
+    expect((folder as HTMLElement).dataset.open).toBe("false");
+    expect(folder.querySelector(".mb-gbody")!.hasAttribute("inert")).toBe(true);
+    expect(folder.querySelector("[data-group-fold]")!.getAttribute("aria-expanded")).toBe("false");
+    // With nothing hidden the folder is empty and does not show (sidebar.css).
+    expect(dom(columnHTML(view())).querySelector(".mb-hidden")?.hasAttribute("data-empty")).toBe(true);
+  });
+
   test("remembering a conversation never selects it while another page is visible", () => {
     const el = dom(columnHTML(view({active:false})));
     expect(el.querySelector('[aria-current="true"]')).toBeNull();
     expect(dom(columnHTML(view({active:true}))).querySelector('[aria-current="true"]')?.getAttribute('data-member')).toBe('0');
   });
-  test("rows show valid last-message times and omit missing or invalid timestamps", () => {
-    const time = new Date(2026, 9, 24, 13, 45).getTime();
-    const row = dom(memberRowHTML(member(1, { last_at: time }), view()));
-    expect(row.querySelector("time")?.textContent).toBe("13:45");
-    expect(row.querySelector("time")?.getAttribute("datetime")).toBe(new Date(time).toISOString());
-    for (const last_at of [null, NaN, 1e20]) expect(dom(memberRowHTML(member(1, { last_at }), view())).querySelector("time")).toBeNull();
+  test("rows show no time, whatever the last message's timestamp", () => {
+    for (const last_at of [new Date(2026, 9, 24, 13, 45).getTime(), null, NaN, 1e20]) expect(dom(memberRowHTML(member(1, { last_at }), view())).querySelector("time")).toBeNull();
   });
 
-  test("search matching only Raphael does not show a contradictory empty result", () => {
-    const el = dom(columnHTML(view({ query: LIST.members[0].name })));
-    expect(el.querySelectorAll(".mb-row")).toHaveLength(1);
-    expect(el.querySelector(".mb-none")).toBeNull();
-  });
-  test("Raphael leads the column as an ordinary row with his bare emblem", () => {
+  test("Raphael leads the column as an ordinary row with his blue slime", () => {
     const el = dom(columnHTML(view()));
     const chief = el.querySelector<HTMLElement>(".mb-chief")!;
     expect(el.firstElementChild?.querySelector(".mb-chief")).toBe(chief);
@@ -64,7 +75,8 @@ describe("the column, drawn", () => {
     expect(chief.dataset.member).toBe("0");
     expect(chief.querySelector("b")?.textContent).toBe("拉斐爾");
     expect(chief.querySelector(".av")!.getAttribute("style")).toBe("--av:40px");
-    expect(chief.innerHTML).not.toMatch(/管理員|mb-av|badge/);
+    expect(chief.innerHTML).not.toMatch(/管理員|badge|app-emblem/);
+    expect(chief.querySelector('.av.mb-av-slime')).not.toBeNull();
     expect(chief.getAttribute("aria-current")).toBe("true");
   });
 
@@ -75,7 +87,7 @@ describe("the column, drawn", () => {
     const el = dom(columnHTML(view({ list: roster(3) })));
     expect(ids(el)).toEqual([3, 1, 2, 0, 4]);
     expect(el.querySelector('[data-group="20"] [data-member="0"] .av')).not.toBeNull();
-    expect(el.querySelector('[data-group="20"] [data-member="0"] .mb-av')).toBeNull();
+    expect(el.querySelector('[data-group="20"] [data-member="0"] .mb-av-slime')).not.toBeNull();
     expect(el.querySelector('[data-member-more="0"]')).not.toBeNull();
     expect(el.querySelector('.mb-chief')?.getAttribute('data-member')).toBe('3');
     expect(el.querySelector('.mb-chief .av')?.getAttribute('style')).toBe('--av:40px');
@@ -84,21 +96,20 @@ describe("the column, drawn", () => {
     expect(LIST.members[3].group_id).toBe(20);
   });
 
-  test("a pinned primary is a tile, Raphael takes its group slot, and searching finds each member only in its new place", () => {
+  test("a pinned primary is a tile and Raphael takes its group slot", () => {
     const list = { ...LIST, members: LIST.members.map(m => m.id === 1 ? { ...m, pinned: true } : m), team_context: { primary_id: 1 } } as MembersList;
     const el = dom(columnHTML(view({ list })));
     expect(el.querySelector('.mb-pinned [data-member="1"]')).not.toBeNull();
     expect(el.querySelector('.mb-pinned [data-member="0"]')).toBeNull();
     expect(el.querySelector('.mb-chief')?.getAttribute('data-member')).toBe('1');
-    const search = dom(columnHTML(view({ list, query: '拉斐爾' })));
-    expect(search.querySelectorAll('[data-member]')).toHaveLength(1);
-    expect(search.querySelector('.mb-none')).toBeNull();
-    expect(search.querySelector('[data-member="0"] .mb-av')).toBeNull();
+    expect(el.querySelectorAll('[data-member="0"]')).toHaveLength(1);
+    expect(el.querySelector('[data-member="0"] .mb-av-slime')).not.toBeNull();
   });
 
   test("only owner-created groups have headers, followed by ungrouped rows", () => {
     const el = dom(columnHTML(view()));
-    expect([...el.querySelectorAll(".mb-gname")].map((n) => n.textContent)).toEqual(["專案", "學習"]);
+    // The hidden folder is drawn too, empty, and stays out of sight until something is hidden (R-UI-112).
+    expect([...el.querySelectorAll(".mb-sec:not([data-empty]) .mb-gname")].map((n) => n.textContent)).toEqual(["專案", "學習"]);
     const ids = (group: string) => [...el.querySelectorAll(`[data-group="${group}"] .mb-row`)].map((n) => (n as HTMLElement).dataset.member);
     expect(ids("10")).toEqual(["1", "2"]);
     expect(ids("20")).toEqual(["3"]);
@@ -148,14 +159,6 @@ describe("the column, drawn", () => {
     expect(section.querySelector("[data-group-fold]")!.getAttribute("aria-expanded")).toBe("false");
   });
 
-  test("a search shows only what matches, folded groups opened, or says nothing matches", () => {
-    const el = dom(columnHTML(view({ query: "老師", folded: new Set([20]) })));
-    expect([...el.querySelectorAll(".mb-row")].map((n) => (n as HTMLElement).dataset.member)).toEqual(["3"]);
-    expect(el.querySelector<HTMLElement>('[data-group="20"]')!.dataset.open).toBe("true");
-    const none = dom(columnHTML(view({ query: "沒有這個人" })));
-    expect(none.querySelector(".mb-none")!.textContent).toBe("沒有相符的成員");
-    expect(none.querySelector(".mb-chief")).toBeNull();
-  });
 });
 
 describe("the column, used", () => {
@@ -190,6 +193,34 @@ describe("the column, used", () => {
     expect(column.el.querySelector<HTMLElement>('.mb-sec[data-group="20"]')!.dataset.open).toBe("true");
   });
 
+  test("the hidden folder starts closed every time, opens on its header for the session, and is never stored open", () => {
+    host.view = () => ({ list: { ...LIST, members: LIST.members.map(m => m.id === 3 ? { ...m, hidden: true } : m) }, current: 0, previews, fresh: new Set() });
+    // An older build stored the hidden folder's id among the folded ones; it no longer means anything.
+    localStorage.setItem("raphael.sidebar.folders", "[-1,10]");
+    const column = mount();
+    const folder = (): HTMLElement => column.el.querySelector<HTMLElement>(".mb-hidden")!;
+    expect(folder().dataset.open).toBe("false");
+    expect(folder().querySelector(".mb-gbody")!.hasAttribute("inert")).toBe(true);
+    folder().querySelector<HTMLElement>(".mb-gname")!.click();
+    expect(folder().dataset.open).toBe("true");
+    expect(folder().querySelector(".mb-gbody")!.hasAttribute("inert")).toBe(false);
+    column.draw();
+    expect(folder().dataset.open).toBe("true");
+    folder().querySelector<HTMLElement>("[data-group-fold]")!.click();
+    expect(folder().dataset.open).toBe("false");
+    folder().querySelector<HTMLElement>("[data-group-fold]")!.click();
+    // A new start (a new column) closes it again: the open state lives only in the session.
+    document.body.innerHTML = "";
+    const next = createMemberColumn(host);
+    document.body.append(next.el);
+    next.draw();
+    expect(next.el.querySelector<HTMLElement>(".mb-hidden")!.dataset.open).toBe("false");
+    // Opening it stored nothing; folding another folder writes only real folders.
+    expect(localStorage.getItem("raphael.sidebar.folders")).toBe("[-1,10]");
+    next.el.querySelector<HTMLElement>('[data-group-fold="20"]')!.click();
+    expect(JSON.parse(localStorage.getItem("raphael.sidebar.folders")!)).toEqual([10, 20]);
+  });
+
   test("a click on a row opens that member's thread", () => {
     const column = mount();
     column.el.querySelector<HTMLElement>('[data-member="3"] .mb-row-t')!.click();
@@ -198,15 +229,29 @@ describe("the column, used", () => {
     expect(host.select).toHaveBeenLastCalledWith(0);
   });
 
-  test("the search narrows the rows as it is typed, and Escape closes it", () => {
+  test("search and plus stand side by side at the top, and search opens a card of every member with 新增成員 at its foot", () => {
     const column = mount();
-    const input = column.el.querySelector<HTMLInputElement>(".mb-find-input")!;
-    input.value = "信箱";
-    input.dispatchEvent(new Event("input"));
-    expect([...column.el.querySelectorAll(".mb-row")].map((n) => (n as HTMLElement).dataset.member)).toEqual(["4"]);
-    input.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
-    expect(column.query()).toBe("");
-    expect(column.el.querySelectorAll(".mb-row")).toHaveLength(5);
+    expect([...column.el.querySelectorAll(".mb-top [data-col]")].map(button => button.getAttribute("data-col"))).toEqual(["search", "add"]);
+    expect(column.el.querySelector("input")).toBeNull();
+    column.el.querySelector<HTMLElement>('[data-col="search"]')!.click();
+    const card = document.querySelector<HTMLElement>("#app-popover.side-search")!;
+    const input = card.querySelector<HTMLInputElement>(".side-search-input")!;
+    expect(document.activeElement).toBe(input);
+    const rows = () => [...card.querySelectorAll<HTMLElement>(".side-search-row")].map(row => row.dataset.member);
+    expect(rows()).toEqual(["0", "1", "2", "3", "4"]);
+    expect(card.querySelector('[data-member="1"] .side-search-main span')!.textContent).toBe("PR #17 已開");
+    input.value = "信箱"; input.dispatchEvent(new Event("input"));
+    expect(rows()).toEqual(["4"]);
+    input.value = "沒有這個人"; input.dispatchEvent(new Event("input"));
+    expect(card.querySelector(".mb-none")!.textContent).toBe("沒有相符的成員");
+    input.value = "老師"; input.dispatchEvent(new Event("input"));
+    input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    expect(host.select).toHaveBeenCalledWith(3);
+    expect(document.getElementById("app-popover")).toBeNull();
+    column.el.querySelector<HTMLElement>('[data-col="search"]')!.click();
+    document.querySelector<HTMLElement>("#app-popover [data-search-new]")!.click();
+    expect(host.newMember).toHaveBeenCalledWith(null);
+    expect(document.getElementById("app-popover")).toBeNull();
   });
 
   test("the persistent plus tooltip follows language changes with its accessible label", () => {
@@ -221,20 +266,24 @@ describe("the column, used", () => {
     } finally { setLocale("zh-TW"); }
   });
 
-  test("the narrow-window search opens a member and closes its popover", () => {
-    const column = mount(), anchor = document.createElement("button");
-    document.body.append(anchor); column.openSearch(anchor);
-    expect(document.activeElement).toBe(document.querySelector("#app-popover input"));
-    document.querySelector<HTMLButtonElement>('#app-popover [data-member="3"]')!.click();
-    expect(host.select).toHaveBeenCalledWith(3);
-    expect(document.getElementById("app-popover")).toBeNull();
+  test("the search card from Ctrl+Shift+F opens a member, closes, and closes the drawer behind it", () => {
+    const column = mount(), anchor = document.createElement("button"), drawer = vi.fn();
+    window.addEventListener("raphael:close-sidebar", drawer);
+    try {
+      document.body.append(anchor); column.openSearch(anchor);
+      expect(document.activeElement).toBe(document.querySelector("#app-popover input"));
+      document.querySelector<HTMLButtonElement>('#app-popover [data-member="3"]')!.click();
+      expect(host.select).toHaveBeenCalledWith(3);
+      expect(document.getElementById("app-popover")).toBeNull();
+      expect(drawer).toHaveBeenCalledTimes(1);
+    } finally { window.removeEventListener("raphael:close-sidebar", drawer); }
   });
 
   test("＋ offers 新增成員 and 新增分組", () => {
     const column = mount();
     column.el.querySelector<HTMLElement>('[data-col="add"]')!.click();
     const items = [...document.querySelectorAll<HTMLElement>("#app-popover [data-pick]")];
-    expect(items.map(b => b.dataset.pick)).toEqual(["member", "group", "group-chat"]);
+    expect(items.map(b => b.dataset.pick)).toEqual(["member", "group", "group-chat", "member-store"]);
     items[0].click();
     expect(host.newMember).toHaveBeenCalled();
   });
@@ -249,12 +298,12 @@ describe("the column, used", () => {
     expect(openNewGroupChat).toHaveBeenCalled();
   });
 
-  test("a row's more gives 移到分組 and 刪除; a right click gives the same", () => {
+  test("a row's menu is grouped into sections, ending with 刪除, and a right click gives the same", () => {
     const column = mount();
     column.el.querySelector<HTMLElement>('[data-member-more="2"]')!.click();
-    expect([...document.querySelectorAll<HTMLElement>("#app-popover [data-pick]")].map(b => b.dataset.pick)).toEqual(["pin", "move", "primary", "unread", "read-all", "edit", "duplicate", "clear", "hide", "delete"]);
-    document.querySelector<HTMLElement>('#app-popover [data-pick="primary"]')!.click();
-    expect(host.memberAction).toHaveBeenCalledWith(2, "primary");
+    const menu = document.querySelector<HTMLElement>("#app-popover")!;
+    expect([...menu.children].map(node => node.matches('[role="separator"]') ? "|" : (node as HTMLElement).dataset.pick)).toEqual(["pin", "move", "unread", "|", "edit", "|", "export-template", "|", "hide", "delete"]);
+    expect(menu.querySelector('[data-pick="delete"]')!.classList.contains("danger")).toBe(true);
     column.el.querySelector<HTMLElement>('[data-member-more="2"]')!.click();
     document.querySelector<HTMLElement>('#app-popover [data-pick="delete"]')!.click();
     expect(host.deleteMember).toHaveBeenCalledWith(2);
@@ -264,6 +313,83 @@ describe("the column, used", () => {
     column.el.querySelector('[data-member="1"]')!.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, button: 2, clientX: 40, clientY: 50 }));
     document.querySelector<HTMLElement>('#app-popover [data-pick="move"]')!.click();
     expect(host.moveMember).toHaveBeenCalledWith(1, null, document.querySelector('#app-popover [data-pick="move"]'));
+  });
+
+  test("only the primary's menu hands the primary on, with 換成其他成員 last, and the primary cannot be deleted or moved from it", () => {
+    const shape = () => [...document.querySelector("#app-popover")!.children].map(node => node.matches('[role="separator"]') ? "|" : (node as HTMLElement).dataset.pick);
+    let column = mount();
+    column.el.querySelector<HTMLElement>('[data-member-more="0"]')!.click();
+    expect(shape()).toEqual(["pin", "|", "primary"]);
+    expect(document.querySelector('#app-popover [data-pick="primary"]')!.textContent).toBe("換成其他成員");
+    document.querySelector<HTMLElement>('#app-popover [data-pick="primary"]')!.click();
+    expect(host.memberAction).toHaveBeenCalledWith(0, "primary");
+    column.el.remove();
+    host.view = () => ({ list: { ...LIST, team_context: { primary_id: 1 } } as MembersList, current: 0, previews, fresh: new Set() });
+    column = mount();
+    column.el.querySelector<HTMLElement>('[data-member-more="1"]')!.click();
+    expect(shape()).toEqual(["pin", "unread", "|", "edit", "|", "export-template", "|", "hide", "|", "primary"]);
+    closeMenu();
+    column.el.querySelector<HTMLElement>('[data-member-more="0"]')!.click();
+    expect(shape()).toEqual(["pin"]);
+    closeMenu();
+    column.el.querySelector<HTMLElement>('[data-member-more="2"]')!.click();
+    expect(shape()).not.toContain("primary");
+  });
+
+  describe("a pinned tile's menu", () => {
+    const shape = () => [...document.querySelector("#app-popover")!.children].map(node => node.matches('[role="separator"]') ? "|" : (node as HTMLElement).dataset.pick);
+    const pinned = (...ids: number[]) => { host.view = () => ({ list: { ...LIST, members: LIST.members.map(m => ids.includes(m.id) ? { ...m, pinned: true } : m) }, current: 0, previews, fresh: new Set() }); };
+
+    test("reads as Grok Bot's pinned bot: 取消釘選, 標為未讀, a line, then 換成其他成員 last, each with its own icon", () => {
+      pinned(3);
+      const column = mount();
+      column.el.querySelector<HTMLElement>('.mb-pinned [data-member-more="3"]')!.click();
+      expect(shape()).toEqual(["pin", "unread", "|", "edit", "|", "export-template", "|", "hide", "delete", "|", "replace-pinned"]);
+      const items = [...document.querySelectorAll<HTMLElement>("#app-popover [data-pick]")];
+      expect(items.map(item => item.textContent!.trim())).toEqual(["取消釘選", "標為未讀", "編輯成員", "分享為範本", "隱藏成員", "刪除成員", "換成其他成員"]);
+      expect(items.every(item => item.querySelector(".ck svg.i"))).toBe(true);
+      // A tile has no 移到分組: its folder is where it goes back to. Nothing offers an id (owner: never shown ids).
+      expect(shape()).not.toContain("move");
+      expect(document.querySelector("#app-popover")!.textContent).not.toMatch(/ID|id/);
+      document.querySelector<HTMLElement>('#app-popover [data-pick="replace-pinned"]')!.click();
+      expect(host.memberAction).toHaveBeenCalledWith(3, "replace-pinned");
+    });
+
+    test("a row in a folder says 釘選 where the tile says 取消釘選, with the same family of icons", () => {
+      pinned(3);
+      const column = mount();
+      column.el.querySelector<HTMLElement>('[data-member-more="2"]')!.click();
+      const row = [...document.querySelectorAll<HTMLElement>("#app-popover [data-pick]")];
+      expect(row.slice(0, 3).map(item => item.textContent!.trim())).toEqual(["釘選", "移到分組", "標為未讀"]);
+      const unreadIcon = row[2].querySelector(".ck")!.innerHTML;
+      closeMenu();
+      column.el.querySelector<HTMLElement>('.mb-pinned [data-member-more="3"]')!.click();
+      const tile = [...document.querySelectorAll<HTMLElement>("#app-popover [data-pick]")];
+      expect(tile[1].querySelector(".ck")!.innerHTML).toBe(unreadIcon);
+      // 取消釘選 is drawn with the unpinned pin, 釘選 with the plain one.
+      expect(tile[0].querySelector(".ck")!.innerHTML).not.toBe(row[0].querySelector(".ck")!.innerHTML);
+    });
+
+    test("without a member to put in its place the tile does not offer 換成其他成員, and the primary's own tile keeps handing the primary on", () => {
+      host.view = () => ({ list: { members: [member(0, { name: "拉斐爾" }), member(1, { pinned: true }), member(2, { pinned: true })], groups: [] }, current: 0, previews, fresh: new Set() });
+      let column = mount();
+      column.el.querySelector<HTMLElement>('.mb-pinned [data-member-more="2"]')!.click();
+      expect(shape()).not.toContain("replace-pinned");
+      column.el.remove(); closeMenu();
+      host.view = () => ({ list: { ...LIST, team_context: { primary_id: 1 }, members: LIST.members.map(m => m.id === 1 ? { ...m, pinned: true } : m) } as MembersList, current: 0, previews, fresh: new Set() });
+      column = mount();
+      column.el.querySelector<HTMLElement>('.mb-pinned [data-member-more="1"]')!.click();
+      expect(shape().slice(-2)).toEqual(["|", "primary"]);
+      expect(shape()).not.toContain("replace-pinned");
+    });
+
+    test("a hidden pinned member is a row of the hidden folder, not a tile, and keeps the row's menu", () => {
+      host.view = () => ({ list: { ...LIST, members: LIST.members.map(m => m.id === 3 ? { ...m, pinned: true, hidden: true } : m) }, current: 0, previews, fresh: new Set() });
+      const column = mount();
+      expect(column.el.querySelector(".mb-tile")).toBeNull();
+      column.el.querySelector<HTMLElement>('[data-member-more="3"]')!.click();
+      expect(shape()).not.toContain("replace-pinned");
+    });
   });
 
   test("a group's menu gives 重新命名, 看的地方 and 刪除", () => {
@@ -285,7 +411,7 @@ describe("the column, used", () => {
     expect(column.el.querySelector<HTMLElement>('[data-group="10"]')!.dataset.open).toBe("true");
   });
 
-  test("the whole group heading folds except its menu, search and a completed drag", () => {
+  test("the whole group heading folds except its menu and a completed drag", () => {
     const column = mount();
     const section = column.el.querySelector<HTMLElement>('[data-group="10"]')!;
     const name = section.querySelector<HTMLElement>('.mb-gname')!;
@@ -300,24 +426,30 @@ describe("the column, used", () => {
     name.dispatchEvent(new Event('dragstart', { bubbles: true, cancelable: true }));
     name.dispatchEvent(new Event('dragend', { bubbles: true }));
     section.querySelector<HTMLElement>('[data-group-fold]')!.click(); expect(section.dataset.open).toBe('false');
-    const search = column.el.querySelector<HTMLInputElement>('.mb-find-input')!;
-    search.value = '老師'; search.dispatchEvent(new Event('input'));
-    const heading = column.el.querySelector<HTMLElement>('.mb-ghead')!;
-    const open = heading.closest<HTMLElement>('.mb-sec')!.dataset.open;
-    heading.click(); expect(heading.closest<HTMLElement>('.mb-sec')!.dataset.open).toBe(open);
   });
 
   test("member drops and folder reorder use the shared persistence callbacks", () => {
     const column = mount();
     host.dropMember = vi.fn().mockResolvedValue(undefined);
     host.reorderGroup = vi.fn().mockResolvedValue(undefined);
-    const drag = (source: string, destination: string): void => {
-      column.el.querySelector(source)!.dispatchEvent(new Event("dragstart", { bubbles: true, cancelable: true }));
-      column.el.querySelector(destination)!.dispatchEvent(new Event("drop", { bubbles: true, cancelable: true }));
+    // Rows and folders where the window would draw them: a drop above a row's middle lands before it.
+    const place = (selector: string, top: number, height: number): void => {
+      column.el.querySelector<HTMLElement>(selector)!.getBoundingClientRect = () => ({ top, bottom: top + height, height, left: 0, right: 240, width: 240, x: 0, y: top, toJSON: () => ({}) }) as DOMRect;
     };
-    drag('[data-member-item="3"]', '[data-group="10"] [data-member-item="1"]');
+    place('[data-group="10"] [data-member-item="1"]', 100, 40);
+    place('[data-group="10"]', 60, 160);
+    place('[data-group="20"]', 240, 120);
+    const drag = (source: string, destination: string, clientY: number): void => {
+      column.el.querySelector(source)!.dispatchEvent(new Event("dragstart", { bubbles: true, cancelable: true }));
+      column.el.querySelector(destination)!.dispatchEvent(new MouseEvent("dragover", { bubbles: true, cancelable: true, clientY }));
+      expect(column.el.querySelector<HTMLElement>(".mb-drop-line")?.hidden).toBe(false);
+      expect(column.el.querySelector(".is-drop-target")).toBeNull();
+      column.el.querySelector(destination)!.dispatchEvent(new MouseEvent("drop", { bubbles: true, cancelable: true, clientY }));
+    };
+    drag('[data-member-item="3"]', '[data-group="10"] [data-member-item="1"]', 105);
     expect(host.dropMember).toHaveBeenCalledWith(3, 10, 1);
-    drag('[data-group="20"] .mb-gname', '[data-group="10"] .mb-gname');
+    drag('[data-group="20"] .mb-gname', '[data-group="10"] .mb-gname', 70);
     expect(host.reorderGroup).toHaveBeenCalledWith(20, 10);
+    expect(column.el.querySelector(".is-dragged")).toBeNull();
   });
 });

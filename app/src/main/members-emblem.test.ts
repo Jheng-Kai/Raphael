@@ -1,10 +1,9 @@
 // @vitest-environment happy-dom
 // Raphael's face on the 拉斐爾 page is his emblem exactly as it is at the bottom right: bare, with no
 // background, border, ring, disc, shadow or circle crop, in the member column, the pill, the details
-// panel and the thread. (The design page once drew a gold disc behind it by a selector that matched
-// the emblem by accident; the owner does not want it.) These read the style sheets for any rule that
-// could reach the emblem's element or what it is drawn into, and look at the HTML that draws it.
-// Owner review 2026-10-30: only a face inside a composite group avatar has its own
+// panel and the thread. These tests inspect style rules that could reach the emblem's element or
+// its drawing surface, along with the rendered HTML.
+// Only a face inside a composite group avatar has its own
 // round background and a 2px separator matching the surface behind that group.
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
@@ -70,17 +69,18 @@ describe("Raphael's emblem stands bare", () => {
     expect(bad).toEqual([]);
   });
 
-  test("Raphael's face is the emblem with none of a member's classes, wherever the page draws it", () => {
+  test("Raphael's face is the first blue slime wherever the page draws it, his emblem only in voice", () => {
     const raphael = raphaelOf(null);
     for (const size of [22, 26, 30, 34, 64, 96]) {
       const html = faceHTML(raphael, size, { cls: "mb-pill-face" });
-      expect(html).toMatch(/^<span data-presence-member="0" class="av mb-pill-face" style="--av:\d+px" aria-hidden="true"><img class="em-l"/);
-      expect(html).not.toMatch(/mb-av|border|background|radius/);
+      expect(html).toMatch(/^<span class="av mb-av mb-av-slime mb-pill-face" data-presence-member="0"/);
+      expect(html).toContain("#3DB5FF");
+      expect(html).not.toContain("app-emblem");
     }
     const column = document.createElement("div");
-    column.innerHTML = columnHTML({ list: null, current: 0, previews: new Map(), query: "", folded: new Set(), fresh: new Set() });
+    column.innerHTML = columnHTML({ list: null, current: 0, previews: new Map(), folded: new Set(), fresh: new Set() });
     const face = column.querySelector(".mb-chief > .av")!;
-    expect(face.className).toBe("av");
+    expect(face.classList.contains("mb-av-slime")).toBe(true);
     expect(face.getAttribute("style")).toBe("--av:40px");
   });
 
@@ -88,8 +88,8 @@ describe("Raphael's emblem stands bare", () => {
     const line = document.createElement("ol");
     const turn: AgentTurn = { id: 5, created_at_ms: 0, question: "問", route: "exchange", prefix: "", text: "答", detail: null, status: "done", source: "member", scope: "exchange", member_id: 3, peer_id: 0 };
     line.innerHTML = receivedLineHTML(turn, { face: () => "", memberName: (id) => (id ? "小晴" : "拉斐爾"), memberFace: () => faceHTML(raphaelOf(null), 18, { cls: "sys-face" }) });
-    const face = line.querySelector(".event-line > .av")!;
-    expect(face.className).toBe("av sys-face");
-    expect(face.querySelector("img.em-l")).not.toBeNull();
+    const face = line.querySelector(".event-line .event-person > .av")!;
+    expect(face.classList.contains("sys-face") && face.classList.contains("mb-av-slime")).toBe(true);
+    expect(face.querySelector("svg.slime")).not.toBeNull();
   });
 });

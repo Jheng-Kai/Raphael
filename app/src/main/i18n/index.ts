@@ -1,14 +1,44 @@
 import { zhTW, type MessageKey } from "./zh-TW";
 import { en } from "./en";
 import { ja } from "./ja";
+import { zhCN } from "./zh-CN";
+import { ko } from "./ko";
+import { es } from "./es";
+import { fr } from "./fr";
+import { de } from "./de";
+import { ptBR } from "./pt-BR";
+import { it } from "./it";
+import { ru } from "./ru";
+import { vi } from "./vi";
+import { th } from "./th";
+import { id } from "./id";
+import { tr } from "./tr";
+import "./fonts.css";
 
-export type UiLocale = "zh-TW" | "en" | "ja";
-export const catalogs = { "zh-TW": zhTW, en, ja };
+export const LOCALES = [
+  { id: "zh-TW", native: zhTW["settings.023"], english: "Traditional Chinese" },
+  { id: "en", native: en["locale.english"], english: "English" },
+  { id: "ja", native: ja["settings.024"], english: "Japanese" },
+  { id: "zh-CN", native: "简体中文", english: "Simplified Chinese" },
+  { id: "ko", native: "한국어", english: "Korean" },
+  { id: "es", native: "Español", english: "Spanish" },
+  { id: "fr", native: "Français", english: "French" },
+  { id: "de", native: "Deutsch", english: "German" },
+  { id: "pt-BR", native: "Português (Brasil)", english: "Portuguese (Brazil)" },
+  { id: "it", native: "Italiano", english: "Italian" },
+  { id: "ru", native: "Русский", english: "Russian" },
+  { id: "vi", native: "Tiếng Việt", english: "Vietnamese" },
+  { id: "th", native: "ไทย", english: "Thai" },
+  { id: "id", native: "Bahasa Indonesia", english: "Indonesian" },
+  { id: "tr", native: "Türkçe", english: "Turkish" },
+] as const;
+export type UiLocale = (typeof LOCALES)[number]["id"];
+export const catalogs = { "zh-TW": zhTW, en, ja, "zh-CN": zhCN, ko, es, fr, de, "pt-BR": ptBR, it, ru, vi, th, id, tr };
 let locale: UiLocale = "zh-TW";
 const listeners = new Set<() => void>();
 
 export const getLocale = (): UiLocale => locale;
-export const isUiLocale = (value: unknown): value is UiLocale => value === "zh-TW" || value === "en" || value === "ja";
+export const isUiLocale = (value: unknown): value is UiLocale => typeof value === "string" && Object.prototype.hasOwnProperty.call(catalogs, value);
 type MessageValue = string | number | (() => string | number);
 const rendered = new Map<string, { key: MessageKey; values?: Record<string, MessageValue> }>();
 

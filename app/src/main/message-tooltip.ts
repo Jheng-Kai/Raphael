@@ -1,6 +1,33 @@
 let typing = false;
 let listening = false;
 
+/** The dictation pages keep their tooltips; everywhere else a tip that only repeats is left out. */
+const KEEPS_ECHOES = ".page-dictation, .page-dict";
+const words = (text: string): string => text.replace(/\s+/g, " ").trim();
+
+/**
+ * Whether `tip` only repeats what `element` already shows.
+ * The rendered text counts, so a name hidden in the folded sidebar still gets its tip; an icon has no text to repeat.
+ */
+export function echoesItsText(element: HTMLElement, tip: string): boolean {
+  const said = words(tip);
+  if (!said || element.closest(KEEPS_ECHOES)) return false;
+  const shown = words(element.innerText ?? element.textContent ?? "");
+  return shown.length > 0 && shown.includes(said);
+}
+
+/**
+ * The browser's own tooltip (`title`) waits for a long hover and then repeats the same words: under the pointer, a title
+ * that only repeats the element's text is taken away before it can show.
+ */
+export function dropEchoTitles(root: Document | HTMLElement = document): void {
+  root.addEventListener("pointerover", event => {
+    const element = (event.target as Element | null)?.closest?.<HTMLElement>("[title]");
+    const title = element?.getAttribute("title");
+    if (element && title && echoesItsText(element, title)) element.removeAttribute("title");
+  }, true);
+}
+
 /** One app tooltip shared by the message actions and composer controls. */
 export function messageTooltip(host: HTMLElement): () => void {
   if (!listening) {
@@ -33,7 +60,7 @@ export function messageTooltip(host: HTMLElement): () => void {
   const observer = new MutationObserver(() => {
     if (!target) return;
     const words = wordsFor();
-    if (!words || !target.isConnected) { hide(); return; }
+    if (!words || !target.isConnected || echoesItsText(target, words)) { hide(); return; }
     if (tip.textContent !== words) { tip.textContent = words; place(); }
   });
   const place = (): void => {
@@ -59,8 +86,10 @@ export function messageTooltip(host: HTMLElement): () => void {
     if (button === target) return;
     hide();
     if (!button || !button.dataset.tooltip || !host.contains(button) || button.dataset.cancelArmed === "true") return;
+    const said = (() => { target = button; const value = wordsFor(); target = null; return value; })();
+    if (echoesItsText(button, said)) return;
     target = button;
-    tip.textContent = wordsFor();
+    tip.textContent = said;
     tip.hidden = false;
     button.setAttribute("aria-describedby", tip.id);
     place();

@@ -3,7 +3,7 @@
 Offline: uv run python -m raphael_core.tools.quick_latency --fake --count 9
 Live (owner only): uv run python -m raphael_core.tools.quick_latency --model cli:codex --count 9
 API live models use the existing OpenRouter OS credential adapter. Nothing is opened,
-scheduled or spoken. Fake times prove instrumentation, not provider performance.
+scheduled. Fake times prove instrumentation, not provider performance.
 """
 
 import argparse
@@ -25,6 +25,8 @@ from raphael_core.brain.db import connect
 from raphael_core.brain.openrouter import ChatToolCall, ChatTurn, Decision, OpenRouterClient
 from raphael_core.brain.secrets import MemoryKeyStore
 from raphael_core.evaluate.credentials import key_provider
+from raphael_core.agent.policy import Tier
+from raphael_core.background.snapshot import take_snapshot
 from raphael_core.evaluate.guardian import Recorder
 
 QUESTIONS = ("Open YouTube.", "What is two plus two?", "What is on my calendar today?")
@@ -52,22 +54,6 @@ class RecordingBackground:
         return False
 
 
-class RecordingVoice:
-    on_state = None
-
-    def speaks(self):
-        return True
-
-    def stop(self):
-        pass
-
-    async def say(self, *args, **kwargs):
-        # Marks the same await-first-sound boundary without producing audio.
-        if self.on_state:
-            self.on_state(kwargs.get("turn_id"), "playing")
-            self.on_state(kwargs.get("turn_id"), "done")
-
-
 class FakeProvider:
     def __init__(self):
         self.calls = []
@@ -93,15 +79,20 @@ class FakeProvider:
             name, args = (("open", {"target_kind": "url", "target": "https://www.youtube.com/"})
                           if self.question % 3 == 0 else ("routine_list", {}))
             calls = [ChatToolCall("record-only", name, args, json.dumps(args))]
-        content = json.dumps({"progress": "Checking the request.", "prefix": "Answer", "text": "Done.", "say_ja": "完了しました。"})
+        content = json.dumps({"progress": "Checking the request.", "prefix": "Answer", "text": "Done."})
         return ChatTurn(content, calls, kwargs["model"], 0.0, 10, 5, 0)
+
+
+def owner_tools():
+    """The tools of the owner's own chat with Raphael, listed and found."""
+    return take_snapshot(None, memory=True, interactive=True, max_tier=Tier.T3)
 
 
 class RecordingLoop(NarratedLoop):
     recorders = []
 
     def __init__(self, **kwargs):
-        self.recorder = Recorder(kwargs["tools"])
+        self.recorder = Recorder(owner_tools())
         self.recorders.append(self.recorder)
         super().__init__(**{**kwargs, "execute": self.recorder})
 
@@ -110,7 +101,7 @@ class RecordingCliLoop(CliLoop):
     recorders = []
 
     def __init__(self, **kwargs):
-        self.recorder = Recorder(kwargs["tools"])
+        self.recorder = Recorder(owner_tools())
         self.recorders.append(self.recorder)
         super().__init__(**{**kwargs, "execute": self.recorder})
 
@@ -145,7 +136,7 @@ async def replay(args):
             # Model traffic uses its own transport; all ordinary lookup HTTP is blocked.
             async with httpx.AsyncClient(transport=httpx.MockTransport(lambda request: httpx.Response(503))) as http:
                 service = AgentService(conn, client, keys, actions=NullActions(), http=http,
-                    background=RecordingBackground(), speaker=RecordingVoice())
+                    background=RecordingBackground())
                 try:
                     service._settings.set("agent_model", args.formal_model)
                     service._settings.set("quick_model", args.model)

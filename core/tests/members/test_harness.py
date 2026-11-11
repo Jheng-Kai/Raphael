@@ -5,7 +5,7 @@ from dataclasses import fields
 
 import pytest
 
-from agent.test_narration import chat
+from agent.test_narration import chat, use
 from raphael_core.agent.harness_tools import DEFINITIONS
 from raphael_core.agent.actions import is_action
 from raphael_core.agent.tools import ToolResult
@@ -25,6 +25,17 @@ async def test_a_member_creates_lists_and_reads_a_skill_through_the_shared_harne
     assert team.members.skill_read(teacher.id, "research-summary") == DOCUMENT
     assert team.members.enabled_skills(0) == []
     assert {"skill_manage", "skills_list", "skill_read"} <= {t["function"]["name"] for t in client.chat_calls[0]["tools"]}
+    def events(turn):
+        records = [json.loads(m["text"]) for m in rig.history.messages([turn]).get(turn, []) if m["kind"] == "event"]
+        return [event for event in records if event.get("type") == "skill_learned"]
+    assert [e["action"] for e in events(result["turn_id"])] == ["created"]
+    changed = DOCUMENT.replace("Check the", "Verify the")
+    for text, actions in ((changed, ["updated"]), (changed, [])):
+        skill = team.members.enabled_skills(teacher.id)[0]
+        client.chats = [chat("", ("skill_manage", {"id": skill["id"], "expected_hash": skill["revision"], "text": text})), live_said("Skill kept.")]
+        result = await typed(rig, "Keep this research procedure", teacher.id)
+        assert result["status"] == "done"
+        assert [e["action"] for e in events(result["turn_id"])] == actions
 
 
 async def test_ten_local_tool_calls_are_persisted_for_skill_review(setup, client):
@@ -64,7 +75,8 @@ async def test_a_member_with_an_old_empty_tool_list_can_search_and_create_a_rout
     assert receipt["text"] == "已建立例行任務 · 每天 08:00 日文練習"
     assert receipt["type"] == "routine" and receipt["id"] == routine.id and receipt["name"] == routine.title
     offered = {t["function"]["name"] for t in client.chat_calls[0]["tools"]}
-    assert {"computer", "open", "web_search", "routine_create"} <= offered  # the same tools as Raphael's
+    # The same tools as Raphael's: `open` is listed, the desktop is found with find_tools (decision 2).
+    assert {"open", "web_search", "routine_create", "find_tools", "use_tool"} <= offered and "computer" not in offered
 
 
 async def test_a_member_can_open_an_app_with_the_same_presence_guard(setup, client):
@@ -136,7 +148,9 @@ async def test_api_model_receives_the_free_group_discussion_contract(setup, clie
     assert "Everyone reads every message" in meeting["description"]
     assert "no fixed rounds" in meeting["description"]
     assert "include Raphael (0)" not in meeting["description"]
-    assert "no automatic conclusion" in request["messages"][0]["content"]
+    # The team and what its primary contact does come with the message (tests/agent/test_cache_sessions.py).
+    assert "no automatic conclusion" in request["messages"][1]["content"]
+    assert "no automatic conclusion" not in request["messages"][0]["content"]
 
 
 async def test_routine_tools_cannot_modify_another_speakers_routine(setup):
@@ -167,7 +181,7 @@ async def test_a_routine_write_obeys_the_same_safety_rule_as_other_writes(setup,
         return Screening(verdict=verdict, rule="Check routine changes")
 
     monkeypatch.setattr(rig.service._gate, "screen", screen)
-    client.chats = [chat("安排練習時間。", ("routine_create", {"title": "Lesson", "prompt": "Teach", "schedule": {"kind": "daily", "time": "08:00"}})), live_said("已安排。")]
+    client.chats = [chat("安排練習時間。", ("routine_create", {"title": "Lesson", "prompt": "Teach", "schedule": {"kind": "daily", "time": "08:00"}})), live_said("已安排。"), live_said("已安排。")]  # a held change: the turn ends, the card is asked, and the turn goes on after the yes
     result = await typed(rig, "Schedule my lesson", teacher.id)
     assert screened == ["routine_create"]
     if verdict == "ask":
@@ -186,7 +200,7 @@ async def test_a_member_uses_the_guarded_computer_loop_in_its_own_thread(setup, 
     teacher = member(team, name="紫苑", tools=[])
     rig.service._computer = ComputerRuns(shell.bridge)
     note = {"target": "user", "action": "add", "content": "Untrusted screen data", "old_text": ""}
-    client.chats = [chat("確認計算機。", ("computer", {"request": "按七"})), *PRESS_SEVEN, live_said("完成了，接著練習日文數字。", memory=[note])]
+    client.chats = [chat("確認計算機。", use("computer", {"request": "按七"})), *PRESS_SEVEN, live_said("完成了，接著練習日文數字。", memory=[note])]
     asked = await typed(rig, "在計算機按七", teacher.id)
     assert asked["status"] == "confirm"
     done = await rig.confirm(asked["confirm"]["id"])

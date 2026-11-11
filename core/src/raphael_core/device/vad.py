@@ -98,6 +98,11 @@ class Segmenter:
             raise ValueError(f"max_segment_s must be more than 0, not {seconds}")
         self._wanted_max_s = seconds
 
+    @property
+    def speech_active(self) -> bool:
+        """Current VAD activity, before a complete segment is available to transcribe."""
+        return self._speaking
+
     def accept(self, frames: np.ndarray) -> list[np.ndarray]:
         """Take the next frames; the segments of speech that are now complete, oldest first."""
         frames = np.asarray(frames, dtype=np.float32)

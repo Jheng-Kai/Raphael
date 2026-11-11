@@ -91,11 +91,13 @@ async def test_a_request_to_remember_is_written_at_once_and_said_so(rig, client,
     assert memory.own(0).read().strip() == "主人住在台北市。"
     assert await steps_of(rig) == [("memory_update", "ok")]
     call = client.json_calls[0]
-    # Both files, the shared one first, each in its tags and with how full it is.
+    # Both files, the shared one first, each in its tags and with how full it is: with the message, so that
+    # the system prompt is the same after the files change (tests/agent/test_cache_sessions.py).
     assert (
         '<shared_memory file="USER.md" usage="0% — 0/1,375 chars">\n(empty)\n</shared_memory>\n'
         '<own_memory file="MEMORY.md" usage="0% — 0/2,200 chars">\n(empty)\n</own_memory>'
-    ) in call["system"]
+    ) in call["user"]
+    assert "<own_memory file=" not in call["system"]
     assert {"memory", "need"} <= set(call["schema"]["properties"])
 
 
@@ -134,7 +136,13 @@ async def test_a_request_to_remember_the_router_misplaced_is_answered_where_note
     client.decisions.append(decision(route))
     client.replies.append(reply(memory=[note("主人 2026-10-31 去東京")]))
     if route == "unclear":
-        client.chats.append(chat(json.dumps(client.replies.pop().data)))
+        # Unclear routing uses the narrated tool protocol rather than legacy reply.memory.
+        client.replies.pop()
+        client.chats.extend([
+            chat("I will save the dated plan.", ("memory_update", {"target": "memory", "operations": [
+                {"action": "add", "content": "主人 2026-10-31 去東京"}]})),
+            chat(json.dumps({"prefix": "了", "text": "已記下。", "detail": ""})),
+        ])
     result = await rig.ask("記住我下週六要去東京")
     assert result["text"] == "已記下。" and background.submitted == []
     assert "主人 2026-10-31 去東京" in memory.own(0).read()
@@ -178,21 +186,23 @@ async def test_what_one_member_learns_of_the_owner_the_next_turn_of_raphael_read
     client.decisions.append(decision("chat"))
     client.replies.append(reply("Sam，你好。", prefix="答"))
     await rig.ask("你好")
-    assert "主人的名字是 Sam" in client.json_calls[-1]["system"]
+    assert "主人的名字是 Sam" in client.json_calls[-1]["user"]
 
 
 # --- reading ------------------------------------------------------------------------------------------
 
 
-async def test_the_files_are_in_the_system_prompt_and_the_same_from_one_turn_to_the_next(rig, client, memory):
+async def test_the_files_come_with_the_message_and_the_system_prompt_is_the_same_whatever_they_hold(rig, client, memory):
     assert memory.update_memory(0, {"target": "memory", "operations": [{"action": "add", "content": "主人住在台北。"}]}).ok
     for _ in range(2):
         client.decisions.append(decision("chat"))
         client.replies.append(reply("你好。", prefix="答"))
         await rig.ask("你好")
+        assert memory.update_memory(0, {"target": "memory", "operations": [{"action": "add", "content": "主人喜歡爬山。"}]}).ok
     first, second = client.json_calls
-    assert "主人住在台北。" in first["system"]
-    assert first["system"] == second["system"]
+    assert "主人住在台北。" in first["user"] and "主人喜歡爬山。" not in first["user"]
+    assert "主人喜歡爬山。" in second["user"]
+    assert first["system"] == second["system"] and "台北" not in first["system"]
 
 
 async def test_a_turn_that_asks_twice_reads_one_snapshot(rig, client, memory):
@@ -248,7 +258,7 @@ async def test_a_search_finds_a_turn_the_context_no_longer_holds(rig, client, me
     rig.seed("Conversation opening", "Hello.")
     rig.seed("Project opening", "Ready.")
     old = rig.seed("上次的會議在哪裡", "在三樓的會議室。")
-    memory.conversation._save("Earlier project discussion.", old)
+    rig.service._conversation_of(0, rig.service.conversations.quick())._save("Earlier project discussion.", old)
     for n in range(40):
         rig.seed(f"別的事 {n}", "好。")
     client.decisions.append(decision("chat"))

@@ -8,7 +8,7 @@
 .card-head { display: flex; align-items: start; gap: 8px; min-width: 0; }
 .card-heading { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1; }
 .card-heading > .mono { width: 22px; height: 22px; flex: 0 0 22px; }
-.card-title { font-size: var(--fs-sm); font-weight: 600; overflow-wrap: anywhere; }
+.card-title { font-size: var(--fs-sm); font-weight: var(--weight-semibold); overflow-wrap: anywhere; }
 .card-status { display: inline-flex; align-items: center; gap: 5px; flex: 0 0 auto; max-width: 48%; min-height: 24px; box-sizing: border-box; padding: 2px 8px; border-radius: var(--r-pill); background: var(--hover); font-size: var(--fs-2xs); color: var(--text-2); }
 .card-status i { display: block; width: 6px; height: 6px; border-radius: var(--r-pill); background: currentColor; flex: 0 0 auto; }
 .card-status.is-waiting { color: var(--warn); background: color-mix(in srgb, var(--warn) 10%, var(--panel)); }
@@ -19,11 +19,17 @@
 .card-well { min-width: 0; border-radius: var(--r-sm); background: var(--surface-2); overflow: clip; }
 :root[data-theme="dark"] .card-well { background: var(--content); }
 .card-well > :not(:last-child) { border-bottom: 1px solid var(--edge); }
-.conversation-card .card-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-start; gap: 8px; margin: 0; grid-column: auto; }
+/* A card's buttons stand at its right, the primary rightmost and the others to its left, as Grok Bot's dialogs (owner,
+   2026-11-10: 「卡片的按鈕盡量放在右側」). The primary stays first in the markup, so it is still the first one Tab reaches. */
+.conversation-card .card-actions { display: flex; flex-direction: row-reverse; flex-wrap: wrap; align-items: center; justify-content: flex-start; gap: 8px; margin: 0; grid-column: auto; }
 .conversation-card .btn { transform: none; }
 .conversation-card .card-actions .pri, .conversation-card .sc-form .pri, .conversation-card .question-submit .pri { background: var(--card-primary); color: var(--card-primary-ink); border: 1px solid var(--card-primary-edge); }
-.conversation-card .card-actions > .card-quiet { margin-left: auto; background: transparent; border-color: transparent; color: var(--text-2); }
-.card-disclosure-toggle.btn { display: flex; align-items: center; gap: 6px; padding: 4px 8px; margin-inline: -8px; border: 0; background: transparent; color: var(--text-2); font-size: var(--fs-xs); min-height: 30px; }
+/* A card's text buttons are a little taller than the compact ones, not hugging their words to the limit (owner,
+   2026-11-10: 「button 上下寬度太窄…可以再胖一點」): the field height. */
+.conversation-card :is(.card-actions, .question-submit) .btn:not(.icon) { min-height: var(--h-field); padding-block: 0; line-height: calc(var(--h-field) - 2px); }
+/* The quiet way out stands left of the others, as Cancel does beside a dialog's action. */
+.conversation-card .card-actions > .card-quiet { background: transparent; border-color: transparent; color: var(--text-2); }
+.card-disclosure-toggle.btn { display: flex; align-items: center; gap: 6px; padding: 1px 8px; margin-inline: -8px; border: 0; background: transparent; color: var(--text-2); font-size: var(--fs-xs); min-height: var(--h-ctl-sm); }
 .card-disclosure-toggle > svg { width: 16px; height: 16px; }
 .card-disclosure-toggle[aria-expanded=true] > svg { rotate: 90deg; }
 .card-detail { margin-top: 8px; white-space: pre-wrap; overflow-wrap: anywhere; }
@@ -44,7 +50,8 @@
 .conversation-card .question-choices { display: flex; flex-direction: column; }
 .question-choices .btn { display: flex; justify-content: start; align-items: start; gap: 10px; width: 100%; border: 0; border-radius: 0; padding: 10px 12px; text-align: start; white-space: normal; background: transparent; }
 [data-choice-letter] { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 22px; flex: 0 0 20px; border-radius: var(--sp-1); background: var(--hover); color: var(--text-3); }
-.question-submit { display: flex; align-items: start; gap: 8px; }
+/* The answer field and its button stand as one row at the same height (the judge: the 送出回答 button was 22 px beside a 30 px field, R-UI-17). */
+.question-submit { display: flex; align-items: stretch; gap: 8px; }
 .question-submit input { flex: 1; width: 0; }
 .conversation-card .sc-form { display: flex; grid-column: auto; flex-wrap: wrap; gap: 8px; }
 .conversation-card .sc-field { min-width: 100px; flex: 1; }
@@ -60,7 +67,6 @@
 .conversation-card .draft-name { width: 100%; }
 .conversation-card .draft-card-ident input { background: transparent; border-color: transparent; }
 .conversation-card .draft-card-blurb { margin: 0; }
-.conversation-card .pg-head { display: none; }
 .conversation-card .pg-body { min-width: 0; }
 .page-agent .conversation-card.connector-card { width: min(480px, 100%); max-width: 480px; }
 .conversation-card .ask-q { max-height: none; overflow: visible; font: inherit; margin: 0; color: var(--text); }
@@ -71,12 +77,22 @@
 .conversation-card .inline-connection-setup { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
 .conversation-card .cn-fields { margin: 0; }
 .inline-connection-setup .cn-hint { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* The owner's own Google (google-card.ts): the text to copy into Google Cloud, a read-only field under its name with the copy button at the right. */
+.google-setup .card-detail:not([hidden]) { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; white-space: normal; }
+.cn-copy { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.cn-copy-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.cn-copy .field { width: 100%; min-width: 0; resize: none; overflow: hidden; text-overflow: ellipsis; color: var(--text); }
+/* The scopes are two lines in a field that is as tall as they are: the shared field height is for one line. */
+.cn-copy textarea.field { display: block; height: auto; padding-block: 6px; line-height: 1.5; white-space: pre; }
+.google-setup .cn-steps { margin: 0; }
 .card-computer-screen { position: relative; }
 .card-computer-screen > button { position: absolute; inset: 0; width: 100%; height: 100%; background: transparent; z-index: 1; }
 /* The hit target keeps the preview visible; a theme hover fill would wash out its frame-coloured icon. */
 .card-computer-screen > .btn:hover:not(:disabled), .card-computer-screen > .btn:active:not(:disabled) { background: transparent; }
 .card-computer-screen > iframe { height: 100%; }
-.composer-failure { width: min(480px, 100%); margin: 0 auto 12px; }
+/* A message that could not be sent starts where the field it came from starts, a card no wider than any other card
+   (judge R-UI-45, 2026-11-10: centred in the composer, it floated between two empty gutters). */
+.composer-failure { margin: 0 0 8px; }
 .conversation-card .mcp-fields { padding: 12px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
 .conversation-card .mcp-field { min-width: 0; }
 @keyframes card-spin { to { rotate: 360deg; } }
@@ -89,3 +105,12 @@
 .conversation-card .draft-more-toggle { padding: 6px 8px; }
 
 .ra-body > .conversation-card, [data-desktop-slot] > .conversation-card, [data-task-result-slot] > .conversation-card { margin-top: 12px; }
+/* The cards of what the panel sends into the conversation: where a bot is made beside its field,
+   a pairing code, and what a template brings. */
+.card-actions-inline { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+.pair-code .code { font-family: var(--mono); font-size: var(--fs-lg); letter-spacing: 0.14em; }
+.template-facts { display: flex; flex-wrap: wrap; gap: var(--sp-1) var(--sp-3); color: var(--text-2); }
+/* A prepared publish request: the one next step, and where its files are (a path wraps at any width instead of cutting). */
+.template-next { margin: 0; }
+.template-where { margin: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); color: var(--text-2); }
+.template-path { overflow-wrap: anywhere; user-select: text; }

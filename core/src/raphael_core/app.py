@@ -5,8 +5,7 @@
 assistant's (`agent.*`, raphael_core.agent), the background worker's (`worker.*`,
 raphael_core.background), the plugins' (`integrations.*` and `toolsets.list`,
 raphael_core.integrations), the messaging apps' (`messaging.<app>.*`, raphael_core.messaging), the
-services of the tools' (`services.*`, raphael_core.services), Raphael's voice (`tts.*`,
-raphael_core.services.speaker), the owner's team's (`members.*`, `groups.*`, `routines.*`,
+services of the tools' (`services.*`, raphael_core.services), the owner's team's (`members.*`, `groups.*`, `routines.*`,
 raphael_core.members) and the few that belong to none of them (`core.*`, `models.*`, `audio.*`).
 `__main__` serves it on stdio.
 
@@ -26,7 +25,7 @@ in a read on the stdin pipe: the loader asks Windows about the stdin handle, and
 that handle for the pending read. The reader of stdio_server is such a thread from its first
 moment to the end of the process, so a numpy imported after it started would load only when the
 app closed stdin. The import takes a fraction of a second when the files are cached. Anything
-else heavy imported at run time (PyTorch for TTS, say) is exposed to the same trap.
+else heavy imported at run time (PyTorch, say) is exposed to the same trap.
 
 Speech-to-text. The `stt_engine` setting, read at each `dictation.start`, picks the engine for that
 dictation: "local" is the engine on this computer; "cloud" sends each stretch of speech to the
@@ -67,7 +66,6 @@ from .agent.device import DeviceActions, NullActions, WindowsActions
 from .agent.gate import ToolGate
 from .agent.safety import SafetyGuard, SafetyJudge, SafetyRules
 from .agent.service import AgentService
-from .agent.routing import Router as DecisionRouter
 from .agent.tools import Tools
 from .background.service import BackgroundService
 from .background.tasks import FINAL_STATES
@@ -104,7 +102,7 @@ from .connectors.service import ConnectorsService
 from .integrations.vault import CredentialVault, MemoryVault, SecretVault
 from .messaging.config import MessagingStore
 from .messaging.service import MessagingService
-from .messaging.words import compose, words
+from .messaging.words import plain_replies, words
 from .protocol import (
     BUSY,
     INTERNAL_ERROR,
@@ -122,7 +120,6 @@ from .services.attachments import Attachment
 from .services.attachment_store import AttachmentStore
 from .services.hub import ServiceHub, offline_transport
 from .services.keys import ServiceKeys, credential_keys, memory_keys
-from .services.speaker import Speaker
 
 logger = logging.getLogger(__name__)
 
@@ -160,6 +157,7 @@ PROGRESS_INTERVAL_S = 0.1
 # How long closing the app waits for the start-up threads. A thread inside ONNX Runtime cannot be
 # stopped, so after this the process leaves without it.
 SHUTDOWN_PATIENCE_S = 3.0
+STARTUP_GRACE_S = 8
 
 # The key the fake LLM's in-memory key store holds: any key makes the cleanup run.
 _FAKE_KEY = "fake-llm-key"
@@ -181,6 +179,23 @@ def _scripted_delegate(text: str) -> bool:
     return text.lstrip().startswith(_DELEGATE_MARK)
 
 
+# The harness's line when the request comes with files (now or earlier in the conversation): the
+# fake model reads one only then, as read_attachment is listed every turn (decision 2).
+_READ_FILES = "Use read_attachment by index"
+
+
+def _found(searches: list[str]) -> set[str]:
+    """The names of the tools find_tools returned: one definition per line, as JSON."""
+    names = set()
+    for line in (line for search in searches for line in search.splitlines()):
+        if line.startswith("{"):
+            try:
+                names.add(json.loads(line)["name"])
+            except (ValueError, KeyError, TypeError):
+                continue
+    return names
+
+
 class EchoClient:
     """Stands in for the OpenRouter client when RAPHAEL_FAKE_LLM=1: the "cleaned" text is the
     transcript as it was said, at no cost, with no network. The end-to-end runs use it.
@@ -189,10 +204,12 @@ class EchoClient:
     question as it was asked.
 
     One scripted exception, for the tests of the background worker: a request that begins with
-    `[delegate]` is routed to the worker, and `chat_tools` then plays a fixed task. It calls the
-    tool named `look` of a connected service twice (topics "alpha" and "beta"; or the time, when the
-    service is not there), a tool named `slow` once if the request says "slow", and then reports in
-    one sentence with the number of results it had seen. No network, no cost."""
+    `[delegate]` is routed to the worker, and `chat_tools` then plays a fixed task. A connection's
+    tools are found, never listed (owner, 2026-11-09, decision 2), so a task that says "look" or
+    "slow" first finds them with find_tools. It then calls the tool named `look` of a connected
+    service twice (topics "alpha" and "beta"; or the time, when the service is not there), a tool
+    named `slow` once if the request says "slow", each found one through use_tool, and reports in
+    one sentence with the number of results it had seen (a search is none). No network, no cost."""
 
     def __init__(self) -> None:
         self.warmed_up = False
@@ -316,21 +333,33 @@ class EchoClient:
         if "routine_create" in offered and seen == 0:
             # Exercise the interactive harness offline, including its explicit input tools.
             from .services.urls import urls_in
-            if "read_attachment" in offered:
+            if "read_attachment" in offered and _READ_FILES in task:
                 return calling("read_attachment", {"index": 1})
             addresses = urls_in(task)
             if addresses:
                 return calling("web_read", {"url": addresses[0]})
 
-        look = next((name for name in sorted(offered) if name.endswith("__look")), None)
-        slow = next((name for name in sorted(offered) if name.endswith("__slow")), None)
-        if slow is not None and "slow" in task and seen == 0:
-            return calling(slow, {})
-        if look is not None and seen < len(_SCRIPT_TOPICS):
-            return calling(look, {"topic": _SCRIPT_TOPICS[seen]})
-        if look is None and "local_time" in offered and seen == 0:
+        answers = [str(message.get("content")) for message in messages if message.get("role") == "tool"]
+        searches = [answer for answer in answers if 'tool="find_tools"' in answer]
+        results = len(answers) - len(searches)  # what the task's tools returned: a search is no result
+        reachable = sorted(offered | _found(searches))
+        look = next((name for name in reachable if name.endswith("__look")), None)
+        slow = next((name for name in reachable if name.endswith("__slow")), None)
+        if (look is None and slow is None and not searches and "find_tools" in offered
+                and _DELEGATE_MARK in task and ("look" in task or "slow" in task)):
+            return calling("find_tools", {"query": "look slow"})
+
+        def using(name: str, arguments: dict) -> ChatTurn:
+            # A listed tool is called by its name, a found one through use_tool.
+            return calling(name, arguments) if name in offered else calling("use_tool", {"name": name, "arguments": arguments})
+
+        if slow is not None and "slow" in task and results == 0:
+            return using(slow, {})
+        if look is not None and results < len(_SCRIPT_TOPICS):
+            return using(look, {"topic": _SCRIPT_TOPICS[results]})
+        if look is None and "local_time" in offered and results == 0:
             return calling("local_time", {})
-        report = {"prefix": "告", "text": f"The scripted task saw {seen} results.", "detail": ""}
+        report = {"prefix": "告", "text": f"The scripted task saw {results} results.", "detail": ""}
         return ChatTurn(json.dumps(report), [], "fake/echo", 0.0, 0, 0, 0)
 
     async def chat_text(self, **kwargs: Any) -> TextCompletion:
@@ -782,7 +811,7 @@ class App(Router):
         super().__init__()
         self._fake_audio = fake_audio
         self._load_kit = _import_kit if load_kit is None else load_kit
-        data_dir.mkdir(parents=True, exist_ok=True)
+        paths.owner_only_directory(data_dir)
         if manager is None:
             from .native_journeys import OfflineModelManager, native_enabled
 
@@ -791,7 +820,10 @@ class App(Router):
         self.manager = manager
 
         # The database is opened here, on the thread that runs the loop, and used there only.
+        began = time.perf_counter()
         self._conn = connect(paths.db_path(data_dir))
+        logger.info("Startup phase=database elapsed_ms=%.1f", (time.perf_counter() - began) * 1000)
+        began = time.perf_counter()
         try:
             self.keys: KeyStore
             self.client: Any
@@ -834,9 +866,6 @@ class App(Router):
             transport=offline_transport() if fake_llm else None,
         )
         self.services.register(self)
-        # Raphael's voice (`tts.*`): his answers aloud, through the service the owner chose.
-        self.speaker = Speaker(self.services)
-        self.speaker.register(self)
         if agent_actions is None:
             agent_actions = NullActions() if fake_llm else WindowsActions()
         # The plugins: servers the user connected, and the hub the assistant reaches their tools by.
@@ -856,8 +885,9 @@ class App(Router):
         # The card for a key a connection declares and the vault holds none of: the value goes from the
         # window to the vault, and that task's one resume follows.
         self.secret_cards = SecretCards(self._conn, self.integrations, notify=self._agent_notice)
-        from .computer.logins import LoginVault
-        self.login_vault = LoginVault(self.vault, conn=self._conn)
+        from .computer.vault_entries import VaultEntries
+        self.login_vault = VaultEntries(self.vault, conn=self._conn)
+        self.login_vault.register(self)
         self.secret_cards.logins = self.login_vault
         self.secret_cards.register(self)
         # The owner's safety rules (`safety.rules.*`), which the gate asks before every action that
@@ -886,7 +916,10 @@ class App(Router):
         from .services.generation_tools import GenerationTools
         from .services.fetch import PageFetcher
         from .services.attachments import MAX_FILE_BYTES
+        from .agent.cli.images import CodexImages
+        from .agent.cli.discovery import CliBrains
         self.generation = Generation(self.providers, self.attachment_store,
+            subscription_images=CodexImages(brains=CliBrains(commands={}) if fake_llm else None, settings=self.providers.settings),
             fetcher=PageFetcher(media=True, media_types=("image/png", "image/jpeg", "image/webp", "video/mp4"), max_bytes=MAX_FILE_BYTES, max_seconds=120,
                                 transport=offline_transport() if fake_llm else None))
         self.tool_hub = GenerationTools(self.tool_hub, self.generation, self._conn)
@@ -930,6 +963,7 @@ class App(Router):
         self.handbacks.register(self)
         # Raphael's memory: the notes on this PC, the summary of the conversation, the reflection.
         memory_root = paths.memory_dir(data_dir) if memory_dir is None else memory_dir
+        paths.owner_only_directory(memory_root)
         self.memory = MemoryService(self._conn, memory_root, self.client, self.keys, notify=self.notify)
         self.memory.register(self)
         self.background.use_memory(self.memory)
@@ -952,11 +986,13 @@ class App(Router):
         self.desktop_viewer.teaching.register(self)
         self.rooms = RoomsService(self._conn, members=self.members, background=self.background,
                                   notify=self.notify, transcribe=self._transcribe_room,
-                                  attachment_store=self.attachment_store, decision=DecisionRouter(self.client))
+                                  attachment_store=self.attachment_store)
         self.rooms.register(self)
-        self.members.use_speech(self.speaker)
+        # The summary of a room thread is written by the memory's own choice of model (members/room_summary.py).
+        self.rooms.summaries.summarize = self.memory.summarize_room
         self.memory.member_exists = self.members.member_exists
         self.memory.language = lambda: self.agent.language
+        from .agent.owner_language import configured_language
         self.agent = AgentService(
             self._conn,
             self.client,
@@ -972,7 +1008,6 @@ class App(Router):
             services=self.services,
             attachment_store=self.attachment_store,
             team=self.members,
-            speaker=self.speaker,
             tool_observer=agent_tool_observer,
             model_observer=agent_model_observer,
             cards=self.cards,
@@ -981,6 +1016,7 @@ class App(Router):
             permissions=self.permissions,
             drafts=self.drafts,
             calendar=self.calendar,
+            owner_language=lambda: configured_language(data_dir),
         )
         self.agent.register(self)
         self.rooms.turn_view = lambda turn: self.agent._turn_views([turn])[0]
@@ -1032,8 +1068,15 @@ class App(Router):
             stop=self._stop_from_messaging,
             transcribe=self._transcribe_from_messaging,
             language=lambda: self.agent.language,
+            members=lambda: {0: self.members.name_of(0) or "Raphael", **{
+                member.id: member.name for member in self.members.store.members() if member.id not in self.members.deleting}},
         )
+        from .messaging.cards import MessagingCards
+        self.messaging.cards = MessagingCards(self._conn, self.messaging, self._agent_notice)
+        self.secret_cards.messaging = self.messaging
+        self.register("messaging.pairing.answer", self.messaging.cards.answer)
         self.messaging.register(self)
+        self.members.remove_messaging = self.messaging.remove_member
 
         self._speech = SpeechModels(
             self.manager, make_segmenter=self._make_segmenter, make_engine=self._make_engine
@@ -1054,6 +1097,8 @@ class App(Router):
         self._threads: list[threading.Thread] = []
         self._closing = threading.Event()
         self._closed = False
+        self._startup_handle: asyncio.TimerHandle | None = None
+        self._deferred_started = False
         self._shutdown_requested = asyncio.Event()
 
         methods = {
@@ -1074,6 +1119,8 @@ class App(Router):
         }
         for method, handler in methods.items():
             self.register(method, handler)
+
+        logger.info("Startup phase=services elapsed_ms=%.1f", (time.perf_counter() - began) * 1000)
 
     # --- start-up and shutdown ------------------------------------------------------------------
 
@@ -1192,6 +1239,9 @@ class App(Router):
         if self._closed:
             return
         self._closed = True
+        if self._startup_handle is not None:
+            self._startup_handle.cancel()
+            self._startup_handle = None
         self._closing.set()
 
         async def close_dictation() -> None:
@@ -1213,6 +1263,7 @@ class App(Router):
             self._conn.close()
 
         steps: list[tuple[str, Callable[[], Awaitable[None]]]] = [
+            ("stop Home narratives", self.home.aclose),
             ("stop the calendar refresh", self.home.calendar_events.aclose),
             ("end room routing calls", self.rooms.aclose),
             ("cancel the dictation", close_dictation),
@@ -1221,6 +1272,7 @@ class App(Router):
             ("end the messaging connections", self.messaging.aclose),
             ("stop the routines' scheduler", self.members.aclose),
             ("end the background tasks", self.background.aclose),
+            ("stop the list of apps' renewal", self.connectors.aclose),
             ("end the connector cards' sign-ins", self.cards.aclose),
             ("end the secret cards' resumes", self.secret_cards.aclose),
             ("end the computer cards' runs", self.handbacks.aclose),
@@ -1229,7 +1281,6 @@ class App(Router):
             ("close the computers' driver connections", self.vm_tools.aclose),
             ("close desktop viewers", self.desktop_viewer.aclose),
             ("stop the computer idle monitor", self.vm.aclose),
-            ("end Raphael's voice", self.speaker.aclose),
             ("end the memory's background pass", self.memory.aclose),
             ("close the services' HTTP client", self.services.aclose),
             ("close the HTTP client", self.client.aclose),
@@ -1371,6 +1422,16 @@ class App(Router):
             "ui_language": language,
             "source": source,
         }
+        from .messaging.core import session_target
+        target = session_target(session_id)
+        if session_id.startswith("member:") and target is None:
+            raise invalid_params("invalid member messaging session")
+        if target is not None and target[0]:
+            member = target[0]
+            if not self.members.member_exists(member) or member in self.members.deleting:
+                raise invalid_params("there is no such member")
+            params["member_id"] = member
+            params["conversation_id"] = self.agent.conversations.main(member)
         if attachments:
             params["attachments"] = [
                 {"name": a.name, "mime": a.mime, "data": base64.b64encode(a.data).decode("ascii")}
@@ -1380,13 +1441,14 @@ class App(Router):
         if reply.get("status") == "confirm":
             question = reply["confirm"]
             await self.call("agent.confirm", {"id": question["id"], "approved": False})
-            asked = compose(question["prefix"], question["text"], None)
-            return f"{asked}\n{words(language, 'confirm')}"
+            return f"{question['text']}\n{words(language, 'confirm')}"
         from .messaging.core import Answer
         from .services.artifacts import turn_files
         from .answer_forms import forms_plain_text
-        return Answer(forms_plain_text(compose(reply.get("prefix", ""), reply.get("text", ""), None)),
-                      list(turn_files(self.agent._history, reply.get("turn_id", 0), self.attachment_store)))
+        # Every message of the reply, unframed, as the app shows them: never only the last one.
+        shown = [m for m in (reply.get("messages") or []) if isinstance(m, str) and m.strip()]
+        parts = [forms_plain_text(m) for m in plain_replies(shown or [reply.get("text", "")])]
+        return Answer("\n\n".join(parts), list(turn_files(self.agent._history, reply.get("turn_id", 0), self.attachment_store)), parts)
 
     async def _transcribe_room(self, audio: bytes, language: str) -> str:
         return await self._transcribe_from_messaging(audio, language, cleanup=True)
@@ -1469,6 +1531,10 @@ class App(Router):
             if ended is not None and ended.turn_id:
                 self.members.turn_arrived(ended.turn_id)
                 self.rooms.turn_arrived(ended.turn_id)
+            if (ended is not None and ended.quiet and ended.member_id and ended.scope == "private"
+                    and ended.routine_id is None and ended.report_room_id is None and ended.parent_task_id is None):
+                # Quiet still means no overlay; a platform-origin task must answer its own chat.
+                method = "worker.report"
         if method != "worker.report" or type(params.get("task_id")) is not int:
             return
         task = self.background.task(params["task_id"])
@@ -1477,14 +1543,19 @@ class App(Router):
         if task.report_text is None:
             return
         from .answer_forms import forms_plain_text
-        text = forms_plain_text(compose(task.report_prefix or "", task.report_text, None))
+        # Cached bubbles retain their boundaries; durable reports retain the complete answer after restart.
+        shown = self.background.final_words(task.id) or [task.full_report]
+        text = [part for part in map(forms_plain_text, plain_replies(shown)) if part.strip()]
+        if not text:
+            return
         try:
             loop = asyncio.get_running_loop()
         except RuntimeError:
             return
         from .services.artifacts import turn_files
         files = list(turn_files(self.agent._history, task.turn_id or 0, self.attachment_store))
-        sent = loop.create_task(self.messaging.report(task.session_id, text, **({"files": files} if files else {})))
+        sent = loop.create_task(self.messaging.report(
+            task.session_id, text[0] if len(text) == 1 else text, **({"files": files} if files else {})))
         sent.add_done_callback(lambda t: t.cancelled() or t.exception())
 
     def _tell_chat_to_answer_here(self, task_id: object) -> None:
@@ -1502,14 +1573,24 @@ class App(Router):
         sent.add_done_callback(lambda t: t.cancelled() or t.exception())
 
     async def _hello(self, params: dict) -> dict:
-        self.vm.start_monitor()
-        self.messaging.start()  # a Telegram bot that was left on polls again
-        self.agent.start()
-        self.agent.prewarm()  # the app is up: read the Start menu now, not at the first "open"
-        self.memory.start()  # and look for turns the reflection pass has not read, soon
-        self.members.start()  # the routines: one missed while the core was not running runs now
-        self.rooms.start()
+        if not self._closed:
+            self.messaging.start()  # Receiving and persistent inbox recovery cannot wait.
+            self.agent.start()
+            self.members.start_ingress()  # Signed webhook deliveries must not wait for routine maintenance.
+            if self._startup_handle is None and not self._deferred_started:
+                self._startup_handle = asyncio.get_running_loop().call_later(STARTUP_GRACE_S, self._start_deferred)
         return {"protocol": PROTOCOL_VERSION, "version": __version__}
+
+    def _start_deferred(self) -> None:
+        self._startup_handle = None
+        if self._closed or self._deferred_started:
+            return
+        self._deferred_started = True
+        for start in (self.vm.start_monitor, self.agent.prewarm, self.memory.start, self.members.start, self.rooms.start):
+            try:
+                start()
+            except Exception:
+                logger.exception("Could not start deferred service %s", start.__qualname__)
 
     async def _shutdown(self, params: dict) -> dict:
         """Close what the app opened, then end the process: the server stops once this is
@@ -1792,8 +1873,6 @@ class App(Router):
         way the meter stays suspended, so a stop that ends meanwhile cannot reopen it beside the
         new dictation.
         """
-        if method == "dictation.start":
-            self.speaker.stop()  # a new recording ends what Raphael was saying
         service = await self._wait_for(self._service)
         if method != "dictation.start":
             try:

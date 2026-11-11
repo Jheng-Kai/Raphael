@@ -12,7 +12,7 @@ export interface ManagedConnector {
   enabled_tools: string[];
   disabled_tools: string[];
   /** Each account the service is signed in with: its status only. */
-  accounts?: { id?: string; status: string }[];
+  accounts?: { id?: string; status: string; label?: string }[];
 }
 
 export interface ConnectorStatus {
@@ -72,7 +72,7 @@ export function managedGroup(c: ManagedConnector, previous?: ConnectionGroup): C
     description: c.kind === "google" ? t("plugins.googleDescription") : c.description || "",
     logo: c.logo, enabled: c.enabled !== false, status: c.status === "ACTIVE" ? "ready" : "error",
     error: c.status === "ACTIVE" ? null : "auth", auth: "oauth", catalog_id: c.kind === "composio" ? slug : null,
-    accounts: (c.accounts ?? []).map(({ status }) => ({ status })),
+    accounts: (c.accounts ?? []).map(({ id, status, label }) => ({ id, status, label })),
     disabled_tools: c.disabled_tools, tools_state: previous?.tools_state,
     tools, tool_count: tools.length || c.enabled_tools.length + c.disabled_tools.length,
     enabled_count: c.enabled_tools.length, write_count: tools.filter(t => t.kind === "write").length,

@@ -1,17 +1,90 @@
 # Member computer (Phases A and B)
 
+## Viewer transport isolation, phase 1 (2026-11-09)
+
+`computer/viewer_relay.py` owns the loopback HTTP listener, both WebSocket pumps,
+RFB gate, socket writers and teaching observation subprocesses on one dedicated
+event-loop thread. Core retains sessions, VM/SSH resolution, SQLite, recording
+files and ownership. Immutable revision/monotonic-deadline/control/teaching policies
+cross a short threading lock; authorization and each write share that lock.
+Session socket sets contain opaque IDs, never writers from another loop.
+Close/revoke/revision changes publish denial before awaiting worker cancellation;
+the relay independently expires connections even while core is blocked. Revoke
+closes that member's viewer sessions but does not stop running commands or containers.
+This supersedes the earlier exception for owner viewers under grant revocation.
+
+Teaching captures privacy context before input on a read-only, relay-owned CuaBridge
+using an immutable command resolved by core at recording start. Only the existing
+accessibility/desktop observation pair is admitted. Privacy-checked immutable JSON
+is queued back for core-owned, ordered recording persistence, without awaiting core
+on the byte path. The queue is bounded (64 pending payloads / 4 MiB, with a small
+full-state notification per overflowing recording); Stop disables new captures and
+flushes prior captures/persistence before drafting. Owner/revision/expiry checks
+run again before forwarding and before recording; close cancels outstanding capture.
+The accepted-input counter increments only for actual forwarded input messages.
+
+BOOTSTRAP snapshots default off. Only parent messages
+`{type:'raphael-desktop-frames', on:true}` take one immediate picture and schedule
+the existing three-second cadence; `on:false` clears it. `pagehide` takes one final
+picture and clears the timer. All pictures require a view-only RFB canvas, retain
+JPEG quality 0.6 and a maximum width of 480 pixels, and use the unchanged
+`{type:'raphael-desktop', state:'frame', image}` response. The separate app consumer
+owns requesting these pictures; this core-only phase changes no app TypeScript.
+
+Offline checks: `tests/computer`, `tests/members/test_teaching.py`,
+`tests/evaluate/test_teaching.py` and `tests/architecture/test_boundaries.py`.
+The fake VNC and client run independently of core; a synthetic 300 ms main-loop
+block must leave framebuffer, owner/teaching input and relay expiry below 200 ms.
+Tests also cover both socket ends closing, preview/watch input denial, stale
+handshakes, privacy and the 8-session/64-connection caps. Evidence and exact exits:
+`app/.look/briefs/viewer-path-report.md`. Actual container/SSH/noVNC rendering,
+native frame pacing and browser canvas performance remain separate acceptance.
+
+## Library: only what the member delivered (owner, 2026-11-07 night)
+
+This supersedes the Library notes below (team-file chips, the workspace/team scan, This week / Earlier). The owner found
+the Library a wall of working screenshots; as Grok Bot's, it now lists only deliverables, read from `members.library`
+(core brief 10: media cards and files or links its replies handed over, pages it published with their first day, verified
+receipts in the owner's output folder; never owner uploads, scratch files or undelivered screenshots). member-panel-work.ts
+groups them by `day`, newest first, under 今天 / 昨天 / a date: pictures as square thumbnails three to a row (a delivered
+attachment loads through `attachments.get` like a chat's; one with no stored copy keeps a tile with the picture icon), every
+other deliverable a row with its kind's icon (document, page, video, audio, archive, file, link), its title and the time;
+nothing framed. Show more adds 12 up to 100. A press opens a picture in the lightbox, a page at the reply that published it,
+a link in the browser, an attachment with `open_attachment`, and a delivered file with the new `open_library_file` command,
+which hands the member id and the Library handle to `members.library_file` (never a path, never `computer.team_file`).
+Delivered file names are data for the look audit's language check (`.lib-title`).
+
+```powershell
+npm run look -- member-panel-library member-panel-library-open member-panel-library-empty details --theme both --width 1120,720,1920x1080
+```
+
+## Bare screen while the computer is not showing its screen (owner, 2026-11-07)
+
+This supersedes every earlier note below that describes words, the member face, preparation progress, a state sentence,
+recovery buttons (Start Docker, Use remote, Download, Retry), the Open pill, the caption under the screen or the header
+state word for an offline computer. While a computer is not showing its live screen (sleeping, starting, waking, updating,
+repairing, stopped Docker, missing installation, remote failure, missing image) the panel draws only the wallpaper: no text,
+face, button, pill or caption inside the screen, and the header state label (computer-lifecycle-state) is hidden until the
+computer runs. The state stays in `data-desktop-state`. The location menu and the overflow menu remain.
+
+One press anywhere on the screen (the `[data-desktop="enlarge"]` cover, visible in every state except while it is getting
+ready) starts it: asleep wakes it, a stopped engine starts Docker through `computer.viewer_status {start_docker:true}`, a
+stalled or unreachable stream reopens, and a running screen opens the larger view as before. Rendered checks use the shared
+`requireBareScreen` helper in scripts/look/checks.mjs. desktop-install and member-panel-remote-location keep their names but
+now cover the absent computer's bare screen and the header location control; no scene was retired.
+
 ## Three-tab member panel and local engine recovery (2026-11-05)
 
 Owner request of 2026-11-05: use Grok Bot's clear Details / Library / Computer hierarchy and explain the actual unavailable-computer reason. This section supersedes earlier landing-panel and first-build-caption guidance for this panel.
 
 R-PANEL-01 through R-PANEL-04 govern the header, shared tabs, live controls and all offline states. Enter from the conversation title for Details; use the monitor for Computer. Gear retains identity, memory, skills, commands and voice. The panel reads the existing private worker-task lane (including delegated private work), newest first. Tasks open their existing results and stop/rerun through the row menu. Library uses the shared team-file chip; file handles are scoped to the selected member's local workspace/team folder, with recorded artifacts/pages retained even without a running computer. Remote volumes are never scanned as local paths. The current scan is capped at 500 entries, depth 3, 100 visible files and 100 task/page/artifact records; ordinary Show more advances by 12.
 
-Owner follow-up of 2026-11-05: say each thing once. Sleeping, starting, waking, updating, repairing, stopped Docker Desktop, missing installation, named remote failure and missing image show the full sentence only inside the screen. The header keeps a matching short state word beside location and overflow, without another face or explanation. Buttons sit after the sentence in normal flow; every offline state has the existing member slime. Only a live screen offers Enlarge and Take control underneath, with no repeated name caption. Details keeps the outer conversation heading and suppresses the list's internal heading. Owner engine recovery starts only the installed local app and reports readiness without implicitly creating a computer; selecting the location recovery opens the existing control. No administrator/app-update advice is shown for a stopped engine.
+Owner follow-up of 2026-11-05: say each thing once. Sleeping, starting, waking, updating, repairing, stopped Docker Desktop, missing installation, named remote failure and missing image show the full sentence only inside the screen. The header keeps a matching short state word beside location and overflow, without another face or explanation. Buttons sit after the sentence in normal flow; every offline state has the existing member slime. Only a live screen offers Enlarge and Take control underneath, with no repeated name caption. Details keeps the outer conversation heading and suppresses the list's internal heading. Owner engine recovery starts only the installed local app and reports readiness without implicitly creating a computer (since 2026-11-11 a granted member's own tool call also starts the installed Docker Desktop and waits up to 120 s, see R-PANEL-04; reads and the viewer still never do); selecting the location recovery opens the existing control. No administrator/app-update advice is shown for a stopped engine.
 
 Consistency comparisons use the existing ui.tabs plain variant, shared fileChipHTML, btn and openMenu. The three member tabs fill the panel to keep equal navigation targets; Connections retains its compact counted tabs within Settings. Work menus have only the applicable action, while maintenance retains its wider descriptive rows and takeover retains its icons. These contextual differences reuse the existing components and tokens. Engine readiness uses the existing viewer notice with role=status and neutral text; failures retain role=alert. Offline recovery buttons retain the screen's existing dark contrast treatment over the wallpaper, while Enlarge and Take control use ordinary panel buttons below it.
 
 ```powershell
-npm run look -- member-panel-details member-panel-task-stop member-panel-task-rerun member-panel-details-empty member-panel-library member-panel-library-empty member-panel-computer-live member-panel-computer-asleep member-panel-computer-starting member-panel-computer-waking member-panel-computer-updating member-panel-computer-repairing member-panel-computer-docker-stopped member-panel-computer-docker-missing member-panel-computer-remote member-panel-computer-image-missing member-panel-docker-start member-panel-remote-location computer-state-sleeping desktop-absent desktop-watch desktop-watch-collapse computer-maintenance-menu takeover-menu connections team-file-reply --theme both --width 1120,720,1920x1080
+npm run look -- member-panel-details member-panel-details-empty member-panel-library member-panel-library-empty member-panel-computer-live member-panel-computer-asleep member-panel-computer-starting member-panel-computer-waking member-panel-computer-updating member-panel-computer-repairing member-panel-computer-docker-stopped member-panel-computer-docker-missing member-panel-computer-remote member-panel-computer-image-missing member-panel-docker-start member-panel-remote-location member-panel-location-hover computer-state-sleeping desktop-absent desktop-watch desktop-watch-collapse computer-maintenance-menu takeover-menu connections team-file-reply --theme both --width 1120,720,1920x1080
 ```
 
 Use synthetic zh-TW fixtures, both themes and 1120/720/1920x1080. panel-state-layout checks sentence/button containment, pairwise nonintersection, ordering, visible face, exactly one visible full sentence and the short header word's agreement with the fixture state. Member-panel checks reject duplicate conversation headings and offline Enlarge/Take control. The task-stop/task-rerun scenes open their shared contextual menus without mutations, and team-file-reply is the shared chip comparison consumer. The library scene exercises ArrowRight, Show more and shared chips; the empty-library scene covers ArrowRight/ArrowLeft; live uses the real chat monitor. Keep the pre-fix desktop-absent overlap failure as red evidence; sleeping did not overlap at the captured baseline widths.
@@ -29,7 +102,7 @@ The explicit remote host check and copyable repairs move from the retired settin
 pane into the location popover using the existing viewer_status owner RPC.
 
 ```powershell
-npm run look -- settings-owner settings-memory safety desktop-host-local desktop-host-remote desktop-panel computer-maintenance-menu computer-state-sleeping owner-output-folder --theme both --width 1120,720,1920x1080
+npm run look -- settings-owner safety desktop-host-local desktop-host-remote desktop-panel computer-maintenance-menu computer-state-sleeping owner-output-folder --theme both --width 1120,720,1920x1080
 ```
 
 ## Computer lifecycle in words (2026-11-05)
@@ -127,9 +200,15 @@ the normal gate and owner-hold checks. No fallback reader/provider is purchased.
 
 Settings checks remote SSH key access, noninteractive Docker PATH, daemon and
 installed image architecture through read-only SSH commands. Fixed localized
-repair words replace raw diagnostics. Docker operations share an owned SSH
-session forwarding the remote Unix socket to loopback; the viewer uses SOCKS on
-that same session. Forwarding failure falls back to ssh:// with bounded backoff.
+words replace raw diagnostics. Since 2026-11-11 (R-COMP-HOST-01) each failure class
+(`ssh_unreachable`, `ssh_alias_unknown`, `ssh_hostkey`, `ssh_hostkey_changed`, `ssh_key`, `docker_missing`,
+`docker_path`, `docker_stopped`, `docker_access`, `architecture`) carries the one command or snippet that
+fixes it, built by `remote_host.repair_command` and shown as the core sent it; a host with Docker running and
+no image is healthy (`image_pending`, a note that the first start prepares it in roughly 5 to 15 minutes).
+The look checks desktop-host-health and desktop-host-repair assert a command that starts with `ssh <alias>`
+and no build from the app's project sources. Docker operations share an owned SSH
+session forwarding the remote Unix socket to an owner-only local socket; the viewer
+uses SSH -W pipes. Unsupported forwarding falls back to ssh:// with bounded backoff.
 No Windows ControlMaster or remote install/start is required.
 
 Idle/eviction and app shutdown only stop compatible owned computers; workspace
@@ -141,7 +220,7 @@ its unchecked option names the host, pins that host for the operation and exclud
 shared/team storage. No deletion/host operation was executed in this brief.
 
 Selected future look matrix (both themes, 1120,720,1920x1080): desktop-panel,
-desktop-watch, desktop-watch-collapse, desktop-watch-boot, desktop-watch-stopped,
+desktop-watch, desktop-watch-collapse,
 desktop-watch-owner, desktop-takeover, desktop-takeover-owner,
 desktop-takeover-done, desktop-owner, desktop-host-remote, desktop-host-invalid,
 desktop-host-health, delete-member-computer. Compare Enlarge/collapse/Stop with
@@ -149,7 +228,7 @@ the existing icon buttons and card Done/Skip with computer-card controls at the
 same theme/size. The owner-typing scene uses synthetic RFB input only.
 
 ```powershell
-npm run look -- desktop-panel desktop-watch desktop-watch-collapse desktop-watch-boot desktop-watch-stopped desktop-watch-owner desktop-takeover desktop-takeover-owner desktop-takeover-done desktop-owner desktop-host-remote desktop-host-invalid desktop-host-health desktop-host-repair delete-member-computer --theme both --width 1120,720,1920x1080
+npm run look -- desktop-panel desktop-watch desktop-watch-collapse desktop-watch-owner desktop-takeover desktop-takeover-owner desktop-takeover-done desktop-owner desktop-host-remote desktop-host-invalid desktop-host-health desktop-host-repair delete-member-computer --theme both --width 1120,720,1920x1080
 ```
 
 Native journeys: member-computer; computer-speed (explicit opt-in, never --all or
@@ -292,7 +371,7 @@ animation, and samples the actual CSS fade at 0/120/240ms under normal motion.
 Selected matrix, both themes at 1120,720,1920x1080:
 
 ```powershell
-npm run look -- desktop-starting desktop-building desktop-preparing desktop-wallpaper-morning desktop-wallpaper-noon desktop-wallpaper-dusk desktop-wallpaper-evening desktop-wallpaper-night desktop-boot-inline desktop-boot-card desktop-boot-connect desktop-boot-expanded desktop-boot-raphael desktop-own-wallpaper desktop-own-wallpaper-card desktop-stopped desktop-unavailable desktop-absent desktop-panel desktop-viewer --theme both --width 1120,720,1920x1080
+npm run look -- desktop-starting desktop-building desktop-preparing desktop-wallpaper-morning desktop-wallpaper-noon desktop-wallpaper-dusk desktop-wallpaper-evening desktop-wallpaper-night desktop-boot-inline desktop-boot-card desktop-boot-connect desktop-boot-raphael desktop-own-wallpaper desktop-own-wallpaper-card desktop-stopped desktop-unavailable desktop-absent desktop-panel desktop-viewer --theme both --width 1120,720,1920x1080
 ```
 
 Compare the full-size preparation and town-period images and the preview/emblem
@@ -336,7 +415,7 @@ connects. The draft scene returns to the screen and reopens the same unsaved
 editor. Stopped renewals after a running stream preserve the no-write contract.
 Additional consumers cover context-menu-routine, automation-event-pick,
 automation-webhook, routine-event-missing/profile, missing-routines,
-memory-editing/saved and polish-caption-member.
+polish-caption-member.
 
 Selected scene matrix, both themes at 1120,720,1920x1080:
 
@@ -422,13 +501,13 @@ an ordinary private member skill on API, CLI and scheduled routine paths.
 Selected local UI matrix:
 
 ```powershell
-npm run look -- desktop-teach-recording desktop-teach-draft desktop-teach-saved desktop-teach-try desktop-teach-discard desktop-teach-shared desktop-owner desktop-absent details-skills skill-private-detail --theme both --width 1120,720,1920x1080
+npm run look -- desktop-teach-recording desktop-teach-draft desktop-teach-saved desktop-teach-try desktop-teach-discard desktop-teach-shared desktop-owner desktop-absent details-skills --theme both --width 1120,720,1920x1080
 ```
 
 The teach-* rendered checks assert lease actions, visible privacy/repair, the
 editable draft before Save, explicit publication, discard without publication,
 and the ordinary conversation call with skill name and fresh input. Compare the
-draft editor with details-skills/skill-private-detail, and teaching controls with
+draft editor with details-skills, and teaching controls with
 desktop-owner. Offline proof: members/test_teaching.py, evaluate/test_teaching.py
 (API and CLI plus routines), computer/test_rfb_input.py and desktop-viewer.test.ts.
 Real Docker/cua accessibility, screenshot privacy across third-party applications,
@@ -556,7 +635,7 @@ only containers owned by this data directory and verifies compatibility before u
 From `app/`, with the installed Python selected via `RAPHAEL_CORE_PYTHON`:
 
 ```powershell
-npm.cmd run verify -- --core
+npm.cmd run verify -- --contract
 npm.cmd run native -- member-computer
 ```
 
@@ -765,8 +844,9 @@ origin and current grant before each field through the computer's lasting browse
 connection. It never submits. Takeover remains available. Driver results and all
 fill exceptions yield only filled true/false. Later page text/errors redact plain
 and JSON-escaped values on computer results before model/history/events. Delegate
-results pass through untouched. Pictures are withheld only for a just-filled page
-until its URL changes or two minutes pass; saving a login alone hides nothing.
+results pass through untouched. Filled-page pictures stay hidden until a different
+origin and a complete tree prove the filled refs absent; no timer or other-tab
+read lifts suppression. Saving a login alone hides nothing.
 Vault read failures log only the exception type and never fail prepare. Login fields
 are full-width labelled rows, with Save below. Explicit safety denials still win over
 full permission on the API and shared CLI/background gate. Slack uses the supplied
@@ -776,7 +856,7 @@ the light theme and the text colour in the dark theme. Never use a letter substi
 Selected matrix, from app/:
 
 ```powershell
-npm run look -- work-messaging-setup work-messaging-pairing work-slack-connect computer-file-changes computer-file-partial computer-file-confirm computer-file-restored computer-file-bypass computer-login-card computer-login-saved chat-secret-masked delete desktop-owner --theme both --width 1120,720,1920x1080
+npm run look -- work-messaging-setup work-messaging-pairing computer-file-changes computer-file-partial computer-file-confirm computer-file-restored computer-file-bypass computer-login-card computer-login-saved chat-secret-masked delete desktop-owner --theme both --width 1120,720,1920x1080
 ```
 
 Compare login with chat-secret-masked, restore confirmation with delete, and panel
@@ -797,3 +877,37 @@ The former Settings > Raphael location and Docker installation area is supersede
 by [Settings by purpose](settings-appearance.md#settings-by-purpose-2026-11-05).
 The compact header/empty-state location popover is shared by all members. See that
 entry for scenes, existing setting/RPC contracts and offline acceptance limits.
+
+
+## Offline root and dispatch security (2026-11-05)
+
+R-SEC-FILES-01/02: core/tests/computer/test_security_boundaries.py uses real temporary
+Windows junctions (symlinks on other systems) and a fake Docker runner. It verifies
+workspace/shared/parent redirection, both team-file handle forms, library root rejection,
+and grant revocation, target change or owner hold during preparation/checkpointing.
+The same checks apply to cached starts. Existing test_vm.py/test_takeover.py assertions
+include vault_entries/fill_contact and the firm T3 fill_card exception, without weakening
+owner-hold or single-use approval tests. No UI markup, scene or navigation changes.
+Follow-up 1 resolves the Docker forwarding and screenshot-lifetime decisions;
+see the approved hardening entry below and .fold/report.md. Do not call offline fake tests authorized SSH or native acceptance.
+
+R-SEC-FILES-04 additionally checks artifact receipt roots and bounds bytes before
+hashing. Include background/test_tasks.py, test_handoff.py and test_team_flow.py
+alongside the security regressions and architecture suite for that consumer boundary.
+
+## Private SSH and filled-page lifetime (2026-11-05 follow-up 1)
+
+R-SEC-SSH-01 and R-SEC-PRIVATE-01 supersede the pending D01/D02 decision above.
+Run tests/computer/test_followup_security.py, test_smooth_computer.py,
+test_login_visibility.py and test_vault_entries.py with tests/computer,
+tests/services and tests/architecture. Fake SSH covers socket success, unsupported
+transport fallback, directory protection/cleanup and absence of TCP/SOCKS forwarding.
+Fake browser states cover time, same-origin URL changes, other tabs, filled refs,
+complete cross-origin clearance and incomplete/unknown/error observations. Only a
+complete safe observation restores screenshots; payment holds remain independent.
+No UI markup/navigation changes; real Windows OpenSSH/Docker AF_UNIX compatibility
+and live browser behavior require separate native acceptance.
+
+The private-picture capture race also requires test_navigation_after_capture_cannot_release_the_captured_private_picture:
+a safe observation authorizes the next read, never earlier captured pixels. Recheck
+grant/target before and after the final observation; revoked reads return no tree.

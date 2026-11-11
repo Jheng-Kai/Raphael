@@ -28,7 +28,7 @@ words), `must_contain` and `must_not_contain` (lists of text), `must_contain_ci`
 lists them as 常被聽成 hints, as the app does for corrections it has seen, and they are never applied
 as replacement rules), and
 `target_app` (the process name of the window the text goes to, such as LINE.exe) and `languages`
-(the `languages` setting the case is cleaned for; DEFAULT_LANGUAGES, the user's own three, when it
+(the `languages` setting the case is cleaned for; DEFAULT_LANGUAGES when it
 is left out). Spaces are ignored when a text is looked for, so 打開 YouTube and 打開YouTube are the
 same. What the model leaves in the wrong Chinese script is converted as the app does for the
 case's Chinese variant (for Taiwan, 打开 into 開啟), so a text to look for must be one that
@@ -36,8 +36,7 @@ conversion leaves alone: Chinese in the variant's own script is.
 
 There are two cases files. `cleanup_cases.jsonl` holds the held-out cases: none of them, nor
 anything like its wording, is in the prompt, so that what is measured is the model's judgment, not
-its memory of the examples. `regression_cases.jsonl` holds real dictations that went
-wrong once, and is run the same way (`--cases ../eval/regression_cases.jsonl`).
+its memory of the examples. `regression_cases.jsonl` holds regression examples for previously incorrect cleanup, and is run the same way (`--cases ../eval/regression_cases.jsonl`).
 """
 
 import argparse
@@ -75,7 +74,7 @@ from raphael_core.brain.textnorm import apply_replacements, finish_cleaned_text
 from raphael_core.evaluate import use_utf8_output
 from raphael_core.languages import checked_languages, chinese_variant
 
-# The languages of a case that names none: the user speaks these three, often mixed.
+# Default languages for multilingual evaluation cases.
 DEFAULT_LANGUAGES = ("zh-TW", "en-US", "ja-JP")
 
 # Generous: the app gives a cleanup 10 s and a second for every 3 of audio (cleanup.timeout_for),
@@ -288,7 +287,7 @@ def failed_checks(case: Case, reply: str) -> list[str]:
 
 
 async def run_case(
-    client, model: str, case: Case, *, timeout_s: float = CALL_TIMEOUT_S
+    client, model: str, case: Case, *, timeout_s: float = CALL_TIMEOUT_S, template: str | None = None
 ) -> Outcome:
     """Have `model` clean the case, and check what the user would get.
 
@@ -306,6 +305,7 @@ async def run_case(
                 case.target_app,
                 languages=case.languages,
                 heard=sent,
+                template=template,
             ),
             user=build_user_message(sent),
             schema=CLEANUP_SCHEMA,

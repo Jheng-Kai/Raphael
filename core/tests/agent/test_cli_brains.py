@@ -5,10 +5,20 @@ import subprocess
 import sys
 import asyncio
 import json
+import tomllib
 
 import pytest
 
 from raphael_core.agent.cli.discovery import CliBrains, cli_available, resolve_command
+
+
+def test_codex_reads_a_skill_list_as_a_toml_sequence_of_tables():
+    from raphael_core.agent.cli.drivers import toml_value
+    paths = [r"C:\Users\owner\AppData\Roaming\Raphael Dev\技能\write\SKILL.md", 'D:\\a "quoted" skill\\SKILL.md']
+    value = toml_value([{"path": path, "enabled": True} for path in paths])
+    assert tomllib.loads(f"value = {value}")["value"] == [{"path": path, "enabled": True} for path in paths]
+    assert toml_value(["deferred", "code_mode"]) == '["deferred", "code_mode"]'
+    assert (toml_value(False), toml_value(0), toml_value("catalog")) == ("false", "0", '"catalog"')
 
 
 def test_a_cli_brain_edits_the_memory_by_the_fields_an_api_brain_is_given():
@@ -40,6 +50,50 @@ print(json.dumps({"type": "result", "subtype": "success", "result": "",
     events = [event async for event in driver.run(user="Synthetic owner turns", system="Capture memory",
         endpoint="http://127.0.0.1:1/mcp", token="ephemeral", permission=None, structured=schema)]
     assert events[-1].kind == "final" and json.loads(events[-1].text) == {"actions": []}
+
+
+async def test_claude_listener_budget_allows_the_structured_result_turn(tmp_path):
+    from raphael_core.agent.cli.drivers import Driver
+    script = tmp_path / 'listener_protocol.py'
+    script.write_text('''import json, sys
+schema = json.loads(sys.argv[sys.argv.index('--json-schema') + 1])
+assert schema['required'] == ['speak', 'urgency']
+budget = int(sys.argv[sys.argv.index('--max-turns') + 1])
+json.loads(sys.stdin.readline())
+if budget < 2:
+    print(json.dumps({'type':'result','subtype':'error_max_turns','is_error':True,'result':'Reached max turns'}), flush=True)
+else:
+    print(json.dumps({'type':'result','subtype':'success','result':'',
+                      'structured_output':{'speak':True,'urgency':0.8}}), flush=True)
+''', encoding='utf-8')
+    schema = {'type':'object','required':['speak','urgency'],'properties':{'speak':{'type':'boolean'},'urgency':{'type':'number'}}}
+    for budget in [1,3]:
+        driver = Driver('claude',[sys.executable,str(script),'--max-turns',str(budget)])
+        events = [event async for event in driver.run(user='Synthetic room',system='Listen',
+            endpoint='http://127.0.0.1:1/mcp',token='ephemeral',permission=None,structured=schema)]
+        assert events[-1].kind == ('error' if budget == 1 else 'final')
+        if budget > 1:
+            assert json.loads(events[-1].text) == {'speak':True,'urgency':.8}
+
+
+async def test_claude_early_exit_keeps_stderr_private_and_logs_failure_kind(tmp_path, caplog):
+    from raphael_core.agent.cli.drivers import Driver
+    script = tmp_path / "missing_resume.py"
+    script.write_text('''import sys
+sys.stdin.readline()
+print("No conversation found with session ID: missing", file=sys.stderr, flush=True)
+print("Authorization: Bearer synthetic-private-credential", file=sys.stderr, flush=True)
+sys.exit(1)
+''', encoding="utf-8")
+    driver = Driver("claude", [sys.executable, str(script)])
+    events = [event async for event in driver.run(user="Synthetic question", system="Synthetic persona",
+        endpoint="http://127.0.0.1:1/mcp", token="synthetic-private-credential", permission=None, session="missing")]
+    error = events[-1]
+    assert error.kind == "error" and error.text == "cli_stopped"
+    assert "No conversation found with session ID" in error.data["detail"]
+    assert "No conversation found with session ID" not in caplog.text
+    assert "cli_stopped" in caplog.text
+    assert "synthetic-private-credential" not in caplog.text + json.dumps(error.data)
 
 
 async def test_discovery_uses_fake_process_and_auth_existence_only(tmp_path):
@@ -119,6 +173,7 @@ for line in sys.stdin:
         cwd=str(tmp_path / "workspace"))]
     assert events[-1].kind == "final", events
     result = json.loads(record.read_text(encoding="utf-8"))
+    assert result["thread"]["params"]["config"] == {"features.shell_tool": False, "features.apply_patch_freeform": False}
     child_env = result["environment"]
     home = Path(child_env["CODEX_HOME"])
     assert home != owner and home.is_relative_to(tmp_path / ".raphael")
@@ -131,6 +186,8 @@ for line in sys.stdin:
     assert command[:2] == ["app-server", "--strict-config"]
     overrides = dict(item.split("=", 1) for item in command[3::2])
     assert command[2::2] == ["-c"] * len(overrides)
+    for key, value in overrides.items():
+        tomllib.loads(f"value = {value}")  # Codex reads each -c value as TOML
     assert overrides["mcp_servers.raphael.url"] == '"http://127.0.0.1:1/mcp"'
     assert overrides["mcp_servers.raphael.bearer_token_env_var"] == '"RAPHAEL_MCP_TOKEN"'
     assert overrides["mcp_servers.raphael.omit_tools_from"] == '["deferred", "code_mode"]'
@@ -212,15 +269,18 @@ for line in sys.stdin:
         assert resumed and "threadId" not in msg["params"]
         send({"id":msg["id"], "result":{"thread":{"id":"new"}}})
     elif method == "turn/start":
+        assert msg["params"]["input"][0]["text"] == "<question>Keep the original request.</question>"
         send({"method":"item/completed", "params":{"item":{"type":"agentMessage", "text":"Fresh"}}})
         send({"method":"turn/completed", "params":{"turn":{"status":"completed"}}})
         break
 ''', encoding="utf-8")
     events = [event async for event in Driver("codex", [sys.executable, str(script)]).run(
         user="Continue", system="Persona", endpoint="http://127.0.0.1:1/mcp", token="ephemeral",
+        fresh_context=lambda: "<question>Keep the original request.</question>",
         session="raphael-codex-v1:missing", cwd=str(tmp_path), permission=None)]
     assert events[-1].kind == "final" and events[-1].text == "Fresh"
     assert next(event.text for event in events if event.kind == "session") == "raphael-codex-v1:new"
+    assert any(event.kind == "context_reset" for event in events)
 
 
 @pytest.mark.parametrize("cancel", [False, True])

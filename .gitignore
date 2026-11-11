@@ -41,3 +41,19 @@ coverage/
 # Shared visual verification output
 /app/.look/
 /core/.live/
+/core/durations-out/
+
+# Test-run output that tools write into the repository root
+/.test-results/
+
+# Written by agents and tools in the repository root, never part of the project
+/.agents/briefs/
+/.agents/skills/composio/
+/skills-lock.json
+
+# Staged builds and the launcher that starts one (the owner's machine, beside the worktree)
+/app*.exe
+/Start Raphael.cmd
+
+# Keep the signed synthetic package even when local excludes hide research folders.
+!/core/tests/fixtures/member-catalog/packages/research/

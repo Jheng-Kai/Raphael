@@ -9,7 +9,7 @@
 import "./connection-setup.css";
 import { cardDisclosureHTML, cardFailure } from "./card";
 import * as api from "./api";
-import { t } from "./i18n";
+import { getLocale, t } from "./i18n";
 import { type Dialog, openDialog } from "./member-dialogs";
 import type { ToolkitPlan } from "./plugins-data";
 import type { AppNeeds } from "./types";
@@ -53,19 +53,46 @@ export function mountInlineConnectionSetup(thread: HTMLElement,
   const act = (slot: HTMLElement, action: () => Promise<unknown>): void => {
     void Promise.resolve(action()).catch(() => cardFailure(slot.closest(".conversation-card"), () => act(slot, action)));
   };
+  /**
+   * A server of the owner's own (n8n) and the owner's own Google bring their fields in their card: there is no catalog, guide or
+   * redirect to read. The Google card draws its own form (`google-card.ts`); the slot only needs the plan to send the fields by.
+   */
+  const serverPlan = (slot: HTMLElement): ToolkitPlan | null => {
+    if (slot.dataset.needs !== "own_server" && slot.dataset.needs !== "own_google") return null;
+    let fields: ToolkitPlan["fields"] = [];
+    try {
+      const given = JSON.parse(slot.dataset.serverFields ?? "[]") as Partial<ToolkitPlan["fields"][number]>[];
+      fields = given.filter(field => typeof field.name === "string" && typeof field.label === "string")
+        .map(field => ({ name: field.name!, label: field.label!, description: field.description ?? "", required: field.required !== false, secret: !!field.secret, default: null }));
+    } catch { /* A card without readable fields offers nothing to type; its member explains in the conversation. */ }
+    return { slug: slot.dataset.toolkit ?? "", name: slot.dataset.name ?? "", needs: "key", scheme: "own_server", fields, redirect_url: null, guide_url: null, app_url: null };
+  };
   const load = async (slot: HTMLElement): Promise<void> => {
     if (loaded.has(slot)) return;
     loaded.add(slot);
     try {
-      const plan = await api.connectorsToolkit(slot.dataset.toolkit ?? "");
+      const server = serverPlan(slot);
+      const plan = server ?? await api.connectorsToolkit(slot.dataset.toolkit ?? "");
       if (!active || !slot.isConnected) return;
       plans.set(slot, plan);
+      if (slot.dataset.needs === "own_google") return;
+      if (server) {
+        slot.classList.add("inline-connection-setup");
+        slot.innerHTML = fieldsHTML(plan) + `<div class="card-actions">${btn(esc(t("card.keySave")), "sm pri", " data-inline-submit")}</div>`;
+        const old = slot.closest("[data-connector]")?.querySelector<HTMLElement>('[data-act="card-setup"]');
+        if (old) old.hidden = true;
+        return;
+      }
+      // The form arrives after the card: a reader at the latest line stays there, so the card's foot never hides under the composer.
+      const scroller = slot.closest<HTMLElement>(".ra-scroll");
+      const pinned = !!scroller && scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight <= 80;
       slot.classList.add("inline-connection-setup");
       slot.innerHTML = fieldsHTML(plan) + `<div class="card-actions">${btn(esc(t("card.keySave")), "sm pri", " data-inline-submit")}</div>` +
         `<p class="card-shield">${ico("lock")}<span>${esc(t(plan.needs === "own_app" ? "setup.keepApp" : "setup.keepKey"))}</span></p>` +
         cardDisclosureHTML(`setup-${slot.dataset.inlineSetup}`, whereHTML(plan, true) + stepsHTML(plan, true) + redirectHTML(plan), t("setup.where"));
       const old = slot.closest("[data-connector]")?.querySelector<HTMLElement>('[data-act="card-setup"]');
       if (old) old.hidden = true;
+      if (pinned) scroller.scrollTop = scroller.scrollHeight;
     } catch {
       if (active && slot.isConnected) cardFailure(slot.closest(".conversation-card"), () => { loaded.delete(slot); void load(slot); });
     }
@@ -97,7 +124,9 @@ export function mountInlineConnectionSetup(thread: HTMLElement,
     if (!button.hasAttribute("data-inline-submit")) {
       const url = button.dataset.dlg === "guide" ? plan.guide_url : button.dataset.dlg === "home" ? plan.app_url : null;
       if (url && /^https:\/\//.test(url)) act(slot, () => api.openExternalUrl(url));
-      if (button.dataset.dlg === "copy" && plan.redirect_url) act(slot, () => copyButton(button, plan.redirect_url!));
+      // A text the card gives to copy (the Google card's scopes and return address), else the developer app's redirect URL.
+      const text = button.dataset.dlg === "copy" ? button.dataset.copy ?? plan.redirect_url : null;
+      if (text) act(slot, () => copyButton(button, text));
       return;
     }
     const inputs = [...slot.querySelectorAll<HTMLInputElement>("[data-setup-field]")];
@@ -160,9 +189,12 @@ const redirectHTML = (plan: ToolkitPlan): string => plan.needs === "own_app" && 
     btn(copyLabel(t("setup.copy"), true), "sm", ' data-dlg="copy"') + `</div></div>` : "";
 
 function fieldsHTML(plan: ToolkitPlan): string {
+  // A field's description is the provider's own English: it shows in an English window only (one language, R-UI-14);
+  // elsewhere the steps above and the guide say where the value is.
+  const hints = getLocale().startsWith("en");
   return `<div class="cn-fields">${plan.fields.map((field, index) =>
     `<label class="cn-field"><span class="cn-label">${esc(field.label)}${field.required ? "" : ` <i>(${esc(t("setup.optional"))})</i>`}</span>` +
-    (field.description ? `<span class="cn-hint" title="${esc(field.description)}">${esc(field.description)}</span>` : "") +
+    (hints && field.description ? `<span class="cn-hint" title="${esc(field.description)}">${esc(field.description)}</span>` : "") +
     `<input class="field" type="${field.secret ? "password" : "text"}" data-setup-field="${esc(field.name)}"` +
     `${field.default ? ` placeholder="${esc(field.default)}"` : ""} autocomplete="${field.secret ? "new-password" : "off"}"` +
     ` spellcheck="false" autocapitalize="off"${index === 0 ? " data-setup-first" : ""}></label>`).join("")}</div>`;

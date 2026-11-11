@@ -132,12 +132,16 @@ def test_output_retains_head_and_tail_with_bounded_memory():
     assert len(EXEC_DESCRIPTION) <= 400
 
 
+# A hang guard for a real PowerShell, not a latency budget: a busy GitHub Windows runner took more than 30 s just to start
+# one (2026-11-06, both real-shell tests at once), while a healthy start takes about a second.
+REAL_SHELL_GUARD = 120
+
+
 @pytest.mark.skipif(os.name != "nt", reason="Windows PowerShell adapter")
 async def test_real_powershell_readonly_output_nonzero_and_closed_stdin():
-    # These timeouts are hang guards for slow PowerShell startup on CI.
-    result = await LocalHost().execute("Write-Output 'harmless-readonly-測試'; exit 7", timeout_seconds=30)
+    result = await LocalHost().execute("Write-Output 'harmless-readonly-測試'; exit 7", timeout_seconds=REAL_SHELL_GUARD)
     assert result["exit_code"] == 7 and "harmless-readonly-測試" in result["stdout"], result
-    result = await LocalHost().execute("[Console]::ReadLine() -eq $null", timeout_seconds=30)
+    result = await LocalHost().execute("[Console]::ReadLine() -eq $null", timeout_seconds=REAL_SHELL_GUARD)
     assert result["exit_code"] == 0 and "True" in result["stdout"], result
 
 
@@ -165,7 +169,7 @@ async def test_powershell_defaults_read_and_write_utf8(tmp_path):
     content = "Synthetic: \u7e41\u9ad4\u4e2d\u6587, caf\u00e9, \u65e5\u672c\u8a9e"
     source.write_text(content, encoding="utf-8")
     command = f"Get-Content -LiteralPath '{source}'; '" + content + f"' | Set-Content -LiteralPath '{target}'"
-    result = await LocalHost().execute(command, timeout_seconds=30)
+    result = await LocalHost().execute(command, timeout_seconds=REAL_SHELL_GUARD)
     assert result["exit_code"] == 0 and content in result["stdout"], result
     assert target.read_text(encoding="utf-8-sig").strip() == content, result
 

@@ -1,0 +1,422 @@
+"""Overflow recovery and native session deltas preserve synthetic owner requests."""
+
+import json
+from types import SimpleNamespace
+
+import pytest
+
+from raphael_core.agent.cli.context import (CONTEXT_HEADROOM, DEFAULT_CONTEXT_TOKENS, FRESH_CONTEXT_SHARE, OWNER_WORDS_BYTES, context_tokens,
+                                            fresh_budget, fresh_user, line_hashes, resumed_user, section_delta)
+from raphael_core.memory.compression import FRESH_CONTEXT_CHARS
+from raphael_core.agent.cli.discovery import CliBrains
+from raphael_core.agent.cli.drivers import Driver, Event
+from raphael_core.agent.cli.loop import CliLoop, RECOVER, Sessions
+from raphael_core.background.cli import RoomCliSessions
+from raphael_core.worker.guards import wrap_untrusted
+
+from agent.test_cli_recovery import recovery_rig
+
+
+async def recorded_error_packets(driver, **kwargs):
+    """Replay provider-shaped errors through the real parser, without launching a model."""
+    if driver.name == "claude":
+        packet = {"type": "assistant", "isApiErrorMessage": True, "message": {"model": "<synthetic>",
+            "content": [{"type": "text", "text": "Prompt is too long"}]}}
+    elif driver.name == "gemini":
+        packet = {"event": "step_update", "step_update": {"step_type": "agent_response", "state": "ERROR",
+            "text": "Prompt is too long"}}
+    else:
+        packet = {"method": "item/completed", "params": {"item": {"type": "agentMessage", "status": "failed",
+            "text": "Prompt is too long"}}}
+
+    async def read():
+        return packet
+
+    async def send(_):
+        pass
+
+    driver._read = read
+    driver.child = SimpleNamespace(process=None, stderr_tail=b"", send=send)
+    stream = driver._claude() if driver.name == "claude" else driver._antigravity() if driver.name == "gemini" else driver._rpc(
+        "Synthetic question", "Persona", "http://127.0.0.1:1/mcp", "fake", None, None)
+    async for event in stream:
+        yield event
+
+
+def test_fresh_context_keeps_question_and_file_names_before_a_12k_tail():
+    owner = "Compare these files. Do not edit any member."
+    files = [SimpleNamespace(name="outline.pdf", mime="application/pdf"),
+             SimpleNamespace(name="diagram.png", mime="image/png")]
+    prompt = fresh_user(owner, files, ["Use the second version."], RECOVER, "Saved receipt 17.",
+        turns=[(1, "Old context. " * 2000), (2, "Most recent context.")],
+        sections={"Memory": "tail" * 3000})
+    assert prompt.startswith(f"<question>\n{owner}\n</question>")
+    assert all(text in prompt for text in ("outline.pdf", "diagram.png", "Use the second version.",
+                                          RECOVER, "Saved receipt 17.", "Most recent context."))
+    assert len(prompt) <= FRESH_CONTEXT_CHARS
+
+
+def test_fresh_context_never_silently_truncates_a_large_owner_request():
+    # Only a request that alone outgrows the model's window is an overflow, not one over the old 16,000 characters.
+    window = 200_000
+    prompt = fresh_user("x" * (FRESH_CONTEXT_CHARS + 1), (), (), RECOVER, "records", window=window)
+    assert "x" * (FRESH_CONTEXT_CHARS + 1) in prompt
+    with pytest.raises(ValueError, match="context_overflow"):
+        fresh_user("x" * int(window * CONTEXT_HEADROOM), (), (), RECOVER, "records", window=window)
+    with pytest.raises(ValueError, match="context_overflow"):  # the system prompt beside it counts
+        fresh_user("x" * 150_000, (), (), RECOVER, "records", window=window, reserve=20_000)
+
+
+def test_the_fresh_budget_grows_with_the_models_window_and_leaves_room_for_the_turn():
+    small, large = fresh_budget(50_000), fresh_budget(1_000_000)
+    assert small[0] < large[0] and small[1] < large[1]
+    assert fresh_budget(None) == fresh_budget(DEFAULT_CONTEXT_TOKENS)  # a conservative default for an unknown window
+    assert small == (int(50_000 * CONTEXT_HEADROOM), int(50_000 * FRESH_CONTEXT_SHARE))
+    assert fresh_budget(50_000, reserve=10_000)[1] == small[1] - 10_000
+    assert fresh_budget(1_000_000, byte_limit=5_000) == (5_000, 5_000)  # a provider's own limit still wins
+    turns = [(number, f"turn {number} " + "w" * 9_000) for number in range(1, 41)]
+    kept = [len(fresh_user("Q", (), (), RECOVER, "r", turns=turns, window=window).encode()) for window in (50_000, 200_000)]
+    assert kept[0] < kept[1] <= fresh_budget(200_000)[1] and kept[0] <= small[1]
+
+
+def test_a_fresh_context_keeps_memory_and_summary_before_recent_turns_and_trims_the_oldest_turns():
+    turns = [(number, f"[turn {number}] " + "t" * 3_000) for number in range(1, 31)]
+    prompt = fresh_user("Current request", (), (), RECOVER, "records", turns=turns, summary="SUMMARY " * 500,
+                        sections={"Team": "TEAM ROSTER", "Memory": "MEMORY SNAPSHOT"}, window=20_000)
+    assert prompt.startswith("<question>\nCurrent request\n</question>")
+    assert "SUMMARY " * 500 in prompt and "TEAM ROSTER" in prompt and "MEMORY SNAPSHOT" in prompt
+    shown = [number for number in range(1, 31) if f"[turn {number}]" in prompt]
+    assert 0 < len(shown) < 30 and shown == list(range(31 - len(shown), 31))  # the newest, no gap
+    assert len(prompt.encode()) <= fresh_budget(20_000)[1]
+    # Order: the request, memory, summary, then the turns oldest first.
+    assert prompt.index("MEMORY SNAPSHOT") < prompt.index("SUMMARY") < prompt.index(f"[turn {shown[0]}]")
+
+
+def test_the_owners_own_words_outlive_the_turns_that_do_not_fit():
+    turns = [(number, f"owner: said <{number:02}>\nRaphael: " + "r" * 2_000) for number in range(1, 21)]
+    words = [(number, f"owner: said <{number:02}>") for number in range(1, 21)]
+    prompt = fresh_user("Q", (), (), RECOVER, "r", turns=turns, owner_words=words, window=12_000)
+    assert "The owner's own recent words" in prompt
+    whole = [number for number in range(1, 21) if f"<{number:02}>\nRaphael:" in prompt]
+    assert 0 < len(whole) < 20
+    # Each owner line is there once: in a turn that fit whole, or alone among the owner's own words.
+    assert all(prompt.count(f"<{number:02}>") == 1 for number in range(1, 21))
+    capped = fresh_user("Q", (), (), RECOVER, "r", owner_words=[(n, "o" * 1_000) for n in range(1, 200)], window=1_000_000)
+    assert 0 < capped.count("o" * 1_000) <= OWNER_WORDS_BYTES // 1_000
+
+
+def test_the_summary_is_not_dropped_behind_recent_turns_and_each_part_is_whole():
+    turns = [(number, "t" * 9_000) for number in range(1, 9)]
+    prompt = fresh_user("Q", (), (), RECOVER, "r", turns=turns, summary="S" * 3_000, window=20_000)
+    assert "S" * 3_000 in prompt and prompt.count("t" * 9_000) < 8
+    assert all(part == "t" * 9_000 for part in prompt.split("\n\n") if part.startswith("t"))
+
+
+def test_compacted_context_respects_utf8_budget_with_complete_request():
+    prompt = fresh_user("Keep this request", (), (), RECOVER, "records",
+        turns=[(1, "\u754c" * 4000), (2, "Recent context")], byte_limit=1200)
+    assert "Keep this request" in prompt and "Recent context" in prompt
+    assert len(prompt.encode("utf-8")) <= 1200
+
+
+def test_context_diffs_include_deletions_and_new_lines_without_old_roster():
+    old = "First member\nRemoved member\nUnchanged member"
+    diff = section_delta("Team", "Renamed member\nUnchanged member", line_hashes(old))
+    assert "[0:2]" in diff and "Renamed member" in diff
+    assert "Removed member" not in diff and "Unchanged member" not in diff
+    assert section_delta("Team", old, line_hashes(old)) == ""
+
+
+def test_resumed_context_includes_only_unseen_turns_and_changed_memory():
+    prompt = resumed_user("Current question", {"Memory": "New memory"},
+        [(3, "Already delivered"), (4, "New owner turn and answer")],
+        {"turn": 3, "sections": {"Memory": line_hashes("Old memory")}})
+    assert "Already delivered" not in prompt and "New owner turn and answer" in prompt
+    assert "New memory" in prompt and "Old memory" not in prompt
+
+
+@pytest.mark.parametrize("brain", ["claude", "codex", "gemini"])
+@pytest.mark.parametrize("fails_again", [False, True])
+async def test_overflow_keeps_explicit_owner_request_after_action(monkeypatch, tmp_path, brain, fails_again):
+    published = []
+
+    async def play(loop, attempt):
+        if attempt == 1:
+            await loop._tool("save", "save_draft", {})
+        if attempt == 1 or fails_again:
+            yield Event("error", "context_overflow")
+        else:
+            yield Event("final", "Compared the files.")
+
+    rig = recovery_rig(monkeypatch, tmp_path, play, brain=brain, reply=published.append,
+        owner_text="Compare outline.pdf; do not edit the team.",
+        attachments=[SimpleNamespace(name="outline.pdf", mime="application/pdf", is_image=False)])
+    rig.loop.sessions.put(5, rig.loop.model, "old", 7)
+    rig.loop.user = "<question>Compare outline.pdf; do not edit the team.</question>" + "z" * 12000
+    result = await rig.loop.run()
+    assert len(rig.calls) == 2 and len(rig.effects) == 1
+    assert rig.calls[0]["session"] == "old" and rig.calls[1]["session"] is None
+    assert "<question>\nCompare outline.pdf; do not edit the team.\n</question>" in rig.calls[1]["user"]
+    assert '"name": "outline.pdf"' in rig.calls[1]["user"]
+    assert "Saved receipt 17" in rig.calls[1]["user"]
+    assert not any("Prompt is too long" in reply.text for reply in published)
+    if fails_again:
+        assert not published and rig.loop.failure == "context_overflow"
+        assert "Prompt is too long" not in result.final
+    else:
+        assert [reply.text for reply in published] == ["Compared the files."]
+
+
+@pytest.mark.parametrize("brain", ["claude", "codex", "gemini"])
+async def test_sixty_native_turns_submit_flat_deltas_and_fresh_gets_full_context(monkeypatch, tmp_path, brain):
+    sessions = RoomCliSessions()
+    calls = []
+
+    class FakeDriver:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def run(self, **kwargs):
+            calls.append(kwargs)
+            yield Event("session", "same-native-session")
+            yield Event("usage", data={"input_tokens": 1000, "context_window": 1000000})
+            yield Event("final", "Complete.")
+
+        async def interrupt(self):
+            pass
+
+    monkeypatch.setattr("raphael_core.agent.cli.loop.Driver", FakeDriver)
+    history = []
+    for index in range(60):
+        current = f"<question>Request {index:02d}</question>"
+        full = "\n".join(text for _, text in history) + "\n" + current
+        loop = CliLoop(brains=SimpleNamespace(environ={}, home=tmp_path, command=lambda _: ["fake"],
+            available=lambda *args, **kwargs: True), sessions=sessions, member_id=5, conversation_id=7,
+            model=f"cli:{brain}:fake", ledger=SimpleNamespace(add=lambda **kwargs: None), language="en", plain=True,
+            system="Persona", user=full, owner_text=f"Request {index:02d}", resume_user=current,
+            context_turns=history[:], turn_id=index + 1, context_sections={"Team": "Team snapshot", "Memory": "Memory snapshot"},
+            tools=[], progress=lambda _: None, thinking=lambda _: None, event=lambda _: None, execute=None)
+        assert (await loop.run()).final == "Complete."
+        history.append((index + 1, f"Earlier question {index:02d} and its answer. " + "h" * 200))
+    assert calls[0]["session"] is None
+    assert all(call["session"] == "same-native-session" for call in calls[1:])
+    assert len({len(call["user"]) for call in calls[1:]}) == 1
+    assert all("Earlier question" not in call["user"] for call in calls[1:])
+    assert all("Team snapshot" not in call["user"] and "Memory snapshot" not in call["user"] for call in calls[1:])
+    # A separate native session still receives the entire available history.
+    sessions.forget(5, f"cli:{brain}:fake", 7)
+    loop.task = None
+    loop._session = None
+    loop._context_state = {}
+    loop.user = full
+    loop.owner_input.closed = False
+    await loop.run()
+    assert calls[-1]["session"] is None
+    assert "Earlier question 00" in calls[-1]["user"] and "Earlier question 58" in calls[-1]["user"]
+
+
+@pytest.mark.parametrize("brain", ["claude", "codex", "gemini"])
+async def test_measured_near_limit_compacts_before_starting_provider(monkeypatch, tmp_path, brain):
+    async def play(loop, attempt):
+        yield Event("session", "new-session")
+        yield Event("final", "Done.")
+
+    rig = recovery_rig(monkeypatch, tmp_path, play, brain=brain, owner_text="Keep this request.",
+        resume_user="<question>Keep this request.</question>", context_turns=[(4, "Most recent task.")], turn_id=5)
+    sessions = rig.loop.sessions
+    sessions.put(5, rig.loop.model, "full-session", 7)
+    sessions.put_context(5, rig.loop.model, "full-session", {"turn": 4, "tokens": 7800, "window": 10000}, 7)
+    await rig.loop.run()
+    assert len(rig.calls) == 1 and rig.calls[0]["session"] is None
+    assert "Keep this request." in rig.calls[0]["user"] and "Most recent task." in rig.calls[0]["user"]
+    assert sessions.get_context(5, rig.loop.model, "new-session", 7)["window"] == 10000
+
+
+def tool_call(identifier, name, arguments, result, *, ok=True):
+    return [{"role": "assistant", "content": None, "tool_calls": [{"id": identifier, "type": "function",
+             "function": {"name": name, "arguments": json.dumps(arguments)}}]},
+            {"role": "tool", "tool_call_id": identifier, "content": wrap_untrusted(name, result, ok=ok)}]
+
+
+@pytest.mark.parametrize("brain", ["claude", "codex", "gemini"])
+async def test_an_over_budget_continuation_starts_afresh_with_the_owners_answer_first(monkeypatch, tmp_path, brain):
+    # Failed lookups would fill the short work record; the owner's answer still leads it, so it is never asked again.
+    earlier = [message for index in range(10)
+               for message in tool_call(f"look-{index}", "find_app", {"query": "q" * 1500}, "e" * 1500, ok=False)]
+    earlier += tool_call("ask", "ask_owner", {"question": "Which day?"}, json.dumps({"answer": "Wednesday after lunch"}))
+
+    async def play(loop, attempt):
+        yield Event("final", "Tuesday confirmed.")
+
+    rig = recovery_rig(monkeypatch, tmp_path, play, brain=brain, owner_text="Arrange a visit.", tool_conversation=earlier)
+    assert "Previous tool conversation" in rig.loop.user and "Wednesday after lunch" in rig.loop.user
+    rig.loop.user += "z" * 160_000  # over any window's budget
+    assert (await rig.loop.run()).final == "Tuesday confirmed."
+    [call] = rig.calls
+    assert call["session"] is None and len(call["user"]) <= FRESH_CONTEXT_CHARS
+    assert '"status": "answered"' in call["user"]
+    assert call["user"].index("Wednesday after lunch") < call["user"].index("find_app")
+
+
+async def test_a_fresh_session_keeps_a_long_request_the_summary_and_memory_inside_the_models_window(monkeypatch, tmp_path):
+    # Claude Code's models hold 200K tokens: a 30K request is no overflow, and the summary and memory are not left behind
+    # the recent turns (they were, and the request was refused above 16,000 characters).
+    async def play(loop, attempt):
+        yield Event("final", "Done.")
+
+    request = "Q" + "y" * 30_000
+    turns = [(number, f"[turn {number}] " + "t" * 6_000) for number in range(1, 41)]
+    rig = recovery_rig(monkeypatch, tmp_path, play, brain="claude", owner_text=request, context_turns=turns,
+                       context_summary="SUMMARY of the earlier talk", context_sections={"Memory": "MEMORY SNAPSHOT"})
+    rig.loop.user = rig.loop.user + "z" * 200_000  # more than the window takes: the session starts afresh
+    result = await rig.loop.run()
+    [call] = rig.calls
+    assert result.final == "Done." and not rig.loop.failure and call["session"] is None
+    assert request in call["user"] and "SUMMARY of the earlier talk" in call["user"] and "MEMORY SNAPSHOT" in call["user"]
+    shown = [number for number in range(1, 41) if f"[turn {number}]" in call["user"]]
+    assert 0 < len(shown) < 40 and shown[-1] == 40
+
+
+async def test_a_new_claude_code_loop_sends_a_long_request_whole(monkeypatch, tmp_path):
+    # Nothing is measured yet, but Claude Code's models hold at least 200K tokens: 60 KB is no reason to start from a
+    # short work record, as the 64K guess made it.
+    async def play(loop, attempt):
+        yield Event("final", "Done.")
+
+    rig = recovery_rig(monkeypatch, tmp_path, play, brain="claude", owner_text="Keep this request.")
+    rig.loop.user = "<question>Keep this request.</question>" + "z" * 60_000
+    await rig.loop.run()
+    assert rig.calls[0]["user"] == rig.loop.user
+
+
+async def test_the_window_a_cli_reported_sizes_its_next_loop(monkeypatch, tmp_path):
+    calls = []
+
+    class FakeDriver:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def run(self, **kwargs):
+            calls.append(kwargs)
+            yield Event("usage", data={"input_tokens": 10, "context_window": 1_000_000})
+            yield Event("final", "Done.")
+
+        async def interrupt(self):
+            pass
+
+    monkeypatch.setattr("raphael_core.agent.cli.loop.Driver", FakeDriver)
+    brains = CliBrains(home=tmp_path, environ={}, commands={"gemini": ["fake"]})
+    monkeypatch.setattr(brains, "available", lambda *args, **kwargs: True)
+    long = "<question>Request</question>" + "z" * 60_000
+
+    async def submitted(model):
+        loop = CliLoop(brains=brains, sessions=RoomCliSessions(), member_id=5, conversation_id=7, model=model,
+            ledger=SimpleNamespace(add=lambda **kwargs: None), language="en", plain=True, system="Persona", user=long,
+            owner_text="Request", tools=[], progress=lambda _: None, thinking=lambda _: None, event=lambda _: None,
+            execute=None)
+        await loop.run()
+        return calls[-1]["user"]
+
+    assert await submitted("cli:gemini:fake") != long  # nothing known yet: the 64K guess compacts it
+    assert await submitted("cli:gemini:fake?effort=high") == long  # the window its first run reported
+    assert await submitted("cli:gemini:other") != long  # another model's window is its own
+
+
+def test_native_context_state_survives_restart_and_is_scoped_and_deleted(conn):
+    sessions = Sessions(conn)
+    conversation = sessions.conversations.main(0)
+    sessions.put(0, "cli:claude", "native", conversation)
+    state = {"turn": 12, "sections": {"Memory": line_hashes("Synthetic memory")}, "tokens": 10}
+    sessions.put_context(0, "cli:claude", "native", state, conversation)
+    restarted = Sessions(conn)
+    assert restarted.get_context(0, "cli:claude", "native", conversation) == state
+    assert restarted.get_context(1, "cli:claude", "native", conversation) is None
+    assert restarted.get_context(0, "cli:claude", "other", conversation) is None
+    assert "Synthetic memory" not in conn.execute("SELECT state FROM agent_conversation_cli_contexts").fetchone()[0]
+    restarted.forget(0, "cli:claude", conversation)
+    assert not conn.execute("SELECT * FROM agent_conversation_cli_contexts").fetchall()
+
+
+@pytest.mark.parametrize("flag", ["model", "isApiErrorMessage"])
+async def test_recorded_claude_synthetic_packet_is_an_error_not_an_answer(monkeypatch, flag):
+    # Protocol shape from the audit, with synthetic text and no owner conversation data.
+    assistant = {"type": "assistant", "message": {"role": "assistant", "model": "claude",
+        "content": [{"type": "text", "text": "Prompt is too long"}], "stop_reason": "end_turn"}}
+    if flag == "model":
+        assistant["message"]["model"] = "<synthetic>"
+    else:
+        assistant[flag] = True
+    packets = iter([assistant, {"type": "result", "is_error": True, "result": "Prompt is too long"}])
+    driver = Driver("claude", ["unused"])
+
+    async def read():
+        return next(packets)
+
+    monkeypatch.setattr(driver, "_read", read)
+    events = [event async for event in driver._claude()]
+    assert not any(event.kind in ("message", "text_delta", "final") for event in events)
+    assert events[-1].kind == "error" and events[-1].text == "context_overflow"
+
+
+@pytest.mark.parametrize("brain", ["claude", "codex", "gemini"])
+async def test_later_failure_keeps_a_real_message_already_published(monkeypatch, tmp_path, brain):
+    published = []
+
+    async def play(loop, attempt):
+        if attempt == 1:
+            yield Event("text_delta", "A complete real reply.")
+            yield Event("message", "A complete real reply.", {"final": True})
+        assert [reply.text for reply in published] == ["A complete real reply."]
+        yield Event("error", "context_overflow")
+
+    rig = recovery_rig(monkeypatch, tmp_path, play, brain=brain, reply=published.append)
+    await rig.loop.run()
+    assert [reply.text for reply in published] == ["A complete real reply."]
+    assert rig.loop.failure == "context_overflow"
+
+
+def test_context_usage_counts_cached_native_history():
+    assert context_tokens({"input_tokens": 10, "cache_read_input_tokens": 80, "cache_creation_input_tokens": 20}) == 110
+    assert context_tokens({"context_tokens": 500, "inputTokens": 20}) == 500
+
+
+@pytest.mark.parametrize("brain", ["claude", "codex", "gemini"])
+async def test_successful_messages_publish_once_as_they_complete(monkeypatch, tmp_path, brain):
+    published = []
+
+    async def play(loop, attempt):
+        yield Event("message", "First answer.", {"id": "one", "final": True})
+        yield Event("message", "Second answer.", {"id": "two", "final": True})
+        assert [reply.text for reply in published] == ["First answer.", "Second answer."]
+        yield Event("final", "Second answer.")
+
+    rig = recovery_rig(monkeypatch, tmp_path, play, brain=brain, reply=published.append)
+    await rig.loop.run()
+    assert [reply.text for reply in published] == ["First answer.", "Second answer."]
+
+
+@pytest.mark.parametrize("brain", ["codex", "gemini"])
+async def test_other_native_drivers_filter_error_assistant_packets(monkeypatch, brain):
+    driver = Driver(brain, ["unused"])
+    if brain == "gemini":
+        packet = {"event": "step_update", "step_update": {"step_type": "agent_response", "state": "ERROR",
+            "text": "Prompt is too long"}}
+        stream = driver._antigravity()
+    else:
+        packet = {"method": "item/completed", "params": {"item": {"type": "agentMessage",
+            "status": "failed", "text": "Prompt is too long"}}}
+        driver.child = SimpleNamespace(send=lambda _: None)
+
+        async def send(_):
+            pass
+
+        driver.child.send = send
+        stream = driver._rpc("Question", "Persona", "http://127.0.0.1:1", "fake", None, None)
+
+    async def read():
+        return packet
+
+    monkeypatch.setattr(driver, "_read", read)
+    events = [event async for event in stream]
+    assert [event.kind for event in events] == ["error"]
+    assert events[0].text == "context_overflow"

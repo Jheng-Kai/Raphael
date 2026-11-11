@@ -21,6 +21,8 @@ test("the inline guide names its own save button in every language for keys and 
 });
 
 test("inline field hints stay on one line and the guide heading is not repeated inside its disclosure", async () => {
+  // The catalog's hint is the provider's English: an English window shows it (connection-setup.ts).
+  setLocale("en");
   const {readFileSync}=await import("node:fs");
   api.connectorsToolkit.mockResolvedValue({slug:"sample",name:"Sample",needs:"key",fields:[{name:"key",label:"API Key",description:"A long catalog hint for this field",secret:true,required:true}]});
   const thread=document.createElement("div");document.body.append(thread);
@@ -35,6 +37,23 @@ test("inline field hints stay on one line and the guide heading is not repeated 
   expect(css).toMatch(/\.inline-connection-setup \.cn-hint\s*\{[^}]*white-space:\s*nowrap/);
   controller.disconnect();
 });
+test("a reader at the latest line stays there when the card's form arrives, and one reading earlier lines is not moved", async () => {
+  api.connectorsToolkit.mockResolvedValue({ slug: "sample", name: "Sample", needs: "key", fields: [{ name: "key", label: "Key", secret: true, required: true }] });
+  for (const [from, moved] of [[900, true], [200, false]] as const) {
+    const scroller = document.createElement("div"); scroller.className = "ra-scroll"; document.body.append(scroller);
+    const thread = document.createElement("div"); scroller.append(thread);
+    thread.innerHTML = connectorCardHTML({ id: "sample", app: "sample", name: "Sample", state: "pending", needs: "key", error: null, reconnect: false, tool_count: null, expires_at_ms: 0, resumed: false });
+    // The thread grows by the form itself once it arrives.
+    Object.defineProperty(scroller, "clientHeight", { configurable: true, get: () => 100 });
+    Object.defineProperty(scroller, "scrollHeight", { configurable: true, get: () => thread.querySelector("[data-setup-field]") ? 1300 : 1000 });
+    scroller.scrollTop = from;
+    const controller = mountInlineConnectionSetup(thread, vi.fn());
+    await vi.waitFor(() => expect(thread.querySelector("[data-setup-field]")).not.toBeNull());
+    expect(scroller.scrollTop, `from ${from}`).toBe(moved ? 1300 : 200);
+    controller.disconnect(); scroller.remove();
+  }
+});
+
 test("conversation key setup stays inline and sends secrets only to its own connection call", async () => {
   api.connectorsToolkit.mockResolvedValue({ slug: "sample", name: "Sample", needs: "key", fields: [{ name: "key", label: "Key", secret: true, required: true }], guide_url: "https://example.invalid/keys" });
   const thread = document.createElement("div"); document.body.append(thread);
@@ -49,6 +68,27 @@ test("conversation key setup stays inline and sends secrets only to its own conn
   expect(JSON.stringify(api.connectorsToolkit.mock.calls)).not.toContain("synthetic-secret-value");
   expect(document.body.innerHTML).not.toContain("synthetic-secret-value");
   expect(thread.querySelector(".card-detail")?.hasAttribute("hidden")).toBe(true);
+  controller.disconnect();
+});
+
+// Owner, 2026-11-09: a server of the owner's own (n8n) is set up in the conversation, in its card.
+test("an own server's card asks for its address and token from the card itself and sends them only to its connection", async () => {
+  const thread = document.createElement("div"); document.body.append(thread);
+  thread.innerHTML = connectorCardHTML({ id: "n8n-card", app: "n8n", name: "n8n", state: "pending", needs: "own_server", error: null, reconnect: false, tool_count: null, expires_at_ms: 0, resumed: false,
+    fields: [{ name: "url", label: "MCP server address", required: true, secret: false }, { name: "token", label: "Access token", required: true, secret: true }] });
+  const connect = vi.fn(async (_id: string, _fields: Record<string, string>) => ({ connected: true }));
+  const controller = mountInlineConnectionSetup(thread, connect);
+  await vi.waitFor(() => expect(thread.querySelectorAll("[data-setup-field]")).toHaveLength(2));
+  expect(api.connectorsToolkit).not.toHaveBeenCalled();
+  const [url, token] = [...thread.querySelectorAll<HTMLInputElement>("[data-setup-field]")];
+  expect([url!.type, token!.type]).toEqual(["text", "password"]);
+  thread.querySelector<HTMLButtonElement>("[data-inline-submit]")!.click();
+  expect(connect).not.toHaveBeenCalled();
+  url!.value = "https://n8n.example.invalid/mcp-server/http"; token!.value = "synthetic-token";
+  thread.querySelector<HTMLButtonElement>("[data-inline-submit]")!.click();
+  await vi.waitFor(() => expect(connect).toHaveBeenCalledExactlyOnceWith("n8n-card", { url: "https://n8n.example.invalid/mcp-server/http", token: "synthetic-token" }));
+  expect(token!.value).toBe("");
+  expect(document.body.innerHTML).not.toContain("synthetic-token");
   controller.disconnect();
 });
 

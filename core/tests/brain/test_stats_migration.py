@@ -2,8 +2,7 @@
 
 from raphael_core.brain import db
 from raphael_core.brain.history import HistoryStore
-from raphael_core.brain.spend import SpendTracker
-from .test_stats import NOW, TPE, at, store_at, period, say
+from .test_stats import NOW, at, store_at, period, say
 
 
 def legacy(tmp_path, monkeypatch):
@@ -24,9 +23,12 @@ def old_dictation(conn, when, text, *, audio=1, stt=300, llm=700, kind="dictatio
 
 
 def cleanup(conn, when, tokens, *, purpose="cleanup", model="m"):
-    SpendTracker(conn, now_ms=lambda: when, tz=TPE).record(
-        purpose=purpose, model=model, cost_usd=0, prompt_tokens=1, completion_tokens=tokens,
+    # A version-19 fixture predates the spend's usage columns (migration 76): the row is written as v19 wrote it.
+    conn.execute(
+        "INSERT INTO spend (created_at_ms, purpose, model, cost_usd, prompt_tokens, completion_tokens)"
+        " VALUES (?, ?, ?, 0, 1, ?)", (when, purpose, model, tokens),
     )
+    conn.commit()
 
 
 def test_migration_backfills_the_previous_counts_durations_and_heatmap_once(tmp_path, monkeypatch):

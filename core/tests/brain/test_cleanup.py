@@ -672,22 +672,37 @@ async def test_the_dictated_text_and_the_reply_are_never_logged(make_svc, fake_c
 def test_the_prompt_is_package_data_with_one_placeholder_at_its_end():
     file = resources.files("raphael_core.brain.prompts").joinpath("cleanup_system.md")
     text = file.read_text(encoding="utf-8")
+    # Keep the general cleanup rules within the short prompt budget.
     assert text.startswith("You edit dictated text.")
+    assert len(text) < 3700
     assert text.count("{dictionary}") == 1 and text.rstrip().endswith("\n{dictionary}")
     assert text.count("{target_app}") == 1
     assert text.count("{languages}") == 1 and text.count("{script_rules}") == 1
+
+
+def test_the_prompt_keeps_all_spoken_particles_without_inventing_questions():
+    text = build_system_prompt([], [])
+    rule = next(line for line in text.splitlines() if line.startswith("3. "))
+    assert "all spoken particles/tags" in rule and "words, not fillers" in rule
+    assert "never delete or move them" in rule
+    assert "Never add a particle, question or question mark" in rule
+    assert "only for a spoken question" in rule
+    assert all(particle in rule for particle in ("嗎", "呢", "吧", "嘛", "啊", "不是嗎", "對吧"))
+    assert "never add an unspoken 嗎" not in text and "are not 嗎" not in text
+    first = next(line for line in text.splitlines() if line.startswith("  → "))
+    assert json.loads(first.split("→ ", 1)[1])["text"].endswith("亂碼啊，大概就這樣")
 
 
 def test_the_examples_of_the_prompt_reply_in_valid_json_with_real_line_breaks():
     # The model copies the form of the examples: each reply must be the JSON the app parses, and
     # its list must come out as lines once the "\n" escapes are decoded.
     text = build_system_prompt([], [])
-    assert r"write each as \n inside the string" in text
+    assert r"Line breaks are real: write each as \n inside the string, a blank line as \n\n." in text
     replies = [line.split("→ ", 1)[1] for line in text.splitlines() if line.startswith("  → ")]
     assert len(replies) >= 2
     texts = [json.loads(reply)["text"] for reply in replies]
     lists = [t for t in texts if t.startswith("1. ") or "\n1. " in t]
-    assert len(lists) >= 2 and all("\n2. " in t for t in lists)
+    assert lists and all("\n2. " in t for t in lists)
     assert "：\n\n1. " in lists[0], "a lead-in ends with ： and a blank line comes before the list"
     assert any("1. " not in t for t in texts), "an example that is not a list"
 
@@ -941,7 +956,8 @@ def test_an_answer_written_as_a_list_is_still_too_long():
 
 def languages_line(prompt):
     (line,) = [line for line in prompt.splitlines() if "The speaker's languages: " in line]
-    return line.split("The speaker's languages: ", 1)[1].split(". ", 1)[0]
+    # The mixed-English instruction follows the configured language labels in prompt C.
+    return line.split("The speaker's languages: ", 1)[1].split(", with English words mixed in.", 1)[0].split(". ", 1)[0]
 
 
 def test_the_prompt_names_the_speakers_languages_in_their_order():
@@ -1013,7 +1029,7 @@ def test_without_chinese_or_english_there_is_no_script_rule_for_them():
     prompt = build_system_prompt([], [], languages=["ja-JP", "ko-KR"])
     assert languages_line(prompt) == "日本語, 한국어"
     assert "Write Chinese" not in prompt and "Write English" not in prompt
-    assert "Leave Japanese in Japanese script." in prompt
+    assert "Japanese script." in prompt
 
 
 def test_the_rest_of_the_prompt_is_the_same_for_every_selection():
@@ -1024,6 +1040,20 @@ def test_the_rest_of_the_prompt_is_the_same_for_every_selection():
         assert "When the speaker enumerates, in any language, write a numbered list." in prompt
         assert '{"text": "<the cleaned text>"}' in prompt
         assert prompt.count("  → ") >= 3
+
+
+def test_structure_rules_cover_implicit_requests_single_topics_and_existing_sentences():
+    prompt = build_system_prompt([], [], languages=["zh-TW"])
+    assert "Several separate points or requests also need numbered items even without enumeration words." in prompt
+    assert "A single topic stays one paragraph, however long." in prompt
+    assert "a topic change starts a new paragraph" in prompt
+    assert "never invent one" in prompt
+    assert "Never use a request as the lead-in; number it too." in prompt
+    assert "Keep sentence-ending 。 already in the transcript" in prompt
+    assert "omit only the whole text's final 。" in prompt
+    assert "end with ，" not in prompt
+    assert 'delete。它上面沒有那個 bar，整個很乾淨。這邊也可以參考' in prompt
+    assert '1. 幫我把窗邊的盆栽搬到走廊，不要曬太陽。' in prompt
 
 
 def test_the_prompt_is_the_same_each_time():

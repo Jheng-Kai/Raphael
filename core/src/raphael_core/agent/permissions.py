@@ -24,7 +24,7 @@ There are two kinds of cards by who delivers the answer:
 - `run`: a question of the run on the desktop that carries on after the owner gave the computer back
   (`computer.handback`). Nobody is at that question: the card is its only door, `integrations.card_allow`,
   `integrations.card_always` and `integrations.card_deny {id, digest?}`, and it waits as long as an
-  unattended question does (`policy.UNATTENDED_WAIT_S`, about ten minutes). The answer goes to the run
+  unattended question does (`policy.UNATTENDED_WAIT_S`, thirty minutes). The answer goes to the run
   that waits on that very question with the digest of the card, so a card that is not the question any
   more answers nothing, a replay finds the card answered, and a core that started again has no run:
   the card is expired.
@@ -55,7 +55,7 @@ logger = logging.getLogger(__name__)
 # The only moves a card's state makes: from pending, and only once.
 STATES = ("pending", "allowed", "always", "denied", "expired", "cancelled")
 _COLUMNS = ("id, turn_id, member_id, conversation_id, source, kind, service, tool, summary, reason, digest, always,"
-            " language, state, created_at_ms, expires_at_ms, message")
+            " language, state, created_at_ms, expires_at_ms, message, context_only")
 
 _MESSAGE_FIELDS = ("workspace", "to", "cc", "subject", "thread", "body")
 _MESSAGE_ALIASES = {
@@ -146,6 +146,7 @@ class PermissionCard:
     created_at_ms: int
     expires_at_ms: int
     message: dict[str, str] | None = None
+    context_only: bool = False
 
     def view(self) -> dict:
         """The card as the window draws it."""
@@ -160,7 +161,7 @@ def _card(row: sqlite3.Row) -> PermissionCard:
     return PermissionCard(row["id"], row["turn_id"], row["member_id"], row["conversation_id"], row["source"],
                           row["kind"], row["service"], row["tool"], row["summary"], row["reason"], row["digest"],
                           bool(row["always"]), row["language"], row["state"], row["created_at_ms"], row["expires_at_ms"],
-                          _message_fields(json.loads(row["message"])))
+                          _message_fields(json.loads(row["message"])), bool(row["context_only"]))
 
 
 class PermissionCardStore:
@@ -174,15 +175,15 @@ class PermissionCardStore:
 
     def open(self, *, card_id: str, turn_id: int, member_id: int, conversation_id: int | None, source: str, kind: str,
              service: str, tool: str, summary: str, reason: str, digest: str, always: bool, language: str,
-             wait_ms: int, message: dict[str, str] | None = None) -> PermissionCard:
+             wait_ms: int, message: dict[str, str] | None = None, context_only: bool = False) -> PermissionCard:
         now = self._now_ms()
         with self._conn:
             self._conn.execute(
                 "INSERT OR IGNORE INTO permission_cards (id, turn_id, member_id, conversation_id, source, kind, service,"
-                " tool, summary, reason, digest, always, language, state, created_at_ms, updated_at_ms, expires_at_ms, message)"
-                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?)",
+                " tool, summary, reason, digest, always, language, state, created_at_ms, updated_at_ms, expires_at_ms, message, context_only)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?)",
                 (card_id, turn_id, member_id, conversation_id, source, kind, service, tool, summary, reason, digest,
-                 int(always), language, now, now, now + wait_ms if wait_ms else 0, json.dumps(_message_fields(message) or {})))
+                 int(always), language, now, now, now + wait_ms if wait_ms else 0, json.dumps(_message_fields(message) or {}), int(context_only)))
         return self.get(card_id)  # type: ignore[return-value]
 
     def expire_due(self) -> None:
@@ -261,10 +262,10 @@ class PermissionCards:
 
     def show(self, *, card_id: str, turn_id: int, member_id: int, conversation_id: int | None, source: str, kind: str,
              service: str, tool: str, summary: str, reason: str, digest: str, always: bool, language: str,
-             wait_ms: int, message: dict[str, str] | None = None) -> PermissionCard:
+             wait_ms: int, message: dict[str, str] | None = None, context_only: bool = False) -> PermissionCard:
         card = self.store.open(card_id=card_id, turn_id=turn_id, member_id=member_id, conversation_id=conversation_id,
                                source=source, kind=kind, service=service, tool=tool, summary=summary, reason=reason,
-                               digest=digest, always=always, language=language, wait_ms=wait_ms, message=message)
+                               digest=digest, always=always, language=language, wait_ms=wait_ms, message=message, context_only=context_only)
         self._changed(card)
         return card
 
@@ -281,7 +282,8 @@ class PermissionCards:
             self._changed(card)
 
     def views(self, turn_ids: Iterable[int]) -> dict[int, list[dict]]:
-        return {turn_id: [card.view() for card in cards] for turn_id, cards in self.store.for_turns(turn_ids).items()}
+        return {turn_id: views for turn_id, cards in self.store.for_turns(turn_ids).items()
+                if (views := [card.view() for card in cards if not card.context_only])}
 
     def get(self, card_id: str) -> PermissionCard | None:
         return self.store.get(card_id)

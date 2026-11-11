@@ -10,25 +10,22 @@ from .test_answering import client, setup, member, typed  # noqa: F401
 
 
 @pytest.mark.parametrize("speaker", ["member", "raphael"])
-async def test_reported_two_fenced_objects_publish_narration_then_only_final_messages(setup, client, speaker):
+async def test_tool_narration_precedes_the_complete_final_messages(setup, client, speaker):
     rig, team = setup
     speaker_id = member(team, name="紫苑", role="Japanese teacher").id if speaker == "member" else 0
-    client.chats = [chat('''```json
-{"thinking":"主人說不會這段文章，先從基礎開始。","progress":"我來逐句拆解這段新聞。"}
-```
-你需要打好基礎。我來分段教。**這是重複的說明。**
-```json
-{"text":"換你練習。","detail":"","messages":["先看第一句。","弱点是弱點。","換你練習。"],"memory":[],"need":{}}
-```''')]
+    client.chats = [
+        chat('{"thinking":"主人說不會這段文章，先從基礎開始。","progress":"我來逐句拆解這段新聞。"}', ("local_time", {})),
+        chat('{"text":"換你練習。","detail":"","messages":["先看第一句。","弱点是弱點。","換你練習。"],"memory":[],"need":{}}'),
+    ]
     result = await typed(rig, "我都不會，可以解釋一下嗎？", speaker_id)
     [turn] = (await rig.call("agent.history.list", {"member_id": speaker_id}))["turns"]
-    assert result["text"] == turn["text"] == "換你練習。"
-    assert [m["kind"] for m in turn["messages"]] == ["thinking", "progress", "reply", "reply", "reply"]
+    assert result["text"] == turn["text"] == "先看第一句。\n\n弱點是弱點。\n\n換你練習。"
+    assert [m["kind"] for m in turn["messages"] if not is_action(m["text"])] == ["thinking", "progress", "reply", "reply", "reply"]
     assert turn["messages"][0]["text"] == "主人說不會這段文章，先從基礎開始。"
     expected = ["我來逐句拆解這段新聞。", "先看第一句。", "弱點是弱點。", "換你練習。"]
     if speaker == "raphael":
         expected = ["《告。我來逐句拆解這段新聞。》", "《答。先看第一句。", "弱點是弱點。", "換你練習。》"]
-    assert [m["text"] for m in turn["messages"][1:]] == expected
+    assert [m["text"] for m in turn["messages"][1:] if not is_action(m["text"])] == expected
 
 
 @pytest.mark.parametrize(("content", "expected"), [
@@ -36,14 +33,14 @@ async def test_reported_two_fenced_objects_publish_narration_then_only_final_mes
     ('```json\n{"text":"A clean answer."}\n```', "A clean answer."),
     ('```\n{"messages":["A clean answer."]}\n```', "A clean answer."),
     ("A clean answer.", "A clean answer."),
-    ('{"thinking":"Check the example."}\nDuplicate prose.\n{"text":"A clean answer."}', "A clean answer."),
-    ('{"thinking":"Check the example."}\nA clean answer.\n{"metadata":{"ignored":true}}', "A clean answer."),
-    ('A clean answer.\n```json\n{"text": broken, "need": {}}\n```', "A clean answer."),
-    ('```json\n{"text": "unfinished\n```\nA clean answer.', "A clean answer."),
-    ('A clean answer.\n{"text": "unfinished', "A clean answer."),
+    ('{"thinking":"Check the example."}\nDuplicate prose.\n{"text":"A clean answer."}', None),
+    ('{"thinking":"Check the example."}\nA clean answer.\n{"metadata":{"ignored":true}}', None),
+    ('A clean answer.\n```json\n{"text": broken, "need": {}}\n```', None),
+    ('```json\n{"text": "unfinished\n```\nA clean answer.', None),
+    ('A clean answer.\n{"text": "unfinished', None),
     (json.dumps({"text": 'A clean answer.\n```json\n{"progress":"Echoed protocol."}\n```',
-                 "detail": 'Details.\n{"thinking":"Echoed protocol."}'}), "A clean answer."),
-    (json.dumps({"messages": ['A clean answer.\n{"text":"Echoed protocol."}']}), "A clean answer."),
+                 "detail": 'Details.\n{"thinking":"Echoed protocol."}'}), 'A clean answer.\n```json\n{"progress":"Echoed protocol."}\n```'),
+    (json.dumps({"messages": ['A clean answer.\n{"text":"Echoed protocol."}']}), 'A clean answer.\n{"text":"Echoed protocol."}'),
     (json.dumps({"text": 'Braces in a string: } and an escaped "quote".', "memory": [], "need": {}}),
      'Braces in a string: } and an escaped "quote".'),
 ], ids=["bare", "json-fence", "plain-fence", "prose", "two-objects", "public-and-metadata",
@@ -51,14 +48,14 @@ async def test_reported_two_fenced_objects_publish_narration_then_only_final_mes
 async def test_final_content_uses_reply_objects_or_prose_without_protocol(setup, client, content, expected):
     rig, team = setup
     teacher = member(team)
+    expected = content if expected is None else expected
     client.chats = [chat(content)]
     result = await typed(rig, "Explain this", teacher.id, language="en")
     [turn] = (await rig.call("agent.history.list", {"member_id": teacher.id}))["turns"]
     assert result["text"] == turn["text"] == expected
     assert [m["text"] for m in turn["messages"] if m["kind"] == "reply"] == [expected]
-    assert "```" not in str(turn) and "Echoed protocol" not in str(turn)
     if "Details." in content:
-        assert turn["detail"] == "Details."
+        assert turn["detail"] == 'Details.\n{"thinking":"Echoed protocol."}'
 
 
 async def test_each_pre_tool_object_is_published_in_order_without_duplicate_prose(setup, client):
@@ -100,7 +97,7 @@ async def test_public_narration_has_hard_length_and_sentence_caps(setup, client,
     final = '{"text":"Done."}'
     client.chats = ([chat(public, ("local_time", {})), chat(final)] if before_tool
                     else [chat(public + "\n" + final)])
-    # a line not in the owner's language is never shown, so the English cases run in English
+    # Both scripts remain bounded independently of the interface language.
     await typed(rig, "Explain this", teacher.id, language="en" if content.isascii() else "zh-TW")
     [turn] = (await rig.call("agent.history.list", {"member_id": teacher.id}))["turns"]
     [message] = [m for m in turn["messages"] if m["kind"] == kind]
@@ -108,8 +105,8 @@ async def test_public_narration_has_hard_length_and_sentence_caps(setup, client,
 
 
 @pytest.mark.parametrize("speaker", ["member", "raphael"])
-@pytest.mark.parametrize(("language", "name"), [("zh-TW", "Traditional Chinese"), ("en", "English")])
-async def test_live_prompt_separates_ui_narration_language_and_persona_replies(setup, client, speaker, language, name):
+@pytest.mark.parametrize("language", ["zh-TW", "en"])
+async def test_live_prompt_keeps_narration_and_replies_independent_of_ui_language(setup, client, speaker, language):
     rig, team = setup
     teacher = member(team, role="Japanese teacher", instructions="Teach and reply in Japanese.")
     speaker_id = teacher.id if speaker == "member" else 0
@@ -118,19 +115,20 @@ async def test_live_prompt_separates_ui_narration_language_and_persona_replies(s
     result = await typed(rig, "Explain the article", speaker_id, language=language)
     system = client.chat_calls[0]["messages"][0]["content"]
     user = client.chat_calls[0]["messages"][1]["content"]
-    assert system.count('content must be ONLY {"thinking": "...", "progress": "..."}') == 1
+    assert system.count('content must be one public object with thinking, progress and optional messages') == 1
     assert system.count("Final content must be ONLY one JSON object") == 1
     assert "no code fences, no prose before or after" in system
     assert "no separate thinking object" in system
-    assert "Thinking and progress are ALWAYS in the owner's UI language" in system
-    assert "even when the persona teaches or replies in another language" in system
+    assert "Thinking, progress and replies follow the speaker's own language instructions" in system
+    assert "The interface language never selects the language of authored speech" in system
+    assert "in the owner's UI language" not in system
     assert "at most 2 sentences (about 60 CJK characters)" in system
     assert "25 CJK characters or 25 words" in system
-    assert '"text": the reply, at most 2000 characters' in system
-    assert '"messages": the reply as the chat messages a person would send' in system
+    assert '"text": the complete reply' in system
+    assert '"messages": the complete reply as chat messages in order' in system
     assert '"text": the reply as one line' not in system
-    assert name in user and "Owner's UI language:" in user
-    assert "Reply messages follow the persona's language rules" in user
+    assert "Owner's UI language:" not in user
+    assert "Use the language specified in your own persona and the owner's instructions" in user
     if speaker == "member":
         assert "Teach and reply in Japanese." in system
         assert "Reply ONLY in" not in system
@@ -138,7 +136,7 @@ async def test_live_prompt_separates_ui_narration_language_and_persona_replies(s
     assert result["text"] == "練習しましょう。"
 
 
-async def test_a_progress_line_in_another_language_is_not_shown(setup, client):
+async def test_authored_narration_is_not_filtered_by_the_interface_language(setup, client):
     rig, team = setup
     teacher = member(team)
     client.chats = [chat('{"thinking": "Let me open the page.", "progress": "我先打開頁面。"}', ("local_time", {})),
@@ -146,4 +144,4 @@ async def test_a_progress_line_in_another_language_is_not_shown(setup, client):
     await typed(rig, "Explain this", teacher.id, language="zh-TW")
     [turn] = (await rig.call("agent.history.list", {"member_id": teacher.id}))["turns"]
     shown = [(m["kind"], m["text"]) for m in turn["messages"] if m["kind"] in ("thinking", "progress")]
-    assert shown == [("progress", "我先打開頁面。")]
+    assert shown == [("thinking", "Let me open the page."), ("progress", "我先打開頁面。")]

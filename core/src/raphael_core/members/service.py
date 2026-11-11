@@ -4,17 +4,19 @@ the team as the assistant sees it.
 The RPC methods (the main window only, through the shell's allow-list):
 
 - `members.list {ui_language?}` -> `{members, groups}`. `members` is Raphael first (`id` 0, his name
-  in the language, his picture when the owner chose one: `avatar_url`, a data URL, and
-  `avatar_crop`), then every member in its place: `{id, name, role, personality, instructions, avatar,
-  avatar_url?, group_id, model, tools, position, created, unread, unread_from, waiting, preview, last_at}`.
+  in the language, his picture when the owner chose one: `avatar_rev` and `avatar_crop`), then every member
+  in its place: `{id, name, role, personality, instructions, avatar,
+  avatar_rev?, cover?, group_id, model, tools, position, created, unread, unread_from, waiting, preview, last_at}`.
   `preview` is the last line of its thread (one line, cut) and `last_at` when it was said; `unread`
   says the thread has news the owner has not seen (`members.read` clears it), `unread_from` names
   its first unseen turn when known, and `waiting` that a
   question waits for the owner there. `groups` is `[{id, name, position, sources}]`.
-- `members.create {name, role?, personality?, instructions?, group_id?, avatar?, tools?, model?, ui_language?}` ->
+- `members.create {name, role?, personality?, instructions?, group_id?, avatar?, tools?, model?, ui_language?, greet?}` ->
   `{member, routine_offer}`. `routine_offer` is the routine offered to a member of a group that
   has places to look (`sources`): `{title, prompt, schedule}` for 「每天早上的進度」 at 09:00, or
   null. It is offered, not made: `routines.create` makes it.
+- `members.greet {id}` -> `{turn_id}`: start another hidden, tool-free greeting before any owner
+  message, replacing failed greetings. Only the member's own interactive brain answers it.
 - `members.update {id, name?, role?, personality?, instructions?, group_id?, avatar?, tools?, model?, position?}`
   -> `{member}`. `avatar` here is "" or a slime, "slime:<character>" or "slime:color:<color>". Raphael (0) is not changed here: his picture is the app's to change.
 - `members.delete {id}` -> `{deleted}`: the member, its conversation (and the exchanges of other
@@ -28,6 +30,12 @@ The RPC methods (the main window only, through the shell's allow-list):
 - `members.set_avatar {id, name, mime, data}` -> `{member}`: a picture of the owner's own, in
   base64, checked as the images of a request are (`services.attachments`), copied into
   `<local>\\avatars\\members\\` under a name of its own: the path it came from is never known here.
+- `members.set_cover {id, name, mime, data}` -> `{member}`: the same checked image upload, kept
+  unchanged in `<local>/avatars/covers/`. `members.update {id, cover: "pattern:<id>" | null}`
+  selects a built-in pattern or clears it. Views omit an unset cover; otherwise return
+  `{kind:"pattern", id}` or `{kind:"image", rev, position?}`. Both support Raphael (id 0).
+- `members.picture {id, kind: "avatar" | "cover"}` -> `{rev, url}`: the picture as a data URL, with the revision
+  (a hash of its bytes) the views name it by; no view carries a picture (a roster with them was ten megabytes).
 - `members.read {id}` -> `{}`; `members.viewing {id | null}` -> `{}`: which thread is on screen now
   (null for none), so that what arrives there is not news.
 - `members.tool_choices {}` -> `{tools, connections}`: Raphael's own tools a member may be given, by
@@ -63,9 +71,11 @@ app alone.
 Nothing here logs a name, a role, an instruction, a routine's title or prompt, or a result.
 """
 
+from raphael_core.ui_words import ui_word, with_ui_words
 import asyncio
 import base64
 import binascii
+import hashlib
 import logging
 import re
 import json
@@ -88,6 +98,7 @@ from ..router import Router
 from ..services.attachments import IMAGE_TYPES, MAX_IMAGE_BYTES, AttachmentError, checked, sniff_ok
 from .capabilities import MemberCapabilities, download_skills
 from .schedule import Schedule, next_run
+from .covers import Covers, selection as cover_selection
 from .store import (
     ROUTINE_RUN_STATUS_SQL,
     PROMPT_MAX,
@@ -113,12 +124,6 @@ OWNER_ABSENCE_MS = 30 * 24 * 3_600_000
 # What the member column shows of the last line of a thread, at most.
 PREVIEW_CHARS = 80
 # The folders of the pictures, in the app's local folder.
-# What a member made in the maker says first, before anything has run: no model is asked, so it costs nothing and is there at once.
-GREETINGS = {
-    "zh-TW": "你好，我是{name}。你想請我幫你做什麼？",
-    "en": "Hi, I'm {name}. What would you like me to do for you?",
-    "ja": "はじめまして、{name}です。どんなことをお手伝いしましょうか？",
-}
 AVATARS_DIR = "avatars"
 SLIME = "slime:"
 MEMBERS_DIR = "members"
@@ -127,23 +132,40 @@ RAPHAEL_AVATAR_DIR = "avatar"
 _EXTENSIONS = {"image/png": "png", "image/jpeg": "jpg", "image/webp": "webp", "image/gif": "gif"}
 # The template of the routine offered to a member of a group with places to look.
 TEMPLATE_TIME = "09:00"
-_TEMPLATE_TITLE = {"zh-TW": "每天早上的進度", "en": "Morning progress", "ja": "毎朝の進捗"}
-_TEMPLATE_PROMPT = {
+_TEMPLATE_TITLE = with_ui_words({"zh-TW": "每天早上的進度", "en": "Morning progress", "ja": "毎朝の進捗"})
+_TEMPLATE_PROMPT = with_ui_words({
     "zh-TW": "用已連接的 GitHub 與 Notion 工具，查看下列地方從昨天到現在的進度，整理成一份簡短的進度報告：",
     "en": (
         "Using the connected GitHub and Notion tools, check the progress since yesterday at the "
         "places below and write a short progress report:"
     ),
     "ja": "接続済みの GitHub と Notion のツールで、以下の場所の昨日からの進捗を確認し、短い進捗報告にまとめてください：",
-}
+})
 _SOURCE_LABEL = {"github": "GitHub", "notion": "Notion"}
-_COLON = {"zh-TW": "：", "en": ": ", "ja": "："}
+_COLON = with_ui_words({"zh-TW": "：", "en": ": ", "ja": "："})
 _ASCII_WORD = re.compile(r"[A-Za-z0-9 ._-]+")
 
 
 def _rpc_error(error: MemberError) -> RpcError:
     """A refusal of the store as a bad request whose data names the field."""
     return RpcError(INVALID_PARAMS, f"Invalid params: {error}", {"kind": error.kind})
+
+
+def _uploaded_picture(params, kind):
+    name, mime, data = params.get("name"), params.get("mime"), params.get("data")
+    if not isinstance(name, str) or not isinstance(mime, str) or not isinstance(data, str):
+        raise invalid_params("name, mime and data must be strings")
+    if len(data) > (MAX_IMAGE_BYTES * 4) // 3 + 8:
+        raise RpcError(INVALID_PARAMS, f"Invalid params: {kind} (size)", {"kind": "size"})
+    try:
+        raw = base64.b64decode(data, validate=True)
+        picture = checked(name, mime, raw, max_bytes=MAX_IMAGE_BYTES)
+    except (binascii.Error, ValueError) as error:
+        reason = error.kind if isinstance(error, AttachmentError) else "data"
+        raise RpcError(INVALID_PARAMS, f"Invalid params: {kind} ({reason})", {"kind": reason}) from None
+    if not picture.is_image:
+        raise RpcError(INVALID_PARAMS, f"Invalid params: {kind} (type)", {"kind": "type"})
+    return picture
 
 
 def _whole(params: dict, name: str, *, least: int = 0) -> int:
@@ -196,6 +218,8 @@ def routine_template(sources: Sequence[Source], language: str) -> dict[str, Any]
     when the group has no place."""
     if not sources:
         return None
+    from ..ui_languages import fixed_language
+    language = fixed_language(language)
     prompt = _TEMPLATE_PROMPT[language]
     for source in sources:
         line = f"\n- {_SOURCE_LABEL[source.kind]}{_COLON[language]}{source.ref}"
@@ -213,6 +237,7 @@ def routine_template(sources: Sequence[Source], language: str) -> dict[str, Any]
 class _Picture:
     key: tuple[int, int]  # the file's mtime and size when it was read
     url: str
+    rev: str  # what the bytes hash to: the window keeps a picture by it and asks again only when it changes
 
 
 def soul_document(speaker: Speaker) -> str:
@@ -257,9 +282,8 @@ class MembersService:
     ) -> None:
         self.store = MemberStore(conn, now_ms)
         self.capabilities = MemberCapabilities(conn, local_dir / "member-skills", self.store)
-        self._speech = None
+        self.greeting = None  # Bound by the interactive AgentService, never the routine worker.
         self._delivered: set[tuple[int, int, str]] = set()
-        self._speech_tasks: set[asyncio.Task] = set()
         self._conn = conn
         self._history = AgentHistory(conn, now_ms)
         self._settings = SettingsStore(conn)
@@ -274,6 +298,8 @@ class MembersService:
         # Told of each member made through the tools: who made it, and which it is.
         self.member_made = lambda maker, made: None
         self.remove_computer_data = None
+        self.remove_messaging = None
+        self.deleting: set[int] = set()
         self._connections = connections
         self._now_ms = now_ms
         if not self._settings.get("routine_owner_seen_ms"):
@@ -283,15 +309,19 @@ class MembersService:
         self._avatars = local_dir / AVATARS_DIR
         self._raphael_avatar = local_dir / RAPHAEL_AVATAR_DIR
         self._pictures: dict[Path, _Picture] = {}
+        self._covers = Covers(self._avatars / "covers", self._picture, self._pictures.pop)
         self._viewing: int | None = None
         self.activity.viewing = lambda: self._viewing
         self._waiting_sources: list[Callable[[], Iterable[int]]] = []
         self._events = None
         self._event_poll_task: asyncio.Task | None = None
         self._ticking: asyncio.Task[None] | None = None
+        self._ingress_start: asyncio.Task[None] | None = None
         from .webhooks import Webhooks
         from ..integrations.vault import MemoryVault
         self.webhooks = Webhooks(self, vault if vault is not None else MemoryVault())
+        from .template_cards import TemplateCards
+        self.template_cards = TemplateCards(self)
         self.sync_homes()
         if memory is not None:
             from .skill_review import SkillReview
@@ -311,6 +341,12 @@ class MembersService:
 
     def register(self, router: Router) -> None:
         self._management_rpc = router.call
+        self.template_cards.register(router)
+        from .avatar_generation import AvatarGeneration
+        self.avatar_generation = AvatarGeneration(self, lambda: getattr(router, "generation", None))
+        router.register("members.avatar_generate", self.avatar_generation.generate)
+        router.register("members.library", self._library)
+        router.register("members.library_file", self._library_file)
         methods = {
             "members.skills.list": self._skills_list,
             "members.skills.read": self._skills_read,
@@ -321,14 +357,17 @@ class MembersService:
             "members.commands.save": self._commands_save,
             "members.commands.delete": self._commands_delete,
             "members.duplicate": self._duplicate,
+            "members.template": self._member_template,
             "members.mark_all_read": self._mark_all_read,
-            "members.voices": self._voices,
             "members.list": self._list,
             "members.create": self._create,
+            "members.greet": self._greet,
             "members.update": self._update,
             "members.delete": self._delete,
             "members.set_primary": self._set_primary,
             "members.set_avatar": self._set_avatar,
+            "members.set_cover": self._set_cover,
+            "members.picture": self._picture_of,
             "members.read": self._read,
             "members.unread": self._unread,
             "members.viewing": self._viewing_now,
@@ -352,7 +391,9 @@ class MembersService:
 
     def speaker(self, member_id: int) -> Speaker | None:
         if member_id == 0:
+            tools = self._settings.get("raphael_tools")
             return Speaker(**self.first_bot_profile(), draft_first=self._settings.get("raphael_draft_first"),
+                           tools=None if tools is None else frozenset(tools),
                            capabilities=frozenset({"chief"}) if self.store.is_chief(member_id) else frozenset())
         return self.store.speaker(member_id)
 
@@ -461,7 +502,7 @@ class MembersService:
             turn = self._history.get(turn_id)
             if turn is not None and turn.scope != "private":
                 return
-            if turn is not None and turn.member_id:
+            if turn is not None:
                 self._deliver_turn(turn)
             if turn is None or (turn.source == "voice" and turn.member_id == 0) or turn.member_id == self._viewing:
                 return
@@ -480,23 +521,19 @@ class MembersService:
         # Bound the delivery cache without retaining any message contents.
         if len(self._delivered) > 2000:
             self._delivered = {(turn.id, turn.created_at_ms, kind)}
-        member = self.store.member(turn.member_id)
+        member = self.speaker(0) if turn.member_id == 0 else self.store.member(turn.member_id)
         if member is None:
             return
         self._notice(member, kind)
-        if kind == "finished" and member.read_aloud and turn.text and self._speech is not None:
-            task = asyncio.get_running_loop().create_task(self._speech.say_member("\n".join(turn.messages) if turn.messages else turn.text, voice=member.voice, turn_id=turn.id))
-            self._speech_tasks.add(task)
-            task.add_done_callback(self._speech_tasks.discard)
-            task.add_done_callback(lambda done: done.cancelled() or done.exception())
 
-    def _notice(self, member: Member, kind: str) -> None:
-        if member.notify and self._notify is not None:
-            self._notify("member.notice", {"member_id": member.id, "name": member.name,
+    def _notice(self, member: Member | Speaker, kind: str) -> None:
+        enabled = self._settings.get("raphael_notify") if member.id == 0 else member.notify
+        if enabled and self._notify is not None:
+            self._notify("member.notice", {"member_id": member.id, "name": member.name or RAPHAEL_NAMES[self._language()],
                                           "kind": kind, "notify": True})
 
     def needs_input(self, member_id: int) -> None:
-        member = self.store.member(member_id)
+        member = self.speaker(0) if member_id == 0 else self.store.member(member_id)
         if member is not None:
             self._notice(member, "needs_input")
 
@@ -522,9 +559,9 @@ class MembersService:
 
     # --- the pictures --------------------------------------------------------------------------------
 
-    def _data_url(self, path: Path) -> str | None:
-        """The picture at `path` as a data URL, if it is one of the four kinds and not too large.
-        Read again only when the file changed."""
+    def _picture(self, path: Path) -> _Picture | None:
+        """The picture at `path`, if it is one of the four kinds and not too large. Read again only when
+        the file changed."""
         try:
             stat = path.stat()
         except OSError:
@@ -532,7 +569,7 @@ class MembersService:
         key = (stat.st_mtime_ns, stat.st_size)
         known = self._pictures.get(path)
         if known is not None and known.key == key:
-            return known.url
+            return known
         if stat.st_size > MAX_IMAGE_BYTES:
             return None
         try:
@@ -543,29 +580,27 @@ class MembersService:
         if mime is None:
             return None
         url = f"data:{mime};base64,{base64.b64encode(data).decode('ascii')}"
-        self._pictures[path] = _Picture(key, url)
-        return url
+        picture = self._pictures[path] = _Picture(key, url, hashlib.sha1(data).hexdigest()[:12])
+        return picture
 
-    def _avatar_url(self, avatar: str) -> str | None:
-        """The picture a member's `avatar` names, as a data URL; None for none, or one that is
-        gone (the app shows the default silhouette)."""
+    def _avatar_picture(self, avatar: str) -> _Picture | None:
+        """The picture a member's `avatar` names; None for none, or one that is gone (the app shows the
+        default silhouette)."""
         kind, _, name = avatar.partition(":")
-        if kind == "file" and name:
-            return self._data_url(self._avatars / MEMBERS_DIR / name)
-        return None
+        return self._picture(self._avatars / MEMBERS_DIR / name) if kind == "file" and name else None
 
-    def _raphael_picture(self) -> tuple[str, dict] | None:
+    def _raphael_picture(self) -> tuple[_Picture, dict] | None:
         """Raphael's picture of the owner's own and its crop, as the shell keeps them; None while he
         is his emblem."""
         try:
             meta = json.loads((self._raphael_avatar / "picture.json").read_text(encoding="utf-8"))
         except (OSError, ValueError):
             return None
-        url = self._data_url(self._raphael_avatar / "picture")
+        picture = self._picture(self._raphael_avatar / "picture")
         crop = meta.get("crop") if isinstance(meta, dict) else None
-        if url is None or not isinstance(crop, dict):
+        if picture is None or not isinstance(crop, dict):
             return None
-        return url, {key: crop.get(key) for key in ("x", "y", "zoom")}
+        return picture, {key: crop.get(key) for key in ("x", "y", "zoom")}
 
     def _remove_picture(self, avatar: str) -> None:
         kind, _, name = avatar.partition(":")
@@ -583,10 +618,10 @@ class MembersService:
     # --- views ---------------------------------------------------------------------------------------
 
     def _member_view(
-        self, member: Member, unread: dict[int, int | None], waiting: set[int], latest: dict[int, Turn]
+        self, member: Member, unread: dict[int, int | None], waiting: set[int], latest: dict[int, Turn], *, tasks=None
     ) -> dict[str, Any]:
         last = latest.get(member.id)
-        activity, activity_label = self.activity.describe(member.id, waiting)
+        activity, activity_label = self.activity.describe(member.id, waiting, tasks=tasks)
         view: dict[str, Any] = {
             **{field: getattr(member, field) for field in PROFILE_FIELDS},
             "id": member.id,
@@ -609,19 +644,22 @@ class MembersService:
             "preview": "" if last is None else _preview(last),
             "last_at": None if last is None else last.created_at_ms,
         }
-        url = self._avatar_url(member.avatar) if member.avatar else None
-        if url is not None:
-            view["avatar_url"] = url
+        # The picture itself is `members.picture`: a roster with the pictures in it was ten megabytes.
+        picture = self._avatar_picture(member.avatar) if member.avatar else None
+        if picture is not None:
+            view["avatar_rev"] = picture.rev
+        if cover := self._covers.view(member.id):
+            view["cover"] = cover
         return view
 
     def _raphael_view(
-        self, language: str, unread: dict[int, int | None], waiting: set[int], latest: dict[int, Turn]
+        self, language: str, unread: dict[int, int | None], waiting: set[int], latest: dict[int, Turn], *, tasks=None
     ) -> dict[str, Any]:
         last = latest.get(0)
-        activity, activity_label = self.activity.describe(0, waiting)
+        activity, activity_label = self.activity.describe(0, waiting, tasks=tasks)
         view: dict[str, Any] = {
-            "blurb": "", "reply_style": "full", "voice": "", "read_aloud": False,
-            "notify": False, "ask_before_members": False, "pinned": self._chief_pinned(), "hidden": False, "draft_first": self._settings.get("raphael_draft_first"),
+            "blurb": "", "reply_style": "full",
+            "notify": self._settings.get("raphael_notify"), "ask_before_members": False, "pinned": self._chief_pinned(), "hidden": False, "draft_first": self._settings.get("raphael_draft_first"),
             "id": 0,
             "chief": self.store.is_chief(0),
             "name": RAPHAEL_NAMES[language],
@@ -631,7 +669,7 @@ class MembersService:
             "avatar": "",
             "group_id": None,
             "model": "",
-            "tools": None,
+            "tools": self._settings.get("raphael_tools"),
             "position": -1,
             "created": 0,
             "unread": 0 in unread,
@@ -647,7 +685,9 @@ class MembersService:
         view.update(profile)
         view["profile_ready"] = bool(profile)
         if picture is not None:
-            view["avatar_url"], view["avatar_crop"] = picture
+            view["avatar_rev"], view["avatar_crop"] = picture[0].rev, picture[1]
+        if cover := self._covers.view(0):
+            view["cover"] = cover
         return view
 
     def view_of(self, member: Member) -> dict[str, Any]:
@@ -680,13 +720,30 @@ class MembersService:
     def native_skills(self, member_id: int) -> list[dict]:
         return self.capabilities.native_skills(member_id)
 
-    def skill_learned(self, member_id, skill, turn_id=None):
+    def learn_skill(self, member_id, args, turn_id=None, *, source="tool"):
+        """A skill the member writes itself. Logged with its name and source only, so the app's log can count them."""
+        cap = self.capabilities
+        identifier = args.get("id")
+        if identifier is None and args.get("provenance", "learned") == "learned":
+            cap.check_new_learned_skill(member_id, args.get("text"))
+        # Compare stored text and references, not timestamps or newline-only revisions.
+        before = None if identifier is None else (
+            cap.document(member_id, identifier)[1], cap.reference_hashes(member_id, identifier))
+        skill = cap.manage_skill(member_id, args)
+        after = (cap.document(member_id, skill["id"])[1], cap.reference_hashes(member_id, skill["id"]))
+        logger.info("Skill %s: member=%d skill=%s source=%s changed=%s", "updated" if before is not None else "created",
+                    member_id, skill["name"], source, before != after)
+        self.skill_learned(member_id, skill, turn_id, existed=before is not None, changed=before != after)
+        return skill
+
+    def skill_learned(self, member_id, skill, turn_id=None, *, existed, changed=True):
         self._changed("members.skills.changed", member_id)
         self._changed()
-        if turn_id and skill["provenance"] == "learned":
+        if changed and turn_id and skill["provenance"] == "learned":
             turn = self._history.get(turn_id)
             if turn is not None and turn.member_id == member_id:
-                self._history.add_message(turn_id, "event", json.dumps({"type": "skill_learned", "name": skill["name"]}, ensure_ascii=False))
+                self._history.add_message(turn_id, "event", json.dumps({"type": "skill_learned", "name": skill["name"],
+                    "action": "updated" if existed else "created"}, ensure_ascii=False))
                 if self._notify:
                     self._notify("agent.turn", {"turn_id": turn_id, "member_id": member_id})
 
@@ -695,6 +752,11 @@ class MembersService:
             return self.capabilities.read_skill(member_id, name)
         except (OSError, MemberError):
             return None
+
+    def skill_file(self, member_id: int, name: object, reference: object) -> str:
+        """A file of an enabled skill's own folder, by its path there (`MemberCapabilities.read_skill_file`); MemberError
+        says why it cannot be read."""
+        return self.capabilities.read_skill_file(member_id, name, reference)
 
     def _cap(self, method, *args):
         from ..bots.homes import HomeError
@@ -860,30 +922,48 @@ class MembersService:
         self._changed()
         return {"member": self.view_of(copy)}
 
-    def use_speech(self, speech) -> None:
-        self._speech = speech
-
-    async def _voices(self, params: dict) -> dict:
-        voice = self._settings.get("tts_fish_voice")
-        configured = bool(self._speech and self._speech.speaks())
-        return {"voices": [{"id": voice, "name": "Fish Audio"}] if voice else [], "configured": configured}
-
     async def _list(self, params: dict) -> dict:
         if "panel_member_id" in params:
-            member = _whole(params, "panel_member_id")
-            if not self.member_exists(member):
-                raise invalid_params("no such member")
-            from .panel import snapshot
-            workspaces = getattr(self, "panel_workspaces", lambda member: [])(member)
-            return snapshot(self._conn, member, workspaces, _whole({"panel_limit": 12, **params}, "panel_limit", least=1))
+            return await self._library({"member_id": params["panel_member_id"], "limit": params.get("panel_limit", 12)})
         language = self._ui_language(params)
         unread = self.store.unread_from()
         waiting = self.waiting_members()
         latest = self._history.latest_by_member()
-        members = [self._raphael_view(language, unread, waiting, latest)]
-        members += [self._member_view(m, unread, waiting, latest) for m in self.store.members()]
+        roster = self.store.members()
+        task_source = self.activity.task_batch_source
+        tasks = task_source([0, *(m.id for m in roster)]) if task_source else None
+        members = [self._raphael_view(language, unread, waiting, latest, tasks=tasks.get(0, []) if tasks is not None else None)]
+        members += [self._member_view(m, unread, waiting, latest, tasks=tasks.get(m.id, []) if tasks is not None else None) for m in roster]
         return {"members": members, "groups": [group_view(g) for g in self.store.groups()],
                 "team_context": self.team_context(0, language)}
+
+    def _library_snapshot(self, params, paths=None):
+        from .panel import snapshot
+        member = _whole(params, "member_id")
+        if not self.member_exists(member):
+            raise invalid_params("no such member")
+        workspaces = getattr(self, "panel_workspaces", lambda member: [])(member)
+        return snapshot(self._conn, member, workspaces, _whole({"limit": 12, **params}, "limit", least=1),
+                        output_folder=self._settings.get("owner_output_folder"), tz=self._tz, paths=paths)
+
+    async def _library(self, params):
+        return self._library_snapshot(params)
+
+    async def _library_file(self, params):
+        paths = {}
+        self._library_snapshot(params, paths)
+        identifier = params.get("id")
+        if not isinstance(identifier, str) or identifier not in paths:
+            raise invalid_params("delivered file unavailable")
+        from ..services.attachment_store import OPENABLE
+        path, receipt = paths[identifier]
+        if receipt:
+            from ..background.tasks import TaskStore
+            if TaskStore(self._conn).artifact_path(*receipt) != path:
+                raise invalid_params("delivered file changed or unavailable")
+        if path.suffix.lower().lstrip(".") not in OPENABLE:
+            raise invalid_params("delivered file type cannot be opened")
+        return {"path": str(path)}
 
     def _member_id(self, params: dict) -> int:
         """The `id` of a member that is there (never Raphael's: he is not changed here)."""
@@ -921,12 +1001,39 @@ class MembersService:
         group = None if member.group_id is None else self.store.group(member.group_id)
         language = self._ui_language(params)
         offer = routine_template(group.sources if group else (), language)
-        if params.get("greet") is True:
-            self._history.add(session_id=f"greeting-{member.id}", question="", route="greeting", prefix="",
-                              text=GREETINGS[language].format(name=member.name), status="done", source="greeting",
-                              member_id=member.id)
+        if params.get("greet") is True and self.greeting is not None:
+            self.greeting(member.id, language)
         self._changed()
         return {"member": self.view_of(member), "routine_offer": offer}
+
+    async def _greet(self, params: dict) -> dict:
+        member_id = self._member_id(params)
+        owner = self._conn.execute(
+            "SELECT 1 FROM agent_turns WHERE member_id=? AND scope='private' AND trim(question)<>'' "
+            "AND source NOT IN ('greeting','member','routine','resumed') LIMIT 1", (member_id,),
+        ).fetchone()
+        running = self._conn.execute(
+            "SELECT 1 FROM agent_turns WHERE member_id=? AND source='greeting' AND status='running' LIMIT 1",
+            (member_id,),
+        ).fetchone()
+        if owner or running:
+            raise invalid_params("greeting requires a conversation without an owner message or running greeting")
+        failed = self._conn.execute(
+            "SELECT id FROM agent_turns WHERE member_id=? AND source='greeting' AND status='error'", (member_id,),
+        ).fetchall()
+        result = self.greeting(member_id, self._ui_language(params))
+        for row in failed:
+            self._history.delete(row['id'])
+            if self._notify is not None:
+                self._notify("agent.turn", {"turn_id": row['id'], "member_id": member_id})
+        return result
+
+    async def _member_template(self, params):
+        from .templates import handle
+        try:
+            return await handle(self, params)
+        except MemberError as error:
+            raise _rpc_error(error) from None
 
     async def set_my_job(self, member_id: int, arguments: dict) -> dict:
         """A new member saves the job its owner has just given it. Once only: after that the job is the owner's to edit."""
@@ -938,15 +1045,50 @@ class MembersService:
         saved = await self._update({"id": member_id, "role": arguments.get("role"), "instructions": arguments.get("instructions")})
         return {"role": saved["member"]["role"], "note": "Saved. The owner can see it in your details."}
 
+    def _updated_cover(self, member_id: int, params: dict):
+        cover = cover_selection(params["cover"]) if "cover" in params else None
+        if "cover_position" in params:
+            if "cover" in params:
+                raise RpcError(INVALID_PARAMS, "Invalid params: a cover picture is required", {"kind": "cover"})
+            cover = self._covers.reposition(member_id, params["cover_position"])
+        return cover
+
+    def _update_raphael(self, params: dict, *, profile_fields=("personality", "instructions")) -> dict:
+        from ..brain.settings import checked
+
+        preferences = {"tools": "raphael_tools", "notify": "raphael_notify", "draft_first": "raphael_draft_first"}
+        if set(params) - {"id", *profile_fields, *preferences, "cover", "cover_position"}:
+            raise RpcError(INVALID_PARAMS, "This field is not editable for the first Bot", {"kind": "raphael"})
+        cover = self._updated_cover(0, params)
+        values = {}
+        changes = {key: params[key] for key in profile_fields if key in params}
+        try:
+            if changes:
+                key, profile = checked("first_bot_profile", {**self.first_bot_profile(), **changes})
+                if profile.get("name") and any(member.name.casefold() == profile["name"].casefold() for member in self.store.members()):
+                    raise invalid_params("duplicate first Bot name")
+                values[key] = profile
+            for field, setting in preferences.items():
+                if field in params:
+                    key, value = checked(setting, params[field])
+                    values[key] = value
+        except (ValueError, TypeError):
+            raise invalid_params("invalid first Bot settings") from None
+        # SettingsStore.set would commit part of this batch prematurely.
+        with self.store.transaction():
+            for key, value in values.items():
+                self._conn.execute("INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                                   (key, json.dumps(value)))
+            if "cover" in params or "cover_position" in params:
+                self._save_cover(0, cover)
+        self._changed()
+        return {"member": self._raphael_view(self._language(), {}, set(), {})}
+
     async def _update(self, params: dict) -> dict:
-        if type(params.get("id")) is int and params["id"] == 0 and set(params) == {"id", "draft_first"}:
-            try:
-                self._settings.set("raphael_draft_first", params["draft_first"])
-            except (ValueError, TypeError):
-                raise invalid_params("draft_first must be a boolean") from None
-            self._changed()
-            return {"member": self._raphael_view(self._language(), {}, set(), {})}
+        if type(params.get("id")) is int and params["id"] == 0:
+            return self._update_raphael(params)
         member_id = self._member_id(params)
+        cover = self._updated_cover(member_id, params)
         fields = {
             name: params[name]
             for name in ("name", "role", "personality", "instructions", "group_id", "avatar", "tools", "model", "position", *PROFILE_FIELDS)
@@ -962,7 +1104,10 @@ class MembersService:
             fields["model"] = ""
         old = self.store.member(member_id)
         try:
-            member = self.store.update_member(member_id, **fields)
+            with self.store.transaction():
+                member = self.store.update_member(member_id, **fields)
+                if "cover" in params or "cover_position" in params:
+                    self._save_cover(member_id, cover)
         except MemberError as error:
             raise _rpc_error(error) from None
         if old is not None and "avatar" in fields and old.avatar != member.avatar:
@@ -981,27 +1126,34 @@ class MembersService:
             await self.remove_computer_data(member_id, params.get("computer_host"))
         member = self.store.member(member_id)
         assert member is not None
-        self._background.forget_member(member_id)
+        self.deleting.add(member_id)
         try:
-            self._history.clear_member(member_id)
-        except sqlite3.Error as exc:
-            logger.warning("Could not delete a member's conversation: %s", type(exc).__name__)
-        if self._memory is not None:
-            await self._memory.forget_member(member_id)
-        for skill in self.capabilities.skills(member_id):
-            self.capabilities.delete_skill(member_id, skill["id"])
-        # Uploaded avatars can be shared by a duplicated profile.
-        if not any(other.id != member_id and other.avatar == member.avatar for other in self.store.members()):
-            self._remove_picture(member.avatar)
-        deleted = self.store.delete_member(member_id)
-        if self._viewing == member_id:
-            self._viewing = None
-        if deleted:
-            await self.webhooks.sync()
-            self._changed()
-            self._changed("routines.changed", member_id)
-        logger.info("A member was deleted")
-        return {"deleted": deleted}
+            if self.remove_messaging is not None:
+                await self.remove_messaging(member_id)
+            self._background.forget_member(member_id)
+            try:
+                self._history.clear_member(member_id)
+            except sqlite3.Error as exc:
+                logger.warning("Could not delete a member's conversation: %s", type(exc).__name__)
+            if self._memory is not None:
+                await self._memory.forget_member(member_id)
+            for skill in self.capabilities.skills(member_id):
+                self.capabilities.delete_skill(member_id, skill["id"])
+            # Uploaded avatars can be shared by a duplicated profile.
+            if not any(other.id != member_id and other.avatar == member.avatar for other in self.store.members()):
+                self._remove_picture(member.avatar)
+            self._save_cover(member_id, None)
+            deleted = self.store.delete_member(member_id)
+            if self._viewing == member_id:
+                self._viewing = None
+            if deleted:
+                await self.webhooks.sync()
+                self._changed()
+                self._changed("routines.changed", member_id)
+            logger.info("A member was deleted")
+            return {"deleted": deleted}
+        finally:
+            self.deleting.discard(member_id)
 
     async def _set_primary(self, params: dict) -> dict:
         member_id = _whole(params, "id")
@@ -1014,21 +1166,75 @@ class MembersService:
             self._changed()
         return {"primary_id": member_id}
 
-    async def _set_avatar(self, params: dict) -> dict:
-        member_id = self._member_id(params)
-        name, mime, data = params.get("name"), params.get("mime"), params.get("data")
-        if not isinstance(name, str) or not isinstance(mime, str) or not isinstance(data, str):
-            raise invalid_params("name, mime and data must be strings")
-        if len(data) > (MAX_IMAGE_BYTES * 4) // 3 + 8:
-            raise RpcError(INVALID_PARAMS, "Invalid params: avatar (size)", {"kind": "size"})
+    def _save_cover(self, member_id, value):
         try:
-            raw = base64.b64decode(data, validate=True)
-            picture = checked(name, mime, raw, max_bytes=MAX_IMAGE_BYTES)
-        except (binascii.Error, ValueError) as error:
-            kind = error.kind if isinstance(error, AttachmentError) else "data"
-            raise RpcError(INVALID_PARAMS, f"Invalid params: avatar ({kind})", {"kind": kind}) from None
-        if not picture.is_image:
-            raise RpcError(INVALID_PARAMS, "Invalid params: avatar (type)", {"kind": "type"})
+            self._covers.save(member_id, value)
+        except OSError:
+            raise RpcError(INVALID_PARAMS, "Invalid params: cover (io)", {"kind": "io"}) from None
+
+    async def _picture_of(self, params: dict) -> dict:
+        """`members.picture {id, kind: "avatar" | "cover"}` -> `{rev, url}`: the picture as a data URL, with the
+        `avatar_rev` or `cover.rev` the roster names it by; both null when the member has none (any more)."""
+        member_id = _whole(params, "id")
+        kind = params.get("kind")
+        if kind not in ("avatar", "cover"):
+            raise invalid_params("kind must be avatar or cover")
+        member = self.store.member(member_id) if member_id else None
+        if member_id and member is None:
+            raise invalid_params("no such member")
+        if kind == "cover":
+            picture = self._covers.picture(member_id)
+        elif member is None:
+            found = self._raphael_picture()
+            picture = None if found is None else found[0]
+        else:
+            picture = self._avatar_picture(member.avatar)
+        return {"rev": None, "url": None} if picture is None else {"rev": picture.rev, "url": picture.url}
+
+    async def _set_cover(self, params: dict) -> dict:
+        member_id = _whole(params, 'id')
+        if member_id:
+            self._member_id(params)
+        picture = _uploaded_picture(params, 'cover')
+        stored = f"{member_id}-{secrets.token_hex(6)}.{_EXTENSIONS[picture.mime]}"
+        writing = asyncio.create_task(asyncio.to_thread(self._covers.stage, stored, picture.data))
+        try:
+            await asyncio.shield(writing)
+            if member_id:
+                self._member_id(params)
+            self._save_cover(member_id, {'kind': 'image', 'file': stored})
+        except BaseException as error:
+            if not writing.done():
+                try:
+                    await writing
+                except Exception:
+                    pass
+            self._covers.remove_image(stored)
+            if isinstance(error, OSError):
+                raise RpcError(INVALID_PARAMS, "Invalid params: cover (io)", {"kind": "io"}) from None
+            raise
+        self._changed()
+        return {'member': self.view_of(self.store.member(member_id)) if member_id else self._raphael_view(self._language(), {}, set(), {})}
+
+    async def _set_avatar(self, params: dict) -> dict:
+        member_id = _whole(params, "id")
+        if member_id:
+            self._member_id(params)
+        picture = _uploaded_picture(params, "avatar")
+        if member_id == 0:
+            def write_first_picture():
+                self._raphael_avatar.mkdir(parents=True, exist_ok=True)
+                for filename, content in (("picture", picture.data), ("picture.json", json.dumps({
+                        "mime": picture.mime, "crop": {"x": 0.5, "y": 0.5, "zoom": 1}}).encode("utf-8"))):
+                    pending = self._raphael_avatar / (filename + ".part")
+                    pending.write_bytes(content)
+                    pending.replace(self._raphael_avatar / filename)
+            try:
+                await asyncio.to_thread(write_first_picture)
+            except OSError:
+                raise invalid_params("avatar (io)") from None
+            self._changed()
+            return {"member": self._raphael_view(self._language(), {}, set(), {})}
         folder = self._avatars / MEMBERS_DIR
         stored = f"{member_id}-{secrets.token_hex(6)}.{_EXTENSIONS[picture.mime]}"
 
@@ -1189,7 +1395,7 @@ class MembersService:
             raise invalid_params("unknown routine tool")
         target = _whole(arguments, "member_id") if "member_id" in arguments else member_id
         if target != member_id:
-            raise invalid_params("Use primary-contact management tools in the owner's interactive chat for another member's routines")
+            raise invalid_params("Use member-management tools in the owner's interactive private chat for another member's routines")
         params = {**arguments, "member_id": target}
         if name in ("routine_update", "routine_delete"):
             routine_id = self._routine_id(params)
@@ -1202,23 +1408,24 @@ class MembersService:
         return result
 
     def admin_confirmation(self, name: str, arguments: dict, language: str, *, question: bool = True) -> str:
+        """The card of one change, in words: what it does, to what (by name), and the question. No ID and no JSON
+        (owner, 2026-11-11: 「不用這麼複雜」)."""
         from ..agent.team_admin import confirmation
         from ..management import resolve
+        from ..management_words import effect, question as asked
+        from ..ui_languages import fixed_language
 
+        language = fixed_language(language)
         action, values = resolve(name, arguments)
-        traditional = {"member_create", "member_update", "member_delete", "group_create", "group_rename",
-                       "member_skill_import", "member_command_save"}
-        if action is not None and name not in traditional:
-            labels = {"en": "Affected target", "zh-TW": "影響對象", "ja": "対象"}
-            target = self.management_target(name, arguments)
-            values = {key: value for key, value in values.items() if key != "data"}
-            if "data" in arguments:
-                values["image"] = arguments.get("name", "uploaded image")
-            heading = {"en": "Requested change", "zh-TW": "要求的變更", "ja": "変更内容"}[language]
-            scope = action.description if language == "en" else self.management_label(action.name, language)
-            return (f"{heading}: {scope}\n{labels[language]}: {target}\n"
-                    + json.dumps(values, ensure_ascii=False, indent=2)
-                    + ({"en": "\nAllow this change?", "zh-TW": "\n允許這項變更嗎？", "ja": "\nこの変更を許可しますか？"}[language] if question else ""))
+        if action is not None and name not in self.TRADITIONAL:
+            detail, notes = self.management_target(name, arguments, language)
+            lines = [effect(self.management_effect(action, values), language)]
+            if detail:
+                lines.append(detail)
+            lines += notes
+            if not action.destructive:
+                lines += self.readable_values(values, language)
+            return "\n".join(lines) + ("\n" + asked(language, several=False) if question else "")
 
         identifier = arguments.get("member_id", 0) if name.startswith("routine_") else arguments.get("member_id", arguments.get("id"))
         target = ""
@@ -1239,10 +1446,141 @@ class MembersService:
                          "blurb": current.blurb if current else "", "group": group.name if group else "", **arguments}
         text = confirmation(name, arguments, language, target, question=False)
         original_fields = {"id", "name", "role", "blurb", "personality", "instructions", "group", "avatar_preset", "source", "member_id", "description", "template"}
-        extra = {key: value for key, value in arguments.items() if key not in original_fields}
-        if extra:
-            text += "\n" + json.dumps(extra, ensure_ascii=False, indent=2)
-        return text + ({"en": "\nAllow this change?", "zh-TW": "\n允許這項變更嗎？", "ja": "\nこの変更を許可しますか？"}[language] if question else "")
+        text += "".join("\n" + line for line in self.readable_values({key: value for key, value in arguments.items() if key not in original_fields}, language))
+        return text + ("\n" + asked(language, several=False) if question else "")
+
+    #: Tools whose card lists the fields the owner approves (`confirmation`), not an effect and a target.
+    TRADITIONAL = frozenset({"member_create", "member_update", "member_delete", "group_create", "group_rename",
+                             "member_skill_import", "member_command_save"})
+
+    @staticmethod
+    def management_effect(action, values) -> str:
+        """The key of the words that say what a registry action does."""
+        if action.setting == "history_retention_days":
+            return "settings_history_retention_days"
+        if action.name == "manage_connection" and values.get("operation") != "disconnect":
+            return "manage_connection"
+        return action.name
+
+    def readable_values(self, values: dict, language: str) -> list[str]:
+        """The fields of a change that have words, one line each; what has none (flags, IDs, raw structures) is not shown."""
+        from ..agent.team_admin import confirmation
+        from ..management_words import joined, say
+
+        shown = {key: value for key, value in values.items() if isinstance(value, str) and value and key in (
+            "name", "role", "blurb", "personality", "instructions", "group", "avatar_preset", "source", "description", "template", "title", "prompt")}
+        lines = confirmation("-", shown, language, question=False).split("\n")[1:] if shown else []
+        extra = {"model": ("Model", "模型", "モデル"), "effort": ("Effort", "思考強度", "思考の強さ")}
+        for key, words in extra.items():
+            if isinstance(values.get(key), str) and values[key]:
+                lines.append(joined(say(language, *words), values[key], language))
+        if isinstance(values.get("tools"), list) and values["tools"]:
+            lines.append(joined(say(language, "Tools", "工具", "ツール"), "、".join(str(tool) for tool in values["tools"]) if language in ("zh-TW", "zh-CN", "ja") else ", ".join(str(tool) for tool in values["tools"]), language))
+        return lines
+
+    def admin_line(self, name: str, arguments: dict, language: str) -> str:
+        """One change as one line of a card that lists several: its effect, then its target by name."""
+        from ..agent.team_admin import title_of
+        from ..management import resolve
+        from ..management_words import effect, joined
+        from ..ui_languages import fixed_language
+
+        language = fixed_language(language)
+        action, values = resolve(name, arguments)
+        if action is None or name in self.TRADITIONAL:
+            identifier = arguments.get("member_id", arguments.get("id"))
+            target = self.name_of(identifier) if type(identifier) is int and name != "group_rename" else ""
+            if name == "group_rename" and type(identifier) is int:
+                group = self.store.group(identifier)
+                target = group.name if group else ""
+            if name.startswith("routine_"):  # the speaker's own routine, named by its title
+                routine = self.store.routine(arguments["id"]) if type(arguments.get("id")) is int else None
+                target = routine.title if routine else str(arguments.get("title", "")) if isinstance(arguments.get("title", ""), str) else ""
+            from ..management_words import quoted
+            return joined(title_of(name, language), quoted(target, language) if target else "", language)
+        detail, notes = self.management_target(name, arguments, language)
+        return joined(effect(self.management_effect(action, values), language), " ".join([detail, *notes]).strip(), language)
+
+    def admin_batch_confirmation(self, operations: list[dict], language: str, *, asker: str = "") -> str:
+        """One card for the changes asked for in one turn: a line each, one question. `asker` is the member that asks,
+        named on the first line of a card of several (one change is titled with the asker by the window)."""
+        from ..management_words import batch
+        from ..ui_languages import fixed_language
+
+        language = fixed_language(language)
+        if len(operations) == 1:
+            return self.admin_confirmation(operations[0]["name"], operations[0]["arguments"], language)
+        return batch([self.admin_line(op["name"], op["arguments"], language) for op in operations], language, asker=asker)
+
+    def management_target(self, name: str, arguments: dict, language: str) -> tuple[str, list[str]]:
+        """What a change is about, by name, resolved at card time: the quoted names, and the notes under them.
+        Nothing here is an ID, and nothing is in a language the owner did not choose."""
+        from ..management import resolve
+        from ..management_words import joined, listed, say
+
+        item, arguments = resolve(name, arguments)
+        name = item.name
+        identifier = arguments.get("room_id", arguments.get("member_id", arguments.get("id")))
+        routine = None
+        if item.rpc.startswith("routines."):
+            identifier = arguments.get("id")
+            routine = self.store.routine(identifier) if type(identifier) is int else None
+        names: list[str] = []
+        notes: list[str] = []
+        if item.rpc.startswith("members.") or name.startswith(("member_history", "member_routine", "member_skill", "member_command")):
+            member_id = (arguments.get("member_id", routine.member_id if routine else None)
+                         if item.rpc.startswith(("routines.", "members.skills", "members.commands")) or name.startswith("member_history")
+                         else arguments.get("member_id", arguments.get("id")))
+            who = self.name_of(member_id) if type(member_id) is int else None
+        else:
+            who = None
+        table = ("member_groups" if item.rpc.startswith("groups.") else "rooms" if item.rpc.startswith("rooms.")
+                 else "conversations" if item.rpc.startswith("conversations.") else "routines" if item.rpc.startswith("routines.") else None)
+        if table and type(identifier) is int:
+            # Table names are fixed above, never model input.
+            record = self._conn.execute(f"SELECT * FROM {table} WHERE id=?", (identifier,)).fetchone()
+            if record:
+                data = dict(record)
+                label = str(data.get("name", data.get("title", "")))
+                if label:
+                    names.append(label)
+        if name in ("member_skill_delete", "member_command_delete"):
+            member = arguments.get("member_id", 0)
+            try:
+                resources = (self.capabilities.skills(-1 if arguments.get("shared") else member)
+                             if name == "member_skill_delete" else self.capabilities.commands(member))
+            except MemberError:
+                resources = []
+            names += [str(entry["name"]) for entry in resources if entry["id"] == arguments.get("id")]
+        if name == "member_history_delete":
+            turn = self._history.get(arguments.get("turn_id"))
+            if turn is not None and turn.question:
+                names.append(turn.question)
+        if name == "room_members":
+            previous = [row[0] for row in self._conn.execute("SELECT member_id FROM room_members WHERE room_id=?", (identifier,))]
+            removed = sorted(set(previous) - set(arguments.get("member_ids", [])))
+            if removed:
+                notes.append(joined(say(language, "Removed members", "移除的成員", "外すメンバー"),
+                                    listed([self.name_of(member) or "" for member in removed if self.name_of(member)], language), language))
+        if name == "dictionary_delete":
+            record = self._conn.execute("SELECT word FROM dictionary WHERE id=?", (identifier,)).fetchone()
+            if record:
+                names.append(record[0])
+        if who and name not in ("member_primary",) or name == "member_primary" and who:
+            names.append(who)
+        if item.setting == "history_retention_days":
+            def span(days) -> str:
+                return say(language, "forever", "永久保留", "無期限") if days is None or days < 0 else say(language, "{days} days", "{days} 天", "{days} 日").format(days=days)
+            return f"{span(self._settings.get(item.setting))} → {span(arguments.get('value'))}", notes
+        value = arguments.get("value")
+        if item.setting and isinstance(value, (str, int)) and not isinstance(value, bool) and str(value).strip():
+            return listed([str(value).strip()[:120]], language), notes  # the new value of a setting, as the owner reads it
+        if item.rpc in ("integrations.disconnect", "connectors.disconnect") or name == "manage_connection":
+            connection = arguments.get("id", arguments.get("connection"))
+            names = [str(next((entry.get("name", connection) for entry in self._connections() if entry.get("id") == connection), connection))]
+        if name == "member_history_clear" and who:
+            names = [who]
+        return listed(names, language) if names else "", notes
 
     async def admin_drafts(self, operations: list[dict]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
         """Build structured member and group drafts for a pending team administration batch."""
@@ -1396,7 +1734,7 @@ class MembersService:
         """Apply the approved list atomically and publish only committed roster changes."""
         from ..agent.team_admin import BATCH_TOOLS
 
-        if not interactive or not self.store.is_chief(member_id) or not operations or any(op["name"] not in BATCH_TOOLS for op in operations):
+        if not interactive or not self.store.exists(member_id) or not operations or any(op["name"] not in BATCH_TOOLS for op in operations):
             raise invalid_params("invalid team administration batch")
         planned = self.plan_admin_batch(operations, drafts=drafts, groups=groups)
         allowed_targets = {op["arguments"].get("id") for op in operations if op["name"] == "member_update"}
@@ -1408,137 +1746,55 @@ class MembersService:
             raise invalid_params("edited drafts exceed the proposed scope")
         if not planned:
             return []
-        notifications, pictures = [], []
-        notify, remove_picture = self._notify, self._remove_picture
+        notifications, pictures, greetings = [], [], []
+        notify, remove_picture, greeting = self._notify, self._remove_picture, self.greeting
         self._notify = lambda method, data: notifications.append((method, data))
         self._remove_picture = pictures.append
+        self.greeting = (lambda identifier, language: greetings.append((identifier, language))) if greeting is not None else None
         try:
             with self.store.transaction():
                 results = [await self.admin_tool(member_id, "member_create" if op["name"] == "create_member" else op["name"], op["arguments"], interactive=True)
                            for op in planned]
         finally:
-            self._notify, self._remove_picture = notify, remove_picture
+            self._notify, self._remove_picture, self.greeting = notify, remove_picture, greeting
         for picture in pictures:
             remove_picture(picture)
         if notify is not None:
             for method, data in notifications:
                 notify(method, data)
+        if greeting is not None:
+            for identifier, language in greetings:
+                greeting(identifier, language)
         return results
-
-    @staticmethod
-    def management_label(name, language):
-        labels = {
-            "member_primary": ("移轉主要聯絡人與管理權", "主担当と管理権限を移動"),
-            "member_history_clear": ("清除此成員的全部對話紀錄", "メンバーの全会話履歴を消去"),
-            "member_history_delete": ("刪除此則對話紀錄", "会話記録を削除"),
-            "group_delete": ("刪除資料夾；成員保留並移至未分類", "フォルダーを削除しメンバーは保持"),
-            "room_members": ("替換群聊成員；移除下列成員", "グループのメンバーを置換"),
-            "room_delete": ("刪除群聊及全部訊息", "グループと全メッセージを削除"),
-            "conversation_delete": ("刪除對話及全部紀錄", "会話と全記録を削除"),
-            "conversation_clear": ("清除此對話的全部紀錄", "会話の全記録を消去"),
-            "member_skill_delete": ("刪除技能套件與授權", "スキルと権限を削除"),
-            "member_skill_undo": ("???????????????", "???????????????????"),
-            "member_command_delete": ("刪除成員指令", "コマンドを削除"),
-            "member_routine_delete": ("刪除例行任務及排程", "定期タスクと予定を削除"),
-            "connection_disconnect": ("中斷連線並撤銷認證", "接続と認証を解除"),
-            "connector_disconnect": ("中斷應用程式連線並撤銷認證", "アプリ接続と認証を解除"),
-            "manage_connection": ("變更連線；中斷連線會撤銷認證", "接続を変更・認証を解除"),
-            "dictionary_delete": ("刪除字典詞彙", "辞書の単語を削除"),
-            "dictation_delete": ("刪除此則聽寫紀錄", "音声入力記録を削除"),
-            "dictation_clear": ("刪除全部聽寫紀錄", "音声入力の全記録を削除"),
-            "memory_clear": ("清除記憶文件", "メモリ文書を消去"),
-            "memory_summary_clear": ("清除對話摘要", "会話の要約を消去"),
-            "settings_history_retention_days": ("變更保留天數；較舊紀錄會被永久刪除", "保持期間を変更・古い記録を完全削除"),
-        }
-        return labels.get(name, ("套用下列管理變更", "次の管理変更を適用"))[0 if language == "zh-TW" else 1]
-
-    def management_target(self, name: str, arguments: dict) -> str:
-        """Resolve the target at card time; retain exact IDs and all removal scope."""
-        from ..management import resolve
-
-        item, arguments = resolve(name, arguments)
-        name = item.name
-        identifier = arguments.get("room_id", arguments.get("member_id", arguments.get("id")))
-        routine = None
-        if item.rpc.startswith("routines."):
-            identifier = arguments.get("id")
-            routine = self.store.routine(identifier) if type(identifier) is int else None
-        target = (f"ID {identifier}" if identifier is not None else
-                  str(arguments.get("name", arguments.get("title", "all relevant records"))))
-        if item.rpc.startswith("members.") or name.startswith(("member_history", "member_routine")):
-            member_id = (arguments.get("member_id", routine.member_id if routine else None)
-                         if item.rpc.startswith("routines.") else arguments.get("member_id", arguments.get("id")))
-            if type(member_id) is int:
-                target += f" / {self.name_of(member_id)}"
-        table = ("member_groups" if item.rpc.startswith("groups.") else "rooms" if item.rpc.startswith("rooms.")
-                 else "conversations" if item.rpc.startswith("conversations.") else "routines" if item.rpc.startswith("routines.") else None)
-        if table and type(identifier) is int:
-            # Table names are fixed above, never model input.
-            record = self._conn.execute(f"SELECT * FROM {table} WHERE id=?", (identifier,)).fetchone()
-            if record:
-                data = dict(record)
-                target += " / " + str(data.get("name", data.get("title", "")))
-        if name == "member_delete":
-            target += " / conversations, memory, routines, skills, commands and resources"
-        if name == "member_history_delete":
-            turn = self._history.get(arguments.get("turn_id"))
-            target += f" / turn {arguments.get('turn_id')}"
-            if turn is not None:
-                target += " / " + turn.question
-        if name == "member_primary":
-            target += f" / authority moves from {self.name_of(self.primary_id())}"
-        if name == "group_delete":
-            target += " / folder only; members remain ungrouped"
-        if name == "room_delete":
-            target += " / all room messages and room state"
-        if name == "room_members":
-            previous = [row[0] for row in self._conn.execute("SELECT member_id FROM room_members WHERE room_id=?", (identifier,))]
-            removed = sorted(set(previous) - set(arguments.get("member_ids", [])))
-            target += " / removed: " + ", ".join(f"{i} ({self.name_of(i)})" for i in removed)
-        if name == "dictionary_delete":
-            record = self._conn.execute("SELECT word FROM dictionary WHERE id=?", (identifier,)).fetchone()
-            if record:
-                target += " / " + record[0]
-        if name in ("member_skill_delete", "member_command_delete"):
-            member = arguments.get("member_id", 0)
-            try:
-                resources = (self.capabilities.skills(-1 if arguments.get("shared") else member)
-                             if name == "member_skill_delete" else self.capabilities.commands(member))
-            except MemberError:
-                resources = []
-            target += f" / {self.name_of(member)} / " + ", ".join(item["name"] for item in resources if item["id"] == arguments.get("id"))
-        if name == "member_skill_undo":
-            target += " / restore the last skill snapshot, replacing its current documents"
-        if item.setting:
-            target = f"{item.setting}: {self._settings.get(item.setting)} -> {arguments.get('value')}"
-        if item.rpc in ("integrations.disconnect", "connectors.disconnect") or name == "manage_connection":
-            connection = arguments.get("id", arguments.get("connection"))
-            label = next((entry.get("name", connection) for entry in self._connections() if entry.get("id") == connection), connection)
-            target = f"{label} (ID {connection}) / connection and stored authorization"
-        return target
 
     def authorize_management(self, member_id, name, arguments, *, interactive=False, approval=None):
         """Recheck live authority and the consumed exact-action gate token before a write."""
-        from ..agent.team_admin import DEFINITIONS
-        from ..management import REGISTRY, destructive
+        from ..agent.team_admin import DEFINITIONS, TEAM_READS
+        from ..management import REGISTRY, destructive, BACKGROUND_MEMBER_TOOLS, BACKGROUND_READS, background_actor, background_requires_approval
         from ..agent.policy import Approval, action_digest
 
         if not self.store.exists(member_id) or name not in DEFINITIONS and name not in REGISTRY:
             raise invalid_params("unknown team administration tool")
-        if name != "team_overview" and (not self.store.is_chief(member_id) or not interactive):
-            raise invalid_params("Only the current primary contact can manage the team in the owner's interactive private chat")
+        background = background_actor() == member_id and (name in BACKGROUND_MEMBER_TOOLS or name in BACKGROUND_READS)
+        # A routine's run of the member reads the team's work as the member does in the owner's private chat.
+        if name == "team_work" and not interactive and background_actor() != member_id:
+            raise invalid_params("team_work is only available in the owner's private chat")
+        if name not in TEAM_READS and not (background or interactive):
+            raise invalid_params("Team management requires the owner's interactive private chat or an approved background member action")
         schema = DEFINITIONS[name]["parameters"] if name in DEFINITIONS else REGISTRY[name].schema
         if (set(arguments) - set(schema["properties"]) or
                 any(field not in arguments for field in schema["required"])):
             raise invalid_params("invalid team administration fields")
-        if name != "team_overview":
+        if name not in TEAM_READS:
             from ..management import validate, resolve
             validate(arguments, schema)
             item, values = resolve(name, arguments)
             validate(values, item.schema)
-            if destructive(name, arguments, self._settings.get("history_retention_days")):
+            if destructive(name, arguments, self._settings.get("history_retention_days")) or background_requires_approval(name, arguments):
+                # The legacy alias names the same exact creation, never a broader permission.
+                aliases = (name, "create_member") if name == "member_create" else (name,)
                 if (not isinstance(approval, Approval) or not approval.spent
-                        or approval.digest != action_digest(name, arguments)):
+                        or approval.digest not in {action_digest(alias, arguments) for alias in aliases}):
                     raise invalid_params("This destructive change requires the owner's approval for this exact action")
                 used = getattr(self, "_management_approvals", set())
                 if approval.pending_id in used:
@@ -1550,27 +1806,50 @@ class MembersService:
         """Run the same services as the UI after live authorization."""
         from ..management import REGISTRY, resolve
         self.authorize_management(member_id, name, arguments, interactive=interactive, approval=approval)
+        if name == "team_work":
+            from zoneinfo import ZoneInfo
+            from .team_work import read
+
+            if "member_id" in arguments and type(arguments["member_id"]) is not int:
+                raise invalid_params("member_id must identify an existing member")
+            # The owner's own time zone (General), else the device's, as routines read their times.
+            zone_name = self._settings.get("routine_timezone") or self._settings.get("routine_detected_timezone")
+            zone = ZoneInfo(zone_name) if zone_name else self._tz
+            return read(self._conn, await self._list({}), zone, self._now_ms(),
+                        arguments.get("member_id"), arguments.get("days", 14))
         if name == "team_overview":
             from ..computer.grants import ComputerGrants
             roster = await self._list({})
+            detail_id = arguments.get('member_id')
+            if 'member_id' in arguments and (type(detail_id) is not int or not any(item['id'] == detail_id for item in roster['members'])):
+                raise invalid_params('member_id must identify an existing member')
             groups = {group["id"]: group["name"] for group in roster["groups"]}
             members = []
             for item in roster["members"]:
                 identifier = item["id"]
+                if detail_id is not None and identifier != detail_id:
+                    continue
                 speaker = self.speaker(identifier)
                 model = speaker.model or self._starting_model()
+                routines = (await self._routines_list({"member_id": identifier}))["routines"]
+                counts = {"skills_count": len(self.capabilities.skills(identifier)),
+                          "commands_count": len(self.capabilities.commands(identifier)) if identifier else 0,
+                          "routines_count": len(routines)}
+                if detail_id is None:
+                    members.append({"id":identifier, "name":item['name'], "role":item['role'][:160], "model":model,
+                                    "group":groups.get(item['group_id']), **counts})
+                    continue
                 capabilities = getattr(self._background, "capabilities_for", lambda speaker: {"tools": [], "brain": {"model": model}})(speaker)
                 members.append({**{field: item[field] for field in ("id", "name", "role", "blurb")},
                                 **capabilities,
                                 "computer": {"allowed": ComputerGrants(self._conn).allowed(identifier),
                                              "local_commands": self._settings.get("local_commands_mode")},
                                 "group": groups.get(item["group_id"]),
-                                "skills_count": len(self.capabilities.skills(identifier)),
-                                "commands_count": len(self.capabilities.commands(identifier)) if identifier else 0,
-                                "routines": (await self._routines_list({"member_id": identifier}))["routines"]})
+                                **counts, "model":model, "routines": routines})
             rooms = getattr(self, "rooms", None)
             return {"members": members, "groups": roster["groups"], "primary_id": roster["team_context"]["primary_id"],
-                    "rooms": rooms.member_rooms(member_id)["rooms"] if rooms else []}
+                    "rooms": rooms.member_rooms(member_id)["rooms"] if rooms else [],
+                    "detail": "Call team_overview with member_id for one member's full details."}
         if name in ("member_create", "member_update"):
             params = dict(arguments)
             if "effort" in params:
@@ -1581,31 +1860,19 @@ class MembersService:
             if name == "member_update" and params.get("id") == 0:
                 from ..brain.settings import checked
 
-                changes = {key: value for key, value in params.items() if key in ("name", "role", "personality", "instructions")}
-                preferences = {"draft_first": "raphael_draft_first", "model": "agent_model", "pinned": "chief_pinned",
-                               "read_aloud": "tts_enabled", "voice": "tts_fish_voice"}
+                preferences = {"model": "agent_model", "pinned": "chief_pinned"}
                 # Profile drafts include these empty fields for ordinary members.
                 for field in ("blurb", "group", "avatar_preset"):
                     if params.get(field) == "":
                         params.pop(field)
-                if set(params) - {"id", "name", "role", "personality", "instructions", *preferences}:
+                if set(params) - {"id", "name", "role", "personality", "instructions", "cover", "cover_position", "tools", "notify", "draft_first", *preferences}:
                     raise invalid_params("This field is not editable for the first Bot")
                 # Validate the whole request before any profile/preference write.
                 for field, setting in preferences.items():
                     if field in params:
                         checked(setting, params[field])
-                profile = {"name": RAPHAEL_NAMES[self._language()], **self.first_bot_profile(), **changes}
-                try:
-                    key, profile = checked("first_bot_profile", profile)
-                except (ValueError, TypeError):
-                    raise invalid_params("invalid first Bot profile") from None
-                if any(member.name.casefold() == profile["name"].casefold() for member in self.store.members()):
-                    raise invalid_params("duplicate first Bot name")
-                # Join the batch transaction: SettingsStore.set would commit it prematurely.
-                with self.store.transaction():
-                    self._conn.execute("INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
-                                       (key, json.dumps(profile)))
-                self._changed()
+                self._update_raphael({key: value for key, value in params.items() if key not in preferences},
+                                     profile_fields=("name", "role", "personality", "instructions"))
                 for field, setting in preferences.items():
                     if field in params:
                         await self._management_rpc("settings.set", {"key": setting, "value": params[field]})
@@ -1628,7 +1895,7 @@ class MembersService:
                     created_group = (await self._group_create({"name": group_name}))["group"]
                 params["group_id"] = group.id if group else created_group["id"] if created_group else None
             try:
-                result = await (self._create(params) if name == "member_create" else self._update(params))
+                result = await (self._create({**params, "greet": True}) if name == "member_create" else self._update(params))
                 if name == "member_create":
                     self.member_made(member_id, result["member"]["id"])
                 return result
@@ -1653,7 +1920,12 @@ class MembersService:
         member_id = self._routine_member(params) if "member_id" in params else None
         from .event_catalog import available_events, connected_apps, pick_event
         connections = self._connections()
-        result = {"routines": [routine_view(r) for r in self.store.routines(member_id)], "events": available_events(connections, self._language()),
+        routines = self.store.routines(member_id)
+        # `last_failed` stands only on a routine whose latest ended run did not work: its view says so beside the reason (`last_error`).
+        failed = {row[0] for row in self._conn.execute(
+            "SELECT routine_id FROM routine_runs r WHERE finished IS NOT NULL AND status IN ('error','expired') AND id="
+            "(SELECT MAX(id) FROM routine_runs x WHERE x.routine_id=r.routine_id AND x.finished IS NOT NULL)")}
+        result = {"routines": [{**routine_view(r), **({"last_failed": True} if r.id in failed else {})} for r in routines], "events": available_events(connections, self._language()),
                   "event_apps": [c.get("name", c["id"]) for c in connected_apps(connections)]}
         if "event" in params:
             result.update(await pick_event(self, self._routine_member(params), params["event"], params.get("value", ""), params.get("contains", "")))
@@ -1666,7 +1938,11 @@ class MembersService:
             raise invalid_params("This routine is not a webhook")
         if type(params.get("reveal", False)) is not bool:
             raise invalid_params("reveal must be a boolean")
-        return await self.webhooks.details(routine.id, reveal=params.get("reveal", False))
+        if "url" in params:
+            return await self.webhooks.test_external(routine.id, params["url"])
+        if type(params.get("rotate", False)) is not bool:
+            raise invalid_params("rotate must be a boolean")
+        return await self.webhooks.details(routine.id, reveal=params.get("reveal", False), rotate=params.get("rotate", False))
 
     def _finish_run(self, turn_id: int) -> None:
         run = self._conn.execute(
@@ -1682,6 +1958,10 @@ class MembersService:
                 "UPDATE routine_runs SET finished = ?, status = ?, summary = ?, cost = ? WHERE id = ?",
                 (self._now_ms(), turn.status, _line(turn.text or turn.detail or ""), turn.cost_usd, run["id"]),
             )
+            if turn.status in ("error", "expired"):
+                # The routine says its last run did not work, and why in a sentence: its view shows it (owner, 2026-11-11).
+                self._conn.execute("UPDATE routines SET last_error=? WHERE id=?",
+                                   (_line((turn.text or turn.detail or "").strip().split("\n\n")[0]), run["routine_id"]))
         routine = self.store.routine(run["routine_id"])
         if routine is not None:
             self._changed("routines.changed", routine.member_id)
@@ -1689,7 +1969,7 @@ class MembersService:
     async def _routine_run(self, params: dict) -> dict:
         routine = self.store.routine(self._routine_id(params))
         if self.routine_busy(routine.id):
-            words = {"zh-TW": "這個例行任務仍在執行，請等候完成。", "ja": "このルーティンは実行中です。完了をお待ちください。", "en": "This routine is still running. Wait for it to finish."}
+            words = with_ui_words({"zh-TW": "這個例行任務仍在執行，請等候完成。", "ja": "このルーティンは実行中です。完了をお待ちください。", "en": "This routine is still running. Wait for it to finish."})
             return {"status": "refused", "reason": words.get(self._language(), words["en"])}
         before = self._conn.execute("SELECT COALESCE(MAX(id),0) FROM routine_runs").fetchone()[0]
         self._run(routine, test_run=True)
@@ -1723,8 +2003,20 @@ class MembersService:
         app = when.get("app") if isinstance(when, dict) else None
         return next((c.get("name", app) for c in self._connections() if c["id"] == app), app or "")
 
+    def _check_routine_tools(self, member_id: int, prompt: object) -> None:
+        """A routine's instructions name only tools its run has (`routine_tools`): a name that it will not have is
+        refused to the model, with the tools that exist, when the instructions are written."""
+        names = getattr(self._background, "routine_tool_names", None)
+        available = names(member_id) if names is not None and isinstance(prompt, str) else None
+        if available is None:
+            return
+        from .routine_tools import refusal, unknown_in
+        if unknown := unknown_in(prompt, available):
+            raise invalid_params(refusal(unknown, available))
+
     async def _routine_create(self, params: dict) -> dict:
         member_id = self._routine_member(params)
+        self._check_routine_tools(member_id, params.get("prompt"))
         if params.get("schedule") is not None and params.get("when") is not None:
             raise invalid_params("Choose either a schedule or when")
         params = {**params, "schedule": self._saved_schedule(params.get("schedule"))}
@@ -1749,6 +2041,7 @@ class MembersService:
     async def _routine_update(self, params: dict) -> dict:
         routine_id = self._routine_id(params)
         existing = self.store.routine(routine_id)
+        self._check_routine_tools(existing.member_id, params.get("prompt"))
         params = {**params, "schedule": self._saved_schedule(params.get("schedule"), existing)}
         was_webhook = existing.when == {"webhook": True}
         try:
@@ -1801,6 +2094,17 @@ class MembersService:
                 await self._events.poll()
             except Exception as exc:
                 logger.warning("The event routines could not be checked: %s", type(exc).__name__)
+
+    def start_ingress(self) -> None:
+        """Listen for signed webhook deliveries without starting scheduled or model work."""
+        if self._ingress_start is None:
+            self._ingress_start = asyncio.get_running_loop().create_task(self._start_ingress())
+
+    async def _start_ingress(self) -> None:
+        try:
+            await self.webhooks.sync()
+        except Exception as exc:
+            logger.warning("The webhook receiver could not be started: %s", type(exc).__name__)
 
     def start(self) -> None:
         """Tick from now on, every TICK_S, the first time at once (a routine that was missed while
@@ -1861,11 +2165,11 @@ class MembersService:
         return ran
 
     def _guard_reason(self, kind: str) -> str:
-        messages = {
+        messages = with_ui_words({
             "zh-TW": {"absence": "已暫停：擁有者超過 30 天未使用。請確認後重新開啟。", "member": "此成員最近一小時已執行 200 次，稍後自動重試。", "total": "團隊最近一小時已執行 300 次，稍後自動重試。"},
             "ja": {"absence": "30 日間利用がないため停止しました。確認して再開してください。", "member": "このメンバーは過去 1 時間に 200 回実行しました。後で再試行します。", "total": "チームは過去 1 時間に 300 回実行しました。後で再試行します。"},
             "en": {"absence": "Paused after 30 days without owner activity. Review and enable to resume.", "member": "This member reached 200 runs in the last hour. Retrying later.", "total": "The team reached 300 runs in the last hour. Retrying later."},
-        }
+        })
         return messages.get(self._language(), messages["en"])[kind]
 
     def pause_absent_routines(self) -> None:
@@ -1961,9 +2265,10 @@ class MembersService:
         return task_id
 
     async def aclose(self) -> None:
-        for task in self._speech_tasks:
-            task.cancel()
-        await asyncio.gather(*self._speech_tasks, return_exceptions=True)
+        ingress, self._ingress_start = self._ingress_start, None
+        if ingress is not None:
+            ingress.cancel()
+            await asyncio.gather(ingress, return_exceptions=True)
         ticking, self._ticking = self._ticking, None
         if ticking is not None and not ticking.done():
             ticking.cancel()

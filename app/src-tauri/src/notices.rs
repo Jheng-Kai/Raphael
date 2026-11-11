@@ -15,11 +15,13 @@
 use std::sync::{Arc, Mutex};
 
 use crate::rpc::lock;
+#[path = "notice_words.rs"]
+mod notice_words;
 
 /// The interface language of the device settings that Raphael's notices and answers follow.
 pub const DEFAULT_LANGUAGE: &str = "zh-TW";
 
-/// The interface language (`ui_language` of the device settings): `"zh-TW"`, `"en"` or `"ja"`. The
+/// The interface language (`ui_language` of the device settings), one of fifteen supported locales. The
 /// device settings write it (at start, and when the person changes it) and the controller reads it
 /// each time it has something to say. Clones share the value.
 #[derive(Clone, Debug)]
@@ -41,7 +43,7 @@ impl LanguageCell {
     }
 }
 
-/// One notice, in Traditional Chinese (Taiwan), English and Japanese.
+/// Source notice copy, extended by the fixed catalog for the additional interface locales.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Notice {
     pub zh: &'static str,
@@ -50,13 +52,13 @@ pub struct Notice {
 }
 
 impl Notice {
-    /// The text for `language` (`"zh-TW"`, `"en"` or `"ja"`). A language the notices do not have
-    /// gets the Traditional Chinese one, like an interface language that was never chosen.
+    /// Every supported locale has fixed copy; unknown locales use English.
     pub fn text(&self, language: &str) -> &'static str {
         match language {
+            "zh-TW" => self.zh,
             "en" => self.en,
             "ja" => self.ja,
-            _ => self.zh,
+            _ => notice_words::text(self.en, language).unwrap_or(self.en),
         }
     }
 }
@@ -195,7 +197,7 @@ pub const GREETING: Notice = Notice {
 };
 
 /// Words learned from the user's corrections after a paste, in one notice, in `language`:
-/// 《了。「手機」、「Typeless」已加入詞典。》, `《Understood. “Typeless” added to the dictionary.》`
+/// 《了。「手機」、「Wordnote」已加入詞典。》, `《Understood. “Wordnote” added to the dictionary.》`
 /// or 《了。「手機」を辞書に追加しました。》.
 pub fn learned(words: &[String], language: &str) -> String {
     let quoted = |open: &str, close: &str, separator: &str| {
@@ -205,13 +207,24 @@ pub fn learned(words: &[String], language: &str) -> String {
             .collect::<Vec<_>>()
             .join(separator)
     };
+    if let Some(template) = notice_words::learned(language) {
+        let (open, close) = match language {
+            "de" => ("„", "“"),
+            "fr" => ("« ", " »"),
+            "es" | "it" | "ru" => ("«", "»"),
+            "ko" => ("‘", "’"),
+            _ => ("“", "”"),
+        };
+        return template.replace("{words}", &quoted(open, close, ", "));
+    }
     match language {
         "en" => format!(
             "《Understood. {} added to the dictionary.》",
             quoted("\u{201c}", "\u{201d}", ", ")
         ),
         "ja" => format!("《了。{}を辞書に追加しました。》", quoted("「", "」", "、")),
-        _ => format!("《了。{}已加入詞典。》", quoted("「", "」", "、")),
+        "zh-TW" => format!("《了。{}已加入詞典。》", quoted("「", "」", "、")),
+        _ => learned(words, "en"),
     }
 }
 
@@ -285,26 +298,26 @@ mod tests {
             learned(&one, "en"),
             "《Understood. \u{201c}手機\u{201d} added to the dictionary.》"
         );
-        let two = ["手機".to_owned(), "Typeless".to_owned()];
+        let two = ["手機".to_owned(), "Wordnote".to_owned()];
         assert_eq!(
             learned(&two, "zh-TW"),
-            "《了。「手機」、「Typeless」已加入詞典。》"
+            "《了。「手機」、「Wordnote」已加入詞典。》"
         );
         assert_eq!(
             learned(&two, "ja"),
-            "《了。「手機」、「Typeless」を辞書に追加しました。》"
+            "《了。「手機」、「Wordnote」を辞書に追加しました。》"
         );
         assert_eq!(
             learned(&two, "en"),
-            "《Understood. \u{201c}手機\u{201d}, \u{201c}Typeless\u{201d} added to the dictionary.》"
+            "《Understood. \u{201c}手機\u{201d}, \u{201c}Wordnote\u{201d} added to the dictionary.》"
         );
     }
 
     #[test]
-    fn the_learned_notice_in_an_unknown_language_is_chinese() {
+    fn the_learned_notice_in_an_unknown_language_is_english() {
         let words = ["手機".to_owned()];
-        for language in ["", "fr", "zh-CN", "EN"] {
-            assert_eq!(learned(&words, language), learned(&words, "zh-TW"));
+        for language in ["", "unknown", "EN"] {
+            assert_eq!(learned(&words, language), learned(&words, "en"));
         }
     }
 
@@ -314,10 +327,37 @@ mod tests {
             assert_eq!(notice.text("zh-TW"), notice.zh);
             assert_eq!(notice.text("en"), notice.en);
             assert_eq!(notice.text("ja"), notice.ja);
-            // A language nobody chose is the default one, never a pair.
-            for other in ["", "fr", "zh-CN", "EN", "zh"] {
-                assert_eq!(notice.text(other), notice.zh, "{other:?}");
+            // A language nobody chose uses English, never a pair.
+            for other in ["", "unknown", "EN", "zh"] {
+                assert_eq!(notice.text(other), notice.en, "{other:?}");
             }
+        }
+    }
+
+    #[test]
+    fn every_new_locale_has_translated_native_notices_and_learned_words() {
+        for language in [
+            "zh-CN", "ko", "es", "fr", "de", "pt-BR", "it", "ru", "vi", "th", "id", "tr",
+        ] {
+            for notice in ALL
+                .iter()
+                .chain([&CLOUD_STT_MISSING, &LOCAL_MODEL_MISSING, &REMEMBERED])
+            {
+                let text = notice.text(language);
+                assert_ne!(text, notice.en, "{language}: {}", notice.en);
+                assert!(
+                    text.starts_with('《') && text.ends_with('》'),
+                    "{language}: {text}"
+                );
+                assert!(!text.contains(['!', '！', '?', '？']), "{language}: {text}");
+            }
+            let words = ["Test".to_owned(), "Example".to_owned()];
+            let text = learned(&words, language);
+            assert!(
+                text.contains("Test") && text.contains("Example"),
+                "{language}: {text}"
+            );
+            assert_ne!(text, learned(&words, "en"), "{language}");
         }
     }
 
@@ -424,7 +464,8 @@ mod tests {
         assert_eq!(REMEMBERED.text("zh-TW"), "《了。已記下。》");
         assert_eq!(REMEMBERED.text("en"), "《Understood. Noted.》");
         assert_eq!(REMEMBERED.text("ja"), "《了。記憶しました。》");
-        assert_eq!(REMEMBERED.text("fr"), REMEMBERED.zh);
+        assert_eq!(REMEMBERED.text("fr"), "《Compris. Noté.》");
+        assert_eq!(REMEMBERED.text("unknown"), REMEMBERED.en);
         assert!(!has_kana(REMEMBERED.zh) && has_kana(REMEMBERED.ja));
         for line in [REMEMBERED.zh, REMEMBERED.en, REMEMBERED.ja] {
             assert!(

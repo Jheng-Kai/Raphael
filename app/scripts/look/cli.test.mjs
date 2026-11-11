@@ -3,6 +3,8 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { parseOptions } from "./options.mjs";
 import { scenes } from "./scenes/index.mjs";
+import { readFileSync } from "node:fs";
+import { UI_LOCALES } from "./locales.mjs";
 
 const app = resolve(import.meta.dirname, "../..");
 const look = (...args) => spawnSync(process.execPath, ["scripts/look/index.mjs", ...args], { cwd: app, encoding: "utf8" });
@@ -34,12 +36,20 @@ describe("look CLI", () => {
     for (const scene of ["chat", "details", "automations-calendar", "connections", "dictation-history", "composer-learn", "member-composer-learn", "room-composer-learn"])
       expect(result.stdout).toMatch(new RegExp(`^${scene}\\s`, "m"));
   });
-  it.each([["unknown-scene"], ["chat", "--width", "0"], ["chat", "--width", "1920x100"], ["--all", "--theme", "sepia"], ["chat", "--locale", "fr"], ["chat", "--out"], ["chat", "--typo"]])("rejects invalid arguments before browser startup: %j", (...args) => {
+  it.each([["unknown-scene"], ["chat", "--width", "0"], ["chat", "--width", "1920x100"], ["--all", "--theme", "sepia"], ["chat", "--locale", "ar"], ["chat", "--out"], ["chat", "--typo"]])("rejects invalid arguments before browser startup: %j", (...args) => {
     const result = look(...args);
     expect(result.status).toBe(1);
     expect(result.stderr).toMatch(/Invalid|Unknown|Missing/);
     expect(result.stderr).not.toContain("not implemented");
   });
+});
+
+it("visual and native locale lists match every selectable app locale", () => {
+  const source = readFileSync(resolve(app, "src/main/i18n/index.ts"), "utf8");
+  const ids = [...source.matchAll(/\{ id: "([^"]+)"/g)].map(match => match[1]);
+  expect(UI_LOCALES).toEqual(ids);
+  for (const locale of UI_LOCALES)
+    expect(parseOptions(["appearance", "--locale", locale], scenes).locale).toBe(locale);
 });
 
 

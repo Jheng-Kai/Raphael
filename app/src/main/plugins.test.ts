@@ -58,6 +58,8 @@ function setup() {
   return { c, root, click };
 }
 const settle = () => new Promise(resolve => setTimeout(resolve, 0));
+/** The store's cards of these sources: n8n, the owner's own server, is always in the store too. */
+const apps = (root: ParentNode): Element[] => [...root.querySelectorAll(".cs-card")].filter(card => !card.querySelector('[data-id="n8n"], [data-id="google"]'));
 
 test("unifies managed, private Google and custom MCP without bridge duplicates", async () => {
   const { c, root } = setup(); await c.load();
@@ -151,21 +153,21 @@ test("the store deduplicates and filters broad groups locally", async () => {
     categories: [{ id: "other", name: "Other" }, { id: "docs", name: "Documents" }] });
   const { c, root, click } = setup(); await c.load(); click("tab", "store"); await settle();
   expect(root.querySelectorAll('[data-conn="store-group"]')).toHaveLength(10);
-  expect(root.querySelectorAll(".cs-card")).toHaveLength(3);
-  expect(root.querySelector('[data-conn="open-store"][data-id="notion"]')).not.toBeNull();
-  expect(root.querySelectorAll('[data-conn="open-store"][data-id="notion"]')).toHaveLength(1);
+  // Notion is connected, so it is not in the store; the duplicate toolkit is gone too.
+  expect(apps(root)).toHaveLength(2);
+  expect(root.querySelector('[data-conn="open-store"][data-id="notion"]')).toBeNull();
   expect(root.querySelector('[data-conn="load-more"]')).toBeNull();
   const requests = api.connectorsCatalog.mock.calls.length;
   click("store-group", "other");
-  expect(root.querySelectorAll(".cs-card")).toHaveLength(2);
+  expect(apps(root)).toHaveLength(2);
   expect(root.querySelector('[data-id="github"]')).not.toBeNull();
   c.input({ id: "conn-search", value: "GitHub" } as HTMLInputElement);
   await new Promise(resolve => setTimeout(resolve, 100));
-  expect(root.querySelectorAll(".cs-card")).toHaveLength(1);
+  expect(apps(root)).toHaveLength(1);
   click("store-group", "");
   c.input({ id: "conn-search", value: "Workspace" } as HTMLInputElement);
   await new Promise(resolve => setTimeout(resolve, 100));
-  expect(root.querySelectorAll(".cs-card")).toHaveLength(3);
+  expect(apps(root)).toHaveLength(2);
   expect(api.connectorsCatalog).toHaveBeenCalledTimes(requests);
   expect(api.connectorsCategories).not.toHaveBeenCalled(); c.reset();
 });
@@ -218,7 +220,7 @@ test.each([false, true])("saving a key never retains or echoes its value (failur
   expect(root.innerHTML).not.toContain("ak_secret");
   expect(vi.mocked(toaster.info)).not.toHaveBeenCalled();
   expect(!!root.querySelector('[role="alert"]')).toBe(failed);
-  expect(!!root.querySelector(".cs-grid")).toBe(!failed); c.reset();
+  expect(apps(root).length > 0).toBe(!failed); c.reset();
 });
 
 test("one login at a time, connecting state, notification refresh and installed result", async () => {
@@ -259,9 +261,12 @@ test("managed disconnect confirms twice and private Google reconnect uses its ow
 test("only trusted remote logos are rendered and they never send a referrer", () => {
   for (const url of ["http://logos.composio.dev/a.svg", "https://composio.dev.evil/a.svg", "https://user@composio.dev/a", "javascript:alert(1)", "https://logos.composio.dev:8443/a.svg"])
     expect(pluginLogoURL(url)).toBeNull();
-  const html = connectionsHTML({ ...emptyConnectionsView(), configured: true, tab: "store", catalog: [storePlugin(toolkit, [])] });
-  expect(html).toContain('src="https://logos.composio.dev/notion.svg"');
+  // A service the app does not know shows the catalogue's picture; one it knows (Notion) its own mark.
+  const unknown: Toolkit = { ...toolkit, slug: "acmecrm", name: "Acmecrm", logo: "https://logos.composio.dev/acmecrm.svg" };
+  const html = connectionsHTML({ ...emptyConnectionsView(), configured: true, tab: "store", catalog: [storePlugin(unknown, []), storePlugin(toolkit, [])] });
+  expect(html).toContain('src="https://logos.composio.dev/acmecrm.svg"');
   expect(html).toContain('referrerpolicy="no-referrer"');
+  expect(html).not.toContain('src="https://logos.composio.dev/notion.svg"');
 });
 
 
@@ -294,8 +299,8 @@ test("built-in services work without a key, search locally, and use their existi
   api.connectorsStatus.mockResolvedValue({ connectors: [], composio_configured: false });
   api.integrationsConnect.mockReturnValue(new Promise(() => {}));
   const { c, root, click } = setup(); await c.load(); click("tab", "store");
-  expect(root.querySelectorAll(".cs-card")).toHaveLength(1);
-  expect(root.querySelector('[data-k="conn-tab:store"] .n')?.textContent).toBe("1");
+  expect(apps(root)).toHaveLength(1);
+  expect(root.querySelector('[data-k="conn-tab:store"] .n')?.textContent).toBe("3"); // Sentry, n8n and the owner's own Google
   expect(root.querySelector('[data-conn="configure-composio"]')).not.toBeNull();
   c.input({ id: "conn-search", value: "unmatched" } as HTMLInputElement);
   await new Promise(resolve => setTimeout(resolve, 100));
@@ -313,9 +318,9 @@ test("own services win across slugs and names, and broad groups filter both sour
   api.integrationsCatalog.mockResolvedValue({ services: [{ ...storePlugin(toolkit, []), source: undefined, popular: true }] });
   api.connectorsCatalog.mockResolvedValue({ items: [toolkit, { ...toolkit, slug: "notion-alt" }, { ...toolkit, slug: "github", name: "GitHub", categories: ["developer"] }], categories: [{ id: "docs", name: "Documents" }, { id: "other", name: "Other" }] });
   const { c, root, click } = setup(); await c.load(); click("tab", "store"); await settle();
-  expect(root.querySelectorAll(".cs-card")).toHaveLength(2);
+  expect(apps(root)).toHaveLength(2);
   expect(root.querySelectorAll('[data-conn="join"][data-id="notion"]')).toHaveLength(1);
-  expect(root.querySelector('[data-k="conn-tab:store"] .n')?.textContent).toBe("2");
+  expect(root.querySelector('[data-k="conn-tab:store"] .n')?.textContent).toBe("3"); // and n8n
   click("store-group", "documents"); await settle();
   expect(root.querySelectorAll(".cs-card")).toHaveLength(1);
   expect(root.querySelector('[data-conn="join"][data-id="notion"]')).not.toBeNull();
@@ -338,7 +343,7 @@ test("a managed catalog failure leaves built-ins available and a late key reply 
 });
 
 
-test.each(["available", "added", "connecting", "needs-key"])("both store sources share their row and action markup when %s", state => {
+test.each(["available", "added", "connecting", "needs-key"])("both store sources share their row and action markup, or both leave the store, when %s", state => {
   const base = { ...storePlugin({ ...toolkit, logo: "", needs: state === "needs-key" ? "key" : "sign_in" }, []), server_id: state === "added" ? "existing" : null };
   const render = (managed: boolean) => {
     const item = { ...base, source: managed ? "composio" as const : undefined };
@@ -346,9 +351,12 @@ test.each(["available", "added", "connecting", "needs-key"])("both store sources
     root.innerHTML = connectionsHTML({ ...emptyConnectionsView(), tab: "store", configured: true,
       catalog: managed ? [] : [item], composioCatalog: managed ? [item] : [],
       login: state === "connecting" ? { target: item.id, name: item.name } : null });
-    return root.querySelector<HTMLElement>(".cs-card")!;
+    return root.querySelector(`[data-conn="open-store"][data-id="${item.id}"]`)?.closest<HTMLElement>(".cs-card") ?? null;
   };
   const own = render(false), managed = render(true);
+  // An app already added is not in the store at all, whichever source it came from.
+  if (state === "added") { expect(own).toBeNull(); expect(managed).toBeNull(); return; }
+  if (!own || !managed) throw new Error("the app has no card");
   if (state === "connecting") {
     expect(own.querySelector<HTMLButtonElement>('[data-conn="cancel-login"]')!.disabled).toBe(false);
     const cancel = managed.querySelector<HTMLButtonElement>('[data-conn="cancel-login"]')!;

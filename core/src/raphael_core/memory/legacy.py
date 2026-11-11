@@ -22,6 +22,7 @@ Nothing here logs a note.
 """
 
 import json
+import hashlib
 import logging
 import re
 import shutil
@@ -131,6 +132,31 @@ def _backup(path: Path, folder: Path) -> None:
         number += 1
     if not target.exists():
         shutil.copyfile(path, target)
+        _retain_backups(folder, path.name, target, data)
+
+
+def _retain_backups(folder, source, target, data):
+    """Keep five versions per source; untracked, replaced and owner-edited files are never removed."""
+    ledger = folder / ".raphael-backups.json"
+    if ledger.is_symlink() or ledger.is_junction():
+        raise OSError("backup_manifest")
+    entries = json.loads(ledger.read_text(encoding="utf-8")) if ledger.exists() else []
+    stat = target.stat()
+    entries.append({"source": source, "name": target.name, "digest": hashlib.sha256(data).hexdigest(),
+                    "identity": [stat.st_dev, stat.st_ino, stat.st_mtime_ns]})
+    older = [entry for entry in entries if entry["source"] == source][:-5]
+    for entry in older:
+        candidate = folder / entry["name"]
+        if candidate.parent != folder or candidate.is_symlink() or candidate.is_junction():
+            continue
+        if candidate.is_file():
+            stat = candidate.stat()
+            if ([stat.st_dev, stat.st_ino, stat.st_mtime_ns] != entry["identity"]
+                    or hashlib.sha256(candidate.read_bytes()).hexdigest() != entry["digest"]):
+                continue
+            candidate.unlink()
+    entries = [entry for entry in entries if entry not in older]
+    atomic(ledger, json.dumps(entries, ensure_ascii=False).encode("utf-8"))
 
 
 def _unlink(path: Path) -> None:
@@ -286,7 +312,7 @@ def _log(homes, member_id: int, created, line: str) -> None:
 def migrate(homes, *, told_name: Callable[[int], str], language: str = "zh-TW") -> None:
     """Move whatever the old store left into the living files. Nothing to do costs a look at a few
     folders. The shared space goes first, so that a member's own does not repeat it."""
-    mark = UNCONFIRMED.get(language, UNCONFIRMED["zh-TW"])
+    mark = UNCONFIRMED.get(language, UNCONFIRMED["en"])
 
     def told(member: int | None, day: str) -> str:
         if member is None or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", day):

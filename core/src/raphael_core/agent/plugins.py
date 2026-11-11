@@ -81,6 +81,7 @@ class PluginTool:
     schema: dict[str, Any]
     tier: Tier
     pinned: bool = False  # Core-owned tools stay together and do not consume the plugin cap.
+    deferred: bool = False  # Discover through find_tools instead of expanding every default offer.
 
 
 @dataclass
@@ -386,7 +387,7 @@ class Planner:
         ledger.add(
             model=plan.model,
             cost_usd=plan.cost_usd,
-            prompt_tokens=plan.prompt_tokens,
+            usage=getattr(plan, "usage", None), prompt_tokens=plan.prompt_tokens,
             completion_tokens=plan.completion_tokens,
             ms=plan.latency_ms,
         )

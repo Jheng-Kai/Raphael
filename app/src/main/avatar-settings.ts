@@ -1,62 +1,126 @@
 // Changing Raphael's picture, from his details panel on the 拉斐爾 page (member-details.ts), the
 // same place as every member's: 「從電腦選…」 opens the file dialog of Windows from the app
 // (`avatar_pick`: PNG, JPG, WebP or GIF; the page never learns where the file was), then a small
-// dialog where the picture is dragged and zoomed inside the circle that will show it; 完成 keeps a
-// copy of it in the app's local folder with that cut (`avatar_save`). 還原 deletes the copy, and
-// Raphael is his emblem again (`avatar_clear`). A moving picture keeps moving: the copy is the file
-// itself, and the cut is a crop drawn over it (`AvatarCrop`), not a new image.
+// dialog with the whole picture and a square frame over it; 完成 keeps a copy of it in the app's
+// local folder with that cut (`avatar_save`). 還原 deletes the copy, and Raphael is his emblem again
+// (`avatar_clear`). A moving picture keeps moving: the copy is the file itself, and the cut is a crop
+// drawn over it (`AvatarCrop`), not a new image. The owner's own photo uses the same dialog.
 
 import { onLocaleChange, t } from "./i18n";
 import { isTopLayer, registerDismissal } from "./dismissals";
 
 import * as api from "./api";
-import { type AvatarCrop, ZOOM_MAX, cleanCrop, cropStyle, loadAvatar } from "./avatar";
+import { type AvatarCrop, ZOOM_MAX, cleanCrop, loadAvatar } from "./avatar";
 import { describeError } from "./format";
 import { actionRow, btn, esc, toaster } from "./ui";
 
-/** The circle of the crop dialog, in px. */
-const CIRCLE_PX = 220;
+/** The square the picture is laid out in, in px, and the air around the picture inside it. */
+const STAGE_PX = 320;
+const STAGE_PAD = 16;
+/** The frame never gets smaller than this, nor closer to the stage's edge than its corners need. */
+const FRAME_MIN = 64;
+const EDGE_GAP = 6;
 
 /**
- * Where a drag of `dx`, `dy` px moves the crop of a picture `w` × `h` in a circle of `side` px:
- * the point under the pointer follows it. (With the picture covering the circle and enlarged
- * `zoom` times about the point at `x`, `y`, a screen point moves by `side - zoom * (over + side)`
- * for each whole unit of `x`, where `over` is how much wider than the circle the picture is.)
+ * What the dialog shows, in px of its stage: the picture enlarged `s` times with its top left at
+ * `ox`, `oy`, and the square frame of side `f` with its top left at `fx`, `fy`.
  */
-export function dragCrop(crop: AvatarCrop, dx: number, dy: number, w: number, h: number, side: number): AvatarCrop {
-  if (w <= 0 || h <= 0) return crop;
-  const cover = side / Math.min(w, h);
-  const overX = w * cover - side;
-  const overY = h * cover - side;
-  const perX = side - crop.zoom * (overX + side);
-  const perY = side - crop.zoom * (overY + side);
-  return cleanCrop({
-    x: perX === 0 ? crop.x : crop.x + dx / perX,
-    y: perY === 0 ? crop.y : crop.y + dy / perY,
-    zoom: crop.zoom,
-  });
+export interface CropView { s: number; ox: number; oy: number; fx: number; fy: number; f: number }
+export type Corner = "nw" | "ne" | "sw" | "se";
+
+const clamp = (n: number, low: number, high: number): number => Math.min(high, Math.max(low, n));
+
+/** The whole picture `w` × `h` fitted in the stage, the frame over the largest square of it in the middle. */
+export function startView(w: number, h: number, stage = STAGE_PX, pad = STAGE_PAD): CropView {
+  const s = Math.min((stage - 2 * pad) / w, (stage - 2 * pad) / h);
+  const ox = (stage - w * s) / 2, oy = (stage - h * s) / 2;
+  const f = Math.min(w, h) * s;
+  return { s, ox, oy, f, fx: (stage - f) / 2, fy: (stage - f) / 2 };
+}
+
+/**
+ * The cut the frame shows, as `AvatarCrop` keeps it: the frame covers a square of `c` picture px,
+ * so the picture is enlarged `min(w, h) / c` times, and its left edge sits `x` of the way along the
+ * room the picture leaves beside the square (the same for `y`).
+ */
+export function frameCrop(v: CropView, w: number, h: number): AvatarCrop {
+  if (w <= 0 || h <= 0 || v.s <= 0) return cleanCrop(null);
+  const c = v.f / v.s;
+  const left = (v.fx - v.ox) / v.s, top = (v.fy - v.oy) / v.s;
+  return cleanCrop({ zoom: Math.min(w, h) / c, x: w - c > 1e-6 ? left / (w - c) : 0.5, y: h - c > 1e-6 ? top / (h - c) : 0.5 });
+}
+
+/** The picture always lies under the whole frame: a move that would uncover it stops at the edge. */
+function covered(v: CropView, w: number, h: number): CropView {
+  return { ...v, ox: clamp(v.ox, v.fx + v.f - w * v.s, v.fx), oy: clamp(v.oy, v.fy + v.f - h * v.s, v.fy) };
+}
+
+/** A drag of `dx`, `dy` px moves the picture under the frame, as far as the pointer. */
+export function moveCrop(v: CropView, dx: number, dy: number, w: number, h: number): CropView {
+  return covered({ ...v, ox: v.ox + dx, oy: v.oy + dy }, w, h);
+}
+
+/** The wheel enlarges the picture `factor` times about the pointer at `px`, `py`: never smaller than the frame, never past ZOOM_MAX. */
+export function zoomCrop(v: CropView, factor: number, px: number, py: number, w: number, h: number): CropView {
+  const least = v.f / Math.min(w, h);
+  const s = clamp(v.s * factor, least, least * ZOOM_MAX);
+  const k = s / v.s;
+  return covered({ ...v, s, ox: px - (px - v.ox) * k, oy: py - (py - v.oy) * k }, w, h);
+}
+
+/**
+ * A drag of one corner to `px`, `py` resizes the frame about the opposite corner, kept square, inside
+ * the picture and the stage; the picture stays where it is.
+ */
+export function resizeCrop(v: CropView, corner: Corner, px: number, py: number, w: number, h: number, stage = STAGE_PX): CropView {
+  const west = corner.endsWith("w"), north = corner.startsWith("n");
+  const ax = west ? v.fx + v.f : v.fx, ay = north ? v.fy + v.f : v.fy;
+  const left = Math.max(EDGE_GAP, v.ox), top = Math.max(EDGE_GAP, v.oy);
+  const right = Math.min(stage - EDGE_GAP, v.ox + w * v.s), bottom = Math.min(stage - EDGE_GAP, v.oy + h * v.s);
+  const room = Math.max(0, Math.min(west ? ax - left : right - ax, north ? ay - top : bottom - ay));
+  const least = Math.min(room, Math.max(FRAME_MIN, (v.s * Math.min(w, h)) / ZOOM_MAX));
+  const f = clamp(Math.max(Math.abs(px - ax), Math.abs(py - ay)), least, room);
+  return { ...v, f, fx: west ? ax - f : ax, fy: north ? ay - f : ay };
 }
 
 /** The crop dialog for the picture `url`: resolves with the cut chosen, or null when it is left. */
 export function cropDialog(url: string): Promise<AvatarCrop | null> {
   return new Promise((resolve) => {
-    let crop: AvatarCrop = cleanCrop(null);
+    let view: CropView | null = null;
     const scrim = document.createElement("div");
     scrim.className = "av-crop-scrim";
+    const corners = (["nw", "ne", "sw", "se"] as const).map((corner) => `<span class="av-crop-corner" data-corner="${corner}"></span>`).join("");
     scrim.innerHTML =
-      `<div class="av-crop" role="dialog" aria-modal="true" aria-labelledby="av-crop-title">` +
+      `<div class="av-crop" role="dialog" aria-modal="true" aria-labelledby="av-crop-title" style="--stage:${STAGE_PX}px">` +
       `<h2 id="av-crop-title">${esc(t("settings.avatar"))}</h2>` +
-      `<div class="av-crop-view" style="--side:${CIRCLE_PX}px"><img src="${esc(url)}" alt="" draggable="false"></div>` +
-      `<input class="av-crop-zoom" type="range" min="1" max="${ZOOM_MAX}" step="0.01" value="1" aria-label="${esc(t("settings.avatarZoom"))}">` +
+      `<div class="av-crop-view" tabindex="0" aria-label="${esc(t("settings.avatarFrame"))}">` +
+      // The picture shows in a circle everywhere, so the frame is a circle, to match the displayed avatar:
+      // the ring dims what falls outside it; the square frame over it only carries the corners that resize it.
+      `<img src="${esc(url)}" alt="" draggable="false"><div class="av-crop-ring" hidden><span class="av-crop-grid"></span></div><div class="av-crop-frame" hidden>${corners}</div></div>` +
       actionRow({ cls: "av-crop-act", secondary: btn(esc(t("common.cancel")), "", ' data-act="crop-cancel"'), primary: { label: esc(t("settings.avatarDone")), attrs: ' data-act="crop-done"' } }) +
       `</div>`;
-    const view = scrim.querySelector<HTMLElement>(".av-crop-view")!;
-    const img = view.querySelector("img")!;
-    const zoom = scrim.querySelector<HTMLInputElement>(".av-crop-zoom")!;
+    const stage = scrim.querySelector<HTMLElement>(".av-crop-view")!;
+    const img = stage.querySelector("img")!;
+    const frame = stage.querySelector<HTMLElement>(".av-crop-frame")!;
+    const ring = stage.querySelector<HTMLElement>(".av-crop-ring")!;
     const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     let stopOutside = (): void => {};
     let stopLocale = (): void => {};
-    const draw = (): void => img.setAttribute("style", cropStyle(crop));
+    const size = (): [number, number] => [img.naturalWidth, img.naturalHeight];
+    const draw = (): void => {
+      if (!view) return;
+      const [w, h] = size();
+      img.style.cssText = `left:${view.ox}px;top:${view.oy}px;width:${w * view.s}px;height:${h * view.s}px`;
+      frame.style.cssText = ring.style.cssText = `left:${view.fx}px;top:${view.fy}px;width:${view.f}px;height:${view.f}px`;
+      frame.hidden = ring.hidden = false;
+    };
+    const start = (): void => {
+      const [w, h] = size();
+      if (w <= 0 || h <= 0) return;
+      view = startView(w, h);
+      draw();
+    };
+    const chosen = (): AvatarCrop => (view ? frameCrop(view, ...size()) : cleanCrop(null));
     const close = (result: AvatarCrop | null): void => {
       stopOutside();
       stopLocale();
@@ -72,7 +136,7 @@ export function cropDialog(url: string): Promise<AvatarCrop | null> {
         e.stopImmediatePropagation();
         close(null);
       } else if (e.key === "Tab") {
-        const stops = [...scrim.querySelectorAll<HTMLElement>("input:not(:disabled), button:not(:disabled)")];
+        const stops = [...scrim.querySelectorAll<HTMLElement>('[tabindex="0"], button:not(:disabled)')];
         if (stops.length === 0) return;
         const first = stops[0]!;
         const last = stops[stops.length - 1]!;
@@ -86,45 +150,71 @@ export function cropDialog(url: string): Promise<AvatarCrop | null> {
         }
       }
     };
-    let from: { x: number; y: number } | null = null;
-    view.addEventListener("pointerdown", (e) => {
-      view.setPointerCapture(e.pointerId);
-      from = { x: e.clientX, y: e.clientY };
+    // The left button only: a press on a corner resizes the frame, anywhere else moves the picture.
+    // While it is held the frame shows its thirds.
+    let held: { corner: Corner | null; x: number; y: number } | null = null;
+    const local = (e: PointerEvent | WheelEvent): [number, number] => {
+      const box = stage.getBoundingClientRect();
+      return [e.clientX - box.left, e.clientY - box.top];
+    };
+    stage.addEventListener("pointerdown", (e) => {
+      if (e.button !== 0 || !view) return;
+      e.preventDefault();
+      stage.setPointerCapture?.(e.pointerId);
+      const corner = (e.target as Element).closest<HTMLElement>("[data-corner]")?.dataset.corner as Corner | undefined;
+      held = { corner: corner ?? null, x: e.clientX, y: e.clientY };
+      stage.dataset.pressed = "";
     });
-    view.addEventListener("pointermove", (e) => {
-      if (!from) return;
-      crop = dragCrop(crop, e.clientX - from.x, e.clientY - from.y, img.naturalWidth, img.naturalHeight, CIRCLE_PX);
-      from = { x: e.clientX, y: e.clientY };
+    stage.addEventListener("pointermove", (e) => {
+      if (!held || !view) return;
+      const [w, h] = size();
+      if (held.corner) view = resizeCrop(view, held.corner, ...local(e), w, h);
+      else view = moveCrop(view, e.clientX - held.x, e.clientY - held.y, w, h);
+      held = { ...held, x: e.clientX, y: e.clientY };
       draw();
     });
-    const drop = (): void => void (from = null);
-    view.addEventListener("pointerup", drop);
-    view.addEventListener("pointercancel", drop);
-    view.addEventListener(
+    const drop = (): void => {
+      held = null;
+      delete stage.dataset.pressed;
+    };
+    stage.addEventListener("pointerup", drop);
+    stage.addEventListener("pointercancel", drop);
+    stage.addEventListener(
       "wheel",
       (e) => {
         e.preventDefault();
-        crop = cleanCrop({ ...crop, zoom: crop.zoom * (e.deltaY < 0 ? 1.08 : 1 / 1.08) });
-        zoom.value = String(crop.zoom);
+        if (!view) return;
+        view = zoomCrop(view, e.deltaY < 0 ? 1.08 : 1 / 1.08, ...local(e), ...size());
         draw();
       },
       { passive: false },
     );
-    zoom.addEventListener("input", () => {
-      crop = cleanCrop({ ...crop, zoom: Number(zoom.value) });
+    // From the keyboard: the arrows move the picture, + and - zoom it about the frame's middle.
+    stage.addEventListener("keydown", (e) => {
+      if (!view) return;
+      const [w, h] = size();
+      const step = e.shiftKey ? 32 : 8;
+      const moves: Record<string, [number, number]> = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] };
+      const middle: [number, number] = [view.fx + view.f / 2, view.fy + view.f / 2];
+      if (moves[e.key]) view = moveCrop(view, ...moves[e.key]!, w, h);
+      else if (e.key === "+" || e.key === "=") view = zoomCrop(view, 1.08, ...middle, w, h);
+      else if (e.key === "-") view = zoomCrop(view, 1 / 1.08, ...middle, w, h);
+      else return;
+      e.preventDefault();
       draw();
     });
+    img.addEventListener("load", start);
     scrim.addEventListener("click", (e) => {
       const act = (e.target as Element).closest<HTMLElement>("[data-act]")?.dataset.act;
       if (act === "crop-cancel") close(null);
-      else if (act === "crop-done") close(crop);
+      else if (act === "crop-done") close(chosen());
     });
     document.addEventListener("keydown", onKey, true);
-    draw();
     document.body.append(scrim);
+    if (img.complete) start();
     stopLocale = onLocaleChange(() => {
       scrim.querySelector("h2")!.textContent = t("settings.avatar");
-      zoom.setAttribute("aria-label", t("settings.avatarZoom"));
+      stage.setAttribute("aria-label", t("settings.avatarFrame"));
       scrim.querySelector('[data-act="crop-cancel"]')!.textContent = t("common.cancel");
       scrim.querySelector('[data-act="crop-done"]')!.textContent = t("settings.avatarDone");
     });

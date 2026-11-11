@@ -11,7 +11,7 @@ from raphael_core.agent.policy import Tier
 from raphael_core.background.snapshot import take_snapshot
 from agent.conftest import client, actions  # noqa: F401
 from agent.test_service import make_rig  # noqa: F401
-from agent.test_narration import chat, typed
+from agent.test_narration import chat, typed, use
 
 
 @pytest.mark.parametrize("interactive", [False, True])
@@ -21,13 +21,21 @@ def test_running_offer_removes_revoked_tools_and_discovers_new_ones(interactive)
     current = [first]
     hub = SimpleNamespace(offered=lambda: list(current))
     snapshot = take_snapshot(hub, interactive=interactive)
-    assert "sample__read" in {d["function"]["name"] for d in snapshot.definitions}
+    listed = json.dumps(snapshot.definitions)
+    # A connection's tools are found, never listed (decision 2): the list stays as grants change.
+    assert "sample__read" in snapshot.pool.by_alias and "sample__read" not in listed
+    assert snapshot.reveal("sample__read") is not None
     current[:] = [second]
     snapshot.refresh_plugins(hub, 0)
-    assert "sample__read" not in {d["function"]["name"] for d in snapshot.definitions}
-    assert "sample__read" not in snapshot.refs
-    assert "sample__write" in {d["function"]["name"] for d in snapshot.definitions}
-    assert not snapshot.find("Read sample")[0]
+    assert json.dumps(snapshot.definitions) == listed
+    assert "sample__read" not in snapshot.refs and snapshot.reveal("sample__read") is None
+    assert snapshot.use({"name": "sample__read", "arguments": {}}) == "unavailable"
+    assert "sample__write" in {item["function"]["name"] for item in snapshot.find("Write sample")[0]}
+    found, _ = snapshot.find("Read sample")
+    assert "sample__read" not in {item["function"]["name"] for item in found}
+    if interactive:
+        # Self-owned read tools may match the generic word even after this plugin is revoked.
+        assert "memory_document_read" in snapshot.management
 
 
 def test_refresh_never_reassigns_a_revoked_alias_to_another_connection():
@@ -36,14 +44,15 @@ def test_refresh_never_reassigns_a_revoked_alias_to_another_connection():
     current = [first, second]
     hub = SimpleNamespace(offered=lambda: list(current))
     snapshot = take_snapshot(hub)
-    aliases = {ref.key: alias for alias, ref in snapshot.refs.items() if ref.kind == "mcp"}
+    aliases = {tool.key: alias for alias, tool in snapshot.pool.by_alias.items()}
     current[:] = [second]
     snapshot.refresh_plugins(hub, 0)
-    assert aliases[first.key] not in snapshot.refs
-    assert snapshot.refs[aliases[second.key]].key == second.key
+    assert aliases[first.key] not in snapshot.pool.by_alias
+    assert snapshot.pool.by_alias[aliases[second.key]].key == second.key
     current[:] = [first, second]
     snapshot.refresh_plugins(hub, 0)
-    assert snapshot.refs[aliases[first.key]].key == first.key
+    assert snapshot.pool.by_alias[aliases[first.key]].key == first.key
+    assert snapshot.reveal(aliases[first.key]).key == first.key
 
 
 async def test_custom_proposal_tests_before_enabling_and_invalidates_an_edited_digest(tmp_path, conn, vault, connector, servers):
@@ -111,17 +120,19 @@ def chat_rig(tmp_path, conn, vault, connector, servers, make_rig):
 
 async def test_model_adds_custom_mcp_and_uses_its_tools_after_owner_enables(chat_rig, client):
     rig, hub, keys = chat_rig
-    client.chats = [chat("Review the card.", ("add_mcp_server", {"name": "Sample", "transport": "http", "url": "https://example.invalid/mcp"})), chat("The card is ready.")]
+    client.chats = [chat("Review the card.", use("add_mcp_server", {"name": "Sample", "transport": "http", "url": "https://example.invalid/mcp"})), chat("The card is ready.")]
     await typed(rig, "Connect Sample and look up a sample")
     [turn] = await rig.turns()
     [card] = turn["connection_proposals"]
     assert card["state"] == "draft" and not hub.offered()
     tested = await rig.call("integrations.proposal", {"id": card["id"], "revision": 1, "operation": "test"})
     assert tested["proposal"]["state"] == "tested"
-    client.chats = [chat("Read sample.", ("Sample__look", {"topic": "sample"})), chat("Read complete.")]
+    client.chats = [chat("Read sample.", use("Sample__look", {"topic": "sample"})), chat("Read complete.")]
     await rig.call("integrations.proposal", {"id": card["id"], "revision": 1, "operation": "enable"})
     await asyncio_sleep_for_resume(rig)
-    assert any(any(d["function"]["name"] == "Sample__look" for d in call["tools"]) for call in client.chat_calls)
+    # The new server's tool is found and called through use_tool; the list stays fixed (decision 2).
+    assert not any(any(d["function"]["name"] == "Sample__look" for d in call["tools"]) for call in client.chat_calls)
+    assert 'tool="use_tool" status="ok"' in client.chat_calls[-1]["messages"][-1]["content"]
     assert next(turn for turn in await rig.turns() if turn["source"] == "connector")["text"] == "Read complete."
 
 
@@ -143,8 +154,11 @@ async def test_chat_revocation_changes_next_model_offer_and_refuses_an_old_alias
     async def after(**kwargs):
         names = {d["function"]["name"] for d in kwargs["tools"]}
         assert "Sample__look" not in names, kwargs["messages"]
-        return chat("Old cached call.", ("Sample__look", {"topic": "sample"}))
-    client.chats = [chat("Change access.", ("manage_connection", {"connection": server.id, "operation": operation, "tool": "look"})), after, chat("Access was revoked."), chat("Access was revoked.")]
+        return chat("Old cached call.", use("Sample__look", {"topic": "sample"}))
+    client.chats = [chat("Change access.", use("manage_connection", {"connection": server.id, "operation": operation, "tool": "look"})), after, chat("Access was revoked."), chat("Access was revoked.")]
+    if operation == "disconnect":
+        # R-AG-MGMT-02: a disconnect is held until the turn is in and the owner says yes, so the old alias is tried after it.
+        client.chats.insert(1, chat("Asked."))
     result = await typed(rig, "Turn off Sample access")
     if operation == "disconnect":
         assert result["status"] == "confirm" and hub.offered()
@@ -206,15 +220,15 @@ async def test_chat_enabling_restores_the_next_model_offer(chat_rig, client, ope
         await hub._set_tool_enabled({"id": server.id, "tool": "look", "enabled": False})
     rig.settings.set("action_mode", "bypass")
     async def after(**kwargs):
-        assert "Sample__look" in {item["function"]["name"] for item in kwargs["tools"]}
-        return chat("Use it.", ("Sample__look", {"topic": "sample"}))
-    client.chats = [chat("Enable.", ("manage_connection", {"connection": server.id, "operation": operation, "tool": "look"})), after, chat("Read complete.")]
+        assert "Sample__look" not in {item["function"]["name"] for item in kwargs["tools"]}  # found, not listed
+        return chat("Use it.", use("Sample__look", {"topic": "sample"}))
+    client.chats = [chat("Enable.", use("manage_connection", {"connection": server.id, "operation": operation, "tool": "look"})), after, chat("Read complete.")]
     assert (await typed(rig, "Enable sample and read"))["text"] == "Read complete."
 
 
 async def test_saving_a_proposal_secret_waits_for_test_and_owner_enable(chat_rig, client):
     rig, hub, keys = chat_rig
-    client.chats = [chat("Review.", ("add_mcp_server", {"name": "Sample", "transport": "http", "url": "https://example.invalid/mcp", "headers": ["Authorization"]})), chat("Review the card.")]
+    client.chats = [chat("Review.", use("add_mcp_server", {"name": "Sample", "transport": "http", "url": "https://example.invalid/mcp", "headers": ["Authorization"]})), chat("Review the card.")]
     await typed(rig, "Connect Sample")
     [turn] = await rig.turns()
     [card] = keys.cards_of(turn["id"])
@@ -263,12 +277,17 @@ async def test_multiple_proposals_wait_without_a_resume_error_then_continue_once
     assert proposals.views([turn])[turn][0]["error"] is None
 
     async def after(**kwargs):
-        assert {"Sample__look", "Other__look"} <= {item["function"]["name"] for item in kwargs["tools"]}
+        assert not {"Sample__look", "Other__look"} & {item["function"]["name"] for item in kwargs["tools"]}
+        return chat("Finding them.", ("find_tools", {"query": "look"}))
+
+    async def found(**kwargs):
+        result = kwargs["messages"][-1]["content"]
+        assert "Sample__look" in result and "Other__look" in result, "both servers' tools can be found"
         return chat("Both connected.")
-    client.chats = [after]
+    client.chats = [after, found]
     await proposals.act({"id": cards[1]["id"], "revision": 1, "operation": "enable"})
     await asyncio_sleep_for_resume(rig)
-    assert len(client.chat_calls) == 1
+    assert len(client.chat_calls) == 2
     assert all(card["error"] is None for card in proposals.views([turn])[turn])
 
 
@@ -350,7 +369,7 @@ async def test_chat_reconnect_of_a_local_server_waits_before_launching_it(chat_r
     await hub._refresh({"id": server.id})
     await hub._set_enabled({"id": server.id, "enabled": True})
     opened = len(servers.opened)
-    client.chats = [chat("Reconnect.", ("manage_connection", {"connection": server.id, "operation": "reconnect"})), chat("Review the card.")]
+    client.chats = [chat("Reconnect.", use("manage_connection", {"connection": server.id, "operation": "reconnect"})), chat("Review the card.")]
     asked = await typed(rig, "Reconnect Sample")
     assert asked["status"] == "confirm" and len(servers.opened) == opened
     await rig.confirm(asked["confirm"]["id"])

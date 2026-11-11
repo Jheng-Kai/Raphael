@@ -12,14 +12,16 @@ from jsonschema import Draft202012Validator
 
 from ..agent.plugins import PluginResult, PluginTool, tool_key
 from ..agent.permissions import qualifies
-from ..agent.policy import Tier
+from ..agent.policy import UNATTENDED_WAIT_S, Tier
+from ..agent.data_floor import DataFloor, WRITE_REFUSAL
 from ..brain.settings import SettingsStore
 from ..integrations.audit import AuditLog
 from .local_host import LocalHost, Output
 from .local_patterns import DANGEROUS_PATTERNS
 
 LOCAL_PREFIX = "mcp:local/"
-BACKGROUND_WAIT_S = 30 * 60
+BACKGROUND_WAIT_S = UNATTENDED_WAIT_S
+FOREGROUND_TIMEOUT_S = 120
 _CONTEXT = ContextVar("local_command_context", default=(None, True, False, ""))
 _DANGEROUS = [re.compile(pattern, re.I | re.S) for pattern, _ in DANGEROUS_PATTERNS]
 # These patterns are best effort, not a shell parser or sandbox. The owner card is the real gate.
@@ -27,9 +29,9 @@ _SECRET = re.compile(r"\.env(?:[.\\/\s'\"]|$)|\.codex[\\/]auth\.json|\.claude[\\
 _OPAQUE = re.compile(r"-(?:enc(?:odedcommand)?|file)\b|\b(?:iex|invoke-expression|Start-Process|Invoke-Command)\b|\b(?:claude|codex|python|node|ruby|perl|powershell|pwsh)(?:\.exe)?\b|\.(?:ps1|cmd|bat|exe)\b", re.I)
 
 EXEC_DESCRIPTION = (
-    "Run one command on the owner's Windows PC: use first for CPU, memory, disk, processes, network, files, "
-    "installed programs and logs. Services use connected apps; desktops are for seeing/clicking. Approval is enforced. "
-    "No interactive/full-screen programs. Long installed claude -p or codex exec work uses background and the same card; it spends the owner's subscription."
+    "Run one command on the owner's Windows PC for CPU, memory, disk, processes, network, files and logs. "
+    "For Raphael itself use self_check first, never a whole-profile scan. Approval is enforced; foreground max 120 s. "
+    "No interactive programs. Long claude -p or codex exec work uses background and the same card; it spends the owner's subscription."
 )
 EXEC_SCHEMA = {"type": "object", "properties": {
     "command": {"type": "string", "minLength": 1, "maxLength": 16000},
@@ -42,6 +44,26 @@ JOB_SCHEMA = {"type": "object", "properties": {"job_id": {"type": "string"}, "st
 
 def is_local(key):
     return key.startswith(LOCAL_PREFIX)
+
+
+def command_of(arguments):
+    """Find the literal command in a native CLI permission envelope."""
+    if not isinstance(arguments, dict):
+        return ""
+    command = arguments.get("command")
+    if isinstance(command, str):
+        return command
+    for key in ("input", "tool_input", "toolCall", "args", "details"):
+        value = arguments.get(key)
+        if isinstance(value, dict):
+            command = value.get("command")
+            if isinstance(command, str):
+                return command
+            for nested in ("input", "args"):
+                part = value.get(nested)
+                if isinstance(part, dict) and isinstance(part.get("command"), str):
+                    return part["command"]
+    return ""
 
 
 def requires_command_approval(settings, command, *, external):
@@ -79,6 +101,7 @@ class LocalTools:
     def __init__(self, delegate, conn, *, host=None, enabled=True):
         self.delegate, self.conn = delegate, conn
         self.settings, self.audit = SettingsStore(conn), AuditLog(conn)
+        self.data_floor = DataFloor(conn)
         self.host, self.enabled = host or LocalHost(), enabled
         self.jobs = {}
 
@@ -101,7 +124,8 @@ class LocalTools:
         return self.settings.get("action_mode") == "bypass"
 
     def requires_approval(self, arguments):
-        return requires_command_approval(self.settings, arguments.get("command", ""), external=_CONTEXT.get()[1])
+        return (self.data_floor.access("local_exec", arguments) is not None
+                or requires_command_approval(self.settings, arguments.get("command", ""), external=_CONTEXT.get()[1]))
 
     def tier_for_call(self, key, arguments):
         if not is_local(key):
@@ -136,6 +160,9 @@ class LocalTools:
             schema = JOB_SCHEMA if key.endswith("/local_job") else EXEC_SCHEMA
             if key not in (tool_key("local", "local_exec"), tool_key("local", "local_job")) or not Draft202012Validator(schema).is_valid(arguments):
                 return PluginResult(False, "bad_arguments")
+            access = self.data_floor.access(key, arguments)
+            if access == "write":
+                return PluginResult(False, "protected_data", WRITE_REFUSAL)
             if (not present and not self._full_permission()) or owner is None:
                 return PluginResult(False, "presence_required", "Local commands need a card in a private conversation in the desktop app. A quick question, a group, a phone or Telegram cannot show one, so tell the owner to ask in a conversation.")
             if key.endswith("/local_job"):
@@ -152,13 +179,16 @@ class LocalTools:
                 return result
             if self.settings.get("local_commands_mode") == "never":
                 return PluginResult(False, "disabled", "Local commands are off. Enable them in Settings > Raphael > Local commands.")
-            if _SECRET.search(arguments["command"]) or _SECRET.search(arguments.get("cwd", "")):
+            if access is None and (_SECRET.search(arguments["command"]) or _SECRET.search(arguments.get("cwd", ""))):
                 return PluginResult(False, "secret_store", "Reading secret stores is refused.")
             if not self.enabled:
                 return PluginResult(False, "disabled", "Local commands are disabled in this test environment.")
             if approver == "none" or self.requires_approval(arguments) and approver != "user":
                 return result
-            params = {"cwd": arguments.get("cwd") or str(Path.home()), "timeout_seconds": arguments.get("timeout_seconds", 60)}
+            timeout = arguments.get("timeout_seconds", 60 if arguments.get("background") else FOREGROUND_TIMEOUT_S)
+            if not arguments.get("background"):
+                timeout = min(timeout, FOREGROUND_TIMEOUT_S)
+            params = {"cwd": arguments.get("cwd") or str(Path.home()), "timeout_seconds": timeout}
             if arguments.get("background"):
                 if len(self.jobs) >= 64:
                     for old, job in list(self.jobs.items()):

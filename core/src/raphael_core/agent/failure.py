@@ -5,6 +5,9 @@ kinds below retain those phrases. An optional shared diagnostic carries a bounde
 provider reason; raw packets and credentials never cross this boundary.
 """
 
+import math
+import re
+
 from httpx import ConnectError, TimeoutException
 
 from ..brain.openrouter import OpenRouterError
@@ -12,8 +15,9 @@ from ..failures import KINDS as SHARED_KINDS
 
 # no_key: no OpenRouter key is stored. auth: OpenRouter does not accept it. budget: this month's
 # limit is used up. credits: the OpenRouter account has none left. offline: the network cannot
-# be reached. timeout: the request did not finish in time. error: anything else.
-KINDS = ("no_key", "auth", "budget", "credits", "offline", "timeout", "error")
+# be reached. timeout: the request did not finish in time. no_answer: the model gave no answer (a reply that was only
+# reasoning has none). error: anything else.
+KINDS = ("no_key", "auth", "budget", "credits", "offline", "timeout", "error", "no_answer")
 
 _KIND_OF_OPENROUTER = {
     "auth": "auth",
@@ -40,6 +44,38 @@ class AgentFailure(Exception):
         self.kind = kind if kind in KINDS or kind in SHARED_KINDS else "error"
         self.diagnostic = diagnostic
         self.model = model
+
+
+def public_failure(value):
+    """Allow only public classification, provider identity and a finite epoch time."""
+    if not isinstance(value, dict) or not isinstance(value.get("kind"), str) or value["kind"] not in SHARED_KINDS:
+        return None
+    provider = value.get("provider")
+    if not isinstance(provider, str) or not re.fullmatch(r"(?:cli:)?[a-z][a-z0-9_-]{0,63}", provider):
+        return None
+    resets_at = value.get("resets_at")
+    if type(resets_at) not in (int, float) or not 0 < resets_at <= 253402300799 or not math.isfinite(resets_at):
+        resets_at = None
+    return {"kind": value["kind"], "provider": provider, "resets_at": resets_at}
+
+
+def turn_failure(kind, model, diagnostic=None):
+    """Project a classified error without copying its reason, detail or missing-resource data."""
+    aliases = {"no_key": "auth_expired", "auth": "auth_expired", "offline": "network",
+               "monthly_budget": "credits", "budget": "credits", "error": "unknown"}
+    kind = diagnostic.kind if diagnostic is not None else aliases.get(kind, kind)
+    kind = kind if kind in SHARED_KINDS else "unknown"
+    return public_failure({"kind": kind, "provider": provider_of(model),
+                           "resets_at": diagnostic.resets_at if diagnostic is not None else None})
+
+
+def provider_of(model):
+    """The provider a model reference runs on: `cli:codex` for a subscription CLI, `chatgpt` for `@chatgpt:...`, else openrouter."""
+    if isinstance(model, str) and model.startswith("cli:"):
+        return ":".join(model.split(":", 2)[:2])
+    if isinstance(model, str) and model.startswith("@"):
+        return model[1:].split(":", 1)[0]
+    return "openrouter"
 
 
 def failure_kind(error: BaseException) -> str:

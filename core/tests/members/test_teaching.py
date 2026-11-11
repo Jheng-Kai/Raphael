@@ -171,3 +171,72 @@ async def test_disconnect_does_not_wait_on_the_recording_lock_while_closing_cont
         await asyncio.wait_for(teaching.disconnected("viewer"), .2)
     assert recording.state == "interrupted"
     assert json.loads(recording.path.read_text(encoding="utf-8"))["state"] == "interrupted"
+
+
+@pytest.mark.parametrize("sensitive,clipboard", [(False, False), (True, False), (False, True)])
+async def test_relay_observation_checks_privacy_before_queuing_core_persistence(rig, monkeypatch, sensitive, clipboard):
+    import threading
+    import time
+    from raphael_core.computer.teaching import RelayTeaching
+    from raphael_core.computer import vm_bridge
+    teaching, member, _ = await setup(rig)
+    result = await teaching.call({"action": "start", "session": "viewer"})
+    main_thread, capture_threads, calls = threading.get_ident(), [], []
+    class Observer:
+        def __init__(self, vm, target, *, observation_command):
+            assert vm is None and target is None and observation_command == ("synthetic-observer",)
+            capture_threads.append(threading.get_ident())
+        async def __aenter__(self): return self
+        async def __aexit__(self, *args): pass
+        async def request(self, method, params, *, owner_observation):
+            assert method == "tools/call" and owner_observation
+            calls.append(params["name"])
+            return {"content": [{"type": "text", "text": "Password SECRET" if sensitive else "Report editor"}]}
+    monkeypatch.setattr(vm_bridge, "CuaBridge", Observer)
+    hook = RelayTeaching(result["id"], ("synthetic-observer",), time.monotonic() + 30)
+    message = b"\x06\0\0\0\0\0\0\x06SECRET" if clipboard else b"\x04\x01\0\0\0\0\0A"
+    payload = await asyncio.to_thread(lambda: asyncio.run(hook.capture(message)))
+    assert all(identifier != main_thread for identifier in capture_threads)
+    assert "SECRET" not in payload
+    assert calls == (["get_accessibility_tree"] if sensitive else ["get_accessibility_tree", "get_desktop_state"])
+    await teaching.relay_input("viewer", result["id"], payload)
+    recording = teaching.items[result["id"]]
+    expected = {"kind": "private_input"} if sensitive or clipboard else {"kind": "text", "text": "A"}
+    assert {key: value for key, value in recording.events[-1].items() if key != "order"} == expected
+    assert "SECRET" not in recording.path.read_text(encoding="utf-8")
+    await teaching.disconnected("viewer")
+    before = recording.path.read_bytes()
+    await teaching.relay_input("viewer", result["id"], payload)
+    assert recording.path.read_bytes() == before
+
+
+@pytest.mark.parametrize("method,params", [("tools/list", {}), ("tools/call", {"name": "vm_exec", "arguments": {}})])
+async def test_relay_observer_cannot_issue_actions(method, params):
+    from raphael_core.computer.vm_bridge import CuaBridge
+    from raphael_core.computer.vm import VmError
+    bridge = CuaBridge(None, None, observation_command=("synthetic-observer",))
+    with pytest.raises(VmError, match="^observation_only$"):
+        await bridge.request(method, params, owner_observation=True)
+
+
+async def test_stop_flushes_pending_relay_events_before_drafting(rig):
+    teaching, _, _ = await setup(rig)
+    result = await teaching.call({"action": "start", "session": "viewer"})
+    recording = teaching.items[result["id"]]
+    steps = []
+    def publish(token):
+        assert not recording.relay_enabled
+        steps.append("disable")
+    async def flush(token):
+        steps.append("flush")
+        await teaching.relay_input(token, recording.id,
+            '{"observation":{"safe":false,"screen":"","images":[]},"event":{"kind":"click","buttons":1,"x":10,"y":20}}')
+    async def draft(item):
+        assert item.state == "stopped" and item.events[-1]["kind"] == "click"
+        steps.append("draft")
+        return item.view()
+    teaching.viewer.publish_session = publish
+    teaching.viewer.flush_teaching = flush
+    teaching.draft = draft
+    await teaching.call({"action": "stop", "session": "viewer"})
+    assert steps == ["disable", "flush", "draft"]

@@ -124,20 +124,15 @@ async def inventory(servers=()):
 
     alias_keys = {alias: external_keys[tool.key] for alias, tool in make_offer(plugins).by_alias.items()}
     for role, member in (("chief", 0), ("member", 1)):
-        snapshot = take_snapshot(AllRegistered(), memory=True, attachments=True,
+        snapshot = take_snapshot(AllRegistered(), memory=True,
                                  speaker=Speaker(id=member, name="Fixture", role="Assistant",
                                                  capabilities=frozenset({"chief"}) if role == "chief" else frozenset()),
                                  team=TEAM_TOOLS,
                                  interactive=True, max_tier=Tier.T3)
-        if snapshot.pool:
-            snapshot.show(snapshot.pool.by_alias)
-        api = snapshot.definitions
-        # find_tools is registered even when a small fixture has no hidden tools.
-        conditional = [] if any(d["function"]["name"] == "find_tools" for d in api) else [
-            {"type": "function", "function": {"name": "find_tools", **_DEFINITIONS["find_tools"]}}]
-        api = [*api, *conditional]
-        api = [*api, *computer_definitions()]
-        mcp = RaphaelMcp(lambda: [*snapshot.definitions, *conditional, APPROVE], None)
+        # Inventory includes what find_tools returns and use_tool calls, not just the listed tools.
+        reachable = list(snapshot.catalog().values())
+        api = [*reachable, *computer_definitions()]
+        mcp = RaphaelMcp(lambda: [*reachable, APPROVE], None)
         listing = (await mcp._dispatch({"method": "tools/list"}))["result"]["tools"]
         for surface, definitions in (("api", [d["function"] for d in api]), ("mcp", listing)):
             for definition in definitions:

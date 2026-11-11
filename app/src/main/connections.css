@@ -2,23 +2,25 @@
    rounded list of the connected services, a dialog for each over the settings, and the store as cards
    in two columns. Colours are the app's tokens. */
 .cs { width: 100%; max-width: var(--layout-reading-max); margin-top: var(--sp-4); container: connections / inline-size; }
-.cs h2.big { margin: 0; font: 600 var(--fs-lg)/1.3 var(--display); }
-.cs h2 { margin: 0 0 var(--sp-2) var(--sp-1); font-size: var(--fs-md); font-weight: 600; }
-.cs h3, .cs-skill-import h3 { margin: 0 0 var(--sp-2) var(--sp-1); font-size: var(--fs-sm); font-weight: 600; color: var(--text-2); }
+.cs h2.big { margin: 0; font: 500 var(--fs-lg)/1.3 var(--display); }
+.cs h2 { margin: 0 0 var(--sp-2) var(--sp-1); font-size: var(--fs-md); font-weight: var(--weight-semibold); }
+.cs h3 { margin: 0 0 var(--sp-2) var(--sp-1); font-size: var(--fs-sm); font-weight: var(--weight-semibold); color: var(--text-2); }
 
 /* The bar: 已安裝 N and 商店 N as quiet tabs, the search on the right */
 .cs-bar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2) var(--sp-3); margin-bottom: var(--sp-3); }
 .cs-find { display: flex; width: 100%; margin: 0; min-width: 0; }
+/* 新增 ends the row of the two views, away from the dialog's ✕. */
+.cs-bar > .cs-add { margin-left: auto; flex: none; }
 .cs-find { gap: var(--sp-2); }
 .cs-find .sel { max-width: 180px; }
 .cs-find .sel span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.cs-find .field { width: 220px; height: 32px; }
-.cs:has([data-conn="store-group"]) .cs-find { order: 0; width: 100%; margin: 0; }
-.cs:has([data-conn="store-group"]) .cs-find .field { width: 100%; height: 40px; }
+/* One search for both views, so switching tabs never reshapes it. */
+.cs-find .field { width: 100%; height: 40px; }
 .cs-store-groups-row { margin-bottom: var(--sp-3); }
 .cs-store-groups { display: flex; flex-wrap: nowrap; gap: var(--sp-2); }
 .cs-store-groups .btn { flex: 0 0 auto; border-radius: var(--r-pill); font-size: var(--fs-xs); }
-.cs-store-groups [aria-pressed="true"] { color: var(--text); background: var(--selected); border-color: var(--accent-text); }
+/* The chosen chip is filled, not only outlined. */
+.cs-store-groups [aria-pressed="true"], .cs-store-groups [aria-pressed="true"]:hover:not(:disabled) { color: var(--on-accent); background: var(--accent); border-color: var(--accent); }
 .cs-store-pages { display: flex; align-items: center; justify-content: center; gap: var(--sp-3); margin: var(--sp-3) 0; }
 /* Keep search and groups outside the results scrollport, including after a page change. */
 .modal-body:has(.cs-store) { display: flex; flex-direction: column; overflow: hidden; }
@@ -30,7 +32,7 @@
 .cs-none { margin: var(--sp-5) var(--sp-1); font-size: var(--fs-sm); line-height: 1.6; color: var(--text-3); text-align: center; text-wrap: pretty; }
 
 /* The picture of a service: its mark bare, or a neutral plug. Marks use the text colour, or the brand's where it reads on both themes. */
-.mono { display: inline-grid; place-items: center; flex: none; width: 28px; height: var(--h-ctl-sm); color: var(--text); font: 600 var(--fs-lg)/1 var(--display); }
+.mono { display: inline-grid; place-items: center; flex: none; width: 28px; height: var(--h-ctl-sm); color: var(--text); font: 500 var(--fs-lg)/1 var(--display); }
 .mono.xl { width: 40px; height: 40px; font-size: var(--fs-h1); }
 .mono .logo { width: 100%; height: 100%; display: block; }
 .logo-mono[style] { color: var(--brand); }
@@ -40,12 +42,15 @@
 :root[data-theme="dark"] .logo-art .lg-d { display: block; }
 :root[data-theme="dark"] .logo-art .lg-d ~ .lg-l, :root[data-theme="dark"] .logo-art .lg-l:has(+ .lg-d) { display: none; }
 
-/* 已安裝: one rounded list; a row is the mark, the name and its line, the switch and a chevron, none of them boxed */
-.cs-list { border: 0; border-radius: 0; background: transparent; overflow: hidden; }
-.cs-item { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto 18px; align-items: center; gap: var(--sp-3); padding-right: var(--sp-3); border-radius: var(--r-md); cursor: pointer; }
+/* 已連結: two columns side by side, so a page holds more of them; a row is
+   the mark, the name and its line, the switch and a chevron, none of them boxed. */
+.cs-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-2) var(--sp-3); border: 0; border-radius: 0; background: transparent; }
+.cs-item { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto 18px; align-items: center; gap: var(--sp-3); min-width: 0; padding-right: var(--sp-3); border-radius: var(--r-md); cursor: pointer; }
 /* Dividers are lines of their own, so a rounded hover does not bend them; they step aside for the row under the pointer. */
-.cs-item + .cs-item::before, .cs-grp > .btn.gr + .btn.gr::before { content: ""; position: absolute; top: 0; left: var(--sp-3); right: var(--sp-3); height: 1px; background: var(--line); }
-:is(.cs-item:hover, .cs-item:hover + .cs-item)::before, :is(.cs-grp > .btn.gr:hover, .cs-grp > .btn.gr:hover + .btn.gr)::before { opacity: 0; }
+.cs-item::after { content: ""; position: absolute; bottom: 0; left: var(--sp-3); right: var(--sp-3); height: 1px; background: var(--line); }
+.cs-item:hover::after { opacity: 0; }
+.cs-grp > .btn.gr + .btn.gr::before { content: ""; position: absolute; top: 0; left: var(--sp-3); right: var(--sp-3); height: 1px; background: var(--line); }
+:is(.cs-grp > .btn.gr:hover, .cs-grp > .btn.gr:hover + .btn.gr)::before { opacity: 0; }
 .cs-item:hover { background: var(--hover); }
 .cs-item .btn.cs-open { justify-content: flex-start; gap: var(--sp-3); min-width: 0; min-height: 60px; padding: var(--sp-2) 0 var(--sp-2) var(--sp-3); border: 0; border-radius: 0; background: transparent; text-align: left; white-space: normal; }
 .cs-item .btn.cs-open:hover:not(:disabled), .cs-item .btn.cs-open:active:not(:disabled) { background: transparent; }
@@ -54,13 +59,13 @@
 :where(:root[data-keys]) .cs-item:has(.cs-open:focus-visible) { box-shadow: inset 0 0 0 2px var(--focus); }
 .cs-item .ic, .cs-card .ic { display: inline-grid; place-items: center; width: 30px; flex: none; }
 .cs-open .tx, .cs-main .tx { display: grid; grid-template-columns: minmax(0, 1fr); flex: 1; min-width: 0; }
-.cs-open .nm, .cs-main .nm { font-size: var(--fs-md); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cs-open .nm, .cs-main .nm { font-size: var(--fs-md); font-weight: var(--weight-semibold); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cs-open .ds { margin-top: var(--sp-1); font-size: var(--fs-2xs); line-height: 1.45; color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cs-open .ds .st { font-size: var(--fs-2xs); }
 .cs-item .chev { display: inline-flex; align-items: center; justify-content: center; color: var(--text-3); }
 
-/* The dialog of a service: over the settings' tab, with the tab dimmed, its own close and switch at the top */
-.cs-scrim { position: absolute; top: 0; right: 0; bottom: 0; left: var(--set-nav); z-index: 5; display: grid; grid-template-columns: minmax(0, 1fr); place-items: center; padding: var(--sp-5); background: var(--scrim); }
+/* The dialog of a service: over the whole settings window, all of it dimmed (R-UI-111), its own close and switch at the top */
+.cs-scrim { position: absolute; inset: 0; z-index: 5; display: grid; grid-template-columns: minmax(0, 1fr); place-items: center; padding: var(--sp-5); background: var(--scrim); }
 .cs-scrim:not(.again) { animation: scrim-in 0.2s ease-out; }
 .cs-scrim:not(.again) > .cs-dialog { animation: dialog-in 0.2s cubic-bezier(0.2, 0.8, 0.2, 1); }
 .cs-scrim.leaving { animation: scrim-out 0.14s ease-in forwards; pointer-events: none; }
@@ -73,7 +78,7 @@
 .cs-dlg-head .sp { flex: 1; }
 .cs-dlg-head .tg { margin-right: var(--sp-1); }
 .cs-dlg-head.sub .cs-dlg-name { flex: 1; min-width: 0; font-size: var(--fs-md); }
-.cs-dlg-name { margin: 0; font: 600 var(--fs-lg)/1.3 var(--display); overflow-wrap: anywhere; }
+.cs-dlg-name { margin: 0; font: 500 var(--fs-lg)/1.3 var(--display); overflow-wrap: anywhere; }
 .cs-dialog em.num, .cs-grp em.num { margin-left: var(--sp-1); font-style: normal; font-weight: 500; color: var(--text-3); }
 .cs-dialog .cs-desc { margin: 0; font-size: var(--fs-sm); line-height: 1.6; color: var(--text-2); text-wrap: pretty; }
 .cs-dialog .cs-meta { margin: 0; }
@@ -121,13 +126,6 @@
 .cs-acct .st { flex: none; font-size: var(--fs-xs); }
 .cs-acct + .cs-acct { border-top: 1px solid var(--line); }
 
-/* The page of a skill is the dialog of an app, wider for the document it holds */
-.cs-dialog.wide { width: min(640px, 100%); }
-.cs-field { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); }
-.cs-field > .flabel { font-size: var(--fs-sm); font-weight: 600; color: var(--text); }
-/* The document is a textarea with the field's look; the field's own padding and height (one line) yield to these, hence the longer selector. */
-.cs-field > .cs-skill-text { display: block; width: 100%; height: auto; min-height: 320px; padding: var(--sp-3); resize: vertical; font-family: var(--mono); font-size: var(--fs-xs); line-height: 1.55; white-space: pre-wrap; }
-
 /* A notice that something waits for the user */
 .ca-alert { display: flex; align-items: center; gap: var(--sp-3); padding: var(--sp-2) var(--sp-2) var(--sp-2) var(--sp-3); border-radius: var(--r-lg); background: var(--warn-soft); border: 1px solid var(--warn-edge); font-size: var(--fs-sm); }
 .ca-alert > .i { color: var(--warn); }
@@ -147,30 +145,12 @@
 .cs-sec { margin-top: var(--sp-5); }
 .cs-sec:first-child { margin-top: 0; }
 .cs-sec > .data-heading h2 { margin: 0 0 0 var(--sp-1); }
-.cs-source { grid-template-columns: minmax(0, 1fr) auto; cursor: default; }
-.cs-source > .cs-open { display: flex; min-width: 0; padding: var(--sp-2) 0 var(--sp-2) var(--sp-3); }
-.cs-skill:has([data-conn="skill-reimport"]) { grid-template-columns: minmax(0, 1fr) auto auto 18px; }
-.cs-skill[data-library-skill] { grid-template-columns: minmax(0, 1fr) 18px; }
-.cs-skill[data-library-skill]:has([data-conn="skill-reimport"]) { grid-template-columns: minmax(0, 1fr) auto 18px; }
-.cs-skill-grants h3 { margin: 0 0 var(--sp-2); font-size: var(--fs-sm); }
-.cs-skill-grants .mp-resource > span { display: flex; align-items: center; gap: var(--sp-2); }
-.cs-library-icon { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; color: var(--text-2); }
-.cs-library-icon svg.i { width: 20px; height: 20px; }
-.cs-dlg-head > .cs-library-icon { width: 40px; height: 40px; }
-.cs-set { margin-top: var(--sp-4); }
-.cs-set-heading { gap: var(--sp-2); }
-.cs-set-heading > .cs-open { display: flex; flex: 1; min-width: 0; align-items: center; gap: var(--sp-2); text-align: left; }
-.cs-set-heading .tx { display: grid; grid-template-columns: minmax(0, 1fr); min-width: 0; }
-.cs-set-heading .ds { font-size: var(--fs-xs); color: var(--text-2); font-weight: 400; }
-.cs-plugin-skills { padding: var(--sp-2) var(--sp-3); font-size: var(--fs-sm); }
-.cs-plugin-skills summary { cursor: pointer; color: var(--text-2); }
-.cs-skill-import .row > label { min-width: 0; }
-.cs-dialog [data-set-mcp] { margin-top: var(--sp-4); }
-/* Keep scrolled MCP controls above the sticky set actions. */
-.cs-dialog:has([data-set-mcp]) { scroll-padding-bottom: calc(var(--h-ctl) + 3 * var(--sp-4)); }
 .cs-say { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); margin: 0; padding: 0; list-style: none; }
 .cs-say li { display: flex; align-items: center; gap: var(--sp-2); padding: var(--sp-2) var(--sp-3); border-radius: 0; border: 0; background: transparent; font-size: var(--fs-xs); line-height: 1.5; }
 .cs-say .i { color: var(--text-3); }
+/* A store page's headings, examples and words share one left edge with its head. */
+.cs-page .cs-sec h3 { margin-left: 0; }
+.cs-page .cs-say li { padding-inline: 0; }
 
 /* Store rows share the detail button, action slot and divider across both catalogs. */
 .cs-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-2) var(--sp-3); }
@@ -184,12 +164,13 @@
 .cs-card .btn.cs-main:focus-visible { outline: none; }
 :where(:root[data-keys]) .cs-card:has(.cs-main:focus-visible) { box-shadow: inset 0 0 0 2px var(--focus); }
 .cs-main .nm { font-size: var(--fs-xs); }
+/* One line each, so paired rows keep one height; the columns pair only where that line has room (see the container rules). */
 .cs-main .sub { font-size: var(--fs-2xs); line-height: 1.45; color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cs-main .sub.wait { color: var(--accent-text); }
 /* What an app asks for (its own key, or its own developer app) comes first on its row, in words, never only a title. */
-.cs-main .sub .need { font-weight: 600; color: var(--text-2); }
+.cs-main .sub .need { font-weight: var(--weight-semibold); color: var(--text-2); }
 .cs-needs { margin: var(--sp-3) 0 0; font-size: var(--fs-sm); line-height: 1.55; color: var(--text-2); text-wrap: pretty; }
-.cs-needs b { color: var(--text); font-weight: 600; }
+.cs-needs b { color: var(--text); font-weight: var(--weight-semibold); }
 .cs-card > .btn { flex: none; padding-inline: var(--sp-2); }
 .cs-card > .cs-state { flex: none; font-size: var(--fs-xs); }
 .cs-card .cs-state .st { font-size: var(--fs-xs); color: var(--text-3); }
@@ -199,7 +180,7 @@
 .cs-composio-setup > button { flex: none; }
 .cs-composio-mark { color: var(--text-2); }
 .cs-composio-mark svg { width: 20px; height: 20px; }
-.cs-key-form label { font-size: var(--fs-sm); font-weight: 600; }
+.cs-key-form label { font-size: var(--fs-sm); font-weight: var(--weight-semibold); }
 .cs-key-form > p { margin: 0; font-size: var(--fs-xs); color: var(--err); }
 .cs-key-form > .note { font-size: var(--fs-sm); color: var(--text-2); }
 
@@ -209,29 +190,36 @@
 .add-grid .two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--sp-3); }
 .add-acts { margin-top: var(--sp-1); }
 .fld { display: flex; flex-direction: column; gap: var(--sp-1); min-width: 0; }
-.fld > .flabel { font-size: var(--fs-sm); font-weight: 600; color: var(--text); }
+.fld > .flabel { font-size: var(--fs-sm); font-weight: var(--weight-semibold); color: var(--text); }
 .fld > .fhint { font-size: var(--fs-xs); color: var(--text-3); }
 .fld .field { width: 100%; }
 .fld .sel { width: 100%; max-width: none; justify-content: space-between; }
 .secret-row { display: flex; align-items: center; gap: var(--sp-2); min-height: 40px; padding: var(--sp-1) var(--sp-1) var(--sp-1) var(--sp-3); border-radius: var(--r-sm); background: var(--surface-2); font-size: var(--fs-sm); }
-.secret-row .nm { font-weight: 600; font-family: var(--mono); font-size: var(--fs-2xs); overflow-wrap: anywhere; }
+.secret-row .nm { font-weight: var(--weight-semibold); font-family: var(--mono); font-size: var(--fs-2xs); overflow-wrap: anywhere; }
 .secret-row .where { flex: 1; min-width: 0; color: var(--text-3); font-size: var(--fs-xs); display: inline-flex; align-items: center; gap: var(--sp-1); }
 .pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; gap: var(--sp-2); }
 .trust { display: flex; gap: var(--sp-2); align-items: flex-start; padding: var(--sp-2) var(--sp-3); border-radius: var(--r-md); background: var(--warn-soft); border: 1px solid var(--warn-edge); font-size: var(--fs-2xs); line-height: 1.55; color: var(--text-2); }
 .trust > .i { color: var(--warn); margin-top: var(--sp-1); }
-.trust b { color: var(--text); font-weight: 600; }
+.trust b { color: var(--text); font-weight: var(--weight-semibold); }
 
-/* A single track stays within the short-card cap; wider panes fill two tracks. */
-@container connections (max-width: 384px) {
+/* Store rows are a name and at most a short need, so they pair down to a narrow dialog; a connected row also
+   has its line and switch, so it pairs only where that line has room. */
+@container connections (max-width: 480px) {
   .cs-grid { grid-template-columns: minmax(0, 1fr); }
 }
+@container connections (max-width: 680px) {
+  .cs-list { grid-template-columns: minmax(0, 1fr); }
+}
+.cs-main .sub:empty { display: none; }
+/* Every mark in a row stands bare (R-UI-34) in one 24 px slot, and a generic plug fills it as the brand marks do, so the
+   column of marks keeps one size and weight (R-UI-19). */
+:is(.cs-item, .cs-card) .ic .mono { width: 24px; height: 24px; }
+:is(.cs-item, .cs-card) .ic .mono > .i { width: 20px; height: 20px; }
 
 @media (max-width: 720px) {
   .cs-find { margin-left: 0; width: 100%; }
   .cs-find .field { flex: 1; width: auto; }
   .add-grid .two { grid-template-columns: minmax(0, 1fr); }
-  .cs-head { flex-wrap: wrap; }
-  .cs-join { width: 100%; }
   .cs-scrim { padding: var(--sp-4); }
 }
 
@@ -239,8 +227,8 @@
 .cs-device { display: flex; flex-direction: column; align-items: center; gap: var(--sp-3); margin-bottom: var(--sp-4); padding: var(--sp-4) var(--sp-4); border: 0; border-radius: 0; background: transparent; }
 .cs-device-hint { margin: 0; font-size: var(--fs-xs); color: var(--text-2); text-align: center; text-wrap: pretty; }
 .cs-code { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: var(--sp-1); user-select: text; }
-.cs-cap { display: inline-grid; place-items: center; width: 36px; height: 46px; border: 1px solid var(--key-edge); border-bottom-width: 3px; border-radius: var(--r-sm); background: var(--key); color: var(--text); font: 600 var(--fs-h1)/1 var(--mono); }
-.cs-dash { padding: 0 var(--sp-1); color: var(--text-3); font: 600 var(--fs-h1)/1 var(--mono); }
+.cs-cap { display: inline-grid; place-items: center; width: 36px; height: 46px; border: 1px solid var(--key-edge); border-bottom-width: 3px; border-radius: var(--r-sm); background: var(--key); color: var(--text); font: 500 var(--fs-h1)/1 var(--mono); }
+.cs-dash { padding: 0 var(--sp-1); color: var(--text-3); font: 500 var(--fs-h1)/1 var(--mono); }
 .cs-device-acts { gap: var(--sp-2); }
 .mcp-lines { width: 100%; min-height: 96px; padding: var(--sp-2) var(--sp-3); resize: vertical; font-family: var(--mono); white-space: pre; }
 .mcp-row-actions { display: flex; align-items: center; gap: var(--sp-1); }

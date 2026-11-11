@@ -11,7 +11,7 @@ skipped unless the environment variable RAPHAEL_TEST_MODELS is 1.
 the brain, the assistant and the plugins.
 """
 
-import inspect
+import gc
 import os
 import sqlite3
 from collections.abc import Iterator
@@ -22,6 +22,7 @@ import keyring.backend
 import keyring.backends.fail
 import keyring.errors
 import pytest
+import shard_durations
 
 from raphael_core.brain import db
 
@@ -106,6 +107,15 @@ def memory_keyring():
     keyring.set_keyring(backend.restored_afterwards)
 
 
+@pytest.fixture(autouse=True)
+def collect_garbage_after_each_test():
+    """The leak of a socket, a pipe or an event loop is reported by the garbage collector whenever it finds the object,
+    which is the set-up or tear-down of some later test (an error under -W error, far from its cause). Collecting here,
+    after the fixtures of the test have been torn down, puts the warning on the test that left the object behind."""
+    yield
+    gc.collect()
+
+
 @pytest.fixture
 def conn() -> Iterator[sqlite3.Connection]:
     connection = db.connect(":memory:")
@@ -113,15 +123,65 @@ def conn() -> Iterator[sqlite3.Connection]:
     connection.close()
 
 
-_EVAL_FILE_MARKERS = ("case_named(", "all_cases(", "HELD_OUT", "REGRESSION", 'REPO / "eval"')
-
-
 def pytest_collection_modifyitems(config, items):
-    """Skip what cannot run here: the tests marked `models` unless RAPHAEL_TEST_MODELS=1, and the
-    tests that read the evaluation sets when the ../eval folder is not checked out. A module keeps
-    only the last function of a name, so both skips must go through this one hook."""
+    """Keep this machine's share of the suite, then skip what cannot run here: the tests marked
+    `models` unless RAPHAEL_TEST_MODELS=1. A module keeps only the last function of a name, so
+    both must go through this one hook."""
+    keep_this_share(config, items)
     skip_model_tests(items)
-    skip_eval_file_tests(items)
+
+
+def keep_this_share(config, items) -> None:
+    """CI runs the suite on several machines at once: RAPHAEL_TEST_SHARE=3/8 keeps the third of
+    eight shares. Unset, as on a developer's machine, every test runs.
+
+    Whole files are dealt, the heaviest first, each to the share holding the least so far. A file
+    weighs the seconds recorded for it in shard-durations.json (see shard_durations.py), or its
+    number of tests where nothing is recorded. Every machine collects the same tests and reads the
+    same record, so all of them agree on the deal and each file lands in exactly one share. A file
+    is never split: its fixtures and the order of its tests stay what they are in a single run."""
+    wanted = os.environ.get("RAPHAEL_TEST_SHARE")
+    if not wanted:
+        return
+    try:
+        index, total = (int(part) for part in wanted.split("/"))
+    except ValueError:
+        raise pytest.UsageError(f"RAPHAEL_TEST_SHARE must look like 3/8, not {wanted!r}") from None
+    if not 1 <= index <= total:
+        raise pytest.UsageError(f"RAPHAEL_TEST_SHARE must name a share from 1 to {total}")
+    files = [item.nodeid.split("::", 1)[0] for item in items]
+    share = deal_files(files, total, shard_durations.read_record(shard_durations.RECORD))
+    kept, dropped = [], []
+    for item, file in zip(items, files, strict=True):
+        (kept if share[file] == index else dropped).append(item)
+    config.hook.pytest_deselected(items=dropped)
+    items[:] = kept
+
+
+def deal_files(files: list[str], shares: int, seconds: dict[str, float] | None = None) -> dict[str, int]:
+    """The share, counted from 1, of each test file; `files` names a file once per test in it.
+    `seconds` are the recorded seconds per file; without them every test weighs the same."""
+    tests: dict[str, int] = {}
+    for file in files:
+        tests[file] = tests.get(file, 0) + 1
+    return shard_durations.deal(tests, shares, seconds)
+
+
+_RECORDED: dict[str, float] = {}
+
+
+def pytest_runtest_logreport(report) -> None:
+    """With RAPHAEL_RECORD_DURATIONS=<path>, add up the seconds each test file takes (set-up, test
+    and tear-down), for shard_durations.py to deal the files by."""
+    if os.environ.get("RAPHAEL_RECORD_DURATIONS"):
+        file = report.nodeid.split("::", 1)[0]
+        _RECORDED[file] = _RECORDED.get(file, 0.0) + report.duration
+
+
+def pytest_sessionfinish(session) -> None:
+    target = os.environ.get("RAPHAEL_RECORD_DURATIONS")
+    if target and _RECORDED:
+        shard_durations.merge_into(Path(target), _RECORDED)
 
 
 def skip_model_tests(items) -> None:
@@ -130,19 +190,4 @@ def skip_model_tests(items) -> None:
     skip = pytest.mark.skip(reason="needs the speech models: set RAPHAEL_TEST_MODELS=1")
     for item in items:
         if item.get_closest_marker("models"):
-            item.add_marker(skip)
-
-
-def skip_eval_file_tests(items) -> None:
-    if (Path(__file__).resolve().parents[2] / "eval").is_dir():
-        return
-    skip = pytest.mark.skip(reason="the eval/ folder is not part of this checkout")
-    for item in items:
-        if item.path.name != "test_eval_tools.py":
-            continue
-        try:
-            source = inspect.getsource(item.function)
-        except (OSError, TypeError):
-            continue
-        if any(marker in source for marker in _EVAL_FILE_MARKERS):
             item.add_marker(skip)

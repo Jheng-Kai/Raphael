@@ -5,15 +5,13 @@ import { setLocale } from "./i18n";
 const api = vi.hoisted(() => ({
   connectorsStatus: vi.fn(), connectorsTools: vi.fn(), connectorsConnect: vi.fn(),
   toolsetsList: vi.fn(), integrationsCatalog: vi.fn(), integrationsAudit: vi.fn(), integrationsInventory: vi.fn(),
-  membersList: vi.fn(), membersSkillsList: vi.fn(), membersSkillsRead: vi.fn(), membersSkillsEdit: vi.fn(),
+  membersList: vi.fn(),
 }));
 vi.mock("./api", () => api);
 vi.mock("./ui", async (original) => ({ ...(await original<typeof import("./ui")>()), toaster: { info: vi.fn() } }));
 import { connectionsHTML, createConnections } from "./connections";
 import { toaster } from "./ui";
 
-const skill = { id: 7, name: "summary-style", description: "Use for summaries", enabled: true, source: "owner/repo" };
-const doc = "---\nname: summary-style\ndescription: Use for summaries\n---\nStart with the verdict.";
 const controls: ReturnType<typeof createConnections>[] = [];
 beforeEach(() => {
   vi.resetAllMocks();
@@ -29,9 +27,6 @@ beforeEach(() => {
   api.integrationsAudit.mockResolvedValue({ entries: [] });
   api.integrationsInventory.mockResolvedValue({ state: "complete", count: 1, apps: [{ id: "composio:notion", name: "Notion", state: "ready", enabled: true, connected: true, tools: 1 }] });
   api.membersList.mockResolvedValue({ members: [{ id: 1, name: "Ada" }], groups: [] });
-  api.membersSkillsList.mockResolvedValue({ skills: [skill] });
-  api.membersSkillsRead.mockResolvedValue({ skill, text: doc });
-  api.membersSkillsEdit.mockResolvedValue({ skill });
 });
 afterEach(() => {
   for (const control of controls.splice(0)) control.reset();
@@ -50,7 +45,7 @@ async function mount() {
     control.click(button!);
   };
   await control.load();
-  await vi.waitFor(() => expect(root.querySelector('[data-conn="skill-open"]')).not.toBeNull());
+  await vi.waitFor(() => expect(root.querySelector('[data-conn="open"]')).not.toBeNull());
   return { root, control, click };
 }
 
@@ -103,20 +98,4 @@ it("drops visible and pending failures when the dialog closes, including reopeni
   expect(control.view().loginError).toBeNull();
   expect(root.querySelector('.cs-dialog .note[role="alert"]')).toBeNull();
   expect(toaster.info).not.toHaveBeenCalled();
-});
-
-it("keeps skill save feedback before its footer and clears it on close", async () => {
-  const { root, control, click } = await mount();
-  click("skill-open");
-  await vi.waitFor(() => expect(root.querySelector<HTMLTextAreaElement>("#skill-text")?.value).toBe(doc));
-  const text = root.querySelector<HTMLTextAreaElement>("#skill-text")!;
-  text.value = doc + "\nKeep it brief.";
-  control.input(text as unknown as HTMLInputElement);
-  click("skill-save");
-  await vi.waitFor(() => expect(root.querySelector('.cs-dialog [role="status"][data-cs-notice]')?.textContent).toBe("已儲存技能"));
-  const note = root.querySelector('[data-cs-notice]')!;
-  expect(note.nextElementSibling?.classList.contains("action-row")).toBe(true);
-  expect(toaster.info).not.toHaveBeenCalled();
-  click("close"); click("skill-open");
-  expect(root.querySelector('[data-cs-notice]')).toBeNull();
 });

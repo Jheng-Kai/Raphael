@@ -2,6 +2,8 @@
 
 import asyncio
 import json
+import logging
+import os
 import re
 import time
 from dataclasses import asdict
@@ -28,6 +30,11 @@ _TOOL = re.compile(r"[A-Za-z0-9_.-]{1,128}")
 COMPOSIO_SERVER = "connectors_composio"
 GOOGLE_SERVER = "connectors_google"
 _CALENDAR_READ = ContextVar("calendar_read", default=None)
+logger = logging.getLogger(__name__)
+RPC_TIMEOUT_S = 30.0
+# How long the app store's list of apps counts as fresh, and the file that keeps the last good one between runs.
+CATALOG_TTL_S = 3600
+CATALOG_FILE = "connectors-catalog.json"
 
 
 def _text(params: dict, key: str, *, optional=False) -> str:
@@ -81,8 +88,12 @@ def _kind(tool: dict, toolkit: str) -> str:
 
 class ConnectorsService:
     def __init__(self, directory, vault, integrations, *, transport=None, open_browser=open_in_browser,
-                 sleep=asyncio.sleep, now=time.monotonic, poll_timeout=600, google_listener=None) -> None:
+                 sleep=asyncio.sleep, now=time.monotonic, poll_timeout=600, google_listener=None, wall=time.time) -> None:
         self.store = ConnectorStore(directory)
+        # The list of apps outlives a run: `now` is monotonic and means nothing next time, so the file holds `wall` time.
+        self._catalog_path, self._wall = directory / CATALOG_FILE, wall
+        self._catalog_read = False  # whether the file was looked at since the key last changed
+        self._catalog_renewal: asyncio.Task | None = None
         self.vault = vault
         self.hub = integrations
         self.composio = ComposioClient(lambda: vault.get(KEY), transport=transport, now=now)
@@ -90,6 +101,7 @@ class ConnectorsService:
         self.open_browser, self.sleep, self.now = open_browser, sleep, now
         self.poll_timeout = poll_timeout
         self._lock = asyncio.Lock()
+        self._connect_task: asyncio.Task | None = None
         self._tool_catalog: dict[str, list[dict]] = {}
         self._tool_load_locks: dict[str, asyncio.Lock] = {}
         self._store_catalog: tuple[float, dict] | None = None
@@ -106,21 +118,45 @@ class ConnectorsService:
     def register(self, router) -> None:
         methods = {"catalog": self.catalog, "categories": self.categories, "toolkit": self.toolkit, "connect": self.connect,
                    "status": self.status, "disconnect": self.disconnect, "tools": self.tools,
-                   "set_tools": self.set_tools, "set_key": self.set_key,
+                   "set_tools": self.set_tools, "set_key": self.set_key, "label": self.label,
                    "google.configure": self.google_configure, "google.connect": self.google_connect}
         for name, handler in methods.items():
             router.register("connectors." + name, self._handler(handler, name))
         self._notify = lambda: router.notify("connectors.changed", {})
 
     def _handler(self, handler, name):
-        async def run(params):
-            try:
-                if name == "status":
+        async def operation(params):
+            # A whole operation has a ceiling, including pagination, lock acquisition and browser launch.
+            budget = self.poll_timeout + RPC_TIMEOUT_S if name == "connect" else 120 + RPC_TIMEOUT_S if name == "google.connect" else RPC_TIMEOUT_S
+            async with asyncio.timeout(budget):
+                if name in {"catalog", "categories", "toolkit", "status"}:
                     return await handler(params)
                 async with self._lock:
                     return await handler(params)
+
+        async def run(params):
+            try:
+                if name not in {"connect", "google.connect"}:
+                    return await operation(params)
+                builtin = self.hub._login
+                if self.login_pending or self._lock.locked() or (builtin is not None and not builtin.done()):
+                    raise ConnectorFailure("busy")
+                task = asyncio.create_task(operation(params))
+                self._connect_task = task
+                try:
+                    return await task
+                except asyncio.CancelledError:
+                    if asyncio.current_task().cancelling():
+                        raise
+                    return {"connected": False, "error": "cancelled"}
+                finally:
+                    if self._connect_task is task:
+                        self._connect_task = None
+            except TimeoutError:
+                return {"ok": False, "error": "timeout", "http_status": None}
             except ConnectorFailure as error:
                 return {"ok": False, "error": error.kind, "http_status": error.status or None,
+                        **({"stage": error.stage} if error.stage and name in ("connect", "google.connect") else {}),
                         **({"failure": error.diagnostic.wire()} if error.diagnostic else {})}
             except RpcError:
                 raise
@@ -129,6 +165,26 @@ class ConnectorsService:
                 # vault, browser, callback or HTTP exception messages reach that path.
                 raise RpcError(INTERNAL_ERROR, "Connector operation failed") from None
         return run
+
+    async def _open(self, url: str) -> None:
+        """Open a sign-in page for the owner. A browser that cannot be opened is its own named failure, never an
+        internal error: the exception may carry the link, which is never shown or logged."""
+        try:
+            await self.open_browser(url)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            raise ConnectorFailure("browser") from None
+
+    @property
+    def login_pending(self):
+        return self._connect_task is not None and not self._connect_task.done()
+
+    def cancel_connect(self):
+        if not self.login_pending:
+            return False
+        self._connect_task.cancel()
+        return True
 
     def _save(self):
         self.store.save()
@@ -140,6 +196,27 @@ class ConnectorsService:
         if entry is None:
             raise invalid_params("There is no such connector")
         return entry
+
+    async def label(self, params):
+        entry = self._entry(params)
+        account_id, label = _text(params, "account_id"), _text(params, "label")
+        if not label or len(label) > 100:
+            raise invalid_params("A label needs 1 to 100 characters")
+        account = next((a for a in entry.accounts if a["id"] == account_id), None)
+        if account is None:
+            raise invalid_params("No such connected account")
+        account["label"] = label
+        self._save()
+        return {"connector": self._view(entry)}
+
+    @staticmethod
+    def account_view(account, previous=()):
+        old = next((a for a in previous if a["id"] == account["id"]), {})
+        # Keep only public address metadata; never copy provider tokens or auth state.
+        data = account.get("data") if isinstance(account.get("data"), dict) else {}
+        address = account.get("email") or data.get("email") or ""
+        label = old.get("label") or (address if isinstance(address, str) and len(address) <= 100 else "")
+        return {"id": account["id"], "status": account["status"], "label": label}
 
     def _view(self, entry: Connector) -> dict:
         view = asdict(entry)
@@ -155,8 +232,24 @@ class ConnectorsService:
         if not self.vault.get(KEY):
             raise ConnectorFailure("missing_key")
         before = self._store_catalog
-        if before and self.now() - before[0] < 3600:
+        if before is None and not self._catalog_read:
+            # A new run starts from the last good list on disk, which answers at once; an old one is renewed after.
+            self._catalog_read = True
+            saved = await asyncio.to_thread(self._read_saved_catalog)
+            if saved is not None and self._store_catalog is None:  # a fetch that finished meanwhile is newer
+                before = self._store_catalog = saved
+                if self.now() - saved[0] >= CATALOG_TTL_S:
+                    self._renew_catalog()
+                return saved[1]
+            before = self._store_catalog
+        renewing = self._catalog_renewal
+        if before and renewing is not None and not renewing.done():
             return before[1]
+        if before and self.now() - before[0] < CATALOG_TTL_S:
+            return before[1]
+        return await self._fetch_catalog(before)
+
+    async def _fetch_catalog(self, before):
         try:
             items, slugs, cursors = [], set(), set()
             cursor, count, truncated = None, 0, False
@@ -197,11 +290,58 @@ class ConnectorsService:
                       "total_items": len(items), "truncated": truncated, "stale": False,
                       "stores_tool_payloads": True, "payload_retention_days": 365}
             self._store_catalog = (self.now(), result)
+            await asyncio.to_thread(self._save_catalog, result)
             return result
         except ConnectorFailure:
             if before:
                 return {**before[1], "stale": True}
             raise
+
+    def _read_saved_catalog(self):
+        """The last good list from an earlier run as (monotonic time it was fetched, list), or None; the file is a cache."""
+        try:
+            raw = json.loads(self._catalog_path.read_text(encoding="utf-8"))
+            result, fetched = raw["result"], raw["fetched_at"]
+            if (raw.get("version") != 1 or type(fetched) not in (int, float) or not isinstance(result, dict)
+                    or not isinstance(result.get("items"), list) or not isinstance(result.get("categories"), list)
+                    or not all(isinstance(item, dict) and isinstance(item.get("slug"), str) for item in result["items"])):
+                return None
+        except (OSError, ValueError, KeyError, TypeError):
+            return None
+        # A clock that went back counts the list as old.
+        age = self._wall() - fetched
+        return self.now() - (age if 0 <= age < CATALOG_TTL_S else CATALOG_TTL_S), {**result, "stale": False}
+
+    def _save_catalog(self, result) -> None:
+        try:
+            temporary = self._catalog_path.with_suffix(".json.tmp")
+            temporary.write_text(json.dumps({"version": 1, "fetched_at": self._wall(), "result": result},
+                                            separators=(",", ":")), encoding="utf-8")
+            os.replace(temporary, self._catalog_path)
+        except OSError as exc:
+            logger.warning("Could not save the list of apps: %s", type(exc).__name__)
+
+    def _renew_catalog(self) -> None:
+        if self._catalog_renewal is None or self._catalog_renewal.done():
+            self._catalog_renewal = asyncio.get_running_loop().create_task(self._renew_catalog_now())
+
+    async def _renew_catalog_now(self) -> None:
+        before = self._store_catalog
+        try:
+            async with asyncio.timeout(120):
+                result = await self._fetch_catalog(before)
+        except (ConnectorFailure, TimeoutError, OSError) as exc:
+            # The old list stays, and the next ask tries again and says what went wrong (`stale`).
+            logger.info("The list of apps was not renewed: %s", type(exc).__name__)
+            return
+        if before is None or (result["items"], result["categories"]) != (before[1]["items"], before[1]["categories"]):
+            self._notify()
+
+    async def aclose(self) -> None:
+        task, self._catalog_renewal = self._catalog_renewal, None
+        if task is not None and not task.done():
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
 
     async def categories(self, params):
         return await self.composio.page("/toolkits/categories", cache=True)
@@ -231,6 +371,8 @@ class ConnectorsService:
                 self.vault.delete(KEY)
             self.composio._cache.clear()
             self._store_catalog = None
+            self._catalog_read = False
+            self._catalog_path.unlink(missing_ok=True)
             self._tool_catalog.clear()
             self._important.clear()
         self._save()
@@ -401,7 +543,7 @@ class ConnectorsService:
         entry.description = (details.get("meta") or {}).get("description", "")
         entry.logo = (details.get("meta") or {}).get("logo", "")
         entry.status, entry.auth_config_id = "ACTIVE", auth_id
-        entry.accounts = [{"id": account_id, "status": "ACTIVE"}]
+        entry.accounts = [self.account_view(account, entry.accounts)]
         self._save()
         await self._load_tools(entry)
         await self._patch()
@@ -437,7 +579,7 @@ class ConnectorsService:
             entry.accounts = [a for a in entry.accounts if a["id"] != account_id] + [{"id": account_id, "status": "INITIALIZING"}]
             self._save()
             try:
-                await self.open_browser(url)
+                await self._open(url)
                 deadline = self.now() + self.poll_timeout
                 while self.now() < deadline:
                     account = await self.composio.request("GET", "/connected_accounts/" + segment(account_id))
@@ -448,7 +590,7 @@ class ConnectorsService:
                         raise ConnectorFailure("account_mismatch")
                     if account.get("toolkit", {}).get("slug", slug) != slug:
                         raise ConnectorFailure("account_mismatch")
-                    entry.accounts = [a for a in entry.accounts if a["id"] != account_id] + [{"id": account_id, "status": status}]
+                    entry.accounts = [a for a in entry.accounts if a["id"] != account_id] + [self.account_view(account, entry.accounts)]
                     entry.status = "ACTIVE" if prior_active else status
                     self._save()
                     if status == "ACTIVE":
@@ -565,7 +707,8 @@ class ConnectorsService:
                     slug = account.get("toolkit", {}).get("slug")
                     status = account.get("status")
                     if isinstance(slug, str) and status in STATUSES and isinstance(account.get("id"), str):
-                        by_slug.setdefault(slug, []).append({"id": account["id"], "status": status})
+                        prior = self.store.connectors.get("composio:" + slug)
+                        by_slug.setdefault(slug, []).append(self.account_view(account, prior.accounts if prior else []))
                 for entry in self.store.connectors.values():
                     if entry.kind == "composio":
                         entry.accounts = by_slug.get(entry.id.split(":", 1)[1], [])
@@ -662,8 +805,9 @@ class ConnectorsService:
         entry.status = "INITIATED"
         self._save()
         try:
-            entry.granted_scopes = await self.google.connect(scopes_for(entry.gmail, entry.calendar), self.open_browser)
-            entry.status, entry.accounts = "ACTIVE", [{"id": "me", "status": "ACTIVE"}]
+            entry.granted_scopes = await self.google.connect(scopes_for(entry.gmail, entry.calendar), self._open)
+            address = await self.google.account_address()
+            entry.status, entry.accounts = "ACTIVE", [self.account_view({"id": "me", "status": "ACTIVE", "email": address}, entry.accounts)]
             await self.sync_google()
             self._save()
         except BaseException:

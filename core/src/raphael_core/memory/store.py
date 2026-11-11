@@ -39,11 +39,13 @@ never change confirmed entries. Only matching owner words or the owner document 
 Nothing here logs an entry.
 """
 
+from raphael_core.ui_words import ui_word, with_ui_words
 import hashlib
 import logging
 import re
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from datetime import date
 
 from . import scan
 from .terms import normalized, parts, tokens
@@ -70,7 +72,7 @@ _BLANK_LINE = re.compile(r"\n[ \t]*(?:\n[ \t]*)+")
 _TOLD = re.compile(r" — [^\n—]{1,60} · \d{4}-\d{2}-\d{2}$")
 
 # The mark of an entry nobody confirmed, in the language of the owner's screen.
-UNCONFIRMED = {"zh-TW": "（待確認）", "ja": "（未確認）", "en": "(unconfirmed) "}
+UNCONFIRMED = with_ui_words({"zh-TW": "（待確認）", "ja": "（未確認）", "en": "(unconfirmed) "})
 _UNCONFIRMED_MARKS = tuple(UNCONFIRMED.values())
 
 
@@ -224,7 +226,7 @@ class Refused(Exception):
 class MemoryFile:
     """One living file: the member's MEMORY.md, or with no member the owner's shared USER.md."""
 
-    def __init__(self, homes, member_id: int | None, *, on_change: Callable[[], None] | None = None) -> None:
+    def __init__(self, homes, member_id: int | None, *, on_change: Callable[[], None] | None = None, conn=None, now_ms=None, owner_thread=None) -> None:
         self.homes = homes
         self.member_id = member_id
         self.name = "USER.md" if member_id is None else "MEMORY.md"
@@ -234,6 +236,9 @@ class MemoryFile:
         self._failures = 0
         # Counts the clears, so that a pass that read the file before one applies nothing after it.
         self.clears = 0
+        from .entry_metadata import EntryMetadata
+        from ..clock import wall_clock_ms
+        self.metadata = EntryMetadata(conn, 'shared' if member_id is None else f'member:{member_id}', now_ms or wall_clock_ms, owner_thread) if conn is not None else None
 
     # --- reading -----------------------------------------------------------------------------------
 
@@ -258,7 +263,35 @@ class MemoryFile:
             return ""
 
     def entries(self) -> list[str]:
-        return parse_entries(self.read())
+        entries = parse_entries(self.read())
+        if self.metadata is not None:
+            from .entry_metadata import LEGACY_UNTIL, checked_until
+            with self.homes.locked(self.member_id):
+                entries = parse_entries(self._raw())
+                migrated = []
+                expiry = []
+                for entry in entries:
+                    found = LEGACY_UNTIL.search(entry)
+                    if found:
+                        try:
+                            until = checked_until(found[1])
+                        except ValueError:
+                            logger.warning('Memory expiry migration retained an invalid date')
+                        else:
+                            plain = LEGACY_UNTIL.sub('', entry).strip()
+                            if plain:
+                                migrated.append(plain)
+                                expiry.append((plain, until))
+                                continue
+                    migrated.append(entry)
+                self.metadata.sync(entries, migrated)
+                for text, until in expiry:
+                    self.metadata.set_until(text, until)
+                # Store expiry first: a crash may repeat migration, but cannot erase the date.
+                if migrated != entries:
+                    self._persist(migrated)
+                entries = migrated
+        return entries
 
     def revision(self) -> str:
         """A mark of the file as it is now, for an edit made from a copy of it."""
@@ -310,6 +343,14 @@ class MemoryFile:
         outside content, `told` the stamp of a shared entry, and `unattended` a pass nobody watches,
         which may not empty the file or take most of it. The result is what the model is told."""
         ops = [dict(op) if isinstance(op, dict) else {} for op in operations]
+        if self.metadata is not None:
+            from .entry_metadata import checked_until
+            try:
+                for op in ops:
+                    if 'until' in op:
+                        checked_until(op['until'])
+            except (ValueError, TypeError):
+                return {'success': False, 'kind': 'bad_arguments', 'error': 'until must be an ISO date or null'}
         if not ops:
             return {"success": False, "kind": "bad_arguments", "error": "operations is empty."}
         for number, op in enumerate(ops, 1):
@@ -332,9 +373,25 @@ class MemoryFile:
                 problem = self._final_check(before, working, ops, unattended)
                 if problem is not None:
                     return self._failed(*problem)
+                expiry = []
+                for op in ops:
+                    if 'until' not in op or not op.get('content') or op.get('action') == 'remove':
+                        continue
+                    matches = [entry for entry in working if str(op['content']) in entry]
+                    if len(matches) != 1:
+                        return self._failed('ambiguous', 'Expiry must identify one complete entry; use its full content.')
+                    entry = matches[0]
+                    if mark and not is_unconfirmed(entry) and not owner_stated(str(op['content']), owner_text):
+                        return self._failed('unconfirmed_only', 'Outside content cannot change a confirmed entry expiry. Nothing was changed.')
+                    expiry.append((entry, op['until']))
                 changed = working != before
                 if changed:
                     self._persist(working)
+                if self.metadata is not None:
+                    if not changed:
+                        self.metadata.sync(before, working)
+                    for entry, until in expiry:
+                        changed = self.metadata.set_until(entry, until) or changed
         except (OSError, ValueError) as exc:
             logger.warning("Could not write a memory file: %s", type(exc).__name__)
             return {"success": False, "kind": "io", "error": f"{self.name} could not be written. Nothing was changed."}
@@ -470,11 +527,23 @@ class MemoryFile:
         return None
 
     def _persist(self, entries: Sequence[str]) -> None:
+        before = parse_entries(self._raw()) if self.metadata is not None else []
         text = render_entries(entries)
         if self.member_id is None:
             self.homes.shared_keep(self.name, text)
         else:
             self.homes.keep(self.member_id, self.name, text)
+        if self.metadata is not None:
+            self.metadata.sync(before, entries)
+
+    def stale_entries(self, today: date, max_unused_days=90):
+        return self.metadata.stale(self.entries(), today, max_unused_days) if self.metadata is not None else []
+
+    def prune_stale(self, today: date, max_unused_days=90):
+        entries = self.stale_entries(today, max_unused_days)
+        if not entries:
+            return None
+        return self.apply([{'action': 'remove', 'old_text': entry} for entry in entries], unattended=True)
 
     def edit_document(self, text: str, revision: str | None) -> dict:
         """The owner's edit of the whole document, from the copy with `revision`. It refuses an edit
@@ -519,7 +588,7 @@ class MemoryFile:
     def clear(self) -> bool:
         """Empty the file; whether it held anything. The journal keeps what it held."""
         with self.homes.locked(self.member_id):
-            held = bool(self.entries())
+            held = bool(parse_entries(self._raw()))
             if held:
                 self._persist([])
             self.clears += 1

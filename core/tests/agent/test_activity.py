@@ -5,7 +5,7 @@ import asyncio
 import pytest
 
 from .test_service import make_rig  # noqa: F401
-from .test_narration import chat, typed
+from .test_narration import chat, typed, use
 from .test_plugins import plugins, calls  # noqa: F401
 
 
@@ -74,7 +74,7 @@ async def test_approval_card_is_idle_and_resumes_tracking(make_rig, plugins, cli
     await plugins.connect(note="T2")
     notes = []
     rig = make_rig(plugins=plugins.hub, notify=lambda method, data: notes.append((method, data)))
-    client.chats = [chat("Saving.", ("Notes__note", {"text": "example"})), chat("Saved.")]
+    client.chats = [chat("Saving.", use("Notes__note", {"text": "example"})), chat("Saved.")]
     result = await typed(rig)
     assert result["status"] == "confirm"
     assert states(notes)[-1] == "idle" and "done" not in states(notes)
@@ -178,9 +178,9 @@ async def test_confirmed_admin_batch_tracks_the_actual_tool(make_rig, monkeypatc
     monkeypatch.setattr(rig.service._gate, "check_admin_batch", lambda *args: None)
     monkeypatch.setattr(rig.service, "_outcome", lambda *args, **kwargs: {"status": "done"})
     pending = SimpleNamespace(language="en", action=SimpleNamespace(args={"operations": []}))
-    ask = SimpleNamespace(speaker=SimpleNamespace(id=0), ledger=SimpleNamespace(total=0),
+    ask = SimpleNamespace(speaker=SimpleNamespace(id=0, depth=0), ledger=SimpleNamespace(total=0),
         admin_pending=[], waiting_apps=[], waiting_secrets=[], waiting_computer=False,
         scope="private", nested=False, quick=False, exchange_speakers=None, source="app", background_owner=False)
-    followup = SimpleNamespace(ask=ask, admin_batch=True)
+    followup = SimpleNamespace(ask=ask, admin_batch=True, management_batch=False)
     await rig.service._confirm_plugin(pending, None, followup)
     assert states(notes) == ["thinking", "working", "thinking", "done", "idle"]

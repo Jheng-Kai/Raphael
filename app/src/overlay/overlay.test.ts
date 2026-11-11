@@ -3,16 +3,24 @@ import { noticeDurationMs } from "./notice";
 import { COMPLETION_MS, formatProgress } from "./progress-caption";
 import { WAITING_LINE_MS } from "./waiting-lines";
 import {
-  HOLD_MS,
   OverlayController,
+  isRefusal,
   type AskButtons,
   type EmblemControl,
-  type HoldState,
   type OverlayEvent,
   type OverlayView,
   type UiLanguage,
 } from "./overlay";
-import type { Mode, Phase } from "./emblem";
+import type { Mode, Mood, Phase } from "./emblem";
+
+test("a refusal is a 否 or Negative line, in any interface language; a report is not", () => {
+  expect(isRefusal("《否。未偵測到麥克風。》")).toBe(true);
+  expect(isRefusal("《Negative. No microphone was found.》")).toBe(true);
+  expect(isRefusal("否。目前無法回答。")).toBe(true);
+  expect(isRefusal("《告。一切正常。》")).toBe(false);
+  expect(isRefusal("《Notice. All is well.》")).toBe(false);
+  expect(isRefusal("我否認這件事")).toBe(false);
+});
 
 // ---- how long a notice stays ----
 
@@ -39,6 +47,7 @@ test("a long line stays 12 s at most", () => {
 // An emblem that keeps the real one's times (appear 833 ms, vanish 467 ms) on the fake clock.
 class FakeEmblem implements EmblemControl {
   level = 0;
+  mood: Mood = "calm";
   readonly log: string[] = [];
   get last(): string | undefined {
     return this.log[this.log.length - 1];
@@ -134,9 +143,6 @@ class FakeView implements OverlayView {
     this.asked.push(buttons);
     this.log.push(`ask:${buttons.yes}|${buttons.no}|${buttons.tier}`);
   }
-  setHold(state: HoldState): void {
-    this.log.push(`hold:${state}`);
-  }
   setChoice(choice: "yes" | "no" | "always" | null): void {
     this.log.push(`choice:${choice}`);
   }
@@ -186,6 +192,19 @@ test("public turn progress replaces the previous subtitle without rotating or re
   expect(view.waiting).toBeNull();
 });
 
+test("Raphael is red while he refuses (a 否 line) and his gold again for a report or a new dictation", () => {
+  send({ type: "notice", text: "《否。未偵測到麥克風。請接上裝置。》" });
+  expect(emblem.mood).toBe("angry");
+  vi.advanceTimersByTime(30_000);
+  send({ type: "notice", text: ZH });
+  expect(emblem.mood).toBe("calm");
+  send({ type: "say", prefix: "否", text: "目前無法回答。" });
+  vi.advanceTimersByTime(30_000);
+  expect(emblem.mood).toBe("angry");
+  send({ type: "show", mode: "listening", line: "Hello" });
+  expect(emblem.mood).toBe("calm");
+});
+
 test("the fake page notices a caption and a line that stand in their one place together", () => {
   view.showLine("《答。好的》", "zh-TW");
   view.showProgress(42);
@@ -195,7 +214,7 @@ test("the fake page notices a caption and a line that stand in their one place t
 });
 
 test("learned words use the notice lifecycle", () => {
-  const text = "《了。「Typeless」已加入詞典。》";
+  const text = "《了。「Wordnote」已加入詞典。》";
   send({ type: "learned", text });
   expect(emblem.log).toEqual(["appear", "set:steady"]);
   vi.advanceTimersByTime(833);
@@ -550,33 +569,20 @@ test("three notices are shown one after the other, in order", () => {
   expect(emblem.log.filter((l) => l === "vanish")).toHaveLength(1);
 });
 
-// The answer the owner saw run out of the top of the window on 2026-10-27, with an address in it.
-const LONG = "1. 建立帳號並登入控制台。 2. 若設定只要求金鑰，前往「Settings → Project Settings → API Keys」取得。" +
-  "[官方說明](https://docs.composio.dev/reference/authenticating-to-composio) 3. 將金鑰填入設定頁，再回到 Gmail 連結卡完成 Google 授權。" +
-  "金鑰請只填入專用欄位，不要貼到聊天中。";
+// A synthetic numbered answer exercises caption paging and link removal.
+const LONG = "1. 建立範例帳號並登入測試控制台。 2. 若範例設定需要金鑰，前往「Settings → Project Settings → API Keys」複製。" +
+  "[範例指南](https://example.test/setup) 3. 將測試金鑰填入範例欄位，再回到連結卡查看測試結果。" +
+  "此處僅使用虛構資料，請勿填入任何真實帳號或金鑰。";
 
-test("a long voiced answer is told page by page without its address, and its last page waits for the voice", () => {
-  send({ type: "say", prefix: "答", text: LONG, hold: true });
-  vi.advanceTimersByTime(60_000);
+test("a long answer is told page by page without its address, then the emblem vanishes", () => {
+  send({ type: "say", prefix: "答", text: LONG });
+  vi.advanceTimersByTime(120_000);
   const pages = lines().map((line) => line.slice("line:".length));
   expect(pages.length).toBeGreaterThan(2);
   expect(pages[0]!.startsWith("《答。1. ")).toBe(true);
   expect(pages[pages.length - 1]!.endsWith("》")).toBe(true);
   expect(pages.join("")).not.toMatch(/https?:|\]\(/);
-  expect(emblem.log).not.toContain("vanish"); // the last page stays while the voice speaks
-  send({ type: "release" });
   expect(view.last).toBe("clear");
-  expect(emblem.last).toBe("vanish");
-});
-
-test("a voice that ends before the last page lets the pages that are left run on their own time", () => {
-  send({ type: "say", prefix: "答", text: LONG, hold: true });
-  vi.advanceTimersByTime(833);
-  expect(lines()).toHaveLength(1);
-  send({ type: "release" });
-  vi.advanceTimersByTime(120_000);
-  expect(lines().length).toBeGreaterThan(2);
-  expect(lines()[lines().length - 1]!.endsWith("》")).toBe(true);
   expect(emblem.last).toBe("vanish");
 });
 
@@ -838,8 +844,6 @@ test("YES of a T2 question is a click, answered once", () => {
   expect(view.log).toEqual(["choice:yes", "ask-hide", "clear"]);
   controller.clickAsk("yes");
   controller.clickAsk("no");
-  controller.holdStart();
-  controller.holdEnd(true);
   expect(confirm).toHaveBeenCalledTimes(1);
 });
 
@@ -850,6 +854,27 @@ test("NO is a click too, and it is the same for T3", () => {
   expect(view.log).toEqual(["choice:no", "ask-hide", "clear"]);
 });
 
+// (owner, 2026-11-11: 「長按才會繼續，點一下就可以了，不用這麼複雜」) The YES of a question that cannot be undone was a press
+// held for 0.6 s with a line filling under it; one press answers it now, as every other.
+test("YES of a T3 question is one click too, answered once, with no hold in between", () => {
+  asked({ tier: "T3" });
+  controller.clickAsk("yes");
+  expect(confirm).toHaveBeenCalledExactlyOnceWith("c1", true);
+  expect(view.log).toEqual(["choice:yes", "ask-hide", "clear"]);
+  controller.clickAsk("yes");
+  vi.advanceTimersByTime(60_000);
+  expect(confirm).toHaveBeenCalledTimes(1);
+});
+
+test("the controller has no hold left: no timer waits after a question is asked, and no hold method exists", () => {
+  asked({ tier: "T3" });
+  expect(vi.getTimerCount()).toBeGreaterThan(0); // the question's own time limit
+  const before = vi.getTimerCount();
+  controller.clickAsk("yes");
+  expect(vi.getTimerCount()).toBeLessThanOrEqual(before);
+  for (const name of ["holdStart", "holdEnd", "holdCancel"]) expect((controller as unknown as Record<string, unknown>)[name]).toBeUndefined();
+});
+
 test("a click before the buttons are on screen is not an answer", () => {
   send(ask());
   controller.clickAsk("yes");
@@ -857,134 +882,16 @@ test("a click before the buttons are on screen is not an answer", () => {
   expect(confirm).not.toHaveBeenCalled();
 });
 
-test("only a T3 question begins a hold: the page captures the pointer for that and for nothing else", () => {
-  expect(controller.holdStart()).toBe(false); // no question
-  send(ask({ tier: "T3" }));
-  expect(controller.holdStart()).toBe(false); // its buttons are not there yet: the emblem is still appearing
-  vi.advanceTimersByTime(833);
-  expect(controller.holdStart()).toBe(true);
-  controller.holdCancel();
-  send(ask({ id: "c2" })); // T2
-  vi.advanceTimersByTime(1);
-  expect(controller.holdStart()).toBe(false); // its YES is a click, which one takes back by moving off
-  controller.clickAsk("no");
-  expect(controller.holdStart()).toBe(false); // answered
-});
-
 test("a click without a question does nothing", () => {
   controller.clickAsk("yes");
-  controller.holdStart();
-  controller.holdEnd(true);
-  controller.holdCancel();
   expect(confirm).not.toHaveBeenCalled();
   expect(view.log).toEqual([]);
 });
 
-test("the YES of a T3 question is not answered by a click", () => {
-  asked({ tier: "T3" });
-  controller.clickAsk("yes");
-  expect(confirm).not.toHaveBeenCalled();
-});
-
-test("T3: a hold shorter than the arming time answers nothing", () => {
-  asked({ tier: "T3" });
-  controller.holdStart();
-  expect(view.log).toEqual(["hold:holding"]);
-  vi.advanceTimersByTime(HOLD_MS - 1);
-  controller.holdEnd(true);
-  expect(view.log).toEqual(["hold:holding", "hold:idle"]);
-  vi.advanceTimersByTime(5000);
-  expect(confirm).not.toHaveBeenCalled();
-  expect(view.log).toEqual(["hold:holding", "hold:idle"]);
-});
-
-test("T3: held for the arming time, the button arms, and letting go on it answers YES", () => {
-  expect(HOLD_MS).toBe(600);
-  asked({ tier: "T3" });
-  controller.holdStart();
-  vi.advanceTimersByTime(HOLD_MS - 1);
-  expect(view.log).toEqual(["hold:holding"]);
-  vi.advanceTimersByTime(1);
-  expect(view.log).toEqual(["hold:holding", "hold:armed"]);
-  expect(confirm).not.toHaveBeenCalled(); // armed is not answered: letting go is
-  controller.holdEnd(true);
-  expect(confirm).toHaveBeenCalledExactlyOnceWith("c1", true);
-  expect(view.log).toEqual(["hold:holding", "hold:armed", "choice:yes", "ask-hide", "clear"]);
-});
-
-test("T3: armed, but let go away from the button, answers nothing and disarms", () => {
-  asked({ tier: "T3" });
-  controller.holdStart();
-  vi.advanceTimersByTime(HOLD_MS);
-  controller.holdEnd(false);
-  expect(view.last).toBe("hold:idle");
-  expect(confirm).not.toHaveBeenCalled();
-  controller.holdEnd(true); // the release of a later press does not find an armed button
-  expect(confirm).not.toHaveBeenCalled();
-});
-
-test("T3: a pointer the system took away drops the hold", () => {
-  asked({ tier: "T3" });
-  controller.holdStart();
-  vi.advanceTimersByTime(300);
-  controller.holdCancel();
-  vi.advanceTimersByTime(HOLD_MS);
-  expect(view.log).toEqual(["hold:holding", "hold:idle"]);
-  controller.holdEnd(true);
-  expect(confirm).not.toHaveBeenCalled();
-});
-
-test("T3: a release that never comes does not leave the button armed", () => {
-  asked({ tier: "T3" });
-  controller.holdStart();
-  vi.advanceTimersByTime(HOLD_MS);
-  expect(view.last).toBe("hold:armed");
-  vi.advanceTimersByTime(5000);
-  expect(view.last).toBe("hold:idle");
-  controller.holdEnd(true);
-  expect(confirm).not.toHaveBeenCalled();
-});
-
-test("T3: pressing again starts the hold again", () => {
-  asked({ tier: "T3" });
-  controller.holdStart();
-  vi.advanceTimersByTime(400);
-  controller.holdStart();
-  vi.advanceTimersByTime(400); // 800 ms since the first press, 400 since the second
-  controller.holdEnd(true);
-  expect(confirm).not.toHaveBeenCalled();
-});
-
-test("T3: NO clicked while YES is being held ends the hold and the YES stays dead", () => {
-  asked({ tier: "T3" });
-  controller.holdStart();
-  vi.advanceTimersByTime(300);
-  controller.clickAsk("no");
-  expect(confirm).toHaveBeenCalledExactlyOnceWith("c1", false);
-  expect(view.log).toEqual(["hold:holding", "hold:idle", "choice:no", "ask-hide", "clear"]);
-  vi.advanceTimersByTime(HOLD_MS);
-  expect(view.log).toEqual(["hold:holding", "hold:idle", "choice:no", "ask-hide", "clear"]); // nothing arms later
-  controller.holdEnd(true);
-  expect(confirm).toHaveBeenCalledTimes(1);
-});
-
-test("a question whose tier is not plainly T2 is asked the strict way", () => {
+test("a question whose tier is not plainly T2 is answered by one click too", () => {
   asked({ tier: "T9" as Ask["tier"] });
   controller.clickAsk("yes");
-  expect(confirm).not.toHaveBeenCalled();
-  controller.holdStart();
-  vi.advanceTimersByTime(HOLD_MS);
-  controller.holdEnd(true);
   expect(confirm).toHaveBeenCalledExactlyOnceWith("c1", true);
-});
-
-test("a hold on the YES of a T2 question is no answer: its YES is a click", () => {
-  asked();
-  controller.holdStart();
-  vi.advanceTimersByTime(HOLD_MS);
-  controller.holdEnd(true);
-  expect(confirm).not.toHaveBeenCalled();
-  expect(view.log).toEqual([]);
 });
 
 test("an answer that could not be sent gives the question back for another try", async () => {
@@ -1157,7 +1064,7 @@ test("other events leave a question alone", () => {
 // ---- the waiting lines: a question being thought about ----
 
 // The app sends the phrase book of the interface language with the quiet thought; the page only rotates it.
-const BOOKS: Record<UiLanguage, string[]> = {
+const BOOKS: Record<"zh-TW" | "en" | "ja", string[]> = {
   "zh-TW": ["《告。解析中……》", "《告。並列演算中……》", "《告。檢索最適解……》", "《告。思考加速中……》", "《告。整理情報中……》"],
   ja: ["《告。解析を実行中……》", "《告。並列演算を実行中……》", "《告。最適解を検索中……》", "《告。思考を加速中……》"],
   en: ["《Notice. Analyzing…》", "《Notice. Computing in parallel…》", "《Notice. Seeking the optimum…》", "《Notice. Accelerating thought…》"],
@@ -1370,11 +1277,10 @@ test("levels and settings leave the lines going", () => {
 
 // ---- a question with a third answer ----
 
-test("a question with the third answer shows three buttons, and is never held", () => {
+test("a question with the third answer shows three buttons", () => {
   send(ask({ tier: "T3", yes: "允許一次", no: "不要", always: "一律允許" }));
   vi.advanceTimersByTime(833);
   expect(view.asked).toEqual([{ yes: "允許一次", no: "不要", always: "一律允許", tier: "T2", language: "zh-TW" }]);
-  expect(controller.holdStart()).toBe(false);
 });
 
 test("a question without the third answer has no always label", () => {

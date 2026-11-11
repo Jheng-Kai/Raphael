@@ -12,7 +12,7 @@ handler below; what a handler alone does not show is here:
   int and a bool is no number.
 - If history cannot be written, cleaned text still comes back (with id None). Cleanup failures
   retain recovery text and a reason; the device refuses automatic delivery of those results.
-- Voice questions share dictation cleanup and spend accounting but never write a history row.
+- Voice questions share cleanup and spend accounting, and enter history as recipient-labelled asks.
   Transcript-only consumers still use `brain.normalize_transcript` for dictionary and script
   normalization without model calls, history or cost.
 - A dictation that is cancelled while its text is being cleaned (`brain.cancel_dictation`, for the
@@ -62,7 +62,7 @@ from .catalog import (
     choice_problem,
     find,
 )
-from .cleanup import CleanupResult, CleanupService, already_clean_short, join_parts, split_for_cleanup
+from .cleanup import CleanedPart, CleanupResult, CleanupService, already_clean_short, join_parts, split_for_cleanup
 from .cloud_stt import CloudTranscriber
 from .dictionary import DictionaryStore, Learned
 from .history import HistoryItem, HistoryStore
@@ -78,6 +78,10 @@ from .usage import UsageAnalytics
 from .textnorm import (
     apply_replacements,
     finish_cleaned_text,
+    finish_chinese_dictation,
+    guard_cleanup_text,
+    remove_dictation_fillers,
+    remove_unspoken_ma,
     normalize_transcript,
     remove_stutters,
 )
@@ -231,6 +235,7 @@ class Brain:
         tz: tzinfo | None = None,
         providers: ProviderRegistry | None = None,
     ) -> None:
+        self._conn = conn
         self._client = client
         self._providers = providers
         self._notify_providers = lambda: None
@@ -245,6 +250,7 @@ class Brain:
         self._key_check_revision = 0
         self._key_checked_at_ms: int | None = None
         self._key_refresh_task: asyncio.Task[None] | None = None
+        self._provider_refresh: asyncio.Task[None] | None = None
         self._closed = False
         # The dictations whose text is being cleaned, by session; True once one was cancelled.
         self._cleaning: dict[str, bool] = {}
@@ -295,6 +301,11 @@ class Brain:
             task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await task
+        renewal = self._provider_refresh
+        if renewal is not None:
+            renewal.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await renewal
 
     def register(self, router: Router) -> None:
         """Put every method of the brain on `router`."""
@@ -349,8 +360,16 @@ class Brain:
         incomplete = params.get("incomplete", False)
         if not isinstance(incomplete, bool):
             raise invalid_params("incomplete must be a boolean")
-        if purpose == "dictation":
-            self._prune_history_if_due()
+        if purpose == "agent":
+            member = _opt_int(params, "member_id")
+            if member is not None:
+                if type(member) is not int or member < 0:
+                    raise invalid_params("member_id must be a nonnegative integer")
+                recipient = self._conn.execute("SELECT name FROM members WHERE id = ?", (member,)).fetchone() if member else None
+                if member and recipient is None:
+                    raise invalid_params("member_id must name an existing member")
+                target_app = recipient[0] if member else "拉斐爾"
+        self._prune_history_if_due()
 
         rules = self._dictionary.replacements()
         # The Chinese written form the user chose decides the script of the text (or none).
@@ -395,7 +414,10 @@ class Brain:
             self._cleaning[session_id] = False
         try:
             if incomplete:
-                result = CleanupResult(normalized, False, "incomplete_stt", None, 0, 0)
+                result, chunks = await self._clean_incomplete_dictation(
+                    raw_text, marker, rules, chinese, audio_seconds, target_app,
+                    lambda: self._cleaning.get(session_id, False),
+                )
             elif already_clean_short(raw_text.strip()) and already_clean_short(normalized):
                 result = CleanupResult(normalized, True, None, None, 0, 0)
             else:
@@ -413,30 +435,62 @@ class Brain:
         if result.model is not None and not result.model.startswith("@") and self._openrouter.state == "ok":
             # The model answered, so the time it took is a round trip to OpenRouter.
             self._openrouter.latency_ms = result.llm_ms
+        if result.cleaned or (incomplete and result.parts):
+            words = self._dictionary.hint_words()
+            if result.parts:
+                guarded = tuple(
+                    replace(part, text=guard_cleanup_text(
+                        chunks[index][0] if chunks else normalized, part.text, dictionary_words=words,
+                    )) if part.cleaned else part
+                    for index, part in enumerate(result.parts)
+                )
+                rejected = any(part.cleaned and not part.text.strip() for part in guarded)
+                result = replace(result, parts=guarded)
+            else:
+                guarded_text = guard_cleanup_text(normalized, result.text, dictionary_words=words)
+                rejected = not guarded_text.strip()
+                result = replace(result, text=guarded_text)
+            if rejected:
+                # Preserve model billing/timing, but never claim unsupported output was cleaned.
+                if incomplete:
+                    result = replace(result, parts=tuple(
+                        replace(part, text=chunks[index][0], cleaned=False)
+                        if part.cleaned and not part.text.strip() else part
+                        for index, part in enumerate(guarded)
+                    ))
+                else:
+                    result = replace(result, text=normalized, cleaned=False, fallback_reason="suspicious", parts=())
         if result.parts:
-            # All pieces succeeded. Finish each and retain its sentence/paragraph boundary.
+            # Finish successful heard pieces; incomplete speech keeps literal gap parts.
+            def finish_part(index, part):
+                if not part.cleaned:
+                    return remove_stutters(part.text)
+                finished = finish_cleaned_text(part.text, rules, chinese=chinese)
+                return remove_unspoken_ma(chunks[index][0] if chunks else normalized, finished) if chinese is not None else finished
+
             text = join_parts(
                 [
-                    replace(
-                        part,
-                        text=finish_cleaned_text(part.text, rules, chinese=chinese)
-                        if part.cleaned
-                        else remove_stutters(part.text),
-                    )
-                    for part in result.parts
+                    replace(part, text=finish_part(index, part))
+                    for index, part in enumerate(result.parts)
                 ]
             )
         elif result.cleaned:
             text = finish_cleaned_text(result.text, rules, chinese=chinese)
+            if chinese is not None:
+                text = remove_unspoken_ma(normalized, text)
         else:
             # A fallback is the normalized text already; doing it twice could repeat a replacement.
             # Nobody has tidied it, so its obvious stutters go; the history keeps it as it was.
             text = remove_stutters(result.text)
 
+        text = remove_dictation_fillers(text)
+        if chinese is not None:
+            text = finish_chinese_dictation(text)
+
         item = HistoryItem(
             id=None,
             created_at_ms=self._now_ms(),
-            kind="dictation",
+            kind="ask" if purpose == "agent" else "dictation",
             raw_text=normalized,
             text=text,
             cleaned=result.cleaned,
@@ -452,8 +506,6 @@ class Brain:
         if cancelled:
             logger.info("A dictation was cancelled while its text was cleaned; not keeping it")
             entry_id = None
-        elif purpose == "agent":
-            entry_id = None
         else:
             entry_id = self._save(item)
         return {
@@ -464,6 +516,44 @@ class Brain:
             "fallback_reason": result.fallback_reason,
             "llm_ms": result.llm_ms,
         }
+
+    async def _clean_incomplete_dictation(self, raw, marker, rules, chinese, seconds, target_app, is_cancelled):
+        """Clean isolated heard regions without giving a model a gap or context across one."""
+        regions = raw.split(marker)
+        total = max(1, sum(len(region.strip()) for region in regions))
+        parts, chunks, results = [], [], []
+        for index, region in enumerate(regions):
+            body = region.strip()
+            if body:
+                pieces = split_for_cleanup(body)
+                aligned = [(normalize_transcript(piece, rules, chinese=chinese), apply_replacements(piece, rules)) for piece in pieces]
+                normalized = normalize_transcript(body, rules, chinese=chinese)
+                if already_clean_short(body) and already_clean_short(normalized):
+                    result = CleanupResult(normalized, True, None, None, 0, 0)
+                else:
+                    result = await self._cleanup.clean(
+                        normalized, heard=apply_replacements(body, rules),
+                        audio_seconds=seconds * len(body) / total, target_app=target_app,
+                        chunks=aligned if len(aligned) > 1 else None, is_cancelled=is_cancelled,
+                    )
+                results.append(result)
+                if result.parts:
+                    parts.extend(result.parts)
+                    chunks.extend(aligned)
+                else:
+                    parts.append(CleanedPart(result.text, result.cleaned))
+                    chunks.append((normalized, apply_replacements(body, rules)))
+                parts[-1] = replace(parts[-1], after=region[len(region.rstrip()):])
+            if index + 1 < len(regions):
+                following = regions[index + 1]
+                parts.append(CleanedPart(marker, False, following[:len(following) - len(following.lstrip())]))
+                chunks.append((marker, marker))
+        # Even when every heard region succeeds, missing speech must remain visibly incomplete.
+        return CleanupResult(
+            join_parts(parts), False, "incomplete_stt",
+            next((result.model for result in results if result.model), None),
+            sum(result.cost_usd for result in results), sum(result.llm_ms for result in results), tuple(parts),
+        ), chunks
 
     async def _normalize_transcript(self, params: dict) -> dict:
         """`{raw_text}` -> `{text}`: what speech-to-text heard, with the dictionary's replacements
@@ -509,7 +599,8 @@ class Brain:
         return {"items": [asdict(item) for item in items], "total": self._history.count()}
 
     async def _history_latest(self, params: dict) -> dict:
-        latest = self._history.latest()
+        """The latest pasted dictation; ask history must never replace the paste-last source."""
+        latest = self._history.latest(kind="dictation")
         return {"item": None if latest is None else asdict(latest)}
 
     async def _history_delete(self, params: dict) -> dict:
@@ -574,10 +665,18 @@ class Brain:
         optional fields are left out when empty: `rules`, the words of `learned` that gained a
         replacement rule, and `reverted`, the words of which a learned rule was withdrawn
         because the user changed the text back (those are not in `learned`). The words are never
-        logged, only how many."""
+        logged, only how many. An optional `history_id` must name a plain dictation;
+        ask history and explicit ask/agent origins never supply learning evidence."""
         corrections = _required(params, "corrections")
         if not isinstance(corrections, list):
             raise invalid_params("corrections must be a list")
+        if "history_id" in params:
+            history_id = _int(params, "history_id")
+            source = self._history.get(history_id)
+            if source is None or source.kind != "dictation":
+                return {"learned": []}
+        if params.get("kind") == "ask" or params.get("purpose") == "agent":
+            return {"learned": []}
         pairs: list[tuple[str, str]] = []
         for correction in corrections:
             if not isinstance(correction, dict):
@@ -852,7 +951,7 @@ class Brain:
         has_key = self._has_key_or_none()
         if has_key:
             self._refresh_key_usage_if_due()
-        latest = self._history.latest()
+        latest = self._history.latest(kind="dictation")
         return {
             "openrouter": self._openrouter_view(has_key),
             "spend": {
@@ -922,7 +1021,12 @@ class Brain:
         else:
             entries, fetched_at_ms, source = await self._pricing.catalog()
         if self._providers:
-            await self._providers.refresh_catalog()
+            # The saved lists answer at once (the window asks at every start); they are renewed after the answer
+            # and the window is told if that changed them. A provider with no list yet is waited for, as before.
+            if self._providers.uncached():
+                await self._providers.refresh_catalog()
+            else:
+                self._renew_providers_later()
             entries = [*entries, *self._providers.catalog_entries()]
         replaced = [] if source == "builtin" else self._replace_vanished(entries)
         view = catalog_view(entries, fetched_at_ms, source, replaced)
@@ -935,17 +1039,40 @@ class Brain:
             for kind in ("image", "video"):
                 view[kind] = []
                 for row in self._providers.media_choices(kind):
-                    pid, _ = self._providers.resolve(row["reference"])
+                    subscription = row.get("billing_source") == "subscription"
+                    pid = row["provider"] if subscription else self._providers.resolve(row["reference"])[0]
+                    provider_name = "Codex" if subscription else self._providers.config(pid)["name"]
                     view[kind].append({"id": row["reference"], "name": row["name"],
-                        "provider": self._providers.config(pid)["name"], "provider_id": pid,
-                        "provider_name": self._providers.config(pid)["name"],
+                        "provider": provider_name, "provider_id": pid,
+                        "provider_name": provider_name,
                         "input_per_mtok": row.get("price_in"), "output_per_mtok": row.get("price_out"),
                         "image_output_per_mtok": row.get("image_output_per_mtok"),
                         "per_image": row.get("per_image"), "per_request": row.get("per_request"),
                         "per_minute": None, "free": False, "variable_price": False,
                         "context_length": row.get("context"), "created_at_ms": None,
                         "capabilities": {}, "roles": {}})
+                    if subscription:
+                        view[kind][-1]["billing_source"] = "subscription"
         return view
+
+    def _renew_providers_later(self) -> None:
+        task = self._provider_refresh
+        if self._closed or (task is not None and not task.done()):
+            return
+        self._provider_refresh = asyncio.get_running_loop().create_task(self._renew_providers())
+
+    async def _renew_providers(self) -> None:
+        before = self._providers.catalog_signature()
+        try:
+            await self._providers.refresh_catalog()
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            # A failed renewal keeps the lists the window has; the next `models.catalog` tries again.
+            logger.info("The providers' model lists were not renewed: %s", type(exc).__name__)
+            return
+        if self._providers.catalog_signature() != before:
+            self._notify_providers()
 
     def _replace_vanished(self, entries: list[CatalogEntry]) -> list[dict[str, str]]:
         """Set each chosen OpenRouter model that is not on its list (`entries`) back to its role's

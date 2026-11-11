@@ -14,6 +14,31 @@ from raphael_core.services.html import html_to_text
 PUBLIC = "93.184.216.34"
 
 
+async def test_webhook_probe_pins_public_dns_and_never_follows_redirects():
+    requests = []
+    def respond(request):
+        requests.append(request)
+        assert request.method == "POST" and request.url.host == PUBLIC
+        assert request.headers["host"] == "sample.example"
+        assert request.extensions["sni_hostname"] == "sample.example"
+        assert request.content == b"probe" and request.headers["x-raphael-probe"] == "nonce"
+        return httpx.Response(302, headers={"location": "http://127.0.0.1/private"})
+    reader = PageFetcher(resolver=resolver_of({"sample.example": [PUBLIC]}), transport=httpx.MockTransport(respond))
+    assert await reader.post_probe("https://sample.example/routines/1", b"probe", {"X-Raphael-Probe": "nonce"}) == 302
+    assert len(requests) == 1
+    blocked = PageFetcher(resolver=resolver_of({"sample.example": [PUBLIC, "127.0.0.1"]}), transport=httpx.MockTransport(respond))
+    assert await kind_of(blocked.post_probe("https://sample.example/routines/1", b"probe", {})) == "blocked_address"
+    assert len(requests) == 1
+
+
+@pytest.mark.parametrize("failure,kind", [(httpx.ConnectError, "network"), (httpx.ReadTimeout, "timeout")])
+async def test_webhook_probe_classifies_transport_failures_without_response_details(failure, kind):
+    def refuse(request):
+        raise failure("private diagnostics", request=request)
+    reader = PageFetcher(resolver=resolver_of({"sample.example": [PUBLIC]}), transport=httpx.MockTransport(refuse))
+    assert await kind_of(reader.post_probe("https://sample.example/routines/1", b"probe", {})) == kind
+
+
 def resolver_of(table):
     async def resolve(host, port):
         if host not in table:

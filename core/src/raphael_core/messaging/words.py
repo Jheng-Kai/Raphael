@@ -1,13 +1,17 @@
 """What Raphael says in a messaging app, in the three languages of the app."""
 
+from raphael_core.ui_words import ui_word, with_ui_words
+import re
+from collections.abc import Sequence
+
 # The longest stretch of a transcript that is echoed back to show what was heard.
 HEARD_CHARS = 80
 
-_WORDS: dict[str, dict[str, str]] = {
+_WORDS: dict[str, dict[str, str]] = with_ui_words({
     "zh-TW": {
         "queued": "已排隊，會依序回答。",
         "intro": "我是拉斐爾。直接傳訊息給我，我會像在電腦前一樣回答你。傳 /stop 可以中斷正在跑的背景任務。",
-        "pair": "這個機器人是私人的。請主人在電腦的拉斐爾裡核准配對碼 {code}（10 分鐘內有效）。",
+        "pair": "這個機器人是私人的。請主人在電腦上與這個機器人所屬成員的對話中，核准配對卡的 {code}（10 分鐘內有效）。",
         "paired": "已連接。現在可以傳訊息給我了。",
         "unsupported": "目前只能處理文字、語音訊息、圖片和 PDF。",
         "file_large": "這個檔案太大了（上限 {mb} MB）。",
@@ -23,7 +27,7 @@ _WORDS: dict[str, dict[str, str]] = {
     "en": {
         "queued": "Queued. I'll answer in order.",
         "intro": "I'm Raphael. Send me a message and I'll answer as I would at your computer. Send /stop to interrupt a background task.",
-        "pair": "This bot is private. Ask the owner to approve the code {code} in Raphael on the computer (valid for 10 minutes).",
+        "pair": "This bot is private. Ask the owner to approve code {code} on the pairing card in this bot's member conversation in Raphael on the computer (valid for 10 minutes).",
         "paired": "Connected. You can message me now.",
         "unsupported": "I can only read text, voice messages, images and PDFs for now.",
         "file_large": "That file is too large (the limit is {mb} MB).",
@@ -39,7 +43,7 @@ _WORDS: dict[str, dict[str, str]] = {
     "ja": {
         "queued": "順番にお答えします。",
         "intro": "ラファエルです。メッセージを送ってください。パソコンの前と同じように答えます。/stop でバックグラウンドの作業を止められます。",
-        "pair": "このボットは非公開です。パソコンのラファエルでコード {code} を承認してください（10 分間有効）。",
+        "pair": "このボットは非公開です。パソコンのラファエルで、このボットのメンバーとの会話に届くペアリングカードのコード {code} を承認してください（10 分間有効）。",
         "paired": "接続しました。メッセージを送ってください。",
         "unsupported": "今はテキスト、音声メッセージ、画像、PDF だけ読めます。",
         "file_large": "このファイルは大きすぎます（上限 {mb} MB）。",
@@ -52,7 +56,7 @@ _WORDS: dict[str, dict[str, str]] = {
         "voice_empty": "何も聞こえませんでした。",
         "voice_large": "この音声メッセージは大きすぎます（上限 {mb} MB）。",
     },
-}
+})
 
 
 def words(language: str, key: str, **values: str) -> str:
@@ -68,15 +72,42 @@ def heard(language: str, transcript: str) -> str:
     return words(language, "heard", text=text)
 
 
+def plain_replies(texts: Sequence[str]) -> list[str]:
+    """The stored messages of one reply without the 《prefix。…》 frame the app strips (the same
+    rule as `plainReplies` in app/src/shared/anime.ts): the first message of a line opens with
+    《prefix。 and the last one before the next opening ends with 》. Anything else, a 》 that closes
+    a book's title included, stays."""
+    from ..agent.persona import PREFIXES
+
+    names = "|".join(re.escape(p) for prefixes in PREFIXES.values() for p in prefixes)
+    opening = re.compile(rf"^《(?:{names})[。.：:]\s*", re.I)
+    plain = list(texts)
+    open_at = -1
+
+    def close(end: int) -> None:
+        if open_at >= 0 and end >= open_at and plain[end].rstrip().endswith("》"):
+            plain[end] = plain[end].rstrip()[:-1]
+
+    for index, text in enumerate(texts):
+        found = opening.match(text.lstrip())
+        if found is None:
+            continue
+        close(index - 1)
+        open_at = index
+        plain[index] = text.lstrip()[found.end():]
+    close(len(texts) - 1)
+    return plain
+
+
 def compose(prefix: str, text: str, detail: str | None) -> str:
     """The answer as one message: the line as the overlay and the app show it, 《prefix。text》, and,
-    when there is more, the longer text. The prefix of the English persona is a word ("Answer"),
-    the others one character (答), each followed by the stop of its script. With no prefix (a
+    when there is more, the longer text. CJK lead characters use their script's stop; other
+    localized lead words use a period and a space. With no prefix (a
     member, who speaks plainly) the text goes as it is."""
     mark = prefix.strip().strip("《》").rstrip("。.").strip()
     body = text.strip()
     if mark:
-        stop = ". " if mark.isascii() else "。"
+        stop = "。" if mark in ("答", "解", "告", "否", "了", "問", "问") else ". "
         line = f"《{mark}{stop}{body}》"
     else:
         line = body

@@ -1,12 +1,23 @@
 # Raphael feature map
 
+## Subscription quota warning (2026-11-10)
+
+See [Usage](usage.md) for R-QUOTA-01: a subscription window with 10% or less left is told once per
+provider, window and reset (core `quota_warned` setting, `MainEvent::QuotaWarning`), as one toast in
+the main window that changes no model. Selected scenes: quota-warning and quota-warning-weekly, both
+themes at 1120,720,1920x1080.
+
+## External-input security boundaries (2026-11-05)
+
+See [Agent and external-input security boundaries](security-boundaries.md) for current allowlist checks, bounded messaging/webhook/MCP ingress, nonce-bound tunnel probes, OAuth callback admission and the offline verification limits.
+
 ## Member panel tabs (2026-11-05)
 
 The owner request of 2026-11-05 introduces R-PANEL-01 through R-PANEL-04. See [Member computer](member-computer.md#three-tab-member-panel-and-local-engine-recovery-2026-11-05) for Details / Library / Computer navigation, shared file/work controls, truthful local Docker recovery, the selected scene matrix and native/judge limits. [Conversation](conversation.md#member-panel-destinations-2026-11-05) and [Daily work](daily-work.md#work-and-files-in-the-member-panel-2026-11-05) map the affected consumers.
 
-## App updates, memory import and attachment limits (2026-11-05)
+## App updates and attachment limits (2026-11-05)
 
-See [Settings and appearance](settings-appearance.md#signed-updates-and-owner-memory-import-2026-11-05)
+See [Settings and appearance](settings-appearance.md#signed-updates-2026-11-05)
 and [Conversation](conversation.md#streaming-composer-files-2026-11-05) for the selected
 matrix, signed-version requirement and native/dependency acceptance boundaries.
 
@@ -28,9 +39,7 @@ native/live and network-backed judge remain deferred.
 See [Members](members.md#plugin-sets-and-github-marketplaces-2026-11-04) for
 R-SKILL-06/07: one installed plugin entry, bounded whole-set import/update/removal,
 pinned GitHub marketplace sources, inherited member grants, commands, and explicit
-MCP setup cards. Migration 62 follows rooms 60 and shared grants 61. Offline look
-adds skills-plugin-entry, skills-marketplace, skills-plugin-set,
-skills-plugin-update and skills-plugin-details to the existing 15-scene skill scope.
+MCP setup cards. Migration 62 follows rooms 60 and shared grants 61. Their Connect apps scenes were retired on 2026-11-07 (connectors only, R-SKILL-05).
 Synthetic HTTP/CLI tests do not establish GitHub, installed-CLI or live acceptance.
 
 ## Primary-contact owner management (2026-11-05)
@@ -50,9 +59,7 @@ See [Conversation](conversation.md#long-busy-conversations-and-bounded-mounting-
 See [Members](members.md#shared-installed-skills-2026-11-04) for R-SKILL-01 through
 R-SKILL-05, shared/member scope, whole local package import, source refresh,
 one shared package row with member grants in its dialog, readable source labels,
-Raphael command parity and native CLI skill delivery. Review follow-up 3 authorizes
-the selected offline look matrix, including skills-installed-sources,
-skills-import-shared, skills-member-grants and skills-source-changed. The Members
+Raphael command parity and native CLI skill delivery. The Connect apps scenes this history named were retired on 2026-11-07 (R-SKILL-05). The Members
 entry maps actions, IPC outcomes and visual comparisons. Native and live acceptance
 remain separate; judge requires external references and authorized subscription use.
 
@@ -194,7 +201,7 @@ from theme tokens, including a future black palette. Markdown images initially
 have no src; only Load image assigns a source, always without a referrer.
 
 ```powershell
-npm run verify -- --core
+npm run verify -- --contract
 npm run look -- rich-chief rich-member rich-room rich-code rich-diagram rich-source rich-expand rich-image rich-image-loaded rich-table-example rich-invalid rich-streaming rich-sequence rich-class rich-state rich-er rich-architecture rich-wide-table reply-split-bubbles conversation-chief-up conversation-member-up conversation-room-up long-owner long-owner-expanded long-room-messages chat --theme both --width 1120,720,1920x1080
 ```
 
@@ -217,9 +224,11 @@ apply.
 
 ## Sidebar redesign (2026-10-30)
 
-One 296px sidebar has no brand: a collapse icon and a plus share the top row, with a
-standing search box below. It collapses to a 72px rail of faces (hover names a face; the plus moves
-above the owner). The chief, without a star, is the first ordinary row; any pinned member leaves the
+One 296px sidebar has no brand. Search and plus stand side by side at the top as Grok Bot's two
+36px soft round buttons (2026-11-06); search opens a card in the middle of the dimmed window with the
+field, every member as face, name and last line, message results once words are typed, and 新增成員
+at its foot (Enter opens the first row). The edge drags the list down to a 72px rail of faces (hover
+names a face; search and plus move above the owner). The chief, without a star, is the first ordinary row; any pinned member leaves the
 rows for a larger centered face above its name at the top, over one continuous list of member rows and unframed group face grids (up to four faces).
 Only owner-created folders have headings; their chevrons appear on hover. Times
 appear on hover, and current-page selection remains unique. The footer is a Notion-like list without a
@@ -233,9 +242,9 @@ existing picker/crop component and presets; footer and owner messages share iden
 
 Selected acceptance: sidebar, sidebar-folders, sidebar-folded, sidebar-many,
 sidebar-unread, sidebar-drawer, sidebar-search, sidebar-chief-pinned, sidebar-rail, sidebar-plus, sidebar-group-avatar,
-sidebar-group-avatar-pair, sidebar-group-avatar-four, sidebar-owner, sidebar-owner-upload, chat, details, profile, plugins-installed,
+sidebar-group-avatar-pair, sidebar-group-avatar-four, sidebar-owner, sidebar-owner-upload, sidebar-owner-crop, sidebar-owner-crop-held, chat, details, profile, plugins-installed,
 all home-* scenes (including full/sparse/empty, edge-only hover and month gestures), both themes at 1120,720,1920x1080,1280x800. Home's emblem is 128px (96px compact), its report is --fs-h1 and its date is unchanged. Check these scenes in black at 1120,720,1920x1080 too.
-Run `npm run verify -- --core`, then the selected look matrix and inspect every
+Run `npm run verify -- --contract`, then the selected look matrix and inspect every
 contact sheet/relevant full-size image. Native readable-layout, locale-sweep and
 delete-conversation cover navigation in an isolated fake-brain app. No judge,
 OpenRouter or Claude session search; one heavy process at a time.
@@ -341,15 +350,15 @@ from format.ts, with explicit zh-TW, ja and en expectations.
 
 The existing details-alignment, conversation-scroll-edge, home-lead-width,
 dictation-overview, dictation-layout, skill-learned-notice and growing-skills checks
-cover these contracts. toast-clearance covers quick-cleared, composer-learn,
-conversation-delete-main and member-delete. Native deletion audit uses the same
+cover these contracts. toast-clearance covers quick-cleared, composer-learn
+and member-delete. Native deletion audit uses the same
 rendered clearance check at every member checkpoint. Native skill-growth rejects a
 notice before its producing reply and checks the learned skill's Chinese date.
 No brain, tool, core or Rust behavior changed.
 
 ```powershell
 npm run verify
-npm run look -- details member-conversation-sections connector-reconnected home-empty home-many dictation-overview quick-cleared member-text details-skills raphael-skills details-memory global-private-memory centred-system-events composer-learn conversation-delete-main member-delete --theme both --width 1120,720,1920x1080
+npm run look -- details member-conversation-sections connector-reconnected home-empty home-many dictation-overview quick-cleared member-text details-skills raphael-skills centred-system-events composer-learn conversation-delete-main member-delete --theme both --width 1120,720,1920x1080
 npm run look -- home-many quick-cleared --theme both --width 1280x800
 $env:RAPHAEL_MODELS_DIR = '<a folder holding the local speech models>'
 npm run native -- skill-growth readable-layout locale-sweep voice-conversation delete-conversation
@@ -378,7 +387,7 @@ behavior the fixture cannot prove.
 | [Dictation](dictation.md) | Overview, history, dictionary, shortcuts, microphone and paste |
 | [Settings and appearance](settings-appearance.md) | Profile/preferences, black and white themes, languages, models and app information |
 | [Connections and MCP](connections-mcp.md) | Connected apps and their count, Settings-only connected-app entry, an app's accounts and tools, members' private skills, managed store, MCP setup/discovery and Home's private Google calendar read |
-| [Usage](usage.md) | Spend overview, grouping, CSV and CLI allowances |
+| [Usage](usage.md) | Spend overview, grouping, CSV, CLI allowances and the once-per-window 90% warning |
 | [Onboarding](onboarding.md) | Welcome, optional setup and immediate conversation |
 
 Keep entry points, prerequisites and observable end states current. If data is
@@ -429,6 +438,25 @@ and group chats; below 860px the same list opens in a 320px drawer. Settings ret
 640px content measure for every pane header, toolbar, row and grid. Charts and
 heatmaps contain several data columns inside their capped containers.
 
+A conversation's column starts and ends where its composer does (2026-11-10; the judge on 2d5e3cf8 measured the
+messages at 20 px and the composer at 32 at 720, and 29 against 43 at 1120). The column is a box: the thread's
+(`.ra-col` in `.ra-scroll`), the search field over it (`.ra-find`) and the members' conversation laid over it
+(`.peer-thread` in `.peer-scroll`) each take the composer's sides, `--pa-dock-x`. The members' conversation keeps the
+conversation's own sides (`.mb-chat`'s, 16 px under 860 px), and a group's side thread holds its composer at the sides
+of its messages and header (24 px). Inside the column the owner's messages end at its right edge and a reply begins at its
+left edge. In a group's side thread the faces stand inside that column, the owner's at its right and the member's at its
+left with its words beside it; in the group itself they hang in the gutter outside it (2026-11-11), so its words, its
+cards and the owner's bubble begin and end where the composer does (the judge on 6e2ca315 read the face's 32 px slot as
+the messages starting inside the composer, page-room-draft and owner-card-room-page). The group's scroll holds the pane's
+own side padding for this (`--room-pad`), and its faces are 24 px, 20 px under 860 px, so they fit the gutter. A reply keeps
+its reading measure (`--pa-bw`, 60 ch), so a long reply ends short of the composer's right edge by design: that is
+the reply's measure, not the column ending early. `checkRendered("thread-edges")` runs on every main-entry scene
+beside `content-width` and measures exactly this within 1 px: each column box, the owner's last mark and the leftmost
+reply against their composer; in a group also its words and cards (`.ra-body`), and that each hung face stands beside the
+column, inside the scroll (it measured the reply's box, which held the face's slot, and passed while the judge failed it). A chat wide enough holds both in the same centred 960 px column; 1280x800 is the
+designed window, where the `max-height: 860px` block holds the thread's sides too. The selected scenes are under
+[Conversation](conversation.md#one-column-with-the-composer-2026-11-10).
+
 The look runner invokes `checkRendered("content-width")` on **every main-entry scene**
 after its interactions (overlay entry is separate). It measures rendered border boxes,
 including list rows and offscreen items in a visible scrolling page, and records the
@@ -443,7 +471,7 @@ Appearance uses the shared theme/language dropdown rows; dictionary entries reta
 Representative main-page acceptance (all consumers of the shared layout):
 
 ```powershell
-npm run look -- home home-empty home-720 home-many home-motion chat details details-routines sidebar sidebar-folders dictation-overview dictation-history dictation-history-day dictation-dictionary dictation-keyboard profile appearance models dictation agent messaging data about plugins-installed plugins-store usage automations-calendar automations-day automation-weekly --theme both --width 1120,720,1920x1080
+npm run look -- home home-empty home-trend-tip home-many home-motion chat details details-routines sidebar sidebar-folders dictation-overview dictation-history dictation-heat-press dictation-dictionary dictation-keyboard profile appearance models dictation agent about plugins-installed plugins-store usage automations-calendar automations-day --theme both --width 1120,720,1920x1080
 ```
 
 The dictionary scene uses twelve words to expose column count and wrapping; the
@@ -491,7 +519,7 @@ both themes. 1280x800 leaves 64 logical pixels for a taskbar on a 1536x864 deskt
 840/860 heights leave only 24/4px. Long Settings catalogs intentionally scroll.
 
 ```powershell
-npm run look -- home home-empty home-many home-motion chat details details-closed member-text room-text no-naming sidebar dictation-overview dictation-history dictation-dictionary profile appearance models dictation agent messaging data about plugins-installed plugins-store appearance-menu appearance-black theme-clarity usage automations-calendar onboarding --theme both --width 1120,720,1920x1080,1180x780,1280x800
+npm run look -- home home-empty home-many home-motion chat details details-closed member-text room-text no-naming sidebar dictation-overview dictation-history dictation-dictionary profile appearance models dictation agent about plugins-installed plugins-store appearance-menu appearance-black theme-clarity usage automations-calendar onboarding --theme both --width 1120,720,1920x1080,1180x780,1280x800
 ```
 
 Home, dictation, thread-measure, settings-alignment, sidebar-shell and welcome
@@ -518,12 +546,12 @@ Owner round 6 keeps the existing 330 scenes. Affected-scene acceptance adds 1280
 ## Memory growth native acceptance (phase 2, 2026-10-29)
 
 `memory-growth` sends 25 turns in the real isolated app with the fake brain,
-checks turn-one recall on turn 25 and an entry in only that member's MEMORY.md. Its implementation and selected memory-pane scenes are mapped in
-[Members](members.md). This is separate from live provider and design-judge acceptance.
+checks turn-one recall on turn 25 and an entry in only that member's MEMORY.md. Its implementation is mapped in
+[Members](members.md); no memory page exists since 2026-11-11 (R-MEM-10). This is separate from live provider and design-judge acceptance.
 
 ## Owner round 7 contracts
 
-Owner round 7 extended the affected journeys with home-lead-width, onboarding-abilities-hero, details-quick-once and conversation-scroll-edge. The sidebar decision replaces sidebar-count-alignment and team-card-lines with sidebar-shell and group-avatar checks. calendar-chips requires two title lines and a visible fixed 20px avatar without time overlap. Run the selected scenes in both themes at 1120,720,1920x1080,1280x800.
+Owner round 7 extended the affected journeys with home-lead-width, onboarding-abilities (replacing onboarding-abilities-hero since 2026-11-07, beside onboarding-tools and onboarding-services), details-quick-once and conversation-scroll-edge. The sidebar decision replaces sidebar-count-alignment and team-card-lines with sidebar-shell and group-avatar checks. calendar-chips requires two title lines and a visible fixed 20px avatar without time overlap. Run the selected scenes in both themes at 1120,720,1920x1080,1280x800.
 
 ## Connect and Docker acceptance (2026-10-30)
 
@@ -578,7 +606,7 @@ Offline evidence lives in `core/tests/brain/test_chatgpt.py`: loopback callback,
 JWT validation, account separation, rotation-before-use, Responses tool round trip
 through NarratedLoop/run_task, gate rejection, terminal stream errors, classified
 turn failures, redaction and revocation. Select these core tests plus the existing
-provider, worker and architecture consumers, then `npm run verify -- --core`.
+provider, worker and architecture consumers, then `npm run verify -- --contract`.
 No UI/look/judge scope applies. Real sign-in, OS vault/browser, plan inference and
 live tool round trips require separately authorized acceptance; fake HTTP is not
 live proof. Never run the owner probe or borrow another application's credentials.
@@ -601,11 +629,10 @@ See [Conversation](conversation.md#durable-owner-questions-and-background-cards-
 for ask_owner, background card completion and the selected question-card matrix.
 
 
-## Owner input, Telegram files and deliverable audio (2026-11-01)
+## Owner input and Telegram files (2026-11-01)
 
-See [Conversation](conversation.md#owner-input-and-deliverable-audio-2026-11-01).
-Selected scenes: generated-audio-chief, generated-audio-member,
-generated-audio-room, generated-audio-missing, generated-audio-repair and owner-addition.
+See [Conversation](conversation.md#owner-input-2026-11-01). Selected scene: owner-addition. Members make no audio
+files since 2026-11-10 ([No voice](conversation.md#no-voice-owner-decision-2026-11-10)).
 
 
 ## CLI failure recovery (2026-11-01)
@@ -683,7 +710,7 @@ and the single participant row. No new page, setting, RPC or migration.
 
 Selected look scenes: all existing sidebar.mjs scenes; busy-team-typing;
 daily-footer-hover, daily-footer-marks, daily-footer-home, daily-press-feedback,
-daily-press-surfaces, daily-press-event, daily-press-card, daily-press-desktop, daily-newest,
+daily-press-surfaces, daily-press-card, daily-press-desktop, daily-newest,
 daily-folder-heading, daily-copy-chief, daily-copy-member, daily-copy-room, daily-copy-setup, daily-copy-webhook,
 daily-draft-member, daily-draft-room, daily-paste-chief, daily-paste-room,
 daily-long-draft, daily-faces-2, daily-faces-3, daily-faces-4,
@@ -739,6 +766,36 @@ discovery and document dialogs; see [Members](members.md#localized-skill-origins
 The same selected twenty-scene skill matrix checks raw-source leakage and one learned
 origin/date line.
 
+
+## Shared owner vault (2026-11-05)
+
+See [Settings and appearance](settings-appearance.md#shared-owner-vault-2026-11-05)
+for R-VAULT-01..05, Safety navigation, shared Credential Manager entries, transient
+CSV import and mandatory payment consent. The merge follow-up maps all nine vault
+scenes plus calm-thread in the ten-scene selected look matrix; the feature entry
+contains the executable look command used by judge context discovery.
+
 ## Calm conversations (owner, 2026-11-05)
 
 See [Conversation](conversation.md#calm-conversations-owner-request-2026-11-05) for R-UI-101 and R-CLI-07, the selected eleven-scene matrix and offline/native boundaries.
+
+
+## Colleagues (2026-11-05)
+
+See [Members](members.md#colleague-recipes-and-goal-first-greeting-2026-11-05), [Connections](connections-mcp.md#named-connected-accounts-2026-11-05), [Automations](automations.md#owner-provided-external-webhook-tunnels-2026-11-05) and [Daily work](daily-work.md#native-output-folder-choice-2026-11-05) for R-COLLEAGUE-01..06 and the selected scene matrix. Recipe preview, imports, account labels and probes reuse existing owner UI/store boundaries; native/OAuth/SSH/live outcomes stay separate from fakes.
+
+## Desktop security and release path (2026-11-05)
+
+[Security boundary](security-boundary.md) maps R-SEC-01 through R-SEC-05 and R-CARD-11, native
+attachment associations, release path validation, publication commit binding and
+the reviewed shell/webview/IPC/update surfaces. Follow-up 1 adds composer-only page text
+placement; see conversation.md for the selected scene matrix.
+
+
+## Offline storage and diagnostic security (2026-11-05)
+
+R-SEC-FILES-01..03 and R-SEC-LOG-01 are core-only boundaries. See the appended
+security sections in member-computer.md, settings-appearance.md and conversation.md.
+Use the normal pytest suites for computer, services, memory, CLI diagnostics, vault,
+member homes/panel, database and architecture. No rendered UI changed, so look/judge
+are outside this local scope. Live/provider/SSH/native checks remain unverified.

@@ -17,18 +17,18 @@ Settings, member and confirmation dialogs.
 
 ## Driving it with look
 
-Selected look scenes: polish-effort-composer, polish-effort, polish-data, polish-data-more, polish-data-delete, polish-data-conversations, polish-scroll,
+Selected look scenes: polish-effort-composer, polish-effort, polish-scroll,
 polish-caption-settings, polish-caption-member, polish-caption-confirm,
 polish-search-chief, polish-search-member, polish-search-room, polish-room-recording,
-composer-voice-recording, quick-effort-menu and member-edit-memory. Use both themes and
+composer-voice-recording and quick-effort-menu. Use both themes and
 1120,720,1920x1080. checks.mjs compares effort geometry, record order/pagination/counts,
-scroll reset, caption hit tests and exactly-once native-boundary calls, search position,
+scroll reset, caption hit tests (the caption's own strip, over Settings, a routine's read-only view and a delete confirmation) and exactly-once native-boundary calls, search position (a group's search button stands alone in its head, which keeps the pane's inset on both sides),
 word highlights (dotted for ordinary matches, solid and outlined for the current match) and recording glyph/labels. The driver checks search wrapping and closure.
 conversation-find.test.ts also checks typing while the initial history load is pending:
 the first completed result starts at the newest word, and stale replies cannot reposition it.
 
 ```powershell
-npm run look -- polish-effort-composer polish-effort polish-data polish-data-more polish-data-delete polish-data-conversations polish-scroll polish-caption-settings polish-caption-member polish-caption-confirm polish-search-chief polish-search-member polish-search-room polish-room-recording composer-voice-recording quick-effort-menu member-edit-memory --theme both --width 1120,720,1920x1080
+npm run look -- polish-effort-composer polish-effort polish-scroll polish-caption-settings polish-caption-member polish-caption-confirm polish-search-chief polish-search-member polish-search-room polish-room-recording composer-voice-recording quick-effort-menu --theme both --width 1120,720,1920x1080
 ```
 
 Run npm run verify for the frontend and the focused brain/messaging tests.

@@ -274,7 +274,8 @@ async def test_the_roster_names_the_primary_to_each_kind_of_speaker(rig):
     for_bob = says(roster_prompt(rig.service, rig.service.speaker(bob), "en"))
     for_raphael = says(roster_prompt(rig.service, rig.service.speaker(0), "en"))
     for text in (for_alice, for_bob, for_raphael):
-        assert text.startswith('"Alice" (id %d).' % alice) and "This member is the chief of staff" in text
+        assert text.startswith('"Alice" (id %d).' % alice) and "This member is the default contact" in text
+        assert "same owner-private abilities as every member" in text
     # the primary dispatches what it is given
     assert "That is you" in for_alice and "handoff" in for_alice and "do only your own work yourself" in for_alice
     # another member forwards work to the colleague it belongs to, and what it cannot place to the primary
@@ -289,7 +290,7 @@ async def test_raphael_is_told_he_is_the_primary_by_default_and_gives_no_second_
     bob = await make(rig, "Bob")
     for who, expected in ((0, "do only your own work yourself."), (bob, "")):
         text = says(roster_prompt(rig.service, rig.service.speaker(who), "en"))
-        assert text.startswith('"Raphael" (id 0).') and (text.endswith(expected) if expected else "That is you" not in text)
+        assert text.startswith('"Raphael" (id 0).') and (expected in text if expected else "That is you" not in text)
     assert "handoff" in says(roster_prompt(rig.service, rig.service.speaker(0), "en"))
 
 
@@ -329,9 +330,12 @@ async def test_an_api_turn_of_a_member_is_told_the_primary_of_that_moment(setup,
     await typed(rig, "Hello", one.id, language="en")
     team.members.store.set_primary(other.id)
     await typed(rig, "Again", one.id, language="en")
-    first, second = (call["messages"][0]["content"] for call in client.chat_calls)
+    # The team comes with each turn's message, so the member reads the primary of that moment while its system
+    # prompt stays the one the provider cached.
+    first, second = (call["messages"][1]["content"] for call in client.chat_calls)
     assert says(first).startswith('"Raphael" (id 0).') and says(second).startswith('"Coach" (id %d).' % other.id)
     assert "hand it to the primary contact" in says(second)
+    assert client.chat_calls[0]["messages"][0]["content"] == client.chat_calls[1]["messages"][0]["content"]
 
 
 async def test_a_resumed_cli_thread_is_told_the_primary_it_has_now_not_the_one_it_began_with(setup, tmp_path, client):
@@ -358,5 +362,5 @@ for line in sys.stdin:
     await typed(rig, "And now?", teacher.id, language="en")
     first, second = [json.loads(line) for line in inputs.read_text(encoding="utf-8").splitlines()]
     assert says(first).startswith('"Raphael" (id 0).')
-    assert 'The team as it is now, which replaces any earlier snapshot:' in second
-    assert says(second.split("The team as it is now")[1]).startswith('"Writer" (id %d).' % writer.id)
+    assert 'And now?' in second
+    assert says(second).startswith('"Writer" (id %d).' % writer.id)

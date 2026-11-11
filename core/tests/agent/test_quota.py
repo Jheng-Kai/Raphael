@@ -105,6 +105,81 @@ def test_recording_an_unchanged_quota_does_not_notify(conn):
     assert events == ["quota.changed", "quota.changed"]
 
 
+def _window(remaining, resets_at, period="fiveHour", status="allowed"):
+    return {"windows": [{"period": period, "remaining_percent": remaining, "resets_at": resets_at, "status": status}],
+            "exhausted": False}
+
+
+def test_a_window_nine_tenths_used_warns_the_owner_once(conn):
+    events = []
+    store = Quotas(conn, lambda: NOW, lambda method, params: events.append((method, params)))
+    reset = NOW // 1000 + 3 * 3600
+    for remaining in (40, 11):
+        store.record("codex", _window(remaining, reset))
+    assert [method for method, _ in events] == ["quota.changed", "quota.changed"]
+    store.record("codex", _window(10, reset))
+    warned = ("quota.warning", {"provider": "codex", "period": "fiveHour", "remaining_percent": 10, "resets_at": reset})
+    assert events[-1] == warned
+    # Lower readings of the same window, also with the reset a second off (it is derived from "resets in N s"), and
+    # the usage page's own reads, tell nothing more.
+    store.record("codex", _window(8, reset))
+    store.record("codex", _window(3, reset + 2))
+    store.record("codex", _window(2, reset), notify=False)
+    assert [event for event in events if event[0] == "quota.warning"] == [warned]
+
+
+def test_the_warning_stays_told_after_a_restart_and_comes_back_after_a_reset(conn):
+    events = []
+    now = [NOW]
+
+    def told():
+        return [params for method, params in events if method == "quota.warning"]
+
+    reset = NOW // 1000 + 3600
+    Quotas(conn, lambda: now[0], lambda method, params: events.append((method, params))).record("claude", parse_quota(
+        {"type": "rate_limit_event", "rate_limit_info": {"status": "allowed_warning", "rateLimitType": "seven_day",
+                                                         "utilization": .93, "resetsAt": reset}}, NOW))
+    assert told() == [{"provider": "claude", "period": "weekly", "remaining_percent": 7, "resets_at": reset}]
+    restarted = Quotas(conn, lambda: now[0], lambda method, params: events.append((method, params)))
+    restarted.record("claude", _window(5, reset, "weekly"))
+    assert len(told()) == 1
+    now[0] = (reset + 60) * 1000
+    following = reset + 7 * 86400
+    restarted.record("claude", _window(100, following, "weekly"))
+    restarted.record("claude", _window(9, following, "weekly", "allowed_warning"))
+    assert told()[1:] == [{"provider": "claude", "period": "weekly", "remaining_percent": 9, "resets_at": following}]
+    assert conn.execute("SELECT value FROM settings WHERE key = 'quota_warned'").fetchone()[0] == f'{{"claude/weekly": {following}}}'
+
+
+def test_spent_stale_blocked_or_unheard_windows_tell_nothing(conn):
+    events = []
+    store = Quotas(conn, lambda: NOW, lambda method, params: events.append(method))
+    reset = NOW // 1000 + 3600
+    store.record("codex", _window(0, reset, status="rejected"))  # spent: the exhausted line says so
+    store.record("claude", _window(4, NOW // 1000 - 60))  # a report of a window already over
+    for period, remaining, status in (("weekly", 0, "rejected"), ("fiveHour", 6, "allowed")):
+        store.record("gemini", _window(remaining, reset, period, status))  # blocked by its other window
+    assert "quota.warning" not in events
+    # A reading no one could hear is not marked as told: the next reading with a listener tells it.
+    Quotas(conn, lambda: NOW).record("claude", _window(5, reset))
+    store.record("claude", _window(5, reset))
+    assert events.count("quota.warning") == 1
+
+
+def test_a_window_read_without_its_reset_is_told_once_and_the_next_window_again(conn):
+    events = []
+    now = [NOW]
+    store = Quotas(conn, lambda: now[0], lambda method, params: events.append(params))
+    store.record("codex", _window(9, None))
+    reset = NOW // 1000 + 3600
+    store.record("codex", _window(8, reset))  # the same window, its reset read later
+    store.record("codex", _window(7, None))
+    assert [event for event in events if event] == [{"provider": "codex", "period": "fiveHour", "remaining_percent": 9, "resets_at": None}]
+    now[0] = (reset + 60) * 1000
+    store.record("codex", _window(6, reset + 5 * 3600))
+    assert [event["resets_at"] for event in events if event] == [None, reset + 5 * 3600]
+
+
 def test_healthy_short_window_and_success_do_not_clear_rejected_weekly_window(conn):
     store = Quotas(conn, lambda: NOW)
     for period, status in (("seven_day", "rejected"), ("five_hour", "allowed")):
@@ -160,7 +235,7 @@ def test_native_resume_ids_are_isolated_and_legacy_sessions_go_only_to_main(conn
     with conn:
         conn.execute("INSERT INTO agent_cli_sessions VALUES (?, ?, ?)", (0, "cli:codex", "old-session"))
     sessions = Sessions(conn)
-    other = conversations.create(0)["id"]
+    other = conversations.quick()
     assert sessions.get(0, "cli:codex", main) == "old-session"
     assert sessions.get(0, "cli:codex", other) is None
     sessions.put(0, "cli:codex", "new-session", other)
@@ -173,7 +248,7 @@ def test_native_resume_ids_are_isolated_and_legacy_sessions_go_only_to_main(conn
 def test_late_native_session_cannot_restore_a_deleted_conversation(conn):
     from raphael_core.agent.cli.loop import Sessions
     sessions = Sessions(conn)
-    conversation = sessions.conversations.create(0)["id"]
+    conversation = sessions.conversations.main()
     with conn:
         conn.execute("DELETE FROM conversations WHERE id=?", (conversation,))
     sessions.put(0, "cli:codex", "late-session", conversation)
@@ -183,7 +258,7 @@ def test_late_native_session_cannot_restore_a_deleted_conversation(conn):
 def test_native_sessions_reject_another_members_conversation(conn):
     from raphael_core.agent.cli.loop import Sessions
     sessions = Sessions(conn)
-    conversation = sessions.conversations.create(0)["id"]
+    conversation = sessions.conversations.main()
     sessions.put(1, "cli:codex", "wrong-member", conversation)
     assert sessions.get(0, "cli:codex", conversation) is None
     sessions.put(0, "cli:codex", "right-member", conversation)
@@ -235,3 +310,28 @@ async def test_allowance_reads_persist_windows_without_credits_and_never_notify(
     cached = await rig.call("usage.allowances", {"refresh": False})
     assert cached["brains"][0]["windows"][0]["remaining_percent"] == 65
     assert notifications == []
+
+
+async def test_a_usage_read_at_ninety_percent_warns_once_and_changes_no_model(make_rig, monkeypatch):
+    from raphael_core.agent.cli.discovery import CliBrains
+    monkeypatch.setattr(CliBrains, "command", lambda *args: ["never-spawn"])
+    monkeypatch.setattr(CliBrains, "logged_in", lambda *args: True)
+    rig = make_rig()
+    notifications = []
+    rig.service.quotas.notify = lambda *args: notifications.append(args)
+    reset = rig.service.quotas.now_ms() // 1000 + 3600
+
+    def models():
+        return ([tuple(row) for row in rig.conn.execute("SELECT id, model FROM members ORDER BY id")],
+                [tuple(row) for row in rig.conn.execute("SELECT key, value FROM settings WHERE key != 'quota_warned' ORDER BY key")])
+
+    before = models()
+
+    async def live(_):
+        return {"brains": [{"id": "codex", "name": "Codex", "windows": [{"period": "weekly", "remaining_percent": 6, "resets_at": reset}]}]}
+    monkeypatch.setattr("raphael_core.agent.cli.allowances.read_allowances", live)
+    await rig.call("usage.allowances")
+    await rig.call("usage.allowances")
+    # The page reading its own numbers is not reloaded (no quota.changed); the owner is told, and nothing else moves.
+    assert notifications == [("quota.warning", {"provider": "codex", "period": "weekly", "remaining_percent": 6, "resets_at": reset})]
+    assert models() == before

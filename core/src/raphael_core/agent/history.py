@@ -50,6 +50,7 @@ from ..clock import wall_clock_ms
 from ..protocol import RpcError
 from ..memory.terms import QueryWord, fts_quote, index_terms, query_words
 from .steps import Step, reason_of, work_summary
+from .failure import public_failure
 from .quotes import quote_from_wire
 from .conversations import Conversations
 from .public_events import event_text
@@ -92,6 +93,9 @@ class Turn:
     # For a turn that did not finish, what it already did (`steps.work_summary`); set where the model
     # reads the turn (`AgentHistory.with_work`), empty otherwise.
     work: str = ""
+    reactions: dict = field(default_factory=dict)
+    card_outcomes: list[str] = field(default_factory=list)
+    failure: dict | None = None
 
 
 def is_unfinished(turn: Turn) -> bool:
@@ -106,13 +110,13 @@ def is_unfinished(turn: Turn) -> bool:
 
 def is_readable(turn: Turn) -> bool:
     """Whether the model reads `turn` as part of the conversation: it was answered, or it is a request
-    of the owner's that did not finish. Not a turn that is running or waits for a yes."""
-    return turn.status == "done" or is_unfinished(turn)
+    of the owner's that did not finish, or a turn carrying a card whose current state is needed."""
+    return turn.status == "done" or is_unfinished(turn) or bool(turn.card_outcomes)
 
 
 _COLUMNS = (
     "id, created_at_ms, session_id, question, route, prefix, text, detail, status, cost_usd,"
-    " source, model, attachments, member_id, peer_id, quote, conversation_id, scope, room_id, thread_id, source_turn_id"
+    " source, model, attachments, member_id, peer_id, quote, conversation_id, scope, room_id, thread_id, source_turn_id, failure"
 )
 _STEP_COLUMNS = "turn_id, kind, tool, server, outcome, ms, reason, at_ms, detail"
 _TURN_COLUMNS = ", ".join(f"t.{name.strip()}" for name in _COLUMNS.split(","))
@@ -140,9 +144,18 @@ def _attachments(saved: str | None) -> list[dict[str, str | int]] | None:
     return kept or None
 
 
+def _failure_json(value, status):
+    failure = public_failure(value) if status == "error" else None
+    return json.dumps(failure) if failure else None
+
+
 def _to_turn(row: sqlite3.Row) -> Turn:
     data = dict(row)
     data["attachments"] = _attachments(data.get("attachments"))
+    try:
+        data["failure"] = public_failure(json.loads(data["failure"])) if data.get("failure") and data["status"] == "error" else None
+    except (ValueError, TypeError):
+        data["failure"] = None
     try:
         data["quote"] = quote_from_wire(json.loads(data["quote"])) if data.get("quote") else None
     except (ValueError, TypeError, RpcError):
@@ -156,7 +169,7 @@ def _to_turn(row: sqlite3.Row) -> Turn:
 _EXCHANGES = "scope = 'exchange' AND peer_id IS NOT NULL"
 # What its own page lists of them: work handed to it, since that is where it does the work. A question is the asker's
 # record alone (`_colleague_events`): a member the owner never spoke to would otherwise fill up with other members' talk.
-_HANDED = _EXCHANGES + " AND EXISTS (SELECT 1 FROM worker_tasks w WHERE w.turn_id = agent_turns.id AND w.mode = 'work')"
+_HANDED = _EXCHANGES + " AND (session_id GLOB 'handoff:[0-9]*' OR EXISTS (SELECT 1 FROM worker_tasks w WHERE w.turn_id = agent_turns.id AND w.mode = 'work'))"
 # The turns the model reads as the conversation (`is_readable`), as SQL.
 _READABLE = (
     f"(status = 'done' OR (status IN ({', '.join(repr(status) for status in UNFINISHED)})"
@@ -250,6 +263,7 @@ class AgentHistory:
         thread_id: int | None = None,
         source_turn_id: int | None = None,
         admission: str | None = None,
+        failure: dict | None = None,
     ) -> int:
         """Store a new turn, made now, in the thread of `member_id`, with the steps taken for it,
         and return its id. `attachments` are the names and the types of the files handed with the
@@ -271,8 +285,8 @@ class AgentHistory:
             conversation_id = conversations.resolve(member_id, conversation_id) if scope in ("private", "exchange") else None
             cursor = self._conn.execute(
                 "INSERT INTO agent_turns (created_at_ms, session_id, question, route, prefix,"
-                " text, detail, status, cost_usd, source, model, attachments, member_id, peer_id, quote, conversation_id, scope, room_id, thread_id, source_turn_id)"
-                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                " text, detail, status, cost_usd, source, model, attachments, member_id, peer_id, quote, conversation_id, scope, room_id, thread_id, source_turn_id, failure)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     self._now_ms(),
                     session_id,
@@ -290,7 +304,7 @@ class AgentHistory:
                     peer_id,
                     json.dumps(quote, ensure_ascii=False) if quote else None,
                     conversation_id,
-                    scope, room_id, thread_id, source_turn_id,
+                    scope, room_id, thread_id, source_turn_id, _failure_json(failure, status),
                 ),
             )
             turn_id = cursor.lastrowid
@@ -312,12 +326,19 @@ class AgentHistory:
         saved = self._conn.execute(
             "SELECT kind, text FROM agent_messages WHERE turn_id = ? ORDER BY seq", (turn_id,)
         ).fetchall()
-        terms = index_terms(question, text, (detail or "") + "\n" + "\n".join(event_text(row["text"]) if row["kind"] == "event" else row["text"] for row in saved if not (row["kind"] == "event" and is_action(row["text"]))))
+        tools = self._conn.execute("SELECT tool,redacted_args,substr(redacted_result,1,8192) FROM turn_tool_events WHERE turn_id=? ORDER BY id", (turn_id,)) if self._conn.execute("SELECT 1 FROM sqlite_master WHERE name='turn_tool_events'").fetchone() else ()
+        tool_text = "\n".join(" ".join(row) for row in tools)
+        terms = index_terms(question, text, (detail or "") + "\n" + tool_text + "\n" + "\n".join(event_text(row["text"]) if row["kind"] == "event" else row["text"] for row in saved if not (row["kind"] == "event" and is_action(row["text"]))))
         self._conn.execute("DELETE FROM agent_turns_fts WHERE rowid = ?", (turn_id,))
         self._conn.execute(
             "INSERT INTO agent_turns_fts (rowid, pairs, chars) VALUES (?, ?, ?)",
             (turn_id, terms.pairs, terms.chars),
         )
+
+    def reindex(self, turn_id):
+        row = self._conn.execute("SELECT question,text,detail FROM agent_turns WHERE id=?", (turn_id,)).fetchone()
+        if row:
+            self._index(turn_id, row[0], row[1], row[2])
 
     def add_steps(self, turn_id: int, steps: Sequence[Step]) -> None:
         """Add steps to a turn that is already stored: the call made after a yes, say. They come
@@ -369,6 +390,17 @@ class AgentHistory:
         ).fetchone()
         return None if row is None else _to_turn(row)
 
+    def get_many(self, turn_ids) -> dict[int, Turn]:
+        ids = sorted(set(turn_ids))
+        found = {}
+        for start in range(0, len(ids), 500):
+            chunk = ids[start:start + 500]
+            for row in self._conn.execute(
+                f"SELECT {_COLUMNS} FROM agent_turns WHERE id IN ({','.join('?' for _ in chunk)})", chunk):
+                turn = _to_turn(row)
+                found[turn.id] = turn
+        return found
+
     def add_message(self, turn_id: int, kind: str, text: str) -> None:
         """Commit one visible line immediately; cleared turns are never resurrected."""
         if kind not in ("progress", "reply", "event", "thinking", "media"):
@@ -387,7 +419,12 @@ class AgentHistory:
 
     def _with_messages(self, turns: list[Turn]) -> list[Turn]:
         saved = self.messages(turn.id for turn in turns if turn.id is not None)
+        from .reactions import private_reactions
+        from .card_context import card_outcomes
+        outcomes = card_outcomes(self._conn, (turn.id for turn in turns), self._now_ms())
         for turn in turns:
+            turn.card_outcomes = outcomes.get(turn.id, [])
+            turn.reactions = private_reactions(self._conn, turn.id)
             turn.messages = [event_text(m["text"]) if m["kind"] == "event" else m["text"] for m in saved.get(turn.id, []) if not (m["kind"] == "event" and is_action(m["text"]))]
         return turns
 
@@ -407,11 +444,11 @@ class AgentHistory:
                 found.setdefault(data.pop("turn_id"), []).append(data)
         return found
 
-    def publish_terminal(self, turn_id, *, prefix, text, detail, status, cost_usd, replies, model):
+    def publish_terminal(self, turn_id, *, prefix, text, detail, status, cost_usd, replies, model, failure=None):
         """Publish inside TaskStore's transaction, together with its terminal outbox event."""
         cursor = self._conn.execute("UPDATE agent_turns SET prefix=?,text=?,detail=?,status=?,cost_usd=cost_usd+?,"
-                                    "model=COALESCE(?,model) WHERE id=?",
-                                    (prefix,text,detail,status,cost_usd,model,turn_id))
+                                    "model=COALESCE(?,model),failure=? WHERE id=?",
+                                    (prefix,text,detail,status,cost_usd,model,_failure_json(failure, status),turn_id))
         if not cursor.rowcount:
             return
         row = self._conn.execute('SELECT question FROM agent_turns WHERE id=?',(turn_id,)).fetchone()
@@ -433,6 +470,7 @@ class AgentHistory:
         cost_usd: float = 0.0,
         model: str | None = None,
         route: str | None = None,
+        failure: dict | None = None,
     ) -> bool:
         """Give a turn its outcome: what Raphael said in the end, how it ended, and the cost of
         getting there on top of what the turn cost so far (and the model that worded it, if one
@@ -441,8 +479,8 @@ class AgentHistory:
             cursor = self._conn.execute(
                 "UPDATE agent_turns SET prefix = ?, text = ?, detail = ?, status = ?,"
                 " cost_usd = cost_usd + ?, model = COALESCE(?, model),"
-                " route = COALESCE(?, route) WHERE id = ?",
-                (prefix, text, detail, status, cost_usd, model, route, turn_id),
+                " route = COALESCE(?, route), failure = ? WHERE id = ?",
+                (prefix, text, detail, status, cost_usd, model, route, _failure_json(failure, status), turn_id),
             )
             if cursor.rowcount:
                 row = self._conn.execute(
@@ -529,7 +567,9 @@ class AgentHistory:
         if count <= 0:
             return []
         condition = "" if conversation_id is None else " AND (conversation_id = ? OR scope = 'exchange')"
+        from .card_context import CARD_TURNS_SQL
         said = _READABLE if unfinished else "status = 'done'"
+        said = f"({said} OR id IN ({CARD_TURNS_SQL}))"
         rows = self._conn.execute(
             f"SELECT {_COLUMNS} FROM agent_turns WHERE scope IN ('private', 'exchange') AND {said} AND member_id = ?"
             + condition + " ORDER BY id DESC LIMIT ?",
@@ -675,7 +715,7 @@ class AgentHistory:
         with self._conn:
             self._conn.execute("DELETE FROM agent_messages")
             self._conn.execute("DELETE FROM agent_steps")
-            self._conn.execute("DELETE FROM agent_turns_fts")
+            self._conn.execute("DELETE FROM agent_turns_fts WHERE rowid > 0")
             cursor = self._conn.execute("DELETE FROM agent_turns")
         return cursor.rowcount
 

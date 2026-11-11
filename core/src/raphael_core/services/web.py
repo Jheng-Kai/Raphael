@@ -106,7 +106,9 @@ async def _search_call(service: str, http: httpx.AsyncClient, method: str, url: 
             # Event-loop timers can wake early on Windows; keep the provider's deadline.
             while (remaining := wait_until - loop.time()) > 0:
                 await asyncio.sleep(remaining)
-            if wait_s > budget:
+            # A cooldown equal to the budget must not read as longer: on Windows the clock ticks every
+            # ~15 ms, so (t + wait) - t can exceed wait by a rounding error and skip a due retry.
+            if wait_s - budget > 1e-6:
                 # Do not send before the provider's cooldown, even when it exceeds this turn's budget.
                 raise _RateLimited(str(wait_s - budget))
             gate.next_at = loop.time() + SEARCH_INTERVAL_S
@@ -167,22 +169,31 @@ async def _call(
     url: str,
     *,
     timeout_s: float = SERVICE_TIMEOUT_S,
+    response_mode: str = "json",
     **kwargs: Any,
 ) -> Any:
     """One request to a service: its JSON, or ServiceError of the kind of the failure."""
     try:
-        response = await http.request(method, url, timeout=timeout_s, **kwargs)
-    except httpx.TimeoutException:
+        async with asyncio.timeout(timeout_s), http.stream(method, url, timeout=timeout_s, follow_redirects=False, **kwargs) as response:
+            if response.status_code == 429:
+                raise _RateLimited(response.headers.get("Retry-After"))
+            if not response.is_success:
+                raise _status_error(response.status_code)
+            raw = bytearray()
+            async for chunk in response.aiter_bytes():
+                raw.extend(chunk)
+                if len(raw) > 2 * 1024 * 1024:
+                    raise ServiceError("too_large")
+    except (TimeoutError, httpx.TimeoutException):
         raise ServiceError("timeout") from None
     except (httpx.TransportError, httpx.DecodingError):
         raise ServiceError("network") from None
-    if response.status_code == 429:
-        raise _RateLimited(response.headers.get("Retry-After"))
-    if not response.is_success:
-        raise _status_error(response.status_code)
     try:
-        return response.json()
-    except ValueError:
+        if response_mode == "text":
+            return raw.decode("utf-8", errors="replace")
+        import json
+        return json.loads(raw)
+    except (ValueError, UnicodeError):
         raise ServiceError("bad_response") from None
 
 
@@ -202,17 +213,23 @@ async def search(
     http: httpx.AsyncClient,
     key: str | None = None,
     searxng_url: str = "",
+    firecrawl_url: str = "",
 ) -> dict:
     """What `service` finds for `query` (see the module). ServiceError of a kind."""
     deadline = asyncio.get_running_loop().time() + SEARCH_TIMEOUT_S
     try:
         async with asyncio.timeout_at(deadline):
-            return await _search(service, query, http=http, key=key, searxng_url=searxng_url, deadline=deadline)
+            return await _search(service, query, http=http, key=key, searxng_url=searxng_url, deadline=deadline, firecrawl_url=firecrawl_url)
     except TimeoutError:
-        raise ServiceError("timeout") from None
+        raise ServiceError("timeout", service=service) from None
+    except ServiceError as error:
+        error.service = service
+        raise
+    except (ValueError, TypeError, KeyError, AttributeError, IndexError):
+        raise ServiceError("bad_response", service=service) from None
 
 
-async def _search(service: str, query: str, *, http: httpx.AsyncClient, key: str | None, searxng_url: str, deadline: float) -> dict:
+async def _search(service: str, query: str, *, http: httpx.AsyncClient, key: str | None, searxng_url: str, deadline: float, firecrawl_url: str = "") -> dict:
     if service == "brave":
         body = await _search_call(
             service, http, "GET", BRAVE_URL, deadline=deadline,
@@ -261,7 +278,10 @@ async def _search(service: str, query: str, *, http: httpx.AsyncClient, key: str
         results = _results(items, "title", "url", lambda item: item.get("content"))
         answer = None
     else:
-        raise ServiceError("not_configured")
+        from .web_backends import search as backend_search
+        async def call(method, url, **kwargs):
+            return await _search_call(service, http, method, url, deadline=deadline, **kwargs)
+        return await backend_search(service, query, key=key, call=call, firecrawl_url=firecrawl_url)
     if not isinstance(body, dict):
         raise ServiceError("bad_response")
     found: dict[str, Any] = {
@@ -299,6 +319,7 @@ async def read(
     fetcher: PageFetcher,
     read_pdf: PdfReader,
     key: str | None = None,
+    firecrawl_url: str = "",
 ) -> dict:
     """The page at `url`, read by `service` (see the module). ServiceError of a kind; an address
     that is not http or https with a host is "bad_url" whoever reads it."""
@@ -352,4 +373,13 @@ async def read(
         if not isinstance(first, dict):
             raise ServiceError("not_found")
         return _page(first.get("title"), first.get("raw_content"))
-    raise ServiceError("not_configured")
+    from .web_backends import read as backend_read
+    async def call(method, url, **kwargs):
+        return await _call(http, method, url, timeout_s=READ_TIMEOUT_S, **kwargs)
+    try:
+        return await backend_read(service, address, key=key, call=call, firecrawl_url=firecrawl_url)
+    except ServiceError as error:
+        error.service = service
+        raise
+    except (ValueError, TypeError, KeyError, AttributeError, IndexError):
+        raise ServiceError("bad_response", service=service) from None

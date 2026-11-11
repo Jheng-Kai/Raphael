@@ -1,3 +1,4 @@
+# Adapted from OpenMausBot (Apache-2.0); see core/packaging/licenses.
 """Managed MCP adapters, sharing Raphael's hub, gate and value-free audit.
 
 The Composio HTTP adapter does not need a background GET stream. POST replies may
@@ -58,7 +59,7 @@ class ManagedMcp:
     async def _request(self, method: str, **kwargs):
         url = self.url
         for _ in range(5):
-            response = await self.http.response(method, url, headers=self._headers, **kwargs)
+            response = await self.http.response(method, url, headers=self._headers, max_bytes=2_000_000, **kwargs)
             if response.status_code not in (301, 302, 303, 307, 308):
                 return response
             from urllib.parse import urljoin

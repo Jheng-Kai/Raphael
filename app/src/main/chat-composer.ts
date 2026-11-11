@@ -14,10 +14,40 @@ import { describeError } from "./format";
 import { getLocale, onLocaleChange, t } from "./i18n";
 import type { WireAttachment } from "./types";
 import { closeMenu, esc, ico, iconButton, openPopover, patchHTML, sendGlyph, toaster } from "./ui";
+import { openMediaLightbox } from "./media-lightbox";
 import "./agent.css";
 
 /** `recording`: the owner is speaking into this composer and the button that ends it sends what was said. */
 export type ComposerTaskState = "idle" | "ack" | "running" | "waiting" | "recording";
+
+/** Page text is a draft, never an owner instruction until the owner submits the composer. */
+export function bindPageComposer(input: HTMLTextAreaElement) {
+  const composer = input.closest<HTMLFormElement>(".composer")!;
+  const note = composer.querySelector<HTMLElement>(".cmp-page-note")!;
+  let pageId: string | undefined;
+  const draw = (): void => {
+    if (!input.value.trim()) pageId = undefined;
+    note.hidden = !pageId;
+    note.textContent = t("page.composerNote");
+    note.title = note.textContent;
+  };
+  input.addEventListener("input", draw);
+  input.addEventListener("composer-draft-restored", () => { pageId = undefined; draw(); });
+  onLocaleChange(draw);
+  return {
+    get pageId() { return input.value.trim() ? pageId : undefined; },
+    restore(id?: string) { pageId = id; draw(); },
+    place(id: string, text: string): boolean {
+      if (!input.isConnected || input.disabled || input.readOnly || composer.closest("[hidden]")) return false;
+      input.value += (input.value && !input.value.endsWith("\n") ? "\n" : "") + text;
+      pageId = id;
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      input.focus();
+      input.setSelectionRange(input.value.length, input.value.length);
+      return true;
+    },
+  };
+}
 
 /**
  * The one button of the composer's right-hand slot (`.cmp-voice`): the voice emblem while idle; while recording the send
@@ -46,7 +76,7 @@ export function composerHTML(): string {
     `<span class="cmp-bar-fill"></span><span class="cmp-model"></span>` +
     `<span class="cmp-pair">` +
     iconButton("send", t("chat.send"), " disabled", "cmp-send task-action").replace('type="button"', 'type="submit"').replace(" title=", " data-tooltip=").replace(ico("send"), sendGlyph()) +
-    `<button type="button" class="btn cmp-voice" data-act="voice"></button></span></div></div><input class="cmp-picker" type="file" multiple hidden>`;
+    `<button type="button" class="btn cmp-voice" data-act="voice"></button></span></div></div><p class="cmp-page-note hint" role="status" hidden></p><input class="cmp-picker" type="file" multiple hidden>`;
 }
 
 const MODE_CHANGED = "raphael:action-mode";
@@ -102,10 +132,11 @@ export function wavBytes(channels: readonly Float32Array[], rate: number): Uint8
   return bytes;
 }
 
-export function createChatComposer(options: { placeholder(): string; transcriptTarget?(): (text: string) => void; send(text: string, files: WireAttachment[]): Promise<void>; stopTask?(): Promise<void> }) {
+export function createChatComposer(options: { placeholder(): string; transcriptTarget?(): (text: string) => void; send(text: string, files: WireAttachment[]): Promise<void>; answerPage?(pageId: string, text: string): boolean; stopTask?(): Promise<void> }) {
   const el=document.createElement("form");el.className="composer";el.noValidate=true;el.innerHTML=composerHTML();
   const input=el.querySelector<HTMLTextAreaElement>("textarea")!,send=el.querySelector<HTMLButtonElement>(".cmp-send")!,voice=el.querySelector<HTMLButtonElement>(".cmp-voice")!,picker=el.querySelector<HTMLInputElement>(".cmp-picker")!;
   const learning=bindComposerLearning(input);bindComposerHistory(input,()=>api.agentSent());
+  const pageDraft = bindPageComposer(input);
   let taskRun=0, discardVoice=false, transcribing=false;
   let revision=0, taskState: ComposerTaskState = "idle", stoppingTask = false;
   el.addEventListener("click",e=>e.stopPropagation());
@@ -122,27 +153,32 @@ export function createChatComposer(options: { placeholder(): string; transcriptT
     if (send.disabled) return;
     el.querySelector(".composer-failure")?.remove();
     const text = input.value, snapshot = files, submitted = revision;
+    const sourcePage = pageDraft.pageId;
     const dictation = learning.snapshot(), corrections = learning.take(text);
     input.value = ""; files = [];
     input.dispatchEvent(new Event("composer-draft-restored"));
     if (options.stopTask) taskState = "ack";
     fit();
-    void options.send(wholeLinks(text).trim(), snapshot).then(() => {
+    const delivered = sourcePage && !snapshot.length && options.answerPage?.(sourcePage, wholeLinks(text).trim());
+    void (delivered ? Promise.resolve() : options.send(wholeLinks(text).trim(), snapshot)).then(() => {
       void learnComposerCorrections(corrections);
     }).catch(() => {
       if (submitted !== revision) return;
       if (!learning.snapshot()) learning.restore(dictation);
       input.value = [input.value, text].filter(Boolean).join("\n\n");
+      pageDraft.restore(sourcePage ?? pageDraft.pageId);
       files = [...files, ...snapshot];
       let failed = el.querySelector<HTMLElement>(".composer-failure");
-      if (!failed) { failed = document.createElement("div"); failed.className = "composer-failure"; el.prepend(failed); }
-      failed.innerHTML = cardHTML({title: t("cards.sendFailed"), status: "failed"});
-      cardFailure(failed.firstElementChild, () => el.requestSubmit(), () => failed?.remove());
+      if (!failed) { failed = document.createElement("div"); failed.className = "composer-failure"; failed.setAttribute("role", "alert"); el.prepend(failed); }
+      // Said once: the title names the message, its status says it was not sent, and no sentence repeats either.
+      failed.innerHTML = cardHTML({title: t("cards.yourMessage"), status: "failed", statusText: t("cards.sendFailed")});
+      cardFailure(failed.firstElementChild, () => el.requestSubmit(), () => failed?.remove(), null);
     }).finally(() => { if (submitted === revision) { fit(); input.focus(); } });
   });
   input.addEventListener("input",fit);input.addEventListener("keydown",e=>{if(e.key==="Enter"&&!e.shiftKey&&!e.isComposing&&e.keyCode!==229){e.preventDefault();el.requestSubmit();}});
   el.querySelector<HTMLElement>(".cmp-attach")!.addEventListener("click",()=>{picker.value="";picker.click();});bindActionMode(el.querySelector<HTMLElement>(".cmp-mode")!);
-  el.querySelector(".cmp-file")!.addEventListener("click",e=>{const button=(e.target as Element).closest<HTMLElement>("[data-file]");if(button){files=files.filter((_,i)=>i!==Number(button.dataset.file));draw();}});
+  // The composer keeps its clicks (below), so a waiting picture opens large from here.
+  el.querySelector(".cmp-file")!.addEventListener("click",e=>{const picture=(e.target as Element).closest<HTMLElement>(".cmp-pic"),src=picture?.querySelector("img")?.getAttribute("src");if(picture){if(src)openMediaLightbox(picture,src);return;}const button=(e.target as Element).closest<HTMLElement>("[data-file]");if(button){files=files.filter((_,i)=>i!==Number(button.dataset.file));draw();}});
   picker.addEventListener("change",()=>addFiles([...picker.files??[]]));bindFilePaste(input,addFiles,fit,()=>files.map(file=>file.name));
   const release=():void=>{stream?.getTracks().forEach(track=>track.stop());stream=undefined;recording=false;draw();};
   const stop=():void=>{if(recorder?.state==="recording")recorder.stop();};
@@ -176,7 +212,7 @@ export function createChatComposer(options: { placeholder(): string; transcriptT
             if(destinationRevision!==revision)return;
             if(result.text.trim()){transcript(result.text);fit();}
             busy=false;transcribing=false;draw();
-            if(result.text.trim()){handedOff=true;el.requestSubmit();}else toaster.info(t("chat.voiceEmpty"));
+            if(result.text.trim()){handedOff=true;if(!pageDraft.pageId)el.requestSubmit();}else toaster.info(t("chat.voiceEmpty"));
           }finally{await audio.close();}
         })().catch(error=>{if(run===taskRun)toaster.info(t("chat.voiceFailed",{p0:describeError(error)}));}).finally(()=>{if(run===taskRun){if(!handedOff)busy=false;transcribing=false;draw();}});
       };
@@ -185,5 +221,5 @@ export function createChatComposer(options: { placeholder(): string; transcriptT
   });
   cancelGesture().register(() => (starting || recording || transcribing || taskState !== "idle") ? { key: `composer:${revision}:${taskRun}:${recording}:${transcribing}`, immediate: starting || recording || transcribing, button: voice, hint: t("common.cancelAgain"), cancel: () => { if(starting||recording||transcribing)cancelVoice();else voice.click(); } } : null);
   onLocaleChange(()=>{drawnFiles=null;draw();});draw();
-  return {el,input,draw,addFiles,snapshot:()=>({text:input.value,files:[...files]}),setTaskState(state:ComposerTaskState){if(taskState==="idle"&&state!=="idle")taskRun++;taskState=state;draw();},stopVoice:cancelVoice,seedDictation(text:string){learning.seed(input.value,text);},setDraft(text:string,draftFiles:WireAttachment[]=[]){cancelVoice();learning.clear();revision++;input.dispatchEvent(new Event("composer-draft-restored"));input.value=text;files=[...draftFiles];fit();input.setSelectionRange(text.length,text.length);}};
+  return {el,input,draw,addFiles,placePageText:pageDraft.place,snapshot:()=>({text:input.value,files:[...files],...(pageDraft.pageId ? {pageId:pageDraft.pageId} : {})}),setTaskState(state:ComposerTaskState){if(taskState==="idle"&&state!=="idle")taskRun++;taskState=state;draw();},stopVoice:cancelVoice,seedDictation(text:string){learning.seed(input.value,text);},setDraft(text:string,draftFiles:WireAttachment[]=[],pageId?:string){cancelVoice();learning.clear();revision++;input.dispatchEvent(new Event("composer-draft-restored"));input.value=text;pageDraft.restore(pageId);files=[...draftFiles];fit();input.setSelectionRange(text.length,text.length);}};
 }

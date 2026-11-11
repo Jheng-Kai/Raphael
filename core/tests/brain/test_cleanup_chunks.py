@@ -355,6 +355,33 @@ async def test_a_cancelled_cleanup_cancels_its_pieces(svc, client):
 # --- through the brain ---------------------------------------------------------------------------
 
 
+async def test_long_heard_regions_keep_chunking_and_never_share_context_across_missing_speech(conn, client):
+    keys = MemoryKeyStore()
+    keys.set("synthetic-key")
+    brain = Brain(conn, client, keys, now_ms=lambda: NOW_MS)
+    router = Router()
+    brain.register(router)
+    marker = "(this part was not heard)"
+    before = " ".join(sentences(3, words=100))
+    after = " ".join(sentence.replace("word", "other") for sentence in sentences(3, words=100))
+    try:
+        result = await router.call("brain.finalize_dictation", {
+            "raw_text": before + "\n\n" + marker + "\n\n" + after,
+            "audio_seconds": 95, "stt_ms": 10, "incomplete": True, "ui_language": "en",
+        })
+    finally:
+        await brain.aclose()
+    assert result["text"] == before.upper() + "\n\n" + marker + "\n\n" + after.upper()
+    assert not result["cleaned"] and result["fallback_reason"] == "incomplete_stt"
+    assert len(client.calls) == 6
+    for call in client.calls:
+        heard = transcript_of(call["user"])
+        assert len(heard) <= CLEANUP_CHUNK_CHARS
+        assert marker not in call["system"] + call["user"]
+        forbidden = "other" if "word" in heard else "word"
+        assert all(f"{forbidden}{index}x" not in call["system"] for index in range(3))
+
+
 async def test_a_long_dictation_through_the_brain_is_cleaned_in_pieces_and_saved_whole(
     conn, client
 ):

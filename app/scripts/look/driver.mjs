@@ -1,9 +1,86 @@
+import { writeFile } from "node:fs/promises";
 import { assertStableClick, stableSnapshot, stableControls } from "./stable-click.mjs";
 import { checkRendered } from "./checks.mjs";
 import { idleCost, paintedSlime, slimeBoard, slimeParts, slimePointer, slimeSharp } from "./slime-board.mjs";
 import { eventStorm } from "./event-storm.mjs";
+import { placesProblems, slimePlaces } from "./slime-places.mjs";
 import { sendProbe } from "./send-probe.mjs";
 import { animationAudit, motionCost, motionDetails } from "./motion-cost.mjs";
+
+/**
+ * Opening a conversation as the owner does, by its row in the sidebar (owner, 2026-11-10: 「開啟對話…太慢」): the
+ * time until its newest turn is drawn and painted, and the main thread's long tasks meanwhile, `rounds` times
+ * (the first open is cold, the others come back to it). `limits` fails the step past `coldMs`, `warmMs` or
+ * `longTaskMs`.
+ */
+async function openCost(page, { from, to, newest, rounds = 3, limits = {}, first = [], once = [], never = [] }) {
+  const samples = [];
+  for (let round = 0; round < rounds; round++) {
+    await page.evaluate(id => document.querySelector(`.mb-col [data-member="${id}"]`).click(), from);
+    await page.waitForFunction(id => !document.querySelector(`.page-agent:not([hidden]) .tn[data-id="${id}"]`), {}, newest);
+    await new Promise(resolve => setTimeout(resolve, 300));
+    samples.push(await page.evaluate(async ({ to, newest }) => {
+      const long = [], watch = new PerformanceObserver(list => { for (const entry of list.getEntries()) long.push(entry.duration); });
+      watch.observe({ type: "longtask" });
+      const started = performance.now(), before = window.__look.calls.length;
+      document.querySelector(`.mb-col [data-member="${to}"]`).click();
+      while (!document.querySelector(`.page-agent:not([hidden]) .tn[data-id="${newest}"]`)) await new Promise(resolve => setTimeout(resolve, 4));
+      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      const ms = performance.now() - started;
+      watch.disconnect();
+      // The core requests the open made, in order: each is a round trip to a core that may be busy.
+      const calls = window.__look.calls.slice(before).map(call => (call.method ?? call.command) + (call.from ? ` [${call.from}]` : "")).filter(Boolean);
+      return { ms: Math.round(ms), longTaskMs: Math.round(long.reduce((sum, value) => sum + value, 0)), turns: document.querySelectorAll(".page-agent:not([hidden]) .tn").length, calls };
+    }, { to, newest }));
+  }
+  const result = { check: "open-cost", samples, coldMs: samples[0].ms, warmMs: Math.max(0, ...samples.slice(1).map(sample => sample.ms)),
+    longTaskMs: Math.max(...samples.map(sample => sample.longTaskMs)) };
+  for (const [key, limit] of Object.entries(limits)) {
+    if (result[key] > limit) throw Object.assign(new Error(`Opening a conversation: ${key} ${result[key]} ms is over ${limit} ms`), { assertion: result });
+  }
+  // The core answers in order: the thread is asked for first (its conversations on a first open), once, and nothing
+  // the open does not need is asked for at all (owner, 2026-11-10).
+  for (const [round, sample] of samples.entries()) {
+    const methods = sample.calls.map(call => call.split(" [")[0]);
+    const problem = first.length && !first.includes(methods[0]) ? `the first request is ${methods[0]}, not ${first.join(" or ")}`
+      : once.find(method => methods.filter(name => name === method).length > 1) ? `${once.find(method => methods.filter(name => name === method).length > 1)} is asked for twice`
+      : never.find(method => methods.includes(method)) ? `${never.find(method => methods.includes(method))} is asked for` : "";
+    if (problem) throw Object.assign(new Error(`Opening a conversation (round ${round + 1}): ${problem}: ${methods.join(" > ")}`), { assertion: result });
+  }
+  return result;
+}
+
+/**
+ * Start-up asks for the first view before anything optional (owner, 2026-11-11: 「第一次開 app 的速度還是非常慢，就只有第一次而已」).
+ * The core answers on one loop, so a model-catalog read that arrives with the Home overview slows the overview
+ * several times over. Waits until every `heavy` read has been asked for (the window reads them ahead on its own), then
+ * fails if one of them began before the `firstView` reads that began earlier were answered, if the heavy reads
+ * overlapped, or if a first-view read is missing. `calls` come from the mock core, which stamps start (`t0`) and answer (`t1`).
+ */
+export function startupOrderProblem(calls, { firstView, heavy }) {
+  const core = calls.filter(call => call.command === "core_call");
+  const of = names => core.filter(call => names.includes(call.method));
+  const missing = [...firstView, ...heavy].find(method => !core.some(call => call.method === method));
+  if (missing) return `${missing} was never asked for`;
+  const unanswered = of([...firstView, ...heavy]).find(call => call.t1 === undefined);
+  if (unanswered) return `${unanswered.method} was never answered`;
+  const reads = of(heavy).sort((a, b) => a.t0 - b.t0);
+  const begin = reads[0].t0;
+  const late = of(firstView).filter(call => call.t0 < begin && call.t1 > begin)[0];
+  if (late) return `${reads[0].method} began while ${late.method} was still waiting for its answer`;
+  const overlapping = reads.find((call, index) => index > 0 && call.t0 < reads[index - 1].t1);
+  if (overlapping) return `${overlapping.method} began before ${reads[reads.indexOf(overlapping) - 1].method} was answered`;
+  return "";
+}
+
+async function startupOrder(page, step) {
+  await page.waitForFunction(heavy => heavy.every(method => window.__look.calls.some(call => call.method === method && call.t1 !== undefined)), { timeout: 30000 }, step.heavy);
+  const calls = await page.evaluate(() => window.__look.calls.filter(call => call.command === "core_call").map(({ method, t0, t1 }) => ({ command: "core_call", method, t0, t1 })));
+  const result = { check: "startup-order", order: calls.map(call => `${call.method}@${Math.round(call.t0)}${call.t1 === undefined ? "" : `-${Math.round(call.t1)}`}`) };
+  const problem = startupOrderProblem(calls, step);
+  if (problem) throw Object.assign(new Error(`Start-up order: ${problem}: ${result.order.join(" > ")}`), { assertion: result });
+  return result;
+}
 
 export function finiteMotionSettled() {
   return document.getAnimations().every(animation => animation.playState !== "running" || animation.effect?.getTiming().iterations === Infinity ||
@@ -55,7 +132,7 @@ export async function decodeVisibleImages() {
 }
 
 export function findVisibleElement(selector) {
-  return [...document.querySelectorAll(selector)].find(element => {
+  const shown = element => {
     const box = element.getBoundingClientRect();
     if (box.width <= 0 || box.height <= 0) return false;
     for (let parent = element; parent; parent = parent.parentElement) {
@@ -63,7 +140,22 @@ export function findVisibleElement(selector) {
       if (parent.hidden || style.display === "none" || style.visibility === "hidden" || style.visibility === "collapse") return false;
     }
     return true;
-  }) ?? null;
+  };
+  const found = [...document.querySelectorAll(selector)].find(shown);
+  if (found) return found;
+  // A row draws no ⋯ (styles.css): a step that waits for one, or hovers it, has the row it sits in. A
+  // message's work is in its ⋯ menu (timeline.ts): a step that waits for the work control has that ⋯.
+  for (const element of document.querySelectorAll(selector)) {
+    if (element.matches("[data-overflow]") && getComputedStyle(element).display === "none") {
+      // A wrapper that held only the ⋯ has no size now: the row is the first box out from it, unless that row is hidden.
+      let row = element.parentElement;
+      while (row && !(row.getBoundingClientRect().width > 0 && row.getBoundingClientRect().height > 0) && getComputedStyle(row).display !== "none" && !row.hidden) row = row.parentElement;
+      if (row && shown(row)) return row;
+    }
+    const more = element.matches('[data-act="thinking"][hidden]') ? element.closest(".chat-message")?.querySelector('[data-act="more-message"]') : null;
+    if (more && shown(more.closest(".chat-message"))) return more;
+  }
+  return null;
 }
 
 export async function perform(page, step, evidenceDirectory) {
@@ -76,6 +168,41 @@ export async function perform(page, step, evidenceDirectory) {
     catch (error) { throw new Error(`No visible match: ${selector}`, { cause: error }); }
   };
   const click = async selector => {
+    // Rows keep their ⋯ out of sight: a step that names one presses it the way the
+    // owner does, with a right click on its row (context-menu.ts), which presses the very same button.
+    if (await page.evaluate(selector => matchMedia("(max-width: 859px)").matches && !document.documentElement.hasAttribute("data-sidebar-open") && !!document.querySelector(selector)?.matches("[data-overflow]") && !!document.querySelector(selector)?.closest("#nav"), selector)) await page.click('[data-sidebar="open"]');
+    const row = await page.evaluate(selector => {
+      const button = document.querySelector(selector);
+      if (!button?.matches("[data-overflow]") || button.getClientRects().length) return null;
+      for (let node = button.parentElement; node; node = node.parentElement) {
+        if (!(node.getBoundingClientRect().width > 0 && node.getBoundingClientRect().height > 0)) continue;
+        node.scrollIntoView({ block: "nearest", inline: "nearest" });
+        const box = node.getBoundingClientRect();
+        return { x: box.left + box.width / 2, y: box.top + box.height / 2 };
+      }
+      return null;
+    }, selector);
+    if (row) {
+      await page.mouse.click(row.x, row.y, { button: "right" });
+      await page.evaluate(at => { window.__look.pointer = at; }, row);
+      return;
+    }
+    // A message's work opens from its ⋯ menu; only react, reply and ⋯ beside the bubble.
+    const work = await page.evaluate(selector => {
+      const control = [...document.querySelectorAll(selector)].find(node => node.matches('[data-act="thinking"][hidden]') && node.closest(".chat-message")?.getClientRects().length);
+      if (!control) return null;
+      const message = control.closest(".chat-message"), id = `look-work-${Math.random().toString(36).slice(2)}`;
+      message.querySelector('[data-act="more-message"]')?.setAttribute("data-look-more", id);
+      message.scrollIntoView({ block: "nearest" });
+      return id;
+    }, selector);
+    if (work) {
+      await page.hover(`[data-look-more="${work}"]`);
+      await page.click(`[data-look-more="${work}"]`);
+      await page.waitForSelector('#app-popover [data-pick="work"]', { visible: true, timeout: 6000 });
+      await page.click('#app-popover [data-pick="work"]');
+      return;
+    }
     for (let attempt = 0; ; attempt++) {
       const element = await visible(selector);
       try { await element.click(); return; }
@@ -208,20 +335,32 @@ export async function perform(page, step, evidenceDirectory) {
     case "handoff-arrival": {
       await page.evaluate(() => {
         window.__handoffGroup = document.querySelector('[data-handoff-group]');
-        window.__handoffReceipt = document.querySelector('[data-handoff="800"]');
+        window.__peerChat = document.querySelector('.peer-chat');
         window.__handoffOwner = document.querySelector('.tn[data-id="1"] .me');
         window.__handoffAnswer = document.querySelector('.tn[data-id="1"] .ra');
         const turn = window.__look.data.turns.find(turn => turn.id === 1);
         turn.handoffs.push({ ...turn.handoffs[0], task_id: 850, work_turn_id: 950 });
         for (let i = 0; i < 20; i++) window.__look.emit({ type: "WorkerChanged", task_id: 850, state: "running", running: true });
       });
-      await page.waitForFunction(() => document.querySelector('[data-handoff="850"]'), { timeout: 5000 });
+      await page.waitForFunction(() => document.querySelector('[data-peer-keys~="850"]') && (!window.__peerChat || document.querySelector('.peer-chat [data-peer-key="850"]')), { timeout: 5000 });
       break;
     }
     case "reload":
       await page.reload({waitUntil:"networkidle0",timeout:20000});
       await page.waitForSelector('.page-home:not([hidden]) .ho-hero',{visible:true,timeout:10000});
       break;
+    case "saved-file": {
+      // The file a report was saved as (report_save), opened as a browser opens it: on its own, with nothing of the app.
+      // The scene is marked `file`: the boundary's errors are read here, before the app's page is gone.
+      const { html, errors } = await page.evaluate(() => ({ html: window.__look.calls.findLast(call => call.command === "report_save")?.html ?? null, errors: window.__look.errors }));
+      if (errors.length) throw new Error(`Before the file: ${errors.join("; ")}`);
+      if (!html) throw new Error("Nothing was saved as a file");
+      if (evidenceDirectory) await writeFile(`${evidenceDirectory}/saved-report.html`, html);
+      // A blank page, not a data: address: a top frame may not go to one, so the file's own contents links would not move.
+      await page.goto("about:blank", { timeout: 20000 });
+      await page.setContent(html, { waitUntil: "load", timeout: 20000 });
+      break;
+    }
     case 'polish-caption': {
       const dialog = await page.$('.mb-dialog') ?? await page.$('.modal-scrim:not([hidden]) .modal');
       const before = await page.evaluate(() => window.__look.calls.length);
@@ -230,8 +369,9 @@ export async function perform(page, step, evidenceDirectory) {
         if (!await page.$eval(selector, el => { const r=el.getBoundingClientRect(); return el.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)); })) throw new Error('caption is covered');
         await click(selector);
       }
-      if (!await page.$eval('[data-window-drag]', el => { const r=el.getBoundingClientRect(); return el.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)); })) throw new Error('caption drag area is covered');
-      await click('[data-window-drag]');
+      // The caption's own strip (index.html) stands above every dialog. The sidebar's top row is a second drag area (owner, 2026-11-08), which a modal dialog rightly covers.
+      if (!await page.$eval('.window-chrome [data-window-drag]', el => { const r=el.getBoundingClientRect(); return el.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)); })) throw new Error('caption drag area is covered');
+      await click('.window-chrome [data-window-drag]');
       await page.evaluate(() => new Promise(resolve => setTimeout(resolve, 50)));
       const result = await page.evaluate(before => {
         const calls = window.__look.calls.slice(before).map(c=>c.command);
@@ -244,8 +384,8 @@ export async function perform(page, step, evidenceDirectory) {
       await page.waitForFunction(el => !el.isConnected || !!el.closest('[hidden]'), {timeout:2000}, dialog);
       await dialog.dispose();
       if (step.kind === 'settings') await click('#nav [data-go="settings"]');
-      else if (step.kind === 'member') { await perform(page, {action:'open-details'}, evidenceDirectory); await click('[data-det="gear"]'); await click('[data-det="edit"]'); }
-      else await click('[data-act="data-clear"][data-what="dictation"]');
+      else if (step.kind === 'member') { await perform(page, {action:'open-details'}, evidenceDirectory); await click('.mb-det [data-det="routine-open"]'); }
+      else { await click('[data-room-menu]'); await click('[data-pick="delete"]'); }
       await page.evaluate(() => { window.__polishCaptionOutside = true; });
       break;
     }
@@ -316,9 +456,10 @@ export async function perform(page, step, evidenceDirectory) {
       await element.hover();
       await new Promise(resolve => setTimeout(resolve, 160));
       const hovered = await measure();
-      if (hovered.background !== (step.control === 'close' ? hovered.close : hovered.hover) || hovered.radius <= 0) throw new Error('Caption hover needs a rounded token surface');
+      // The caption buttons are Windows cells: the token surface fills the square cell (R-UI-16).
+      if (hovered.background !== (step.control === 'close' ? hovered.close : hovered.hover) || hovered.radius !== 0) throw new Error('Caption hover needs its token surface on a square cell');
       if (Math.abs(hovered.centerX - hovered.x) > .5 || Math.abs(hovered.centerY - hovered.y) > .5 || Math.abs(rest.x - hovered.x) > .5 || Math.abs(rest.y - hovered.y) > .5) throw new Error('Caption glyph moved or is not centered');
-      if (hovered.marginTop < 3 || Math.abs(hovered.marginTop - hovered.marginBottom) > .5) throw new Error('Caption hover needs even inner margins');
+      if (hovered.marginTop > .5 || hovered.marginBottom > .5) throw new Error("A caption cell fills the strip from top to bottom, like a native Windows caption cell");
       if (!hovered.label || hovered.title !== hovered.label) throw new Error('Caption tooltip and accessible label must remain');
       if (step.control === 'close') {
         const rgb = value => value.match(/[\d.]+/g).slice(0, 3).map(Number).map(c => c / 255).map(c => c <= .04045 ? c / 12.92 : ((c + .055) / 1.055) ** 2.4);
@@ -337,9 +478,18 @@ export async function perform(page, step, evidenceDirectory) {
       try { await new Promise(resolve => setTimeout(resolve, 160)); pressed = await measure(); }
       finally { await page.mouse.move(0, 100); await page.mouse.up(); }
       if (pressed.background !== (step.control === 'close' ? pressed.close : pressed.pressed)) throw new Error('Caption press needs the pressed token');
-      await page.keyboard.press('Tab'); await element.focus();
-      const focus = await element.evaluate(button => { const style = getComputedStyle(button); return { style: style.outlineStyle, width: parseFloat(style.outlineWidth) }; });
-      if (focus.style === 'none' || focus.width < 2) throw new Error('Caption keyboard focus needs a visible ring');
+      // A ring is drawn only in a window that has the system's focus, and the browser window of a look run may not have
+      // it (another window was in front, or Tab left the page from its last control): one capture in fifteen failed here
+      // with the control focused and no ring. The page is told it has the focus for as long as the ring is read.
+      const client = await page.createCDPSession();
+      let focus;
+      try {
+        await client.send('Emulation.setFocusEmulationEnabled', { enabled: true });
+        await page.keyboard.press('Tab'); await element.focus();
+        focus = await element.evaluate(button => { const style = getComputedStyle(button); return { style: style.outlineStyle, width: parseFloat(style.outlineWidth),
+          keys: document.documentElement.hasAttribute('data-keys'), active: document.activeElement === button, visible: button.matches(':focus-visible'), window: document.hasFocus() }; });
+      } finally { await client.send('Emulation.setFocusEmulationEnabled', { enabled: false }).catch(() => {}); await client.detach().catch(() => {}); }
+      if (focus.style === 'none' || focus.width < 2) throw new Error(`Caption keyboard focus needs a visible ring: ${JSON.stringify(focus)}`);
       await element.evaluate(button => button.blur());
       await element.hover(); await new Promise(resolve => setTimeout(resolve, 160));
       await element.dispose();
@@ -362,15 +512,15 @@ export async function perform(page, step, evidenceDirectory) {
       for (const target of step.selectors) {
         const selector = typeof target === 'string' ? target : target.selector;
         const behindDrawer = await page.evaluate(selector => matchMedia('(max-width: 859px)').matches && document.documentElement.hasAttribute('data-sidebar-open') && [...document.querySelectorAll(selector)].some(el => !el.closest('#nav')), selector);
-        if (behindDrawer) await page.click('[data-sidebar="collapse"]');
+        if (behindDrawer) await page.click('.sidebar-scrim');
         const element = await visible(selector);
         try {
           const snapshot = () => element.evaluate(button => {
             const box = button.getBoundingClientRect();
-            return { active: button.matches(':active'), bounds: [box.x, box.y, box.width, box.height], colors: [button.parentElement, button, ...button.querySelectorAll('*')].map(node => {
-              const style = getComputedStyle(node);
-              return [style.color, style.backgroundColor, style.borderColor, style.opacity];
-            }) };
+            // A control may answer on a drawn pseudo-element (a pill's ::before surface), which the owner sees as the control's own colour.
+            const colorsOf = (node, pseudo) => { const style = getComputedStyle(node, pseudo); return [style.color, style.backgroundColor, style.borderColor, style.opacity]; };
+            return { active: button.matches(':active'), bounds: [box.x, box.y, box.width, box.height], colors: [button.parentElement, button, ...button.querySelectorAll('*')].flatMap(node =>
+              [colorsOf(node), ...['::before', '::after'].filter(pseudo => !['none', 'normal'].includes(getComputedStyle(node, pseudo).content)).map(pseudo => colorsOf(node, pseudo))]) };
           });
           await element.hover();
           await new Promise(resolve => setTimeout(resolve, 180));
@@ -480,7 +630,29 @@ export async function perform(page, step, evidenceDirectory) {
       if(result.failures.length) throw Object.assign(new Error(`Non-compositable endless motion: ${JSON.stringify(result)}`),{assertion:result});
       return result;
     }
+    // Slimes move in two places only (R-SLIME-01): the member list's rows and the thinking line; everywhere else they are pictures.
+    case "slime-places": {
+      const result = await page.evaluate(slimePlaces), problems = placesProblems(result, step.expect);
+      if (problems.length) throw Object.assign(new Error(`Slimes move in the wrong places: ${problems.join("; ")} | ${JSON.stringify(result)}`), { assertion: result });
+      return { check: "slime-places", ...result };
+    }
     case "event-storm": return await eventStorm(page, step);
+    case "open-cost": return await openCost(page, step);
+    case "startup-order": return await startupOrder(page, step);
+    // The composer's voice button pressed and held, as the owner starts speaking to Raphael.
+    case "press-voice":
+      await page.evaluate(() => { const button = document.querySelector(".page-agent:not([hidden]) .composer .cmp-voice"); button?.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0, pointerId: 1 })); });
+      await new Promise(resolve => setTimeout(resolve, 200));
+      return { action: "press-voice" };
+    // The core's events, as the window hears them (a recording that started, its loudness).
+    case "emit":
+      await page.evaluate(events => { for (const event of events) window.__look.emit(event); }, step.events);
+      await new Promise(resolve => setTimeout(resolve, step.wait ?? 300));
+      return { action: "emit", events: step.events.map(event => event.type) };
+    // The models of the CLI held back by the mock (`codexLate`) arrive now.
+    case "codex-arrives": await page.evaluate(() => { window.__look.codexArrives(); }); break;
+    // From now on the roster answers after `ms` (the mock's rosterDelay): the thread is asked for first and the roster comes late.
+    case "late-roster": await page.evaluate(ms => { window.__look.rosterDelay = ms; }, step.ms); break;
     case "send-probe": return await sendProbe(page, step);
     case "advance-time":
       // Advance the shared fixed clock, then let production timers observe it.
@@ -505,7 +677,8 @@ export async function perform(page, step, evidenceDirectory) {
           active = await state();
         } finally { await page.mouse.move(0, 0); await page.mouse.up(); }
         if ([hover, active].some(value => value.background !== "rgba(0, 0, 0, 0)")) throw new Error("Icon hover/active must remain transparent");
-        if (active.color !== active.accent) throw new Error("Pressed icon must use the accent color");
+        // R-UI-88: a press changes colour from the hover, without a surface (R-UI-16).
+        if (active.color === hover.color) throw new Error("A pressed icon must change colour from its hover");
         await page.keyboard.press("Tab");
         await element.focus();
         const focus = await state();
@@ -519,6 +692,10 @@ export async function perform(page, step, evidenceDirectory) {
       if (await page.$('.conversation-trigger[aria-expanded="true"]')) await click('.mb-det [data-det="close"]');
       await click(".conversation-trigger");
       await visible('.mb-det:not([hidden])');
+      break;
+    case "close-details-if-open":
+      // The settings page closes a panel that would cover it (a narrow window), so only an open one is closed.
+      if (await page.$('.mb-det:not([hidden]) [data-det="close"]')) { await click('.mb-det [data-det="close"]'); await page.waitForSelector('.conversation-trigger[aria-expanded="false"]'); }
       break;
     case "close-details": {
       const scrim = await page.$('.mb-det-scrim');
@@ -577,7 +754,9 @@ export async function perform(page, step, evidenceDirectory) {
         let pressed;
         try { await new Promise(resolve => setTimeout(resolve, 180)); pressed = await measure(); }
         finally { await page.mouse.move(0, 100); await page.mouse.up(); }
-        if (pressed.background !== normal.background || pressed.layer !== 'rgba(0, 0, 0, 0)') throw new Error('Whole block press preserves its background and transparent target');
+        // R-UI-88: an enabled control changes colour on press without moving; the block's target layer stays transparent.
+        if (pressed.background === normal.background || pressed.layer !== 'rgba(0, 0, 0, 0)') throw new Error(`A whole block press changes its surface colour with a transparent target (${step.selector}: ${normal.background} -> ${pressed.background}, target ${pressed.layer})`);
+        if (pressed.visual.some((node, index) => node.slice(0, 4).some((value, edge) => Math.abs(value - hovered.visual[index][edge]) > .5))) throw new Error('A whole block press moves nothing inside it');
         await element.focus();
         const pointer = await measure();
         if (pointer.outline !== 'none' && pointer.width > 0) throw new Error('Pointer focus must not show a keyboard ring');
@@ -590,7 +769,8 @@ export async function perform(page, step, evidenceDirectory) {
     }
     case "stable-click":
     case "click": {
-      const enabled = step.action === "stable-click" || await page.evaluate(({ selector, selectors }) => [...document.querySelectorAll(selector)].some(node => node.getBoundingClientRect().width > 0 && node.getBoundingClientRect().height > 0 && node.matches(selectors) && !node.closest('#nav, .page-home')), { selector: step.selector, selectors: stableControls });
+      // A choice in a shared popover (the narrow calendar tools' dates) closes it once made; tabs there stay checked.
+      const enabled = step.action === "stable-click" || await page.evaluate(({ selector, selectors }) => [...document.querySelectorAll(selector)].some(node => node.getBoundingClientRect().width > 0 && node.getBoundingClientRect().height > 0 && node.matches(selectors) && !node.closest('#nav, .page-home') && !(node.closest('#app-popover') && node.matches('button[aria-pressed]'))), { selector: step.selector, selectors: stableControls });
       if (!enabled) { await click(step.selector); break; }
       const target = await visible(step.selector);
       await target.evaluate(node => node.scrollIntoView({ block: "nearest", inline: "nearest" }));
@@ -625,13 +805,37 @@ export async function perform(page, step, evidenceDirectory) {
           transfer.items.add(input);
         }
         if (text) transfer.setData("text/plain", text);
-        if (action === "clipboard-paste") { element.dispatchEvent(new ClipboardEvent("paste", { bubbles: true, cancelable: true, clipboardData: transfer })); return; }
+        if (action === "clipboard-paste") {
+          const event = new ClipboardEvent("paste", { bubbles: true, cancelable: true, clipboardData: transfer });
+          element.dispatchEvent(event);
+          // A synthetic paste does nothing by itself: the browser's own default, which writes the words in, is done here when no page code took the paste.
+          if (!event.defaultPrevented && text && !file) document.execCommand("insertText", false, text);
+          return;
+        }
         for (const type of hold ? ["dragenter", "dragover"] : ["dragenter", "dragover", "drop"]) element.dispatchEvent(new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer: transfer }));
       }, step);
       break;
     }
     case "type": await fill(step.selector, step.text); break;
     case "hover": { const element = await visible(step.selector); await element.hover(); await element.dispose(); break; }
+    // A press held past a control's long-press threshold, then let go there (the member voice button records on hold).
+    // `release: false` keeps the button down through the still frame (the crop frame's thirds show only while held).
+    case "hold": {
+      const element = await visible(step.selector), box = await element.boundingBox(); await element.dispose();
+      await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2); await page.mouse.down();
+      if (step.release === false) { await new Promise(resolve => setTimeout(resolve, step.ms ?? 100)); break; }
+      try { await new Promise(resolve => setTimeout(resolve, step.ms ?? 500)); } finally { await page.mouse.up(); }
+      break;
+    }
+    // A press moved across in small steps and let go: a pane's edge resizes it as the owner's pointer would.
+    case "drag": {
+      if (step.wide && await page.evaluate(() => matchMedia("(max-width: 859px)").matches)) break;
+      const element = await visible(step.selector), box = await element.boundingBox(); await element.dispose();
+      const x = box.x + box.width / 2, y = box.y + box.height / 2;
+      await page.mouse.move(x, y); await page.mouse.down();
+      try { await page.mouse.move(x + step.dx, y, { steps: 12 }); } finally { await page.mouse.up(); }
+      break;
+    }
     case "desktop-refresh-still": {
       const before = await page.evaluate(() => {
         const panel = document.querySelector('.mb-det');
@@ -729,14 +933,6 @@ export async function perform(page, step, evidenceDirectory) {
       } finally { await element.dispose(); }
       break;
     }
-    case "home-day": {
-      const calendar = await visible('.ho-calendar');
-      const expanded = await calendar.evaluate(node => getComputedStyle(node).getPropertyValue('--home-calendar-expanded').trim() === '1');
-      await calendar.dispose();
-      await click(`[data-home-select="${step.date}"]`);
-      const day = await visible(`.au-day-col[data-day="${step.date}"]`); await day.dispose();
-      return {check:'home-day-selection',expanded,date:step.date,opened:true};
-    }
     case "touch-swipe": {
       const element = await visible(step.selector), client = await page.createCDPSession();
       try {
@@ -826,10 +1022,12 @@ export async function perform(page, step, evidenceDirectory) {
     case "member": await click(`.mb-col [data-member="${step.id}"]`); break;
     case "room": await click(`[data-room="${step.id}"]`); break;
     case "new-room": await click('[data-col="add"]'); await click('#app-popover [data-pick="group-chat"]'); break;
-    case "room-row-menu": { const more = await visible(`[data-room-more="${step.id}"]`); try { await more.hover(); await more.click(); } finally { await more.dispose(); } break; }
+    // A room's row draws no ⋯ (owner, 2026-11-06, R-UI-44): its menu opens the way the owner opens it, with a right click on the row.
+    case "room-row-menu": await click(`[data-room-more="${step.id}"]`); break;
     case "rooms-menu": await visible(".mb-col [data-room]"); break;
     case "search":
-      await fill(".mb-find-input", step.text); break;
+      if (!(await page.$("#app-popover .side-search-input"))) await click('[data-col="search"]');
+      await fill("#app-popover .side-search-input", step.text); break;
     case "drop": case "drag-start": case "drag-over":
       { const element = await visible(step.selector);
       await element.evaluate((element, options) => {
@@ -838,10 +1036,6 @@ export async function perform(page, step, evidenceDirectory) {
         element.dispatchEvent(new DragEvent(options.action === "drop" ? "drop" : options.action === "drag-over" ? "dragover" : "dragstart", { bubbles: true, cancelable: true, dataTransfer: transfer }));
       }, step);
       await element.dispose(); }
-      break;
-    case "disable-abilities":
-      await visible("#ob [data-ability]");
-      while (await page.$('#ob [data-ability][aria-checked="true"]')) await click('#ob [data-ability][aria-checked="true"]');
       break;
     default: throw new Error(`Unknown scene action: ${step.action}`);
   }

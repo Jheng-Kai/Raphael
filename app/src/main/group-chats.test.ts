@@ -6,7 +6,7 @@ import * as richScroll from "./message-rich";
 const api=vi.hoisted(()=>({membersList:vi.fn(),roomsCreate:vi.fn(),roomsList:vi.fn(),roomMessages:vi.fn(),roomSend:vi.fn(),roomsDelete:vi.fn(),roomsUpdate:vi.fn(),roomStop:vi.fn(),core:vi.fn(),pagesOpen:vi.fn(),ownerQuestionBring:vi.fn(),openTeamFile:vi.fn().mockResolvedValue(undefined)}));
 vi.mock("./api",()=>api);
 import { configureRooms, openNewGroupChat, openGroupChat, openRoomsMenu, createRoomsSection, createRoomPane, clearRoomSelection } from "./group-chats";
-import { setLocale } from "./i18n";
+import { getLocale, setLocale, t } from "./i18n";
 import { setAvatar } from './avatar';
 
 test('an avatar repaint uses the loaded room and roster without IPC reads', async () => {
@@ -23,6 +23,29 @@ let event:(e:any)=>void;
 let app:AppContext;
 const pane=async()=>{const view=createRoomPane(app,vi.fn());document.body.append(view.el);await view.open(1);return view;};
 const draft=(text:string)=>{const input=document.querySelector<HTMLTextAreaElement>("#room-message")!;input.value=text;input.dispatchEvent(new Event("input"));return input;};
+
+test("a room page appends to its composer and waits for the owner's send", async () => {
+  const page = { id: "room-page-draft", title: "Sample page", rev: 0, height: 320, source: "html", server: null };
+  api.pagesOpen.mockResolvedValue({ ...page, url: "http://127.0.0.1:9/room-page-draft" });
+  api.roomMessages.mockResolvedValue({ messages: [{ id: 22, member_id: 1, text: "Page", created: 1, status: "done", turn: { pages: [page] } }] });
+  const view = await pane(); await flush();
+  const input = draft("My room draft");
+  const frame = view.el.querySelector<HTMLIFrameElement>(".pg-frame")!;
+  Object.defineProperty(navigator, "userActivation", { value: { isActive: true }, configurable: true });
+  Object.defineProperty(frame, "contentWindow", { value: { postMessage: vi.fn() }, configurable: true });
+  const focus = vi.spyOn(document, "activeElement", "get").mockReturnValue(frame);
+  window.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab" }));
+  const event = new MessageEvent("message", { data: { raphaelPage: 1, type: "send", text: "Page room words" } });
+  Object.defineProperty(event, "source", { value: frame.contentWindow });
+  window.dispatchEvent(event); focus.mockRestore(); await flush();
+  expect(api.roomSend).not.toHaveBeenCalled();
+  expect(input.value).toBe("My room draft\nPage room words");
+  expect(document.activeElement).toBe(input);
+  expect(view.el.querySelector<HTMLElement>(".cmp-page-note")!.hidden).toBe(false);
+  view.el.querySelector<HTMLFormElement>("form.composer")!.requestSubmit(); await flush();
+  expect(api.roomSend).toHaveBeenCalledExactlyOnceWith(1, "My room draft\nPage room words", expect.any(String), getLocale(), [], undefined);
+  view.close(); Reflect.deleteProperty(navigator, "userActivation");
+});
 
 test("bringing a room question releases queued scroll corrections before revealing its moved turn", async () => {
  const question={id:'pending-room',kind:'ask_owner',state:'asked',question:'Choose a date',turn_id:10};
@@ -132,19 +155,18 @@ test("a deleted room drops its stored words and reply target", async () => {
  expect(JSON.parse(localStorage.getItem('raphael.composer.drafts')??'{}')['room:1']).toBeUndefined();
 });
 
-test("only consecutive room receipts fold, and an arriving receipt preserves the open group and intervening message", async () => {
+test("only consecutive room receipts fold, and an arriving receipt keeps the line and the intervening message", async () => {
  const task = (id:number, created:number):HandoffView => ({task_id:id,source_turn_id:1,work_turn_id:100+id,member_id:1,member_name:"Alice",from_member_id:0,
   stage_id:"",mode:"work",state:"done",reason:null,created_at_ms:created,ready_at_ms:created,dispatch_policy:"immediate",result:"Sample result",evidence:[]});
  const history={messages:[{id:1,member_id:0,text:"A separating message",created:5,status:"done"}],handoffs:[task(1,1),task(2,2),task(3,7),task(4,8)]};
  api.roomMessages.mockResolvedValue(history);
  const view=await pane();
- const groups=view.el.querySelectorAll<HTMLDetailsElement>('[data-handoff-group]'); expect(groups).toHaveLength(2);
+ const groups=view.el.querySelectorAll<HTMLElement>('[data-handoff-group]'); expect(groups).toHaveLength(2);
  expect([...view.el.querySelectorAll('.au-room-thread > li')].map(row=>row.classList.contains('handoff-row'))).toEqual([true,false,true]);
- expect(groups[0].querySelector('summary')?.textContent).toContain('2 messages');
- groups[0].open=true; const receipt=groups[0].querySelector<HTMLDetailsElement>('[data-handoff="1"]')!; receipt.open=true;
+ expect(groups[0].textContent).toContain('2 messages');
  const message=view.el.querySelector('[data-room-message="1"]'); history.handoffs.push(task(5,3)); await view.refresh();
- expect(view.el.querySelector('[data-handoff-group]')).toBe(groups[0]); expect(groups[0].open).toBe(true); expect(receipt.open).toBe(true);
- expect(groups[0].querySelector('summary')?.textContent).toContain('3 messages'); expect(view.el.querySelector('[data-room-message="1"]')).toBe(message);
+ expect(view.el.querySelector('[data-handoff-group]')).toBe(groups[0]);
+ expect(groups[0].textContent).toContain('3 messages'); expect(view.el.querySelector('[data-room-message="1"]')).toBe(message);
  view.close();
 });
 
@@ -154,13 +176,13 @@ test("room rows render the RPC summary and select only the visible conversation 
  api.roomsList.mockResolvedValue({rooms:[{...room,preview:"Latest room reply",last_at,unread:true}]});
  const section=createRoomsSection(() => active);document.body.append(section);await flush();
  expect(section.querySelector('[data-room="1"] .mb-row-p')?.textContent).toBe('Latest room reply');
- expect(section.querySelector('time')?.dateTime).toBe(new Date(last_at).toISOString());
+ expect(section.querySelector('time')).toBeNull();
  expect(section.querySelector('[data-room="1"] .is-unread')).not.toBeNull();
  openGroupChat(1);await flush();
  expect(section.querySelector('[data-room="1"]')?.getAttribute('aria-current')).toBe('true');
- active=false;section.dispatchEvent(new CustomEvent('sidebar-search',{detail:""}));
+ active=false;section.dispatchEvent(new Event('sidebar-draw'));
  expect(section.querySelector('[aria-current="true"]')).toBeNull();
- active=true;section.dispatchEvent(new CustomEvent('sidebar-search',{detail:""}));
+ active=true;section.dispatchEvent(new Event('sidebar-draw'));
  expect(section.querySelector('[data-room="1"]')?.getAttribute('aria-current')).toBe('true');
 });
 
@@ -242,7 +264,9 @@ test("a primary changes room picker order and becomes the required chief", async
  expect(chief.disabled).toBe(true); expect(chief.getAttribute('aria-pressed')).toBe('true');
  expect(document.querySelector('[data-dlg="member"][data-member="0"]')!.getAttribute('aria-pressed')).toBe('false');
  document.querySelector<HTMLElement>('[data-dlg="member"][data-member="0"]')!.click();
- expect([...document.querySelectorAll('[data-picked] > span')].map(row=>row.textContent)).toEqual(['Alice','Raphael']);
+ // The rows' own checks say who takes part: no second line of picked names.
+ expect([...document.querySelectorAll<HTMLElement>('[data-dlg="member"][aria-pressed="true"]')].map(row=>row.querySelector('.room-row-name')!.textContent)).toEqual(['Alice','Raphael']);
+ expect(document.querySelector('[data-picked]')).toBeNull();
  expect(api.roomsCreate).not.toHaveBeenCalled();
  document.querySelector<HTMLElement>('[data-dlg="cancel"]')!.click();
 });
@@ -280,24 +304,32 @@ test("generated room names preserve owner edits and creation retries reuse the r
  expect(api.roomsCreate.mock.calls[1][0].name).toBe('Owner name');
 });
 
-test("reply labels distinguish owner sources from unavailable sources",async()=>{
+test("a reply quotes its source at the top of its bubble: who said it and its first words, or that it is gone",async()=>{
  api.roomMessages.mockResolvedValue({messages:[
+  {id:1,member_id:null,text:'Please **check** the [launch list](https://example.test) today',created:0,status:'done'},
   {id:2,member_id:1,text:'Answer',created:1,status:'done',reply_reference:{message_id:1,author_kind:'owner',author_member_id:null}},
   {id:3,member_id:1,text:'Kept reply',created:1,status:'done',reply_reference:{message_id:9,unavailable:true}},
  ]});await pane();
- expect([...document.querySelectorAll('.au-room-reply')].map(el=>el.textContent)).toEqual(['Reply to You','Source unavailable']);
+ const quote=document.querySelector<HTMLElement>('[data-room-message="2"] .ans > .room-quote.message-quote')!;
+ expect([quote.querySelector('.quote-author')!.textContent,quote.querySelector('.quote-text')!.textContent]).toEqual(['You','Please check the launch list today']);
+ expect(quote.matches('button[data-room-act="jump-reply"][data-message="1"]')).toBe(true);
+ expect(quote.getAttribute('aria-label')).toBe('Reply to You: Please check the launch list today');
+ expect(quote.nextElementSibling!.matches('.message-text')).toBe(true);
+ const gone=document.querySelector('[data-room-message="3"] .room-quote.is-missing')!;
+ expect([gone.tagName,gone.textContent]).toEqual(['SPAN','Source unavailable']);
+ expect(document.querySelector('.au-room-meta, .au-room-reply')).toBeNull();
 });
 
 test("the room voice target seeds correction learning while preserving reply delivery",async()=>{
  const create=vi.spyOn(chatComposer,"createChatComposer");
  try {
-  api.core.mockResolvedValue({learned:["OpenMausBot"]});
+  api.core.mockResolvedValue({learned:["SampleToolX"]});
   api.roomMessages.mockResolvedValue({messages:[{id:7,member_id:1,text:"Ready",created:1,status:"done"}]});
   await pane();document.querySelector<HTMLElement>('[data-room-act="reply"]')!.click();
-  create.mock.calls[create.mock.calls.length-1][0].transcriptTarget!()("Please use Open Mouse Bot");
-  draft("Please use OpenMausBot");document.querySelector<HTMLElement>('.cmp-send')!.click();await flush();
-  expect(api.roomSend).toHaveBeenCalledWith(1,"Please use OpenMausBot",expect.any(String),"en",[],7);
-  expect(api.core).toHaveBeenCalledWith("dictionary.correct",{edits:[{before:"Please use Open Mouse Bot",after:"Please use OpenMausBot"}]});
+  create.mock.calls[create.mock.calls.length-1][0].transcriptTarget!()("Please use Sample Tool Ex");
+  draft("Please use SampleToolX");document.querySelector<HTMLElement>('.cmp-send')!.click();await flush();
+  expect(api.roomSend).toHaveBeenCalledWith(1,"Please use SampleToolX",expect.any(String),"en",[],7);
+  expect(api.core).toHaveBeenCalledWith("dictionary.correct",{edits:[{before:"Please use Sample Tool Ex",after:"Please use SampleToolX"}]});
   expect(document.querySelector('.cmp-quote')!.textContent).toBe("");
  } finally { create.mockRestore(); }
 });
@@ -357,12 +389,12 @@ test("room rows expose rename, membership and confirmed deletion through more",a
  expect(api.roomsDelete).toHaveBeenCalledWith(1);
 });
 
-test("reply chips identify their recipient including Raphael's zero id and escape names",async()=>{
+test("reply quotes name their source including Raphael's zero id and escape names",async()=>{
  api.membersList.mockResolvedValue({members:[{id:0,name:'Raphael',avatar:''},{id:1,name:'<img src=x onerror=bad()>',avatar:''}],groups:[]});
  api.roomMessages.mockResolvedValue({messages:[{id:1,member_id:0,text:'Agreed',reply_reference:{message_id:8,author_kind:'member',author_member_id:1},reply_to_member:1,kind:'message',created:1,status:'done'},{id:2,member_id:1,text:'Thanks',reply_reference:{message_id:9,author_kind:'member',author_member_id:0},reply_to_member:0,created:2,status:'done'}]});
- await pane();const chips=[...document.querySelectorAll('.au-room-reply')];
- expect(chips.map(el=>el.textContent)).toEqual(['Reply to <img src=x onerror=bad()>','Reply to Raphael']);
- expect(document.querySelector('.au-room-reply img')).toBeNull();
+ await pane();const quotes=[...document.querySelectorAll('.room-quote')];
+ expect(quotes.map(el=>el.querySelector('.quote-author')!.textContent)).toEqual(['<img src=x onerror=bad()>','Raphael']);
+ expect(document.querySelector('.room-quote img')).toBeNull();
 });
 
 test("a streamed room table stays provisional and becomes a rich card only after completion",async()=>{
@@ -422,6 +454,8 @@ test("active exchanges expose stop, and Raphael's wrap-up is his ordinary messag
  expect(wrapup.textContent).not.toContain('Wrap-up');
  expect(wrapup.querySelector('h3')).toBeNull();
  expect(document.querySelector('.au-room-crown')!.getAttribute('aria-label')).toBe('Chief of staff');
+ // The crown seen is the one the chief's slime wears; no second crown icon covers the 24 px face.
+ expect(document.querySelector('.au-room-crown')!.childElementCount).toBe(0);
  document.querySelector<HTMLElement>('.au-room-pane .composer[data-task-state="running"] .cmp-voice')!.click();await flush();expect(api.roomStop).toHaveBeenCalledWith(1);
  api.roomMessages.mockResolvedValue({messages:[],exchange:{state:'stopped',stop_requested:1}});event({type:'RoomsChanged',room_id:1});await flush();
  expect(document.querySelector('.au-room-pane .composer[data-task-state="running"] .cmp-voice')).toBeNull();
@@ -437,14 +471,56 @@ test("a blocked reply is a line of the thread after its exchange, with its reaso
  expect(document.querySelector('.au-room-controls')!.textContent).toBe('');
 });
 
-test("a hand-off line names its assignee and opens on the request, result and files, never its number",async()=>{
- api.roomMessages.mockResolvedValue({messages:[{id:1,member_id:0,text:'Alice, write the report.',created:1,status:'done',turn_id:5}],exchange:null,handoffs:[{task_id:42,source_turn_id:5,work_turn_id:6,member_id:1,member_name:'Alice',from_member_id:0,stage_id:'stage-xyz',mode:'work',state:'done',reason:null,created_at_ms:2,ready_at_ms:2,dispatch_policy:'immediate',result:'Report ready.',evidence:[{kind:'artifact',uri:'out/report.html',mime:'text/html',digest:'abc',verdict:'verified'}]}]});
+test("a named member that passed, a stalled reply and an API brain's limits each say so, not that something went wrong",async()=>{
+ const intent=(id:number,reason:string)=>({id,origin_message_id:1,source_message_id:1,recipient_id:1,recipient_name:'Alice',state:'blocked',reason});
+ api.roomMessages.mockResolvedValue({messages:[{id:1,member_id:null,text:'@Alice check',created:1,status:'done'}],exchange:{state:'stopped',stop_requested:0,
+   reply_intents:[intent(7,'no_reply'),intent(8,'stalled'),intent(9,'usage_limit'),intent(10,'rate_limit'),intent(11,'cli_context_overflow')]}});
  await pane();
- const line=document.querySelector('[data-handoff="42"]')!;
- expect(line.querySelector('summary')!.textContent).toBe('Forwarded to AliceCompleted');
- expect(line.querySelector('.handoff-detail .message-quote')!.textContent).toBe('RaphaelAlice, write the report.');
- expect(line.querySelector('.handoff-files')!.textContent).toBe('report.html');
- expect(line.textContent).not.toMatch(/42|abc|stage-xyz/);
+ expect([...document.querySelectorAll('.room-intent-blocked')].map(row=>row.textContent)).toEqual(["Alice couldn't reply: Gave no answer",
+   "Alice couldn't reply: No progress for too long","Alice couldn't reply: Subscription quota used up",
+   "Alice couldn't reply: Rate limited for too many requests","Alice couldn't reply: Too much text to read at once"]);
+});
+
+test("a hand-off line names its assignee and opens their conversation with the request, result and files, never its number",async()=>{
+ api.roomMessages.mockResolvedValue({messages:[{id:1,member_id:0,text:'Alice, write the report.',created:1,status:'done',turn_id:5}],exchange:null,handoffs:[{task_id:42,source_turn_id:5,work_turn_id:6,member_id:1,member_name:'Alice',from_member_id:0,stage_id:'stage-xyz',mode:'work',state:'done',reason:null,created_at_ms:2,ready_at_ms:2,dispatch_policy:'immediate',request:'Write the report.',result:'Report ready.',evidence:[{kind:'artifact',uri:'out/report.html',mime:'text/html',digest:'abc',verdict:'verified'}]}]});
+ const view=await pane();
+ const line=document.querySelector<HTMLElement>('[data-handoff="42"]')!;
+ // The room takes nobody's side: the line names both members of the exchange.
+ expect(line.textContent).toBe(`2 messages between ${t("agent.title")} and Alice`);
+ line.click();
+ const chat=view.el.querySelector<HTMLElement>(':scope > .peer-chat')!;
+ expect(chat.getAttribute('aria-label')).toBe(`${t("agent.title")} ⇄ Alice`);
+ expect([...chat.querySelectorAll('.peer-line')].map(row=>row.querySelector('.peer-who')!.textContent)).toEqual([t("agent.title"),'Alice']);
+ expect(chat.querySelector('.peer-line .message-text')!.textContent).toBe('Write the report.');
+ expect(chat.querySelector('.handoff-files')!.textContent).toBe('report.html');
+ expect(line.textContent+chat.textContent).not.toMatch(/42|abc|stage-xyz/);
+ chat.querySelector<HTMLElement>('.peer-close')!.click();
+ expect(view.el.querySelector('.peer-chat')).toBeNull();
+});
+
+test("a member's own work is its own line that opens its conversation, and each pair of members has its own line",async()=>{
+ // Owner, 2026-11-09: 「他是在跟我說話 但是這邊是兩個史萊姆在溝通才對」. Work a member handed itself is no exchange.
+ const base={source_turn_id:5,member_name:'Alice',stage_id:'',mode:'work' as const,reason:null,created_at_ms:2,ready_at_ms:2,dispatch_policy:'immediate' as const,request:'',result:'',evidence:[]};
+ api.roomMessages.mockResolvedValue({messages:[{id:1,member_id:0,text:'Team, compare the sources.',created:1,status:'done',turn_id:5}],exchange:null,handoffs:[
+  {...base,task_id:41,work_turn_id:61,member_id:1,from_member_id:1,own_work:true,state:'running'},
+  {...base,task_id:42,work_turn_id:62,member_id:1,from_member_id:0,state:'running',request:'Check the first source.'},
+  {...base,task_id:43,work_turn_id:63,member_id:2,member_name:'Bob',from_member_id:0,state:'done',request:'Check the second source.',result:'Bob, done.'},
+  {...base,task_id:44,work_turn_id:64,member_id:2,member_name:'Bob',from_member_id:0,state:'done',request:'And the third.',result:'Done too.'}]});
+ const view=await pane();
+ const lines=[...view.el.querySelectorAll<HTMLElement>('.handoff-row > button')];
+ expect(lines.map(line=>line.textContent)).toEqual([`Alice's private workRunning`,`1 message between ${t("agent.title")} and AliceRunning`,`4 messages between ${t("agent.title")} and Bob`]);
+ expect(lines[0]!.dataset.act).toBeUndefined();
+ const opened=vi.fn();window.addEventListener('raphael:open-member',opened);
+ try {
+  lines[0]!.click();
+  expect(opened.mock.calls[0][0].detail).toEqual({memberId:1,turnId:61});
+  expect(view.el.querySelector('.peer-chat')).toBeNull();
+ } finally { window.removeEventListener('raphael:open-member',opened); }
+ lines[2]!.click();
+ const chat=view.el.querySelector<HTMLElement>(':scope > .peer-chat')!;
+ expect(chat.getAttribute('aria-label')).toBe(`${t("agent.title")} ⇄ Bob`);
+ expect([...chat.querySelectorAll('.peer-line .message-text')].map(text=>text.textContent)).toEqual(['Check the second source.','Bob, done.','And the third.','Done too.']);
+ view.close();
 });
 
 test("concurrent speech stays visible beside the board and a report opens its real private turn",async()=>{

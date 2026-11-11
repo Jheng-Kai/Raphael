@@ -183,7 +183,9 @@ class MemoryService(Growth):
         self.homes = BotHomes(root.parent)
         self.homes.migrate(root)
         legacy.migrate(self.homes, told_name=self._told_name)
-        self.shared = MemoryFile(self.homes, None, on_change=lambda: self._changed(0, "shared"))
+        import threading
+        self._owner_thread = threading.get_ident()
+        self.shared = MemoryFile(self.homes, None, on_change=lambda: self._changed(0, "shared"), conn=conn, now_ms=now_ms, owner_thread=self._owner_thread)
         self._files: dict[int, MemoryFile] = {}
         self._history = AgentHistory(conn, now_ms)
         self._settings = SettingsStore(conn)
@@ -200,7 +202,8 @@ class MemoryService(Growth):
         self._timer: asyncio.TimerHandle | None = None
         self._running: asyncio.Task[None] | None = None
         self._failed_at: float | None = None
-        self._failure_count = 0
+        self._failure_count = self._state("background_failures")
+        self._sync_log_index()
         # How many times the conversation was cleared: a pass that began at another count is stale.
         self._turn_clears = 0
 
@@ -213,7 +216,6 @@ class MemoryService(Growth):
         methods = {
             "memory.get": self._get,
             "memory.update": self._update,
-            "memory.import": self._import,
             "memory.clear": self._clear,
             "memory.summary_clear": self._summary_clear,
         }
@@ -221,6 +223,18 @@ class MemoryService(Growth):
             router.register(method, handler)
 
     # --- the state ---------------------------------------------------------------------------------
+
+    def _sync_log_index(self):
+        """Backfill existing logs once at startup; normal appends update the same index directly."""
+        from .recall_index import write_document
+        for folder in self.homes.safe(self.homes.root / 'bots').glob('*'):
+            if not folder.name.isdigit():
+                continue
+            member_id = int(folder.name)
+            for path in self.homes.safe(folder / 'memory/log').glob('*.md'):
+                safe = self.homes.path(member_id, 'memory/log/' + path.name)
+                write_document(self._conn, 'log', 'memory/log/' + path.name, member_id,
+                               safe.read_text(encoding='utf-8'), int(safe.stat().st_mtime * 1000))
 
     def _state(self, key: str) -> int:
         try:
@@ -247,7 +261,7 @@ class MemoryService(Growth):
         """The MEMORY.md of `member_id`."""
         memory = self._files.get(member_id)
         if memory is None:
-            memory = MemoryFile(self.homes, member_id, on_change=lambda: self._changed(member_id))
+            memory = MemoryFile(self.homes, member_id, on_change=lambda: self._changed(member_id), conn=self._conn, now_ms=self._now_ms, owner_thread=self._owner_thread)
             self._files[member_id] = memory
         return memory
 
@@ -309,7 +323,7 @@ class MemoryService(Growth):
         return (self._now() if self._now is not None else datetime.now().astimezone()).date()
 
     def _mark(self) -> str:
-        return UNCONFIRMED.get(self.language(), UNCONFIRMED["zh-TW"])
+        return UNCONFIRMED.get(self.language(), UNCONFIRMED["en"])
 
     async def forget_member(self, member_id: int) -> None:
         """A member was deleted: its own memory folder goes, with its conversation's summary and
@@ -328,6 +342,8 @@ class MemoryService(Growth):
                 self._conn.execute(
                     "DELETE FROM memory_state WHERE key = ?", (_watermark(member_id),)
                 )
+                self._conn.execute("DELETE FROM memory_search_documents WHERE kind='log' AND member_id=?", (member_id,))
+                self._conn.execute("DELETE FROM memory_entry_metadata WHERE scope=?", (f'member:{member_id}',))
         except sqlite3.Error as exc:
             logger.warning("Could not delete a member's summary: %s", type(exc).__name__)
         for folder in (self.homes.home(member_id), self.homes.state(member_id)):
@@ -347,9 +363,11 @@ class MemoryService(Growth):
         USER.md alone without a member (`SharedMemory`). It is text, so nothing the turn writes changes it,
         and the next turn reads what the files say then. A new turn may try a failed edit again."""
         self.shared.reset_failures()
+        self.shared.metadata.recalled(self.shared.entries())
         if member_id is None:
             return MemorySnapshot(shared=self.shared.prompt_text(), own=None, shared_usage=self.shared.usage())
         own = self.own(member_id)
+        own.metadata.recalled(own.entries())
         own.reset_failures()
         return MemorySnapshot(shared=self.shared.prompt_text(), own=own.prompt_text(),
                               shared_usage=self.shared.usage(), own_usage=own.usage())
@@ -419,7 +437,7 @@ class MemoryService(Growth):
         self._turn_clears += 1
         with self._conn:
             self._conn.execute(
-                "DELETE FROM memory_state WHERE key = ? OR key LIKE ?",
+                "DELETE FROM memory_state WHERE key = ? OR key LIKE ? OR key LIKE 'skills:%:through'",
                 (_REFLECTED, f"{_REFLECTED}:%"),
             )
 
@@ -476,6 +494,30 @@ class MemoryService(Growth):
         from .brain import MemoryBrain
         return MemoryBrain(self, member_id)
 
+    def summary_model(self, member_model):
+        """Use the owner's auxiliary choice, or explicitly retain the member's own brain."""
+        quick = self._settings.get("quick_model")
+        reason = "not_configured"
+        if quick:
+            from ..agent.cli.discovery import brain_ref
+            try:
+                ref = brain_ref(quick)
+                usable = (self._cli_brains is not None and self._cli_brains.available(ref[0])) if ref else (
+                    self._base_client.available(quick) if isinstance(self._base_client, ProviderRouter) else bool(self._keys.get()))
+                if usable:
+                    return quick
+                reason = "unavailable"
+            except Exception as error:
+                reason = type(error).__name__
+        logger.info("Memory summariser retains member brain: quick_model %s", reason)
+        return member_model
+
+    def configure_conversation(self, conversation):
+        conversation.threshold_cap = self._settings.get("memory_threshold_tokens_cap")
+        conversation.summary_model = self.summary_model
+        from ..brain.windows import window_of
+        conversation.summary_window = window_of
+
     def may_spend(self, member_id: int = 0) -> bool:
         """Whether a call of the memory's own may be made: there is a key."""
         try:
@@ -499,8 +541,9 @@ class MemoryService(Growth):
         """A turn was written in the thread of `member_id`: fold its conversation if it is time,
         and run the reflection pass now if enough turns wait for one, or once the conversation has
         been quiet for a while."""
-        if self.may_spend(member_id):
+        if self.may_spend(member_id) or self.summary_model(self._model(member_id)) != self._model(member_id):
             conversation = self.conversation_for(member_id)
+            self.configure_conversation(conversation)
             conversation._client = self._brain(member_id)
             conversation.schedule_fold(self._model(member_id), self.ledger)
         skill_due = self.skill_review is not None and self.skill_review.due()
@@ -548,8 +591,12 @@ class MemoryService(Growth):
             if left > 0:
                 return left
         delays: list[float] = []
-        if self.skill_review is not None and self.skill_review.due():
-            delays.append(RETRY_S if self._failed_at is not None else 0.0)
+        if self.skill_review is not None:
+            if self.skill_review.due():
+                delays.append(RETRY_S if self._failed_at is not None else 0.0)
+            retry = getattr(self.skill_review, "retry_delay_s", lambda: None)()
+            if retry is not None:
+                delays.append(retry)
         for member_id in self._agents():
             try:
                 unread = self._unread(member_id=member_id)
@@ -606,7 +653,8 @@ class MemoryService(Growth):
         return [(self.shared, 0), *((self.own(member_id), member_id) for member_id in self._agents())]
 
     def _filling(self) -> list[tuple[MemoryFile, int]]:
-        return [(memory, member_id) for memory, member_id in self._spaces() if memory.fill() >= FULL_FROM]
+        return [(memory, member_id) for memory, member_id in self._spaces() if memory.fill() >= FULL_FROM
+                or memory.stale_entries(self._today(), self._settings.get('memory_max_unused_days'))]
 
     def consolidation_due(self) -> bool:
         if not self._filling():
@@ -635,7 +683,7 @@ class MemoryService(Growth):
         if self._failed_at is not None and self._clock() - self._failed_at < self._retry_s():
             self._arm_next()
             return
-        if not any(self.may_spend(member_id) for member_id in self._agents()):
+        if not any(self.may_spend(member_id) for member_id in self._agents()) and not self.consolidation_due():
             delay = self._next_due_s()
             if delay is not None:
                 self._arm(max(delay, RETRY_S))
@@ -661,11 +709,22 @@ class MemoryService(Growth):
 
     def _record_failure(self) -> None:
         self._failure_count += 1
+        self._set_state("background_failures", self._failure_count)
         self._failed_at = self._clock()
         logger.info("Memory retry deferred: failures=%d delay_s=%d", self._failure_count, self._retry_s())
 
+    def health(self):
+        """Content-free, persisted failure counts for the existing self-check tool."""
+        failures = self._state("background_failures")
+        reviews = sum(1 for row in self._conn.execute(
+            "SELECT value FROM memory_state WHERE key LIKE 'skills:%:failures'") if int(row[0]) >= 3)
+        return {"status": "attention" if failures >= 3 or reviews else "ok",
+                "consecutive_failures": failures, "skill_reviews_repeatedly_failed": reviews,
+                "retry_delay_s": self._retry_s() if failures else 0}
+
     def _recovered(self) -> None:
         self._failure_count = 0
+        self._set_state("background_failures", 0)
         self._failed_at = None
 
     async def reflect(self, member_id: int = 0) -> Applied:
@@ -684,8 +743,14 @@ class MemoryService(Growth):
             return self._turn_clears == clears and file_clears == (own.clears, self.shared.clears)
 
         from .growth import tainted_turn
+        from .reflection import readable_turns
         steps = self._history.steps([turn.id for turn in turns if turn.id is not None])
         outside = {turn.id for turn in turns if tainted_turn(turn, steps.get(turn.id, ()))}
+        # Only what fits one pass: the newest turns; the watermark moves past the rest (memory/reflection.py).
+        from ..brain.windows import window_of
+        from .reflection import reflection_limit
+        turns = readable_turns(self._today(), own, self.shared, turns, outside, self._name_of(member_id),
+                               limit=reflection_limit(window_of(self._model(member_id))))
         private_request = any(keeps_private(turn.question) for turn in turns)
         applied = await Reflector(self._brain(member_id)).reflect(
             own, self.shared, turns,
@@ -705,11 +770,29 @@ class MemoryService(Growth):
             self._set_state(_watermark(member_id), through)
         return applied
 
+    async def summarize_room(self, system: str, user: str, schema: dict) -> dict:
+        """The call that writes the summary of a room thread (members/room_summary.py): the owner's auxiliary model, else the
+        chief's own, as the conversation's fold chooses (`summary_model`). Nothing is asked without a model to ask."""
+        if not self.may_spend(0):
+            raise LookupError("no model to write the summary")
+        model = self.summary_model(self._model(0))
+        completion = await self._brain(0).complete_json(
+            model=model, fallbacks=[], system=system, user=user, schema=schema, schema_name="raphael_room_summary",
+            timeout_s=40.0, max_tokens=10_200, reasoning_effort="none")
+        self.ledger().add(model=completion.model, cost_usd=completion.cost_usd, usage=getattr(completion, "usage", None),
+                          prompt_tokens=completion.prompt_tokens, completion_tokens=completion.completion_tokens)
+        return completion.data
+
     async def consolidate(self) -> Applied:
         """The tidy of every file near or past its limit, each by itself; the next one is a day away
         once the model has answered for each."""
         total = Applied()
         for memory, member_id in self._filling():
+            stale = memory.prune_stale(self._today(), self._settings.get('memory_max_unused_days'))
+            if stale is not None:
+                logger.info('Memory stale-entry cleanup: %s', 'applied' if stale.get('success') else stale.get('kind', 'refused'))
+            if memory.fill() < FULL_FROM:
+                continue
             if not self.may_spend(member_id):
                 continue
 
@@ -788,30 +871,6 @@ class MemoryService(Growth):
 
     async def _get(self, params: dict) -> dict:
         return self._view(params)
-
-    async def _import(self, params: dict) -> dict:
-        """Explicit owner import, through the shared writer and its existing secret scan.
-
-        Refused text is never returned: it can contain the secret that was refused.
-        Each paragraph or bullet is independent, so one refusal does not hide the rest.
-        """
-        text = params.get("text")
-        if not isinstance(text, str) or not text.strip() or len(text) > MAX_DOCUMENT_CHARS:
-            raise invalid_params("text must contain 1 to 64000 characters")
-        entries = [re.sub(r"^\s*(?:[-*•]|\d+[.)])\s+", "", line).strip()
-                   for line in re.split(r"\n\s*\n|\n(?=\s*(?:[-*•]|\d+[.)])\s)", text)]
-        memory = self.space("shared", 0)
-        kept, refused = [], []
-        for index, entry in enumerate(entries, 1):
-            if not entry:
-                continue
-            memory.reset_failures()
-            result = memory.apply([{"action": "add", "content": entry}])
-            if result["success"]:
-                kept.append(entry)
-            else:
-                refused.append({"index": index, "reason": result.get("kind", "invalid")})
-        return {"kept": kept, "refused": refused}
 
     async def _update(self, params: dict) -> dict:
         text, revision = params.get("text"), params.get("revision")

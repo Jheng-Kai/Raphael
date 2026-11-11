@@ -59,7 +59,7 @@ describe("a connector card", () => {
     expect(pending).toContain(entryIcon({ name: "gmail" }, "md"));
     expect(pending).not.toContain("tile");
     expect(pending).toContain('class="btn sm pri" data-act="card-connect" data-card="c1"');
-    expect(visible(pending)).toBe("Gmail 需要你 連結後就能繼續這項工作。 連結");
+    expect(visible(pending)).toBe("Gmail 需要你 連結後就能繼續這項工作，隨時可以在設定中斷連結。 連結");
     expect(actions(connectorCardHTML(card({ state: "authorizing" })))).toEqual(["card-cancel"]);
     expect(actions(connectorCardHTML(card({ state: "cancelled" })))).toEqual(["card-connect"]);
     expect(actions(connectorCardHTML(card({ state: "failed", error: "denied" })))).toEqual(["card-connect"]);
@@ -82,15 +82,15 @@ describe("a connector card", () => {
   test("an app that needs the owner's own key or developer app says so, and its one button opens the form", () => {
     const key = card({ app: "acme", name: "Acme", needs: "key", toolkit: "acme" });
     const pending = connectorCardHTML(key);
-    expect(visible(pending)).toBe("連結 Acme 等你填入 需要你的 API key 填入金鑰");
+    expect(visible(pending)).toBe("連結 Acme 等你填入 需要你的 API 金鑰 填入金鑰");
     expect(actions(pending)).toEqual(["card-setup"]);
     expect(pending).toContain('data-toolkit="acme" data-needs="key" data-name="Acme"');
     expect(pending).not.toContain("<input"); // the key is never asked for in the chat
     const own = connectorCardHTML(card({ app: "orbit", name: "Orbit", needs: "own_app", toolkit: "orbit" }));
-    expect(visible(own)).toBe("連結 Orbit 等你填入 需要你自己的開發者 app 設定開發者 app");
+    expect(visible(own)).toBe("連結 Orbit 等你填入 需要你自己的開發者應用程式 設定開發者應用程式");
     // A failure names what is missing and offers the form again, never a bare "retry".
     const rejected = connectorCardHTML({ ...key, state: "failed", error: "key_rejected" });
-    expect(visible(rejected)).toBe("連結 Acme 未能完成 這把金鑰沒有被接受，請再填一次 填入金鑰 關閉");
+    expect(visible(rejected)).toBe("連結 Acme 未能完成 這把金鑰沒有被接受，請再填一次 填入金鑰"); // closed by the × at its top right
     expect(actions(rejected)).toEqual(["card-setup"]);
     expect(actions(connectorCardHTML({ ...key, state: "cancelled" }))).toEqual(["card-setup"]);
     expect(actions(connectorCardHTML({ ...key, state: "authorizing" }))).toEqual(["card-cancel"]);
@@ -98,7 +98,7 @@ describe("a connector card", () => {
 
   test("with no Composio key the failed card says so and opens the settings, not a vague retry", () => {
     const failed = connectorCardHTML(card({ state: "failed", error: "needs_composio_key" }));
-    expect(visible(failed)).toBe("Gmail 未能完成 還沒有 Composio 金鑰，請到「設定 › 連接 › 商店」開啟 Composio 表單，依表單指引取得金鑰後填入並儲存。 開啟連接設定 關閉");
+    expect(visible(failed)).toBe("Gmail 未能完成 還沒有 Composio 金鑰，請到「設定 › 連接 › 商店」開啟 Composio 表單，依表單指引取得金鑰後填入並儲存。 開啟連接設定");
     const shared = connectorCardHTML(card({ state: "failed", error: "needs_composio_key", missing: {resource: "composio", requirement: "composio_key", state: "missing", repair: "store"} }));
     expect(visible(shared)).toContain("設定 › 連接 › 商店");
     expect(shared).toContain('data-missing-repair="store"');
@@ -109,7 +109,7 @@ describe("a connector card", () => {
 
   test("speaks only the window's language", () => {
     setLocale("en");
-    expect(visible(connectorCardHTML(card({ app: "googlecalendar", name: "Google Calendar" })))).toBe("Google Calendar Action needed Connect this app to continue the task. Connect");
+    expect(visible(connectorCardHTML(card({ app: "googlecalendar", name: "Google Calendar" })))).toBe("Google Calendar Action needed Connect this app to continue the task. Disconnect it in Settings at any time. Connect");
     setLocale("ja");
     expect(visible(connectorCardHTML(card({ state: "connected", tool_count: 1 })))).toContain("接続済み · ツール 1 個");
   });
@@ -117,7 +117,7 @@ describe("a connector card", () => {
 
 describe("a turn with a card", () => {
   test("a catalog app keeps its persisted display name in its card and resumed line", () => {
-    expect(visible(connectorCardHTML(card({ app: "catalog-slug", name: "Catalog App" })))).toBe("Catalog App 需要你 連結後就能繼續這項工作。 連結");
+    expect(visible(connectorCardHTML(card({ app: "catalog-slug", name: "Catalog App" })))).toBe("Catalog App 需要你 連結後就能繼續這項工作，隨時可以在設定中斷連結。 連結");
     expect(visible(resumedLineHTML(turn({ resumed_apps: ["catalog-slug"], resumed_app_names: ["Catalog App"] })))).toBe("Catalog App 已連結，繼續原本的工作");
   });
 
@@ -133,5 +133,77 @@ describe("a turn with a card", () => {
     expect(html).toContain('data-resumed="8"');
     expect(visible(resumedLineHTML(resumed))).toBe("Gmail 已連結，繼續原本的工作");
     expect(html).toContain(entryIcon({ name: "gmail" }, "md"));
+  });
+});
+
+describe("a card that did not connect says why", () => {
+  const failed = (error: string, over: Partial<ConnectorCard> = {}): ConnectorCard => card({ state: "failed", error, ...over });
+  /** What the card says of how it ended: its one line under the heading. */
+  const said = (html: string): string => /<p class="card-body cc-state">([^<]*)<\/p>/.exec(html)?.[1] ?? "";
+
+  test.each([
+    ["busy", "另一個連線還在進行"], ["vault", "安全憑證庫"], ["browser", "打不開瀏覽器"], ["network", "連不上服務"],
+    ["no_answer", "沒有及時回應"], ["service_down", "服務那邊暫時出了問題"], ["rate_limit", "暫時限制了請求"],
+    ["not_found", "已經找不到這個應用程式"], ["bad_response", "回應拉斐爾看不懂"], ["address", "不屬於它自己的登入網址"],
+    ["not_allowed", "不允許你的專案"], ["signin_failed", "服務中止了登入"], ["signin_expired", "不再接受這次登入"],
+    ["no_refresh", "沒有給長期授權"], ["api_disabled", "沒有啟用 Gmail API"], ["unknown", "無法判斷為什麼沒有連上"],
+    ["server_address", "伺服器位址不正確"], ["server_auth", "沒有接受這個存取權杖"], ["server_unreachable", "連不上伺服器"],
+  ])("%s is said in a sentence of its own, never the bare 沒有連上", (error, words) => {
+    const html = connectorCardHTML(failed(error));
+    expect(visible(html)).toContain(words);
+    expect(said(html)).not.toBe(t("card.error"));
+  });
+
+  test("a retry is offered where pressing again can help, and where it cannot the card says what to do instead", () => {
+    for (const error of ["busy", "network", "no_answer", "service_down", "rate_limit", "browser", "bad_response", "unknown"]) {
+      expect(actions(connectorCardHTML(failed(error, { retry: true, fix: null }))), error).toEqual(["card-connect"]);
+    }
+    for (const error of ["refused", "not_found", "not_allowed"]) {
+      expect(actions(connectorCardHTML(failed(error, { retry: false, fix: null }))), error).toEqual([]);
+    }
+    // The Composio key is put right in Connections.
+    const key = connectorCardHTML(failed("key_refused", { retry: false, fix: "settings" }));
+    expect(visible(key)).toContain("Composio 沒有接受這把金鑰");
+    expect(actions(key)).toEqual(["card-settings"]);
+    // What the card asks for is put right in its own form.
+    const form = connectorCardHTML(failed("key_rejected", { needs: "key", toolkit: "acme", retry: false, fix: "form" }));
+    expect(actions(form)).toEqual(["card-setup"]);
+    // An older core sends no flags: the old actions stay.
+    expect(actions(connectorCardHTML(failed("denied")))).toEqual(["card-connect"]);
+    expect(actions(connectorCardHTML(failed("not_configured")))).toEqual(["card-settings"]);
+  });
+
+  test("the service's own short words are in the sentence when it gave some", () => {
+    expect(visible(connectorCardHTML(failed("refused", { detail: "This project may not add Gmail", retry: false })))).toContain("服務拒絕了這次連線：This project may not add Gmail");
+    expect(visible(connectorCardHTML(failed("refused", { detail: null, retry: false })))).toContain("服務拒絕了這次連線。");
+    setLocale("en");
+    expect(visible(connectorCardHTML(failed("refused", { detail: "Quota is spent", retry: false })))).toContain("The service refused: Quota is spent");
+  });
+
+  test("what could not be named keeps its short technical reason folded under the details, never on the card's face", () => {
+    const html = connectorCardHTML(failed("unknown", { detail: "gremlin · HTTP 599", retry: true }));
+    expect(html).toMatch(/<p class="card-body cc-state">[^<]*無法判斷為什麼沒有連上/);
+    expect(html).toContain('<div class="card-detail" id="card-detail-reason-c1" hidden><p class="card-body">gremlin · HTTP 599</p></div>');
+    expect(html).toContain("<span>詳細資料</span>");
+    // Only unknown folds a reason; a named cause has its sentence and nothing to unfold.
+    expect(connectorCardHTML(failed("network", { detail: "x", retry: true }))).not.toContain("card-detail");
+    expect(connectorCardHTML(failed("unknown", { detail: null, retry: true }))).not.toContain("card-detail");
+  });
+
+  test("no raw JSON, trace or id ever reaches the card's text", () => {
+    const text = visible(connectorCardHTML(failed("unknown", { detail: "RuntimeError", retry: true })));
+    expect(text).not.toMatch(/[{}]|Traceback|card-|c1/);
+  });
+
+  test("every cause the core can name has words in the window", async () => {
+    // A failure seen twice becomes a rule: a cause added to `CAUSES` without words would show only 沒有連上.
+    const { readFileSync } = await import("node:fs");
+    const { resolve } = await import("node:path");
+    const source = readFileSync(resolve(import.meta.dirname, "../../../core/src/raphael_core/connectors/cards.py"), "utf8");
+    const names = [...source.matchAll(/^\s+Cause\("([a-z_]+)"/gm)].map(match => match[1]!);
+    expect(names.length).toBeGreaterThan(30);
+    for (const name of names) {
+      expect(said(connectorCardHTML(failed(name, { retry: true }))), name).not.toBe(t("card.error"));
+    }
   });
 });

@@ -28,7 +28,7 @@ pub const SAY_MAX_MS: u64 = 12_000;
 /// What the core answered, ready for the overlay.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Reply {
-    /// The message was admitted into running work or its durable queue.
+    /// The message was admitted into work, or an explicitly silent terminal reply ended it.
     Accepted,
     /// Raphael's answer, shown as 《prefix。text》.
     Say { prefix: String, text: String },
@@ -50,6 +50,15 @@ pub fn parse_reply(reply: &Value) -> Result<Reply, Malformed> {
     match reply.get("status").and_then(Value::as_str) {
         Some("queued") => Ok(Reply::Accepted),
         Some("done") if reply.get("steered").and_then(Value::as_bool) == Some(true) => {
+            Ok(Reply::Accepted)
+        }
+        Some("done")
+            if reply.get("silent").and_then(Value::as_bool) == Some(true)
+                && reply
+                    .get("text")
+                    .and_then(Value::as_str)
+                    .is_some_and(|text| text.trim().is_empty()) =>
+        {
             Ok(Reply::Accepted)
         }
         Some("done") => parse_say(reply),
@@ -402,5 +411,20 @@ mod tests {
         assert_eq!(say_hold_ms(&"字".repeat(70)), SAY_MAX_MS);
         assert_eq!(say_hold_ms(&"字".repeat(69)), 1_500 + 69 * 150);
         assert_eq!(say_hold_ms(&"x".repeat(100_000)), SAY_MAX_MS);
+    }
+
+    #[test]
+    fn local_command_flow_silent_empty_reply_is_accepted_but_real_failures_remain_malformed() {
+        let reply = json!({"status":"done", "prefix":"", "text":"", "silent":true});
+        assert_eq!(parse_reply(&reply), Ok(Reply::Accepted));
+        assert_eq!(parse_answer(&reply), Ok(Reply::Accepted));
+        for silent in [json!(false), json!("true"), json!(null)] {
+            assert!(
+                parse_reply(&json!({"status":"done", "prefix":"", "text":"", "silent":silent}))
+                    .is_err()
+            );
+        }
+        assert!(parse_reply(&json!({"status":"error", "silent":true, "text":""})).is_err());
+        assert!(parse_reply(&json!({"status":"done", "silent":true, "text":"Failure"})).is_err());
     }
 }

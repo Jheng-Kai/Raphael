@@ -70,11 +70,10 @@ def container(vm, target, runtime):
     if target.shared:
         raw["Mounts"].append({"Type": "bind", "Source": str(target.shared), "Destination": "/home/cua/team", "RW": True})
     if target.remote:
-        raw["HostConfig"]["PortBindings"] = {}
         for mount, source in zip(raw["Mounts"], [target.workspace, target.shared]):
             mount.update(Type="volume", Name=str(source), Source="/engine/volumes/" + str(source))
         raw["HostConfig"]["Mounts"] = [{"Type": "volume", "Source": m["Name"], "Target": m["Destination"]} for m in raw["Mounts"]]
-        raw["NetworkSettings"] = {"Ports": {}, "Networks": {"bridge": {"IPAddress": "172.18.0.2"}}}
+        raw["NetworkSettings"]["Networks"] = {"bridge": {"IPAddress": "172.18.0.2"}}
     return raw
 
 
@@ -611,7 +610,8 @@ class CatalogBridge(Bridge):
         return await super().request(method, params)
 
 
-async def test_first_screen_requires_owner_engine_start_then_reuses_catalog(desktop, tmp_path):
+async def test_first_screen_starts_docker_for_the_granted_member_then_reuses_catalog(desktop, tmp_path):
+    # (owner, 2026-11-11: 「理論上就算我沒有開 Docker，它也會自動自己打開才對」) supersedes the owner-press-only start.
     from unittest.mock import AsyncMock
     vm, target, runtime = desktop
     runtime.up = False
@@ -625,9 +625,6 @@ async def test_first_screen_requires_owner_engine_start_then_reuses_catalog(desk
     await hub.prepare()
     assert runtime.calls == []
     shot = next(tool for tool in hub.offered() if tool.name == "get_desktop_state")
-    assert (await hub.call(shot.key, {}, approver="auto")).kind == 'docker_stopped'
-    vm.desktop.start.assert_not_awaited()
-    await vm.ensure_engine(target, start_desktop=True)
     result = await hub.call(shot.key, {}, approver="auto")
     assert result.ok and result.blocks
     vm.desktop.start.assert_awaited_once()
@@ -641,6 +638,87 @@ async def test_first_screen_requires_owner_engine_start_then_reuses_catalog(desk
     assert sum(method == "tools/list" for method, _ in RecordingBridge.calls) == 1
 
 
+async def _stopped_engine(desktop, tmp_path, *, starts=True):
+    """A stopped engine whose Docker Desktop launcher is a fake; `starts` says whether the engine then comes up."""
+    from unittest.mock import AsyncMock
+    vm, target, runtime = desktop
+    runtime.up = False
+    runtime.raw["State"]["Running"] = False
+    async def launch():
+        await asyncio.sleep(0)
+        runtime.up = starts
+    vm.desktop = SimpleNamespace(installed=lambda: True, start=AsyncMock(side_effect=launch))
+    hub = VmTools(EmptyHub(), vm, attachments=AttachmentStore(tmp_path), bridge=Bridge)
+    await hub.prepare()
+    return vm, target, runtime, hub, next(tool for tool in hub.offered() if tool.name == "get_desktop_state")
+
+
+async def test_member_call_says_it_is_starting_docker_while_it_waits(desktop, tmp_path):
+    vm, target, runtime, hub, shot = await _stopped_engine(desktop, tmp_path)
+    said = []
+    with vm_scope(("turn", 0, 7), turn_id=7, progress=said.append, language="zh-TW"):
+        assert (await hub.call(shot.key, {}, approver="auto")).ok
+    # The restart of the stopped container may add its own repair line after it.
+    assert said[0] == "正在啟動 Docker Desktop 來準備電腦，大約需要一分鐘" and said.count(said[0]) == 1
+
+
+async def test_a_start_timeout_tells_the_model_to_try_once_more_later(desktop, tmp_path, monkeypatch):
+    monkeypatch.setattr("raphael_core.computer.vm.ENGINE_WAIT_S", 0.05)
+    monkeypatch.setattr("raphael_core.computer.vm.ENGINE_POLL_S", 0.01)
+    vm, target, runtime, hub, shot = await _stopped_engine(desktop, tmp_path, starts=False)
+    result = await hub.call(shot.key, {}, approver="auto")
+    assert (result.ok, result.kind) == (False, "docker_start_timeout")
+    assert "Try this tool again once after about 30 seconds" in result.text
+    assert "tell the owner plainly that Docker Desktop did not start" in result.text
+    assert target.key not in vm.preparation and vm.active[target.key] == 0
+    from raphael_core.failures import classify
+    failure = classify({"kind": result.kind, "message": result.text}, record=False)
+    assert failure.kind == "timeout"
+    for kind in ("docker_stopped", "docker_start_failed"):
+        assert classify({"kind": kind, "message": "x"}, record=False).kind == "tool_broken"
+
+
+async def test_two_concurrent_member_calls_start_docker_once(desktop, tmp_path):
+    vm, target, runtime, hub, shot = await _stopped_engine(desktop, tmp_path)
+    first, second = await asyncio.gather(hub.call(shot.key, {}, approver="auto"), hub.call(shot.key, {}, approver="auto"))
+    assert first.ok or second.ok
+    assert all(result.ok or result.kind == "computer_busy" for result in (first, second))
+    vm.desktop.start.assert_awaited_once()
+    assert sum(args[0] == "start" for args, _ in runtime.calls) == 1
+
+
+async def test_concurrent_computers_share_one_docker_start(tmp_path, conn):
+    from unittest.mock import AsyncMock
+    from raphael_core.computer.vm import engine_start_allowed
+    settings = SettingsStore(conn)
+    settings.set("computer_vm_mode", "per-bot")
+    runtime = Runtime()
+    runtime.up = False
+    vm = LocalVm(tmp_path, settings=settings, runner=runtime, clock=lambda: 0)
+    async def launch():
+        await asyncio.sleep(0.01)
+        runtime.up = True
+    vm.desktop = SimpleNamespace(installed=lambda: True, start=AsyncMock(side_effect=launch))
+    async def member(number):
+        with engine_start_allowed():
+            await vm.ensure_engine(vm.target(number), start_desktop=True)
+    await asyncio.gather(member(1), member(2), member(3))
+    vm.desktop.start.assert_awaited_once()
+
+
+async def test_status_reads_and_the_viewer_never_start_docker_for_a_granted_member(desktop, tmp_path):
+    from raphael_core.computer.viewer import DesktopViewer
+    vm, target, runtime, hub, shot = await _stopped_engine(desktop, tmp_path)
+    assert (await vm.status(target, probe=False))["error"] == "docker_stopped"
+    viewer = DesktopViewer(vm)
+    try:
+        assert (await viewer.status({"member_id": 0}))["error"] == "docker_stopped"
+    finally:
+        await viewer.aclose()
+    vm.desktop.start.assert_not_awaited()
+    assert not any(args[0] == "start" for args, _ in runtime.calls)
+
+
 async def test_start_failure_is_reported_on_use_and_releases_action_lock(desktop, tmp_path):
     from unittest.mock import AsyncMock
     vm, target, runtime = desktop
@@ -649,7 +727,8 @@ async def test_start_failure_is_reported_on_use_and_releases_action_lock(desktop
     await hub.prepare()
     vm.start.assert_not_awaited()
     shot = next(tool for tool in hub.offered() if tool.name == "get_desktop_state")
-    assert (await hub.call(shot.key, {}, approver="auto")).kind == "docker_start_failed"
+    failed = await hub.call(shot.key, {}, approver="auto")
+    assert failed.kind == "docker_start_failed" and "did not start" in failed.text
     assert not hub.actions[target.key].locked() and vm.active[target.key] == 0
 
 
@@ -722,22 +801,52 @@ async def test_real_driver_catalog_offers_only_the_curated_tools(desktop, tmp_pa
     assert DRIVER_CATALOG["reported_count"] == 67
     assert len(DRIVER_CATALOG["names"]) == len(set(DRIVER_CATALOG["names"])) == 68
     assert CURATED <= set(DRIVER_CATALOG["names"])
-    assert {tool.name for tool in hub.offered()} == CURATED | {"request_takeover", "fill_login", "browser_open", "run_steps"}
+    deferred = {"vault_entries", "fill_contact", "fill_card"}
+    assert {tool.name for tool in hub.offered()} == CURATED | {"request_takeover", "fill_login", "browser_open", "run_steps"} | deferred
     snapshot = take_snapshot(hub)
     assert {ref.name for ref in snapshot.refs.values() if ref.server == "computer"} == CURATED | {"request_takeover", "fill_login", "browser_open", "run_steps"}
-    assert not snapshot.hidden()
+    assert set(snapshot.hidden()) == {"computer__" + name for name in deferred}
     assert not snapshot.refresh_computer(hub, 0)
     assert all(tool.pinned for tool in hub.offered())
     assert hub.tier_of("mcp:computer-shared/install_extension") is None
 
 
-@pytest.mark.parametrize("count", [40, 65, 400])
-@pytest.mark.parametrize("question", ["", "hello", "search notion", "install_extension set_config replay_trajectory"])
 @pytest.mark.parametrize("interactive", [False, True])
-async def test_computer_set_survives_plugin_shortlists_and_refine(desktop, tmp_path, count, question, interactive):
+async def test_vault_discovery_survives_refresh_but_not_a_revoked_computer_grant(desktop, tmp_path, interactive):
+    vm, _, runtime = desktop
+    hub = VmTools(EmptyHub(), vm, attachments=AttachmentStore(tmp_path), bridge=CatalogBridge)
+    await hub.prepare()
+    snapshot = take_snapshot(hub, interactive=interactive)
+    deferred = {"computer__vault_entries", "computer__fill_contact", "computer__fill_card"}
+    try:
+        assert not deferred & snapshot.refs.keys()
+        snapshot.refresh_plugins(hub, 0)
+        snapshot.refresh_computer(hub, 0)
+        assert not deferred & snapshot.refs.keys()
+        for name in sorted(deferred):
+            assert name in {item["function"]["name"] for item in snapshot.find(name)[0]}
+            assert snapshot.reveal(name) is not None  # what use_tool does with a found name
+        assert snapshot.refs["computer__fill_card"].tier == Tier.T3
+        listed = [item["function"]["name"] for item in snapshot.definitions]
+        snapshot.refresh_plugins(hub, 0)
+        snapshot.refresh_computer(hub, 0)
+        assert deferred <= snapshot.refs.keys(), "a found tool stays callable after a refresh"
+        assert [item["function"]["name"] for item in snapshot.definitions] == listed, "and is never listed"
+        vm.grants.set(0, False)
+        snapshot.refresh_plugins(hub, 0)
+        snapshot.refresh_computer(hub, 0)
+        assert not deferred & snapshot.refs.keys()
+        assert not deferred & {item["function"]["name"] for item in snapshot.find("fill_card")[0]}
+        assert not runtime.calls
+    finally:
+        await hub.aclose()
+
+
+@pytest.mark.parametrize("count", [40, 65, 400])
+@pytest.mark.parametrize("interactive", [False, True])
+async def test_the_computer_set_stays_listed_whatever_the_plugins_hold(desktop, tmp_path, count, interactive):
     from raphael_core.agent.plugins import PluginTool
     from raphael_core.agent.team import SKILL_TOOLS
-    from raphael_core.background.snapshot import refine
     from raphael_core.memory.growth import TOOLS as MEMORY_TOOLS
 
     class ManyHub(EmptyHub):
@@ -745,33 +854,18 @@ async def test_computer_set_survives_plugin_shortlists_and_refine(desktop, tmp_p
             return [PluginTool(f"mcp:other/t{n}", "Other", f"t{n}", "Search notion", {"type": "object"}, Tier.T0)
                     for n in range(count)]
 
-    class Picker:
-        calls = 0
-        async def pick(self, offer, *args, **kwargs):
-            self.calls += 1
-            assert len(offer.tools) == count
-            assert all(tool.server == "Other" for tool in offer.tools)
-            return [next(iter(offer.by_alias))]
-
     vm, target, runtime = desktop
     hub = VmTools(ManyHub(), vm, attachments=AttachmentStore(tmp_path), bridge=CatalogBridge)
     await hub.prepare()
     shot = next(tool for tool in hub.offered() if tool.name == "get_desktop_state")
     assert (await hub.call(shot.key, {}, approver="auto")).ok
-    snapshot = take_snapshot(hub, question, memory=True, team=SKILL_TOOLS, interactive=interactive)
+    snapshot = take_snapshot(hub, memory=True, team=SKILL_TOOLS, interactive=interactive)
     expected = {"computer__" + name for name in CURATED} | set(MEMORY_TOOLS) | set(SKILL_TOOLS)
-    assert expected <= snapshot.refs.keys()
-    other = [ref for ref in snapshot.refs.values() if ref.server == "Other"]
-    if count <= 40:
-        assert len(other) == count
-    else:
-        assert len(other) < count
-    picker = Picker()
-    await refine(snapshot, picker, question, [], model="fake", ledger=None)
-    assert picker.calls == (0 if count <= 40 else 1)
-    assert expected <= snapshot.refs.keys()
-    assert expected.isdisjoint(snapshot.hidden())
-    assert {d["function"]["name"] for d in snapshot.definitions} == snapshot.refs.keys()
+    listed = {d["function"]["name"] for d in snapshot.definitions}
+    # The member's computer is the core's own and listed; a connection's tools are found (decision 2).
+    assert expected <= listed and expected.isdisjoint(snapshot.hidden())
+    assert not [name for name in listed if name.startswith("Other__")]
+    assert len([alias for alias in snapshot.hidden() if alias.startswith("Other__")]) == count
 
 
 async def test_a_tool_call_on_a_running_desktop_does_not_report_preparation(desktop, monkeypatch):
@@ -842,13 +936,14 @@ async def test_sandbox_steps_do_not_reenter_per_action_safety_screening(desktop,
     snapshot = take_snapshot(hub)
     caller = SimpleNamespace(_gate=gate, snapshot=snapshot, language="en", ledger=None,
                              _check=lambda **kwargs: None, _guarded=guarded)
+    private_fills = {"fill_login", "fill_contact", "fill_card"}
     for tool in hub.offered():
         call = SimpleNamespace(tool=tool, arguments={})
-        expected = Screening(DENY) if tool.name == "fill_login" else PASS
+        expected = Screening(DENY) if tool.name in private_fills else PASS
         assert await AgentService._screen_call(caller, SimpleNamespace(language="en"), call, None) == expected
-        ref = snapshot.refs["computer__" + tool.name]
+        ref = snapshot.ref("computer__" + tool.name)  # listed, or found and called through use_tool
         assert await TaskRun._screen(caller, ref, {}) == expected
-    assert screened == ["computer / fill_login", "computer / fill_login"]
+    assert screened == [f"computer / {tool.name}" for tool in hub.offered() if tool.name in private_fills for _ in range(2)]
     assert not gate.is_vm_tool("mcp:unrelated/click")
 
 
@@ -858,16 +953,26 @@ async def test_vm_tool_descriptions_require_owner_yes_before_outward_actions(des
     vm, target, runtime = desktop
     hub = VmTools(EmptyHub(), vm, attachments=AttachmentStore(tmp_path), bridge=Bridge)
     await hub.prepare()
-    definitions = {item["function"]["name"]: item["function"] for item in take_snapshot(hub).definitions}
+    snapshot = take_snapshot(hub)
+    # Listed, or (the vault's) found with find_tools: the description a model reads either way.
+    definitions = {name: item["function"] for name, item in snapshot.catalog().items()}
     for tool in hub.offered():
-        assert tool.tier == Tier.T0
+        assert tool.tier == (Tier.T3 if tool.name == "fill_card" else Tier.T0)
+        description = definitions["computer__" + tool.name]["description"]
+        if tool.name == "vault_entries":
+            assert "opaque IDs" in description and "Never ask for private values" in description
+            continue
+        if tool.name in ("fill_login", "fill_contact", "fill_card"):
+            assert all(clause in description for clause in ("hint", "ask_owner", "submit"))
+            if tool.name == "fill_card":
+                assert "Every use needs owner approval" in description and "request_takeover" in description
+            continue
         if tool.name == "attach_file":
             assert tool.description == ATTACH["description"]
             continue
         if tool.name == "request_takeover":
             assert "Never request secrets in chat" in definitions["computer__request_takeover"]["description"]
             continue
-        description = definitions["computer__" + tool.name]["description"]
         for clause in ("no per-action approval", "owner control blocks all calls",
                        "sending a message/email", "publishing/posting", "outside the workspace",
                        "paying/buying", "call approve", "API harness", "owner's yes",

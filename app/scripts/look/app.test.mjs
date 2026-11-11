@@ -23,7 +23,7 @@ describe("real app entry with the shared look fixture", () => {
     expect(document.querySelector('#nav [data-go="home"]')).not.toBeNull();
     document.querySelector('.mb-chief').click();
     await vi.waitFor(() => expect(document.querySelector(".page-agent:not([hidden]) .conversation-trigger")).not.toBeNull());
-    await vi.waitFor(() => expect(document.querySelector(".conversation-caption").textContent).toContain("這週的研究與安排"));
+    await vi.waitFor(() => expect(document.querySelector(".conversation-caption").hidden).toBe(true));
     // A reply wait must not select the earlier, collapsed work messages.
     await vi.waitFor(() => {
       const reply = document.querySelector(scenes.find(scene => scene.name === "chat").steps[0].selector);
@@ -35,28 +35,28 @@ describe("real app entry with the shared look fixture", () => {
       await vi.waitFor(() => expect(document.querySelector(destination === "agent" ? ".page.page-agent:not([hidden])" : `#nav [data-go="${destination}"][aria-current="page"]`), destination).not.toBeNull());
     }
     document.querySelector('#nav [data-go="home"]').click();
-    await vi.waitFor(() => expect(document.querySelector('.ho-calendar [data-home-go="calendar"]')).not.toBeNull());
+    await vi.waitFor(() => expect(document.querySelector('.ho-schedule header [data-home-go="calendar"]')).not.toBeNull());
     expect(document.querySelector('#nav .nav[data-go="automations"]')).toBeNull();
-    document.querySelector('.ho-calendar [data-home-go="calendar"]').click();
+    document.querySelector('.ho-schedule header [data-home-go="calendar"]').click();
     await vi.waitFor(() => expect(document.querySelector('.au-page:not([hidden]) .au-calendar-scroll')).not.toBeNull());
     expect(document.querySelector('#nav [data-go][aria-current="page"]').dataset.go).toBe("home");
     document.querySelector('#nav .nav[data-go="settings"]').click();
     await vi.waitFor(() => expect(document.querySelector('.modal-scrim [data-pane="general"]')).not.toBeNull());
-    for (const pane of ["general", "appearance", "dictation", "tools", "safety", "connections", "messaging", "models", "data", "about"]) {
+    // 連結應用程式 is no tab: the sidebar opens it as a dialog of its own (R-UI-111).
+    // Grok Bot's six tabs (owner, 2026-11-07): appearance is a section of 一般.
+    for (const pane of ["general", "dictation", "tools", "safety", "models", "about"]) {
       document.querySelector(`.modal-scrim [data-pane="${pane}"]`).click();
       await vi.waitFor(() => expect(document.querySelector(`.modal-scrim [data-pane="${pane}"][aria-current="page"]`), pane).not.toBeNull());
     }
     expect(state.errors).toEqual([]);
   });
-  it("exercises the usage member expansion with the shared fixture", async () => {
+  it("shows each subscription's allowance above the spending rows, with the shared fixture", async () => {
     document.querySelector('.modal-scrim [data-pane="models"]').click();
     await vi.waitFor(() => expect(document.querySelector('[data-models-tab="usage"]')).not.toBeNull());
     document.querySelector('[data-models-tab="usage"]').click();
-    await vi.waitFor(() => expect(document.querySelectorAll(".run-members .run-bars > li")).toHaveLength(5));
-    const expand = document.querySelector('[data-run-act="members"]');
-    expect(expand).not.toBeNull();
-    expand.click();
-    expect(document.querySelectorAll(".run-members .run-bars > li")).toHaveLength(6);
+    await vi.waitFor(() => expect(document.querySelectorAll(".run-allowance .run-subscription").length).toBeGreaterThan(0));
+    expect(document.querySelector('[data-row="raphael-spend"]')).not.toBeNull();
+    expect(document.querySelector(".run-tiles, .run-bill, .ua-chart")).toBeNull();
   });
   it("deletes a dictionary word through its overflow menu and keeps undo available", async () => {
     document.querySelector('.modal-scrim [data-act="close"]').click();

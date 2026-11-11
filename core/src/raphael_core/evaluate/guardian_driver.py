@@ -236,7 +236,7 @@ class RpcDriver:
                             "conversation_scope": conversation, "outcome": "ok" if outcome.ok else outcome.kind,
                             "gate_passed": outcome.ok, "source": "production_loop"})
 
-    async def ask(self, prompt, *, member=0, conversation=None, quick=False, model=None, session=""):
+    async def ask(self, prompt, *, member=0, conversation=None, quick=False, model=None, session="", intent=None):
         """The owner's request: typed in a thread (`conversation`, else its main one), or with `quick`
         as the Alt+Space hotkey sends it, spoken with the quick destination. A CLI turn counts here;
         the transport counts API calls."""
@@ -244,6 +244,8 @@ class RpcDriver:
             self.budget.take()
         params = {"session_id": "-".join(filter(None, ("guardian", self.nonce, session))),
                   "text": prompt, "ui_language": "zh-TW", "member_id": member}
+        if intent is not None:
+            params["intent"] = intent
         if quick:
             params["destination"] = "quick"
         else:
@@ -314,6 +316,8 @@ class RpcDriver:
             reasons, result = await self.quick_scenario()
         elif cell.driver == 'connect-gmail':
             reasons, result = await self.connect_gmail_scenario()
+        elif cell.driver.startswith("panel-"):
+            reasons, result = await self.panel_card_scenario(cell)
         elif cell.driver == 'secret-card':
             reasons, result = await self.secret_scenario()
         elif cell.driver == 'computer-card':
@@ -322,6 +326,8 @@ class RpcDriver:
             reasons, result = await self.permission_scenario()
         elif cell.driver == 'draft-handoff':
             reasons, result = await self.draft_handoff_scenario()
+        elif cell.driver == 'slack-draft':
+            reasons, result = await self.slack_draft_scenario()
         elif cell.driver == "team-setup":
             reasons = []
             # Where the owner asks first a team is a draft for them to edit; in 自動 it is made at once.
@@ -408,7 +414,11 @@ class RpcDriver:
                 # Only these known internal fixture actions are approved. Native CLI
                 # permissions are never automatically accepted by the suite.
                 action = self.app.agent._confirmations._pending.get(result["confirm"]["id"])
-                if action and action.action.tool in {"routine_create", "routine_update", "routine_delete"}:
+                routines = {"routine_create", "routine_update", "routine_delete"}
+                # A routine delete is asked on the one card of the turn's held changes (`management_batch`): approved only
+                # when every change on it is one of these fixture routine actions.
+                batch = action.action.args.get("operations") if action and action.action.tool == "management_batch" else None
+                if action and (action.action.tool in routines or batch and all(op["name"] in routines for op in batch)):
                     result = await self.confirm(result, True)
             found = (await self.app.call("routines.list", {"member_id": 0}))["routines"]
             tool = "routine_" + {"edit": "update", "pause": "update", "resume": "update"}.get(operation, operation)
@@ -467,6 +477,49 @@ class RpcDriver:
             reasons.append("no_terminal_owner_result")
         return reasons, turns
 
+    async def panel_card_scenario(self, cell):
+        """Exercise the panel intent through the real loop; never save a real bot credential."""
+        member = (await self.app.call("members.create", {"name": "Card" + self.nonce, "role": "Public guide editor",
+                  "instructions": "Make public guides clear.", "greet": False}))["member"]["id"]
+        sharing = cell.driver == "panel-share"
+        platform = cell.driver.removeprefix("panel-")
+        tool = "share_template" if sharing else "connect_messaging"
+        result = await self.ask(cell.prompt, member=member, intent="share-template" if sharing else "setup-" + platform)
+        turn = await self.turn_of(member, result.get("turn_id"))
+        reasons = []
+        if turn.get("question") != cell.prompt:
+            reasons.append("owner_text_preserved")
+        if not any(trace["name"] == tool and trace["outcome"] == "ok" for trace in self.traces):
+            reasons.append("missing_successful_tool:" + tool)
+        if sharing:
+            cards = turn.get("templates", [])
+            if len(cards) != 1 or cards[0]["state"] != "draft":
+                reasons.append("template_snapshot")
+            else:
+                identifier = cards[0]["id"]
+                review = await self.app.call("members.template_card", {"id": identifier})
+                self.app.members.store.update_member(member, instructions="Changed after the card was shown.")
+                saved = await self.app.call("members.template_card_export", {"id": identifier})
+                # Asking for the text saves nothing: a cancelled dialog leaves the card a draft. The page reports `saved`
+                # only once the owner's dialog wrote the file.
+                pending = await self.turn_of(member, turn["id"])
+                await self.app.call("members.template_card_export", {"id": identifier, "saved": True})
+                latest = await self.turn_of(member, turn["id"])
+                if (pending["templates"][0]["state"] != "draft"
+                        or json.loads(saved["text"]) != review["template"]
+                        or not review["template"]["instructions"].strip()
+                        or not review["template"].get("description", "").strip()
+                        or review["findings"]
+                        or latest["templates"][0]["state"] != "saved"):
+                    reasons.append("template_snapshot")
+        else:
+            from ..messaging.cards import LINKS
+            cards = turn.get("secrets", [])
+            if (len(cards) != 1 or cards[0]["state"] != "pending" or cards[0].get("platform") != platform
+                    or cards[0].get("link") != LINKS[platform] or cards[0]["secret"] != "bot_token"):
+                reasons.append("messaging_card")
+        return reasons, {**result, "viewer": member}
+
     async def seed_team(self):
         return [(await self.app.call('members.create', {'name':name, 'role':role}))['member']['id']
                 for name, role in [('行銷','行銷企劃'), ('信件助理','信件管理'), ('HiKari','社群內容'), ('PM','專案規劃'), ('RD','來源研究')]]
@@ -521,7 +574,11 @@ class RpcDriver:
         for task in tasks:
             if task['state']!='done' or task['ready_at_ms']!=task['created_at_ms'] or task['dispatch_policy']!='immediate' or task['started_at_ms'] is None:
                 reasons.append('immediate_start')
-            if task['scope']!=('private' if room else 'exchange') or task['model_ref']!=self.model:
+            work_turn = self.app._conn.execute('SELECT scope,member_id,conversation_id FROM agent_turns WHERE id=?', (task['turn_id'],)).fetchone()
+            # A hand-off runs in the assignee's own private conversation; the exchange is only its audit.
+            if (task['scope']!='private' or task['model_ref']!=self.model or work_turn is None
+                    or work_turn['scope']!='private' or work_turn['member_id']!=target
+                    or work_turn['conversation_id']!=self.app.agent.conversations.main(target)):
                 reasons.append('work_scope_or_model')
             if task['report_room_id']!=room_id or task['room_id'] is not None or self.nonce not in (task['report_text'] or '')+(task['report_detail'] or ''):
                 reasons.append('result_destination_or_nonce')
@@ -1383,6 +1440,52 @@ class RpcDriver:
         if not sent["sent"] or again["sent"] or len(sends()) != 1 or sends()[0]["argument_digest"] != digest(edited):
             reasons.append("one_receipt")
         return reasons, {**asked, "viewer": mail}
+
+    async def slack_draft_scenario(self):
+        """Exercise the shared draft RPCs with a recorded Slack transport, never a real send."""
+        member = (await self.seed_team())[1]
+        schema = {"type": "object", "properties": {key: {"type": "string"} for key in ("channel", "text")},
+                  "required": ["channel", "text"], "additionalProperties": False}
+        tool = ToolRecord("post_message", "Post a synthetic Slack reply", schema,
+                          fingerprint("post_message", "Guardian Slack fixture", schema), read_only_hint=False)
+        self.app.integrations._config.add(checked(ServerConfig("guardian-slack", "Slack", "http",
+                                                               url="https://example.invalid/mcp", tools=[tool])))
+        reasons = []
+
+        async def prepare(tag):
+            asked = await self.ask(f"Prepare a Slack reply to #guardian-{self.nonce}-{tag}: Thursday at 3pm works. "
+                                   "Let me review it before anything is sent.", member=member, session=tag)
+            shown = (await self.turn_of(member, asked.get("turn_id"))).get("drafts") or []
+            valid = (asked.get("status") == "done" and len(shown) == 1 and shown[0].get("kind") == "slack"
+                     and shown[0]["state"] == "draft" and shown[0]["version"] == 1 and shown[0]["digest"]
+                     and self.nonce in shown[0]["to"] and not self.recorder.receipts)
+            return asked, shown[0] if valid else None
+
+        asked, first = await prepare("discard")
+        if first is None:
+            return ["editable_slack"], {**asked, "viewer": member}
+        discarded = await self.app.call("integrations.draft_discard", {"id": first["id"]})
+        late = await self.app.call("integrations.draft_send", {"id": first["id"], "digest": first["digest"]})
+        if late["sent"] or self.recorder.receipts or discarded["draft"]["state"] != "discarded":
+            reasons.append("cancel_zero_send")
+        asked, draft = await prepare("send")
+        if draft is None:
+            return reasons + ["editable_slack"], {**asked, "viewer": member}
+        edited = {"to": f"#guardian-{self.nonce}-edited", "body": f"Thursday at 3pm confirmed ({self.nonce})."}
+        saved = await self.app.call("integrations.draft_save", {"id": draft["id"], "digest": draft["digest"], **edited})
+        new = saved["draft"]
+        if not saved["saved"] or new["version"] != 2 or new["digest"] == draft["digest"] or self.recorder.receipts:
+            reasons.append("version_bound_send")
+        old = await self.app.call("integrations.draft_send", {"id": draft["id"], "digest": draft["digest"]})
+        if old["sent"] or self.recorder.receipts:
+            reasons.append("version_bound_send")
+        sent = await self.app.call("integrations.draft_send", {"id": draft["id"], "digest": new["digest"]})
+        again = await self.app.call("integrations.draft_send", {"id": draft["id"], "digest": new["digest"]})
+        receipts = self.recorder.receipts
+        if (not sent["sent"] or again["sent"] or len(receipts) != 1 or receipts[0]["operation"] != "post_message"
+                or not receipts[0]["test_mode"] or receipts[0]["argument_digest"] != digest({"channel": edited["to"], "text": edited["body"]})):
+            reasons.append("one_receipt")
+        return reasons, {**asked, "viewer": member}
 
     async def meeting_scenario(self):
         ids = await self.seed_team()

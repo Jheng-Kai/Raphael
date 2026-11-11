@@ -1,0 +1,126 @@
+/* The member settings page (member-settings.ts): a page of its own where the conversation is. A cover from the
+   member's own slime colour (--ms-tint, set by the page; tokens only), the face large across the cover's lower edge, then
+   sections, each a name over one tinted list of rows. Nothing here scrolls but the page itself. */
+
+.page-agent > .ms-pane { grid-column: 1; grid-row: 1; position: relative; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); min-width: 0; min-height: 0; background: var(--content); container: ms-pane / inline-size; }
+.page-agent:has(> .ms-pane:not([hidden])) > .mb-chat { display: none; }
+.ms-pane:focus { outline: 0; }
+
+/* The way back stays in sight at the page's top left, on the cover's picture and over a view's heading, under the window's
+   own strip (owner, 2026-11-11: 「放回圖片裡面…要有背景。Hover 上去的時候不要消失」). It and the cover's change icon are
+   Grok Bot's soft round edge buttons (styles.css): a solid surface at rest, under the pointer and pressed, so no picture
+   swallows them (owner, 2026-11-09: 「那個 Icon 要記得都要有背景 不然根本看不到」). The window's own buttons get a surface
+   on a picture too. Escape goes back from anywhere. */
+.ms-bar { position: absolute; z-index: 2; inset: 0 0 auto 0; display: flex; box-sizing: border-box; padding: calc(var(--window-controls-height) + var(--sp-1)) var(--sp-4) var(--sp-1); pointer-events: none; }
+.ms-bar > .btn { pointer-events: auto; }
+/* Once the page has scrolled, the arrow stands on a band of the page's own ground, so no row slides under it. */
+.ms-pane[data-scrolled] .ms-bar { background: var(--content); box-shadow: 0 1px 0 var(--line); }
+:root:has(.ms-pane:not([hidden]):not([data-scrolled]) .ms-cover[data-pattern="image"]) .window-controls { border-bottom-left-radius: var(--r-lg); background: color-mix(in srgb, var(--content) 72%, transparent); }
+
+.ms-scroll { min-width: 0; min-height: 0; overflow-x: hidden; overflow-y: auto; }
+
+/* The cover: a pattern in the member's colour (data-pattern, chosen from its round button; dots unless the owner chose
+   another), or the owner's own picture. The same rules draw the small covers of its menu. */
+.ms-cover { --ms-ink: color-mix(in srgb, var(--ms-tint) 30%, transparent);
+  --ms-wash: linear-gradient(135deg, color-mix(in srgb, var(--ms-tint) 36%, var(--content)), color-mix(in srgb, var(--ms-tint) 12%, var(--content)) 62%, var(--content));
+  position: relative; height: 176px; background: radial-gradient(circle at 1px 1px, var(--ms-ink) 1px, transparent 1.6px) 0 0 / 18px 18px, var(--ms-wash); }
+.ms-cover[data-pattern="grid"] { background: linear-gradient(var(--ms-ink) 1px, transparent 1px) 0 0 / 22px 22px, linear-gradient(90deg, var(--ms-ink) 1px, transparent 1px) 0 0 / 22px 22px, var(--ms-wash); }
+.ms-cover[data-pattern="lines"] { background: repeating-linear-gradient(135deg, var(--ms-ink) 0 1px, transparent 1px 12px), var(--ms-wash); }
+.ms-cover[data-pattern="glow"] { background: radial-gradient(70% 120% at 18% 0%, color-mix(in srgb, var(--ms-tint) 50%, var(--content)), transparent 70%), radial-gradient(60% 100% at 88% 100%, color-mix(in srgb, var(--ms-tint) 28%, var(--content)), transparent 70%), var(--content); }
+.ms-cover[data-pattern="plain"] { background: color-mix(in srgb, var(--ms-tint) 24%, var(--content)); }
+.ms-cover[data-pattern="image"] { background: var(--panel); }
+.ms-cover-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+/* Its one control, a soft round icon at its lower right (the round edge buttons, styles.css), away from the face on the
+   left: the same solid surface as the way back, so it reads on any picture in either theme. */
+.ms-cover > .btn.icon.ms-cover-btn { position: absolute; right: var(--sp-4); bottom: var(--sp-3); }
+.ms-pane:not([data-view="main"]) .ms-cover, .ms-pane:not([data-view="main"]) .ms-id { display: none; }
+/* The cover's menu: its patterns as small covers in a row, then a picture from this PC. */
+.ms-swatches { display: grid; grid-template-columns: repeat(5, 52px); gap: var(--sp-2); padding: var(--sp-1) var(--sp-1) var(--sp-2); }
+/* Inside a menu, whose buttons are rows: each swatch is a small cover filling its button. */
+.menu .ms-swatch { display: flex; align-items: stretch; width: 52px; height: 36px; min-height: 0; padding: 0; border: 0; border-radius: var(--r-md); overflow: hidden; background: transparent; cursor: pointer; box-shadow: inset 0 0 0 1px var(--line); }
+.menu .ms-swatch > .ms-cover { display: block; flex: 1; height: auto; min-width: 0; }
+.menu .ms-swatch[aria-checked="true"] { box-shadow: 0 0 0 2px var(--accent); }
+:root[data-keys] .ms-swatch:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.ms-main { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-5); min-width: 0; }
+.ms-body { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-5); width: 100%; max-width: calc(var(--layout-reading-max) + 200px); margin-inline: auto; padding: 0 var(--sp-5) var(--sp-6); box-sizing: border-box; }
+/* The kinds in a column on the left, as Settings' own; the chosen kind beside them. The column stays in sight as the page
+   scrolls, under the band of the way back. A narrow page puts the kinds in a row above. */
+.ms-layout { display: grid; grid-template-columns: 176px minmax(0, 1fr); align-items: start; gap: var(--sp-6); min-width: 0; }
+.ms-nav { position: sticky; top: calc(var(--window-controls-height) + var(--h-row) + var(--sp-2)); display: flex; flex-direction: column; gap: var(--sp-1); min-width: 0; }
+.ms-nav > .nav { min-height: 34px; padding: var(--sp-1) var(--sp-2); font-size: var(--fs-sm); }
+.ms-nav > .nav > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ms-content { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-5); min-width: 0; }
+@container ms-pane (max-width: 680px) {
+  .ms-layout { grid-template-columns: minmax(0, 1fr); gap: var(--sp-4); }
+  /* Small pills that wrap, as the panel's own tabs, rather than a tall list over the settings. */
+  .ms-nav { position: static; flex-direction: row; flex-wrap: wrap; gap: var(--sp-1) var(--sp-2); }
+  .ms-nav > .nav { flex: none; width: auto; min-height: var(--h-ctl); padding: 0 var(--sp-3); border-radius: var(--r-pill); }
+  .ms-nav > .nav > .i { display: none; }
+}
+/* A view of its own starts under the way back. */
+.ms-pane:not([data-view="main"]) .ms-body { padding-top: calc(var(--window-controls-height) + var(--h-row) + var(--sp-2)); }
+
+/* The face crosses the cover's lower edge; the name and the role are in place under it, as the owner's profile in Settings. */
+.ms-id { display: grid; grid-template-columns: minmax(0, 1fr); justify-items: start; gap: var(--sp-1); margin-top: calc(-48px - var(--sp-2)); }
+.ms-name { width: 100%; font-size: var(--fs-h1); font-weight: var(--weight-semibold); line-height: 1.3; text-align: left; }
+.ms-role { width: 100%; font-size: var(--fs-md); color: var(--text-2); text-align: left; }
+.ms-id :is(.ms-name, .ms-role) { padding-inline: calc(var(--sp-3) - 1px); }
+.ms-static { overflow-wrap: anywhere; }
+
+/* A section: its name over one tinted list. */
+.ms-section { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); min-width: 0; }
+.ms-head { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); min-height: var(--h-ctl-sm); padding-left: var(--sp-3); }
+.ms-head > h2 { margin: 0; font-size: var(--fs-sm); font-weight: var(--weight-medium); color: var(--text-2); }
+.ms-list { display: grid; grid-template-columns: minmax(0, 1fr); padding: var(--sp-1); border-radius: var(--r-lg); background: color-mix(in srgb, var(--text) 5%, transparent); }
+.ms-row { display: flex; align-items: center; gap: var(--sp-3); min-width: 0; min-height: 44px; padding: 0 var(--sp-2) 0 var(--sp-3); border-radius: var(--r-md); font-size: var(--fs-sm); }
+.ms-row > .ms-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ms-row:has(> .ms-open) { padding-left: 0; }
+.ms-empty { margin: 0; padding: var(--sp-3); font-size: var(--fs-sm); color: var(--text-3); }
+
+/* A row that opens something is a bare button across the row, its pencil or chevron at the end. */
+.btn.ms-open { display: flex; align-items: center; gap: var(--sp-3); flex: 1; min-width: 0; width: 100%; min-height: 44px; padding: 0 var(--sp-3); border: 0; border-radius: var(--r-md); background: transparent; font-size: var(--fs-sm); font-weight: var(--weight-regular); text-align: left; color: var(--text); }
+.btn.ms-open:hover:not(:disabled) { background: var(--hover); }
+.btn.ms-open > .ms-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.btn.ms-open > .ms-label.is-empty { color: var(--text-3); }
+.btn.ms-open > small { flex: none; max-width: 50%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--fs-xs); color: var(--text-3); }
+.btn.ms-open > .i { flex: none; color: var(--text-3); }
+.ms-row > .btn.ms-open { width: auto; }
+.ms-row > .tg { margin-right: var(--sp-1); }
+
+/* An app the member may use: its own mark before its name, so the list is read by its pictures. */
+.ms-row.ms-app { padding-left: var(--sp-2); }
+.ms-row.ms-app > .mono { flex: none; }
+
+/* Moving a cover picture, as Notion's Reposition: the picture follows the pointer, a quiet line in its middle says so,
+   and 取消 / 儲存位置 stand where the change button was. */
+.ms-cover[data-repositioning] .ms-cover-img { cursor: grab; touch-action: none; user-select: none; }
+.ms-cover[data-repositioning] .ms-cover-img:active { cursor: grabbing; }
+.ms-cover-hint { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); max-width: calc(100% - 2 * var(--sp-4)); padding: var(--sp-1) var(--sp-3); border-radius: var(--r-pill); background: color-mix(in srgb, var(--content) 72%, transparent); color: var(--text); font-size: var(--fs-xs); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: none; }
+.ms-cover > .ms-cover-actions { position: absolute; right: var(--sp-4); bottom: var(--sp-3); }
+
+/* A long text opens in place. */
+.ms-edit { padding: var(--sp-1); }
+.ms-edit > .mb-ta { width: 100%; background: var(--content); }
+.ms-add { display: flex; align-items: center; gap: var(--sp-2); padding: var(--sp-1) var(--sp-2); }
+.ms-add > .mb-fin { flex: 1; min-width: 0; background: var(--content); }
+.ms-list > .missing-note, .ms-list > .note { margin: var(--sp-1); }
+
+/* A view of its own: a skill, a command. */
+.ms-subhead { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); min-height: var(--h-ctl); }
+.ms-title { margin: 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--fs-lg); font-weight: var(--weight-semibold); }
+.ms-meta { margin: 0; font-size: var(--fs-xs); color: var(--text-3); overflow-wrap: anywhere; }
+.ms-meta:empty { display: none; }
+.ms-text, .ms-fields > .mb-ta { width: 100%; background: var(--content); font-family: var(--mono); font-size: var(--fs-xs); }
+.ms-fields { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); }
+.ms-fields > .mb-fin { background: var(--content); }
+.ms-actions { justify-content: flex-end; }
+
+@media (max-width: 720px) {
+  .ms-body { padding-inline: var(--sp-4); }
+  .ms-cover { height: 136px; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .ms-pane:not([hidden]) { animation: ms-in 0.16s ease-out backwards; }
+}
+@keyframes ms-in { from { opacity: 0; transform: translateY(4px); } }

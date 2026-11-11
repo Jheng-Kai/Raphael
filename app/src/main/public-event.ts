@@ -12,7 +12,8 @@ export function publicEventText(text: string): string {
       const labels = {
         "routine.created": "event.routine.created", "routine.updated": "event.routine.updated", "routine.deleted": "event.routine.deleted",
         "calendar.created": "event.calendar.created", "calendar.updated": "event.calendar.updated", "calendar.deleted": "event.calendar.deleted",
-        "meeting": "rooms.meetingOpened", "skill_learned": "skills.learnedNotice",
+        // A skill it already had and rewrote says so.
+        "meeting": "rooms.meetingOpened", "skill_learned": "skills.learnedNotice", "skill_learned.updated": "skills.updatedNotice",
       } as const;
       const key = `${event.type}.${event.action}` in labels ? `${event.type}.${event.action}` : event.type;
       if (Object.prototype.hasOwnProperty.call(labels, key)) return t(labels[key as keyof typeof labels], {p0: event.name});

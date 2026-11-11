@@ -2,6 +2,7 @@
 
 import type { Undoable } from "./undo";
 import type { Cleared } from "./cleared";
+import type { UiLocale } from "./i18n";
 
 /** `status.get` */
 export interface Status {
@@ -189,6 +190,8 @@ export interface CatalogModel {
   input_modalities?: string[];
   /** The roles of its kind. */
   roles: Partial<Record<ModelRole, RoleFit>>;
+  /** `subscription`: the owner's own plan serves it (Codex's drawing model), so it has no price per token. */
+  billing_source?: string;
 }
 
 /** A chosen model that OpenRouter no longer lists, whose setting went back to its default. */
@@ -288,6 +291,9 @@ export interface MediaPayload {
 
 /** A turn of the conversation with Raphael (`agent.history.list`, newest first). */
 export interface AgentTurn {
+  /** What kind of failure ended the turn and which brain it came from; null for a turn that did not fail. */
+  failure?: { kind: string; provider: string; resets_at: number | null } | null;
+  reactions?: Record<string, string[]>;
   routine?: Pick<Routine, "id" | "schedule" | "when" | "app_name">;
   handoffs?: HandoffView[];
   conversation_id?: number;
@@ -342,6 +348,10 @@ export interface AgentTurn {
   resumed_app_logos?: string[];
   /** The cards of the keys this turn's task waits for (`connectors.secret_cards`). */
   secrets?: SecretCard[];
+  /** Pairing requests to a bot this turn set up, each answered in place. */
+  pairings?: PairingCard[];
+  /** The template this turn's member made of itself. */
+  templates?: TemplateCard[];
   connection_proposals?: ConnectionProposal[];
   /** The cards of the owner's turn at the computer this turn's task is paused on (`computer.handback`). */
   computers?: ComputerCard[];
@@ -362,6 +372,11 @@ export interface OwnerQuestion {
   id: string; task_id: number; turn_id: number; member_id: number; kind: string; card_id: string;
   question: string; options: string[]; free_text: boolean; state: "asked" | "answered" | "cancelled";
   result: { state: string; answer?: string } | null;
+  /**
+   * When it was asked. The core keeps it (`owner_questions.created_at_ms`, which orders a turn's questions) but `view` in
+   * agent/owner_questions.py does not send it yet, so a card without it stands before the turn's replies (settledQuestions).
+   */
+  created_at_ms?: number;
 }
 
 export interface ConnectionProposal {
@@ -383,7 +398,25 @@ export interface PageCard {
   source: "html" | "mcp";
   server: string | null;
   fallback: string;
+  /** A report is drawn by the app from checked content (report-page.ts) and shows as a link card; a page runs in a frame. */
+  kind?: "page" | "report";
 }
+
+/** A report page's content as the core keeps it (core agent/report_page.py): every value is plain text. */
+export type ReportStatus = "running" | "done" | "pending" | "waiting" | "blocked" | "paused" | "failed";
+export interface ReportItem { title: string; text?: string; status?: ReportStatus; label?: string }
+export interface ReportRow { cells: string[]; group?: string; member_id?: number; status?: ReportStatus; label?: string }
+export interface ReportNode { id: string; member_id?: number; owner?: true; name?: string; note?: string }
+export interface ReportEdge { from: string; to: string; label?: string }
+export type ReportSection =
+  | { kind: "findings"; title?: string; callout?: string; items: ReportItem[] }
+  | { kind: "table"; title?: string; columns: string[]; rows: ReportRow[]; status_title?: string }
+  | { kind: "team"; title?: string; nodes: ReportNode[]; edges: ReportEdge[]; notes?: { label: string; text: string }[] }
+  | { kind: "text"; title?: string; text: string };
+export interface Report { as_of: string; sections: ReportSection[] }
+export interface ReportOpened { kind: "report"; title: string; rev: number; report: Report }
+/** Where a report's file went (`report_save`): the owner's output folder, by its name, or Downloads. */
+export interface ReportSaved { place: "output" | "downloads"; folder: string }
 
 export interface PageOpened {
   url: string;
@@ -431,6 +464,7 @@ export interface MailSender {
 
 /** An email draft as the owner's chat shows it: editable while it is a draft, and sent only by 傳送, once. */
 export interface MailDraftCard {
+  kind?: "email" | "slack";
   id: string;
   mode: "card";
   state: "draft" | "sending" | "sent" | "failed" | "discarded";
@@ -478,10 +512,25 @@ export interface ConnectorCard {
   tool_count: number | null;
   expires_at_ms: number;
   resumed: boolean;
-  /** What connecting it asks of the owner: a sign-in only (the default), their own key, or a developer app of their own. */
-  needs?: AppNeeds;
+  /**
+   * What connecting it asks of the owner: a sign-in only (the default), their own key, a developer app of their own, or
+   * (`own_server`) the address and token of a server of their own, such as n8n.
+   */
+  needs?: AppNeeds | "own_server" | "own_google";
   /** The Composio toolkit the form for `needs` is read from. */
   toolkit?: string;
+  /** An own server's or the owner's own Google's fields, given by the card itself (`connectors/cards.py`): never their values. */
+  fields?: { name: string; label: string; required: boolean; secret: boolean; description?: string }[];
+  /** A short reason the named cause (`error`, a cause of the core's `CAUSES`) carries: the service's own words when it refused, the technical reason when nothing could be named. */
+  detail?: string | null;
+  /** Whether pressing again can help. */
+  retry?: boolean;
+  /** What the owner puts right first: the Composio key in Connections (`settings`), or what the card asks for (`form`). */
+  fix?: "settings" | "form" | null;
+  /** The owner's own Google: what to copy into Google Cloud, and whether a Client ID is kept so that the card asks only for the sign-in. */
+  google?: { redirect: string; scopes: string[]; configured: boolean };
+  /** The Google account that signed in, once connected. */
+  account?: string;
 }
 
 /** A secret card: a key a connection needs and has none of, and where saving it stands. Never the key itself. */
@@ -497,6 +546,36 @@ export interface SecretCard {
   error: string | null;
   expires_at_ms: number;
   resumed: boolean;
+  /** A bot token a member asked for in its conversation (`connect_messaging`): its platform and where the bot is made. */
+  platform?: "telegram" | "slack" | "discord";
+  link?: string;
+}
+
+/** Someone asked a bot set up in this conversation to pair (`messaging.pairing.answer`). */
+export interface PairingCard {
+  id: string;
+  platform: "telegram" | "slack" | "discord";
+  member_id: number;
+  code: string;
+  who: string;
+  expires_at_ms: number;
+  state: "pending" | "approved" | "rejected" | "expired";
+}
+
+/** A member packaged as a template in its conversation (`share_template`): the snapshot is kept by the core. */
+export interface TemplateCard {
+  id: string;
+  state: "draft" | "saved" | "published";
+  name: string;
+  avatar: string;
+  description: string;
+  counts: { skills: number; routines: number };
+  connections: string[];
+  findings: { kind: "secret" | "injection"; path: string }[];
+  url?: string;
+  /** Where the files of a prepared publish request are (a published card only), and the 16 characters that name that folder. */
+  folder?: string;
+  folder_id?: string;
 }
 
 /** A computer card: the owner's turn at the computer for a sign-in, a password or a payment. Never what was on screen. */
@@ -642,19 +721,11 @@ export interface BrainSettings {
   pdf_service?: string;
   /** The address of the owner's own SearXNG, `http(s)`; "" while there is none. */
   searxng_url?: string;
-  /** Whether each capability of the tools is used at all (the switch of its row in 服務): the first four are on until turned off. */
+  /** Whether each capability of the tools is used at all (the switch of its row in 服務): all are on until turned off. */
   web_search_enabled?: boolean;
   web_read_enabled?: boolean;
   vision_enabled?: boolean;
   pdf_enabled?: boolean;
-  /** Whether Raphael speaks his answers aloud: off until the owner turns it on. */
-  tts_enabled?: boolean;
-  /** Who speaks Raphael's answers aloud: `fish` (Fish Audio), the one voice service; "no voice" is `tts_enabled` off. */
-  tts_service?: string;
-  /** The id of the owner's Fish Audio voice model: 32 hexadecimal characters, or "" while none is set. Not a secret. */
-  tts_fish_voice?: string;
-  /** The Fish Audio model; the window never changes it. */
-  tts_fish_model?: string;
 }
 
 /** One service a capability can use, as `services.status` lists it. Never a key, only whether there is one. */
@@ -683,8 +754,6 @@ export interface ServicesStatus {
   search: ServiceChoice;
   read: ServiceChoice;
   pdf: ServiceChoice;
-  /** Raphael's voice: `fish` (which needs a key), and whether the voice model id is filled in. */
-  voice: ServiceChoice & { fish_voice_set: boolean };
   vision: {
     /** The owner has reading images on. */
     enabled: boolean;
@@ -758,7 +827,7 @@ export interface DeviceSettings {
   /** Reports beside the emblem, on or off. (Files from before had "both", "zh" and "ja": they mean on.) */
   subtitles: "on" | "off";
   appearance: "system" | "light" | "dark";
-  ui_language: "zh-TW" | "en" | "ja";
+  ui_language: UiLocale;
   autostart: boolean;
   auto_update?: boolean;
   onboarded: boolean;
@@ -778,6 +847,8 @@ export type MainEvent =
   | { type: "DictationPasted"; text: string }
   | { type: "ConversationsChanged"; member_id: number }
   | { type: "QuotaChanged" }
+  /** A subscription window is nine-tenths used: said once per window (quota-warning.ts); `resets_at` is unix seconds. */
+  | { type: "QuotaWarning"; provider: "codex" | "claude" | "gemini"; period: import("./usage-analytics-types").CliAllowanceWindow["period"]; remaining_percent: number; resets_at?: number }
   | { type: "ActionModeChanged" }
   | { type: "Level"; value: number }
   | { type: "ModelProgress"; name: string; done: number; total: number }
@@ -792,6 +863,8 @@ export type MainEvent =
   | { type: "RoomsChanged"; room_id: number }
   | { type: "RoutinesChanged"; member_id: number }
   | { type: "CalendarChanged" }
+  /** Home's daily summaries were written (`home.changed`). */
+  | { type: "HomeChanged" }
   | { type: "MembersChanged" }
   | { type: "ProvidersChanged" }
   | { type: "SettingsChanged" }
@@ -811,7 +884,9 @@ export type MainEvent =
   /** The question `id` was answered (here or on the overlay), ran out or was dropped. */
   | { type: "AgentQuestionClosed"; id: string }
   /** The microphone's loudness, 0 to 1, while a question to Raphael is recorded (never a dictation's). */
-  | { type: "VoiceLevel"; value: number };
+  | { type: "VoiceLevel"; value: number }
+  /** A member template file was opened from the file manager: the window takes its text (`memberTemplatePending`) and shows the import review. */
+  | { type: "TemplateFile" };
 
 /** A YES/NO question of Raphael's that waits for its answer (`AgentQuestion`, `agent_question_open`). */
 export interface AgentQuestion {
@@ -881,8 +956,6 @@ export interface Member {
   personality?: string;
   blurb?: string;
   reply_style?: "full" | "conversational";
-  voice?: string;
-  read_aloud?: boolean;
   notify?: boolean;
   ask_before_members?: boolean;
   /** Writes an email as a draft in the owner's chat for them to send, instead of sending it (on unless turned off). */
@@ -892,8 +965,13 @@ export interface Member {
   /** `""`, `"preset:<stem>"` or `"file:<stored name>"`. */
   avatar: string;
   avatar_url?: string;
+  /** What the picture is named by; the roster carries no picture, and `api.ts` fills `avatar_url` from `members.picture` (member-pictures.ts). */
+  avatar_rev?: string;
   /** Raphael's only: the cut of the owner's picture of him (avatar.ts `AvatarCrop`). */
   avatar_crop?: { x: number; y: number; zoom: number };
+  /** The cover of the member settings page: one of the window's patterns or the owner's picture; none is the dotted band. */
+  /** A picture's `position` is how far down it is shown, in percent (50 when the owner never moved it). */
+  cover?: { kind: "pattern"; id: string } | { kind: "image"; url: string; rev?: string; position?: number };
   /** Null: 未分組. */
   group_id: number | null;
   /** The chief capability is independent of the member's identity. */
@@ -956,6 +1034,8 @@ export interface AppsInventory { state: "complete" | "partial" | "unknown"; coun
 
 /** What `members.create` takes (`ui_language` names the language of the routine it may offer). */
 export interface NewMember {
+  template?: import("./member-templates").MemberTemplate;
+  catalog_id?: string;
   name: string;
   /** It speaks first in its own conversation, asking what it is for. */
   greet?: boolean;
@@ -969,8 +1049,6 @@ export interface NewMember {
   ui_language?: string;
   blurb?: string;
   reply_style?: "full" | "conversational";
-  voice?: string;
-  read_aloud?: boolean;
   notify?: boolean;
   ask_before_members?: boolean;
   draft_first?: boolean;
@@ -980,7 +1058,12 @@ export interface NewMember {
  * What `members.update` may change, beside its `id`: the avatar only as `""` or `"preset:<stem>"`
  * (a picture of the PC goes by `members.set_avatar`).
  */
-export type MemberPatch = Partial<Pick<Member, "name" | "role" | "personality" | "instructions" | "group_id" | "model" | "tools" | "avatar" | "position" | "blurb" | "reply_style" | "voice" | "read_aloud" | "notify" | "ask_before_members" | "draft_first" | "pinned" | "hidden">>;
+export type MemberPatch = Partial<Pick<Member, "name" | "role" | "personality" | "instructions" | "group_id" | "model" | "tools" | "avatar" | "position" | "blurb" | "reply_style" | "notify" | "ask_before_members" | "draft_first" | "pinned" | "hidden">> & {
+  /** `pattern:<id>` chooses a pattern; null puts the dotted band back and forgets a picture. */
+  cover?: string | null;
+  /** Where a cover picture is shown, 0 (its top) to 100 (its bottom), as Notion's Reposition. */
+  cover_position?: number;
+};
 
 /** The routine the core offers with a new member of a group with places to look (`members.create`, `routines.template`). */
 export interface RoutineOffer {
@@ -1011,6 +1094,9 @@ export interface Room {
   roles?: Record<string, string>;
 }
 export interface RoomMessage {
+  reactions?: string[];
+  reply_thread_id?: number;
+  reply_count?: number;
   turn?: AgentTurn;
   id: number; room_id: number; member_id: number | null; text: string; created: number;
   request_id: string | null; reply_to: number | null; turn_id: number | null;
@@ -1030,6 +1116,8 @@ export interface HandoffView {
   /** Null for a quick question (`ask_member`), which has no task: `work_turn_id` is its record. */
   task_id: number | null; source_turn_id: number; work_turn_id: number; member_id: number;
   member_name: string; from_member_id: number; stage_id: string; mode: "work" | "consult";
+  /** What the work is called: the first words of its request. `stage_id` is the member's key for the system and is never shown. */
+  title?: string;
   state: string; reason: string | null; created_at_ms: number; ready_at_ms: number;
   dispatch_policy: "immediate"; result: string;
   /** What was sent to the colleague: a consultation's question. */
@@ -1068,6 +1156,8 @@ export interface Routine {
   app_name?: string;
   last_checked?: number | null;
   last_error?: string;
+  /** The latest run that ended did not work: `last_error` says why (the core writes it in the owner's words). */
+  last_failed?: boolean;
   enabled: boolean;
   last_run: number | null;
   next_run: number | null;
@@ -1095,8 +1185,8 @@ export type PageId = "home" | "agent" | "dictation" | "history" | "dictionary" |
 export type MainPageId = Exclude<PageId, "settings" | "history" | "dictionary">;
 export type DictationTab = "overview" | "history" | "dictionary";
 
-/** The tabs of the settings panel. */
-export type SettingsPane = "general" | "appearance" | "dictation" | "agent" | "tools" | "safety" | "connections" | "messaging" | "models" | "usage" | "data" | "about";
+/** The tabs of the settings panel. "memory" is no tab since 2026-11-11 (R-MEM-10): it stays a name only so an old saved or linked pane opens 一般. */
+export type SettingsPane = "general" | "memory" | "appearance" | "dictation" | "agent" | "tools" | "safety" | "connections" | "messaging" | "models" | "usage" | "data" | "about";
 
 /**
  * What the 拉斐爾 page is to put in its composer when it opens, ready to be sent or changed: the
@@ -1109,7 +1199,7 @@ export type CalendarEventFocus = `calendar:${CalendarDate}:${string}`;
 export type CalendarCreate = `calendar-new:${CalendarDate}`;
 /** Calendar on the week of that day, its usual view. */
 export type CalendarWeek = `calendar-week:${CalendarDate}`;
-export type PageArgument = "computer" | SettingsPane | AgentDraft | CalendarDate | CalendarEventFocus | CalendarCreate | CalendarWeek | `repair:${string}:${string}`;
+export type PageArgument = "computer" | SettingsPane | AgentDraft | CalendarDate | CalendarEventFocus | CalendarCreate | CalendarWeek | `repair:${string}:${string}` | `member-settings:${number}`;
 
 /** One of the five pages of the main window. */
 export interface Page {
@@ -1176,7 +1266,7 @@ export interface ConnectionGroup {
   description?: string;
   logo?: string;
   /** The accounts a managed service is signed in with, by their status (`ACTIVE`, `EXPIRED`, ...): never an account's name or id. */
-  accounts?: { status: string }[];
+  accounts?: { id?: string; status: string; label?: string }[];
   disabled_tools?: string[];
   tools_state?: "loading" | "failed" | "ready";
   result_size_limit?: number;
@@ -1205,7 +1295,7 @@ export interface ConnectionGroup {
 }
 
 /** The words of the window, in each language the user can choose. */
-export type Words = Record<"zh-TW" | "en" | "ja", string>;
+export type Words = Record<"zh-TW" | "en" | "ja", string> & Partial<Record<UiLocale, string>>;
 
 /** What an app of the store asks of the owner before it can be added (`connectors/toolkits.py`). */
 export type AppNeeds = "sign_in" | "key" | "own_app";
@@ -1226,7 +1316,7 @@ export interface StoreService {
   popular: boolean;
   summary: Words;
   about: Words;
-  examples: Record<"zh-TW" | "en" | "ja", string[]>;
+  examples: Record<"zh-TW" | "en" | "ja", string[]> & Partial<Record<UiLocale, string[]>>;
   /** "none": a public server, added with no login. */
   auth?: "oauth" | "none" | "device";
   /** The id of the connected service it was added as; null when it is not added. */
@@ -1267,4 +1357,3 @@ export interface McpTest { ok: boolean; tools: string[]; error?: string }
 /** Member-owned resources; command templates expand only in the core. */
 export interface MemberSkill { set_id?: number; set_kind?: "skill" | "command"; plugin_version?: string; shared?: boolean; source_changed?: boolean | null; id: number; name: string; description: string; enabled: boolean; source: string; plugin?: string; slash_name?: string; provenance?: "learned" | "imported" | "owner"; revision?: string; learned_at?: string | null; updated_at?: string | null }
 export interface MemberCommand { id: number; name: string; description: string; template: string }
-export interface MemberVoice { id: string; name: string }

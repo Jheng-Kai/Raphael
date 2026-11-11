@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 const api = vi.hoisted(() => ({ settingsGet: vi.fn(), settingsSet: vi.fn(), desktopHostCheck: vi.fn() }));
 vi.mock("./api", () => api);
-import { computerLocationHTML, mountComputerLocation, validComputerAlias } from "./computer-location";
+import { computerHostHealthHTML, computerLocationHTML, mountComputerLocation, validComputerAlias } from "./computer-location";
 import { closeMenu } from "./ui";
 import { setLocale, t } from "./i18n";
 
@@ -76,15 +76,16 @@ test("a host status error is current state only and opening the popover starts n
   mounted.hide(); expect(document.querySelector('.computer-location-popover')).toBeNull();
 });
 
-test("the explicit host check keeps its existing owner RPC and copyable repair in the popover", async () => {
+test("the explicit host check keeps its existing owner RPC and shows the core's command, copyable, as it came", async () => {
   await mount("studio-mini");
-  api.desktopHostCheck.mockResolvedValue({host:"studio-mini",ok:false,checks:[{kind:"docker_path",ok:false}]});
+  const command = `ssh studio-mini "echo 'export PATH=/usr/local/bin:/usr/bin' >> ~/.zshenv"`;
+  api.desktopHostCheck.mockResolvedValue({host:"studio-mini",ok:false,checks:[{kind:"docker_path",ok:false,command}]});
   click('[data-act="computer-host-check"]'); await flush();
   expect(api.desktopHostCheck).toHaveBeenCalledExactlyOnceWith("studio-mini");
-  expect(document.querySelector('[data-computer-host-health]')!.textContent).toContain("遠端登入時找不到 Docker");
-  expect(document.querySelector('[data-computer-host-repair]')!.textContent).toContain("那台 Mac 的終端機");
+  expect(document.querySelector('[data-computer-host-health]')!.textContent).toContain(t("desktop.health.docker_path"));
+  expect(document.querySelector('[data-computer-host-repair]')!.textContent).toContain(t("desktop.health.runHere"));
   expect(document.querySelector('[data-act="copy-code"]')).not.toBeNull();
-  expect(document.querySelector('code')!.textContent).toContain("~/.zshenv");
+  expect(document.querySelector('code')!.textContent).toBe(command);
   expect(api.settingsSet).not.toHaveBeenCalled();
 });
 
@@ -105,4 +106,60 @@ test("the local host label follows the window language and the shared popover re
   expect(document.querySelector('.computer-location-popover')).toBeNull();
   host.querySelector<HTMLButtonElement>('[data-computer-location]')!.click();
   expect(document.querySelector('.computer-location-popover')!.textContent).toContain(t("desktop.sharedLocation"));
+});
+
+test("a refused key login names the user ssh tried, so a wrong account is the first thing to check", () => {
+  setLocale("zh-TW");
+  const html = computerHostHealthHTML({ host: "192.0.2.178", ok: false, checks: [{ kind: "ssh_key", ok: false, user: "tester" }] });
+  expect(html).toContain("以 tester 登入被拒");
+  expect(computerHostHealthHTML({ host: "studio-mini", ok: false, checks: [{ kind: "ssh_key", ok: false }] })).toContain(t("desktop.health.ssh_key"));
+});
+
+const checks = (...list: { kind: string; ok: boolean; user?: string; command?: string }[]) => computerHostHealthHTML({ host: "studio-mini", ok: list.every(check => check.ok), checks: list });
+
+test.each([
+  ["ssh_hostkey", "desktop.health.ssh_hostkey", "desktop.health.runHere", "ssh studio-mini"],
+  ["ssh_hostkey_changed", "desktop.health.ssh_hostkey_changed", "desktop.health.runHere", "ssh-keygen -R 192.168.8.178"],
+  ["ssh_alias_unknown", "desktop.health.ssh_alias_unknown", "desktop.health.editConfig", "Host studio-mini\n  HostName HOST_ADDRESS"],
+  ["ssh_key", "desktop.health.ssh_key", "desktop.health.runHere", "ssh-keygen -t ed25519\nssh-copy-id studio-mini"],
+  ["ssh_unreachable", "desktop.health.ssh_unreachable", "desktop.health.localTerminal", "ssh studio-mini"],
+  ["docker_missing", "desktop.health.docker_missing", "desktop.health.runHere", 'ssh -t studio-mini "curl -fsSL https://get.docker.com | sh"'],
+  ["docker_stopped", "desktop.health.docker_stopped", "desktop.health.runHere", 'ssh studio-mini "open -a Docker"'],
+  ["docker_access", "desktop.health.docker_access", "desktop.health.runHere", 'ssh -t studio-mini "sudo usermod -aG docker jack2"'],
+  ["architecture", "desktop.health.architecture", "desktop.health.runHere", 'ssh studio-mini "docker image rm raphael/cua-local-vm:driver-0.37.0-v4"'],
+] as const)("a %s failure says what is missing and shows the one command that fixes it", (kind, said, lead, command) => {
+  for (const locale of ["zh-TW", "en", "ja"] as const) {
+    setLocale(locale);
+    document.body.innerHTML = checks({ kind: "ssh", ok: true }, { kind, ok: false, command });
+    const row = document.querySelector(`[data-computer-host-health="${kind}"]`)!;
+    expect(row.textContent).toContain(t(said));
+    const repair = document.querySelector("[data-computer-host-repair]")!;
+    expect(repair.querySelector("p")!.textContent).toBe(t(lead));
+    expect(repair.querySelector("code")!.textContent).toBe(command);
+    expect(repair.querySelector('[data-act="copy-code"]')).not.toBeNull();
+  }
+});
+
+test("the host key, key login and unreachable texts are different sentences in every language", () => {
+  for (const locale of ["zh-TW", "en", "ja", "de", "ko"] as const) {
+    setLocale(locale);
+    const words = ["ssh_hostkey", "ssh_hostkey_changed", "ssh_alias_unknown", "ssh_key", "ssh_unreachable", "docker_stopped", "docker_access", "docker_missing", "docker_path"].map(kind => t(`desktop.health.${kind}` as "desktop.health.ssh_key"));
+    expect(new Set(words).size).toBe(words.length);
+  }
+});
+
+test("a reachable host with no image yet is healthy, says its first start prepares one, and shows no command", () => {
+  for (const locale of ["zh-TW", "en", "ja"] as const) {
+    setLocale(locale);
+    document.body.innerHTML = checks({ kind: "ssh", ok: true }, { kind: "docker", ok: true }, { kind: "image_pending", ok: true });
+    expect(document.querySelector('[data-computer-host-health="image_pending"]')!.textContent).toContain(t("desktop.health.image_pending"));
+    expect(document.querySelector("[data-computer-host-repair]")).toBeNull();
+    expect(document.querySelector('[data-computer-host-health] .st-err, [data-computer-host-health] [data-st="err"]')).toBeNull();
+  }
+  expect(t("desktop.health.image_pending")).toMatch(/5.*15/);
+});
+
+test("no host failure offers a build from this app's sources or a command without the host", () => {
+  const shown = ["ssh_unreachable", "ssh_hostkey", "ssh_key", "docker_path", "docker_stopped", "architecture"].map(kind => checks({ kind, ok: false, command: kind === "ssh_key" ? "ssh-copy-id studio-mini" : "ssh studio-mini" })).join("");
+  expect(shown).not.toMatch(/core\/src|docker build|project folder/);
 });

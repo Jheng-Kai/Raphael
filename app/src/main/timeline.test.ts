@@ -48,8 +48,8 @@ test("queued owner bubbles show a muted mark and withdraw instead of edit or liv
   setLocale("en");
   document.body.innerHTML = turnHTML(turn(91, { status: "queued", text: "", messages: [], model: null }), emptyTimelineState(), false, LOOK);
   expect(document.querySelector(".queued-mark")?.textContent).toBe("Queued");
-  expect(document.querySelector('button[data-act="cancel-message"]')).not.toBeNull();
-  expect(document.querySelector('[data-act="edit-message"],.live-presence,.work-section')).toBeNull();
+  expect(document.querySelector('button[data-act="more-message"][data-owner-act="cancel"]')).not.toBeNull();
+  expect(document.querySelector('[data-owner-act="edit"],.live-presence,.work-section')).toBeNull();
 });
 
 test("a pending permission card replaces duplicate running and waiting task controls", () => {
@@ -149,28 +149,79 @@ const THREE = [
   step({ tool: "create-event", server: "Google Calendar", outcome: "error", reason: "auth", ms: 600, at_ms: T0 + 2_900 }),
 ];
 
-test.each(["zh-TW", "en", "ja"] as const)("completed work preserves the exact missing-service repair in %s", locale => {
+test.each(["zh-TW", "en", "ja"] as const)("a completed turn keeps the exact missing-service repair in sight in %s", locale => {
   setLocale(locale);
   for (const missing of [
     { resource: "searxng", requirement: "url", state: "missing", repair: "search" },
     { resource: "pdf", requirement: "no_text", state: "broken", repair: "vision" },
-    { resource: "fish", requirement: "setup", state: "missing", repair: "voice" },
   ] as const) {
-    for (const withActions of [false, true]) {
-      const state = emptyTimelineState(); state.thinkingOpen.set(1, true);
+    for (const [withActions, words] of [[false, ""], [true, ""], [false, "台北現在 24 度。"], [true, "台北現在 24 度。"]] as const) {
       const item = turn(1, {
-        status: "error", steps: [step({ tool: "web_search", outcome: "error", reason: "not_configured", missing })],
+        status: "error", text: words, steps: [step({ tool: "web_search", outcome: "error", reason: "not_configured", missing })],
         messages: withActions ? [{ seq: 1, kind: "event", text: JSON.stringify({ type: "action", id: "search", state: "done", present: "Search", past: "Searched", outcome: "error", reason: "not_configured" }), at_ms: T0 }] : [],
       });
-      const root = document.createElement("div"); root.innerHTML = turnHTML(item, state, false, LOOK);
-      const work = root.querySelector(".work-section.is-open")!;
-      expect(work.querySelectorAll("[data-missing-repair]")).toHaveLength(1);
-      expect(work.querySelector(`[data-missing-resource="${missing.resource}"]`)?.getAttribute("data-missing-repair")).toBe(missing.repair);
-      expect(work.closest(".ra-body")).not.toBeNull();
+      const root = document.createElement("div"); root.innerHTML = turnHTML(item, emptyTimelineState(), false, LOOK);
+      const notes = root.querySelector(".turn-prerequisites")!;
+      expect(notes.closest("[hidden], .work-body")).toBeNull();
+      expect(root.querySelectorAll("[data-missing-repair]")).toHaveLength(1);
+      expect(notes.querySelector(`[data-missing-resource="${missing.resource}"]`)?.getAttribute("data-missing-repair")).toBe(missing.repair);
+      expect(notes.closest(".ra-body")).not.toBeNull();
       expect(root.querySelector(".sys [data-missing-repair],.task-actions [data-missing-repair]")).toBeNull();
-      if (missing.repair === "search") expect(work.textContent).toContain(t("missing.url"));
+      // Words of the member say what is missing, so under them it is only the repair; with none, the note says it.
+      if (words) expect(notes.textContent?.trim()).toBe(t("missing.open"));
+      else if (missing.repair === "search") expect(notes.textContent).toContain(t("missing.url"));
     }
   }
+});
+
+test("a meeting opened and a skill learned stay one line each in the conversation while routine events fold into the work", () => {
+  setLocale("zh-TW");
+  const item = turn(1, {
+    messages: [
+      { seq: 1, kind: "event", text: JSON.stringify({ type: "meeting", room_id: 4, name: "Sample room" }), at_ms: T0 },
+      { seq: 2, kind: "event", text: JSON.stringify({ type: "routine", action: "created", id: 7, name: "Sample routine" }), at_ms: T0 },
+      { seq: 3, kind: "event", text: JSON.stringify({ type: "skill_learned", name: "sample-skill" }), at_ms: T0 },
+      { seq: 4, kind: "reply", text: "Done.", at_ms: T0 },
+    ],
+  });
+  const root = document.createElement("div"); root.innerHTML = turnHTML(item, emptyTimelineState(), false, LOOK);
+  const meeting = root.querySelector('[data-meeting-room="4"]')!;
+  expect(meeting.closest(".work-section")).toBeNull();
+  expect(meeting.textContent).toContain("Sample room");
+  const learned = [...root.querySelectorAll(".conversation-event-line")].find(line => line.textContent?.includes("sample-skill"));
+  expect(learned?.closest(".work-section")).toBeFalsy();
+  expect(root.querySelector('[data-routine="7"]')?.closest(".work-body")).not.toBeNull();
+});
+
+test("a prerequisite the reply already states is said once", () => {
+  setLocale("zh-TW");
+  const missing = { resource: "searxng", requirement: "url", state: "missing", repair: "search" } as const;
+  const item = turn(1, {
+    status: "error", text: "請先設定搜尋服務。",
+    steps: [step({ tool: "web_search", server: "Raphael", outcome: "error", reason: "not_configured", missing })],
+    messages: [{ seq: 1, kind: "media", text: JSON.stringify({ missing }), at_ms: T0 }],
+  });
+  const root = document.createElement("div"); root.innerHTML = turnHTML(item, emptyTimelineState(), false, LOOK);
+  expect(root.querySelectorAll('[data-missing-repair="search"]')).toHaveLength(1);
+  expect(root.textContent).not.toContain(t("missing.search"));
+  // The repair comes after the reply that says what is missing, never above it.
+  const reply = root.querySelector(".chat-message[data-reply]")!, repair = root.querySelector('.turn-prerequisites [data-missing-repair="search"]')!;
+  expect(reply.compareDocumentPosition(repair) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+});
+
+test("a reply that failed on ChatGPT's usage limit leads with Manage usage under its words, and nothing else does", () => {
+  setLocale("zh-TW");
+  const html = (more: Partial<AgentTurn>): HTMLElement => {
+    const root = document.createElement("div"); root.innerHTML = turnHTML(turn(1, more), emptyTimelineState(), false, LOOK); return root;
+  };
+  const limited = (provider: string): Partial<AgentTurn> => ({ status: "error", text: "ChatGPT 的用量已達上限。", failure: { kind: "usage_limit", provider, resets_at: null } });
+  for (const provider of ["chatgpt", "cli:codex"]) {
+    const button = html(limited(provider)).querySelector<HTMLButtonElement>('.chat-message[data-reply] > .turn-usage > button[data-act="manage-usage"]')!;
+    expect([button.textContent, button.dataset.provider]).toEqual([t("brains.manageUsage"), provider]);
+  }
+  expect(html(limited("openrouter")).querySelector(".turn-usage")).toBeNull();
+  expect(html({ status: "error", failure: { kind: "network", provider: "chatgpt", resets_at: null } }).querySelector(".turn-usage")).toBeNull();
+  expect(html({ status: "done", failure: null }).querySelector(".turn-usage")).toBeNull();
 });
 
 /** What a sighted reader sees: the text outside the tags, without what only a screen reader hears. */
@@ -212,6 +263,12 @@ test("an old turn without messages still renders its answer once", () => {
   expect(html).not.toContain("《");
 });
 
+test("a reply carries no play control or transcript, even when stored data still has legacy voice memo fields", () => {
+  const html = turnHTML(turn(1, { voice_memo: true, voice_memo_state: "playing" } as Partial<AgentTurn>), emptyTimelineState(), false, { face: () => "" });
+  expect(html).toContain("台北現在 24 度。");
+  expect(html).not.toMatch(/memo|data-act="play|aria-pressed/i);
+});
+
 test("Raphael's stored replies and progress read plainly in the window", () => {
   const html = turnHTML(turn(1, { status: "done", messages: [
     { seq: 1, kind: "progress", text: "《告。正在查看今天下午的行程。》", at_ms: T0 },
@@ -231,8 +288,8 @@ test.each([false, true])("a durable receipt renders outside assistant bubbles wi
     reason: null, created_at_ms: T0, ready_at_ms: T0, dispatch_policy: "immediate", result: "", evidence: [] }] }),
     emptyTimelineState(), false, { face: () => "" });
   expect(html.match(/data-handoff="42"/g)).toHaveLength(1);
-  expect(html.indexOf('class="handoff-event"')).toBeLessThan(html.indexOf('class="ra"'));
-  expect(visible(html)).toContain("已轉交給 小晴");
+  expect(html.indexOf('class="btn event-open handoff-event"')).toBeLessThan(html.indexOf('class="ra"'));
+  expect(visible(html)).toContain("與 小晴 的 1 則訊息");
 });
 
 test("an unknown tool connection has a plug with its accessible name, never an initial", () => {
@@ -557,28 +614,26 @@ describe("停止", () => {
 const LOOK: TurnLook = { face: (loop) => `<i class="face${loop ? " loop" : ""}"></i>` };
 
 describe("a turn", () => {
-  test("a question asked of a colleague is one 和 X 討論 line naming the colleague, opening on the question and its answer", () => {
+  test("a question asked of a colleague is one 與 X 的 2 則訊息 line naming the colleague, keeping what was said for their conversation", () => {
     const asked = { task_id: null, source_turn_id: 5, work_turn_id: 9, member_id: 0, member_name: "", from_member_id: 4,
       stage_id: "", mode: "consult" as const, state: "done", reason: null, created_at_ms: T0, ready_at_ms: T0,
       dispatch_policy: "immediate" as const, result: "新品代號是 NX-1。", request: "新品代號是什麼？", evidence: [] };
     const look: TurnLook = { ...LOOK, memberName: (id) => (id === 4 ? "PM" : "拉斐爾"), memberFace: () => "<i></i>" };
     const html = turnHTML(turn(5, { handoffs: [asked] }), emptyTimelineState(), false, look);
     expect(html).toContain('data-handoff="x9"');
-    expect(visible(html.slice(html.indexOf("<summary>"), html.indexOf("</summary>")))).toContain("和 拉斐爾 討論");
-    const detail = visible(html.slice(html.indexOf('class="handoff-detail"')));
-    expect(detail).toContain("PM");
-    expect(detail).toContain("新品代號是什麼？");
-    expect(detail).toContain("新品代號是 NX-1。");
-    expect(detail).not.toContain("主人");
+    expect(html).toContain('data-act="peer-chat"');
+    expect(visible(html)).toContain("與 拉斐爾 的 2 則訊息");
+    expect(visible(html)).not.toContain("新品代號是什麼？");
+    expect(visible(html)).not.toContain("主人");
   });
 
   test("the person on the right without 「」 with where and when; Raphael on the left with his face and plain words", () => {
     const html = turnHTML(turn(5), emptyTimelineState(), false, LOOK);
     expect(html).not.toContain('class="me-src"');
-    expect(html).toContain('data-act="edit-message"');
+    expect(html).toContain('data-owner-act="edit"');
     expect(html).toContain('<div class="bubble"><div class="message-text">台北天氣如何，順便記到行事曆</div><button');
     expect(html).not.toContain('class="ra-face"');
-    expect(html).toContain('data-tooltip="查看過程 ·');
+    expect(html).not.toContain("查看過程");
     expect(html).toContain('class="work-meta">gpt-6-luna · US$0.0012');
     expect(html).toContain('<div class="ans"><div class="message-text"><p>台北現在 24 度。</p>');
     expect(html).not.toContain("tn-foot"); // nothing more to open
@@ -614,7 +669,7 @@ describe("a turn", () => {
 
   test("a detail shares the reply's collapsed work action", () => {
     const closed = turnHTML(turn(5, { detail: "更多" }), emptyTimelineState(), false, LOOK);
-    expect(closed).toContain('data-act="thinking" aria-expanded="false" aria-controls="work-5"');
+    expect(closed).not.toContain('data-act="thinking"');
     expect(closed).toContain('id="work-5" hidden');
     expect(closed).toContain('<pre class="failure-detail">更多</pre>');
     const state = emptyTimelineState(); state.thinkingOpen.set(5, true);
@@ -644,19 +699,19 @@ describe("a turn", () => {
 
   test.each(["openai/gpt-6-luna", "cli:claude:sonnet", "cli:codex", "cli:gemini"])("a %s member turn with thinking, progress, media cards, event chip, and multiple replies renders in order without duplicating turn.text", (model) => {
     const messages = [
-      { seq: 1, kind: "thinking" as const, text: "主人想看今天的 NHK 新聞與相關影片，先檢索重點報導。", at_ms: T0 + 1_000 },
-      { seq: 2, kind: "progress" as const, text: "先幫你找今天的 NHK 重點新聞。", at_ms: T0 + 2_000 },
+      { seq: 1, kind: "thinking" as const, text: "主人想看今天的 Example News 新聞與相關影片，先檢索重點報導。", at_ms: T0 + 1_000 },
+      { seq: 2, kind: "progress" as const, text: "先幫你找今天的 Example News 重點新聞。", at_ms: T0 + 2_000 },
       { seq: 3, kind: "thinking" as const, text: "已找到新聞頁面與 YouTube 報導影片，整理成卡片附上。", at_ms: T0 + 4_000 },
       {
         seq: 4,
         kind: "media" as const,
         text: JSON.stringify({
           type: "link",
-          url: "https://www3.nhk.or.jp/news/html/20261023/k1001.html",
-          title: "日銀維持利率不變 關注春季物價走勢",
-          site: "NHK",
-          description: "日本銀行於今日金融政策決定會議決議維持現行政策利率。",
-          thumbnail: "https://www3.nhk.or.jp/news/html/20261023/thumb.jpg",
+          url: "https://news.example.test/articles/sample-project.html",
+          title: "範例團隊公布季度進度 下一階段測試即將展開",
+          site: "Example News",
+          description: "範例團隊今日公布專案進度，並安排下一階段的功能測試。",
+          thumbnail: "https://news.example.test/articles/sample-thumb.jpg",
           embed: null,
         }),
         at_ms: T0 + 4_500,
@@ -666,18 +721,18 @@ describe("a turn", () => {
         kind: "media" as const,
         text: JSON.stringify({
           type: "video",
-          url: "https://www.youtube.com/watch?v=hJdEb0N_0sc",
-          title: "NHK ニュース解説：金融政策の行方",
-          site: "YouTube · NHK",
+          url: "https://www.youtube.com/watch?v=SampleVid01",
+          title: "Example News サンプル解説：開発計画の進め方",
+          site: "YouTube · Example News",
           description: "記者解説動画",
           thumbnail: null,
-          embed: "https://www.youtube.com/embed/hJdEb0N_0sc",
+          embed: "https://www.youtube.com/embed/SampleVid01",
         }),
         at_ms: T0 + 5_000,
       },
-      { seq: 6, kind: "event" as const, text: "已建立例行任務：每天 08:00 · 早安新聞", at_ms: T0 + 5_500 },
-      { seq: 7, kind: "reply" as const, text: "以上是今天 NHK 的頭條新聞與解說影片。", at_ms: T0 + 6_000 },
-      { seq: 8, kind: "reply" as const, text: "我也幫你設好每天早上 08:00 的早安新聞例行任務了，想考哪一段單字隨時跟我說！", at_ms: T0 + 6_500 },
+      { seq: 6, kind: "event" as const, text: "已建立例行任務：每天 08:00 · 範例晨報", at_ms: T0 + 5_500 },
+      { seq: 7, kind: "reply" as const, text: "以上是今天 Example News 的頭條新聞與解說影片。", at_ms: T0 + 6_000 },
+      { seq: 8, kind: "reply" as const, text: "我也幫你設好每天早上 08:00 的範例晨報例行任務了，需要查看哪一項進度隨時跟我說！", at_ms: T0 + 6_500 },
     ];
     // While running, only the current public action is exposed beside the avatar.
     const runningHtml = turnHTML(
@@ -690,7 +745,7 @@ describe("a turn", () => {
     expect(runningHtml).not.toContain('data-act="thinking"');
     expect(runningHtml).not.toContain("work-toggle");
     expect(runningHtml).toContain('class="live-action"');
-    expect(runningHtml).toContain("先幫你找今天的 NHK 重點新聞。");
+    expect(runningHtml).toContain("先幫你找今天的 Example News 重點新聞。");
 
     // When done: thinking block auto-collapses to 思考了 N 秒, and turn.text / turn.detail are not duplicated
     const doneHtml = turnHTML(
@@ -700,18 +755,18 @@ describe("a turn", () => {
       LOOK,
     );
     expect(doneHtml.match(/class="work-section think-box/g)).toHaveLength(1);
-    expect(doneHtml).toContain('data-act="thinking" aria-expanded="false"');
+    expect(doneHtml).not.toContain('data-act="thinking"');
     expect(doneHtml).not.toContain("work-toggle");
     expect(doneHtml).toContain('class="work-body think-body" id="work-20" hidden');
     expect(doneHtml).toContain('data-media-type="link"');
-    expect(doneHtml).toContain("日銀維持利率不變 關注春季物價走勢");
+    expect(doneHtml).toContain("範例團隊公布季度進度 下一階段測試即將展開");
     expect(doneHtml).toContain('data-media-type="video"');
-    expect(doneHtml).toContain('src="https://www.youtube.com/embed/hJdEb0N_0sc"');
-    expect(doneHtml).toContain('data-act="open-url" data-url="https://www3.nhk.or.jp/news/html/20261023/k1001.html"');
+    expect(doneHtml).toContain('src="https://www.youtube.com/embed/SampleVid01"');
+    expect(doneHtml).toContain('data-act="open-url" data-url="https://news.example.test/articles/sample-project.html"');
     expect(doneHtml).toContain("在網站開啟");
-    expect(doneHtml).toContain("已建立例行任務：每天 08:00 · 早安新聞");
-    expect(doneHtml).toContain("以上是今天 NHK 的頭條新聞與解說影片。");
-    expect(doneHtml).toContain("我也幫你設好每天早上 08:00 的早安新聞例行任務了");
+    expect(doneHtml).toContain("已建立例行任務：每天 08:00 · 範例晨報");
+    expect(doneHtml).toContain("以上是今天 Example News 的頭條新聞與解說影片。");
+    expect(doneHtml).toContain("我也幫你設好每天早上 08:00 的範例晨報例行任務了");
     expect(doneHtml).not.toContain("不該重複出現的文字");
     expect(doneHtml).not.toContain("不該出現的詳細");
   });
@@ -728,7 +783,7 @@ describe("a turn", () => {
               type: "image",
               url: "https://example.com/chart.png",
               title: "匯率走勢圖",
-              site: "NHK",
+              site: "Example News",
             }),
             at_ms: T0 + 1_000,
           },

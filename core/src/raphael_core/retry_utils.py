@@ -18,17 +18,13 @@ from typing import Any, Optional
 _jitter_counter = 0
 _jitter_lock = threading.Lock()
 
-# How long a model may say nothing before its answer begins. Deep reasoning is silent for minutes: a real gpt-6-sol at max
-# effort thought 470 s; opencode waits 900 s for a chunk (DeepSeek asked for at least that), Hermes 600 s for its reasoning
-# models (1500 s at most for a Codex plan), Codex itself 300 s. Any traffic, a keep-alive comment included, starts the wait
-# again: this is for a connection that sends nothing at all, and it is the longest silence a person would call thinking.
+# Allow long silent reasoning before the first answer. Any traffic restarts this timer.
 MODEL_SILENCE_S = 1800.0
-# Once the answer is flowing, a gap this long is a dead connection, not a thought. Hermes: 180 s, and 600 s for its
-# reasoning models, which is the number taken here.
+# After output starts, a long silent gap indicates a stalled connection.
 STREAM_STALL_S = 600.0
-# Connecting is quick or it is not going to happen (Hermes: 30 s).
+# Bound connection setup independently from model reasoning.
 CONNECT_TIMEOUT_S = 30.0
-# A provider's own "wait N seconds" is believed up to this long (Hermes: Anthropic buckets of ~171 s tripped a 120 s cap).
+# Bound provider-requested retry delays so long waits can be checked periodically.
 # One that names more is asked again after this long, so that a wait of hours is polled and not slept through (a quota
 # that lasts hours is a `usage_limit` and is not waited for at all: `failures.classify`).
 RETRY_AFTER_CAP_S = 600.0

@@ -8,10 +8,10 @@
 // nothing under reduced motion), closes on Escape, on its × and on a click beside it, and gives the
 // focus back to what had it. What a person types goes into the page through `esc` only.
 
-import { pickSlime, slimePickerHTML } from "./slime";
+import { pickSlime } from "./slime";
+import { selectSlimeTab, slimeKeys, slimePickerHTML as slimeTabsPickerHTML } from "./slime-tabs";
 import { onLocaleChange, t } from "./i18n";
-export { openEditMemberDialog } from "./member-profile";
-export type { MemberProfileHost, ProfileTab } from "./member-profile";
+import "./member-profile.css";
 import { isTopLayer, registerDismissal } from "./dismissals";
 import {
   GROUP_NAME_MAX,
@@ -63,7 +63,8 @@ export function openDialog(o: DialogOptions): Dialog {
     `<div class="mb-dialog${o.cls ? ` ${o.cls}` : ""}" role="dialog" aria-modal="true" aria-labelledby="${id}"${o.describedByBody ? ` aria-describedby="${id}-body"` : ""}>` +
     `<div class="mb-dlg-head"><h2 id="${id}">${esc(o.title)}</h2>${iconButton("x", t("common.close"), ' data-dlg="close"')}</div>` +
     `<div class="mb-dlg-body" id="${id}-body">${o.body}</div>` +
-    actionRow({ ...o.actions, cls: "mb-dlg-act" }) +
+    // A dialog that only shows something has no footer: its × closes it.
+    (o.actions.primary || o.actions.secondary || o.actions.destructive ? actionRow({ ...o.actions, cls: "mb-dlg-act" }) : "") +
     `</div>`;
   let open = true;
   const mayClose = (): boolean => !o.canClose || o.canClose();
@@ -357,27 +358,31 @@ export interface AvatarPickerOptions {
   current?: string | null;
 }
 
-/** The small popover of a picture: the slimes and, for the owner and Raphael, 「從電腦選…」. */
+/**
+ * The small popover of a picture: the slimes and, for the owner and Raphael, 「從電腦選…」. A member's face is a slime:
+ * there is no picture drawn by an image model (owner, 2026-11-09: 「生成拿掉…把史萊姆的種類與造型大幅擴增」).
+ */
 export function openAvatarPicker(anchor: HTMLElement, o: AvatarPickerOptions): void {
   const actions = [...(o.onComputer ? [{ label: t("members.fromPc"), run: o.onComputer }] : []), ...(o.more ?? [])];
-  const el = openPopover(
-    anchor,
-    (o.slimes ? slimePickerHTML(o.current, esc) : "") +
-      actions
-        .map((action, i) => `<button type="button" role="menuitem" tabindex="-1" class="menu-action" data-pick="${i}"><span class="mt">${esc(action.label)}</span></button>`)
-        .join(""),
-    { className: "menu mb-avpop", role: "menu", label: t("settings.avatar") },
-  );
+  const slimes = (o.slimes ? slimeTabsPickerHTML(o.current, esc) : "") +
+    actions
+      .map((action, i) => `<button type="button" role="menuitem" tabindex="-1" class="menu-action" data-pick="${i}"><span class="mt">${esc(action.label)}</span></button>`)
+      .join("");
+  let el: HTMLElement;
+  el = openPopover(anchor, slimes, { className: "menu mb-avpop", role: "menu", label: t("settings.avatar"), placement: "center", onKey: (e) => slimeKeys(el, e) });
   el.addEventListener("click", (e) => {
     const target = (e.target as Element).closest<HTMLElement>("button");
     if (!target) return;
+    // A tab shows its group in the place the others stand in; the chip row's arrows scroll the row (chip-scroll.ts).
+    if (target.dataset.slimeTab) { selectSlimeTab(el, target.dataset.slimeTab); return; }
+    if (target.dataset.chipStep) return;
     // Trying slimes is the point of this menu, so a press on one leaves it where it is.
     const slime = pickSlime(target);
     if (slime) { o.onSlime?.(slime); return; }
     closeMenu();
     actions[Number(target.dataset.pick)]?.run();
   });
-  el.querySelector<HTMLElement>("button")?.focus();
+  (el.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]') ?? el.querySelector<HTMLElement>("button"))?.focus();
 }
 
 // ---------- the groups' dropdowns ----------

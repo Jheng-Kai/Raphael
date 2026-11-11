@@ -23,8 +23,9 @@ def speaker(member_id):
 
 
 def offered(member_id, plugins):
-    snapshot = take_snapshot(plugins, "x", memory=False, attachments=False, speaker=speaker(member_id), max_tier=Tier.T3, interactive=True)
-    return set(snapshot.refs)
+    """What the turn can reach: listed, or found with find_tools (the desktop is seldom called, so it is found)."""
+    snapshot = take_snapshot(plugins, memory=False, speaker=speaker(member_id), max_tier=Tier.T3, interactive=True)
+    return set(snapshot.refs) | set(snapshot.work)
 
 
 def test_a_speaker_with_a_computer_of_its_own_is_not_also_offered_the_owners_desktop():

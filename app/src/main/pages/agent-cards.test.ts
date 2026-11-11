@@ -7,6 +7,7 @@ import type { AgentTurn, AppContext, MailDraftCard, MainEvent, PermissionCard } 
 
 const api = vi.hoisted(() => ({
   agentHistoryList: vi.fn(),
+  membersGreet: vi.fn(async () => ({ turn_id: 1 })),
   agentHistoryClear: vi.fn(),
   agentHistorySearch: vi.fn(),
   agentAskText: vi.fn(),
@@ -99,6 +100,68 @@ test("approval titles name the known action and localized speaker, with an expla
     agent.hide();
   }
   setLocale("zh-TW");
+});
+
+// (owner, 2026-11-11: 「有連續兩張卡片的時候…理論上是要一張卡片顯示出來就好，然後就可以一次把三個都刪掉」, and 「長按才會繼續，點一下就可以了」)
+describe("the card of changes that cannot be undone", () => {
+  const LINES = ["永久刪除成員及其所有資料：「工程師」", "永久刪除成員及其所有資料：「架構師」", "刪除群聊及全部訊息：「Raphael macOS 版規劃」"];
+  const many = { ...asked, id: "many", tier: "T3" as const, yes: "是", no: "否", always: undefined,
+    text: ["有 3 項變更需要你同意", ...LINES, "允許以上所有變更嗎？"].join("\n") };
+
+  test("three changes are one card with a line each, open, and no JSON", async () => {
+    api.agentHistoryList.mockResolvedValue({ turns: [turn(1, { status: "confirm", text: "" })] });
+    mount();
+    await flush();
+    send(many);
+    await flush();
+    expect(document.querySelectorAll(".ask-card").length).toBe(1);
+    expect(document.querySelector(".ask-card .card-body.cc-state")?.textContent).toBe("有 3 項變更需要你同意");
+    const detail = document.querySelector<HTMLElement>(".ask-card .card-detail")!;
+    expect(detail.hidden).toBe(false);
+    expect(document.querySelector('.ask-card [data-card-disclosure]')?.getAttribute("aria-expanded")).toBe("true");
+    expect(document.querySelector(".ask-q")!.textContent!.split("\n").slice(0, 3)).toEqual(LINES);
+    expect(document.querySelector(".ask-card pre:not([hidden])")).toBeNull();
+    expect(document.querySelector(".ask-card")!.textContent).not.toMatch(/[{}]|ID/);
+  });
+
+  test("one press of 是 answers all of them, once, and a second press does nothing", async () => {
+    api.agentHistoryList.mockResolvedValue({ turns: [turn(1, { status: "confirm", text: "" })] });
+    mount();
+    await flush();
+    send(many);
+    await flush();
+    const yes = document.querySelector<HTMLButtonElement>(".ask-card .ask-yes")!;
+    // No hold: nothing fills under the word and no timer waits for the pointer to stay down.
+    expect(yes.dataset.hold).toBeUndefined();
+    expect(yes.querySelector(".ask-fill")).toBeNull();
+    yes.click();
+    await flush();
+    expect(api.agentQuestionAnswer).toHaveBeenCalledExactlyOnceWith("many", true);
+    expect(yes.disabled).toBe(true);
+    yes.click();
+    await flush();
+    expect(api.agentQuestionAnswer).toHaveBeenCalledTimes(1);
+  });
+
+  test("a change of one line keeps its one line: the heading, then its target by name, with no JSON", async () => {
+    api.agentHistoryList.mockResolvedValue({ turns: [turn(1, { status: "confirm", text: "" })] });
+    mount();
+    await flush();
+    send({ ...many, id: "one", text: "刪除群聊及全部訊息\n「Raphael macOS 版規劃」\n允許這項變更嗎？" });
+    await flush();
+    expect(document.querySelector(".ask-card .card-body.cc-state")?.textContent).toBe("刪除群聊及全部訊息");
+    expect(document.querySelector(".ask-q")!.textContent!.split("\n")[0]).toBe("「Raphael macOS 版規劃」");
+    expect(document.querySelector(".ask-card pre:not([hidden])")).toBeNull();
+  });
+
+  test("a question that can be undone keeps its detail folded", async () => {
+    api.agentHistoryList.mockResolvedValue({ turns: [turn(1, { status: "confirm", text: "" })] });
+    mount();
+    await flush();
+    send({ ...many, id: "plain", tier: "T2" as const });
+    await flush();
+    expect(document.querySelector<HTMLElement>(".ask-card .card-detail")!.hidden).toBe(true);
+  });
 });
 
 describe("the permission card in the page", () => {

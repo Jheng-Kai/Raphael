@@ -16,13 +16,19 @@ def chat(text, *calls):
     return ChatTurn(text, [ChatToolCall(str(n), name, args, json.dumps(args)) for n, (name, args) in enumerate(calls)], "fake/model", 0.3, 10, 10, 1)
 
 
+def use(name, arguments):
+    """A call of a tool that is found, not listed (a connection's, management, the seldom ones): the list is
+    fixed (owner, 2026-11-09, decision 2), so the model calls it through use_tool."""
+    return ("use_tool", {"name": name, "arguments": arguments})
+
+
 async def typed(rig, text="Check the time", member_id=0):
     rig.typed_count = getattr(rig, "typed_count", 0) + 1
     session = "live" if rig.typed_count == 1 else f"live-{rig.typed_count}"
     return await rig.call("agent.ask", {"session_id": session, "text": text, "ui_language": "en", "source": "app", "member_id": member_id})
 
 
-async def test_progress_is_persisted_and_notified_before_each_tool_round(make_rig, client):
+async def test_tool_narration_is_progress_and_only_final_is_a_reply(make_rig, client):
     notes = []
     rig = make_rig(notify=lambda method, data: notes.append((method, data)))
     client.decisions.append(decision("answer", time=0.95))
@@ -31,7 +37,7 @@ async def test_progress_is_persisted_and_notified_before_each_tool_round(make_ri
         [turn] = await rig.turns()
         assert turn["status"] == "running"
         assert [m["kind"] for m in turn["messages"] if not is_action(m["text"])] == ["progress"]
-        assert turn["messages"][0]["text"] == "《Notice. I will check the current time.》"
+        assert "I will check the current time." in next(m["text"] for m in turn["messages"] if m["kind"] == "progress")
         assert kwargs["messages"][-1]["role"] == "tool"
         assert any(m.get("content") == "I will check the current time." for m in kwargs["messages"])
         return chat("I will confirm the date too.", ("local_time", {}))
@@ -47,13 +53,16 @@ async def test_progress_is_persisted_and_notified_before_each_tool_round(make_ri
     assert turn["messages"][-1]["text"] == "《Answer. It is Friday.》"
     assert len({data["turn_id"] for method, data in notes if method == "agent.turn"}) == 1
     assert turn["cost_usd"] == pytest.approx(0.9)
+    events = rig.conn.execute('SELECT turn_id,tool,outcome FROM turn_tool_events ORDER BY id').fetchall()
+    # This fixture reuses call id "0"; retries replace that event instead of duplicating it.
+    assert [tuple(event) for event in events] == [(turn['id'], 'local_time', 'ok')]
 
 
 async def test_a_permission_pauses_the_sequence_and_yes_continues_the_same_turn(make_rig, plugins, calls, client):
     await plugins.connect(note="T2", look="T1")
     rig = make_rig(plugins=plugins.hub)
     client.decisions.append(decision("answer"))
-    client.chats = [chat("I will save your example.", ("Notes__look", {"topic": "example"}), ("Notes__note", {"text": "example"})),
+    client.chats = [chat("I will save your example.", use("Notes__look", {"topic": "example"}), use("Notes__note", {"text": "example"})),
                     chat("I will check the saved example.", ("local_time", {})),
                     chat(json.dumps({"prefix": "Answer", "text": "Saved.", "detail": ""}))]
     asked = await typed(rig, "Save an example")
@@ -73,7 +82,7 @@ async def test_a_no_finishes_the_sequence_without_making_the_tool_call(make_rig,
     await plugins.connect(note="T2")
     rig = make_rig(plugins=plugins.hub)
     client.decisions.append(decision("answer"))
-    client.chats = [chat("I will save your example.", ("Notes__note", {"text": "example"}))]
+    client.chats = [chat("I will save your example.", use("Notes__note", {"text": "example"}))]
     asked = await typed(rig, "Save an example")
     await rig.confirm(asked["confirm"]["id"], approved=False)
     [turn] = await rig.turns()
@@ -112,7 +121,7 @@ async def test_a_resumed_turn_can_be_cancelled(make_rig, plugins, client):
         await asyncio.Event().wait()
 
     client.decisions.append(decision("answer"))
-    client.chats = [chat("I will save the example.", ("Notes__note", {"text": "example"})), slow]
+    client.chats = [chat("I will save the example.", use("Notes__note", {"text": "example"})), slow]
     asked = await typed(rig)
     task = asyncio.create_task(rig.confirm(asked["confirm"]["id"]))
     await asyncio.wait_for(waiting.wait(), 2)
@@ -138,7 +147,7 @@ async def test_a_confirmed_result_can_supply_the_address_for_the_next_round(make
 
     monkeypatch.setattr(rig.service._tools, "web_read", read)
     client.decisions.append(decision("answer"))
-    client.chats = [chat("I will find the reference.", ("Notes__look", {"topic": address})),
+    client.chats = [chat("I will find the reference.", use("Notes__look", {"topic": address})),
                     chat("I will open that reference.", ("web_read", {"url": address})),
                     chat(json.dumps({"text": "Found.", "detail": ""}))]
     asked = await typed(rig, "Find and read the reference")
@@ -170,4 +179,13 @@ async def test_final_json_wrapping_does_not_leak_into_the_reply(make_rig, client
     rig = make_rig()
     client.decisions.append(decision("answer"))
     client.chats = [chat(wrap.format(json.dumps({"text": "Done.", "detail": ""})))]
-    assert (await typed(rig))["text"] == "Done."
+    expected = "Done." if wrap.startswith("```") else wrap.format(json.dumps({"text": "Done.", "detail": ""}))
+    assert (await typed(rig))["text"] == expected
+
+
+@pytest.mark.parametrize("envelope", [False, True])
+async def test_authored_json_examples_survive_the_real_narrated_reply(make_rig, client, envelope):
+    rig = make_rig()
+    text = 'Here is the cleanup prompt:\n```json\n{"text": "Example only"}\n```\nKeep every instruction.'
+    client.chats = [chat(json.dumps({"text": text, "detail": ""}) if envelope else text)]
+    assert (await typed(rig))["text"] == text

@@ -8,6 +8,7 @@ import hashlib
 import json
 import re
 import secrets
+import time
 from dataclasses import dataclass, field
 
 from ..bots.homes import redact_secrets
@@ -34,6 +35,51 @@ def safe_observation(result):
     return {"safe": True, "screen": redact_secrets(text[:16000]), "images": images[:1]}
 
 
+def input_event(message, observation):
+    kind = message[0]
+    if kind == 5 and message[1]:
+        return {"kind": "click" if message[1] < 8 else "scroll", "buttons": message[1],
+                "x": int.from_bytes(message[2:4], "big"), "y": int.from_bytes(message[4:6], "big")}
+    if kind in (4, 255) and (message[1] if kind == 4 else int.from_bytes(message[2:4], "big")):
+        value = int.from_bytes(message[4:8], "big")
+        if not observation["safe"]:
+            return {"kind": "private_input"}
+        if 32 <= value <= 255 or 0x1000100 <= value <= 0x110ffff:
+            return {"kind": "text", "text": chr(value & 0xffffff)}
+        return {"kind": "key", "key": value}
+    if kind == 6:
+        # Clipboard text cannot be attributed to a field reliably; never retain it.
+        return {"kind": "private_input"}
+
+
+@dataclass(frozen=True)
+class RelayTeaching:
+    identifier: str
+    command: tuple
+    deadline: float
+
+    async def capture(self, message):
+        from .vm_bridge import CuaBridge
+        kind = message[0]
+        if kind == 5 and not message[1] or kind == 4 and not message[1] or kind == 255 and not int.from_bytes(message[2:4], "big"):
+            return None
+        if time.monotonic() >= self.deadline:
+            return '{"full":true}'
+        observation = {"safe": False, "screen": "", "images": []}
+        try:
+            # This loop owns the subprocess and bridge lock. No VM, database or core lock crosses threads.
+            async with CuaBridge(None, None, observation_command=self.command) as bridge:
+                tree = await bridge.request("tools/call", {"name": "get_accessibility_tree", "arguments": {}}, owner_observation=True)
+                if safe_observation(tree)["safe"]:
+                    result = await bridge.request("tools/call", {"name": "get_desktop_state", "arguments": {}}, owner_observation=True)
+                    observation = safe_observation({"content": tree.get("content", []) + result.get("content", []),
+                                                    "isError": result.get("isError")})
+        except Exception:
+            pass
+        # Only immutable, already privacy-checked data is queued for core-owned persistence.
+        return json.dumps({"observation": observation, "event": input_event(message, observation)}, ensure_ascii=False)
+
+
 @dataclass
 class Recording:
     id: str
@@ -48,6 +94,8 @@ class Recording:
     text: str = ""
     last_screen: str = ""
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+    relay: RelayTeaching | None = None
+    relay_enabled: bool = True
 
     def view(self):
         return {"id": self.id, "state": self.state, "text": self.text,
@@ -94,6 +142,29 @@ class Teaching:
     def active(self, token):
         return next((r for r in self.items.values() if r.session == token and r.state in ("recording", "full")), None)
 
+    def relay_hook(self, token):
+        recording = self.active(token)
+        return recording.relay if recording and recording.state == "recording" and recording.relay_enabled else None
+
+    async def relay_input(self, token, identifier, payload):
+        recording = self.items.get(identifier)
+        if not recording or recording.session != token:
+            return
+        async with recording.lock:
+            if (recording.state != "recording" or not self.members.member_exists(recording.member)
+                    or self.viewer.owners.get(recording.target.key) != token):
+                return
+            data = json.loads(payload)
+            if data.get("full"):
+                recording.state = "full"
+                self.persist(recording)
+            else:
+                self.remember_screen(recording, data["observation"])
+                if data["event"]:
+                    self.append(recording, data["event"])
+            if recording.state == "full" and (publish := getattr(self.viewer, "publish_session", None)):
+                publish(token)
+
     async def observe(self, target):
         from .vm_bridge import CuaBridge
         try:
@@ -131,12 +202,16 @@ class Teaching:
         if recording.state != "recording" or not self.members.member_exists(recording.member):
             return {"safe": False, "screen": "", "images": []}
         observation = await self.observe(recording.target)
-        if observation["safe"] and self.members.member_exists(recording.member):
+        if self.members.member_exists(recording.member):
+            self.remember_screen(recording, observation)
+        return observation
+
+    def remember_screen(self, recording, observation):
+        if observation["safe"]:
             signature = hashlib.sha256(json.dumps(observation, sort_keys=True).encode()).hexdigest()
             if signature != recording.last_screen:
                 self.append(recording, {"kind": "screen", "screen": observation["screen"], "images": observation["images"]})
                 recording.last_screen = signature
-        return observation
 
     async def input(self, token, message):
         recording = self.active(token)
@@ -153,21 +228,7 @@ class Teaching:
             observation = await self.screen(recording)
             if recording.state != "recording" or self.viewer.owners.get(recording.target.key) != token:
                 return
-            event = None
-            if kind == 5 and message[1]:
-                event = {"kind": "click" if message[1] < 8 else "scroll", "buttons": message[1],
-                         "x": int.from_bytes(message[2:4], "big"), "y": int.from_bytes(message[4:6], "big")}
-            elif kind in (4, 255) and (message[1] if kind == 4 else int.from_bytes(message[2:4], "big")):
-                value = int.from_bytes(message[4:8], "big")
-                if not observation["safe"]:
-                    event = {"kind": "private_input"}
-                elif 32 <= value <= 255 or 0x1000100 <= value <= 0x110ffff:
-                    event = {"kind": "text", "text": chr(value & 0xffffff)}
-                else:
-                    event = {"kind": "key", "key": value}
-            elif kind == 6:
-                # Clipboard text cannot be attributed to a field reliably; never retain it.
-                event = {"kind": "private_input"}
+            event = input_event(message, observation)
             if event:
                 self.append(recording, event)
 
@@ -224,7 +285,16 @@ class Teaching:
                 folder.mkdir(parents=True, exist_ok=True)
                 recording = Recording(identifier, session.member_id, session.conversation_id, token, target,
                                       folder / f"{identifier}.json", asyncio.get_running_loop().time())
+                if command_for := getattr(self.viewer.vm, "bridge_command", None):
+                    from .vm import DRIVER, SOCKET, exec_args
+                    command = await command_for(target, exec_args(target, [DRIVER, "mcp", "--socket", SOCKET], interactive=True))
+                    self.viewer.session(params)
+                    if self.viewer.owners.get(target.key) != token:
+                        raise invalid_params("demonstration control expired")
+                    recording.relay = RelayTeaching(identifier, tuple(command), time.monotonic() + self.max_seconds)
                 self.items[identifier] = recording
+                if publish := getattr(self.viewer, "publish_session", None):
+                    publish(token)
                 self.persist(recording)
                 await self.screen(recording)
                 return recording.view()
@@ -233,6 +303,10 @@ class Teaching:
             recording = self.active(token)
             if not recording:
                 raise invalid_params("no active demonstration")
+            recording.relay_enabled = False
+            if publish := getattr(self.viewer, "publish_session", None):
+                publish(token)
+                await self.viewer.flush_teaching(token)
             async with recording.lock:
                 if recording.state == "recording":
                     await self.screen(recording)

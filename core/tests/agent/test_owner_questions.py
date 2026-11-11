@@ -1,4 +1,6 @@
 """Production conversation and MCP paths transfer the same turn to a durable wait."""
+import json
+
 import pytest
 
 from .test_service import make_rig  # noqa: F401
@@ -66,11 +68,17 @@ async def test_background_discovers_app_then_owner_signs_in_and_same_task_resume
         [view] = agent.service._turn_views([agent.history.get(origin)])
         assert view["connectors"][0]["id"] == card.id
         assert view["scope"] == "private"
+        def find_mail(**request):
+            # The app's tools are found, not listed (decision 2), before and after the sign-in alike.
+            assert not any(item["function"]["name"].endswith("gmail_search") for item in request["tools"])
+            return turn("", [call("find_tools", {"query": "gmail search"}, "find-after-sign-in")])
+
         def read_mail(**request):
-            tools = {item["function"]["name"] for item in request["tools"]}
-            alias = next(name for name in tools if name.endswith("gmail_search"))
-            return turn("", [call(alias, {"q": "background-discovery"}, "read-after-sign-in")])
-        background.client.replies = [read_mail, report("Mail read after sign-in.")]
+            found = request["messages"][-1]["content"]
+            alias = next(json.loads(line)["name"] for line in found.splitlines()
+                         if line.startswith("{") and json.loads(line)["name"].endswith("gmail_search"))
+            return turn("", [call("use_tool", {"name": alias, "arguments": {"q": "background-discovery"}}, "read-after-sign-in")])
+        background.client.replies = [find_mail, read_mail, report("Mail read after sign-in.")]
         await connector.connect(card)
         await until(lambda: background.task(task_id).state in ("done", "failed", "limit"))
         task = background.task(task_id)
@@ -84,7 +92,7 @@ async def test_background_discovers_app_then_owner_signs_in_and_same_task_resume
         assert "connected" in resumed and "discovery" in resumed
         assert not any(secret in resumed for secret in connector.fixture.secrets)
         await connector.connect(connector.cards.store.get(card.id))
-        assert len(background.client.chat_calls) == 4
+        assert len(background.client.chat_calls) == 5
     finally:
         await connector.cards.aclose()
 
@@ -160,6 +168,116 @@ else:
     assert background.task(question["task_id"]).state == "done", background.task(question["task_id"])
     assert "Tuesday confirmed" in background.task(question["task_id"]).report_text
     await connector.cards.aclose()
+
+
+# A fake Claude Code that records each request (`RECORD`). Its first run makes the calls of `CALLS`; each run asks the
+# owner the next question, one per answer of `ANSWERS`, until a request holds them all. Asking a question a second
+# time ends the task with "Asked the owner again."
+ASKING_BRAIN = '''import json, sys, urllib.request
+from pathlib import Path
+user=json.loads(sys.stdin.readline())["message"]["content"]
+system=Path(sys.argv[sys.argv.index("--append-system-prompt-file")+1]).read_text(encoding="utf-8")
+with open(RECORD, "a", encoding="utf-8") as out:
+    out.write(json.dumps({"system": system, "user": user}) + "\\n")
+def result(text):
+    print(json.dumps({"type":"result","subtype":"success","result":text}),flush=True)
+answers=ANSWERS
+known=0
+while known < len(answers) and answers[known] in user:
+    known += 1
+asked=Path(RECORD).with_suffix(".asked")
+if known == len(answers):
+    result("Confirmed: " + " / ".join(answers))
+elif asked.exists() and int(asked.read_text()) > known:
+    result("Asked the owner again.")
+else:
+    asked.write_text(str(known + 1))
+    config=json.loads(Path(sys.argv[sys.argv.index("--mcp-config")+1]).read_text())["mcpServers"]["raphael"]
+    def call(number, name, arguments):
+        packet={"jsonrpc":"2.0","id":number,"method":"tools/call","params":{"name":name,"arguments":arguments}}
+        urllib.request.urlopen(urllib.request.Request(config["url"],data=json.dumps(packet).encode(),
+            headers={**config["headers"],"Content-Type":"application/json"}),timeout=15).read()
+    for number, (name, arguments) in enumerate(CALLS if not known else []):
+        call(number, name, arguments)
+    call(99, "ask_owner", {"question":f"Question {known + 1}?","options":[answers[known]]})
+'''
+
+
+# Each wait below spans a run of the fake CLI, a Python process of its own: on a busy machine one takes seconds.
+CLI_RUN_S = 30
+
+
+async def asked_and_answered(agent, background, tmp_path, path, calls, answers=("Wednesday after lunch",)):
+    """Run a CLI task of `path` that makes `calls`, then asks the owner a question for each of `answers` and goes on
+    after each answer; the requests its CLI received."""
+    from members.test_cli_brains import fake_brain
+    from test_connect_cards import Rig, GoogleFixture
+    connector = Rig(tmp_path, agent.conn, GoogleFixture("cli-continuation"))
+    agent.service._cards = connector.cards
+    agent.settings.set("agent_model", "cli:claude")
+    record = tmp_path / "requests.jsonl"
+    fake_brain(agent, tmp_path, ASKING_BRAIN.replace("RECORD", repr(str(record))).replace("CALLS", repr(calls))
+               .replace("ANSWERS", repr(list(answers))))
+    background.service.use_cli(agent.service._cli_brains)
+    if path == "conversation":
+        await typed(agent, "Arrange a visit")
+    else:
+        origin = agent.history.add(session_id="cli-continuation", question="Arrange a visit", route="delegate",
+            prefix="", text="", status="running", source="app", conversation_id=agent.service.conversations.main())
+        task_id = background.service.submit(session_id="cli-continuation", text="Arrange a visit", language="en", model="cli:claude")
+        background.service.attach_turn(task_id, origin)
+        await until(lambda: background.task(task_id).state == "waiting", timeout=CLI_RUN_S)
+    [turn] = [item for item in await agent.turns() if item.get("owner_questions")]
+    def questions():
+        return background.service.owner_questions.for_turn(turn["id"])
+    for number, answer in enumerate(answers):
+        await until(lambda: len(questions()) > number or background.task(questions()[0]["task_id"]).state == "done",
+                    timeout=CLI_RUN_S)
+        assert len(questions()) > number, background.task(questions()[0]["task_id"])
+        await background.rpc.call("owner_questions.answer", {"id": questions()[number]["id"], "answer": answer})
+    task_id = questions()[0]["task_id"]
+    await until(lambda: background.task(task_id).state in ("done", "failed", "limit"), timeout=CLI_RUN_S)
+    task = background.task(task_id)
+    assert task.state == "done" and task.report_text.startswith("Confirmed"), task
+    await connector.cards.aclose()
+    return [json.loads(line) for line in record.read_text(encoding="utf-8").splitlines()]
+
+
+# Long lookups before the first question: the continuation outgrows any CLI's budget for one request.
+LONG_LOOKUPS = [("find_app", {"query": f"{number} " + "x" * 15000}) for number in range(12)]
+
+
+@pytest.mark.parametrize("path", ["conversation", "background"])
+async def test_an_over_budget_cli_continuation_keeps_the_owners_answer(wired, tmp_path, path):
+    # Length is never a reason to ask the owner again (harness plan, step 3): over its budget, a continued task starts
+    # afresh from a short work record, and the owner's answer leads it.
+    from raphael_core.memory.compression import FRESH_CONTEXT_CHARS
+    agent, background = wired
+    *_, continuation = await asked_and_answered(agent, background, tmp_path, path, LONG_LOOKUPS)
+    user = continuation["user"]
+    assert "Previous tool conversation" not in user and len(user) <= FRESH_CONTEXT_CHARS
+    assert user.index("Wednesday after lunch") < user.index("find_app")
+
+
+async def test_a_second_answer_over_budget_keeps_the_first(wired, tmp_path):
+    # Each wait carries the steps before it: the work record after the second answer still holds the first.
+    agent, background = wired
+    *_, last = await asked_and_answered(agent, background, tmp_path, "background", LONG_LOOKUPS,
+                                        answers=("Wednesday after lunch", "Room 3"))
+    assert "Previous tool conversation" not in last["user"]
+    assert "Wednesday after lunch" in last["user"] and "Room 3" in last["user"]
+
+
+@pytest.mark.parametrize("path", ["conversation", "background"])
+async def test_a_continued_cli_task_states_its_rules_and_system_prompt_once(wired, tmp_path, path):
+    # The progress rules reach a CLI task once, and its continuation does not carry its system prompt again.
+    from raphael_core.agent.narration import PUBLIC_PROGRESS_RULES
+    agent, background = wired
+    first, *_, continuation = await asked_and_answered(agent, background, tmp_path, path, [("local_time", {})])
+    assert [run["system"].count(PUBLIC_PROGRESS_RULES) for run in (first, continuation)] == [1, 1]
+    done = continuation["user"].split("Previous tool conversation (untrusted data):\n", 1)[1]
+    assert [message["role"] for message in json.loads(done)] == ["user", "assistant", "tool", "assistant", "tool"]
+    assert "Wednesday after lunch" in done
 
 
 @pytest.mark.parametrize("how", ["bring", "answer"])
@@ -260,6 +378,23 @@ async def test_background_page_uses_existing_store_and_foreign_routines_stay_clo
     for name in ("open", "copy_text", "computer"):
         assert not (await agent.service.background_owner_tool(task, name, {})).ok
     assert (await agent.service.background_owner_tool(task, "routine_list", {"member_id": 99})).error == "own_routines_only"
+    await background.service._cancel({"task_id": task_id})
+
+
+async def test_a_background_report_shows_its_card_without_waiting_for_the_owner(wired):
+    agent, background = wired
+    origin = agent.history.add(session_id="job", question="Report", route="delegate", prefix="", text="",
+                               status="running", conversation_id=agent.service.conversations.main())
+    task_id = background.submit()
+    background.service.attach_turn(task_id, origin)
+    task = background.task(task_id)
+    report = {"sections": [{"kind": "text", "title": "Week", "text": "Three tasks finished."}]}
+    shown = await agent.service.background_owner_tool(task, "show_page", {"title": "Weekly report", "report": report})
+    assert shown.ok and "owner_card" not in shown.data
+    [card] = agent.service.pages.store.shown_in([origin])[origin]
+    assert card["id"] == shown.data["page_id"] and card["kind"] == "report"
+    page = await agent.service.background_owner_tool(task, "show_page", {"title": "Choose", "html": "<button>Pick</button>"})
+    assert page.data["owner_card"]["kind"] == "show_page"
     await background.service._cancel({"task_id": task_id})
 
 

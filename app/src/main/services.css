@@ -6,17 +6,26 @@
 .svc-ic { display: inline-grid; place-items: center; width: 30px; flex: none; color: var(--text-2); }
 .svc-ic .i { width: 20px; height: 20px; }
 
-/* A row of the list: the row, the service in use in small muted words, the switch, the chevron */
-.svc-item { grid-template-columns: minmax(0, 1fr) auto auto 18px; }
-.svc-now { max-width: 130px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size:var(--fs-2xs); color: var(--text-3); }
+/* One capability or service per row, as the onboarding lists them: in two columns the dialog's
+   names were cut and their words broke a few characters a line. */
+.svc .cs-list, .svc-view .cs-list { grid-template-columns: minmax(0, 1fr); gap: 0; }
+/* A row of the list: its name, what it does and the service it uses, whole (never cut), then
+   the switch and the chevron */
+.svc-item { grid-template-columns: minmax(0, 1fr) auto 18px; }
+.svc-srv .nm { white-space: normal; overflow: visible; }
+.svc-item .tx .ds, .svc-srv .tx .ds { white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere; }
+.svc-now { display: block; font-size: var(--fs-2xs); color: var(--text-3); overflow-wrap: anywhere; }
 .svc-item.off .nm { color: var(--text-2); }
+/* A service's state beside its name: 需要金鑰, 已設定, 本機 */
+.svc-tag { margin-inline-start: var(--sp-2); font-size: var(--fs-2xs); font-weight: 400; color: var(--text-3); }
+.svc-why { margin: 0; }
 /* a row the settings' search lit */
 .cs-item.found, .cs-list.found > .cs-item { background: var(--accent-soft); }
 
 /* The dialog's list of services: the mark, the name and its note, the check on the one in use, the chevron */
 .svc-srv { grid-template-columns: minmax(0, 1fr) 16px 18px; }
 .svc-chk { display: inline-flex; justify-content: center; width: 16px; color: var(--accent-text); }
-.svc-h { margin: 0 0 -4px var(--sp-1); font-size: var(--fs-sm); font-weight: 600; color: var(--text-2); }
+.svc-h { margin: 0 0 -4px var(--sp-1); font-size: var(--fs-sm); font-weight: var(--weight-semibold); color: var(--text-2); }
 
 /* The two views of the dialog: the page that comes in slides from the side it is reached from (180 ms) */
 .svc-view { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-3); }
@@ -28,11 +37,9 @@
 /* A service's own settings: its key, its address, its voice model, then the buttons */
 .svc-line { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; }
 .svc-line .field { flex: 1; min-width: 0; width: auto; }
+/* A button beside a field in one row stands as tall as the field (R-UI-17). */
+.svc-line:has(> .field) .btn { min-height: var(--h-field); }
 .svc-line .val { flex: 1; color: var(--text-2); font-size: var(--fs-sm); }
 .svc-pick { display: grid; grid-template-columns: minmax(0, 1fr); }
 .svc-pick .mp-slot, .svc-pick .sel { width: 100%; max-width: none; }
 
-@media (max-width: 720px) {
-  .svc-now { display: none; }
-  .svc-item { grid-template-columns: minmax(0, 1fr) auto 18px; }
-}

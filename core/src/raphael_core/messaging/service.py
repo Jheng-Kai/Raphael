@@ -1,6 +1,7 @@
 """The messaging connections as the app uses them: `messaging.<app>.*`, for each app in `channels`.
 
-What a connection needs to be secret is in the vault (`messaging:<app>:<name>`) and nowhere else;
+What a connection needs to be secret is in the vault (`messaging:<app>:<name>`, or
+`messaging:member:<id>:<platform>:<name>`) and nowhere else;
 it never comes back to the window. Only the main window may call these methods (the Rust
 allowlist); the switchboard has no way to reach them, so a message cannot approve a pairing or
 change a setting.
@@ -9,7 +10,7 @@ change a setting.
 import asyncio
 import contextlib
 import logging
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -21,7 +22,8 @@ from ..router import Router
 from .channels import CHANNEL_TYPES
 from .channels.base import ChannelError, ChannelType
 from .config import MAX_ALLOWED, AllowedUser, ChannelConfig, MessagingStore
-from .core import Ask, Stop, Switchboard, Transcribe, chat_hash, split_session
+from .core import Ask, Stop, Switchboard, Transcribe, chat_hash, session_target
+from .pairing import Pairing
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +31,11 @@ logger = logging.getLogger(__name__)
 def secret_name(kind: str, name: str) -> str:
     """The vault entry of a secret of a messaging app."""
     return f"messaging:{kind}:{name}"
+
+
+def member_account(member_id: int, platform: str = "telegram") -> str:
+    """An account key shared by the nonsecret config and the existing secret vault."""
+    return platform if member_id == 0 else f"member:{member_id}:{platform}"
 
 
 @dataclass
@@ -39,7 +46,7 @@ class _Running:
 
 class MessagingService:
     """`ask` and `stop` are what a switchboard reaches the assistant by, `transcribe` turns the
-    audio of a voice message into text, and `language` is the language Raphael answers in. `http`
+    audio of a voice message into text, and `language` selects fixed app notices, not authored replies. `http`
     is a client for tests (a fake server); otherwise one is made."""
 
     def __init__(
@@ -53,6 +60,7 @@ class MessagingService:
         transcribe: Transcribe | None = None,
         http: httpx.AsyncClient | None = None,
         types: dict[str, ChannelType] | None = None,
+        members: Callable[[], dict[int, str]] = lambda: {0: "Raphael"},
     ) -> None:
         self._store = store
         self._vault = vault
@@ -62,15 +70,19 @@ class MessagingService:
         self._language = language
         self._http = http
         self._owns_http = http is None
-        self._types = CHANNEL_TYPES if types is None else types
+        self._base_types = dict(CHANNEL_TYPES if types is None else types)
+        self._types = dict(self._base_types)
+        self._members = members
         self._config = store.load()
         self._running: dict[str, _Running] = {}
         self._ended = False
+        self._approved_pairings: dict[tuple[str, str], str] = {}
+        self.cards = None
         # One lock for the changes of the connections, so a switch and a disconnect cannot cross.
         self._lock = asyncio.Lock()
 
     def register(self, router: Router) -> None:
-        for kind in self._types:
+        for kind in self._base_types:
             for method, handler in {
                 "status": self._status,
                 "connect": self._connect,
@@ -81,6 +93,38 @@ class MessagingService:
                 "disconnect": self._disconnect,
             }.items():
                 router.register(f"messaging.{kind}.{method}", self._for(kind, handler))
+        for method in ("status", "connect", "disconnect", "set_enabled", "approve", "reject", "remove_user"):
+            router.register(f"messaging.member.{method}", self._member_handler(method))
+        router.register("messaging.accounts", self._accounts)
+
+    def _member_handler(self, method: str) -> Callable[[dict], Any]:
+        async def handle(params: dict) -> dict:
+            member = params.get("member_id")
+            if type(member) is not int or member < 0 or member not in self._members():
+                raise invalid_params("member_id must name an existing member")
+            platform = params.get("platform", "telegram")
+            kind = self._member_type(member, platform)
+            result = await getattr(self, "_" + method)(kind, params)
+            if "status" in result:
+                return {**result, "status": self._member_view(member, platform)}
+            return result if method == "connect" else self._member_view(member, platform)
+        return handle
+
+    def _member_type(self, member: int, platform: str = "telegram") -> str:
+        if not isinstance(platform, str) or platform not in self._base_types:
+            raise invalid_params("platform must be telegram, slack or discord")
+        kind = member_account(member, platform)
+        self._types[kind] = self._base_types[platform]
+        return kind
+
+    def _member_view(self, member: int, platform: str = "telegram") -> dict[str, Any]:
+        view = self._view(self._member_type(member, platform))
+        return {**view, "member_id": member, "kind": platform, "platform": platform, "paired": bool(view["allowed"])}
+
+    async def _accounts(self, params: dict) -> dict:
+        return {"accounts": [{**self._member_view(member, platform), "member_name": name}
+                             for member, name in self._members().items() for platform in self._base_types
+                             if (member == 0 and platform == "telegram") or self._config.channel(member_account(member, platform)).connected]}
 
     @staticmethod
     def _for(kind: str, handler: Callable[..., Any]) -> Callable[[dict], Any]:
@@ -90,12 +134,17 @@ class MessagingService:
 
     def start(self) -> None:
         """Begin receiving on the connections that are on. Needs the running loop."""
+        for member in self._members():
+            for platform in self._base_types:
+                self._member_type(member, platform)
         for kind in self._types:
             if self._config.channel(kind).enabled and self._secrets(kind) is not None:
                 self._launch(kind)
 
     async def aclose(self) -> None:
         self._ended = True
+        if self.cards:
+            self.cards.close()
         for kind in list(self._running):
             await self._stop_receiving(kind)
         if self._http is not None and self._owns_http:
@@ -128,14 +177,27 @@ class MessagingService:
         secrets = self._secrets(kind)
         if secrets is None:
             return
+        target = session_target(kind + ":chat")
+        member = target[0] if target else 0
+        if member and member not in self._members():
+            return
+
+        async def ask(session, text, language, source, **options):
+            scoped = f"member:{member}:{session}" if member else session
+            return await self._ask(scoped, text, language, source, **options)
+
+        async def stop(session):
+            return await self._stop(f"member:{member}:{session}" if member else session)
+
         switchboard = Switchboard(
             self._types[kind].make(secrets, self._client()),
-            ask=self._ask,
-            stop=self._stop,
+            ask=ask,
+            stop=stop,
             transcribe=self._transcribe,
             is_allowed=lambda user: self._config.channel(kind).is_allowed(user),
             chat_allowed=lambda chat: self._config.channel(kind).chat_allowed(chat),
             language=self._language,
+            pairing=Pairing(changed=lambda event, pairing: self.cards.event(kind, event, pairing) if self.cards else None),
         )
         self._running[kind] = _Running(switchboard, asyncio.ensure_future(switchboard.run()))
 
@@ -146,24 +208,44 @@ class MessagingService:
         running.task.cancel()
         await asyncio.gather(running.task, return_exceptions=True)
         await running.switchboard.aclose()
+        if self.cards:
+            self.cards.stopped(kind)
 
     # --- what the worker says when a task ends ---
 
     def handles(self, session: str) -> bool:
         """Whether a session is a conversation with a chat of one of the apps."""
-        parts = split_session(session)
-        return parts is not None and parts[0] in self._types
+        target = session_target(session)
+        return target is not None and target[1] in self._base_types and (target[0] == 0 or target[0] in self._members())
 
-    async def report(self, session: str, text: str, *, files=()) -> None:
-        """A background task of a chat has ended: tell that chat."""
-        parts = split_session(session)
-        if parts is None:
+    async def report(self, session: str, text: "str | Sequence[str]", *, files=()) -> None:
+        """A background task of a chat has ended: tell that chat (one message, or several in order)."""
+        target = session_target(session)
+        if target is None or not self.handles(session):
             return
-        running = self._running.get(parts[0])
+        member, kind, chat = target
+        running = self._running.get(member_account(member, kind))
         if running is not None:
-            await running.switchboard.tell(parts[1], text, files=files)
+            await running.switchboard.tell(chat, text, files=files)
+
+    async def remove_member(self, member: int) -> None:
+        """Stop the member's owned poller and in-flight requests before its history is removed."""
+        if member <= 0:
+            return
+        for platform in self._base_types:
+            kind = self._member_type(member, platform)
+            await self._disconnect(kind, {})
+            self._config.channels.pop(kind, None)
+            self._types.pop(kind, None)
+        self._store.save(self._config)
 
     # --- the methods ---
+
+    def _token_present(self, kind: str) -> bool | None:
+        try:
+            return all(bool(self._vault.get(secret_name(kind, name))) for name in self._types[kind].secrets)
+        except Exception:
+            return None
 
     def _view(self, kind: str) -> dict[str, Any]:
         running = self._running.get(kind)
@@ -179,6 +261,7 @@ class MessagingService:
         config = self._config.channel(kind)
         return {
             "connected": config.connected,
+            "token_present": self._token_present(kind),
             "enabled": config.enabled,
             "running": receiving,
             "error": None if running is None else running.switchboard.error,
@@ -190,7 +273,7 @@ class MessagingService:
     async def _status(self, kind: str, params: dict) -> dict:
         return self._view(kind)
 
-    async def _connect(self, kind: str, params: dict) -> dict:
+    async def _connect(self, kind: str, params: dict, *, guard=None, card_id=None) -> dict:
         """Check the credentials, keep them in the vault and turn the connection on. They are
         never returned. Credentials that do not work come back as `ok: false` with the reason."""
         channel_type = self._types[kind]
@@ -206,11 +289,24 @@ class MessagingService:
             logger.info("%s credentials check failed: %s", kind, error.kind)
             return {"ok": False, "reason": "network" if error.kind == "network" else "invalid_token"}
         async with self._lock:
+            if guard is not None and not guard():
+                return {"ok": False, "reason": "cancelled"}
+            target = session_target(kind + ":chat")
+            if target and target[0] and target[0] not in self._members():
+                raise invalid_params("member_id must name an existing member")
+            if any(
+                key != kind and config.bot_id == identity.id and
+                self._types.get(key) is not None and self._types[key].kind == self._types[kind].kind
+                for key, config in self._config.channels.items()
+            ):
+                return {"ok": False, "reason": "bot_in_use"}
             await self._stop_receiving(kind)
             previous = self._config.channel(kind)
             for name, value in secrets.items():
                 self._vault.set(secret_name(kind, name), value)
             same_bot = previous.bot_id == identity.id
+            if not same_bot:
+                self._approved_pairings = {key: user for key, user in self._approved_pairings.items() if key[0] != kind}
             self._config.channels[kind] = ChannelConfig(
                 enabled=True,
                 bot_id=identity.id,
@@ -219,6 +315,10 @@ class MessagingService:
                 allowed=previous.allowed if same_bot else [],
             )
             self._store.save(self._config)
+            if self.cards:
+                self.cards.detached(kind)
+                if card_id:
+                    self.cards.connected(kind, card_id)
             self._launch(kind)
         return {"ok": True, "status": self._view(kind)}
 
@@ -245,13 +345,27 @@ class MessagingService:
         running = self._running.get(kind)
         pairing = None if running is None else running.switchboard.pairing.take(code)
         if running is None or pairing is None:
-            return {"approved": False, "status": self._view(kind)}
+            user = self._approved_pairings.get((kind, code.strip().upper()))
+            paired = user is not None and self._config.channel(kind).is_allowed(user)
+            return {"approved": paired, "already_paired": paired,
+                    "text": "This bot is already paired." if paired else "No matching pairing is pending.",
+                    "status": self._view(kind)}
         config = self._config.channel(kind)
+        if config.is_allowed(pairing.user):
+            if self.cards:
+                self.cards.finish_code(kind, code, "approved")
+            return {"approved": True, "already_paired": True, "text": "This bot is already paired.",
+                    "status": self._view(kind)}
         if not config.is_allowed(pairing.user):
             if len(config.allowed) >= MAX_ALLOWED:
                 raise invalid_params("too many people are allowed")
             config.allowed.append(AllowedUser(pairing.user, pairing.name, pairing.chat))
             self._store.save(self._config)
+        if self.cards:
+            self.cards.finish_code(kind, code, "approved")
+        if len(self._approved_pairings) >= 128:
+            self._approved_pairings.pop(next(iter(self._approved_pairings)))
+        self._approved_pairings[kind, code.strip().upper()] = pairing.user
         logger.info("%s: a pairing was approved, chat=%s", kind, chat_hash(pairing.chat))
         task = asyncio.ensure_future(running.switchboard.welcome(pairing.chat))
         task.add_done_callback(lambda t: t.cancelled() or t.exception())
@@ -264,6 +378,8 @@ class MessagingService:
         running = self._running.get(kind)
         if running is not None:
             running.switchboard.pairing.take(code)
+        if self.cards:
+            self.cards.finish_code(kind, code, "rejected")
         return self._view(kind)
 
     async def _remove_user(self, kind: str, params: dict) -> dict:
@@ -277,8 +393,11 @@ class MessagingService:
 
     async def _disconnect(self, kind: str, params: dict) -> dict:
         """Forget the connection: its secrets are deleted from the vault and nobody stays allowed."""
+        self._approved_pairings = {key: user for key, user in self._approved_pairings.items() if key[0] != kind}
         async with self._lock:
             await self._stop_receiving(kind)
+            if self.cards:
+                self.cards.detached(kind)
             for name in self._types[kind].secrets:
                 with contextlib.suppress(Exception):
                     self._vault.delete(secret_name(kind, name))
@@ -294,5 +413,5 @@ class MessagingService:
                 if self._vault.get(secret_name(kind, name)) is not None:
                     return True
             except Exception:
-                continue
+                return True
         return False

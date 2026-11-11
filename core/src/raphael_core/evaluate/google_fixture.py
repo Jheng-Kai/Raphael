@@ -8,7 +8,10 @@ once, for that redirect, with the verifier of that challenge, and a bearer token
 call becomes a test-mode receipt of digests, never values; nothing is sent anywhere.
 
 `mode` is what the owner does in the browser: "approve", "deny", "hold" (never finishes) or
-"forged" (a callback with another `state`). `scopes` is what the owner grants.
+"forged" (a callback with another `state`). `scopes` is what the owner grants. The rest is what Google's servers do:
+`token` "invalid_client" refuses the client (a wrong ID, or a secret other than `secret` when one is set), "invalid_grant"
+refuses the code, "no_refresh" answers without a refresh token; `api` "disabled" answers Gmail's profile as a project that has
+not turned the Gmail API on does; `account` is the address the profile gives.
 """
 
 import asyncio
@@ -26,6 +29,7 @@ from ..connectors.google import AUTH, CALENDAR, GMAIL, REVOKE, TOKEN, scopes_for
 from .guardian_registry import digest
 
 CLIENT_ID = "guardian-desktop.apps.googleusercontent.invalid"
+ACCOUNT = "owner@example.invalid"
 GRANTS = {
     "read": scopes_for("read", "read"),
     "calendar-only": scopes_for("read", "read")[1:],
@@ -33,14 +37,16 @@ GRANTS = {
 
 
 class GoogleFixture:
-    def __init__(self, nonce: str, *, mode: str = "approve", scopes: str = "read") -> None:
+    def __init__(self, nonce: str, *, mode: str = "approve", scopes: str = "read", token: str = "ok", api: str = "enabled",
+                 secret: str | None = None, account: str = ACCOUNT) -> None:
         self.nonce, self.mode, self.scopes = nonce, mode, scopes
+        self.token, self.api, self.secret, self.account = token, api, secret, account
         self.mail_code = "MC-" + secrets.token_hex(4)
         self.receipts: list[dict] = []
         self.sign_ins: list[dict] = []
         self.opened = 0
         # Every value that must never leave the sign-in: the URL and its parts, codes and tokens.
-        self.secrets: set[str] = set()
+        self.secrets: set[str] = {secret} if secret else set()
         self._codes: dict[str, tuple[str, str]] = {}
         self._access: set[str] = set()
         self._refresh: set[str] = set()
@@ -109,6 +115,10 @@ class GoogleFixture:
         if bearer not in self._access:
             return httpx.Response(401, json={"error": "invalid_token"})
         params = dict(request.url.params)
+        if url == GMAIL + "/profile":
+            if self.api == "disabled":
+                return httpx.Response(403, json={"error": {"code": 403, "message": "Gmail API has not been used in project 0 before or it is disabled."}})
+            return httpx.Response(200, json={"emailAddress": self.account, "messagesTotal": 0})
         if url == GMAIL + "/messages":
             self._receipt("gmail_search", params)
             found = self.nonce in params.get("q", "")
@@ -127,8 +137,11 @@ class GoogleFixture:
 
     def _token(self, form: dict[str, list[str]]) -> httpx.Response:
         grant = form.get("grant_type", [""])[0]
-        if form.get("client_id") != [CLIENT_ID]:
+        if (form.get("client_id") != [CLIENT_ID] or self.token == "invalid_client"
+                or (self.secret is not None and form.get("client_secret") != [self.secret])):
             return httpx.Response(401, json={"error": "invalid_client"})
+        if grant == "authorization_code" and self.token == "invalid_grant":
+            return httpx.Response(400, json={"error": "invalid_grant"})
         if grant == "authorization_code":
             issued = self._codes.pop(form.get("code", [""])[0], None)
             verifier = form.get("code_verifier", [""])[0]
@@ -146,7 +159,7 @@ class GoogleFixture:
         self._access.add(access)
         self.secrets.add(access)
         body = {"access_token": access, "expires_in": 3600, "token_type": "Bearer", "scope": " ".join(GRANTS[self.scopes])}
-        if grant == "authorization_code":
+        if grant == "authorization_code" and self.token != "no_refresh":
             body["refresh_token"] = refresh
         return httpx.Response(200, json=body)
 

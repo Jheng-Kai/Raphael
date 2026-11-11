@@ -1,22 +1,32 @@
 {
+  "memberCatalog": {"entries": [{"id": "research", "name": "研究夥伴", "creator": "Raphael 範例作者", "category": "engineering", "summary": "核對來源，整理能查證的研究摘要。", "avatar": "souei", "featured": true, "package": "packages/research/member.raphael-member", "sha256": "d46e687c006fba647c8200fa5573c69862de95c201a620f9633ee7b543c167c0", "version": "1.0.0", "created": "2026-11-05", "updated": "2026-11-05", "skills": 1, "routines": 1, "connections": ["gmail", "github"]}, {"id": "writing", "name": "文字編輯", "creator": "Raphael 範例作者", "category": "marketing", "summary": "整理清楚易讀的文章與發佈草稿。", "avatar": "shuna", "featured": true, "package": "packages/writing/member.raphael-member", "sha256": "aea37fc38e49597da48c5ae96aa4004abb1f894cc70bf9ed577c09767605d707", "version": "1.0.0", "created": "2026-11-05", "updated": "2026-11-05", "skills": 1, "routines": 1, "connections": ["gmail", "github"]}, {"id": "planning", "name": "產品規劃", "creator": "Raphael 範例作者", "category": "product", "summary": "拆解目標，安排能追蹤的產品步驟。", "avatar": "benimaru", "featured": false, "package": "packages/planning/member.raphael-member", "sha256": "9144c76062c52c6872d0e17a84735d61a3d9d33b5d89a1e987989ab4a55b22d2", "version": "1.0.0", "created": "2026-11-05", "updated": "2026-11-05", "skills": 1, "routines": 1, "connections": ["gmail", "github"]}, {"id": "inbox", "name": "信件助手", "creator": "Raphael 範例作者", "category": "personal", "summary": "整理重要來信，先準備草稿再確認。", "avatar": "gobta", "featured": false, "package": "packages/inbox/member.raphael-member", "sha256": "8106a8f09d214cc93f90cc2269e92dd52af7e3121be1eeff8e4eb69837445797", "version": "1.0.0", "created": "2026-11-05", "updated": "2026-11-05", "skills": 1, "routines": 1, "connections": ["gmail", "github"]}], "template": {"format": "raphael-member", "version": 1, "name": "研究夥伴", "role": "研究", "personality": "仔細而親切", "instructions": "整理可以查證的資料，協助團隊決定下一步。", "reply_style": "full", "skills": [{"text": "---\nname: 資料核對\ndescription: 檢查來源與結論\n---\n先查證來源，再完成報告。"}], "routines": [{"title": "檢視研究進度", "prompt": "檢視研究目標與待確認的資料。", "schedule": {"kind": "daily", "time": "09:00"}, "when": null}], "connections": ["gmail", "github"]}, "templates": {"research": {"format": "raphael-member", "version": 1, "name": "研究夥伴", "role": "研究夥伴", "personality": "仔細而親切", "instructions": "核對來源，整理能查證的研究摘要。", "reply_style": "full", "skills": [{"text": "---\nname: 資料核對\ndescription: 檢查來源與結論\n---\n先查證來源，再完成報告。"}], "routines": [{"title": "檢視研究進度", "prompt": "檢視研究目標與待確認的資料。", "schedule": {"kind": "daily", "time": "09:00"}, "when": null}], "connections": ["gmail", "github"]}, "writing": {"format": "raphael-member", "version": 1, "name": "文字編輯", "role": "文字編輯", "personality": "仔細而親切", "instructions": "整理清楚易讀的文章與發佈草稿。", "reply_style": "full", "skills": [{"text": "---\nname: 資料核對\ndescription: 檢查來源與結論\n---\n先查證來源，再完成報告。"}], "routines": [{"title": "檢視研究進度", "prompt": "檢視研究目標與待確認的資料。", "schedule": {"kind": "daily", "time": "09:00"}, "when": null}], "connections": ["gmail", "github"]}, "planning": {"format": "raphael-member", "version": 1, "name": "產品規劃", "role": "產品規劃", "personality": "仔細而親切", "instructions": "拆解目標，安排能追蹤的產品步驟。", "reply_style": "full", "skills": [{"text": "---\nname: 資料核對\ndescription: 檢查來源與結論\n---\n先查證來源，再完成報告。"}], "routines": [{"title": "檢視研究進度", "prompt": "檢視研究目標與待確認的資料。", "schedule": {"kind": "daily", "time": "09:00"}, "when": null}], "connections": ["gmail", "github"]}, "inbox": {"format": "raphael-member", "version": 1, "name": "信件助手", "role": "信件助手", "personality": "仔細而親切", "instructions": "整理重要來信，先準備草稿再確認。", "reply_style": "full", "skills": [{"text": "---\nname: 資料核對\ndescription: 檢查來源與結論\n---\n先查證來源，再完成報告。"}], "routines": [{"title": "檢視研究進度", "prompt": "檢視研究目標與待確認的資料。", "schedule": {"kind": "daily", "time": "09:00"}, "when": null}], "connections": ["gmail", "github"]}}},
+  "colleagueSample": {"name": "研究夥伴", "role": "研究", "goal": "整理可以查證的資料，協助團隊決定下一步。", "greeting": "你好，我是研究夥伴。你希望一起達成什麼成果？", "options": ["請幫我整理 Gmail 的重要來信，先一起確認成果。", "請幫我完成研究目標，先一起確認成果。", "我們先一起訂一個工作目標。"], "outcomeQuestion": "這些工作希望達成什麼成果？", "handoff": "研究資料已交給規劃夥伴。背景放在 /home/cua/team/context/，會議記錄放在 meetings/，交付成果放在 projects/。這次成果：/home/cua/team/projects/研究摘要.md", "template": {"format": "raphael-member", "version": 1, "name": "研究夥伴", "role": "研究", "personality": "仔細而親切", "instructions": "整理可以查證的資料，協助團隊決定下一步。", "reply_style": "full", "skills": [{"text": "---\nname: 資料核對\ndescription: 檢查來源與結論\n---\n先查證來源，再完成報告。"}], "routines": [{"title": "檢視研究進度", "prompt": "檢視研究目標與待確認的資料。", "schedule": {"kind": "daily", "time": "09:00"}, "when": null}], "connections": ["gmail", "github"]}, "path": "C:\\Owner\\交付成果", "commandWords": "tailscale funnel bg http cloudflared tunnel url ngrok HTTPS HMAC SHA256 raw request body Bearer Authorization signature context meetings projects"},
+  "vaultEntries": [
+    {"id":"sample-login","kind":"login","label":"範例差旅網站","hint":"預訂出差住宿時使用","origin":"https://travel.example.invalid","members":"all"},
+    {"id":"sample-contact","kind":"contact","label":"公司聯絡資料","hint":"寄送公司用品時使用","origin":"","members":[1,2]},
+    {"id":"sample-card","kind":"card","label":"公司差旅卡","hint":"出差用公司卡","origin":"","members":[1]}
+  ],
+  "vaultPaymentSummary":"允許使用「公司差旅卡」在 https://travel.example.invalid 填入付款資料？金額：NT$ 1,280。最後付款由你完成。",
+  "vaultImportPreview":{"token":"synthetic-vault-preview","entries":[{"id":0,"label":"範例差旅網站","origin":"https://travel.example.invalid"},{"id":1,"label":"工作文件","origin":"https://docs.example.invalid"}],"rejected":1},
   "memberPanelSample": {
     "tasks": ["整理本週研究筆記", "比較兩份設計草稿", "確認專案進度", "匯出每日摘要"],
     "files": ["研究摘要.md", "專案計畫.html", "訪談筆記.txt"],
     "page": "每週工作報告"
   },
   "appUpdateSample": { "version": "1.1.0", "notes": "改善更新安裝、記憶匯入與大型附件。\n更新會保留你的設定與工作資料。" },
-  "memoryImportSample": { "kept": "我喜歡以繁體中文溝通，每週五整理研究筆記。", "answer": "我喜歡以繁體中文溝通，每週五整理研究筆記。\n\npassword is synthetic123" },
   "routineWorkflowSample": {"title":"早晨摘要", "prompt":"整理範例筆記，只在對話中回報。", "done":"已整理三則範例筆記。", "refused":"這位成員每小時已執行 200 次，請稍後再試。", "failed":"範例來源無法讀取，未使用舊資料。"},
   "routineTimezoneSample": {"timezone":"America/New_York"},
   "routineWebhookRecipes": [
     {"provider":"Sentry","setup":"Custom Integrations > Webhook URL","fields":["action","data.issue.id","data.issue.title","data.issue.permalink","data.event.event_id","data.event.message"],"payload":{"action":"created","data":{"issue":{"id":"S001","title":"範例錯誤","permalink":"https://example.test/issues/S001"}}}},
     {"provider":"PagerDuty","setup":"Generic Webhooks v3 > URL > Custom Headers","fields":["event.id","event.event_type","event.occurred_at","event.data.id","event.data.title","event.data.html_url","event.data.urgency"],"payload":{"event":{"id":"PD001","event_type":"incident.triggered","data":{"id":"I001","title":"範例事故","urgency":"high"}}}}
   ],
-  "calmSample": {"question":"請再檢查一次範例新聞摘要。", "routine":"NHK Easy News 每日摘要", "failure":"Codex CLI 在回答完成前停止了。"},
+  "chatMetadataSample": {"question":"請整理這份範例研究摘要。", "reply":"已整理範例重點，請確認後再分享給團隊。", "root":"這是範例摘要的第一版，請在回覆串補充意見。", "sideReply":"只補充這份摘要的資料來源與確認事項。", "sideOwner":"請補上範例資料來源。", "channel":"#研究討論", "body":"大家好，範例研究摘要已整理完成，請在週四前提供意見。"},
+  "calmSample": {"question":"請再檢查一次範例新聞摘要。", "routine":"範例晨間筆記摘要", "failure":"Codex CLI 在回答完成前停止了。"},
   "lowDiskSample": "電腦磁碟快滿了。最大的資料夾：/home/cua/workspace/downloads (200 MiB), /home/cua/workspace/reports (100 MiB)。要我清理哪些？刪除前會先徵求你的同意。",
   "unreadSample": {"question": "Check the sample notes.", "answer": "The sample notes are ready for review.", "paragraph": "The sample comparison includes the observations, remaining questions and a suggested next step."},
   "windowSample": {"needle": "視窗搜尋標記", "question": "請檢查這份範例筆記。", "answer": "範例筆記已整理完成，可以開始檢閱。", "paragraph": "這份比較記錄了觀察結果、待釐清的問題，以及建議的下一步。"},
   "presenceSample": {"question": "Check the sample report.", "answer": "The sample report is ready.", "secondAnswer": "The sample comparison is complete.", "progress": "Checking sample sources", "nextAction": "Comparing sample sources", "routine": "Sample briefing", "calendar": "Sample review", "source": "https://example.test/sample"},
+  "peerChatSample": {"earlierQuestion": "請先整理範例專案的進度。", "earlierAnswer": "範例專案的進度已整理好。", "earlierRequest": "範例專案的進度表在哪裡？", "earlierResult": "進度表在共用資料夾的範例專案底下，最新一版是上週五更新的。", "otherRequest": "範例報告的格式確定了嗎？", "otherResult": "格式已確定，沿用上一期的範本。", "request": "今天的範例檢查做完了嗎？", "result": "做完了，三個項目都通過，只有一個標題需要再確認。"},
   "handoffGroupSample": {
     "people": ["Ada", "Ben", "Cleo", "Dara", "Eli", "Fran"],
     "longPeople": ["Ada with a deliberately long display name", "BenWithAnUnbrokenInternationalDisplayName", "Cleo with another long display name", "Dara"],
@@ -571,7 +581,28 @@
       "attachments": []
     }
   },
-  "pageProductHtml": "<!doctype html>\n<meta charset=\"utf-8\">\n<style>\n  body { margin: 0; padding: 16px; font: 14px/1.5 system-ui, \"Microsoft JhengHei\", sans-serif; color: #111; background: #fff; }\n  .row { display: grid; grid-template-columns: 180px minmax(0, 1fr); gap: 16px; }\n  .pic { height: 180px; border-radius: 10px; background: linear-gradient(135deg, #2a83d5, #15897e); }\n  h1 { margin: 0 0 4px; font-size: 18px; } .price { font-size: 20px; font-weight: 700; margin: 8px 0; }\n  button { padding: 8px 16px; border: 0; border-radius: 999px; background: #111; color: #fff; font: inherit; cursor: pointer; }\n  @media (max-width: 420px) { .row { grid-template-columns: minmax(0, 1fr); } }\n</style>\n<div class=\"row\">\n  <div class=\"pic\"></div>\n  <div>\n    <h1>輕量後背包</h1>\n    <p>防潑水、十五吋筆電隔層,重量 480 公克。</p>\n    <div class=\"price\">NT$ 1,280</div>\n    <button id=\"buy\" type=\"button\">加入購物車</button>\n  </div>\n</div>\n<script>\n  // What the core's helper does (`agent/pages.py`), so the fixture behaves as a served page does.\n  const post = (type, data) => parent.postMessage({ raphaelPage: 1, type, ...data }, \"*\");\n  window.raphael = { send: text => post(\"send\", { text }), open: url => post(\"open\", { url }) };\n  const report = () => post(\"height\", { height: Math.ceil(document.body.getBoundingClientRect().height + 32) });\n  new ResizeObserver(report).observe(document.body);\n  report();\n  document.getElementById(\"buy\").addEventListener(\"click\", () => window.raphael.send(\"把輕量後背包加入購物車\"));\n</script>\n",
+  "pageProductHtml": "<!doctype html>\n<meta charset=\"utf-8\">\n<style>\n  body { margin: 0; padding: 16px; font: 14px/1.5 system-ui, \"Microsoft JhengHei\", sans-serif; color: #111; background: #fff; }\n  body.dark { color: #f1f1f1; background: #121212; }\n  body.dark button { background: #f1f1f1; color: #111; }\n  .row { display: grid; grid-template-columns: 180px minmax(0, 1fr); gap: 16px; }\n  .pic { height: 180px; border-radius: 10px; background: linear-gradient(135deg, #2a83d5, #15897e); }\n  h1 { margin: 0 0 4px; font-size: 18px; } .price { font-size: 20px; font-weight: 700; margin: 8px 0; }\n  button { padding: 8px 16px; border: 0; border-radius: 999px; background: #111; color: #fff; font: inherit; cursor: pointer; }\n  @media (max-width: 420px) { .row { grid-template-columns: minmax(0, 1fr); } }\n</style>\n<body class=\"__THEME__\">\n<div class=\"row\">\n  <div class=\"pic\"></div>\n  <div>\n    <h1>輕量後背包</h1>\n    <p>防潑水、十五吋筆電隔層,重量 480 公克。</p>\n    <div class=\"price\">NT$ 1,280</div>\n    <button id=\"buy\" type=\"button\">加入購物車</button>\n  </div>\n</div>\n<script>\n  // What the core's helper does (`agent/pages.py`), so the fixture behaves as a served page does.\n  const post = (type, data) => parent.postMessage({ raphaelPage: 1, type, ...data }, \"*\");\n  window.raphael = { send: text => post(\"send\", { text }), open: url => post(\"open\", { url }) };\n  let previous = 0;\n  const report = () => { const box = document.body.getBoundingClientRect(), style = getComputedStyle(document.body);\n    const own = box.height + parseFloat(style.marginTop) + parseFloat(style.marginBottom);\n    const height = Math.max(80, Math.min(2400, Math.ceil(Math.max(own, document.documentElement.getBoundingClientRect().height))));\n    if (height !== previous) { previous = height; post(\"height\", { height }); } };\n  const sizes = new ResizeObserver(report);\n  sizes.observe(document.body); sizes.observe(document.documentElement); report();\n  document.getElementById(\"buy\").addEventListener(\"click\", () => window.raphael.send(\"把輕量後背包加入購物車\"));\n</script>\n",
+  "pageNewsHtml": "<!doctype html>\n<meta charset=\"utf-8\">\n<style>\n  :root { --bg: #fff; --fg: #111; --mute: #666; --line: #e4e4e4; --chip: #f1f1f1; }\n  body.dark { --bg: #121212; --fg: #f1f1f1; --mute: #a3a3a3; --line: #2a2a2a; --chip: #232323; }\n  body { margin: 0; padding: 16px; font: 14px/1.6 system-ui, \"Microsoft JhengHei\", sans-serif; color: var(--fg); background: var(--bg); }\n  h1 { margin: 0 0 2px; font-size: 20px; } .date { margin: 0 0 12px; color: var(--mute); }\n  .bar { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 8px; }\n  button { padding: 6px 14px; border: 0; border-radius: 999px; background: var(--chip); color: var(--fg); font: inherit; cursor: pointer; }\n  article { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line); }\n  h2 { margin: 0 0 6px; font-size: 16px; } p { margin: 0 0 6px; } .zh { color: var(--mute); }\n  body.plain rt { display: none; }\n</style>\n<body class=\"__THEME__\">\n<h1>每日新聞日文學習</h1>\n<p class=\"date\">2026-11-11 · 三則新聞 · 約 5 分鐘</p>\n<div class=\"bar\"><button id=\"hide\" type=\"button\">隱藏假名讀音</button><button id=\"copy\" type=\"button\">複製日文原文</button><button id=\"dark\" type=\"button\">深色模式</button></div>\n<article>\n  <h2>1. 東京で初雪を観測</h2>\n  <p lang=\"ja\"><ruby>東京<rt>とうきょう</rt></ruby>で<ruby>初雪<rt>はつゆき</rt></ruby>を<ruby>観測<rt>かんそく</rt></ruby>しました。</p>\n  <p class=\"zh\">東京觀測到了今年的初雪，氣象廳提醒早晚路面可能結冰。</p>\n</article>\n<article>\n  <h2>2. 新しい図書館が来月オープン</h2>\n  <p lang=\"ja\"><ruby>新<rt>あたら</rt></ruby>しい<ruby>図書館<rt>としょかん</rt></ruby>が<ruby>来月<rt>らいげつ</rt></ruby>オープンします。</p>\n  <p class=\"zh\">新的圖書館下個月開幕，館內設有自習室與兒童閱讀區。</p>\n</article>\n<article>\n  <h2>3. 地下鉄の運行時間を延長</h2>\n  <p lang=\"ja\"><ruby>地下鉄<rt>ちかてつ</rt></ruby>の<ruby>運行<rt>うんこう</rt></ruby><ruby>時間<rt>じかん</rt></ruby>を<ruby>延長<rt>えんちょう</rt></ruby>します。</p>\n  <p class=\"zh\">地下鐵將延長週末的運行時間，最後一班車改為凌晨一點。</p>\n</article>\n<article>\n  <h2>4. 今日の単語</h2>\n  <p lang=\"ja\"><ruby>観測<rt>かんそく</rt></ruby> / <ruby>延長<rt>えんちょう</rt></ruby> / <ruby>初雪<rt>はつゆき</rt></ruby></p>\n  <p class=\"zh\">觀測、延長、初雪。每個單字各造一句，明天再複習。</p>\n</article>\n<article>\n  <h2>5. 練習問題</h2>\n  <p lang=\"ja\">「図書館」の読み方を、かなで書いてください。</p>\n  <p class=\"zh\">請用假名寫出「図書館」的讀法，答案放在頁面最下方。</p>\n</article>\n<script>\n  const post = (type, data) => parent.postMessage({ raphaelPage: 1, type, ...data }, \"*\");\n  let previous = 0;\n  const report = () => { const box = document.body.getBoundingClientRect(), style = getComputedStyle(document.body);\n    const own = box.height + parseFloat(style.marginTop) + parseFloat(style.marginBottom);\n    const height = Math.max(80, Math.min(2400, Math.ceil(Math.max(own, document.documentElement.getBoundingClientRect().height))));\n    if (height !== previous) { previous = height; post(\"height\", { height }); } };\n  const sizes = new ResizeObserver(report);\n  sizes.observe(document.body); sizes.observe(document.documentElement); report();\n  document.getElementById(\"hide\").addEventListener(\"click\", () => document.body.classList.toggle(\"plain\"));\n</script>\n",
+  "pageReport": {"title": "團隊總覽報告", "sections": [
+    {"kind": "findings", "title": "重點發現", "callout": "這兩週 4 位成員完成 23 件工作；有 2 件停在等你，1 個例行工作暫停。", "items": [
+      {"title": "小森 · 第四季產品時程", "text": "時程頁 10/23 定稿，等你說開始。", "status": "pending", "label": "定稿待執行"},
+      {"title": "小晴 · 競品價格整理", "text": "10/22 起在等你開放雲端文件的讀取權限。", "status": "blocked"},
+      {"title": "拉斐爾 · 每週五寄週報", "text": "例行工作 10/20 由你暫停。", "status": "paused"},
+      {"title": "紫苑 · 每日日文練習", "text": "連續 12 天完成，最近一次 10/23 08:00。", "status": "running"}]},
+    {"kind": "table", "title": "總覽表", "columns": ["成員", "負責", "最近完成", "產出"], "rows": [
+      {"cells": ["小晴", "研究與資訊整理", "10/22 競品價格初稿", "試算表 2 份"], "group": "專案工作", "member_id": 1, "status": "blocked"},
+      {"cells": ["小森", "專案進度", "10/23 第四季時程", "時程頁 1 份"], "group": "專案工作", "member_id": 2, "status": "pending", "label": "定稿待執行"},
+      {"cells": ["紫苑", "日文老師", "10/23 練習第 42 回", "練習卷 12 份"], "group": "語言學習", "member_id": 3, "status": "running"},
+      {"cells": ["拉斐爾", "分派與追蹤", "10/22 寄出週報", "週報 3 份"], "group": "其他", "member_id": 0, "status": "paused"}]},
+    {"kind": "team", "title": "分工與協作", "nodes": [
+      {"id": "owner", "owner": true, "note": "做決定"}, {"id": "raphael", "member_id": 0, "note": "分派與追蹤"},
+      {"id": "shion", "member_id": 3, "note": "日文老師"}, {"id": "haru", "member_id": 1, "note": "研究與資訊整理"},
+      {"id": "mori", "member_id": 2, "note": "專案進度"}], "edges": [
+      {"from": "owner", "to": "raphael", "label": "交辦"}, {"from": "owner", "to": "shion", "label": "每日練習"},
+      {"from": "raphael", "to": "haru", "label": "研究題目"}, {"from": "raphael", "to": "mori", "label": "排進度"},
+      {"from": "haru", "to": "mori", "label": "整理好的資料"}, {"from": "mori", "to": "owner", "label": "每週進度"}], "notes": [
+      {"label": "重複", "text": "小晴和小森 10/21 都整理了同一份會議紀錄。"},
+      {"label": "缺口", "text": "客戶來信沒有成員負責；紀錄裡沒有相關工作。"}]}]},
   "sidebarRoster": {
     "groups": [
       {
@@ -1180,7 +1211,18 @@
       "prefix": "", "text": "Acme Ledger 需要你自己的 API key，填好後就繼續這項工作。", "detail": null, "status": "done", "cost_usd": 0,
       "model": "fixture", "steps": [], "attachments": [],
       "messages": [{ "seq": 1, "kind": "reply", "text": "Acme Ledger 需要你自己的 API key，填好後就繼續這項工作。", "at_ms": 1792807186000 }],
-      "connectors": [{ "id": "card-acme", "app": "acme-ledger", "name": "Acme Ledger", "logo": "https://logos.composio.dev/api/slack", "needs": "key", "toolkit": "acme-ledger",
+      "connectors": [{ "id": "card-acme", "app": "acme-ledger", "name": "Acme Ledger", "logo": "", "needs": "key", "toolkit": "acme-ledger",
+        "state": "pending", "error": null, "reconnect": false, "tool_count": null, "expires_at_ms": 1792893585000, "resumed": false }]
+    },
+    "server": {
+      "id": 126, "session_id": "look-connect-server", "member_id": 0, "conversation_id": 1,
+      "created_at_ms": 1792807185000, "question": "用我的 n8n 跑一下每週報表的流程。", "route": "answer", "source": "app",
+      "prefix": "", "text": "n8n 在你自己的伺服器上，填好服務網址和存取權杖後就繼續這項工作。", "detail": null, "status": "done", "cost_usd": 0,
+      "model": "fixture", "steps": [], "attachments": [],
+      "messages": [{ "seq": 1, "kind": "reply", "text": "n8n 在你自己的伺服器上，填好服務網址和存取權杖後就繼續這項工作。", "at_ms": 1792807186000 }],
+      "connectors": [{ "id": "card-n8n", "app": "n8n", "name": "n8n", "logo": "", "needs": "own_server", "toolkit": "n8n",
+        "fields": [{ "name": "url", "label": "服務網址", "required": true, "secret": false, "description": "n8n 的 MCP 伺服器網址" },
+          { "name": "token", "label": "存取權杖", "required": true, "secret": true, "description": "" }],
         "state": "pending", "error": null, "reconnect": false, "tool_count": null, "expires_at_ms": 1792893585000, "resumed": false }]
     },
     "app": {
@@ -1189,7 +1231,7 @@
       "prefix": "", "text": "Orbit Ads 需要你自己的開發者 app，設定好後就繼續這項工作。", "detail": null, "status": "done", "cost_usd": 0,
       "model": "fixture", "steps": [], "attachments": [],
       "messages": [{ "seq": 1, "kind": "reply", "text": "Orbit Ads 需要你自己的開發者 app，設定好後就繼續這項工作。", "at_ms": 1792807186000 }],
-      "connectors": [{ "id": "card-orbit", "app": "orbit-ads", "name": "Orbit Ads", "logo": "https://logos.composio.dev/api/slack", "needs": "own_app", "toolkit": "orbit-ads",
+      "connectors": [{ "id": "card-orbit", "app": "orbit-ads", "name": "Orbit Ads", "logo": "", "needs": "own_app", "toolkit": "orbit-ads",
         "state": "pending", "error": null, "reconnect": false, "tool_count": null, "expires_at_ms": 1792893585000, "resumed": false }]
     },
     "calendar": {
@@ -1285,6 +1327,10 @@
     { "id": 100, "origin_message_id": 1, "source_message_id": 1, "recipient_id": 2, "recipient_name": "研究員", "state": "blocked", "reason": "cli_rate_limited" },
     { "id": 101, "origin_message_id": 7, "source_message_id": 7, "recipient_id": 1, "recipient_name": "小堇", "state": "blocked", "reason": "owner" },
     { "id": 102, "origin_message_id": 7, "source_message_id": 7, "recipient_id": 2, "recipient_name": "研究員", "state": "blocked", "reason": "cost" }
+  ],
+  "roomReplyStatusIntents": [
+    { "id": 110, "origin_message_id": 1, "source_message_id": 1, "recipient_id": 2, "recipient_name": "小森", "state": "blocked", "reason": "stalled" },
+    { "id": 111, "origin_message_id": 7, "source_message_id": 7, "recipient_id": 1, "recipient_name": "小晴", "state": "blocked", "reason": "no_reply" }
   ],
   "p02BlockedMessage": {
     "id": 7, "room_id": 1, "member_id": null, "text": "@小晴 @小森 請補上文案檢查結果。",
@@ -1392,9 +1438,19 @@
       "turn_id": 1,
       "member_id": 0,
       "prefix": "問",
-      "text": "永久刪除成員及其所有資料：小晴\nID：1\n允許這項變更嗎？",
+      "text": "永久刪除成員及其所有資料：「小晴」\n允許這項變更嗎？",
       "tier": "T3",
       "timeout_ms": 30000
+    },
+    "deleteMany": {
+      "id": "look-admin-delete-many",
+      "turn_id": 1,
+      "member_id": 0,
+      "prefix": "問",
+      "text": "有 3 項變更需要你同意\n永久刪除成員及其所有資料：「工程師」\n永久刪除成員及其所有資料：「架構師」\n刪除群聊及全部訊息：「Raphael macOS 版規劃」\n允許以上所有變更嗎？",
+      "tier": "T3",
+      "timeout_ms": 30000,
+      "done": "已完成：永久刪除成員及其所有資料：「工程師」\n已完成：永久刪除成員及其所有資料：「架構師」\n已完成：刪除群聊及全部訊息：「Raphael macOS 版規劃」"
     },
     "draft": {
       "id": "look-admin-draft",
@@ -1448,7 +1504,7 @@
       "turn_id": 1,
       "member_id": 0,
       "prefix": "問",
-      "text": "永久刪除成員及其所有資料：小晴\nID：1\n允許這項變更嗎？",
+      "text": "永久刪除成員及其所有資料：「小晴」\n允許這項變更嗎？",
       "tier": "T3",
       "timeout_ms": 30000
     }
@@ -1548,7 +1604,7 @@
       "instructions": "回答時請附上具體例子，並區分已確認的事實與推測。",
       "personality": "溫和、細心，重視資料來源。",
       "avatar": "",
-      "avatar_url": "/brand/in-app-icon.png",
+      "avatar_url": "/brand/app-icon.png",
       "group_id": null,
       "model": "",
       "tools": null,
@@ -1558,8 +1614,6 @@
       "waiting": false,
       "preview": "研究摘要已整理完成，接著確認下週的安排。",
       "last_at": 1792807140000,
-      "voice": null,
-      "read_aloud": false,
       "notify": true
     },
     {
@@ -1579,8 +1633,6 @@
       "waiting": false,
       "preview": "研究摘要已整理完成，接著確認下週的安排。",
       "last_at": 1792807140000,
-      "voice": null,
-      "read_aloud": false,
       "notify": true
     },
     {
@@ -1600,8 +1652,6 @@
       "waiting": false,
       "preview": "研究摘要已整理完成，接著確認下週的安排。",
       "last_at": 1792807140000,
-      "voice": null,
-      "read_aloud": false,
       "notify": true
     },
     {
@@ -1621,8 +1671,6 @@
       "waiting": false,
       "preview": "研究摘要已整理完成，接著確認下週的安排。",
       "last_at": 1792807140000,
-      "voice": null,
-      "read_aloud": false,
       "notify": true
     }
   ],
@@ -1716,6 +1764,7 @@
   "roomHandoff": {
     "task_id": 42, "source_turn_id": 1, "work_turn_id": 101, "member_id": 1,
     "member_name": "小晴", "from_member_id": 0, "stage_id": "launch-report", "mode": "work",
+    "request": "請整理上線驗收報告，列出待確認的文案。",
     "state": "queued", "reason": null, "created_at_ms": 1792807141000, "ready_at_ms": 1792807141000,
     "dispatch_policy": "immediate", "result": "已讀取來源，完成上線驗收報告。兩項待確認文案已整理。",
     "evidence": [{ "kind": "artifact", "uri": "reports/上線驗收報告.html", "mime": "text/html", "digest": "fixture-report-digest", "verdict": "verified" }]
@@ -1781,22 +1830,6 @@
       "member_id": 0,
       "title": "這週的研究與安排",
       "is_default": true,
-      "created_at_ms": 1792720800000,
-      "updated_at_ms": 1792807140000
-    },
-    {
-      "id": 2,
-      "member_id": 0,
-      "title": "專案規劃與會議記錄",
-      "is_default": false,
-      "created_at_ms": 1792720800000,
-      "updated_at_ms": 1792807140000
-    },
-    {
-      "id": 3,
-      "member_id": 0,
-      "title": "日本旅行行程",
-      "is_default": false,
       "created_at_ms": 1792720800000,
       "updated_at_ms": 1792807140000
     },
@@ -2170,138 +2203,6 @@
       "cost_usd": 0.25
     }
   ],
-  "usage": {
-    "range": "week",
-    "start_day": "2026-10-18",
-    "end_day": "2026-10-24",
-    "summary": {
-      "duration_ms": 123000,
-      "cost_usd": 0.084,
-      "tokens": 56800,
-      "ai_steps": 12,
-      "tools": 24,
-      "errors": 0
-    },
-    "groups": {
-      "member": [
-        {
-          "label": "拉斐爾",
-          "tokens": 14200,
-          "cost_usd": 0.021,
-          "runs": 1,
-          "member_id": 0,
-          "avatar_url": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI4MCIgaGVpZ2h0PSI4MCI+PHJlY3Qgd2lkdGg9IjgwIiBoZWlnaHQ9IjgwIiByeD0iMjQiIGZpbGw9IiM1Njc0ODEiLz48Y2lyY2xlIGN4PSI0MCIgY3k9IjMwIiByPSIxNCIgZmlsbD0iI2ZmZjJkYiIvPjxwYXRoIGQ9Ik0xNCA4MGEyNiAyOCAwIDAgMSA1MiAwIiBmaWxsPSIjZmZmMmRiIi8+PC9zdmc+"
-        },
-        {
-          "label": "小晴",
-          "tokens": 14200,
-          "cost_usd": 0.021,
-          "runs": 1,
-          "member_id": 1,
-          "avatar_url": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI4MCIgaGVpZ2h0PSI4MCI+PHJlY3Qgd2lkdGg9IjgwIiBoZWlnaHQ9IjgwIiByeD0iMjQiIGZpbGw9IiM2ODdkYTUiLz48Y2lyY2xlIGN4PSI0MCIgY3k9IjMwIiByPSIxNCIgZmlsbD0iI2ZmZjJkYiIvPjxwYXRoIGQ9Ik0xNCA4MGEyNiAyOCAwIDAgMSA1MiAwIiBmaWxsPSIjZmZmMmRiIi8+PC9zdmc+"
-        },
-        {
-          "label": "小森",
-          "tokens": 14200,
-          "cost_usd": 0.021,
-          "runs": 1,
-          "member_id": 2,
-          "avatar_url": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI4MCIgaGVpZ2h0PSI4MCI+PHJlY3Qgd2lkdGg9IjgwIiBoZWlnaHQ9IjgwIiByeD0iMjQiIGZpbGw9IiM2YzkzODkiLz48Y2lyY2xlIGN4PSI0MCIgY3k9IjMwIiByPSIxNCIgZmlsbD0iI2ZmZjJkYiIvPjxwYXRoIGQ9Ik0xNCA4MGEyNiAyOCAwIDAgMSA1MiAwIiBmaWxsPSIjZmZmMmRiIi8+PC9zdmc+"
-        },
-        {
-          "label": "紫苑",
-          "tokens": 14200,
-          "cost_usd": 0.021,
-          "runs": 1,
-          "member_id": 3,
-          "avatar_url": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI4MCIgaGVpZ2h0PSI4MCI+PHJlY3Qgd2lkdGg9IjgwIiBoZWlnaHQ9IjgwIiByeD0iMjQiIGZpbGw9IiNhNzdjOTEiLz48Y2lyY2xlIGN4PSI0MCIgY3k9IjMwIiByPSIxNCIgZmlsbD0iI2ZmZjJkYiIvPjxwYXRoIGQ9Ik0xNCA4MGEyNiAyOCAwIDAgMSA1MiAwIiBmaWxsPSIjZmZmMmRiIi8+PC9zdmc+"
-        },
-        {
-          "label": "小夏（已封存）",
-          "tokens": 1800,
-          "cost_usd": 0.003,
-          "runs": 1,
-          "member_id": 4
-        },
-        {
-          "label": "小秋（已封存）",
-          "tokens": 1200,
-          "cost_usd": 0.002,
-          "runs": 1,
-          "member_id": 5
-        }
-      ],
-      "model": [
-        {
-          "label": "openai/gpt-6-sol",
-          "tokens": 14200,
-          "cost_usd": 0.021,
-          "runs": 1
-        },
-        {
-          "label": "cli:codex:gpt-6.1",
-          "tokens": 14200,
-          "cost_usd": 0.021,
-          "runs": 1
-        },
-        {
-          "label": "openai/gpt-6-luna",
-          "tokens": 14200,
-          "cost_usd": 0.021,
-          "runs": 1
-        }
-      ],
-      "day": [
-        {
-          "label": "2026-10-24",
-          "tokens": 14200,
-          "cost_usd": 0.021,
-          "runs": 1
-        },
-        {
-          "label": "2026-10-23",
-          "tokens": 14200,
-          "cost_usd": 0.021,
-          "runs": 1
-        },
-        {
-          "label": "2026-10-22",
-          "tokens": 14200,
-          "cost_usd": 0.021,
-          "runs": 1
-        }
-      ],
-      "provider": [
-        {
-          "label": "OpenRouter",
-          "tokens": 14200,
-          "cost_usd": 0.021,
-          "runs": 1
-        },
-        {
-          "label": "Codex CLI",
-          "tokens": 14200,
-          "cost_usd": 0.021,
-          "runs": 1
-        }
-      ],
-      "routine": [
-        {
-          "label": "午間資訊摘要",
-          "tokens": 14200,
-          "cost_usd": 0.021,
-          "runs": 1
-        },
-        {
-          "label": "每天早上的進度",
-          "tokens": 14200,
-          "cost_usd": 0.021,
-          "runs": 1
-        }
-      ]
-    },
-    "total": 4
-  },
   "allowances": {
     "quotas": [],
     "brains": [
@@ -3354,6 +3255,18 @@
       "stt_ms": 320,
       "llm_ms": 450,
       "cost_usd": 0.001
+    },
+    {
+      "id": 2,
+      "kind": "ask",
+      "text": "幫我把明天的行程排一下，下午留給研究",
+      "raw_text": "幫我把明天的行程排一下下午留給研究",
+      "created_at_ms": 1792806600000,
+      "target_app": "拉斐爾",
+      "cleaned": true,
+      "stt_ms": 300,
+      "llm_ms": 420,
+      "cost_usd": 0.001
     }
   ],
   "dictionary": [
@@ -3380,85 +3293,8 @@
     "0": "週報固定週五下午寄出，寄之前先給使用者看草稿。\n\n設計稿都放在 Figma 的「Orbit」專案，檔名用日期開頭。\n",
     "1": "專案每週三檢查原型，週五彙整結果。\n\n上一輪檢查發現註冊流程少一步驗證，已寫進下次檢查清單。\n\n報告控制在一頁以內，圖表用黑白兩色，附上原始資料的連結。\n\n（待確認）競品的新版本預計十一月中上線，首頁改成單欄版面。\n"
   },
-  "analytics": {
-    "range": "7d",
-    "days": [
-      "2026-10-18",
-      "2026-10-19",
-      "2026-10-20",
-      "2026-10-21",
-      "2026-10-22",
-      "2026-10-23",
-      "2026-10-24"
-    ],
-    "tz": "Asia/Taipei",
-    "start_day": "2026-10-18",
-    "end_day": "2026-10-24",
-    "today_day": "2026-10-24",
-    "cost_by": {
-      "purpose": {
-        "total": 0,
-        "series": []
-      },
-      "model": {
-        "total": 0,
-        "series": []
-      },
-      "provider": {
-        "total": 0,
-        "series": []
-      }
-    },
-    "tools": {
-      "total": 0,
-      "series": []
-    },
-    "members": [],
-    "messages_by": {
-      "model": {
-        "total": 0,
-        "series": []
-      },
-      "source": {
-        "total": 0,
-        "series": []
-      }
-    },
-    "dictation": {
-      "dictations": [
-        4,
-        0,
-        4,
-        4,
-        0,
-        4,
-        4
-      ],
-      "words": [
-        100,
-        0,
-        200,
-        300,
-        0,
-        250,
-        400
-      ],
-      "estimated": [
-        false,
-        false,
-        false,
-        false,
-        false,
-        false,
-        false
-      ],
-      "estimated_words": 0,
-      "estimated_dictations": 0,
-      "day_basis": "capture_local"
-    }
-  },
   "avatar": {
-    "url": "/brand/in-app-icon.png",
+    "url": "/brand/app-icon.png",
     "crop": {
       "x": 0.5,
       "y": 0.5,
@@ -3502,19 +3338,6 @@
         }
       ]
     },
-    "voice": {
-      "enabled": false,
-      "service": "fish",
-      "options": [
-        {
-          "id": "fish",
-          "needs_key": true,
-          "has_key": false,
-          "key_optional": false
-        }
-      ],
-      "fish_voice_set": false
-    },
     "vision": {
       "enabled": true,
       "model": "",
@@ -3522,7 +3345,6 @@
       "supports_images": true
     }
   },
-  "usageCsv": "time,member,title,model,provider,duration_ms,tokens,cost_usd,ai_steps,tools,errors\r\n2026-10-24,拉斐爾,研究摘要,openai/gpt-6-sol,OpenRouter,21000,14200,.021,3,6,0\r\n",
   "presets": [],
   "skills": [],
   "skillSources": [],
@@ -3530,13 +3352,6 @@
   "skillMarketplaces": [],
   "skillMarketplaceCatalog": null,
   "commands": [],
-  "voices": {
-    "voices": [],
-    "configured": false
-  },
-  "speech": {
-    "ready": true
-  },
   "safetyRules": [],
   "modelStatus": {
     "models": [
@@ -3606,7 +3421,7 @@
         "kind": "question",
         "member_id": 0,
         "name": "拉斐爾",
-        "avatar_url": "/brand/in-app-icon.png",
+        "avatar_url": "/brand/app-icon.png",
         "title": "確認本週研究方向",
         "summary": "",
         "at_ms": 1792807140000,
@@ -3619,7 +3434,7 @@
         "kind": "routine",
         "member_id": 0,
         "name": "拉斐爾",
-        "avatar_url": "/brand/in-app-icon.png",
+        "avatar_url": "/brand/app-icon.png",
         "title": "每天早上的進度",
         "summary": "",
         "at_ms": 1792809000000,
@@ -3660,7 +3475,7 @@
         "kind": "report",
         "member_id": 0,
         "name": "拉斐爾",
-        "avatar_url": "/brand/in-app-icon.png",
+        "avatar_url": "/brand/app-icon.png",
         "title": "Daily briefing",
         "summary": "研究摘要已整理完成。",
         "at_ms": 1792805400000,
@@ -3675,7 +3490,7 @@
         "kind": "routine",
         "member_id": 0,
         "name": "拉斐爾",
-        "avatar_url": "/brand/in-app-icon.png",
+        "avatar_url": "/brand/app-icon.png",
         "title": "每天早上的進度",
         "summary": "",
         "at_ms": 1792809000000,
@@ -3714,7 +3529,7 @@
         "kind": "routine",
         "member_id": 0,
         "name": "拉斐爾",
-        "avatar_url": "/brand/in-app-icon.png",
+        "avatar_url": "/brand/app-icon.png",
         "title": "每天早上的進度",
         "summary": "",
         "at_ms": 1792891800000,

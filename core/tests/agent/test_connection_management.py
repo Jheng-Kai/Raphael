@@ -3,7 +3,7 @@
 import pytest
 
 from .test_service import make_rig  # noqa: F401
-from .test_narration import chat, typed
+from .test_narration import chat, typed, use
 from .test_service import until
 from background.conftest import Rig as BackgroundRig, plugins, call, turn, report  # noqa: F401
 from raphael_core.connectors.secret_cards import SecretCards
@@ -28,7 +28,7 @@ async def test_disconnect_waits_in_private_chat_until_the_owner_says_yes(wired_c
     agent, background = wired_connections
     server = await plugins.connect(look="T1")
     agent.settings.set("action_mode", "ask")
-    client.chats = [chat("Disconnect.", ("manage_connection", {"connection": server, "operation": "disconnect"})), chat("Disconnected.")]
+    client.chats = [chat("Disconnect.", use("manage_connection", {"connection": server, "operation": "disconnect"})), chat("Disconnected.")]
     asked = await typed(agent, "Disconnect sample")
     assert asked["status"] == "confirm" and plugins.hub.offered()
     await agent.confirm(asked["confirm"]["id"])
@@ -72,28 +72,28 @@ async def test_cli_lists_and_calls_use_current_grants(wired_connections, plugins
     attempts = []
 
     async def run(driver, **kwargs):
-        attempt = len(attempts)
-        attempts.append(attempt)
+        attempts.append(len(attempts))
         async with httpx.AsyncClient(headers={"Authorization": "Bearer " + kwargs["token"]}, trust_env=False) as http:
             async def rpc(method, **params):
                 return (await http.post(kwargs["endpoint"], json={"jsonrpc": "2.0", "id": 1, "method": method, "params": params})).json()
+            def use(name, arguments):
+                return rpc("tools/call", name="use_tool", arguments={"name": name, "arguments": arguments})
             names = lambda response: {item["name"] for item in response["result"]["tools"]}
-            if attempt == 0:
-                assert "Notes__look" in names(await rpc("tools/list"))
-                assert not (await rpc("tools/call", name="manage_connection", arguments={"connection": server, "operation": "disable"}))["result"]["isError"]
-            elif attempt == 1:
-                assert "Notes__look" not in names(await rpc("tools/list"))
-                stale = await rpc("tools/call", name="Notes__look", arguments={"topic": "sample"})
-                assert "error" in stale or stale["result"]["isError"]
-                assert not (await rpc("tools/call", name="manage_connection", arguments={"connection": server, "operation": "enable"}))["result"]["isError"]
-            else:
-                assert "Notes__look" in names(await rpc("tools/list"))
-                assert not (await rpc("tools/call", name="Notes__look", arguments={"topic": "sample"}))["result"]["isError"]
+            # The list is fixed (decision 2): the connection's tool and the management are found and called
+            # through use_tool, and the list the CLI read when it started stays right, whatever the grants do.
+            listed = names(await rpc("tools/list"))
+            assert "Notes__look" not in listed and {"find_tools", "use_tool"} <= listed
+            assert not (await use("manage_connection", {"connection": server, "operation": "disable"}))["result"]["isError"]
+            stale = await use("Notes__look", {"topic": "sample"})
+            assert "error" in stale or stale["result"]["isError"]
+            assert not (await use("manage_connection", {"connection": server, "operation": "enable"}))["result"]["isError"]
+            assert not (await use("Notes__look", {"topic": "sample"}))["result"]["isError"]
+            assert names(await rpc("tools/list")) == listed
         yield Event("final", "Sample read.")
 
     monkeypatch.setattr(Driver, "run", run)
     assert (await typed(agent, "Manage sample connection and read"))["status"] == "done"
-    assert attempts == [0, 1, 2]
+    assert attempts == [0], "a grant that changes never starts the CLI again"
 
 
 async def test_background_cli_observes_owner_connection_changes_without_management_tools(wired_connections, plugins, monkeypatch):
@@ -105,12 +105,14 @@ async def test_background_cli_observes_owner_connection_changes_without_manageme
     background.service.use_cli(object())
     async def work(loop):
         names = lambda: {item["function"]["name"] for item in loop.tools}
-        assert "Notes__look" in names()
-        assert not {"manage_connection", "add_mcp_server"} & names()
+        before = names()
+        assert "Notes__look" not in before and "use_tool" in before
+        assert not {"manage_connection", "add_mcp_server"} & before
+        assert (await loop._tool("found", "use_tool", {"name": "Notes__look", "arguments": {"topic": "sample"}})).ok
         # The owner changes the service externally while this worker is running.
         await plugins.hub._set_enabled({"id": server, "enabled": False})
-        stale = await loop._tool("stale", "Notes__look", {"topic": "sample"})
-        assert not stale.ok
+        stale = await loop._tool("stale", "use_tool", {"name": "Notes__look", "arguments": {"topic": "sample"}})
+        assert not stale.ok and names() == before
         loop._queue.put_nowait(Outcome("done", final="Owner disabled sample."))
     monkeypatch.setattr(CliLoop, "_work", work)
     identifier = background.submit("Read sample", model="cli:codex:test")
@@ -159,7 +161,10 @@ async def test_managed_app_changes_use_the_existing_connector_policy(make_rig, c
     rig = make_rig(plugins=hub, secret_cards=SecretCards(conn, hub), team=team)
     team.register(rig.rpc)
     rig.settings.set("action_mode", "bypass")
-    client.chats = [chat("Change.", ("manage_connection", {"connection": entry.id, "operation": operation, "tool": "GMAIL_FETCH_EMAILS"})), chat("Changed.")]
+    client.chats = [chat("Change.", use("manage_connection", {"connection": entry.id, "operation": operation, "tool": "GMAIL_FETCH_EMAILS"})), chat("Changed.")]
+    if operation == "disconnect":
+        # R-AG-MGMT-02: the change is held until the turn is in and asked on one card; the yes then goes on with a model call of its own.
+        client.chats.insert(1, chat("Asked."))
     asked = await typed(rig, "Change sample app access")
     if operation == "disconnect":
         assert asked["status"] == "confirm" and entry.id in asked["confirm"]["text"]

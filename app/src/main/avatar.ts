@@ -9,9 +9,56 @@
 // sidebar's 拉斐爾, the composer's voice button, the approval card, the voice-mode flyer and the
 // settings row. They draw again when `onAvatarChange` says the picture changed.
 
-import { pictureStyle } from "../overlay/emblem";
+import { drawEmblem, glyphTextureReady, params, pictureStyle } from "../overlay/emblem";
 import { esc } from "./ui";
 import "./avatar.css";
+
+// ---------- the emblem as a picture, drawn by the corner's renderer ----------
+//
+// The emblem shows in the main window only in voice (the voice button and the voice screen); Raphael's
+// face elsewhere is the first blue slime (members.ts). It is the overlay's own renderer drawn once at the size it is
+// shown, times the screen's pixel ratio, exactly as the corner draws it over the desktop: no dark ground behind it, in
+// either theme. Until the texture is there (and where there is no canvas, the tests) the pictures of
+// app/public/brand stand in.
+
+const stills = new Map<string, string | null>();
+/** The rune texture: still loading (a local file, a moment), there, or missing (the old pictures stand in). */
+let texture: "waiting" | "ready" | "missing" = "waiting";
+let drawable: boolean | undefined;
+const canDraw = (): boolean => drawable ??= typeof document !== "undefined" && !!document.createElement("canvas").getContext?.("2d");
+
+/** The rune texture arrived (or could not be read): every face is drawn again. */
+export function emblemTextureArrived(ok = true): void {
+  texture = ok ? "ready" : "missing";
+  stills.clear();
+  notify();
+}
+
+/** The emblem standing still, `px` CSS pixels square, as a data URL; null where it cannot be drawn yet. */
+function emblemStill(px: number): string | null {
+  if (!glyphTextureReady()) return null;
+  const ratio = typeof window === "undefined" ? 1 : Math.max(1, Math.min(3, window.devicePixelRatio || 1));
+  const side = Math.min(512, Math.ceil(px * ratio));
+  const key = String(side);
+  if (stills.has(key)) return stills.get(key)!;
+  let url: string | null = null;
+  try {
+    const canvas = document.createElement("canvas");
+    canvas.width = canvas.height = side;
+    const ctx = canvas.getContext("2d");
+    if (ctx) {
+      ctx.translate(side / 2, side / 2);
+      // The letters' rim reaches a little past the outer radius; a small face keeps its white ring visible. Unturned, the
+      // word break stands at one o'clock.
+      drawEmblem(ctx, side / 2 / 1.04, params("steady", 0, px < 48 ? 0.3 : 0.15), { tq: 0, rot: 0, dim: 1, calm: 0.7, lvl: 0.15, surface: "transparent" });
+      url = canvas.toDataURL("image/png");
+    }
+  } catch {
+    url = null;
+  }
+  stills.set(key, url);
+  return url;
+}
 
 /**
  * Which part of the picture shows in the circle. The picture covers the circle (its shorter side
@@ -111,8 +158,8 @@ async function makeStill(url: string): Promise<string> {
  * The address to show the person's picture with: itself, or under reduced motion the still of one
  * that may move (null until it is made; every listener draws again then).
  */
-function shownUrl(url: string): string | null {
-  if (!reduced || !MAY_MOVE.test(url)) return url;
+function shownUrl(url: string, picture = false): string | null {
+  if (!(reduced || picture) || !MAY_MOVE.test(url)) return url;
   if (still?.url === url) return still.frame;
   const mine = { url, frame: null as string | null };
   still = mine;
@@ -160,23 +207,33 @@ export interface AvatarOptions {
   cls?: string;
   /** The picture of the person's own, if any (by default the one in force now). */
   avatar?: CustomAvatar | null;
+  /** A picture that may move (a GIF, a WebP) shows its first frame: Raphael's face stands still wherever it is not the member list or the thinking line (owner, 2026-11-11). */
+  still?: boolean;
 }
 
 /**
- * Raphael's face at `size` px: the emblem for the theme (two pictures, the stylesheet shows the
- * one of the theme), or the person's picture in a circle. Decorative: whoever shows it names it.
- * Under reduced motion nothing in it moves (see above): the loop is the still, a moving picture
- * its first frame, and the circle is empty for the moment that frame takes to be made.
+ * The emblem at `size` px, as the corner draws it (the voice button and the voice screen), or the person's picture in a
+ * circle (Raphael's face when the owner chose one). Decorative: whoever shows it names it. Under reduced motion nothing in
+ * it moves (see above): the loop is the still, a moving picture its first frame, and the circle is empty for the moment
+ * that frame takes to be made.
  */
 export function avatarHTML(o: AvatarOptions): string {
   const chosen = o.avatar === undefined ? custom : o.avatar;
   const cls = `av${chosen ? " av-custom" : ""}${o.cls ? " " + o.cls : ""}`;
   const box = `style="--av:${Math.round(o.size)}px"`;
   if (chosen) {
-    const url = shownUrl(chosen.url);
+    const url = shownUrl(chosen.url, o.still);
     const img = url === null ? "" : `<img src="${esc(url)}" alt="" draggable="false" style="${cropStyle(chosen.crop)}">`;
     return `<span class="${cls}" ${box} aria-hidden="true">${img}</span>`;
   }
+  const drawn = emblemStill(o.size);
+  if (drawn) {
+    // While he thinks or listens the drawn emblem turns slowly, as the corner's ring does (still under reduced motion).
+    const turn = o.loop && !reduced ? " em-turn" : "";
+    return `<span class="${cls}" ${box} aria-hidden="true"><img class="em${turn}" src="${drawn}" alt="" draggable="false"></span>`;
+  }
+  // The moment the texture takes to load leaves the circle empty rather than fetch a picture that is replaced at once.
+  if (texture === "waiting" && canDraw()) return `<span class="${cls}" ${box} aria-hidden="true"></span>`;
   const kind = o.loop && !reduced ? "loop" : o.size > 40 ? "128" : "64";
   return (
     `<span class="${cls}" ${box} aria-hidden="true">` +

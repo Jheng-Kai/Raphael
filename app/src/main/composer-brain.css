@@ -6,29 +6,29 @@
 .cb-body[hidden], .cb-now[hidden] { display: none; }
 /* The sources on the left, the models of the one pressed on the right. The height never changes, so a source pressed stays under the pointer. */
 .cb-browse { display: grid; flex: none; grid-template-columns: 160px minmax(0, 1fr); height: min(340px, 56vh); min-height: 0; }
-.cb-rail { display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; row-gap: 2px; min-height: 0; padding-inline-end: var(--sp-2); border-inline-end: 1px solid var(--line); overflow-y: auto; scrollbar-width: none; }
+/* A row is as tall as its words however long the list: in a card of fixed height, auto rows would shrink to a button's
+   least height and a model's price would lie over the next name (owner, 2026-11-09). */
+.cb-rail { display: grid; grid-template-columns: minmax(0, 1fr); grid-auto-rows: max-content; align-content: start; row-gap: 2px; min-height: 0; padding-inline-end: var(--sp-2); border-inline-end: 1px solid var(--line); overflow-y: auto; scrollbar-width: none; }
 .cb-pane { display: flex; flex-direction: column; gap: var(--sp-1); min-height: 0; min-width: 0; padding-inline-start: var(--sp-2); }
-.cb-list { display: grid; flex: 1 1 0; row-gap: 2px; grid-template-columns: minmax(0, 1fr); align-content: start; min-height: 0; overflow-y: auto; scrollbar-width: none; }
-.menu .cb-source { display: flex; align-items: center; gap: var(--sp-2); width: 100%; min-height: 36px; padding: var(--sp-1) var(--sp-2); border-radius: var(--r-sm); text-align: left; }
+.cb-list { display: grid; flex: 1 1 0; row-gap: 2px; grid-template-columns: minmax(0, 1fr); grid-auto-rows: max-content; align-content: start; min-height: 0; overflow-y: auto; scrollbar-width: none; }
+.menu .cb-source { display: flex; align-items: center; gap: var(--sp-2); width: 100%; min-height: var(--h-menu); padding: var(--sp-1) var(--sp-2); border-radius: var(--r-sm); text-align: left; }
 .menu .cb-source[aria-pressed="true"] { background: var(--hover); }
-.cb-source[aria-pressed="true"] .cb-name b { font-weight: 600; }
 .cb-source .mono { display: inline-grid; flex: none; place-items: center; width: 20px; height: 20px; margin: 0; }
 .cb-source .mono .logo, .cb-source .mono svg { width: 16px; height: 16px; }
-.menu .cb-row { display: flex; align-items: center; gap: var(--sp-2); width: 100%; min-height: 40px; padding: var(--sp-1) var(--sp-2); border-radius: var(--r-sm); text-align: left; }
+.menu .cb-row { display: flex; align-items: center; gap: var(--sp-2); width: 100%; min-height: var(--h-menu); padding: var(--sp-1) var(--sp-2); border-radius: var(--r-sm); text-align: left; }
 .menu .cb-row[aria-checked="true"] { background: var(--hover); }
 .cb-name { display: grid; flex: 1; grid-template-columns: minmax(0, 1fr); min-width: 0; }
 .cb-name b { overflow: hidden; color: var(--text); font-size: var(--fs-sm); font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
 .cb-name small { overflow: hidden; color: var(--text-3); font-size: var(--fs-xs); text-overflow: ellipsis; white-space: nowrap; }
 .cb-check { display: inline-grid; flex: none; place-items: center; width: 16px; height: 16px; color: var(--accent-text); }
 .cb-check .i { width: 16px; height: 16px; }
-.cb-row[aria-checked="true"] .cb-name b { font-weight: 600; }
 .menu .cb-row:disabled { opacity: 0.5; cursor: default; }
-.menu .cb-all { display: flex; flex: none; align-items: center; justify-content: space-between; min-height: 32px; color: var(--text-2); font-size: var(--fs-xs); }
+.menu .cb-all { display: flex; flex: none; align-items: center; justify-content: space-between; min-height: var(--h-menu); color: var(--text-2); font-size: var(--fs-xs); }
 .cb-all .i { flex: none; width: 16px; height: 16px; color: var(--text-3); transition: transform 120ms ease; }
 .cb-all[aria-expanded="true"] .i { transform: rotate(180deg); }
 /* The way back on the left, the title in the middle of the card whatever the length of either. */
 .cb-head { display: grid; flex: none; grid-template-columns: 32px minmax(0, 1fr) 32px; align-items: center; margin-bottom: var(--sp-2); }
-.cb-head h3 { display: flex; grid-column: 2; align-items: center; justify-content: center; gap: var(--sp-2); min-width: 0; margin: 0; color: var(--text); font-size: var(--fs-sm); font-weight: 600; }
+.cb-head h3 { display: flex; grid-column: 2; align-items: center; justify-content: center; gap: var(--sp-2); min-width: 0; margin: 0; color: var(--text); font-size: var(--fs-sm); font-weight: var(--weight-semibold); }
 .cb-head h3 span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .menu .cb-back { grid-column: 1; grid-row: 1; justify-content: center; width: 32px; min-height: 32px; padding: 0; }
 .cb-search { flex: none; width: 100%; min-height: 32px; padding: 0 var(--sp-2); border: 1px solid var(--edge); border-radius: var(--r-sm); background: var(--content); color: var(--text); font-size: var(--fs-sm); }
@@ -39,7 +39,7 @@
 .menu .cb-pick { display: grid; grid-template-columns: minmax(0, 1fr); justify-items: center; gap: 2px; min-height: 0; padding: var(--sp-1) var(--sp-2); text-align: center; }
 .cb-pick small { max-width: 100%; min-height: 1lh; overflow: hidden; color: var(--text-3); font-size: var(--fs-xs); text-overflow: ellipsis; white-space: nowrap; }
 .cb-pick-name { display: inline-flex; align-items: center; gap: var(--sp-1); max-width: 100%; }
-.cb-pick-name b { overflow: hidden; color: var(--text); font-size: var(--fs-sm); font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.cb-pick-name b { overflow: hidden; color: var(--text); font-size: var(--fs-sm); font-weight: var(--weight-semibold); text-overflow: ellipsis; white-space: nowrap; }
 .cb-pick-name .i { flex: none; width: 16px; height: 16px; color: var(--text-3); }
 .cmp-model .cb-depth { flex: none; color: var(--text-3); font-size: var(--fs-xs); font-weight: 400; }
 .cmp-model .mp-ttext:has(.cb-depth) { display: inline-flex; align-items: baseline; gap: var(--sp-1); max-width: 200px; }

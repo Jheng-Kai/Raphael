@@ -1,308 +1,421 @@
-// What each screen of the guide looks like, as HTML for a given state. Every screen is one title,
-// at most one short line, and what the step is about (keys, states, a list); the one main button
-// and the way back and on are drawn by mount.ts. Nothing here reads the window or the core, so a
-// screen can be drawn from made-up data (the browser check does).
+// What each screen of the guide looks like, as HTML for a given state. Each screen is one calm centred column, with a consistent structure: a title, the choice it is about (tiles in a grid, or rows), and, drawn by
+// mount.ts, one wide black pill under it with a round arrow beside it for the way back. Nothing here reads the window or
+// the core, so a screen can be drawn from made-up data (the browser check does).
 
-import { t } from "../i18n";
+import { getLocale, t } from "../i18n";
+import type { MessageKey } from "../i18n/zh-TW";
 
-import { DICTATION_MODES } from "../dictation";
-import { formatSeconds } from "../format";
-import { entryIcon } from "../connections";
-import type { StoreService } from "../types";
-import { btn, esc, ico, iconButton, keys, sel, st } from "../ui";
-import { ABILITIES, type AbilityId } from "./abilities";
-import { changeCount, textDiff, type Piece } from "./diff";
-import type { Lesson, Miss } from "./practice";
-import { capsHTML } from "./keycaps";
-import type { SetupState } from "./flow";
+import { CLIS, type CliBrainsView } from "../cli-brains";
+import { COMPOSIO_SVG, entryIcon, ownServerForm } from "../connections";
+import { nameScore } from "../find-match";
+import { popularServices } from "./helpers";
+import { providerMark } from "../provider-marks";
+import { type ProvidersView, description, emptyProvidersView, providersAddHTML } from "../providers";
+import type { ProviderKind, StoreService } from "../types";
+import { slimeFaceHTML } from "../slime";
+import { btn, esc, fieldHTML, ico, st } from "../ui";
 
-/** The title and the one line under it. */
-export const head = (title: string, line = ""): string =>
-  `<h2 tabindex="-1">${esc(title)}</h2>${line ? `<p class="ob-sub">${esc(line)}</p>` : ""}`;
+export type GuideStep = "welcome" | "tools" | "services" | "abilities";
 
-// ---------- the bar, the way back and the way past ----------
+/** A slime floating by a step's title: who it is, where (from the column's left or right edge, and down from the
+ * title's top) and how large. */
+interface Floater { avatar: string; side: "left" | "right"; x: number; y: number; px: number }
+/**
+ * The team's own characters float by each step's title: different ones on
+ * every step, never in the same places.
+ */
+const FLOATERS: Record<Exclude<GuideStep, "welcome">, readonly Floater[]> = {
+  tools: [
+    { avatar: "slime:gobta", side: "left", x: 2, y: 2, px: 42 },
+    { avatar: "slime:shion", side: "right", x: 4, y: 40, px: 36 },
+    { avatar: "slime:ranga", side: "right", x: 18, y: -18, px: 28 },
+  ],
+  services: [
+    { avatar: "slime:shuna", side: "left", x: 9, y: 38, px: 36 },
+    { avatar: "slime:diablo", side: "right", x: 1, y: 6, px: 42 },
+    { avatar: "slime:benimaru", side: "left", x: 20, y: -16, px: 28 },
+  ],
+  abilities: [
+    { avatar: "slime:milim", side: "left", x: 0, y: -8, px: 38 },
+    { avatar: "slime:souei", side: "right", x: 12, y: 42, px: 32 },
+    { avatar: "slime:rigurd", side: "right", x: 0, y: -14, px: 30 },
+  ],
+};
 
-export interface Top {
-  segments: { total: number; current: number };
-  /** The way back: false on the first screen of a first run. */
-  back: boolean;
-  /** The way past a step that waits for something outside. */
-  skip: boolean;
+/** The decoration around a title: it takes no room and no part in the reading order. */
+function floaters(step: Exclude<GuideStep, "welcome">): string {
+  const one = (floater: Floater, index: number): string =>
+    `<span class="ob-fl" style="${floater.side}:${floater.x}%;top:${floater.y}px">${slimeFaceHTML({ id: -1 - index, avatar: floater.avatar }, floater.px)}</span>`;
+  return `<div class="ob-floaters" aria-hidden="true">${FLOATERS[step].map(one).join("")}</div>`;
 }
 
-export function topHTML(top: Top): string {
-  const bar = Array.from({ length: top.segments.total }, (_, i) => `<i class="${i < top.segments.current ? "done" : i === top.segments.current ? "now" : ""}"></i>`).join("");
+/** The title of a screen; what the step is for is the choice itself, never a line under it. */
+export const head = (title: string, step?: Exclude<GuideStep, "welcome">): string => (step ? floaters(step) : "") + `<h2 tabindex="-1">${esc(title)}</h2>`;
+
+/** A check in a small black square, on a tile that is chosen or ready; `word` is what a reader hears. */
+const tick = (word: string): string => `<span class="ob-tick" role="img" aria-label="${esc(word)}">${ico("check")}</span>`;
+
+/**
+ * One tile of a choice, one row as a store's app is: the mark in its square, the name over one quiet line that never wraps, and on the right the control,
+ * then the check when the tile is `on` (the word a reader hears for it). A `wide` tile spans its row and its line may
+ * wrap; an `entry` tile (a key or an address being typed) spans it too, with its fields and buttons under its name, so
+ * a narrow window never squeezes its words into a sliver.
+ */
+function tile(o: { id: string; mark: string; name: string; line?: string; lineHTML?: string; control?: string; on?: string; wide?: boolean; entry?: boolean }): string {
+  const line = o.lineHTML ?? (o.line ? esc(o.line) : "");
   return (
-    (top.back ? iconButton("left", t("onboarding.back"), ' data-ob="back"') : `<span class="ob-gap"></span>`) +
-    `<div class="ob-bar-steps" role="img" aria-label="${esc(t("onboarding.progress", { p0: Math.max(1, top.segments.current + 1), p1: Math.max(1, top.segments.total) }))}">${bar}</div>` +
-    (top.skip ? btn(esc(t("onboarding.skip")), "sm", ' data-ob="skip"') : `<span class="ob-gap"></span>`)
+    `<div class="ob-tile${o.wide || o.entry ? " wide" : ""}${o.entry ? " entry" : ""}${o.on ? " on" : ""}" data-item="${esc(o.id)}">` +
+    `<span class="ob-ic">${o.mark}</span>` +
+    `<span class="ob-tx"><span class="nm">${esc(o.name)}</span>${line ? `<span class="ds">${line}</span>` : ""}</span>` +
+    `<span class="ob-ctl">${o.control ?? ""}${o.on && !o.wide && !o.entry ? tick(o.on) : ""}</span>` +
+    `</div>`
   );
 }
+
+const alert = (html: string): string => `<div class="ob-alert" role="alert">${html}</div>`;
 
 // ---------- welcome ----------
 
-export function welcomeHTML(o: { rerun: boolean; languageSelect: string }): string {
+/** What the welcome types: something the owner might ask, and Raphael's answer in his own manner,
+ * 告。, 解。 or 否。 — what the team can do, said by him rather than a slogan. */
+export const DEMOS = [
+  ["onboarding.demo1Ask", "onboarding.demo1Reply"], ["onboarding.demo2Ask", "onboarding.demo2Reply"],
+  ["onboarding.demo3Ask", "onboarding.demo3Reply"], ["onboarding.demo4Ask", "onboarding.demo4Reply"],
+  ["onboarding.demo5Ask", "onboarding.demo5Reply"], ["onboarding.demo6Ask", "onboarding.demo6Reply"],
+] as const satisfies readonly (readonly [MessageKey, MessageKey])[];
+export const demoAsk = (demo: (typeof DEMOS)[number]): string => t(demo[0]);
+export const demoReply = (demo: (typeof DEMOS)[number]): string => t(demo[1]);
+
+/**
+ * Raphael's emblem (the canvas is drawn by mount.ts with the same renderer as the voice screen), his name, and under it
+ * an ask being typed with his answer: mount.ts types, deletes and moves on; with reduced motion the first pair stands.
+ * A reader hears one sentence of what the team does instead. The language is chosen at the window's top left.
+ */
+export function welcomeHTML(): string {
+  // His name is one wordmark for every language, 「智慧之王ラファエル」,
+  // inked in the theme's colour through a mask; a reader hears the name in the window's language.
   return (
-    `<div class="stage onboarding-stage"><canvas class="emb" aria-hidden="true"></canvas><div class="subs" aria-live="polite"></div></div>` +
-    head(o.rerun ? t("onboarding.rerunTitle") : t("onboarding.welcomeTitle")) +
-    `<div class="ob-main ob-lang"><span class="ob-lang-label">${esc(t("settings.059"))}</span>${o.languageSelect}</div>`
+    `<div class="ob-emblem" aria-hidden="true"><canvas class="ob-emb"></canvas></div>` +
+    `<h2 tabindex="-1" class="ob-wordmark"><span class="ob-wm" aria-hidden="true"></span><span class="ob-name">${esc(t("onboarding.welcomeTitle"))}</span></h2>` +
+    `<div class="ob-demo"><p class="ob-sr">${esc(t("onboarding.demoSummary"))}</p>` +
+    `<p class="ob-demo-ask" aria-hidden="true"><span data-ob-typed>${esc(demoAsk(DEMOS[0]))}</span><span class="ob-caret"></span></p>` +
+    `<p class="ob-demo-reply" aria-hidden="true" data-ob-reply>${esc(demoReply(DEMOS[0]))}</p></div>`
   );
 }
 
-// ---------- the checklist of abilities ----------
+// ---------- 1. the AI tools ----------
 
-/** A ticked-or-not row: a real checkbox that the whole row is. */
-function abilityRow(id: AbilityId, on: boolean): string {
-  const ability = ABILITIES.find((a) => a.id === id)!;
-  return (
-    `<button type="button" class="ob-ability" role="checkbox" aria-checked="${on}" data-ability="${id}">` +
-    `<span class="ob-ability-icon">${ico(ability.icon)}</span>` +
-    `<span class="ob-ability-text"><b>${esc(ability.name())}</b><span>${esc(ability.desc())}</span></span>` +
-    `<span class="ob-check" aria-hidden="true">${ico("check")}</span>` +
-    `</button>`
-  );
+/** The OpenRouter key, as the guide knows it. The key itself is never held here. */
+export interface KeyView {
+  has: boolean;
+  /** The name the key was given at OpenRouter, once it has been checked in this run. */
+  name: string | null;
+  /** The field is open although there is a key: it is being replaced. */
+  replacing: boolean;
+  busy: boolean;
+  error: string | null;
 }
 
-export const abilitiesHTML = (ticked: readonly AbilityId[]): string =>
-  head(t("onboarding.abilitiesTitle")) +
-  `<div class="ob-main ob-abilities" role="group" aria-label="${esc(t("onboarding.abilitiesTitle"))}">${ABILITIES.map((a) => abilityRow(a.id, ticked.includes(a.id))).join("")}</div>`;
+type ToolId = "chatgpt" | (typeof CLIS)[number]["id"];
 
-// ---------- the key ----------
-
-export const keyHTML = (groupHTML: string): string => head(t("onboarding.keyTitle"), t("onboarding.keyLine")) + `<div class="ob-main" id="ob-keygroup">${groupHTML}</div>`;
-
-// ---------- the microphone ----------
-
-export type MicBlock = "system" | "user" | "desktop_apps";
-
-export interface MicView {
-  micRowHTML: string;
-  /** The privacy settings of Windows keep the microphone shut: which switch. */
-  blocked: MicBlock | null;
-  heard: boolean;
-  modelRowHTML: string;
+export interface ToolCard {
+  id: ToolId;
+  mark: string;
+  name: string;
+  /** The quiet line: what the account is at, or who it is. */
+  line: string;
+  /** The tool is signed in and ready. */
+  ready: boolean;
+  /** The one button the card has when it is not: its label and the hook the account controller listens to. */
+  action: { label: string; attrs: string } | null;
 }
 
-const BLOCK_LINES: Record<MicBlock, () => string> = {
-  system: () => t("onboarding.micBlockedSystem"),
-  user: () => t("onboarding.micBlockedUser"),
-  desktop_apps: () => t("onboarding.micBlockedDesktop"),
-};
+const versionOf = (text: string | undefined): string => text?.match(/\d+(?:\.\d+)+(?:[-+][\w.-]+)?/)?.[0] ?? "";
 
-export function micHTML(v: MicView): string {
-  const state = v.blocked ? "" : st(v.heard ? "ok" : "idle", v.heard ? t("onboarding.micHeard") : t("onboarding.micWaiting"));
-  const block = v.blocked
-    ? `<div class="alert" role="alert">${st("warn", BLOCK_LINES[v.blocked]())}${btn(esc(t("onboarding.micOpenSettings")), "sm", ' data-ob="mic-settings"')}</div>`
-    : "";
-  return (
-    head(t("onboarding.micTitle"), t("onboarding.micLine")) +
-    `<div class="ob-main"><div class="list">${v.micRowHTML}${v.modelRowHTML}</div>` +
-    `<div class="ob-state" data-ob-mic-state>${state}</div>${block}</div>`
-  );
-}
-
-/** The model row's control: a bar while fetching, a dot while unpacking. */
-export function modelControlHTML(o: { kind: "idle" | "downloading" | "installing" | "ready" | "failed"; percent: number | null; detail: string }): string {
-  switch (o.kind) {
-    case "idle":
-      return st("idle", t("common.checking"));
-    case "downloading": {
-      const bar = o.percent === null ? "" : `<span class="bar ob-bar" role="progressbar" aria-label="${esc(t("onboarding.modelName"))}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${o.percent}"><i style="width:${o.percent}%"></i></span>`;
-      return bar + `<span class="val num">${esc(o.percent === null ? t("onboarding.modelPreparing") : o.detail)}</span>`;
-    }
-    case "installing":
-      return `<span class="st"><span class="dot busy"></span>${esc(t("onboarding.modelInstalling"))}</span>`;
-    case "ready":
-      return st("ok", t("onboarding.modelReady"));
-    case "failed":
-      return st("err", t("onboarding.modelFailed")) + btn(esc(t("onboarding.retry")), "sm", ' data-ob="model-retry"');
+/** The subscription accounts as cards, from the account controller's view. */
+export function toolCards(v: CliBrainsView): ToolCard[] {
+  const waiting = v.state !== "ready";
+  const waitLine = t(v.state === "loading" ? "common.loading" : "missing.cli");
+  const chatgpt = v.chatgpt;
+  const signing = !!chatgpt?.signing_in;
+  const signedIn = !!chatgpt?.signed_in && !signing && chatgpt.plan_scope_granted !== false;
+  const cards: ToolCard[] = [
+    {
+      id: "chatgpt",
+      mark: providerMark("openai"),
+      name: "ChatGPT",
+      // Signed in, the account is the line: the check already says it is ready.
+      line: waiting ? waitLine : signing ? t("brains.chatgptSigning") : signedIn ? chatgpt?.email || t("brains.usingPlan") : chatgpt?.signed_in ? t("brains.chatgptNoPlan") : t("brains.signedOut"),
+      ready: !waiting && signedIn,
+      action: waiting || signedIn ? null : signing ? { label: t("common.cancel"), attrs: ' data-chatgpt="cancel" data-k="chatgpt:cancel"' } : { label: t("providers.connect"), attrs: ' data-chatgpt="sign-in" data-k="chatgpt:sign-in"' },
+    },
+  ];
+  for (const known of CLIS) {
+    const cli = v.clis.find((c) => c.id === known.id);
+    const ready = !waiting && !!cli?.available;
+    // Every tile of the guide says 連接 for the same act, whatever kind of tool it is.
+    const label = t(cli?.installed ? "providers.connect" : "brains.install");
+    const version = versionOf(cli?.version);
+    cards.push({
+      id: known.id,
+      mark: providerMark(known.mark),
+      name: known.name,
+      // Every tile has its quiet line, so the names stand at one height: a ready tool says so, with its version.
+      line: waiting ? waitLine : ready ? [t("brains.ready"), version].filter(Boolean).join(" · ") : t(cli?.disconnected ? "brains.disconnected" : !cli?.installed ? "brains.missing" : "brains.signedOut"),
+      ready,
+      action: waiting || ready ? null : { label, attrs: ` data-cli="${known.id}" data-k="cli:${known.id}" aria-label="${esc(`${label} ${known.name}`)}"${v.busy ? " disabled" : ""}` },
+    });
   }
+  return cards;
 }
 
-// ---------- connections ----------
+const toolTile = (card: ToolCard): string =>
+  tile({ id: card.id, mark: card.mark, name: card.name, line: card.line, on: card.ready ? t("brains.ready") : undefined, control: !card.ready && card.action ? btn(esc(card.action.label), "sm", card.action.attrs) : "" });
 
-export interface ConnectionsView {
+/**
+ * A key typed in a wide tile: the masked field, 「取消」 and 「貼上」 (「檢查中…」 while it is checked). The guide's two keys,
+ * OpenRouter's and Composio's, are typed alike; a key is sent by Enter or 貼上 only.
+ */
+function keyEntry(o: { id: string; placeholder: string; label: string; busy: boolean; invalid: boolean; cancel: string; paste: string }): string {
+  return (
+    fieldHTML(o.placeholder, "", { label: o.label, id: o.id, type: "password", invalid: o.invalid, disabled: o.busy }) +
+    btn(esc(t("common.cancel")), "sm", ` data-ob="${o.cancel}"${o.busy ? " disabled" : ""}`) +
+    btn(esc(o.busy ? t("common.checking") : t("common.paste")), "sm", ` data-ob="${o.paste}"${o.busy ? " disabled" : ""}`)
+  );
+}
+
+/**
+ * The OpenRouter tile, one tile like the others: 「連接」 (or the check and 「更換」) until it is pressed, then it spans its row
+ * with the key's field while the key is typed. A refused key keeps the field open with its alert.
+ */
+function keyTile(k: KeyView): string {
+  const entering = k.replacing || k.busy || k.error !== null;
+  const control = entering
+    ? keyEntry({ id: "ob-key-input", placeholder: "sk-or-v1-…", label: t("common.apiKeyField"), busy: k.busy, invalid: k.error !== null, cancel: "key-cancel", paste: "key-paste" })
+    : k.has
+      ? btn(esc(t("onboarding.keyReplace")), "sm", ' data-ob="key-replace"')
+      : btn(esc(t("providers.connect")), "sm", ` data-ob="key-replace" aria-label="${esc(`${t("providers.connect")} OpenRouter`)}"`);
+  // One short line like every other tile's: the key's own name once it is known, otherwise what it is.
+  const line = k.has && !entering && k.name !== null ? t("onboarding.keyNamed", { p0: k.name }) : t("common.apiKey");
+  return tile({ id: "openrouter", mark: providerMark("openrouter"), name: "OpenRouter", line, control, entry: entering, on: k.has && !entering ? t("onboarding.keyIsSet") : undefined }) + (k.error ? alert(st("err", k.error)) : "");
+}
+
+/**
+ * Every provider the app can connect, as tiles, from the core's catalog (the same as Settings › 模型與用量's 新增供應商):
+ * the guide is for everyone, not only the providers one owner uses. A tile's button opens the same
+ * editor as Settings. OpenRouter keeps its own key tile above them; ChatGPT is a sign-in among the accounts.
+ */
+const GROUP_TITLE: Record<ProviderKind["group"], MessageKey> = { official: "providers.official", gateway: "providers.gateway", local: "providers.local" };
+
+function providerTile(kind: ProviderKind, v: ProvidersView): string {
+  const provider = v.providers.find((p) => p.kind === kind.kind);
+  const control = provider
+    ? btn(esc(t("providers.manage")), "sm", ` data-pv="open" data-id="${esc(provider.id)}" aria-label="${esc(`${t("providers.manage")} ${kind.name}`)}"${v.busy ? " disabled" : ""}`)
+    : btn(esc(t("providers.connect")), "sm", ` data-pv="add" data-id="${esc(kind.kind)}" aria-label="${esc(`${t("providers.connect")} ${kind.name}`)}"${kind.available && !v.busy ? "" : " disabled"}`);
+  return tile({ id: `provider:${kind.kind}`, mark: providerMark(kind.kind), name: kind.name, line: kind.available ? description(kind) : t("providers.soon"), on: provider ? t("providers.connected") : undefined, control });
+}
+
+const tr = t as unknown as (key: MessageKey) => string;
+
+/** One AI tool the guide offers, whatever kind it is: a subscription account, the OpenRouter key or a catalog provider. */
+interface ToolTile { id: string; name: string; group: "accounts" | ProviderKind["group"]; html: string }
+
+/**
+ * The tools most people reach for, the same for everyone. The guide is a store: it never orders itself by what one owner has set up.
+ */
+export const POPULAR_TOOLS = ["chatgpt", "claude", "codex", "openrouter", "provider:anthropic", "provider:google"] as const;
+const GROUPS = ["accounts", "official", "gateway", "local"] as const;
+const groupTitle = (group: ToolTile["group"]): string => (group === "accounts" ? t("brains.accounts") : tr(GROUP_TITLE[group]));
+
+function toolTiles(accounts: CliBrainsView, key: KeyView, providers: ProvidersView): ToolTile[] {
+  const tiles: ToolTile[] = toolCards(accounts).map((card) => ({ id: card.id, name: card.name, group: "accounts", html: toolTile(card) }));
+  tiles.push({ id: "openrouter", name: "OpenRouter", group: "gateway", html: keyTile(key) });
+  if (providers.state === "ready") {
+    for (const kind of providers.kinds) {
+      if (kind.kind !== "openrouter" && kind.kind !== "chatgpt") tiles.push({ id: `provider:${kind.kind}`, name: kind.name, group: kind.group, html: providerTile(kind, providers) });
+    }
+  }
+  return tiles;
+}
+
+const toolGrid = (tiles: readonly ToolTile[], attrs: string): string => `<div class="ob-grid"${attrs}>${tiles.map((tile) => tile.html).join("")}</div>`;
+
+/**
+ * The tools as a store: 熱門 first, then every other tool under its kind, each kind by name; a search shows the tools whose
+ * name it finds (typos forgiven, R-FIND-01) in one grid instead.
+ */
+export function toolsListHTML(accounts: CliBrainsView, key: KeyView, providers: ProvidersView = emptyProvidersView(), query = ""): string {
+  const tiles = toolTiles(accounts, key, providers);
+  const wanted = query.trim();
+  if (wanted) {
+    const found = tiles.map((tile) => ({ tile, score: nameScore([tile.name, tile.id.replace(/^provider:/, "")], wanted) })).filter((hit) => hit.score < Infinity).sort((a, b) => a.score - b.score);
+    return found.length ? toolGrid(found.map((hit) => hit.tile), " data-ob-found") : `<p class="ob-state">${esc(t("onboarding.toolsNone"))}</p>`;
+  }
+  const popular = POPULAR_TOOLS.map((id) => tiles.find((tile) => tile.id === id)).filter((tile): tile is ToolTile => !!tile);
+  const rest = tiles.filter((tile) => !popular.includes(tile));
+  const byName = (a: ToolTile, b: ToolTile): number => a.name.localeCompare(b.name, "en");
+  return `<h3 class="ob-section">${esc(t("onboarding.popular"))}</h3>${toolGrid(popular, ' data-ob-group="popular"')}` +
+    GROUPS.map((group) => {
+      const shown = rest.filter((tile) => tile.group === group).sort(byName);
+      return shown.length ? `<h3 class="ob-section">${esc(groupTitle(group))}</h3>${toolGrid(shown, ` data-ob-group="${group}"`)}` : "";
+    }).join("") +
+    (providers.state === "failed" ? alert(st("err", t("providers.error"))) : "");
+}
+
+export function toolsHTML(accounts: CliBrainsView, key: KeyView, accountError: string, providers: ProvidersView = emptyProvidersView(), query = ""): string {
+  return (
+    head(t("onboarding.toolsTitle"), "tools") +
+    `<div class="ob-main"><div class="ob-find">${fieldHTML(t("conn.search"), query, { icon: "search", id: "ob-tools-find" })}</div>` +
+    (accountError ? alert(st("err", accountError)) : "") +
+    `<div data-ob-tools>${toolsListHTML(accounts, key, providers, query)}</div>` +
+    `</div>` + providersAddHTML(providers)
+  );
+}
+
+// ---------- 2. the services ----------
+
+/** Composio, as the services step knows it. The key itself is never held here. */
+export interface ComposioView {
+  /** Whether a key is set; null until the core has said, and then the card is not drawn. */
+  configured: boolean | null;
+  /** The key's field is open. */
+  entering: boolean;
+  busy: boolean;
+  error: string | null;
+}
+
+export const emptyComposioView = (): ComposioView => ({ configured: null, entering: false, busy: false, error: null });
+
+/** The own-server app (n8n) whose address and key are being typed in its tile. */
+export interface ServerEntry { id: string; busy: boolean; error: string | null }
+
+export interface ServicesState {
+  /** Every app the guide can add (mergeServices): what is shown before a search is the popular sign-in ones. */
   services: StoreService[] | "loading" | "failed";
   /** The service whose login is open in the browser. */
   waiting: string | null;
   /** A login that did not come through. */
   failed: string | null;
+  /** What the search box holds. */
+  query?: string;
+  composio?: ComposioView;
+  server?: ServerEntry | null;
 }
 
-export function connectionsHTML(v: ConnectionsView): string {
+/** The most a search shows: the nearest matches, the rest of the store being in 「連接」 afterwards. */
+const FOUND_SHOWN = 30;
+
+/**
+ * The services whose name or id the search finds: as typed (by letters, not by case or spacing), or, when none is,
+ * the names it nearly spells, nearest first (typos forgiven, R-FIND-01).
+ */
+export function matchServices(services: readonly StoreService[], query: string): StoreService[] {
+  const text = (value: string): string => value.toLowerCase().replace(/\s+/g, "");
+  const wanted = text(query.trim());
+  if (!wanted) return [...services];
+  const exact = services.filter((s) => text(s.name).includes(wanted) || text(s.id).includes(wanted));
+  if (exact.length) return exact;
+  return services.map((s) => ({ s, score: nameScore([s.name, s.id], query.trim()) }))
+    .filter((hit) => hit.score < Infinity).sort((a, b) => a.score - b.score).map((hit) => hit.s);
+}
+
+const summaryOf = (s: StoreService): string => s.summary[getLocale()] ?? s.summary.en ?? "";
+
+/**
+ * One app's tile. An app that asks only a sign-in is one button: pressing the tile opens its login. One that asks for
+ * the owner's own key or developer app has 「加入」, which opens the store's own form; an app on the owner's own server
+ * (n8n) has 「加入」 too, and its address and key are then typed across its row.
+ */
+function serviceTile(s: StoreService, v: ServicesState): string {
+  const mark = entryIcon(s, "md");
+  const own = ownServerForm(s.id);
+  if (s.server_id !== null) return tile({ id: s.id, mark, name: s.name, line: summaryOf(s), on: t("onboarding.connConnected") });
+  if (v.waiting === s.id) {
+    return tile({ id: s.id, mark, name: s.name, lineHTML: st("idle", t("onboarding.connWaiting")), control: btn(esc(t("common.cancel")), "sm", ' data-ob="conn-cancel"') });
+  }
+  if (own && v.server?.id === s.id) return serverTile(s, mark, own, v.server);
+  const need = own ? t("store.needsOwnServer") : s.needs === "key" ? t("setup.needsKey") : s.needs === "own_app" ? t("setup.needsOwnApp") : "";
+  if (need) {
+    const act = own ? "server-open" : "conn-setup";
+    return tile({ id: s.id, mark, name: s.name, line: need, control: btn(esc(t("conn.join")), "sm", ` data-ob="${act}" data-service="${esc(s.id)}" aria-label="${esc(`${t("conn.join")} ${s.name}`)}"${v.waiting || v.server?.busy ? " disabled" : ""}`) });
+  }
+  // The whole tile is the sign-in button; the word on its right says what pressing it does.
+  return (
+    `<button type="button" class="btn ob-tile pick" data-item="${esc(s.id)}" data-ob="conn-login" data-id="${esc(s.id)}" data-service="${esc(s.id)}"` +
+    ` aria-label="${esc(`${t("onboarding.connLogin")} ${s.name}`)}"${v.waiting ? " disabled" : ""}>` +
+    `<span class="ob-ic">${mark}</span><span class="ob-tx"><span class="nm">${esc(s.name)}</span><span class="ds">${esc(summaryOf(s))}</span></span>` +
+    `<span class="ob-ctl"><span class="ob-get" aria-hidden="true">${esc(t("onboarding.connLogin"))}</span></span></button>`
+  );
+}
+
+/** An own-server app being added: its address and its key across its row, then 「取消」 and 「連接」. */
+function serverTile(s: StoreService, mark: string, own: NonNullable<ReturnType<typeof ownServerForm>>, entry: ServerEntry): string {
+  const off = entry.busy ? " disabled" : "";
+  const control =
+    fieldHTML(own.urlHint, "", { label: `${s.name} ${t("conn.form.url")}`, id: "ob-server-url", invalid: entry.error !== null, disabled: entry.busy }) +
+    fieldHTML(t("onboarding.serverToken"), "", { label: `${s.name} ${t("onboarding.serverToken")}`, id: "ob-server-token", type: "password", disabled: entry.busy }) +
+    btn(esc(t("common.cancel")), "sm", ` data-ob="server-cancel"${off}`) +
+    btn(esc(entry.busy ? t("conn.form.connecting") : t("providers.connect")), "sm", ` data-ob="server-add"${off}`);
+  return tile({ id: s.id, mark, name: s.name, line: t("store.leadOwnServer", { p0: s.name }), control, entry: true }) + (entry.error ? alert(st("err", entry.error)) : "");
+}
+
+/**
+ * Composio, before its key is set: one card across the step that unlocks the store's other apps. Its key is typed in the card, as OpenRouter's is on the first step.
+ */
+function composioTile(c: ComposioView): string {
+  const entering = c.entering || c.busy || c.error !== null;
+  const control = entering
+    ? keyEntry({ id: "ob-composio-input", placeholder: "ak_…", label: t("plugins.keyPrompt"), busy: c.busy, invalid: c.error !== null, cancel: "composio-cancel", paste: "composio-paste" })
+    : btn(esc(t("providers.connect")), "sm", ` data-ob="composio-open" aria-label="${esc(`${t("providers.connect")} Composio`)}"`);
+  const mark = `<span class="mono md" aria-hidden="true">${COMPOSIO_SVG}</span>`;
+  return (
+    `<div class="ob-composio">` +
+    tile({ id: "composio", mark, name: "Composio", line: t(entering ? "onboarding.composioKeyLine" : "onboarding.composioLine"), control, wide: true, entry: entering }) +
+    (c.error ? alert(st("err", c.error)) : "") +
+    `</div>`
+  );
+}
+
+/**
+ * What the grid holds: before a search, the popular apps that ask only a sign-in; with one, every app it finds,
+ * whatever it asks, or a word that none does.
+ */
+export function serviceTilesHTML(v: ServicesState): string {
+  if (!Array.isArray(v.services)) return "";
+  const shown = v.query?.trim()
+    ? matchServices(v.services, v.query).slice(0, FOUND_SHOWN)
+    : popularServices(v.services.filter((s) => !ownServerForm(s.id)));
+  return shown.length ? shown.map((s) => serviceTile(s, v)).join("") : `<p class="ob-state">${esc(t("onboarding.connNone"))}</p>`;
+}
+
+/** The heading over the grid: what it is, so without Composio it says these need none. */
+const servicesHeading = (v: ServicesState): string =>
+  v.query?.trim() ? "" : `<h3 class="ob-section" data-ob-services-title>${esc(t(v.composio?.configured === false ? "onboarding.connBuiltin" : "onboarding.popular"))}</h3>`;
+
+export function servicesHTML(v: ServicesState): string {
   let body: string;
   if (v.services === "loading") body = `<div class="ob-state"><span class="spin" role="status" aria-label="${esc(t("conn.loading"))}"></span></div>`;
-  else if (v.services === "failed") body = `<div class="alert" role="alert">${st("err", t("onboarding.connLoadFailed"))}${btn(esc(t("onboarding.retry")), "sm", ' data-ob="conn-reload"')}</div>`;
+  else if (v.services === "failed") body = alert(st("err", t("onboarding.connLoadFailed")) + btn(esc(t("onboarding.retry")), "sm", ' data-ob="conn-reload"'));
   else {
-    const rows = v.services.map((s) => {
-      const connected = s.server_id !== null;
-      const waiting = v.waiting === s.id;
-      const control = connected
-        ? st("ok", t("onboarding.connConnected"))
-        : waiting
-          ? st("idle", t("onboarding.connWaiting")) + btn(esc(t("common.cancel")), "sm", ' data-ob="conn-cancel"')
-          : btn(esc(t("onboarding.connLogin")), "sm", ` data-ob="conn-login" data-service="${esc(s.id)}"${v.waiting ? " disabled" : ""}`);
-      return `<div class="row ob-service">${entryIcon(s, "md")}<div class="lbl"><div class="t">${esc(s.name)}</div></div><div class="ctl">${control}</div></div>`;
-    });
-    body = `<div class="list">${rows.join("")}</div>` + (v.failed ? `<div class="note" role="alert">${st("err", v.failed)}</div>` : "");
+    body =
+      `<div class="ob-find">${fieldHTML(t("conn.search"), v.query ?? "", { icon: "search", id: "ob-find" })}</div>` +
+      (v.composio?.configured === false ? composioTile(v.composio) : "") +
+      `<div data-ob-services-list>${servicesListHTML(v)}</div>`;
   }
-  return head(t("onboarding.connTitle"), t("onboarding.connLine")) + `<div class="ob-main" id="ob-conn">${body}</div>`;
+  return head(t("onboarding.connTitle"), "services") + `<div class="ob-main" id="ob-conn">${body}</div>`;
 }
 
-// ---------- Telegram ----------
-
-export const telegramHTML = (messagingHTML: string): string => head(t("onboarding.tgTitle"), t("onboarding.tgLine")) + `<div class="ob-main" id="ob-tg">${messagingHTML}</div>`;
-
-// ---------- the practice ----------
-
-export interface LessonView {
-  lesson: Lesson;
-  mode: "toggle" | "hold";
-  dictationKeys: string;
-  agentKeys: string;
-  /** The AltGr layout makes the dictation key a poor choice. */
-  altgr: boolean;
-  /** The question key looks taken by another program. */
-  conflict: boolean;
-  /** Why dictating cannot start yet: the speech model is still on its way (a percent, or null when unknown). */
-  waitingForModel: { percent: number | null } | null;
-  /** The sentence or command to say, in the language of the window. */
-  say: string;
+/** The heading, the grid and a login's failure: what a search or a login redraws, leaving the field and Composio's card be. */
+export function servicesListHTML(v: ServicesState): string {
+  return servicesHeading(v) + `<div class="ob-grid" data-ob-services>${serviceTilesHTML(v)}</div>` + (v.failed ? alert(st("err", v.failed)) : "");
 }
 
-const MISS_LINES: Record<Miss, () => string> = {
-  tooShort: () => t("onboarding.missTooShort"),
-  fallback: () => t("onboarding.missFallback"),
-  error: () => t("onboarding.missError"),
-  cancelled: () => t("onboarding.missCancelled"),
-  notCommand: () => t("onboarding.missNotCommand"),
-  refused: () => t("onboarding.missRefused"),
-  noText: () => t("onboarding.missNoText"),
-};
+// ---------- 3. the abilities ----------
 
-const sayBlock = (say: string): string => `<p class="ob-say">${esc(t("onboarding.quote", { p0: say }))}</p>`;
-
-/** The state of the lesson, as one line with a dot. */
-export function lessonStatus(v: LessonView): string {
-  const l = v.lesson;
-  if (l.phase === "ok") {
-    const spent = l.item ? t("onboarding.lessonTook", { p0: formatSeconds(l.item.stt_ms + l.item.llm_ms) }) : "";
-    return st("ok", spent ? `${t("onboarding.lessonOk")} · ${spent}` : t("onboarding.lessonOk"));
-  }
-  if (l.miss && (l.phase === "idle" || l.phase === "failed")) return st("warn", MISS_LINES[l.miss]());
-  if (v.waitingForModel && l.id !== "key") {
-    const percent = v.waitingForModel.percent === null ? "" : t("onboarding.modelPercent", { p0: v.waitingForModel.percent });
-    return st("idle", t("onboarding.modelWaiting", { p0: percent }));
-  }
-  switch (l.phase) {
-    case "pressed":
-      return st("idle", t("onboarding.lessonPressed"));
-    case "listening":
-      return st("ok", t("onboarding.lessonListening"));
-    case "processing":
-      return st("idle", t(l.id === "ask" || l.id === "act" ? "onboarding.lessonThinking" : "onboarding.lessonProcessing"));
-    default:
-      return st("idle", t("onboarding.lessonReady"));
-  }
+/**
+ * The abilities the members share, as the same rows and dialogs as Settings › 工具 (services.ts): each says what it
+ * uses now and opens the choice of service, its key and its model.
+ */
+export function abilitiesHTML(services: string): string {
+  return head(t("onboarding.abilitiesTitle"), "abilities") + `<div class="ob-main" data-ob-abilities>${services}</div>`;
 }
-
-/** The result of lesson 3: what was said next to what the cleanup made of it. */
-export function diffHTML(raw: string, cleaned: string): string {
-  const diff = textDiff(raw, cleaned);
-  const piece = (p: Piece, cls: string): string => (p.changed ? `<${cls}>${esc(p.text)}</${cls}>` : esc(p.text));
-  const count = changeCount(diff);
-  return (
-    `<div class="ob-diff card">` +
-    `<div class="ob-diff-row"><span class="ob-diff-label">${esc(t("onboarding.cleanupSaid"))}</span><p>${diff.spoken.map((p) => piece(p, "del")).join("")}</p></div>` +
-    `<div class="ob-diff-row"><span class="ob-diff-label">${esc(t("onboarding.cleanupMade"))}</span><p class="out">${diff.cleaned.map((p) => piece(p, "ins")).join("")}</p></div>` +
-    `<div class="ob-diff-foot">${count > 0 ? esc(t("onboarding.cleanupChanged", { p0: count })) : esc(t("onboarding.cleanupSame"))}</div>` +
-    `</div>`
-  );
-}
-
-/** Raphael's reply, as the desktop shows it: 《答。……》, with the question as it was heard. */
-export function replyHTML(question: string, prefix: string, text: string): string {
-  return (
-    `<div class="ob-reply card">` +
-    (question ? `<p class="ob-heard">${esc(t("onboarding.heard", { p0: question }))}</p>` : "") +
-    `<p class="ob-answer">《${esc(prefix)}。${esc(text)}》</p>` +
-    `</div>`
-  );
-}
-
-export function practiceHTML(v: LessonView): string {
-  const l = v.lesson;
-  const status = `<div class="ob-state" role="status" data-ob-status>${lessonStatus(v)}</div>`;
-  const again = btn(`${ico("refresh")}${esc(t("onboarding.retry"))}`, "sm", ' data-ob="lesson-retry"');
-  // A miss offers another try; so does a lesson that shows its result in place of the sentence.
-  const retry = l.phase === "failed" || (l.phase === "idle" && l.miss !== null) ? again : "";
-  const retryRow = (button: string): string => (button ? `<div class="ob-retry">${button}</div>` : "");
-  const box = (rows: number): string =>
-    `<textarea class="trybox" id="ob-box" rows="${rows}" placeholder="${esc(t("onboarding.boxPlaceholder"))}" aria-label="${esc(t("onboarding.boxLabel"))}" spellcheck="false"></textarea>`;
-  const change = (field: "dictation" | "agent"): string => btn(esc(t("onboarding.changeKey")), "sm", ` data-ob="change-key" data-field="${field}"`);
-  switch (l.id) {
-    case "key": {
-      const mode = sel(DICTATION_MODES, v.mode, t("settings.055"), ' data-ob="mode"');
-      const warn = v.altgr ? `<div class="alert" role="alert">${st("warn", t("settings.054"))}${change("dictation")}</div>` : "";
-      return (
-        head(t(v.mode === "hold" ? "onboarding.keyHoldTitle" : "onboarding.keyToggleTitle"), t(v.mode === "hold" ? "onboarding.keyHoldLine" : "onboarding.keyToggleLine")) +
-        `<div class="ob-main"><div class="ob-keys big" data-ob-caps>${capsHTML(v.dictationKeys, t("home.020"))}</div>${status}<div class="ob-mode">${mode}</div>${warn}</div>`
-      );
-    }
-    case "dictate":
-      return (
-        head(t("onboarding.dictateTitle"), t("onboarding.dictateLine")) +
-        `<div class="ob-main">${sayBlock(v.say)}<div class="ob-keys" data-ob-caps>${capsHTML(v.dictationKeys, t("home.020"))}</div>${box(3)}${status}</div>`
-      );
-    case "cleanup": {
-      // Done: the result takes the place of the sentence and the box, so that it is not below the fold.
-      if (l.item && l.phase === "ok") {
-        return head(t("onboarding.cleanupTitle"), t("onboarding.cleanupLine")) + `<div class="ob-main">${diffHTML(l.item.raw_text, l.item.text)}${status}${retryRow(again)}</div>`;
-      }
-      return (
-        head(t("onboarding.cleanupTitle"), t("onboarding.cleanupLine")) +
-        `<div class="ob-main">${sayBlock(v.say)}<div class="ob-keys" data-ob-caps>${capsHTML(v.dictationKeys, t("home.020"))}</div>${box(2)}${status}${retryRow(retry)}</div>`
-      );
-    }
-    case "ask":
-    case "act": {
-      const title = head(t(l.id === "ask" ? "onboarding.askTitle" : "onboarding.actTitle"), t(l.id === "ask" ? "onboarding.askLine" : "onboarding.actLine"));
-      if (l.turn && l.phase === "ok") {
-        return title + `<div class="ob-main">${replyHTML(l.turn.question, l.turn.prefix, l.turn.text)}${status}${retryRow(again)}</div>`;
-      }
-      const conflict = v.conflict ? `<div class="alert" role="alert">${st("warn", t("onboarding.conflict"))}${change("agent")}</div>` : "";
-      const then = v.mode === "toggle" ? `<span class="ob-then" aria-hidden="true">→</span>${capsHTML(v.dictationKeys)}` : "";
-      return (
-        title +
-        `<div class="ob-main">${sayBlock(v.say)}<div class="ob-keys" data-ob-caps>${capsHTML(v.agentKeys, t("settings.agentKeys"))}${then}</div>${status}${retryRow(retry)}${conflict}</div>`
-      );
-    }
-  }
-}
-
-// ---------- the end ----------
-
-export interface DoneView {
-  rerun: boolean;
-  /** The steps that were part of this run and how each ended, with what to say about it. */
-  rows: { label: string; state: "ok" | "warn"; text: string }[];
-  dictationKeys: string;
-  agentKeys: string;
-  pasteKeys: string;
-  /** No key: the guide ends with a way to the settings for it. */
-  noKey: boolean;
-}
-
-export function doneHTML(v: DoneView): string {
-  const rows = v.rows.map((r) => `<div class="row"><div class="lbl"><div class="t">${esc(r.label)}</div></div><div class="ctl">${st(r.state, r.text)}</div></div>`).join("");
-  const shortcut = (binding: string, label: string): string => `<div class="ob-shortcut">${capsHTML(binding)}<span>${esc(label)}</span></div>`;
-  return (
-    head(t("onboarding.doneTitle"), v.noKey ? t("onboarding.doneNoKey") : "") +
-    `<div class="ob-main">${rows ? `<div class="list">${rows}</div>` : ""}` +
-    `<div class="ob-shortcuts">${shortcut(v.dictationKeys, t("home.020"))}${shortcut(v.agentKeys, t("settings.agentKeys"))}${v.pasteKeys ? shortcut(v.pasteKeys, t("home.021")) : ""}<div class="ob-shortcut">${keys(["Esc"])}<span>${esc(t("common.cancel"))}</span></div></div></div>`
-  );
-}
-
-/** Which setup states say 「已設定」 and which 「已跳過」, for the end's rows. */
-export const setupText = (state: SetupState): { state: "ok" | "warn"; text: string } =>
-  state === "done" ? { state: "ok", text: t("onboarding.doneSet") } : { state: "warn", text: t("onboarding.doneSkipped") };

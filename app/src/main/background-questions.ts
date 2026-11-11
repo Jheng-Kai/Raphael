@@ -13,7 +13,8 @@
 
 import { cardHTML, cardFailure } from "./card";
 import { core } from "./api";
-import { avatarHTML, onAvatarChange } from "./avatar";
+import { onAvatarChange } from "./avatar";
+import { faceHTML, RAPHAEL_ID } from "./members";
 import { describeError } from "./format";
 import { onLocaleChange, t } from "./i18n";
 import type { MainEvent, PermissionCard } from "./types";
@@ -45,10 +46,10 @@ export interface Asker {
   name: string | null;
 }
 
-/** Raphael's own: the emblem, bare (never framed, filled or shadowed), and no name. */
+/** Raphael's own: his face (the first blue slime, or the owner's picture), bare, and no name. */
 const RAPHAEL: Asker = {
   get face() {
-    return avatarHTML({ size: 22, cls: "bgq-face" });
+    return faceHTML({ id: RAPHAEL_ID, name: "" }, 22, { cls: "bgq-face" });
   },
   name: null,
 };
@@ -70,6 +71,7 @@ export interface BackgroundQuestionsHost {
   memberId(): number;
   /** The room whose questions these are, when they wait in a room rather than a member's thread. */
   roomId?(): number | undefined;
+  threadId?(): number | undefined;
   /** Who asks in this thread (absent: Raphael). Read each time a card is drawn. */
   asker?(question?: BackgroundQuestion): Asker;
   /** The cards changed (one came or went): the page may keep its thread at the bottom. */
@@ -137,7 +139,7 @@ export function createBackgroundQuestions(host: BackgroundQuestionsHost): Backgr
     const mine = ++loads;
     try {
       const room = host.roomId?.();
-      const next = await core<{ questions: BackgroundQuestion[] }>("background.questions.list", room === undefined ? { member_id: host.memberId() } : { room_id: room });
+      const next = await core<{ questions: BackgroundQuestion[] }>("background.questions.list", room === undefined ? { member_id: host.memberId() } : { room_id: room, ...(host.threadId?.() === undefined ? {} : { thread_id: host.threadId!() }) });
       if (mine !== loads) return;
       shown = next?.questions ?? [];
     } catch {

@@ -1,19 +1,16 @@
-"""Tests for a task being shown the tools it needs out of many, and being able to find more."""
+"""Tests for a task finding the tools it is not listed, and calling them by use_tool.
+
+The list is fixed (owner, 2026-11-09, decision 2): many tools of a connection stay out of it, and
+find_tools returns the ones that fit what the task wants, each with its input schema."""
 
 import json
 
-from raphael_core.agent.ledger import Ledger
-from raphael_core.agent.plugins import MAX_OFFERED, PluginTool
+from raphael_core.agent.plugins import PluginTool
 from raphael_core.agent.policy import Tier
-from raphael_core.agent.toolpick import CHOOSE, PICK_MAX, ToolPicker
-from raphael_core.background.snapshot import FIND, MCP, refine, take_snapshot
-from raphael_core.brain.openrouter import ToolCall, ToolPlan
-from raphael_core.brain.spend import SpendTracker
-from raphael_core.worker.loop import Call, ToolOutcome, Turn, run_task
+from raphael_core.background.snapshot import FIND, FIND_MAX, FOUND, MCP, USE, take_snapshot
+from raphael_core.worker.loop import NOT_LISTED, Call, ToolOutcome, Turn, run_task
 
 from .test_run import Rig
-
-QUESTION = "search my notion for the notes I wrote today"
 
 
 def notion_tools(count=65):
@@ -45,97 +42,62 @@ class Hub:
         return list(self.tools)
 
 
-class Chooser:
-    """A model that names the tools it is told to."""
-
-    def __init__(self, *names):
-        self.names = names
-        self.calls = []
-
-    async def plan_tools(self, **kwargs):
-        self.calls.append(kwargs)
-        return ToolPlan(
-            calls=[ToolCall(CHOOSE, {"names": list(self.names)})],
-            model="fake/model",
-            cost_usd=0.0002,
-            prompt_tokens=100,
-            completion_tokens=10,
-            latency_ms=1,
-        )
+def listed(snapshot):
+    return [d["function"]["name"] for d in snapshot.definitions]
 
 
-def mcp_names(snapshot):
-    return [ref.name for ref in snapshot.refs.values() if ref.kind == MCP]
+def test_a_connections_tools_are_found_not_listed():
+    snapshot = take_snapshot(Hub(notion_tools()))
+    assert not [name for name in listed(snapshot) if name.startswith("Notion__")]
+    assert snapshot.refs["find_tools"].kind == FIND and snapshot.refs["use_tool"].kind == USE
+    assert len(snapshot.hidden()) == 65
 
 
-def test_a_task_is_shown_the_tools_that_fit_its_words_and_can_find_the_rest():
-    snapshot = take_snapshot(Hub(notion_tools()), QUESTION)
-    shown = mcp_names(snapshot)
-    assert "notion-search" in shown and len(shown) <= PICK_MAX + 4
-    assert snapshot.refs["find_tools"].kind == FIND
-    assert "find_tools" in [d["function"]["name"] for d in snapshot.definitions]
+def test_find_returns_the_tools_that_fit_with_their_schemas_and_lists_nothing():
+    snapshot = take_snapshot(Hub(notion_tools()))
+    before = json.dumps(snapshot.definitions)
+    found, lines = snapshot.find("update a page")
+    # The connection's page tool fits; its listing tools do not, and Raphael's own update_page is listed already.
+    assert [d["function"]["name"] for d in found] == ["Notion__notion-update-page"]
+    assert len(found) <= FIND_MAX and FOUND in lines
+    assert json.loads(lines[lines.index(FOUND) + 1]) == found[0]["function"], "a line is the whole definition"
+    assert any(line.startswith("calendar_update is in your list already") for line in lines)
+    assert json.dumps(snapshot.definitions) == before
+    again, _ = snapshot.find("update a page")
+    assert again == found, "a search may be made again: nothing was taken out of the catalog"
 
 
-def test_a_few_tools_are_all_shown_and_there_is_nothing_to_find():
-    snapshot = take_snapshot(Hub(notion_tools(MAX_OFFERED)), QUESTION)
-    assert len(mcp_names(snapshot)) == MAX_OFFERED and "find_tools" not in snapshot.refs
+def test_an_exact_name_finds_that_tool_and_a_listed_one_says_so():
+    snapshot = take_snapshot(Hub(notion_tools()))
+    found, _ = snapshot.find("Notion__notion-a050-list")
+    assert [d["function"]["name"] for d in found] == ["Notion__notion-a050-list"]
+    assert snapshot.find("web_search") == ([], ["web_search is in your list already: call it directly."])
 
 
-async def test_the_model_chooses_the_tools_of_a_task_and_is_paid_for(conn):
-    hub = Hub(notion_tools())
-    snapshot = take_snapshot(hub, "zzz")  # words that help nothing
-    chooser = Chooser("Notion__notion-a050-list")
-    ledger = Ledger(SpendTracker(conn, now_ms=lambda: 1_000))
-    await refine(snapshot, ToolPicker(chooser), "zzz", [], model="m", ledger=ledger)
-    shown = mcp_names(snapshot)
-    assert "notion-a050-list" in shown and "notion-search" in shown  # the search comes along
-    assert len(shown) <= PICK_MAX + 4
-    assert ledger.total == 0.0002 and "find_tools" in snapshot.refs
-    names = [d["function"]["name"] for d in snapshot.definitions]
-    assert len(names) == len(set(names)) and set(names) == set(snapshot.refs)
+def test_words_that_fit_nothing_get_the_names_to_choose_from():
+    snapshot = take_snapshot(Hub(notion_tools(3)))
+    found, lines = snapshot.find("qqqqq")
+    assert found == [] and "Notion__notion-search" in lines[-1] and "slack_draft" in lines[-1]
 
 
-async def test_refine_asks_no_one_when_everything_fits(conn):
-    snapshot = take_snapshot(Hub(notion_tools(5)), QUESTION)
-    chooser = Chooser()
-    ledger = Ledger(SpendTracker(conn, now_ms=lambda: 1_000))
-    await refine(snapshot, ToolPicker(chooser), QUESTION, [], model="m", ledger=ledger)
-    assert chooser.calls == [] and len(mcp_names(snapshot)) == 5
-
-
-def test_find_shows_the_tools_that_fit_the_query_and_not_the_ones_it_has():
-    snapshot = take_snapshot(Hub(notion_tools()), QUESTION)
-    assert "notion-update-page" not in mcp_names(snapshot)
-    added, lines = snapshot.find("update a page")
-    assert [d["function"]["name"] for d in added] == ["Notion__notion-update-page"]
-    assert "notion-update-page" in mcp_names(snapshot)
-    assert any(line.startswith("Notion__notion-update") for line in lines)
-    assert any(line.startswith("calendar_update (yours already)") for line in lines)
-    again, reminders = snapshot.find("update a page")
-    assert again == []  # No plugin is added twice; the internal calendar remains discoverable.
-    assert len(reminders) == 1 and reminders[0].startswith("calendar_update (yours already)")
-
-
-async def test_the_find_tools_call_makes_the_tool_callable_and_counts_as_a_tool_call(
-    conn, plugins
-):
-    snapshot = take_snapshot(Hub(notion_tools()), QUESTION)
-    rig = Rig(conn, plugins, snapshot=snapshot)
-    reply = await rig.tool("find_tools", {"query": "update page"})
-    assert reply["ok"] and "Notion__notion-update-page" in reply["content"]
-    assert [d["function"]["name"] for d in reply["tools"]] == ["Notion__notion-update-page"]
-    assert "Notion__notion-update-page" in rig.run.snapshot.refs
+async def test_find_tools_counts_as_a_tool_call_and_use_tool_calls_what_it_found(conn, plugins, calls):
+    await plugins.connect(look="T0")
+    rig = Rig(conn, plugins, snapshot=take_snapshot(plugins.hub))
+    reply = await rig.tool("find_tools", {"query": "look it up"})
+    assert reply["ok"] and "Notes__look" in reply["content"] and "tools" not in reply
     assert rig.run.tool_calls == 1
     bad = await rig.tool("find_tools", {"query": 5})
     assert not bad["ok"] and bad["kind"] == "bad_arguments"
-    nothing = await rig.tool("find_tools", {"query": "qqqqq"})
-    assert nothing["ok"] and "tools" not in nothing
+    used = await rig.tool("use_tool", {"name": "Notes__look", "arguments": {"topic": "x"}}, call_id="c2")
+    assert used["ok"] and calls == ["look"] and rig.run.snapshot.refs["Notes__look"].kind == MCP
+    assert "Notes__look" not in listed(rig.run.snapshot)
+    await rig.meteo.http.aclose()
 
 
 # --- the worker's loop ---------------------------------------------------------------------
 
 FIND_TOOLS = {"type": "function", "function": {"name": "find_tools", "parameters": {}}}
-FOUND = {"type": "function", "function": {"name": "Notion__update", "parameters": {}}}
+USE_TOOL = {"type": "function", "function": {"name": "use_tool", "parameters": {}}}
 
 
 class Host:
@@ -143,26 +105,28 @@ class Host:
         self.turns = [
             Turn("", [Call("c0", "Notion__update", {}, "{}")]),
             Turn("", [Call("c1", "find_tools", {"query": "update"}, "{}")]),
-            Turn("", [Call("c2", "Notion__update", {}, "{}")]),
+            Turn("", [Call("c2", "use_tool", {"name": "Notion__update", "arguments": {}}, "{}")]),
             Turn(json.dumps({"prefix": "告", "text": "ok", "detail": ""})),
         ]
         self.seen = []
         self.made = []
+        self.results = []
 
     async def chat(self, messages, tools):
         self.seen.append([t["function"]["name"] for t in tools])
+        if messages[-1].get("role") == "tool":
+            self.results.append(messages[-1]["content"])
         return self.turns.pop(0)
 
     async def tool(self, call_id, name, arguments):
         self.made.append(name)
-        if name == "find_tools":
-            return ToolOutcome(True, content="Notion__update", tools=[FOUND])
-        return ToolOutcome(True, content="done")
+        return ToolOutcome(True, content="Notion__update" if name == "find_tools" else "done")
 
 
-async def test_the_loop_allows_a_tool_the_host_made_available_and_offers_it_from_then_on():
+async def test_the_loop_sends_an_unlisted_name_to_find_tools_and_never_grows_its_list():
     host = Host()
-    outcome = await run_task(host, system="s", user="u", tools=[FIND_TOOLS])
+    outcome = await run_task(host, system="s", user="u", tools=[FIND_TOOLS, USE_TOOL])
     assert outcome.status == "done"
-    assert host.made == ["find_tools", "Notion__update"]  # the first call, before it, was refused
-    assert host.seen[0] == ["find_tools"] and host.seen[2] == ["find_tools", "Notion__update"]
+    assert host.made == ["find_tools", "use_tool"]  # the first call, by a name not listed, was refused
+    assert NOT_LISTED in host.results[0]
+    assert host.seen == [["find_tools", "use_tool"]] * 4

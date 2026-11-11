@@ -37,6 +37,7 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 
 from ..clock import wall_clock_ms
+from ..paths import local_storage_root
 from ..agent.conversations import Conversations
 from ..agent.steps import reason_of
 from ..worker.stall_guards import stalled
@@ -48,10 +49,30 @@ FILE_NAMES = re.compile(r'(?i)(?<![\w/])([\w.-]+\.(?:html|xlsx|pdf|csv|txt|json)
 # A design, a plan or a review is work done in the words themselves, on a brain that used no tool for it. So few words
 # are a promise or a line, not that.
 WRITTEN_WORK_CHARS = 200
+MAX_ARTIFACT_BYTES = 50 * 1024 * 1024
+
+
+def _artifact_digest(path):
+    digest, size = hashlib.sha256(), 0
+    with path.open("rb") as stream:
+        while chunk := stream.read(min(1024 * 1024, MAX_ARTIFACT_BYTES + 1 - size)):
+            size += len(chunk)
+            if size > MAX_ARTIFACT_BYTES:
+                raise ValueError("artifact_size")
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def _asker_key(turn_id: int) -> str:
     return hashlib.sha256(json.dumps(["asker", turn_id]).encode()).hexdigest()
+
+
+# The most work one reply in a room may hand off (a room holds six, and a reply gives each colleague one piece), and the
+# most that starts in one room thread between two messages of the owner's: the bound a single task already has on its own
+# fan-out (`background.service.MAX_HANDOFFS`). Live, one member ran about 87 background tasks in a meeting nobody had asked
+# for them in.
+MAX_TURN_HANDOFFS = 6
+MAX_THREAD_HANDOFFS = 24
 
 
 class Refused(Exception):
@@ -106,12 +127,23 @@ class Task:
     requires_artifact: bool = False
     report_room_id: int | None = None
     report_thread_id: int | None = None
+    # A work hand-off's words to whoever handed it over (background/handback.py); None before it ends.
+    handback: str | None = None
+
+    @property
+    def full_report(self) -> str:
+        """Read complete new reports and legacy rows that kept the full answer in detail."""
+        text, detail = self.report_text or "", self.report_detail or ""
+        prefix = " ".join(text.rstrip("…").split())
+        if prefix and len(detail) > len(text) and " ".join(detail.split()).startswith(prefix):
+            return detail
+        return text or detail
 
     @property
     def quiet(self) -> bool:
         """Whether its report stays in its thread: a member's task, or a routine's run, is never
         said on the overlay (the owner reads it in the app)."""
-        return self.member_id != 0 or self.routine_id is not None or self.scope != "private" or self.report_room_id is not None
+        return self.member_id != 0 or self.routine_id is not None or self.scope != "private" or self.report_room_id is not None or self.mode == "work"
 
 
 @dataclass
@@ -159,7 +191,7 @@ _TASK_COLUMNS = (
     " announced, rerun_of, member_id, routine_id, scope, room_id, thread_id,"
     " parent_task_id, root_task_id, stage_id, from_member_id, source_turn_id, model_ref, mode,"
     " done_when, idempotency_key, ready_at_ms, dispatch_policy, schedule_provenance, continuation, generation, requires_artifact,"
-    " report_room_id, report_thread_id"
+    " report_room_id, report_thread_id, handback"
 )
 _STEP_COLUMNS = "n, at_ms, kind, tool, server, tier, outcome, cost_usd, ms, reason, detail"
 
@@ -196,10 +228,10 @@ class TaskStore:
                     (rerun_of, cursor.lastrowid, rerun_of))
                 self._conn.execute("UPDATE worker_tasks SET (report_room_id,report_thread_id,source_turn_id,stage_id,from_member_id,model_ref)="
                     "(SELECT report_room_id,report_thread_id,source_turn_id,stage_id,from_member_id,model_ref FROM worker_tasks WHERE id=?) "
-                    "WHERE id=? AND EXISTS(SELECT 1 FROM worker_tasks WHERE id=? AND report_room_id IS NOT NULL)",
+                    "WHERE id=? AND EXISTS(SELECT 1 FROM worker_tasks WHERE id=? AND source_turn_id IS NOT NULL)",
                     (rerun_of,cursor.lastrowid,rerun_of))
                 self._conn.execute("UPDATE task_stage_owners SET owner_task_id=?,state='queued',reason='' WHERE owner_task_id=? "
-                    "AND EXISTS(SELECT 1 FROM worker_tasks WHERE id=? AND report_room_id IS NOT NULL)",
+                    "AND EXISTS(SELECT 1 FROM worker_tasks WHERE id=? AND source_turn_id IS NOT NULL)",
                     (cursor.lastrowid,rerun_of,rerun_of))
         assert cursor.lastrowid is not None
         return cursor.lastrowid
@@ -242,10 +274,24 @@ class TaskStore:
                                        (scope_key, stage)).fetchone()
             if owner and (parent is None or owner[0] != parent.id or mode == 'consult'):
                 raise Refused('stage_conflict')
+            if scope_key.startswith('room:'):
+                # The same work for the same colleague under another stage_id is the same work: a refusal is not mended by a
+                # new code (live, eight refused hand-offs were sent again that way).
+                # Since the owner last wrote in the thread: a request he makes again is new work.
+                _, room_id, thread_id = scope_key.split(':')
+                since = self._conn.execute("SELECT COALESCE(MAX(created),0) FROM room_messages WHERE room_id=? AND thread_id IS ? AND member_id IS NULL",
+                                           (int(room_id), None if thread_id == 'None' else int(thread_id))).fetchone()[0]
+                if self._conn.execute(
+                        "SELECT 1 FROM task_stage_owners o JOIN worker_tasks w ON w.id=o.owner_task_id WHERE o.scope_key=? "
+                        "AND o.stage_id!=? AND w.member_id=? AND w.text=? AND w.mode=? AND w.created_at_ms>=? AND w.state NOT IN "
+                        "('failed','cancelled','interrupted','limit')", (scope_key, stage, assignee, request, mode, since)).fetchone():
+                    raise Refused('stage_conflict')
+                if self.room_handoffs_used(source, parent):
+                    raise Refused('handoff_limit')
             if parent and self.get(parent.id).state not in ('running', 'queued'):
                 raise Refused('cancelled')
         own_lane = source.scope == 'private' and assignee == source.member_id
-        lane = source.scope == 'room' or bool(parent and parent.report_room_id) or own_lane
+        lane = mode == 'work' or source.scope == 'room' or bool(parent and parent.report_room_id) or own_lane
         report_room = source.room_id if source.scope == 'room' else parent.report_room_id if parent else None
         report_thread = source.thread_id if source.scope == 'room' else parent.report_thread_id if parent else None
         conversation = source.conversation_id if own_lane and source.conversation_id is not None else Conversations(self._conn, self._now_ms).main(assignee)
@@ -270,15 +316,54 @@ class TaskStore:
             if not changed:
                 raise Refused('stage_conflict')
             self._conn.execute("UPDATE worker_tasks SET root_task_id=COALESCE(root_task_id,id) WHERE id=?", (task_id,))
+            exchange_id = None
+            if mode == 'work' and assignee != source.member_id:
+                exchange_id = self._work_exchange(task_id, source, assignee, request, model, conversation, now)
+            work_at = max(now, source.created_at_ms) + 1 if mode == 'work' else now
             cursor = self._conn.execute("INSERT INTO agent_turns(created_at_ms,session_id,question,route,prefix,text,status,"
                 "source,member_id,peer_id,scope,room_id,thread_id,source_turn_id,model,conversation_id) "
                 "VALUES (?,?,?,?, '','','running',?,?,?,?,?,?,?,?,?)",
-                (now,f'work:{task_id}',request,'worker' if lane else 'exchange','worker' if lane else 'member',
+                (work_at,f'work:{task_id}','' if mode == 'work' else request,'worker' if lane else 'exchange','worker' if lane else 'member',
                  assignee,source.member_id,'private' if lane else 'exchange',None,None,source.id,model,conversation))
             self._conn.execute("UPDATE worker_tasks SET turn_id=? WHERE id=?", (cursor.lastrowid,task_id))
+            if exchange_id is not None:
+                self._conn.execute('UPDATE agent_turns SET session_id=? WHERE id=?',
+                                   (f'handoff:{cursor.lastrowid}',exchange_id))
             self._conn.execute("INSERT INTO task_outbox VALUES (?,?, 'queued',?,?,?,?,NULL,NULL)",
                 (f'{task_id}:queued',task_id,source.id,source.room_id,source.thread_id,now))
         return task_id, False
+
+    def room_handoffs_used(self, source, parent):
+        """Whether the work handed off from a reply in a room is at its bound: this reply's own
+        (`MAX_TURN_HANDOFFS`), or the room thread's since the owner last wrote in it (`MAX_THREAD_HANDOFFS`)."""
+        room = source.room_id if source.scope == 'room' else parent.report_room_id if parent else None
+        thread = source.thread_id if source.scope == 'room' else parent.report_thread_id if parent else None
+        if room is None:
+            return False
+        if source.scope == 'room' and self._conn.execute(
+                "SELECT COUNT(*) FROM worker_tasks WHERE source_turn_id=? AND mode IS NOT NULL", (source.id,)).fetchone()[0] >= MAX_TURN_HANDOFFS:
+            return True
+        since = self._conn.execute("SELECT COALESCE(MAX(created),0) FROM room_messages WHERE room_id=? AND thread_id IS ? AND member_id IS NULL",
+                                   (room, thread)).fetchone()[0]
+        return self._conn.execute(
+            "SELECT COUNT(*) FROM worker_tasks WHERE report_room_id=? AND report_thread_id IS ? AND mode IS NOT NULL AND created_at_ms>=?",
+            (room, thread, since)).fetchone()[0] >= MAX_THREAD_HANDOFFS
+
+    def _work_exchange(self, task_id, source, assignee, request, model, conversation, now):
+        """A separate audit of the brief, inserted before the owner's work turn."""
+        cursor = self._conn.execute("INSERT INTO agent_turns(created_at_ms,session_id,question,route,prefix,text,status,"
+            "source,member_id,peer_id,scope,source_turn_id,model,conversation_id) "
+            "VALUES (?,?,?,'exchange','','','running','member',?,?,'exchange',?,?,?)",
+            (max(now, source.created_at_ms),f'handoff-pending:{task_id}',request,assignee,source.member_id,source.id,model,conversation))
+        return cursor.lastrowid
+
+    def exchange_turn_id(self, task_id):
+        task = self.get(task_id)
+        if task is None or task.turn_id is None:
+            return None
+        row = self._conn.execute("SELECT id FROM agent_turns WHERE session_id=? AND scope='exchange' AND source='member'",
+                                 (f'handoff:{task.turn_id}',)).fetchone()
+        return row[0] if row else None
 
     def asker(self, source, *, model, language):
         """The task a conversation turn that consults colleagues waits as, made once for the turn.
@@ -345,45 +430,64 @@ class TaskStore:
         if not item or not item.get('workspace') or not item.get('uri'):
             return None
         try:
-            root = Path(item['workspace']).resolve(strict=True)
+            root = local_storage_root(item['workspace'])
             found = (root / item['uri']).resolve(strict=True)
-            if not found.is_relative_to(root) or not found.is_file() or found.stat().st_size > 50 * 1024 * 1024:
+            if not found.is_relative_to(root) or not found.is_file() or found.stat().st_size > MAX_ARTIFACT_BYTES:
                 return None
-            return found if hashlib.sha256(found.read_bytes()).hexdigest() == item['digest'] else None
+            return found if _artifact_digest(found) == item['digest'] else None
         except (OSError, ValueError):
             return None
 
     def verify_artifact(self,task_id,call_id,path,*,workspace,mime):
         """Trusted executors verify actual bytes inside their authorized workspace, never stdout claims."""
-        root = Path(workspace).resolve(strict=True)
+        root = local_storage_root(workspace)
         artifact = Path(path).resolve(strict=True)
-        if not artifact.is_file() or not artifact.is_relative_to(root):
+        if not artifact.is_file() or not artifact.is_relative_to(root) or artifact.stat().st_size > MAX_ARTIFACT_BYTES:
             raise ValueError('artifact_outside_workspace')
-        digest = hashlib.sha256(artifact.read_bytes()).hexdigest()
+        digest = _artifact_digest(artifact)
         self.record_evidence(task_id,call_id,kind='artifact',uri=artifact.relative_to(root).as_posix(),digest=digest,mime=mime)
         with self._conn:
             self._conn.execute("UPDATE task_evidence SET workspace=? WHERE task_id=? AND tool_call_id=? AND uri=?",
                                (str(root),task_id,call_id,artifact.relative_to(root).as_posix()))
         return digest
 
+    def capture_file(self, task_id, path):
+        """Persist the hand-off baseline; it is not evidence that work happened."""
+        path = path.resolve(strict=True)
+        if not path.is_file() or path.stat().st_size > MAX_ARTIFACT_BYTES:
+            raise ValueError('artifact_size')
+        self.record_evidence(task_id, 'file_before', kind='file_before', uri=str(path), digest=_artifact_digest(path), mime="application/octet-stream")
+
+    def file_changed(self, item):
+        path = Path(item['uri']).resolve(strict=True)
+        return (path.is_file() and path.stat().st_size <= MAX_ARTIFACT_BYTES
+                and _artifact_digest(path) != item['digest'])
+
     def completion_reason(self, task, *, verifiable=True, said=""):
         """Validate receipts and explicit file requirements, even without a member workspace."""
-        evidence = self.evidence(task.id)
+        receipts = self.evidence(task.id)
+        evidence = [item for item in receipts if item['kind'] not in ('file_before', 'artifact_note')]
+        before = {item['uri']: item for item in receipts if item['kind'] == 'file_before'}
         artifacts = [item for item in evidence if item['kind'] == 'artifact']
-        requires_artifact = task.requires_artifact
+        waived = [Path(item['uri']).name.lower() for item in receipts if item['kind'] == 'artifact_note']
+        expected = [name for name in FILE_NAMES.findall(task.done_when) if not any(
+            found == name.lower() or found.endswith(' ' + name.lower()) for found in waived)] if task.requires_artifact else []
+        requires_artifact = task.requires_artifact and (not waived or bool(expected) or bool(before))
         if requires_artifact and not artifacts:
             return 'missing_artifact'
         if not evidence:
             return None if not requires_artifact and len(said.strip()) >= WRITTEN_WORK_CHARS and not stalled(said) else 'work_without_action'
         for item in artifacts:
             try:
-                root = Path(item['workspace']).resolve(strict=True)
+                root = local_storage_root(item['workspace'])
                 path = (root / item['uri']).resolve(strict=True)
-                if not path.is_relative_to(root) or hashlib.sha256(path.read_bytes()).hexdigest() != item['digest']:
+                if (not path.is_relative_to(root) or not path.is_file() or path.stat().st_size > MAX_ARTIFACT_BYTES
+                        or _artifact_digest(path) != item['digest']):
                     return 'artifact_changed'
+                if str(path) in before and not self.file_changed(before[str(path)]):
+                    return 'missing_artifact'
             except (OSError, TypeError, ValueError):
                 return 'missing_artifact'
-        expected = FILE_NAMES.findall(task.done_when) if requires_artifact else []
         names = [Path(item['uri']).name.lower() for item in artifacts]
         # A filename extracted from prose can be the last word of a named path containing spaces.
         if any(not any(found == name.lower() or (found in task.done_when.lower() and found.endswith(' ' + name.lower()))
@@ -427,6 +531,7 @@ class TaskStore:
         detail: str | None,
         reason: str | None,
         publish=None,
+        handback: str | None = None,
     ) -> None:
         if state not in FINAL_STATES:
             raise ValueError(f"{state!r} is not a state a task ends in")
@@ -434,8 +539,8 @@ class TaskStore:
         with self._conn:
             self._conn.execute(
                 "UPDATE worker_tasks SET state = ?, finished_at_ms = ?, report_prefix = ?,"
-                " report_text = ?, report_detail = ?, reason = ? WHERE id = ?",
-                (state, self._now_ms(), prefix, text, detail, reason, task_id),
+                " report_text = ?, report_detail = ?, reason = ?, handback = ? WHERE id = ?",
+                (state, self._now_ms(), prefix, text, detail, reason, handback, task_id),
             )
             stage_state = 'done' if state == 'done' else 'cancelled' if state == 'cancelled' else 'incomplete' if reason in (
                 'missing_artifact','artifact_changed','work_without_action','missing_terminal','dangling_mention','child_work_incomplete') else 'blocked'

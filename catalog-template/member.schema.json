@@ -1,0 +1,685 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "format": {
+      "const": "raphael-member"
+    },
+    "version": {
+      "const": 1
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 16
+    },
+    "role": {
+      "type": "string",
+      "minLength": 0,
+      "maxLength": 24
+    },
+    "personality": {
+      "type": "string",
+      "minLength": 0,
+      "maxLength": 2000
+    },
+    "instructions": {
+      "type": "string",
+      "minLength": 0,
+      "maxLength": 2000
+    },
+    "reply_style": {
+      "enum": [
+        "full",
+        "conversational"
+      ]
+    },
+    "description": {
+      "type": "string",
+      "minLength": 0,
+      "maxLength": 280
+    },
+    "skills": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 131072
+          },
+          "files": {
+            "type": "object",
+            "maxProperties": 100,
+            "propertyNames": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 300
+            },
+            "additionalProperties": {
+              "type": "string",
+              "minLength": 0,
+              "maxLength": 131072
+            }
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "additionalProperties": false
+      },
+      "maxItems": 40
+    },
+    "routines": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 40
+          },
+          "prompt": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1000
+          },
+          "schedule": {
+            "anyOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "enum": [
+                      "once",
+                      "daily",
+                      "weekdays",
+                      "weekly",
+                      "monthly",
+                      "every"
+                    ]
+                  },
+                  "time": {
+                    "type": "string",
+                    "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$"
+                  },
+                  "days": {
+                    "type": "array",
+                    "items": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 6
+                    },
+                    "maxItems": 7,
+                    "minItems": 1,
+                    "uniqueItems": true
+                  },
+                  "hours": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 24
+                  },
+                  "minutes": {
+                    "type": "integer",
+                    "minimum": 5,
+                    "maximum": 1440
+                  },
+                  "day": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 31
+                  },
+                  "timezone": {
+                    "type": "string",
+                    "minLength": 0,
+                    "maxLength": 100
+                  },
+                  "start_date": {
+                    "type": "string",
+                    "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+                  },
+                  "until": {
+                    "type": "string",
+                    "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+                  },
+                  "max_runs": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "from": {
+                    "type": "string",
+                    "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$"
+                  },
+                  "to": {
+                    "type": "string",
+                    "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$"
+                  }
+                },
+                "required": [
+                  "kind"
+                ],
+                "additionalProperties": false,
+                "allOf": [
+                  {
+                    "if": {
+                      "properties": {
+                        "kind": {
+                          "enum": [
+                            "daily",
+                            "weekdays",
+                            "weekly",
+                            "monthly",
+                            "once"
+                          ]
+                        }
+                      }
+                    },
+                    "then": {
+                      "required": [
+                        "time"
+                      ]
+                    }
+                  },
+                  {
+                    "if": {
+                      "properties": {
+                        "kind": {
+                          "const": "weekly"
+                        }
+                      }
+                    },
+                    "then": {
+                      "required": [
+                        "days"
+                      ]
+                    }
+                  },
+                  {
+                    "if": {
+                      "properties": {
+                        "kind": {
+                          "const": "monthly"
+                        }
+                      }
+                    },
+                    "then": {
+                      "required": [
+                        "day"
+                      ]
+                    }
+                  },
+                  {
+                    "if": {
+                      "properties": {
+                        "kind": {
+                          "const": "once"
+                        }
+                      }
+                    },
+                    "then": {
+                      "required": [
+                        "start_date"
+                      ]
+                    }
+                  },
+                  {
+                    "if": {
+                      "properties": {
+                        "kind": {
+                          "const": "every"
+                        }
+                      }
+                    },
+                    "then": {
+                      "oneOf": [
+                        {
+                          "required": [
+                            "hours"
+                          ]
+                        },
+                        {
+                          "required": [
+                            "minutes"
+                          ]
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          "when": {
+            "anyOf": [
+              {
+                "type": "null"
+              },
+              {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "webhook": {
+                        "const": true
+                      }
+                    },
+                    "required": [
+                      "webhook"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "app": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 200
+                      },
+                      "event": {
+                        "type": "object",
+                        "properties": {
+                          "tool": {
+                            "type": "string",
+                            "pattern": "^mcp:[A-Za-z0-9_.:-]+/[^/\\s]+$"
+                          },
+                          "arguments": {
+                            "type": "object"
+                          },
+                          "items": {
+                            "type": "string",
+                            "maxLength": 200,
+                            "pattern": "^[A-Za-z0-9_.-]*$"
+                          },
+                          "id": {
+                            "type": "string",
+                            "maxLength": 200,
+                            "pattern": "^[A-Za-z0-9_.-]*$",
+                            "minLength": 1
+                          },
+                          "since": {
+                            "type": "object",
+                            "properties": {
+                              "arg": {
+                                "type": "string",
+                                "pattern": "^[A-Za-z0-9_-]{1,100}$"
+                              },
+                              "format": {
+                                "const": "iso"
+                              }
+                            },
+                            "required": [
+                              "arg",
+                              "format"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "required": [
+                          "tool",
+                          "arguments",
+                          "items",
+                          "id"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "filter": {
+                        "type": "object",
+                        "properties": {
+                          "field": {
+                            "type": "string",
+                            "maxLength": 200,
+                            "pattern": "^[A-Za-z0-9_.-]*$"
+                          },
+                          "equals": {
+                            "type": "string",
+                            "minLength": 0,
+                            "maxLength": 300
+                          },
+                          "operator": {
+                            "enum": [
+                              "equals",
+                              "contains"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "field",
+                          "equals"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "app",
+                      "event",
+                      "filter"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        "required": [
+          "title",
+          "prompt",
+          "schedule",
+          "when"
+        ],
+        "additionalProperties": false,
+        "oneOf": [
+          {
+            "properties": {
+              "schedule": {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "enum": [
+                      "once",
+                      "daily",
+                      "weekdays",
+                      "weekly",
+                      "monthly",
+                      "every"
+                    ]
+                  },
+                  "time": {
+                    "type": "string",
+                    "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$"
+                  },
+                  "days": {
+                    "type": "array",
+                    "items": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 6
+                    },
+                    "maxItems": 7,
+                    "minItems": 1,
+                    "uniqueItems": true
+                  },
+                  "hours": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 24
+                  },
+                  "minutes": {
+                    "type": "integer",
+                    "minimum": 5,
+                    "maximum": 1440
+                  },
+                  "day": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 31
+                  },
+                  "timezone": {
+                    "type": "string",
+                    "minLength": 0,
+                    "maxLength": 100
+                  },
+                  "start_date": {
+                    "type": "string",
+                    "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+                  },
+                  "until": {
+                    "type": "string",
+                    "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+                  },
+                  "max_runs": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "from": {
+                    "type": "string",
+                    "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$"
+                  },
+                  "to": {
+                    "type": "string",
+                    "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$"
+                  }
+                },
+                "required": [
+                  "kind"
+                ],
+                "additionalProperties": false,
+                "allOf": [
+                  {
+                    "if": {
+                      "properties": {
+                        "kind": {
+                          "enum": [
+                            "daily",
+                            "weekdays",
+                            "weekly",
+                            "monthly",
+                            "once"
+                          ]
+                        }
+                      }
+                    },
+                    "then": {
+                      "required": [
+                        "time"
+                      ]
+                    }
+                  },
+                  {
+                    "if": {
+                      "properties": {
+                        "kind": {
+                          "const": "weekly"
+                        }
+                      }
+                    },
+                    "then": {
+                      "required": [
+                        "days"
+                      ]
+                    }
+                  },
+                  {
+                    "if": {
+                      "properties": {
+                        "kind": {
+                          "const": "monthly"
+                        }
+                      }
+                    },
+                    "then": {
+                      "required": [
+                        "day"
+                      ]
+                    }
+                  },
+                  {
+                    "if": {
+                      "properties": {
+                        "kind": {
+                          "const": "once"
+                        }
+                      }
+                    },
+                    "then": {
+                      "required": [
+                        "start_date"
+                      ]
+                    }
+                  },
+                  {
+                    "if": {
+                      "properties": {
+                        "kind": {
+                          "const": "every"
+                        }
+                      }
+                    },
+                    "then": {
+                      "oneOf": [
+                        {
+                          "required": [
+                            "hours"
+                          ]
+                        },
+                        {
+                          "required": [
+                            "minutes"
+                          ]
+                        }
+                      ]
+                    }
+                  }
+                ]
+              },
+              "when": {
+                "type": "null"
+              }
+            }
+          },
+          {
+            "properties": {
+              "schedule": {
+                "type": "null"
+              },
+              "when": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "webhook": {
+                        "const": true
+                      }
+                    },
+                    "required": [
+                      "webhook"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "app": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 200
+                      },
+                      "event": {
+                        "type": "object",
+                        "properties": {
+                          "tool": {
+                            "type": "string",
+                            "pattern": "^mcp:[A-Za-z0-9_.:-]+/[^/\\s]+$"
+                          },
+                          "arguments": {
+                            "type": "object"
+                          },
+                          "items": {
+                            "type": "string",
+                            "maxLength": 200,
+                            "pattern": "^[A-Za-z0-9_.-]*$"
+                          },
+                          "id": {
+                            "type": "string",
+                            "maxLength": 200,
+                            "pattern": "^[A-Za-z0-9_.-]*$",
+                            "minLength": 1
+                          },
+                          "since": {
+                            "type": "object",
+                            "properties": {
+                              "arg": {
+                                "type": "string",
+                                "pattern": "^[A-Za-z0-9_-]{1,100}$"
+                              },
+                              "format": {
+                                "const": "iso"
+                              }
+                            },
+                            "required": [
+                              "arg",
+                              "format"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "required": [
+                          "tool",
+                          "arguments",
+                          "items",
+                          "id"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "filter": {
+                        "type": "object",
+                        "properties": {
+                          "field": {
+                            "type": "string",
+                            "maxLength": 200,
+                            "pattern": "^[A-Za-z0-9_.-]*$"
+                          },
+                          "equals": {
+                            "type": "string",
+                            "minLength": 0,
+                            "maxLength": 300
+                          },
+                          "operator": {
+                            "enum": [
+                              "equals",
+                              "contains"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "field",
+                          "equals"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "app",
+                      "event",
+                      "filter"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "maxItems": 50
+    },
+    "connections": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 100
+      },
+      "maxItems": 30
+    }
+  },
+  "required": [
+    "format",
+    "version",
+    "name",
+    "role",
+    "personality",
+    "instructions",
+    "reply_style",
+    "skills",
+    "routines",
+    "connections"
+  ],
+  "additionalProperties": false
+}

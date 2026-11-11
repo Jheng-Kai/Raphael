@@ -18,7 +18,7 @@ import functools
 import json
 import re
 import string
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 
 import opencc
 
@@ -427,7 +427,7 @@ def _latin_stutter(match: re.Match[str]) -> str:
 def remove_stutters(text: str) -> str:
     """`text` without its obvious stutters: a word or a short run that is said again right after a
     comma, where the speaker started over. The first is dropped with the comma and the second
-    stays (as it was spelled): "Hermes，Hermes agent" is "Hermes agent", "the, the config" is "the
+    stays (as it was spelled): "Helion，Helion agent" is "Helion agent", "the, the config" is "the
     config", "任何，任何事情" is "任何事情".
 
     This is for the text that is pasted without cleanup, which is speech-to-text as it came, and it
@@ -448,6 +448,283 @@ def remove_stutters(text: str) -> str:
 
 _HAN = re.compile(r"[㐀-鿿豈-﫿]")
 _KANA = re.compile(r"[぀-ヿ]")
+
+
+# A CJK character is one unit; a Latin word is one unit regardless of its length.
+# Digits and punctuation include list markers and do not make a paragraph unsupported.
+_CLEANUP_UNITS = re.compile(r"[A-Za-z\u00c0-\u024f]+(?:['’][A-Za-z\u00c0-\u024f]+)*|[^\W\d_]", re.UNICODE)
+_CLEANUP_FILLERS = re.compile(r"怎麼講|怎么讲|那個|那个|就是|然後|然后|[嗯呃哦]|\b(?:um|uh)\b", re.IGNORECASE)
+MIN_PARAGRAPH_SHARE = 0.5
+
+
+def guard_cleanup_text(raw: str, cleaned: str, *, dictionary_words: Sequence[str] = ()) -> str:
+    """Retain supported boundary prose and every original middle paragraph.
+
+    An empty return rejects the whole cleanup: the caller must retain normalized raw text with
+    a failure reason, never deliver an empty dictation. Both scripts and regional word forms
+    count as spoken, as do canonical dictionary names. The threshold is inclusive.
+    """
+    def units(text: str, convert: Callable[[str], str]) -> list[str]:
+        return _CLEANUP_UNITS.findall(_CLEANUP_FILLERS.sub("", convert(text).casefold()))
+
+    conversions = (to_simplified, to_mainland)
+    heard = [set(units(raw + "\n" + "\n".join(dictionary_words), convert)) for convert in conversions]
+
+    def supported(text: str) -> bool:
+        for convert, present in zip(conversions, heard, strict=True):
+            tokens = units(text, convert)
+            if not tokens or sum(token in present for token in tokens) / len(tokens) >= MIN_PARAGRAPH_SHARE:
+                return True
+        return False
+
+    spans = []
+    start = 0
+    for boundary in re.finditer(r"\r?\n[ \t]*\r?\n(?:[ \t]*\r?\n)*", cleaned):
+        if cleaned[start:boundary.start()].strip():
+            spans.append((start, boundary.start()))
+        start = boundary.end()
+    if cleaned[start:].strip():
+        spans.append((start, len(cleaned)))
+    if not spans:
+        return ""
+
+    # Some models put their preface/note on a single line without a blank separator. Inspect
+    # only the outward line of each original edge, never list interiors or fences. Do this
+    # before scoring the paragraph: a long note must not overwhelm a short spoken line.
+    adjusted = list(spans)
+    for index in dict.fromkeys((0, len(spans) - 1)):
+        start, end = spans[index]
+        paragraph = cleaned[start:end]
+        lines = paragraph.splitlines(keepends=True)
+        if len(lines) < 2 or re.search(r"(?m)^ {0,3}(?:`{3,}|~{3,})", paragraph):
+            continue
+        left, right = start, end
+        if index == 0 and not supported(lines[0]):
+            left = start + len(lines[0])
+        if index == len(spans) - 1 and not supported(lines[-1]):
+            right = end - len(lines[-1])
+            # The removed line owns the preceding line break, not the speaker's paragraph.
+            while right > left and cleaned[right - 1] in "\r\n":
+                right -= 1
+        adjusted[index] = (left, right)
+
+    # Decide on the original edges once. A middle paragraph never becomes a new candidate.
+    kept = [index for index, (start, end) in enumerate(adjusted)
+            if index not in (0, len(spans) - 1) or
+            (end > start and cleaned[start:end].strip() and supported(cleaned[start:end]))]
+    if not kept:
+        return ""
+    left = adjusted[kept[0]][0]
+    right = adjusted[kept[-1]][1]
+    if kept[0] == 0 and left == spans[0][0]:
+        left = 0
+    if kept[-1] == len(spans) - 1 and right == spans[-1][1]:
+        right = len(cleaned)
+    return cleaned[left:right] if right > left else ""
+
+
+def _dictation_prose(text: str, change: Callable[[str, set[int], int], str], *, skip_kana: bool = True) -> str:
+    """Edit prose lines only, retaining kana lines, code fences and inline code byte for byte."""
+    fence = ""
+    size = 0
+    result = []
+    offset = 0
+    prose: list[tuple[str, int]] = []
+
+    def flush() -> None:
+        if not prose:
+            return
+        block = "".join(line for line, _ in prose)
+        protected = set()
+        for span in re.finditer(r"(?<![`\\])(`+)(?!`)(.*?)(?<!`)\1(?!`)", block, re.DOTALL):
+            protected.update(range(span.start(), span.end()))
+        base = prose[0][1]
+        for line, start in prose:
+            if skip_kana and re.search(r"[\u3040-\u30ff\u31f0-\u31ff\uff66-\uff9f]", line):
+                result.append(line)
+            else:
+                begin = start - base
+                local = {index - begin for index in range(begin, begin + len(line)) if index in protected}
+                result.append(change(line, local, start))
+        prose.clear()
+
+    for line in text.splitlines(keepends=True):
+        start = offset
+        offset += len(line)
+        marker = re.match(r"^ {0,3}(`{3,}|~{3,})(.*)$", line.rstrip("\r\n"))
+        if fence:
+            if marker and marker[1][0] == fence and len(marker[1]) >= size and not marker[2].strip():
+                fence = ""
+            result.append(line)
+            continue
+        if marker:
+            flush()
+            fence, size = marker[1][0], len(marker[1])
+            result.append(line)
+            continue
+        prose.append((line, start))
+    flush()
+    return "".join(result)
+
+
+def finish_chinese_dictation(text: str) -> str:
+    """Omit only the whole dictation's final prose full stop, preserving its sentences."""
+    final = len(text.rstrip()) - 1
+
+    def finish(line: str, protected: set[int], offset: int) -> str:
+        index = final - offset
+        if 0 <= index < len(line) and line[index] == "。" and index not in protected:
+            return line[:index] + line[index + 1:]
+        return line
+
+    return _dictation_prose(text, finish)
+
+
+def remove_dictation_fillers(text: str) -> str:
+    """Remove unquoted hesitation syllables and repair their comma boundaries in prose."""
+    pairs = {"「": "」", "『": "』", '"': '"', "“": "”"}
+    quotes: list[str] = []
+    commas = {",", "，"}
+
+    def at_start(prefix: str) -> bool:
+        return not prefix.strip() or bool(re.fullmatch(r"[ \t]*(?:\d+[.)]|[-*])[ \t]+", prefix))
+
+    def finish(line: str, protected: set[int], offset: int) -> str:
+        for match in re.finditer(
+            r'https?://[^\s<>「」『』“”，。？！：；、"]+|www\.[^\s<>「」『』“”，。？！：；、"]+'
+            r'|[\w.+-]+@[\w.-]+\.[a-z]{2,}', line, re.I,
+        ):
+            protected.update(range(match.start(), match.end()))
+        for index, char in enumerate(line):
+            if index in protected:
+                continue
+            if quotes:
+                protected.add(index)
+            if quotes and char == quotes[-1]:
+                quotes.pop()
+            elif char in pairs:
+                protected.add(index)
+                quotes.append(pairs[char])
+        # Read quote boundaries on kana lines too, but retain the entire line byte for byte.
+        if re.search(r"[\u3040-\u30ff\u31f0-\u31ff\uff66-\uff9f]", line):
+            return line
+        removed = set()
+        for match in re.finditer(r"(?<![a-z0-9_-])(?:uh|um)(?![a-z0-9_-])", line, re.I):
+            span = set(range(match.start(), match.end()))
+            if not span & protected:
+                removed.update(span)
+        for match in re.finditer(r"[,，][ \t]*(嗯)[ \t]*(?=[,，])", line):
+            if not set(range(match.start(), match.end() + 1)) & protected:
+                removed.add(match.start(1))
+        for index, char in enumerate(line):
+            if index in protected:
+                continue
+            if char == "呃":
+                removed.add(index)
+            elif char == "欸":
+                before, after = line[:index].rstrip(), line[index + 1:]
+                if (at_start(line[:index]) or before[-1] in ",，。？！?!;；:：") and (
+                    not after.strip() or after[0].isspace() or after[0] in ",，。？！?!;；:："
+                ):
+                    removed.add(index)
+        output: list[tuple[str, bool]] = []
+        changed = bool(removed)
+        leading_separator = False
+        for index, char in enumerate(line):
+            if index in removed:
+                continue
+            keep = index in protected
+            if leading_separator and not keep and char in " \t":
+                continue
+            leading_separator = False
+            previous = len(output) - 1
+            while previous >= 0 and output[previous][0] in " \t":
+                previous -= 1
+            if not keep and char in commas:
+                if at_start("".join(value for value, _ in output)):
+                    changed = True
+                    leading_separator = True
+                    continue
+                if output[previous][0] in commas and not output[previous][1]:
+                    del output[previous + 1:]
+                    changed = True
+                    continue
+            if not keep and char in "。？！?!" and previous >= 0 and output[previous][0] in commas and not output[previous][1]:
+                del output[previous:]
+                changed = True
+            output.append((char, keep))
+        result = "".join(char for char, _ in output)
+        if changed:
+            indent = re.match(r"[ \t]*", line)[0]
+            result = indent + result.lstrip(" \t")
+        return result
+
+    return _dictation_prose(text, finish, skip_kana=False)
+
+
+def remove_unspoken_ma(raw: str, cleaned: str) -> str:
+    """Remove only excess question particles whose local context was not spoken."""
+    extra = cleaned.count("嗎") - raw.count("嗎")
+    if extra <= 0:
+        return cleaned
+    compact_raw = re.sub(r"[\s,，、]", "", raw)
+    positions = [index for index, char in enumerate(cleaned) if not re.fullmatch(r"[\s,，、]", char)]
+    compact_cleaned = "".join(cleaned[index] for index in positions)
+    spoken = set()
+    for block in difflib.SequenceMatcher(None, compact_raw, compact_cleaned, autojunk=False).get_matching_blocks():
+        for index in range(block.size):
+            if compact_raw[block.a + index] == "嗎":
+                spoken.add(positions[block.b + index])
+
+    def finish(line: str, protected: set[int], offset: int) -> str:
+        nonlocal extra
+        output = []
+        skip = -1
+        for index, char in enumerate(line):
+            if index == skip:
+                continue
+            if char == "嗎" and index not in protected and offset + index not in spoken and extra > 0:
+                context = re.sub(r"[\s,，、]", "", line[:index])[-2:] + "嗎"
+                if context not in compact_raw:
+                    extra -= 1
+                    if line[index + 1:index + 2] == "？" and index + 1 not in protected:
+                        skip = index + 1
+                        if line[index + 2:].strip():
+                            output.append("，")
+                    continue
+            output.append(char)
+        return "".join(output)
+    return _dictation_prose(cleaned, finish)
+
+
+def authored_chinese(text: str, chinese: str | None) -> str:
+    """Use the owner's chosen Chinese script without selecting a speaking language.
+
+    Kana lines, fenced code and inline code remain byte for byte. English and whitespace
+    are unchanged. Only leftover characters are converted, so existing Traditional prose
+    does not acquire ambiguous replacements on a second pass.
+    """
+    chinese = _checked_variant(chinese)
+    if chinese is None:
+        return text
+
+    def convert(line: str, protected: set[int], offset: int) -> str:
+        if line.startswith(("    ", "\t")):
+            return line
+        pieces = []
+        start = 0
+        for end in range(1, len(line) + 1):
+            if end < len(line) and (end in protected) == (start in protected):
+                continue
+            piece = line[start:end]
+            if start not in protected:
+                piece = (convert_leftover_traditional(piece) if chinese == "zh-CN" else
+                         convert_leftover_simplified(piece, _TO_TRADITIONAL[chinese]))
+            pieces.append(piece)
+            start = end
+        return "".join(pieces)
+
+    return _dictation_prose(text, convert)
 
 
 def public_line(text: str, language: str) -> str:

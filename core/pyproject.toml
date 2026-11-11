@@ -1,6 +1,6 @@
 [project]
 name = "raphael-core"
-version = "1.1.0"
+version = "1.2.0"
 license = "MIT"
 requires-python = ">=3.12.11,<3.13"
 dependencies = [

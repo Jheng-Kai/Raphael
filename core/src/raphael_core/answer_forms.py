@@ -1,4 +1,4 @@
-"""Readable equivalents of bounded answer forms for speech and external messages."""
+"""Readable equivalents of bounded answer forms for external messages."""
 
 import json
 import math

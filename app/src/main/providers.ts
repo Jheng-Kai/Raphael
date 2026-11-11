@@ -5,6 +5,7 @@ import { t } from "./i18n";
 import { providerMark } from "./provider-marks";
 import type { MainEvent, ModelProvider, ProviderKind, ProviderField, ProviderPatch, ProviderModel, ProviderTest } from "./types";
 import { DISCONNECT_CONFIRM_MS, btn, esc, fieldHTML, ico, iconButton, openMenu, sel, tg } from "./ui";
+import { findsName } from "./find-match";
 
 export interface ProvidersView {
   providers: ModelProvider[];
@@ -44,7 +45,8 @@ const choicesFor = (field: "region" | "location") => FIELD_CHOICES[field].map((v
 const GROUP_TITLES = { official: () => t("providers.official"), gateway: () => t("providers.gateway"), local: () => t("providers.local") };
 const POPULAR = ["openrouter", "litellm", "portkey", "vercel"];
 const allowsMultiple = (kind: ProviderKind): boolean => kind.group === "local" || ["openai_compatible", "litellm", "bifrost"].includes(kind.kind);
-function description(kind: ProviderKind): string {
+/** What a provider is, in one line: its official API, a model gateway, a cloud host or a server on this computer. */
+export function description(kind: ProviderKind): string {
   if (kind.kind === "openai_compatible") return t("providers.compatibleNote");
   if (kind.group === "official") return t("providers.officialAPI", { p0: kind.name });
   if (kind.group === "local") return t("providers.localServer");
@@ -130,7 +132,7 @@ function modelsHTML(v: ProvidersView): string {
   if (!Array.isArray(v.models)) return `<p class="note">${esc(t(v.models === "loading" ? "providers.loading" : "providers.error"))}</p>`;
   if (!v.models.length) return `<p class="note">${esc(t("providers.noModels"))}</p>`;
   const query = v.query.toLowerCase();
-  return `<ul>` + v.models.filter((m) => `${m.name} ${m.id}`.toLowerCase().includes(query)).map((m) =>
+  return `<ul>` + v.models.filter((m) => `${m.name} ${m.id}`.toLowerCase().includes(query) || findsName([m.name, m.id], query)).map((m) =>
     `<li><span class="pv-model-name">${esc(m.name)}</span><span class="pv-model-id">${esc(m.id)}</span>${m.context_warning ? `<span class="pv-context-warning">${esc(t("providers.contextWarning"))}</span>` : ""}</li>`).join("") + `</ul>`;
 }
 

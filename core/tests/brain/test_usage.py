@@ -102,6 +102,19 @@ def turn(conn, member=0, model="plain/model", source="app", cost=1):
     ).lastrowid
 
 
+async def test_historical_model_efforts_merge_in_every_daily_model_group(conn):
+    for effort in ('xhigh', 'high'):
+        model = f'cli:codex:gpt-6.1-sol?effort={effort}'
+        turn(conn, model=model, cost=0)
+        spend(conn, NOW, 0, model=model)
+    result = await router_for(conn).call('usage.analytics', {'range': '7d'})
+    model = 'cli:codex:gpt-6.1-sol'
+    assert result['members'][0]['models'] == [{'model': model, 'turns': 2, 'cost_usd': None}]
+    assert result['members'][0]['cost_usd'] == 0
+    for key, total in (('cost_by', 0), ('messages_by', 2)):
+        assert [(s['key'], s['total']) for s in result[key]['model']['series']] == [(model, total)]
+
+
 async def test_members_turn_counts_sources_and_models_without_double_counting_cost(conn):
     conn.execute("INSERT INTO members (id,name,role,position,created_at_ms) VALUES (1,'Ada','Writer',0,?)", (NOW,))
     turn(conn, 1, "@p:model:v1", "telegram", 3)

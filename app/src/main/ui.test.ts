@@ -136,14 +136,15 @@ describe("the main window's actions", () => {
       const text = read(file).replace(/\bcard-quiet\b/g, "card-exit");
       expect(text, file).not.toMatch(/["'`][^"'`\n]*\bquiet\b[^"'`\n]*["'`]/);
       // `class=\"link\"` in the catalogs, `class="link"` in the pages, `.link` in the styles
-      expect(text, file).not.toMatch(/\.btn\.quiet|class=\\?"link\\?"|\.link\b/);
+      // (`.link` itself, not a class that only begins with it, such as a link chip's `.link-chip`)
+      expect(text, file).not.toMatch(/\.btn\.quiet|class=\\?"link\\?"|\.link(?![\w-])/);
     }
   });
 
   test("monospace text has one font stack, with Windows' own faces before the browser's default", () => {
     // Bare `monospace` resolves to MingLiU on Traditional Chinese Windows, whose Latin letters are ugly.
     const css = read(path.join(root, "styles.css"));
-    expect(css).toMatch(/--mono: "Cascadia Mono", Consolas, "Microsoft JhengHei UI", "Microsoft JhengHei"[^;]*, monospace;/);
+    expect(css).toMatch(/--mono: "Cascadia Mono", Consolas, "Noto Sans TC", "PingFang TC", "Microsoft JhengHei UI", "Microsoft JhengHei", monospace;/);
     expect(css).toMatch(/\bcode, pre, samp \{ font-family: var\(--mono\); \}/);
     for (const file of sources.filter((f) => f.endsWith(".css")))
       expect(read(file).replace(/--mono:[^;]*;/, ""), file).not.toMatch(/monospace/);

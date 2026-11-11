@@ -23,6 +23,8 @@ import { RAPHAEL_ID } from "./members";
 import type { BrainSettings, CatalogModel, CliBrain, MainEvent, Member, ModelCatalog } from "./types";
 import { closeMenu, esc, ico, iconButton, openPopover, placeMenu, toaster } from "./ui";
 import { describeError } from "./format";
+import { optionalRead } from "./startup-reads";
+import { findsName } from "./find-match";
 
 /** A source's models fold past this many, under a button that says how many there are. */
 const COMPACT = 5;
@@ -44,7 +46,7 @@ export function mountComposerBrain(slot: HTMLElement, member: () => Member, host
   let catalog: ModelCatalog | null = knownCatalog(), clis: CliBrain[] = knownClis(), answerModel = "", quickModel = "", quickEffort = "low", generation = 0;
   let menu: HTMLElement | null = null, source = "", query = "", showAll = false, view: "now" | "browse" = "now";
   let modelTries = 0, modelTimer: ReturnType<typeof setTimeout> | undefined;
-  let paintedWho: string | null = null, paintedDepth: string | null = null;
+  let paintedWho: string | null = null, paintedDepth: string | null = null, paintedBody: string | null = null;
   let favorites: readonly string[] = [];
 
   const look = (): ModelPickerLook => {
@@ -64,9 +66,14 @@ export function mountComposerBrain(slot: HTMLElement, member: () => Member, host
     if (!button) return;
     const { model, effort } = chosen();
     const face = buttonFaceHTML(look());
+    const levels = model?.reasoning_efforts ?? [];
+    // Drawn every time the roster or the conversation changes, and almost always the same words: then nothing is touched,
+    // so the chip does not flash and its hover stays (owner, 2026-11-11).
+    const stamp = JSON.stringify([face.inner, face.label, effort && levels.length > 1 ? effortText(effort) : ""]);
+    if (button.dataset.painted === stamp) return;
+    button.dataset.painted = stamp;
     button.innerHTML = face.inner;
     button.setAttribute("aria-label", face.label);
-    const levels = model?.reasoning_efforts ?? [];
     if (effort && levels.length > 1) button.querySelector(".mp-tname")?.insertAdjacentHTML("afterend", `<span class="cb-depth">${esc(effortText(effort))}</span>`);
   }
 
@@ -152,7 +159,7 @@ export function mountComposerBrain(slot: HTMLElement, member: () => Member, host
         : `<div class="cb-empty"><p>${esc(t("chooser.modelsFailed"))}</p><button type="button" class="btn sm" data-cb-act="retry">${esc(t("page.retry"))}</button></div>`;
     }
     const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
-    if (words.length) return item.models.filter(model => words.every(word => `${model.name} ${model.provider} ${model.id}`.toLowerCase().includes(word))).map(model => row(model)).join("") || empty;
+    if (words.length) return item.models.filter(model => findsName([model.name, model.provider, model.id], query)).map(model => row(model)).join("") || empty;
     const { rows, first } = rowsOf(item);
     return (showAll || rows.length <= COMPACT + 1 ? rows : rows.slice(0, Math.max(COMPACT, first))).map(model => row(model)).join("") || empty;
   }
@@ -191,7 +198,9 @@ export function mountComposerBrain(slot: HTMLElement, member: () => Member, host
     body.dataset.source = source;
     body.hidden = view === "now";
     menu.querySelector<HTMLElement>(".cb-now")!.hidden = view !== "now";
-    body.innerHTML = view === "now" ? "" : browseHTML(sources);
+    // The same list again (a roster read that changed nothing here) is left as it is under the owner's hand.
+    const listing = view === "now" ? "" : browseHTML(sources);
+    if (listing !== paintedBody) body.innerHTML = paintedBody = listing;
     // A list that arrives while the owner drags the slider must not take the slider from under the pointer.
     const who = nowHTML(), slider = depthHTML();
     if (who !== paintedWho) menu.querySelector<HTMLElement>(".cb-now-who")!.innerHTML = paintedWho = who;
@@ -211,7 +220,7 @@ export function mountComposerBrain(slot: HTMLElement, member: () => Member, host
   }
 
   function open(button: HTMLButtonElement): void {
-    source = ""; query = ""; showAll = false; modelTries = 0; view = "now"; paintedWho = paintedDepth = null;
+    source = ""; query = ""; showAll = false; modelTries = 0; view = "now"; paintedWho = paintedDepth = paintedBody = null;
     menu = openPopover(button, `<div class="cb-card cb-body" hidden></div><div class="cb-card cb-now"><div class="cb-now-who"></div><div class="cb-depth-slot"></div></div>`,
       { className: "menu cb-menu", role: "dialog", label: t("chooser.title"), placement: "above", onClose: () => { menu = null; clearTimeout(modelTimer); } });
     menu.addEventListener("click", click);
@@ -262,7 +271,7 @@ export function mountComposerBrain(slot: HTMLElement, member: () => Member, host
     if (field.matches(".cb-search")) {
       query = field.value;
       const list = menu?.querySelector<HTMLElement>(".cb-list");
-      if (list) list.innerHTML = rowsHTML(answering());
+      if (list) { list.innerHTML = rowsHTML(answering()); paintedBody = null; }
     } else if (field.matches(".mc-range")) moveEffortSlider(field);
   }
 
@@ -286,11 +295,14 @@ export function mountComposerBrain(slot: HTMLElement, member: () => Member, host
     paintMenu();
   }
 
-  async function reload(): Promise<void> {
+  /** `quietly`: a read of the app's own accord (start-up, a change); the owner opening the menu reads at once. */
+  async function reload(quietly = false): Promise<void> {
     const mine = ++generation;
+    // The two lists wait for the first view and for each other at start-up (startup-reads.ts); the settings are small.
+    const optional = <T>(method: string): Promise<T> => quietly ? optionalRead(() => api.core<T>(method)) : api.core<T>(method);
     const [catalogResult, cliResult, settingsResult] = await Promise.allSettled([
-      api.core<ModelCatalog>("models.catalog"),
-      api.core<{ clis: CliBrain[] }>("brains.cli"),
+      optional<ModelCatalog>("models.catalog"),
+      optional<{ clis: CliBrain[] }>("brains.cli"),
       api.core<{ settings: BrainSettings }>("settings.get"),
     ]);
     if (mine !== generation) return;
@@ -305,7 +317,7 @@ export function mountComposerBrain(slot: HTMLElement, member: () => Member, host
     }
     draw();
   }
-  host.onEvent?.(event => { if (CHANGES.includes(event.type)) void reload(); });
-  draw(); void reload();
+  host.onEvent?.(event => { if (CHANGES.includes(event.type)) void reload(true); });
+  draw(); void reload(true);
   return { draw, reload: () => void reload() };
 }

@@ -7,18 +7,18 @@ import pytest
 
 from raphael_core.agent.history import AgentHistory
 from raphael_core.memory.conversation import turn_text
-from raphael_core.protocol import RpcError
 from .test_service import make_rig  # noqa: F401
 
 
 @pytest.mark.parametrize("kind", ["routine", "calendar", "meeting", "skill_learned"])
-def test_history_search_and_model_context_read_event_words(conn, kind):
+@pytest.mark.parametrize("action", ["created", "updated"])
+def test_history_search_and_model_context_read_event_words(conn, kind, action):
     history = AgentHistory(conn)
     turn_id = history.add(session_id="sample", question="", route="answer", prefix="", text="", status="done")
-    event = {"type": kind, "action": "created", "id": 987654321, "room_id": 876543219,
+    event = {"type": kind, "action": action, "id": 987654321, "room_id": 876543219,
              "name": "Sample orchard", "text": "已建立 · Sample orchard"}
     history.add_message(turn_id, "event", json.dumps(event))
-    for query in (kind, "created", "987654321", "876543219"):
+    for query in (kind, action, "987654321", "876543219"):
         assert history.search(query) == [], query
     assert [turn.id for turn in history.search("orchard")] == [turn_id]
     assert history.search("orchard")[0].messages == [event["text"]]
@@ -26,6 +26,20 @@ def test_history_search_and_model_context_read_event_words(conn, kind):
     assert turn.messages == [event["text"]]
     assert event["text"] in turn_text(turn, detail=True)
     assert '"type"' not in turn_text(turn, detail=True)
+
+
+@pytest.mark.parametrize("action", ["created", "updated"])
+def test_skill_receipts_without_text_keep_their_public_name_and_hide_the_action(conn, action):
+    from raphael_core.agent.public_events import event_text
+    history = AgentHistory(conn)
+    turn = history.add(session_id="sample", question="", route="answer", prefix="", text="", status="done")
+    raw = json.dumps({"type": "skill_learned", "name": "Sample orchard", "action": action})
+    history.add_message(turn, "event", raw)
+    assert event_text(raw) == "Sample orchard"
+    assert history.search(action) == [] and history.search("skill_learned") == []
+    [found] = history.search("orchard")
+    assert found.id == turn and found.messages == ["Sample orchard"]
+    assert "Sample orchard" in turn_text(found, detail=True)
 
 
 @pytest.mark.parametrize("method", ["agent.history.search", "messages.search"])
@@ -54,17 +68,13 @@ def test_saved_indexes_from_before_the_projection_are_repaired(conn):
 
 
 @pytest.mark.parametrize("kind", ["routine", "calendar", "meeting", "skill_learned"])
-async def test_voice_and_telegram_deliver_answers_without_event_transport(make_rig, kind):
+@pytest.mark.parametrize("action", ["created", "updated"])
+async def test_telegram_delivers_answers_without_event_transport(make_rig, kind, action):
     from raphael_core.app import App
-    voice = SimpleNamespace(speaks=lambda: True, say=AsyncMock())
-    rig = make_rig(speaker=voice)
+    rig = make_rig()
     turn_id = rig.history.add(session_id="sample", question="Check samples", route="answer", prefix="", text="Samples checked.", status="done")
-    raw = json.dumps({"type": kind, "action": "created", "id": 987654321, "name": "Sample orchard"})
+    raw = json.dumps({"type": kind, "action": action, "id": 987654321, "name": "Sample orchard"})
     rig.history.add_message(turn_id, "event", raw)
-    await rig.call("agent.speak", {"turn_id": turn_id})
-    voice.say.assert_awaited_once_with("", "Samples checked.", turn_id=turn_id)
-    with pytest.raises(RpcError, match="message_seq must name an answer"):
-        await rig.call("agent.speak", {"turn_id": turn_id, "message_seq": 1})
     reply = {"status": "done", "prefix": "", "text": "Samples checked.", "turn_id": turn_id,
              "messages": [{"kind": "event", "text": raw}]}
     app = SimpleNamespace(call=AsyncMock(return_value=reply), agent=rig.service, attachment_store=None)

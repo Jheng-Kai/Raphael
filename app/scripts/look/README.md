@@ -246,7 +246,7 @@ npm run look -- composer-learn member-composer-learn room-composer-learn --theme
 npm run look -- appearance --locale ja --out .look/review
 npm run verify
 npm run verify -- --quick
-npm run verify -- --core --rust
+npm run verify -- --contract --rust
 npm run judge -- .look/run-EXAMPLE --references <external-reference.png>
 npm run verify -- --live
 ```
@@ -261,7 +261,7 @@ themes and 1120/720/1920x1080. A shared confirmation dialog, for example, uses
 `npm run look -- delete automation-delete team-delete room-delete --theme both --width 1120,720,1920x1080`.
 Shared components need representative affected consumers, not every unrelated page.
 Reserve `--all` for integration/release acceptance, CI, explicit requests or genuinely
-app-wide changes. Add `verify -- --core` or `verify -- --rust` only when those
+app-wide changes. Add `verify -- --contract` or `verify -- --rust` only when those
 boundaries change; documentation-only work needs diff/link review. Judge reviews the
 same selected look run. State the selection and any incomplete evidence in the handoff.
 
@@ -375,7 +375,8 @@ centering, inner margins, labels, keyboard focus and close contrast without clos
 Its `hoverOnly` option preserves an open settings modal for the resulting screenshot.
 
 Verify always runs TypeScript and Vitest; its default also runs contrast. `--quick`
-excludes contrast; `--core` adds offline pytest with warnings as errors and `--rust` adds what CI's Windows shell
+excludes contrast; `--contract` adds the core's scenario drivers and the default prompt's size budget; `--core` adds
+the whole offline pytest suite with warnings as errors (CI runs it on every push); `--rust` adds what CI's Windows shell
 job checks: `cargo fmt --check`, offline locked cargo tests for the app and the vendored
 listener, and Clippy with warnings denied. Optional checks use the existing environment/cache and fail if unavailable.
 Use `--out dir` to select a writable evidence directory for look or verify.
@@ -400,7 +401,7 @@ login or external references is blocked/SKIP, never design acceptance.
 
 The nine `composer-stop-*` scenes cover roster repaints, typed requests before the first turn, native voice processing, quick/member navigation and a live background task. Result scenes press the same slot and assert the exact cancellation boundary, no voice key, and the returned idle emblem. `composer-task-stop` also rejects an emblem mislabeled as Stop.
 
-### Designed main viewport (owner round 4)
+### Designed main viewport
 
 With no --width argument, look reads the main window's dimensions from
 src-tauri/tauri.conf.json (1280x800). Explicit plain widths retain the 900px
@@ -415,23 +416,23 @@ centered welcome are asserted by their ordinary feature scenes. no-naming
 replaces the removed first-Bot setup scenes. Details' pointer focus assertion
 runs before its separate keyboard icon-interaction check.
 
-## Owner round 5 readable layout
+## Readable conversation layout
 
 Run all main-page scenes in both themes at 1120, 720, 1920x1080 and 1280x800.
 `sidebar-shell` checks the fixed conversation list and compact drawer, including
 open and folded folders. `details-alignment` compares New conversation, the search
 input and routines/memory block. `conversation-header` rejects duplicate compact
 identity and clipped header line boxes. The former Team canvas and Fit/zoom
-interactions were retired by the owner's 2026-10-30 sidebar decision.
+interactions are replaced by the conversation sidebar.
 
 `npm run native -- readable-layout` applies the same assertions to an isolated
 WebView/SQLite run. Roster prerequisites use production RPC; folder folding,
 drawer navigation, Home month changes and details controls use the real UI. Captures
 record their actual viewport dimensions.
 
-## Owner round 7 layout
+## Conversation layout checks
 
-The feature map names the affected scene matrix and shared checks. Native readable-layout now also checks separate model/source lines, aligned card actions, a single quick-question row label, the conversation fade and Home/sidebar geometry. Keep the pre-fix binary identity separate from exact source build evidence. The owner runs design judge from their shell for this round.
+The feature map names the affected scene matrix and shared checks. Native readable-layout now also checks separate model/source lines, aligned card actions, a single quick-question row label, the conversation fade and Home/sidebar geometry. Keep the pre-fix binary identity separate from exact source build evidence. Run design judge locally from a signed-in shell.
 
 The theme-clarity scene records computed surface/filter evidence. Computer desktop-* scenes use the existing member side panel and persistent stream; no desktop dialog or inline screen is mounted. Native member-computer uses the same screen-click and explicit nonce handback.
 ### Stable view controls (R-UI-49)

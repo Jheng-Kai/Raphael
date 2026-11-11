@@ -60,9 +60,15 @@ async def test_private_takeover_blocks_every_tool_and_resumes_once_after_explici
         assert (await viewer.status({"member_id": 1, "conversation_id": 11}))["works"][0]["state"] == "waiting_control"
         assert "works" not in await viewer.status({"member_id": 0, "conversation_id": 11})
         assert "works" not in await viewer.status({"member_id": 1, "conversation_id": 12})
+        snapshot.find("vault_entries fill_contact fill_card")
+        before = list(vm.run.calls)
         for ref in list(snapshot.refs.values()):
             if ref.server == "computer":
-                assert (await call(ref.name)).kind == "owner_holds_control"
+                # An unapproved payment is refused before reaching the desktop-control check.
+                result = await call(ref.name)
+                assert not result.ok
+                assert result.kind == ("blocked" if ref.name == "fill_card" else "owner_holds_control")
+        assert vm.run.calls == before
         wrong = await viewer.open({"member_id": 0})
         with pytest.raises(RpcError):
             await viewer.control({**wrong, "held": True})

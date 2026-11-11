@@ -41,6 +41,8 @@ const words = (key: MessageKey, kind: MessagingKind): string => tr(key).split("T
 
 export interface MessagingView {
   kind?: MessagingKind;
+  /** The token field's id: a member's own bot (member panel) has its own, beside Raphael's in Settings. */
+  tokenId?: string;
   channels?: Partial<Record<MessagingKind, MessagingView>>;
   status: TelegramStatus | "loading" | "failed";
   token: string;
@@ -80,7 +82,7 @@ const headName = (name: string, dot: string, kind: MessagingKind): string => `<s
 
 function setupRows(v: MessagingView, kind: MessagingKind): string[] {
   const field = fieldHTML(t("msg.tg.tokenHint"), v.token, {
-    id: kind === "telegram" ? "msg-token" : `msg-token-${kind}`,
+    id: v.tokenId ?? (kind === "telegram" ? "msg-token" : `msg-token-${kind}`),
     type: "password",
     label: t("msg.tg.token"),
     invalid: v.tokenError !== null,
@@ -140,10 +142,12 @@ export function messagingHTML(v: MessagingView): string {
   const bot = s.bot?.username ? `@${s.bot.username}` : words("msg.tg.bot", kind);
   const badge = s.pending.length ? `<span class="msg-badge num" title="${esc(t("msg.tg.pairing"))}">${s.pending.length}</span>` : "";
   const head = row(
-    headName(kind === "telegram" ? bot : `${title(kind)} · ${bot}`, dotHTML(dot, label) + badge, kind),
+    // The mark says the platform; the name is the bot.
+    // The whole name is the button that opens the details, with no arrow, and the switch stands alone on the right,
+    // in line with the 「設定」 buttons under it.
+    `<button type="button" class="btn msg-open" data-msg="expand" aria-expanded="${open}">${headName(bot, dotHTML(dot, label) + badge, kind)}</button>`,
     "",
-    tg(s.enabled, words("msg.tg.switch", kind), ` data-msg="enable"${v.busy ? " disabled" : ""}`) +
-      iconButton("down", t("msg.tg.details"), ` data-msg="expand" aria-expanded="${open}"`, "msg-more"),
+    tg(s.enabled, words("msg.tg.switch", kind), ` data-msg="enable"${v.busy ? " disabled" : ""}`),
     { cls: "msg-head" },
   );
   // 中斷連線 is a row of the card like any other setting, never a button left under it.
@@ -157,6 +161,23 @@ export function messagingHTML(v: MessagingView): string {
   // Before anyone has paired there is nothing to show but how to begin: the one line that says it.
   const waiting = open && !s.pending.length && !s.allowed.length ? `<p class="foot">${esc(t("msg.tg.waitingLead", { p0: bot }).split("Telegram").join(title(kind)))}</p>` : "";
   return group(rows, waiting);
+}
+
+/**
+ * The bots of a member's panel: a connected one is its card as above; the others are one row each,
+ * the platform and 「設定」, which opens the member's conversation where it sets the bot up with the owner (chat-ask.ts).
+ * No token field is drawn on the panel.
+ */
+/** A panel button the member is still working on: a spinner, and no second press (chat-ask.ts). */
+export const busySetupButton = (label: string, attrs: string, busy: boolean): string =>
+  btn((busy ? `<span class="spin" aria-hidden="true"></span>` : "") + esc(label), "sm", attrs + (busy ? ' disabled aria-busy="true"' : ""));
+
+export function chatChannelsHTML(views: readonly (readonly [MessagingKind, MessagingView])[], busy: (intent: `setup-${MessagingKind}`) => boolean = () => false): string {
+  const connected = ([, v]: readonly [MessagingKind, MessagingView]): boolean => typeof v.status === "object" && v.status.connected;
+  const setUp = views.filter(connected).map(([kind, v]) => messagingHTML({ ...v, kind })).join("");
+  const rows = views.filter((entry) => !connected(entry)).map(([kind, v]) =>
+    row(headName(title(kind), "", kind), "", v.status === "loading" ? `<span class="spin" role="status" aria-label="${esc(t("conn.loading"))}"></span>` : busySetupButton(t("members.setUp"), ` data-det="setup" data-intent="setup-${kind}" data-k="det-setup:${kind}" aria-label="${esc(`${t("members.setUp")} ${title(kind)}`)}"`, busy(`setup-${kind}`)), { cls: "msg-head", attrs: ` data-msg-kind="${kind}"` }));
+  return setUp + (rows.length ? `<section class="sgroup msg msg-chat-setup"><div class="slist">${rows.join("")}</div></section>` : "");
 }
 
 // ---------- state ----------
@@ -187,9 +208,53 @@ export function createMessaging(host: MessagingHost): Messaging {
   };
 }
 
-function createChannelMessaging(host: MessagingHost, kind: MessagingKind): Messaging {
-  const tokenId = kind === "telegram" ? "msg-token" : `msg-token-${kind}`;
+type ConnectReply = Awaited<ReturnType<typeof api.telegramConnect>>;
+/** What a channel asks the core: Raphael's Telegram, his Slack or Discord, or one member's own Telegram bot. */
+interface ChannelOps {
+  status(): Promise<TelegramStatus>;
+  connect(token: string): Promise<ConnectReply>;
+  setEnabled(on: boolean): Promise<TelegramStatus>;
+  approve(code: string): Promise<{ approved: boolean; status: TelegramStatus }>;
+  reject(code: string): Promise<TelegramStatus>;
+  removeUser(userId: string): Promise<TelegramStatus>;
+  disconnect(): Promise<TelegramStatus>;
+}
+
+function raphaelOps(kind: MessagingKind): ChannelOps {
+  // Read at the moment of the call, as before: a channel is made with the panel, long before it asks anything.
+  if (kind === "telegram") return {
+    status: () => api.telegramStatus(), connect: (token) => api.telegramConnect(token), setEnabled: (on) => api.telegramSetEnabled(on),
+    approve: (code) => api.telegramApprove(code), reject: (code) => api.telegramReject(code), removeUser: (user) => api.telegramRemoveUser(user),
+    disconnect: () => api.telegramDisconnect(),
+  };
   const call = <T>(method: string, params?: object): Promise<T> => api.messagingCall<T>(kind, method, params);
+  return {
+    status: () => call("status"), connect: (token) => call("connect", { token }), setEnabled: (enabled) => call("set_enabled", { enabled }),
+    approve: (code) => call("approve", { code }), reject: (code) => call("reject", { code }), removeUser: (user_id) => call("remove_user", { user_id }),
+    disconnect: () => call("disconnect"),
+  };
+}
+
+/**
+ * A member's own bot on one platform, in its panel, through `messaging.member.*`; messages to it
+ * land in the member's own conversation. Telegram sends no platform, as the core first knew it.
+ */
+export function createMemberChannel(host: MessagingHost, memberId: () => number, kind: MessagingKind = "telegram"): Messaging {
+  const on = kind === "telegram" ? undefined : kind;
+  return createChannelMessaging(host, kind, {
+    status: () => api.memberMessagingStatus(memberId(), on), connect: (token) => api.memberMessagingConnect(memberId(), token, on),
+    setEnabled: (enabled) => api.memberMessagingSetEnabled(memberId(), enabled, on), approve: (code) => api.memberMessagingApprove(memberId(), code, on),
+    reject: (code) => api.memberMessagingReject(memberId(), code, on), removeUser: (user) => api.memberMessagingRemoveUser(memberId(), user, on),
+    disconnect: () => api.memberMessagingDisconnect(memberId(), on),
+  }, kind === "telegram" ? "msg-token-member" : `msg-token-member-${kind}`);
+}
+export const createMemberTelegram = (host: MessagingHost, memberId: () => number): Messaging => createMemberChannel(host, memberId, "telegram");
+
+/** Raphael's own bot on one platform, in his panel (Settings no longer holds it). */
+export const createRaphaelChannel = (host: MessagingHost, kind: MessagingKind): Messaging => createChannelMessaging(host, kind);
+
+function createChannelMessaging(host: MessagingHost, kind: MessagingKind, ops: ChannelOps = raphaelOps(kind), ownTokenId?: string): Messaging {
+  const tokenId = ownTokenId ?? (kind === "telegram" ? "msg-token" : `msg-token-${kind}`);
   let status: MessagingView["status"] = "loading";
   let token = "";
   let connecting = false;
@@ -204,7 +269,7 @@ function createChannelMessaging(host: MessagingHost, kind: MessagingKind): Messa
   const redraw = (): void => {
     if (host.visible()) host.redraw();
   };
-  const view = (): MessagingView => ({ status, token, connecting, tokenError, confirmingDisconnect: confirming, busy, expanded });
+  const view = (): MessagingView => ({ status, token, connecting, tokenError, confirmingDisconnect: confirming, busy, expanded, ...(ownTokenId ? { tokenId } : {}) });
 
   const poll = visibilityGate(() => void refresh(), () => poller !== undefined && host.visible());
 
@@ -228,8 +293,8 @@ function createChannelMessaging(host: MessagingHost, kind: MessagingKind): Messa
     if (!host.visible() || !windowVisible()) return;
     const mine = ++loads;
     try {
-      const next = await (kind === "telegram" ? api.telegramStatus() : call<TelegramStatus>("status"));
-      if (mine === loads && !busy) take(next);
+      const next = await ops.status();
+      if (mine === loads && !busy && next && typeof next === "object") take(next);
     } catch {
       // a poll that fails is tried again; the state on screen stays
     }
@@ -238,8 +303,10 @@ function createChannelMessaging(host: MessagingHost, kind: MessagingKind): Messa
   async function load(): Promise<void> {
     const mine = ++loads;
     try {
-      const next = await (kind === "telegram" ? api.telegramStatus() : call<TelegramStatus>("status"));
+      const next = await ops.status();
       if (mine !== loads) return;
+      // A core too old to know the method answers nothing: that is a failed read, never a crash of the card.
+      if (!next || typeof next !== "object") throw new Error("no status");
       status = next;
       schedule();
     } catch {
@@ -261,7 +328,7 @@ function createChannelMessaging(host: MessagingHost, kind: MessagingKind): Messa
     tokenError = null;
     redraw();
     try {
-      const reply = await (kind === "telegram" ? api.telegramConnect(token.trim()) : call<Awaited<ReturnType<typeof api.telegramConnect>>>("connect", { token: token.trim() }));
+      const reply = await ops.connect(token.trim());
       if (reply.ok) {
         token = ""; // it is in the vault now: nothing of it stays on this page
         status = reply.status;
@@ -315,25 +382,25 @@ function createChannelMessaging(host: MessagingHost, kind: MessagingKind): Messa
       case "enable":
         if (typeof status === "object") {
           const on = !status.enabled;
-          void act(() => (kind === "telegram" ? api.telegramSetEnabled(on) : call<TelegramStatus>("set_enabled", { enabled: on })));
+          void act(() => ops.setEnabled(on));
         }
         return true;
       case "approve": {
         const code = button.dataset.code ?? "";
         void act(async () => {
-          const reply = await (kind === "telegram" ? api.telegramApprove(code) : call<Awaited<ReturnType<typeof api.telegramApprove>>>("approve", { code }));
+          const reply = await ops.approve(code);
           if (!reply.approved) toaster.info(t("msg.tg.codeGone"));
           return reply.status;
         });
         return true;
       }
       case "reject":
-        void act(() => (kind === "telegram" ? api.telegramReject(button.dataset.code ?? "") : call<TelegramStatus>("reject", { code: button.dataset.code ?? "" })));
+        void act(() => ops.reject(button.dataset.code ?? ""));
         return true;
       case "user-menu": {
         const user = button.dataset.user ?? "";
         const name = (typeof status === "object" ? status.allowed.find((u) => String(u.user_id) === user)?.name : "") || user;
-        openActions(button, [{ id: "remove", label: t("msg.tg.removeUser", { p0: name }), icon: "trash" }], () => void act(() => (kind === "telegram" ? api.telegramRemoveUser(user) : call<TelegramStatus>("remove_user", { user_id: user }))));
+        openActions(button, [{ id: "remove", label: t("msg.tg.removeUser", { p0: name }), icon: "trash" }], () => void act(() => ops.removeUser(user)));
         return true;
       }
       case "disconnect":
@@ -350,7 +417,7 @@ function createChannelMessaging(host: MessagingHost, kind: MessagingKind): Messa
         clearTimeout(confirmTimer);
         confirming = false;
         void act(async () => {
-          const next = await (kind === "telegram" ? api.telegramDisconnect() : call<TelegramStatus>("disconnect"));
+          const next = await ops.disconnect();
           toaster.info(words("msg.tg.disconnected", kind));
           return next;
         });

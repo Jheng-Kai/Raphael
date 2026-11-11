@@ -8,7 +8,7 @@ export function computerStateText(state: DesktopState | undefined): string {
   if (state?.error === 'remote_unavailable') return t('desktop.remoteUnavailable', {p0:state.host ?? ''});
   if (state?.state === 'absent') return t(state.error === 'disabled' ? 'desktop.disabled' : 'desktop.dockerMissing');
   if (state?.state === 'missing' && state.image === false) return t('desktop.imageMissing');
-  if (state?.state === 'stopped' || state?.state === 'missing') return t('desktop.sleepHint');
+  if (state?.state === 'stopped' || state?.state === 'missing') return t('desktop.asleep');
   if (state?.state === 'incompatible') return t('desktop.incompatible');
   if (state?.state === 'starting') return t('desktop.starting');
   if (state?.state === 'building') return t('desktop.building');

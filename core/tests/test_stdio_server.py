@@ -666,3 +666,78 @@ def test_run_stdio_stops_when_told_with_stdin_still_open():
     assert json.loads(out) == {"jsonrpc": "2.0", "id": 1, "result": {"bye": True}}
     assert b"on_close ran" in err and b"run_stdio returned" in err
     assert b"Fatal Python error" not in err
+
+
+@pytest.mark.parametrize('wait,run_s,write_s,logged', [
+    (0.3, 0, 0, True), (0, 0.3, 0, True), (0.1, 0.1, 0.1, True),
+    (0, 0, 0, False), (0.25, 0, 0, False),
+])
+async def test_request_latency_includes_queue_and_wire_write_without_payloads(monkeypatch, caplog, wait, run_s, write_s, logged):
+    from types import SimpleNamespace
+    from raphael_core import stdio_server as server
+
+    clock = [100.0]
+    monkeypatch.setattr(server, 'time', SimpleNamespace(perf_counter=lambda: clock[0]))
+    router, output = Router(), []
+    async def handler(params):
+        assert params == {'secret': 'PRIVATE-PARAM'}
+        clock[0] += run_s
+        return {'private': 'PRIVATE-RESULT', 'text': '\u6e2c\u8a66'}
+    router.register('sample.slow', handler)
+    def write(line):
+        output.append(line)
+        clock[0] += write_s
+    async def lines():
+        yield server._ReadLine(call('PRIVATE-ID', 'sample.slow', {'secret': 'PRIVATE-PARAM'}), clock[0] - wait)
+    with caplog.at_level(logging.INFO, logger=server.__name__):
+        await serve(router, lines(), write)
+    logs = [record for record in caplog.records if record.msg.startswith('Slow JSON-RPC')]
+    assert len(logs) == int(logged)
+    if logged:
+        assert logs[0].levelno == logging.INFO
+        method, wait_ms, run_ms, size = logs[0].args
+        assert method == 'sample.slow'
+        assert wait_ms == pytest.approx(wait * 1000)
+        assert run_ms == pytest.approx((run_s + write_s) * 1000)
+        assert size == len(output[0].encode('ascii')) / 1024
+    assert all(private not in caplog.text for private in ('PRIVATE-PARAM', 'PRIVATE-RESULT', 'PRIVATE-ID', '\u6e2c\u8a66'))
+
+
+async def test_loop_lag_warns_for_a_blocked_callback(monkeypatch, caplog):
+    from raphael_core import stdio_server as server
+
+    assert (server.LAG_INTERVAL_S, server.LAG_WARNING_S, server.LAG_LOG_INTERVAL_S) == (0.25, 0.25, 5)
+    monkeypatch.setattr(server, 'LAG_INTERVAL_S', 0.01)
+    monkeypatch.setattr(server, 'LAG_WARNING_S', 0.02)
+    loop = asyncio.get_running_loop()
+    watcher = asyncio.create_task(server._watch_loop_lag(loop.time() + server.LAG_INTERVAL_S))
+    with caplog.at_level(logging.WARNING, logger=server.__name__):
+        try:
+            await asyncio.sleep(0)
+            loop.call_soon(time.sleep, 0.07)
+            await asyncio.sleep(0.1)
+        finally:
+            watcher.cancel()
+            await asyncio.gather(watcher, return_exceptions=True)
+    logs = [record for record in caplog.records if record.msg.startswith('Event loop lag')]
+    assert len(logs) == 1
+    assert logs[0].args[1] == 0
+    assert all(record.levelno == logging.WARNING and record.args[0] > 20 for record in logs)
+
+
+async def test_loop_lag_rate_limit_reports_the_exact_skipped_count(monkeypatch, caplog):
+    from types import SimpleNamespace
+    from raphael_core import stdio_server as server
+
+    clock, wakes = [0.0], iter([0.6, 1.2, 6.2])
+    async def sleep(delay):
+        try:
+            clock[0] = next(wakes)
+        except StopIteration:
+            raise asyncio.CancelledError
+    monkeypatch.setattr(server, 'asyncio', SimpleNamespace(sleep=sleep,
+        get_running_loop=lambda: SimpleNamespace(time=lambda: clock[0])))
+    with caplog.at_level(logging.WARNING, logger=server.__name__), pytest.raises(asyncio.CancelledError):
+        await server._watch_loop_lag(0.25)
+    logs = [record for record in caplog.records if record.msg.startswith('Event loop lag')]
+    assert len(logs) == 2 and [record.args[1] for record in logs] == [0, 1]

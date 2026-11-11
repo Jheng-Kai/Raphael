@@ -29,7 +29,10 @@ pub const FILE_NAME: &str = "device.json";
 pub const EMBLEM_SIZES: [u32; 3] = [120, 150, 194];
 
 /// The interface languages offered by the main window.
-const UI_LANGUAGES: [&str; 3] = ["zh-TW", "en", "ja"];
+const UI_LANGUAGES: [&str; 15] = [
+    "zh-TW", "en", "ja", "zh-CN", "ko", "es", "fr", "de", "pt-BR", "it", "ru", "vi", "th", "id",
+    "tr",
+];
 
 /// Whether the overlay shows Raphael's words as subtitles, in the interface language.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -163,7 +166,8 @@ impl Default for DeviceSettings {
             appearance: Appearance::default(),
             ui_language: "zh-TW".to_owned(),
             autostart: true,
-            auto_update: false,
+            // On by default: a new version is checked for hourly and installed while idle.
+            auto_update: true,
             update_receipt: String::new(),
             onboarded: false,
             computer_apps: Vec::new(),
@@ -588,10 +592,14 @@ mod tests {
     use serde_json::json;
 
     #[test]
-    fn automatic_updates_are_opt_in_and_receipts_cannot_be_forged_by_a_page() {
+    fn automatic_updates_are_on_by_default_and_receipts_cannot_be_forged_by_a_page() {
         let mut settings = DeviceSettings::default();
-        assert!(!settings.auto_update);
+        assert!(settings.auto_update);
         assert!(settings.update_receipt.is_empty());
+        settings
+            .apply_patch(&json!({"auto_update": false}))
+            .unwrap();
+        assert!(!settings.auto_update);
         settings.apply_patch(&json!({"auto_update": true})).unwrap();
         assert!(settings.auto_update);
         assert!(
@@ -718,7 +726,7 @@ mod tests {
                 "appearance": "light",
                 "ui_language": "zh-TW",
                 "autostart": true,
-                "auto_update": false,
+                "auto_update": true,
                 "update_receipt": "",
                 "onboarded": false,
                 "computer_apps": [],
@@ -861,7 +869,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join(FILE_NAME);
         let mut settings = DeviceSettings::default();
-        for language in ["en", "ja", "zh-TW"] {
+        for language in UI_LANGUAGES {
             settings
                 .apply_patch(&json!({"ui_language": language, "appearance": "dark"}))
                 .unwrap();
@@ -888,7 +896,7 @@ mod tests {
             .unwrap();
         let before = settings.clone();
         for bad in [
-            json!("zh-CN"),
+            json!("ar"),
             json!("zh-tw"),
             json!("EN"),
             json!(""),
@@ -908,7 +916,7 @@ mod tests {
     #[test]
     fn an_invalid_stored_ui_language_only_defaults_that_field() {
         for bad in [
-            json!("zh-CN"),
+            json!("ar"),
             json!("zh-tw"),
             json!("EN"),
             json!(""),

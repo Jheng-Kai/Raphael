@@ -48,6 +48,7 @@ class Activity:
         self.published = {}
         self.task_states = {}
         self.task_source = None
+        self.task_batch_source = None
         self.owner_waiting = lambda: set()
         self.viewing = lambda: None
         self.language = lambda: "zh-TW"
@@ -63,15 +64,15 @@ class Activity:
     def task_list(self, member_id):
         return self.task_source(member_id) if self.task_source else self.task_states.get(member_id, ())
 
-    def describe(self, member_id, waiting=None):
-        tasks = self.task_list(member_id)
+    def describe(self, member_id, waiting=None, *, tasks=None):
+        tasks = self.task_list(member_id) if tasks is None else tasks
         state = self.state(member_id, tasks=tasks, waiting=waiting)
         return state, self.label(member_id, state, tasks=tasks)
 
     def label(self, member_id, state=None, *, tasks=None):
-        from ..agent.persona import ACTIVITY_LABELS
+        from ..agent.persona import ACTIVITY_LABELS, normalize_language
         state = state or self.state(member_id)
-        words = ACTIVITY_LABELS.get(self.language(), ACTIVITY_LABELS["zh-TW"])
+        words = ACTIVITY_LABELS[normalize_language(self.language())]
         if state == "waiting":
             tasks = self.task_list(member_id) if tasks is None else tasks
             name = next((task.get("waiting_for") for task in tasks if task.get("waiting_for")), None)

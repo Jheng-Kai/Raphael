@@ -104,6 +104,15 @@ async def transcribe(router, **overrides):
     return await router.call("stt.transcribe", params)
 
 
+@pytest.mark.parametrize("delay,expected", [(2.5, 2.5), (float("nan"), None), (float("inf"), None), (-1, None)])
+async def test_retry_after_crosses_rpc_only_as_safe_numeric_metadata(router, fake_client, delay, expected):
+    fake_client.error = OpenRouterError(429, "rate_limit", "Synthetic limit")
+    fake_client.error.retry_after = delay
+    with pytest.raises(RpcError) as raised:
+        await transcribe(router)
+    assert raised.value.data.get("retry_after") == expected
+
+
 async def test_cloud_transcription_has_at_most_two_requests_in_flight(router, fake_client):
     active = peak = 0
 

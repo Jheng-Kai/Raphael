@@ -92,10 +92,10 @@ class RunAnalytics:
                 member, avatar = members.get(mid, ("", ""))
                 metric = self.conn.execute("SELECT * FROM run_metrics WHERE kind=? AND run_id=?", (kind, item["id"])).fetchone()
                 metric = dict(metric) if metric else None
-                model = item.get("model") or ""
+                spans = json.loads(metric["model_spans"]) if metric else []
+                model = (item.get("model") or "").partition("?effort=")[0]
                 if metric and not model:
-                    spans = json.loads(metric["model_spans"])
-                    model = next((s.get("model", "") for s in reversed(spans) if s.get("model")), "")
+                    model = next((s.get("model", "") for s in reversed(spans) if s.get("model")), "").partition("?effort=")[0]
                 started = metric["started_at_ms"] if metric else item.get("started_at_ms")
                 finished = metric["finished_at_ms"] if metric else item.get("finished_at_ms")
                 duration = max(0, finished - started) if started is not None and finished is not None else None
@@ -107,7 +107,7 @@ class RunAnalytics:
                              "duration_ms": duration, "member_id": mid, "member_name": member, "avatar": avatar,
                              "title": item["question"] if kind == "turn" else (routine[0] if routine else item["text"]),
                              "model": model, "provider": self._provider(model), "routine": routine[0] if routine else "",
-                             "cost_usd": item["cost_usd"], "tokens": metric["tokens"] if metric else None,
+                             "cost_usd": item["cost_usd"], "tokens": metric["tokens"] if metric else None, "model_spans": spans,
                              "ai_steps": max(metric["ai_steps"], models) if metric else models, "tools": tools,
                              "errors": errors + (int(item.get("status", item.get("state")) in ("error", "failed")) if not errors else 0)})
         if not only or only[0] == "routine":
@@ -124,7 +124,7 @@ class RunAnalytics:
                 if source and source_kind == "turn":
                     metric = self.conn.execute("SELECT * FROM run_metrics WHERE kind='turn' AND run_id=?", (source["id"],)).fetchone()
                     steps = self.conn.execute("SELECT COUNT(CASE WHEN kind!='model' THEN 1 END), COUNT(CASE WHEN outcome NOT IN ('ok','running') THEN 1 END), COUNT(CASE WHEN kind='model' THEN 1 END) FROM agent_steps WHERE turn_id=?", (source["id"],)).fetchone()
-                    backing = [{"tokens": metric["tokens"] if metric else None, "ai_steps": max(metric["ai_steps"],steps[2]) if metric else steps[2], "tools": steps[0], "errors": steps[1], "model": source.get("model") or ""}]
+                    backing = [{"tokens": metric["tokens"] if metric else None, "ai_steps": max(metric["ai_steps"],steps[2]) if metric else steps[2], "tools": steps[0], "errors": steps[1], "model": (source.get("model") or "").partition("?effort=")[0], "model_spans": json.loads(metric["model_spans"]) if metric else []}]
                 base = backing[0] if backing else {}
                 started, finished = record["started"], record["finished"]
                 member, avatar = members.get(record["member_id"], ("", ""))
@@ -151,7 +151,23 @@ class RunAnalytics:
         groups = {}
         for grouping in ("member", "model", "day", "provider", "routine"):
             values = defaultdict(lambda: {"tokens": 0, "cost_usd": 0, "runs": 0})
+            subscription_models = set()
             for row in rows:
+                if grouping == "model":
+                    spans = row.get("model_spans") or [row]
+                    seen = set()
+                    for span in spans:
+                        label = (span.get("model") or "").partition("?effort=")[0] or "unknown"
+                        entry = values[label]
+                        entry["tokens"] += span.get("tokens") or 0
+                        # Old single-model metrics omitted the cost; their run total is attributable.
+                        if span.get("billing_source") == "subscription":
+                            subscription_models.add(label)
+                        entry["cost_usd"] += span.get("cost_usd", row["cost_usd"] if len(spans) == 1 else 0) or 0
+                        if label not in seen:
+                            entry["runs"] += 1
+                            seen.add(label)
+                    continue
                 # A member that is gone has no name to show, so it is no group of its own.
                 if grouping == "member" and not row["member_name"]:
                     continue
@@ -161,12 +177,14 @@ class RunAnalytics:
                 entry["tokens"] += row["tokens"] or 0
                 entry["cost_usd"] += row["cost_usd"]
                 entry["runs"] += 1
-            groups[grouping] = sorted([{"label": label, **value} for label, value in values.items()], key=lambda v: (-v["tokens"], -v["cost_usd"], v["label"]))
+            if grouping == "model":
+                for label, value in values.items():
+                    if (value["tokens"] or label in subscription_models) and not value["cost_usd"]:
+                        value["cost_usd"] = None
+            groups[grouping] = sorted([{"label": label, **value} for label, value in values.items()], key=lambda v: (-v["tokens"], -(v["cost_usd"] or 0), v["label"]))
         return {"range": period, "start_day": start.isoformat() if start else None, "end_day": (end-timedelta(days=1)).isoformat(),
                 "summary": self.summary(rows), "groups": groups, "total": len(rows),
-                "bill": self.spend.bill(period),
-                "fish_voice": bool(self.settings and self.settings.get("tts_enabled")
-                                   and self.settings.get("tts_service") == "fish")}
+                "bill": self.spend.bill(period)}
 
     async def export(self, params):
         _, _, _, _, lower, upper = self._period(params)

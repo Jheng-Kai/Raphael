@@ -346,10 +346,10 @@ test("connected cards show status, a switch and a dialog button; the add dialog 
   for (const title of ["Providers", "Add a provider", "Official", "Gateways and cloud", "Local"]) expect(root.textContent).toContain(title);
   expect(root.querySelector<HTMLButtonElement>('[data-pv="add"][data-id="bedrock"]')?.disabled).toBe(true);
   expect(root.querySelector('[data-pv="open"] .ic')?.textContent).toBe("");
+  // One press on the switch behind the open directory closes it and flips the switch (R-UI-121).
   click('[data-pv="toggle"]'); await flush();
   expect(root.querySelector('[role="dialog"]')).toBeNull();
-  expect(api.providersUpdate).not.toHaveBeenCalled();
-  click('[data-pv="toggle"]'); await flush();
+  expect(api.providersUpdate).toHaveBeenCalledOnce();
   expect(api.providersUpdate).toHaveBeenCalledWith({ id: "p3", enabled: false });
 });
 

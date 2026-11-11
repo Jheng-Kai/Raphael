@@ -3,7 +3,7 @@ import { afterEach, expect, test, vi } from "vitest";
 const api = vi.hoisted(() => ({ core: vi.fn() }));
 vi.mock("./api", () => api);
 import { ComposerLearning, bindComposerLearning, composerCorrections, learnComposerCorrections } from "./composer-learning";
-const before = "Please use Open Mouse Bot", after = "Please use OpenMausBot";
+const before = "Please use Sample Tool Ex", after = "Please use SampleToolX";
 const correction = [{ before, after }];
 afterEach(() => { vi.useRealTimers(); vi.clearAllMocks(); document.body.innerHTML = ""; });
 
@@ -47,12 +47,23 @@ test("pending-send retry evidence is erased at the original deadline", () => {
   learning.restore(retry); expect(learning.take(after)).toEqual([]);
 });
 test("learning uses native IPC and leaves notice ownership to the passive pill", async () => {
-  api.core.mockResolvedValue({ learned: ["OpenMausBot"] });
+  api.core.mockResolvedValue({ learned: ["SampleToolX"] });
   await learnComposerCorrections(correction);
   expect(api.core).toHaveBeenCalledWith("dictionary.correct", { edits: correction });
   expect(document.querySelectorAll(".toast")).toHaveLength(0);
   api.core.mockRejectedValue(new Error("offline"));
   await expect(learnComposerCorrections(correction)).resolves.toBeUndefined();
+});
+
+test("capture uses only the native correction route and never requests a model judgment", async () => {
+  await learnComposerCorrections([]);
+  expect(api.core).not.toHaveBeenCalled();
+  api.core.mockResolvedValue({ learned: [], undo: undefined });
+  await learnComposerCorrections([{ before: "不錯", after: "真的很好" }]);
+  expect(api.core.mock.calls).toEqual([["dictionary.correct", {
+    edits: [{ before: "不錯", after: "真的很好" }],
+  }]]);
+  expect(document.querySelectorAll(".toast")).toHaveLength(0);
 });
 
 test("sequential input snapshots retain separate corrections for one native batch", () => {

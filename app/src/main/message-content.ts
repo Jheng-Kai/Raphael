@@ -7,6 +7,7 @@ import { answerFormHTML } from "./message-forms";
 import { answerFormText, isAnswerFormKind, parseAnswerForm } from "../shared/answer-forms";
 import { publicEventText } from "./public-event";
 import { composioText } from "./composio-result";
+import { SERVICE_ICONS, brandStyle, hasLogo, serviceIconOf, serviceIconSVG, serviceLogoHTML } from "./service-icons";
 
 // A file of the team folder is one press from opening; any other path is words the owner can use.
 const TEAM_FILE = /^\/home\/cua\/team\/[^\s<>"'`]+$/;
@@ -48,6 +49,33 @@ export function bareUrl(text: string): string {
   return raw;
 }
 
+/** An address only this machine or its network can open: no public page, so no title to read and no preview. */
+export function isLocalAddress(url: string): boolean {
+  const host = new URL(url).hostname;
+  return !host.includes(".") || /\.(?:local|internal|lan)$/.test(host) || /^(?:127\.|10\.|192\.168\.|169\.254\.|172\.(?:1[6-9]|2\d|3[01])\.)/.test(host);
+}
+
+/** The mark before a link's name: the site's own mark when the app knows it, else a plain link. */
+function siteMark(url: string): string {
+  const id = serviceIconOf({ name: "", url });
+  if (id && hasLogo(id)) return `<span class="link-mark logo-art" aria-hidden="true">${serviceLogoHTML(id)}</span>`;
+  if (id && id in SERVICE_ICONS) return `<span class="link-mark logo-mono" aria-hidden="true"${brandStyle(id as keyof typeof SERVICE_ICONS)}>${serviceIconSVG(id as keyof typeof SERVICE_ICONS)}</span>`;
+  return `<span class="link-mark" aria-hidden="true">${ico("link")}</span>`;
+}
+
+/**
+ * A link  source chips: the site's
+ * mark and the link's name, in the link colour, inside the words; the page's preview shows under the pointer
+ * (`link-previews.ts`). A link with words of its own says them; a bare address says its site until the page's own
+ * title is read (`data-link-title`), and an address of this machine says itself in full.
+ */
+function linkChipHTML(url: string, labelHTML: string | null, query: string): string {
+  const local = isLocalAddress(url);
+  const name = labelHTML ?? highlightHTML(local ? urlLabel(url) : new URL(url).host.replace(/^www\./, ""), query);
+  return `<a class="message-link link-chip" href="${esc(url)}" data-act="open-url" data-url="${esc(url)}" data-link-url="${esc(url)}"` +
+    `${labelHTML === null ? ` data-link-bare${local ? "" : " data-link-title"}` : ""} rel="noreferrer noopener">${siteMark(url)}<span class="link-name">${name}</span></a>`;
+}
+
 function inline(text: string, query: string, markdown: boolean, urls: Set<string>, depth = 0, mentions: readonly MentionTarget[] = []): string {
   let out = "", at = 0, plain = "";
   const flush = (): void => { out += mentions.length ? mentionsHTML(plain, mentions, words => highlightHTML(words, query)) : highlightHTML(plain, query); plain = ""; };
@@ -55,7 +83,7 @@ function inline(text: string, query: string, markdown: boolean, urls: Set<string
     const url = messageUrl(raw);
     if (!url) return null;
     urls.add(url);
-    return `<a class="message-link" href="${esc(url)}" data-act="open-url" data-url="${esc(url)}" rel="noreferrer noopener">${highlightHTML(label ?? shortUrl(url), query)}</a>`;
+    return linkChipHTML(url, label === undefined || !label.trim() ? null : highlightHTML(label, query), query);
   };
   while (at < text.length) {
     if (markdown && text.startsWith("\\![", at)) {
@@ -278,7 +306,8 @@ function plainTextBlock(source: string): string {
   el.querySelectorAll("button").forEach(button => button.remove());
   for (const link of el.querySelectorAll<HTMLAnchorElement>("a")) {
     const url = link.dataset.url!;
-    link.textContent = link.textContent === shortUrl(url) ? url : `${link.textContent} (${url})`;
+    // A bare address copies as itself, whatever its chip says on screen (its site, or the page's title once read).
+    link.textContent = link.hasAttribute("data-link-bare") || link.textContent === url || link.textContent === shortUrl(url) ? url : `${link.textContent} (${url})`;
   }
   const read = (node: Node): string => {
     if (node.nodeType === Node.TEXT_NODE) return node.textContent ?? "";

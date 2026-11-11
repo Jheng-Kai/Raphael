@@ -80,8 +80,9 @@ class Crew:
         return ChatToolCall(f"call{self.count}", tool, arguments, json.dumps(arguments))
 
     async def chat_tools(self, **kwargs):
-        messages, system = kwargs["messages"], kwargs["messages"][0]["content"]
-        me = json.loads(system.split("<team_roster>")[-1].split("</team_roster>")[0])["self_id"]
+        messages = kwargs["messages"]
+        # The team comes with the task, in the first message after the rules.
+        me = json.loads(messages[1]["content"].split("<team_roster>")[-1].split("</team_roster>")[0])["self_id"]
         told = " ".join(str(message.get("content")) for message in messages if message.get("role") == "user")
         if me == 0 and "handoff_results" in told:
             self.seen["chief"] = messages[-1]["content"]
@@ -89,7 +90,8 @@ class Crew:
             return self.turn(reply, [], kwargs)
         if me == 0:
             offered = {tool["function"]["name"] for tool in kwargs["tools"]}
-            assert not {"create_member", "member_create", "member_delete"} & offered
+            # Member management is found and called through use_tool, never listed (decision 2).
+            assert "use_tool" in offered and not {"member_create", "create_member"} & offered
             work = [("Builder", "build", "Build office.html in the workspace", "office.html exists in the workspace"),
                     ("Tester", "test", "Look at the screen and test the page", "Report what the test run showed")]
             calls = [self.call("handoff", member_id=self.ids[name], stage_id=stage, request=request, done_when=done, requires_artifact=name == "Builder")
@@ -117,6 +119,8 @@ class Crew:
 
 
 async def test_an_existing_team_works_at_once_and_waits_for_the_computer(tmp_path):
+    (tmp_path / "data").mkdir()
+    (tmp_path / "data" / "device.json").write_text('{"ui_language":"en"}', encoding="utf-8")
     crew = Crew()
     driver = RpcDriver(tmp_path, "fake/model", crew, Budget(200))
     app = driver.app

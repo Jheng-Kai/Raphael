@@ -55,12 +55,13 @@ export function secretStateText(card: SecretCard): string {
 function actionHTML(card: SecretCard): string {
   const on = (act: string): string => ` data-act="${act}" data-card="${esc(card.id)}"`;
   if (typing(card)) {
-    const label = `${card.name} ${card.secret}`;
+    // A bot's token is named in the window's language; a connection's secret keeps its own declared name.
+    const label = card.platform ? `${card.name} ${t("msg.tg.token")}` : `${card.name} ${card.secret}`;
     if (card.login) return `<div class="sc-form sc-login"><label><span>${esc(t("card.loginUser"))}</span><span class="field sc-field"><input data-login-user="${esc(card.id)}" autocomplete="off" spellcheck="false"></span></label>` +
       `<label><span>${esc(t("card.loginPassword"))}</span><span class="field sc-field">${ico("lock")}<input type="password" data-secret-input="${esc(card.id)}" autocomplete="off" spellcheck="false" autocapitalize="off"></span></label>` +
       btn(esc(t("card.keySave")), "sm pri", `${on("card-save")} disabled`) + `</div>`;
     return `<div class="sc-form"><label class="field sc-field">${ico("lock")}` +
-      `<input type="password" data-secret-input="${esc(card.id)}" placeholder="${esc(card.login ? t("card.loginPassword") : t("card.keyField"))}" aria-label="${esc(label)}" ` +
+      `<input type="password" data-secret-input="${esc(card.id)}" placeholder="${esc(card.login ? t("card.loginPassword") : card.platform ? t("msg.tg.tokenHint") : t("card.keyField"))}" aria-label="${esc(label)}" ` +
       `autocomplete="off" spellcheck="false" autocapitalize="off"></label>` +
       btn(esc(t("card.keySave")), "sm pri", `${on("card-save")} disabled`) + `</div>`;
   }
@@ -68,7 +69,27 @@ function actionHTML(card: SecretCard): string {
   return "";
 }
 
+/**
+ * A bot token a member asked for in its conversation: where to make the bot, then the same masked
+ * field; the core checks the token and connects the member's own bot (`connect_messaging`).
+ */
+const SLACK_SCOPES = ["im:read", "im:history", "chat:write", "files:read", "files:write"] as const;
+function botCardHTML(card: SecretCard & { platform: "telegram" | "slack" | "discord" }): string {
+  const active = typing(card);
+  const failed = card.state === "failed" ? plain(card.error === "offline" ? "cards.botOffline" : card.error === "invalid" ? "cards.botInvalid" : (FAILURES[card.error ?? ""] ?? "card.keyVault")) : "";
+  const make = btn(`<span>${esc(t(card.platform === "telegram" ? "cards.botFather" : "msg.createBot"))}</span>${ico("link")}`, "sm", ` data-act="bot-link" data-platform="${card.platform}"`);
+  return cardHTML({ title: active ? t("cards.botTitle", { p0: card.name }) : card.name, mark: connectionMarkHTML(card.name),
+    status: card.state === "failed" ? "failed" : active || card.state === "resuming" ? "waiting" : "done",
+    statusText: active ? cardPromptText("key") : card.state === "resuming" ? t("cards.needsYou") : t("cards.done"),
+    body: active ? failed || plain(card.platform === "telegram" ? "cards.botHowTelegram" : card.platform === "slack" ? "cards.botHowSlack" : "cards.botHowDiscord") : undefined,
+    // Slack's scopes are names to copy, set apart as code beside the words.
+    content: active ? (card.platform === "slack" ? `<p class="card-body bot-scopes">${SLACK_SCOPES.map((scope) => `<code>${scope}</code>`).join(" ")}</p>` : "") + `<div class="card-actions-inline">${make}</div>` + actionHTML(card) + `<p class="card-shield">${ico("lock")}<span>${esc(t("cards.vault"))}</span></p>` : "",
+    cls: "secret-card bot-card", attrs: ` data-secret-card="${esc(card.id)}" data-card-state="${esc(card.state)}" data-platform="${card.platform}"${card.error ? ` data-card-error="${esc(card.error)}"` : ""}`,
+  });
+}
+
 export function secretCardHTML(card: SecretCard): string {
+  if (card.platform) return botCardHTML(card as SecretCard & { platform: "telegram" | "slack" | "discord" });
   const active = typing(card), action = actionHTML(card);
   return cardHTML({ title: active ? t("cards.connect", { p0: card.name }) : card.name, mark: connectionMarkHTML(card.name),
     status: card.state === "failed" || card.error ? "failed" : active || card.state === "resuming" ? "waiting" : "done",

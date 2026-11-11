@@ -7,6 +7,7 @@ const api = vi.hoisted(() => Object.fromEntries([
   "agentHistoryList", "agentQuestionOpen", "agentAskText", "agentVoice", "agentStop", "cancelSession", "workerCancel",
   "membersList", "membersPresets", "membersRead", "membersViewing", "membersToolChoices", "toolsetsList",
   "routinesList", "modelsCatalog", "providersList", "brainsCli", "core", "roomsList", "statusGet",
+  "membersGreet",
 ].map(name => [name, vi.fn()])));
 vi.mock("../api", () => api);
 import { Cleared } from "../cleared";
@@ -14,10 +15,8 @@ import { createAgent } from "./agent";
 
 const conversations = [
   { id: 1, member_id: 0, is_default: 1, kind: "main", title: "", created_at_ms: 1, updated_at_ms: 1 },
-  { id: 2, member_id: 0, is_default: 0, kind: "standard", title: "Project", created_at_ms: 1, updated_at_ms: 1 },
   { id: 4, member_id: 0, is_default: 0, kind: "quick", title: "", created_at_ms: 1, updated_at_ms: 1 },
   { id: 31, member_id: 3, is_default: 1, kind: "main", title: "", created_at_ms: 1, updated_at_ms: 1 },
-  { id: 32, member_id: 3, is_default: 0, kind: "standard", title: "Project", created_at_ms: 1, updated_at_ms: 1 },
 ];
 let turns: AgentTurn[];
 let emit: (event: MainEvent) => void;
@@ -28,6 +27,8 @@ const refresh = async (event: MainEvent = { type: "MembersChanged" }) => { emit(
 const choose = async (member: number, conversation: number) => {
   $(`.mb-col [data-member="${member}"]`).click();
   await flush();
+  // A member has one conversation; only Raphael's panel switches between his and the quick questions.
+  if (member !== 0) return;
   if ($<HTMLElement>(".mb-det").hidden) $(".conversation-trigger").click();
   await flush();
   $(`[data-conversation-open="${conversation}"]`).click();
@@ -46,6 +47,11 @@ const press = () => {
   $(".cmp-voice").dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
   document.body.dispatchEvent(new KeyboardEvent("keyup", { key: "Enter", bubbles: true }));
 };
+const pointer = (button: HTMLElement, type: string) => {
+  button.setPointerCapture = vi.fn();
+  button.dispatchEvent(new PointerEvent(type, { button: 0, pointerId: 7, bubbles: true }));
+};
+const pointerClick = (button: HTMLElement) => button.dispatchEvent(new MouseEvent("click", { detail: 1, bubbles: true }));
 function mount() {
   agent = createAgent({ go: vi.fn(), device: () => ({ dictation_mode: "hold" }), cleared: new Cleared(),
     undo: { begin: vi.fn() }, onEvent(handler: typeof emit) { emit = handler; return () => {}; },
@@ -72,12 +78,16 @@ test("while work runs the field sends message after message and stops nothing", 
   expectStop();
 });
 
-test.each([[0, 1], [0, 2], [3, 31], [3, 32]])("the composer voice press stays in member %s conversation %s through navigation", async (member, conversation) => {
+test.each([[0, 1], [3, 31]])("the composer voice press stays in member %s conversation %s through navigation", async (member, conversation) => {
   mount(); await flush(); await choose(member, conversation);
-  press(); await flush();
-  expect(api.agentVoice.mock.calls).toEqual([["down", member, conversation], ["up", member, conversation]]);
+  const button = $(".cmp-voice");
+  pointer(button, "pointerdown");
+  await vi.advanceTimersByTimeAsync(300); await flush();
+  expect(api.agentVoice.mock.calls).toEqual([["down", member, conversation]]);
   emit({ type: "Dictation", phase: "listening", agent: true, member_id: member });
   await choose(0, 4);
+  pointer(button, "pointerup"); pointerClick(button); await flush();
+  expect(api.agentVoice.mock.calls).toEqual([["down", member, conversation], ["up", member, conversation]]);
   emit({ type: "Dictation", phase: "processing", agent: true, member_id: member });
   expect(document.querySelector('[data-key="hearing"]')).toBeNull();
   await choose(member, conversation); expectStop("ack");
@@ -85,6 +95,26 @@ test.each([[0, 1], [0, 2], [3, 31], [3, 32]])("the composer voice press stays in
   await refresh({ type: "AgentTurn", turn_id: 11, member_id: member });
   expect(document.querySelector('[data-key="hearing"]')).toBeNull();
   expect(document.body.textContent).toContain("Report ready");
+});
+
+test("a member's voice button records a voice message on a click, a hold and a key", async () => {
+  mount(); await flush(); await choose(3, 31);
+  const button = $(".cmp-voice");
+  pointer(button, "pointerdown");
+  expect(api.agentVoice.mock.calls).toEqual([["down", 3, 31]]);
+  pointer(button, "pointerup"); pointerClick(button); await flush();
+  pointer(button, "pointerdown"); await vi.advanceTimersByTimeAsync(600);
+  pointer(button, "pointerup"); pointerClick(button); await flush();
+  button.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })); await flush();
+  document.body.dispatchEvent(new KeyboardEvent("keyup", { key: "Enter", bubbles: true })); await flush();
+  expect(api.agentVoice.mock.calls).toEqual([["down", 3, 31], ["up", 3, 31], ["down", 3, 31], ["up", 3, 31], ["down", 3, 31], ["up", 3, 31]]);
+});
+
+test.each(["pointercancel", "lostpointercapture"])("%s ends a member's voice message once", async event => {
+  mount(); await flush(); await choose(3, 31);
+  const button = $(".cmp-voice"); pointer(button, "pointerdown");
+  pointer(button, event); pointer(button, "pointerup"); pointerClick(button); await flush();
+  expect(api.agentVoice.mock.calls).toEqual([["down", 3, 31], ["up", 3, 31]]);
 });
 
 beforeEach(() => {
@@ -96,7 +126,7 @@ beforeEach(() => {
     group_id: null, instructions: "", model: "", tools: null, created: 0, unread: false, waiting: false, preview: "", last_at: null } as Member)) });
   api.membersPresets.mockResolvedValue({ presets: [] }); api.membersRead.mockResolvedValue({}); api.membersViewing.mockResolvedValue({});
   api.membersToolChoices.mockResolvedValue({ tools: [], connections: [] }); api.toolsetsList.mockResolvedValue({ groups: [] });
-  api.routinesList.mockResolvedValue({ routines: [] }); api.roomsList.mockResolvedValue({ rooms: [] });
+  api.routinesList.mockResolvedValue({ routines: [] }); api.roomsList.mockResolvedValue({ rooms: [] }); api.membersGreet.mockResolvedValue({ turn_id: 1 });
   api.brainsCli.mockResolvedValue({ clis: [] }); api.providersList.mockResolvedValue({ providers: [] });
   api.agentVoice.mockResolvedValue(undefined); api.cancelSession.mockResolvedValue(undefined);
   api.core.mockImplementation(async (method: string, params: { member_id?: number } = {}) => method === "conversations.list"
@@ -376,7 +406,11 @@ test("a failed typed send restores the exact draft and clears the failure on suc
  const input = $<HTMLTextAreaElement>(".cmp-input"); input.value = "Please review the note";
  input.dispatchEvent(new Event("input", {bubbles:true}));
  $(".composer").dispatchEvent(new Event("submit", {bubbles:true,cancelable:true})); await flush();
- expect(input.value).toBe("Please review the note"); expect(document.querySelector(".composer-failure .card-status.is-failed")).not.toBeNull();
+ expect(input.value).toBe("Please review the note"); expect(document.querySelector(".composer-failure [data-card-retry]")).not.toBeNull();
+ // Said once: the title names the message, its status says it was not sent, no sentence repeats it; the words are back in the field.
+ const failed = $(".composer-failure");
+ expect(failed.getAttribute("role")).toBe("alert"); expect(failed.querySelector(".card-title")!.textContent).toBe("你的訊息");
+ expect(failed.querySelector(".card-status.is-failed")!.textContent).toBe("未能傳送"); expect(failed.querySelector(".card-failure p")).toBeNull();
  input.dispatchEvent(new Event("input", {bubbles:true}));
  $(".cmp-send").click(); await flush();
  expect(api.agentAskText).toHaveBeenCalledTimes(2); expect(document.querySelector(".composer-failure")).toBeNull();

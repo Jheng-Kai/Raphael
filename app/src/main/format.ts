@@ -4,6 +4,7 @@ import { getLocale, t } from "./i18n";
 import { backendMessage } from "./i18n/backend";
 
 const pad = (n: number): string => String(n).padStart(2, "0");
+const originalLocale = (): boolean => ["zh-TW", "en", "ja"].includes(getLocale());
 
 /** Bytes in a megabyte and a gigabyte, as download sizes are written (powers of ten). */
 export const MB = 1_000_000;
@@ -12,6 +13,10 @@ export const GB = 1_000_000_000;
 /** `3.42` -> `US$3.42`. Under a cent shows four decimals, so a month of a few dictations
  * (`0.0037`) does not read as nothing spent. */
 export function formatUsd(n: number): string {
+  if (!originalLocale()) return new Intl.NumberFormat(getLocale(), {
+    style: "currency", currency: "USD", currencyDisplay: "code",
+    minimumFractionDigits: n > 0 && n < 0.01 ? 4 : 2, maximumFractionDigits: n > 0 && n < 0.01 ? 4 : 2,
+  }).format(n);
   if (n > 0 && n < 0.01) return `US$${n.toFixed(4)}`;
   return `US$${n.toFixed(2)}`;
 }
@@ -19,12 +24,17 @@ export function formatUsd(n: number): string {
 /** The local time of day: `21:42` */
 export function formatClock(ms: number): string {
   const d = new Date(ms);
+  if (!originalLocale()) return new Intl.DateTimeFormat(getLocale(), { hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(d);
   return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
 /** A short local timestamp, with the year only outside the current year. */
 export function formatShortDateTime(ms: number, nowMs = Date.now()): string {
   const date = new Date(ms);
+  if (!originalLocale()) return new Intl.DateTimeFormat(getLocale(), {
+    calendar: "gregory", ...(date.getFullYear() === new Date(nowMs).getFullYear() ? {} : { year: "numeric" }),
+    month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+  }).format(date);
   const year = date.getFullYear() === new Date(nowMs).getFullYear() ? "" : `${date.getFullYear()}/`;
   return `${year}${date.getMonth() + 1}/${date.getDate()} ${formatClock(ms)}`;
 }
@@ -34,6 +44,7 @@ export function formatDate(value: string | number): string {
   const date = new Date(typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value) ? `${value}T00:00:00` : value);
   if (!Number.isFinite(date.getTime())) return "";
   const locale = getLocale();
+  if (!originalLocale()) return new Intl.DateTimeFormat(locale, { calendar: "gregory", year: "numeric", month: "short", day: "numeric" }).format(date);
   return locale === "en"
     ? date.toLocaleDateString(locale, { year: "numeric", month: "short", day: "numeric" })
     : `${date.getFullYear()}/${pad(date.getMonth() + 1)}/${pad(date.getDate())}`;
@@ -61,13 +72,18 @@ export function dayLabel(ms: number, nowMs: number, inSentence = false): string 
   if (days === 0) return t(inSentence ? "format.todayInSentence" : "format.001");
   if (days === 1) return t(inSentence ? "format.yesterdayInSentence" : "format.002");
   const d = new Date(ms);
+  if (!originalLocale()) return new Intl.DateTimeFormat(getLocale(), {
+    calendar: "gregory", month: "short", day: "numeric",
+    ...(d.getFullYear() === new Date(nowMs).getFullYear() ? {} : { year: "numeric" }),
+  }).format(d);
   const date = t("format.003", { p0: d.getMonth() + 1, p1: d.getDate() });
   return d.getFullYear() === new Date(nowMs).getFullYear() ? date : t("format.004", { p0: d.getFullYear(), p1: date });
 }
 
 /** `1340` -> `1.34 秒` */
 export function formatSeconds(ms: number): string {
-  return t("format.005", { p0: (ms / 1000).toFixed(2) });
+  return t("format.005", { p0: originalLocale() ? (ms / 1000).toFixed(2)
+    : new Intl.NumberFormat(getLocale(), { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(ms / 1000) });
 }
 
 /** "Keep forever" is a retention this long (days); the core takes it as an ordinary number. */
@@ -109,6 +125,9 @@ function asText(value: unknown): string {
 
 /** The monthly limit as the home page shows it next to the spend: `20`, `7.50`. */
 export function formatLimit(limit: number): string {
+  if (!originalLocale()) return new Intl.NumberFormat(getLocale(), {
+    useGrouping: false, minimumFractionDigits: Number.isInteger(limit) ? 0 : 2, maximumFractionDigits: 2,
+  }).format(limit);
   return Number.isInteger(limit) ? String(limit) : limit.toFixed(2);
 }
 

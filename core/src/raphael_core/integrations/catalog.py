@@ -15,8 +15,10 @@ The words are kept in the languages of the window (`zh-TW`, `en`, `ja`), and the
 from dataclasses import dataclass
 
 from .config import checked_url
+from ..ui_languages import LANGUAGES
+from ..ui_words import with_ui_words
 
-LANGUAGES = ("zh-TW", "en", "ja")
+SOURCE_LANGUAGES = ("zh-TW", "en", "ja")
 CATEGORIES = ("docs", "projects", "developer", "payments", "automation", "design", "crm", "analytics")
 # The marks the window has (`service-icons.ts`, `service-logos/`): every entry shows its brand's own.
 ICONS = ("notion", "linear", "atlassian", "cloudflare", "todoist", "sentry", "stripe", "zapier", "paypal", "monday", "webflow", "wix", "netlify", "neon", "prisma", "airtable", "jam", "fireflies", "close", "calendly", "attio", "granola", "posthog", "postman", "klaviyo", "sanity", "apify", "jotform", "bitly", "context7", "deepwiki", "mslearn", "aws", "huggingface", "exa", "github")
@@ -70,9 +72,9 @@ def _service(
         url=checked_url(url),
         category=category,
         icon=icon,
-        summary=dict(zip(LANGUAGES, summary, strict=True)),
-        about=dict(zip(LANGUAGES, about, strict=True)),
-        examples=dict(zip(LANGUAGES, examples, strict=True)),
+        summary=with_ui_words(dict(zip(SOURCE_LANGUAGES, summary, strict=True))),
+        about=with_ui_words(dict(zip(SOURCE_LANGUAGES, about, strict=True))),
+        examples=with_ui_words(dict(zip(SOURCE_LANGUAGES, examples, strict=True))),
         auth=auth,
         device=device,
     )

@@ -4,8 +4,9 @@ Selection follows Cua's bundled get_guide topics and published tool descriptions
 https://cua.ai/docs/cua-driver/reference/mcp-tools
 https://cua.ai/docs/cua-driver/reference/mcp-tools/pointer-cursor-and-browser
 Browser tools support Linux CDP; this is a capability contract, not image smoke proof.
-Raphael owns lifecycle/control and uses vm_exec/attach_file, as in OpenMausBot's
-server/drivers/agents-catalog.ts and server/mcp-bridge.ts.
+Raphael owns lifecycle/control and uses vm_exec/attach_file.
+
+Adapted from OpenMausBot (Apache-2.0); see core/packaging/licenses.
 """
 
 DRIVER_TOOLS = {

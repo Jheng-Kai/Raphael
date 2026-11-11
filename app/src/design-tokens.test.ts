@@ -12,8 +12,6 @@ const legacy: Record<string, number> = {
   "overlay/overlay.css | #picture | border-radius: 50%": 1,
   "overlay/overlay.css | .progress, .sub-line | font: 600 14px/1.45 var(--zh-sub)": 1,
   "overlay/overlay.css | .ask-btn | font: 700 15px/1 var(--zh-sub)": 1,
-  "overlay/overlay.css | .ask-fill | border-radius: 2px": 1,
-  'overlay/overlay.css | .ask[data-tier="T3"] .ask-yes::after | border-radius: 2px': 1,
 };
 
 test("type and radius literals outside styles.css cannot grow beyond the frozen exceptions", () => {

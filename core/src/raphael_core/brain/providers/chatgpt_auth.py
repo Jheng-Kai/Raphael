@@ -61,14 +61,28 @@ def failure(status, body, request_id=None, retry_after=None):
         "context_length_exceeded": "context_overflow",
         "insufficient_quota": "credits",
         "content_policy_violation": "content_policy",
+        # The codes a stream's own error event carries (OpenAI's list): what happened to a request that was accepted.
+        "server_error": "server",
+        "service_unavailable": "server",
+        "rate_limit_exceeded": "rate_limit",
+        "invalid_prompt": "content_policy",
+        "invalid_request_error": "invalid_request",
     }
     # The plan endpoint names its usage limit as the error's type.
     kind = next((kinds[word] for word in (code, error.get("type") if isinstance(error, dict) else None)
                  if isinstance(word, str) and word in kinds), None)
+    # A response that stopped for its content filter says so in its incomplete details, not as an error.
+    details = body.get("incomplete_details") if isinstance(body, dict) else None
+    if kind is None and isinstance(details, dict) and details.get("reason") == "content_filter":
+        kind = "content_policy"
+    # A plain 503 is a busy service: asked again like any other. Only the plan's own codes above say the plan is the
+    # problem. An error in a stream (status 200: the request was taken) the code does not name is the service failing,
+    # unless it says the request was invalid, which only a 4xx or an `invalid_` code says.
     kind = kind or ("auth_expired" if (isinstance(code, str) and code in TERMINAL_REFRESH) or status == 401 else
         "permission_denied" if status == 403 else "payload_too_large" if status == 413 else
-        "rate_limit" if status == 429 else
-        "chatgpt_unavailable" if status == 503 else "server" if status >= 500 else "invalid_request")
+        "rate_limit" if status == 429 else "server" if status >= 500 else
+        "invalid_request" if isinstance(code, str) and code.startswith("invalid_") else
+        "server" if status == 200 else "invalid_request")
     result = OpenRouterError(status, kind, "ChatGPT request failed: " + kind)
     resets = error.get("resets_in_seconds") if isinstance(error, dict) else None
     result.retry_after = next((float(wait) for wait in (retry_after, resets) if type(wait) in (int, float) and wait > 0), None)

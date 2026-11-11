@@ -1,5 +1,6 @@
 """Bounded public action words, retained only with the conversation that owns them."""
 
+from raphael_core.ui_words import ui_word, with_ui_words
 import json
 import asyncio
 import re
@@ -15,7 +16,7 @@ _ACTIVE = ContextVar("public_action", default=None)
 _PRIVATE = re.compile(r"password|passwd|token|secret|key|authorization|credential|cookie|login", re.I)
 _SENSITIVE = re.compile(r"(?:https?://|[\w.+-]+@[\w.-]+|(?:sk|ghp|gho|eyJ)[-_A-Za-z0-9]{8,}|[A-Za-z0-9_-]{24,}|password|token|secret|authorization|api.?key)", re.I)
 _APPS = {"googlecalendar":"Google Calendar", "github":"GitHub", "gmail":"Gmail", "notion":"Notion", "slack":"Slack", "googledrive":"Google Drive"}
-_WORDS = {
+_WORDS = with_ui_words({
     "en": {
         "read": ("Reading {x}", "Read {x}"), "write": ("Writing {x}", "Wrote {x}"),
         "edit": ("Editing {x}", "Edited {x}"), "search": ('Searching for “{x}”', 'Searched for “{x}”'),
@@ -60,7 +61,7 @@ _WORDS = {
         "update": ("{x} を更新しています", "{x} を更新しました"), "delete": ("{x} から削除しています", "{x} から削除しました"),
         "send": ("{x} で送信しています", "{x} で送信しました"), "private": ("非公開のログインを待っています", "非公開のログインを処理しました"),
     },
-}
+})
 
 
 def _safe(value):
@@ -94,36 +95,44 @@ def _bound(text):
 
 
 def _sentence(tool, arguments, language, *, server=None):
+    from ..ui_languages import fixed_language
+    language = fixed_language(language)
     words = _WORDS.get(language, _WORDS["zh-TW"])
     args = {k: v for k, v in (arguments or {}).items() if not _PRIVATE.search(k)}
     short = str(tool).rsplit("/", 1)[-1].rsplit("__", 1)[-1]
     if server and (server.lower() in ("composio", "connectors_composio") or server.startswith("composio:")):
         server = "composio"
     tokens = re.findall(r"[a-z]+", short.lower())
-    action, target = "use", {"en": "a tool", "ja": "ツール"}.get(language, "工具")
+    action, target = "use", with_ui_words({"en": "a tool", "ja": "ツール"}).get(language, "工具")
     if _PRIVATE.search(short):
         action = "private"
     elif short in ("local_exec", "vm_exec", "exec_command", "run_command", "execute_command") or server == "computer" and short in ("exec", "command", "shell"):
         action = "command" if short == "local_exec" else "computer_command"
-        target = _command(args.get("command", args.get("cmd", ""))) or {"en": "a command", "ja": "コマンド"}.get(language, "指令")
+        if short == "local_exec":
+            from ..failures import redact
+            command = str(args.get("command") or "").splitlines()
+            target = (_command(command[0]) if _SENSITIVE.search(command[0]) else redact(command[0].strip())) if command else ""
+        else:
+            target = _command(args.get("command", args.get("cmd", "")))
+        target = target or with_ui_words({"en": "a command", "ja": "コマンド"}).get(language, "指令")
     elif short == "local_job":
         action = "job"
     elif short in ("read_file", "Read", "read_document", "write_file", "Write", "edit_file", "Edit", "apply_patch", "read_attachment"):
         action = "write" if "write" in short.lower() else "edit" if short in ("Edit", "edit_file", "apply_patch") else "read"
         path = args.get("path", args.get("file_path", args.get("filename", "")))
-        target = _safe(str(path).replace("\\", "/").rsplit("/", 1)[-1]) or {"en": "a file", "ja": "ファイル"}.get(language, "檔案")
+        target = _safe(str(path).replace("\\", "/").rsplit("/", 1)[-1]) or with_ui_words({"en": "a file", "ja": "ファイル"}).get(language, "檔案")
     elif short in ("web_search", "search_query", "search_code", "code_search", "Grep", "grep", "rg"):
         action = "search"
-        target = _safe(args.get("query", args.get("pattern", ""))) or {"en": "information", "ja": "情報"}.get(language, "資料")
+        target = _safe(args.get("query", args.get("pattern", ""))) or with_ui_words({"en": "information", "ja": "情報"}).get(language, "資料")
     elif short in ("web_read", "WebFetch", "fetch_url"):
         action = "page"
         try:
             target = _safe(urlsplit(args.get("url", "")).hostname or "")
         except ValueError:
             target = ""
-        target = target or {"en": "a web page", "ja": "ウェブページ"}.get(language, "網頁")
+        target = target or with_ui_words({"en": "a web page", "ja": "ウェブページ"}).get(language, "網頁")
     elif short in ("ask_member", "consult", "handoff"):
-        action, target = "ask", _safe(args.get("member_name", args.get("member", args.get("name", "")))) or {"en": "a colleague", "ja": "同僚"}.get(language, "同事")
+        action, target = "ask", _safe(args.get("member_name", args.get("member", args.get("name", "")))) or with_ui_words({"en": "a colleague", "ja": "同僚"}).get(language, "同事")
     elif ("routine" in tokens or "calendar" in tokens) and server in (None, "Raphael", "local"):
         action = "routine" if "routine" in tokens else "calendar"
         target = _safe(args.get("title", args.get("name", "")))

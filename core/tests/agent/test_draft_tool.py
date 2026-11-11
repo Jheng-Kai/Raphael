@@ -18,6 +18,7 @@ from raphael_core.agent.speaker import RAPHAEL
 from raphael_core.brain.openrouter import ChatToolCall, ChatTurn, Decision
 
 from .conftest import decision, noul
+from .test_narration import use
 from .test_drafts import SENT, Judge, connect_mail, sent  # noqa: F401
 from .test_plugins import calls, plugins  # noqa: F401
 from .test_service import make_rig  # noqa: F401
@@ -78,7 +79,7 @@ async def test_a_member_writes_the_mail_as_a_draft_and_cannot_send_it(office, cl
 
 async def test_a_member_that_sends_mail_by_itself_is_told_to_write_a_draft(office, client, plugins):
     client.decisions.append(decision("answer"))
-    client.chats = [chat("Sending.", ("Mail__send_email", MAIL)), chat("Writing a draft.", ("email_draft", MAIL)), finished()]
+    client.chats = [chat("Sending.", use("Mail__send_email", MAIL)), chat("Writing a draft.", ("email_draft", MAIL)), finished()]
     await typed(office.rig)
     assert SENT == []  # the owner's draft-first preference: not sent, whatever the rules say
     told = [m["content"] for m in client.chat_calls[1]["messages"] if m["role"] == "tool"][-1]
@@ -91,7 +92,7 @@ async def test_a_member_that_sends_mail_by_itself_is_told_to_write_a_draft(offic
 
 async def test_a_mail_app_that_only_keeps_drafts_is_not_a_way_to_send(office, client):
     client.decisions.append(decision("answer"))
-    client.chats = [chat("Keeping it.", ("Mail__create_draft", MAIL)), finished()]
+    client.chats = [chat("Keeping it.", use("Mail__create_draft", MAIL)), finished()]
     await typed(office.rig)
     assert SENT == [] and "drafts" not in await office.turn()  # (a tool that sends nothing is none of the draft-first's)
 
@@ -99,7 +100,7 @@ async def test_a_mail_app_that_only_keeps_drafts_is_not_a_way_to_send(office, cl
 async def test_without_draft_first_a_direct_send_is_a_call_like_any_other_through_the_gate(office, client, monkeypatch):
     monkeypatch.setattr(office.rig.service, "_speaker", lambda member_id: replace(RAPHAEL, draft_first=False))
     client.decisions.append(decision("answer"))
-    client.chats = [chat("Sending.", ("Mail__send_email", MAIL)), finished("Sent.")]
+    client.chats = [chat("Sending.", use("Mail__send_email", MAIL)), finished("Sent.")]
     result = await typed(office.rig)
     assert result["status"] == "done" and SENT == [{"to": "a@b.co", "cc": "", "subject": "Re: lunch", "body": "Thursday works."}]
 
@@ -112,7 +113,7 @@ async def test_without_draft_first_an_ask_first_of_the_owner_still_asks_and_the_
     office.judge.decisions.append(lambda **kwargs: Decision(
         answers={key: noul(0.93 if key == f"rule_{asking.id}" else 0.0) for key in kwargs["questions"]}, cost_usd=0, latency_ms=1))
     client.decisions.append(decision("answer"))
-    client.chats = [chat("Sending.", ("Mail__send_email", MAIL)), finished("Sent.")]
+    client.chats = [chat("Sending.", use("Mail__send_email", MAIL)), finished("Sent.")]
     asked = await typed(office.rig)
     assert asked["status"] == "confirm" and SENT == []
     [card] = (await office.turn())["permissions"]
@@ -129,7 +130,7 @@ async def test_without_draft_first_a_no_to_the_question_sends_nothing(office, cl
     office.judge.decisions.append(lambda **kwargs: Decision(
         answers={key: noul(0.93 if key == f"rule_{asking.id}" else 0.0) for key in kwargs["questions"]}, cost_usd=0, latency_ms=1))
     client.decisions.append(decision("answer"))
-    client.chats = [chat("Sending.", ("Mail__send_email", MAIL))]
+    client.chats = [chat("Sending.", use("Mail__send_email", MAIL))]
     asked = await typed(office.rig)
     await office.rig.call("agent.confirm", {"id": asked["confirm"]["id"], "approved": False})
     assert SENT == [] and (await office.turn())["permissions"][0]["state"] == "denied"

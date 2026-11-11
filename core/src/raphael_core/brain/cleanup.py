@@ -37,7 +37,7 @@ from .providers.base import ModelProvider
 from .providers.registry import for_purpose
 from .settings import SettingsStore
 from .spend import SpendTracker
-from .textnorm import to_mainland, to_simplified
+from .textnorm import guard_cleanup_text, to_mainland, to_simplified
 
 logger = logging.getLogger(__name__)
 
@@ -407,12 +407,16 @@ def build_system_prompt(
     *,
     languages: Sequence[str] = DEFAULT_LANGUAGES,
     heard: str | None = None,
+    template: str | None = None,
 ) -> str:
     """The system prompt with the user's languages, dictionary and the target app filled in.
 
     `languages` is the `languages` setting: the prompt names them in that order and says how the
     chosen Chinese and English variants are written (`script_rules`). The same arguments always
     give the same prompt.
+
+    `template` lets offline comparisons use a candidate with the same field rendering;
+    omitted, the app continues to use the packaged cleanup_system.md.
 
     `target_app` is the process name of the window the text goes to, written as
     `describe_target_app` does. It is in the system prompt, never inside the transcript, so it
@@ -460,7 +464,7 @@ def build_system_prompt(
     }
     # One pass of re.sub, not str.format or one str.replace after another: the prompt has braces
     # of its own (the JSON of the reply), and a word or an app name may look like a placeholder.
-    return _PLACEHOLDER.sub(lambda match: values[match.group(1)], _prompt_template())
+    return _PLACEHOLDER.sub(lambda match: values[match.group(1)], _prompt_template() if template is None else template)
 
 
 @dataclass(frozen=True)
@@ -802,7 +806,11 @@ class CleanupService:
         cost_usd = _usable_cost(completion.cost_usd)
         text = completion.data.get("text")
         text = text.strip() if isinstance(text, str) else ""
-        if is_suspicious_reply(heard, text):
+        # Assess only the content Brain will retain, so an edge note does not cause a valid
+        # cleanup to fail the whole-reply length/overlap rules. Return the original paragraphs
+        # for Brain to guard exactly once; otherwise an original middle could become an edge.
+        retained = guard_cleanup_text(raw, text, dictionary_words=self._dictionary.hint_words())
+        if not retained.strip() or is_suspicious_reply(heard, retained):
             logger.warning(
                 "Cleanup reply is no cleanup (empty, too long or unrelated):"
                 " reply %d characters, dictation %d",

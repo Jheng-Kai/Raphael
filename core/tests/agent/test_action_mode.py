@@ -10,7 +10,7 @@ from raphael_core.agent.policy import Action, Confirmations, NotApproved, Tier
 from raphael_core.agent.safety import ASK, Proposed
 from raphael_core.brain.settings import SettingsStore
 from .test_service import make_rig  # noqa: F401
-from .test_narration import chat, typed
+from .test_narration import chat, typed, use
 from .test_plugins import plugins, calls  # noqa: F401
 from .conftest import decision
 
@@ -75,7 +75,7 @@ async def test_allow_all_does_the_whole_job_in_a_conversation_without_a_card(mak
     rig = make_rig(plugins=plugins.hub)
     rig.settings.set("action_mode", "bypass")
     client.decisions.append(decision("answer"))
-    client.chats = [chat("Doing it.", ("Notes__note", {"text": "example"})),
+    client.chats = [chat("Doing it.", use("Notes__note", {"text": "example"})),
                     chat(json.dumps({"prefix": "Answer", "text": "Done.", "detail": ""}))]
     done = await typed(rig, "Save an example")
     assert done["status"] != "confirm" and done["text"] == "Done."

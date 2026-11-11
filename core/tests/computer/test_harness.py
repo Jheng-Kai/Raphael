@@ -3,7 +3,7 @@
 import asyncio
 import json
 
-from agent.test_narration import chat
+from agent.test_narration import chat, use
 from .test_operate import operating, shell, PRESS_SEVEN  # noqa: F401
 
 
@@ -14,7 +14,8 @@ async def test_cli_computer_tool_uses_auxiliary_api_model_and_keeps_approval_flo
     settings = SettingsStore(conn)
     settings.set("agent_model", "cli:claude")
     settings.set("assistant_model", "anthropic/claude-haiku-5.5")
-    fake_mcp(operating, tmp_path, [("computer", {"request": "Press seven in Calculator"})])
+    # The desktop is seldom called, so it is found, not listed (decision 2): the CLI calls it through use_tool.
+    fake_mcp(operating, tmp_path, [("use_tool", {"name": "computer", "arguments": {"request": "Press seven in Calculator"}})])
     client.chats = list(PRESS_SEVEN)
     asked = await operating.call("agent.ask", {"session_id": "cli-computer", "source": "app", "text": "Press seven", "ui_language": "en"})
     assert asked["status"] == "confirm"
@@ -25,7 +26,7 @@ async def test_cli_computer_tool_uses_auxiliary_api_model_and_keeps_approval_flo
 
 
 async def test_desktop_permission_resumes_the_same_harness_turn(operating, client, shell):
-    client.chats = [chat('先用計算機確認結果。', ('computer', {'request': '在小算盤按七'})), *PRESS_SEVEN, chat('{"text":"已按下七。","detail":""}')]
+    client.chats = [chat('先用計算機確認結果。', use('computer', {'request': '在小算盤按七'})), *PRESS_SEVEN, chat('{"text":"已按下七。","detail":""}')]
     asked = await operating.call('agent.ask', {'session_id':'live', 'source':'app', 'text':'在小算盤按七', 'ui_language':'zh-TW'})
     assert asked['status'] == 'confirm'
     done = await operating.confirm(asked['confirm']['id'])
@@ -39,7 +40,7 @@ async def test_desktop_permission_resumes_the_same_harness_turn(operating, clien
 
 
 async def test_cancel_a_desktop_permission_finishes_the_existing_turn_once(operating, client, shell):
-    client.chats = [chat("Checking the calculator.", ("computer", {"request": "Press seven"})), *PRESS_SEVEN]
+    client.chats = [chat("Checking the calculator.", use("computer", {"request": "Press seven"})), *PRESS_SEVEN]
     asked = await operating.call("agent.ask", {"session_id": "live", "source": "app", "text": "Press seven", "ui_language": "en"})
     assert asked["status"] == "confirm"
     await operating.call("agent.cancel", {"session_id": "live"})
@@ -50,11 +51,12 @@ async def test_cancel_a_desktop_permission_finishes_the_existing_turn_once(opera
     [turn] = await operating.turns(quick=False)
     assert turn["status"] == "denied"
     assert len([m for m in turn["messages"] if m["kind"] == "reply"]) == 1
+    assert "Checking the calculator." in next(m["text"] for m in turn["messages"] if m["kind"] == "progress")
     assert not any(op == "act" for op, args in shell.requests)
 
 
 async def test_a_denied_desktop_permission_is_data_for_the_harness_not_a_second_turn(operating, client, shell):
-    client.chats = [chat("Checking the calculator.", ("computer", {"request": "Press seven"})), *PRESS_SEVEN[:3], chat('{"text":"I left it unchanged.","detail":""}')]
+    client.chats = [chat("Checking the calculator.", use("computer", {"request": "Press seven"})), *PRESS_SEVEN[:3], chat('{"text":"I left it unchanged.","detail":""}')]
     asked = await operating.call("agent.ask", {"session_id": "live", "source": "app", "text": "Press seven", "ui_language": "en"})
     await operating.confirm(asked["confirm"]["id"], approved=False)
     [turn] = await operating.turns(quick=False)

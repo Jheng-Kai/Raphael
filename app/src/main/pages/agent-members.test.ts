@@ -23,8 +23,10 @@ const api = vi.hoisted(() => ({ statusGet: vi.fn(async () => ({ openrouter: { st
   membersRead: vi.fn(),
   membersViewing: vi.fn(),
   membersToolChoices: vi.fn(),
+  membersSkillsList: vi.fn(), membersCommandsList: vi.fn(),
   membersUpdate: vi.fn(),
   membersCreate: vi.fn(),
+  membersGreet: vi.fn(async () => ({ turn_id: 99 })),
   membersDelete: vi.fn(),
   settingsGet: vi.fn(async () => ({settings:{computer_ssh_alias:''}})),
   membersSetAvatar: vi.fn(),
@@ -44,6 +46,8 @@ vi.mock("../api", () => api);
 import { Cleared } from "../cleared";
 import { createAgent } from "./agent";
 import { openGroupChat } from "../group-chats";
+import { closeMenu } from "../ui";
+import { resetAsks } from "../chat-ask";
 
 const member = (id: number, more: Partial<Member> = {}): Member => ({
   id, name: `成員${id}`, role: "", instructions: "", avatar: "", group_id: null, model: "", tools: null, position: id, created: 0, unread: false, waiting: false, preview: "", last_at: null, ...more,
@@ -89,6 +93,8 @@ function mount(mode: "hold" | "toggle" = "hold") {
   return agent;
 }
 const $ = <T extends HTMLElement>(q: string) => document.querySelector<T>(q)!;
+/** Edit and Cancel live in a message's ⋯ menu (agent.ts messageMenu), not beside it. */
+const pickMessage = (scope: string, pick: "edit" | "cancel"): void => { $(`${scope} [data-act="more-message"]`).click(); $(`#app-popover [data-pick="${pick}"]`).click(); };
 const pick = async (id: number) => {
   $(`.mb-col [data-member="${id}"]`).click();
   await flush();
@@ -121,6 +127,20 @@ test.each(["member", "page", "room"])("the first unseen turn has its own stable 
   if (leave === "room") { await openGroupChat(1); await flush(); await pick(3); }
   expect(document.querySelector('.thread-new')).toBeNull();
   agent.hide();
+});
+
+test("share sits in a member's conversation header, opposite search, and asks the member to write its template there", async () => {
+  resetAsks(); api.agentAskText.mockResolvedValue({});
+  const agent = mount(); await flush();
+  expect($('[data-act="share-member"]').hidden).toBe(true); // Raphael is the app's own
+  await pick(3);
+  const share = $('.mb-head .ra-tools [data-act="share-member"]');
+  expect(share.hidden).toBe(false);
+  expect($('.mb-head .mb-head-l [data-act="search"]')).not.toBeNull();
+  share.click();
+  $('#app-popover [data-action="0"]').click(); await flush();
+  expect(api.agentAskText).toHaveBeenCalledWith(expect.any(String), [], 3, { intent: "share-template" });
+  closeMenu(); agent.hide();
 });
 
 test("an unread boundary before the newest history page loads its original turn", async () => {
@@ -168,7 +188,44 @@ test("a delayed initial roster still opens at news before the newest history pag
   agent.hide();
 });
 
+test("a thread whose boundary is still on its way is drawn but not shown, then shown at its place once", async () => {
+  // The first place is the last (owner, 2026-11-11): a thread seen at the bottom and then moved to the line jumped up.
+  let deliver!: (list: MembersList) => void;
+  const roster = structuredClone(LIST);
+  Object.assign(roster.members[0], { unread: true, unread_from: 2 });
+  api.membersList.mockImplementation(() => new Promise(resolve => { deliver = resolve; }));
+  const agent = mount(); await flush();
+  expect($('.mb-chat .tn[data-id="1"]')).not.toBeNull();
+  expect($('.mb-chat .ra-scroll').classList.contains("is-opening")).toBe(true);
+  deliver(roster); await flush();
+  expect($('.mb-chat .ra-scroll').classList.contains("is-opening")).toBe(false);
+  expect($('.thread-new').nextElementSibling).toBe($('.tn[data-id="2"]'));
+  agent.hide();
+});
+
+test("a page shown again takes its boundary from the roster it has, so a late roster moves nothing", async () => {
+  const roster = structuredClone(LIST);
+  api.membersList.mockImplementation(async () => structuredClone(roster));
+  const agent = mount(); await flush();
+  agent.hide();
+  // News came while the page was away; the roster that carries it is read again late when the page is shown.
+  Object.assign(roster.members[0], { unread: true, unread_from: 2 });
+  send({ type: "MembersChanged" } as MainEvent);
+  await new Promise(resolve => setTimeout(resolve, 400)); await flush();
+  let deliver!: (list: MembersList) => void;
+  api.membersList.mockImplementation(() => new Promise(resolve => { deliver = resolve; }));
+  agent.show(); await flush();
+  const divider = document.querySelector('.thread-new');
+  expect(divider).not.toBeNull();
+  expect($('.mb-chat .ra-scroll').classList.contains("is-opening")).toBe(false);
+  deliver(structuredClone(roster)); await flush();
+  expect($('.thread-new')).toBe(divider);
+  agent.hide();
+});
+
 test.each([false, true])("opening unread content follows its length (long: %s)", async long => {
+  // Without an end observer the reading anchor decides following from the real scroll position.
+  vi.stubGlobal("IntersectionObserver", undefined);
   const roster = structuredClone(LIST);
   Object.assign(roster.members.find(m => m.id === 3)!, { unread: true, unread_from: 31 });
   api.membersList.mockResolvedValue(roster);
@@ -180,7 +237,15 @@ test.each([false, true])("opening unread content follows its length (long: %s)",
   });
   await pick(3);
   expect(scroller.scrollTop).toBe(long ? 176 : 1500);
-  rect.mockRestore(); agent.hide();
+  // A later draw keeps a long run at its line; a short run keeps following the bottom.
+  api.agentHistoryList.mockResolvedValue({ turns: [turn(32, { member_id: 3 }), ...THREADS[3]] });
+  send({ type: "AgentTurn", turn_id: 32, member_id: 3 });
+  await new Promise(resolve => setTimeout(resolve, 800)); await flush();
+  for (let frame = 0; frame < 3; frame++) await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+  expect(document.querySelector('.tn[data-id="32"]')).not.toBeNull();
+  if (long) expect(scroller.scrollTop).toBe(176);
+  else expect(scroller.scrollTop).toBeGreaterThanOrEqual(1500);
+  rect.mockRestore(); agent.hide(); vi.unstubAllGlobals();
 });
 
 test("member drafts follow the composer owner through switching and page return", async () => {
@@ -197,29 +262,26 @@ test("member drafts follow the composer owner through switching and page return"
   agent.hide();
 });
 
-test("explicit conversation choices and their drafts survive later activity and sending elsewhere", async () => {
+test("Raphael's conversation and his quick questions keep their own drafts through activity, sending and other members", async () => {
   const conversations = [
     {id:1,member_id:0,title:'First sample',kind:'standard',is_default:1,updated_at_ms:1},
-    {id:2,member_id:0,title:'Recent sample',kind:'standard',is_default:0,updated_at_ms:20},
+    {id:9,member_id:0,title:'',kind:'quick',is_default:0,updated_at_ms:20},
   ];
   api.core.mockImplementation(async (method:string)=>method==='conversations.list'?{conversations:structuredClone(conversations)}:{questions:[]});
   const agent=mount();await flush();
-  $('.conversation-trigger').click();await flush();
-  $('[data-conversation-open="1"]').click();await flush();
   const input=agent.el.querySelector<HTMLTextAreaElement>('.composer textarea')!;
   input.value='First unfinished';input.dispatchEvent(new Event('input'));
   conversations[1].updated_at_ms=100;
   window.dispatchEvent(new CustomEvent('conversations-changed',{detail:0}));await flush();
-  expect($('.conversation-caption').textContent).toBe('First sample');
+  expect($<HTMLElement>('.conversation-caption').hidden).toBe(true);
   if($('.mb-det').hidden)$('.conversation-trigger').click();await flush();
-  $('[data-conversation-open="2"]').click();await flush();
-  expect(input.value).toBe('');input.value='Send second';input.dispatchEvent(new Event('input'));
+  $('[data-conversation-open="9"]').click();await flush();
+  expect($('.conversation-caption').textContent).toBe('快速提問');
+  expect(input.value).toBe('');input.value='Send quick';input.dispatchEvent(new Event('input'));
   agent.el.querySelector<HTMLFormElement>('.composer')!.requestSubmit();await flush();
-  if($('.mb-det').hidden)$('.conversation-trigger').click();await flush();
   $('[data-conversation-open="1"]').click();await flush();
   expect(input.value).toBe('First unfinished');
   await pick(3);input.value='Other member draft';input.dispatchEvent(new Event('input'));
-  window.dispatchEvent(new CustomEvent('conversation-deleted',{detail:{member:0,id:1}}));await flush();
   await pick(4);await pick(3);expect(input.value).toBe('Other member draft');agent.hide();
 });
 
@@ -241,20 +303,19 @@ test("typing defers storage work until the pause and a new page restores the sav
   next.hide();
 });
 
-test.each([true, false])("an authoritative missing conversation removes its saved draft (open: %s)", async (open) => {
+test("a conversation the core folded into the member's one conversation drops its saved draft", async () => {
   let conversations = [
     {id:1,member_id:0,title:'First sample',kind:'standard',is_default:1,updated_at_ms:1},
     {id:2,member_id:0,title:'Recent sample',kind:'standard',is_default:0,updated_at_ms:20},
   ];
   api.core.mockImplementation(async (method:string)=>method==='conversations.list'?{conversations:structuredClone(conversations)}:{questions:[]});
-  const agent=mount();await flush();$('.conversation-trigger').click();await flush();$('[data-conversation-open="1"]').click();await flush();
+  const agent=mount();await flush();
   const input=agent.el.querySelector<HTMLTextAreaElement>('.composer textarea')!;
-  input.value='Removed conversation draft';input.dispatchEvent(new Event('input'));agent.hide();agent.show();await flush();
-  if (!open) { if ($('.mb-det').hidden) $('.conversation-trigger').click(); await flush(); $('[data-conversation-open="2"]').click(); await flush(); }
-  conversations=conversations.filter(item=>item.id!==1);
+  input.value='Folded conversation draft';input.dispatchEvent(new Event('input'));agent.hide();agent.show();await flush();
+  conversations=conversations.filter(item=>item.id!==2);
   window.dispatchEvent(new CustomEvent('conversations-changed',{detail:0}));await flush();
-  expect($('.conversation-caption').textContent).toBe('Recent sample');expect(input.value).toBe('');
-  expect(JSON.parse(localStorage.getItem('raphael.composer.drafts')??'{}')['member:0:1']).toBeUndefined();agent.hide();
+  expect(input.value).toBe('');
+  expect(JSON.parse(localStorage.getItem('raphael.composer.drafts')??'{}')['member:0:2']).toBeUndefined();agent.hide();
 });
 
 test("a long draft keeps its words without repeated full-text height measurements", async () => {
@@ -278,17 +339,22 @@ test('work events refresh the visible preview without rereading skills or comman
   agent.hide();
 });
 
-test('hidden thread metadata waits until the thread is shown and returns with its latest title', async () => {
+test('hidden thread metadata waits until the thread is shown, and the header names only the member', async () => {
   vi.useFakeTimers();
   let title='Original sample';
-  api.core.mockImplementation(async (method:string)=>method==='conversations.list' ? {conversations:[{id:701,member_id:0,is_default:1,kind:'main',title,created_at_ms:1,updated_at_ms:1}]} : {questions:[]});
+  api.core.mockImplementation(async (method:string)=>method==='conversations.list' ? {conversations:[{id:701,member_id:0,is_default:1,kind:'standard',title,created_at_ms:1,updated_at_ms:1},{id:702,member_id:0,is_default:0,kind:'quick',title:'',created_at_ms:1,updated_at_ms:1}]} : {questions:[]});
   const agent=mount(); await flush(); agent.hide();
   api.core.mockClear(); title='Updated sample';
   send({type:'AgentTurn',turn_id:1,member_id:0});
   await vi.advanceTimersByTimeAsync(400); await flush();
   expect(api.core.mock.calls.filter(call=>call[0]==='conversations.list')).toHaveLength(0);
   agent.show(); await flush();
-  expect(document.querySelector('.conversation-trigger')?.textContent).toContain('Updated sample');
+  expect(api.core.mock.calls.filter(call=>call[0]==='conversations.list').length).toBeGreaterThan(0);
+  expect($('.conversation-trigger').textContent).toBe('拉斐爾');
+  expect($<HTMLElement>('.conversation-caption').hidden).toBe(true);
+  if ($<HTMLElement>('.mb-det').hidden) $('.conversation-trigger').click(); await flush();
+  $('[data-conversation-open="702"]').click(); await flush();
+  expect($('.conversation-caption').textContent).toBe('快速提問');
   agent.hide();
 });
 
@@ -319,15 +385,65 @@ test("show reads an unread thread already loaded while hidden", async () => {
 
 const openDetails = async (): Promise<void> => { if (document.querySelector<HTMLElement>(".mb-det")?.hidden) $(".conversation-trigger").click(); await flush(); };
 
-test("a closed details panel reads nothing while work runs, and opening it shows the current counts", async () => {
+test("the details panel has no fold button: its left edge drags it, narrower than it can be it closes, and it reopens at its width", async () => {
+  localStorage.removeItem("raphael.panel.width");
+  const agent = mount(); await flush(); await pick(3);
+  await openDetails();
+  const panel = document.querySelector<HTMLElement>(".mb-det")!, page = panel.parentElement!;
+  const edge = panel.querySelector<HTMLElement>(":scope > .det-edge")!;
+  expect(edge.getAttribute("role")).toBe("separator");
+  panel.getBoundingClientRect = () => ({ left: 700, right: 1120, width: 420, top: 0, bottom: 900, height: 900, x: 700, y: 0, toJSON() {} }) as DOMRect;
+  edge.setPointerCapture = vi.fn(); edge.hasPointerCapture = () => true; edge.releasePointerCapture = vi.fn();
+  const drag = (...xs: number[]): void => {
+    edge.dispatchEvent(new PointerEvent("pointerdown", { button: 0, pointerId: 1, clientX: xs[0], bubbles: true }));
+    for (const x of xs.slice(1)) edge.dispatchEvent(new PointerEvent("pointermove", { pointerId: 1, clientX: x, bubbles: true }));
+    edge.dispatchEvent(new PointerEvent("pointerup", { pointerId: 1, bubbles: true }));
+  };
+  drag(700, 600);
+  expect(page.style.getPropertyValue("--pa-det")).toBe("520px");
+  expect(localStorage.getItem("raphael.panel.width")).toBe("520");
+  drag(600, 1000);
+  await vi.waitFor(() => expect(panel.hidden).toBe(true));
+  await openDetails();
+  expect(page.style.getPropertyValue("--pa-det")).toBe("520px");
+  localStorage.removeItem("raphael.panel.width");
+  agent.hide();
+});
+
+test("the settings page folds the details panel away at any width, and leaving it puts the panel back as it was", async () => {
+  const agent = mount(); await flush(); await pick(3);
+  await openDetails();
+  const panel = document.querySelector<HTMLElement>(".mb-det")!;
+  expect(panel.hidden).toBe(false);
+  agent.showSettings(3); await flush();
+  await vi.waitFor(() => expect(panel.hidden).toBe(true));
+  expect(document.querySelector<HTMLElement>("[data-member-settings]")!.hidden).toBe(false);
+  agent.showSettings(null); await flush();
+  await vi.waitFor(() => expect(panel.hidden).toBe(false));
+  // A panel that was closed stays closed after the page.
+  $('[data-det="close"]').click(); await flush();
+  await vi.waitFor(() => expect(panel.hidden).toBe(true));
+  agent.showSettings(3); await flush();
+  agent.showSettings(null); await flush();
+  expect(panel.hidden).toBe(true);
+  agent.hide();
+});
+
+test("a closed details panel reads nothing while work runs, and the settings page reads its counts only once it is opened", async () => {
   const agent = mount(); await flush(); await pick(3);
   expect(document.querySelector<HTMLElement>(".mb-det")!.hidden).toBe(true);
-  api.core.mockClear();
+  api.core.mockClear(); api.membersSkillsList.mockClear(); api.membersCommandsList.mockClear();
   send({ type: "CoreReady" } as unknown as MainEvent); await flush();
   const read = (): string[] => api.core.mock.calls.map(([method]) => method as string);
-  for (const method of ["memory.get", "members.skills.list", "members.commands.list"]) expect(read()).not.toContain(method);
+  expect(read()).not.toContain("memory.get");
+  expect(api.membersSkillsList).not.toHaveBeenCalled(); expect(api.membersCommandsList).not.toHaveBeenCalled();
+  // The panel no longer counts skills or commands: those are the settings page's.
   await openDetails();
-  for (const method of ["memory.get", "members.skills.list", "members.commands.list"]) expect(read()).toContain(method);
+  expect(read()).not.toContain("memory.get"); expect(api.membersSkillsList).not.toHaveBeenCalled();
+  agent.showSettings(3); await flush();
+  // The page holds no memory to read (owner, 2026-11-11), only what the member has.
+  expect(read()).not.toContain("memory.get");
+  expect(api.membersSkillsList).toHaveBeenCalledWith(3); expect(api.membersCommandsList).toHaveBeenCalledWith(3);
   agent.hide();
 });
 
@@ -338,7 +454,11 @@ test("a restarted core receives the current viewing even with an unchanged roste
   send({ type: "CoreReady" } as unknown as MainEvent); await flush();
   expect(api.membersList).toHaveBeenCalledTimes(1);
   expect(api.membersViewing).toHaveBeenCalledExactlyOnceWith(3);
-  await vi.waitFor(() => expect(api.core.mock.calls.some(([method]) => method === "memory.get")).toBe(true));
+  // The open settings page reads what the member has again for the restarted core.
+  agent.showSettings(3); await flush();
+  api.membersSkillsList.mockClear();
+  send({ type: "CoreReady" } as unknown as MainEvent); await flush();
+  await vi.waitFor(() => expect(api.membersSkillsList).toHaveBeenCalledWith(3));
   agent.hide();
 });
 
@@ -401,7 +521,7 @@ test("sidebar pin and hide update only their target and hiding the open member r
   agent.hide();
 });
 
-test("an unconfigured Raphael is immediately usable before and after history clears", async () => {
+test("an unconfigured Raphael is immediately usable, and so is an empty member", async () => {
   api.membersList.mockResolvedValue({...LIST,members:LIST.members.map(m=>({...m,profile_ready:false}))});
   api.agentHistoryList.mockResolvedValue({turns:[]});
   const agent=mount(); await flush();
@@ -411,41 +531,26 @@ test("an unconfigured Raphael is immediately usable before and after history cle
     expect($('.composer').hidden).toBe(false);
     expect($('.ra-hi').hidden).toBe(false);
   }
-  api.core.mockResolvedValue({questions:[]});
-  $('[data-member-more="3"]').click(); $('[data-pick="clear"]').click();
-  $('[data-dlg="clear"]').click(); await flush();
-  expect(api.core).toHaveBeenCalledWith("agent.history.clear", {member_id:3});
-  expect(document.querySelector('.first-bot')).toBeNull();
-  expect($('.composer').hidden).toBe(false);
   agent.hide();
 });
 
-test("clearing conversations requires confirmation and scopes the request to that member", async () => {
+test("a member's menu no longer clears its one conversation (one conversation per member, R-UI-103)", async () => {
   const agent = mount(); await flush(); await pick(3);
-  api.core.mockResolvedValue({questions: []});
-  $('[data-member-more="3"]').click(); $('[data-pick="clear"]').click();
+  $('[data-member-more="3"]').click();
+  expect(document.querySelector('#app-popover [data-pick="clear"]')).toBeNull();
   expect(api.core).not.toHaveBeenCalledWith("agent.history.clear", expect.anything());
-  $('[data-dlg="cancel"]').click();
-  $('[data-member-more="3"]').click(); $('[data-pick="clear"]').click();
-  $('[data-dlg="clear"]').click(); await flush();
-  expect(api.core).toHaveBeenCalledWith("agent.history.clear", {member_id: 3});
-  expect(document.querySelector(".mb-confirm")).toBeNull(); agent.hide();
+  agent.hide();
 });
 
-test("a fresh window opens the newest standard conversation and deletion opens the newest remaining", async () => {
-  let conversations = [
-    {id:4,member_id:0,title:"Quick",kind:"quick",is_default:0,updated_at_ms:100},
-    {id:1,member_id:0,title:"Old default",kind:"standard",is_default:1,updated_at_ms:1},
-    {id:2,member_id:0,title:"Newest",kind:"standard",is_default:0,updated_at_ms:20},
-    {id:3,member_id:0,title:"Remaining newest",kind:"standard",is_default:0,updated_at_ms:10},
+test("a fresh window opens the member's one conversation, never the quick questions", async () => {
+  const conversations = [
+    {id:4,member_id:0,title:"",kind:"quick",is_default:0,updated_at_ms:100},
+    {id:1,member_id:0,title:"Main sample",kind:"standard",is_default:1,updated_at_ms:1},
   ];
   api.core.mockImplementation(async (method:string) => method === "conversations.list" ? {conversations:structuredClone(conversations)} : {questions:[]});
   const agent=mount();await flush();
-  expect(api.agentHistoryList).toHaveBeenLastCalledWith(expect.objectContaining({conversation_id:2}));
-  conversations=conversations.filter(c=>c.id!==2);
-  window.dispatchEvent(new CustomEvent("conversation-deleted",{detail:{member:0,id:2}}));await flush();
-  expect(api.agentHistoryList).toHaveBeenLastCalledWith(expect.objectContaining({conversation_id:3}));
-  expect($(".conversation-caption").textContent).toBe("Remaining newest");agent.hide();
+  expect(api.agentHistoryList).toHaveBeenLastCalledWith(expect.objectContaining({conversation_id:1}));
+  expect($<HTMLElement>(".conversation-caption").hidden).toBe(true);agent.hide();
 });
 
 test("a member is deleted from its ⋯ menu only after the confirmation, and its open thread returns to Raphael", async () => {
@@ -459,25 +564,17 @@ test("a member is deleted from its ⋯ menu only after the confirmation, and its
   agent.hide();
 });
 
-test("the sidebar's plus makes no conversation, and 新對話 in a member's details opens the new one", async () => {
-  const conversations = [{ id: 31, member_id: 3, title: "Cobalt", is_default: 1, created_at_ms: 1, updated_at_ms: 1 }];
-  api.core.mockImplementation(async (method: string, params: { member_id?: number }) => {
-    if (method === "conversations.list") return { conversations: conversations.filter(c => c.member_id === params.member_id) };
-    if (method !== "conversations.create") return undefined;
-    const made = { id: 100 + conversations.length, member_id: params.member_id!, title: "", is_default: 0, created_at_ms: 2, updated_at_ms: 2 };
-    conversations.push(made);
-    return { conversation: made };
-  });
+test("nobody makes a conversation: neither the sidebar's plus nor a member's details offers one", async () => {
+  const conversations = [{ id: 31, member_id: 3, title: "Cobalt", is_default: 1, kind: "standard", created_at_ms: 1, updated_at_ms: 1 }];
+  api.core.mockImplementation(async (method: string, params: { member_id?: number }) =>
+    method === "conversations.list" ? { conversations: conversations.filter(c => c.member_id === params.member_id) } : undefined);
   const agent = mount(); await flush(); await pick(3); await openDetails();
   $('[data-col="add"]').click();
   expect(document.querySelector('#app-popover [data-pick="conversation"]')).toBeNull();
   document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
-  const button = $<HTMLButtonElement>(".mb-det [data-conversation-new]");
-  expect(button.disabled).toBe(false);
-  button.click(); await flush();
-  expect(api.core).toHaveBeenCalledWith("conversations.create", { member_id: 3 });
-  expect(api.agentHistoryList).toHaveBeenLastCalledWith(expect.objectContaining({ member_id: 3, conversation_id: 101 }));
-  expect($<HTMLButtonElement>(".mb-det [data-conversation-new]").disabled).toBe(true);
+  expect(document.querySelector(".mb-det [data-conversation-new], .mb-det [data-slot=\"conversations\"]")).toBeNull();
+  expect(api.agentHistoryList).toHaveBeenLastCalledWith(expect.objectContaining({ member_id: 3, conversation_id: 31 }));
+  expect(api.core).not.toHaveBeenCalledWith("conversations.create", expect.anything());
   agent.hide();
 });
 
@@ -493,6 +590,7 @@ test.each([undefined, 0, 4])("primary %s swaps the member picker without changin
   expect(document.querySelector('.mb-col [data-member="0"][aria-current="true"]')).not.toBeNull();
   agent.hide();
 });
+
 
 test("files dropped into a member's thread are sent only to that member", async () => {
   const agent = mount(); await flush(); await pick(3);
@@ -530,6 +628,7 @@ beforeEach(() => { localStorage.clear();
   api.membersRead.mockResolvedValue({});
   api.membersViewing.mockResolvedValue({});
   api.membersToolChoices.mockResolvedValue({ tools: ["web_search", "weather"], connections: [] });
+  api.membersSkillsList.mockResolvedValue({ skills: [], undo: null }); api.membersCommandsList.mockResolvedValue({ commands: [] });
   api.toolsetsList.mockResolvedValue({ groups: [] });
   api.routinesList.mockResolvedValue({ routines: [] });
   api.modelsCatalog.mockResolvedValue(null);
@@ -551,7 +650,7 @@ test("pending owner questions can be cancelled into the same member's composer, 
   $(".cmp-send").click(); await flush();
   const options = api.agentAskText.mock.calls[0][3];
   expect(options.requestId).toEqual(expect.any(String));
-  $('.is-pending [data-act="cancel-message"]').click(); await flush();
+  pickMessage('.is-pending', 'cancel'); await flush();
   expect(api.agentRetract).toHaveBeenCalledWith(options.requestId, 3, undefined);
   expect(input.value).toBe("fix this typo");
   expect(document.activeElement).toBe(input);
@@ -563,7 +662,7 @@ test("pending owner questions can be cancelled into the same member's composer, 
 
 test("editing preserves the old turn until resending the replacement in its own thread", async () => {
   const agent = mount(); await flush(); await pick(3);
-  $('[data-id="31"] [data-act="edit-message"]').click(); await flush();
+  pickMessage('[data-id="31"]', 'edit'); await flush();
   const input = $<HTMLTextAreaElement>(".cmp-input");
   expect(input.value).toBe("問題 31");
   expect(document.querySelector('[data-id="31"]')).not.toBeNull();
@@ -575,10 +674,10 @@ test("editing preserves the old turn until resending the replacement in its own 
 
 test("message actions show an app tooltip on keyboard focus, with no native title", async () => {
   const agent = mount(); await flush();
-  const edit = $('[data-id="2"] [data-act="edit-message"]');
-  expect(edit.hasAttribute("title")).toBe(false);
-  edit.focus();
-  expect($('[role="tooltip"]').textContent).toBe("編輯");
+  const reply = $('[data-id="2"] [data-act="reply-message"]');
+  expect(reply.hasAttribute("title")).toBe(false);
+  reply.focus();
+  expect($('[role="tooltip"]').textContent).toBe("回覆");
   expect($('[role="tooltip"]').hidden).toBe(false);
   $<HTMLTextAreaElement>(".cmp-input").focus();
   expect($('[role="tooltip"]').hidden).toBe(true);
@@ -608,7 +707,7 @@ test("editing a legacy attachment without a stored copy requires reattachment, w
   const original = turn(8, { session_id: "saved", attachments: [{ name: "original.pdf", mime: "application/pdf" }], quote: { text: "Saved passage", author: "You" } });
   api.agentHistoryList.mockResolvedValue({ turns: [original] });
   const agent = mount(); await flush();
-  $('[data-id="8"] [data-act="edit-message"]').click(); await flush();
+  pickMessage('[data-id="8"]', 'edit'); await flush();
   expect($(".cmp-quote .quote-text").textContent).toBe("Saved passage");
   expect($<HTMLButtonElement>(".cmp-send").disabled).toBe(true);
   $('[data-act="drop-missing"]').click();
@@ -626,8 +725,9 @@ test.each(["edit", "cancel", "regenerate"])("%s after reload retrieves stored fi
   api.agentHistoryList.mockImplementation(async ({ member_id }: { member_id?: number }) => ({ turns: member_id === 3 ? [original] : [] }));
   api.core.mockImplementation(async (method: string) => method === "attachments.get" ? { mime: "text/csv", data: btoa("report") } : { questions: [] });
   const agent = mount(); await flush(); await pick(3);
-  $(`[data-id="8"] [data-act="${action === "regenerate" ? "more-message" : `${action}-message`}"]`).click(); await flush();
-  if (action === "regenerate") { $('[data-pick="regenerate"]').click(); await flush(); }
+  // Edit, Cancel and Regenerate all live in the message's ⋯ menu.
+  $(`[data-id="8"] ${action === "regenerate" ? ".ra" : ".me"} [data-act="more-message"]`).click(); await flush();
+  $(`[data-pick="${action}"]`).click(); await flush();
   expect(api.core).toHaveBeenCalledWith("attachments.get", { id });
   if (action !== "regenerate") {
     expect($<HTMLTextAreaElement>(".cmp-input").value).toBe("問題 8");
@@ -648,7 +748,7 @@ test("an unavailable stored copy falls back to reattachment", async () => {
   api.agentHistoryList.mockResolvedValue({ turns: [turn(8, { attachments: [{ id, name: "lost.pdf", mime: "application/pdf" }] })] });
   api.core.mockImplementation(async (method: string) => { if (method === "attachments.get") throw new Error("unavailable"); return { questions: [] }; });
   const agent = mount(); await flush();
-  $('[data-id="8"] [data-act="edit-message"]').click(); await flush();
+  pickMessage('[data-id="8"]', 'edit'); await flush();
   expect(api.core).toHaveBeenCalledWith("attachments.get", { id });
   expect($("[data-missing]").textContent).toContain("lost.pdf");
   expect($<HTMLButtonElement>(".cmp-send").disabled).toBe(true);
@@ -660,7 +760,7 @@ test("a stored-file read finishing after a thread switch cannot fill the new com
   api.agentHistoryList.mockResolvedValue({ turns: [turn(8, { attachments: [{ id: `${"c".repeat(32)}.csv`, name: "old.csv", mime: "text/csv" }] })] });
   api.core.mockImplementation((method: string) => method === "attachments.get" ? new Promise(resolve => { finish = resolve; }) : Promise.resolve({ questions: [] }));
   const agent = mount(); await flush();
-  $('[data-id="8"] [data-act="edit-message"]').click(); await flush();
+  pickMessage('[data-id="8"]', 'edit'); await flush();
   await pick(3);
   finish({ mime: "text/csv", data: btoa("old") }); await flush();
   expect($<HTMLTextAreaElement>(".cmp-input").value).toBe("");
@@ -684,7 +784,7 @@ test("a selected member reply travels separately, renders on the pending bubble,
   expect(api.agentAskText).toHaveBeenCalledWith("Explain", [], 3, expect.objectContaining({ quote: { text: "今天的單字", author: "日文老師" } }));
   expect($(".is-pending .quote-text").textContent).toBe("今天的單字");
   expect($(".cmp-quote").hidden).toBe(true);
-  $('.is-pending [data-act="cancel-message"]').click(); await flush();
+  pickMessage('.is-pending', 'cancel'); await flush();
   expect($(".cmp-quote .quote-text").textContent).toBe("今天的單字");
   $('[data-act="remove-quote"]').click();
   expect($(".cmp-quote").hidden).toBe(true);
@@ -728,19 +828,47 @@ test("rerunning an older failed reply asks its original question in the same mem
   agent.hide();
 });
 
+test("a member whose conversation is empty is asked once to greet; Raphael and a member with words are not", async () => {
+  api.agentHistoryList.mockResolvedValue({ turns: [] });
+  const agent = mount(); await flush();
+  expect(api.membersGreet).not.toHaveBeenCalled();
+  await pick(3);
+  expect(api.membersGreet).toHaveBeenCalledExactlyOnceWith(3);
+  await pick(0); await pick(3);
+  expect(api.membersGreet).toHaveBeenCalledTimes(1);
+  api.agentHistoryList.mockResolvedValue({ turns: [turn(35, { member_id: 4 })] });
+  await pick(4);
+  expect(api.membersGreet).toHaveBeenCalledTimes(1);
+  agent.hide();
+});
+
+test("a failed greeting is written again by the member's own model, and a greeting that came through is never written twice", async () => {
+  const greeting = (status: string, text: string) => turn(34, { member_id: 3, question: "", route: "greeting", source: "greeting", prefix: "", status, text });
+  api.agentHistoryList.mockResolvedValue({ turns: [greeting("error", "CLI stopped")] });
+  const agent = mount(); await flush(); await pick(3);
+  $('[data-id="34"] .rerun').click(); await flush();
+  expect(api.membersGreet).toHaveBeenCalledExactlyOnceWith(3);
+  expect(api.agentAskText).not.toHaveBeenCalled();
+  api.agentHistoryList.mockResolvedValue({ turns: [greeting("done", "嗨，我是日文老師。想讓我幫你分擔什麼？")] });
+  await pick(0); await pick(3);
+  document.querySelector<HTMLButtonElement>('.tn[data-id="34"] .ra [data-act="more-message"]')!.click(); await flush();
+  expect([...document.querySelectorAll<HTMLElement>("#app-popover [data-pick]")].map(item => item.dataset.pick)).toEqual(["reply", "copy"]);
+  agent.hide();
+});
+
 test("regenerating the latest member reply asks the same question in that member's thread", async () => {
   const agent = mount(); await flush(); await pick(3);
-  document.querySelector<HTMLButtonElement>('.tn[data-id="30"] [data-act="more-message"]')!.click();
+  document.querySelector<HTMLButtonElement>('.tn[data-id="30"] .ra [data-act="more-message"]')!.click();
   await flush(); expect(document.querySelector('[data-pick="regenerate"]')).toBeNull();
   document.dispatchEvent(new KeyboardEvent('keydown', {key:'Escape', bubbles:true}));
-  document.querySelector<HTMLButtonElement>('.tn[data-id="31"] [data-act="more-message"]')!.click();
+  document.querySelector<HTMLButtonElement>('.tn[data-id="31"] .ra [data-act="more-message"]')!.click();
   await flush(); document.querySelector<HTMLButtonElement>('[data-pick="regenerate"]')!.click();
   await flush();
   expect(api.agentAskText).toHaveBeenCalledExactlyOnceWith("問題 31", [], 3, expect.objectContaining({ requestId: expect.any(String) }));
   agent.hide();
 });
 
-test("routine notifications refresh the open panel immediately and keep the routine being edited", async () => {
+test("routine notifications refresh the open panel immediately and keep the routine being read", async () => {
   mount();
   await flush();
   await pick(3);
@@ -751,19 +879,13 @@ test("routine notifications refresh the open panel immediately and keep the rout
   await flush();
   expect($(".mb-rts").textContent).toContain("Daily review");
   $('[data-det="routine-open"]').click();
-  const title = document.querySelector<HTMLInputElement>("#au-title")!;
-  title.focus();
-  title.value = "My unsaved title";
-  title.setSelectionRange(3, 5);
   const scroll = $(".mb-det-scroll");
   scroll.scrollTop = 84;
   api.routinesList.mockResolvedValue({ routines: [routine, { ...routine, id: 10, title: "New routine" }] });
   send({ type: "RoutinesChanged", member_id: 3 });
   await flush();
   expect($(".mb-rts").textContent).toContain("New routine");
-  expect(document.querySelector<HTMLInputElement>("#au-title")!.value).toBe("My unsaved title");
-  expect(document.activeElement).toBe(document.querySelector("#au-title"));
-  expect(document.querySelector<HTMLInputElement>("#au-title")!.selectionStart).toBe(3);
+  expect(document.querySelector(".mb-dialog.rv-dialog .rv-prompt")!.textContent).toBe("Review");
   expect(scroll.scrollTop).toBe(84);
 });
 
@@ -783,11 +905,11 @@ test("a chat event refreshes routines even when its explicit change notification
 });
 
 test("member notifications refresh names, groups, unread dots and the open header", async () => {
-  mount();
+  const agent = mount();
   await flush();
   await pick(3);
   await openDetails();
-  $('[data-det="gear"]').click();
+  agent.showSettings(3);
   const next = structuredClone(LIST);
   next.members[1] = { ...next.members[1], name: "Updated name", role: "Updated role", group_id: 5 };
   next.members[2] = { ...next.members[2], waiting: true, unread: true, preview: "New preview" };
@@ -796,37 +918,56 @@ test("member notifications refresh names, groups, unread dots and the open heade
   send({ type: "MembersChanged" });
   await flush();
   expect($(".mb-pill-t").textContent).toBe("Updated name");
-  expect($<HTMLInputElement>("#mb-det-name").value).toBe("Updated name");
+  expect($<HTMLInputElement>("#ms-name").value).toBe("Updated name");
   expect($(".mb-col").textContent).toContain("New group");
   expect($('.mb-col [data-member="4"]').textContent).toContain("New preview");
   expect($('.mb-col [data-member="4"] .mb-dot')).not.toBeNull();
 });
 
-test("memory notifications refresh the visible own and shared lists with correct scope", async () => {
-  const document = (text: string) => ({ text, revision: "r", chars: text.length, entries: text ? 1 : 0, limit: 2200, summary: null });
-  api.core.mockImplementation(async (method: string) => method === "memory.get" ? document("") : { questions: [] });
-  mount();
+test("a memory change reads nothing and shows nothing on the member's page", async () => {
+  api.core.mockImplementation(async () => ({ questions: [] }));
+  const agent = mount();
   await flush();
   await pick(3);
   $(".conversation-trigger").click();
-  $('[data-det="gear"]').click();
-  $('[data-tab="memory"]').click();
-  await flush();
-  api.core.mockClear();
-  send({ type: "MemoryChanged", member_id: 4, space: "own" });
-  await flush();
+  agent.showSettings(3); await flush();
+  api.core.mockClear(); api.membersSkillsList.mockClear();
+  for (const event of [{ member_id: 4, space: "own" }, { member_id: 3, space: "own" }, { member_id: 0, space: "shared" }] as const) {
+    send({ type: "MemoryChanged", ...event });
+    await flush();
+  }
   expect(api.core).not.toHaveBeenCalled();
-  api.core.mockImplementation(async (method: string) => method === "memory.get" ? document("Fresh note") : { questions: [] });
-  send({ type: "MemoryChanged", member_id: 3, space: "own" });
-  await flush();
-  expect(api.core).toHaveBeenLastCalledWith("memory.get", { member_id: 3, space: "own" });
-  expect($('[data-mem-space="own"]').textContent).toContain("Fresh note");
-  send({ type: "MemoryChanged", member_id: 0, space: "shared" });
-  await flush();
-  expect(api.core).toHaveBeenLastCalledWith("memory.get", { space: "shared" });
-  expect($('[data-mem-space="shared"]').textContent).toContain("Fresh note");
+  expect(api.membersSkillsList).not.toHaveBeenCalled();
+  expect(globalThis.document.querySelector('.ms-pane [data-mem-space], .ms-pane [data-mem-section], .ms-pane [data-cat="memory"]')).toBeNull();
 });
 
+
+test("a roster that moves only a last line, a step or an unread mark starts no Library read and leaves the panel alone, and a renamed member reads and shows", async () => {
+  vi.useFakeTimers();
+  const agent = mount(); await flush(); await pick(3); await openDetails();
+  await vi.advanceTimersByTimeAsync(1000); await flush();
+  const panel = $(".mb-det");
+  const library = (): number => api.core.mock.calls.filter(([method]) => method === "members.library").length;
+  const touched: MutationRecord[] = [];
+  const watch = new MutationObserver(records => touched.push(...records));
+  api.core.mockClear(); api.membersSkillsList.mockClear(); api.membersCommandsList.mockClear();
+  watch.observe(panel, { subtree: true, childList: true, attributes: true, characterData: true });
+  for (let step = 1; step <= 5; step++) {
+    api.membersList.mockResolvedValue({ ...LIST, members: LIST.members.map(m => m.id === 3 ? { ...m, preview: `Checking ${step}`, activity: "searching", activity_label: `Step ${step}`, last_at: Date.now() - 1000 + step, unread: step % 2 === 0 } : m) });
+    send({ type: "MembersChanged" }); await vi.advanceTimersByTimeAsync(400); await flush();
+  }
+  expect(library()).toBe(0);
+  expect(api.membersSkillsList).not.toHaveBeenCalled(); expect(api.membersCommandsList).not.toHaveBeenCalled();
+  // Only the words of the face's tooltip follow the step, on the face where it stands.
+  expect(touched.map(record => record.target.nodeName + ":" + record.attributeName)).toEqual(Array(5).fill("SPAN:data-tooltip"));
+  expect($('.mb-col [data-member="3"]').textContent).toContain("Checking 5");
+  // What the panel shows moved: it is drawn and the Library is read once.
+  api.membersList.mockResolvedValue({ ...LIST, members: LIST.members.map(m => m.id === 3 ? { ...m, name: "Renamed" } : m) });
+  send({ type: "MembersChanged" }); await vi.advanceTimersByTimeAsync(400); await flush();
+  expect($(".mb-who b").textContent).toBe("Renamed");
+  expect(library()).toBe(1);
+  watch.disconnect(); agent.hide();
+});
 describe("Raphael's thread", () => {
   test("reads plainly: his answers without 《》, 問拉斐爾, his voice button, asked with no member", async () => {
     mount();
@@ -892,9 +1033,8 @@ describe("a member's thread", () => {
     expect($<HTMLTextAreaElement>(".cmp-input").placeholder).toBe("傳訊息給 日文老師");
     expect($(".cmp-voice").hidden).toBe(false);
     expect($(".mb-pill-t").textContent).toContain("日文老師");
-    // 清除全部 and Raphael's settings are his thread's
     expect(document.querySelector('[data-act="clear"]')).toBeNull();
-    expect($('[data-act="settings"]').hidden).toBe(true);
+    expect(document.querySelector('[data-act="settings"]')).toBeNull();
     $<HTMLTextAreaElement>(".cmp-input").value = "考我";
     $<HTMLFormElement>(".composer").requestSubmit();
     await flush();
@@ -1174,17 +1314,23 @@ describe("a member's thread", () => {
     api.core.mockReset();
   });
 
-  test("what a colleague asked a member is one closed line in its chat, holding the question and the answer", async () => {
+  test("what a colleague asked a member is one line in its chat that opens the two members' conversation", async () => {
     THREADS[4] = [turn(42, { member_id: 4, peer_id: 0, route: "exchange", source: "member", scope: "exchange", question: "主人明天幾點有空？", text: "下午兩點以後" })];
     mount();
     await flush();
     await pick(4);
-    const line = $<HTMLDetailsElement>('.exchange-event[data-exchange="42"]');
-    expect(line.querySelector("summary")!.textContent).toBe("訊息來自 拉斐爾");
-    expect(line.open).toBe(false);
+    const line = $<HTMLButtonElement>('.exchange-event[data-exchange="42"]');
+    expect(line.textContent!.replace(/\s+/g, " ").trim()).toBe("與 拉斐爾 的 2 則訊息");
+    // Neither the owner's bubble nor the answer stands in the thread: both are read in the conversation view.
     expect(document.querySelector('.tn[data-id="42"] .me')).toBeNull();
-    expect([...line.querySelectorAll(".exchange-message")].map((message) => message.textContent)).toEqual(["主人明天幾點有空？"]);
-    expect(document.querySelector('.tn[data-id="42"] .ra')!.textContent).toContain("下午兩點以後");
+    expect(document.querySelector('.tn[data-id="42"]')!.textContent).not.toContain("下午兩點以後");
+    line.click();
+    await flush();
+    const view = $<HTMLElement>(".peer-chat");
+    expect(view.querySelector(".peer-pill")!.getAttribute("aria-label")).toContain("⇄");
+    expect([...view.querySelectorAll(".peer-line .message-text")].map((text) => text.textContent)).toEqual(["主人明天幾點有空？", "下午兩點以後"]);
+    view.querySelector<HTMLButtonElement>('[data-peer="close"]')!.click();
+    expect(document.querySelector(".peer-chat")).toBeNull();
   });
 
   test("the core is told which thread is on screen, and none once the page goes", async () => {
@@ -1314,18 +1460,18 @@ describe("the details panel", () => {
     expect($(".mb-det").hidden).toBe(false);
   });
 
-  test("renaming the open member in the details panel updates the composer placeholder and thread faces", async () => {
-    mount();
+  test("renaming the open member on its settings page updates the composer placeholder and thread faces", async () => {
+    const agent = mount();
     await flush();
     await pick(3);
     if ($(".mb-det").hidden) $(".conversation-trigger").click();
-    $('[data-det="gear"]').click();
+    agent.showSettings(3);
     api.membersUpdate.mockResolvedValue({ member: { ...LIST.members[1], name: "嚴格老師" } });
     api.membersList.mockResolvedValue({
       ...structuredClone(LIST),
       members: LIST.members.map((m) => (m.id === 3 ? { ...m, name: "嚴格老師" } : m)),
     });
-    const name = $<HTMLInputElement>("#mb-det-name");
+    const name = $<HTMLInputElement>("#ms-name");
     name.focus();
     name.value = "嚴格老師";
     name.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
@@ -1370,7 +1516,7 @@ test.each(['room','hidden'])("opening member details in a %s page never polls or
  else agent.hide();
  await flush();
  api.desktopOpen.mockClear(); api.desktopStatus.mockClear();
- agent.el.querySelector<HTMLButtonElement>('[data-act="computer"]')!.click(); await flush();
+ agent.el.querySelector<HTMLButtonElement>('#member-tab-computer')?.click(); await flush();
  expect(api.desktopStatus).not.toHaveBeenCalled(); expect(api.desktopOpen).not.toHaveBeenCalled();
  agent.hide();
 });
@@ -1406,6 +1552,71 @@ test("a burst of turn events while typing makes one history request and preserve
   expect(api.agentHistoryList.mock.calls[0]![0]).toMatchObject({after_id:expect.any(Number),turn_ids:[31]});
   expect(input.value).toBe("Keep typing this draft");
   expect($('.tn[data-id="31"]')).toBe(node);
+  agent.hide();
+});
+
+test("an empty conversation keeps its empty state while an event refreshes it", async () => {
+  vi.useFakeTimers();
+  api.agentHistoryList.mockImplementation(async () => ({ turns: [] }));
+  const agent = mount(); await flush(); await pick(3);
+  const empty = $(".ra-empty");
+  expect(empty.hidden).toBe(false);
+  let answer!: (value: { turns: never[] }) => void;
+  api.agentHistoryList.mockImplementation(() => new Promise(resolve => { answer = resolve; }));
+  send({ type: "AgentTurn", turn_id: 0, member_id: 3 });
+  await vi.advanceTimersByTimeAsync(500); await flush();
+  expect(api.agentHistoryList).toHaveBeenCalled();
+  expect(empty.hidden).toBe(false);
+  answer({ turns: [] }); await flush();
+  expect(empty.hidden).toBe(false);
+  agent.hide();
+});
+
+test("a cleared conversation reads its history whole, so its old turns leave the screen", async () => {
+  vi.useFakeTimers();
+  const agent = mount(); await flush(); await pick(3);
+  expect(document.querySelector('.tn[data-id="31"]')).not.toBeNull();
+  const fresh = { ...structuredClone(THREADS[3]![0]!), id: 40 };
+  const last = () => api.agentHistoryList.mock.calls[api.agentHistoryList.mock.calls.length - 1]![0];
+  api.agentHistoryList.mockClear();
+  api.agentHistoryList.mockImplementation(async (q: { after_id?: number }) => q.after_id === undefined ? { turns: [structuredClone(fresh)] } : { turns: [], delta: true, removed_ids: [] });
+  send({ type: "ConversationsChanged", member_id: 3 });
+  send({ type: "AgentTurn", turn_id: 0, member_id: 3 });
+  await vi.advanceTimersByTimeAsync(500); await flush();
+  expect(api.agentHistoryList.mock.calls.some(([q]) => !("after_id" in q))).toBe(true);
+  expect(document.querySelector('.tn[data-id="31"]')).toBeNull();
+  expect(document.querySelector('.tn[data-id="40"]')).not.toBeNull();
+  send({ type: "AgentTurn", turn_id: 40, member_id: 3 });
+  await vi.advanceTimersByTimeAsync(500); await flush();
+  expect(last()).toMatchObject({ after_id: 40 });
+  agent.hide();
+});
+
+test("a finished turn reads its colleagues' receipts again while they work and when one ends", async () => {
+  vi.useFakeTimers();
+  const handoff = { task_id: 77, source_turn_id: 31, work_turn_id: 90, member_id: 4, member_name: "Sample colleague", from_member_id: 3, stage_id: "check",
+    mode: "work" as const, state: "running", reason: null, created_at_ms: 1, ready_at_ms: 1, dispatch_policy: "immediate" as const, result: "", evidence: [] };
+  const history = structuredClone(THREADS[3]!); history[0]!.handoffs = [handoff];
+  api.agentHistoryList.mockImplementation(async (q: { member_id?: number }) => ({ turns: q.member_id === 3 ? structuredClone(history) : THREADS[0] }));
+  const agent = mount(); await flush(); await pick(3);
+  const lastAsked = () => { const reads = api.agentHistoryList.mock.calls.filter(([q]) => "after_id" in q); return reads[reads.length - 1]?.[0].turn_ids; };
+  const read = async (q: { after_id?: number; turn_ids?: number[] }) => q.after_id === undefined ? { turns: structuredClone(history) }
+    : { turns: structuredClone(history).filter(item => q.turn_ids?.includes(item.id)), delta: true, removed_ids: [] };
+  api.agentHistoryList.mockClear();
+  api.agentHistoryList.mockImplementation(read);
+  send({ type: "WorkerChanged", task_id: 88, state: "running", running: true });
+  await vi.advanceTimersByTimeAsync(3000); await flush();
+  expect(lastAsked()).toContain(31);
+  history[0]!.handoffs = [{ ...handoff, state: "done" }];
+  send({ type: "AgentTurn", turn_id: 0, member_id: 3 });
+  await vi.advanceTimersByTimeAsync(3000); await flush();
+  expect(lastAsked()).toContain(31);
+  send({ type: "AgentTurn", turn_id: 0, member_id: 3 });
+  await vi.advanceTimersByTimeAsync(3000); await flush();
+  expect(lastAsked()).not.toContain(31);
+  send({ type: "WorkerChanged", task_id: 77, state: "failed", running: false });
+  await vi.advanceTimersByTimeAsync(3000); await flush();
+  expect(lastAsked()).toContain(31);
   agent.hide();
 });
 

@@ -62,6 +62,9 @@ class _Background:
     def handoff_views(self, **scope):
         return []
 
+    def handoff_views_for_turns(self, turn_ids):
+        return {turn: self.handoff_views(source_turn_id=turn) for turn in turn_ids}
+
     def brief_for_assistant(self, limit=3, *, member_id=0):
         return []
 

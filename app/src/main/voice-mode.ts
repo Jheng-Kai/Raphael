@@ -9,6 +9,7 @@
 // The movement is the design page's: 520 ms out with cubic-bezier(.2,.8,.2,1), 380 ms back with
 // cubic-bezier(.4,0,.2,1). With reduced motion the flyer is simply there, and simply gone.
 
+import { Emblem } from "../overlay/emblem";
 import { patchHTML } from "./ui";
 
 /** The flyer's diameter when it has landed: the emblem of the empty page. */
@@ -53,8 +54,13 @@ export interface VoiceModeParts {
   composer: () => HTMLElement | null;
   /** The emblem of the empty page, when it is on screen: the flyer lands on it and it hides meanwhile. */
   target: () => HTMLElement | null;
-  /** The flyer's picture: the loop of the emblem, or the person's picture in a circle. */
+  /** The flyer's picture: the person's picture in a circle (used when `live` says no). */
   face: () => string;
+  /**
+   * Whether the flyer is Raphael's emblem: then it is the corner's own renderer on a canvas, listening and following the
+   * voice exactly as the emblem over the desktop does when Alt is held, not a picture of it.
+   */
+  live?: () => boolean;
   /** A click on the flyer: it ends the recording, as the key would. */
   onClick: () => void;
 }
@@ -67,6 +73,8 @@ const reduced = (): boolean => typeof matchMedia === "function" && matchMedia("(
 /** The flyer of one page: `up` sends it out (once), `down` brings it back. */
 export class VoiceMode {
   private flyer: HTMLElement | null = null;
+  /** The corner's renderer while the flyer is the emblem. */
+  private emblem: Emblem | null = null;
   /** The emblem of the empty page while the flyer is over it. */
   private hidden: HTMLElement[] = [];
   /** The voice button whose picture is hidden while the flyer is up. */
@@ -88,7 +96,15 @@ export class VoiceMode {
     const { from, to } = flightPath(this.parts.stage.getBoundingClientRect(), button.getBoundingClientRect(), composer.getBoundingClientRect(), target?.getBoundingClientRect());
     const flyer = document.createElement("div");
     flyer.className = "ra-flyer";
-    flyer.innerHTML = this.parts.face();
+    this.emblem?.dispose();
+    this.emblem = null;
+    if (this.parts.live?.() && typeof document.createElement("canvas").getContext === "function") {
+      const canvas = document.createElement("canvas");
+      canvas.className = "ra-flyer-emblem";
+      flyer.append(canvas);
+      this.emblem = new Emblem(canvas, FLYER_PX, { surface: "transparent", visible: true });
+      this.emblem.set("listening");
+    } else flyer.innerHTML = this.parts.face();
     flyer.style.transform = spotTransform(to);
     flyer.addEventListener("click", () => this.parts.onClick());
     this.parts.stage.append(flyer);
@@ -112,7 +128,10 @@ export class VoiceMode {
     const away = this.button;
     this.hidden = [];
     this.button = null;
+    const emblem = this.emblem;
+    this.emblem = null;
     const done = (): void => {
+      emblem?.dispose();
       flyer.remove();
       for (const el of hidden) el.style.visibility = "";
       // A picture sent up again meanwhile keeps the button's picture hidden.
@@ -141,6 +160,8 @@ export class VoiceMode {
   drop(): void {
     const flyer = this.flyer;
     this.flyer = null;
+    this.emblem?.dispose();
+    this.emblem = null;
     flyer?.remove();
     for (const el of this.hidden) el.style.visibility = "";
     this.hidden = [];
@@ -155,10 +176,11 @@ export class VoiceMode {
    */
   level(value: number): void {
     if (this.flyer) this.flyer.style.setProperty("--lvl", String(Math.max(0, Math.min(1, value)).toFixed(2)));
+    if (this.emblem) this.emblem.level = value;
   }
 
   /** The picture changed while it is up: the flyer shows the new one. */
   redraw(): void {
-    if (this.flyer) patchHTML(this.flyer, this.parts.face());
+    if (this.flyer && !this.emblem) patchHTML(this.flyer, this.parts.face());
   }
 }

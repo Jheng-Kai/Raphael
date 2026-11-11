@@ -8,7 +8,7 @@ from raphael_core.members.store import MemberError, MemberStore
 def test_member_profile_preferences_round_trip_and_validate(conn):
     store = MemberStore(conn)
     member = store.create_member(name="Ada", blurb="Research partner", reply_style="conversational",
-                                 voice="a" * 32, read_aloud=True, notify=True,
+                                 notify=True,
                                  ask_before_members=True, pinned=True, hidden=True)
     assert member == store.member(member.id)
     assert member.speaker().reply_style == "conversational"
@@ -57,20 +57,13 @@ async def test_the_owners_edit_of_a_memory_is_private_to_its_member(rig):
             await rig.call("memory.update", {"member_id": one, **bad})
 
 
-async def test_finished_and_waiting_notices_require_opt_in_and_read_aloud_is_once(rig):
+async def test_finished_and_waiting_notices_ignore_the_legacy_read_aloud_columns(rig):
     import asyncio
     from raphael_core.agent.history import AgentHistory
 
-    class Speech:
-        def __init__(self):
-            self.lines = []
-
-        async def say_member(self, text, **kwargs):
-            self.lines.append((text, kwargs))
-
-    speech = Speech()
-    rig.service.use_speech(speech)
-    member = rig.service.store.create_member(name="Ada", notify=True, read_aloud=True, voice="b" * 32)
+    member = rig.service.store.create_member(name="Ada", notify=True)
+    with rig.conn:
+        rig.conn.execute("UPDATE members SET read_aloud=1, voice_memo=1 WHERE id=?", (member.id,))
     history = AgentHistory(rig.conn)
     turn_id = history.add(session_id="s", question="Q", route="answer", prefix="", text="Answer", status="done", source="app", member_id=member.id)
     rig.service.turn_arrived(turn_id)
@@ -78,7 +71,6 @@ async def test_finished_and_waiting_notices_require_opt_in_and_read_aloud_is_onc
     await asyncio.sleep(0)
     notices = [params for method, params in rig.notes if method == "member.notice"]
     assert notices == [{"member_id": member.id, "name": "Ada", "kind": "finished", "notify": True}]
-    assert speech.lines == [("Answer", {"voice": "b" * 32, "turn_id": turn_id})]
     rig.service.needs_input(member.id)
     assert rig.notes[-1][1]["kind"] == "needs_input"
     rig.service.store.update_member(member.id, notify=False)

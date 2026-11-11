@@ -1,9 +1,9 @@
 import { scene, check } from "./steps.mjs";
 
-// The answer the owner saw run out of the top of the corner on 2026-10-27, with an address in it.
-const LONG = "1. 建立帳號並登入控制台。 2. 若設定只要求金鑰，前往「Settings → Project Settings → API Keys」取得。" +
-  "[官方說明](https://docs.composio.dev/reference/authenticating-to-composio) 3. 將金鑰填入設定頁，再回到 Gmail 連結卡完成 Google 授權。" +
-  "金鑰請只填入專用欄位，不要貼到聊天中。";
+// A synthetic numbered answer exercises caption paging and link removal.
+const LONG = "1. 建立範例帳號並登入測試控制台。 2. 若範例設定需要金鑰，前往「Settings → Project Settings → API Keys」複製。" +
+  "[範例指南](https://example.test/setup) 3. 將測試金鑰填入範例欄位，再回到連結卡查看測試結果。" +
+  "此處僅使用虛構資料，請勿填入任何真實帳號或金鑰。";
 
 // Exercise the production overlay.html and native event contract; no alternate renderer.
 export default [{
@@ -22,7 +22,28 @@ export default [{
     { type: "mode", mode: "thinking", quiet: true },
     { type: "step", text: "《告。正在查看今天下午的行程。》", language: "zh-TW" },
   ] }), entry: "overlay.html",
-}, ...["transcribing", "cleaning"].map(stage => ({
+}, {
+  // A quick answer that arrived while the owner dictated is held by the shell and said once the dictation completed
+  // (dictation.rs `wait_for_overlay`): the corner finishes the dictation's 100 % and then tells the answer, nothing else.
+  ...scene("overlay-held-answer", "A quick answer held through a dictation is told in the corner once the dictation has completed", [
+    { action: "advance-time", ms: 2500 }, check("overlay-held-answer"),
+  ], { overlayEvents: [
+    { type: "settings", px: 96, subtitles: "on", language: "zh-TW" },
+    { type: "show", mode: "listening" },
+    { type: "mode", mode: "thinking" },
+    { type: "progress", stage: "done", done: 0, total: 0, audio_seconds: 0 },
+    { type: "complete" },
+    { type: "say", prefix: "答", text: "台北現在二十四度。" },
+  ] }), entry: "overlay.html", ready: ".subs.on .sub-line",
+}, ...[["gold", "《告。一切正常。本月額度已使用 6%。》"], ["angry", "《否。未偵測到麥克風。請接上裝置，再到「設定 › 聽寫 › 麥克風」選擇。》"]].map(([mood, line]) => ({
+  // The vector rune ring: crisp at the largest corner size, gold for a report, red for a refusal.
+  ...scene(`overlay-emblem-${mood}`, `Raphael's emblem drawn as vectors, ${mood === "gold" ? "in his gold for a report" : "red while he refuses"}`, [
+    { action: "advance-time", ms: 1500 }, check(`overlay-emblem-${mood}`),
+  ], { emblem: true, overlayEvents: [
+    { type: "settings", px: 194, subtitles: "on", language: "zh-TW" },
+    { type: "notice", text: line },
+  ] }), entry: "overlay.html", ready: ".subs.on .sub-line",
+})), ...["transcribing", "cleaning"].map(stage => ({
   ...scene(`overlay-${stage}`, `Overlay ${stage} percentage caption`, [{ action: "advance-time", ms: 500 }, check("overlay-percentage")], {
     overlayEvents: [
       { type: "settings", px: 96, subtitles: "all", language: "zh-TW" },

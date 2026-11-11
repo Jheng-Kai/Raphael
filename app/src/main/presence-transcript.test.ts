@@ -84,23 +84,22 @@ test("thinking, blocked and working keep their own-colour slime and liquid props
     expect(root.querySelector(".slime-body")).not.toBeNull();
     expect(root.querySelector(".slime-drop")).toBeNull();
     expect(root.querySelector(".slime-dots, .slime-blocked, .slime-ribbons")).toBeNull();
-    expect(root.querySelector(".slime")?.getAttribute("style")).toContain("--slime-color:#15897E");
+    expect(root.querySelector(".slime")?.getAttribute("style")).toContain("--slime-color:#13B8A3");
   }
 });
 
 test("owner waiting overrides running while colleague waiting remains a separate state", () => {
   followSlimeRoster([{ id: 91, activity: "working" }]);
-  expect(dom(slimeFaceHTML({ id: 91, waiting: true }, 28)).querySelector(".slime")?.getAttribute("data-state")).toBe("blocked");
+  expect(dom(slimeFaceHTML({ id: 91, waiting: true }, 28, "", true)).querySelector(".slime")?.getAttribute("data-state")).toBe("blocked");
   followSlimeRoster([{ id: 92, activity: "waiting" }]);
-  expect(dom(slimeFaceHTML({ id: 92 }, 28)).querySelector(".slime")?.getAttribute("data-state")).toBe("waiting");
+  expect(dom(slimeFaceHTML({ id: 92 }, 28, "", true)).querySelector(".slime")?.getAttribute("data-state")).toBe("waiting");
 });
 
 test("private bubbles have no faces and completed work opens from the message hover actions", () => {
   const root = dom(turnHTML(turn({ messages: [{seq: 1, kind: "progress", text: "Checking a sample", at_ms: time}], model: "sample/model", cost_usd: .001 }), emptyTimelineState(), false, look));
   expect(root.querySelector(".ra-face, .me > .owner-face, .me > .av")).toBeNull();
   expect(root.querySelector(".work-section > .work-toggle")).toBeNull();
-  expect(root.querySelector('.message-actions [data-act="thinking"]')).not.toBeNull();
-  expect(root.querySelector('.message-actions [data-act="thinking"]')?.getAttribute("data-tooltip")).toContain("查看過程");
+  expect(root.querySelector('.message-actions [data-act="thinking"]')).toBeNull();
 });
 
 test("live and pending private work shows only a 28px avatar with the public progress tooltip", () => {
@@ -141,10 +140,10 @@ test("a routine receipt preserves the member who owns its inspection target", ()
   expect(root.querySelector('[data-routine="9"]')?.getAttribute("data-routine-member")).toBe("4");
 });
 
-test("a sidebar row keeps the name and time without a role pill", () => {
+test("a sidebar row keeps the name and its last line, without a role pill or a time", () => {
   const root = dom(memberRowHTML({id: 1, name: "Sample", role: "Research", last_at: time} as Member, {current: 1, previews: new Map(), fresh: new Set()}));
   expect(root.querySelector(".mb-row-t i")).toBeNull();
-  expect(root.querySelector(".mb-row-t time")).not.toBeNull();
+  expect(root.querySelector("time")).toBeNull();
 });
 
 test("an open shared hover updates its public action without pointer movement", async () => {
@@ -157,11 +156,15 @@ test("an open shared hover updates its public action without pointer movement", 
 });
 
 
-test("Raphael keeps his emblem and shares the public action hover", () => {
+test("Raphael's blue slime shares the public action hover and moves with his work", () => {
   followSlimeRoster([{id: RAPHAEL_ID, activity: "thinking", activity_label: "Checking a sample"}]);
-  const root = dom(faceHTML({id: RAPHAEL_ID, name: "Raphael"}, 28));
+  const root = dom(faceHTML({id: RAPHAEL_ID, name: "Raphael"}, 28, {moving: true}));
   expect(root.querySelector(`[data-presence-member="${RAPHAEL_ID}"]`)?.getAttribute("data-tooltip")).toBe("Checking a sample");
-  expect(root.querySelector(".slime")).toBeNull();
+  expect(root.querySelector(".slime")?.getAttribute("data-state")).toBe("thinking");
+  // Elsewhere his slime is a picture that keeps the hover (owner, 2026-11-11).
+  const picture = dom(faceHTML({id: RAPHAEL_ID, name: "Raphael"}, 28));
+  expect(picture.querySelector(`[data-presence-member="${RAPHAEL_ID}"]`)?.getAttribute("data-tooltip")).toBe("Checking a sample");
+  expect(picture.querySelector(".slime")?.getAttribute("data-state")).toBe("idle");
 });
 
 test("a blocked task keeps its live presence until the owner acts", () => {

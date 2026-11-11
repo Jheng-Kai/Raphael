@@ -309,12 +309,14 @@ def test_a_refusal_that_passes_is_tried_again_after_a_wait(kind):
     assert len(brain.calls) == 3
 
 
-def test_a_refusal_that_lasts_falls_back_after_three_tries():
+def test_a_rate_limit_that_lasts_retains_audio_after_three_tries_without_switching_models():
     brain = Refusals(RATE_LIMIT, RATE_LIMIT, RATE_LIMIT)
     slept: list[float] = []
     cloud, local = engine(brain, slept=slept)
-    assert cloud.transcribe(speech()) == "本機聽到的"
-    assert len(brain.calls) == 3 and slept == [1.0, 2.0] and len(local.calls) == 1
+    with pytest.raises(RpcError) as raised:
+        cloud.transcribe(speech())
+    assert raised.value.data["kind"] == "rate_limit"
+    assert len(brain.calls) == 3 and slept == [1.0, 2.0] and local.calls == []
 
 
 def test_other_failures_are_not_tried_again():
@@ -325,15 +327,58 @@ def test_other_failures_are_not_tried_again():
     assert len(brain.calls) == 1 and slept == []
 
 
-def test_without_a_local_engine_the_next_segment_tries_the_cloud_again(caplog):
+def test_without_a_local_engine_the_next_segment_tries_the_same_cloud_after_backoff():
     brain = Refusals(*[RATE_LIMIT] * 3)
     cloud = CloudSttEngine(brain, fallback=no_local_model, warned=set(), sleep=lambda _: None)
     with pytest.raises(RpcError) as raised:
         cloud.transcribe(speech())
-    assert raised.value.code == NO_LOCAL_MODEL
+    assert raised.value.data["kind"] == "rate_limit"
     assert cloud.transcribe(speech()) == "雲端聽到的"
     assert len(brain.calls) == 4
-    assert any("no local engine" in r.getMessage() for r in caplog.records)
+
+
+@pytest.mark.parametrize("retry_after,expected", [(None, 1.0), (2.5, 2.5)])
+@pytest.mark.parametrize("final", [False, True])
+def test_rate_limit_backoff_honors_provider_delay_within_original_budget(retry_after, expected, final):
+    now = [0.0]
+    sleeps = []
+    data = {"kind": "rate_limit", **({"retry_after": retry_after} if retry_after is not None else {})}
+    brain = Refusals(RpcError(INTERNAL_ERROR, "busy", data))
+
+    def sleep(seconds):
+        sleeps.append(seconds)
+        now[0] += seconds
+
+    cloud = CloudSttEngine(brain, fallback=lambda: pytest.fail("No model switch"), warned=set(), sleep=sleep, now=lambda: now[0])
+    call = cloud.transcribe_final if final else cloud.transcribe
+    assert call(speech()) == "雲端聽到的"
+    assert sleeps == [expected]
+    assert brain.calls[0][1] == brain.calls[1][1]
+    assert brain.calls[1][2] == pytest.approx(cloud_stt.wait_for(1) - expected)
+
+
+def test_retry_after_longer_than_budget_never_retries_early_or_switches_models():
+    brain = Brain(error=RpcError(INTERNAL_ERROR, "busy", {"kind": "rate_limit", "retry_after": 120.0}))
+    cloud = CloudSttEngine(brain, fallback=lambda: pytest.fail("No model switch"), warned=set(),
+                           now=lambda: 0.0, sleep=lambda _: pytest.fail("No wait beyond the budget"))
+    for call in (cloud.transcribe, cloud.transcribe_final):
+        with pytest.raises(RpcError):
+            call(speech())
+    assert len(brain.calls) == 1
+
+
+def test_scheduler_delay_during_rate_limit_backoff_cannot_switch_models():
+    now = [0.0]
+
+    def sleep(_seconds):
+        now[0] += 60
+
+    brain = Brain(error=RATE_LIMIT)
+    cloud = CloudSttEngine(brain, fallback=lambda: pytest.fail("No model switch"), warned=set(), sleep=sleep, now=lambda: now[0])
+    with pytest.raises(RpcError) as raised:
+        cloud.transcribe(speech())
+    assert raised.value.data["kind"] == "rate_limit"
+    assert len(brain.calls) == 1
 
 
 def test_nothing_of_the_audio_or_the_text_is_logged(caplog):

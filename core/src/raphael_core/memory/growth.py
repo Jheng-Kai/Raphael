@@ -5,14 +5,12 @@ both files: `target` names the file and `operations` what to do to it. Reads nev
 """
 
 import json
-import sqlite3
 from datetime import datetime
 
 from ..agent.tools import ToolResult
 from ..bots.homes import HomeError, digest, redact_secrets
 from .store import UNCONFIRMED
 from .doctrine import DOCTRINE
-from .terms import tokens
 
 WRITE_TOOLS = frozenset(("memory_update", "memory_log"))
 READ_TOOLS = frozenset(("session_search", "session_read"))
@@ -53,7 +51,8 @@ DEFINITIONS = {
              "type": "object", "properties": {
                  "action": {"type": "string", "enum": ["add", "replace", "remove"]},
                  "content": {"type": "string", "description": "For 'add', the new entry. For 'replace', the text that takes the place of old_text; the rest of the entry stays."},
-                 "old_text": {"type": "string", "description": "For 'replace' and 'remove': text from one entry. 'replace' changes exactly this span (to rewrite an entry, give its whole text); 'remove' deletes the whole entry."}},
+                 "old_text": {"type": "string", "description": "For 'replace' and 'remove': text from one entry. 'replace' changes exactly this span (to rewrite an entry, give its whole text); 'remove' deletes the whole entry."},
+                 "until": {"type": ["string", "null"], "description": "Optional expiry as YYYY-MM-DD (inclusive); null removes an existing expiry."}},
              "required": ["action"], "additionalProperties": False}}},
         ["target", "operations"]),
     "memory_log": definition("Append a work outcome to your own daily log (at most 1000 characters). Logs are searchable but never in the system prompt.",
@@ -121,51 +120,25 @@ class Growth:
             old = path.read_bytes() if path.exists() else None
             text = (old.decode("utf-8") if old else "") + "\n" + body + "\n"
             self.homes.write(member_id, relative, text, expected_hash=digest(old))
+            from .recall_index import write_document
+            write_document(self._conn, 'log', relative, member_id, text, self._now_ms())
             self._changed(member_id)
             return ToolResult("memory_log", True, {"path": relative})
         except (HomeError, OSError):
             return ToolResult("memory_log", False, None, "full")
 
-    def _documents(self, member_id, *, private=True, conversation_id=None, include_rooms=True):
-        """Enumerate only authorized sources; never enumerate another member's home. The memory files
-        are not among them: every turn reads them whole."""
-        if private:
-            for path in self.homes.safe(self.homes.home(member_id) / "memory/log").glob("*.md"):
-                relative = "memory/log/" + path.name
-                text = self.homes.path(member_id, relative).read_text(encoding="utf-8")
-                yield "own:" + relative, text, "memory"
-        for row in self._conn.execute(
-            "SELECT id, question, text, detail FROM agent_turns WHERE member_id=? AND scope='private' AND status='done' AND (? IS NULL OR conversation_id=?) ORDER BY id DESC",
-            (member_id if private else -1, conversation_id, conversation_id),
-        ):
-            yield f"turn:{row[0]}", f"Owner: {row[1]}\nAssistant: {row[2]}\n{row[3] or ''}", "conversation"
-        for row in self._conn.execute(
-            "SELECT m.id,m.text FROM room_messages m JOIN room_members r ON r.room_id=m.room_id WHERE r.member_id=? ORDER BY m.id DESC",
-            (member_id if include_rooms else -1,),
-        ):
-            yield f"room:{row[0]}", row[1], "conversation"
-
-    def _search_hits(self, member_id, query, limit, kind=None, *, private=True, conversation_id=None, include_rooms=True):
-        terms = list(dict.fromkeys(tokens(str(query)[:1000])))[:32]
-        if not terms:
-            return []
-        # An ephemeral FTS index contains only the permitted corpus. No disk, events,
-        # or updates to application state occur on a read, even on a cache miss.
-        with sqlite3.connect(":memory:") as index:
-            index.execute("CREATE VIRTUAL TABLE docs USING fts5(id UNINDEXED, body UNINDEXED, kind UNINDEXED, terms)")
-            index.executemany("INSERT INTO docs VALUES (?,?,?,?)", (
-                (identifier, body, source, " ".join(tokens(body)))
-                for identifier, body, source in self._documents(member_id, private=private, conversation_id=conversation_id, include_rooms=include_rooms) if kind is None or source == kind))
-            match = " OR ".join('"' + term.replace('"', '""') + '"' for term in terms)
-            rows = index.execute("SELECT id,body,kind FROM docs WHERE docs MATCH ? ORDER BY bm25(docs) LIMIT ?", (match, limit))
-            return [{"id": row[0], "text": row[1][:1200], "kind": row[2]} for row in rows]
+    def _search_hits(self, member_id, query, limit, kind=None, *, private=True, conversation_id=None, include_rooms=True, exclude=()):
+        from .recall_index import search
+        return search(self._conn, member_id, query, limit, kind, private=private,
+                      conversation_id=conversation_id, include_rooms=include_rooms, exclude=exclude)
 
     def _source_untrusted(self, identifier, text=""):
         if identifier.startswith("room:"):
             return True
         if identifier.startswith("turn:"):
             turn = self._history.get(int(identifier.partition(":")[2]))
-            return turn is not None and tainted_turn(turn, self._history.steps([turn.id]).get(turn.id, ()))
+            return turn is not None and (bool(self._conn.execute('SELECT 1 FROM turn_tool_events WHERE turn_id=? LIMIT 1', (turn.id,)).fetchone())
+                                         or tainted_turn(turn, self._history.steps([turn.id]).get(turn.id, ())))
         # A log line written after outside content carries its mark, as a memory entry does.
         return any(mark in text for mark in UNCONFIRMED.values())
 
@@ -177,19 +150,21 @@ class Growth:
     def session_read(self, member_id, identifier, offset=0, *, private=True):
         if type(offset) is not int or offset < 0:
             return ToolResult("session_read", False, None, "bad_arguments")
-        for name, body, _ in self._documents(member_id, private=private):
-            if name == identifier:
-                result = {"id": name, "text": body[offset:offset + RECALL_CHARS], "more": len(body) > offset + RECALL_CHARS}
-                return ToolResult("session_read", True, result, untrusted=self._source_untrusted(name, body))
+        from .recall_index import read_source
+        source = read_source(self._conn, member_id, identifier, private=private)
+        if source:
+            body, external = source
+            result = {"id": identifier, "text": body[offset:offset + RECALL_CHARS], "more": len(body) > offset + RECALL_CHARS}
+            return ToolResult("session_read", True, result, untrusted=external or self._source_untrusted(identifier, body))
         return ToolResult("session_read", False, None, "not_found")
 
     def recall(self, member_id, query):
         return self.recall_result(member_id, query)[0]
 
-    def recall_result(self, member_id, query, *, private=True, conversation_id=None):
+    def recall_result(self, member_id, query, *, private=True, conversation_id=None, exclude=()):
         # Automatic recall respects the current thread. Explicit session_search
         # can deliberately retrieve the member's other threads and joined rooms.
-        scope = dict(private=private, conversation_id=conversation_id, include_rooms=False)
+        scope = dict(private=private, conversation_id=conversation_id, include_rooms=False, exclude=exclude)
         hits = self._search_hits(member_id, query, 4, "memory", **scope) + self._search_hits(member_id, query, 4, "conversation", **scope)
         if not hits:
             return "", False

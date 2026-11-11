@@ -24,11 +24,13 @@ mod overlay;
 mod paste;
 mod rpc;
 mod schedule_awake;
+mod template_file;
 mod tray;
 mod updates;
 mod webview_power;
 
 use std::path::PathBuf;
+use std::time::Instant;
 use tauri::{AppHandle, Manager, Runtime, WindowEvent, plugin::TauriPlugin};
 use tauri_plugin_log::{RotationStrategy, Target, TargetKind, TimezoneStrategy};
 use tauri_plugin_window_state::StateFlags;
@@ -38,7 +40,7 @@ const MAIN_WINDOW: &str = "main";
 /// Label of the overlay window. It is created in Rust, never by the config.
 const OVERLAY_WINDOW: &str = "overlay";
 
-/// Nothing is restored: every launch opens at the designed 1280x800, centred (owner, 2026-10-30), even
+/// Nothing is restored: every launch opens at the designed 1280x800, centred, even
 /// after the window was maximized last time. Launch policy and the native frame stay under app control.
 fn main_window_state_flags() -> StateFlags {
     StateFlags::empty()
@@ -83,6 +85,7 @@ fn panic_report(thread: Option<&str>, location: Option<&std::panic::Location<'_>
 }
 
 pub fn run() {
+    let launched_at = Instant::now();
     log_panics();
     // A restricted runner can terminate its spawn handle without enumerating processes. Keep
     // every native-test descendant in the same kill-on-close Job before any webview is created.
@@ -125,7 +128,13 @@ pub fn run() {
         tauri::Builder::default(),
         |app, args| {
             log::info!("another launch handed over");
-            if first_run::opens_at_start(&args) {
+            // A template file double-clicked while the app runs: the window shows its import review.
+            let template = template_file::offer(&args);
+            if template {
+                log::info!("a member template file was handed over");
+                commands::tell_main_window(commands::MainEvent::TemplateFile);
+            }
+            if template || first_run::opens_at_start(&args) {
                 log::info!("manual launch handed over: showing the main window");
                 show_main_window(app);
             }
@@ -191,7 +200,10 @@ pub fn run() {
             learned::learned_subscribe,
             learned::learned_layout,
             learned::learned_finish,
-            commands::save_usage_csv,
+            commands::pick_output_folder,
+            commands::member_template_file,
+            commands::member_template_pending,
+            commands::show_template_export,
             commands::schedule_keep_awake_get,
             commands::schedule_keep_awake_set,
             commands::device_settings_get,
@@ -204,6 +216,8 @@ pub fn run() {
             commands::attachment_source,
             updates::update_control,
             commands::open_team_file,
+            commands::open_library_file,
+            commands::report_save,
             commands::hotkeys_pause,
             commands::window_hotkey,
             commands::main_window_forward,
@@ -232,6 +246,33 @@ pub fn run() {
             // What the move of files from earlier builds did (it ran before the log existed), and
             // the copy of the speech models when they could not be renamed.
             let migration = take_migration(app.handle());
+
+            // ---- Python core ----
+            // Start before creating any webviews so that Python initializes alongside them.
+            // The app does not need it to run (tray, settings), so a core that cannot be started
+            // is logged and the app carries on without dictation.
+            match core_process::resolve_app_core_command(app.handle())
+                .map(|mut command| {
+                    // Models that could not be moved yet stay usable where they are.
+                    if let Some(dir) = &migration.models_dir {
+                        command
+                            .env
+                            .push(("RAPHAEL_MODELS_DIR".to_owned(), dir.display().to_string()));
+                    }
+                    command
+                })
+                .and_then(core_process::CoreProcess::start)
+            {
+                Ok(core) => {
+                    app.manage(core);
+                    log::info!(
+                        "start-up: core spawned {} ms after launch",
+                        launched_at.elapsed().as_millis()
+                    );
+                }
+                Err(err) => log::error!("the Python core is not running: {err}"),
+            }
+
             for (level, message) in &migration.notes {
                 log::log!(*level, "data folders: {message}");
             }
@@ -243,6 +284,10 @@ pub fn run() {
             // Created here rather than from the config so that it gets the webview data folder
             // like the overlay does, after the migration has put the old data there.
             create_main_window(app.handle())?;
+            log::info!(
+                "start-up: main window created {} ms after launch",
+                launched_at.elapsed().as_millis()
+            );
 
             if let Some(window) = app.get_webview_window(MAIN_WINDOW) {
                 match window.is_decorated() {
@@ -274,6 +319,10 @@ pub fn run() {
                 match overlay::Overlay::create(app.handle(), 150, "on", "zh-TW") {
                     Ok(overlay) => {
                         app.manage(overlay);
+                        log::info!(
+                            "start-up: overlay created {} ms after launch",
+                            launched_at.elapsed().as_millis()
+                        );
                     }
                     Err(err) => log::error!("could not create the overlay window: {err}"),
                 }
@@ -283,28 +332,6 @@ pub fn run() {
             // Learned corrections have their own passive window, including isolated native tests.
             if let Err(err) = learned::start(app.handle()) {
                 log::error!("could not create the learned word window: {err}");
-            }
-
-            // ---- Python core ----
-            // Started in the background and kept in Tauri state for the dictation controller. The
-            // app does not need it to run (tray, settings), so a core that cannot be started is
-            // logged and the app carries on without dictation.
-            match core_process::resolve_app_core_command(app.handle())
-                .map(|mut command| {
-                    // Models that could not be moved yet stay usable where they are.
-                    if let Some(dir) = &migration.models_dir {
-                        command
-                            .env
-                            .push(("RAPHAEL_MODELS_DIR".to_owned(), dir.display().to_string()));
-                    }
-                    command
-                })
-                .and_then(core_process::CoreProcess::start)
-            {
-                Ok(core) => {
-                    app.manage(core);
-                }
-                Err(err) => log::error!("the Python core is not running: {err}"),
             }
 
             // ---- Hotkeys ----
@@ -362,6 +389,11 @@ pub fn run() {
 
             // A member's desktop notices follow the core even while the main window is hidden.
             member_notifications::spawn(app.handle());
+
+            // ---- A template file the app was opened with ----
+            // Double-clicked in the file manager (the installer's file association): the window takes
+            // its text when it has loaded (`member_template_pending`) and shows the import review.
+            template_file::offer(&std::env::args().collect::<Vec<_>>());
 
             // ---- First run ----
             // Until the first-run guide has been gone through, the main window opens by itself.
@@ -532,11 +564,8 @@ fn log_plugin<R: Runtime>() -> TauriPlugin<R> {
         // Other crates (the webview, the HTTP stack) stay at Info even when Raphael logs more.
         .level_for("tao", log::LevelFilter::Info)
         .level_for("wry", log::LevelFilter::Info)
-        // Until the "hotkey does nothing while Raphael's own window is in front" report is
-        // explained, the keyboard hook and the hotkey service always log their decisions. They
-        // log modifier keys only (Alt, Ctrl, Shift, Win), and a Space that went down just before
-        // the modifier of its hotkey (Right Alt+Space); never what is typed.
-        .level_for("handy_keys", log::LevelFilter::Debug)
+        // Suppress per-modifier hook diagnostics; keep actual Raphael hotkey events visible.
+        .level_for("handy_keys", log::LevelFilter::Info)
         .level_for("app_lib::hotkey", log::LevelFilter::Debug)
         // Keep overlay event delivery and page diagnostics visible during normal dictations.
         .level_for("app_lib::overlay", log::LevelFilter::Debug)
@@ -620,7 +649,7 @@ mod window_state_tests {
 
     #[test]
     fn ctrl_plus_and_minus_zoom_the_main_window_within_three_steps() {
-        // The owner zooms with Ctrl + plus / minus (2026-10-25) but only three steps either way: the app's
+        // Ctrl + plus / minus supports three zoom steps either way: the app's
         // window-zoom.ts handles the keys, so WebView2's own 25%-500% zoom keys stay off.
         let config: serde_json::Value =
             serde_json::from_str(include_str!("../tauri.conf.json")).unwrap();

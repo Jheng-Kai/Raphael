@@ -14,6 +14,7 @@
 // leaves Raphael alone in the column: the page works as it did before.
 
 import * as api from "./api";
+import { settleAsks } from "./chat-ask";
 import { shortcut, openCommandPalette, type Command } from "./shortcuts";
 import { eventRead } from './event-read';
 import { describeError } from "./format";
@@ -25,6 +26,12 @@ import { bindComposerMentions, mentionTargets } from "./team-mentions";
 import { createMemberActions } from "./member-actions";
 import { createMemberColumn } from "./member-column";
 import { createDetails } from "./member-details";
+import { createMemberSettings, type MemberSettings } from "./member-settings";
+import { mountEdge, savedWidth, saveWidth } from "./edge-drag";
+
+/** The details panel's widths (px): it opens at about 453 and drags to about 685; narrower than PANEL_CLOSE it closes. */
+const PANEL_MIN = 300, PANEL_MAX = 720, PANEL_CLOSE = 240;
+const PANEL_KEY = "raphael.panel.width";
 import {
   askGroupName,
   confirmDelete,
@@ -32,9 +39,11 @@ import {
   offerRoutine,
 } from "./member-dialogs";
 import { openMemberCreator } from "./member-creator";
-import { RAPHAEL_ID, faceHTML, memberOf, orderedMembers, memberRole, raphaelOf } from "./members";
+import { previewTemplateFile } from "./member-templates";
+import { RAPHAEL_ID, faceHTML, isMemberNameTaken, memberOf, orderedMembers, memberRole, raphaelOf, stableMember } from "./members";
+import { memberColor, nameAccent } from "./owner-bubble";
 import { followSlimeRoster, setSlimeState } from "./slime";
-import type { AppContext, MainEvent, Member, MemberGroup, MemberPatch, MembersList } from "./types";
+import type { AppContext, MainEvent, Member, MemberGroup, MemberPatch, MembersList, NewMember } from "./types";
 import { type Choice, closeMenu, esc, ico, leave, openMenu, patchHTML, toaster } from "./ui";
 
 /** Below this width details start closed to leave a readable conversation column. */
@@ -63,6 +72,12 @@ export interface MembersShell {
   readonly column: HTMLElement;
   /** The details panel. */
   readonly details: HTMLElement;
+  /** The open member's settings page, which takes the conversation's place while it is open. */
+  readonly settings: MemberSettings;
+  /** Opens the settings page of the open member; the details panel folds away while it is open. */
+  openSettings(): void;
+  /** Leaves the settings page for the conversation and puts the details panel back as it was. */
+  closeSettings(): void;
   computer(): void;
   /** The narrow windows' dropdown of members, for the left of the chat's top row. */
   readonly picker: HTMLElement;
@@ -74,6 +89,10 @@ export interface MembersShell {
   nameOf(id: number): string;
   /** The face of member `id` at `size` px (Raphael's bare emblem for 0); none for a member the list does not have. */
   faceOf(id: number, size: number): string;
+  /** The colour member `id`'s name takes where members talk (owner-bubble.ts `nameAccent`). */
+  accentOf(id: number): string;
+  /** Member `id`'s own colour, its slime's (Raphael's blue for 0): what stands for it on a report. */
+  colorOf(id: number): string;
   /** The open member, as the list has it. */
   member(): Member;
   /** Existing groups sorted by position. */
@@ -86,6 +105,8 @@ export interface MembersShell {
   select(id: number): void;
   /** Reads the list (and what the column and the panel need with it) again. */
   load(): Promise<void>;
+  /** Whether the list has been read at least once: the open member's unread boundary is known only then. */
+  loaded(): boolean;
   /** Local navigation changed which destination is selected. */
   show(): void;
   /** A turn was written or a task moved: the list is read again a moment later. */
@@ -108,21 +129,27 @@ export function createMembers(host: MembersHost): MembersShell {
   let fresh = new Set<number>();
   let loads = 0;
   let listJSON = "";
+  /** The part of the list that does not change with each word or step (members.ts `stableMember`). */
+  let stableJSON = "";
   let viewing: number | null | undefined;
   let refreshDue = 0;
   let refreshTimer: ReturnType<typeof setTimeout> | null = null;
   let open = typeof innerWidth === "number" ? innerWidth >= DETAILS_COLUMN_MIN_PX : true;
+  /** Whether the details panel was open when the settings page folded it away; null while the page is closed. */
+  let panelBeforeSettings: boolean | null = null;
   let stopLeaving: (() => void) | null = null;
   let panelRead = false;
   let refreshOnShow = false;
 
   const member = (): Member => memberOf(list, current) ?? raphaelOf(list);
+  /** The panel's face as it is drawn, but for the words of its tooltip: those are put on the face where it stands (slime.ts). */
+  const faceKey = (m: Member): string => faceHTML(m, 64).replace(/ data-tooltip="[^"]*"/, "");
 
   // ---------- the parts ----------
 
-  const { editMember, memberAction, moveMember, deleteMember } = createMemberActions({
+  const { memberAction, moveMember, deleteMember } = createMemberActions({
     list: () => list, current: () => current, select, load, update,
-    cleared: id => host.onSelect(id), deleted: id => previews.delete(id),
+    deleted: id => previews.delete(id),
   });
 
   const column = createMemberColumn({
@@ -148,7 +175,9 @@ export function createMembers(host: MembersHost): MembersShell {
     async reorderGroup(id, beforeId) {
       const groups = [...(list?.groups ?? [])].sort((a, b) => a.position - b.position);
       const moving = groups.find(g => g.id === id); if (!moving) return;
-      const next = groups.filter(g => g.id !== id); next.splice(next.findIndex(g => g.id === beforeId), 0, moving);
+      const next = groups.filter(g => g.id !== id);
+      const at = beforeId === null ? -1 : next.findIndex(g => g.id === beforeId);
+      next.splice(at < 0 ? next.length : at, 0, moving);
       await groupChange(async () => { for (const [position, group] of next.entries()) await api.groupsUpdate(group.id, { position }); });
     },
   });
@@ -160,11 +189,46 @@ export function createMembers(host: MembersHost): MembersShell {
     list: () => list,
     update,
     close: () => setDetails(false),
-    edit: m => editMember(m),
-    hide: m => void memberAction(m.id, "hide"),
+    // The gear: the member's settings page in the main area, or, when it is open, back to the conversation.
+    openSettings: () => { if (settings.isOpen()) host.app.go("agent"); else host.app.go("agent", `member-settings:${current}`); },
     openConversation: host.onOpenConversation ? (member, conversation) => host.onOpenConversation!(member, conversation) : undefined,
     conversationOf: member => host.conversationOf?.(member),
     openTurn: (member, conversation, turn) => host.onOpenConversation?.(member, conversation!, turn),
+  });
+
+  // The member settings page: where the conversation is, over it, while it is open.
+  const settings: MemberSettings = createMemberSettings({
+    app: host.app,
+    member,
+    list: () => list,
+    update,
+    refreshList: () => void load(),
+    back: () => host.app.go("agent"),
+  });
+
+  // The panel's left edge drags it wider or narrower, and dragged narrower than it can be it closes; the
+  // header's name opens it again at the width it had. There is no button for it.
+  let panelWidth = savedWidth(PANEL_KEY, PANEL_MIN, PANEL_MAX);
+  const panelEdge = document.createElement("div");
+  panelEdge.className = "det-edge";
+  details.el.prepend(panelEdge);
+  const placePanel = (): void => {
+    const page = details.el.parentElement;
+    if (panelWidth === null) page?.style.removeProperty("--pa-det");
+    else page?.style.setProperty("--pa-det", `${panelWidth}px`);
+  };
+  mountEdge(panelEdge, {
+    label: t("nav.panelWidth"),
+    grow: -1,
+    widthAt: x => details.el.getBoundingClientRect().right - x,
+    width: () => details.el.getBoundingClientRect().width,
+    resize: next => {
+      if (next < PANEL_CLOSE) { setDetails(false); return false; }
+      panelWidth = Math.round(Math.min(PANEL_MAX, innerWidth * 0.6, Math.max(PANEL_MIN, next)));
+      placePanel();
+    },
+    done: () => saveWidth(PANEL_KEY, panelWidth),
+    toggle: () => setDetails(false),
   });
 
   const pill = document.createElement("span");
@@ -179,16 +243,23 @@ export function createMembers(host: MembersHost): MembersShell {
   /** The pill and the narrow dropdown, for the open member. */
   function drawHead(): void {
     const m = member();
-    patchHTML(pill, faceHTML(m, 22, { cls: "mb-pill-face" }) + `<span class="mb-pill-t">${esc(m.name)}</span>`);
+    // The header pill: the face and name, and a › that slides in under the pointer (the pill opens the panel).
+    patchHTML(pill, faceHTML(m, 22, { cls: "mb-pill-face" }) + `<span class="mb-pill-t">${esc(m.name)}</span><span class="mb-pill-go" aria-hidden="true">${ico("right")}</span>`);
     const waiting = list?.members.some((other) => other.id !== current && (other.waiting || other.unread)) ?? false;
     patchHTML(picker, `<span>${esc(m.name)}</span>${waiting ? `<i class="mb-dot is-wait" aria-hidden="true"></i>` : ""}${ico("down")}`);
     picker.setAttribute("aria-label", `${t("members.pick")}: ${m.name}`);
   }
 
-  function drawAll(): void {
+  /** `panels` false: what the panel and the settings page draw from is as it was, so they are not asked. */
+  function drawAll(panels = true): void {
     column.draw();
-    details.draw();
+    if (panels) {
+      details.draw();
+      settings.draw();
+    }
     drawHead();
+    // The panel joins its page after the shell is made; its width follows it there.
+    placePanel();
   }
 
   // ---------- reading ----------
@@ -221,7 +292,13 @@ export function createMembers(host: MembersHost): MembersShell {
       if (host.visible()) tellViewing(current);
       return;
     }
+    // What the panel and the settings page draw from (stableMember), and whether it moved: a new last line, a step or an
+    // unread mark moves nothing there, so those two are neither drawn again nor given a read of their own.
+    const stable = JSON.stringify([read.members.map(stableMember), read.groups]);
+    const first = listJSON === "", settled = !first && stable === stableJSON;
+    const openMember = current, panelFace = faceKey(member());
     listJSON = json;
+    stableJSON = stable;
     const ids = new Set(read.members.map((m) => m.id));
     fresh = known === null ? new Set() : new Set([...ids].filter((id) => !known!.has(id)));
     followSlimeRoster(read.members);
@@ -237,7 +314,9 @@ export function createMembers(host: MembersHost): MembersShell {
       toaster.info(t("common.deleted"));
       details.showMember();
     }
-    drawAll();
+    // The panel's face is a picture of what the member is (asleep, waiting) and the words for it: those move it too.
+    drawAll(!settled || current !== openMember || faceKey(member()) !== panelFace);
+    if (!first && !settled) details.refreshResources();
     host.onUpdate?.();
     void readThread();
     if (host.visible()) tellViewing(current);
@@ -250,7 +329,8 @@ export function createMembers(host: MembersHost): MembersShell {
     if (!host.visible() || !m.unread) return;
     if (list) list = { ...list, members: list.members.map((other) => (other.id === m.id ? { ...other, unread: false, unread_from: null } : other)) };
     column.draw();
-    if (m.id === RAPHAEL_ID) return;
+    // Raphael's thread is told read as every member's is: the core also clears it when the viewing is told, but that is
+    // sent once per visit and only after a roster read succeeded, so his boundary could outlive the visit it was shown in.
     try {
       await api.membersRead(m.id);
     } catch {
@@ -281,7 +361,11 @@ export function createMembers(host: MembersHost): MembersShell {
   // ---------- choosing ----------
 
   function select(id: number): void {
-    if (!host.visible()) host.app.go("agent");
+    // Another member (or the same one, from the sidebar) leaves the settings page for the conversation.
+    panelBeforeSettings = null;
+    settings.close();
+    // Another member is switched to before the page shows (host.onSelect), so the page reads only its thread.
+    if (id === current && !host.visible()) host.app.go("agent");
     if (id === current) {
       if (currentRoomId() !== null) { host.onSelect(id, true); drawAll(); void readThread(); }
       // Reopening the same conversation preserves its details state.
@@ -305,13 +389,13 @@ export function createMembers(host: MembersHost): MembersShell {
     stopLeaving = null;
     if (next) {
       details.el.hidden = false;
+      placePanel();
       page?.setAttribute("data-det", "open");
       details.el.classList.remove("is-in");
       void details.el.offsetWidth;
       details.el.classList.add("is-in");
       details.overview();
       details.refreshRoutines();
-      details.refreshMemory(current);
       if (document.documentElement.hasAttribute("data-keys")) details.el.querySelector<HTMLElement>('[data-det="close"]')?.focus({ preventScroll: true });
     } else {
       details.el.classList.remove("is-in");
@@ -362,38 +446,47 @@ export function createMembers(host: MembersHost): MembersShell {
     return true;
   }
 
-  function newMember(groupId: number | null): void {
-    window.dispatchEvent(new Event("raphael:close-sidebar"));
-    openMemberCreator({
-      groupId,
-      taken: (list?.members ?? []).map((m) => m.name),
-      async create(made) {
-        let answer: Awaited<ReturnType<typeof api.membersCreate>>;
+  // Adds a member the maker or an import review made. A name another member has is said here, in the owner's words, whichever
+  // way the member comes (the maker, a starter, a template file, the store).
+  async function createMember(made: NewMember): Promise<Member | null> {
+    if (isMemberNameTaken(made.name, (list?.members ?? []).map((m) => m.name))) {
+      toaster.info(t("members.nameTaken", { p0: made.name }));
+      return null;
+    }
+    let answer: Awaited<ReturnType<typeof api.membersCreate>>;
+    try {
+      answer = await api.membersCreate({ ...made, ui_language: getLocale() });
+    } catch (err) {
+      toaster.info(describeError(err));
+      return null;
+    }
+    const id = answer.member.id;
+    toaster.info(t("members.created", { p0: made.name }));
+    await load();
+    select(id);
+    // the routine the core offers goes in only with the owner's 加入, once the maker is gone
+    const offer = answer.routine_offer;
+    if (offer) {
+      setTimeout(async () => {
+        if (!(await offerRoutine(offer))) return;
         try {
-          answer = await api.membersCreate({ ...made, ui_language: getLocale() });
+          await api.routinesCreate({ member_id: id, ...offer });
         } catch (err) {
           toaster.info(describeError(err));
-          return null;
         }
-        const id = answer.member.id;
-        toaster.info(t("members.created", { p0: made.name }));
-        await load();
-        select(id);
-        // the routine the core offers goes in only with the owner's 加入, once the maker is gone
-        const offer = answer.routine_offer;
-        if (offer) {
-          setTimeout(async () => {
-            if (!(await offerRoutine(offer))) return;
-            try {
-              await api.routinesCreate({ member_id: id, ...offer });
-            } catch (err) {
-              toaster.info(describeError(err));
-            }
-            if (current === id) details.showMember();
-          }, 0);
-        }
-        return answer.member;
-      },
+        if (current === id) details.showMember();
+      }, 0);
+    }
+    return answer.member;
+  }
+
+  function newMember(groupId: number | null, store = false): void {
+    window.dispatchEvent(new Event("raphael:close-sidebar"));
+    openMemberCreator({
+      store,
+      groupId,
+      taken: (list?.members ?? []).map((m) => m.name),
+      create: createMember,
     });
   }
 
@@ -471,13 +564,35 @@ export function createMembers(host: MembersHost): MembersShell {
   }
 
   window.addEventListener("raphael:new-member", () => newMember(null));
-  onLocaleChange(() => { drawAll(); details.refreshMemory(current); });
+  window.addEventListener("raphael:member-store", () => newMember(null, true));
+  // A template file opened from the file manager (template-open.ts): its import review, the same as the maker's 開啟.
+  window.addEventListener("raphael:template-file", (event) => {
+    window.dispatchEvent(new Event("raphael:close-sidebar"));
+    void previewTemplateFile(String((event as CustomEvent<string>).detail ?? ""), createMember, null, () => {});
+  });
+  onLocaleChange(() => { drawAll(); });
+  // A group chat comes where the conversation is: the settings page gives way to it.
+  window.addEventListener("raphael:open-room", () => { panelBeforeSettings = null; settings.close(); });
   details.el.hidden = !open;
   drawAll();
 
   return {
     column: column.el,
     details: details.el,
+    settings,
+    // The settings page takes the room: the details panel folds away while it is open, at every width, and comes back
+    // as it was when the page is left for the conversation.
+    openSettings() {
+      if (!settings.isOpen()) panelBeforeSettings = open;
+      setDetails(false);
+      settings.open();
+    },
+    closeSettings() {
+      const wasOpen = settings.isOpen(), restore = panelBeforeSettings;
+      panelBeforeSettings = null;
+      settings.close();
+      if (wasOpen && restore) setDetails(true);
+    },
     computer() { setDetails(true); details.select('computer'); },
     picker,
     pill,
@@ -490,9 +605,12 @@ export function createMembers(host: MembersHost): MembersShell {
       const found = memberOf(list, id);
       return found ? faceHTML(found, size, { cls: "sys-face" }) : "";
     },
+    accentOf: id => nameAccent(memberOf(list, id) ?? { id }),
+    colorOf: id => memberColor(memberOf(list, id) ?? { id }),
     member,
     select,
     load,
+    loaded: () => list !== null,
     show: () => column.draw(),
     changed,
     detailsOpen: () => open,
@@ -507,15 +625,21 @@ export function createMembers(host: MembersHost): MembersShell {
         if (refreshTimer !== null) clearTimeout(refreshTimer);
         refreshTimer = null;
         void load(true);
-        details.refreshResources();
+        // A roster that changed in what the panel shows reads the Library itself (load); the others read it here.
+        if (event.type !== "MembersChanged") details.refreshResources();
+        settings.refresh();
       } else if (event.type === "RoutinesChanged" && event.member_id === current) {
         details.refreshRoutines();
-      } else if (event.type === "MemoryChanged") {
-        details.refreshMemory(event.member_id, event.space);
       } else if (event.type === "MemberActivity") {
         setSlimeState(event.member_id, event.state, event.label);
+        // A press of a panel button ends when the member stops; the bot it set up shows at once.
+        settleAsks(event.member_id, event.state);
+        if (event.member_id === current && open && ["idle", "done", "error", "waiting", "blocked"].includes(event.state)) details.refreshChannels();
       } else if (event.type === 'AgentTurn' && (event.member_id ?? 0) === current && open) {
-        details.refreshResources();
+        // Skills and commands change through their own events; a streaming turn can only add files.
+        details.refreshWork('turn');
+      } else if (event.type === 'WorkerChanged' && open) {
+        details.refreshWork('task');
       }
     },
     hide() {

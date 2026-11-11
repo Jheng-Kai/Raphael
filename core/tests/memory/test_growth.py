@@ -69,7 +69,7 @@ async def test_quick_context_keeps_complete_conversation_below_half_window(growi
     memory, _ = growing
     for n in range(24):
         add_turn(history, f"step {n}")
-    context = memory.conversation.context(quick=True, context_window=32000)
+    context = memory.conversation.context(context_window=32000)
     assert len(context.turns) == 24
 
 
@@ -116,6 +116,28 @@ async def test_room_search_and_read_recheck_membership(growing, conn):
     assert not events
 
 
+async def test_room_index_tracks_message_moves_edits_and_deletion(growing, conn):
+    memory, _ = growing
+    with conn:
+        old = conn.execute("INSERT INTO rooms(name,created) VALUES ('Old',0)").lastrowid
+        new = conn.execute("INSERT INTO rooms(name,created) VALUES ('New',0)").lastrowid
+        conn.execute('INSERT INTO room_members(room_id,member_id) VALUES (?,2)', (old,))
+        conn.execute('INSERT INTO room_members(room_id,member_id) VALUES (?,3)', (new,))
+        identifier = conn.execute("INSERT INTO room_messages(room_id,text,created) VALUES (?,'amber first',0)", (old,)).lastrowid
+    assert memory.session_search(2, 'amber').data['hits']
+    with conn:
+        thread = conn.execute('SELECT id FROM room_threads WHERE room_id=?', (new,)).fetchone()[0]
+        conn.execute("UPDATE room_messages SET room_id=?,thread_id=?,text='violet revised' WHERE id=?", (new, thread, identifier))
+    assert not memory.session_read(2, f'room:{identifier}').ok
+    assert not memory.session_search(2, 'violet').data['hits']
+    assert memory.session_read(3, f'room:{identifier}').untrusted
+    assert memory.session_search(3, 'violet').data['hits']
+    assert not memory.session_search(3, 'amber').data['hits']
+    with conn:
+        conn.execute('DELETE FROM room_messages WHERE id=?', (identifier,))
+    assert not memory.session_search(3, 'violet').data['hits']
+
+
 async def test_private_capture_uses_member_brain_confidence_and_deduplication(growing, conn, history):
     from raphael_core.members.store import MemberStore
     memory, _ = growing
@@ -146,7 +168,7 @@ async def test_cli_capture_uses_toolless_subscription_loop(growing, monkeypatch)
         def __init__(self, **kwargs):
             calls.append(kwargs)
         async def run(self):
-            return SimpleNamespace(kind="done", final='{"actions": []}')
+            return SimpleNamespace(status="done", kind=None, final='{"actions": []}')
         async def aclose(self):
             pass
     monkeypatch.setattr(cli, "CliLoop", FakeLoop)
@@ -175,7 +197,7 @@ async def test_first_bots_cli_brain_handles_background_consolidation_without_api
         def __init__(self, **kwargs):
             calls.append(kwargs)
         async def run(self):
-            return SimpleNamespace(kind="done", final='{"actions": []}')
+            return SimpleNamespace(status="done", kind=None, final='{"actions": []}')
         async def aclose(self):
             pass
 
@@ -201,7 +223,7 @@ async def test_cli_memory_failure_is_not_reported_as_an_openrouter_call(growing,
         def __init__(self, **kwargs):
             assert kwargs["tools"] == [] and kwargs["resume_session"] is False
         async def run(self):
-            return SimpleNamespace(kind=kind, final=final)
+            return SimpleNamespace(status=kind, kind=None, final=final)
         async def aclose(self):
             pass
 
@@ -245,7 +267,7 @@ async def test_a_done_cli_failure_keeps_its_kind_and_never_parses_the_owner_mess
         def __init__(self, **kwargs):
             pass
         async def run(self):
-            return SimpleNamespace(kind="done", final="A friendly quota message, not JSON")
+            return SimpleNamespace(status="done", kind=None, final="A friendly quota message, not JSON")
         async def aclose(self):
             pass
     monkeypatch.setattr(cli, "CliLoop", Loop)

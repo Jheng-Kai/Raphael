@@ -1,6 +1,7 @@
 """Host adapter for starting an installed Docker Desktop; VM code stays portable."""
 
 import asyncio
+import json
 import os
 import shutil
 import subprocess
@@ -9,6 +10,28 @@ from pathlib import Path
 
 # Windows only; the other systems have no console window to hide and refuse the flag.
 NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+
+
+DESKTOP_PIPE = "dockerDesktopLinuxEngine"
+PIPES = r"\\.\pipe"
+
+
+def engine_pipe_missing():
+    """True only when the docker CLI certainly talks to Docker Desktop's Windows pipe and that pipe is not there.
+
+    A failing `docker info` costs 350 to 830 ms and the panel asks every 10 s; the pipe list is a directory read.
+    Any doubt (another OS, DOCKER_HOST or DOCKER_CONTEXT, another current context, an unreadable list) answers False
+    so the real `docker info` decides: a false "down" would be worse than a slow one."""
+    if sys.platform != "win32" or os.environ.get("DOCKER_HOST") or os.environ.get("DOCKER_CONTEXT"):
+        return False
+    try:
+        config = Path(os.environ.get("DOCKER_CONFIG") or Path.home() / ".docker") / "config.json"
+        if json.loads(config.read_text(encoding="utf-8-sig")).get("currentContext") != "desktop-linux":
+            return False
+        # Listing the pipes opens none of them, so a running engine never sees a stray client.
+        return DESKTOP_PIPE not in os.listdir(PIPES)
+    except (OSError, ValueError, AttributeError):
+        return False
 
 
 class DockerDesktop:

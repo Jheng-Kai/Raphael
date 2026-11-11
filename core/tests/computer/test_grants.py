@@ -116,7 +116,7 @@ async def test_routine_without_grant_fails_visibly_without_asking_or_starting(tm
     hub = VmTools(EmptyHub(), vm, attachments=AttachmentStore(tmp_path), conn=conn, bridge=Bridge)
     snapshot = take_snapshot(hub)
     ref = snapshot.refs["computer__request_computer"]
-    caller = SimpleNamespace(_gate=ToolGate(hub), task_id=123)
+    caller = SimpleNamespace(tool_allowed=lambda key: True, _gate=ToolGate(hub), task_id=123)
     reply, outcome, tier, sent = await TaskRun._plugin(caller, ref, {"reason": "routine screenshot"})
     assert reply["kind"] == "computer_permission_required" and "routine cannot start" in reply["content"]
     assert outcome == "blocked" and sent is None
@@ -132,8 +132,8 @@ async def test_worker_stops_and_persists_a_failed_report_for_missing_grant(tmp_p
     vm = LocalVm(tmp_path, runner=Runtime())
     vm.start = AsyncMock()
     hub = VmTools(EmptyHub(), vm, attachments=AttachmentStore(tmp_path), conn=conn, bridge=Bridge)
-    caller = SimpleNamespace(_gate=ToolGate(hub), task_id=123, tool_calls=0, snapshot=take_snapshot(hub),
-                             _check=lambda **kwargs: None, _end_step=Mock())
+    caller = SimpleNamespace(tool_allowed=lambda key: True, _gate=ToolGate(hub), task_id=123, tool_calls=0, snapshot=take_snapshot(hub),
+                             _check=lambda **kwargs: None, _end_step=Mock(), _note_action=lambda *args: None, _note_result=lambda *args: None)
     caller._plugin = lambda *args: TaskRun._plugin(caller, *args)
     with pytest.raises(RpcError) as stopped:
         await TaskRun._tool(caller, "computer__request_computer", {"reason": "Routine needs desktop"})

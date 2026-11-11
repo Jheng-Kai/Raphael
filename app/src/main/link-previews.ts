@@ -1,5 +1,8 @@
-import { messageUrl, rememberedUrls, urlLabel } from "./message-content";
+import { isLocalAddress, messageUrl, urlLabel } from "./message-content";
 import { esc } from "./ui";
+
+// The links of a reply are chips in its words. This reads, for the chips near the reader, the page behind a bare
+// address, so the chip can say the page's own title, and shows the page's preview under the pointer.
 
 export interface LinkPreview {
   url: string;
@@ -9,25 +12,19 @@ export interface LinkPreview {
   thumbnail: string | null;
 }
 
-function contents(url: string, preview: LinkPreview | null = null): string {
-  // Core supplies bounded raster data only. Never load a remote image from a chat message.
+/** What the preview under the pointer shows: the picture (bounded raster data from the core only, never a remote
+ * image), the site, the title and a line of description; a page with nothing to show is its address, once. */
+export function previewHTML(url: string, preview: LinkPreview | null = null): string {
   const thumbnail = preview?.thumbnail;
   const image = typeof thumbnail === "string" && /^data:image\/(?:png|jpeg|gif|webp|avif);base64,[A-Za-z0-9+/=]+$/.test(thumbnail)
     ? `<img class="preview-image" src="${esc(thumbnail)}" alt="" width="64" height="64">` : "";
-  // A page with no title of its own (an internal address, say) is its address, once.
   return image + `<span class="preview-meta">` + (preview?.title ? `<span class="preview-site">${esc(preview.site || new URL(url).host)}</span>` : "") +
     `<span class="preview-title">${esc(preview?.title || urlLabel(url))}</span>` +
     (preview?.title && preview.description ? `<span class="preview-description">${esc(preview.description)}</span>` : "") + `</span>`;
 }
 
-/** An address only this machine or its network can open: no public page is behind it, so its card never fills. */
-function isLocalAddress(url: string): boolean {
-  const host = new URL(url).hostname;
-  return !host.includes(".") || /\.(?:local|internal|lan)$/.test(host) || /^(?:127\.|10\.|192\.168\.|169\.254\.|172\.(?:1[6-9]|2\d|3[01])\.)/.test(host);
-}
-
 /** A link that needs its owner's account (a mail, a drive) lands on a sign-in page, the same for every such link:
- * its card shows the link's own address instead of that page. */
+ * its chip keeps its own site instead of that page's title. */
 function signInDetour(url: string, preview: LinkPreview): boolean {
   try {
     const from = new URL(url), to = new URL(preview.url || url);
@@ -35,75 +32,121 @@ function signInDetour(url: string, preview: LinkPreview): boolean {
   } catch { return false; }
 }
 
-/** Links that differ only after `#` are one page to its server, so they share one card. */
+/** What a read gave that is worth showing: a title or a picture, from the page itself rather than a sign-in page. */
+const usable = (url: string, result: LinkPreview | null): LinkPreview | null =>
+  result && (result.title || result.thumbnail) && !signInDetour(url, result) ? result : null;
+
+/** Links that differ only after `#` are one page to its server, so they share one read. */
 const pageOf = (url: string): string => url.split("#")[0]!;
 
-/** Pages that gave nothing to show. The markup never carries this (R-UI-71); a later draw paints it from the cache before the frame. */
-const unreadable = new Set<string>();
-function noteUnreadable(url: string): void {
-  unreadable.add(url);
-  if (unreadable.size > 256) unreadable.delete(unreadable.values().next().value!);
-}
+const HOVER_MS = 350;
 
-export function previewCardsHTML(text: string): string {
-  const urls = rememberedUrls(text).filter((url, index, all) => all.findIndex(other => pageOf(other) === pageOf(url)) === index).slice(0, 3);
-  return urls.length ? `<div class="preview-cards">${urls.map(url =>
-    `<button type="button" class="btn preview-card${isLocalAddress(url) ? " is-local" : ""}" data-act="open-url" data-url="${esc(url)}" data-preview-url="${esc(url)}" title="${esc(url)}">${contents(url)}</button>`).join("")}</div>` : "";
-}
-
-/** Observes only cards near the reader, sharing in-flight and cached results across thread draws. */
+/** Reads only the chips near the reader, sharing in-flight and cached results across thread draws. */
 export function createLinkPreviews(root: HTMLElement, fetch: (url: string) => Promise<LinkPreview | null>) {
   const cache = new Map<string, { until: number; result?: LinkPreview | null; promise: Promise<LinkPreview | null> }>();
   let active = false;
-  const load = (card: HTMLElement): void => {
-    const url = messageUrl(card.dataset.previewUrl);
-    if (!url || card.dataset.previewLoaded) return;
-    card.dataset.previewLoaded = "true";
-    let entry = cache.get(url);
+  const read = (url: string): { result?: LinkPreview | null; promise: Promise<LinkPreview | null> } => {
+    const key = pageOf(url);
+    let entry = cache.get(key);
     if (!entry || entry.until <= Date.now()) {
       const promise = Promise.resolve().then(() => fetch(url)).catch(() => null);
       entry = { until: Date.now() + 86400_000, promise };
-      cache.set(url, entry);
+      cache.set(key, entry);
       const current = entry;
       void promise.then(result => { current.result = result; if (!result) current.until = Date.now() + 300_000; });
       // Keep the cache small even when searching through a long history.
       if (cache.size > 128) cache.delete(cache.keys().next().value!);
     }
+    return entry;
+  };
+  /** A bare address says its page's title once it is read; one with nothing usable keeps its site. */
+  const title = (chip: HTMLElement): void => {
+    const url = messageUrl(chip.dataset.linkUrl);
+    if (!url || chip.dataset.linkLoaded) return;
+    chip.dataset.linkLoaded = "true";
+    const entry = read(url);
     const paint = (result: LinkPreview | null): void => {
-      if (active && root.contains(card)) {
-        // A page with no title and no picture, or a sign-in page, leaves only the link's own address.
-        const shown = result && (result.title || result.thumbnail) && !signInDetour(url, result) ? result : null;
-        card.innerHTML = contents(url, shown); card.dataset.previewState = shown ? "ready" : "unavailable";
-        if (!shown) { noteUnreadable(url); card.classList.add("is-short"); }
-      }
-      else delete card.dataset.previewLoaded;
+      if (!active || !root.contains(chip)) { delete chip.dataset.linkLoaded; return; }
+      const shown = usable(url, result);
+      const name = chip.querySelector<HTMLElement>(".link-name");
+      if (shown?.title && name) name.textContent = shown.title;
+      chip.dataset.linkState = shown?.title ? "ready" : "unavailable";
     };
     if (entry.result !== undefined) paint(entry.result);
     else void entry.promise.then(paint);
   };
   const observer = typeof IntersectionObserver === "function" ? new IntersectionObserver(entries => {
-    for (const entry of entries) if (active && entry.isIntersecting) { observer!.unobserve(entry.target); load(entry.target as HTMLElement); }
+    for (const entry of entries) if (active && entry.isIntersecting) { observer!.unobserve(entry.target); title(entry.target as HTMLElement); }
   }, { root, rootMargin: "160px" }) : null;
   const fallback = (): void => {
     if (!active || observer) return;
     const view = root.getBoundingClientRect();
-    for (const card of root.querySelectorAll<HTMLElement>("[data-preview-url]")) {
-      const box = card.getBoundingClientRect();
-      if (box.top <= view.bottom + 160 && box.bottom >= view.top - 160) load(card);
+    for (const chip of root.querySelectorAll<HTMLElement>("[data-link-title]:not([data-link-loaded])")) {
+      const box = chip.getBoundingClientRect();
+      if (box.top <= view.bottom + 160 && box.bottom >= view.top - 160) title(chip);
     }
   };
-  root.addEventListener("scroll", fallback, { passive: true });
+
+  // ---------- the preview under the pointer ----------
+  let hover: HTMLElement | null = null, timer = 0, over: HTMLElement | null = null;
+  const hide = (): void => { clearTimeout(timer); over = null; hover?.remove(); hover = null; };
+  const place = (chip: HTMLElement, card: HTMLElement): void => {
+    const box = chip.getBoundingClientRect(), width = card.offsetWidth, height = card.offsetHeight, gap = 6;
+    const left = Math.max(8, Math.min(box.left, innerWidth - width - 8));
+    const below = box.bottom + gap + height <= innerHeight - 8;
+    card.style.left = `${left}px`;
+    card.style.top = `${below ? box.bottom + gap : Math.max(8, box.top - gap - height)}px`;
+  };
+  const show = (chip: HTMLElement): void => {
+    const url = messageUrl(chip.dataset.linkUrl);
+    if (!url || isLocalAddress(url)) return;
+    const draw = (result: LinkPreview | null): void => {
+      if (!active || over !== chip || !chip.isConnected) return;
+      hover?.remove();
+      hover = document.createElement("div");
+      hover.className = "link-hover";
+      hover.setAttribute("role", "tooltip");
+      hover.innerHTML = previewHTML(url, usable(url, result));
+      document.body.append(hover);
+      place(chip, hover);
+    };
+    const entry = read(url);
+    if (entry.result !== undefined) draw(entry.result);
+    else void entry.promise.then(draw);
+  };
+  const enter = (event: Event): void => {
+    const chip = (event.target as Element | null)?.closest?.<HTMLElement>("a.link-chip");
+    if (!chip || !active || chip === over) return;
+    hide(); over = chip;
+    timer = window.setTimeout(() => show(chip), HOVER_MS);
+  };
+  const leave = (event: Event): void => {
+    const chip = (event.target as Element | null)?.closest?.<HTMLElement>("a.link-chip");
+    const to = (event as PointerEvent | FocusEvent).relatedTarget as Node | null;
+    if (chip && chip === over && !(to && chip.contains(to))) hide();
+  };
+  const escape = (event: KeyboardEvent): void => { if (event.key === "Escape" && hover) hide(); };
+  root.addEventListener("pointerover", enter);
+  root.addEventListener("pointerout", leave);
+  root.addEventListener("focusin", enter);
+  root.addEventListener("focusout", leave);
+  root.addEventListener("click", hide);
+  root.addEventListener("scroll", () => { hide(); fallback(); }, { passive: true });
+  document.addEventListener("keydown", escape);
+
   return {
     sync(): void {
       active = true;
       observer?.disconnect();
-      for (const card of root.querySelectorAll<HTMLElement>("[data-preview-url]:not([data-preview-loaded])")) {
-        const entry = cache.get(card.dataset.previewUrl ?? "");
-        if (entry && entry.until > Date.now() && entry.result !== undefined) load(card);
-        else observer?.observe(card);
+      for (const chip of root.querySelectorAll<HTMLElement>("[data-link-title]:not([data-link-loaded])")) {
+        // A page read before paints before the frame: the markup never carries what a read found (R-UI-71).
+        const entry = cache.get(pageOf(chip.dataset.linkUrl ?? ""));
+        if (entry && entry.until > Date.now() && entry.result !== undefined) title(chip);
+        else observer?.observe(chip);
       }
+      if (over && !over.isConnected) hide();
       fallback();
     },
-    pause(): void { active = false; observer?.disconnect(); },
+    pause(): void { active = false; observer?.disconnect(); hide(); },
   };
 }

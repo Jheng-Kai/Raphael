@@ -1,0 +1,20 @@
+/* Script-specific installed fonts; shared layout and the existing three locales stay unchanged. */
+:root[lang="zh-CN"] {
+  --ui: "Inter", "Noto Sans SC", "Microsoft YaHei UI", "Microsoft YaHei", system-ui, sans-serif;
+  --voice: "Noto Sans SC", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif;
+}
+:root[lang="ko"] {
+  --ui: "Inter", "Noto Sans KR", "Malgun Gothic", "Apple SD Gothic Neo", system-ui, sans-serif;
+  --voice: "Noto Sans KR", "Malgun Gothic", "Apple SD Gothic Neo", sans-serif;
+}
+:root[lang="th"] {
+  --ui: "Inter", "Noto Sans Thai", "Leelawadee UI", Tahoma, system-ui, sans-serif;
+  --voice: "Noto Sans Thai", "Leelawadee UI", Tahoma, sans-serif;
+}
+:root:is([lang="es"], [lang="fr"], [lang="de"], [lang="pt-BR"], [lang="it"], [lang="ru"], [lang="vi"], [lang="id"], [lang="tr"]) {
+  --voice: var(--ui);
+}
+.progress:is(:lang(zh-CN), :lang(ko), :lang(es), :lang(fr), :lang(de), :lang(pt-BR), :lang(it), :lang(ru), :lang(vi), :lang(th), :lang(id), :lang(tr)),
+.sub-line:is(:lang(zh-CN), :lang(ko), :lang(es), :lang(fr), :lang(de), :lang(pt-BR), :lang(it), :lang(ru), :lang(vi), :lang(th), :lang(id), :lang(tr)) {
+  font-family: var(--voice);
+}

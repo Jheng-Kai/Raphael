@@ -1,67 +1,56 @@
-// Small rules of the guide that do not belong to one step: the limit that was typed, the
-// microphones to choose from, how the model bar reads, and asking the core again for what it has
-// not written yet. All pure (the wait is given), so each is tested on its own.
+// Small rules of the guide that do not belong to one step. Pure, so each is tested on its own.
 
-import { parseLimit } from "../format";
-import { type ModelPhase } from "../models";
+import { popularRank } from "../store-finder";
+import type { StoreService } from "../types";
 
-export type LimitAction = { kind: "keep" } | { kind: "save"; value: number } | { kind: "invalid" };
+/** The services the second step offers: six rows of the three-column grid, the rest of the store being a search away. */
+export const SERVICES_SHOWN = 18;
 
-/** What the text in the limit field means for the limit that is set now. */
-export function limitAction(text: string, current: number): LimitAction {
-  const value = parseLimit(text);
-  if (value === null) return { kind: "invalid" };
-  return value === current ? { kind: "keep" } : { kind: "save", value };
-}
-
-
-/** How loud the microphone has to be, and for how long, before the guide says it hears the person. */
-export const HEARD_LEVEL = 0.05;
-export const HEARD_MS = 300;
+/** How long the services step waits for the store's lists before it offers 重試. */
+export const SERVICES_WAIT_MS = 15_000;
 
 /**
- * Whether the person has been heard: the level stayed above `HEARD_LEVEL` for `HEARD_MS`. Give it the
- * time the level first rose (null: it is not up) and the new reading; it answers the new rise time
- * and whether that is long enough. A reading under the line starts over.
+ * `promise`, or a rejection after `ms`: a call the core does not answer never keeps a screen spinning.
  */
-export function heardAfter(since: number | null, level: number, now: number): { since: number | null; heard: boolean } {
-  if (level <= HEARD_LEVEL) return { since: null, heard: false };
-  const from = since ?? now;
-  return { since: from, heard: now - from >= HEARD_MS };
+export function within<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error("timeout")), ms);
+    promise.then((value) => { clearTimeout(timer); resolve(value); }, (error: unknown) => { clearTimeout(timer); reject(error); });
+  });
 }
 
-/** How far the model download is, 0 to 100, or null while that is not known. */
-export function modelPercent(phase: ModelPhase): number | null {
-  if (phase.kind === "ready") return 100;
-  if (phase.kind === "installing") return 100;
-  if (phase.kind !== "downloading" || phase.total <= 0) return null;
-  return Math.min(100, Math.round((phase.done / phase.total) * 100));
-}
-
-/** The pauses before each further look at the core for something that is being written. */
-export const LOOKUP_DELAYS_MS: readonly number[] = [700, 1500];
+const identity = (value: string): string => value.toLowerCase().replace(/[^a-z0-9]/g, "");
 
 /**
- * Asks `fetch` for the newest of something and gives every answer to `accept`, which says whether it
- * is the one that was waited for. What a notification announces may not be in the core's records
- * yet, so a look that finds nothing is repeated after each of `LOOKUP_DELAYS_MS`. `wait` is how the
- * time passes (a test gives its own). A core that does not answer counts as nothing found.
- * Resolves with the first answer that was accepted, or null.
+ * Every app the guide can add, from the same lists as the store of Connect apps, in order: the built-in catalog, the
+ * apps run on the owner's own server (n8n), and, when Composio is set up, its managed apps. An app listed twice is
+ * kept where it first comes, so a built-in app wins over a managed one of the same name.
  */
-export async function lookUp<T>(
-  fetch: () => Promise<T>,
-  accept: (value: T) => boolean,
-  wait: (ms: number) => Promise<void> = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
-  delays: readonly number[] = LOOKUP_DELAYS_MS,
-): Promise<T | null> {
-  for (let attempt = 0; attempt <= delays.length; attempt++) {
-    if (attempt > 0) await wait(delays[attempt - 1]);
-    try {
-      const value = await fetch();
-      if (accept(value)) return value;
-    } catch {
-      // the core did not answer; the next look may be luckier
-    }
-  }
-  return null;
+export function mergeServices(...lists: readonly (readonly StoreService[])[]): StoreService[] {
+  const seen = new Set<string>();
+  return lists.flatMap((list) =>
+    list.filter((s) => {
+      const keys = [identity(s.id), identity(s.name)];
+      if (keys.some((key) => seen.has(key))) return false;
+      keys.forEach((key) => seen.add(key));
+      return true;
+    }));
+}
+
+/**
+ * What the step shows before anything is searched: the apps that ask no more than a sign-in, the popular ones first in
+ * the store's own order. An app that wants its own key, developer app or server is a search away, set up in its tile.
+ */
+export function popularServices(all: readonly StoreService[], limit = SERVICES_SHOWN): StoreService[] {
+  return all
+    .filter((s) => (s.needs ?? "sign_in") === "sign_in")
+    .map((s, at) => ({ s, at }))
+    .sort((a, b) => popularRank(a.s) - popularRank(b.s) || Number(b.s.popular) - Number(a.s.popular) || a.at - b.at)
+    .slice(0, limit)
+    .map(({ s }) => s);
+}
+
+/** The popular sign-in apps of the built-in catalog and Composio's managed apps together. */
+export function pickServices(builtin: readonly StoreService[], managed: readonly StoreService[], limit = SERVICES_SHOWN): StoreService[] {
+  return popularServices(mergeServices(builtin, managed), limit);
 }

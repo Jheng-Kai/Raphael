@@ -1,16 +1,19 @@
-import { missingHTML, missingText } from "./missing";
+import { greetingHTML } from "./member-greeting";
+import { missingHTML, missingRepairHTML, missingText, type Missing } from "./missing";
 import { fileKind, sentFileHTML } from "./attachments";
 import { computerCardsHTML, computerResumedLineHTML } from "./computer-card";
 import { connectorCardsHTML, resumedLineHTML } from "./connector-card";
 import { NAME, eventLineHTML, eventPeopleHTML } from "./event-line";
 import { handoffGroupHTML } from "./handoff-line";
+import { reactionControlHTML, reactionRowHTML } from "./message-metadata";
 import { mailCardsHTML, mailHandedLinesHTML } from "./mail-card";
 import { pageCardsHTML } from "./page-card";
-import { ownerQuestionsHTML, permissionCardsHTML } from "./permission-card";
+import { ownerQuestionsHTML, permissionCardsHTML, settledQuestions } from "./permission-card";
+import { chatCardsHTML } from "./chat-cards";
 import { secretCardsHTML, secretResumedLineHTML } from "./secret-card";
 import { mcpProposalsHTML } from "./mcp-proposal";
 import { liveAction, pastStep, workActions } from "./work-actions";
-// Conversation density informed by Grok Bot; see core/packaging/licenses/NOTICES.md.
+// Shared conversation rendering and message controls.
 // A turn of the conversation as the 拉斐爾 page shows it: the person's words on the right, with a
 // their actions below each bubble; Raphael on the left, with his face and each public message
 // in order. Receipts fold into reply detail, questions mount inline, and pending work shares the live work line.
@@ -26,14 +29,13 @@ import type { MessageKey } from "./i18n/zh-TW";
 
 import { plainReplies } from "../shared/anime";
 import { messageExpandHTML } from "./message-preview";
-import { TYPED, VOICE, exchangeTurn, hasDetail, highlightHTML, sourceOf } from "./conversation";
+import { TYPED, VOICE, delegatedTurn, exchangeTurn, hasDetail, highlightHTML, sourceOf } from "./conversation";
 import { receivedLineHTML } from "./exchange-line";
 import { isBotRename, isSettledDraftTurn, settledDraftHTML } from "./member-draft";
 import { messageHTML, replyContentHTML } from "./message-content";
 import type { MentionTarget } from "./mention-text";
 import { quoteHTML } from "./message-quote";
-import { previewCardsHTML } from "./link-previews";
-import { formatClock, formatUsd } from "./format";
+import { formatUsd } from "./format";
 import { formatPerMtok } from "./pricing";
 import { SERVICE_ICONS, brandStyle, hasLogo, serviceIconOf, serviceIconSVG, serviceLogoHTML } from "./service-icons";
 import type { AgentStep, AgentTask, AgentTurn, MainEvent, MediaPayload, MessageQuote, TurnAttachment } from "./types";
@@ -56,7 +58,6 @@ const BUILTIN_TITLES: Record<string, MessageKey> = {
   local_time: "agent.tool.time",
   find_tools: "agent.tool.findTools",
   ask_member: "agent.tool.askMember",
-  generate_audio: "agent.tool.generateAudio",
 };
 const COMMAND_TITLES: Record<string, MessageKey> = {
   open: "agent.cmd.open",
@@ -372,10 +373,13 @@ const actionsText = (count: number): string => (count === 1 ? t("agent.stepsDone
 
 /** The same conversation cards and controls are used in private and room replies. */
 export function conversationCardsHTML(turn: AgentTurn, memberName?: string): string {
-  return (turn.task?.state === "done" ? `<div data-task-result-slot="${turn.id}" data-task-member="${turn.member_id ?? 0}"></div>` : "") + connectorCardsHTML(turn) + mcpProposalsHTML(turn) + secretCardsHTML(turn) + permissionCardsHTML(turn, undefined, false, memberName) +
+  return (turn.task?.state === "done" ? `<div data-task-result-slot="${turn.id}" data-task-member="${turn.member_id ?? 0}"></div>` : "") + connectorCardsHTML(turn) + mcpProposalsHTML(turn) + secretCardsHTML(turn) + chatCardsHTML(turn) + permissionCardsHTML(turn, undefined, false, memberName) +
     mailCardsHTML(turn) + pageCardsHTML(turn) + ownerQuestionsHTML(turn) +
-    (turn.messages ?? []).filter(message => message.kind === "media").map(message => artifactHTML(message.text, message.seq)).join("");
+    (turn.messages ?? []).filter(message => message.kind === "media").map(message => artifactHTML(message.text, message.seq, replySpeaks(turn))).join("");
 }
+
+/** Whether the member said something in the turn: then a missing setup under it needs only its repair, not its sentence. */
+const replySpeaks = (turn: AgentTurn): boolean => !!turn.text?.trim() || (turn.messages ?? []).some(message => message.kind === "reply" && message.text.trim());
 
 /** The words of a summary: how many things were done, how long it took, how many failed; or that a task is under way. */
 export function summaryText(turn: AgentTurn, nowMs: number): { lead: string; time: string; failed: number } {
@@ -556,6 +560,9 @@ export function answerMeta(turn: AgentTurn): string {
 
 /** How a turn is drawn besides its data. */
 export interface TurnLook {
+  /** The earlier exchanges with the same colleague in a row (conversation.ts threadItems), counted in this turn's line. */
+  exchangeTogether?: readonly AgentTurn[];
+  greetingOpen?: boolean;
   deferPresence?: boolean;
   revealing?: (turnId: number) => boolean;
   waitingForOwner?: (turnId: number) => boolean;
@@ -608,14 +615,20 @@ function bubbleHTML(words: string, files: readonly TurnAttachment[] | undefined,
   return files?.length ? `<div class="owner-content">${filesHTML(files)}${bubble}</div>` : bubble;
 }
 
-export function messageActionsHTML(time: number, regenerate = false, owner?: "edit" | "cancel", actionable = true, work = "", queued = false): string {
+/**
+ * Beside the bubble, under the pointer, only react, reply and ⋯; Copy, the work, Edit and Cancel live in
+ * the ⋯ menu and the right-click menu (agent.ts messageMenu), and the time lives in the thread's dividers. `extra` holds
+ * the few controls a message needs in sight: a failed reply's Run again and a voice memo's play. A message with no menu
+ * (a group's or a side thread's) keeps Copy in sight instead.
+ */
+export function messageActionsHTML(_time: number, regenerate = false, owner?: "edit" | "cancel", actionable = true, extra = "", queued = false): string {
   const action = (icon: Parameters<typeof iconBtn>[0], label: string, act: string): string =>
     iconBtn(icon, label, ` data-act="${act}"`).replace(" title=", " data-tooltip=");
-  return `<div class="message-actions">${queued ? `<span class="queued-mark">${esc(t("agent.queued"))}</span>` : ""}<time tabindex="0" data-tooltip="${esc(new Date(time).toLocaleString())}" datetime="${esc(new Date(time).toISOString())}">${esc(formatClock(time))}</time>` + work +
+  return `<div class="message-actions">${queued ? `<span class="queued-mark">${esc(t("agent.queued"))}</span>` : ""}` + extra +
+    (actionable ? reactionControlHTML() : "") +
     (actionable ? action("reply", t("chat.reply"), "reply-message") : "") +
-    action("copy", t("chat.copy"), "copy-message") +
-    (owner ? action(owner === "edit" ? "pencil" : "x", t(owner === "edit" ? "chat.edit" : "common.cancel"), `${owner}-message`) : "") +
-    (!owner && actionable ? action("more", t("chat.more"), "more-message").replace('data-act="more-message"', `data-act="more-message" data-regenerate="${regenerate}" aria-haspopup="menu"`) : "") + `</div>`;
+    (actionable ? "" : action("copy", t("chat.copy"), "copy-message")) +
+    (actionable ? action("more", t("chat.more"), "more-message").replace('data-act="more-message"', `data-act="more-message" data-regenerate="${regenerate}"${owner ? ` data-owner-act="${owner}"` : ""} aria-haspopup="menu"`) : "") + `</div>`;
 }
 
 function messageBlockHTML(turn: AgentTurn, key: string, text: string, time: number, query: string, state: TimelineState, reply: boolean, regenerate = false, origin = true, last = true): string {
@@ -626,21 +639,28 @@ function messageBlockHTML(turn: AgentTurn, key: string, text: string, time: numb
   return `<div class="chat-message${expanded ? " is-expanded" : ""}" data-message="${esc(key)}"${reply ? ' data-reply="true"' : ""}>` +
     (reply && origin && sourceOf(turn) === "routine" ? routineLineHTML(turn) : "") +
     (reply ? replyContentHTML(text, query, turn.status === "running") : `<div class="ans progress"><div class="message-text">${messageHTML(text, query)}</div></div>`) +
-    messageActionsHTML(time, regenerate, undefined, reply, reply ? workActionHTML(turn, state) + retry : "") + (reply ? previewCardsHTML(text) : "") + `</div>`;
+    (reply && last ? usageActionHTML(turn) : "") +
+    // Its links are chips in its words, with no row of cards under it.
+    reactionRowHTML(turn.reactions?.[key]) + messageActionsHTML(time, regenerate, undefined, reply, reply ? retry : "") + `</div>`;
 }
 
+/** The plans whose usage page the app knows: ChatGPT's, which Codex signs in with too. */
+const USAGE_PROVIDERS = new Set(["chatgpt", "cli:codex"]);
+
+/** A reply that failed on a plan's usage limit leads with Manage usage, the plan's own page (OpenAI's guidance). */
+function usageActionHTML(turn: AgentTurn): string {
+  const failure = turn.failure;
+  if (turn.status !== "error" || failure?.kind !== "usage_limit" || !USAGE_PROVIDERS.has(failure.provider)) return "";
+  return `<div class="turn-usage">${btn(esc(t("brains.manageUsage")), "sm", ` data-act="manage-usage" data-provider="${esc(failure.provider)}"`)}</div>`;
+}
+
+/** A failed reply's Run again: a bare icon first among its actions, which stay in sight on the latest failure. */
 function rerunActionHTML(turn: AgentTurn, state: TimelineState, regenerate: boolean): string {
-  if (turn.task && RERUNNABLE.has(turn.task.state)) return btn(esc(t("agent.rerun")), "sm rerun", ` data-act="rerun" data-task="${turn.task.id}"${state.rerunning.has(turn.task.id) ? " disabled" : ""}`);
-  return turn.status === "error" && regenerate ? btn(esc(t("agent.rerun")), "sm rerun", ' data-act="regenerate"') : "";
+  const rerun = (attrs: string): string => iconBtn("refresh", t("agent.rerun"), attrs, "rerun").replace(" title=", " data-tooltip=");
+  if (turn.task && RERUNNABLE.has(turn.task.state)) return rerun(` data-act="rerun" data-task="${turn.task.id}"${state.rerunning.has(turn.task.id) ? " disabled" : ""}`);
+  return turn.status === "error" && regenerate ? rerun(' data-act="regenerate"') : "";
 }
 
-function workActionHTML(turn: AgentTurn, state: TimelineState): string {
-  if (turn.status === "running" || isLive(turn.task)) return "";
-  if (!(shownSteps(turn).length || workActions(turn).length || turn.messages?.some(m => m.kind !== "reply" && m.kind !== "media") || hasDetail(turn) || turn.model)) return "";
-  const end = turn.task?.finished_at_ms ?? Math.max(turn.created_at_ms, ...(turn.messages ?? []).filter(message => message.kind === "reply").map(message => message.at_ms), ...(turn.steps ?? []).map(step => step.at_ms || turn.created_at_ms));
-  const label = t("work.inspect") + ` · ${formatDuration(Math.max(0, end - turn.created_at_ms))}`;
-  return btn(ico("steps"), "sm icon message-work", ` data-act="thinking" aria-expanded="${state.thinkingOpen.get(turn.id) ?? false}" aria-controls="work-${turn.id}" aria-label="${esc(label)}" data-tooltip="${esc(label)}"`);
-}
 
 export function livePresenceHTML(look: TurnLook, progress?: string, showAction = true): string {
   const face = look.liveFace?.() ?? look.face(true);
@@ -704,19 +724,32 @@ export function safeYoutubeEmbedUrl(embed: unknown, fallbackUrl?: unknown): stri
   return null;
 }
 
-function artifactHTML(text: string, seq: number): string {
+/** A media message that says what a step was missing (`{missing}`), or null. */
+function mediaMissing(text: string): Missing | null {
+  try {
+    const prerequisite = JSON.parse(text)?.missing;
+    return prerequisite && typeof prerequisite.resource === "string" && typeof prerequisite.requirement === "string" && ["missing", "broken", "unknown", "off"].includes(prerequisite.state) && (prerequisite.repair === null || typeof prerequisite.repair === "string") ? prerequisite as Missing : null;
+  } catch { return null; }
+}
+
+function artifactHTML(text: string, seq: number, replied = false): string {
+  const prerequisite = mediaMissing(text);
+  if (prerequisite) return `<div class="chat-message" data-message="${seq}">${replied ? missingRepairHTML(prerequisite) : missingHTML(prerequisite)}</div>`;
   try {
     const payload = JSON.parse(text);
-    const prerequisite = payload?.missing;
-    if (prerequisite && typeof prerequisite.resource === "string" && typeof prerequisite.requirement === "string" && ["missing", "broken", "unknown", "off"].includes(prerequisite.state) && (prerequisite.repair === null || typeof prerequisite.repair === "string")) {
-      return `<div class="chat-message" data-message="${seq}">${missingHTML(prerequisite)}</div>`;
-    }
     const file = payload?.attachment as TurnAttachment | undefined;
     if (file && typeof file.id === "string" && /^[a-f0-9]{32}\.[a-z0-9]{1,12}$/.test(file.id) && typeof file.name === "string" && typeof file.mime === "string") {
       return `<div class="chat-message" data-message="${seq}">${sentFileHTML({ id: file.id, name: file.name, mime: file.mime, size: typeof file.size === "number" && Number.isFinite(file.size) && file.size >= 0 ? file.size : undefined })}</div>`;
     }
   } catch { /* Older media messages use the URL payload below. */ }
   return "";
+}
+
+function missingKey(text: string): string {
+  try {
+    const missing = JSON.parse(text)?.missing;
+    return typeof missing?.resource === "string" && typeof missing?.requirement === "string" ? `${missing.resource}:${missing.requirement}` : "";
+  } catch { return ""; }
 }
 
 /** Parses a `media` message's JSON string; returns null when malformed. */
@@ -762,21 +795,38 @@ export function latestProgress(turn: AgentTurn): string | undefined {
 function workSectionHTML(turn: AgentTurn, state: TimelineState, query: string, revealing = false, waitingForOwner = false): string {
   const messages = (turn.messages ?? []).filter(m => m.kind !== "reply" && m.kind !== "media" && m.kind !== "event" && m.text.trim())
     .map(m => ({ ...m, text: composioText(plainLine(m.text), composioAction(turn)) }));
+  // The work itself is never shown (owner, 2026-11-10: 「不用有查看過程」): what a step was missing stands in sight with its
+  // repair, live or not, and the closed body stays only for a search that finds words in it.
+  const prerequisites = prerequisitesHTML(turn);
   const live = !waitingForOwner && !waitsAtCard(turn) && turn.task?.state !== "waiting" && (turn.status === "running" || isLive(turn.task));
-  if (live) return "";
-  const events = [...publicEventsHTML(turn).values()].join("");
-  if (!messages.length && !events && !hasDetail(turn) && !workActions(turn).length && !(turn.steps?.length) && !turn.model && !revealing) return "";
+  if (live) return prerequisites;
+  const events = [...publicEventsHTML(turn, false).values()].join("");
+  if (!messages.length && !events && !hasDetail(turn) && !workActions(turn).length && !(turn.steps?.length) && !turn.model && !revealing) return prerequisites;
   const open = state.thinkingOpen.get(turn.id) ?? false;
   const actions = workActions(turn).filter(action => action.state === "done").map(action => ({ ...action, past: composioText(action.past, composioAction(turn)) }));
   const steps = shownSteps(turn).filter(step => step.kind !== "model");
   const rows = actions.length ? actions.map(action => `<li>${esc(action.past)}${action.outcome && action.outcome !== "ok" ? ` · ${esc(reasonText({kind:"tool", tool:"", server:null, ms:0, at_ms:0, outcome:action.outcome, reason:action.reason ?? null}))}` : ""}</li>`).join("") : steps.length ? steps.map(step => `<li>${esc(pastStep(step))}${!step.missing && step.outcome !== "ok" ? ` · ${esc(reasonText(step))}` : ""}</li>`).join("") : messages.map(message => `<li class="work-progress">${messageHTML(message.text, query)}</li>`).join("");
-  const prerequisites = shownSteps(turn).map(step => step.missing ? missingHTML(step.missing) : "").join("");
   const meta = [esc(answerMeta(turn)), ...shownSteps(turn).map(mediaBillHTML)].filter(Boolean).join(" · ");
   const detail = hasDetail(turn) && (!turn.messages?.length || turn.status === "error" || turn.task?.state === "failed");
-  const body = (rows ? `<ol class="work-sentences">${rows}</ol>` : "") + events + prerequisites + (detail ? `<pre class="failure-detail">${highlightHTML(turn.detail, query)}</pre>` : "") + (meta ? `<p class="work-meta">${meta}</p>` : "");
-  if (!body) return "";
-  return `<div class="work-section think-box${open ? " is-open" : ""}" data-thinking-turn="${turn.id}">` +
+  const body = (rows ? `<ol class="work-sentences">${rows}</ol>` : "") + events + (detail ? `<pre class="failure-detail">${highlightHTML(turn.detail, query)}</pre>` : "") + (meta ? `<p class="work-meta">${meta}</p>` : "");
+  if (!body) return prerequisites;
+  return prerequisites + `<div class="work-section think-box${open ? " is-open" : ""}" data-thinking-turn="${turn.id}">` +
     `<div class="work-body think-body" id="work-${turn.id}"${open ? "" : " hidden"}>${body}</div></div>`;
+}
+
+/**
+ * What a step of the turn was missing, each with its one repair, unless a message of the turn already carries it (then it
+ * is there once). Under a reply that speaks, only the repair: the reply says what is missing.
+ */
+function prerequisitesHTML(turn: AgentTurn): string {
+  const media = (turn.messages ?? []).filter(m => m.kind === "media");
+  const stated = new Set(media.map(m => missingKey(m.text)).filter(Boolean));
+  const replied = replySpeaks(turn);
+  const note = replied ? missingRepairHTML : missingHTML;
+  // A spoken turn's own missing message moves here, under the reply, as its repair (turnMessagesHTML leaves it out).
+  const said = replied ? media.map(m => mediaMissing(m.text)).filter((value): value is Missing => value !== null).map(missingRepairHTML) : [];
+  const notes = said.join("") + shownSteps(turn).map(step => step.missing && !stated.has(`${step.missing.resource}:${step.missing.requirement}`) ? note(step.missing) : "").join("");
+  return notes ? `<div class="turn-prerequisites">${notes}</div>` : "";
 }
 
 /** An inline media card (`link`, `image`, `video`, or `pdf`) with a safe `在網站開啟` action button. */
@@ -856,37 +906,43 @@ function turnMessagesHTML(turn: AgentTurn, state: TimelineState, query: string, 
   const lastReply = [...replies].reverse().find(m => said.get(m.seq))?.seq;
   const work = workSectionHTML(turn, state, query, revealing, waitingForOwner);
   const settledDraft = isSettledDraftTurn(turn);
+  // A question the owner has settled stands where it was asked, among the replies (permission-card.ts settledQuestions).
+  const asked = settledQuestions(turn);
   return settled + ordered.filter(message => (message.kind === "reply" && !(settledDraft && said.get(message.seq) === turn.text.trim())) || message.kind === "media").map(message => {
     const text = message.kind === "reply" ? said.get(message.seq) ?? "" : message.text.trim();
     if (!text) return "";
     if (message.kind === "media") {
+      // Under a reply that speaks, a missing setup is only its repair, drawn below the reply (prerequisitesHTML).
+      if (replySpeaks(turn) && mediaMissing(text)) return "";
       const artifact = artifactHTML(text, message.seq);
       if (artifact) return artifact;
       const media = parseMediaPayload(text);
       return media ? `<div class="chat-message" data-message="${message.seq}">${mediaCardHTML(media, query, message.seq)}</div>` : "";
     }
-    return `<div data-seq="${message.seq}">${messageBlockHTML(turn, String(message.seq), text, message.at_ms, query, state, true, regenerate && message.seq === lastReply, message.seq === replies.find(reply => said.get(reply.seq))?.seq, message.seq === lastReply)}</div>`;
-  }).join("") + (replies.length ? "" : fallback) + work;
+    return asked(message.at_ms) + `<div data-seq="${message.seq}">${messageBlockHTML(turn, String(message.seq), text, message.at_ms, query, state, true, regenerate && message.seq === lastReply, message.seq === replies.find(reply => said.get(reply.seq))?.seq, message.seq === lastReply)}</div>`;
+  }).join("") + asked(Infinity) + (replies.length ? "" : fallback) + work;
 }
 
 /**
- * The centred event lines of a turn, outside Raphael's messages: the work it handed over (each opens on
- * what the owner asked), what it asked colleagues (each opens on the question sent and the answer)
- * and the meetings it opened, whose line opens the room.
+ * The centred event lines of a turn, outside Raphael's messages: what it sent colleagues (one line that opens
+ * their conversation, peer-chat.ts) and the meetings it opened, whose line opens the room.
  */
 function learnedSkillEvent(text: string): string | null {
   try { const event = JSON.parse(text); return event?.type === "skill_learned" && typeof event.name === "string" ? event.name : null; }
   catch { return null; }
 }
 
-function turnEventsHTML(turn: AgentTurn, look: TurnLook, said: boolean): string {
-  const owner = said ? { author: t("rooms.owner"), text: turn.question.trim() } : undefined;
+function turnEventsHTML(turn: AgentTurn, look: TurnLook): string {
   return handoffGroupHTML((turn.handoffs ?? []).map(task => ({ task, face: look.memberFace?.(task.member_id) ?? "",
-    request: task.mode === "consult" && task.request ? { author: look.memberName?.(task.from_member_id) ?? "", text: task.request } : owner,
     name: look.memberName?.(task.member_id) || task.member_name })));
 }
 
-function publicEventsHTML(turn: AgentTurn): Map<number, string> {
+/**
+ * `conversation` picks the lines that stay in the conversation: a meeting this turn opened (an exchange
+ * with colleagues, shown on one line) and a skill the member learned (it changes what the member
+ * does next). Every other public event is work and folds into the reply.
+ */
+function publicEventsHTML(turn: AgentTurn, conversation: boolean): Map<number, string> {
   const labels = {
     "routine.created": "event.routine.created", "routine.updated": "event.routine.updated", "routine.deleted": "event.routine.deleted",
     "calendar.created": "event.calendar.created", "calendar.updated": "event.calendar.updated", "calendar.deleted": "event.calendar.deleted",
@@ -901,8 +957,9 @@ function publicEventsHTML(turn: AgentTurn): Map<number, string> {
     if (plainLine(message.text) === plainLine(turn.text) || turn.messages?.some(reply => reply.kind === "reply" && plainLine(reply.text) === plainLine(message.text))) continue;
     const known = ["routine", "calendar"].includes(event?.type ?? "") && ["created", "updated", "deleted"].includes(event?.action ?? "") && typeof event.name === "string" && Number.isSafeInteger(event.id) && event.id! > 0;
     const meeting = meetingEvent(message.text), skill = learnedSkillEvent(message.text);
+    if ((!!meeting || !!skill) !== conversation) continue;
     const kind = known ? `${event.type}.${event.action}` : meeting ? "meeting" : skill ? "skill" : `notice:${plainLine(message.text)}`;
-    const words = known ? eventLineHTML(t(labels[`${event.type}.${event.action}` as keyof typeof labels], {p0: NAME}), ico(event.type === "routine" ? "clock" : "calendar"), event.name!) : meeting ? eventLineHTML(t("rooms.meetingOpened", {p0: NAME}), ico("chat"), meeting.name) : skill ? eventLineHTML(t("skills.learnedNotice", {p0: NAME}), ico("check"), skill) : `<span class="sys event-line">${esc(plainLine(message.text.trim().startsWith("{") || message.text.trim().startsWith("[") ? t("event.changed") : message.text))}</span>`;
+    const words = known ? eventLineHTML(t(labels[`${event.type}.${event.action}` as keyof typeof labels], {p0: NAME}), ico(event.type === "routine" ? "clock" : "calendar"), event.name!) : meeting ? eventLineHTML(t("rooms.meetingOpened", {p0: NAME}), ico("chat"), meeting.name) : skill ? eventLineHTML(t(event?.action === "updated" ? "skills.updatedNotice" : "skills.learnedNotice", {p0: NAME}), ico(event?.action === "updated" ? "pencil" : "check"), skill) : `<span class="sys event-line">${esc(plainLine(message.text.trim().startsWith("{") || message.text.trim().startsWith("[") ? t("event.changed") : message.text))}</span>`;
     const attrs = meeting ? `data-meeting-room="${meeting.room_id}"` : event?.type === "routine" ? `data-act="open-routine" data-routine="${event.id}"${Number.isSafeInteger(event.member_id) && event.member_id! >= 0 ? ` data-routine-member="${event.member_id}"` : ""}` : `data-act="open-calendar-event" data-event="${event?.id}" data-date="${esc(event?.date ?? "")}"`;
     const openable = meeting || known && event?.action !== "deleted" && (event.type === "routine" || /^\d{4}-\d{2}-\d{2}$/.test(event.date ?? ""));
     const line = `<div class="conversation-event-line timeline-event" data-timeline-event="${turn.id}:${message.seq}">${openable ? btn(words, "event-open", ` ${attrs}`) : words}</div>`;
@@ -934,42 +991,55 @@ export function turnHTML(turn: AgentTurn, state: TimelineState, detailOpen: bool
   const resumed = sourceOf(turn) === "connector";
   // what a colleague handed this member says who from, in place of the owner's words
   const handed = exchangeTurn(turn);
-  const said = turn.question.trim() !== "" && !routine && !resumed && !handed;
+  const said = turn.question.trim() !== "" && !routine && !resumed && !handed && !delegatedTurn(turn);
   const asked = said || (turn.attachments?.length ?? 0) > 0;
   const waitingForOwner = look.waitingForOwner?.(turn.id) ?? false;
   const live = !waitingForOwner && !waitsAtCard(turn) && turn.task?.state !== "waiting" && (turn.status === "running" || isLive(turn.task));
   const revealing = look.revealing?.(turn.id) ?? false;
-  const regenerate = !live && said && turn.id === look.regenerateTurnId;
+  // What a colleague said to this member is one line that opens the two members' conversation (exchange-line.ts):
+  // the request and the answer are read there, not under the line. Only a card that waits for the owner stays here.
+  if (handed) {
+    const name = turn.member_id ? look.memberName?.(turn.member_id) : t("agent.title");
+    const cards = permissionCardsHTML(turn, look.answerable, true, name) + ownerQuestionsHTML(turn, true) + connectorCardsHTML(turn) + secretCardsHTML(turn) + chatCardsHTML(turn) + computerCardsHTML(turn) +
+      permissionCardsHTML(turn, look.answerable, false, name) + ownerQuestionsHTML(turn, false);
+    return `<li class="tn" data-id="${id}" data-status="${esc(turn.status)}"${live ? ' data-live="true"' : ""}>` + receivedLineHTML(turn, look) +
+      (cards ? `<div class="ra"><div class="ra-body">${cards}</div></div>` : "") + `</li>`;
+  }
+  // A greeting has no words of the owner's, yet a failed one is written again (the core's members.greet).
+  const regenerate = !live && (said || turn.route === "greeting") && turn.id === look.regenerateTurnId;
   // A turn without reply messages answers in its text: a question spoken to Raphael with public progress has no other.
   // A draft handed to this chat (`route` "draft") is a card, and what it is told is for the model, not for the page.
-  const textAnswer = turn.status === "confirm" || settledDraft || turn.route === "draft" || !turn.text.trim()
+  const textAnswer = turn.status === "confirm" || settledDraft || turn.route === "draft" || (turn.route === "greeting" && !!greetingHTML(turn, look.greetingOpen ?? true)) || !turn.text.trim()
     ? "" : messageBlockHTML(turn, "reply", turn.text, turn.created_at_ms, query, state, true, regenerate);
   return (
     `<li class="tn${turn.id === look.latestFailedTurnId ? " is-latest-failure" : ""}${turn.status === "queued" || turn.route === "owner_input" || (live && !hasMsgs) ? " is-owner-only" : ""}" data-id="${id}" data-status="${esc(turn.status)}"${live ? ' data-live="true"' : ""}>` +
-    (handed ? receivedLineHTML(turn, look) : "") +
     (resumed ? resumedLineHTML(turn) + secretResumedLineHTML(turn) + computerResumedLineHTML(turn) : "") +
+    // A brief another member handed over says who from, in place of the owner's bubble.
+    (delegatedTurn(turn) && turn.question.trim() ? receivedLineHTML(turn, look) : "") +
     (asked
       ? `<div class="me">` +
         `<div class="chat-message owner-message${state.expandedMessages.has(`${id}:question`) ? " is-expanded" : ""}" data-message="question" data-expandable="true">` +
-        bubbleHTML(said ? messageHTML(turn.question.trim(), query, false, look.mentions) : "", turn.attachments, turn.quote, messageExpandHTML(turn.question, state.expandedMessages.has(`${id}:question`))) + messageActionsHTML(turn.created_at_ms, false, live || turn.status === "queued" || turn.status === "confirm" || turn.task?.state === "waiting" ? "cancel" : "edit", true, "", turn.status === "queued") + `</div>` +
+        bubbleHTML(said ? messageHTML(turn.question.trim(), query, false, look.mentions) : "", turn.attachments, turn.quote, messageExpandHTML(turn.question, state.expandedMessages.has(`${id}:question`))) + reactionRowHTML(turn.reactions?.owner) + messageActionsHTML(turn.created_at_ms, false, live || turn.status === "queued" || turn.status === "confirm" || turn.task?.state === "waiting" ? "cancel" : "edit", true, "", turn.status === "queued") + `</div>` +
         `</div>`
       : "") +
-    turnEventsHTML(turn, look, said) + mailHandedLinesHTML(turn, look) +
+    turnEventsHTML(turn, look) + mailHandedLinesHTML(turn, look) +
     (turn.route === "owner_input" || turn.status === "queued" ? "" : `<div class="ra${isBotRename(turn) ? " is-system-result" : ""}">` +
     `<div class="ra-body">` +
     // A question already answered came before the answer: it reads in that order, under the work and above the reply.
     (hasMsgs
       ? turnMessagesHTML(turn, state, query, regenerate, revealing, permissionCardsHTML(turn, look.answerable, true, turn.member_id ? look.memberName?.(turn.member_id) : t("agent.title")), textAnswer, waitingForOwner)
-      : permissionCardsHTML(turn, look.answerable, true, turn.member_id ? look.memberName?.(turn.member_id) : t("agent.title")) + textAnswer + workSectionHTML(turn, state, query, revealing, waitingForOwner)) +
+      : permissionCardsHTML(turn, look.answerable, true, turn.member_id ? look.memberName?.(turn.member_id) : t("agent.title")) + ownerQuestionsHTML(turn, true) + textAnswer + workSectionHTML(turn, state, query, revealing, waitingForOwner)) +
     (settledDraft ? settledDraftHTML(turn, detailOpen, query) : "") +
-    connectorCardsHTML(turn) + mcpProposalsHTML(turn) + secretCardsHTML(turn) + computerCardsHTML(turn) +
+    connectorCardsHTML(turn) + mcpProposalsHTML(turn) + secretCardsHTML(turn) + chatCardsHTML(turn) + computerCardsHTML(turn) +
     `<div data-desktop-slot="${id}"></div>` +
     permissionCardsHTML(turn, look.answerable, false, turn.member_id ? look.memberName?.(turn.member_id) : t("agent.title")) + mailCardsHTML(turn, look) + pageCardsHTML(turn) +
-    ownerQuestionsHTML(turn) +
+    ownerQuestionsHTML(turn, false) + greetingHTML(turn, look.greetingOpen ?? true) +
     (turn.status === "confirm" ? `<div class="turn-question" data-question-turn="${id}"></div>` : "") +
     (turn.task?.state === "done" ? `<div data-task-result-slot="${id}" data-task-member="${turn.member_id ?? 0}"></div>` : "") +
     (!look.deferPresence && (live || waitingForOwner || waitsAtCard(turn) || revealing || turn.task?.state === "waiting" || turn.status === "confirm") ? livePresenceHTML(look, latestProgress(turn), live || revealing) : "") +
-    `</div></div>`) + `</li>`
+    `</div></div>`) +
+    // What the reply led to (a meeting opened, a skill learned) follows it as one quiet line.
+    [...publicEventsHTML(turn, true).values()].join("") + `</li>`
   );
 }
 

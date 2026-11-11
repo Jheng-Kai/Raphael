@@ -1,4 +1,6 @@
-"""Cua stdio MCP client, with OpenMausBot's ping/schema/control adaptations.
+"""Cua stdio MCP client with bounded ping, schema and control handling.
+
+Adapted from OpenMausBot (Apache-2.0); see core/packaging/licenses.
 
 The trusted caller supplies the approval gate. No standalone unauthenticated proxy
 or model loop is created here. Writes are serialized and calls refused during a hold.
@@ -47,8 +49,9 @@ class CuaBridge:
     read_timeout_s = 120.0
     action_timeout_s = 60.0
 
-    def __init__(self, vm, target):
+    def __init__(self, vm, target, *, observation_command=None):
         self.vm, self.target = vm, target
+        self.observation_command = observation_command
         self.process = None
         self.sequence = 0
         self.lock = asyncio.Lock()
@@ -61,7 +64,8 @@ class CuaBridge:
 
     async def __aenter__(self):
         self.process = await asyncio.create_subprocess_exec(
-            *await self.vm.bridge_command(self.target, exec_args(self.target, [DRIVER, "mcp", "--socket", SOCKET], interactive=True)),
+            *(self.observation_command if self.observation_command is not None else
+              await self.vm.bridge_command(self.target, exec_args(self.target, [DRIVER, "mcp", "--socket", SOCKET], interactive=True))),
             stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.DEVNULL, limit=16 * 1024 * 1024, creationflags=NO_WINDOW,
         )
@@ -98,7 +102,9 @@ class CuaBridge:
             return {}
         observing = owner_observation and method == "tools/call" and params in (
             {"name": "get_desktop_state", "arguments": {}}, {"name": "get_accessibility_tree", "arguments": {}})
-        if method == "tools/call" and self.target.key in self.vm.held and not observing:
+        if self.observation_command is not None and method not in ("initialize", "ping") and not observing:
+            raise VmError("observation_only")
+        if self.vm is not None and method == "tools/call" and self.target.key in self.vm.held and not observing:
             return {"content": [{"type": "text", "text": "owner_holds_control"}], "isError": True}
         self.sequence += 1
         identifier = self.sequence
@@ -109,7 +115,7 @@ class CuaBridge:
         try:
             async with asyncio.timeout(timeout):
                 async with self.lock:
-                    if method == "tools/call" and self.target.key in self.vm.held and not observing:
+                    if self.vm is not None and method == "tools/call" and self.target.key in self.vm.held and not observing:
                         return {"content": [{"type": "text", "text": "owner_holds_control"}], "isError": True}
                     await self._write({"jsonrpc": "2.0", "id": identifier, "method": method, "params": params or {}})
                 if self.reader is None or self.reader.done():
@@ -123,12 +129,14 @@ class CuaBridge:
                 result["content"] = [block for block in result.get("content", []) if block.get("type") == "text"]
             return result
         except (TimeoutError, asyncio.CancelledError):
-            self.vm.invalidate(self.target)
+            if self.vm is not None:
+                self.vm.invalidate(self.target)
             # Closing this owned connection abandons uncertain input; it must never be replayed.
             await self.__aexit__(None, None, None)
             raise
         except (VmError, ConnectionError):
-            self.vm.invalidate(self.target)
+            if self.vm is not None:
+                self.vm.invalidate(self.target)
             raise
         finally:
             self.pending.pop(identifier, None)

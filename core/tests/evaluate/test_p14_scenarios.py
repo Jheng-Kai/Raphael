@@ -14,6 +14,7 @@ from raphael_core.evaluate.guardian_driver import RpcDriver
 from raphael_core.evaluate.guardian_scenarios import cells
 
 from background.conftest import Links
+from cli_context import NativeContext
 from test_guardian import FakeBrains
 from test_guardian_scenarios import FakeClient
 
@@ -29,7 +30,10 @@ def asked(user):
     """What a turn was asked: the owner's or a colleague's question, a task's request, or in a room the owner's
     latest message there."""
     task = between(user, "<task>", "</task>")
-    if "Full room transcript" in task or "New room messages" in task:
+    # A resumed native session is sent the room's new messages after the turn's own part (agent/cli/context.py resumed_user).
+    resumed = user.split("New conversation records since your last turn", 1)[1] if "New conversation records since your last turn" in user else ""
+    if "Full room transcript" in task or "New room messages" in task or resumed:
+        task = task + resumed
         said = re.findall(r'"name": "Owner", "role": "Owner", "text": "((?:[^"\\]|\\.)*)"', task)
         return json.loads(f'"{said[-1]}"') if said else ""
     return between(user, "<question>", "</question>") or task
@@ -82,7 +86,7 @@ class HonestBrain(FakeClient):
         if "記住" in question and "全團隊" in question:
             text = json.dumps({"text": "好，我記住了。", "memory": [remembered(question)]}, ensure_ascii=False)
         elif consults(question, user) and not results:
-            calls = [consultation(self.tool, system, question)]
+            calls = [consultation(self.tool, system + "\n" + user, question)]  # the team comes with the message
         elif "群組代碼" in question and not results and "You are speaking in a meeting" not in system:
             calls = [("history_search", {"query": "群組代碼"})]
         elif results and '"task_id"' in results[-1]:
@@ -94,15 +98,16 @@ class HonestBrain(FakeClient):
 
 
 def cli_brain(monkeypatch, tool):
+    context = NativeContext()
+
     class Driver:
         def __init__(self, *args, **kwargs):
             pass
 
-        async def run(self, *, system, user, endpoint, token, **kwargs):
+        async def run(self, *, system, user, endpoint, token, session=None, **kwargs):
             yield Event("model", "owner-model")
-            if "Return only your speak choice" in system:
-                yield Event("final", '{"speak":false,"urgency":0}')
-                return
+            native, effective = context.receive(system, user, session)
+            yield Event("session", native)
 
             async def call(name, arguments):
                 async with httpx.AsyncClient() as http:
@@ -118,12 +123,13 @@ def cli_brain(monkeypatch, tool):
                 await call("memory_update", {"target": edit["target"], "operations": [{"action": edit["action"], "content": edit["content"]}]})
                 answer = "好，我記住了。"
             elif consults(question, user):
-                came = await call(*consultation(tool, system, question))
-                answer = honest(system, user + came) if tool == "ask_member" else "我已詢問行銷，等他回覆。"
+                came = await call(*consultation(tool, effective, question))
+                answer = honest(effective, user + came) if tool == "ask_member" else "我已詢問行銷，等他回覆。"
             elif "群組代碼" in question and "You are speaking in a meeting" not in system:
-                answer = honest(system, user + await call("history_search", {"query": "群組代碼"}))
+                answer = honest(effective, user + await call("history_search", {"query": "群組代碼"}))
             else:
-                answer = honest(system, user)
+                answer = honest(effective, user)
+            context.answered(native, answer)
             yield Event("final", answer)
 
         async def interrupt(self):

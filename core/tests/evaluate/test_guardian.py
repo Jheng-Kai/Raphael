@@ -57,7 +57,7 @@ async def api_cell(conn, tmp_path, scenario, turns, member=0, budget=None):
 async def test_api_records_two_creates_without_side_effects(conn, tmp_path):
     before = conn.execute("SELECT COUNT(*) FROM members").fetchone()[0]
     result, client = await api_cell(conn, tmp_path, SCENARIOS[0], [
-        ('{"progress":"我會建立兩位成員。"}', [("member_create", {"name": "青禾", "role": "研究員"}), ("member_create", {"name": "明月", "role": "編輯"})]),
+        ('{"progress":"我會建立兩位成員。"}', [("use_tool", {"name": "member_create", "arguments": {"name": "青禾", "role": "研究員"}}), ("use_tool", {"name": "member_create", "arguments": {"name": "明月", "role": "編輯"}})]),
         ("已建立青禾與明月。", []),
     ])
     assert result["status"] == "PASS", result
@@ -65,17 +65,17 @@ async def test_api_records_two_creates_without_side_effects(conn, tmp_path):
     assert conn.execute("SELECT COUNT(*) FROM members").fetchone()[0] == before
     assert all(request["fallbacks"] == [] for request in client.requests)
     assert result["cost_usd"] == .002
-    assert "member_create" in {tool["function"]["name"] for tool in client.requests[0]["tools"]}
+    # Management is found, not listed (decision 2): the model calls it through use_tool.
 
 
 @pytest.mark.parametrize("approved", [True, False])
 async def test_approval_pauses_and_resumes_without_deleting(conn, tmp_path, approved):
     scenario = next(s for s in SCENARIOS if s.name == ("approval-yes" if approved else "approval-no"))
-    result, client = await api_cell(conn, tmp_path, scenario, [("", [("member_delete", {"id": 7})]), ("已確認。" if approved else "已拒絕，未刪除。", [])])
+    result, client = await api_cell(conn, tmp_path, scenario, [("", [("use_tool", {"name": "member_delete", "arguments": {"id": 7}})]), ("已確認。" if approved else "已拒絕，未刪除。", [])])
     assert result["status"] == "PASS", result
     assert result["approvals"] == [{"tool": "member_delete", "language": "zh-TW", "choices": ["YES", "NO"], "executed": False, "decision": "YES" if approved else "NO"}]
     assert client.requests[-1]["messages"][-1]["role"] == "tool"
-    assert "member_delete" in {tool["function"]["name"] for tool in client.requests[0]["tools"]}
+    assert "member_delete" not in {tool["function"]["name"] for tool in client.requests[0]["tools"]}
 
 
 async def test_missing_calls_and_empty_or_english_replies_fail(conn, tmp_path):
@@ -116,7 +116,8 @@ async def test_cli_fake_brain_calls_real_authenticated_mcp(conn, tmp_path, monke
                 headers = {"Authorization": "Bearer " + token}
                 listing = await http.post(endpoint, headers=headers, json={"jsonrpc": "2.0", "id": 1, "method": "tools/list"})
                 names = {tool["name"] for tool in listing.json()["result"]["tools"]}
-                assert "routine_list" in names and "member_create" not in names
+                # Owner-private members share the management catalog; listing it grants no delegation authority.
+                assert {"routine_list", "find_tools", "use_tool"} <= names and "member_create" not in names
                 response = await http.post(endpoint, headers=headers, json={"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "routine_list", "arguments": {}}})
                 assert response.status_code == 200
                 assert "寫作" in response.text

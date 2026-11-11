@@ -122,8 +122,20 @@ installed app and other worktrees untouched.
 
 Read [RULES.md](../../product/RULES.md) and [ARCHITECTURE.md](../../product/ARCHITECTURE.md).
 Their named tests run in the ordinary Vitest/pytest suites on every PR, not local hooks.
-From app/, the complete integration offline check is `npm run verify -- --core --rust`.
+From app/, the complete integration offline check is `npm run verify -- --contract --rust` together with CI's result
+on the exact commit: CI runs the whole core suite on every push (about a quarter of an hour over eight machines),
+so `--core`, the same suite on a developer's machine, is for when CI cannot be used. A core change runs the test
+folders it touched and `--contract` (the scenario drivers in `core/tests/evaluate` and the default prompt's size
+budget) before it is handed back: on 2026-11-11 units that ran only their own files let 5, 6 and 9 failures
+through to the merged tree, nearly all of them in those two places.
 Local changes use the affected frontend/core/Rust boundaries described above.
+
+CI deals the Python test files among eight machines by the seconds recorded in
+`core/tests/shard-durations.json` (2026-11-11). When one share runs much longer than the others,
+refresh the record as the header of `core/tests/shard_durations.py` describes: merge the
+`python-durations-*` artifacts of one green CI run. A pull request that touches `core/packaging`,
+`core/pyproject.toml` or `core/uv.lock` also runs the frozen-core smoke test (not a required gate).
+A release workflow run asks for a green CI run on its commit instead of repeating the suites.
 
 For local UI hand-off, capture the selected affected scenes at both themes and all
 three sizes. Full UI integration acceptance uses

@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { UI_LOCALES } from "./locales.mjs";
 
 const mainWindow = JSON.parse(readFileSync(new URL("../../src-tauri/tauri.conf.json", import.meta.url), "utf8")).app.windows.find(window => window.label === "main");
 
@@ -21,7 +22,7 @@ export function parseOptions(args, scenes) {
       options.widths = [...new Set(sizes.map(([w]) => w))];
       options.heights = Object.fromEntries(sizes.filter(size => size.length > 1));
     } else if (flag === "--locale") {
-      if (!["zh-TW", "en", "ja"].includes(value)) throw new Error(`Invalid locale: ${value}`);
+      if (!UI_LOCALES.includes(value)) throw new Error(`Invalid locale: ${value}`);
       options.locale = value;
     } else options.out = resolve(value);
   }

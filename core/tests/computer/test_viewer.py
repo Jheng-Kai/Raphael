@@ -1,6 +1,10 @@
 """Viewer privacy, routing, lifecycle and phase A lease contracts, without Docker."""
 import asyncio
 import json
+import socket
+import socketserver
+import threading
+import time
 from types import SimpleNamespace
 
 import httpx
@@ -10,6 +14,253 @@ from raphael_core.computer.viewer import DesktopViewer, embedded_page, LEASE_SEC
 from raphael_core.computer.vm import LocalVm, VmError
 from raphael_core.protocol import RpcError
 from .test_vm import Runtime, container
+
+
+@pytest.fixture
+def wire_upstream():
+    disconnected = threading.Event()
+    class Handler(socketserver.BaseRequestHandler):
+        def handle(self):
+            try:
+                request = b""
+                while not request.endswith(b"\r\n\r\n"):
+                    chunk = self.request.recv(1)
+                    if not chunk:
+                        return
+                    request += chunk
+                self.request.sendall(b"HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n\r\n")
+                while data := self.request.recv(65536):
+                    self.request.sendall(data)
+            finally:
+                disconnected.set()
+    class Server(socketserver.ThreadingTCPServer):
+        daemon_threads = True
+    server = Server(("127.0.0.1", 0), Handler)
+    thread = threading.Thread(target=server.serve_forever, kwargs={"poll_interval": .01}, daemon=True)
+    thread.start()
+    try:
+        yield server.server_address[1], disconnected
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
+
+def websocket_request(bridge, opened):
+    from urllib.parse import urlsplit
+    url = urlsplit(opened["url"])
+    revision = bridge.sessions[opened["session"]].revision
+    return url, (f"GET /{opened['session']}/websockify/{revision} HTTP/1.1\r\nHost: {url.netloc}\r\n"
+                 f"Origin: {bridge.origin}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n\r\n").encode()
+
+
+@pytest.mark.parametrize("owner_input,teaching_mode,lease_expiry", [(False, False, False), (True, False, False),
+                                                                 (True, True, False), (False, False, True)],
+                         ids=["framebuffer", "owner-input", "teaching-input", "relay-expiry"])
+async def test_live_view_bytes_do_not_wait_for_a_busy_core_loop(viewer, wire_upstream, owner_input, teaching_mode, lease_expiry):
+    from raphael_core.computer.rfb_input import frame
+    bridge, _, _ = viewer
+    port, _ = wire_upstream
+    async def connection(target): return port, "synthetic"
+    bridge.vm.viewer_connection = connection
+    opened = await bridge.open({})
+    if owner_input:
+        await bridge.control({**opened, "held": True})
+    threads = {}
+    if teaching_mode:
+        async def capture(message):
+            threads["capture"] = threading.get_ident()
+            await asyncio.sleep(.005)
+            return '{"observation":{"safe":false,"screen":"","images":[]},"event":{"kind":"private_input"}}'
+        async def commit(*args):
+            threads["commit"] = threading.get_ident()
+        async def idle(*args): pass
+        bridge.teaching = SimpleNamespace(relay_hook=lambda token: SimpleNamespace(identifier="fake", capture=capture),
+                                         relay_input=commit, disconnected=idle, tick=idle)
+        bridge.publish_session(opened["session"])
+    url, request = websocket_request(bridge, opened)
+    ready, start = threading.Event(), threading.Event()
+    result = {}
+    def client():
+        try:
+            with socket.create_connection((url.hostname, url.port), timeout=2) as stream:
+                stream.sendall(request)
+                header = b""
+                while not header.endswith(b"\r\n\r\n"):
+                    header += stream.recv(1)
+                handshake = b"RFB 003.008\n\x02" + bytes(16) + b"\x01"
+                stream.sendall(frame(handshake))
+                response = b""
+                while len(response) < len(frame(handshake)):
+                    chunk = stream.recv(len(frame(handshake)) - len(response))
+                    assert chunk
+                    response += chunk
+                ready.set()
+                assert start.wait(2)
+                message = b"\x05" + bytes((int(teaching_mode),)) + bytes(4) if owner_input else b"\x03" + bytes(9)
+                began = time.perf_counter()
+                if not lease_expiry:
+                    stream.sendall(frame(message))
+                result["response"] = stream.recv(1024)
+                result["delay"] = time.perf_counter() - began
+        except Exception as error:
+            result["error"] = type(error).__name__
+            ready.set()
+    thread = threading.Thread(target=client, daemon=True)
+    thread.start()
+    try:
+        assert await asyncio.to_thread(ready.wait, 3)
+        if lease_expiry:
+            from dataclasses import replace
+            bridge.relay.publish(opened["session"], replace(bridge.relay.policies[opened["session"]], deadline=time.monotonic() + .05))
+        start.set()
+        time.sleep(.3)  # Synthetic synchronous work on the core loop, independent of both network peers.
+        await asyncio.to_thread(thread.join, 3)
+        assert not thread.is_alive() and "error" not in result, result
+        assert bool(result["response"]) is not lease_expiry and result["delay"] < .2, result
+        print(f"delivery_ms={result['delay'] * 1000:.2f}, owner_input={owner_input}, teaching={teaching_mode}, expiry={lease_expiry}")
+        if teaching_mode:
+            await bridge.flush_teaching(opened["session"])
+            assert threads["capture"] != threading.get_ident()
+            assert threads["commit"] == threading.get_ident()
+    finally:
+        start.set()
+        await bridge.close(opened)
+        await asyncio.to_thread(thread.join, 3)
+
+
+@pytest.mark.parametrize("ending", ["close", "revoke", "expiry"])
+async def test_main_loop_session_end_closes_both_relay_sockets(viewer, wire_upstream, ending):
+    bridge, _, clock = viewer
+    port, disconnected = wire_upstream
+    async def connection(target): return port, "synthetic"
+    bridge.vm.viewer_connection = connection
+    opened = await bridge.open({"member_id": 1})
+    url, request = websocket_request(bridge, opened)
+    reader, writer = await asyncio.open_connection(url.hostname, url.port)
+    try:
+        writer.write(request)
+        await writer.drain()
+        await asyncio.wait_for(reader.readuntil(b"\r\n\r\n"), 2)
+        if ending == "revoke":
+            await bridge.revoke({"member_id": 1})
+        elif ending == "expiry":
+            clock[0] += LEASE_SECONDS + 1
+        else:
+            await bridge.close(opened)
+        assert await asyncio.wait_for(reader.read(), 2) == b""
+        assert await asyncio.to_thread(disconnected.wait, 2)
+        assert opened["session"] not in bridge.sessions
+    finally:
+        writer.close()
+
+
+def test_bridge_pictures_are_requested_and_stopped_explicitly():
+    from raphael_core.computer.viewer import BOOTSTRAP
+    script = BOOTSTRAP.decode()
+    assert "raphael-desktop-frames" in script
+    assert "clearInterval" in script
+    assert "pagehide" in script and "snapshot();" in script
+    assert "!rfb.viewOnly" in script and "480 / canvas.width" in script
+    assert "framesTimer = null" in script.splitlines()[0]
+    assert "if (event.source !== parent) return;" in script
+    assert "if (event.data.on === true) { snapshot(); framesTimer = setInterval(snapshot, 3000); }" in script
+    assert "setInterval(() => {\n  const canvas" not in script
+    assert "pagehide', () => {snapshot(); clearInterval(framesTimer)" in script
+
+
+@pytest.mark.parametrize("preview", [False, True], ids=["watch-only", "preview"])
+async def test_relay_drops_unauthorized_input_without_stalling_frames(viewer, wire_upstream, preview):
+    from raphael_core.computer.rfb_input import frame
+    from .test_rfb_input import payload
+    bridge, _, _ = viewer
+    port, _ = wire_upstream
+    async def connection(target): return port, "synthetic"
+    bridge.vm.viewer_connection = connection
+    opened = await bridge.open({"preview": preview})
+    url, request = websocket_request(bridge, opened)
+    reader, writer = await asyncio.open_connection(url.hostname, url.port)
+    try:
+        writer.write(request)
+        await writer.drain()
+        await asyncio.wait_for(reader.readuntil(b"\r\n\r\n"), 2)
+        writer.write(frame(b"RFB 003.008\n\x02" + bytes(16) + b"\x01"))
+        await writer.drain()
+        await asyncio.wait_for(reader.read(1024), 2)
+        display = b"\x03" + bytes(9)
+        writer.write(frame(b"\x05\x01" + bytes(4)) + frame(display))
+        await writer.drain()
+        assert payload(await asyncio.wait_for(reader.read(1024), 2)) == display
+        assert bridge.relay.sequence(opened["session"]) == 0
+    finally:
+        writer.close()
+
+
+async def test_revoke_during_teaching_capture_cannot_forward_late_input(viewer, wire_upstream):
+    from raphael_core.computer.rfb_input import frame
+    bridge, _, _ = viewer
+    port, _ = wire_upstream
+    async def connection(target): return port, "synthetic"
+    bridge.vm.viewer_connection = connection
+    opened = await bridge.open({"member_id": 1})
+    await bridge.control({**opened, "held": True})
+    entered, cancelled, commits = threading.Event(), threading.Event(), []
+    async def capture(message):
+        entered.set()
+        try:
+            await asyncio.Event().wait()
+        finally:
+            cancelled.set()
+    async def commit(*args): commits.append(args)
+    async def idle(*args): pass
+    bridge.teaching = SimpleNamespace(relay_hook=lambda token: SimpleNamespace(identifier="fake", capture=capture),
+                                     relay_input=commit, disconnected=idle, tick=idle)
+    bridge.publish_session(opened["session"])
+    url, request = websocket_request(bridge, opened)
+    reader, writer = await asyncio.open_connection(url.hostname, url.port)
+    try:
+        writer.write(request)
+        await writer.drain()
+        await asyncio.wait_for(reader.readuntil(b"\r\n\r\n"), 2)
+        writer.write(frame(b"RFB 003.008\n\x02" + bytes(16) + b"\x01"))
+        await writer.drain()
+        await asyncio.wait_for(reader.read(1024), 2)
+        writer.write(frame(b"\x05\x01" + bytes(4)))
+        await writer.drain()
+        assert await asyncio.to_thread(entered.wait, 2)
+        await bridge.revoke({"member_id": 1})
+        assert await asyncio.wait_for(reader.read(), 2) == b""
+        assert cancelled.is_set()
+        assert not commits
+    finally:
+        writer.close()
+
+
+async def test_threaded_listener_retains_session_and_connection_caps(viewer):
+    bridge, _, _ = viewer
+    for _ in range(8):
+        await bridge.open({})
+    with pytest.raises(RpcError, match="too many desktop viewers"):
+        await bridge.open({})
+    port = bridge.server.sockets[0].getsockname()[1]
+    streams = await asyncio.gather(*(asyncio.open_connection("127.0.0.1", port) for _ in range(64)))
+    async def count(): return len(bridge.relay.tasks)
+    try:
+        for _ in range(50):
+            if await bridge.relay.call(count()) == 64:
+                break
+            await asyncio.sleep(.01)
+        assert await bridge.relay.call(count()) == 64
+        reader, extra = await asyncio.open_connection("127.0.0.1", port)
+        try:
+            assert await asyncio.wait_for(reader.read(), 2) == b""
+        finally:
+            extra.close()
+            await extra.wait_closed()
+    finally:
+        for _, writer in streams:
+            writer.close()
+        await asyncio.gather(*(writer.wait_closed() for _, writer in streams))
 
 
 @pytest.fixture
@@ -26,6 +277,7 @@ async def viewer(tmp_path, conn):
         yield bridge, runtime, clock
     finally:
         await bridge.aclose()
+        assert bridge.relay is None or not bridge.relay.thread.is_alive()
 
 
 def _docker_calls(runtime):
@@ -353,7 +605,7 @@ async def test_control_rechecks_active_tools_after_the_probe_and_close_cannot_le
 
 async def test_handback_invalidates_an_inflight_websocket_handshake(viewer, monkeypatch):
     bridge, _, _ = viewer
-    connecting, resume = asyncio.Event(), asyncio.Event()
+    connecting, resume = threading.Event(), threading.Event()
 
     async def upstream(reader, writer):
         try:
@@ -375,7 +627,7 @@ async def test_handback_invalidates_an_inflight_websocket_handshake(viewer, monk
         streams = await original(host, requested_port, **kwargs)
         if requested_port == port:
             connecting.set()
-            await resume.wait()
+            assert await asyncio.to_thread(resume.wait, 3)
         return streams
 
     monkeypatch.setattr(asyncio, "open_connection", delayed_connection)
@@ -385,7 +637,7 @@ async def test_handback_invalidates_an_inflight_websocket_handshake(viewer, monk
     try:
         writer.write(f"GET /{opened['session']}/websockify/{revision} HTTP/1.1\r\nHost: {url.netloc}\r\nUpgrade: websocket\r\n\r\n".encode())
         await writer.drain()
-        await asyncio.wait_for(connecting.wait(), 2)
+        assert await asyncio.to_thread(connecting.wait, 2)
         await bridge.control({**opened, "held": False})
         resume.set()
         assert await asyncio.wait_for(reader.read(), 2) == b""

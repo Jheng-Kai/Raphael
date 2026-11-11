@@ -5,7 +5,8 @@
 // reaches with a right click: each is a violation of R-UI-44.
 export function auditDocument(doc = document, viewport = { width: innerWidth, height: innerHeight }, namespaces = [], latinAllowed = null, englishUI = [], overflowOrphans = []) {
   const win = doc.defaultView;
-  const describe = element => ({ tag: element.tagName.toLowerCase(), id: element.id, class: typeof element.className === "string" ? element.className : "", text: element.textContent?.trim().slice(0, 100) });
+  // An icon button has no words, so its accessible name says which one a finding means.
+  const describe = element => ({ tag: element.tagName.toLowerCase(), id: element.id, class: typeof element.className === "string" ? element.className : "", text: element.textContent?.trim().slice(0, 100), ...(element.getAttribute?.("aria-label") ? { label: element.getAttribute("aria-label") } : {}) });
   const visible = element => {
     const box = element.getBoundingClientRect();
     if (box.width <= 0 || box.height <= 0) return false;
@@ -15,7 +16,11 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
     }
     return true;
   };
-  // Content outside a scrollport is intentionally offscreen. Inspect its container instead.
+  // Content outside a scrollport is intentionally offscreen. Inspect its container instead. A document that scrolls as a
+  // whole (a report saved as a file) is its own scrollport up and down; the app's body never scrolls, so nothing changes there.
+  const root = doc.scrollingElement ?? doc.documentElement;
+  const bodyStyle = win.getComputedStyle(doc.body);
+  const pageScrolls = !/hidden|clip/.test(bodyStyle.overflowY || bodyStyle.overflow) && root.scrollHeight > root.clientHeight + 1;
   const clipped = element => {
     const box = element.getBoundingClientRect();
     for (let parent = element.parentElement; parent && parent !== doc.body; parent = parent.parentElement) {
@@ -24,7 +29,7 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
       const y = /auto|scroll|hidden|clip/.test(style.overflowY || style.overflow);
       if ((x && (box.left < rect.left - 1 || box.right > rect.right + 1)) || (y && (box.top < rect.top - 1 || box.bottom > rect.bottom + 1))) return true;
     }
-    return false;
+    return pageScrolls && (box.top < -1 || box.bottom > viewport.height + 1);
   };
   const onScreen = element => {
     const box = element.getBoundingClientRect();
@@ -47,6 +52,9 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
     const dataHeading = button.matches('.modal-body .data-section > .data-heading > button[data-act="data-clear"]:is([data-what="dictation"], [data-what="conversation"])');
     return name.length <= 24 && destroyWords.test(name) && !button.closest(destroyMayStand) && !dataHeading;
   };
+  // An IANA time-zone id ("Asia/Taipei") is an identifier, like a file name or a URL: the Chinese row names the city and
+  // then shows the id the setting stores (zoneLabel in timezones.ts, 2026-11-05), so the id is not English copy.
+  const IANA_ZONE_ID = /\b(?:Africa|America|Antarctica|Arctic|Asia|Atlantic|Australia|Europe|Indian|Pacific)\/[A-Za-z0-9_+-]+(?:\/[A-Za-z0-9_+-]+)?/g;
   const outsideViewport = [], horizontalOverflow = [], missingI18nKeys = [], nativeControls = [], invalidDurations = [], mixedLanguage = [], rawMarkdown = [], productRules = [];
   const markdownPattern = /(?:^|\r?\n)[\t ]*(?:#{1,6}(?:[\t ]|$)|-\s+\[[ xX]\])|\*\*[^*\r\n]+\*\*|`{3,}/;
   // A textarea holds the document its owner is editing (a private skill's SKILL.md), so Markdown there is data, not unrendered copy.
@@ -57,7 +65,7 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
   };
   if (visible(doc.body) && onScreen(doc.body)) checkMarkdown(doc.body);
   const allowed = latinAllowed && new Set(latinAllowed), seenWords = new Set();
-  const phrases = latinAllowed?.filter(name => /\s|=/.test(name)) ?? [];
+  const phrases = latinAllowed?.filter(name => /\s|=|\d/.test(name)) ?? [];
   const productPattern = phrases.length ? new RegExp(`\\b(?:${phrases.map(name => name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})\\b`, "gi") : null;
   const keyPattern = /\b([a-z][A-Za-z0-9]*\.[A-Za-z0-9_.-]+)\b/g;
   const seenKeys = new Set();
@@ -71,8 +79,12 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
     if (element.namespaceURI !== 'http://www.w3.org/2000/svg' && element.clientWidth > 0 && element.scrollWidth > element.clientWidth + 1 && !/auto|scroll|hidden|clip/.test(style.overflowX || style.overflow))
       horizontalOverflow.push({ ...description, width: element.clientWidth, scrollWidth: element.scrollWidth });
     if (!onScreen(element)) continue;
-    const floatingLatest = element.matches(".page-agent .ra-stage > button.conversation-latest");
-    const sidebarAction = element.matches(".side .btn.icon");
+    // The conversation between members has the same jump-to-latest edge button as a conversation (peer-chat.ts).
+    const floatingLatest = element.matches(".page-agent .ra-stage > button.conversation-latest, .peer-chat > button.conversation-latest");
+    // The sidebar's icons and the buttons on the window's edges are soft round buttons;
+    // so is an icon that floats on a picture (the lightbox's close, a member page's way back and its cover's change), which needs its own surface,
+    // and so is the guide's arrow beside its primary pill, on the grey the old 上一步 pill had (owner, 2026-11-11).
+    const sidebarAction = element.matches(".side .btn.icon, .page-agent .mb-det-head .btn.icon, .page-agent .mb-head :is(.ra-tools, .mb-head-l) .btn.icon, :is(.mb-dlg-head, .cs-dlg-head, .room-side-thread > header, .desktop-panel[data-expanded] .desktop-dock, .rp-top) .btn.icon, .btn.icon.modal-x, .ob-foot .btn.icon.ob-back, .media-lightbox .lb-card > .btn.icon.lb-close, .ms-cover > .btn.icon.ms-cover-btn, .ms-bar > .btn.icon.ms-back");
     const violation = (rule, reason) => productRules.push({ ...description, rule, reason });
     if (element.matches('button:disabled[title], [aria-disabled="true"][title]')) {
       const title = element.getAttribute('title')?.trim();
@@ -83,9 +95,26 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
       if (title && title !== label && !text.includes(title)) violation('R-UI-69', 'A disabled control explains its reason only in a hover title');
     }
     if (element.matches('.page-agent .ans.thinking')) violation('R-UI-38', 'Conversation waiting must use the shared work line');
+    // A message hugs its bubble and the actions beside it: empty room to its side is no part of it, so a
+    // pointer or a right click there shows nothing.
+    if (element.matches('.chat-message') && box.width > 0) {
+      // The parts' margin boxes (a file card keeps a small margin) side by side with the actions and the gap between.
+      const spans = [...element.children].map(child => {
+        const rect = child.getBoundingClientRect(), own = win.getComputedStyle(child);
+        return rect.width ? [rect.left - (parseFloat(own.marginLeft) || 0), rect.right + (parseFloat(own.marginRight) || 0)] : null;
+      }).filter(Boolean);
+      // Actions with no width yet (shown on hover) still keep their track's gap.
+      const resting = element.querySelector(':scope > .message-actions')?.getBoundingClientRect().width === 0 ? parseFloat(style.columnGap) || 0 : 0;
+      const allowed = (spans.length ? Math.max(...spans.map(span => span[1])) - Math.min(...spans.map(span => span[0])) : 0) + resting;
+      const parts = [...element.children].map(child => `${child.className.split(' ')[0] || child.tagName}:${Math.round(child.getBoundingClientRect().left - box.left)}+${Math.round(child.getBoundingClientRect().width)}`).join(' ');
+      if (box.width > allowed + 2) violation('R-UI-104', `A message is wider than its bubble and actions: ${Math.round(box.width)} > ${Math.round(allowed)} (${parts})`);
+    }
     const scrollbar = element.offsetWidth - element.clientWidth - (parseFloat(style.borderLeftWidth) || 0) - (parseFloat(style.borderRightWidth) || 0);
     if (['auto', 'scroll'].includes(style.overflowY) && scrollbar > 1 && !element.matches('.main, .modal-body, .cs-results, .cs-form .add-grid')) violation('R-UI-62', 'A scrollbar takes room from a narrow part; only a wide page shows one');
     if (element.matches('.main') && scrollbar > 1 && element.querySelector(':scope > .page-agent:not([hidden])')) violation('R-UI-62', 'A conversation never scrolls the main area, so it keeps no strip for a scrollbar');
+    // An overlay scrollbar takes no width, so the height says it as well: a node that escaped a thread's clip
+    // once stretched the area under a long room and the wheel scrolled the whole conversation away (owner, 2026-11-09).
+    else if (element.matches('.main') && element.scrollHeight > element.clientHeight + 1 && element.querySelector(':scope > .page-agent:not([hidden])')) violation('R-UI-62', `A conversation scrolls inside itself, yet the main area around it scrolls ${element.scrollHeight - element.clientHeight}px`);
     if (element.matches('.mb-av-slime') && style.overflow !== 'visible') {
       const reserve = Number(style.overflowClipMargin?.match(/([\d.]+)px/)?.[1] ?? 0);
       if (style.overflow !== 'clip' || reserve < Math.max(box.width, box.height)) violation('R-UI-54', 'A crop cuts the horns and wings of a slime');
@@ -101,7 +130,8 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
       const glyph = element.querySelector(':scope > svg.i');
       if (glyph) {
         const rect = glyph.getBoundingClientRect();
-        const sizes = element.matches('.cmp-send') ? [32] : [16, 20];
+        // Lucide's icons: 16 px, 18 on the round edge buttons (1.5 px lines), 20 where a larger one is meant (R-UI-19).
+        const sizes = element.matches('.cmp-send') ? [32] : [16, 18, 20];
         // CSS zoom scales glyphs too; compare their shared size before scaling.
         let zoom = 1;
         for (let parent = element; parent; parent = parent.parentElement) {
@@ -111,6 +141,11 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
         if (!sizes.some(size => Math.abs(rect.width / zoom - size) <= .5 && Math.abs(rect.height / zoom - size) <= .5)) violation('R-UI-19', 'Action glyph does not use the shared icon sizes');
         if (Math.abs(rect.left + rect.width / 2 - box.left - box.width / 2) > 1 || Math.abs(rect.top + rect.height / 2 - box.top - box.height / 2) > 1) violation('R-UI-19', 'Action glyph is not centered');
       }
+    }
+    // A dim over a dialog covers all of it: a part left bright reads as a broken layer.
+    if (element.matches('.cs-scrim')) {
+      const box = element.getBoundingClientRect(), dialog = element.closest('.modal')?.getBoundingClientRect();
+      if (dialog && (Math.abs(box.left - dialog.left) > 2 || Math.abs(box.right - dialog.right) > 2)) violation('R-UI-111', 'The dim over a dialog leaves part of it uncovered');
     }
     if (element.matches('.au-month-grid .btn[aria-pressed="true"], .desktop-screen [data-desktop="retry"]')) {
       const luminance = value => {
@@ -138,13 +173,16 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
         violation('R-UI-17', 'Shortcut label and keys wrap onto separate rows');
     }
     if (element.matches('.modal-body .purpose')) violation('R-UI-02', 'Settings subtitle repeats the pane purpose');
-    if (element.matches('.ob-col h2') && parseFloat(style.fontSize) < 28) violation('R-UI-37', 'Onboarding needs a large headline');
+    if (element.matches('.ob-col > h2') && parseFloat(style.fontSize) < 28) violation('R-UI-37', 'Onboarding needs a large headline');
     if (element.matches('.ob-actions > .btn.pri') && box.width < element.parentElement.getBoundingClientRect().width * .6)
       violation('R-UI-37', 'Onboarding primary action must fill the action row');
-    if (element.matches('.ob-abilities')) {
-      const choices = [...element.children].filter(visible);
-      if (choices.length > 1 && choices.some((choice, index) => index > 0 && Math.abs(choice.getBoundingClientRect().top - choices[0].getBoundingClientRect().top) <= 1))
-        violation('R-UI-35', 'Onboarding abilities must form a vertical checklist');
+    if (element.matches('.ob-item')) {
+      const text = element.querySelector(':scope > .ob-tx'), control = element.querySelector(':scope > .ob-ctl');
+      if (text && control && visible(control)) {
+        const label = text.getBoundingClientRect(), side = control.getBoundingClientRect();
+        if (side.left < label.right - 1 || side.right > box.right + 1 || side.top < box.top - 1 || side.bottom > box.bottom + 1)
+          violation('R-UI-35', 'An onboarding choice keeps its control on the right of its name, inside its card');
+      }
     }
     if (element.matches('.mc-source-list')) {
       const selected = element.querySelector('.mc-source[aria-pressed="true"]');
@@ -174,12 +212,14 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
       // Navigation cards, list choices and disclosures are not text action buttons; an event line
       // that opens its room navigates like the sidebar's room rows. Pending question rows reveal their card.
       // Keep this inventory explicit: ordinary action buttons never opt out by an attribute.
-      const navigation = element.matches('.pending-questions > .pending-question, .conversation-trigger, .conversation-open, .mb-panel-row, .mb-panel-back, .mb-chat-choice, .mc-source, .cs-open, .cs-main, .au-room-row > .btn:first-child, .event-open, .ho-spend, .ho-row, .ho-agenda-row, .ho-agenda-more, .ho-event-chip, .ho-more, .ho-allowance, .ho-dictation, .au-edit, .cal-chip, .cal-more, .au-day-num, .au-date-nav > .au-today, .steps-sum, .task-sum') || element.closest('.mb-col, .au-month-grid, .ho-month, .au-drag-members, .au-segment, .mc-segments') || element.hasAttribute('aria-expanded') || element.matches('.conversation-card > .card-actions > .card-quiet');
+      const navigation = element.matches('.pending-questions > .pending-question, .conversation-trigger, .conversation-open, .mb-panel-row, .mb-panel-back, .ms-open, .mb-det .mb-rt, .mb-chat-choice, .mc-source, .room-row, .cs-open, .cs-main, .au-room-row > .btn:first-child, .event-open, .menu-reactions .reaction, .reaction-bar .reaction, .ho-row, .ho-stat, .lib-row, .lib-pic, .tpr-row, .au-edit, .cal-chip, .cal-more, .au-day-num, .au-date-nav > .au-today, .steps-sum, .task-sum, .desktop-panel .desktop-screen > .btn.desktop-open') || element.closest('.mb-col, .au-month-grid, .au-drag-members, .au-segment, .mc-segments') || element.hasAttribute('aria-expanded') || element.matches('.conversation-card > .card-actions > .card-quiet');
       const hasBorder = ['Top', 'Right', 'Bottom', 'Left'].some(side => parseFloat(style[`border${side}Width`]) > 0 && !['transparent', 'rgba(0, 0, 0, 0)'].includes(style[`border${side}Color`]) && !['none', 'hidden'].includes(style[`border${side}Style`]));
       if (!floatingLatest && element.classList.contains('icon') && hasBorder) violation('R-UI-18', 'Icon button has a visible border');
       const routineNavigation = element.matches('.chat-message .routine-origin > button.routine-run-link[data-act="open-routine"]');
       if (!navigation && !routineNavigation && !element.classList.contains('icon') && element.textContent.trim() && !hasBorder) violation('R-UI-18', 'Text action button has no frame');
     }
+    // The guide's row follows the rule like any other: since 2026-11-11 its round arrow (or ×) is at the left of the black
+    // primary, no longer stacked above it (owner guide), so nothing in the guide is exempt.
     if (element.matches('.action-row')) {
       const buttons = [...element.querySelectorAll('button')].filter(visible);
       const primary = buttons.find(button => button.matches('.pri'));
@@ -190,10 +230,12 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
     checkMarkdown(element);
     if (element.matches('.work-time, .work-toggle, .step-ms') && /\b(?:NaN|Infinity)\b/.test(element.textContent)) invalidDurations.push(description);
     if (element.matches('select,input[type="time"]')) nativeControls.push(description);
-    // Owner-authored text is data; labels, titles and placeholders remain UI copy.
-    const authored = element.matches(".modal-body .data-record > .data-record-text, .thread :is(.message-text, .message-code code, .message-table td, .message-table th) mark[data-find-match]") || element.closest("textarea, .checkpoint summary, .checkpoint pre code, .checkpoint-uncovered li");
+    // Owner-authored text is data; labels, titles and placeholders remain UI copy. So is the name of a file a member
+    // delivered (its Library's rows).
+    const authored = element.matches(".modal-body .data-record > .data-record-text, .output-path, .output-name, .template-path, .lib-title, .thread :is(.message-text, .message-code code, .message-table td, .message-table th) mark[data-find-match]") || element.closest("textarea, .checkpoint summary, .checkpoint pre code, .checkpoint-uncovered li");
     const strings = authored ? [] : [...element.childNodes].filter(node => node.nodeType === 3).map(node => node.textContent);
-    for (const attribute of ["aria-label", "title", "placeholder"]) if (element.hasAttribute(attribute)) strings.push(element.getAttribute(attribute));
+    // The output folder's button names the owner's own folder in its label: that name is data too.
+    for (const attribute of ["aria-label", "title", "placeholder"]) if (element.hasAttribute(attribute) && !element.matches(".output-chosen")) strings.push(element.getAttribute(attribute));
     for (const value of strings) for (const match of value.matchAll(keyPattern)) {
       // Explicit JSON path examples are provider field names, not untranslated catalogue keys.
       if (element.matches('code[data-json-paths]') && /^(?:data|event)\./.test(match[1])) continue;
@@ -201,9 +243,9 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
       seenKeys.add(match[1]); missingI18nKeys.push({ ...description, key: match[1] });
     }
     // The literal command-template token is syntax in every locale, not English copy.
-    if (allowed && !element.closest('.message-link, .url-chip, .local-command, .message-code pre code, .msg .note code, .mb-row-p, .rich-language, .message-diagram .diagram-view svg, .rich-view-dialog .diagram-view svg')) for (const value of strings) {
+    if (allowed && !element.closest('.message-link, .url-chip, .local-command, .message-code pre code, .msg .note code, .bot-scopes code, .mb-row-p, .rich-language, .message-diagram .diagram-view svg, .rich-view-dialog .diagram-view svg')) for (const value of strings) {
       const copy = productPattern ? value.replace(productPattern, "") : value;
-      for (const [word] of copy.replace(/\{input\}/g, "").replace(keyPattern, "").replace(/https?:\/\/\S+|\S+\.(?:pdf|png|jpe?g|txt|md|csv|exe|com|dev|io)\b/gi, "").matchAll(/[A-Za-z]{2,}/g)) {
+      for (const [word] of copy.replace(/\{input\}/g, "").replace(keyPattern, "").replace(IANA_ZONE_ID, "").replace(/https?:\/\/\S+|\S+\.(?:pdf|png|jpe?g|txt|md|csv|exe|com|dev|io)\b/gi, "").matchAll(/[A-Za-z]{2,}/g)) {
         if (allowed.has(word.toLowerCase()) || seenWords.has(word)) continue;
         seenWords.add(word); mixedLanguage.push({ ...description, word });
       }
@@ -266,7 +308,8 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
       for (const selector of rule.selectorText.split(/,(?![^(]*\))/)) {
         if (!selector.includes(":hover")) continue;
         let matches;
-        try { matches = doc.querySelectorAll(selector.replace(/:hover/g, "").trim() || "*"); } catch { continue; }
+        // `:is(*)` stands where `:hover` was, so `x:is(:hover, :active)` stays a valid selector for x.
+        try { matches = doc.querySelectorAll(selector.replace(/:hover/g, ":is(*)").trim()); } catch { continue; }
         const weight = specificity(selector);
         for (const element of matches) {
           const entry = hovered.get(element) ?? {};
@@ -304,7 +347,7 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
       if (unreadable(foreground, background)) { reportContrast(`hover:${fill.selector}`, element, `under the pointer (${fill.selector.trim()})`); break; }
     }
   }
-  // R-UI-53: a hover fill keeps its words off its edges (owner, 2026-10-31). Measured at rest, so every row of every scene counts.
+  // R-UI-53: a hover fill keeps its words off its edges. Measured at rest, so every row of every scene counts.
   const HOVER_TEXT_GAP = 6, HOVER_ROW_MIN = 80;
   for (const [element, { fill }] of hovered) {
     if (!fill || /^(?:transparent|none)$/.test(fill.value.trim()) || !visible(element) || !onScreen(element)) continue;

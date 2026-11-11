@@ -12,24 +12,25 @@ from collections.abc import Awaitable, Callable, Sequence
 
 from ..brain.model_ref import short_name
 from ..brain.openrouter import OpenRouterError
+from ..brain.prompt_cache import cache_options
 from ..brain.providers.base import ModelProvider
 from ..brain.textnorm import public_line
 from ..background.run import estimate_cost, summary_reply
 from ..worker.context import CONTEXT_OVERFLOW, is_context_overflow, provider_window, smaller_output
 from ..worker.loop import REPLY_TOKENS, UNLIMITED, Call, Outcome, Stop, ToolOutcome, Turn, run_task
 from ..worker.tool_guardrails import ToolGuardrails
-from .answers import Reply, loose_reply, parse_reply
+from .answers import MESSAGE_RULES, Reply, loose_reply, parse_reply, public_reply
 from .failure import AgentFailure, failure_kind
 from .ledger import Ledger
 from .tools import ToolResult
 from ..failures import PATIENT_WAITS, RETRY_WAITS, classify, tool_failure
 from ..retry_utils import MODEL_SILENCE_S, Outage
 
-PUBLIC_PROGRESS_RULES = """
+PUBLIC_PROGRESS_RULES = MESSAGE_RULES + """
 This is a live conversation: your owner sees your messages while you work.
 Before EVERY batch of tool calls, provide a public progress update.
-Thinking and progress are ALWAYS in the owner's UI language,
-even when the persona teaches or replies in another language. Replies follow the persona.
+Thinking, progress and replies follow the speaker's own language instructions, otherwise the owner's words.
+The interface language never selects the language of authored speech.
 Say what you are doing and why it helps the goal, in everyday words.
 Use first person, at most 25 CJK characters or 25 words. Do not name tools,
 services, API parameters or internal steps. Do not expose private reasoning or chain of thought.
@@ -43,8 +44,12 @@ answer directly in a single model reply.
 """
 
 NARRATION_RULES = PUBLIC_PROGRESS_RULES + """
-Before tool calls, content must be ONLY {"thinking": "...", "progress": "..."},
-with no code fences, no prose before or after, and no other objects.
+Before tool calls, content must be one public object with thinking, progress and optional messages:
+{"thinking": "...", "progress": "...", "messages": ["A complete message for the owner."]}.
+Use messages only for an important result or owner question worth reading now, never routine narration.
+Each complete message is delivered immediately. Progress remains the short action line.
+Do not repeat already delivered messages in the final answer; finish with only the new result.
+Use no code fences, no prose before or after, and no other objects.
 "thinking" is at most 2 sentences (about 60 CJK characters) about the practical choice or next decision that helps
 the owner's goal. It is a public explanation, never private reasoning, chain of thought or tool
 names. "progress" is the short action sentence described above. After results, add thinking only
@@ -107,6 +112,11 @@ def _public_text(value: object, limit: int, *, sentences: int | None = None) -> 
 
 
 class NarratedLoop:
+    # The conversation's name for its provider's cache, and how long Anthropic keeps it ("1h" or "5m";
+    # brain/prompt_cache.py). None leaves the provider to choose.
+    cache_session: str | None = None
+    cache_ttl: str | None = None
+
     def __init__(
         self, *, client: ModelProvider, model: str, ledger: Ledger,
         language: str, plain: bool, system: str, user: str, tools: Sequence[dict],
@@ -116,6 +126,7 @@ class NarratedLoop:
         fallbacks: Sequence[str] | None = None,
         reasoning_effort: str = "none",
         context_window: int | None = None,
+        reply: Callable[[Reply], None] | None = None,
     ) -> None:
         self.client, self.model, self.ledger = client, model, ledger
         self.reasoning_effort = reasoning_effort
@@ -124,7 +135,7 @@ class NarratedLoop:
         self.language, self.plain = language, plain
         self.system, self.user, self.tools = system + NARRATION_RULES, user, list(tools)
         self.progress, self.execute = progress, execute
-        self.thinking = thinking
+        self.thinking, self.publish_reply = thinking, reply
         self.fallbacks = list(fallbacks or ())
         self.model_calls = self.tool_calls = 0
         self.messages: list[dict] | None = None
@@ -134,7 +145,7 @@ class NarratedLoop:
         self.batch_calls = []
         self.guardrails = ToolGuardrails()
         self.last_failure = None
-        self.acted = False
+        self.used_tools = False
         # The conversation as the model last saw it (the loop's own list, which it goes on adding to).
         self.live: list[dict] = []
         from ..worker.owner_input import OwnerInput
@@ -152,7 +163,10 @@ class NarratedLoop:
         try:
             # Once a turn has done something it rides out a failed call for as long as that lasts, until the owner stops
             # it: asking again repeats nothing, since the tools run only after a reply. Before that the owner learns in seconds.
-            outage = Outage(RETRY_WAITS, PATIENT_WAITS, patient_ok=self.acted)
+            # Here "done something" is still any tool, a read included (owner, 2026-10-31, "Long team work", pinned by
+            # test_long_turn). A CLI turn and a background task count only what they changed outside (`acted`); whether
+            # this loop does too is the owner's open decision.
+            outage = Outage(RETRY_WAITS, PATIENT_WAITS, patient_ok=self.used_tools)
             while True:
                 try:
                     refresh = getattr(self, "refresh_tools", None)
@@ -162,6 +176,7 @@ class NarratedLoop:
                         model=self.model, fallbacks=self.fallbacks,
                         messages=list(messages), tools=list(tools), timeout_s=MODEL_SILENCE_S,
                         max_tokens=self.max_tokens * room, reasoning_effort=self.reasoning_effort,
+                        **cache_options(self.cache_session, self.cache_ttl),
                     )
                     self.last_failure = None
                     break
@@ -197,19 +212,26 @@ class NarratedLoop:
             model=answer.model, cost_usd=answer.cost_usd if answer.usage_known else max(
                 answer.cost_usd, estimate_cost(self.model, len(str(messages)))
             ),
-            prompt_tokens=answer.prompt_tokens, completion_tokens=answer.completion_tokens,
+            usage=getattr(answer, "usage", None), prompt_tokens=answer.prompt_tokens, completion_tokens=answer.completion_tokens,
             ms=int((time.perf_counter() - began) * 1000),
         )
+        if thought := " ".join(getattr(answer, "reasoning", "").split()):
+            # What the model wrote into the channel of its answer is its thinking, never its reply (brain/reasoning.py).
+            self.thinking(thought[-240:])
         if answer.content.strip():
             # Only explicitly public fields are published, including those in final content.
+            # Keep envelope validation without choosing or converting the authored language.
             objects, prose = _content(answer.content)
             for public in objects:
                 for kind, emit, limit in (("thinking", self.thinking, 120), ("progress", self.progress, 60)):
-                    text = public_line(_public_text(public.get(kind), limit, sentences=2 if kind == "thinking" else None), self.language)
+                    text = public_line(_public_text(public.get(kind), limit, sentences=2 if kind == "thinking" else None), "auto")
                     if text:
                         emit(text)
+            authored = public_reply(answer.content, self.language, plain=self.plain, explicit=True) if answer.calls else None
+            if authored is not None and self.publish_reply is not None:
+                self.publish_reply(authored)
             if answer.calls and not objects and prose:
-                text = public_line(_public_text(prose, 60), self.language)
+                text = public_line(_public_text(prose, 60), "auto")
                 if text:
                     self.progress(text)
         self.batch_calls = answer.calls
@@ -220,12 +242,12 @@ class NarratedLoop:
 
     async def summarize(self, system: str, user: str, max_tokens: int) -> str:
         reply = await summary_reply(self.client, self.model, system=system, user=user, max_tokens=max_tokens)
-        self.ledger.add(model=reply.model, cost_usd=reply.cost_usd, prompt_tokens=reply.prompt_tokens,
+        self.ledger.add(model=reply.model, cost_usd=reply.cost_usd, usage=getattr(reply, "usage", None), prompt_tokens=reply.prompt_tokens,
                         completion_tokens=reply.completion_tokens)
         return reply.text
 
     async def tool(self, call_id: str, name: str, arguments: dict) -> ToolOutcome:
-        self.acted = True
+        self.used_tools = True
         return await self.execute(call_id, name, arguments)
 
     async def run(self) -> Outcome:
@@ -279,12 +301,8 @@ class NarratedLoop:
             if self.last_failure is not None and outcome.kind == "failed":
                 raise AgentFailure(self.last_failure.kind, diagnostic=self.last_failure, model=self.model)
             raise AgentFailure(outcome.detail or "error")
-        objects, prose = _content(outcome.final)
-        data = next((obj for obj in reversed(objects) if "text" in obj or "messages" in obj),
-                    loose_reply(prose) or {"text": prose, "detail": ""})
-        data = dict(data)
-        for field in ("text", "detail", "say_ja"):
-            data[field] = _reply_text(data.get(field))
-        if isinstance(data.get("messages"), list):
-            data["messages"] = [_reply_text(item) for item in data["messages"]]
-        return parse_reply(data, self.language, plain=self.plain, long=True)
+        if not outcome.final.strip():
+            raise AgentFailure("no_answer")  # a reply that was only reasoning is no answer (brain/reasoning.py)
+        # Final authored words use the same whole-envelope boundary as CLI replies.
+        # Progress parsing must never consume JSON examples inside the answer.
+        return parse_reply(outcome.final, self.language, plain=self.plain, long=True)

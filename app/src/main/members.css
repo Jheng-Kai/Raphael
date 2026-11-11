@@ -17,17 +17,30 @@
 /* ---------- the member column ---------- */
 .mb-col { display: flex; flex-direction: column; min-width: 0; min-height: 0; background: var(--side); border-right: 0; padding-top: calc(var(--window-controls-height) + 4px); }
 .mb-top { display: flex; align-items: center; gap: var(--sp-1); padding: 0 var(--pa-pad) 6px; }
-.mb-top-fill { flex: 1; }
-.mb-find { display: flex; align-items: center; gap: var(--sp-1); flex: 1; min-width: 0; height: var(--pa-tool); padding: 0 calc(8px + 6 * var(--pa-u)); border: 1px solid var(--btn-edge); border-radius: var(--r-sm); background: var(--panel); color: var(--text-3); }
-.mb-find:not([hidden]) + .mb-top-fill { display: none; }
-.mb-find-input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; font-size: var(--fs-xs); color: var(--text); }
-.mb-find-input::-webkit-search-cancel-button { display: none; }
-.mb-find-input:focus-visible { outline: 0; }
+/* The search card: in the middle of the window over a dimmed page, the field above a
+   hairline, every member in two lines, what the words find in the messages, and 新增成員 at the foot. */
+.menu.side-search { display: flex; flex-direction: column; width: min(560px, calc(100vw - 24px)); max-width: none; max-height: min(480px, calc(100vh - 96px)); padding: 0; overflow: hidden; border-radius: var(--r-lg); box-shadow: 0 0 0 100vmax var(--scrim), var(--pop); }
+.side-search-field { flex: none; display: flex; align-items: center; gap: var(--sp-2); height: 52px; padding: 0 var(--sp-4); border-bottom: 1px solid var(--line); color: var(--text-3); }
+.side-search-field .i { flex: none; width: 16px; height: 16px; }
+.side-search-input { flex: 1; min-width: 0; height: 100%; border: 0; outline: 0; background: transparent; color: var(--text); font-size: var(--fs-sm); }
+.side-search-input::-webkit-search-cancel-button { display: none; }
+.side-search-input:focus-visible { outline: 0; }
+.side-search-rows { flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: none; padding: var(--sp-2); }
+.side-search-rows .mb-none { margin: 0; padding: var(--sp-3); color: var(--text-3); font-size: var(--fs-sm); }
+.nav.side-search-row { display: flex; align-items: center; gap: var(--sp-3); width: 100%; min-height: 50px; padding: var(--sp-1) var(--sp-2); border-radius: var(--r-md); text-align: left; }
+.side-search-row > .av { flex: none; }
+.side-search-main { display: flex; flex-direction: column; min-width: 0; line-height: 1.4; }
+.side-search-main > * { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.side-search-main b { color: var(--text); font-size: var(--fs-sm); font-weight: var(--weight-semibold); }
+.side-search-main span { color: var(--text-2); font-size: var(--fs-xs); }
+.side-search-main span:empty { display: none; }
+/* The first row is what Enter opens, so it carries the soft fill while the field has the keys. */
+.side-search:has(.side-search-input:focus) .side-search-rows > button:first-of-type { background: var(--hover); }
+.nav.side-search-new { flex: none; display: flex; align-items: center; gap: var(--sp-3); min-height: 44px; margin: 0 var(--sp-2) var(--sp-2); padding: 0 var(--sp-2) 0 calc(var(--sp-2) + 5px); border-radius: var(--r-md); color: var(--text-2); font-size: var(--fs-sm); }
+.nav.side-search-new .i { width: 16px; height: 16px; }
 .page-agent .btn.mb-tool { width: var(--pa-tool); min-height: var(--pa-tool); border-radius: var(--r-sm); }
 .mb-scroll { flex: 1; min-height: 0; overflow-x: hidden; overflow-y: auto; padding: 0 var(--pa-pad) 14px; }
 .mb-list { display: flex; flex-direction: column; gap: var(--sp-1); }
-
-.mb-row-time { flex: none; margin-left: auto; color: var(--text-3); font-size: var(--fs-2xs); font-variant-numeric: tabular-nums; }
 
 /* a group: its header folds it away, the body slides */
 .mb-sec { margin-top: var(--sp-1); }
@@ -54,13 +67,12 @@
 .nav.mb-row[aria-current="true"]:active { background: var(--pressed); }
 .mb-row-main { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); min-width: 0; }
 .mb-row-t { display: flex; align-items: center; gap: var(--sp-1); min-width: 0; }
-.mb-row-t b { flex: 0 1 auto; min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; font-size: var(--pa-row-name); line-height: 1.35; }
+.mb-row-t b { flex: 0 1 auto; min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: var(--weight-semibold); font-size: var(--pa-row-name); line-height: 1.35; }
 .mb-row-t b:not(:only-child) { max-width: 70%; }
-.mb-row-t:has(time) i { max-width: 64px; }
 /* the role is a small chip after the name, in a tint of the text so that it shows on the selected row too */
 .mb-row-t i { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 1px calc(5px + 3 * var(--pa-u)); border-radius: var(--r-pill); background: color-mix(in srgb, var(--text) 7%, transparent); font-style: normal; font-size: var(--pa-row-role); line-height: 1.5; color: var(--text-3); }
 .mb-row-p { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--pa-row-pv); line-height: 1.45; color: var(--text-3); }
-.mb-row-p.is-wait { color: var(--rg-ink); font-weight: 600; }
+.mb-row-p.is-wait { color: var(--rg-ink); }
 .mb-dot { display: block; flex: none; width: var(--pa-dot); height: var(--pa-dot); border-radius: var(--r-pill); }
 .mb-dot.is-wait { background: var(--rg-btn); }
 .mb-dot.is-unread { background: var(--accent-text); }
@@ -68,7 +80,6 @@
 :is(.page-agent, .side) .mb-item .btn.mb-more { position: absolute; top: 50%; right: 4px; width: var(--pa-more); min-height: var(--pa-more); margin-top: calc(var(--pa-more) / -2); border-radius: var(--r-sm); opacity: 0; }
 :is(.page-agent, .side) .mb-item:hover .btn.mb-more, :is(.page-agent, .side) .mb-item .btn.mb-more:focus-visible, :is(.page-agent, .side) .mb-item .btn.mb-more[aria-expanded="true"] { opacity: 1; }
 .mb-item:hover .nav.mb-row, .mb-item:has(.mb-more[aria-expanded="true"]) .nav.mb-row { padding-right: calc(var(--pa-more) + 8px); }
-.mb-item:hover .mb-row .mb-dot, .mb-item:has(.mb-more[aria-expanded="true"]) .mb-row .mb-dot { display: none; }
 .mb-item:hover .nav.mb-chief, .mb-item:has(.mb-more[aria-expanded="true"]) .nav.mb-chief { padding-right: var(--sp-2); }
 
 .mb-who-face { position: relative; display: inline-flex; }
@@ -93,33 +104,38 @@
 .ask-card.is-member { border-color: var(--edge); background: var(--panel); box-shadow: none; animation: none; }
 .ask-card.is-member .ask-q { color: var(--text); }
 .page-agent .ask-card.is-member .btn { border-color: var(--edge); color: var(--text); background: var(--surface-2); }
-.page-agent .ask-card.is-member .btn:hover:not(:disabled) { border-color: var(--hover-edge); background: var(--hover); }
+.page-agent .ask-card.is-member .btn:hover:not(:disabled) { background: var(--hover); }
 .page-agent .ask-card.is-member .btn:active:not(:disabled) { background: var(--pressed); }
-.page-agent .ask-card.is-member .ask-fill { background: var(--text-2); }
 .bgq-card.is-member { border-color: var(--edge); background: var(--panel); box-shadow: none; animation: none; }
 .bgq-card.is-member .bgq-q, .bgq-card.is-member .bgq-name { color: var(--text); }
 .bgq-card.is-member .btn { border-color: var(--edge); color: var(--text); background: var(--surface-2); }
-.bgq-card.is-member .btn:hover:not(:disabled) { border-color: var(--hover-edge); background: var(--hover); }
+.bgq-card.is-member .btn:hover:not(:disabled) { background: var(--hover); }
 .bgq-card.is-member .btn:active:not(:disabled) { background: var(--pressed); }
 /* the line of a routine's run */
 .sys { align-self: center; display: inline-flex; align-items: center; gap: var(--sp-1); max-width: 100%; font-size: var(--pa-sys); color: var(--text-3); }
 .sys .av { --av: var(--pa-sys-face) !important; }
-.sys b { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; color: var(--text-2); }
+.sys b { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: var(--weight-semibold); color: var(--text-2); }
 /* a member's empty thread: its face and its name */
 .ra-empty.is-member .ra-hero { width: var(--pa-hero-m); height: var(--pa-hero-m); }
 .ra-empty.is-member .ra-hero .av { --av: var(--pa-hero-m) !important; }
-.ra-empty.is-member .ra-hi { font: 600 var(--fs-lg)/1.5 var(--display); letter-spacing: 0; }
+.ra-empty.is-member .ra-hi { font: 500 var(--fs-lg)/1.5 var(--display); letter-spacing: 0; }
 
 /* ---------- the details panel ---------- */
-.mb-det { display: flex; flex-direction: column; min-width: 0; min-height: 0; background: var(--side); border-left: 0; padding-top: var(--window-controls-height); }
+.mb-det { position: relative; display: flex; flex-direction: column; min-width: 0; min-height: 0; background: var(--side); border-left: 0; padding-top: var(--window-controls-height); }
+/* The panel's left edge drags it (members-shell.ts): no handle, a thin line only while it moves or has the keyboard. */
+.det-edge { position: absolute; top: 0; left: 0; bottom: 0; z-index: 5; width: 6px; cursor: col-resize; touch-action: none; outline: none; }
+.det-edge:focus-visible::after, .det-edge.is-dragging::after { content: ""; position: absolute; top: 0; left: 0; bottom: 0; width: 2px; background: var(--edge); }
+:root[data-desktop-expanded] .det-edge, :root[data-desktop-watch] .det-edge { display: none; }
 .mb-det.is-in { animation: mb-det-in 0.2s cubic-bezier(0.2, 0.8, 0.2, 1); }
 .mb-det.leaving { animation: mb-det-out 0.16s ease-in forwards; pointer-events: none; }
 @keyframes mb-det-in { from { opacity: 0; transform: translateX(16px); } }
 @keyframes mb-det-out { to { opacity: 0; transform: translateX(16px); } }
-.mb-det-head { display: flex; align-items: center; padding: 4px calc(8px + 4 * var(--pa-u)) 0; }
+/* In the panel, everything in it follows its width: the gear on the left edge, close on the right, and every
+   card and the computer's screen as wide as the panel is. */
+/* Two round buttons never touch: back and the gear keep a gap between them. */
+.mb-det-head { display: flex; align-items: center; gap: var(--sp-2); width: 100%; padding: 4px var(--pa-dpad) 0; }
 .mb-det-fill { flex: 1; }
-.page-agent .mb-det-head .btn.icon { width: var(--pa-dclose); min-height: var(--pa-dclose); border-radius: var(--r-sm); }
-.mb-det-scroll { flex: 1; min-height: 0; width: 100%; max-width: calc(var(--layout-card-max) + 2 * var(--pa-dpad)); overflow-x: hidden; overflow-y: auto; display: flex; flex-direction: column; gap: var(--pa-dgap); padding: 0 var(--pa-dpad) calc(18px + 6 * var(--pa-u)); }
+.mb-det-scroll { flex: 1; min-height: 0; width: 100%; overflow-x: hidden; overflow-y: auto; display: flex; flex-direction: column; gap: var(--pa-dgap); padding: 0 var(--pa-dpad) calc(18px + 6 * var(--pa-u)); }
 .mb-det-scrim { display: none; }
 .mb-who { display: grid; grid-template-columns: minmax(0, 1fr); justify-items: center; gap: calc(2px + 3 * var(--pa-u)); text-align: center; }
 /* the face is the button that changes it: no edge and no fill, so that Raphael's emblem stands bare */
@@ -127,33 +143,37 @@
 .page-agent .btn.mb-avbtn .av { --av: var(--pa-det-av) !important; }
 .page-agent .btn.mb-avbtn:hover:not(:disabled), .page-agent .btn.mb-avbtn:active:not(:disabled) { border-color: transparent; background: transparent; opacity: 0.85; }
 .page-agent .btn.mb-avbtn:active:not(:disabled) { color: var(--text); opacity: 0.7; }
-.mb-who-name { max-width: 100%; font-size: var(--pa-dname); font-weight: 600; overflow-wrap: anywhere; }
+.mb-who-name { max-width: 100%; font-size: var(--pa-dname); font-weight: var(--weight-semibold); overflow-wrap: anywhere; }
 .mb-edit { width: 100%; min-width: 0; padding: var(--sp-1) var(--sp-1); border: 1px solid transparent; border-radius: var(--r-sm); background: transparent; text-align: center; color: var(--text); outline: 0; }
-.mb-edit:hover { border-color: var(--hover-edge); }
+.mb-edit:hover { background-color: var(--hover); }
 .mb-edit:focus-visible { outline: 0; }
 .mb-who-role { font-size: var(--pa-drole); color: var(--text-3); }
 .mb-brain { display: inline-flex; align-items: center; justify-content: center; gap: var(--sp-2); max-width: 100%; color: var(--text-2); font-size: var(--fs-sm); }
 .mb-brain .mono.md { width: 16px; height: 16px; flex: none; }
 .mb-who-role::placeholder { color: var(--text-3); }
-.mb-tabs .tabs.plain { width: 100%; }
+/* The panel tabs: the shared small pills side by side in the middle. */
+.mb-tabs:has(> .tabs.plain) { display: flex; justify-content: center; }
 .mb-tabs .tabs.plain .tab { min-height: var(--pa-dtab-h); font-size: var(--pa-dtab); }
 /* the sections of a tab (個性, 指示, 分組, 模型, 例行任務) are set apart, each label close to its own field */
 .mb-tab-body { display: grid; grid-template-columns: minmax(0, 1fr); gap: calc(16px + 6 * var(--pa-u)); }
 .mb-field { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); }
 .mb-dh { display: flex; align-items: center; justify-content: space-between; min-height: var(--pa-gh-btn); font-size: var(--pa-dlabel); color: var(--text-3); }
 .page-agent .mb-dh .btn.icon { width: var(--pa-gh-btn); min-height: var(--pa-gh-btn); border-radius: var(--r-sm); }
-.mb-fin { width: 100%; min-width: 0; min-height: var(--pa-dctl); padding: calc(6px + 2 * var(--pa-u)) calc(10px + 4 * var(--pa-u)); border: 1px solid var(--btn-edge); border-radius: var(--r-sm); background: var(--panel); font-size: var(--pa-dfs); color: var(--text); outline: 0; }
+.mb-fin { width: 100%; min-width: 0; min-height: var(--h-field); padding: 4px var(--sp-2); border: 1px solid var(--btn-edge); border-radius: var(--r-sm); background: var(--panel); font-size: var(--pa-dfs); color: var(--text); outline: 0; }
 .mb-fin:focus-visible { outline: 0; }
+/* A field the owner must correct, as .field[data-invalid] marks one: the same edge and a line below that says what to do. */
+.mb-fin[aria-invalid="true"] { border-color: var(--err); }
+.field-error { margin: 0; color: var(--err); }
 .mb-ta { min-height: calc(72px + 32 * var(--pa-u)); resize: vertical; line-height: 1.55; }
-.mb-field .sel, .mb-frow .sel, .mb-rsched .sel { width: 100%; max-width: 100%; justify-content: space-between; height: var(--pa-dctl); font-size: var(--pa-dfs); }
+.mb-field .sel, .mb-frow .sel, .mb-rsched .sel { width: 100%; max-width: 100%; justify-content: space-between; }
 .mb-field .sel > span, .mb-frow .sel > span { flex: 1; min-width: 0; text-align: left; }
-.mb-dialog .btn { min-height: var(--pa-dctl); font-size: var(--pa-dfs); }
-.mb-det .btn.sm, .mb-dialog .btn.sm { min-height: calc(28px + 10 * var(--pa-u)); font-size: var(--pa-dfs); }
+
+
 /* routines: a row each, the switch at its end; the pencil and the trash show under the pointer */
 .mb-rts { display: grid; grid-template-columns: minmax(0, 1fr); gap: calc(6px + 4 * var(--pa-u)); }
 .mb-rt { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: var(--sp-1); padding: calc(8px + 4 * var(--pa-u)) calc(8px + 4 * var(--pa-u)) calc(8px + 4 * var(--pa-u)) calc(10px + 6 * var(--pa-u)); border: 1px solid var(--edge); border-radius: var(--r-lg); }
 .mb-rt-main { display: grid; grid-template-columns: minmax(0, 1fr); min-width: 0; }
-.mb-rt-main b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--pa-rt-t); font-weight: 600; }
+.mb-rt-main b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--pa-rt-t); font-weight: var(--weight-semibold); }
 .mb-rt-main span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--pa-rt-s); color: var(--text-3); }
 .mb-rt.is-event .mb-rt-main span { white-space: pre-line; overflow-wrap: anywhere; }
 .mb-rt-ctl { display: flex; align-items: center; gap: 0; }
@@ -176,20 +196,18 @@
 .mb-det .slist > .row > .lbl { min-width: 0; }
 .mb-det .slist > .row { flex-wrap: nowrap; }
 .mb-det .row .t { font-size: var(--fs-sm); }
-.mb-det .row .d, .mb-det .mem-tag, .mb-det .mem-from, .mb-det .mem-count { font-size: var(--fs-2xs); }
-.mb-det .mem-body, .mb-det .mem-entry, .mb-det .mem-none { font-size: var(--pa-dfs); }
-.mb-det .mem .ctl { gap: 0; }
-.mb-det .mem-head .ctl { gap: var(--sp-1); }
-.page-agent .mb-det .mem .btn.icon { width: calc(28px + 8 * var(--pa-u)); min-height: calc(28px + 8 * var(--pa-u)); }
+.mb-det .row .d { font-size: var(--fs-2xs); }
 .mb-det .sgroup + .sgroup { margin-top: var(--sp-3); }
 
 /* ---------- dialogs ---------- */
 /* Choosing a kind of schedule adds a row: the dialog grows downward, so the choice stays under the pointer. */
-.mb-scrim:has(.au-chips) { place-items: start center; }
+/* A dialog whose schedule adds rows stays in the middle too: it starts at the top only when it is taller than the window. */
+.mb-scrim:has(.au-chips) { place-items: start center; overflow-y: auto; }
+.mb-scrim:has(.au-chips) > .mb-dialog { margin-block: auto; }
 .mb-scrim { position: fixed; inset: 0; z-index: 110; display: grid; grid-template-columns: minmax(0, 1fr); place-items: center; padding: calc(var(--window-controls-height) + var(--sp-2)) var(--sp-4) var(--sp-4); background: var(--scrim); animation: scrim-in 0.2s ease-out; }
 .mb-dialog { display: flex; flex-direction: column; gap: calc(14px + 6 * var(--pa-u)); width: min(var(--pa-dlg-w), 100%); max-height: 100%; overflow: hidden; padding: var(--pa-dlg-pad); border-radius: var(--r-lg); background: var(--panel); box-shadow: var(--pop); animation: dialog-in 0.2s cubic-bezier(0.2, 0.8, 0.2, 1); }
 .mb-dlg-head { display: flex; align-items: center; gap: var(--sp-2); }
-.mb-dlg-head h2 { flex: 1; min-width: 0; margin: 0; font: 600 var(--pa-dlg-h2)/1.35 var(--display); overflow-wrap: anywhere; }
+.mb-dlg-head h2 { flex: 1; min-width: 0; margin: 0; font: 500 var(--pa-dlg-h2)/1.35 var(--display); overflow-wrap: anywhere; }
 .mb-dialog .btn.icon { width: calc(34px + 8 * var(--pa-u)); min-height: calc(34px + 8 * var(--pa-u)); border-radius: var(--r-sm); }
 .mb-dlg-head, .mb-dlg-act { flex: none; }
 .mb-dlg-body { min-height: 0; overflow-x: hidden; overflow-y: auto; scroll-padding-block: var(--sp-4); display: grid; grid-template-columns: minmax(0, 1fr); gap: calc(12px + 4 * var(--pa-u)); }
@@ -203,26 +221,37 @@
 .mb-new-av { display: inline-flex; width: var(--pa-new-av); height: var(--pa-new-av); }
 .mb-new-av .av { --av: var(--pa-new-av) !important; }
 .mb-offer-t { display: grid; grid-template-columns: minmax(0, 1fr); min-width: 0; }
-.mb-offer-t b { font-size: var(--pa-dfs); font-weight: 600; overflow-wrap: anywhere; }
+.mb-offer-t b { font-size: var(--pa-dfs); font-weight: var(--weight-semibold); overflow-wrap: anywhere; }
 .mb-offer-t > .routine-sentence { font-size: var(--pa-rt-s); overflow-wrap: anywhere; }
-.mb-dialog.mb-confirm { width: min(480px, 100%); gap: var(--sp-2); padding: var(--sp-4); border: 1px solid var(--edge); border-radius: var(--r-lg); }
-.mb-confirm .mb-dlg-head { align-items: flex-start; }
-.mb-confirm .mb-dlg-head h2 { padding-top: 4px; font-size: var(--fs-lg); }
+/* A confirmation, as Grok Bot's dialogs (owner, 2026-11-10: 「刪除的 dialog 可以參考 grok bot 的 UI」): a 440 px panel, its
+   question in a compact semibold head over a hairline, what it does in secondary words, and a footer over a hairline with
+   Cancel then the action at the right. With a Cancel there is no × as well: Escape and the scrim still close it. */
+.mb-dialog.mb-confirm { width: min(440px, 100%); gap: 0; padding: 0; border: 1px solid var(--edge); border-radius: var(--r-lg); }
+.mb-confirm .mb-dlg-head { align-items: center; min-height: 48px; padding: var(--sp-2) var(--sp-4); border-bottom: 1px solid var(--line); }
+.mb-confirm .mb-dlg-head h2 { font-size: var(--fs-sm); font-weight: var(--weight-semibold); }
 .mb-confirm .mb-dlg-head .btn.icon { flex: none; width: 32px; min-height: 32px; }
-.mb-confirm .mb-dlg-body { font-size: var(--fs-sm); line-height: 1.55; color: var(--text-2); overflow-wrap: anywhere; }
+.mb-confirm:has(.mb-dlg-act [data-dlg="cancel"]) .mb-dlg-head [data-dlg="close"] { display: none; }
+.mb-confirm .mb-dlg-body { padding: var(--sp-4); font-size: var(--fs-sm); line-height: 1.55; color: var(--text-2); overflow-wrap: anywhere; }
 .mb-confirm .mb-dlg-body p { margin: 0; }
-.mb-confirm .mb-dlg-act { padding-top: var(--sp-1); border-top: 0; }
-.mb-confirm .mb-dlg-act .btn { min-height: 36px; padding-inline: var(--sp-4); border-radius: var(--r-sm); font-size: var(--fs-sm); }
+.mb-confirm .mb-dlg-act { padding: var(--sp-3) var(--sp-4); border-top: 1px solid var(--line); }
+/* With nothing to say under the question, one hairline parts it from the buttons, not two. */
+.mb-confirm:has(.mb-dlg-body:empty) .mb-dlg-act { border-top: 0; }
+.mb-confirm .mb-dlg-act .btn { padding-inline: var(--sp-4); }
+/* A dialog's footer buttons are the field height, as a card's are (owner, 2026-11-10: 「上下寬度可以再胖一點」). */
+.mb-dlg-act .btn:not(.icon) { min-height: var(--h-field); padding-block: 0; line-height: calc(var(--h-field) - 2px); }
 .mb-addrow { display: flex; gap: var(--sp-2); }
 .mb-addrow .mb-fin { flex: 1; }
 
 /* the popovers: the slimes and 從電腦選…, and a member's or group's actions */
 .menu.mb-avpop, .menu.mb-menu { max-width: min(calc(360px + 80 * var(--pa-u)), calc(100vw - 16px)); }
-.menu.mb-avpop button, .menu.mb-menu button { min-height: var(--pa-menu-h); font-size: var(--pa-menu-fs); }
+
 .menu.mb-avpop { min-width: calc(200px + 60 * var(--pa-u)); }
 .menu.mb-menu { min-width: calc(180px + 40 * var(--pa-u)); }
 .mb-presets { display: grid; grid-template-columns: repeat(4, var(--pa-preset)); gap: calc(6px + 4 * var(--pa-u)); padding: calc(6px + 4 * var(--pa-u)); }
 .menu.mb-avpop .mb-preset { width: var(--pa-preset); height: var(--pa-preset); min-height: var(--pa-preset); padding: 0; justify-content: center; border-radius: var(--r-pill); overflow: hidden; }
+/* A picture drawn earlier as a member's face (members.ts faceHTML) still shows; new faces are slimes. */
+.mb-av-pic { display: inline-flex; flex: none; width: var(--av); height: var(--av); border-radius: var(--r-pill); overflow: hidden; }
+.mb-av-pic > img { display: block; width: 100%; height: 100%; object-fit: cover; }
 
 @media (prefers-reduced-motion: reduce) {
   .mb-det.is-in, .mb-det.leaving, .mb-item.is-new, .mb-scrim, .mb-dialog { animation: none !important; }
@@ -232,7 +261,7 @@
 /* The icons are drawn on a 16 px grid and are shown at 16 or 20 px, never between (ui-rules.test.ts): so
    they do not follow the fluid sizes, they step from 16 to 20 px once the window is wide. */
 @media (min-width: 1280px) {
-  .page-agent .btn.mb-tool .i, .mb-find .i, :is(.page-agent, .side) .mb-ghead .btn.icon .i, :is(.page-agent, .side) .mb-item .btn.mb-more .i, .page-agent .mb-det-head .btn.icon .i, .page-agent .mb-dh .btn.icon .i, .mb-dialog .btn.icon .i { width: 20px; height: 20px; }
+  .page-agent .btn.mb-tool .i, :is(.page-agent, .side) .mb-item .btn.mb-more .i, .page-agent .mb-det-head .btn.icon .i, .page-agent .mb-dh .btn.icon .i, .mb-dialog .btn.icon .i { width: 20px; height: 20px; }
   .sys .i { width: 20px; height: 20px; }
   .menu.mb-avpop :is(.ck, .ck svg, svg.i), .menu.mb-menu :is(.ck, .ck svg, svg.i) { width: 20px; height: 20px; }
 }
@@ -249,7 +278,7 @@
 /* 個性 and 指示: closed, one line behind a button (the name, the first line, a chevron); open, the box. */
 .mb-fold-field { gap: var(--sp-2); }
 .mb-field .btn.mb-fold-head { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: var(--sp-2); width: 100%; min-height: 44px; padding: var(--sp-2) var(--sp-3); border: 1px solid var(--btn-edge); border-radius: var(--r-md); background: var(--btn); color: var(--text); text-align: left; font-weight: 400; }
-.mb-field .btn.mb-fold-head:hover:not(:disabled) { background: var(--hover); border-color: var(--hover-edge); }
+.mb-field .btn.mb-fold-head:hover:not(:disabled) { background: var(--hover); }
 .mb-field .btn.mb-fold-head:active:not(:disabled) { background: var(--pressed); }
 .mb-fold-head .mb-dh { margin: 0; }
 .mb-fold-head .mb-peek { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-3); font-size: var(--fs-sm); }

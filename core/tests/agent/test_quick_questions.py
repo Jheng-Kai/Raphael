@@ -119,8 +119,7 @@ def test_quick_kind_survives_reopen_and_cannot_be_renamed(tmp_path):
         store = Conversations(conn)
         assert store.quick() == quick
         assert store.get(quick)["kind"] == "quick"
-        with pytest.raises(RpcError, match="quick"):
-            store.rename(quick, "A different purpose")
+        assert not hasattr(store, "rename")
 
 
 async def test_overlay_retains_full_quick_history_below_half_window(make_rig, client):
@@ -138,42 +137,23 @@ async def test_overlay_retains_full_quick_history_below_half_window(make_rig, cl
     assert client.chat_calls[-1]["reasoning_effort"] == "low"
 
 
-async def test_latency_logs_only_timings_and_waits_for_actual_sound(make_rig, client, caplog):
-    class DelayedVoice:
-        on_state = None
-
-        def speaks(self):
-            return True
-
-        def stop(self):
-            pass
-
-        async def say(self, *args, **kwargs):
-            self.turn = kwargs["turn_id"]
-            # The speech service can return before playback when its wait expires.
-
-    voice = DelayedVoice()
-    rig = make_rig(speaker=voice)
+async def test_latency_logs_only_timings(make_rig, client, caplog):
+    rig = make_rig()
     client.decisions.append(decision("unclear"))
-    client.chats.append(chat('{"progress":"Public step","prefix":"Answer","text":"PRIVATE_WORD_SENTINEL","say_ja":"はい"}'))
+    client.chats.append(chat('{"progress":"Public step","prefix":"Answer","text":"PRIVATE_WORD_SENTINEL"}'))
     caplog.set_level("INFO", logger="raphael_core.agent.service")
-    result = await rig.call("agent.ask", {"session_id": "timed", "text": "QUESTION_SENTINEL", "ui_language": "en", "transcript_ms": 25,
-                                          "destination": "quick"})
+    await rig.call("agent.ask", {"session_id": "timed", "text": "QUESTION_SENTINEL", "ui_language": "en", "transcript_ms": 25,
+                                 "destination": "quick"})
     records = [r for r in caplog.records if r.msg == "Quick latency ms: %s"]
     trace = json.loads(records[-1].args[0])
-    assert trace["speech_start"] is None
+    assert "speech_start" not in trace
     assert 25 <= trace["routing"] <= trace["first_step"] <= trace["final_answer"]
-    await asyncio.sleep(0)
-    voice.on_state(result["turn_id"], "playing")
-    voice.on_state(result["turn_id"], "done")
-    records = [r for r in caplog.records if r.msg == "Quick latency ms: %s"]
-    assert json.loads(records[-1].args[0])["speech_start"] >= trace["final_answer"]
     assert "SENTINEL" not in " ".join(r.getMessage() for r in records)
-    assert not rig.service._speech_traces
+    assert not rig.service._latency_traces
 
 
 @pytest.mark.parametrize("source", ["voice", "app"])
-async def test_quick_cli_passes_effort_and_resumes_its_native_session(make_rig, client, tmp_path, monkeypatch, source):
+async def test_quick_cli_passes_effort_rebuilds_a_legacy_session_then_resumes(make_rig, client, tmp_path, monkeypatch, source):
     from raphael_core.agent.cli.discovery import CliBrains
     from raphael_core.agent.cli.drivers import Event
     from raphael_core.agent.cli import loop as production
@@ -207,10 +187,14 @@ async def test_quick_cli_passes_effort_and_resumes_its_native_session(make_rig, 
     result = await rig.call("agent.ask", {"session_id": "cli", "text": "Hello", "ui_language": "en", "source": source,
         "destination": "quick", "conversation_id": quick})
     assert result["text"] == "Quick answer."
-    assert calls[0]["session"] == "unbounded-native-history" and calls[0]["effort"] == "low"
+    assert calls[0]["session"] is None and calls[0]["effort"] == "low"
     assert "FORMAL_SENTINEL" not in calls[0]["user"] and "quick-seed-00" in calls[0]["user"]
     assert "quick-seed-11" in calls[0]["user"]
     assert rig.service._cli_sessions.get(0, model, quick) == "new-native-session"
+    await rig.call("agent.ask", {"session_id": "cli-next", "text": "Continue", "ui_language": "en", "source": source,
+        "destination": "quick", "conversation_id": quick})
+    assert calls[1]["session"] == "new-native-session" and calls[1]["effort"] == "low"
+    assert "quick-seed-00" not in calls[1]["user"] and "quick-seed-11" not in calls[1]["user"]
     assert not client.decide_calls and not client.json_calls
 
 

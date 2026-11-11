@@ -1,18 +1,14 @@
 //! What the user corrected in a pasted dictation, with pure rules over character origins.
 //!
-//! [`Tracker`] starts from the field's text right after the paste, finds the pasted text in it,
-//! and follows the field from snapshot to snapshot. Between two snapshots (half a second apart)
-//! the user makes one small edit at most, so the common prefix and suffix of the two texts leave
-//! exactly the edited part in the middle. Every character of the field is either one that was
-//! there right after the paste (it remembers which) or one typed since. That is enough to tell,
-//! at the end, which stretches of the original text were replaced by which new ones, even when
-//! the user first deleted a word and typed the right one later: no diff of the whole text is
-//! needed, and no word that the user retyped whole is cut in two by a coincidental match.
+//! [`Tracker`] anchors the pasted dictation inside the field and follows scalar-character origins
+//! across snapshots, including selection, deletion and later retyping. Only the dictated span
+//! reaches the shared pure term rule; neighboring typing never becomes dictionary evidence.
 //!
-//! [`Tracker::corrections`] keeps the replacements that look like a misheard term put right
-//! (see [`Correction`]'s rules).
+//! [`Tracker::corrections`] applies the shared pure term rule to the final dictated span.
 
 use std::ops::Range;
+
+pub(crate) use super::terms::term_corrections;
 
 /// The user replaced `misheard` with `word` in the pasted text.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -22,15 +18,7 @@ pub struct Correction {
 }
 
 /// The most corrections taken from one dictation.
-pub const MAX_CORRECTIONS: usize = 3;
-/// The most CJK characters (kanji, kana, hangul) on either side of a correction.
-const MAX_CJK: usize = 12;
-/// The most Latin words on either side of a correction.
-const MAX_WORDS: usize = 3;
-/// The most characters on either side of a correction, all kinds together.
-const MAX_CHARS: usize = 40;
-/// The edits inside the pasted text may change at most this share of it; more is a rewrite.
-const MAX_EDITED_SHARE: f64 = 0.3;
+pub const MAX_CORRECTIONS: usize = 2;
 /// Below this share of the pasted text still in the field, the field was cleared (the message
 /// was sent) or replaced.
 pub const MIN_KEPT_SHARE: f64 = 0.5;
@@ -226,264 +214,35 @@ impl Tracker {
             .collect()
     }
 
-    /// The edits with Latin words made whole: one inside a word ("Tyeless" fixed to "Typeless"
-    /// by typing the "p") takes in the rest of the word, and edits with only word characters
-    /// between them become one. Never past the pasted text.
-    fn whole_words(&self, edits: Vec<Edit>) -> Vec<Edit> {
-        let mut merged: Vec<Edit> = Vec::new();
-        for edit in edits {
-            if let Some(last) = merged.last_mut() {
-                let gap = &self.before[last.old.end..edit.old.start];
-                if self.touches_word(last)
-                    && self.touches_word(&edit)
-                    && gap.iter().all(|&c| is_word_char(c))
-                {
-                    last.old.end = edit.old.end;
-                    last.new.end = edit.new.end;
-                    continue;
-                }
-            }
-            merged.push(edit);
-        }
-        for edit in &mut merged {
-            // Terminal providers trim row padding during a delete-and-retype. A reinserted
-            // separator must not pull the unchanged preceding word into the correction.
-            while edit.old.start < edit.old.end
-                && edit.new.start < edit.new.end
-                && self.before[edit.old.start].is_whitespace()
-                && self.before[edit.old.start] == self.current[edit.new.start]
-            {
-                edit.old.start += 1;
-                edit.new.start += 1;
-            }
-            while edit.old.start < edit.old.end
-                && edit.new.start < edit.new.end
-                && self.before[edit.old.end - 1].is_whitespace()
-                && self.before[edit.old.end - 1] == self.current[edit.new.end - 1]
-            {
-                edit.old.end -= 1;
-                edit.new.end -= 1;
-            }
-            if !self.touches_word(edit) {
-                continue;
-            }
-            // Left: the original characters right before the edit, as long as they are word
-            // characters (they are the same in both texts).
-            while edit.old.start > self.span.start
-                && edit.new.start > 0
-                && self.origin[edit.new.start - 1] == Some(edit.old.start - 1)
-                && is_word_char(self.before[edit.old.start - 1])
-            {
-                edit.old.start -= 1;
-                edit.new.start -= 1;
-            }
-            while edit.old.end < self.span.end
-                && edit.new.end < self.current.len()
-                && self.origin[edit.new.end] == Some(edit.old.end)
-                && is_word_char(self.before[edit.old.end])
-            {
-                edit.old.end += 1;
-                edit.new.end += 1;
-            }
-        }
-        merged
-    }
-
-    /// Whether the edit is about Latin words: it has a word character in it (old or new side),
-    /// or it sits between two word characters ("Open Router" joined into "OpenRouter").
-    fn touches_word(&self, edit: &Edit) -> bool {
-        let inside = self.before[edit.old.clone()]
-            .iter()
-            .chain(&self.current[edit.new.clone()])
-            .any(|&c| is_word_char(c));
-        let between = edit.old.start > 0
-            && self
-                .before
-                .get(edit.old.end)
-                .is_some_and(|&c| is_word_char(c))
-            && is_word_char(self.before[edit.old.start - 1]);
-        inside || between
-    }
-
-    /// The corrections the user made in the pasted text, at most [`MAX_CORRECTIONS`]. A
-    /// correction replaces a short run (up to 12 CJK characters, up to 3 Latin words) with a
-    /// different short run that looks like a term: 2 CJK characters or more, or a Latin word of 3
-    /// letters or more. Not a correction: a deletion or an insertion alone, a change of letter
-    /// case only, a change across a line break, or digits and punctuation alone. None at all when
-    /// the edits change more than 30% of the pasted text: that is a rewrite, not a correction.
+    /// Apply the same pure term rule to the dictated span in every capture surface.
     pub fn corrections(&self) -> Vec<Correction> {
-        // The OS adapter is optional. All alignment and acceptance rules below also work with
-        // injected scalar ranges; a failed provider preserves the original conservative rules.
-        let needs_words = self
-            .edits_in_span()
-            .iter()
-            .any(|edit| self.single_han_replacement(edit));
-        let ranges = needs_words.then(|| {
-            let before: String = self.before.iter().collect();
-            let current: String = self.current.iter().collect();
-            Some((
-                super::cjk_words::word_ranges(&before)?,
-                super::cjk_words::word_ranges(&current)?,
-            ))
-        });
-        match ranges.flatten() {
-            Some((before, current)) => self.corrections_with_word_ranges(&before, &current),
-            None => self.corrections_with_word_ranges(&[], &[]),
-        }
-    }
-
-    /// Pure correction rules with optional, nonoverlapping word ranges in scalar indexes.
-    pub(crate) fn corrections_with_word_ranges(
-        &self,
-        before_words: &[Range<usize>],
-        current_words: &[Range<usize>],
-    ) -> Vec<Correction> {
-        let edits = self.edits_in_span();
-        // How much of the pasted text was changed: what was replaced or deleted, and for an
-        // insertion what was inserted (before words are made whole: "Open Router" joined into
-        // one word is one character changed).
-        let edited: usize = edits
-            .iter()
-            .map(|edit| {
-                if edit.old.is_empty() {
-                    edit.new.len()
-                } else {
-                    edit.old.len()
-                }
-            })
-            .sum();
-        let whole = self.whole_words(edits);
-        let name = whole.len() == 1 && {
-            let edit = &whole[0];
-            plausible_name(
-                &trimmed(&self.before[edit.old.clone()]),
-                &trimmed(&self.current[edit.new.clone()]),
-            )
-        };
-        if edited as f64 > MAX_EDITED_SHARE * self.span.len() as f64 && !name {
+        let edits = self.edits();
+        // A replacement across either pasted edge cannot be attributed to dictation alone.
+        if edits.iter().any(|edit| {
+            edit.old.start < self.span.end
+                && edit.old.end > self.span.start
+                && (edit.old.start < self.span.start || edit.old.end > self.span.end)
+        }) {
             return Vec::new();
         }
-        whole
-            .into_iter()
-            .filter_map(|edit| {
-                let edit = if self.current[edit.new.clone()].iter().any(|&c| is_kana(c)) {
-                    self.whole_kana_word(edit)
-                } else if self.single_han_replacement(&edit) {
-                    self.whole_han_word(edit, before_words, current_words)?
-                } else {
-                    edit
-                };
-                let misheard = trimmed(&self.before[edit.old.clone()]);
-                let word = trimmed(&self.current[edit.new.clone()]);
-                is_correction(&misheard, &word).then_some(Correction { word, misheard })
-            })
-            .take(MAX_CORRECTIONS)
-            .collect()
-    }
-
-    fn whole_kana_word(&self, mut edit: Edit) -> Edit {
-        while edit.old.start > self.span.start
-            && edit.new.start > 0
-            && self.origin[edit.new.start - 1] == Some(edit.old.start - 1)
-            && same_kana_script(
-                self.before[edit.old.start - 1],
-                self.current[edit.new.start],
-            )
-        {
-            edit.old.start -= 1;
-            edit.new.start -= 1;
-        }
-        while edit.old.end < self.span.end
-            && edit.new.end < self.current.len()
-            && self.origin[edit.new.end] == Some(edit.old.end)
-            && same_kana_script(self.before[edit.old.end], self.current[edit.new.end - 1])
-        {
-            edit.old.end += 1;
-            edit.new.end += 1;
-        }
-        edit
-    }
-
-    fn single_han_replacement(&self, edit: &Edit) -> bool {
-        edit.old.len() == 1
-            && edit.new.len() == 1
-            && is_han(self.before[edit.old.start])
-            && is_han(self.current[edit.new.start])
-    }
-
-    fn whole_han_word(
-        &self,
-        mut edit: Edit,
-        before_words: &[Range<usize>],
-        current_words: &[Range<usize>],
-    ) -> Option<Edit> {
-        if !valid_word_ranges(before_words, self.before.len())
-            || !valid_word_ranges(current_words, self.current.len())
-        {
-            return None;
-        }
-        let word = current_words
+        let mut positions: Vec<usize> = self
+            .origin
             .iter()
-            .find(|word| word.start <= edit.new.start && edit.new.end <= word.end)?;
-        if !(2..=MAX_CJK).contains(&word.len())
-            || !self.current[word.clone()].iter().copied().all(is_han)
-        {
-            return None;
+            .enumerate()
+            .filter_map(|(at, origin)| origin.filter(|i| self.span.contains(i)).map(|_| at))
+            .collect();
+        let mut end = positions.last().map_or(0, |at| at + 1);
+        for edit in self.edits_in_span() {
+            positions.push(edit.new.start);
+            end = end.max(edit.new.end);
         }
-        while edit.new.start > word.start {
-            if edit.old.start <= self.span.start
-                || self.origin[edit.new.start - 1] != Some(edit.old.start - 1)
-            {
-                return None;
-            }
-            edit.old.start -= 1;
-            edit.new.start -= 1;
-        }
-        while edit.new.end < word.end {
-            if edit.old.end >= self.span.end || self.origin[edit.new.end] != Some(edit.old.end) {
-                return None;
-            }
-            edit.old.end += 1;
-            edit.new.end += 1;
-        }
-        // Both original edges must be real word boundaries. If the original was already one
-        // complete multi-character word, this could be a meaning/style edit, so do not alias it.
-        let starts_word = before_words.iter().any(|word| word.start == edit.old.start);
-        let ends_word = before_words.iter().any(|word| word.end == edit.old.end);
-        let was_word = before_words
-            .iter()
-            .any(|word| word.start <= edit.old.start && edit.old.end <= word.end && word.len() > 1);
-        (starts_word && ends_word && !was_word).then_some(edit)
+        let Some(start) = positions.into_iter().min() else {
+            return Vec::new();
+        };
+        let before: String = self.before[self.span.clone()].iter().collect();
+        let after: String = self.current[start..end.max(start)].iter().collect();
+        term_corrections(&before, &after)
     }
-}
-
-fn valid_word_ranges(words: &[Range<usize>], text_len: usize) -> bool {
-    !words.is_empty()
-        && words
-            .iter()
-            .all(|word| word.start < word.end && word.end <= text_len)
-        && words.windows(2).all(|pair| pair[0].end <= pair[1].start)
-}
-
-fn is_han(character: char) -> bool {
-    matches!(character,
-        '\u{3400}'..='\u{4DBF}'
-        | '\u{4E00}'..='\u{9FFF}'
-        | '\u{F900}'..='\u{FAFF}'
-        | '\u{20000}'..='\u{2FFFF}')
-}
-
-/// The text without whitespace and punctuation at its ends.
-fn trimmed(chars: &[char]) -> String {
-    let text: String = chars.iter().collect();
-    text.trim_matches(|c: char| c.is_whitespace() || is_punctuation(c))
-        .to_owned()
-}
-
-fn is_punctuation(c: char) -> bool {
-    c.is_ascii_punctuation()
-        || matches!(c, '\u{3000}'..='\u{303F}' | '\u{FF01}'..='\u{FF0F}' | '\u{FF1A}'..='\u{FF20}')
-        || matches!(c, '\u{2010}'..='\u{205E}' | '\u{FF5B}'..='\u{FF65}')
 }
 
 /// Kanji, kana and hangul: scripts written without spaces between words.
@@ -497,87 +256,6 @@ pub fn is_cjk(c: char) -> bool {
         | '\u{20000}'..='\u{2FFFF}')
 }
 
-/// A letter or digit of a script with spaces between words (Latin and the like).
-fn is_word_char(c: char) -> bool {
-    c.is_alphanumeric() && !is_cjk(c)
-}
-
-/// The Latin words of `text`: its runs of word characters.
-fn words(text: &str) -> impl Iterator<Item = &str> {
-    text.split(|c: char| !is_word_char(c))
-        .filter(|word| !word.is_empty())
-}
-
-/// Whether `text` is short enough to be one term.
-fn is_short(text: &str) -> bool {
-    let cjk = text.chars().filter(|&c| is_cjk(c)).count();
-    cjk <= MAX_CJK && words(text).count() <= MAX_WORDS && text.chars().count() <= MAX_CHARS
-}
-
-/// Whether `text` looks like a term: 2 CJK characters or more, or a word of 3 letters or more.
-fn is_kana(c: char) -> bool {
-    matches!(c, '\u{3041}'..='\u{3096}' | '\u{30A1}'..='\u{30FA}' | '\u{30FC}' | '\u{FF66}'..='\u{FF9D}')
-}
-
-fn same_kana_script(a: char, b: char) -> bool {
-    let katakana =
-        |c: char| matches!(c, '\u{30A1}'..='\u{30FA}' | '\u{30FC}' | '\u{FF66}'..='\u{FF9D}');
-    is_kana(a) && is_kana(b) && katakana(a) == katakana(b)
-}
-
-fn is_term(text: &str) -> bool {
-    text.chars().filter(|&c| is_cjk(c)).count() >= 2
-        || words(text).any(|word| word.chars().filter(|c| c.is_alphabetic()).count() >= 3)
-}
-
-/// Whether replacing `misheard` with `word` is a correction worth learning.
-fn is_correction(misheard: &str, word: &str) -> bool {
-    !misheard.is_empty()
-        && !word.is_empty()
-        && !misheard.contains('\n')
-        && !word.contains('\n')
-        && misheard.to_lowercase() != word.to_lowercase()
-        && is_short(misheard)
-        && is_short(word)
-        && is_term(word)
-}
-
-/// A retyped name can be most of a short utterance. Exempt one small, similarly spelled
-/// capitalized name from the rewrite share, never an arbitrary replacement sentence.
-fn plausible_name(misheard: &str, word: &str) -> bool {
-    if !is_correction(misheard, word)
-        || !word.chars().any(|c| c.is_ascii_uppercase())
-        || !word
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '\''))
-    {
-        return false;
-    }
-    let compact = |text: &str| {
-        text.chars()
-            .filter(char::is_ascii_alphanumeric)
-            .map(|c| c.to_ascii_lowercase())
-            .collect::<Vec<_>>()
-    };
-    let (old, new) = (compact(misheard), compact(word));
-    if old.len() < 3 || new.len() < 3 {
-        return false;
-    }
-    let mut row: Vec<usize> = (0..=new.len()).collect();
-    for (i, a) in old.iter().enumerate() {
-        let mut diagonal = row[0];
-        row[0] = i + 1;
-        for (j, b) in new.iter().enumerate() {
-            let above = row[j + 1];
-            row[j + 1] = (above + 1)
-                .min(row[j] + 1)
-                .min(diagonal + usize::from(a != b));
-            diagonal = above;
-        }
-    }
-    row[new.len()] * 5 <= old.len().max(new.len()) * 2
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -589,7 +267,7 @@ mod tests {
             tracker = tracker.advanced(text);
         }
         tracker
-            .corrections_with_word_ranges(&[], &[])
+            .corrections()
             .into_iter()
             .map(|c| (c.misheard, c.word))
             .collect()
@@ -646,46 +324,46 @@ mod tests {
 
     #[test]
     fn a_known_span_is_followed_even_when_the_text_occurs_again_after_it() {
-        let field = "Tyeless is here and Tyeless again";
+        let field = "Wornote is here and Wornote again";
         // `new` takes the last occurrence; the caller knows it is the first.
-        assert_eq!(Tracker::new(field, "Tyeless").unwrap().span, 20..27);
+        assert_eq!(Tracker::new(field, "Wornote").unwrap().span, 20..27);
         let tracker = Tracker::with_span(field, 0..7).unwrap();
-        let tracker = tracker.advanced("Typeless is here and Tyeless again");
+        let tracker = tracker.advanced("Wordnote is here and Wornote again");
         let learned: Vec<_> = tracker
-            .corrections_with_word_ranges(&[], &[])
+            .corrections()
             .into_iter()
             .map(|c| (c.misheard, c.word))
             .collect();
-        assert_eq!(learned, [("Tyeless".to_owned(), "Typeless".to_owned())]);
+        assert_eq!(learned, [("Wornote".to_owned(), "Wordnote".to_owned())]);
     }
 
     #[test]
     fn only_a_change_inside_the_pasted_text_counts_as_an_edit() {
-        let pasted = "Use Tyeless for this";
+        let pasted = "Use Wornote for this";
         let field = format!("PS> {pasted} and more");
         let tracker = Tracker::new(&field, pasted).unwrap();
         assert!(!tracker.edited());
         // The prompt, and the text after the paste, are not the paste.
         assert!(
             !tracker
-                .advanced("PS2> Use Tyeless for this and more")
+                .advanced("PS2> Use Wornote for this and more")
                 .edited()
         );
         assert!(
             !tracker
-                .advanced("PS> Use Tyeless for this and more more")
+                .advanced("PS> Use Wornote for this and more more")
                 .edited()
         );
         // A letter typed inside it, a word deleted from it, and a replaced word are.
         assert!(
             tracker
-                .advanced("PS> Use Typeless for this and more")
+                .advanced("PS> Use Wordnote for this and more")
                 .edited()
         );
-        assert!(tracker.advanced("PS> Use Tyeless this and more").edited());
+        assert!(tracker.advanced("PS> Use Wornote this and more").edited());
         assert!(
             tracker
-                .advanced("PS> Use Tyeless for that and more")
+                .advanced("PS> Use Wornote for that and more")
                 .edited()
         );
     }
@@ -712,258 +390,15 @@ mod tests {
 
     // ---------- CJK ----------
 
-    #[cfg(windows)]
     #[test]
-    #[ignore = "needs the Windows zh-TW word breaker"]
-    fn windows_word_boundaries_learn_phone_and_name() {
-        let learned = |pasted: &str, from: &str, to: &str| {
-            Tracker::new(pasted, pasted)
-                .unwrap()
-                .advanced(&pasted.replacen(from, to, 1))
-                .corrections()
-                .into_iter()
-                .map(|correction| (correction.misheard, correction.word))
-                .collect::<Vec<_>>()
-        };
-        assert_eq!(learned(PASTED, "首機", "手機"), pairs(&[("首機", "手機")]));
-        let pasted = "我今天使用拉菲爾整理會議紀錄，整體操作很流暢，明天也會繼續使用";
-        assert_eq!(
-            learned(pasted, "拉菲爾", "拉斐爾"),
-            pairs(&[("拉菲爾", "拉斐爾")])
-        );
-        let pasted = "😀今天帶著首機去開會\n下午再一起確認新的工作安排";
-        assert_eq!(learned(pasted, "首機", "手機"), pairs(&[("首機", "手機")]));
-        for (from, to) in [
-            ("房子", "孩子"),
-            ("台北", "臺北"),
-            ("可能", "可以"),
-            ("感覺", "感到"),
-            ("以經", "已經"),
-            ("可已", "可以"),
-            ("敢覺", "感覺"),
-            ("阿咪咕", "阿米咕"),
-        ] {
-            let pasted = format!("今天討論{from}的相關內容，下午還會繼續確認其他細節");
-            assert!(
-                learned(&pasted, from, to).is_empty(),
-                "{from} must not alias {to}"
-            );
-        }
-        for (field, pasted) in [
-            (
-                "手雞已放在桌上，下午再拿去開會",
-                "雞已放在桌上，下午再拿去開會",
-            ),
-            ("今天開會之前請先帶著首機", "今天開會之前請先帶著首"),
-        ] {
-            let current = field.replace("手雞", "手機").replace("首機", "手機");
-            assert!(
-                Tracker::new(field, pasted)
-                    .unwrap()
-                    .advanced(&current)
-                    .corrections()
-                    .is_empty()
-            );
-        }
-    }
-
-    fn word_range(text: &str, word: &str) -> Range<usize> {
-        let byte = text.find(word).expect("fixture word is present");
-        let start = text[..byte].chars().count();
-        start..start + word.chars().count()
-    }
-
-    fn with_han_word(pasted: &str, from: &str, to: &str) -> Vec<Correction> {
-        let current = pasted.replacen(from, to, 1);
-        let old = word_range(pasted, from);
-        let fragments: Vec<_> = old.clone().map(|index| index..index + 1).collect();
-        Tracker::new(pasted, pasted)
-            .unwrap()
-            .advanced(&current)
-            .corrections_with_word_ranges(&fragments, &[word_range(&current, to)])
-    }
-
-    #[test]
-    fn one_han_edit_uses_the_complete_injected_word() {
-        assert_eq!(
-            with_han_word(PASTED, "首機", "手機"),
-            vec![Correction {
-                word: "手機".into(),
-                misheard: "首機".into()
-            }]
-        );
-        let pasted = "今天使用拉菲爾整理文件，明天也會繼續使用這個工具";
-        assert_eq!(
-            with_han_word(pasted, "拉菲爾", "拉斐爾"),
-            vec![Correction {
-                word: "拉斐爾".into(),
-                misheard: "拉菲爾".into()
-            }]
-        );
-    }
-
-    #[test]
-    fn scalar_word_ranges_remain_correct_after_emoji_and_newlines() {
-        let pasted = "😀今天帶著首機去開會\n下午再一起確認新的工作安排";
-        assert_eq!(
-            with_han_word(pasted, "首機", "手機"),
-            vec![Correction {
-                word: "手機".into(),
-                misheard: "首機".into()
-            }]
-        );
-    }
-
-    #[test]
-    fn a_word_that_was_already_complete_is_not_aliased() {
-        for (from, to) in [
-            ("房子", "孩子"),
-            ("台北", "臺北"),
-            ("可能", "可以"),
-            ("感覺", "感到"),
-        ] {
-            let pasted = format!("今天討論{from}的相關內容，下午還會繼續確認其他細節");
-            let current = pasted.replacen(from, to, 1);
-            let tracker = Tracker::new(&pasted, &pasted).unwrap().advanced(&current);
-            assert!(
-                tracker
-                    .corrections_with_word_ranges(
-                        &[word_range(&pasted, from)],
-                        &[word_range(&current, to)]
-                    )
-                    .is_empty(),
-                "{from} must not become an alias of {to}"
-            );
-        }
-    }
-
-    #[test]
-    fn core_owns_the_common_vocabulary_decision_for_extracted_candidates() {
-        let pasted = "今天討論以經完成的資料內容，下午再去清理新訊息並確認沒有紀錄。";
-        assert_eq!(
-            with_han_word(pasted, "以經", "已經"),
-            vec![Correction {
-                word: "已經".into(),
-                misheard: "以經".into()
-            }]
-        );
-    }
-
-    #[test]
-    fn word_expansion_stops_at_both_pasted_edges() {
-        let before = "手雞已放在桌上，下午再拿去開會";
-        let current = before.replace("手雞", "手機");
-        let tracker = Tracker::new(before, "雞已放在桌上，下午再拿去開會")
-            .unwrap()
-            .advanced(&current);
-        assert!(
-            tracker
-                .corrections_with_word_ranges(&[0..1, 1..2], std::slice::from_ref(&(0..2)))
-                .is_empty()
-        );
-
-        let before = "今天開會之前請先帶著首機";
-        let current = before.replace("首機", "手機");
-        let tracker = Tracker::new(before, "今天開會之前請先帶著首")
-            .unwrap()
-            .advanced(&current);
-        let old = word_range(before, "首機");
-        let fragments: Vec<_> = old.map(|index| index..index + 1).collect();
-        assert!(
-            tracker
-                .corrections_with_word_ranges(&fragments, &[word_range(&current, "手機")])
-                .is_empty()
-        );
-    }
-
-    #[test]
-    fn only_unchanged_origin_characters_can_complete_a_han_word() {
-        let pasted = "今天使用拉菲小耳整理文件，明天也會繼續使用這個工具";
-        let first = pasted.replace('菲', "斐");
-        let current = first.replace('耳', "爾");
-        let tracker = Tracker::new(pasted, pasted)
-            .unwrap()
-            .advanced(&first)
-            .advanced(&current);
-        let fragments: Vec<_> = word_range(pasted, "拉菲小耳")
-            .map(|index| index..index + 1)
-            .collect();
-        assert!(
-            tracker
-                .corrections_with_word_ranges(&fragments, &[word_range(&current, "拉斐小爾")])
-                .is_empty()
-        );
-    }
-
-    #[test]
-    fn missing_invalid_or_overlapping_ranges_fail_closed() {
-        let current = PASTED.replace("首機", "手機");
-        let tracker = Tracker::new(PASTED, PASTED).unwrap().advanced(&current);
-        for (before, after) in [
-            (vec![], std::slice::from_ref(&(9..11)).to_vec()),
-            (vec![9..10, 10..11], vec![]),
-            (
-                vec![9..10, 10..11],
-                std::slice::from_ref(&(9..1000)).to_vec(),
-            ),
-            (vec![9..10, 10..11], vec![9..10, 9..11]),
-            (
-                vec![9..10, 10..1000],
-                std::slice::from_ref(&(9..11)).to_vec(),
-            ),
-            (vec![9..11, 10..11], std::slice::from_ref(&(9..11)).to_vec()),
-        ] {
-            assert!(
-                tracker
-                    .corrections_with_word_ranges(&before, &after)
-                    .is_empty()
-            );
-        }
-    }
-
-    #[test]
-    fn partial_original_word_edges_are_not_expanded() {
-        let current = PASTED.replace("首機", "手機");
-        let tracker = Tracker::new(PASTED, PASTED).unwrap().advanced(&current);
-        assert!(
-            tracker
-                .corrections_with_word_ranges(&[8..10, 10..11], std::slice::from_ref(&(9..11)))
-                .is_empty()
-        );
-        assert!(
-            tracker
-                .corrections_with_word_ranges(&[9..10, 10..12], std::slice::from_ref(&(9..11)))
-                .is_empty()
-        );
-    }
-
-    #[test]
-    fn han_expansion_does_not_override_the_rewrite_or_script_guards() {
-        assert!(with_han_word("首機", "首機", "手機").is_empty());
-        let mixed = "今天帶著首a機去開會，下午再一起確認新的工作安排";
-        assert!(with_han_word(mixed, "首a機", "手a機").is_empty());
-        let kana = "今天帶著カ機去開會，下午再一起確認新的工作安排";
-        assert!(with_han_word(kana, "カ機", "手機").is_empty());
-        let long = "今天使用首一二三四五六七八九十甲乙處理資料，明天也會繼續確認其他細節";
-        assert!(
-            with_han_word(
-                long,
-                "首一二三四五六七八九十甲乙",
-                "手一二三四五六七八九十甲乙"
-            )
-            .is_empty()
-        );
-    }
-
-    #[test]
-    fn a_word_selected_and_retyped_is_learned_whole() {
+    fn a_common_word_is_not_learned_even_when_selected_and_retyped() {
         // select 首機 and delete it, type 手機 (the IME's composition shows in between)
         assert_eq!(
             learned_after(
                 PASTED,
                 &[("首機", ""), ("新的，", "新的shou，"), ("shou", "手機")]
             ),
-            pairs(&[("首機", "手機")])
+            NONE
         );
     }
 
@@ -1020,11 +455,8 @@ mod tests {
     }
 
     #[test]
-    fn punctuation_around_the_word_is_left_out() {
-        assert_eq!(
-            learned_after(PASTED, &[("首機", "「手提電話」")]),
-            pairs(&[("首機", "手提電話")])
-        );
+    fn punctuation_decorated_cjk_text_is_not_a_term() {
+        assert_eq!(learned_after(PASTED, &[("首機", "「手提電話」")]), NONE);
     }
 
     #[test]
@@ -1036,13 +468,13 @@ mod tests {
 
     // ---------- Latin ----------
 
-    const EN: &str = "I tried type less yesterday and it works really well for long emails";
+    const EN: &str = "I tried word note yesterday and it works really well for long emails";
 
     #[test]
     fn latin_words_replaced_by_a_term_are_learned() {
         assert_eq!(
-            learned_after(EN, &[("type less", "Typeless")]),
-            pairs(&[("type less", "Typeless")])
+            learned_after(EN, &[("word note", "Wordnote")]),
+            pairs(&[("word note", "Wordnote")])
         );
     }
 
@@ -1054,16 +486,19 @@ mod tests {
             pairs(&[("tailscail", "Tailscale")])
         );
         // one letter typed into the word
-        let pasted = "I tried Tyeless yesterday and it works really well for long emails";
+        let pasted = "I tried Wornote yesterday and it works really well for long emails";
         assert_eq!(
-            learned_after(pasted, &[("Tyeless", "Typeless")]),
-            pairs(&[("Tyeless", "Typeless")])
+            learned_after(pasted, &[("Wornote", "Wordnote")]),
+            pairs(&[("Wornote", "Wordnote")])
         );
     }
 
     #[test]
-    fn a_change_of_letter_case_only_is_not_learned() {
-        assert_eq!(learned_after(EN, &[("type less", "Type Less")]), NONE);
+    fn capitalized_terms_are_candidates_for_the_dictionary() {
+        assert_eq!(
+            learned_after(EN, &[("word note", "Word Note")]),
+            pairs(&[("word note", "Word Note")])
+        );
     }
 
     #[test]
@@ -1083,12 +518,9 @@ mod tests {
     // ---------- mixed ----------
 
     #[test]
-    fn a_cjk_run_replaced_by_a_latin_term_is_learned() {
+    fn a_cross_script_replacement_must_have_comparable_lengths() {
         let pasted = "我們用泰斯克連回家裡的電腦，速度還不錯，設定也很簡單";
-        assert_eq!(
-            learned_after(pasted, &[("泰斯克", "Tailscale")]),
-            pairs(&[("泰斯克", "Tailscale")])
-        );
+        assert_eq!(learned_after(pasted, &[("泰斯克", "Tailscale")]), NONE);
     }
 
     #[test]
@@ -1129,8 +561,8 @@ mod tests {
     }
 
     #[test]
-    fn at_most_three_corrections() {
-        let pasted = "甲乙丙丁戊己庚辛壬癸子丑寅卯辰巳午未申酉戌亥天干地支，這是一段很長的文字用來測試最多三個修正的規則是不是有效";
+    fn more_than_two_changed_spans_reject_the_whole_dictation() {
+        let pasted = "甲乙丙丁戊己庚辛壬癸子丑寅卯辰巳午未申酉戌亥天干地支，這是一段很長的文字用來測試最多兩個修正的規則是不是有效";
         assert_eq!(
             learned_after(
                 pasted,
@@ -1141,20 +573,20 @@ mod tests {
                     ("辰巳", "七八")
                 ]
             ),
-            pairs(&[("甲乙", "一二"), ("戊己", "三四"), ("子丑", "五六")])
+            NONE
         );
     }
 
     #[test]
     fn two_corrections_in_one_dictation() {
         let pasted =
-            "我用泰斯克連回家，再用歐噴肉特叫模型，整體來說還算順利，大概花了十分鐘左右就弄好了";
+            "我用泰斯刻爾連回家，再用歐噴肉特叫模型，整體來說還算順利，大概花了十分鐘左右就弄好了";
         assert_eq!(
             learned_after(
                 pasted,
-                &[("泰斯克", "Tailscale"), ("歐噴肉特", "OpenRouter")]
+                &[("泰斯刻爾", "Tailscale"), ("歐噴肉特", "OpenRouter")]
             ),
-            pairs(&[("泰斯克", "Tailscale"), ("歐噴肉特", "OpenRouter")])
+            pairs(&[("泰斯刻爾", "Tailscale"), ("歐噴肉特", "OpenRouter")])
         );
     }
 

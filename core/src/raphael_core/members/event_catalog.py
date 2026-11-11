@@ -1,5 +1,6 @@
 """Event words and read slugs; paths come only from the selected read's reply."""
 
+from raphael_core.ui_words import ui_word, with_ui_words
 import json
 from collections import deque
 from copy import deepcopy
@@ -8,6 +9,7 @@ from types import SimpleNamespace
 from ..connectors.response import unwrap_envelope, unwrap_read
 from ..connectors.http import ConnectorFailure
 from .events import MAX_ITEMS, MAX_ITEM_CHARS, _PATH, failure_message
+from ..ui_languages import normalize_language
 
 # No result paths belong in this catalogue.
 EVENTS = (
@@ -29,9 +31,10 @@ def connected_apps(connections):
 
 
 def available_events(connections, language="en"):
+    language = normalize_language(language)
     index = 0 if language == "zh-TW" else 2 if language == "ja" else 1
     return [{"id": identifier, "toolkit": toolkit, "slug": slug, "input": field,
-             "label": words[index], "app": app["id"], "app_name": app.get("name", app["id"])}
+             "label": words[index] if language in ("zh-TW", "en", "ja") else ui_word(words[1], language), "app": app["id"], "app_name": app.get("name", app["id"])}
             for app in connected_apps(connections) if app.get("source") == "composio"
             for identifier, toolkit, slug, field, words, _ in EVENTS if toolkit in app.get("services", [])]
 
@@ -107,11 +110,11 @@ async def pick_event(service, member_id, identifier, value, contains=""):
     except ValueError as error:
         reason = str(error)
         if reason in ("empty", "identity"):
-            words = {
+            words = with_ui_words({
                 "zh-TW": (f"目前沒有可用的{name}項目。出現新項目後，請再試一次。", f"無法辨識{name}項目，暫時無法設定此事件。請稍後重試。"),
                 "ja": (f"{name}に利用できる項目がありません。項目が届いてから再試行してください。", f"{name}の項目を識別できないため、このイベントはまだ設定できません。再試行してください。"),
                 "en": (f"No {name} items are available yet. Try again after an item arrives.", f"Could not identify {name} items, so this event cannot be set up yet. Try again later."),
-            }
+            }, lambda _ui_language: (ui_word('No {p0} items are available yet. Try again after an item arrives.', _ui_language).format(p0=name), ui_word('Could not identify {p0} items, so this event cannot be set up yet. Try again later.', _ui_language).format(p0=name)))
             return {"event_error": words.get(language, words["en"])[reason == "identity"]}
         return {"event_error": failure_message(language, name)}
     except (KeyError, IndexError, TypeError, AttributeError, TimeoutError, ConnectorFailure):

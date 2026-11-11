@@ -5,7 +5,6 @@ import pytest
 from raphael_core.agent import persona
 from raphael_core.answer_forms import forms_plain_text
 from raphael_core.messaging.words import compose
-from raphael_core.services.speaker import speakable
 
 
 @pytest.mark.parametrize("language", persona.LANGUAGES)
@@ -25,13 +24,13 @@ def test_forms_schema_reaches_api_cli_and_background_prompts(language):
     ("board", {"columns": [{"title": "Ready", "cards": [{"title": "Review", "line": "Check dates", "owner": "Alex"}]}]}, ["Ready", "Review", "Check dates", "Alex"]),
     ("chart", {"type": "line", "title": "Visitors", "units": "people", "labels": ["Mon"], "series": [{"name": "Visits", "values": [3]}]}, ["Visitors", "people", "Mon", "Visits", "3"]),
 ])
-def test_messaging_and_speech_turn_forms_into_readable_words(kind, data, expected):
+def test_messaging_turns_forms_into_readable_words(kind, data, expected):
     text = f"```{kind}\n{json.dumps(data)}\n```"
-    for result in (forms_plain_text(compose("", text, None)), speakable(text)):
-        assert "{" not in result
-        assert "```" not in result
-        for word in expected:
-            assert word in result
+    result = forms_plain_text(compose("", text, None))
+    assert "{" not in result
+    assert "```" not in result
+    for word in expected:
+        assert word in result
 
 
 def test_unclosed_forms_and_forms_inside_code_keep_the_original_words():

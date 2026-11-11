@@ -1,15 +1,19 @@
 .owner-profile { margin-top: 0; }
-.owner-profile .slist { display: grid; grid-template-columns: 72px minmax(0, 1fr); align-items: start; gap: var(--sp-5); }
+.owner-profile .slist { display: grid; grid-template-columns: 72px minmax(0, 1fr); align-items: start; gap: var(--sp-5); padding-block: var(--sp-4); }
 .owner-fields { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-4); min-width: 0; }
-.owner-profile .btn.owner-photo { width: 72px; height: 72px; border: 0; padding: 0; border-radius: var(--r-pill); }
+.owner-profile .btn.owner-photo { position: relative; width: 72px; height: 72px; border: 0; padding: 0; border-radius: var(--r-pill); overflow: hidden; }
+.owner-profile .btn.owner-photo:hover:not(:disabled) { background: var(--btn); }
+.owner-photo-edit { position: absolute; inset: 0; display: grid; place-items: center; border-radius: var(--r-pill); background: var(--photo-dim); color: var(--photo-mark); opacity: 0; transition: opacity 0.12s ease; pointer-events: none; }
+.owner-photo-edit .i { width: 20px; height: 20px; }
+.btn.owner-photo:hover:not(:disabled) .owner-photo-edit, :root[data-keys] .btn.owner-photo:focus-visible .owner-photo-edit { opacity: 1; }
+@media (prefers-reduced-motion: reduce) { .owner-photo-edit { transition: none; } }
 .owner-profile label { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); font-size: var(--fs-sm); }
-.owner-profile .field { width: 100%; min-width: 0; padding: var(--sp-2) var(--sp-2); background: var(--panel); border: 1px solid var(--btn-edge); border-radius: var(--r-sm); }
+/* On the section's card the fields keep the page's own ground, so they read as fields. */
+.owner-profile .field { width: 100%; min-width: 0; padding: var(--sp-2) var(--sp-2); background: var(--content); border: 1px solid var(--btn-edge); border-radius: var(--r-sm); }
 .owner-profile textarea { resize: vertical; min-height: 110px; }
-.appearance-settings { width: min(100%, var(--layout-reading-max)); margin-inline: auto; }
-.appearance-settings .slist { border: 1px solid var(--line); border-radius: var(--r-md); background: var(--panel); }
-.appearance-settings .slist > .row { padding: var(--sp-4); }
+/* The output folder: the button names the folder; its whole path stands under the row's name. */
+.output-path { overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.btn.output-chosen { max-width: 220px; }
+.btn.output-chosen .output-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-.memory-import .import-field { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); margin-block: var(--sp-3); font-size: var(--fs-sm); }
-.memory-import textarea { width: 100%; min-width: 0; height: auto; min-height: 140px; padding: var(--sp-3); resize: vertical; }
-.import-result { overflow-wrap: anywhere; }
 .update-notes { white-space: pre-wrap; overflow-wrap: anywhere; }

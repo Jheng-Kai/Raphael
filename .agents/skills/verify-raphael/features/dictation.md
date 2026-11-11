@@ -1,5 +1,96 @@
 # Dictation
 
+## Cleanup v3 production decision and calibrated comparison (2026-11-05)
+
+Follow-up 5 explicitly adopts v3 for the owner's short-prompt, clear-structure goal.
+`core/src/raphael_core/brain/prompts/cleanup_system.md` is now the exact 3026-character
+v3 text, SHA-256 a67e50307492e25343ec7e0a8fe5670665e4f1a75ef92fcc8c726ea44947c82b
+on LF-normalized UTF-8 (3294 bytes), replacing the 6783-character/8119-byte prompt.
+`cleanup_candidate.md` equals production. V3 preserves final intent, scope, names,
+numbers, conditions, negation, original languages, dictionary and JSON boundaries;
+it emphasizes an opening point, topic paragraphs and numbered enumerations.
+V4 was rejected and archived with v3 under `.fold/prompts/`; the previous production
+prompt is `.fold/prompts/cleanup_system_before_v3.md`. The repository change does not
+claim a packaged/installed release. No model settings or judge rubric changed.
+
+All three integrator runs scored 91/91. Columns below are old/new, including the
+arbitrary two identical sides in the control; spreads always use absolute differences.
+
+| Run | Prompt characters | Kept | Missing | Additions | Clarity old/new (ties) | All/factual case failures |
+| --- | --- | --- | --- | --- | --- | --- |
+| noise, identical old prompt | 6783/6783 | 569/572 | 11/8 | 3/1 | 11/12 (68) | 16/2 |
+| v3 | 6783/3026 | 606/610 | 11/7 | 3/1 | 7/17 (67) | 11/2 |
+| v4 | 6783/3364 | 586/591 | 19/14 | 4/9 | 14/22 (55) | 15/8 |
+
+| Run | Language kept | Long clarity old/new (ties) | Long structure checks | All long enumerations formatted | Long topics separated |
+| --- | --- | --- | --- | --- | --- |
+| noise | 91/91 | 8/6 (1) | 8/10 | 5/6 | 13/14 |
+| v3 | 91/91 | 3/12 (0) | 8/14 | 4/13 | 15/13 |
+| v4 | 87/89 | 5/10 (0) | 11/14 | 5/10 | 14/15 |
+
+Sources are ignored `eval/data/cleanup-compare-noise-20261105/`,
+`cleanup-compare-followup-3-20261105/` and `cleanup-compare-followup-4-20261105/`.
+Private text/facts never enter tracked fixtures or handoff prose. The identical-prompt
+control invalidates a zero-case-failure requirement as a useful acceptance rule.
+The integrator's explicit adoption of v3 is distinct from the new automatic gate.
+
+The comparer accepts optional `--noise <report.json>`. Without it, results are still
+reported but `ship_candidate=false` (complete report exits 1). Before any write or CLI
+call, a supplied control must be complete with every case scored, identical prompts
+matching the comparison's old prompt, the same full ordered input fingerprints,
+models, seed and judge-instructions hash. Counts are recomputed from scored rows;
+only safe calibration hashes, spreads and counts are retained in the target report.
+
+Policy `noise-v1-strict` requires directional improvement STRICTLY GREATER THAN the
+control's absolute old/new spread for every metric: kept facts; missing facts and
+wrong additions (lower is better); language kept; overall clarity wins; list cases;
+long-case clarity; lead sentence, topic separation, enumeration formatting and
+structural checks on annotated long cases. Factual case failures (lost_facts OR
+wrong_additions) count each case once and cannot exceed the control count. Per-case
+diagnostics remain visible, but do not impose the obsolete zero-failure veto.
+Every comparison case must be scored and long-case evidence must exist. No ceiling
+or equality exception is inferred. Summaries list gains, spreads and failure reasons.
+
+Consequently, strict recalculation still rejects this historical v3: additions gain
+2 equals spread 2; language and lead sentence gain 0 equals spread 0; topic separation
+gain -2 fails spread 1. Factual count 2 meets the control ceiling 2. V4 fails additions
+and topic thresholds and its factual count 8 exceeds 2. Do not present the explicit
+production decision as an automatic gate pass. Fake CLI tests prove both refusal and
+a positive comparison that exceeds every spread, equality rejection and the case cap.
+
+The runner never installs prompts. It uses serial subscription-only Codex cleanup
+and tool-less Claude judgments; no OpenRouter or API credentials. One invalid judgment
+gets one identical-request retry, then judge_failed; cleanup calls never retry. Failed
+judgments have no wins/scores. Four judge failures or any cleanup failure stop with
+exit 2; setup/control/preflight errors also exit 2. Complete non-recommendations,
+including up to three failed judgments, exit 1; a calibrated passing run exits 0.
+
+Each cleanup checkpoints immediately. Matching reports resume scored rows intact,
+reuse cached cleanup outputs and finish an interrupted retry's remaining attempt.
+Changed prompt/model/seed/rubric/ordered-case fingerprints refuse resume. Legacy v2
+reports lack full input fingerprints; compatibility resume records that limitation.
+A fully scored matching report can recompute its gate with --noise without CLI calls;
+omitting --noise on a later invocation removes the recommendation, never reuses it.
+
+The 15 versioned, self-authored long scripts are the third --cases input after the
+76 private cases. Each has three topics, semantic fact floors and structure checks;
+estimated speech duration is 2.8-3.3 minutes, not measured audio. Optional cached
+local tokenization only; unavailable token counts remain null. CLI framing/latency
+is not app latency. See `core/tests/evaluate/data/README.md` for provenance.
+
+Required follow-up 5 offline checks: `tests/brain/test_cleanup.py`,
+`tests/evaluate/test_cleanup_compare.py` and `tests/architecture` from core/.
+Run targeted tests without the waiter. Full verify/core suites belong to the integrator
+at merge under the resource override. No UI boundary changed, so no look/native matrix.
+No new real model, provider, microphone/paste or release acceptance is claimed.
+
+## No voice output (owner decision, 2026-11-10)
+
+Dictation is unchanged, but nothing speaks: no voice calls, no spoken Alt+Space answer and no voice service (see
+[Conversation](conversation.md#no-voice-owner-decision-2026-11-10)). The composer's voice button records a voice message
+on a click, a hold or a key (R-UI-106).
+
+
 ## Owner round 10 contracts (supersedes round 9 message previews)
 
 Only owner messages use eight-line faded previews with a quiet expand action inside
@@ -43,8 +134,8 @@ comes from the same stored turn stream as the conversation, newest line only, in
 existing 14px caption position. No rotating placeholder status is sent. The API fast
 router remains available; CLI quick questions skip auxiliary routing and native session
 resume, consuming only the recent quick context and that conversation's own summary.
-Native acceptance must check stale-session rejection, foreground suppression,
-hotkey/transcript timing and actual first audio.
+Native acceptance must check stale-session rejection, foreground suppression and
+hotkey/transcript timing.
 
 ```powershell
 npm run look -- overlay-step overlay-long-answer --theme both --width 1120,720,1920x1080
@@ -53,17 +144,14 @@ npm run look -- overlay-step overlay-long-answer --theme both --width 1120,720,1
 The corner never writes an address and never more than about two lines at a time (owner,
 2026-10-27: 「右下角的時候並不需要有 URL」, 「要記得要做一些切分」). `overlay/caption.ts` takes
 addresses and link syntax out and cuts a long line into pages at sentence ends and before
-each item of a numbered list; a voiced answer holds only its last page, and pages still
-waiting when the voice ends run on their own time. `overlay-long-answer` replays the answer
+each item of a numbered list; each page runs on its own time. `overlay-long-answer` replays the answer
 the owner saw run out of the window and checks that the first page is up to two lines, has
 no address and stays inside the real window (the canvas and 40 px, `overlay.rs` `place`).
-The voice is apart: it reads the Japanese rendering, already without addresses
-(`speaker.speakable`).
 
 Offline latency plumbing: `uv run python -m raphael_core.tools.quick_latency --fake --count 9` from core/.
 Fake timings do not establish live speed. The owner runs without `--fake` for model
-timings using recording execution and silent first-audio simulation, then compares
-real hotkey/STT/audio logs. Only native logs prove actual transcription/playback speed.
+timings using recording execution, then compares real hotkey/STT logs. Only native logs
+prove actual transcription speed.
 
 ## Keys with the app in front (owner reports 2026-10-31)
 
@@ -74,24 +162,54 @@ its words are in (`hand_over`), so the dictation key works during the answer (R-
 voice-keys` proves both with the real worker, the recognising light and a slow brain at high depth. A turn said
 into a conversation has the time a typed one has; only the overlay's quick question has `VOICE_TURN_TIMEOUT_S`.
 
+A question said to the overlay (Alt+Space) leaves the slot the same way, and the dictation key always wins (R-VC-03):
+pressed while the answer is worked on, asked a yes or no, or on the overlay, it dictates at once. The answer is held while
+a recording has the overlay and told again once the words are typed, for its ordinary time; a newer quick question
+replaces it. The shell's timing is proved by the `dictation.rs` tests named in R-VC-03; the one thing the corner shows
+is the answer arriving behind the dictation's 100 %, which `overlay-held-answer` replays on the real overlay page:
+
+```powershell
+npm run look -- overlay-held-answer --theme both --width 1120,720,1920x1080
+```
+
+Only a real key press proves the rest: Alt+Space, a question that takes a while, Right Alt during the answer and the
+answer appearing after the pasted words (`npm run native -- voice-keys` covers the conversation case only).
+
 ## Sub-features
 
 Four separate totals, activity/shortcuts, horizontal tabs, dated history, dictionary and connection notices; native
 recording, recognition, cleanup, paste and correction learning. Conversation voice
 and Alt+Space agent questions share cleanup and cleanup spend accounting, including
-the short-clean-sentence shortcut, without a history row or target paste.
+the short-clean-sentence shortcut, without a target paste. Since 2026-11-07 (owner) they are kept
+in the history as `kind="ask"` with the recipient's name in `target_app` (Rust sends `member_id` with
+`dictation.stop`, 0 for Raphael); the row says 「傳給 拉斐爾」 (`history-sent-to` in dictation-history).
+Paste-last, the lifetime totals and dictionary learning still use dictations only.
+
+## The owner's punctuation (2026-11-07)
+
+The owner dislikes 。: every Chinese result (cleaned, cleaned in pieces, the raw fallback) goes through
+`textnorm.finish_chinese_dictation` (a line-final 。 goes, one inside a line becomes ，; kana lines and
+code stay). A cleaned result also goes through `remove_unspoken_ma`: a 嗎 the transcript does not have
+around it is removed with its ？, so a request never becomes a question. Tests:
+core/tests/brain/test_dictation_finish.py. Before that, `textnorm.guard_cleanup_text` drops a first or last
+paragraph (or outer line) the transcript mostly does not have (below half of its characters/words, dictionary
+words counting as present), so a model's note, answer or preface never reaches the paste; a result with nothing
+left falls back to the normalized raw text as `suspicious` (core/tests/brain/test_cleanup_guard.py). MAI-Transcribe
+is called with automatic language detection (no hint): a forced zh would bend English names. The prompt was the owner's version C (cleanup_system.md);
+a shorter candidate D lost paragraph breaks and a hedge and added two 嗎 on the owner's own 24 hours
+(gpt-6-luna, 30 cases), so it was not adopted.
 
 ## How to get to it (user POV)
 
-Choose Dictation, then use the compact horizontal Overview/History/Dictionary tabs beside the title. Left/Right/Home/End change the selected tab while retaining keyboard focus; selection and legacy history/dictionary deep links remain available. Four separate stat cards form a 2 by 2 left grid above activity; shortcuts start in the right column. At 720 the order is totals, shortcuts, activity. An active heatmap day opens its
-history. Settings > Dictation configures recognition/shortcuts. Actual dictation
+Choose Dictation, then use the compact horizontal Overview/History/Dictionary tabs beside the title: the app's shared plain tabs (ui.ts `tabs`, the same as Connect apps), never a look of their own. Every return to Dictation opens on Overview, whichever tab was last chosen (owner, 2026-11-09: 「每一次回到聽寫的時候，它會 default 是在總覽」); nothing is kept between visits. Left/Right/Home/End change the selected tab while retaining keyboard focus; legacy history/dictionary deep links remain available. The overview's small words (card labels, the activity sum, the heatmap axis and legend, shortcut names) are medium weight in the secondary ink rather than thin grey (owner, 2026-11-09: 「文字有點點細」). Four separate stat cards form a 2 by 2 left grid; shortcuts stand beside them in the right column, end with them and share the header tabs' right edge, and the activity heatmap runs under both (2026-11-07). At 720 the order is totals, shortcuts, activity. A heatmap day says its words only in its title under the pointer;
+pressing it does nothing, and no history opens from the grid (owner, 2026-11-07). Settings > Dictation configures recognition/shortcuts. Actual dictation
 begins with the configured global key while a target field has focus.
 
 ## Driving it with look
 
 ```powershell
-npm run look -- dictation-overview dictation-history dictation-history-day dictation-dictionary dictation-keyboard dictation-notice dictation --theme both --width 1120,720,1920x1080
-npm run look -- overlay-transcribing overlay-cleaning --theme both --width 1120,720,1920x1080
+npm run look -- dictation-overview dictation-history dictation-heat-press dictation-dictionary dictation-keyboard dictation-notice dictation --theme both --width 1120,720,1920x1080
+npm run look -- overlay-transcribing overlay-cleaning overlay-emblem-gold overlay-emblem-angry --theme both --width 1120,720,1920x1080
 npm run look -- composer-learn member-composer-learn room-composer-learn --theme both --width 1120,720,1920x1080
 ```
 

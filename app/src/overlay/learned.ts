@@ -41,7 +41,7 @@ export function learnedPill(root: HTMLElement, actions: LearnedActions): { show(
     setLocale(notice.language);
     if (notice.theme === "light" || notice.theme === "dark") document.documentElement.dataset.theme = notice.theme;
     root.querySelector<HTMLImageElement>("img")!.src = `/brand/app-emblem-${document.documentElement.dataset.theme === "dark" ? "dark" : "light"}-64.webp`;
-    text.textContent = t("dictionary.learned", { p0: notice.words.join(notice.language === "en" ? ", " : "、") });
+    text.textContent = t("dictionary.learned", { p0: notice.words.join(["zh-TW", "zh-CN", "ja"].includes(notice.language) ? "、" : ", ") });
     undo.textContent = t("dictionary.undo"); undo.disabled = !notice.token;
     void Promise.resolve(document.fonts?.ready).then(() => {
       if (current !== notice) return;

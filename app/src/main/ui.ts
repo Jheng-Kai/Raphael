@@ -3,9 +3,11 @@
 // the core wrote goes through `esc` first.
 
 import { onLocaleChange, t, translatedMessage } from "./i18n";
-import { registerDismissal } from "./dismissals";
+import { pressWentThrough, registerDismissal } from "./dismissals";
 
 import { type Notifier, UNDO_MS } from "./undo";
+import { ICON } from "./icon-set";
+import { nameScore } from "./find-match";
 
 // ---------- HTML ----------
 
@@ -13,6 +15,11 @@ const ESCAPES: Record<string, string> = { "&": "&amp;", "<": "&lt;", ">": "&gt;"
 
 /** Text as it can go into HTML, in an attribute too. */
 export const esc = (s: unknown): string => String(s).replace(/[&<>"']/g, (c) => ESCAPES[c]);
+
+/** Whose a generated face is. The same member's new colour or character keeps its face (slime.ts makes its clock again). */
+function faceIdentity(surface: Element): string {
+  return surface.querySelector("svg.slime")?.getAttribute("data-slime-member") ?? surface.getAttribute("data-slime-still") ?? "";
+}
 
 /** Update generated markup without discarding its live controls. */
 export function patchHTML(root: Element, html: string): void {
@@ -59,6 +66,14 @@ export function patchHTML(root: Element, html: string): void {
         live.insertBefore(node, at);
       } else {
         if (node !== at) live.insertBefore(node, at);
+        // A face never turns into someone else's: its clock remembers the drawing it was made with, so morphing
+        // Testarossa's into Raphael's drew her bow on him while he moved. Another member takes the
+        // fresh face whole.
+        if (node instanceof Element && fresh instanceof Element && node.matches(".slime-surface") && fresh.matches(".slime-surface") && faceIdentity(node) !== faceIdentity(fresh)) {
+          live.replaceChild(fresh, node);
+          at = fresh.nextSibling;
+          continue;
+        }
         if (node instanceof Element && fresh instanceof Element) {
           const oldFace = face(node), nextFace = face(fresh);
           const sameDrawing = node.matches('.slime-surface[data-slime-drawing]') && node.getAttribute('data-slime-drawing') === fresh.getAttribute('data-slime-drawing') && (oldFace as SVGElement | null)?.style.getPropertyValue('--slime-color') === (nextFace as SVGElement | null)?.style.getPropertyValue('--slime-color');
@@ -89,81 +104,14 @@ export function patchHTML(root: Element, html: string): void {
   walk(root, template.content);
 }
 
-// The app's line icons, one 16 x 16 drawing each: drawn to show at 16 CSS px (20 where a larger one
-// is meant), with a 1.5 stroke, round caps and joins and no fill (styles.css `svg.i`). Straight
-// lines sit on .25 / .75 so that one edge of each falls on a whole pixel; an icon shown at 14 or
-// 15 px, or moved by a fractional transform, loses that and blurs. Dots (`info`, `steps`, `more`)
-// are small closed circles the stroke fills.
-const ICON = {
-  menu: "M2.75 3.75H12.75M2.75 7.75H12.75M2.75 11.75H12.75",
-  sidebar: "M3.75 2.75H11.75A1.5 1.5 0 0 1 13.25 4.25V11.25A1.5 1.5 0 0 1 11.75 12.75H3.75A1.5 1.5 0 0 1 2.25 11.25V4.25A1.5 1.5 0 0 1 3.75 2.75ZM6.25 2.75V12.75",
-  person: "M10.75 4.75A3 3 0 1 1 4.75 4.75A3 3 0 1 1 10.75 4.75ZM2.75 13.25C2.75 8.25 12.75 8.25 12.75 13.25",
-  crown: "M2.75 5.25 5.25 7.25 7.75 3.25 10.25 7.25 12.75 5.25 11.75 11.25H3.75ZM4.25 13.25H11.25",
-  reply: "M6.25 3.25 2.75 6.75 6.25 10.25M3.25 6.75H9.25A3 3 0 0 1 12.25 9.75V12.25",
-  pin: "M5.25 2.25H10.25L9.75 6.25 12.25 8.75H8.25V13.75M7.25 8.75H3.25L5.75 6.25Z",
-  eyeOff: "M2.25 2.25 13.25 13.25M6.25 3.5 7.75 3.25C11.25 3.25 13.75 7.75 13.75 7.75L12 10M9.25 12 7.75 12.25C4.25 12.25 1.75 7.75 1.75 7.75L3.5 5.5",
-  home: "M2.25 6.75 7.75 2.25 13.25 6.75M3.75 5.75V11.75A1.5 1.5 0 0 0 5.25 13.25H6.25V9.25H9.25V13.25H10.25A1.5 1.5 0 0 0 11.75 11.75V5.75",
-  clock: "M13.25 7.75A5.5 5.5 0 1 1 2.25 7.75A5.5 5.5 0 1 1 13.25 7.75ZM7.75 4.25V7.75L10.25 9.25",
-  book: "M4.75 2.75H10.75A1.5 1.5 0 0 1 12.25 4.25V13.25H4.75A1.5 1.5 0 0 1 3.25 11.75V4.25A1.5 1.5 0 0 1 4.75 2.75M3.25 11.75A1.5 1.5 0 0 1 4.75 10.25H12.25M6.25 5.75H9.25",
-  down: "M3.75 5.75 7.75 9.75 11.75 5.75",
-  up: "M3.75 9.75 7.75 5.75 11.75 9.75",
-  plus: "M7.75 3.25V12.25M3.25 7.75H12.25",
-  copy: "M6.25 3.75A1.5 1.5 0 0 1 7.75 2.25H11.75A1.5 1.5 0 0 1 13.25 3.75V7.75A1.5 1.5 0 0 1 11.75 9.25M3.75 6.25H7.75A1.5 1.5 0 0 1 9.25 7.75V11.75A1.5 1.5 0 0 1 7.75 13.25H3.75A1.5 1.5 0 0 1 2.25 11.75V7.75A1.5 1.5 0 0 1 3.75 6.25Z",
-  trash: "M2.75 4.75H12.75M5.75 4.75V2.75H9.75V4.75M4.25 4.75V11.75A1.5 1.5 0 0 0 5.75 13.25H9.75A1.5 1.5 0 0 0 11.25 11.75V4.75M7.75 7.75V10.25",
-  search: "M10.75 6.75A4 4 0 1 1 2.75 6.75A4 4 0 1 1 10.75 6.75ZM9.75 9.75 13.25 13.25",
-  x: "M4.25 4.25 11.25 11.25M11.25 4.25 4.25 11.25",
-  gear: "M6.25 2.25H9.25L9.75 4.25 11.75 3.75 13.25 6.25 11.75 7.75 13.25 9.25 11.75 11.75 9.75 11.25 9.25 13.25H6.25L5.75 11.25 3.75 11.75 2.25 9.25 3.75 7.75 2.25 6.25 3.75 3.75 5.75 4.25ZM9.75 7.75A2 2 0 1 1 5.75 7.75A2 2 0 1 1 9.75 7.75Z",
-  mic: "M7.75 2.25A2 2 0 0 1 9.75 4.25V7.25A2 2 0 0 1 5.75 7.25V4.25A2 2 0 0 1 7.75 2.25ZM3.75 7.25A4 4 0 0 0 11.75 7.25M7.75 11.25V13.25M5.75 13.25H9.75",
-  wallet: "M12.25 5.25V2.75L3.75 4.75M3.75 5.25H11.75A1.5 1.5 0 0 1 13.25 6.75V11.75A1.5 1.5 0 0 1 11.75 13.25H3.75A1.5 1.5 0 0 1 2.25 11.75V6.75A1.5 1.5 0 0 1 3.75 5.25ZM10.75 9.25H11.25",
-  sparkle: "M7.75 2.25 9.25 6.25 13.25 7.75 9.25 9.25 7.75 13.25 6.25 9.25 2.25 7.75 6.25 6.25Z",
-  info: "M13.25 7.75A5.5 5.5 0 1 1 2.25 7.75A5.5 5.5 0 1 1 13.25 7.75ZM7.75 7.75V10.75M8.35 4.75A.6 .6 0 1 1 7.15 4.75A.6 .6 0 1 1 8.35 4.75Z",
-  lock: "M4.75 7.25H10.75A1.5 1.5 0 0 1 12.25 8.75V11.75A1.5 1.5 0 0 1 10.75 13.25H4.75A1.5 1.5 0 0 1 3.25 11.75V8.75A1.5 1.5 0 0 1 4.75 7.25ZM5.25 7.25V4.75A2.5 2.5 0 0 1 10.25 4.75V7.25M7.75 9.75V10.75",
-  left: "M9.75 3.75 5.75 7.75 9.75 11.75",
-  right: "M5.75 3.75 9.75 7.75 5.75 11.75",
-  refresh: "M12.75 6.25A5.25 5.25 0 0 0 3.25 4.75L2.25 6.25M2.25 2.75V6.25H5.75M2.75 9.25A5.25 5.25 0 0 0 12.25 10.75L13.25 9.25M9.75 9.25H13.25V12.75",
-  link: "M6.25 5.25 7.75 3.75A3 3 0 0 1 12 8L10.5 9.5M5 6 3.5 7.5A3 3 0 0 0 7.75 11.75L9.25 10.25M5.75 9.75 9.75 5.75",
-  chat: "M3.75 2.75H11.75A1.5 1.5 0 0 1 13.25 4.25V8.75A1.5 1.5 0 0 1 11.75 10.25H7.75L4.25 13.25V10.25H3.75A1.5 1.5 0 0 1 2.25 8.75V4.25A1.5 1.5 0 0 1 3.75 2.75ZM5.25 5.75H10.25M5.25 7.75H8.25",
-  globe: "M13.25 7.75A5.5 5.5 0 1 1 2.25 7.75A5.5 5.5 0 1 1 13.25 7.75ZM2.25 7.75H13.25M7.75 2.25C4.75 5.25 4.75 10.25 7.75 13.25C10.75 10.25 10.75 5.25 7.75 2.25Z",
-  monitor: "M3.75 2.75H11.75A1.5 1.5 0 0 1 13.25 4.25V9.25A1.5 1.5 0 0 1 11.75 10.75H3.75A1.5 1.5 0 0 1 2.25 9.25V4.25A1.5 1.5 0 0 1 3.75 2.75ZM7.75 10.75V13.25M5.25 13.25H10.25",
-  expand: "M6 2.75H2.75V6M10 2.75H13.25V6M2.75 10V13.25H6M13.25 10V13.25H10",
-  shield: "M7.75 2.25 12.75 4.25V7.75C12.75 10.25 10.75 12.25 7.75 13.25C4.75 12.25 2.75 10.25 2.75 7.75V4.25ZM5.25 7.75 7.25 9.75 10.25 6.75",
-  star: "M7.75 2.25 9.75 6.25 13.75 6.75 10.75 9.75 11.25 13.75 7.75 11.75 4.25 13.75 4.75 9.75 1.75 6.75 5.75 6.25Z",
-  grid: "M3.75 2.25H5.25A1.5 1.5 0 0 1 6.75 3.75V5.25A1.5 1.5 0 0 1 5.25 6.75H3.75A1.5 1.5 0 0 1 2.25 5.25V3.75A1.5 1.5 0 0 1 3.75 2.25ZM10.25 2.25H11.75A1.5 1.5 0 0 1 13.25 3.75V5.25A1.5 1.5 0 0 1 11.75 6.75H10.25A1.5 1.5 0 0 1 8.75 5.25V3.75A1.5 1.5 0 0 1 10.25 2.25ZM3.75 8.75H5.25A1.5 1.5 0 0 1 6.75 10.25V11.75A1.5 1.5 0 0 1 5.25 13.25H3.75A1.5 1.5 0 0 1 2.25 11.75V10.25A1.5 1.5 0 0 1 3.75 8.75ZM10.25 8.75H11.75A1.5 1.5 0 0 1 13.25 10.25V11.75A1.5 1.5 0 0 1 11.75 13.25H10.25A1.5 1.5 0 0 1 8.75 11.75V10.25A1.5 1.5 0 0 1 10.25 8.75Z",
-  check: "M3.25 7.75 6.25 10.75 12.25 4.75",
-  sliders: "M2.25 4.75H8.25M11.25 4.75H13.25M2.25 10.75H4.25M7.25 10.75H13.25M9.75 3.25V6.25M5.75 9.25V12.25",
-  keyboard: "M3.75 3.75H11.75A1.5 1.5 0 0 1 13.25 5.25V10.25A1.5 1.5 0 0 1 11.75 11.75H3.75A1.5 1.5 0 0 1 2.25 10.25V5.25A1.5 1.5 0 0 1 3.75 3.75ZM4.75 6.25H5.25M7.75 6.25H8.25M10.75 6.25H11.25M5.25 9.25H10.25",
-  cloud: "M4.75 12.25H11.25A2.5 2.5 0 0 0 11.75 7.25A4 4 0 0 0 4.25 5.75A3.25 3.25 0 0 0 4.75 12.25Z",
-  send: "M7.75 13.25V2.75M3.25 7.25 7.75 2.75 12.25 7.25",
-  stop: "M5.25 3.75H10.25A1.5 1.5 0 0 1 11.75 5.25V10.25A1.5 1.5 0 0 1 10.25 11.75H5.25A1.5 1.5 0 0 1 3.75 10.25V5.25A1.5 1.5 0 0 1 5.25 3.75Z",
-  bot: "M4.75 5.75H10.75A1.5 1.5 0 0 1 12.25 7.25V11.25A1.5 1.5 0 0 1 10.75 12.75H4.75A1.5 1.5 0 0 1 3.25 11.25V7.25A1.5 1.5 0 0 1 4.75 5.75ZM7.75 5.75V2.75M6.75 2.75H8.75M5.75 8.75V9.25M9.75 8.75V9.25M1.75 8.25V10.25M13.75 8.25V10.25",
-  pencil: "M9.75 2.75 12.75 5.75 5.25 13.25H2.25V10.25ZM8.25 4.25 11.25 7.25",
-  steps: "M3.35 3.75A.6 .6 0 1 1 2.15 3.75A.6 .6 0 1 1 3.35 3.75ZM3.35 7.75A.6 .6 0 1 1 2.15 7.75A.6 .6 0 1 1 3.35 7.75ZM3.35 11.75A.6 .6 0 1 1 2.15 11.75A.6 .6 0 1 1 3.35 11.75ZM6.25 3.75H12.75M6.25 7.75H12.75M6.25 11.75H12.75",
-  plug: "M5.25 2.25V5.25M10.25 2.25V5.25M3.25 5.25H12.25M4.25 5.25V7.75A3.5 3.5 0 0 0 11.25 7.75V5.25M7.75 11.25V13.75",
-  bell: "M3.25 11.25 4.25 9.75V6.25A3.5 3.5 0 0 1 11.25 6.25V9.75L12.25 11.25ZM6.25 13.25H9.25M7.75 2.75V1.75",
-  calendar: "M3.75 3.75H11.75A1.5 1.5 0 0 1 13.25 5.25V11.75A1.5 1.5 0 0 1 11.75 13.25H3.75A1.5 1.5 0 0 1 2.25 11.75V5.25A1.5 1.5 0 0 1 3.75 3.75ZM5.25 2.25V5.25M10.25 2.25V5.25M2.25 7.25H13.25M5.25 10.25H6.25M9.25 10.25H10.25",
-  news: "M2.25 3.25H8.75A1.5 1.5 0 0 1 10.25 4.75V11.25A1.5 1.5 0 0 0 13.25 11.25V5.75H10.25M2.25 3.25V11.25A1.5 1.5 0 0 0 3.75 12.75H11.75M4.75 6.25H7.25M4.75 9.25H7.25",
-  folder: "M2.25 4.25A1.5 1.5 0 0 1 3.75 2.75H6.25L8.25 4.75H11.75A1.5 1.5 0 0 1 13.25 6.25V11.25A1.5 1.5 0 0 1 11.75 12.75H3.75A1.5 1.5 0 0 1 2.25 11.25ZM2.25 6.75H13.25",
-  memory: "M4.75 2.75H10.75A1.5 1.5 0 0 1 12.25 4.25V13.25H4.75A1.5 1.5 0 0 1 3.25 11.75V4.25A1.5 1.5 0 0 1 4.75 2.75ZM3.25 11.75A1.5 1.5 0 0 1 4.75 10.25H12.25M6.25 2.75V7.25L7.75 5.75 9.25 7.25V2.75",
-  attach: "M12.75 7.25 7.25 12.75A3.5 3.5 0 0 1 2.3 7.8L7.8 2.3A2.25 2.25 0 0 1 10.98 5.48L5.48 10.98A1 1 0 0 1 4.07 9.57L9.25 4.39",
-  voice: "M2.75 6.25V9.25M5.25 3.75V11.75M7.75 2.25V13.25M10.25 4.75V10.75M12.75 6.25V9.25",
-  database: "M12.75 4.25A5 2 0 1 1 2.75 4.25A5 2 0 1 1 12.75 4.25ZM2.75 4.25V11.25A5 2 0 0 0 12.75 11.25V4.25M2.75 7.75A5 2 0 0 0 12.75 7.75",
-  play: "M4.75 2.75 12.75 7.75 4.75 12.75Z",
-  pause: "M4.75 3.25V12.25M10.75 3.25V12.25",
-  external: "M7.25 2.75H3.75A1.5 1.5 0 0 0 2.25 4.25V11.75A1.5 1.5 0 0 0 3.75 13.25H11.25A1.5 1.5 0 0 0 12.75 11.75V8.25M8.75 2.25H13.25V6.75M13.25 2.25 7.25 8.25",
-  minus: "M3.25 7.75H12.25",
-  image: "M3.75 2.75H11.75A1.5 1.5 0 0 1 13.25 4.25V11.25A1.5 1.5 0 0 1 11.75 12.75H3.75A1.5 1.5 0 0 1 2.25 11.25V4.25A1.5 1.5 0 0 1 3.75 2.75ZM2.25 10.25 5.75 6.75 9.75 10.75M8.75 9.75 10.25 8.25 13.25 11.25M10.35 5.75A.6 .6 0 1 1 9.15 5.75A.6 .6 0 1 1 10.35 5.75Z",
-  file: "M4.25 1.75H9.25L12.25 4.75V12.75A1.5 1.5 0 0 1 10.75 14.25H4.25A1.5 1.5 0 0 1 2.75 12.75V3.25A1.5 1.5 0 0 1 4.25 1.75ZM9.25 1.75V4.75H12.25",
-  download: "M7.75 2.25V9.75M4.25 6.25 7.75 9.75 11.25 6.25M2.75 10.25V12.75H12.75V10.25",
-  more: "M3.85 7.75A.6 .6 0 1 1 2.65 7.75A.6 .6 0 1 1 3.85 7.75ZM8.35 7.75A.6 .6 0 1 1 7.15 7.75A.6 .6 0 1 1 8.35 7.75ZM12.85 7.75A.6 .6 0 1 1 11.65 7.75A.6 .6 0 1 1 12.85 7.75Z",
-  repeat: "M10.75 1.75 12.75 3.75 10.75 5.75M2.75 7.25V6.25A2.5 2.5 0 0 1 5.25 3.75H12.75M4.75 13.75 2.75 11.75 4.75 9.75M12.75 8.25V9.25A2.5 2.5 0 0 1 10.25 11.75H2.75",
-  mail: "M3.75 3.75H11.75A1.5 1.5 0 0 1 13.25 5.25V10.75A1.5 1.5 0 0 1 11.75 12.25H3.75A1.5 1.5 0 0 1 2.25 10.75V5.25A1.5 1.5 0 0 1 3.75 3.75ZM2.75 5.25 7.75 8.75 12.75 5.25",
-} as const;
-
+// The app's line icons are Lucide's: icon-set.ts is generated from the pinned
+// lucide-static by scripts/icons/build-icons.mjs. Each is drawn in a 24 x 24 box with a stroke of 2 (styles.css `svg.i`),
+// so it shows 1.33 px lines at 16 px and 1.5 px at the 18 px of the edge buttons.
 export type IconName = keyof typeof ICON;
 
-/** A 16px line icon. */
+/** A line icon, 16 px unless its place says otherwise. */
 export const ico = (name: IconName): string =>
-  `<svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="${ICON[name]}"/></svg>`;
+  `<svg class="i" viewBox="0 0 24 24" aria-hidden="true">${ICON[name]}</svg>`;
 
 /** A row: the name (and a line of explanation) on the left, the control on the right. */
 export function row(t: string, d = "", ctl = "", o: { cls?: string; attrs?: string } = {}): string {
@@ -246,7 +194,7 @@ export interface TabItem {
  * quiet words with a soft fill under the one that is open, for a bar that also holds a search (the
  * 「已安裝」 and 「商店」 of 連接): still tabs, with the same roles and keys.
  */
-export function tabs(items: TabItem[], selected: string, o: { label: string; kind: "nav" | "filter"; fill?: boolean; plain?: boolean }): string {
+export function tabs(items: TabItem[], selected: string, o: { label: string; kind: "nav" | "filter"; fill?: boolean; plain?: boolean; className?: string; attrs?: string }): string {
   const nav = o.kind === "nav";
   const one = (it: TabItem): string => {
     const on = it.id === selected;
@@ -257,7 +205,7 @@ export function tabs(items: TabItem[], selected: string, o: { label: string; kin
     return `<button type="button" class="tab" ${state}${it.attrs ?? ""}>${label}${n}</button>`;
   };
   const cls = nav ? `tabs ${o.plain ? "plain" : "switch"}${o.fill ? " fill" : ""}` : "tabs seg";
-  return `<div class="${cls}" role="${nav ? "tablist" : "group"}" aria-label="${esc(o.label)}">${items.map(one).join("")}</div>`;
+  return `<div class="${cls}${o.className ? ` ${o.className}` : ""}" role="${nav ? "tablist" : "group"}" aria-label="${esc(o.label)}"${o.attrs ?? ""}>${items.map(one).join("")}</div>`;
 }
 
 /** How long 「中斷連線」 (of a connection or a messaging app) waits for its second press. */
@@ -434,7 +382,7 @@ export function swapHTML(host: HTMLElement, html: string): void {
 interface MenuState {
   el: HTMLElement; anchor: HTMLElement; rect: DOMRect; stopOutside(): void;
   onKey?: (e: KeyboardEvent) => boolean; onClose?: () => void;
-  parent: MenuState | null; placement?: "beside" | "start" | "pointer" | "above"; anchorRect?: () => DOMRect;
+  parent: MenuState | null; placement?: "beside" | "start" | "pointer" | "above" | "center"; anchorRect?: () => DOMRect;
   /** Set when a right click asked for the menu: it stands at that point rather than under its button. */
   at?: PointerAt;
   stopHover?: () => void;
@@ -481,7 +429,7 @@ function closeMenuLevel(): void {
 
 /** The buttons of the open menu that can be reached with the arrow keys. */
 const menuItems = (el: HTMLElement): HTMLButtonElement[] =>
-  Array.from(el.querySelectorAll<HTMLButtonElement>("button")).filter((b) => !b.disabled && b.offsetParent !== null);
+  Array.from(el.querySelectorAll<HTMLButtonElement>("button")).filter((b) => !b.disabled && b.offsetParent !== null && !b.closest("[inert]"));
 
 const MENU_LEAVE_MS = 700;
 
@@ -512,6 +460,13 @@ function listenForMenuEvents(): void {
       const anchor = menu.anchor;
       closeMenuLevel(); anchor.focus({ preventScroll: true });
       return;
+    }
+    if (e.key === "Tab" && menu.el.getAttribute("role") === "dialog") {
+      // A popover form (the computer location) keeps Tab inside it; only tabbing past its ends closes it.
+      const stops = [...menu.el.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])')]
+        .filter(stop => stop.getClientRects().length > 0);
+      const at = stops.indexOf(document.activeElement as HTMLElement), next = at + (e.shiftKey ? -1 : 1);
+      if (at !== -1 && next >= 0 && next < stops.length) return;
     }
     if (e.key === "Escape" || e.key === "Tab") {
       if (e.key === "Escape") e.preventDefault();
@@ -597,7 +552,7 @@ export function menuPlacement(
   anchor: Pick<DOMRect, "top" | "bottom" | "right"> & Partial<Pick<DOMRect, "left">>,
   size: { width: number; height: number },
   viewport: { width: number; height: number; headerBottom: number },
-  alignment: "end" | "start" | "pointer" | "above" = "end",
+  alignment: "end" | "start" | "pointer" | "above" | "center" = "end",
 ): { left: number; top: number; maxHeight: number } {
   const upper = viewport.headerBottom + 8;
   const lower = Math.max(upper, viewport.height - 8);
@@ -610,7 +565,8 @@ export function menuPlacement(
     : size.height <= below || (size.height > above && below >= above);
   const maxHeight = useBelow ? below : above;
   return {
-    left: Math.max(8, Math.min(alignment === "end" || alignment === "above" ? anchor.right - size.width : anchor.left ?? anchor.right, viewport.width - size.width - 8)),
+    // "center" stands under the middle of its anchor (a face picker under the face).
+    left: Math.max(8, Math.min(alignment === "center" ? ((anchor.left ?? anchor.right) + anchor.right - size.width) / 2 : alignment === "end" || alignment === "above" ? anchor.right - size.width : anchor.left ?? anchor.right, viewport.width - size.width - 8)),
     top: useBelow ? belowTop : aboveBottom - Math.min(size.height, maxHeight),
     maxHeight,
   };
@@ -637,12 +593,12 @@ export function placeMenu(): void {
   const { el, anchor } = menu;
   const r = menu.anchorRect?.() ?? menu.rect;
   const headerBottom = document.getElementById("window-chrome")?.getBoundingClientRect().bottom ?? 0;
-  // A dropdown's menu is at least as wide as the dropdown itself (owner, 2026-10-24).
+  // A dropdown's menu is at least as wide as the dropdown itself.
   if (anchor.classList?.contains("sel")) el.style.minWidth = `${Math.round(r.width)}px`;
   // Release the previous side's height limit before measuring a menu after scrolling or redraw.
   el.style.maxHeight = `${Math.max(0, innerHeight - headerBottom - 16)}px`;
   const size = { width: el.offsetWidth, height: el.offsetHeight }, viewport = { width: innerWidth, height: innerHeight, headerBottom };
-  const placement = menu.placement === "beside" ? submenuPlacement(r, size, viewport) : menuPlacement(r, size, viewport, menu.placement === "start" || menu.placement === "pointer" || menu.placement === "above" ? menu.placement : "end");
+  const placement = menu.placement === "beside" ? submenuPlacement(r, size, viewport) : menuPlacement(r, size, viewport, menu.placement === "start" || menu.placement === "pointer" || menu.placement === "above" || menu.placement === "center" ? menu.placement : "end");
   if (menu.placement === "beside") {
     const first = el.querySelector<HTMLElement>("button");
     const inset = first ? first.getBoundingClientRect().top - el.getBoundingClientRect().top : 0;
@@ -711,7 +667,7 @@ function listenForSubmenus(state: MenuState): void {
 
 export interface PopoverOptions {
   /** Beside preserves its parent menu; start aligns text completions above their character. */
-  placement?: "beside" | "start" | "above";
+  placement?: "beside" | "start" | "above" | "center";
   /** A live text/caret rectangle; the field remains the dismissal and focus anchor. */
   anchorRect?: () => DOMRect;
   onClose?: () => void;
@@ -752,7 +708,7 @@ export function openPopover(anchor: HTMLElement, html: string, o: PopoverOptions
   document.body.append(el);
   if (at) at.until = Infinity;
   menu = { el, anchor, rect, parent, placement: at ? "pointer" : o.placement, anchorRect: at ? () => pointRect(at) : o.anchorRect, at,
-    stopOutside: registerDismissal(el, () => { const root = menuRootAnchor(); closeMenu(); root?.focus({ preventScroll: true }); }, undefined, parent?.el ?? anchor), onKey: o.onKey, onClose: o.onClose };
+    stopOutside: registerDismissal(el, () => { const root = menuRootAnchor(); closeMenu(); if (!pressWentThrough()) root?.focus({ preventScroll: true }); }, undefined, parent?.el ?? anchor), onKey: o.onKey, onClose: o.onClose };
   anchor.setAttribute("aria-expanded", "true");
   anchor.setAttribute("aria-controls", el.id);
   placeMenu();
@@ -934,20 +890,24 @@ export function openMenu(
   if (placement?.focus !== false && !placement?.completion) (remembered ?? el.querySelector<HTMLElement>('[aria-checked="true"]') ?? el.querySelector<HTMLElement>("button") ?? el).focus();
 }
 
-/** Stable exact, prefix, then substring matches within each section, including alternate names. */
+/** Matches within each section, best first and stable: exact, start, inside, then near misses (`find-match.ts`), by
+ * the value, the label and other names. */
 export function matchingChoices(options: Choice[], query: string): Choice[] {
-  const needle = query.toLocaleLowerCase();
-  const score = (choice: Choice): number => Math.min(...[choice.value, ...(choice.aliases ?? [])].map(value => {
-    const name = value.toLocaleLowerCase();
-    return name === needle ? 0 : name.startsWith(needle) ? 1 : name.includes(needle) ? 2 : Infinity;
+  // A space after the words ends them: 「@研究組 」 is a finished mention, and only a longer name that goes on after those
+  // words ("Google " for Google Calendar) still answers it.
+  const finished = /\s$/u.test(query) ? query.trimStart().toLocaleLowerCase() : "";
+  const scores = new Map(options.map(choice => {
+    const names = [choice.value, choice.label.replace(/^[@/]/, ""), ...(choice.aliases ?? [])];
+    return [choice, finished && !names.some(name => name.toLocaleLowerCase().startsWith(finished)) ? Infinity : nameScore(names, query)];
   }));
+  const score = (choice: Choice): number => scores.get(choice)!;
   const groups = [...new Set(options.map(option => option.group))];
   return groups.flatMap(group => options.filter(option => option.group === group && score(option) < Infinity).sort((a, b) => score(a) - score(b)));
 }
 
 /** The check mark of a chosen item: drawn, so that it is the same in every font; the `check` of ICON,
  * drawn at 16 px by `.menu .ck svg`. */
-export const CHECK = `<svg viewBox="0 0 16 16" aria-hidden="true"><path d="${ICON.check}"/></svg>`;
+export const CHECK = `<svg viewBox="0 0 24 24" aria-hidden="true">${ICON.check}</svg>`;
 
 // ---------- toasts ----------
 

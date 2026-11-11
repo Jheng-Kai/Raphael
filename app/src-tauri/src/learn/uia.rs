@@ -1548,25 +1548,25 @@ mod tests {
 
     #[test]
     fn logged_terminal_paste_overlay_backspaces_and_retyping_learns_the_name() {
-        let pasted = "Please use Open Mouse Bot";
+        let pasted = "Please use Sample Tool Ex";
         let focus = FocusWatch::new(Some(vec![1, 2]), 7, 42);
         let mut keys = Keystrokes::with_enter(pasted, EnterKey::Submit).unwrap();
-        // 2026-10-25 11:39:03: own unfocused Pane, target still foreground.
+        // The application's own Pane is unfocused while the target stays foreground.
         focus.changed_from(Some(&[9]), Some(false), true, Some(false), true);
         assert!(focus.input_observation_allowed());
-        for _ in 0.."Open Mouse Bot".len() {
+        for _ in 0.."Sample Tool Ex".len() {
             keys.apply(EditEvent::Backspace);
         }
-        for byte in b"OpenMausBot" {
+        for byte in b"SampleToolX" {
             keys.apply(EditEvent::Ascii(*byte));
         }
         keys.apply(EditEvent::Enter);
-        assert_eq!(keys.text(), Some("Please use OpenMausBot"));
+        assert_eq!(keys.text(), Some("Please use SampleToolX"));
         assert_eq!(
             keys.corrections(),
             [Correction {
-                word: "OpenMausBot".into(),
-                misheard: "Open Mouse Bot".into(),
+                word: "SampleToolX".into(),
+                misheard: "Sample Tool Ex".into(),
             }]
         );
     }

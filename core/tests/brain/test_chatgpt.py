@@ -127,7 +127,12 @@ class Rig:
             body = json.loads(request.content)
             self.body_checks.append(body)
             assert body["store"] is False and body["stream"] is True
-            assert body["include"] == ["reasoning.encrypted_content"]
+            # A conversation (no key, or one named by its session, as Codex sends it) keeps its reasoning;
+            # a one-off call with a fixed key does not.
+            if "prompt_cache_key" not in body or request.headers.get("session-id"):
+                assert body["include"] == ["reasoning.encrypted_content"]
+            else:
+                assert "include" not in body
             assert not set(body) & {"max_output_tokens", "max_tokens", "temperature", "previous_response_id", "provider"}
             assert all(item.get("role") != "system" for item in body["input"])
             if request.headers["Authorization"] == "Bearer rotated-access":
@@ -714,6 +719,63 @@ async def test_model_provider_text_json_and_planning_use_responses(rig):
     assert (await provider.plan_tools(**args, tools=[])).calls[0].name == "calendar_read"
 
 
+@pytest.mark.parametrize("levels,requested,expected", [
+    (["low", "none", "minimal"], "none", "none"),
+    (["medium", "low"], "none", "low"),
+    (["low", "minimal"], "none", "minimal"),
+    (["none", "low", "high"], "high", "high"),
+    (None, "none", None),
+])
+async def test_cleanup_asks_for_the_least_listed_reasoning(rig, levels, requested, expected, caplog):
+    import logging
+
+    await rig.sign_in()
+    rig.auth.model_rows = [] if levels is None else [{"id": "chosen-model", "reasoning_efforts": levels}]
+    rig.responses = [sse([message('{"cleaned":"Synthetic."}')])] * 2
+    with caplog.at_level(logging.DEBUG, logger="raphael_core.brain.providers.chatgpt"):
+        for _ in range(2):
+            result = await rig.registry.chatgpt.complete_json(model="chosen-model", system="Synthetic instructions",
+                user="Synthetic.", schema={"type": "object", "required": ["cleaned"]},
+                schema_name="cleaned_dictation", timeout_s=2, max_tokens=50, reasoning_effort=requested)
+            assert result.data == {"cleaned": "Synthetic."}
+    bodies = [json.loads(r.content) for r in rig.requests if r.url.path == "/v1/responses"]
+    assert len(bodies) == 2
+    for body in bodies:
+        assert body.get("reasoning") == ({"effort": expected} if expected else None)
+        assert body["prompt_cache_key"] == "raphael-cleanup" and "include" not in body
+        assert body["model"] == "chosen-model" and "tools" not in body
+    assert caplog.text.count("reasoning metadata unavailable") == (1 if levels is None else 0)
+
+
+async def test_reasoning_continuity_is_kept_only_for_the_guarded_conversation(rig):
+    await rig.sign_in()
+    rig.auth.model_rows = [{"id": "chosen-model", "reasoning_efforts": ["low", "high"]}]
+    rig.responses = [sse([message("Text")])] * 3
+    provider = rig.registry.chatgpt
+    args = dict(model="chosen-model", timeout_s=2, max_tokens=50, reasoning_effort="high")
+    await provider.chat_tools(messages=[], tools=[], **args)
+    await provider.chat_text(system="System", user="User", **args)
+    await provider.plan_tools(system="System", user="User", tools=[], **args)
+    bodies = [json.loads(r.content) for r in rig.requests if r.url.path == "/v1/responses"]
+    assert bodies[0]["include"] == ["reasoning.encrypted_content"]
+    assert "prompt_cache_key" not in bodies[0]
+    assert all(body["reasoning"] == {"effort": "high"} for body in bodies)
+    assert [body.get("prompt_cache_key") for body in bodies[1:]] == ["raphael-text", "raphael-planner"]
+    assert all("include" not in body for body in bodies[1:])
+
+
+async def test_a_named_conversation_is_its_own_cache_key_and_session_as_codex_sends_them(rig):
+    # Codex (core/src/client.rs, requests/headers.rs): ChatGPT derives cache affinity from the session-id header.
+    await rig.sign_in()
+    rig.auth.model_rows = [{"id": "chosen-model", "reasoning_efforts": ["low"]}]
+    rig.responses = [sse([message("Text")])]
+    await rig.registry.chatgpt.chat_tools(messages=[], tools=[], model="chosen-model", timeout_s=2, max_tokens=50,
+                                          session="raphael-5-7", cache_ttl="1h")
+    [request] = [r for r in rig.requests if r.url.path == "/v1/responses"]
+    assert json.loads(request.content)["prompt_cache_key"] == "raphael-5-7"
+    assert request.headers["session-id"] == "raphael-5-7"
+
+
 @pytest.mark.parametrize("scope,kind", [(None, "auth_expired"), ("openid", "chatgpt_scope")])
 async def test_missing_sign_in_and_scope_report_the_selected_model(rig, scope, kind):
     if scope is not None:
@@ -731,7 +793,61 @@ async def test_missing_sign_in_and_scope_report_the_selected_model(rig, scope, k
     assert not [r for r in rig.requests if r.url.host == "api.openai.com"]
 
 
-@pytest.mark.parametrize("status,body,kind,shape", [(503, {"detail": "secret-provider-text"}, "chatgpt_unavailable", "detail"),
+async def chat_once(rig):
+    return await rig.client.chat_tools(model="@chatgpt:chosen-model", messages=[], tools=[], timeout_s=2, max_tokens=50)
+
+
+async def test_a_busy_service_is_asked_again_and_is_not_a_plan_that_cannot_be_checked(rig):
+    await rig.sign_in()
+    rig.responses = [httpx.Response(503, json={"detail": "secret-provider-text"})]
+    with pytest.raises(OpenRouterError) as error:
+        await chat_once(rig)
+    failed = classify(error.value)
+    assert failed.kind == "server" and failed.transient
+    # The plan's own word that it cannot be checked is still that.
+    rig.responses = [httpx.Response(503, json={"error": {"code": "subscription_sharing_usage_unavailable"}})]
+    with pytest.raises(OpenRouterError) as error:
+        await chat_once(rig)
+    assert classify(error.value).kind == "chatgpt_unavailable"
+
+
+def stream_error(packet):
+    return httpx.Response(200, headers={"content-type": "text/event-stream"},
+                          text="data: " + json.dumps(packet) + "\n\n")
+
+
+@pytest.mark.parametrize("packet,kind", [
+    ({"type": "error", "code": "server_error", "message": "secret-provider-text"}, "server"),
+    ({"type": "error", "code": "rate_limit_exceeded", "message": "secret-provider-text"}, "rate_limit"),
+    ({"type": "response.failed", "response": {"status": "failed", "error": {"code": "server_error", "message": "x"}}}, "server"),
+    ({"type": "response.failed", "response": {"status": "failed", "error": {"code": "something_new", "message": "x"}}}, "server"),
+    ({"type": "response.failed", "response": {"status": "failed"}}, "server"),
+    ({"type": "response.failed", "response": {"status": "failed", "error": {"code": "invalid_prompt", "message": "x"}}}, "content_policy"),
+    ({"type": "response.incomplete", "response": {"status": "incomplete", "incomplete_details": {"reason": "content_filter"}}}, "content_policy"),
+    ({"type": "response.failed", "response": {"status": "failed", "error": {"code": "invalid_value", "message": "x"}}}, "invalid_request"),
+    ({"type": "response.failed", "response": {"status": "failed", "error": {"code": "context_length_exceeded", "message": "x"}}}, "context_overflow"),
+])
+async def test_an_error_inside_the_stream_is_the_kind_it_is_and_not_a_call_to_update_raphael(rig, packet, kind):
+    await rig.sign_in()
+    rig.responses = [stream_error(packet)]
+    with pytest.raises(OpenRouterError) as error:
+        await chat_once(rig)
+    failed = classify(error.value)
+    assert failed.kind == kind and "secret-provider-text" not in failed.reason
+    assert failed.transient == (kind in ("server", "rate_limit"))
+
+
+async def test_a_stream_that_ends_early_and_cleanly_is_a_cut_connection_not_a_broken_tool(rig):
+    await rig.sign_in()
+    rig.responses = [httpx.Response(200, headers={"content-type": "text/event-stream"},
+                                    text="data: " + json.dumps({"type": "response.output_text.delta", "delta": "Par"}) + "\n\n")]
+    with pytest.raises(OpenRouterError) as error:
+        await chat_once(rig)
+    failed = classify(error.value)
+    assert failed.kind == "network" and failed.transient
+
+
+@pytest.mark.parametrize("status,body,kind,shape", [(503, {"detail": "secret-provider-text"}, "server", "detail"),
     (403, {"error": {"code": "subscription_sharing_user_not_eligible", "message": "secret-provider-text"}},
      "chatgpt_plan_unavailable", "error_object")])
 async def test_rpc_errors_preserve_safe_protocol_metadata_and_credentials(rig, caplog, status, body, kind, shape):
@@ -811,3 +927,24 @@ async def test_a_plan_conversation_that_does_not_fit_is_told_apart(rig):
     with pytest.raises(OpenRouterError) as error:
         await rig.registry.chatgpt.chat_tools(model="chosen-model", messages=[], tools=[], timeout_s=2, max_tokens=50)
     assert error.value.kind == "context_overflow"
+
+
+async def test_reasoning_items_and_reasoning_written_into_the_answer_are_not_the_reply(rig):
+    """The stream is scripted: nothing here has met the real API."""
+    await rig.sign_in()
+    thought = "I should check the price before answering."
+    summary = {"type": "reasoning", "id": "rs", "summary": [{"type": "summary_text", "text": thought}], "encrypted_content": "enc"}
+    rig.responses = [sse([summary, message(f"<think>{thought}</think>AAPL is 190.")]), sse([summary, message(f"<think>{thought}")])]
+    thoughts = []
+
+    async def execute(call_id, name, arguments):
+        raise AssertionError("no tool was called")
+    first = loop(rig, execute)
+    first.thinking = thoughts.append
+    outcome = await first.run()
+    assert first.reply(outcome).text == "AAPL is 190." and thoughts == [thought]
+    second = loop(rig, execute)
+    outcome = await second.run()
+    with pytest.raises(AgentFailure) as failure:
+        second.reply(outcome)
+    assert failure.value.kind == "no_answer"

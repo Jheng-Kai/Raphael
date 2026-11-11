@@ -1,12 +1,14 @@
-﻿"""Management follows the live primary, while destructive writes await exact approval."""
+﻿"""Owner-private management is equal, while destructive writes await exact approval."""
 
 import pytest
 
-from agent.test_narration import chat
+from agent.test_narration import chat, use
 from .test_answering import client, setup, member, typed, live_said  # noqa: F401
 from raphael_core.agent.harness_tools import definitions_for
 from raphael_core.agent.policy import Action, Confirmations, NotApproved
 from raphael_core.agent.gate import ToolGate
+from raphael_core.agent.team_admin import title_of
+from raphael_core.management_words import effect
 from raphael_core.management import ACTIONS, MANAGEMENT_TOOLS, REGISTRY, destructive, publish, resolve
 from raphael_core.protocol import RpcError
 
@@ -17,19 +19,21 @@ from raphael_core.protocol import RpcError
     "Disconnect Sample", "Reconnect Sample", "Manage the MCP connection",
 ])
 @pytest.mark.parametrize("primary", [0, 7])
-def test_connection_intent_offers_management_only_to_the_interactive_primary(prompt, primary):
+def test_connection_management_is_found_by_every_owner_private_member(prompt, primary):
     from raphael_core.agent.speaker import Speaker
     from raphael_core.background.snapshot import take_snapshot
 
     for identifier in (0, 7):
         speaker = Speaker(id=identifier, capabilities=frozenset({"chief"}) if identifier == primary else frozenset())
         for interactive, owner_management in ((True, True), (True, False), (False, True)):
-            snapshot = take_snapshot(None, prompt, speaker=speaker, interactive=interactive,
-                                     owner_management=owner_management)
-            allowed = identifier == primary and interactive and owner_management
-            assert ({"manage_connection", "add_mcp_server"} <= snapshot.refs.keys()) == allowed
-            snapshot.find("manage_connection")
-            assert ("manage_connection" in snapshot.refs) == allowed
+            snapshot = take_snapshot(None, speaker=speaker, interactive=interactive, owner_management=owner_management)
+            allowed = interactive and owner_management
+            # The list never follows the request (decision 2): the request's words only rank what find_tools returns.
+            assert not {"manage_connection", "add_mcp_server"} & snapshot.listed()
+            found = {item["function"]["name"] for item in snapshot.find(prompt)[0]}
+            assert bool(found & set(snapshot.management)) == allowed
+            assert ("manage_connection" in {item["function"]["name"] for item in snapshot.find("manage_connection")[0]}) == allowed
+            assert (snapshot.reveal("manage_connection") is not None) == allowed
 
 
 def test_default_primary_offer_stays_bounded_and_management_requires_discovery():
@@ -37,14 +41,13 @@ def test_default_primary_offer_stays_bounded_and_management_requires_discovery()
     from raphael_core.background.snapshot import take_snapshot
 
     speaker = Speaker(id=0, capabilities=frozenset({"chief"}))
-    snapshot = take_snapshot(None, "Read my report", speaker=speaker, interactive=True,
-                             memory=True, attachments=True)
+    snapshot = take_snapshot(None, speaker=speaker, interactive=True, memory=True)
     assert len(snapshot.definitions) <= 49
     assert not MANAGEMENT_TOOLS & snapshot.refs.keys()
-    assert "find_tools" in snapshot.refs
+    assert {"find_tools", "use_tool"} <= snapshot.refs.keys()
     added, _ = snapshot.find("manage_connection")
     assert "manage_connection" in {item["function"]["name"] for item in added}
-    assert "manage_connection" in snapshot.refs
+    assert snapshot.reveal("manage_connection") is not None and "manage_connection" not in snapshot.listed()
 
 
 def sample(schema):
@@ -92,34 +95,35 @@ async def test_every_destructive_row_shows_a_card_and_waits_for_the_exact_yes(se
     rig.service._connection_tool = connection
     public_name, _ = publish(name, args)
     client.chats = [chat("Find the requested action.", ("find_tools", {"query": public_name})),
-                    chat("Requested change.", publish(name, args)), live_said("Finished.")]
+                    chat("Requested change.", use(*publish(name, args))), live_said("Finished.")]
     asked = await typed(rig, "Apply this requested change", 0, language="en")
     assert asked["status"] == "confirm", (name, asked)
     assert asked["confirm"]["tier"] == "T3"
     assert writes == []
     text = asked["confirm"]["text"]
-    assert ("Affected target" in text and resolve(name, args)[0].description in text) if name != "member_delete" else "ID: " in text
-    assert all(str(value) in text for value in args.values() if not isinstance(value, (list, dict, bool)))
+    # The card says the effect in words (owner, 2026-11-11: no JSON, no ID, one language), never a raw argument list.
+    action, values = resolve(name, args)
+    words = title_of(name, "en") if name in team.members.TRADITIONAL else effect(team.members.management_effect(action, values), "en")
+    assert words in text and "Affected target" not in text and "{" not in text and "ID" not in text
     await rig.confirm(asked["confirm"]["id"])
     assert len(writes) == 1
 
 
-async def test_nonprimary_and_stale_primary_cannot_write_even_if_the_model_calls_directly(setup):
+async def test_owner_private_management_stays_equal_after_the_primary_contact_moves(setup):
     rig, team = setup
     team.members.register(rig.rpc)
     other = member(team)
     old = team.members.speaker(0)
-    with pytest.raises(RpcError, match="current primary contact"):
-        await team.members.admin_tool(other.id, "group_create", {"name": "Denied"}, interactive=True)
+    made = await team.members.admin_tool(other.id, "group_create", {"name": "Ordinary"}, interactive=True)
+    assert made["group"]["name"] == "Ordinary"
     await rig.call("members.set_primary", {"id": other.id})
-    assert "group_create" in dict(definitions_for(old))
-    assert not set(dict(definitions_for(team.members.speaker(0)))) & MANAGEMENT_TOOLS
-    assert "group_create" in dict(definitions_for(team.members.speaker(other.id)))
-    with pytest.raises(RpcError, match="current primary contact"):
-        await team.members.admin_tool(old.id, "group_create", {"name": "Stale"}, interactive=True)
-    with pytest.raises(RpcError, match="interactive private chat"):
-        await team.members.admin_tool(other.id, "group_create", {"name": "Worker"})
-    assert (await team.members.admin_tool(other.id, "group_create", {"name": "Allowed"}, interactive=True))["group"]["name"] == "Allowed"
+    for actor in (old.id, other.id):
+        from raphael_core.management import DEFINITIONS
+        assert DEFINITIONS.keys() <= dict(definitions_for(team.members.speaker(actor))).keys()
+        result = await team.members.admin_tool(actor, "group_create", {"name": f"Folder {actor}"}, interactive=True)
+        assert result["group"]["name"] == f"Folder {actor}"
+        with pytest.raises(RpcError, match="interactive private chat"):
+            await team.members.admin_tool(actor, "group_create", {"name": "Worker"})
 
 
 @pytest.mark.parametrize("name", DESTRUCTIVE)
@@ -161,13 +165,16 @@ def test_retention_uses_the_real_forever_and_immediate_delete_semantics():
 
 
 async def test_management_uses_the_same_profile_folder_and_command_services(rig):
+    greetings = []
+    rig.service.greeting = lambda identifier, language: greetings.append((identifier, language))
     async def run(tool_name, **args):
         return await rig.service.admin_tool(0, tool_name, args, interactive=True)
     group = (await run("group_create", name="Team"))["group"]
     await run("group_update", id=group["id"], position=2, sources=[{"kind": "github", "ref": "owner/repo"}])
     person = (await run("member_create", name="Writer", role="Write", group_id=group["id"]))["member"]
+    assert greetings == [(person["id"], rig.language)]
     updated = (await run("member_update", id=person["id"], reply_style="conversational", pinned=True, hidden=True,
-                         notify=True, read_aloud=True, draft_first=False, ask_before_members=True, effort="high"))["member"]
+                         notify=True, draft_first=False, ask_before_members=True, effort="high"))["member"]
     assert updated["reply_style"] == "conversational" and updated["hidden"] and updated["notify"]
     assert updated["model"].endswith("?effort=high")
     await run("member_command_save", member_id=person["id"], name="review", template="Review {input}")
@@ -201,14 +208,13 @@ async def test_registry_routes_rooms_conversations_skills_dictionary_and_setting
         assert "Edited review" in card and "Reader" in card
         room = (await run("room_members", room_id=room["id"], member_ids=[0, person["id"]]))["room"]
         assert other["id"] not in room["member_ids"]
-        conversation = (await run("conversation_create", member_id=person["id"]))["conversation"]
-        await run("conversation_rename", id=conversation["id"], title="Notes")
-        await run("conversation_delete", id=conversation["id"])
-        assert all(item["id"] != conversation["id"] for item in (await app.call("conversations.list", {"member_id": person["id"]}))["conversations"])
-        skill = app.members.capabilities.keep_skill(person["id"], "local-test", "---\nname: Review\ndescription: Read reports\n---\nRead carefully.")
-        await run("member_skill_update", member_id=person["id"], id=skill["id"], text="---\nname: Review\ndescription: Read reports\n---\nCheck evidence.", expected_hash=skill["revision"], enabled=False)
+        conversation = (await run("conversation_list", member_id=person["id"]))["conversations"][0]
+        await run("conversation_clear", id=conversation["id"])
+        assert [item["id"] for item in (await app.call("conversations.list", {"member_id": person["id"]}))["conversations"]] == [conversation["id"]]
+        skill = app.members.capabilities.keep_skill(person["id"], "local-test", "---\nname: review\ndescription: Read reports\n---\nRead carefully.")
+        await run("member_skill_update", member_id=person["id"], id=skill["id"], text="---\nname: review\ndescription: Read reports\n---\nCheck evidence.", expected_hash=skill["revision"], enabled=False)
         assert not app.members.capabilities.skills(person["id"])[0]["enabled"]
-        assert "Review" in app.members.admin_confirmation("member_skill_delete", {"member_id": person["id"], "id": skill["id"]}, "en")
+        assert "review" in app.members.admin_confirmation("member_skill_delete", {"member_id": person["id"], "id": skill["id"]}, "en")
         await run("member_skill_delete", member_id=person["id"], id=skill["id"])
         assert not app.members.capabilities.skills(person["id"])
         await run("dictionary_add", word="Raphael")
@@ -253,7 +259,7 @@ async def test_production_model_change_requires_the_owners_request(setup, client
             loop._queue.put_nowait(Outcome("done", final=json.dumps({"prefix": "Answer", "text": "Finished.", "detail": ""})))
         monkeypatch.setattr(CliLoop, "_work", work)
     else:
-        client.chats = [chat("Change effort.", ("settings_update", args)), live_said("Finished.")]
+        client.chats = [chat("Change effort.", use("settings_update", args)), live_said("Finished.")]
     text = "Set the quick model reasoning effort to high" if requested else "The model failed; finish my report"
     assert (await typed(rig, text, 0, language="en"))["status"] == "done"
     assert rig.settings.get("quick_effort") == ("high" if requested else "low")
@@ -285,12 +291,12 @@ async def test_server_approval_cannot_be_reused_or_redirected(rig):
         await rig.service.admin_tool(0, action.tool, action.args, interactive=True, approval=approval)
 
 
-@pytest.mark.parametrize("tool", ["member_history_clear", "conversation_clear", "conversation_delete"])
+@pytest.mark.parametrize("tool", ["member_history_clear", "conversation_clear"])
 async def test_deleting_the_requesting_chat_finishes_without_cancelling_itself(setup, client, tool):
     rig, team = setup
     team.members.register(rig.rpc)
     args = {"member_id": 0} if tool == "member_history_clear" else {"id": rig.service.conversations.main(0)}
-    client.chats = [chat("Removing the records.", publish(tool, args)), live_said("Records removed.")]
+    client.chats = [chat("Removing the records.", use(*publish(tool, args))), live_said("Waiting for your yes."), live_said("Records removed.")]
     asked = await typed(rig, "Remove this conversation's records", 0, language="en")
     assert asked["status"] == "confirm"
     import asyncio
@@ -306,7 +312,7 @@ async def test_primary_can_approve_its_own_deletion_and_leave_a_receipt_with_the
     primary = member(team, name="Coordinator")
     team.members.store.set_primary(primary.id)
     rig.settings.set("action_mode", "bypass")
-    client.chats = [chat("Delete this member.", ("member_delete", {"id": primary.id})), live_said("Deleted.")]
+    client.chats = [chat("Delete this member.", use("member_delete", {"id": primary.id})), live_said("Waiting for your yes."), live_said("Deleted.")]
     asked = await typed(rig, "Delete Coordinator", primary.id, language="en")
     assert asked["status"] == "confirm" and "Coordinator" in asked["confirm"]["text"]
     done = await rig.confirm(asked["confirm"]["id"])

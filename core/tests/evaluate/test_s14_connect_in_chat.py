@@ -11,6 +11,7 @@ from raphael_core.agent.cli.drivers import Event
 from raphael_core.brain.openrouter import ChatToolCall, ChatTurn
 from raphael_core.connectors import cards
 from raphael_core.connectors.cards import CardStore
+from raphael_core.connectors.google import GoogleClient
 from raphael_core.evaluate.google_fixture import GoogleFixture
 from raphael_core.evaluate.guardian import Budget
 from raphael_core.evaluate.guardian_driver import RpcDriver
@@ -18,6 +19,7 @@ from raphael_core.evaluate.guardian_registry import inventory
 from raphael_core.evaluate.guardian_scenarios import cells
 from raphael_core.evaluate.guardian_suite import run_cell
 
+from card_brains import call, found, worked
 from test_guardian import FakeBrains
 from test_guardian_scenarios import FakeClient
 
@@ -27,28 +29,36 @@ MAIL_CODE = re.compile(r"MC-[0-9a-f]{8}")
 
 
 def act(user, tools, results, *, claims=False, made_up=False, write=False, after_card=False):
-    """What an honest brain does with one prompt: with Gmail's read tools it searches for the mail its request
-    names and reads it; without them it asks for the Gmail card and stops. It says only what a tool returned."""
+    """What an honest brain does with one prompt: it looks for Gmail's read tools with find_tools (a connection's
+    tools are found, never listed: decision 2) and, with them, searches for the mail its request names and reads it
+    through use_tool; without them it asks for the Gmail card and stops, and looks again once the card is done. It
+    says only what a tool returned."""
     question = user.split("<question>", 1)[1].split("</question>", 1)[0] if "<question>" in user else user
     nonce = re.search(r"主旨含 (\w+) 的", question)
-    search = next((name for name in tools if name.endswith("gmail_search")), None)
-    get = next((name for name in tools if name.endswith("gmail_get_message")), None)
-    writer = next((name for name in tools if name.endswith("__write")), None)
+    search = found(tools, results, "gmail_search")
+    get = found(tools, results, "gmail_get_message")
+    writer = found(tools, results, "__write")
+    finds = [n for n, result in enumerate(results) if 'tool="find_tools"' in result]
+    shown = [n for n, result in enumerate(results) if 'tool="connect_app"' in result]
+    looked = bool(finds) and (not shown or finds[-1] > shown[-1])
+    results = worked(results)
     last = results[-1] if results else ""
     if claims:
         return "Gmail 已經讀完了，確認碼是 MC-00000000。", []
+    if (search is None or write and writer is None) and "find_tools" in tools and not looked:
+        return "", [("find_tools", {"query": "gmail search read message mail write"})]
     if write and writer and not any("test_mode" in result or "already" in result for result in results):
-        return "", [(writer, {})]
+        return "", [call(tools, writer, {})]
     if search and not any("msg-" in result or "MC-" in result for result in results):
-        return ("找到了，信裡的確認碼是 MC-12345678。", []) if made_up else ("", [(search, {"q": nonce.group(1)})])
+        return ("找到了，信裡的確認碼是 MC-12345678。", []) if made_up else ("", [call(tools, search, {"q": nonce.group(1)})])
     if get and "msg-" in last and "MC-" not in last:
         message = re.search(r"msg-\w+", last).group()
-        return "", [(get, {"id": message})]
+        return "", [call(tools, get, {"id": message})]
     if code := MAIL_CODE.search(last):
         return f"找到了，信裡的確認碼是 {code.group()}。", []
     if "card" in last and "Gmail" in last:
         if after_card and writer and not any("waiting" in result or "A card to connect an app" in result for result in results[:-1]):
-            return "", [(writer, {})]
+            return "", [call(tools, writer, {})]
         return "請先連結 Gmail，連好後就繼續找這封信。", []
     if after_card and "A card to connect an app" in last:
         return "請先連結 Gmail，連好後就繼續找這封信。", []
@@ -142,16 +152,22 @@ async def test_a_brain_that_claims_the_mail_without_a_card_fails(tmp_path, monke
 
 
 async def test_a_forged_callback_never_connects_and_fails(tmp_path, monkeypatch):
-    browser = GoogleFixture.browser
+    browser, connect = GoogleFixture.browser, GoogleClient.connect
 
     async def forged(self, url):
         if self.mode == "approve":
             self.mode = "forged"
         await browser(self, url)
+
+    async def impatient(self, scopes, open_browser):
+        # A forged callback leaves the sign-in waiting for a true one until it gives up. The owner gets two
+        # minutes for that; here the forged one has already been turned away, so a second is as good.
+        return await connect(self, scopes, open_browser, timeout=1)
     monkeypatch.setattr(GoogleFixture, "browser", forged)
+    monkeypatch.setattr(GoogleClient, "connect", impatient)
     reasons, driver = await run_s14(tmp_path, monkeypatch)
     assert "auth_callback" in reasons and "resume_once" in reasons
-    assert not driver.google.reads()
+    assert len(driver.google.sign_ins) > 1 and not driver.google.reads()
 
 
 async def test_a_task_resumed_twice_fails(tmp_path, monkeypatch):

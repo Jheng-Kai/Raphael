@@ -13,6 +13,7 @@ from raphael_core.evaluate.guardian_driver import RpcDriver
 from raphael_core.evaluate.guardian_scenarios import cells
 
 from background.conftest import Links
+from cli_context import NativeContext
 from test_guardian import FakeBrains
 from test_guardian_scenarios import FakeClient
 
@@ -76,7 +77,8 @@ class P02Brain(FakeClient):
         return f"幕僚長：{names[snapshot['chief_id']]}"
 
     def answer(self, system, user):
-        raw = system.split('<team_roster>')[-1].split('</team_roster>')[0].strip()
+        # The team comes with the message (an API brain) or as a CLI session's section, never among the rules.
+        raw = (system + '\n' + user).split('<team_roster>')[-1].split('</team_roster>')[0].strip()
         snapshot = json.loads(raw)
         if self.scenario == 'S02':
             people = '；'.join(person['name'] + '：' + person['role'] for person in snapshot['members'])
@@ -96,8 +98,6 @@ class P02Brain(FakeClient):
         return '已開啟會議。', []
 
     async def complete_json(self, **kwargs):
-        if kwargs.get('schema_name') == 'raphael_room_listener':
-            return Completion({'speak':False,'urgency':0,'reason':'fixture silence'}, kwargs['model'], 0, 0, 0, 0)
         if kwargs.get('schema_name') != 'raphael_room_route':
             raise RuntimeError('fixture has no auxiliary response')
         request = json.loads(kwargs['user'])
@@ -146,15 +146,16 @@ async def test_a_refused_meeting_call_tells_the_model_what_to_fix(tmp_path):
 
 def cli_brain(monkeypatch, client, scenario, limited=()):
     """A CLI that answers as the fixture brain; the members in `limited` are always rate-limited."""
+    context = NativeContext()
+
     class Driver:
         def __init__(self, *args, **kwargs):
             pass
 
-        async def run(self, *, system, user, endpoint, token, **kwargs):
+        async def run(self, *, system, user, endpoint, token, session=None, **kwargs):
             yield Event('model','owner-model')
-            if 'Return only your speak choice' in system:
-                yield Event('final','{"speak":false,"urgency":0}')
-                return
+            native, effective = context.receive(system, user, session)
+            yield Event('session', native)
             if scenario=='S07.meeting' and 'You are in a group chat' not in user:
                 async with httpx.AsyncClient() as http:
                     response = await http.post(endpoint, headers={'Authorization':'Bearer ' + token}, json={
@@ -163,16 +164,18 @@ def cli_brain(monkeypatch, client, scenario, limited=()):
                             'roles':{'4':'moderator','1':'pro','5':'con'}}}})
                     assert not response.json()['result']['isError'], response.text
                 answer = '已開啟會議。'
-            elif json.loads(system.split('<team_roster>')[-1].split('</team_roster>')[0])['self_id'] in limited:
+            elif json.loads(effective.split('<team_roster>')[-1].split('</team_roster>')[0])['self_id'] in limited:
                 yield Event('error','rate_limited')
                 return
             else:
-                answer, _ = client.answer(system, user)
+                answer, _ = client.answer(effective, user)
+            context.answered(native, answer)
             yield Event('final',answer)
 
         async def interrupt(self):
             pass
     monkeypatch.setattr('raphael_core.agent.cli.loop.Driver', Driver)
+    return context
 
 
 @pytest.mark.parametrize('scenario', ['S02', 'S07.meeting'])
@@ -193,6 +196,44 @@ async def test_p02_scenarios_pass_on_both_production_brain_paths(tmp_path, monke
         await driver.aclose()
 
 
+async def test_native_roster_survives_unchanged_turns_applies_updates_and_rebuilds_after_clear(tmp_path, monkeypatch):
+    context = cli_brain(monkeypatch, P02Brain('S02'), 'S02')
+    driver = RpcDriver(tmp_path, 'cli:codex:owner-model', P02Brain('S02'), Budget(40), brains=FakeBrains(tmp_path))
+    try:
+        members = await driver.seed_team()
+        await driver.install_fixture()
+        for _ in range(2):
+            assert (await driver.ask('List the current public team inventory.'))['status'] == 'done'
+        first, unchanged = context.calls
+        assert first['session'] is None and unchanged['session'] == first['native']
+        assert '<team_roster>' in first['user'] and '<team_roster>' not in first['system']
+        assert '<team_roster>' not in unchanged['user'] and 'Team changed' not in unchanged['user']
+        assert unchanged['roster'] == first['roster']
+
+        await driver.app.call('members.update', {'id': members[-1], 'name': 'Synthetic Cedar'})
+        await driver.app.call('members.set_primary', {'id': members[0]})
+        driver.app.integrations._config.remove('guardian-mail')
+        for _ in range(2):
+            assert (await driver.ask('List the updated public team inventory.'))['status'] == 'done'
+        changed, stable = context.calls[2:]
+        assert changed['session'] == stable['session'] == first['native']
+        assert 'Team changed' in changed['user']
+        assert changed['roster'] == driver.app.members.team_context(0, 'zh-TW')
+        assert changed['roster']['primary_id'] == changed['roster']['chief_id'] == members[0]
+        assert changed['roster']['connected'] < first['roster']['connected']
+        assert any(person['name'] == 'Synthetic Cedar' for person in changed['roster']['members'])
+        assert 'Team changed' not in stable['user'] and '<team_roster>' not in stable['user']
+        assert stable['roster'] == changed['roster']
+
+        await driver.app.call('agent.history.clear', {'member_id': 0})
+        assert (await driver.ask('List the current public team inventory again.'))['status'] == 'done'
+        rebuilt = context.calls[-1]
+        assert rebuilt['session'] is None and rebuilt['native'] != first['native']
+        assert '<team_roster>' in rebuilt['user'] and rebuilt['roster'] == stable['roster']
+    finally:
+        await driver.aclose()
+
+
 async def test_s07_meeting_goes_on_when_one_cli_member_is_rate_limited(tmp_path, monkeypatch):
     client = P02Brain('S07.meeting')
     cli_brain(monkeypatch, client, 'S07.meeting', limited={5})
@@ -208,13 +249,11 @@ async def test_s07_meeting_goes_on_when_one_cli_member_is_rate_limited(tmp_path,
         assert {tuple(i) for i in intents if i['state'] != 'done'} == {(5, 'blocked', 'cli_rate_limited')}
         spoken = conn.execute("SELECT m.member_id FROM room_messages m JOIN agent_turns t ON t.id=m.turn_id "
                               "WHERE m.origin_message_id=? AND m.kind='message' AND t.status='done'", (origin,)).fetchall()
-        assert {row[0] for row in spoken} == {1, 4}
-        # HiKari already authored the agenda; it does not answer its own post.
+        # Every participant, including the agenda author, gets a review turn.
+        assert {row[0] for row in spoken} == {1, 3, 4}
         assert conn.execute('SELECT member_id FROM room_messages WHERE id=?', (origin,)).fetchone()[0] == 3
-        [notice] = conn.execute("SELECT t.question,t.text,t.model,t.cost_usd FROM room_messages m "
-            "JOIN agent_turns t ON t.id=m.turn_id WHERE m.origin_message_id=? AND m.kind='wrapup'", (origin,)).fetchall()
-        assert notice['question'] == '' and notice['model'] is None and notice['cost_usd'] == 0
-        assert 'RD' in notice['text'] and '限流' in notice['text']
+        # RD's rate limit is its status line (the blocked intent above): no close-out speaks for it in the chief's name.
+        assert not conn.execute("SELECT 1 FROM room_messages WHERE origin_message_id=? AND kind='wrapup'", (origin,)).fetchone()
         assert 'meeting_pending_or_blocked_intents' in reasons
     finally:
         await driver.aclose()

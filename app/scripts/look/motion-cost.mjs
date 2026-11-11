@@ -22,7 +22,8 @@ export async function motionCost(page, revision) {
   const load = await page.evaluate(async () => {
     const current = await import('/src/main/slime.ts');
     const { handOver, slimeSVG } = window.__slimeBaseline ?? current;
-    const svgs = [...document.querySelectorAll('svg.slime')];
+    // Only the slimes that move (R-SLIME-01); a picture has no clock to hand over.
+    const svgs = [...document.querySelectorAll('.slime-surface:not([data-slime-still]) svg.slime')];
     const saved = svgs.map(svg => svg.dataset.state);
     const visible = svgs.filter(svg => {
       const surface=svg.closest('.slime-surface'), rect=surface.getBoundingClientRect();
@@ -31,7 +32,7 @@ export async function motionCost(page, revision) {
     // The ordinary fixture may have fewer than ten members; use the shared board's avatar host.
     const reserve = document.createElement('div'); reserve.id = 'look-motion-reserve';
     reserve.style.cssText = 'position:fixed;bottom:8px;left:8px;display:flex;pointer-events:none';
-    for (let index = visible.length; index < 10; index++) reserve.insertAdjacentHTML('beforeend', `<span class="av mb-av mb-av-slime" style="--av:40px">${slimeSVG({ color: 'sky' })}</span>`);
+    for (let index = visible.length; index < 10; index++) reserve.insertAdjacentHTML('beforeend', `<span class="av mb-av mb-av-slime" style="--av:40px">${slimeSVG({ color: 'sky' }, { moving: true })}</span>`);
     document.body.append(reserve);
     const avatars=[...visible,...reserve.querySelectorAll('svg.slime')];
     // Each avatar changes directly to its measured state, as a real event does.
@@ -61,7 +62,7 @@ export async function motionCost(page, revision) {
     document.querySelector('#look-motion-reserve').remove();
     const current = await import('/src/main/slime.ts');
     const { handOver } = window.__slimeBaseline ?? current;
-    [...document.querySelectorAll('svg.slime')].forEach((svg, index) => handOver(svg, saved[index]));
+    [...document.querySelectorAll('.slime-surface:not([data-slime-still]) svg.slime')].forEach((svg, index) => handOver(svg, saved[index]));
   }, load.saved);
   const withinBudget = !audit.failures.length && !loaded.failures.length && samples.every(sample => sample.TaskDuration <= 3);
   const result = {check:'motion-cost', revision:revision ?? 'working-tree',warmup:6.5,seconds:2.5,load:{working:load.working,sleeping:load.sleeping,avatarNodes:load.avatarNodes,sizes:load.sizes},samples,windows,limit:3,withinBudget,audit,loaded};
@@ -95,7 +96,7 @@ export async function motionDetails(page) {
   const setEmblem=async loop=>page.evaluate(async loop=>{const {avatarHTML}=await import('/src/main/avatar.ts');const host=document.querySelector('#look-motion-detail');host.innerHTML=avatarHTML({size:40,loop});await Promise.all([...host.querySelectorAll('img')].map(image=>image.decode()));},loop);
   await setEmblem(false);const still=await measure();
   await setEmblem(true);const emblem=await measure();
-  await page.evaluate(async()=>{const {slimeSVG}=await import('/src/main/slime.ts');document.querySelector('#look-motion-detail').innerHTML=`<span class="av mb-av mb-av-slime" style="--av:96px">${slimeSVG({color:'sky'},{state:'working'})}</span>`;});
+  await page.evaluate(async()=>{const {slimeSVG}=await import('/src/main/slime.ts');document.querySelector('#look-motion-detail').innerHTML=`<span class="av mb-av mb-av-slime" style="--av:96px">${slimeSVG({color:'sky'},{state:'working',moving:true})}</span>`;});
   const large=await measure();const audit=await page.evaluate(animationAudit);
   await client.detach();
   await page.evaluate(()=>{document.querySelector('#look-motion-detail').remove();window.__motionImages.forEach(([image,src])=>{image.src=src;});window.__motionPaused.forEach(animation=>animation.play());});
