@@ -500,8 +500,13 @@ class RpcDriver:
                 review = await self.app.call("members.template_card", {"id": identifier})
                 self.app.members.store.update_member(member, instructions="Changed after the card was shown.")
                 saved = await self.app.call("members.template_card_export", {"id": identifier})
+                # Asking for the text saves nothing: a cancelled dialog leaves the card a draft. The page reports `saved`
+                # only once the owner's dialog wrote the file.
+                pending = await self.turn_of(member, turn["id"])
+                await self.app.call("members.template_card_export", {"id": identifier, "saved": True})
                 latest = await self.turn_of(member, turn["id"])
-                if (json.loads(saved["text"]) != review["template"]
+                if (pending["templates"][0]["state"] != "draft"
+                        or json.loads(saved["text"]) != review["template"]
                         or not review["template"]["instructions"].strip()
                         or not review["template"].get("description", "").strip()
                         or review["findings"]
