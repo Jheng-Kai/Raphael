@@ -847,11 +847,48 @@ export function installMock(fixture, config = {}, target = window) {
   // The roster read answers late (`rosterDelay`, or the `late-roster` step), as a busy core does.
   state.rosterDelay = variant.rosterDelay ?? 0;
   const copy = value => value === undefined ? undefined : structuredClone(value);
-  if (variant.colleague === "greeting" || variant.colleague === "handoff") {
+  if (variant.colleague === "handoff") {
     const base = structuredClone(data.turns.find(turn => turn.member_id === 1));
     const sample = data.colleagueSample;
     Object.assign(data.members.find(member => member.id === 1), {role: sample.role, name:sample.name, unread:false, activity:"idle", waiting:false});
-    data.turns = data.turns.filter(turn => turn.member_id !== 1).concat({...base,id:9800,session_id:"colleague-greeting",member_id:1,conversation_id:11,question:"",route:variant.colleague === "greeting" ? "greeting" : "answer",source:variant.colleague === "greeting" ? "greeting" : "app",text:variant.colleague === "greeting" ? sample.greeting : sample.handoff,detail:variant.colleague === "greeting" ? JSON.stringify({kind:"greeting",options:sample.options}) : null,status:"done",steps:[],messages:[],task:null,permissions:[],owner_questions:[],computers:[],secrets:[],connectors:[],drafts:[],pages:[],handoffs:[]});
+    data.turns = data.turns.filter(turn => turn.member_id !== 1).concat({...base,id:9800,session_id:"colleague-greeting",member_id:1,conversation_id:11,question:"",route:"answer",source:"app",text:sample.handoff,detail:null,status:"done",steps:[],messages:[],task:null,permissions:[],owner_questions:[],computers:[],secrets:[],connectors:[],drafts:[],pages:[],handoffs:[]});
+  }
+  // A new member's set-up by cards (owner, 2026-11-11): the greeting with its question card ("card"), the card answered, the job saved
+  // and the first-task card ("job"), the one app the job needs ("connect"), or a clear answer that skips the cards ("collapsed").
+  // "flow" starts as "card" and moves to "job" when the card is answered. The core sends each question's time (created_at_ms).
+  const setupStage = stage => {
+    const sample = data.colleagueSample, member = data.members.find(item => item.id === 1);
+    const base = structuredClone(data.turns.find(turn => turn.member_id === 1 && turn.conversation_id === 11) ?? data.turns.find(turn => turn.member_id === 1));
+    const blank = { ...base, member_id: 1, conversation_id: 11, detail: null, model: "openai/gpt-6-sol", cost_usd: 0, steps: [], handoffs: [], permissions: [], drafts: [], connectors: [], secrets: [], pages: [], computers: [], owner_questions: [], task: null, attachments: [], reactions: {} };
+    const first = data.now - 180000, answered = stage !== "card";
+    const answer = stage === "collapsed" ? "叫我阿信，每天幫我整理 Gmail 信件，先從今天的未讀信開始" : "整理 Gmail 信件，每天幫我回覆重要的信";
+    const line = `嗨，我是${sample.name}，很高興加入你的團隊。`;
+    const card = { id: "setup-first", task_id: 9811, turn_id: 9810, member_id: 1, kind: "ask_owner", card_id: "", question: "你想先讓我接手哪一件事？",
+      options: ["整理 Gmail 信件", "安排行程與提醒", "查資料、做研究", "寫文件與報告"], free_text: true, state: answered ? "answered" : "asked",
+      result: answered ? { state: "answered", answer } : null, created_at_ms: first + 1000 };
+    Object.assign(member, { name: stage === "collapsed" ? "阿信" : sample.name, role: stage === "card" ? "" : "信件管家", unread: false, activity: "idle", waiting: !answered });
+    const turns = [{ ...blank, id: 9810, session_id: "greeting-1-look", created_at_ms: first, question: "", route: "greeting", source: "greeting", prefix: "", text: line, status: "done",
+      messages: [{ seq: 1, kind: "reply", text: line, at_ms: first }], owner_questions: [card],
+      task: { id: 9811, state: answered ? "done" : "waiting", waiting_owner: answered ? 0 : 1, started_at_ms: first, created_at_ms: first + 1000, finished_at_ms: answered ? first + 30000 : null } }];
+    if (!answered) return turns;
+    const at = first + 31000, event = (seq, value) => ({ seq, kind: "event", text: JSON.stringify(value), at_ms: at + seq });
+    const step = { ...blank, id: 9820, session_id: "setup-9810-look", created_at_ms: at, question: answer, setup: true, source: "app", prefix: "", status: "done" };
+    if (stage === "job") {
+      const ask = { id: "setup-task", task_id: 9821, turn_id: 9820, member_id: 1, kind: "ask_owner", card_id: "", question: "先從哪一件事開始？", options: ["整理今天的未讀信", "草擬重要信件的回覆"], free_text: true, state: "asked", result: null, created_at_ms: at + 5000 };
+      turns.push({ ...step, route: "delegate", text: ask.question, messages: [event(1, { type: "job_set", name: "信件管家" }), { seq: 2, kind: "reply", text: "好，我負責幫你整理信件，重要的先回覆。", at_ms: at + 4000 }],
+        owner_questions: [ask], task: { id: 9821, state: "waiting", waiting_owner: 1, started_at_ms: at, created_at_ms: at + 5000, finished_at_ms: null } });
+    } else if (stage === "connect") {
+      turns.push({ ...step, route: "answer", text: "好，我負責整理信件。先連結 Gmail 才能讀信。", messages: [event(1, { type: "job_set", name: "信件管家" }), { seq: 2, kind: "reply", text: "好，我負責整理信件。先連結 Gmail 才能讀信。", at_ms: at + 4000 }],
+        connectors: [structuredClone(data.connectorTurns.gmail.connectors[0])] });
+    } else {
+      turns.push({ ...step, route: "answer", text: "好，我是阿信，現在先整理今天的未讀信。", messages: [event(1, { type: "renamed", name: "阿信", text: "已重新命名為 阿信" }), event(2, { type: "job_set", name: "信件管家" }),
+        { seq: 3, kind: "reply", text: "好，我是阿信，現在先整理今天的未讀信。", at_ms: at + 4000 }] });
+    }
+    return turns;
+  };
+  if (variant.setupChain) {
+    const stage = variant.setupChain === "flow" ? "card" : variant.setupChain;
+    data.turns = data.turns.filter(turn => turn.member_id !== 1).concat(setupStage(stage));
   }
   const nextId = items => Math.max(0, ...items.map(item => item.id)) + 1;
   const unsupported = name => { const message = `Unmocked IPC: ${name}`; state.errors.push(message); throw new Error(message); };
@@ -874,14 +911,19 @@ export function installMock(fixture, config = {}, target = window) {
     if (latest) latest.is_default = true;
     else data.conversations.push({ id: nextId(data.conversations), member_id: member, title: "", is_default: true, kind: "standard", created_at_ms: data.now, updated_at_ms: data.now });
   };
-  // As the core does since 2026-11-06: the member types while its own model writes the greeting, with no choices.
+  // As the core does since 2026-11-11: the member types while its own model writes the greeting; it comes as its line and one question card.
   const greet = member => {
     mainConversation(member.id);
     const conversation = data.conversations.find(item => item.member_id === member.id && item.is_default);
     const greeting = { id: nextId(data.turns), session_id: `greeting-${member.id}`, question: "", route: "greeting", prefix: "", text: "", detail: null, status: "running", cost_usd: 0, source: "greeting", model: null, steps: [], messages: [], attachments: [], member_id: member.id, conversation_id: conversation.id, created_at_ms: data.now, created_at: new Date(data.now).toISOString() };
     data.turns.push(greeting);
     if (!variant.greetingPending) setTimeout(() => {
-      Object.assign(greeting, { status: "done", text: `嗨，我是${member.name} 👋 想讓我先幫你分擔哪件事？可以是手上的專案，或其他成員還沒顧到的事。` });
+      // The member's own line with the one question card (the core's greeting since 2026-11-11), asked after the line.
+      const line = `嗨，我是${member.name} 👋 很高興加入你的團隊。`;
+      Object.assign(greeting, { status: "done", text: line, messages: [{ seq: 1, kind: "reply", text: line, at_ms: data.now }],
+        task: { id: 9900 + greeting.id, state: "waiting", waiting_owner: 1, started_at_ms: data.now, created_at_ms: data.now + 1, finished_at_ms: null },
+        owner_questions: [{ id: `greeting-card-${greeting.id}`, task_id: 9900 + greeting.id, turn_id: greeting.id, member_id: member.id, kind: "ask_owner", card_id: "", question: "你想先讓我接手哪一件事？",
+          options: ["整理 Gmail 信件", "安排行程與提醒", "查資料、做研究", "寫文件與報告"], free_text: true, state: "asked", result: null, created_at_ms: data.now + 1 }] });
       notify("AgentTurn", { turn_id: greeting.id, member_id: member.id });
     }, 600);
     return greeting;
@@ -1361,6 +1403,11 @@ export function installMock(fixture, config = {}, target = window) {
         question.state = p.answer === null ? "cancelled" : "answered";
         question.result = p.answer === null ? { state: "cancelled" } : { state: "answered", answer: p.answer };
         turn.task = { ...turn.task, state: "done", waiting_owner: 0, finished_at_ms: data.now };
+        if (variant.setupChain === "flow" && question.id === "setup-first" && question.state === "answered") {
+          // The job is saved and the first-task card is asked, in a turn of its own.
+          data.turns = data.turns.filter(item => item.member_id !== 1).concat(setupStage("job"));
+          notify("AgentTurn", { turn_id: 9820, member_id: 1 });
+        }
         notify("AgentTurn", { turn_id: turn.id, member_id: turn.member_id });
         return { status: question.state };
       }
@@ -1832,11 +1879,6 @@ export function installMock(fixture, config = {}, target = window) {
         return null;
       }
       if (command === "agent_ask_text") {
-        if (variant.colleague === "greeting") {
-          const base = data.turns.find(turn => turn.member_id === args.memberId);
-          const turn = {...base,id:nextId(data.turns),session_id:args.requestId,route:"answer",source:"app",question:args.text,text:data.colleagueSample.outcomeQuestion,detail:null};
-          data.turns.push(turn); notify("AgentTurn",{turn_id:turn.id,member_id:args.memberId}); return null;
-        }
         if (variant.cardSendFailure && !variant.cardSendRetried) { variant.cardSendRetried = true; throw new Error("Synthetic send unavailable"); }
         if (variant.ownerAddition || variant.queuedOwner) {
           const active = data.turns.find(turn => turn.status === "running" && turn.member_id === args.memberId);

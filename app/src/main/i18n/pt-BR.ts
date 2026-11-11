@@ -2077,6 +2077,8 @@ export const ptBR = {
   "vault.cardNotice": "Você aprova cada uso e conclui o pagamento ou envio final.",
   "vault.busy": "Trabalhando…",
   "skills.updatedNotice": "Atualizado: {p0}",
+  "members.jobSetNotice": "Função definida: {p0}",
+  "cards.connectYes": "Nada é enviado ou alterado sem o seu sim.",
   "lang.search": "Buscar idiomas",
   "lang.none": "Idioma não encontrado",
   "onboarding.demo1Ask": "Organize meu Gmail de hoje",

@@ -182,7 +182,8 @@ DEFINITIONS = {
         ["to", "subject", "body"]),
 }
 DEFINITIONS[ASK_OWNER] = definition(
-    "Ask the owner a question that truly blocks this job and only the owner can answer. Prefer deciding routine details yourself. "
+    "Ask the owner a card when a decision is theirs and fits two to four choices; decide the rest yourself, and never ask what the app "
+    "or you can find out (connected apps, time zone, language, names you know). One card at a time. "
     "Give one question, up to four options with short labels, and free_text (default true) for an optional written answer. "
     "The durable card ends this turn until answered or cancelled; the same task continues with the outcome. "
     "Never use this for permission: the tool gate handles approvals. Never request passwords or keys here; use request_secret.",

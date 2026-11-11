@@ -304,6 +304,8 @@ export interface AgentTurn {
   created_at_ms: number;
   /** What the person said, as the speech recognition heard it. */
   question: string;
+  /** The turn that goes on from the answer to a new member's first card: that answer is the card's, not a message. */
+  setup?: boolean;
   /** How the question was routed: a command, a question, a chat... (the core's word). */
   route: string;
   /** The word before Raphael's reply: 答, 告, 否, 了 or 問 (Answer, Notice, ... in English). */

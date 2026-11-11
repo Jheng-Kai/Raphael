@@ -2077,6 +2077,8 @@ export const ru = {
   "vault.cardNotice": "Вы одобряете каждое использование и сами завершаете оплату или отправку.",
   "vault.busy": "В работе…",
   "skills.updatedNotice": "Обновлено: {p0}",
+  "members.jobSetNotice": "Должность задана: {p0}",
+  "cards.connectYes": "Ничего не отправляется и не меняется без вашего согласия.",
   "lang.search": "Поиск языков",
   "lang.none": "Такой язык не найден",
   "onboarding.demo1Ask": "Разбери сегодняшнюю почту Gmail",

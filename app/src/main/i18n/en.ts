@@ -1319,6 +1319,8 @@ export const en = {
   "mem.editLabel": "Edit {p0}",
   "skills.learnedNotice": "Learned: {p0}",
   "skills.updatedNotice": "Updated: {p0}",
+  "members.jobSetNotice": "Job set: {p0}",
+  "cards.connectYes": "Nothing is sent or changed without your yes.",
   "lang.search": "Search languages",
   "lang.none": "No such language",
   "onboarding.demo1Ask": "Sort out today's Gmail",

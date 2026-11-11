@@ -14,7 +14,7 @@ it("keeps installed tunnel product names while still flagging untranslated contr
   } finally {browser.happyDOM.abort();}
 });
 
-it.each(["owner", "greeting"])("the shared %s question heading needs a close action and no duplicate status", kind => {
+it.each(["owner"])("the shared %s question heading needs a close action and no duplicate status", kind => {
   const browser = new Window(), doc = browser.document;
   doc.body.innerHTML = `<section class="conversation-card" data-${kind}-question="sample" data-card-state="asked"><header class="card-head"><h3>Question</h3><button data-${kind}-answer="cancel">Close</button></header></section>`;
   for (const element of doc.querySelectorAll('*')) {

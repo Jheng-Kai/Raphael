@@ -2077,6 +2077,8 @@ export const tr = {
   "vault.cardNotice": "Her kullanımı onaylar, son ödeme veya gönderimi kendiniz tamamlarsınız.",
   "vault.busy": "Çalışıyor…",
   "skills.updatedNotice": "Güncellendi: {p0}",
+  "members.jobSetNotice": "Görev belirlendi: {p0}",
+  "cards.connectYes": "Onayın olmadan hiçbir şey gönderilmez veya değiştirilmez.",
   "lang.search": "Dil ara",
   "lang.none": "Böyle bir dil yok",
   "onboarding.demo1Ask": "Bugünkü Gmail iletilerimi düzenle",

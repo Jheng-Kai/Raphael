@@ -1319,6 +1319,8 @@ export const ja = {
   "mem.editLabel": "{p0}を編集",
   "skills.learnedNotice": "習得しました：{p0}",
   "skills.updatedNotice": "更新しました：{p0}",
+  "members.jobSetNotice": "職務を設定しました：{p0}",
+  "cards.connectYes": "あなたの了承なしに、送信や変更は一切行いません。",
   "lang.search": "言語を検索",
   "lang.none": "該当する言語はありません",
   "onboarding.demo1Ask": "今日の Gmail を整理して",

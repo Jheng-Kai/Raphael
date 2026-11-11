@@ -2077,6 +2077,8 @@ export const it = {
   "vault.cardNotice": "Approvi ogni utilizzo e completi il pagamento o l’invio finale.",
   "vault.busy": "Elaborazione…",
   "skills.updatedNotice": "Aggiornato: {p0}",
+  "members.jobSetNotice": "Incarico impostato: {p0}",
+  "cards.connectYes": "Nulla viene inviato o modificato senza il tuo ok.",
   "lang.search": "Cerca lingue",
   "lang.none": "Lingua non trovata",
   "onboarding.demo1Ask": "Riordina Gmail di oggi",

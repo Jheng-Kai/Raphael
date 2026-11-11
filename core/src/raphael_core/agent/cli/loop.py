@@ -194,7 +194,7 @@ class CliLoop:
     def __init__(self, *, brains, sessions, member_id, model, ledger, language, plain,
                  system, user, tools, progress, thinking, event, execute, expire=None,
                  conversation_id=None, quota=None, attachments=(), wait_timeout_s=None, resume_session=True,
-                 rate_limit_waits=None, structured=None, alive=lambda waiting=0.0: None, skills=(), no_tools=False, reply=None,
+                 rate_limit_waits=None, structured=None, alive=lambda waiting=0.0: None, skills=(), no_tools=False, reply=None, only=(),
                  owner_text=None, resume_user=None, context_sections=None, context_turns=(), context_summary="",
                  context_summary_through=0, context_owner_words=(), turn_id=None, tool_conversation=(), steps=(),
                  acted=None, stall_s=None, tool_s=None):
@@ -213,6 +213,10 @@ class CliLoop:
         self.resume_session = resume_session
         self.structured = structured
         self.no_tools = no_tools
+        # The tools still offered and called under `no_tools`: a first greeting may ask the owner one question card.
+        self._only = frozenset(only)
+        # What the model last said before a tool call (a first greeting's words, which a tool call would otherwise make progress).
+        self.last_speech = ""
         self.skills = skills
         # The waits before running a rate-limited request again: None waits as for a turn someone is reading
         # (RATE_LIMIT_WAITS_S), () never waits.
@@ -258,7 +262,7 @@ class CliLoop:
         self._metered = False
         self._submitted_user = user
         self._turn_user = user
-        self.tools = [] if no_tools else list(tools) + ([APPROVE] if structured is None and (brain_ref(model) or ("",))[0] == "claude" else [])
+        self.tools = [item for item in tools if item["function"]["name"] in self._only] if no_tools else list(tools) + ([APPROVE] if structured is None and (brain_ref(model) or ("",))[0] == "claude" else [])
         self.images = [attachment for attachment in attachments if attachment.is_image]
         self.progress, self.thinking, self.event, self.execute = progress, thinking, event, execute
         self.seen, self.batch_calls = [], []
@@ -370,6 +374,8 @@ class CliLoop:
                     self.progress(text[:400])
 
     def _progress(self):
+        if said := self._buffer.strip():
+            self.last_speech = said
         if line := public_line(self._buffer, "auto"):
             self.progress(line[:400])
         self._buffer = ""
@@ -387,7 +393,7 @@ class CliLoop:
     @tool_step(lambda self, identifier, name, args: name,
                scope=lambda self, *args: self.activity_turn)
     async def _tool(self, identifier, name, args):
-        if self.no_tools:
+        if self.no_tools and name not in self._only:
             return ToolOutcome(False, "tools_disabled")
         async with self._serial:
             # Every hand-off of a turn starts now; anything else waits for the delegated work.
@@ -1025,7 +1031,7 @@ class CliLoop:
                         for complete in parts[:-1]:
                             self._separated.extend(self._publish(complete) or [])
                         self._buffer = parts[-1]
-                elif event.kind == "message" and self._publish_reply is not None:
+                elif event.kind == "message" and (self._publish_reply is not None or self._only):
                     key = (self._attempts, event.data.get("id"))
                     words = self._unthought(event.text)
                     public = bool(event.data.get("final") or public_reply(words, self.language, plain=self.plain, explicit=True))

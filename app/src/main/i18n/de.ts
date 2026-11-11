@@ -2077,6 +2077,8 @@ export const de = {
   "vault.cardNotice": "Sie genehmigen jede Nutzung und schließen Zahlung oder Übermittlung selbst ab.",
   "vault.busy": "In Bearbeitung…",
   "skills.updatedNotice": "Aktualisiert: {p0}",
+  "members.jobSetNotice": "Aufgabe festgelegt: {p0}",
+  "cards.connectYes": "Ohne dein Ja wird nichts gesendet oder geändert.",
   "lang.search": "Sprachen suchen",
   "lang.none": "Keine solche Sprache",
   "onboarding.demo1Ask": "Sortiere meine heutigen Gmail-Nachrichten",

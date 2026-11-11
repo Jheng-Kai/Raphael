@@ -2077,6 +2077,8 @@ export const ko = {
   "vault.cardNotice": "매번 사용을 승인하고 최종 결제 또는 제출은 직접 완료합니다.",
   "vault.busy": "작업 중…",
   "skills.updatedNotice": "업데이트됨: {p0}",
+  "members.jobSetNotice": "업무 설정됨: {p0}",
+  "cards.connectYes": "허락 없이는 아무것도 보내거나 바꾸지 않아요.",
   "lang.search": "언어 검색",
   "lang.none": "해당 언어 없음",
   "onboarding.demo1Ask": "오늘 Gmail을 정리해 줘",
