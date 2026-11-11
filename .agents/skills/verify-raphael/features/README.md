@@ -232,24 +232,23 @@ apply.
 
 ## Sidebar redesign (2026-10-30)
 
-One 296px sidebar has no brand. Search and plus stand side by side at the top as Grok Bot's two
+One sidebar (348px since 2026-11-12, R-SIDE-01) has no brand. Search and plus stand side by side at the top as Grok Bot's two
 36px soft round buttons (2026-11-06); search opens a card in the middle of the dimmed window with the
 field, every member as face, name and last line, message results once words are typed, and 新增成員
-at its foot (Enter opens the first row). The edge drags the list down to a 72px rail of faces (hover
-names a face; search and plus move above the owner). The chief, without a star, is the first ordinary row; any pinned member leaves the
+at its foot (Enter opens the first row). The edge drags the list down to an 88px rail of faces (hover
+names a face; search and plus move above the owner), which is also what the list is under 860px. The chief, without a star, is the first ordinary row; any pinned member leaves the
 rows for a larger centered face above its name at the top, over one continuous list of member rows and unframed group face grids (up to four faces).
 Only owner-created folders have headings; their chevrons appear on hover. Times
 appear on hover, and current-page selection remains unique. The footer is a Notion-like list without a
-separator: a dictation row above the owner's face and name, which open Settings, beside a square Home. Native `owner-face`
+separator: one row, the owner's face (Settings) and the Connections pill, with dictation and a square Home at its end. Native `owner-face`
 proves a window that loaded before the core still hears it and shows the saved photo.
 Groups are the owner's own: there is no everyone entry, and an empty former team room is not listed.
-Below 860px the same list opens in a menu drawer, with Escape/scrim dismissal and
-focus containment. Team route/canvas are removed. Settings > Connections owns apps;
+Below 860px the same list is the 88px rail of faces. Team route/canvas are removed. Settings > Connections owns apps;
 Home mini calendar owns full calendar navigation. Owner avatar upload reuses the
 existing picker/crop component and presets; footer and owner messages share identity.
 
 Selected acceptance: sidebar, sidebar-folders, sidebar-folded, sidebar-many,
-sidebar-unread, sidebar-drawer, sidebar-search, sidebar-chief-pinned, sidebar-rail, sidebar-plus, sidebar-group-avatar,
+sidebar-unread, sidebar-drawer, sidebar-air, sidebar-air-foot, sidebar-rail-menu, sidebar-drag-row, sidebar-metrics, sidebar-search, sidebar-chief-pinned, sidebar-rail, sidebar-plus, sidebar-group-avatar,
 sidebar-group-avatar-pair, sidebar-group-avatar-four, sidebar-owner, sidebar-owner-upload, sidebar-owner-crop, sidebar-owner-crop-held, chat, details, profile, plugins-installed,
 all home-* scenes (including full/sparse/empty, edge-only hover and month gestures), both themes at 1120,720,1920x1080,1280x800. Home's emblem is 128px (96px compact), its report is --fs-h1 and its date is unchanged. Check these scenes in black at 1120,720,1920x1080 too.
 Run `npm run verify -- --contract`, then the selected look matrix and inspect every
@@ -441,8 +440,8 @@ empty/sparse/full data, including at 720px. This composition uses page-level
 summary containers instead of the generic short-card cap. Short inbox rows remain
 reading-capped; checks reject unequal blocks, overflow and a narrow/reordered lead.
 The 896px thread measure is 28 existing 32px spaces, adding room for conversation
-content while prose keeps 20 spaces. The fixed 296px sidebar holds chief, folders
-and group chats; below 860px the same list opens in a 320px drawer. Settings retains its 1000px modal and uses one
+content while prose keeps 20 spaces. The fixed 348px sidebar holds chief, folders
+and group chats; below 860px the same list is an 88px rail of faces. Settings retains its 1000px modal and uses one
 640px content measure for every pane header, toolbar, row and grid. Charts and
 heatmaps contain several data columns inside their capped containers.
 
@@ -742,8 +741,7 @@ that delegate painting to their parent are measured with that parent too.
 
 Run npm.cmd run verify and the targeted attachment core tests.
 
-Long draft profiling also covers idempotent drawer close: closing a closed
-drawer never steals the destination focus. Unchanged member controls keep focus
+Long draft profiling keeps the owner's focus: unchanged member controls keep focus
 without another layout, and newest-page reads skip the earlier-page scroll anchor.
 ## Motion cost (2026-11-03)
 

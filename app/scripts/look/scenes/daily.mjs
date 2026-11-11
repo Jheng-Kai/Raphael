@@ -1,4 +1,4 @@
-import { scene, click, hover, check, page, member, room, type, wait, paste, stableClick, settings, key, waitGone, drag } from "./steps.mjs";
+import { scene, click, hover, check, page, member, room, type, wait, paste, stableClick, settings, key, waitGone, drag, wide } from "./steps.mjs";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import settingsScenes from "./settings.mjs";
@@ -12,7 +12,7 @@ const faces=count=>({rooms:fixture.rooms.map(item=>({...item,member_ids:item.id=
 
 export default [
   scene('daily-footer-hover','Connections pill has an outlined quiet hover',[{action:'member-column',collapsed:false},hover('.sidebar-apps'),check('sidebar-shell')]),
-  scene('daily-footer-marks','Three connected service marks share the outlined door',[{action:'member-column',collapsed:false},wait('.sidebar-app-marks .mono'),check('daily-marks'),check('sidebar-shell')],marks),
+  scene('daily-footer-marks','Three connected service marks share the outlined door',[{action:'member-column',collapsed:false},wide(wait('.sidebar-app-marks .mono')),check('daily-marks'),check('sidebar-shell')],marks),
   scene('daily-footer-home','Home retains the selected icon surface',[page('home'),{action:'member-column',collapsed:false},check('sidebar-shell'),check('sidebar-selection')]),
   scene('daily-press-feedback','Ordinary and selected sidebar controls answer a press without moving',[
     page('agent'),{action:'member-column',collapsed:false},
@@ -46,7 +46,7 @@ export default [
     {id:77,member_id:0,title:'Newest sample',kind:'standard',is_default:0,created_at_ms:2,updated_at_ms:20},
     {id:4,member_id:0,title:'Quick sample',kind:'quick',is_default:0,created_at_ms:3,updated_at_ms:100},
   ]}),
-  scene('daily-folder-heading','Pressing the group name folds its existing body',[{action:'member-column',collapsed:false},click('[data-group="1"] .mb-gname'),check('sidebar-folded')]),
+  scene('daily-folder-heading','Pressing the group name folds its existing body',[{action:'member-column',collapsed:false},wide(click('[data-group="1"] .mb-gname')),check('sidebar-folded')]),
   ...['chief','member','room'].map(kind=>scene(`daily-copy-${kind}`,'Copy answers in the same control with a tick',[
     ...(kind==='room'?[room(1)]:kind==='member'?[member(1)]:[page('agent')]),
     hover(kind==='room'?'.au-room-thread .ra .chat-message':'.mb-chat:not([hidden]) .ra .chat-message'),

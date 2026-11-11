@@ -159,29 +159,43 @@ test("a slow drag through the fold point folds the list once and opens it once, 
   document.documentElement.removeAttribute("data-sidebar-collapsed");
 });
 
-test("closing an already closed drawer preserves the destination's focus", () => {
-  vi.stubGlobal('matchMedia', () => ({matches:true,addEventListener:vi.fn()}));
-  const read=vi.spyOn(api,'integrationsInventory').mockResolvedValue({state:'complete',count:0,apps:[]} as never);
+test("a window under 860 px shows the rail of faces: no menu button or drawer, search and plus in its foot", () => {
+  localStorage.clear();
+  document.documentElement.removeAttribute("data-sidebar-collapsed");
+  document.documentElement.removeAttribute("data-sidebar-narrow");
+  vi.stubGlobal("matchMedia", () => ({ matches: true, addEventListener: vi.fn() }));
+  const read = vi.spyOn(api, "integrationsInventory").mockResolvedValue({ state: "complete", count: 0, apps: [] } as never);
   try {
-    document.body.innerHTML='<div class="window-chrome"></div><nav id="nav"></nav><main id="main"><textarea id="entry"></textarea></main>';
-    const nav=document.getElementById('nav')!, column=document.createElement('aside');
-    column.innerHTML='<div class="mb-top"><button data-col="search"></button><button data-col="add"></button></div>';
-    const sidebar=createSidebar(nav,column), entry=document.getElementById('entry')!;
-    entry.focus();
-    const observer=new MutationObserver(() => {});
-    observer.observe(document.documentElement,{attributes:true,childList:true,subtree:true});
-    sidebar.close();
-    const mutations=observer.takeRecords(); observer.disconnect();
-    expect(mutations).toHaveLength(0);
-    expect(document.activeElement).toBe(entry);
-    const toggle=document.querySelector<HTMLElement>('[data-sidebar="open"]')!;
-    toggle.click();
-    expect(document.activeElement).toBe(nav.querySelector('[data-col="search"]'));
-    sidebar.close();
-    expect(document.activeElement).toBe(toggle);
-    entry.focus(); sidebar.close();
-    expect(document.activeElement).toBe(entry);
-  } finally { read.mockRestore(); vi.unstubAllGlobals(); }
+    document.body.innerHTML = '<div class="window-chrome"></div><nav id="nav"></nav><main id="main"></main>';
+    const nav = document.getElementById("nav")!, column = document.createElement("aside");
+    column.innerHTML = '<div class="mb-top"><button data-col="search"></button><button data-col="add"></button></div>';
+    createSidebar(nav, column);
+    expect(document.documentElement.hasAttribute("data-sidebar-collapsed")).toBe(true);
+    expect(document.documentElement.hasAttribute("data-sidebar-narrow")).toBe(true);
+    expect(document.querySelector('[data-sidebar="open"], .sidebar-toggle, .sidebar-scrim')).toBeNull();
+    expect(nav.inert).toBe(false);
+    expect([...nav.querySelectorAll(".side-foot [data-col]")].map(button => button.getAttribute("data-col"))).toEqual(["search", "add"]);
+  } finally { read.mockRestore(); vi.unstubAllGlobals(); document.documentElement.removeAttribute("data-sidebar-collapsed"); document.documentElement.removeAttribute("data-sidebar-narrow"); }
+});
+
+test("the list has the stylesheet's own width until it is dragged, and a dragged width keeps winning", () => {
+  localStorage.clear();
+  document.documentElement.style.removeProperty("--sidebar-width");
+  document.body.innerHTML = '<div class="window-chrome"></div><nav id="nav"></nav><main id="main"></main>';
+  const nav = document.getElementById("nav")!, column = document.createElement("aside");
+  column.innerHTML = '<div class="mb-top"><button data-col="search"></button><button data-col="add"></button></div>';
+  createSidebar(nav, column);
+  expect(document.documentElement.style.getPropertyValue("--sidebar-width")).toBe("");
+  expect(readFileSync("src/main/styles.css", "utf8")).toContain("--sidebar-width: min(348px, calc(100vw - 604px));");
+  const edge = nav.querySelector<HTMLElement>(".side-edge")!;
+  edge.setPointerCapture = vi.fn(); edge.hasPointerCapture = () => true; edge.releasePointerCapture = vi.fn();
+  edge.dispatchEvent(new PointerEvent("pointerdown", { button: 0, pointerId: 1, clientX: 348, bubbles: true }));
+  edge.dispatchEvent(new PointerEvent("pointermove", { pointerId: 1, clientX: 300, bubbles: true }));
+  edge.dispatchEvent(new PointerEvent("pointerup", { pointerId: 1, bubbles: true }));
+  expect(document.documentElement.style.getPropertyValue("--sidebar-width")).toBe("300px");
+  expect(localStorage.getItem("raphael.sidebar.width")).toBe("300");
+  document.documentElement.style.removeProperty("--sidebar-width");
+  document.documentElement.removeAttribute("data-sidebar-collapsed");
 });
 
 test("the shell has one permanent conversation sidebar and no Team route or apps entry", () => {
@@ -211,10 +225,21 @@ test("owner profile updates the existing outgoing face as well as the footer ide
   document.body.replaceChildren();
 });
 
-test("the compact drawer header starts below the window controls", () => {
+test("the rail is 88 px, and under 860 px there is no drawer: the list stays in its column", () => {
   const css = readFileSync("src/main/sidebar.css", "utf8");
-  const compact = css.slice(css.indexOf("@media (max-width: 859px)"));
-  expect(compact).toMatch(/\.side\s*\{[^}]*inset:\s*var\(--window-controls-height\) auto 0 0;/);
+  expect(css).toContain(':root[data-sidebar-collapsed] { --sidebar-width: 88px; }');
+  expect(css).toContain("@media (max-width: 859px) { :root { --sidebar-width: 88px; } }");
+  expect(css).not.toMatch(/translateX\(-100%\)|sidebar-scrim|sidebar-toggle|data-sidebar-open/);
+});
+
+test("a row is a 54 px highlight 58 px from the next, and the foot is one row of 36 px", () => {
+  const css = readFileSync("src/main/sidebar.css", "utf8");
+  expect(css).toContain("--side-row: 54px; --side-face: 36px;");
+  expect(css).toMatch(/\.side :is\(\.mb-list, \.mb-gclip\) \{ gap: var\(--sp-1\); \}/);
+  expect(css).toMatch(/\.side \.nav\.mb-row \{[^}]*min-height: var\(--side-row\)[^}]*border-radius: var\(--r-md\)/);
+  expect(css).toMatch(/\.side \.mb-row-t b \{ font-size: var\(--fs-sm\)/);
+  expect(css).toMatch(/\.side \.mb-row-p \{ font-size: var\(--fs-xs\)/);
+  expect(css).toMatch(/\.sidebar-foot-row \{ display: contents; \}/);
 });
 
 test("private timeline events use the full conversation column", () => {

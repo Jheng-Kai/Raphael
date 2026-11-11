@@ -2,7 +2,10 @@
    own, a member's slime colour for a routine, an outline and Google's mark for what is read from Google. */
 .cal-chip.btn { --chip: var(--text-3); position: relative; display: flex; flex-direction: column; align-items: stretch; justify-content: flex-start; box-sizing: border-box; width: 100%; height: 100%; min-width: 0; min-height: 0; padding: 2px 6px; border: 0; border-radius: var(--r-sm); font-size: var(--fs-2xs); line-height: 1.3; text-align: left; white-space: normal; overflow: hidden; cursor: pointer; }
 .cal-chip-copy { display: block; min-width: 0; overflow: hidden; }
+/* Side by side two or three chips of the hours are each a few words wide: a time that does not fit is not drawn half ("11:("), and the title keeps the room; the tooltip holds the time (R-UI-142). */
+.cal-chip.btn:not(.is-line, .is-rhythm) { container: cal-chip / inline-size; }
 .cal-chip time { display: block; min-height: 16px; line-height: 16px; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; }
+@container cal-chip (max-width: 50px) { .cal-chip time { display: none; } }
 .cal-chip b { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; font-size: var(--fs-2xs); font-weight: 500; line-height: 1.25; overflow: hidden; overflow-wrap: anywhere; white-space: normal; text-wrap: balance; }
 
 .cal-chip.is-own.btn { background: var(--accent); color: var(--on-accent); }
@@ -19,6 +22,12 @@
 
 /* A chip too small for two lines, and every chip of a month: one line, time then title. */
 .cal-chip.is-line.btn { flex-direction: row; align-items: center; gap: var(--sp-1); }
+/* A one-line chip (a month's day, a short hour) with its time, a mark and no room for two letters of the title shows a cut glyph where the
+   title should be: the mark gives its place up (R-UI-143). */
+.cal-chip.is-line.btn { container: cal-line / inline-size; }
+@container cal-line (max-width: 96px) { .cal-chip.is-line > .cal-mark { display: none; } }
+/* Narrower still (two events side by side in one hour), the time gives its place up as well: a title left a glyph and a half shows a cut glyph; the tooltip holds the time. */
+@container cal-line (max-width: 64px) { .cal-chip.is-line time { display: none; } }
 .cal-chip.is-line .cal-chip-copy { display: flex; align-items: baseline; gap: var(--sp-1); flex: 1; }
 .cal-chip.is-line time { flex: none; min-height: 0; line-height: inherit; }
 .cal-chip.is-line b { display: block; flex: 1; min-width: 0; white-space: nowrap; text-overflow: ellipsis; }

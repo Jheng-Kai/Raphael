@@ -2,7 +2,7 @@ import { scene, click, wait, member, room, check } from "./steps.mjs";
 
 // One row at the top of a conversation (owner, 2026-11-12, after Grok Bot): the header is the window's top row and the thread passes under it.
 // `conversation-top-row` measures that row; these scenes put it in the states that move something in it. Every scene runs at 1120, 720 (where
-// the sidebar's menu button stands at the top left) and 1920, so the narrow and the wide layouts are measured by the same ones.
+// the sidebar is the rail of faces) and 1920, so the narrow and the wide layouts are measured by the same ones.
 const reply = '.ra .chat-message[data-reply]';
 // A 150-turn conversation (thread-window.mjs), so that the thread is long enough to scroll under the row.
 const long = [member(1), wait('.tn[data-id="9149"]')];

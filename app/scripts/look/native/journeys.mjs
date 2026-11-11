@@ -347,14 +347,12 @@ export async function drive(name, context) {
       await page.setViewport({ width, height: width === 1920 ? 1080 : 900 });
       await pause(250);
       result.layout.push(await page.evaluate(checkRendered, "home-hero"));
-      if (width === 720) { await click(page, '[data-sidebar="open"]'); await pause(300); }
       result.layout.push(await page.evaluate(checkRendered, "sidebar-shell"));
       await page.evaluate(checkRendered, "sidebar-search-before");
       await click(page, '[data-col="search"]');
       result.layout.push(await page.evaluate(checkRendered, "sidebar-search-open"));
       await capture(`home-sidebar-${width}`);
       await page.keyboard.press('Escape'); await pause(150);
-      if (width === 720) await click(page, '.sidebar-scrim');
     }
     return;
   }
@@ -1420,9 +1418,7 @@ await page.waitForFunction(role => document.querySelector('.ms-pane #ms-role')?.
     await click(page, '.mb-det [data-det="close"]');
     await page.setViewport({ width: 720, height: 900 }); await pause(250);
     await inspect("conversation-720", ["conversation-header"]);
-    await click(page, '[data-sidebar="open"]');
-    await inspect("sidebar-drawer-720", ["sidebar-shell"]);
-    await page.keyboard.press("Escape");
+    await inspect("sidebar-rail-720", ["sidebar-shell"]);
     await details(page); await pause(250);
     await inspect("details-sheet-720", ["details-sheet"]);
     const scrim = await page.$('.mb-det-scrim'), bounds = await scrim?.boundingBox();

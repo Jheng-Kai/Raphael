@@ -4,6 +4,8 @@ export const hover = selector => ({ action: "hover", selector });
 export const hold = (selector, ms = 500) => ({ action: "hold", selector, ms });
 // A press on `selector` moved `dx` px across and let go there (a pane's edge resizes it, edge-drag.ts). `wide`: only on a desktop-width window, where the list is not a drawer.
 export const drag = (selector, dx, options = {}) => ({ action: "drag", selector, dx, ...options });
+// A step for the full list only: the rail of faces on a narrow window has no folder headings (driver.mjs `perform`).
+export const wide = step => ({ ...step, wide: true });
 export const type = (selector, text) => ({ action: "type", selector, text });
 export const wait = selector => ({ action: "wait", selector });
 export const waitGone = selector => ({ action: "wait-gone", selector });

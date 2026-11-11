@@ -266,17 +266,13 @@ describe("the column, used", () => {
     } finally { setLocale("zh-TW"); }
   });
 
-  test("the search card from Ctrl+Shift+F opens a member, closes, and closes the drawer behind it", () => {
-    const column = mount(), anchor = document.createElement("button"), drawer = vi.fn();
-    window.addEventListener("raphael:close-sidebar", drawer);
-    try {
-      document.body.append(anchor); column.openSearch(anchor);
-      expect(document.activeElement).toBe(document.querySelector("#app-popover input"));
-      document.querySelector<HTMLButtonElement>('#app-popover [data-member="3"]')!.click();
-      expect(host.select).toHaveBeenCalledWith(3);
-      expect(document.getElementById("app-popover")).toBeNull();
-      expect(drawer).toHaveBeenCalledTimes(1);
-    } finally { window.removeEventListener("raphael:close-sidebar", drawer); }
+  test("the search card from Ctrl+Shift+F opens a member and closes", () => {
+    const column = mount(), anchor = document.createElement("button");
+    document.body.append(anchor); column.openSearch(anchor);
+    expect(document.activeElement).toBe(document.querySelector("#app-popover input"));
+    document.querySelector<HTMLButtonElement>('#app-popover [data-member="3"]')!.click();
+    expect(host.select).toHaveBeenCalledWith(3);
+    expect(document.getElementById("app-popover")).toBeNull();
   });
 
   test("＋ offers 新增成員 and 新增分組", () => {
@@ -286,6 +282,14 @@ describe("the column, used", () => {
     expect(items.map(b => b.dataset.pick)).toEqual(["member", "group", "group-chat", "member-store"]);
     items[0].click();
     expect(host.newMember).toHaveBeenCalled();
+  });
+
+  test("every row of the plus menu has a mark of its own: the store is not drawn with the plus of 新增成員", () => {
+    const column = mount();
+    column.el.querySelector<HTMLElement>('[data-col="add"]')!.click();
+    const drawings = [...document.querySelectorAll<HTMLElement>("#app-popover [data-pick]")].map(item => item.querySelector(".ck svg")?.innerHTML ?? "");
+    expect(drawings.every(Boolean)).toBe(true);
+    expect(new Set(drawings).size).toBe(drawings.length);
   });
 
   test("the plus menu retains group creation and opens the shared group chat creator", () => {
