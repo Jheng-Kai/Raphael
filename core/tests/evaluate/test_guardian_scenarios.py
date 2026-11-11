@@ -350,7 +350,9 @@ async def test_rpc_driver_uses_real_routine_mutation_and_readback(tmp_path, oper
         args["schedule"] = {"kind": "daily", "time": "09:00"}
     if operation in ("pause", "resume"):
         args["enabled"] = operation == "resume"
-    client.turns = iter([("", [(tool, args)]), ("已完成。" if operation != "list" else "驗證寫作" + driver.nonce, [])])
+    said = "已完成。" if operation != "list" else "驗證寫作" + driver.nonce
+    # A delete is asked on a card: the turn ends with the proposal, and goes on, with the model's word, after the yes.
+    client.turns = iter([("", [(tool, args)]), (said, []), *([(said, [])] if operation == "delete" else [])])
     try:
         reasons, turns = await driver.execute(selected("S21.routines." + operation))
         assert not reasons, (reasons, turns)
