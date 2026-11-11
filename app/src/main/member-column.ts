@@ -281,7 +281,7 @@ export function createMemberColumn(host: ColumnHost): MemberColumn {
           { id: "member", label: t("members.newMember") + "  Ctrl+N", icon: "plus" },
           { id: "group", label: t("members.newGroup"), icon: "folder" },
           { id: "group-chat", label: t("members.sideNewGroupChat"), icon: "chat" },
-          { id: "member-store", label: t("store.title"), icon: "plus" },
+          { id: "member-store", label: t("store.title"), icon: "store" },
         ],
         pick => {
           if (pick === "member") host.newMember(null);

@@ -168,6 +168,9 @@ svg.i { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor;
 /* Over the conversations the caption buttons are drawn into the window itself, with no
    strip of their own; the right panel reaches the window's top under them, and the columns below keep their room. */
 :root[data-window-layout="main"]:has(.main > .page-agent:not([hidden])) .window-chrome { background: transparent; }
+/* The new member's page lies over a conversation from just under the strip down, so the right panel behind the conversation would show
+   as a bar of its own colour across the top of a wide window: the strip takes the page's own surface instead. */
+:root[data-window-layout="main"]:has(.main > .page-agent:not([hidden])):has(.mb-scrim.cr-scrim):not(:has(.mb-scrim:not(.cr-scrim))) .window-chrome { background: var(--content); }
 /* A dialog dims the caption with everything else; its buttons still answer on top of the dim. */
 :root:has(.mb-scrim:not(.cr-scrim)) .window-chrome, :root:has(.menu.side-search) .window-chrome { background: transparent; border-color: transparent; }
 .window-drag { flex: 1; min-width: 0; }
@@ -567,6 +570,9 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
 /* The languages: one dropdown that says which are chosen, and a panel of them in which a chosen
    language with several written forms has them under it. */
 .slist .row-lang .ctl .sel { width: 360px; }
+/* In a narrow settings dialog the label and 360 px do not fit side by side, so the dropdown dropped under its label while the microphone row
+   under it (232 px) stayed beside its own: one card, two layouts. At that width the language row takes the card's shared width too (R-UI-144). */
+@media (max-width: 820px) { .slist .row-lang .ctl .sel { width: 232px; } }
 .menu.lang-panel { width: 340px; max-width: calc(100vw - 24px); padding: var(--sp-1); overflow: hidden; display: flex; flex-direction: column; }
 .lang-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--sp-3); padding: var(--sp-2) var(--sp-2) var(--sp-1); }
 .lang-title { font-size: var(--fs-xs); font-weight: var(--weight-semibold); color: var(--text-2); }

@@ -365,7 +365,12 @@ describe("icons", () => {
   test("no page keeps a copy of an icon: every drawing of the set comes from icon-set.ts", () => {
     const drawings = [...read(join(SRC, "main/icon-set.ts")).matchAll(/d=\\"([^\\"]{12,})\\"/g)].map(([, d]) => d);
     expect(drawings.length).toBeGreaterThan(50);
-    const copies = sources.filter((f) => !["ui.ts", "icon-set.ts"].includes(rel(f)) && (read(f).includes('viewBox="0 0 16 16"') || drawings.some((d) => read(f).includes(d)))).map(rel);
+    // Each file is read once: reading it again for every drawing of the set made this test slower with every icon added (a timeout on a busy machine).
+    const copies = sources.filter((f) => {
+      if (["ui.ts", "icon-set.ts"].includes(rel(f))) return false;
+      const text = read(f);
+      return text.includes('viewBox="0 0 16 16"') || drawings.some((d) => text.includes(d));
+    }).map(rel);
     expect(copies).toEqual([]);
   });
 });

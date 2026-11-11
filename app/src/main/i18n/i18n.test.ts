@@ -23,6 +23,14 @@ test("one failed locale listener cannot interrupt later surfaces or reject the s
   } finally { stopBroken(); stopHealthy(); warn.mockRestore(); }
 });
 
+test("the calendar's Google notice button names the sidebar's own entry, never a Settings path that no longer exists", () => {
+  // Connect apps is a dialog opened by the sidebar button (R-UI-111); a button that said \u8a2d\u5b9a \u203a \u9023\u63a5 sent people to a place Settings does not have.
+  for (const [locale, catalog] of Object.entries(catalogs)) {
+    const messages = catalog as Record<string, string>;
+    for (const key of ["cal.googleConnect", "cal.googleCheck"]) expect(messages[key], `${locale} ${key}`).toBe(messages["nav.apps"]);
+  }
+});
+
 const CJK = /[\u3400-\u9fff\u3040-\u30ff]/;
 
 /** The string literals in `files` (TypeScript sources) that hold Chinese or Japanese text, except 《…》 notices. */

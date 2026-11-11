@@ -4821,7 +4821,7 @@ export function checkRendered(name, context = {}) {
     const words = notice?.textContent ?? "";
     if (name === "calendar-google-off") require(/未連接/.test(words) && visible(notice.querySelector('[data-calendar-go]')) && visible(notice.querySelector('[data-calendar-dismiss]')), "not connected is said, with the place to connect it, and can be closed");
     if (name === "calendar-google-closed") require(/未連接/.test(words) && !notice.querySelector('.btn'), "closed, only the words stay");
-    if (name === "calendar-google-failed") require(/讀不到/.test(words) && /設定/.test(notice.querySelector('[data-calendar-go]')?.textContent ?? "") && !notice.querySelector('[data-calendar-dismiss]'), "a failed read says so and names where to check");
+    if (name === "calendar-google-failed") require(/讀不到/.test(words) && /連結應用程式/.test(notice.querySelector('[data-calendar-go]')?.textContent ?? "") && !notice.querySelector('[data-calendar-dismiss]'), "a failed read says so and names where to check");
     require(!rail.querySelector('[data-source="google"]'), "no row for a calendar that is not read");
     require(document.querySelector('.au-page .cal-chip.is-own'), "own events always show");
     return { check: name };
@@ -4832,7 +4832,7 @@ export function checkRendered(name, context = {}) {
     else {
       require(visible(notice), "Home says it too");
       const go = notice.querySelector('[data-home-go="connections"]');
-      require(visible(go) && /設定/.test(go.textContent), "with the place to go");
+      require(visible(go) && /連結應用程式/.test(go.textContent), "with the place to go");
       const words = notice.querySelector('.cal-notice-words').textContent;
       require(name === "home-google-off" ? /未連接/.test(words) : /讀不到/.test(words), `in plain words: ${words}`);
       const box = notice.getBoundingClientRect(), section = schedule.getBoundingClientRect();
