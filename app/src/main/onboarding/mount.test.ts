@@ -118,38 +118,46 @@ describe("the guide", () => {
     expect(root.dataset.step).toBe("services");
   });
 
-  test("the foot is one row, the welcome's pill alone and then a round back arrow before the pill", async () => {
+  test("the foot is one row, the welcome's pill alone and then on every step a worded back button before the worded pill", async () => {
     await open();
     const foot = (): HTMLElement[] => [...root.querySelectorAll<HTMLElement>(".ob-foot .btn")];
     expect(foot().map((control) => control.dataset.ob)).toEqual(["next"]);
+    // The welcome's row is not the steps' row of two ends.
+    expect(root.querySelector(".ob-foot .ob-actions")!.classList.contains("ob-ends")).toBe(false);
     for (const step of ["tools", "services", "abilities"]) {
       await press('[data-ob="next"]');
       expect(root.dataset.step).toBe(step);
-      // Exactly two controls, the arrow first and the primary after it, so that is also the tab order.
-      const [arrow, primary, ...more] = foot();
+      // Exactly two controls, the way back first and the primary after it (also the tab order), in the row that puts one
+      // at each end.
+      const [back, primary, ...more] = foot();
       expect(more).toHaveLength(0);
-      expect(arrow!.dataset.ob).toBe("back");
+      expect(root.querySelector(".ob-foot .ob-actions")!.classList.contains("ob-ends")).toBe(true);
+      expect(back!.dataset.ob).toBe("back");
       expect(primary!.dataset.ob).toBe("next");
       expect(primary!.classList.contains("pri")).toBe(true);
-      expect(arrow!.classList.contains("icon")).toBe(true);
-      // The arrow carries no words: its name and tooltip are the old pill's label, and only a drawing shows.
-      expect(arrow!.textContent).toBe("");
-      expect(arrow!.getAttribute("aria-label")).toBe("Back");
-      expect(arrow!.getAttribute("title")).toBe("Back");
-      expect(arrow!.querySelector("svg.i")).not.toBeNull();
+      // Both say what they do in words (owner, 2026-11-11): the way back is no icon-only button, so it has no name or
+      // tooltip that would repeat its words.
+      expect(back!.classList.contains("icon")).toBe(false);
+      expect(back!.textContent).toBe("Back");
+      expect(back!.hasAttribute("aria-label") || back!.hasAttribute("title")).toBe(false);
+      // A chevron points where each goes: before the words of the way back, after the words of the way on. The last
+      // step's pill finishes, and has none.
+      expect(back!.firstElementChild!.matches("svg.i")).toBe(true);
+      expect(primary!.lastElementChild!.matches("svg.i")).toBe(step !== "abilities");
+      expect(primary!.querySelectorAll("svg.i")).toHaveLength(step === "abilities" ? 0 : 1);
     }
     expect(text('[data-ob="next"]')).toBe("Start using Raphael");
   });
 
-  test("the round back arrow goes back one step, and the pill keeps its words", async () => {
+  test("the back button goes back one step, and the pill keeps its words", async () => {
     await open();
     await press('[data-ob="next"]');
     await press('[data-ob="next"]');
     expect(root.dataset.step).toBe("services");
     expect(text('[data-ob="next"]')).toBe("Next");
-    await press('.ob-foot button[aria-label="Back"]');
+    await press('.ob-foot [data-ob="back"]');
     expect(root.dataset.step).toBe("tools");
-    await press('.ob-foot button[aria-label="Back"]');
+    await press('.ob-foot [data-ob="back"]');
     expect(root.dataset.step).toBe("welcome");
     expect(root.querySelector('[data-ob="back"]')).toBeNull();
   });
