@@ -1,5 +1,31 @@
 # Members and sidebar
 
+## A member's colour on its switches (owner, 2026-11-12)
+
+Owner: 「它這個主題，不只是 Message Bubble，還有這些 Toggle 的 Buttons 也都會變成主題色，就是可能會變紫色」
+(R-UI-147). A member's colour is its slime's (`owner-bubble.ts` `memberColor`; Raphael's is his blue). The conversation
+already wears it on the owner's bubble and on send, stop and the computer (`--member-bubble`, `--member-accent` on `.mb-chat`).
+`memberSwitch` (owner-bubble.ts) turns the same colour into the track of a switch that is on, its outline and its knob:
+`drawFaces` in pages/agent.ts sets `--member-switch`, `--member-accent` and `--member-knob` and the mark `data-member-switch`
+on the member's panel (`.mb-det`) and its settings page (`.ms-pane`'s host), and styles.css gives
+`[data-member-switch] .tg[aria-checked="true"]` those. On the white theme the track is the bubble's colour, on the black theme
+the lighter colour send wears (the bubble's darker shade would sink into the black panel); the outline is send's colour. The
+knob follows the bubble's rule for light colours: white, dark on a yellow or white-ish slime (whose bubble takes dark words;
+on the black theme dark wherever white does not stand 3:1 off the track). The off state is untouched, and the Settings
+dialog, Home, the store and Connect apps carry no mark. A routine is only read in the panel (its view has no switch), so
+no routine editor has switches to colour.
+
+The scenes: member-switch (the panel's routine), member-switch-yellow and member-switch-white (light slimes, with the
+check `member-switch-light`), member-switch-raphael, member-switch-tools, member-switch-tools-yellow,
+member-switch-skills, member-switch-notify and member-switch-notify-off (the settings page) and settings-switch-neutral (Settings keeps the accent).
+`member-switch` asserts the track is the conversation's bubble colour (white theme) or send colour (black theme), the outline
+is send's colour, the knob stands 3:1 off the track and follows the white-or-dark rule, and an off switch is as before
+(`member-switch-off`).
+
+```powershell
+npm run look -- member-switch member-switch-yellow member-switch-white member-switch-raphael member-switch-tools member-switch-tools-yellow member-switch-skills member-switch-notify member-switch-notify-off settings-switch-neutral member-panel-details details raphael-details member-settings-tools member-settings-notify --theme both --width 1120,720,1920x1080
+```
+
 ## Member settings page (2026-11-08)
 
 Owner request: a member's settings are a page of their own, where the conversation is (R-PANEL-05).
@@ -29,8 +55,10 @@ messaging) is not here. The kinds are the same for every member and for Raphael,
 (owner, 2026-11-09, memory out of them since 2026-11-11, see [No memory on screen](#no-memory-on-screen-owner-decision-2026-11-11)): 工具 (each
 connected app with its own mark and a switch over the member's `tools` list, then the drafts switch under them),
 技能與指令 (skills as names with switches, a press opens the skill's own view, a plus adds one from a link, delete
-waits in a ⋯ behind a second press; commands), 個性與指示 (personality and instructions, one line each, a press
-opens the box in place and blur saves it; Raphael's too), 通知 (one switch). The model is chosen at the composer
+waits in a ⋯ behind a second press; commands), 個性與指示 (personality and instructions, R-PANEL-07: two quiet rows of
+their words, whole, each with a pencil; a press opens a field in the row's place that is as tall as its words, Enter on
+one line, Ctrl+Enter or leaving it saves without a word (a spinner for the pencil meanwhile), Escape restores; nothing written is one quiet line of
+what could stand there; Raphael's too), 通知 (one switch). The model is chosen at the composer
 alone, members have no voice (the release has none), and the group is the sidebar's. A cover picture moves up and
 down as Notion's Reposition: 調整位置 in the cover's menu, then the picture follows the pointer and 取消 / 儲存位置
 stand where the change icon was (`members.update {cover_position}`, 0 to 100, 50 by default). Raphael's name and
@@ -45,7 +73,7 @@ details-commands, details-notify, raphael-skills, member-edit, speaker-draft-mem
 speaker-draft-chief, member-draft-switch and primary-contact-set.
 
 ```powershell
-npm run look -- member-settings member-settings-raphael member-settings-skills member-settings-tools member-settings-notify member-settings-field member-settings-skill member-settings-command member-settings-cover member-settings-cover-picture member-settings-back-hover member-settings-back member-settings-back-bottom member-settings-back-kept details member-panel-library member-face-hover --theme both --width 1120,720,1920x1080
+npm run look -- member-settings member-settings-raphael member-settings-skills member-settings-tools member-settings-notify member-settings-field member-persona-empty member-persona-filled member-persona-mixed member-persona-long member-persona-editing member-persona-editing-long member-persona-saved member-persona-escape member-settings-skill member-settings-command member-settings-cover member-settings-cover-picture member-settings-back-hover member-settings-back member-settings-back-bottom member-settings-back-kept details member-panel-library member-face-hover --theme both --width 1120,720,1920x1080
 ```
 
 ## No member voices (owner decision, 2026-11-10)
@@ -110,10 +138,10 @@ gets narrower than at 900 px with the old list; a dragged width (240 to 400 px) 
 under Raphael's row and between folders, the unread dot on the face's corner, the name as the face's tooltip, a right click opens the row menu,
 and at its foot search and plus side by side (the plus opens the list's own menu), microphone and Home side by side, the Connections icon
 and the account. Folders folded in the list stay folded in the rail, and a folder's heading and the hidden folder are not reachable there
-(widen the window). The wide list's foot is one row: the account's face at the left and the 36 px Connections pill filling the rest, with
-microphone and Home at its end while the pill keeps 180 px; a list narrower than 336 px puts those two in the top row beside search and plus.
+(widen the window). The wide list's foot keeps its two rows (owner, 2026-11-12): the 40 px Connections pill on a row of its own, with no tooltip, and under it
+the account's face and name with microphone and Home at the row's end, at every width of the list.
 `sidebar-metrics` records the numbers (width, pitch, highlight, type, foot, rows that fit), `sidebar-air` asserts them (and the rail's),
-`sidebar-air-foot` the narrow list, `panel-widest` (the details panel dragged as wide as it goes beside the conversation: at 1120 the panel stops at 388 px so the conversation keeps 386 px and the one-row composer 301 px, `composer-shape-narrow` measures the same), `sidebar-rail-menu` the right click, `sidebar-drag-row` a dragged row at the new height.
+`sidebar-air-foot` the same foot on a list dragged narrow, `panel-widest` (the details panel dragged as wide as it goes beside the conversation: at 1120 the panel stops at 388 px so the conversation keeps 386 px), `sidebar-rail-menu` the right click, `sidebar-drag-row` a dragged row at the new height.
 
 ```powershell
 npm run look -- sidebar-metrics sidebar-air sidebar-air-foot sidebar-rail-menu sidebar-drag-row panel-widest sidebar-rail sidebar-drawer sidebar sidebar-many sidebar-unread --theme both --width 1120,720,1920x1080
@@ -1172,7 +1200,7 @@ Each scene presses once with the real mouse on a control that is not part of wha
 `checks.mjs` `press-through-*` waits only for the page to draw the result, never presses again. At 720 the list is the rail of faces, always on screen, so the press on a face is one press.
 
 ```text
-npm run look -- press-through-avatar-picker press-through-row-menu press-through-right-click press-through-delete-dialog press-through-model-menu --theme both --width 1120,720,1920x1080
+npm run look -- press-through-avatar-picker press-through-row-menu press-through-right-click press-through-delete-dialog press-through-model-menu press-through-page-frame --theme both --width 1120,720,1920x1080
 ```
 
 ## The control that opened a thing is its toggle (2026-11-11)

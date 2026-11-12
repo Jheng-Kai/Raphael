@@ -99,9 +99,18 @@
 .ms-cover-hint { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); max-width: calc(100% - 2 * var(--sp-4)); padding: var(--sp-1) var(--sp-3); border-radius: var(--r-pill); background: color-mix(in srgb, var(--content) 72%, transparent); color: var(--text); font-size: var(--fs-xs); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: none; }
 .ms-cover > .ms-cover-actions { position: absolute; right: var(--sp-4); bottom: var(--sp-3); }
 
-/* A long text opens in place. */
-.ms-edit { padding: var(--sp-1); }
-.ms-edit > .mb-ta { width: 100%; background: var(--content); }
+/* The personality and the instructions (owner, 2026-11-12): one kind of thing, so one kind of row. Its words as they are, in as
+   many lines as they take (a line break of the owner's stays, a long word wraps, nothing is cut), no wider than a page of
+   text reads, with the pencil at the first line's height. Nothing written: one quiet line of what could stand there. */
+.btn.ms-open.ms-value { align-items: flex-start; height: auto; padding-block: calc((44px - 1lh) / 2); line-height: 1.6; text-wrap: pretty; }
+.btn.ms-open.ms-value > .ms-label { max-width: 70ch; overflow: visible; text-overflow: clip; white-space: pre-wrap; overflow-wrap: anywhere; }
+.btn.ms-open.ms-value > .ms-label.is-empty { color: var(--text-2); }
+.btn.ms-open.ms-value > .i { margin-top: calc((1lh - 16px) / 2); }
+/* While the words are on their way to the core the pencil is the page's own spinner, as wide as the pencil. */
+.btn.ms-open.ms-value > .spin { margin: calc((1lh - 12px) / 2) calc(var(--sp-1) / 2) 0; color: var(--text-3); }
+/* A press turns the row into a field in the row's own place: the same box, the same padding less its edge, the same type,
+   so the words stay where they were. It is as tall as its words (up to a long page of them) and has no grip of its own. */
+.ms-list > .mb-ta.ms-field { display: block; box-sizing: border-box; width: 100%; min-height: 44px; max-height: calc(24lh + 2 * var(--sp-3)); padding: calc((44px - 1lh) / 2 - 1px) calc(var(--sp-3) - 1px); border-radius: var(--r-md); background: var(--content); font-size: var(--fs-sm); line-height: 1.6; resize: none; field-sizing: content; overflow-wrap: anywhere; }
 .ms-add { display: flex; align-items: center; gap: var(--sp-2); padding: var(--sp-1) var(--sp-2); }
 .ms-add > .mb-fin { flex: 1; min-width: 0; background: var(--content); }
 .ms-list > .missing-note, .ms-list > .note { margin: var(--sp-1); }

@@ -197,18 +197,23 @@ describe("the page of a member", () => {
     expect($<HTMLImageElement>(".ms-cover-img").style.objectPosition).toBe("50% 30%");
   });
 
-  test("personality and instructions are one line each; a press opens the box in place and blur saves it", async () => {
+  test("personality and instructions are one kind of row, whole: a press opens a field in place, as tall as its words, and leaving it saves", async () => {
     await open();
     await cat("soul");
     expect($('[data-ms="edit"][data-field="personality"]').textContent).toContain("嚴厲但耐心");
-    // Only the first line of a long text is shown.
-    expect($('[data-ms="edit"][data-field="instructions"]').textContent).toContain("每天出 10 題");
-    expect($('[data-ms="edit"][data-field="instructions"]').textContent).not.toContain("第二行");
+    // The row says every line of the words, as they are (owner, 2026-11-12), and the two are the same kind of row.
+    const instructions = $('[data-ms="edit"][data-field="instructions"]');
+    expect(instructions.querySelector(".ms-label")!.textContent).toBe("每天出 10 題\n第二行");
+    expect([...page.el.querySelectorAll('[data-ms="edit"]')].map(row => row.className)).toEqual(["btn ms-open ms-value", "btn ms-open ms-value"]);
     expect(page.el.querySelector("textarea")).toBeNull();
     await press('[data-ms="edit"][data-field="personality"]');
     const box = $<HTMLTextAreaElement>("#ms-personality");
     expect(box.maxLength).toBe(2000);
     expect(document.activeElement).toBe(box);
+    // It opens with the caret after the words, and is one line to start with: the stylesheet sizes it to its words.
+    expect([box.selectionStart, box.selectionEnd]).toEqual([box.value.length, box.value.length]);
+    expect(box.getAttribute("rows")).toBe("1");
+    expect(box.closest(".ms-list")).not.toBeNull();
     box.value = "  親切。\n直接稱呼你。  ";
     blur(box); await flush();
     expect(host.update).toHaveBeenCalledWith(3, { personality: "親切。\n直接稱呼你。" });
@@ -225,11 +230,84 @@ describe("the page of a member", () => {
     expect(host.update).toHaveBeenCalledWith(3, { instructions: "每天出 20 題" });
   });
 
-  test("an empty long field says 未填寫, stored text is escaped, and Escape in the box puts the old text back", async () => {
+  test("saving shows the words with the page's spinner for the pencil until the core answers, and says nothing when it has, as the name and the role beside it do", async () => {
+    await open();
+    await cat("soul");
+    let answer!: (saved: boolean) => void;
+    host.update.mockImplementationOnce(() => new Promise<boolean>(resolve => { answer = resolve; }));
+    await press('[data-ms="edit"][data-field="instructions"]');
+    $<HTMLTextAreaElement>("#ms-instructions").value = "每天出 20 題";
+    blur($("#ms-instructions")); await flush();
+    const row = $('[data-ms="edit"][data-field="instructions"]');
+    expect(row.getAttribute("aria-busy")).toBe("true");
+    expect(row.querySelector(".ms-label")!.textContent).toBe("每天出 20 題");
+    expect(row.querySelector(".spin")).not.toBeNull();
+    expect(row.querySelector("svg.i")).toBeNull();
+    // A row still being saved is not opened again.
+    await press('[data-ms="edit"][data-field="instructions"]');
+    expect(page.el.querySelector("#ms-instructions")).toBeNull();
+    expect(document.querySelector(".toast")).toBeNull();
+    answer(true); await flush();
+    // Saved: the pencil is back and nothing is said, as for the name and the role.
+    expect(document.querySelector(".toast")).toBeNull();
+    expect($('[data-ms="edit"][data-field="instructions"]').querySelector("svg.i")).not.toBeNull();
+    expect(page.el.querySelector(".spin")).toBeNull();
+    // The core refused (the host has said why): the row goes back to the words it had, with no second note.
+    host.update.mockResolvedValueOnce(false);
+    await press('[data-ms="edit"][data-field="personality"]');
+    $<HTMLTextAreaElement>("#ms-personality").value = "輕鬆";
+    blur($("#ms-personality")); await flush();
+    expect(document.querySelector(".toast")).toBeNull();
+    expect($('[data-ms="edit"][data-field="personality"] .ms-label')!.textContent).toBe("嚴厲但耐心");
+  });
+
+  test("Enter saves a value of one line, Ctrl+Enter saves any value, and Shift+Enter or Enter in several lines writes a new line", async () => {
+    await open();
+    await cat("soul");
+    const press_ = (target: HTMLElement, init: KeyboardEventInit): KeyboardEvent => {
+      const event = new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true, ...init });
+      target.dispatchEvent(event);
+      return event;
+    };
+    // One line: Enter saves (the field is left, which saves it).
+    await press('[data-ms="edit"][data-field="personality"]');
+    let box = $<HTMLTextAreaElement>("#ms-personality");
+    box.value = "沉著";
+    expect(press_(box, {}).defaultPrevented).toBe(true);
+    expect(document.activeElement).not.toBe(box);
+    await flush();
+    expect(host.update).toHaveBeenCalledWith(3, { personality: "沉著" });
+    // Shift+Enter, and an input method still composing, write instead.
+    await press('[data-ms="edit"][data-field="personality"]');
+    box = $<HTMLTextAreaElement>("#ms-personality");
+    box.value = "沉著";
+    expect(press_(box, { shiftKey: true }).defaultPrevented).toBe(false);
+    expect(press_(box, { isComposing: true }).defaultPrevented).toBe(false);
+    // Several lines: Enter writes the next line; Ctrl+Enter saves.
+    box.value = "沉著\n直接";
+    expect(press_(box, {}).defaultPrevented).toBe(false);
+    expect(document.activeElement).toBe(box);
+    expect(press_(box, { ctrlKey: true }).defaultPrevented).toBe(true);
+    await flush();
+    expect(host.update).toHaveBeenCalledWith(3, { personality: "沉著\n直接" });
+  });
+
+  test("an empty long field is one quiet line of what could stand there, with no box, stored text is escaped, and Escape in the field puts the old text back", async () => {
     list = { ...LIST, members: LIST.members.map(m => m.id === 3 ? { ...m, personality: "", instructions: "</textarea><script>x()</script>" } : m) };
     await open();
     await cat("soul");
-    expect($('[data-ms="edit"][data-field="personality"] .ms-label').textContent).toBe(t("members.notSet"));
+    const quiet = $('[data-ms="edit"][data-field="personality"] .ms-label');
+    expect(quiet.textContent).toBe(t("members.personalityHint"));
+    expect(quiet.classList.contains("is-empty")).toBe(true);
+    expect($('[data-ms="edit"][data-field="personality"]').querySelector("svg.i")).not.toBeNull();
+    expect(page.el.querySelector("textarea")).toBeNull();
+    // Pressing the line opens the same field, with the same words as its placeholder.
+    await press('[data-ms="edit"][data-field="personality"]');
+    expect($<HTMLTextAreaElement>("#ms-personality").placeholder).toBe(t("members.personalityHint"));
+    expect($<HTMLTextAreaElement>("#ms-personality").value).toBe("");
+    $("#ms-personality").dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+    await flush();
+    expect(page.el.querySelector("textarea")).toBeNull();
     expect(page.el.querySelector("script")).toBeNull();
     await press('[data-ms="edit"][data-field="instructions"]');
     const box = $<HTMLTextAreaElement>("#ms-instructions");
