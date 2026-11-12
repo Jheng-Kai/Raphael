@@ -220,7 +220,7 @@
 .message-link:hover { text-decoration: underline; text-underline-offset: 3px; }
 :root[data-keys] .message-link:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; border-radius: var(--r-sm); }
 .message-actions { display: flex; flex: none; align-items: center; justify-content: flex-start; gap: var(--sp-1); height: 28px; opacity: 0; }
-.message-tooltip { position: fixed; z-index: 100; pointer-events: none; max-width: calc(100vw - 16px); padding: var(--sp-1) var(--sp-2); border: 1px solid var(--edge); border-radius: var(--r-sm); background: var(--panel); color: var(--text); box-shadow: var(--pop); font: var(--fs-2xs)/1.5 var(--ui); }
+.message-tooltip { position: fixed; z-index: 100; pointer-events: none; max-width: calc(100vw - 16px); padding: var(--sp-1) var(--sp-2); border: 1px solid var(--float-edge); border-radius: var(--r-sm); background: var(--float); color: var(--text); box-shadow: var(--pop); font: var(--fs-2xs)/1.5 var(--ui); }
 .message-tooltip { white-space: pre-line; overflow-wrap: anywhere; }
 .message-tooltip[hidden], :has([data-cancel-armed="true"]) > .message-tooltip { display: none; }
 .page-agent .btn.quote-pill { position: fixed; z-index: 99; width: auto; min-height: var(--h-ctl); padding: 3px var(--sp-3); gap: var(--sp-1); border: 1px solid var(--edge); border-radius: var(--r-pill); background: var(--panel); color: var(--text); box-shadow: var(--pop); font: var(--fs-xs)/calc(var(--h-ctl) - 8px) var(--ui); }
@@ -263,7 +263,7 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 /* The page's preview, under the pointer only, drawn as a menu is: it never takes a row of the conversation. It lives on
    <body>, outside the page that sets --pa-u, so its width must not lean on it: without a width the card stretched across
    the window to fit a whole description (owner, 2026-11-09: 「可以就用 .. 就好」). Each line ends in an ellipsis. */
-.link-hover { position: fixed; z-index: 130; display: flex; align-items: center; gap: var(--sp-3); width: min(400px, calc(100vw - 16px)); padding: var(--sp-2) var(--sp-3); border-radius: var(--r-md); background: var(--menu); border: 1px solid var(--edge); box-shadow: var(--pop); pointer-events: none; }
+.link-hover { position: fixed; z-index: 130; display: flex; align-items: center; gap: var(--sp-3); width: min(400px, calc(100vw - 16px)); padding: var(--sp-2) var(--sp-3); border-radius: var(--r-md); background: var(--float); border: 1px solid var(--float-edge); box-shadow: var(--pop); pointer-events: none; }
 .preview-image { flex: none; width: 64px; height: 64px; object-fit: cover; border-radius: var(--r-sm); }
 .preview-meta { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); flex: 1; }
 .preview-site { font: var(--fs-2xs)/1.5 var(--ui); color: var(--accent-text); }

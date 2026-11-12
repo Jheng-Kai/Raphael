@@ -574,9 +574,9 @@ describe("rendered look checks", () => {
   });
   it("checks every dialog footer button and accepts hits on its children", () => {
     const win = new Window();
-    win.document.body.innerHTML = '<div class="cs-scrim"><div class="cs-dialog"><div class="action-row"><button><span>Retry</span></button><button>Done</button></div></div></div><div class="toast">Saved</div>';
+    win.document.body.innerHTML = '<div class="cs-page"><div class="action-row"><button><span>Retry</span></button><button>Done</button></div></div><div class="toast">Saved</div>';
     const buttons = [...win.document.querySelectorAll('button')];
-    win.document.querySelector('.cs-dialog').getBoundingClientRect = () => ({ width: 400, height: 300 });
+    win.document.querySelector('.cs-page').getBoundingClientRect = () => ({ width: 400, height: 300 });
     buttons.forEach((button, i) => { button.getBoundingClientRect = () => ({ left: 20 + i * 100, top: 200, width: 80, height: 32 }); });
     win.document.elementFromPoint = vi.fn(x => x < 100 ? buttons[0].firstElementChild : buttons[1]);
     vi.stubGlobal('document', win.document);
@@ -1237,45 +1237,44 @@ describe("rendered look checks", () => {
 
 it("rejects divergent store add classes, row markup and card styling", () => {
   const browser = new Window();
-  // Store rows: a name, and under it only what the app asks for.
-  const row = `<div class="cs-card" style="display:grid;grid-template-columns:240px 64px;border-radius:12px;border-bottom:0px solid;border-left:0px solid"><button class="btn cs-main" data-conn="open-store"><span class="ic"></span><span class="tx"><span class="nm">App</span><span class="sub"><b class="need">Needs a key</b></span></span></button><button class="btn sm" data-conn="join">Add</button></div>`;
+  // The apps of the one view: a row is the mark on its tile and the name, and at the right 連結 (or its state); nothing it would have to explain.
+  const row = `<div class="cs-card" style="display:flex"><button class="btn cs-main" data-conn="open-store"><span class="cs-tile"></span><span class="tx"><span class="nm">App</span></span></button><button class="btn cs-connect" data-conn="join">連結</button></div>`;
   browser.document.body.innerHTML = row + row;
-  // happy-dom has no pseudo-elements, so the divider line is stood in for by a data attribute.
-  const own = browser.getComputedStyle.bind(browser);
-  browser.getComputedStyle = (element, pseudo) => pseudo === '::after' ? { height: element.dataset.divider ?? '1px' } : own(element);
   const previous = { document: globalThis.document, window: globalThis.window };
   globalThis.document = browser.document; globalThis.window = browser;
   try {
-    expect(checkRendered("plugins-store-rows")).toEqual({ check: "plugins-store-rows", rows: 2, addClass: "btn sm" });
+    expect(checkRendered("plugins-store-rows")).toEqual({ check: "plugins-store-rows", rows: 2 });
     const first = browser.document.querySelector('.cs-card');
-    const line = first.querySelector('.sub'), need = line.innerHTML;
-    line.textContent = "What the app does";
-    expect(() => checkRendered("plugins-store-rows")).toThrow("only what the app asks for");
-    line.innerHTML = need;
-    first.style.borderRadius = '0px';
-    expect(() => checkRendered("plugins-store-rows")).toThrow("rounded hover");
-    first.style.borderRadius = '12px'; first.style.borderBottom = '1px solid';
-    expect(() => checkRendered("plugins-store-rows")).toThrow("inset divider");
-    first.style.borderBottom = '0px solid'; first.dataset.divider = '0px';
-    expect(() => checkRendered("plugins-store-rows")).toThrow("inset divider");
-    delete first.dataset.divider;
+    const tx = first.querySelector('.tx');
+    tx.insertAdjacentHTML('beforeend', '<span class="sub">What the app does</span>');
+    expect(() => checkRendered("plugins-store-rows")).toThrow("only its waiting sign-in");
+    tx.querySelector('.sub').remove();
+    tx.insertAdjacentHTML('beforeend', '<span class="sub wait">…</span>');
+    expect(checkRendered("plugins-store-rows").rows).toBe(2);
+    tx.querySelector('.sub').remove();
+    first.querySelector('.nm').insertAdjacentHTML('beforeend', '<b class="need">Needs a key</b>');
+    expect(() => checkRendered("plugins-store-rows")).toThrow("nothing it would have to explain");
+    first.querySelector('.need').remove();
+    first.style.display = 'grid';
+    expect(() => checkRendered("plugins-store-rows")).toThrow("one line with nothing it would have to explain");
+    first.style.display = 'flex';
     const second = browser.document.querySelectorAll('.cs-card')[1];
     const add = second.querySelector('[data-conn="join"]');
     add.classList.add('pri');
-    expect(() => checkRendered("plugins-store-rows")).toThrow("same outlined class list");
+    expect(() => checkRendered("plugins-store-rows")).toThrow("same class list");
     add.classList.remove('pri');
     const main = second.querySelector('.cs-main');
     const oldMain = browser.document.createElement('div'); oldMain.className = 'cs-main';
     oldMain.innerHTML = main.innerHTML; main.replaceWith(oldMain);
-    expect(() => checkRendered("plugins-store-rows")).toThrow("same detail button");
-    oldMain.replaceWith(main); second.style.display = 'flex';
-    expect(() => checkRendered("plugins-store-rows")).toThrow("same compact row");
-    second.style.display = 'grid'; second.style.gridTemplateColumns = '304px';
-    expect(() => checkRendered("plugins-store-rows")).toThrow("same compact row");
-    second.style.gridTemplateColumns = '240px 64px';
+    expect(() => checkRendered("plugins-store-rows")).toThrow("same page button");
+    oldMain.replaceWith(main);
+    const mark = second.querySelector('.cs-tile');
+    mark.className = 'ic';
+    expect(() => checkRendered("plugins-store-rows")).toThrow("same tile and text structure");
+    mark.className = 'cs-tile';
     add.getBoundingClientRect = () => new browser.DOMRect(0, 0, 64, 80);
     second.getBoundingClientRect = () => new browser.DOMRect(0, 0, 320, 64);
-    expect(() => checkRendered("plugins-store-rows")).toThrow("actions fit inside their row");
+    expect(() => checkRendered("plugins-store-rows")).toThrow("fit inside their row");
   } finally { globalThis.document = previous.document; globalThis.window = previous.window; browser.happyDOM.abort(); }
 });
 

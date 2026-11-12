@@ -112,7 +112,7 @@
 /* The chart's figures as a table, for a screen reader only: a 1px box that clips the table inside it. */
 .ho-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 /* One tooltip for the band's marks and the chart's days. */
-.ho-tip { position: fixed; z-index: 30; display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px; max-width: 240px; padding: var(--sp-2) var(--sp-3); border-radius: var(--r-sm); background: var(--menu); box-shadow: var(--pop); font-size: var(--fs-xs); color: var(--text); pointer-events: none; }
+.ho-tip { position: fixed; z-index: 30; display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px; max-width: 240px; padding: var(--sp-2) var(--sp-3); border-radius: var(--r-sm); background: var(--float); border: 1px solid var(--float-edge); box-shadow: var(--pop); font-size: var(--fs-xs); color: var(--text); pointer-events: none; }
 .ho-tip > strong { font-weight: 500; }
 .ho-tip-row { display: grid; grid-template-columns: 8px minmax(0, 1fr) auto; align-items: center; gap: var(--sp-2); color: var(--text-2); }
 .ho-tip-row > b { font-weight: 500; color: var(--text); font-variant-numeric: tabular-nums; }

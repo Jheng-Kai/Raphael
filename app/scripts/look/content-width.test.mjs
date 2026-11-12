@@ -6,9 +6,9 @@ it("rejects the store toolbar and Add action having different content edges", ()
   const browser = new Window(), doc = browser.document;
   doc.documentElement.style.setProperty('--sp-6', '32px');
   doc.documentElement.style.setProperty('--sp-5', '24px');
-  doc.body.innerHTML = '<div class="modal-scrim"><div class="set-content"><div class="set-head"><h1>Connections</h1><button>Add</button></div><div class="cs cs-store"><div class="cs-find"><label class="field"></label></div><div class="cs-store-groups"></div><div class="cs-results"><div class="cs-grid" style="grid-template-columns:640px"><div class="cs-card"></div></div></div></div></div></div>';
+  doc.body.innerHTML = '<div class="modal-scrim"><div class="set-content"><div class="set-head"><h1>Connections</h1><button>Add</button></div><div class="cs cs-apps"><div class="cs-find"><label class="field"></label></div><div class="cs-chips"></div><div class="cs-results"><div class="cs-grid" style="grid-template-columns:640px"><div class="cs-card"></div></div></div></div></div></div>';
   const measure = (element, left, right) => { element.getBoundingClientRect = () => ({ left, right, width: right - left, height: 32 }); };
-  const content = doc.querySelector('.set-content'), heading = doc.querySelector('.set-head'), action = doc.querySelector('button'), store = doc.querySelector('.cs'), search = doc.querySelector('.field'), groups = doc.querySelector('.cs-store-groups');
+  const content = doc.querySelector('.set-content'), heading = doc.querySelector('.set-head'), action = doc.querySelector('button'), store = doc.querySelector('.cs'), search = doc.querySelector('.field'), groups = doc.querySelector('.cs-chips');
   [content, heading, store, search, groups].forEach(element => measure(element, 297, 937));
   measure(action, 903, 977);
   const results = doc.querySelector('.cs-results'), grid = doc.querySelector('.cs-grid'), card = doc.querySelector('.cs-card');
@@ -18,9 +18,9 @@ it("rejects the store toolbar and Add action having different content edges", ()
   try {
     expect(() => checkRendered('content-width')).toThrow(/header action shares/);
     measure(action, 863, 937);
-    measure(search, 297, 900);
+    measure(groups, 297, 900);
     expect(() => checkRendered('content-width')).toThrow(/toolbar shares/);
-    measure(search, 297, 937);
+    measure(groups, 297, 937);
     measure(results, 297, 900);
     expect(() => checkRendered('content-width')).toThrow(/toolbar shares/);
     measure(results, 297, 937); measure(card, 297, 681);

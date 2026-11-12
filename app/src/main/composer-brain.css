@@ -1,7 +1,7 @@
 /* The composer's model menu: one card standing on the composer, showing one view at a time. */
 .menu.cb-menu { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); width: min(320px, calc(100vw - 16px)); max-width: min(320px, calc(100vw - 16px)); padding: 0; overflow: visible; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
 .menu.cb-menu:has(> .cb-body:not([hidden])) { width: min(440px, calc(100vw - 16px)); max-width: min(440px, calc(100vw - 16px)); }
-.cb-card { min-width: 0; padding: var(--sp-2); border: 1px solid var(--edge); border-radius: var(--r-md); background: var(--menu); box-shadow: var(--pop); }
+.cb-card { min-width: 0; padding: var(--sp-2); border: 1px solid var(--float-edge); border-radius: var(--r-md); background: var(--float); box-shadow: var(--pop); }
 .cb-body { display: flex; flex-direction: column; overflow: hidden; }
 .cb-body[hidden], .cb-now[hidden] { display: none; }
 /* The sources on the left, the models of the one pressed on the right. The height never changes, so a source pressed stays under the pointer. */

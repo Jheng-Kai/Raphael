@@ -1362,7 +1362,7 @@ form. Installation dependencies and file repair steps without an app setting hav
 no settings button. Local services remain in Settings > Raphael > Services.
 A store card opens the Composio form; the native Google client needs an administrator.
 
-npm run look -- missing-card missing-card-repair missing-onboarding-repair missing-store-repair missing-search missing-search-repair missing-vision missing-model-list missing-provider missing-provider-repair missing-routines missing-learned missing-pdf missing-media missing-expired missing-mail --theme both --width 1120,720,1920x1080
+npm run look -- missing-card missing-card-repair missing-onboarding-repair missing-search missing-search-repair missing-vision missing-model-list missing-provider missing-provider-repair missing-routines missing-learned missing-pdf missing-media missing-expired missing-mail --theme both --width 1120,720,1920x1080
 
 Run both themes at 1120,720,1920x1080. Also cover desktop-absent,
 desktop-unavailable, desktop-install, model-choices-answer, plugins-store-key,

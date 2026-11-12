@@ -33,7 +33,7 @@ export const OVERFLOW_ROWS: readonly OverflowRow[] = [
   { more: '[data-act="word-menu"]', row: ".wrow" },
   { more: '[data-act="history-menu"]', row: ".hrow" },
   { more: '[data-act="computer-menu"]', row: "div.row" },
-  { more: '[data-conn="server-menu"]', row: ".cs-dlg-head" },
+  { more: '[data-conn="server-menu"]', row: ".cs-page .cs-head" },
   { more: "[data-cli-menu]", row: ".cli-card" },
   { more: "[data-chatgpt-menu]", row: "[data-chatgpt-card]" },
   { more: '[data-act="more-message"]', row: ".chat-message" },

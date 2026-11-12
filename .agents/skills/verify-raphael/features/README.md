@@ -402,7 +402,7 @@ behavior the fixture cannot prove.
 | [Group chats and folders](team-and-rooms.md) | Sidebar folders, Everyone room, group identity and mentions |
 | [Dictation](dictation.md) | Overview, history, dictionary, shortcuts, microphone and paste |
 | [Settings and appearance](settings-appearance.md) | Profile/preferences, black and white themes, languages, models and app information |
-| [Connections and MCP](connections-mcp.md) | Connected apps and their count, Settings-only connected-app entry, an app's accounts and tools, members' private skills, managed store, MCP setup/discovery and Home's private Google calendar read |
+| [Connections and MCP](connections-mcp.md) | Connect apps as one view after Grok Bot (chip of the connected apps, search, category chips, 為你推薦 and sections, an app's page; 2026-11-12), the one colour of everything that floats, connected apps and their count, an app's accounts and tools, members' private skills, managed catalog, MCP setup/discovery and Home's private Google calendar read |
 | [Usage](usage.md) | Spend overview, CLI allowances read unseen at each opening of Settings (no refresh button), and the once-per-window 90% warning |
 | [Onboarding](onboarding.md) | Welcome, optional setup and immediate conversation |
 
