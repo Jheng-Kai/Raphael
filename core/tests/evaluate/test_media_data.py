@@ -102,6 +102,10 @@ async def test_named_dataset_returns_tables_between_member_turns_and_routine(tmp
         app.vm.enabled = True
         app.vm.desktop = None
         monkeypatch.setattr(app.vm, 'start', AsyncMock())
+        # This rig's two seams (start, execute) are a computer of the member's own. A new data folder's computer is
+        # the shared one, whose first use asks the engine whether a screen is empty: CI has no Docker to ask. The
+        # dataset on a shared computer is test_shared_datasets.py's and the acceptance run's.
+        app.vm.settings.set('computer_vm_mode', 'per-bot')
         execute = AsyncMock(return_value={'exit_code':0,'output':json.dumps({'dataset':'sales','columns':['total'],'rows':[[36]]})})
         monkeypatch.setattr(app.vm, 'execute', execute)
         for session in ('first-data', 'continued-data'):
@@ -199,6 +203,10 @@ async def test_allow_all_tools_keep_rules_and_the_selected_brain(tmp_path, monke
         member = (await app.call('members.create', {'name': 'Maker'}))['member']['id']
         app.vm.enabled, app.vm.desktop = True, None
         monkeypatch.setattr(app.vm, 'start', AsyncMock())
+        # This rig's two seams (start, execute) are a computer of the member's own. A new data folder's computer is
+        # the shared one, whose first use asks the engine whether a screen is empty: CI has no Docker to ask. The
+        # dataset on a shared computer is test_shared_datasets.py's and the acceptance run's.
+        app.vm.settings.set('computer_vm_mode', 'per-bot')
         execute = AsyncMock(return_value={'exit_code': 0, 'output': '{"columns":["total"],"rows":[[36]]}'})
         monkeypatch.setattr(app.vm, 'execute', execute)
         provider = object()
