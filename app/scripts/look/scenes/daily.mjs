@@ -27,7 +27,7 @@ export default [
     page('dictation'),{action:'press-feedback',selectors:['.sidebar-dictation']},
   ]),
   scene('daily-press-surfaces','Quiet Home, connections and calendar controls retain visible stationary press feedback',[
-    page('home'),{action:'press-feedback',selectors:['.ho-stat.btn','.ho-schedule .ho-event','.ho-schedule header .btn.icon']},
+    page('home'),{action:'press-feedback',selectors:['.ho-board .ho-event','.ho-date .btn.icon']},
     ...settings('connections'),{action:'press-feedback',selectors:['.cs-open']},
     click('[data-conn="tab"][data-id="store"]'),wait('.cs-card'),{action:'press-feedback',selectors:['.cs-main']},
     key('Escape'),waitGone('.modal-scrim:not([hidden])'),

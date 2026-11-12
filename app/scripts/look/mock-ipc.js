@@ -776,6 +776,37 @@ export function installMock(fixture, config = {}, target = window) {
       ...(hour === 11 ? { run_status: "error" } : hour === 14 ? { run_status: "confirm" } : {}) })) : [];
     // A full day: more than the eight rows Home draws, so the rest is counted and opens the day on the calendar.
     const more = variant.homeMore ? ["晨會", "設計審查", "客戶簡報", "午餐會議", "程式碼審查", "週報撰寫"].map((title, index) => own(60 + index, title, octoberAt(24, 8 + index * 2), octoberAt(24, 9 + index * 2))) : [];
+    // The days Home is judged on (owner, 2026-11-12): his real one (25 items from his task board: 12 overdue, 8 due today, the Notion
+    // summary and 4 timed, with 12 routine runs and nothing waiting), a quiet one, a heavy one and (homeEmpty) an empty one.
+    if (variant.homeDay) {
+      const plan = { real: { overdue: 12, today: 8, timed: 4, waiting: 0, failed: true }, quiet: { overdue: 0, today: 0, timed: 2, waiting: 0, failed: false, summary: false, routines: false },
+        heavy: { overdue: 40, today: 15, timed: 6, waiting: 3, failed: true } }[variant.homeDay];
+      const projects = ["Filia", "Raphael", "Filia", "Notion", "Filia", "Raphael", null];
+      const overdueTitles = ["remote 改指向至 Jheng-Kai", "成員電腦：回應慢的原因", "預留 bucket 容量", "季度回顧草稿", "更新 Tunnel 憑證", "Home 版面重做", "買 11/13 台中到新竹的高鐵票", "整理 invoice 範本", "讀書筆記整理", "修正 webhook 重試", "整理待辦同步", "回覆房東"];
+      const todayTitles = ["預留 bucket 備份", "寄出本週進度", "審閱 PR 說明文件", "更新發布備註", "回覆供應商報價", "整理會議紀錄", "檢查憑證到期日", "安排下週訪談"];
+      const task = (id, state, index, titles) => {
+        const tag = projects[index % projects.length];
+        return own(id, `${state}：${tag ? `[${tag}] ` : ""}${titles[index % titles.length]}${index >= titles.length ? ` ${Math.floor(index / titles.length) + 1}` : ""}`, octoberAt(24, 0), octoberAt(25, 0), { all_day: true });
+      };
+      const day = [
+        ...Array.from({ length: plan.overdue }, (_, i) => task(200 + i, "逾期", i, overdueTitles)),
+        ...Array.from({ length: plan.today }, (_, i) => task(300 + i, "今天", i, todayTitles)),
+        ...(plan.summary === false ? [] : [own(400, "[Notion] 今日重點", octoberAt(24, 0), octoberAt(25, 0), { all_day: true })]),
+      ];
+      const meeting = (id, title, from, to) => ({ ...own(id, title, octoberAt(24, ...from), octoberAt(24, ...to)) });
+      const slots = [["設計審查", [9, 30], [10, 30]], ["供應商會議", [10, 35], [11, 30]], ["牙醫回診", [14, 0], [15, 0]], ["週會", [16, 30], [17, 0]], ["午餐", [12, 30], [13, 15]], ["客戶簡報", [15, 30], [16, 0]]];
+      const calendar = slots.slice(0, plan.timed).map(([title, from, to], i) => i === 3 ? { ...meeting(500 + i, title, from, to), id: "event:week", kind: "event" } : meeting(500 + i, title, from, to));
+      const run = (routine, title, memberId, hour, minute = 0, status) => ({ ...daily, id: `routine:${routine}:${octoberAt(24, hour, minute)}`, routine_id: routine, title, member_id: memberId, name: person(memberId).name, avatar: person(memberId).avatar,
+        at_ms: octoberAt(24, hour, minute), all_day: false, ...(status ? { run_status: status } : {}) });
+      const routines = plan.routines === false ? [] : [
+        ...[6, 8, 9, 12, 15, 18].map(hour => run(91, "Gmail 與行程檢查", 1, hour, 0, hour === 9 && plan.failed ? "error" : undefined)),
+        run(1, "每天早上的進度", 0, 10, 30), run(2, "午間資訊摘要", 1, 12, 50),
+        ...[7, 13, 17, 21].map(hour => run(93, "整理下載資料夾", 1, hour)),
+      ];
+      const asks = Array.from({ length: plan.waiting }, (_, i) => ({ ...home.today.find(item => item.kind === "question"), id: `question:${i + 1}`, turn_id: i + 1, title: ["確認本週研究方向", "核准後續研究安排", "選擇報告格式"][i], at_ms: now - i * 600000 }));
+      home.today = [...day, ...calendar, ...routines, ...asks].sort((a, b) => a.at_ms - b.at_ms);
+      home.calendar_events = [...home.calendar_events.filter(item => dayKey(item.at_ms) !== dayKey(now)), ...day, ...calendar];
+    } else
     home.today = [...home.today, ...home.calendar_events.filter(item => dayKey(item.at_ms) === dayKey(now)), ...runs, ...more].sort((a, b) => a.at_ms - b.at_ms);
     home.counts.today = home.today.length;
     const story = narrative => quiet ? { narrative: null, state: "unavailable", reason: "model_unavailable", model: null }
@@ -795,7 +826,7 @@ export function installMock(fixture, config = {}, target = window) {
       ? { days: Array.from({ length: 14 }, (_, i) => ({ date: dayAt(13 - i), work: 0, routines_ok: 0, routines_failed: 0, messages: 0, failed: 0 })),
           today: { routines_due: 0, routines_done: 0, routines_failed: 0, events: 0, questions: 0 } }
       : { days: shape.map(([work, messages, routines_ok, routines_failed, failed], i) => ({ date: dayAt(13 - i), work, routines_ok, routines_failed, messages, failed })),
-          today: { routines_due: Math.max(routinesToday, 6), routines_done: 3, routines_failed: 1, events: home.today.filter(item => item.kind === "event" || item.kind === "own").length,
+          today: { routines_due: variant.homeDay ? routinesToday : Math.max(routinesToday, 6), routines_done: variant.homeDay ? home.today.filter(item => item.kind === "routine" && !item.run_status && item.at_ms < now).length : 3, routines_failed: variant.homeDay ? home.today.filter(item => item.run_status === "error").length : 1, events: home.today.filter(item => item.kind === "event" || item.kind === "own").length,
             questions: home.today.filter(item => item.kind === "question").length } };
   }
   function usageBill(period) {

@@ -1447,13 +1447,15 @@ export function checkRendered(name, context = {}) {
     return {check:name};
   }
   if (name==="home-calendar-rhythm") {
-    const bar=[...document.querySelectorAll('.ho-schedule .ho-event.is-rhythm')].find(visible);
-    require(visible(bar) && !bar.querySelector('time').textContent.trim() && visible(bar.querySelector('.ho-repeat')) && /^例行・/.test(bar.querySelector('.ho-kind').textContent) && !bar.querySelector('.av'),"today's rhythm shows its title and whose routine it is in words, never a time or a face (R-CAL-03)");
-    require(bar.querySelector('b').scrollWidth <= bar.querySelector('b').clientWidth + 1 || getComputedStyle(bar.querySelector('b')).textOverflow === 'ellipsis', "its title fits or ends in an ellipsis");
-    const marks=[...document.querySelectorAll('.ho-schedule .cal-run-mark')];
-    require(marks.length > 0, "a failed or waiting run of today is marked");
-    for (const mark of marks) require(!mark.closest('.ho-event').classList.contains('is-past'),"Home exceptions never carry is-past");
-    return {check:name, marks:marks.length};
+    // A routine due many times is one line: its face, done of due, the failed run named and the next to run (R-CAL-03).
+    const line=document.querySelector('.page-home .ho-routines .ho-event');
+    require(visible(line) && line.querySelector('b').textContent==='例行工作' && /^\d+\/\d+$/.test(line.querySelector('em').textContent),"today's routines are one line with done of due");
+    require(visible(line.querySelector('.ho-rail .av, .ho-rail svg.slime, .ho-rail .slime-surface')),"with the member's face");
+    const bad=line.querySelector('.ho-note.is-bad'), next=[...line.querySelectorAll('.ho-note:not(.is-bad)')].find(visible);
+    require(visible(bad) && /Gmail 與行程檢查/.test(bad.textContent) && /沒完成/.test(bad.textContent),"the routine that failed is named");
+    require(visible(next) && /^下一個 \d{2}:\d{2}/.test(next.textContent),"with the time of the next");
+    require(!document.querySelector('.page-home .ho-event.is-rhythm, .page-home .cal-run-mark'),"no rhythm row or run mark among the day's rows");
+    return {check:name};
   }
   if (name==="calendar-google-composio") {
     require(window.__look.data.managedConnectors.some(c=>c.id==='composio:googlecalendar' && c.status==='ACTIVE') && !window.__look.data.managedConnectors.some(c=>c.id==='google'),"only Composio is connected");
@@ -3711,116 +3713,93 @@ export function checkRendered(name, context = {}) {
     require(getComputedStyle(close).outlineStyle === 'none', "pointer opening has no focus outline");
     return {check:name};
   }
-  if (name === "home-figures") {
-    // Four figures: today's events, routines done of due, questions waiting and this week against last,
-    // each read from the same data the core sends.
-    const page = document.querySelector('.page-home:not([hidden])'), data = window.__look.data.home, activity = data.activity;
-    const tiles = [...page.querySelectorAll('.ho-stats > .ho-stat')];
-    require(tiles.map(tile => tile.dataset.stat).join() === "events,routines,questions,week", `four figures in order: ${tiles.map(tile => tile.dataset.stat)}`);
-    const value = key => page.querySelector(`.ho-stat[data-stat="${key}"] b`).textContent;
-    const rows = page.querySelectorAll('.ho-schedule .ho-event').length, questions = data.today.filter(item => item.kind === 'question').length;
-    require(value("events") === String(rows), `events count today's rows (${value("events")} / ${rows})`);
-    require(value("routines") === `${activity.today.routines_done}/${activity.today.routines_due}`, `routines done of due: ${value("routines")}`);
-    require(value("questions") === String(questions), `questions waiting: ${value("questions")} / ${questions}`);
-    const done = day => day.work + day.messages + day.routines_ok, week = activity.days.slice(-7).reduce((sum, day) => sum + done(day), 0);
-    require(value("week") === String(week), `this week's finished work: ${value("week")} / ${week}`);
-    for (const tile of tiles) {
-      const style = getComputedStyle(tile), number = tile.querySelector('b');
-      require(parseFloat(style.borderTopWidth) === 0 && parseFloat(style.borderLeftWidth) === 0 && (tile.matches(':hover') || style.backgroundColor === 'rgba(0, 0, 0, 0)'), `a figure is not a box: ${tile.dataset.stat}`);
-      require(parseFloat(getComputedStyle(number).fontSize) >= 30, `its number is large: ${tile.dataset.stat}`);
-      const words = tile.querySelector(':scope > span');
-      require(words.scrollWidth <= words.clientWidth + 1 || getComputedStyle(words).textOverflow === 'ellipsis', `its words fit or end in an ellipsis: ${tile.dataset.stat}`);
-    }
-    require(tiles.filter(tile => tile.tagName === 'BUTTON').map(tile => tile.dataset.stat).join() === (questions ? "events,questions" : "events"), "only a figure that leads somewhere is a button");
-    const main = document.querySelector('.main'), tops = new Set(tiles.map(tile => Math.round(tile.getBoundingClientRect().top)));
-    require(main.clientWidth <= 760 ? tops.size === 2 : tops.size === 1, `four in a row, two by two in a narrow window (${tops.size} rows)`);
-    return { check: name, values: tiles.map(tile => tile.querySelector('b').textContent) };
+  if (name === "home-day") {
+    // The page answers one question: what do I do now, and what must not be missed today. Each part is read against the
+    // same data the core sends: what is present is exactly what the data has, in the sizes the page promises, and an item
+    // appears once.
+    const home = document.querySelector('.page-home:not([hidden])'), data = window.__look.data.home, now = data.generated_at_ms;
+    const probe = token => { const i = document.createElement('i'); i.style.cssText = `display:block;height:var(${token})`; document.body.append(i); const h = parseFloat(getComputedStyle(i).height); i.remove(); return h; };
+    const row = probe('--sp-6'), gap = probe('--sp-1');
+    const calendar = data.today.filter(item => item.kind === 'own' || item.kind === 'event');
+    const allDay = calendar.filter(item => item.all_day), overdue = allDay.filter(item => /^逾期[:：]/.test(item.title)), tasks = allDay.filter(item => !/^逾期[:：]/.test(item.title));
+    const timed = calendar.filter(item => !item.all_day), coming = timed.filter(item => (item.end_ms > item.at_ms ? item.end_ms : item.at_ms + 3600000) > now);
+    const overdueTimed = timed.filter(item => !coming.includes(item) && /^逾期[:：]/.test(item.title));
+    const questions = data.today.filter(item => item.kind === 'question'), runs = data.today.filter(item => item.kind === 'routine');
+    const sec = key => home.querySelector(`.ho-board .ho-${key}`);
+    const rowsOf = key => [...(sec(key)?.querySelectorAll('.ho-row') ?? [])];
+    const words = row => row.querySelector('.ho-title > b').textContent;
+    // Now and next: the timed things only, now first, at most three; absent when there is none.
+    if (coming.length) {
+      const rows = rowsOf('next');
+      require(rows.length === Math.min(3, coming.length), `now and next show ${Math.min(3, coming.length)} of the ${coming.length} timed things still to come (${rows.length})`);
+      require(visible(sec('next').querySelector(':scope > header h2')) && rows.every(r => /^\d{2}:\d{2}$/.test(r.querySelector('time').textContent) && r.querySelector('.ho-when').textContent.trim()), "each with its time and how long until it");
+      const times = rows.map(r => r.querySelector('time').textContent);
+      require(times.join() === [...times].sort().join() || rows[0].classList.contains('is-now'), `in time order: ${times}`);
+      require(rows.every((r, i) => !r.classList.contains('is-now') || rows.slice(0, i).every(before => before.classList.contains('is-now'))), "what is on now leads");
+    } else require(!sec('next'), "no timed thing to come: no heading and no empty box for it");
+    // What waits for his decision: each opens its conversation.
+    if (questions.length) {
+      const rows = rowsOf('waiting');
+      require(rows.length === Math.min(5, questions.length) + (questions.length > 5 ? 1 : 0), `what waits: ${rows.length} rows for ${questions.length}`);
+      require(sec('waiting').querySelector('.ho-count').textContent === String(questions.length) && rows.every(r => r.dataset.homeItem), "counted, and each row opens its conversation");
+    } else require(!sec('waiting'), "nothing waits: no 等你決定 and no zero");
+    // Today's tasks: at most five, the rest behind one row that opens the calendar on today.
+    if (tasks.length) {
+      const rows = rowsOf('todo');
+      require(rows.length === Math.min(5, tasks.length) + (tasks.length > 5 ? 1 : 0), `today's tasks: ${rows.length} rows for ${tasks.length}`);
+      require(sec('todo').querySelector('.ho-count').textContent === String(tasks.length), "with their number");
+      if (tasks.length > 5) require(rows.at(-1).dataset.homeGo === 'calendar' && /^還有 \d+ 件$/.test(words(rows.at(-1))) && rows.at(-1).dataset.homeDate, "the rest are one row that opens the calendar on today");
+    } else require(!sec('todo'), "no task for today: no heading");
+    // The overdue: one block of one size, the count, the projects, three rows and a way to all.
+    const owed = overdue.length + overdueTimed.length;
+    if (owed) {
+      const block = sec('overdue'), rows = rowsOf('overdue'), header = block.querySelector(':scope > header');
+      require(block.querySelector('.ho-count').textContent === String(owed), `the count of the overdue: ${block.querySelector('.ho-count').textContent} / ${owed}`);
+      require(rows.length === Math.min(3, owed) + (owed > 3 ? 1 : 0), `the overdue show ${Math.min(3, owed)} rows${owed > 3 ? ' and a way to all' : ''} (${rows.length})`);
+      const groups = block.querySelector('.ho-groups').textContent.split(' · ').map(part => Number(part.match(/(\d+)$/)?.[1]));
+      require(groups.length <= 4 && groups.reduce((sum, n) => sum + n, 0) === owed, `the projects add up to the count: ${block.querySelector('.ho-groups').textContent}`);
+      if (owed > 3) require(rows.at(-1).dataset.homeGo === 'calendar' && words(rows.at(-1)) === '看全部', "看全部 opens the calendar");
+      if (owed >= 3) {
+        const expected = header.getBoundingClientRect().height + gap + (rows.length) * row;
+        require(Math.abs(block.getBoundingClientRect().height - expected) <= 1.5, `the overdue block is one size, a heading and ${rows.length} rows (${block.getBoundingClientRect().height} / ${expected})`);
+      }
+    } else require(!sec('overdue'), "nothing overdue: no heading");
+    for (const r of home.querySelectorAll('.ho-todo .ho-row.is-task .ho-title b, .ho-overdue .ho-row.is-task .ho-title b, .ho-next .ho-title b')) require(!/^(逾期|今天)[:：]/.test(r.textContent), `the board's prefix is stripped: ${r.textContent}`);
+    // The routines in one line, nothing when the day has none.
+    const line = rowsOf('routines');
+    if (runs.length || data.activity.today.routines_due > 0) {
+      require(line.length === 1 && line[0].querySelector('em') && /^\d+\/\d+$/.test(line[0].querySelector('em').textContent), "the routines are one line with done of due");
+      const failed = runs.filter(r => r.run_status === 'error');
+      if (failed.length === 1) require([...line[0].querySelectorAll('.ho-note.is-bad')].some(n => n.textContent.includes(failed[0].title)), "a routine that failed today is named");
+    } else require(!sec('routines'), "no routine today: no line");
+    // Once: an item is one row of the page, not two.
+    const ids = [...home.querySelectorAll('.ho-board .ho-row[data-home-event]')].map(r => r.dataset.homeEvent);
+    require(new Set(ids).size === ids.length, `an item appears once: ${ids.filter((id, i) => ids.indexOf(id) !== i)}`);
+    return { check: name, timed: coming.length, tasks: tasks.length, overdue: owed, waiting: questions.length, overdueHeight: sec('overdue')?.getBoundingClientRect().height ?? 0 };
   }
-  if (name === "home-trend") {
-    // The last two weeks as stacked bars of work, messages and routines, in the validated chart colours, with a two-line
-    // scale, today's total over its bar, readable day labels and a table for a screen reader.
-    const section = document.querySelector('.page-home:not([hidden]) .ho-trend'), days = window.__look.data.home.activity.days;
-    require(visible(section) && visible(section.querySelector(':scope > header h2')), "the chart is a named section");
-    const cols = [...section.querySelectorAll('.ho-col')], plot = section.querySelector('.ho-plot').getBoundingClientRect();
-    require(cols.length === 14 && cols[13].classList.contains('is-today'), "fourteen days, today last");
-    const done = day => day.work + day.messages + day.routines_ok, top = Math.max(...days.map(done));
-    const busiest = cols[days.findIndex(day => done(day) === top)].querySelector('.ho-bar').getBoundingClientRect();
-    require(busiest.height > plot.height * 0.45 && busiest.height <= plot.height + 1, `the busiest day reaches into the scale (${Math.round(busiest.height)} of ${Math.round(plot.height)})`);
-    for (const [index, col] of cols.entries()) {
-      const bar = col.querySelector('.ho-bar').getBoundingClientRect();
-      require(Math.abs(bar.bottom - plot.bottom) <= 1.5, `every bar stands on the baseline: day ${index}`);
-      const parts = [...col.querySelectorAll('.ho-bar > i')].map(part => part.getBoundingClientRect());
-      for (let i = 1; i < parts.length; i++) require(parts[i - 1].top - parts[i].bottom >= 1.5, `a gap between the parts of a bar: day ${index}`);
-    }
-    const probe = token => { const i = document.createElement('i'); i.style.color = `var(${token})`; document.body.append(i); const c = getComputedStyle(i).color; i.remove(); return c; };
-    const keys = [...section.querySelectorAll('.ho-legend .ho-key')].map(key => getComputedStyle(key).backgroundColor);
-    require(keys.join() === ['--series-1', '--series-2', '--series-3'].map(probe).join() && new Set(keys).size === 3, `the legend shows the three chart colours: ${keys}`);
-    const value = cols[13].querySelector('.ho-bar-value');
-    require(visible(value) && value.textContent === String(done(days[13])) && value.getBoundingClientRect().bottom <= cols[13].querySelector('.ho-bar').getBoundingClientRect().top + 1, "today's total stands over its bar");
-    const labels = [...section.querySelectorAll('.ho-xaxis > span')].filter(label => getComputedStyle(label).visibility !== 'hidden').map(label => label.getBoundingClientRect());
-    for (let i = 1; i < labels.length; i++) require(labels[i].left >= labels[i - 1].right - 1, "the day labels never overlap");
-    require(section.querySelector('.ho-xaxis > .is-today').textContent === '今天', "today is named");
-    const grid = [...section.querySelectorAll('.ho-grid small')].map(label => label.textContent);
-    require(grid.length === 2 && Number(grid[1]) >= top && Number(grid[0]) * 2 === Number(grid[1]), `a two-line scale with a round top: ${grid}`);
-    const hidden = section.querySelector('.ho-sr'), table = hidden?.querySelector('table');
-    require(table && table.querySelectorAll('tbody tr').length === 14 && hidden.getBoundingClientRect().width <= 1, "the same figures as a table for a screen reader");
-    return { check: name, top, scale: grid };
-  }
-  if (name === "home-trend-tip") {
-    const tip = document.querySelector('.page-home:not([hidden]) .ho-tip'), col = document.querySelector('.ho-col.is-today');
-    require(visible(tip) && tip.querySelectorAll('.ho-tip-row').length >= 3, "the day under the pointer shows its figures");
-    const box = tip.getBoundingClientRect(), bar = col.getBoundingClientRect();
-    require(box.left >= 0 && box.right <= innerWidth && box.top >= 0 && box.bottom <= innerHeight, "inside the window");
-    require(box.right <= bar.left + 1 || box.left >= bar.right - 1, "beside its bar, never over it");
-    const legend = document.querySelector('.page-home:not([hidden]) .ho-trend .ho-legend').getBoundingClientRect();
-    require(box.top >= legend.bottom - 1 || box.right <= legend.left + 1 || box.left >= legend.right - 1, "never over the legend");
-    require(getComputedStyle(tip).pointerEvents === 'none', "it never takes the pointer");
-    return { check: name };
-  }
-  if (name === "home-band") {
-    // Today's hours as a band over the table: each timed entry where it falls, routine runs as ticks, the red line of now.
-    const schedule = document.querySelector('.page-home:not([hidden]) .ho-schedule'), band = schedule.querySelector('.ho-band'), track = band.querySelector('.ho-band-track').getBoundingClientRect();
-    require(visible(band) && band.getAttribute('aria-hidden') === 'true', "a picture of the table under it");
-    require(band.getBoundingClientRect().bottom <= (schedule.querySelector('.ho-thead, .ho-empty')?.getBoundingClientRect().top ?? Infinity) + 1, "over the table");
-    const marks = [...band.querySelectorAll('.ho-mark')];
-    require(marks.length > 0, "today's timed entries are marked");
-    for (const mark of marks) {
-      const box = mark.getBoundingClientRect();
-      require(box.left >= track.left - 6 && box.right <= track.right + 6, `a mark falls inside the day: ${mark.dataset.tip}`);
-    }
-    const now = band.querySelector('.ho-now').getBoundingClientRect(), hour = new Date(window.__look.data.home.generated_at_ms);
-    const expected = track.left + track.width * (hour.getHours() * 60 + hour.getMinutes()) / 1440;
-    require(Math.abs(now.left + now.width / 2 - expected) <= 2, "the line of now stands at the time of day");
-    const hours = [...band.querySelectorAll('.ho-band-hours > span')].map(span => span.getBoundingClientRect());
-    for (let i = 1; i < hours.length; i++) require(hours[i].left >= hours[i - 1].right, "the hours never overlap");
-    require(hours[0].left >= track.left - 1 && hours[hours.length - 1].right <= track.right + 1, "the hours stay under the band");
-    return { check: name, marks: marks.length };
+  if (name === "home-fit") {
+    // His real day fits one screen at a desk-sized window without scrolling; a narrow window scrolls as a page.
+    const main = document.querySelector('.main'), page = document.querySelector('.page-home:not([hidden])');
+    if (innerWidth >= 1000) require(main.scrollHeight <= main.clientHeight + 1, `the whole day fits one screen without scrolling (${main.scrollHeight} of ${main.clientHeight} at ${innerWidth} x ${innerHeight})`);
+    return { check: name, content: main.scrollHeight, window: main.clientHeight };
   }
   if (name === "home-empty-day") {
-    // Nothing yet: calm words, zeros, 建立 for today, and the chart's quiet note over its empty baseline.
+    // Nothing at all: calm words, 建立 for today, and nothing else on the page.
     const page = document.querySelector('.page-home:not([hidden])');
-    require(page.querySelector('.ho-schedule .ho-empty')?.textContent === '今天沒有行程' && visible(page.querySelector('.ho-create')), "an empty day offers 建立");
-    require(page.querySelector('.ho-stat[data-stat="routines"] span').textContent === '今天沒有例行工作' && page.querySelector('.ho-stat[data-stat="questions"] b').textContent === '0', "zeros, said plainly");
-    const note = page.querySelector('.ho-trend .ho-empty');
-    require(visible(note) && note.textContent === '近兩週還沒有完成的事', "the chart says nothing was finished yet");
-    require([...page.querySelectorAll('.ho-trend .ho-bar')].every(bar => bar.classList.contains('is-zero')), "every day is an empty stub");
+    require(page.querySelector('.ho-none .ho-empty')?.textContent === '今天沒有行程' && visible(page.querySelector('.ho-create')), "an empty day offers 建立");
+    require([...page.querySelectorAll('.ho-board .ho-sec')].map(section => section.classList[1]).join() === 'ho-none' && !page.querySelector('.ho-board h2, .ho-count, .ho-row'), "no heading, number or row");
     require(page.querySelector('.ho-hero .ho-line').textContent === '告。今天沒有行程，也沒有事在等你。', "his line says the day is quiet, as himself (告。)");
     return { check: name };
   }
   if (name === "home-questions") {
     const data = window.__look.data.home, questions = data.today.filter(item => item.kind === 'question');
-    const tile = document.querySelector('.page-home:not([hidden]) .ho-stat[data-stat="questions"]');
-    require(tile.tagName === 'BUTTON' && tile.querySelector('b').textContent === String(questions.length), `every waiting question is counted (${tile.querySelector('b').textContent} of ${questions.length})`);
-    require(/^最新：/.test(tile.querySelector('span').textContent), "with the newest one named");
+    const section = document.querySelector('.page-home:not([hidden]) .ho-waiting'), rows = [...section.querySelectorAll('.ho-row')];
+    require(section.querySelector('.ho-count').textContent === String(questions.length), `every waiting question is counted (${section.querySelector('.ho-count').textContent} of ${questions.length})`);
+    require(rows.length === 6 && /^還有 \d+ 件$/.test(rows.at(-1).textContent) && rows.every(r => r.dataset.homeItem), "five rows and one for the rest, each opening a conversation");
+    const newest = [...questions].sort((a, b) => b.at_ms - a.at_ms)[0];
+    require(rows[0].querySelector('b').textContent === newest.title, "the newest first");
+    require(rows.slice(0, 5).every(r => visible(r.querySelector('.ho-rail .av, .ho-rail svg.slime, .ho-rail .slime-surface'))), "with the member's face");
     return { check: name, questions: questions.length };
-  }
-  if (name === "home-all-rows") {
-    // No 「顯示更多」 or 「還有…」 anywhere: every item of today is a row.
-    const page = document.querySelector('.page-home:not([hidden])');
-    const schedule = page.querySelectorAll('.ho-schedule .ho-event').length;
-    require(schedule > 8, `more than eight rows, all drawn (${schedule})`);
-    require(!page.querySelector('.ho-more, .ho-count'), "no count or button for more");
-    return { check: name, schedule };
   }
   if (name === "home-problem") {
     const alert = document.querySelector('.page-home .ho-alert'), health = document.querySelector('.page-home .ho-line');
@@ -3831,7 +3810,7 @@ export function checkRendered(name, context = {}) {
     return { check: name };
   }
   if (name === "home-row-hover") {
-    const row = document.querySelector('.ho-schedule .ho-event:hover'), style = getComputedStyle(row);
+    const row = document.querySelector('.page-home .ho-event:hover'), style = getComputedStyle(row);
     const probe = document.createElement('i'); probe.style.color = 'var(--hover)'; document.body.append(probe); const hover = getComputedStyle(probe).color; probe.remove();
     require(row && style.backgroundColor === hover, "the row under the pointer lights its own background");
     require(parseFloat(style.borderTopWidth) === 0 && style.boxShadow === 'none' && style.outlineStyle === 'none', "with no frame");
@@ -4061,13 +4040,13 @@ export function checkRendered(name, context = {}) {
     if (visible(hero)) {
       const page = hero.closest('.page-home'), style = getComputedStyle(page);
       const lead = hero.getBoundingClientRect(), bounds = page.getBoundingClientRect();
-      const sections = [...page.querySelectorAll('.ho-panels > .ho-sec')].filter(visible).map(section => section.getBoundingClientRect());
+      const sections = [...page.querySelectorAll('.ho-lanes > .ho-lane, .ho-lanes > .ho-none')].filter(visible).map(section => section.getBoundingClientRect());
       const available = bounds.width - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
       require(Math.abs(lead.width - available) <= 1, 'Home hero spans the page measure');
       require(sections.length >= 1 && sections.every(section => section.top >= lead.bottom - 1 && section.width <= lead.width + 1), 'Home hero leads every section');
       const columns = sections.length > 1 && Math.abs(sections[0].top - sections[1].top) <= 1 ? 2 : 1;
-      // Side by side, today's schedule and the last two weeks share the width.
-      require(columns === 1 || Math.abs(sections[0].width - sections[1].width) <= 1, 'side by side, today and the last two weeks share a width');
+      // Side by side, what to do now and what is owed share the width.
+      require(columns === 1 || Math.abs(sections[0].width - sections[1].width) <= 1, 'side by side, the two lanes share a width');
       home = { heroWidth: lead.width, available, columns };
     }
     return { check: name, limits, measurements, ...(home ? { home } : {}) };
@@ -5058,43 +5037,65 @@ export function checkRendered(name, context = {}) {
     });
   }
   if (name === "home-overview") {
-    // Charts, tables, numbers and a little text; no member rows, open-item list, yesterday or health
-    // check, and no slime. No boxes, nothing sideways and no scrolling panel inside; the page itself may scroll.
+    // What to do now and what must not be missed today: a few parts, each a quiet list. No figures, chart, table or
+    // tooltip, no boxes, nothing sideways and no scrolling panel inside; the page itself may scroll.
     const home = document.querySelector('.page-home:not([hidden])'), main = document.querySelector('.main');
     require(document.documentElement.scrollWidth <= innerWidth + 1 && main.scrollWidth <= main.clientWidth + 1, "nothing on Home runs out sideways");
-    require(!home.querySelector('.ho-card, .ho-calendar, .ho-meter, .ho-spend, .ho-allowance, .ho-dictation, .ho-target'), "no blocks of spend, allowances, dictation or a month calendar");
-    require(!home.querySelector('.ho-team, .ho-pending, .ho-yesterday, .ho-checks, .ho-member, .ho-who, .av, svg.slime, .slime-surface'), "no member rows, open items, yesterday, health check or faces");
-    const board = home.querySelector('.ho-board');
-    require([...board.children].map(child => child.className).join() === "ho-stats,ho-panels", "the figures, then the panels");
-    const panels = [...board.querySelectorAll('.ho-panels > .ho-sec')], hasChart = !!window.__look.data.home.activity;
-    require(panels.map(panel => panel.classList[1]).join() === (hasChart ? "ho-schedule,ho-trend" : "ho-schedule"), `today's schedule, then the last two weeks: ${panels.map(panel => panel.classList[1])}`);
-    require(!/US\$|\d+\s*%/.test(board.textContent), "no money or percentages");
-    if (panels.length === 2) {
-      const [a, b] = panels.map(panel => panel.getBoundingClientRect()), side = Math.abs(a.top - b.top) <= 1;
-      require(side ? Math.abs(a.width - b.width) <= 1 : b.top >= a.bottom - 1, "side by side at the same width, or one under the other");
+    require(!home.querySelector('.ho-card, .ho-calendar, .ho-meter, .ho-spend, .ho-allowance, .ho-dictation, .ho-target, .ho-stats, .ho-stat, .ho-panels, .ho-trend, .ho-schedule, .ho-band, .ho-thead, .ho-tip, .ho-chart, .ho-sr'), "no figures, chart, band, table, tooltip, or blocks of spend, allowances, dictation or a month calendar");
+    require(!home.querySelector('.ho-team, .ho-pending, .ho-yesterday, .ho-checks, .ho-member, .ho-who-list'), "no member rows, open items, yesterday or health check");
+    require([...home.querySelectorAll('.av, svg.slime, .slime-surface')].every(face => face.closest('.ho-rail')), "a face stands only in a row's rail");
+    require(!/US\$|\d+\s*%/.test(home.querySelector('.ho-board').textContent), "no money or percentages");
+    // The parts, in the order the day is read, each only when it has something to say.
+    const order = ['ho-next', 'ho-waiting', 'ho-todo', 'ho-overdue', 'ho-routines'], sections = [...home.querySelectorAll('.ho-board .ho-sec')], names = sections.map(section => section.classList[1]);
+    require(names.join() === 'ho-none' || names.every((n, i) => order.includes(n) && (i === 0 || order.indexOf(n) > order.indexOf(names[i - 1]))), `the parts in order: ${names}`);
+    const lanes = [...home.querySelectorAll('.ho-board .ho-lane')];
+    require(lanes.every(lane => lane.querySelector('.ho-sec')) && lanes.length <= 2, "no empty lane");
+    if (lanes.length === 2) {
+      const [a, b] = lanes.map(lane => lane.getBoundingClientRect());
+      require(home.clientWidth >= 1100 ? Math.abs(a.top - b.top) <= 1 && b.left >= a.right - 1 : b.top >= a.bottom - 1, "two lanes side by side where the page is wide, else one column");
     }
-    for (const section of panels) {
+    const probe = token => { const i = document.createElement('i'); i.style.cssText = `display:block;height:var(${token})`; document.body.append(i); const h = parseFloat(getComputedStyle(i).height); i.remove(); return h; };
+    const space = probe('--sp-5'), rowHeight = probe('--sp-6');
+    for (const lane of lanes) {
+      const boxes = [...lane.children].map(section => section.getBoundingClientRect());
+      for (let i = 1; i < boxes.length; i++) require(Math.abs(boxes[i].top - boxes[i - 1].bottom - space) <= 1, `parts are one space apart, whichever are absent: ${Math.round(boxes[i].top - boxes[i - 1].bottom)} / ${space}`);
+    }
+    for (const section of sections) {
       const style = getComputedStyle(section);
       require(style.backgroundColor === 'rgba(0, 0, 0, 0)' && parseFloat(style.borderLeftWidth) === 0 && parseFloat(style.borderTopWidth) === 0 && style.boxShadow === 'none', `no box around a section: ${section.className}`);
-      require(!section.querySelector('.ho-more, .ho-count, [data-home-go="calendar"].btn.sm'), `nothing to press for more, every row shows: ${section.className}`);
+      require(section.getAttribute('aria-label') && (section.classList.contains('ho-routines') || section.classList.contains('ho-none') || visible(section.querySelector(':scope > header h2'))), `every part is named: ${section.className}`);
+      const heading = section.querySelector(':scope > header h2');
+      if (heading) require(heading.textContent.trim().split(/\s+/).length <= 2 && heading.textContent.trim().length <= 12, `a heading is one or two words: ${heading.textContent}`);
+      require(section.querySelector('.ho-row, .ho-empty'), `a part with nothing to say is not drawn: ${section.className}`);
       for (const element of [section, ...section.querySelectorAll('*')]) {
         const inner = getComputedStyle(element);
         require(!['auto', 'scroll'].includes(inner.overflowY) || element.scrollHeight <= element.clientHeight + 1, `Home has no scrolling inner panels: ${element.className}`);
       }
-      require(visible(section.querySelector(':scope > header h2')), `every section is named: ${section.className}`);
       const box = section.getBoundingClientRect();
-      for (const element of section.querySelectorAll('.ho-rows > *:not(.ho-sr), .ho-col, .ho-mark, .ho-xaxis > span')) if (visible(element)) {
+      for (const element of section.querySelectorAll('.ho-row, .ho-rail, .ho-title, .ho-groups')) if (visible(element)) {
         const inner = element.getBoundingClientRect();
-        require(inner.left >= box.left - 8 && inner.right <= box.right + 8, `nothing runs out of its section: ${element.className}`);
+        require(inner.left >= box.left - 1 && inner.right <= box.right + 1, `nothing runs out of its section: ${element.className}`);
       }
+    }
+    // Every row is a plain line that does something when pressed, at the shared row height, its rail and words in line.
+    for (const lane of lanes) {
+      const rails = [...lane.querySelectorAll('.ho-row .ho-rail')].map(rail => Math.round(rail.getBoundingClientRect().left)), titles = [...lane.querySelectorAll('.ho-row .ho-title')].map(title => Math.round(title.getBoundingClientRect().left));
+      require(new Set(rails).size <= 1 && new Set(titles).size <= 1, `the rails and the words line up in a lane: ${[...new Set(rails)]} / ${[...new Set(titles)]}`);
     }
     for (const row of home.querySelectorAll('.ho-row')) {
       const style = getComputedStyle(row);
       require(parseFloat(style.borderTopWidth) === 0 && style.boxShadow === 'none' && (row.matches(':hover') || style.backgroundColor === 'rgba(0, 0, 0, 0)'), `a row is a plain line, no frame: ${row.className}`);
-      require(row.tagName === 'BUTTON', "every row is a real button");
-      const columns = [...row.children].map(cell => cell.getBoundingClientRect()), head = [...home.querySelectorAll('.ho-thead > span')].map(cell => cell.getBoundingClientRect());
-      if (head.length === 3) require(columns.every((cell, i) => Math.abs(cell.left - head[i].left) <= 1), `a row lines up with the table's heading: ${row.textContent}`);
+      require(row.tagName === 'BUTTON' && (row.dataset.homeEvent || row.dataset.homeItem || row.dataset.homeGo), `every row is a real button with a target: ${row.textContent}`);
+      require(Math.abs(row.getBoundingClientRect().height - rowHeight) <= 0.5, `a row has the shared height (${row.getBoundingClientRect().height} / ${rowHeight})`);
+      require(visible(row), `a row is seen: ${row.textContent}`);
     }
+    // No row's words are cut without an ellipsis.
+    for (const element of home.querySelectorAll('.ho-row b, .ho-rail, .ho-when, .ho-who, .ho-note, .ho-groups, .ho-count, .ho-sec h2')) if (visible(element)) {
+      const style = getComputedStyle(element);
+      require(element.scrollWidth <= element.clientWidth + 1 || (style.textOverflow === 'ellipsis' && style.overflow === 'hidden'), `words are never cut without an ellipsis: ${element.textContent}`);
+    }
+    // The way to the whole Calendar is the icon beside the date.
+    require(visible(home.querySelector('.ho-date [data-home-go="calendar"]')), "the calendar's icon stands beside the date");
     const emblem = home.querySelector('.ho-orb');
     require(visible(emblem) && emblem.offsetWidth >= 72 && emblem.querySelector('canvas.ho-emb'), "Raphael's emblem is large on Home, drawn on a canvas");
     require(!!home.querySelector('.ho-hero h1') && !!home.querySelector('.ho-hero .ho-line'), "Raphael greets the owner and gives his line on today");
@@ -5104,7 +5105,7 @@ export function checkRendered(name, context = {}) {
     // Each page is named on one line in the sidebar, at every width: 連結應用程式 and its number must fit the narrow sidebar too.
     for (const label of document.querySelectorAll('#nav .nav .nav-t')) if (visible(label))
       require(label.getBoundingClientRect().height < (parseFloat(getComputedStyle(label).lineHeight) || 20) * 1.5, `"${label.textContent}" does not fit on one line in the sidebar`);
-    return { check: name, rows: home.querySelectorAll('.ho-row').length, width: home.clientWidth };
+    return { check: name, parts: names, rows: home.querySelectorAll('.ho-row').length, width: home.clientWidth };
   }
   if (name === "calendar-now") {
     const line = document.querySelector('.au-now'), scroll = document.querySelector('.au-calendar-scroll');
@@ -5222,7 +5223,7 @@ export function checkRendered(name, context = {}) {
     return { check: name };
   }
   if (name === "home-google-off" || name === "home-google-closed" || name === "home-google-failed") {
-    const schedule = document.querySelector('.page-home .ho-schedule'), notice = schedule.querySelector('.cal-notice');
+    const foot = document.querySelector('.page-home .ho-foot'), notice = foot?.querySelector('.cal-notice');
     if (name === "home-google-closed") require(!notice, "closed, it stays closed");
     else {
       require(visible(notice), "Home says it too");
@@ -5230,25 +5231,23 @@ export function checkRendered(name, context = {}) {
       require(visible(go) && /連結應用程式/.test(go.textContent), "with the place to go");
       const words = notice.querySelector('.cal-notice-words').textContent;
       require(name === "home-google-off" ? /未連接/.test(words) : /讀不到/.test(words), `in plain words: ${words}`);
-      const box = notice.getBoundingClientRect(), section = schedule.getBoundingClientRect();
-      require(box.left >= section.left - 1 && box.right <= section.right + 1, "inside today's schedule, within its column");
+      const box = notice.getBoundingClientRect(), board = document.querySelector('.page-home .ho-board').getBoundingClientRect();
+      require(box.left >= board.left - 1 && box.right <= board.right + 1 && box.top >= document.querySelector('.page-home .ho-lanes').getBoundingClientRect().bottom - 1, "under the day, within the page's column");
     }
     return { check: name };
   }
   if (name === "home-calendar-language") {
-    // Today's schedule speaks the calendar's language without its boxes: its time format and each source's colour as a tick.
-    const rows = [...document.querySelectorAll('.page-home .ho-schedule .ho-event')].filter(visible);
-    require(rows.length > 0, "today's schedule lists today");
-    const own = rows.find(row => row.classList.contains('is-own'));
-    require(own, "with the owner's own events");
-    const probe = document.createElement('i'); probe.style.color = 'var(--accent-icon)'; document.body.append(probe); const ink = getComputedStyle(probe).color; probe.remove();
-    require(getComputedStyle(own.querySelector('.ho-kind'), '::before').backgroundColor === ink && getComputedStyle(own).backgroundColor === 'rgba(0, 0, 0, 0)' && own.querySelector('.ho-kind').textContent === '自己的', "an own event says so beside the calendar's ink as a dot, never a filled box");
+    // Now and next speak the calendar's language without its boxes: its time format, in time order, with what is on now first.
+    // Where the mock core is present the owner's own event is the one on now.
+    const rows = [...document.querySelectorAll('.page-home .ho-next .ho-event')].filter(visible);
     for (const row of rows) {
-      const time = row.querySelector('time').textContent;
-      if (!row.classList.contains('is-rhythm') && time !== '全天') require(/^\d{2}:\d{2}$/.test(time), `the calendar's time format: ${time}`);
+      require(/^\d{2}:\d{2}$/.test(row.querySelector('time').textContent), `the calendar's time format: ${row.querySelector('time').textContent}`);
+      require(getComputedStyle(row).backgroundColor === 'rgba(0, 0, 0, 0)', "never a filled box");
     }
-    const times = rows.filter(row => /^\d{2}:\d{2}$/.test(row.querySelector('time').textContent)).map(row => row.querySelector('time').textContent);
+    const times = rows.map(row => row.querySelector('time').textContent);
     require(times.join() === [...times].sort().join(), `in time order: ${times}`);
+    const own = window.__look?.data.home.calendar_events.find(item => item.id === 'own:1');
+    if (own) require(rows.length > 0 && rows[0].classList.contains('is-now') && rows[0].querySelector('b').textContent === own.title, "the owner's own event is on now, first");
     return { check: name, rows: rows.length };
   }
   if (name === "calendar-all-day") {

@@ -35,9 +35,9 @@ describe("real app entry with the shared look fixture", () => {
       await vi.waitFor(() => expect(document.querySelector(destination === "agent" ? ".page.page-agent:not([hidden])" : `#nav [data-go="${destination}"][aria-current="page"]`), destination).not.toBeNull());
     }
     document.querySelector('#nav [data-go="home"]').click();
-    await vi.waitFor(() => expect(document.querySelector('.ho-schedule header [data-home-go="calendar"]')).not.toBeNull());
+    await vi.waitFor(() => expect(document.querySelector('.ho-date [data-home-go="calendar"]')).not.toBeNull());
     expect(document.querySelector('#nav .nav[data-go="automations"]')).toBeNull();
-    document.querySelector('.ho-schedule header [data-home-go="calendar"]').click();
+    document.querySelector('.ho-date [data-home-go="calendar"]').click();
     await vi.waitFor(() => expect(document.querySelector('.au-page:not([hidden]) .au-calendar-scroll')).not.toBeNull());
     expect(document.querySelector('#nav [data-go][aria-current="page"]').dataset.go).toBe("home");
     document.querySelector('#nav .nav[data-go="settings"]').click();

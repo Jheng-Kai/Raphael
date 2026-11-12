@@ -113,13 +113,13 @@ it("rejects the judge's room inset on 6e2ca315: a group's words and cards begin 
   } finally { vi.unstubAllGlobals(); browser.happyDOM.abort(); }
 });
 
-it("keeps Home's lead across the page and its two panels side by side at one width", () => {
+it("keeps Home's lead across the page and its two lanes side by side at one width", () => {
   const browser = new Window();
   const doc = browser.document;
   doc.documentElement.style.setProperty('--sp-6', '32px');
   doc.documentElement.style.setProperty('--sp-5', '24px');
-  doc.body.innerHTML = '<section class="page-home" style="padding:32px"><section class="ho-hero"></section><div class="ho-board"><div class="ho-stats"></div><div class="ho-panels">' + '<section class="ho-sec"></section>'.repeat(2) + '</div></div></section>';
-  const page = doc.querySelector('.page-home'), hero = page.firstElementChild, sections = [...page.querySelectorAll('.ho-sec')];
+  doc.body.innerHTML = '<section class="page-home" style="padding:32px"><section class="ho-hero"></section><div class="ho-board"><div class="ho-lanes">' + '<div class="ho-lane"></div>'.repeat(2) + '</div></div></section>';
+  const page = doc.querySelector('.page-home'), hero = page.firstElementChild, sections = [...page.querySelectorAll('.ho-lane')];
   const measure = (element, width, top) => { element.getBoundingClientRect = () => ({ width, height: 100, top, bottom: top + 100 }); };
   measure(page, 1264, 0); measure(hero, 384, 32);
   sections.forEach(section => measure(section, 584, 300));

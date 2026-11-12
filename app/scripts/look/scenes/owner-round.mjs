@@ -18,7 +18,7 @@ export default [
     ...settings("connections"), check(`locale-${locale}`), click('.modal-scrim [data-act="close"]'),
     ...["home", "agent", "dictation"].flatMap(name => [page(name), check(`locale-${locale}`)]),
     ...["history", "dictionary", "overview"].flatMap(tab => [page("dictation"), click(`[data-dictation-tab="${tab}"]`), check(`locale-${locale}`)]),
-    page("home"), click('.ho-schedule header [data-home-go="calendar"]'), wait('.au-page:not([hidden]) .au-day-col'), check(`locale-${locale}`), key("Escape"), waitGone('.au-pop-detail'),
+    page("home"), click('.ho-date [data-home-go="calendar"]'), wait('.au-page:not([hidden]) .au-day-col'), check(`locale-${locale}`), key("Escape"), waitGone('.au-pop-detail'),
     click('#nav [data-go="settings"]'), check(`locale-${locale}`), click('.modal-scrim [data-act="close"]'),
     ...settings("general"), check(`locale-${locale}`),
   ])),

@@ -1435,7 +1435,7 @@ await page.waitForFunction(role => document.querySelector('.ms-pane #ms-role')?.
     await inspect("home-1920", ["home-hero", "home-overview"]);
     await page.setViewport({ width: 1280, height: 800 });
     await inspect("home-1280", ["home-hero", "home-overview"]);
-    await click(page, '.ho-schedule header [data-home-go="calendar"]'); await wait(page, '.au-day-col'); await pause(200);
+    await click(page, '.ho-date [data-home-go="calendar"]'); await wait(page, '.au-day-col'); await pause(200);
     await inspect("calendar-week-1280", ["calendar-shell"]);
     await click(page, '[data-au="view"]'); await click(page, '#app-popover [data-value="day"]');
     await inspect("calendar-day-1280", ["calendar-shell"]);
@@ -1470,7 +1470,7 @@ await page.waitForFunction(role => document.querySelector('.ms-pane #ms-role')?.
     };
     const inspectPage = async (label, checks) => { await pause(200); for (const check of checks) await page.evaluate(checkRendered, check); await capture(label); };
     await page.setViewport({ width: 1280, height: 800 });
-    await click(page, '.ho-schedule header [data-home-go="calendar"]'); await wait(page, ".au-day-col");
+    await click(page, '.ho-date [data-home-go="calendar"]'); await wait(page, ".au-day-col");
     await inspectPage("week-empty", ["calendar-shell", "calendar-now"]);
     // The owner, by hand: 建立, then the small form beside the placeholder.
     await click(page, '[data-au="new"]');
@@ -1515,7 +1515,7 @@ await page.waitForFunction(role => document.querySelector('.ms-pane #ms-role')?.
     // Home draws both, and a click on the member's event opens it on the Calendar page.
     await perform(page, { action: "click", selector: '#nav [data-go="home"]' });
     await wait(page, ".ho-hero h1");
-    const eventOnHome = `.ho-schedule [data-home-event="own:${added.id}"]`;
+    const eventOnHome = `.ho-board [data-home-event="own:${added.id}"]`;
     await wait(page, eventOnHome);
     await inspectPage("home", ["home-calendar-language"]);
     await click(page, eventOnHome);

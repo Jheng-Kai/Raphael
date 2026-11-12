@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
-// Home (pages/home.ts): Raphael's live emblem beside the greeting and his line, four figures, today's
-// hours as a band over today's schedule as a table, and the last two weeks as a chart. No member rows, open-item list,
-// yesterday paragraph or health check; no spend, allowance or dictation figures; no slime.
+// Home (pages/home.ts): Raphael's live emblem beside the greeting and his line, then what to do now and what must not be
+// missed today: the timed things, what waits, today's tasks, the overdue and the routines in one line (owner, 2026-11-12).
+// The sorting itself is tested in home-day.test.ts. No figures, charts, tables, spend, allowance or dictation numbers.
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import type { HomeActivity, HomeItem, HomeOverview } from "../home-types";
 import type { AppContext, MainEvent } from "../types";
@@ -122,7 +122,7 @@ describe("Home's hero", { timeout: 15_000 }, () => {
     expect(page.querySelector(".ho-date")!.textContent).toContain("27");
     expect(page.textContent).not.toMatch(/US\$|%|字/);
     // No member rows, open-item list, yesterday or health check, and no face anywhere.
-    for (const gone of [".ho-team", ".ho-pending", ".ho-yesterday", ".ho-checks", ".ho-member", ".av", "svg.slime", ".ho-card", ".ho-spend", ".ho-dictation"])
+    for (const gone of [".ho-team", ".ho-pending", ".ho-yesterday", ".ho-checks", ".ho-member", ".av", "svg.slime", ".ho-card", ".ho-spend", ".ho-dictation", ".ho-stats", ".ho-trend"])
       expect(page.querySelector(gone), gone).toBeNull();
     const evening = { ...overview(5), generated_at_ms: new Date(2026, 9, 27, 20).getTime() };
     expect(parse(homeHTML(evening)).querySelector("h1")!.textContent).toBe("晚上好，主人");
@@ -149,167 +149,164 @@ describe("Home's hero", { timeout: 15_000 }, () => {
     expect(broken.querySelector(".ho-alert")!.textContent).toContain("OpenRouter");
     // The main window shows his words plainly; 《告。…》 is the desktop caption's (R-UI-42).
     expect(broken.querySelector(".ho-hero")!.textContent).not.toMatch(/[《》]/);
-    expect([...broken.querySelectorAll(".ho-hero button")].map(button => button.getAttribute("data-home-go"))).toEqual(["report"]);
+    expect([...broken.querySelectorAll(".ho-hero button")].map(button => button.getAttribute("data-home-go"))).toEqual(["calendar", "report"]);
     expect(broken.innerHTML).not.toContain('data-home-go="agent"');
   });
 });
 
-describe("the day in numbers", () => {
-  test("four figures: today's events, routines done of due, questions waiting and this week against last", async () => {
-    const sample = { ...overview(5), activity: activity() };
-    sample.today = [item("event:x", "event", "Design review", NOW + 3_600_000), item("question:7", "question", "Which source?", NOW - 60_000, { turn_id: 7 })];
-    queue.splice(0, queue.length, sample);
-    const { page, app } = await mount();
-    const tiles = [...page.el.querySelectorAll<HTMLElement>(".ho-stats > .ho-stat")];
-    expect(tiles.map(tile => [tile.dataset.stat, tile.querySelector("small")!.textContent, tile.querySelector("b")!.textContent, tile.querySelector("span")!.textContent])).toEqual([
-      ["events", "行程", "1", "下一個 11:00 Design review"],
-      ["routines", "例行工作", "3/6", "1 次沒完成"],
-      ["questions", "等你回答", "1", "最新：Which source?"],
-      // This week: six days of 4 and today's 6 = 30; the week before: seven days of 3 = 21.
-      ["week", "本週完成", "30", "▲ 比上週多 9"],
-    ]);
-    expect(tiles.map(tile => tile.tagName)).toEqual(["BUTTON", "DIV", "BUTTON", "DIV"]);
-    expect(tiles[1]!.querySelector("span")!.classList.contains("is-bad")).toBe(true);
-    tiles[0]!.click();
-    expect(app.go).toHaveBeenLastCalledWith("automations");
-    const { openMemberThread } = await import("../team-navigation");
-    tiles[2]!.click();
-    expect(openMemberThread).toHaveBeenCalledWith(app, 1, 7);
-  });
+/** A day of the owner's task board: all-day own events whose titles carry the board's words. */
+const board = (title: string, id: number): HomeItem => item(`own:${id}`, "own", title, new Date(2026, 9, 27).getTime(), { all_day: true, event_id: id, member_id: -1, name: "", end_ms: new Date(2026, 9, 28).getTime() });
+const at = (h: number, m = 0): number => new Date(2026, 9, 27, h, m).getTime();
+/** A day with no routines due, so that nothing at all can be quiet. */
+const idle = (): HomeActivity => ({ ...activity(), today: { routines_due: 0, routines_done: 0, routines_failed: 0, events: 0, questions: 0 } });
+const sections = (page: ParentNode): string[] => [...page.querySelectorAll(".ho-sec")].map(section => section.classList[1]!);
 
-  test("without the core's activity the routine and week figures and the chart are left out", async () => {
+describe("what to do now", () => {
+  test("the page is the parts of the day that change what he does, in order, and a part with nothing to say is not drawn", async () => {
     const { homeHTML } = await load();
-    const page = parse(homeHTML(overview(5)));
-    expect([...page.querySelectorAll<HTMLElement>(".ho-stat")].map(tile => tile.dataset.stat)).toEqual(["events", "questions"]);
-    expect(page.querySelector(".ho-trend")).toBeNull();
-    expect(page.querySelector(".ho-schedule")).not.toBeNull();
-  });
-
-  test("the last two weeks are stacked bars of work, messages and routines with a scale, today's total, a tooltip and a table", async () => {
-    const { homeHTML, dayTipHTML } = await load();
-    const data = activity();
-    const page = parse(homeHTML({ ...overview(5), activity: data }));
-    const cols = [...page.querySelectorAll<HTMLElement>(".ho-trend .ho-col")];
-    expect(cols).toHaveLength(14);
-    expect(cols[13]!.classList.contains("is-today")).toBe(true);
-    // Each finished kind is one part of its day's bar, bottom first: work, messages, routines.
-    expect([...cols[13]!.querySelectorAll<HTMLElement>(".ho-bar > i")].map(part => [part.dataset.s, parseFloat(part.style.flexGrow)])).toEqual([["work", 2], ["messages", 1], ["routines", 3]]);
-    expect(cols[13]!.querySelector(".ho-bar-value")!.textContent).toBe("6");
-    expect(cols.slice(0, 13).every(col => !col.querySelector(".ho-bar-value"))).toBe(true);
-    // The busiest day is 6, so the scale's top is a round 10 and its middle 5.
-    expect([...page.querySelectorAll(".ho-grid small")].map(label => label.textContent)).toEqual(["5", "10"]);
-    expect(parseFloat(cols[13]!.querySelector<HTMLElement>(".ho-bar")!.style.height)).toBe(60);
-    expect([...page.querySelectorAll(".ho-trend .ho-legend > span")].map(key => key.textContent)).toEqual(["工作", "訊息", "例行"]);
-    const labels = [...page.querySelectorAll(".ho-xaxis > span")];
-    expect(labels[13]!.textContent).toBe("今天");
-    // Every third day back from today is named: today and four more of the fourteen.
-    expect(labels.filter(label => label.classList.contains("is-minor"))).toHaveLength(9);
-    const tip = parse(dayTipHTML(data.days[13]!));
-    expect([...tip.querySelectorAll(".ho-tip-row")].map(row => row.textContent)).toEqual(["工作2", "訊息1", "例行3", "沒完成2"]);
-    const table = page.querySelector(".ho-sr > table")!;
-    expect(table.querySelector("caption")!.textContent).toBe("近兩週完成的事");
-    expect(table.querySelectorAll("tbody tr")).toHaveLength(14);
-    expect([...table.querySelectorAll("tbody tr:last-child td")].map(cell => cell.textContent)).toEqual(["2", "1", "3", "2"]);
-  });
-
-  test("a day's bar shows its figures under the pointer, inside the window", async () => {
-    queue.splice(0, queue.length, { ...overview(5), activity: activity() });
-    const { page } = await mount();
-    const col = page.el.querySelectorAll<HTMLElement>(".ho-col")[13]!;
-    col.dispatchEvent(new PointerEvent("pointerover", { bubbles: true }));
-    const tip = page.el.querySelector<HTMLElement>(".ho-tip")!;
-    expect(tip.hidden).toBe(false);
-    expect(tip.querySelectorAll(".ho-tip-row")).toHaveLength(4);
-    page.el.dispatchEvent(new PointerEvent("pointerleave"));
-    expect(tip.hidden).toBe(true);
-  });
-});
-
-describe("today's schedule", () => {
-  test("today's schedule is a band of the day's hours over a table of time, title and kind, every row and nothing for more, each opening its event", async () => {
-    const sample = overview(5);
-    const at = (h: number, m = 0) => new Date(2026, 9, 27, h, m).getTime();
-    sample.calendar_items = [
-      item("own:4", "own", "Dentist", at(14), { member_id: -1, name: "", added_by: null, end_ms: at(15) }),
-      item("routine:1:1", "routine", "Morning digest", at(9), { routine_id: 1 }),
-      item("rhythm:2:2026-10-27", "routine", "Inbox sweep", at(0), { all_day: true, rhythm: true, routine_id: 2 }),
-      item("event:x", "event", "Design review", at(16)),
-      item("event:y", "event", "Tomorrow", new Date(2026, 9, 28, 9).getTime()),
-    ];
-    sample.calendar_counts = { "2026-10-27": 6 };
-    queue.splice(0, queue.length, sample);
-    const { page, app } = await mount();
-    const rows = [...page.el.querySelectorAll<HTMLElement>(".ho-schedule .ho-event")];
-    expect(rows.map(row => row.querySelector("b")!.textContent)).toEqual(["Inbox sweep", "Morning digest", "Dentist", "Design review"]);
-    expect(rows.map(row => row.querySelector("time")!.textContent)).toEqual(["", "09:00", "14:00", "16:00"]);
-    expect(rows.map(row => row.querySelector(".ho-kind")!.textContent)).toEqual(["例行・Ari", "例行・Ari", "自己的", "行事曆"]);
-    expect([...page.el.querySelectorAll(".ho-thead span")].map(cell => cell.textContent)).toEqual(["時間", "事項", "類型"]);
-    // A rhythm shows no time (R-CAL-03) and no face; a run that is over is dimmed.
-    expect(rows[0]!.classList.contains("is-rhythm") && !rows[0]!.querySelector(".av")).toBe(true);
-    expect(rows[1]!.classList.contains("is-past")).toBe(true);
-    expect(rows[2]!.classList.contains("is-own")).toBe(true);
-    // No 「還有…」 to press: the heading's calendar icon is the way to the whole calendar.
-    expect(page.el.querySelector(".ho-schedule .ho-more, .ho-count")).toBeNull();
-    rows[2]!.click();
-    expect(app.go).toHaveBeenLastCalledWith("automations", "calendar:2026-10-27:own%3A4");
-    page.el.querySelector<HTMLButtonElement>('.ho-schedule header [data-home-go="calendar"]')!.click();
-    expect(app.go).toHaveBeenLastCalledWith("automations");
-  });
-
-  test("the band marks each timed entry where it falls, a routine run as a tick, and where the day is now", async () => {
-    const { homeHTML } = await load();
-    const sample = { ...overview(5), activity: activity() };
-    const at = (h: number) => new Date(2026, 9, 27, h).getTime();
+    const sample = { ...overview(5), activity: idle() };
+    expect(sections(parse(homeHTML(sample)))).toEqual(["ho-none"]);
     sample.today = [
-      item("own:4", "own", "Dentist", at(12), { end_ms: at(18) }),
-      ...[6, 9, 12].map(h => item(`routine:5:${at(h)}`, "routine", "Inbox sweep", at(h), { routine_id: 5 })),
-      item(`routine:5:${at(15)}`, "routine", "Inbox sweep", at(15), { routine_id: 5, run_status: "error" }),
-      item("event:all", "event", "Holiday", at(0), { all_day: true }),
-      item("question:1", "question", "Which source?", at(8)),
+      item("own:1", "own", "Dentist", at(14), { end_ms: at(15) }),
+      item("question:7", "question", "Which source?", NOW - 60_000, { turn_id: 7 }),
+      board("今天：[Filia] 預留 bucket", 2), board("逾期：[Filia] remote 改指向", 3),
+      item(`routine:5:${at(8)}`, "routine", "Inbox sweep", at(8), { routine_id: 5 }),
     ];
-    const band = parse(homeHTML(sample)).querySelector('.ho-schedule .ho-band[aria-hidden="true"]')!;
-    const marks = [...band.querySelectorAll<HTMLElement>(".ho-mark")];
-    expect(marks.map(mark => [mark.className, parseFloat(mark.style.left)])).toEqual([
-      ["ho-mark is-own", 50], ["ho-mark is-routine", 25], ["ho-mark is-routine", 37.5], ["ho-mark is-routine", 50], ["ho-mark is-routine is-failed", 62.5]]);
-    expect(marks[0]!.getAttribute("style")).toContain("--w:25.00%");
-    expect(marks[0]!.dataset.tip).toBe("12:00 Dentist");
-    expect(parseFloat(band.querySelector<HTMLElement>(".ho-now")!.style.left)).toBe(41.67);
-    expect([...band.querySelectorAll(".ho-band-hours span")].map(hour => hour.textContent)).toEqual(["00", "06", "12", "18", "24"]);
+    const page = parse(homeHTML(sample));
+    expect(sections(page)).toEqual(["ho-next", "ho-waiting", "ho-todo", "ho-overdue", "ho-routines"]);
+    // No figures, no chart, no band, no table, no tooltip.
+    for (const gone of [".ho-stats", ".ho-stat", ".ho-trend", ".ho-band", ".ho-thead", ".ho-tip", ".ho-chart", ".ho-panels"]) expect(page.querySelector(gone), gone).toBeNull();
+    expect(page.textContent).not.toMatch(/近兩週|本週完成|今天：|逾期：/);
+    // Each part is named in one or two words.
+    expect([...page.querySelectorAll(".ho-sec h2")].map(h => h.textContent)).toEqual(["接下來", "等你決定", "今天要做的", "逾期"]);
+    // Taking a part away leaves no heading and no empty lane.
+    sample.today = [board("今天：[Filia] 預留 bucket", 2)];
+    const only = parse(homeHTML(sample));
+    expect(sections(only)).toEqual(["ho-todo"]);
+    expect(only.querySelectorAll(".ho-lane")).toHaveLength(1);
+  });
+
+  test("now and next show the timed things only, with how long until each, and the one on now says so", async () => {
+    const { homeHTML } = await load();
+    const sample = { ...overview(5), activity: activity() };
+    sample.today = [
+      item("own:1", "own", "Standup", at(8), { end_ms: at(8, 30) }),
+      item("own:2", "own", "Review", at(9, 30), { end_ms: at(10, 30) }),
+      item("event:x", "event", "Supplier", at(10, 35), { end_ms: at(11, 30) }),
+      item("own:3", "own", "Dentist", at(14), { end_ms: at(15) }),
+      item("own:4", "own", "Weekly", at(16)),
+      board("今天：[Filia] 預留 bucket", 9),
+    ];
+    const page = parse(homeHTML(sample));
+    const rows = [...page.querySelectorAll<HTMLElement>(".ho-next .ho-event")];
+    expect(rows.map(row => [row.querySelector("time")!.textContent, row.querySelector("b")!.textContent, row.querySelector(".ho-when")!.textContent])).toEqual([
+      ["09:30", "Review", "進行中"], ["10:35", "Supplier", "35 分鐘後"], ["14:00", "Dentist", "4 小時後"]]);
+    expect(rows[0]!.classList.contains("is-now")).toBe(true);
+    expect(rows.every(row => row.tagName === "BUTTON" && row.dataset.homeEvent && row.dataset.homeDate === "2026-10-27")).toBe(true);
+  });
+
+  test("what waits for his decision opens its conversation with the member's face, and the rest are one row", async () => {
+    const sample = { ...overview(5), activity: activity() };
+    sample.today = Array.from({ length: 7 }, (_, i) => item(`question:${i}`, "question", `Question ${i}`, NOW - i * 60_000, { turn_id: i, member_id: i % 2 }));
+    queue.splice(0, queue.length, sample);
+    const { page } = await mount();
+    const { openMemberThread } = await import("../team-navigation");
+    const rows = [...page.el.querySelectorAll<HTMLElement>(".ho-waiting .ho-event")];
+    expect(rows.map(row => row.querySelector("b")!.textContent)).toEqual(["Question 0", "Question 1", "Question 2", "Question 3", "Question 4", "還有 2 件"]);
+    expect(page.el.querySelector(".ho-waiting .ho-count")!.textContent).toBe("7");
+    expect(rows[0]!.querySelector(".ho-face, .av, svg.slime")).not.toBeNull();
+    rows[1]!.click();
+    expect(openMemberThread).toHaveBeenLastCalledWith(expect.anything(), 1, 1);
+    rows[5]!.click();
+    expect(openMemberThread).toHaveBeenLastCalledWith(expect.anything(), 1, 5);
+  });
+
+  test("today's tasks are at most five with the prefix stripped and the project a quiet label, and the rest open today on the Calendar", async () => {
+    const sample = { ...overview(5), activity: activity() };
+    sample.today = [board("[Notion] 今日重點", 1), ...Array.from({ length: 8 }, (_, i) => board(`今天：[${i % 2 ? "Raphael" : "Filia"}] 事 ${i}`, 10 + i))];
+    queue.splice(0, queue.length, sample);
+    const { page, app } = await mount();
+    const rows = [...page.el.querySelectorAll<HTMLElement>(".ho-todo .ho-event")];
+    expect(rows.map(row => row.querySelector("b")!.textContent)).toEqual(["今日重點", "事 0", "事 1", "事 2", "事 3", "還有 4 件"]);
+    expect(rows.map(row => row.querySelector(".ho-rail")!.textContent)).toEqual(["Notion", "Filia", "Raphael", "Filia", "Raphael", ""]);
+    expect(page.el.querySelector(".ho-todo .ho-count")!.textContent).toBe("9");
+    rows[1]!.click();
+    expect(app.go).toHaveBeenLastCalledWith("automations", "calendar:2026-10-27:own%3A10");
+    rows[5]!.click();
+    expect(app.go).toHaveBeenLastCalledWith("automations", "2026-10-27");
+  });
+
+  test("the overdue are one block of one size: the count, the projects, three rows and a way to all, whether there are 12 or 40", async () => {
+    const { homeHTML } = await load();
+    const html = (count: number): HTMLElement => parse(homeHTML({ ...overview(5), activity: activity(), today:
+      Array.from({ length: count }, (_, i) => board(`逾期：[${["Filia", "Raphael", "Notion", "Docs", "Ops"][i % 5]}] 舊事 ${i}`, i + 1)) }));
+    for (const count of [12, 40]) {
+      const page = html(count);
+      expect(page.querySelectorAll(".ho-overdue .ho-event")).toHaveLength(4);
+      expect([...page.querySelectorAll(".ho-overdue .ho-event b")].map(b => b.textContent).slice(0, 3)).toEqual(["舊事 0", "舊事 1", "舊事 2"]);
+      expect(page.querySelector(".ho-overdue .ho-count")!.textContent).toBe(String(count));
+      expect(page.querySelector(".ho-overdue .ho-groups")!.textContent).toMatch(/^(Filia|Raphael|Notion|Docs|Ops) \d+ · .+ · .+ · 其他 \d+$/);
+      const more = page.querySelector<HTMLElement>(".ho-overdue .is-more")!;
+      expect([more.textContent, more.dataset.homeGo, more.dataset.homeDate]).toEqual(["看全部", "calendar", "2026-10-27"]);
+    }
+    // Three or fewer are all shown, with nothing more to see.
+    expect(html(3).querySelectorAll(".ho-overdue .ho-event")).toHaveLength(3);
+  });
+
+  test("the routines are one line: done of due, the failed one named, the next to run", async () => {
+    const sample = { ...overview(5), activity: { ...activity(), today: { routines_due: 4, routines_done: 1, routines_failed: 1, events: 0, questions: 0 } } };
+    sample.today = [
+      item("routine:1:1", "routine", "Inbox sweep", at(8), { routine_id: 1 }),
+      item("routine:2:1", "routine", "Morning digest", at(9), { routine_id: 2, run_status: "error" }),
+      item("routine:3:1", "routine", "Evening notes", at(18), { routine_id: 3 }),
+    ];
+    queue.splice(0, queue.length, sample);
+    const { page } = await mount();
+    const line = page.el.querySelector<HTMLElement>(".ho-routines .ho-event")!;
+    expect(line.querySelector("b")!.textContent).toBe("例行工作");
+    expect(line.querySelector("em")!.textContent).toBe("1/4");
+    expect([...line.querySelectorAll(".ho-note")].map(note => note.textContent)).toEqual(["「Morning digest」沒完成", "下一個 18:00 Evening notes"]);
+    expect(line.querySelector(".ho-note.is-bad")).not.toBeNull();
+    expect(line.querySelector(".ho-face, .av, svg.slime")).not.toBeNull();
+    expect(page.el.querySelectorAll(".ho-routines .ho-event")).toHaveLength(1);
+  });
+
+  test("every row is a real button that goes somewhere", async () => {
+    const sample = { ...overview(5), activity: activity() };
+    sample.today = [
+      item("own:1", "own", "Dentist", at(14), { end_ms: at(15) }), item("question:7", "question", "Which source?", NOW, { turn_id: 7 }),
+      board("今天：x", 2), board("逾期：y", 3), item("routine:1:1", "routine", "Inbox", at(18), { routine_id: 1 }),
+    ];
+    queue.splice(0, queue.length, sample);
+    const { page } = await mount();
+    const rows = [...page.el.querySelectorAll<HTMLElement>(".ho-sec .ho-event")];
+    expect(rows).toHaveLength(5);
+    for (const row of rows) {
+      expect(row.tagName).toBe("BUTTON");
+      expect(row.dataset.homeEvent || row.dataset.homeItem || row.dataset.homeGo, row.textContent!).toBeTruthy();
+    }
+  });
+
+  test("the date has the calendar's icon beside it, the way to the whole Calendar", async () => {
+    const { page, app } = await mount();
+    page.el.querySelector<HTMLButtonElement>('.ho-date [data-home-go="calendar"]')!.click();
+    expect(app.go).toHaveBeenLastCalledWith("automations");
   });
 
   test("an empty day stays calm and offers to make something today", async () => {
     const { page, app } = await mount();
-    expect(page.el.querySelector(".ho-schedule .ho-empty")!.textContent).toBe("今天沒有行程");
+    expect(page.el.querySelector(".ho-none .ho-empty")!.textContent).toBe("今天沒有行程");
     expect(page.el.querySelector(".cal-notice")).toBeNull();
     page.el.querySelector<HTMLButtonElement>(".ho-create")!.click();
     expect(app.go).toHaveBeenCalledWith("automations", "calendar-new:2026-10-27");
-  });
-
-  test("today is every item of the day in time order, a routine due many times is one row with its count", async () => {
-    const { todaysSchedule, homeHTML } = await load();
-    const sample = { ...overview(5), activity: activity() };
-    const at = (h: number) => new Date(2026, 9, 27, h).getTime();
-    sample.today = [
-      item("question:1", "question", "Which source?", at(8)),
-      ...[8, 10, 12, 14].map(h => item(`routine:5:${at(h)}`, "routine", "Inbox sweep", at(h), { routine_id: 5 })),
-      item(`routine:5:${at(11)}`, "routine", "Inbox sweep", at(11), { routine_id: 5, run_status: "error" }),
-      item("routine:6:1", "routine", "Morning digest", at(9), { routine_id: 6 }),
-      item("event:x", "event", "Design review", at(16)),
-    ];
-    const rows = todaysSchedule(sample);
-    expect(rows.map(({ item: row, times }) => [row.title, times, row.rhythm === true])).toEqual([
-      ["Inbox sweep", 4, true], ["Morning digest", 1, false], ["Inbox sweep", 1, false], ["Design review", 1, false]]);
-    const page = parse(homeHTML(sample));
-    expect(page.querySelector(".ho-event.is-rhythm .ho-times")!.textContent).toBe("4 次");
-    expect(page.querySelector('.ho-schedule [data-home-event="question:1"]')).toBeNull();
   });
 
   test("Home tells not connected from a failed read from nothing, and a closed offer stays closed", async () => {
     const off = overview(5); off.calendar_google = "not_connected";
     queue.splice(0, queue.length, off);
     const { page, app } = await mount();
-    expect(page.el.querySelector(".ho-schedule .cal-notice")!.textContent).toMatch(/未連接|isn't connected/);
-    page.el.querySelector<HTMLButtonElement>('.ho-schedule [data-home-go="connections"]')!.click();
+    expect(page.el.querySelector(".ho-foot .cal-notice")!.textContent).toMatch(/未連接|isn't connected/);
+    page.el.querySelector<HTMLButtonElement>('.ho-foot [data-home-go="connections"]')!.click();
     expect(app.go).toHaveBeenCalledWith("settings", "connections");
     page.el.querySelector<HTMLButtonElement>("[data-home-dismiss]")!.click();
     expect(page.el.querySelector(".cal-notice")).toBeNull();
@@ -367,7 +364,7 @@ describe("Raphael's emblem", () => {
     await new Promise(resolve => setTimeout(resolve, 400));
     await flush();
     expect(page.el.querySelector("canvas.ho-emb")).toBe(canvas);
-    expect(page.el.querySelector('[data-stat="questions"] b')!.textContent).toBe("1");
+    expect(page.el.querySelector(".ho-waiting .ho-count")!.textContent).toBe("1");
     expect(emblems).toHaveLength(1);
   });
 });
@@ -385,8 +382,8 @@ test("translates the retained Home behind Settings immediately in every locale",
       setLocale(locale);
       expect(page.el.querySelector(".ho-greet")!.textContent).toBe(t("home.greetMorning"));
       expect(page.el.querySelector(".ho-line")!.textContent).toBe(t("home.notice") + t("home.lineQuiet"));
-      expect([...page.el.querySelectorAll(".ho-sec h2")].map(h => h.textContent)).toEqual([t("home.schedule"), t("home.trend")]);
-      expect(page.el.querySelector('[data-stat="week"] small')!.textContent).toBe(t("home.statWeek"));
+      expect(page.el.querySelector(".ho-routines b")!.textContent).toBe(t("home.statRoutines"));
+      expect(page.el.querySelector(".ho-date .btn")!.getAttribute("aria-label")).toBe(t("overview.calendar"));
     }
     expect(vi.mocked(homeOverview).mock.calls.length).toBe(calls);
     expect(page.el.querySelector("canvas.ho-emb")).toBe(canvas);

@@ -478,7 +478,7 @@ Appearance uses the shared theme/language dropdown rows; dictionary entries reta
 Representative main-page acceptance (all consumers of the shared layout):
 
 ```powershell
-npm run look -- home home-empty home-trend-tip home-many home-motion chat details details-routines sidebar sidebar-folders dictation-overview dictation-history dictation-heat-press dictation-dictionary dictation-keyboard profile appearance models dictation agent about plugins-installed plugins-store usage automations-calendar automations-day --theme both --width 1120,720,1920x1080
+npm run look -- home home-day-real home-empty home-many home-motion chat details details-routines sidebar sidebar-folders dictation-overview dictation-history dictation-heat-press dictation-dictionary dictation-keyboard profile appearance models dictation agent about plugins-installed plugins-store usage automations-calendar automations-day --theme both --width 1120,720,1920x1080
 ```
 
 The dictionary scene uses twelve words to expose column count and wrapping; the
