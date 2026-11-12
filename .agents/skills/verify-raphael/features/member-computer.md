@@ -27,8 +27,7 @@ town files.
 The keys. `xfconf-query -c xfce4-keyboard-shortcuts -l -v` on layer 5 listed every XFCE
 default under `/xfwm4/custom` and `/commands/custom`, with four workspaces. The session
 copies its defaults into those branches when it starts, so the helper waits (20 s at
-most) for both `override` properties before it takes keys away, and the ready mark now
-follows the session by a few seconds (measured 4.5 s after start for one screen, 8.1 s
+most) for both `override` properties before it takes keys away. With multiple screens it attempts all removals, then rereads bindings and workspace_count; remaining forbidden bindings, a count other than 1 or a required-query failure invokes the existing retry before writing a new ready mark. One screen keeps best-effort behavior. The original layer-6 measurements found that its ready mark follows the session by a few seconds (measured 4.5 s after start for one screen, 8.1 s
 for six; 3.4 s and 9.6 s on layer 5). The acceptance opens a terminal, presses ctrl+F2,
 ctrl+F4 and ctrl+alt+d through the screen's own view and requires the window still
 mapped on workspace 0.
@@ -69,8 +68,7 @@ seat, disconnects its driver and closes its viewer tokens. The old route returns
 computer_changed. All busy seats return the existing computer_busy notice with
 "every screen of the computer is in use". close_displaced_seat_windows now closes all displaced screen windows except the
 panel with best-effort wmctrl calls after disconnecting the old session. Deletion
-holds seat_lock until cleanup finishes before releasing the seat; every close
-rechecks the holder. Viewer opens and request/renew/control/peer entry points
+holds seat_lock until cleanup finishes before releasing the seat; every close rechecks the holder. Displacement also holds seat_lock: revoke the old holder first, clean its driver/viewers/windows, then publish the new holder. The cached-route reproducer verifies that a returning member cannot launch during pending cleanup. Viewer opens and request/renew/control/peer entry points
 recheck member/Target/holder after awaits and revoke stale sessions.
 
 Physical lifecycle, locks, preparation, caches, capacity and idle time use the
@@ -100,8 +98,7 @@ placements back. Driver tree/element_token prose stays intact; page replies appe
 one JSON line. Pointer prose and move summary use seat coordinates; click canvas
 trailers are removed. Desktop pictures still use authenticated clipped screen-N
 RFB, 1280x900 RGB PNG. AX/screenshot nodes remain window-local. launch_app moves
-only new windows attributed by reply pid/launcher_pid or a pid without prior windows,
-and filters/projects windows[] after movement.
+new windows matching reply pid/launcher_pid; only when no such window appeared and exactly one other new window appeared does it use that helper fallback. Multiple unmatched windows stay put. A lone concurrent peer window or same-process peer window remains a possible attribution error. windows[] is filtered/projected after movement.
 
 The browser belongs to the computer. Layer 7 adds the existing-profile grant and
 installs raphael-seat-browser. The launcher uses now-minus-before plus a unique
@@ -111,12 +108,11 @@ places/maximizes the window and waits up to five seconds for settled geometry
 (the measured panel height is 49 pixels). Each seat attaches with existing_profile,
 binds, then browser_open navigates to the requested URL. Shared browser_prepare
 normalizes profile/strategy to existing_profile and preserves delivery_mode.
-Per-bot launch stays unchanged. Takeover checks the seat's non-command activity
+Per-bot launch stays unchanged. In both modes, successful snapshots and active-tab binds remember the exact tab per target until disconnect; fill and private-picture reads use target_id plus that tab, and unknown tabs fail closed. Offline tests cover both reply shapes, ambiguous/unseen targets, per-field typing and disconnect. run_steps accepts live expect observations and rejects empty/legacy-only predicates before any action. Takeover checks the seat's non-command activity
 and unit input lock; other seats' background page/read/command work continues.
 Foreground page input waits/busy during the hold and resumes after handback.
 
-Offline scope: tests/computer, tests/evaluate/test_computer_acceptance.py and
- tests/members/test_deleted_member_computer.py, with the repository Python,
+Offline scope: tests/computer plus every agent, member and background test file that imports or drives computer/, members/service.py or teaching.py, including fixture consumers, and tests/evaluate/test_computer_acceptance.py. Run each file separately with the repository Python; list every result and any file not run. C3 also checks tests/evaluate/test_teaching.py. Use
 worktree PYTHONPATH=core/src, RAPHAEL_TEST_MODELS=0, PYTHONUTF8=1,
 PYTHONDONTWRITEBYTECODE=1, -q -W error -p no:cacheprovider. New seat-wall tests are in
 test_seat_tools.py; RFB fake-server PNG round trips are in test_rfb_view.py. The

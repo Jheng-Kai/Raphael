@@ -157,8 +157,7 @@ and foreground browser input blocked while page navigation continues during a ho
 Dependent checks that did not run are skipped, success detail claims only observations,
 and any inner failure fails the outer shared block. --no-shared explicitly skips it.
 The real bridge argv retain the same IsolatedDocker owner guard. Offline doubles
-validate the reduced measured schema (strict top-level unknown-argument rejection),
-while the table guard covers every nested property. Offline protocol/PNG evidence
+validate the measured fixture with every validation keyword retained (strict top-level unknown-argument rejection), while the table guard covers every nested property. Browser fakes additionally reproduce the measured exact-tab requirement and http/https/about navigation restriction. Offline generator tests compare full-schema and fixture refusals for numeric bounds and element_token patterns; this is not real-driver acceptance. Offline protocol/PNG evidence
 does not establish image/native behavior. Final computer acceptance is run by the
 maintainer in an authorized Docker environment; it does not prove the native app
 panel or a remote SSH host.

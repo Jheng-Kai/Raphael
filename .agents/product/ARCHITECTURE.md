@@ -10,9 +10,7 @@ Target cache keys normalize the seat number. Container labels name the unit.
 
 LocalVm.seats uses ComputerSeats and migration 81. target() reads without assigning:
 unassigned members have screen 0 and an empty viewer_url. VmTools.prepare and a real
-DesktopViewer._open take a seat. Previews and status reads do not. A displaced idle
-member loses its driver connection and viewer sessions; the old route returns
-computer_changed. close_displaced_seat_windows(target) joins wmctrl -lG/-lx rows
+DesktopViewer._open take a seat. Previews and status reads do not. A displaced idle member is first selected without mutation by ComputerSeats.candidate. Under seat_lock, LocalVm revokes the old holder, disconnects its driver, closes its viewers and finishes best-effort window cleanup before ComputerSeats.take publishes the next holder. Cached routes that try to reacquire the screen wait for that transition and return computer_changed. A failed or cancelled transition restores the old holder before unlocking so an uncleaned screen cannot become a free seat. close_displaced_seat_windows(target) joins wmctrl -lG/-lx rows
 after disconnect, closing every screen window except its panel
 with best-effort wmctrl calls. Every busy seat yields seats_full, projected to the existing tool
 computer_busy notice or viewer unavailable error. Deletion holds seat_lock through driver/viewer/window cleanup, then releases every host's
@@ -58,7 +56,7 @@ Lists include only own windows and panel. Structured placements use seat coordin
 AX and screenshot nodes stay window-local. Driver tree/token prose is preserved,
 page JSON is appended once, pointer prose uses seat coordinates and click trailers
 naming canvas points are removed. Every page target and private/vault state read
-shares the same fresh ownership gate; moved bindings are dropped.
+shares the same fresh ownership gate; moved bindings are dropped. The list and dispatch are separate operations in one X server; application-driven geometry changes between them remain possible, so this is not atomic isolation.
 
 Shared get_desktop_state never asks the driver for canvas pixels. LocalVm's
 viewer_connection supplies core-only credentials to asyncio.to_thread(rfb_view.capture),
@@ -72,13 +70,11 @@ profile. A title-only data page carries a unique launch marker. The launcher sel
 now-minus-before windows and matches both marker and browser main pid, then moves,
 maximizes and waits for settled seat geometry. Each seat attaches its own window
 using existing_profile, binds and navigates in its own session. Per-bot computers
-retain driver-owned browser launch. launch_app moves only new foreign-screen windows
-attributed to reply pid/launcher_pid or a pid with no earlier window, under the unit
-lock; windows[] is filtered and projected after movement. Owner takeover checks its
+retain driver-owned browser launch. launch_app, under the unit lock, moves new foreign-screen windows matching reply pid/launcher_pid. Only when none match and exactly one other new window appeared is that window moved as a helper fallback; otherwise unmatched windows stay. A lone concurrent peer window can still be misattributed, and matching pids do not distinguish simultaneous same-process peer windows. windows[] is filtered and projected after movement. Owner takeover checks its
 own non-command activity and the unit native lock before and after a status await;
 other seats' background page/read/command activity is allowed.
 
-Clipboard, files, sign-ins, OS user and physical pointer remain common. Shared foreground/background vm_exec shells remove DISPLAY to avoid accidental windows on the pointer's screen; members use launch_app to open a window. This is not an adversarial shell isolation boundary. Vault filling resolves the current tab_id from either a tab snapshot or an active-tab window bind before every browser_type call; member-facing fill parameters are unchanged. Teaching
+Clipboard, files, sign-ins, OS user and physical pointer remain common. Shared foreground/background vm_exec shells remove DISPLAY to avoid accidental windows on the pointer's screen; members use launch_app to open a window. This is not an adversarial shell isolation boundary. VmTools.page_tabs records the exact tab_id from every successful target/tab snapshot or explicitly active-tab window bind, keyed by computer target in both modes. _driver_call feeds _observe_page, including internal reads and binds. Every private-picture probe and per-field vault read/type sends target_id and the remembered tab_id; absent knowledge refuses filling and preserves privacy. _disconnect drops those tabs with the native page bindings. Member-facing fill parameters are unchanged. run_steps checks nonempty expect for verify_state observations; predicates remains a driver reply field, not a legacy input alias. Teaching
 and dataset stay disabled in shared mode. The opt-in --computer acceptance now
 includes two real members through LocalVm, VmTools and CuaBridge after the per-count
 blocks; --no-shared skips it. Offline fakes prove contracts, while final image,
