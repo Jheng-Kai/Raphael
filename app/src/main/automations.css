@@ -21,7 +21,7 @@
 .au-rows { display: grid; grid-template-columns: minmax(0, 1fr); border-radius: var(--r-md); background: var(--surface-2); padding: var(--sp-1) var(--sp-3); }
 .au-days { display: flex; flex-wrap: wrap; gap: var(--sp-1); }
 .au-days .btn { border-radius: var(--r-pill); }
-.au-days .btn[aria-pressed="true"] { background: var(--selected); border-color: var(--accent-text); }
+.au-days .btn[aria-pressed="true"] { background: var(--float-hover); border-color: transparent; }
 .au-date-menu.menu { padding: var(--sp-3); width: 290px; max-width: calc(100vw - 24px); }
 .au-month-head { display: flex; gap: var(--sp-1); align-items: center; justify-content: space-between; font-size: var(--fs-xs); padding-bottom: var(--sp-2); }
 .au-month-head b { text-align: center; min-width: 0; white-space: nowrap; font-size: var(--fs-2xs); }

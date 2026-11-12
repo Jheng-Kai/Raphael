@@ -35,6 +35,21 @@ npm run look -- connect-apps connect-apps-scrolled connect-apps-category connect
 npm run look -- member-delete-ask context-menu-member composer-model-small composer-model-sources member-maker automations-detail-own automations-create-slot appearance-menu model-choices-answer profile connections-add-menu server-menu connections-delete --theme both --width 1120,720,1920x1080
 ```
 
+Marks and inner cards (2026-11-13):
+
+- Marks keep their owners' colours on the tile and in the chip (R-ICON-01): `connect-icons` shows a row for every mark of `SERVICE_ICONS` (fixture
+  variant `iconMarks`) and `icon-colours` compares the computed colour of each with its brand hex (Simple Icons) in the real browser;
+  `service-icons.test.ts` pins the table and the rule that wins on the tile.
+- Inside a floating surface a card is the surface with a hairline and a control the control fill (R-FLOAT-02): the check `float-cards` is
+  appended to every tab of Settings and to the dialogs, menus and popovers that hold cards, fields or rows (`FLOAT_CARD_SCENES` in
+  `scenes/index.mjs`); it fails on a near-identical grey without an edge or a darker hole. The model chooser is one tone with a hairline
+  between its columns and no light edge on the chosen row (`model-choices-answer`, `quick-model-menu`, `chooser-chatgpt-signed-out`).
+
+```powershell
+npm run look -- connect-icons --theme both --width 1120,720,1920x1080
+npm run look -- profile appearance models dictation tools safety about usage model-choices-answer model-choices-local quick-model-menu cli-account-menu member-maker slime-picker template-preview template-review-pages connections-command --theme both --width 1120,720,1920x1080
+```
+
 Scene changes of the same round: the scenes of the connected list start with `[data-conn="connected"]` (`plugins-installed`,
 `plugins-detail`, `connections-hover`, `connected-apps-only`, `connections-app-switch`, `connector-*`); the scenes of the apps start
 on the view (`plugins-store*`, `store-n8n`, `plugins-setup-*`); `plugins-store-wheel` and `missing-store-repair` are gone (nothing scrolls
