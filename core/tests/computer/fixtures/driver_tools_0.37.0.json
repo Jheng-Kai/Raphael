@@ -16,6 +16,7 @@
     "type": "object",
     "properties": {
       "max_image_dimension": {
+        "minimum": 0,
         "type": "integer"
       },
       "screenshot_out_file": {
@@ -53,15 +54,19 @@
         "type": "boolean"
       },
       "max_depth": {
+        "minimum": 1,
         "type": "integer"
       },
       "max_dimension": {
+        "minimum": 1,
         "type": "integer"
       },
       "max_elements": {
+        "minimum": 1,
         "type": "integer"
       },
       "max_image_dimension": {
+        "minimum": 0,
         "type": "integer"
       },
       "pid": {
@@ -80,6 +85,9 @@
         "type": "string"
       },
       "timeout_ms": {
+        "default": 1000,
+        "maximum": 120000,
+        "minimum": 100,
         "type": "integer"
       },
       "tree_format": {
@@ -130,12 +138,14 @@
         "type": "string"
       },
       "count": {
+        "minimum": 1,
         "type": "integer"
       },
       "cursor_id": {
         "type": "string"
       },
       "delivery_mode": {
+        "default": "background",
         "enum": [
           "background",
           "foreground"
@@ -143,6 +153,7 @@
         "type": "string"
       },
       "element_token": {
+        "pattern": "^s[0-9a-f]{8}:[0-9]+$",
         "type": "string"
       },
       "from_zoom": {
@@ -158,6 +169,7 @@
         "type": "integer"
       },
       "scope": {
+        "default": "window",
         "enum": [
           "window",
           "desktop"
@@ -185,9 +197,11 @@
             "type": "string"
           },
           "pid": {
+            "minimum": 0,
             "type": "integer"
           },
           "window_id": {
+            "minimum": 0,
             "type": "integer"
           }
         }
@@ -218,6 +232,7 @@
         "type": "string"
       },
       "delivery_mode": {
+        "default": "background",
         "enum": [
           "background",
           "foreground"
@@ -225,6 +240,7 @@
         "type": "string"
       },
       "element_token": {
+        "pattern": "^s[0-9a-f]{8}:[0-9]+$",
         "type": "string"
       },
       "from_zoom": {
@@ -262,6 +278,7 @@
         "type": "string"
       },
       "delivery_mode": {
+        "default": "background",
         "enum": [
           "background",
           "foreground"
@@ -269,6 +286,7 @@
         "type": "string"
       },
       "element_token": {
+        "pattern": "^s[0-9a-f]{8}:[0-9]+$",
         "type": "string"
       },
       "from_zoom": {
@@ -312,6 +330,7 @@
         "type": "string"
       },
       "delivery_mode": {
+        "default": "background",
         "enum": [
           "background",
           "foreground"
@@ -319,12 +338,14 @@
         "type": "string"
       },
       "element_token": {
+        "pattern": "^s[0-9a-f]{8}:[0-9]+$",
         "type": "string"
       },
       "pid": {
         "type": "integer"
       },
       "scope": {
+        "default": "window",
         "enum": [
           "window",
           "desktop"
@@ -352,9 +373,11 @@
             "type": "string"
           },
           "pid": {
+            "minimum": 0,
             "type": "integer"
           },
           "window_id": {
+            "minimum": 0,
             "type": "integer"
           }
         }
@@ -388,6 +411,7 @@
         "type": "string"
       },
       "delivery_mode": {
+        "default": "background",
         "enum": [
           "background",
           "foreground"
@@ -395,6 +419,7 @@
         "type": "string"
       },
       "element_token": {
+        "pattern": "^s[0-9a-f]{8}:[0-9]+$",
         "type": "string"
       },
       "key": {
@@ -410,6 +435,7 @@
         "type": "integer"
       },
       "scope": {
+        "default": "window",
         "enum": [
           "window",
           "desktop"
@@ -437,9 +463,11 @@
             "type": "string"
           },
           "pid": {
+            "minimum": 0,
             "type": "integer"
           },
           "window_id": {
+            "minimum": 0,
             "type": "integer"
           }
         }
@@ -463,6 +491,7 @@
     ],
     "properties": {
       "delivery_mode": {
+        "default": "background",
         "enum": [
           "background",
           "foreground"
@@ -470,9 +499,11 @@
         "type": "string"
       },
       "element_token": {
+        "pattern": "^s[0-9a-f]{8}:[0-9]+$",
         "type": "string"
       },
       "keys": {
+        "minItems": 2,
         "type": "array",
         "items": {
           "type": "string"
@@ -482,6 +513,7 @@
         "type": "integer"
       },
       "scope": {
+        "default": "window",
         "enum": [
           "window",
           "desktop"
@@ -509,9 +541,11 @@
             "type": "string"
           },
           "pid": {
+            "minimum": 0,
             "type": "integer"
           },
           "window_id": {
+            "minimum": 0,
             "type": "integer"
           }
         }
@@ -535,6 +569,8 @@
     ],
     "properties": {
       "amount": {
+        "maximum": 50,
+        "minimum": 1,
         "type": "integer"
       },
       "by": {
@@ -555,6 +591,7 @@
         "type": "string"
       },
       "delivery_mode": {
+        "default": "background",
         "enum": [
           "background",
           "foreground"
@@ -571,12 +608,14 @@
         "type": "string"
       },
       "element_token": {
+        "pattern": "^s[0-9a-f]{8}:[0-9]+$",
         "type": "string"
       },
       "pid": {
         "type": "integer"
       },
       "scope": {
+        "default": "window",
         "enum": [
           "window",
           "desktop"
@@ -604,9 +643,11 @@
             "type": "string"
           },
           "pid": {
+            "minimum": 0,
             "type": "integer"
           },
           "window_id": {
+            "minimum": 0,
             "type": "integer"
           }
         }
@@ -651,6 +692,7 @@
         "type": "string"
       },
       "delivery_mode": {
+        "default": "background",
         "enum": [
           "background",
           "foreground"
@@ -658,6 +700,8 @@
         "type": "string"
       },
       "duration_ms": {
+        "maximum": 10000,
+        "minimum": 0,
         "type": "integer"
       },
       "from_x": {
@@ -679,6 +723,7 @@
         "type": "integer"
       },
       "scope": {
+        "default": "window",
         "enum": [
           "window",
           "desktop"
@@ -689,6 +734,8 @@
         "type": "string"
       },
       "steps": {
+        "maximum": 200,
+        "minimum": 1,
         "type": "integer"
       },
       "target": {
@@ -709,9 +756,11 @@
             "type": "string"
           },
           "pid": {
+            "minimum": 0,
             "type": "integer"
           },
           "window_id": {
+            "minimum": 0,
             "type": "integer"
           }
         }
@@ -739,6 +788,7 @@
         "type": "string"
       },
       "scope": {
+        "default": "window",
         "enum": [
           "window",
           "desktop"
@@ -766,9 +816,11 @@
             "type": "string"
           },
           "pid": {
+            "minimum": 0,
             "type": "integer"
           },
           "window_id": {
+            "minimum": 0,
             "type": "integer"
           }
         }
@@ -861,6 +913,7 @@
     "type": "object",
     "properties": {
       "include_text": {
+        "default": false,
         "type": "boolean"
       },
       "session": {
@@ -896,6 +949,8 @@
     ],
     "properties": {
       "expect": {
+        "maxItems": 8,
+        "minItems": 1,
         "type": "array",
         "items": {
           "additionalProperties": false,
@@ -924,9 +979,11 @@
                   "type": "object",
                   "properties": {
                     "label_contains": {
+                      "minLength": 1,
                       "type": "string"
                     },
                     "role": {
+                      "minLength": 1,
                       "type": "string"
                     }
                   }
@@ -955,6 +1012,8 @@
                       "type": "number"
                     },
                     "tolerance_px": {
+                      "maximum": 100,
+                      "minimum": 0,
                       "type": "number"
                     },
                     "width": {
@@ -980,15 +1039,22 @@
         "type": "boolean"
       },
       "pid": {
+        "minimum": 1,
         "type": "integer"
       },
       "session": {
         "type": "string"
       },
       "stable_samples": {
+        "default": 2,
+        "maximum": 5,
+        "minimum": 1,
         "type": "integer"
       },
       "timeout_ms": {
+        "default": 5000,
+        "maximum": 10000,
+        "minimum": 0,
         "type": "integer"
       },
       "window_id": {
@@ -1004,6 +1070,7 @@
         "type": "string"
       },
       "include_screenshot": {
+        "default": false,
         "type": "boolean"
       },
       "pid": {
@@ -1044,6 +1111,7 @@
         "type": "boolean"
       },
       "delivery_mode": {
+        "default": "background",
         "enum": [
           "background",
           "foreground"
@@ -1127,6 +1195,7 @@
     ],
     "properties": {
       "delivery_mode": {
+        "default": "background",
         "enum": [
           "background",
           "foreground"
@@ -1247,6 +1316,7 @@
         "type": "string"
       },
       "delivery_mode": {
+        "default": "background",
         "enum": [
           "background",
           "foreground"
@@ -1263,6 +1333,7 @@
         "type": "string"
       },
       "input_route": {
+        "default": "trusted",
         "enum": [
           "trusted",
           "dom_event"
@@ -1313,6 +1384,7 @@
         "type": "string"
       },
       "delivery_mode": {
+        "default": "background",
         "enum": [
           "background",
           "foreground"
@@ -1347,6 +1419,8 @@
     ],
     "properties": {
       "files": {
+        "maxItems": 32,
+        "minItems": 1,
         "type": "array",
         "items": {
           "type": "string"

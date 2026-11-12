@@ -16,7 +16,7 @@ from raphael_core.computer.vm_tools import VmTools, vm_scope
 from raphael_core.protocol import RpcError
 from raphael_core.services.attachment_store import AttachmentStore
 from .test_vm import Bridge, CatalogBridge, EmptyHub, Runtime, container
-from .fixtures.driver_contract import validate_call
+from .fixtures.driver_contract import validate_call, runtime_refusal
 
 
 @pytest.fixture
@@ -224,6 +224,9 @@ async def test_native_driver_calls_serialize_but_page_calls_overlap(shared_vm, t
         async def request(self, method, params):
             nonlocal inside, peak
             validate_call(method, params)
+            refusal = runtime_refusal(method, params)
+            if refusal:
+                return refusal
             if params["name"] == "list_windows":
                 from .test_seat_tools import window
                 return {"structuredContent": {"windows": [window(1, 20), window(2, 1300)]}}
@@ -530,3 +533,67 @@ async def test_takeover_request_refuses_input_already_running_on_another_seat(sh
         result = await asyncio.wait_for(hub.call(key, {"reason": "sign_in"}, approver="auto"), .1)
     assert result.kind == "computer_busy" and not vm.held
     lock.release()
+
+
+async def test_returning_member_cached_route_cannot_launch_during_displacement_cleanup(shared_vm, tmp_path):
+    from raphael_core.computer.seats import ComputerSeats
+    vm, runtime = shared_vm
+    vm.seats = ComputerSeats(count=1)
+    hub = VmTools(EmptyHub(), vm, attachments=AttachmentStore(tmp_path), bridge=Bridge)
+    await hub.prepare(1)
+    first = vm.target(1)
+    runtime.raw = container(vm, first, runtime)
+    cached = next(tool for tool in hub.offered_for(1) if tool.name == "launch_app")
+    await vm.seat(2)
+    entered, resume = asyncio.Event(), asyncio.Event()
+    disconnect = vm.disconnect_driver
+    async def pause(key):
+        if key == vm.key_for("", 2):
+            entered.set()
+            await resume.wait()
+        await disconnect(key)
+    vm.disconnect_driver = pause
+    cleanup = AsyncMock()
+    vm.close_displaced_seat_windows = cleanup
+    returning = asyncio.create_task(vm.seat(1))
+    try:
+        await asyncio.wait_for(entered.wait(), 2)
+        assert vm.seat_lock.locked()
+        with vm_scope(("turn", 1, 1)):
+            pending = asyncio.create_task(hub.call(cached.key, {"name": "xfce4-terminal"}, approver="auto"))
+        await asyncio.sleep(.01)
+        assert not pending.done()
+        assert not cleanup.await_count and vm.target(1).screen == 0
+        resume.set()
+        assert (await asyncio.wait_for(returning, 2)) == first
+        result = await asyncio.wait_for(pending, 2)
+        assert not result.ok and result.kind == "computer_changed"
+        cleanup.assert_awaited_once()
+        assert vm.seats.holders("") == {1: 1}
+    finally:
+        resume.set()
+        await returning
+        await hub.aclose()
+
+
+@pytest.mark.parametrize("cancelled", [False, True])
+async def test_incomplete_displacement_restores_the_old_holder_before_unlocking(shared_vm, cancelled):
+    from raphael_core.computer.seats import ComputerSeats
+    vm, _ = shared_vm
+    vm.seats = ComputerSeats(count=1)
+    old = await vm.seat(2)
+    async def fail(key):
+        assert vm.seat_lock.locked() and not vm.seats.holders("")
+        if cancelled:
+            raise asyncio.CancelledError()
+        raise OSError("Driver close failed")
+    vm.disconnect_driver = fail
+    vm.close_displaced_seat_windows = AsyncMock()
+    with pytest.raises(asyncio.CancelledError if cancelled else OSError):
+        await vm.seat(1)
+    assert vm.seats.holders("") == {1: 2} and vm.target(2) == old
+    assert not vm.seat_lock.locked() and vm.target(1).screen == 0
+    vm.close_displaced_seat_windows.assert_not_awaited()
+    vm.disconnect_driver = AsyncMock()
+    assert (await vm.seat(1)).screen == 1
+    vm.close_displaced_seat_windows.assert_awaited_once_with(old)

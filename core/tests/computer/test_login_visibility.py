@@ -64,9 +64,9 @@ async def test_picture_suppression_survives_navigation_time_and_other_tabs(deskt
         filled = await hub.call(tools["fill_login"], {"reference": reference, "site": "https://example.com",
             "target_id": "tab", "username_ref": "u", "password_ref": "p"}, approver="auto")
         assert filled.ok
-        hidden = await hub.call(tools["get_browser_state"], {"target_id": "tab"}, approver="auto")
+        hidden = await hub.call(tools["get_browser_state"], {"target_id": "tab", "tab_id": "tab-1"}, approver="auto")
         assert not hidden.blocks
-        args, tool = {"target_id": "tab"}, tools["get_browser_state"]
+        args, tool = {"target_id": "tab", "tab_id": "tab-1"}, tools["get_browser_state"]
         if recovery == "navigation":
             tool = tools["browser_navigate"]
             args["url"] = "https://example.com/done"

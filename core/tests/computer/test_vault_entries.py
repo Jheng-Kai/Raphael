@@ -174,7 +174,7 @@ async def test_card_always_needs_an_exact_single_use_approval_and_never_submits(
         for name, arguments in (("browser_pointer", {}), ("browser_navigate", {"url": "https://shop.example/pay"}), ("vm_exec", {"command": "echo submit"}), ("run_steps", {"steps": [{"name": "browser_pointer", "arguments": {}}], "observe": {"name": "get_browser_state", "arguments": {}}})):
             blocked = await hub.call(tools[name], arguments, approver="user")
             assert not blocked.ok
-        observed = await hub.call(tools["get_browser_state"], {"target_id": "tab"}, approver="user")
+        observed = await hub.call(tools["get_browser_state"], {"target_id": "tab", "tab_id": "tab-1"}, approver="user")
         assert observed.ok
     assert [call["name"] for call in calls].count("browser_type") == 4
     assert all(call["arguments"]["tab_id"] == "tab-1" for call in calls if call["name"] == "browser_type")

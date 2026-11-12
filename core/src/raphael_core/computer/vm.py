@@ -583,15 +583,23 @@ class LocalVm:
             previous = {member: self.shared_target(target.remote, member, number)
                         for number, member in self.seats.holders(target.remote).items()}
             try:
-                number, displaced = self.seats.take(target.remote, member_id, busy=busy)
+                number, displaced = self.seats.candidate(target.remote, member_id, busy=busy)
             except SeatsFull:
                 raise VmError("seats_full") from None
             if displaced is not None:
                 old = previous[displaced]
-                await self.disconnect_driver(old.key)
-                await self.close_seat_viewers(old)
-                await self.close_displaced_seat_windows(old)
+                # Revoke the old route before yielding; publish the new holder only after cleanup.
+                self.seats.release(target.remote, displaced)
+                try:
+                    await self.disconnect_driver(old.key)
+                    await self.close_seat_viewers(old)
+                    await self.close_displaced_seat_windows(old)
+                except BaseException:
+                    # A cancelled/failed transition must not expose an uncleaned free screen.
+                    self.seats.take(target.remote, displaced)
+                    raise
                 self.targets.pop(old.key, None)
+            self.seats.take(target.remote, member_id, busy=busy)
             return self.target(member_id)
 
     async def available(self, target=None):

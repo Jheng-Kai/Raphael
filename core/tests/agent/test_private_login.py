@@ -13,6 +13,7 @@ from raphael_core.services.attachment_store import AttachmentStore
 
 from computer.test_vm import desktop, CatalogBridge, EmptyHub  # noqa: F401
 from computer.test_login_vault import Vault
+from computer.fixtures.driver_contract import bind_page, window_reply
 from .test_service import make_rig  # noqa: F401
 from .test_narration import chat, typed, use
 
@@ -27,8 +28,10 @@ async def test_full_permission_login_stays_private_and_an_explicit_deny_wins(des
             if method == "tools/list":
                 return {"tools": [{"name": name, "inputSchema": {"type": "object", "properties": {}}}
                                   for name in ("get_browser_state", "browser_type")]}
+            if params["name"] == "list_windows":
+                return window_reply(self.target)
             forwarded.append(params["name"])
-            return {"structuredContent": {"target_id": "tab", "url": "https://example.com/login", **private},
+            return {"structuredContent": {"target_id": "tab", "tab_id": "tab-1", "url": "https://example.com/login", **private},
                     "content": [{"type": "text", "text": json.dumps(private)}]}
     hub = VmTools(EmptyHub(), vm, attachments=AttachmentStore(tmp_path), conn=conn, bridge=Browser)
     hub.logins = LoginVault(Vault())
@@ -41,9 +44,12 @@ async def test_full_permission_login_stays_private_and_an_explicit_deny_wins(des
         async def matching(self, *_): return {rule.id} if deny else set()
     gate = ToolGate(hub, conn=conn, safety=SafetyGuard(rules, Judge()))
     rig = make_rig(plugins=hub, gate=gate, notify=lambda *event: events.append(event))
+    await hub.prepare()
+    await bind_page(hub, vm.target(0))
+    forwarded.clear()
     client.chats = [chat("", ("computer__fill_login", {"site": "https://example.com", "reference": reference,
                      "target_id": "tab", "username_ref": "u", "password_ref": "p"})),
-                    *([] if deny else [chat("", ("computer__get_browser_state", {"target_id": "tab"}))]),
+                    *([] if deny else [chat("", ("computer__get_browser_state", {"target_id": "tab", "tab_id": "tab-1"}))]),
                     chat('{"text":"Finished."}')]
     try:
         result = await typed(rig, "Fill my saved login")
@@ -66,8 +72,10 @@ async def test_contact_values_never_reach_model_history_notifications_or_logs(de
         async def request(self, method, params=None):
             if method == "tools/list":
                 return {"tools": [{"name": name, "inputSchema": {"type": "object"}} for name in ("get_browser_state", "browser_type")]}
+            if params["name"] == "list_windows":
+                return window_reply(self.target)
             if params["name"] == "browser_type": filled.append(params["arguments"]["text"])
-            return {"structuredContent": {"target_id": "tab", "url": "https://example.com/contact", **private},
+            return {"structuredContent": {"target_id": "tab", "tab_id": "tab-1", "url": "https://example.com/contact", **private},
                     "content": [{"type": "text", "text": json.dumps(private)}]}
     events = []
     hub = VmTools(EmptyHub(), vm, attachments=AttachmentStore(tmp_path), conn=conn, bridge=Browser)
@@ -76,10 +84,12 @@ async def test_contact_values_never_reach_model_history_notifications_or_logs(de
     SettingsStore(conn).set("action_mode", "bypass")
     gate = ToolGate(hub, conn=conn)
     rig = make_rig(plugins=hub, gate=gate, notify=lambda *event: events.append(event))
+    await hub.prepare()
+    await bind_page(hub, vm.target(0))
     client.chats = [chat("", ("find_tools", {"query": "vault_entries fill_contact"})),
         chat("", use("computer__vault_entries", {})), chat("", use("computer__fill_contact", {"site": "https://example.com", "reference": identifier,
         "label": "Company", "target_id": "tab", "fields": {key: key + "-ref" for key in private}})),
-        chat("", ("computer__get_browser_state", {"target_id": "tab"})), chat('{"text":"Finished."}')]
+        chat("", ("computer__get_browser_state", {"target_id": "tab", "tab_id": "tab-1"})), chat('{"text":"Finished."}')]
     try:
         result = await typed(rig, "Fill my work contact details")
         assert result["status"] != "confirm"

@@ -183,6 +183,7 @@ class VmTools:
         self.logins = None
         self.private_pages = {}
         self.page_windows = {}
+        self.page_tabs = {}
         self.payment_holds = set() if conn is None else {row[0] for row in conn.execute("SELECT target FROM computer_payment_holds")}
         self.checkpointed, self.checkpoint_locks = set(), {}
         self.refreshes = {}
@@ -534,8 +535,15 @@ class VmTools:
     def _observe_page(self, target, page):
         from urllib.parse import urlsplit
         identifier = page.get("target_id")
-        url = page.get("url") or next((tab.get("url") for tab in page.get("tabs", []) if tab.get("active") is True), None)
+        url = (page.get("page") or {}).get("url") or page.get("url") or next((tab.get("url") for tab in page.get("tabs", []) if tab.get("active") is True), None)
         key = (target.key, identifier)
+        if identifier:
+            active = next((tab for tab in page.get("tabs", []) if tab.get("active") is True), {})
+            tab_id = page.get("tab_id") or active.get("tab_id")
+            if tab_id:
+                self.page_tabs[key] = tab_id
+            elif "tabs" in page:
+                self.page_tabs.pop(key, None)
         protected = self.private_pages.get(key)
         if protected and url:
             try:
@@ -580,8 +588,11 @@ class VmTools:
         for key in keys:
             try:
                 client, session = await self._connection(target)
+                tab_id = self.page_tabs.get(key)
+                if not tab_id:
+                    continue
                 state = await self._driver_call(target, client, "get_browser_state", {
-                    "target_id": key[1], "session": session, "include_screenshot": False, "snapshot_format": "semantic_v2"})
+                    "target_id": key[1], "tab_id": tab_id, "session": session, "include_screenshot": False, "snapshot_format": "semantic_v2"})
                 page = state.get("structuredContent") or {}
                 if not state.get("isError"):
                     self._observe_page(target, page)
@@ -871,7 +882,7 @@ class VmTools:
             return PluginResult(False, "blocked")
         if not Draft202012Validator(RUN_STEPS["parameters"]).is_valid(arguments):
             return PluginResult(False, "bad_arguments")
-        if arguments['observation']['name'] == 'verify_state' and not arguments['observation']['arguments'].get('predicates'):
+        if arguments['observation']['name'] == 'verify_state' and not arguments['observation']['arguments'].get('expect'):
             return PluginResult(False, "bad_arguments", "verify_state needs a nonempty expectation before any batch action.")
         completed = 0
         # Subcalls retain the ordinary action lock, audit, lease and private-field redaction.
@@ -954,7 +965,7 @@ class VmTools:
     @staticmethod
     def _page_tab(page):
         tabs = page.get("tabs", [])
-        selected = next((tab for tab in tabs if tab.get("active") is True), tabs[0] if len(tabs) == 1 else {})
+        selected = next((tab for tab in tabs if tab.get("active") is True), {})
         tab_id = page.get("tab_id") or selected.get("tab_id")
         url = (page.get("page") or {}).get("url") or page.get("url") or selected.get("url")
         if not tab_id:
@@ -978,7 +989,11 @@ class VmTools:
             if "delivery_mode" in schema.get("properties", {}):
                 calls = [{**call, "delivery_mode": "foreground"} for call in calls]
             for call in calls:
-                state = await self._driver_call(target, client, "get_browser_state", {"target_id": args["target_id"], "session": session})
+                tab_id = self.page_tabs.get((target.key, args["target_id"]))
+                if not tab_id:
+                    raise ValueError()
+                state = await self._driver_call(target, client, "get_browser_state", {
+                    "target_id": args["target_id"], "tab_id": tab_id, "session": session})
                 page = state.get("structuredContent") or {}
                 call["tab_id"], url = self._page_tab(page)
                 if not Draft202012Validator(schema).is_valid(call):
@@ -1018,7 +1033,11 @@ class VmTools:
             if "delivery_mode" in schema.get("properties", {}):
                 calls = [{**call, "delivery_mode": "foreground"} for call in calls]
             for call in calls:
-                state = await self._driver_call(target, client, "get_browser_state", {"target_id": args["target_id"], "session": session})
+                tab_id = self.page_tabs.get((target.key, args["target_id"]))
+                if not tab_id:
+                    raise ValueError()
+                state = await self._driver_call(target, client, "get_browser_state", {
+                    "target_id": args["target_id"], "tab_id": tab_id, "session": session})
                 page = state.get("structuredContent") or {}
                 call["tab_id"], url = self._page_tab(page)
                 if not Draft202012Validator(schema).is_valid(call):
@@ -1051,11 +1070,15 @@ class VmTools:
 
     async def _driver_call(self, target, client, name, arguments):
         if not target.container:
-            return await client.request("tools/call", {"name": name, "arguments": arguments})
-        if shared_native_input(name, arguments):
+            reply = await client.request("tools/call", {"name": name, "arguments": arguments})
+        elif shared_native_input(name, arguments):
             async with self._native_lock(target):
-                return await self._seat_driver_call(target, client, name, arguments)
-        return await self._seat_driver_call(target, client, name, arguments)
+                reply = await self._seat_driver_call(target, client, name, arguments)
+        else:
+            reply = await self._seat_driver_call(target, client, name, arguments)
+        if not reply.get("isError"):
+            self._observe_page(target, reply.get("structuredContent") or {})
+        return reply
 
     @asynccontextmanager
     async def _native_lock(self, target):
@@ -1219,12 +1242,13 @@ class VmTools:
         if before is not None and not reply.get("isError"):
             after = await self._canvas_windows(client, session)
             existing = {row["window_id"] for row in before["windows"]}
-            previous_pids = {row["pid"] for row in before["windows"]}
             launched = reply.get("structuredContent") or {}
             launch_pids = {launched.get("pid"), launched.get("launcher_pid")} - {None, 0}
-            for row in after["windows"]:
-                if (row["window_id"] not in existing and (row["pid"] in launch_pids or row["pid"] not in previous_pids)
-                        and not seat_view.mine(row["window_id"], after, target.screen, target.screens)):
+            new = [row for row in after["windows"] if row["window_id"] not in existing]
+            owned = [row for row in new if row["pid"] in launch_pids]
+            candidates = owned or (new if len(new) == 1 else [])
+            for row in candidates:
+                if not seat_view.mine(row["window_id"], after, target.screen, target.screens):
                     await self.vm.move_window(target, row["window_id"])
             after = await self._canvas_windows(client, session)
         if reply.get("isError"):
@@ -1307,9 +1331,10 @@ class VmTools:
         return self.connections[target.key]
 
     async def _disconnect(self, key):
-        for binding in list(self.page_windows):
-            if binding[0] == key:
-                self.page_windows.pop(binding, None)
+        for remembered in (self.page_windows, self.page_tabs):
+            for binding in list(remembered):
+                if binding[0] == key:
+                    remembered.pop(binding, None)
         held = self.connections.pop(key, None)
         if held is not None:
             await held[0].__aexit__(None, None, None)

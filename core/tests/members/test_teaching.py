@@ -17,7 +17,7 @@ DOCUMENT = "---\nname: checked-report\ndescription: Produce a checked report\n--
 async def setup(rig):
     from raphael_core.computer.teaching import Teaching
     member = (await rig.call("members.create", {"name": "Ada"}))["member"]["id"]
-    target = SimpleNamespace(key="private", workspace=rig.local / "vm", remote="")
+    target = SimpleNamespace(key="private", workspace=rig.local / "vm", remote="", container="")
     session = SimpleNamespace(member_id=member, conversation_id=11, target=target, preview=False)
     vm = SimpleNamespace(target=lambda identifier: target, work=SimpleNamespace(pending=lambda target: None))
     viewer = SimpleNamespace(vm=vm, session=lambda params: ("viewer", session), owners={"private": "viewer"},
@@ -29,10 +29,10 @@ async def setup(rig):
 
 async def test_teaching_refuses_shared_preview_and_changed_member_computers(rig):
     teaching, member, session = await setup(rig)
-    session.target.key = "shared"
+    session.target.container = "shared"
     with pytest.raises(RpcError):
         await teaching.call({"action": "start", "session": "viewer"})
-    session.target.key = "private"
+    session.target.container = ""
     session.preview = True
     with pytest.raises(RpcError):
         await teaching.call({"action": "start", "session": "viewer"})

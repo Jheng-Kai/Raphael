@@ -149,8 +149,70 @@ async def test_removing_the_request_turn_keeps_restart_redaction_for_the_saved_l
     await bind_page(hub, target)
     tool = next(item for item in hub.offered() if item.name == "get_browser_state")
     with vm_scope(("turn", 0, 9), turn_id=9, private=True):
-        result = await hub.call(tool.key, {"target_id": "bound-own"}, approver="auto")
+        result = await hub.call(tool.key, {"target_id": "bound-own", "tab_id": "tab-1"}, approver="auto")
     assert result.ok and "[private]" in result.text
     for value in private.values():
         assert value not in repr(result) and json.dumps(value)[1:-1] not in repr(result)
+    await hub.aclose()
+
+
+@pytest.mark.parametrize("shared", [False, True])
+@pytest.mark.parametrize("shape", ["snapshot", "active", "ambiguous", "unseen", "lost-active"])
+async def test_fill_and_private_picture_use_only_the_tab_observed_for_this_connection(desktop, tmp_path, shared, shape):
+    from raphael_core.computer.vm_tools import VmTools
+    from raphael_core.services.attachment_store import AttachmentStore
+    vm, _, _ = desktop
+    vm.settings.set("computer_vm_mode", "shared" if shared else "per-bot")
+    calls = []
+    class Browser(CatalogBridge):
+        url = "https://example.com/login"
+        async def request(self, method, params=None):
+            if method == "tools/list":
+                return catalog(("get_browser_state", "browser_type"))
+            if params["name"] == "list_windows":
+                return window_reply(self.target)
+            if params["name"] in ("get_browser_state", "browser_type"):
+                calls.append(params)
+            if params["name"] == "get_browser_state":
+                page = {"target_id": "own", "page": {"url": self.url}}
+                if "target_id" in params["arguments"]:
+                    assert params["arguments"]["tab_id"] == "exact-tab"
+                    page.update(nodes=[], truncated=False, has_more=False)
+                    if shape == "lost-active":
+                        page["tabs"] = [{"tab_id": "exact-tab"}]
+                    else:
+                        page["tab_id"] = "exact-tab"
+                elif shape == "snapshot":
+                    page["tab_id"] = "exact-tab"
+                else:
+                    page["tabs"] = [{"tab_id": "other"}, {"tab_id": "exact-tab", "active": shape in ("active", "lost-active")}]
+                return {"structuredContent": page}
+            return {"content": []}
+    hub = VmTools(EmptyHub(), vm, attachments=AttachmentStore(tmp_path), bridge=Browser)
+    hub.logins = LoginVault(Vault())
+    reference = hub.logins.reference(0, "https://example.com")
+    hub.logins.save(reference, json.dumps({"username": "owner", "password": "secret"}))
+    await hub.prepare()
+    target = vm.target(0)
+    if shape != "unseen":
+        await bind_page(hub, target)
+    args = dict(reference=reference, site="https://example.com", target_id="own", username_ref="u", password_ref="p")
+    result = await hub._fill_login(target, 0, args)
+    assert result.ok is (shape in ("snapshot", "active"))
+    typed = [call for call in calls if call["name"] == "browser_type"]
+    assert len(typed) == (2 if result.ok else 0)
+    assert all(call["arguments"]["tab_id"] == "exact-tab" for call in typed)
+    if not result.ok:
+        reads = [call for call in calls if call["arguments"].get("target_id")]
+        assert len(reads) == (1 if shape == "lost-active" else 0)
+    hub._protect_page(target, "own", "https://example.com", ("p",))
+    assert await hub._private_picture(target, {})
+    Browser.url = "https://other.example/done"
+    assert (await hub._private_picture(target, {})) is (not result.ok)
+    hub._protect_page(target, "own", "https://example.com", ("p",))
+    await hub._disconnect(target.key)
+    assert not any(key[0] == target.key for key in hub.page_tabs)
+    count = len(calls)
+    assert await hub._private_picture(target, {})
+    assert len(calls) == count
     await hub.aclose()

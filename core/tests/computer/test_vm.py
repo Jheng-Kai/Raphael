@@ -628,7 +628,7 @@ class EmptyHub:
     def record_unrun(self, *args, **kwargs): pass
 
 
-from .fixtures.driver_contract import checked_request, validate_call
+from .fixtures.driver_contract import checked_request, validate_call, runtime_refusal
 
 
 class Bridge:
@@ -643,6 +643,9 @@ class Bridge:
     async def __aexit__(self, *args): pass
     async def request(self, method, params=None):
         validate_call(method, params)
+        refusal = runtime_refusal(method, params)
+        if refusal:
+            return refusal
         self.calls.append((method, params))
         if method == "tools/list":
             return {"tools": [{"name": name, "description": name, "inputSchema": {"type": "object"}}

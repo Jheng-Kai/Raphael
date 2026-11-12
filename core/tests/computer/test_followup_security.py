@@ -60,7 +60,7 @@ async def test_private_page_requires_changed_origin_and_absent_fields(desktop, t
     with vm_scope(("turn", 0, 7), turn_id=7):
         assert (await hub.call(tools["fill_login"], {"reference": reference, "site": "https://example.com",
             "target_id": "tab", "username_ref": "u", "password_ref": "p"}, approver="auto")).ok
-        args = {"target_id": "tab"}
+        args = {"target_id": "tab", "tab_id": "tab-1"}
         if change == "same-origin": Browser.url = "https://example.com/done"
         elif change == "time": hub.vm.clock = lambda: 1000000
         elif change == "other-tab": args["target_id"] = "other"
@@ -91,7 +91,7 @@ async def test_a_target_change_during_a_read_does_not_probe_or_return_a_private_
         return data
     monkeypatch.setattr(Browser, "request", change)
     with vm_scope(("turn", 0, 7), turn_id=7):
-        result = await hub.call(tools["get_browser_state"], {"target_id": "tab"}, approver="auto")
+        result = await hub.call(tools["get_browser_state"], {"target_id": "tab", "tab_id": "tab-1"}, approver="auto")
         assert not result.ok and result.kind == "computer_changed" and not result.blocks
     await hub.aclose()
 
@@ -170,7 +170,7 @@ async def test_navigation_after_capture_cannot_release_the_captured_private_pict
                 Browser.url = "https://other.example/done"
             return data
         monkeypatch.setattr(Browser, "request", navigate_after_capture)
-        first = await hub.call(tools["get_browser_state"], {"target_id": "tab"}, approver="auto")
+        first = await hub.call(tools["get_browser_state"], {"target_id": "tab", "tab_id": "tab-1"}, approver="auto")
         assert not first.blocks
-        assert (await hub.call(tools["get_browser_state"], {"target_id": "tab"}, approver="auto")).blocks
+        assert (await hub.call(tools["get_browser_state"], {"target_id": "tab", "tab_id": "tab-1"}, approver="auto")).blocks
     await hub.aclose()

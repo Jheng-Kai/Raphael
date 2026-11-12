@@ -44,8 +44,8 @@ class ComputerSeats:
         row = self.rows.get((host, member_id))
         return row[0] if row is not None else None
 
-    def take(self, host, member_id, *, busy=lambda member_id: False):
-        ident = (host, member_id)
+    def candidate(self, host, member_id, *, busy=lambda member_id: False):
+        """Select without publishing; the caller can revoke and clean up before take."""
         number = self.seat(host, member_id)
         displaced = None
         if number is None:
@@ -57,6 +57,11 @@ class ComputerSeats:
                 if victim is None:
                     raise SeatsFull("Every seat on this host is busy")
                 number, displaced = victim
+        return number, displaced
+
+    def take(self, host, member_id, *, busy=lambda member_id: False):
+        number, displaced = self.candidate(host, member_id, busy=busy)
+        ident = (host, member_id)
         used = self.clock()
         rows = self.rows.copy()
         statements = []

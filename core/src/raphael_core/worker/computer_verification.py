@@ -44,7 +44,9 @@ class ComputerVerification:
         elif ok and kind not in ("computer_busy", "screen_changed"):
             if verb in CHANGES:
                 self.required = True
-            elif verb in READS and (verb != 'verify_state' or arguments.get('predicates')):
+            # The driver's verify_state takes its expectations as `expect`; `predicates` was the name in an older schema,
+            # and a check written to the real one was not counted, so a member that had verified was asked to again.
+            elif verb in READS and (verb != 'verify_state' or arguments.get('expect') or arguments.get('predicates')):
                 self.required = False
 
     def finishing(self):

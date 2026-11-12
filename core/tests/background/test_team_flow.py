@@ -1,6 +1,6 @@
 """A team does a job from start to end, on the production app with a scripted model and a fake Docker:
-the owner creates two members and the chief hands each a task, both work at the same time, one waits for the
-other to finish with the computer, both finish with evidence, and the chief gets the results and answers.
+the owner creates two members and the chief hands each a task, both work at the same time on their own screens,
+both finish with evidence, and the chief gets the results and answers.
 
 The real app runs: the chief's tools, the member service, the background service with its worker (in
 this event loop), the gates, the shared computer's tools. Only the model and the container engine are
@@ -21,6 +21,7 @@ from raphael_core.evaluate.guardian import Budget
 from raphael_core.evaluate.guardian_driver import RpcDriver
 
 from computer.test_vm import Runtime, container
+from computer.fixtures.driver_contract import checked_request, window_reply
 from .conftest import Links, until
 
 PNG = base64.b64encode(b"\x89PNG\r\n\x1a\nimage").decode()
@@ -46,7 +47,7 @@ class Desktop:
     alive = True
 
     def __init__(self, vm, target):
-        pass
+        self.target = target
 
     async def __aenter__(self):
         return self
@@ -54,10 +55,18 @@ class Desktop:
     async def __aexit__(self, *args):
         pass
 
+    @checked_request
     async def request(self, method, params=None):
         if method == "tools/list":
             return {"tools": [{"name": name, "description": name, "inputSchema": {"type": "object"}}
                               for name in ("get_desktop_state", "click")]}
+        if params["name"] == "list_windows":
+            Desktop.log.append(("start", "get_desktop_state"))
+            if not Desktop.release.is_set() and ("held", 1) not in Desktop.log:
+                Desktop.log.append(("held", 1))
+                await Desktop.release.wait()
+            Desktop.log.append(("end", "get_desktop_state"))
+            return window_reply(self.target)
         Desktop.log.append(("start", params["name"]))
         if params["name"] == "get_desktop_state" and not Desktop.release.is_set() and ("held", 1) not in Desktop.log:
             Desktop.log.append(("held", 1))
@@ -118,7 +127,7 @@ class Crew:
         return ChatTurn(content, calls, kwargs["model"], 0.001, 100, 10, 50, True)
 
 
-async def test_an_existing_team_works_at_once_and_waits_for_the_computer(tmp_path):
+async def test_an_existing_team_works_at_once_on_independent_screens(tmp_path, monkeypatch):
     (tmp_path / "data").mkdir()
     (tmp_path / "data" / "device.json").write_text('{"ui_language":"en"}', encoding="utf-8")
     crew = Crew()
@@ -133,6 +142,10 @@ async def test_an_existing_team_works_at_once_and_waits_for_the_computer(tmp_pat
                                                   interactive=True)
             crew.ids[name] = result["member"]["id"]
         Desktop.release, Desktop.log = asyncio.Event(), []
+        # Clip captures stay synthetic; the fake list above blocks the first seat observation.
+        def capture(port, password, screen):
+            return base64.b64decode(PNG)
+        monkeypatch.setattr("raphael_core.computer.rfb_view.capture", capture)
         # The shared computer, on a container engine that is a fake.
         hub = app.vm_tools
         runtime = Docker()
@@ -154,15 +167,15 @@ async def test_an_existing_team_works_at_once_and_waits_for_the_computer(tmp_pat
         app.background.attach_turn(parent, turn)
 
         lines = lambda: [params["text"] for method, params in driver.events if method == "worker.progress"]
-        await until(lambda: "Waiting for Builder to finish with the computer" in lines(), timeout=30)
-        # Both members are at work, and one is waiting for the other to finish with the screen.
+        await until(lambda: ("held", 1) in Desktop.log and ("end", "get_desktop_state") in Desktop.log, timeout=30)
+        # The second member reads its seat while the first member's read is pending.
         assert crew.peak == 2 and set(crew.ids) == {"Builder", "Tester"}
-        assert ("end", "get_desktop_state") not in Desktop.log
+        assert len({vm.target(member).screen for member in crew.ids.values()}) == 2
         Desktop.release.set()
 
         await until(lambda: app.background.task(parent).state in ("done", "failed"), timeout=60)
         assert app.background.task(parent).state == "done", app.background.task(parent).reason
-        assert lines().count("Waiting for Builder to finish with the computer") == 1
+        assert not any("Waiting for Builder to finish with the computer" in line for line in lines())
         children = {name: app.background.task(task.id) for name in crew.ids
                     for task in app.background._store.handoffs(turn) if task.member_id == crew.ids[name]}
         assert {task.state for task in children.values()} == {"done"}
@@ -170,9 +183,9 @@ async def test_an_existing_team_works_at_once_and_waits_for_the_computer(tmp_pat
         [page] = [e for e in app.background._store.evidence(children["Builder"].id) if e["kind"] == "artifact"]
         assert page["uri"] == "office.html"
         assert page["digest"] == hashlib.sha256((workspace / "office.html").read_bytes()).hexdigest()
-        # The Tester looked at the screen only once the Builder had finished with it.
+        # Both screen reads started before the first pending one was released.
         starts = [n for n, (kind, name) in enumerate(Desktop.log) if (kind, name) == ("start", "get_desktop_state")]
-        assert Desktop.log.index(("end", "get_desktop_state")) < starts[1]
+        assert starts[1] < Desktop.log.index(("end", "get_desktop_state"))
         # The chief was told how each ended, in three words, and what to rely on.
         told = crew.seen["chief"]
         assert told.count('"state": "completed"') == 2 and "claim" in told and "evidence" in told

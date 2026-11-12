@@ -105,6 +105,21 @@ def test_restored_completion_evidence_uses_only_the_result_header(read_ok):
     assert check.required is not read_ok
 
 
+@pytest.mark.parametrize("arguments,checked", [
+    ({"expect": [{"window": {"exists": True}}]}, True),   # the driver's own schema (0.37.0)
+    ({"predicates": [{"exists": True}]}, True),            # the name of the older schema, still counted
+    ({"expect": []}, False),
+    ({}, False),
+])
+def test_a_verify_state_written_to_the_drivers_schema_counts_as_the_check(arguments, checked):
+    from raphael_core.worker.computer_verification import ComputerVerification
+    check = ComputerVerification()
+    check.after("computer__click", {}, True)
+    assert check.required
+    check.after("computer__verify_state", {"pid": 1, "window_id": 1, **arguments}, True)
+    assert check.required is not checked
+
+
 IMAGE_NAME = "raphael/cua-local-vm:driver-0.37.0-v7"
 
 
@@ -307,3 +322,34 @@ def test_speed_summary_reports_median_worst_and_strict_budgets_without_running_a
     summary = computer_speed_summary([{'first_observation': value, 'browser_open': 2, 'run_steps': 3} for value in (1,2,3,4,8)])
     assert summary['first_observation'] == {'median_seconds':3, 'worst_seconds':8, 'budget_seconds':8, 'passed':False}
     assert summary['browser_open']['passed'] and summary['run_steps']['passed'] is None
+
+
+@pytest.mark.parametrize("expectation", ["live", "empty", "legacy"])
+async def test_batch_verification_observation_uses_live_expect_before_any_action(desktop, tmp_path, expectation):
+    from .fixtures.driver_contract import catalog
+    vm, target, _ = desktop
+    class Driver(CatalogBridge):
+        async def request(self, method, params=None):
+            if method == "tools/list":
+                return catalog()
+            if params["name"] == "verify_state":
+                return {"structuredContent": {"status": "satisfied"}, "content": [{"type": "text", "text": "Verified"}]}
+            return await super().request(method, params)
+    hub = VmTools(EmptyHub(), vm, attachments=AttachmentStore(tmp_path), bridge=Driver)
+    await hub.prepare()
+    await hub._discover(target)
+    ToolGate(hub)
+    original = hub.step_gate
+    seen = []
+    async def gate(child, arguments, **kwargs):
+        seen.append((child, arguments))
+        return await original(child, arguments, **kwargs)
+    hub.step_gate = gate
+    args = {"pid": 1, "window_id": 1}
+    args.update({"expect": [{"window": {"exists": True}}]} if expectation == "live" else
+                {"expect": []} if expectation == "empty" else {"predicates": [{"exists": True}]})
+    result = await hub.call(key(hub, "run_steps"), {"steps": [{"name": "click", "arguments": {"pid": 1, "window_id": 1}}],
+        "observation": {"name": "verify_state", "arguments": args}}, approver="auto")
+    assert result.ok is (expectation == "live")
+    assert len(seen) == (2 if expectation == "live" else 0)
+    await hub.aclose()

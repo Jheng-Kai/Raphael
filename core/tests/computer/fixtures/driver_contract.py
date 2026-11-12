@@ -22,10 +22,29 @@ def validate_call(method, params):
         pytest.fail(f"Real driver would refuse {params['name']}: {error.message}")
 
 
+def runtime_refusal(method, params):
+    """Measured semantic refusals that JSON Schema alone does not express."""
+    if method != "tools/call":
+        return None
+    name, args = params["name"], params["arguments"]
+    if name == "get_browser_state" and args.get("target_id") and not args.get("tab_id"):
+        message = "confirmation provider failed: the browser operation requires an exact tab_id"
+        return {"isError": True, "content": [{"type": "text", "text": message}],
+                "structuredContent": {"status": "refused", "refusal": {"code": "authorization_host_failed"}}}
+    if name == "browser_navigate":
+        from urllib.parse import urlsplit
+        if urlsplit(args["url"]).scheme.lower() not in ("http", "https", "about"):
+            return {"isError": True, "content": [{"type": "text", "text": "only accepts http/https/about URLs"}]}
+    return None
+
+
 def checked_request(request):
     @wraps(request)
     async def checked(self, method, params=None, *args, **kwargs):
         validate_call(method, params)
+        refusal = runtime_refusal(method, params)
+        if refusal:
+            return refusal
         return await request(self, method, params, *args, **kwargs)
     return checked
 

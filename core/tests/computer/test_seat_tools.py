@@ -19,7 +19,7 @@ from raphael_core.protocol import RpcError
 from raphael_core.services.attachment_store import AttachmentStore
 from .test_seat_wiring import shared_vm
 from .test_vm import EmptyHub, container
-from .fixtures.driver_contract import SCHEMAS, catalog, validate_call
+from .fixtures.driver_contract import SCHEMAS, catalog, validate_call, runtime_refusal
 
 
 def window(identifier, x, app="Xfce4-terminal", pid=None):
@@ -36,6 +36,9 @@ class SeatBridge:
 
     async def request(self, method, params):
         validate_call(method, params)
+        refusal = runtime_refusal(method, params)
+        if refusal:
+            return refusal
         assert method == "tools/call"
         name, args = params["name"], params["arguments"]
         self.calls.append((name, deepcopy(args)))
@@ -242,7 +245,7 @@ async def test_peer_native_wait_preserves_its_existing_connection_and_bound_page
         result = await call(hub, 2, "click", dict(pid=20, window_id=20, x=5, y=6))
         assert result.kind == "computer_busy"
         assert hub.connections.get(second.key) == connection and connection[0].alive
-        assert (await call(hub, 2, "get_browser_state", dict(target_id="own-target"))).ok
+        assert (await call(hub, 2, "get_browser_state", dict(target_id="own-target", tab_id="tab"))).ok
     finally:
         vm.hold(first, False)
 
@@ -642,3 +645,26 @@ class SimpleRecordingClient:
         assert method == "tools/call"
         self.sent = params
         return {}
+
+
+@pytest.mark.parametrize("case,moved", [("peer", [40]), ("helper", [51]), ("ambiguous", []), ("launcher", [51])])
+async def test_launch_only_moves_its_reply_pids_or_a_single_unattributed_window(seat_tools, case, moved):
+    hub, vm, _ = seat_tools
+    client, session = hub.connections[vm.target(2).key]
+    original = client.request
+    async def request(method, params):
+        reply = await original(method, params)
+        if params["name"] == "launch_app":
+            if case != "peer":
+                client.rows[:] = [row for row in client.rows if row["window_id"] != 40]
+            client.rows.append(window(51, 2600, pid=51))
+            if case == "ambiguous":
+                client.rows.append(window(52, 2600, pid=52))
+            if case == "launcher":
+                reply["structuredContent"]["launcher_pid"] = 51
+                client.rows.append(window(52, 2600, pid=52))
+        return reply
+    client.request = request
+    vm.move_window = AsyncMock()
+    await hub._driver_call(vm.target(2), client, "launch_app", dict(name="xfce4-terminal", session=session))
+    assert [call.args[1] for call in vm.move_window.await_args_list] == moved

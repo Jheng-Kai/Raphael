@@ -12,7 +12,7 @@ import pytest
 
 from raphael_core.computer import vm
 from raphael_core.evaluate import computer_acceptance as acceptance
-from computer.fixtures.driver_contract import SCHEMAS, catalog, validate_call
+from computer.fixtures.driver_contract import SCHEMAS, catalog, validate_call, runtime_refusal
 
 
 @pytest.fixture(autouse=True)
@@ -279,6 +279,9 @@ class MemoryDriver:
         if unknown:
             return {"isError": True, "content": [{"type": "text", "text": f"{name}: unknown argument {sorted(unknown)[0]}"}]}
         validate_call(method, params)
+        refusal = runtime_refusal(method, params)
+        if refusal:
+            return refusal
         text = 'Found 1 windows:\n  window_id=7 pid=9 "Desktop" 1280x900+0+0 app=Xfdesktop' if name == "list_windows" else "ok"
         return {"content": [{"type": "text", "text": text}]}
 
@@ -916,6 +919,9 @@ async def test_shared_acceptance_drives_real_tools_through_every_numbered_check(
         if method == "tools/list":
             return catalog()
         validate_call(method, params)
+        refusal = runtime_refusal(method, params)
+        if refusal:
+            return refusal
         name, args = params["name"], params["arguments"]
         state = {}
         text = "Action completed."

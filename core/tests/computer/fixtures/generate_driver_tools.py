@@ -11,16 +11,30 @@ from raphael_core.computer.vm_catalog import DRIVER_TOOLS
 
 
 def reduce_schema(schema):
-    result = {key: value for key, value in schema.items()
-              if key in ("type", "enum", "required", "additionalProperties", "const")}
-    if "properties" in schema:
-        result["properties"] = {key: reduce_schema(value) for key, value in schema["properties"].items()}
-    if "items" in schema:
-        result["items"] = reduce_schema(schema["items"])
-    for key in ("anyOf", "oneOf", "allOf"):
-        if key in schema:
-            result[key] = [reduce_schema(value) for value in schema[key]]
-    return result
+    if isinstance(schema, list):
+        return [reduce_schema(value) for value in schema]
+    if not isinstance(schema, dict):
+        return schema
+    # Recurse only into schemas: names and literal values must keep annotation-like keys.
+    mappings = {"properties", "patternProperties", "$defs", "definitions", "dependentSchemas"}
+    arrays = {"allOf", "anyOf", "oneOf", "prefixItems"}
+    singles = {"items", "additionalItems", "additionalProperties", "unevaluatedItems", "unevaluatedProperties",
+               "contains", "not", "if", "then", "else", "propertyNames", "contentSchema"}
+    result = {}
+    for key, value in schema.items():
+        if key in ("description", "title", "$comment", "examples"):
+            continue
+        if key in mappings:
+            value = {name: reduce_schema(child) for name, child in value.items()}
+        elif key in arrays or key in singles:
+            value = reduce_schema(value)
+        elif key == "dependencies":
+            value = {name: reduce_schema(child) if isinstance(child, dict) else child for name, child in value.items()}
+        result[key] = value
+    # Keep the existing fixture's ordering so added constraints remain a small diff.
+    nested = ("properties", "items", "anyOf", "oneOf", "allOf")
+    return {**{key: value for key, value in result.items() if key not in nested},
+            **{key: result[key] for key in nested if key in result}}
 
 
 def generate(source):
