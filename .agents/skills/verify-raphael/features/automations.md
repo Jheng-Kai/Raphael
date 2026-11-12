@@ -237,6 +237,23 @@ npm run look -- automations-day-empty automations-sparse automations-day-sparse 
 
 Title priority review: calendar-rhythm-week, calendar-rhythm-day, calendar-rhythm-month and home-calendar-rhythm use a long routine title. Check its visible width at 1120/720 and require timing to be whole or hidden, never truncated. Run the same four scenes in both themes at 1120,720,1920x1080.
 
+## A busy day: every all-day item in reach (owner, 2026-11-12)
+
+R-CAL-07. The all-day band of the day and week view draws three rows and one button per day that has more, 「還有 N 個」,
+N being the items not drawn. Pressing it opens the band in place to every all-day item of the days in view (the hours move down by
+what it grew and keep their height, the day names stay on top, the page scrolls, there is no scrollbar of the band's own); its one
+button then reads 「收合」 and folds it. It is the same toggle for Tab, Enter and Space, with aria-expanded, and the choice
+(`openBand` in `pages/automations.ts`: the view and first day it was made on) is folded again on any other day or week. A month's
+count (a separate `.cal-more`, still `data-au="open-day"`) opens that day in the day view with the band already open. The words are
+`overview.moreEvents` and `common.showLess`, both in the fifteen languages. The gutter's `+8` is the time zone (GMT+8) and is no count.
+Fixture: `calendarManyAllDay: N` puts N all-day items on 2026-10-24. Checks: calendar-more-folded (the count equals the hidden items),
+calendar-more-open (every item in the document, scrolled to and pressable, the hours moved by the band's growth, the first timed event and
+the last hour reachable), calendar-more-closed, calendar-more-month, calendar-more-focus.
+
+```powershell
+npm run look -- automations-more-day automations-more-day-open automations-more-day-closed automations-more-week automations-more-many automations-more-sixty automations-more-month-cell automations-more-month automations-more-keyboard automations-month-busy automations-all-day automations-busy-day --theme both --width 1120,720,1920x1080
+```
+
 ## Moving routine triggers (2026-11-01)
 
 Rules R-RT-01 through R-RT-05 extend the existing editor, with no new page. Monthly saves a date 1-31 and clamps per month. The ordinary interval menu includes 5/10/15/30 minutes with the same window; minute rhythms stay in the all-day row. A scheduled slot is consumed while that same routine's preceding task is queued/running/waiting. Migration 55 leaves saved routines intact and snapshots each new run's trigger for its transcript button.

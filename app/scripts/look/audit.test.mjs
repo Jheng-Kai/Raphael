@@ -297,6 +297,19 @@ describe("rendered look checks", () => {
     expect(found('dim')).toEqual([]);
     win.happyDOM.abort();
   });
+  it("does not call a row covered when only a sliver of it is left in the box it scrolled out of, and still rejects a row that is in view (R-UI-145)", () => {
+    const win = new Window();
+    win.document.body.innerHTML = '<div id="menu" style="overflow-y:auto"><button id="out">09:00</button><button id="in">09:15</button></div>';
+    const box = (top, bottom) => ({ left: 0, top, right: 100, bottom, width: 100, height: bottom - top });
+    const rects = { menu: box(100, 300), out: box(72, 100.8), in: box(100.8, 128.8) };
+    for (const element of win.document.querySelectorAll('*')) element.getBoundingClientRect = () => rects[element.id] ?? box(0, 0);
+    win.document.elementFromPoint = () => win.document.getElementById('in');
+    const covered = () => auditDocument(win.document, { width: 1120, height: 900 }, [], []).productRules.filter(item => item.rule === 'R-UI-145').map(item => item.text);
+    expect(covered()).toEqual([]);
+    rects.out = box(80, 108);
+    expect(covered()).toEqual(['09:00']);
+    win.happyDOM.abort();
+  });
   it("lets a pane's top row stand over what scrolls under it, and still rejects a covered control of the row itself", () => {
     const win = new Window();
     win.document.body.innerHTML = '<section><header id="row" data-window-drag><span id="pill">name</span><button id="tool">Share</button></header><div id="panel">card</div><ol><li><button id="file">Open file</button></li></ol></section>';
