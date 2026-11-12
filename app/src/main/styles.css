@@ -279,6 +279,12 @@ svg.i { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor;
 /* Some on, some off (the switch of a whole list): the knob stays in the middle, in the accent, on an accent border. */
 .tg[aria-checked="mixed"] { background: var(--accent-soft); border-color: var(--accent-text); }
 .tg[aria-checked="mixed"]::after { transform: translateX(8px); background: var(--accent-text); }
+/* A member's own places (its panel and its settings page: pages/agent.ts drawFaces sets the custom properties and the mark) show a
+   switch that is on in the member's colour, as the owner's bubble in its conversation (owner, 2026-11-12): the bubble's colour on the
+   white theme, a lighter one on the black, outlined by the colour that stands off the panel. The knob is white, or dark on a light
+   colour, as the bubble's words; the off state is as everywhere. Raphael's panel wears Raphael's. */
+[data-member-switch] .tg[aria-checked="true"] { background: var(--member-switch); border-color: var(--member-accent); }
+[data-member-switch] .tg[aria-checked="true"]::after { background: var(--member-knob); }
 .sel { display: inline-flex; align-items: center; gap: var(--sp-2); height: var(--h-ctl); max-width: 260px; padding: 0 var(--sp-2) 0 var(--sp-3); border-radius: var(--r-sm); border: 1px solid var(--btn-edge); background: var(--btn); font-size: var(--fs-sm); color: var(--text); }
 .sel > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sel:hover { background-color: var(--hover); }

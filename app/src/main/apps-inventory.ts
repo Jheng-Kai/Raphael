@@ -23,7 +23,7 @@ export function countText(inventory: InventoryView): string {
   return count !== null ? String(count) : countUnknown(inventory) ? "—" : "";
 }
 
-/** What a screen reader and the tooltip of the rail say of the sidebar's entry: its name and how many apps are connected. */
+/** What a screen reader says of the sidebar's entry: its name and how many apps are connected. It has no tooltip. */
 export function entryLabel(inventory: InventoryView): string {
   const count = connectedCount(inventory);
   if (count !== null) return t("nav.appsCount", { p0: count });

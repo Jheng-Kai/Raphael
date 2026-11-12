@@ -981,16 +981,17 @@ export function checkRendered(name, context = {}) {
   }  if(name === "daily-newest") {const reads=window.__look.calls.filter(call=>call.method==='agent.history.list'&&!call.params?.member_id&&call.params?.conversation_id!==undefined);require(reads.length>0&&reads.every(call=>call.params.conversation_id===77),'the newest standard conversation (not the default one, not the quick questions) is the one read');require(document.querySelector('.conversation-caption').hidden,'the header names only the member while a standard conversation is open (R-UI-103)');return {check:name,reads:reads.map(call=>call.params.conversation_id)};}
   if(name === "daily-copy") {const copied={"zh-TW":"已複製",en:"Copied",ja:"コピーしました"}[document.documentElement.lang];const tick=[...document.querySelectorAll('.thread button, .cn-setup-dialog button, .au-routine-dialog button')].find(el=>el.getAttribute('aria-label')===copied);require(tick&&tick.querySelector('svg'),'the pressed copy control displays its tick and copied name');require(tick.scrollWidth<=tick.clientWidth,'copied words fit in the fixed button width');return {check:name};}
   if(name === "daily-footer-hover") {
-    // The pointer is on the Connections pill. In the list it says its own words, so nothing more shows under the pointer (owner,
-    // 2026-11-12); on the rail it is a bare icon, and its name is its tooltip as a face's is.
+    // The pointer is on the Connections button: nothing more shows under it, in the list (it says its own words) or on the rail
+    // (owner, 2026-11-12; there its tooltip also covered the microphone, Home and the composer's edge).
     const pill=document.querySelector('#nav .sidebar-apps'),tips=[...document.querySelectorAll('[role="tooltip"]')].filter(visible);
     require(pill.matches(':hover'),'the pointer is on the Connections pill');
-    if(document.documentElement.hasAttribute('data-sidebar-collapsed'))require(pill.dataset.tooltip&&!visible(pill.querySelector('.nav-t')),"the rail's bare icon keeps its name as its tooltip");
-    else require(tips.length===0&&!pill.hasAttribute('data-tooltip')&&!pill.hasAttribute('title')&&visible(pill.querySelector('.nav-t')),`nothing shows under the pointer over the pill: ${tips.map(tip=>tip.textContent)}`);
+    const rail=document.documentElement.hasAttribute('data-sidebar-collapsed');
+    require(tips.length===0&&!pill.hasAttribute('data-tooltip')&&!pill.hasAttribute('title')&&pill.getAttribute('aria-label'),`nothing shows under the pointer over the Connections button: ${tips.map(tip=>tip.textContent)}`);
+    require(rail?!visible(pill.querySelector('.nav-t')):visible(pill.querySelector('.nav-t')),'the list shows its words, the rail its icon alone');
     return {check:name,tips:tips.length};}
   if(name === "daily-marks") {
-    // The rail of faces (a window under 860px) has no room for marks: the Connections button is an icon there, named by its tooltip and still the door to the same dialog.
-    if(document.documentElement.hasAttribute('data-sidebar-collapsed')){const door=document.querySelector('#nav .sidebar-apps[data-connect-apps]'),box=door.getBoundingClientRect();require(visible(door)&&Math.abs(box.width-36)<1&&Math.abs(box.height-36)<1&&door.getAttribute('aria-label')&&door.dataset.tooltip&&!visible(door.querySelector('.nav-t'))&&![...door.querySelectorAll('.sidebar-app-marks .mono')].some(visible),'on the rail the Connections door is a 36px icon with its name as tooltip and no marks');return {check:name,rail:true};}
+    // The rail of faces (a window under 860px) has no room for marks: the Connections button is an icon there, with no tooltip, and still the door to the same dialog.
+    if(document.documentElement.hasAttribute('data-sidebar-collapsed')){const door=document.querySelector('#nav .sidebar-apps[data-connect-apps]'),box=door.getBoundingClientRect();require(visible(door)&&Math.abs(box.width-36)<1&&Math.abs(box.height-36)<1&&door.getAttribute('aria-label')&&!door.hasAttribute('data-tooltip')&&!visible(door.querySelector('.nav-t'))&&![...door.querySelectorAll('.sidebar-app-marks .mono')].some(visible),'on the rail the Connections door is a 36px icon with no tooltip and no marks');return {check:name,rail:true};}
     require(document.querySelectorAll('.sidebar-app-marks .mono').length===3,'three connected known apps show bare marks');return {check:name};}
   if(name === "daily-draft-member" || name === "daily-draft-room") {const input=document.querySelector(name.endsWith('room')?'#room-message':'.page-agent .mb-chat:not([hidden]) .cmp-input');require(input.value==='Unfinished sample draft','navigation restores this composer words');require(input.selectionStart===input.value.length,'caret returns to the end');return {check:name};}
   if (name === "group-live-line") {
@@ -2771,6 +2772,55 @@ export function checkRendered(name, context = {}) {
       }
     }
     return {check:name,background:style.backgroundColor,ratio:Number(ratio.toFixed(2))};
+  }
+  if (name === "member-switch" || name === "member-switch-light" || name === "member-switch-off" || name === "switch-neutral") {
+    // A switch that is on wears the member's colour in the member's own places (its panel and its settings page), as the owner's bubble
+    // does in its conversation (owner, 2026-11-12); everywhere else (the Settings dialog, Home, the store) it is as it was.
+    const token = (prop, value) => { const probe = document.createElement('i'); probe.style[prop] = value; document.body.append(probe); const out = getComputedStyle(probe)[prop]; probe.remove(); return out; };
+    const channel = value => value / 255 <= 0.03928 ? value / 255 / 12.92 : ((value / 255 + 0.055) / 1.055) ** 2.4;
+    const light = color => { const [r, g, b] = color.match(/[\d.]+/g).map(Number); return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b); };
+    const ratio = (a, b) => (Math.max(light(a), light(b)) + 0.05) / (Math.min(light(a), light(b)) + 0.05);
+    const knobOf = node => getComputedStyle(node, '::after').backgroundColor;
+    if (name === "switch-neutral") {
+      const switches = [...document.querySelectorAll('.modal-scrim .tg[aria-checked="true"]')].filter(visible);
+      require(switches.length > 0, "the Settings dialog shows a switch that is on");
+      for (const node of switches) {
+        require(!node.closest('[data-member-switch]'), "the Settings dialog is no member's place");
+        require(getComputedStyle(node).backgroundColor === token('backgroundColor', 'var(--accent)') && knobOf(node) === token('backgroundColor', 'var(--on-accent)'), `a switch outside a member's places keeps the accent (${getComputedStyle(node).backgroundColor}, knob ${knobOf(node)})`);
+      }
+      return { check: name, switches: switches.length };
+    }
+    const chat = document.querySelector('.mb-chat');
+    // The colour comes from the conversation: its bubble's, and the accent its send button wears (agent.ts drawFaces).
+    const inChat = (prop, value) => { const probe = document.createElement('i'); probe.style[prop] = value; chat.append(probe); const out = getComputedStyle(probe)[prop]; probe.remove(); return out; };
+    const dark = document.documentElement.dataset.theme === 'dark';
+    const bubbleColour = inChat('backgroundColor', 'var(--member-bubble)'), accentColour = inChat('backgroundColor', 'var(--member-accent)');
+    require(bubbleColour !== 'rgba(0, 0, 0, 0)' && accentColour !== 'rgba(0, 0, 0, 0)', "the conversation has the member's colour (the one its bubble and send button wear)");
+    // On the white theme the track is the owner's bubble, on the black one the lighter colour that stands off the panel.
+    const colour = dark ? accentColour : bubbleColour;
+    const places = [...document.querySelectorAll('.mb-det, .ms-pane')].filter(visible);
+    require(places.length > 0, "the member's panel or settings page is open");
+    const on = places.flatMap(place => [...place.querySelectorAll('.tg[aria-checked="true"]')]).filter(visible);
+    const off = places.flatMap(place => [...place.querySelectorAll('.tg[aria-checked="false"]')]).filter(visible);
+    if (name === "member-switch-off") require(on.length === 0 && off.length > 0, "only switches that are off are shown here");
+    else require(on.length > 0, "a switch that is on is shown in the member's place");
+    for (const node of on) {
+      const style = getComputedStyle(node), knob = knobOf(node);
+      require(node.closest('[data-member-switch]'), "the place carries the member's colour");
+      require(style.backgroundColor === colour && style.borderTopColor === accentColour, `a switch that is on wears the member's colour (${style.backgroundColor} with ${style.borderTopColor}, wanted ${colour} with ${accentColour})`);
+      // The knob is white on a colour white stands 3:1 off, dark on a light one (a yellow or white-ish slime), and always stands off the track.
+      const white = token('backgroundColor', 'var(--on-tint-light)'), wanted = ratio(white, colour) >= 3 ? white : token('backgroundColor', 'var(--on-tint-dark)');
+      require(knob === wanted && ratio(knob, colour) >= 3, `the knob stands off the colour (${knob} on ${colour}: ${ratio(knob, colour).toFixed(2)})`);
+      // The black theme's colour stands off its panel; the white theme's outline does (`memberAccent` holds 3:1 off white, the panel is #f7f7f7).
+      const panel = getComputedStyle(node.closest('.mb-det, .ms-pane')).backgroundColor;
+      if (panel !== 'rgba(0, 0, 0, 0)') require(ratio(accentColour, panel) >= 2.7, `the colour stands off its surface (${ratio(accentColour, panel).toFixed(2)})`);
+      if (name === "member-switch-light") require(light(knob) < 0.1, `a light slime's knob is dark (${knob} on ${colour})`);
+    }
+    for (const node of off) {
+      const style = getComputedStyle(node);
+      require(style.backgroundColor === 'rgba(0, 0, 0, 0)' && knobOf(node) === token('backgroundColor', 'var(--text-2)') && style.borderTopColor === token('borderTopColor', 'var(--text-3)'), `a switch that is off keeps its look (${style.backgroundColor}, knob ${knobOf(node)})`);
+    }
+    return { check: name, on: on.length, off: off.length, colour, knob: on[0] ? knobOf(on[0]) : null };
   }
   if (name === "sidebar-folded") {
     // The rail of faces on a narrow window has no folder headings to press.
@@ -4649,29 +4699,46 @@ export function checkRendered(name, context = {}) {
     return { check: name, rows: rows.length, minimumGap: Number.isFinite(minimumGap) ? minimumGap : null };
   }
   if (name === "delete-confirmation") {
+    // The app's one delete dialog, Grok Bot's (owner, 2026-11-12): a small box, the title over one sentence, then one row of two
+    // buttons of the same width that fill the box, Cancel then a red Delete; no × and no line inside; the focus on Cancel.
     const dialogs = [...document.querySelectorAll('.mb-dialog.mb-confirm')];
     const dialog = dialogs.at(-1);
-    require(visible(dialog), "the confirmation is visible");
+    require(visible(dialog) && dialog.classList.contains('mb-delete'), "the delete confirmation is the shared delete dialog");
+    const px = value => parseFloat(value) || 0;
+    const token = (prop, name) => { const probe = document.createElement('i'); probe.style[prop] = `var(${name})`; document.body.append(probe); const value = getComputedStyle(probe)[prop]; probe.remove(); return value; };
     const buttons = [...dialog.querySelectorAll('.mb-dlg-act .btn')];
     require(buttons.map(button => button.dataset.dlg).join('|') === 'cancel|delete', "Cancel precedes Delete visually and in keyboard order");
-    require(document.activeElement === buttons[0], "Cancel receives initial focus");
+    require(document.activeElement === buttons[0], "Cancel receives initial focus, so Enter never deletes");
     require(visible(document.getElementById(dialog.getAttribute('aria-describedby'))), "the irreversible-action description is announced");
-    require(buttons[1].classList.contains('pri'), "Delete uses the skin's primary accent");
-    // As Grok Bot's dialogs (owner, 2026-11-10): a compact head over a hairline, a footer over a hairline with Cancel
-    // then Delete at the right, and no × beside a Cancel.
-    const head = dialog.querySelector('.mb-dlg-head'), act = dialog.querySelector('.mb-dlg-act');
-    require(parseFloat(getComputedStyle(head).borderBottomWidth) > 0 && parseFloat(getComputedStyle(act).borderTopWidth) > 0, "hairlines part the head and the footer");
-    require(parseFloat(getComputedStyle(head.querySelector('h2')).fontSize) <= parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--fs-sm')) + 0.5, "the question is a compact heading");
-    require(!visible(dialog.querySelector('[data-dlg="close"]')), "no × stands beside Cancel");
-    const end = act.getBoundingClientRect().right - parseFloat(getComputedStyle(act).paddingRight);
+    // No ×, no rule line: nothing inside the box but the buttons draws a border, and the head and the footer have none.
+    require(!dialog.querySelector('[data-dlg="close"], .btn.icon'), "no × in the box");
+    const lines = [...dialog.querySelectorAll('*')].filter(node => !node.closest('.btn') && ['Top', 'Right', 'Bottom', 'Left'].some(side => px(getComputedStyle(node)[`border${side}Width`]) > 0));
+    require(lines.length === 0, `no line inside the box (${lines.map(node => node.className || node.tagName).join(', ')})`);
+    require(!dialog.querySelector('hr, [role="separator"]'), "no separator element");
+    // The box: 320 px wide (less in a narrower window), centred in the window.
+    const box = dialog.getBoundingClientRect(), style = getComputedStyle(dialog);
+    require(Math.abs(box.width - Math.min(320, innerWidth - 2 * px(getComputedStyle(dialog.parentElement).paddingLeft))) <= 1, `the box is 320 px wide (${box.width})`);
+    require(box.left >= 0 && box.right <= innerWidth && Math.abs((box.left + box.right) / 2 - innerWidth / 2) <= 2, "the box is centred in the window");
+    // One row of two equal buttons that fill the box's inner width.
     const [cancel, remove] = buttons.map(button => button.getBoundingClientRect());
-    require(Math.abs(remove.right - end) <= 1 && cancel.right <= remove.left, "Cancel then Delete stand at the right");
-    // The dialog's text buttons share the app's small radius, like every other text button.
-    const small = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--r-sm'));
-    require(buttons.every(button => parseFloat(getComputedStyle(button).borderRadius) === small), "actions share the app's small button radius");
-    const box = dialog.getBoundingClientRect();
-    require(box.width <= 442 && box.left >= 0 && box.right <= innerWidth, "the compact panel fits the window");
-    return { check: name, width: box.width, height: box.height };
+    const inner = { left: box.left + px(style.borderLeftWidth) + px(style.paddingLeft), right: box.right - px(style.borderRightWidth) - px(style.paddingRight) };
+    require(Math.abs(cancel.width - remove.width) <= 1, `the two buttons are the same width (${cancel.width} and ${remove.width})`);
+    require(Math.abs(cancel.top - remove.top) <= 0.5 && Math.abs(cancel.height - remove.height) <= 0.5, "the two buttons are one row of one height");
+    require(Math.abs(cancel.left - inner.left) <= 1 && Math.abs(remove.right - inner.right) <= 1 && remove.left >= cancel.right, `the buttons fill the box (${cancel.left}..${remove.right} in ${inner.left}..${inner.right})`);
+    require(Math.abs(cancel.height - px(token('height', '--h-field'))) <= 0.5, `the buttons take the field height (${cancel.height})`);
+    require(buttons.every(button => px(getComputedStyle(button).borderTopLeftRadius) >= cancel.height / 2), "both buttons have fully rounded ends");
+    // Delete is red with white words, at the right; Cancel is the quiet button colour.
+    const [cancelStyle, removeStyle] = buttons.map(button => getComputedStyle(button));
+    require(removeStyle.backgroundColor === token('backgroundColor', '--close') && removeStyle.color === token('color', '--on-close'), `Delete is the danger red with white words (${removeStyle.backgroundColor} on ${removeStyle.color})`);
+    require(cancelStyle.backgroundColor === token('backgroundColor', '--btn'), `Cancel is the quiet button colour (${cancelStyle.backgroundColor})`);
+    // The words: a title and one sentence in the ordinary text colour.
+    const title = dialog.querySelector('h2'), sentences = [...dialog.querySelectorAll('.mb-dlg-body p')];
+    require(sentences.length === 1 && getComputedStyle(sentences[0]).color === token('color', '--text'), "one sentence in the ordinary text colour");
+    require(px(getComputedStyle(title).fontSize) <= px(token('fontSize', '--fs-sm')) + 0.5, "the title is a compact heading");
+    require(title.getBoundingClientRect().bottom <= sentences[0].getBoundingClientRect().top + 1 && sentences[0].getBoundingClientRect().bottom <= cancel.top, "the title, the sentence and the buttons stand in that order");
+    return { check: name, width: box.width, height: box.height, padding: [style.paddingTop, style.paddingRight, style.paddingBottom, style.paddingLeft].map(px),
+      titleSize: px(getComputedStyle(title).fontSize), titleToSentence: sentences[0].getBoundingClientRect().top - title.getBoundingClientRect().bottom,
+      sentenceToButtons: cancel.top - sentences[0].getBoundingClientRect().bottom, buttonHeight: cancel.height, cancelWidth: cancel.width, deleteWidth: remove.width, gap: remove.left - cancel.right };
   }
   if (name.startsWith("cli-account-")) {
     const row = document.querySelector('[data-cli-menu="codex"], [data-cli="codex"]')?.closest('.cli-card');
@@ -7177,8 +7244,11 @@ export function checkRendered(name, context = {}) {
     require(solid(getComputedStyle(back).backgroundColor), `the way back has a solid surface (${getComputedStyle(back).backgroundColor})`);
     if (view === "main") {
       const edge = cover.getBoundingClientRect(), mark = face.getBoundingClientRect();
-      require(arrow.top >= edge.top && arrow.bottom <= edge.bottom, "the way back is on the cover");
-      require(arrow.bottom <= mark.top || arrow.right <= mark.left, "the way back is clear of the face");
+      // Once the page has scrolled (a long field opened low on a short window) the arrow stands on its own band and the cover has gone under it.
+      if (!pane.hasAttribute("data-scrolled")) {
+        require(arrow.top >= edge.top && arrow.bottom <= edge.bottom, "the way back is on the cover");
+        require(arrow.bottom <= mark.top || arrow.right <= mark.left, "the way back is clear of the face");
+      }
       const change = cover.querySelector('[data-ms="cover"]');
       // At rest the two share one surface; under the pointer an edge button is a step lighter, as everywhere.
       if (change && !back.matches(":hover") && !change.matches(':hover, [aria-expanded="true"]')) require(getComputedStyle(change).backgroundColor === getComputedStyle(back).backgroundColor, "the cover's two icons share one surface");
@@ -7314,6 +7384,111 @@ export function checkRendered(name, context = {}) {
       require(visible(box) && document.activeElement === box, "the box opens in place and has the keyboard");
       require(box.closest(".ms-list") && !box.closest("button"), "the box stands in the section's list");
       require(box.getBoundingClientRect().width > 200, "the box is as wide as its list");
+    }
+    if (name.startsWith("member-settings-persona-")) {
+      // The personality and the instructions (owner, 2026-11-12: 「我不是很喜歡這個個性的欄位的 UI UX」) are one kind of thing, so
+      // one kind of quiet row: its words whole with a pencil, or one line of what could stand there; a press makes it a field.
+      const stage = name.slice("member-settings-persona-".length);
+      const stored = window.__look.data.members.find(item => item.id === 1);
+      const fields = ["personality", "instructions"];
+      const slot = field => pane.querySelector(`.ms-section[data-k="ms-${field}"]`);
+      const rowOf = field => slot(field).querySelector('[data-ms="edit"]');
+      const fieldOf = field => slot(field).querySelector("textarea");
+      const here = field => rowOf(field) ?? fieldOf(field);
+      const at = element => element.getBoundingClientRect();
+      const lineOf = element => parseFloat(getComputedStyle(element).lineHeight);
+      const edited = stage === "editing" ? "personality" : stage === "editing-long" ? "instructions" : null;
+      require(pane.querySelector('.ms-content[data-cat="soul"]') && fields.every(field => visible(slot(field))), "the kind holds the personality and the instructions");
+      // No box until a row is pressed (owner: 「一個巨大的空框」): at most the one field that was pressed is a textarea.
+      const boxes = [...pane.querySelectorAll("textarea")].filter(visible).map(item => item.id);
+      require(boxes.join() === (edited ? `ms-${edited}` : ""), `textareas on the page: ${boxes.join() || "none"}`);
+      // The two are one kind: the same box edges, one left edge and one right edge, inset as the other kinds' rows are in their cards.
+      const [first, second] = fields.map(here);
+      require(visible(first) && visible(second) && Math.abs(at(first).left - at(second).left) <= 0.5 && Math.abs(at(first).right - at(second).right) <= 0.5, "the two share one left edge and one right edge");
+      for (const field of fields) {
+        const list = slot(field).querySelector(".ms-list"), pad = parseFloat(getComputedStyle(list).paddingLeft), mine = at(here(field));
+        require(Math.abs(mine.left - (at(list).left + pad)) <= 0.5 && Math.abs(mine.right - (at(list).right - pad)) <= 0.5, `${field}: its row or field fills its card inside the card's padding`);
+      }
+      for (const field of fields.filter(item => item !== edited)) {
+        const row = rowOf(field), label = row?.querySelector(".ms-label");
+        require(row && row.tagName === "BUTTON" && visible(label), `${field} is a row you press`);
+        const words = (stored[field] ?? "").trim(), style = getComputedStyle(label), line = lineOf(label);
+        require(label.scrollWidth <= label.clientWidth + 1 && label.scrollHeight <= label.clientHeight + 1, `${field}: its words are not cut`);
+        require(style.whiteSpace === "pre-wrap" && style.textOverflow !== "ellipsis" && style.overflowY === "visible", `${field}: its words wrap, a line break of the owner's stays, nothing is ellipsised`);
+        require(at(label).width <= parseFloat(style.maxWidth) + 1, `${field}: its lines are no wider than ${style.maxWidth}`);
+        require(at(row).height >= at(label).height, `${field}: its row holds all its words`);
+        const pencil = row.querySelector("svg.i");
+        require(visible(pencil) && Math.abs((at(pencil).top + at(pencil).bottom) / 2 - (at(label).top + line / 2)) <= 1.5 && at(pencil).right <= at(row).right, `${field}: the pencil stands at the right, level with the first line`);
+        if (words) {
+          require(label.textContent === words && !label.classList.contains("is-empty"), `${field}: the row says the words as they are`);
+          require(Math.round(at(label).height / line) >= words.split("\n").length, `${field}: every line of it shows`);
+          require(style.color === getComputedStyle(row).color, `${field}: its words are in the text colour`);
+        } else {
+          // Nothing written: one quiet line in the secondary colour, what could stand there, a pencil, no box.
+          require(label.classList.contains("is-empty") && label.textContent.trim() && !label.textContent.includes("\n"), `${field}: one quiet line of what could stand here`);
+          require(Math.round(at(label).height / line) === 1 && Math.abs(at(row).height - 44) <= 1, `${field}: the empty state is one line (${Math.round(at(row).height)} px)`);
+          require(style.color === getComputedStyle(slot(field).querySelector("h2")).color, `${field}: the line is in the secondary colour, as the heading`);
+        }
+        if (!words.includes("\n") && words && at(label).height <= line * 1.2) require(Math.abs(at(row).height - 44) <= 1, `${field}: a one-line row is as tall as the other kinds' rows`);
+      }
+      require(fields.every(field => slot(field).querySelector(".ms-head h2")?.textContent.trim() && !slot(field).querySelector(".ms-head small, .ms-head p, .ms-note")), "each heading is its name alone, with no small print");
+      if (edited) {
+        const input = fieldOf(edited), other = fields.find(field => field !== edited), style = getComputedStyle(input), line = lineOf(input);
+        require(document.activeElement === input, "the field has the keyboard");
+        require(style.resize === "none" && !input.matches("[rows]:not([rows='1'])"), "the field has no grip of its own");
+        require(input.scrollHeight <= input.clientHeight + 1, "no scrollbar inside the field");
+        // Its words stand exactly where the row's words stood, in the same type: nothing moves under the pointer.
+        const label = rowOf(other).querySelector(".ms-label");
+        require(Math.abs(at(input).left + parseFloat(style.borderLeftWidth) + parseFloat(style.paddingLeft) - at(label).left) <= 0.5, "the words in the field stand where a row's words stand");
+        require(style.fontSize === getComputedStyle(label).fontSize && style.lineHeight === getComputedStyle(label).lineHeight, "the field is set in the row's own type");
+        // As tall as its words: a whole number of lines plus the row's own measure, and it grows and shrinks with them.
+        const frame = 44 - line, lines = (at(input).height - frame) / line;
+        require(Math.abs(lines - Math.round(lines)) < 0.05 && Math.round(lines) >= input.value.split("\n").length, `the field is as tall as its words (${lines.toFixed(2)} lines)`);
+        if (stage === "editing") require(Math.round(lines) === 2, `two typed lines are two lines tall (${lines.toFixed(2)})`);
+        if (stage === "editing-long") require(Math.round(lines) >= 20, `twenty lines open whole (${lines.toFixed(2)})`);
+        const before = at(input).height, kept = input.value;
+        input.value = kept + "\n一\n二\n三";
+        const grown = at(input).height;
+        input.value = kept;
+        require(grown >= before + 2.9 * line && Math.abs(at(input).height - before) <= 1, "the field grows by the lines added to it and comes back with them");
+      }
+      if (stage === "saved") {
+        const label = rowOf("personality").querySelector(".ms-label");
+        require(stored.personality.trim() !== "" && label.textContent === stored.personality.trim(), "the row is back with the words that were saved");
+        // Saved without a word, as the name and the role are: no note, no badge, and the pencil is back.
+        require(![...document.querySelectorAll(".toast")].some(visible), "nothing is said once it has saved");
+        require(!pane.querySelector(".spin, [aria-busy]") && visible(rowOf("personality").querySelector("svg.i")), "nothing is still being saved and the pencil is back");
+        require(window.__look.calls.some(call => call.method === "members.update" && call.params?.personality === stored.personality), "it was saved");
+      }
+      if (stage === "escape") {
+        const label = rowOf("instructions").querySelector(".ms-label");
+        require(label.textContent === stored.instructions.trim(), "the old words are back");
+        require(!window.__look.calls.some(call => call.method === "members.update" && call.params?.instructions !== undefined), "nothing was saved");
+        require(![...document.querySelectorAll(".toast")].some(visible), "and nothing said");
+      }
+      // Beside the other kinds: the same cards, the same inset, the same headings and the same distances (not while a field is open:
+      // leaving the kind would leave it).
+      if (!edited && stage !== "saved") {
+        const measure = () => {
+          const lists = [...pane.querySelectorAll(".ms-content .ms-list")].filter(visible), heads = [...pane.querySelectorAll(".ms-content .ms-head h2")].filter(visible);
+          const list = lists[0], row = list.querySelector(".ms-row, .ms-open"), style = getComputedStyle(list), h2 = heads[0] ? getComputedStyle(heads[0]) : null;
+          return { left: at(list).left, right: at(list).right, rowLeft: at(row).left, rowRight: at(row).right, rowTop: at(row).top - at(list).top,
+            card: [style.backgroundColor, style.borderTopLeftRadius, style.padding].join(" "),
+            title: h2 ? [h2.fontSize, h2.fontWeight, h2.color, h2.lineHeight].join(" ") : "", titleLeft: heads[0] ? at(heads[0]).left - at(list).left : 0,
+            titleGap: heads[0] ? at(list).top - at(heads[0]).bottom : 0, between: heads[1] ? at(heads[1]).top - at(lists[0]).bottom : 0 };
+        };
+        const mine = measure();
+        const others = Object.fromEntries(["tools", "skills", "notify"].map(id => { pane.querySelector(`.ms-nav [data-cat="${id}"]`).click(); return [id, measure()]; }));
+        pane.querySelector('.ms-nav [data-cat="soul"]').click();
+        require(pane.querySelector('.ms-content[data-cat="soul"]') && measure().left === mine.left, "the kind is as it was after looking at the others");
+        for (const [id, other] of Object.entries(others)) for (const key of ["left", "right", "rowLeft", "rowRight", "rowTop", "card"]) {
+          require(typeof other[key] === "string" ? other[key] === mine[key] : Math.abs(other[key] - mine[key]) <= 0.5, `beside ${id}: ${key} is ${mine[key]}, there ${other[key]}`);
+        }
+        for (const key of ["title", "titleLeft", "titleGap", "between"]) {
+          require(typeof others.skills[key] === "string" ? others.skills[key] === mine[key] : Math.abs(others.skills[key] - mine[key]) <= 0.5, `beside skills: the headings' ${key} is ${mine[key]}, there ${others.skills[key]}`);
+        }
+      }
+      return { check: name, stage };
     }
     if (name === "member-settings-skill") {
       const text = pane.querySelector("#ms-skill-text");

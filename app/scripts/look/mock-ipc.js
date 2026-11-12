@@ -115,6 +115,8 @@ export function installMock(fixture, config = {}, target = window) {
   if (variant.coverPicture) data.members.find(member => member.id === 1).cover = { kind: "image", url: "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='960' height='240'><rect width='960' height='240' fill='%233a6f5c'/><circle cx='760' cy='70' r='90' fill='%2396c8b0'/><rect y='170' width='960' height='70' fill='%23264d40'/></svg>" };
   if (variant.computerHost) data.settings.computer_ssh_alias = variant.computerHost;
   if (variant.routineEmpty) data.routines = [];
+  // What the first member's personality page holds (member-settings.ts): its name, role, personality and instructions as the scene gives them.
+  if (variant.persona) Object.assign(data.members.find(member => member.id === 1), variant.persona);
 
   if (variant.ownerOutputFolder) data.settings.owner_output_folder = "C:\\Owner\\Deliveries";
   if (variant.routineGuard) for (const routine of data.routines.filter(item => item.member_id === 1)) {

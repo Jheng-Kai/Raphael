@@ -1,5 +1,10 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { scene, member, click, wait, check, key, hover } from './steps.mjs';
 
+const fixture = JSON.parse(readFileSync(join(import.meta.dirname, '../fixture.json'), 'utf8'));
+/** The fixture's members with member `id` as the slime `avatar` (a yellow or a white-ish one, for the colour on its switches). */
+const withSlime = (id, avatar) => fixture.members.map(item => item.id === id ? {...item, avatar} : item);
 const details = [member(1), {action:'open-details'}, wait('.mb-det[data-details-tab="details"] .mb-panel-routines')];
 // Nothing is written over an offline computer, so scenes wait for the state the panel keeps in data.
 const computer = (phase = 'unavailable') => [...details, click('.mb-tabs [data-tab="computer"]'), wait(`.desktop-panel:not([hidden])[data-desktop-state="${phase}"]`)];
@@ -33,4 +38,10 @@ export default [
   scene('member-panel-docker-start', 'Only an owner press on the screen starts this PC and the ready result stays contextual', [...computer('unavailable'),click('[data-desktop="enlarge"]'),wait('.desktop-error:not([hidden])'),check('member-panel-docker-start')], state('unavailable',{error:'docker_stopped'})),
   scene('member-panel-location-hover', 'The computer location is words and a chevron with no frame or fill, even under the pointer', [...computer('unavailable'),hover('.desktop-location-header [data-computer-location]'),check('member-panel-location-hover')], {...state('unavailable',{error:'remote_unavailable',host:'mac-mini'}),computerHost:'mac-mini'}),
   scene('member-panel-remote-location', 'An unavailable computer keeps the header location control, which opens the existing popover', [...computer('unavailable'),click('.desktop-location-header [data-computer-location]'),wait('.computer-location-popover'),check('member-panel-remote-location')], state('unavailable',{error:'docker_stopped'})),
+  // A member's colour is on its switches too (owner, 2026-11-12): a routine that is on in the member's panel, the panel of a yellow
+  // and of a white-ish slime (a knob that still shows), and Raphael's own in his blue.
+  scene('member-switch', 'In the member\'s panel a routine that is on has a switch in the member\'s colour, and the off ones are as they were', [...details, wait('.mb-routine-row .tg[aria-checked="true"]'), check('member-switch')]),
+  scene('member-switch-yellow', 'A yellow slime\'s switch keeps a knob that shows', [...details, wait('.mb-routine-row .tg[aria-checked="true"]'), check('member-switch-light')], {members: withSlime(1, 'slime:ramiris')}),
+  scene('member-switch-white', 'A white-ish slime\'s switch keeps a knob that shows', [...details, wait('.mb-routine-row .tg[aria-checked="true"]'), check('member-switch-light')], {members: withSlime(1, 'slime:testarossa')}),
+  scene('member-switch-raphael', 'Raphael\'s own panel wears Raphael\'s blue on a routine that is on', [{action:'open-details'}, wait('.mb-routine-row .tg[aria-checked="true"]'), check('member-switch')]),
 ];
