@@ -1,7 +1,9 @@
 // @vitest-environment happy-dom
 import { expect, test } from "vitest";
 import { esc } from "./ui";
-import { LIGHT_WORDS_RATIO, memberAccent, memberColor, nameAccent, ownerBubble } from "./owner-bubble";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { LIGHT_WORDS_RATIO, memberAccent, memberColor, memberSwitch, nameAccent, ownerBubble } from "./owner-bubble";
 import { RAPHAEL_COLOR, slimeCharactersHTML, slimeColorOf, slimeColorsHTML } from "./slime";
 
 const WORDS = { light: "#ffffff", dark: "#0a0a0a" };
@@ -56,4 +58,36 @@ test("every character and colour marks send, stop and its computer at 3:1 on bot
   }
   // A colour that already stands off both panels is kept as it is.
   expect(memberAccent("#7c3aed")).toBe("light-dark(#7c3aed, #7c3aed)");
+});
+
+test("a switch that is on wears the member's colour and its knob stands off it in both themes, a light slime's knob is dark", () => {
+  const KNOB = { "var(--on-tint-light)": "#ffffff", "var(--on-tint-dark)": "#0a0a0a" } as Record<string, string>;
+  for (const colour of everySlime()) {
+    const [, trackLight, trackDark] = memberSwitch(colour).track.match(/^light-dark\((#[0-9a-f]{6}), (#[0-9a-f]{6})\)$/)!;
+    const [, knobLight, knobDark] = memberSwitch(colour).knob.match(/^light-dark\((var\(--on-tint-(?:light|dark)\)), (var\(--on-tint-(?:light|dark)\))\)$/)!;
+    // On the white theme the track is the owner's bubble, whose words the knob follows; on the black theme it stands 3:1 off the panel.
+    expect(trackLight, colour).toBe(ownerBubble(colour).fill);
+    expect(ratio(KNOB[knobLight!]!, trackLight!), `${colour} knob on ${trackLight} in the light theme`).toBeGreaterThanOrEqual(3);
+    expect(ratio(KNOB[knobDark!]!, trackDark!), `${colour} knob on ${trackDark} in the dark theme`).toBeGreaterThanOrEqual(3);
+    expect(ratio(trackDark!, "#161616"), `${colour} track on the black panel`).toBeGreaterThanOrEqual(3);
+  }
+  // A yellow or white-ish slime is a light bubble with dark words: its knob is dark on the white theme as well, white slimes' too on the black.
+  expect(memberSwitch("#FFC83D").knob).toBe("light-dark(var(--on-tint-dark), var(--on-tint-dark))");
+  expect(memberSwitch("#D5D9D6").knob).toBe("light-dark(var(--on-tint-dark), var(--on-tint-dark))");
+  expect(memberSwitch("#905AFB").knob).toBe("light-dark(var(--on-tint-light), var(--on-tint-light))");
+  // Raphael's own places wear Raphael's colour: the same source as his bubble.
+  expect(memberSwitch(memberColor({ id: 0 }))).toEqual(memberSwitch(RAPHAEL_COLOR));
+});
+
+test("only a member's panel and settings page wear the colour on switches, the rest of the app keeps its own", () => {
+  const css = readFileSync(join(__dirname, "styles.css"), "utf8");
+  expect(css).toContain('[data-member-switch] .tg[aria-checked="true"] { background: var(--member-switch); border-color: var(--member-accent); }');
+  expect(css).toContain('[data-member-switch] .tg[aria-checked="true"]::after { background: var(--member-knob); }');
+  const source = readFileSync(join(__dirname, "pages", "agent.ts"), "utf8");
+  expect(source).toContain("for (const place of [members.details, members.settings.el]) {");
+  expect(source).toContain('"--member-knob": knob');
+  // A refresh that changes nothing touches nothing in the panel: the colour is written only when it differs.
+  expect(source).toContain("if (place.style.getPropertyValue(name) !== value) place.style.setProperty(name, value);");
+  // Nothing else marks a place: the Settings dialog, Home and the store never carry the mark.
+  for (const file of ["pages/home.ts", "owner-settings.ts", "member-store.ts"]) expect(readFileSync(join(__dirname, file), "utf8"), file).not.toContain("memberSwitch");
 });

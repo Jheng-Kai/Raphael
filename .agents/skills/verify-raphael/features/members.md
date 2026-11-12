@@ -1,5 +1,31 @@
 # Members and sidebar
 
+## A member's colour on its switches (owner, 2026-11-12)
+
+Owner: 「它這個主題，不只是 Message Bubble，還有這些 Toggle 的 Buttons 也都會變成主題色，就是可能會變紫色」
+(R-UI-147). A member's colour is its slime's (`owner-bubble.ts` `memberColor`; Raphael's is his blue). The conversation
+already wears it on the owner's bubble and on send, stop and the computer (`--member-bubble`, `--member-accent` on `.mb-chat`).
+`memberSwitch` (owner-bubble.ts) turns the same colour into the track of a switch that is on, its outline and its knob:
+`drawFaces` in pages/agent.ts sets `--member-switch`, `--member-accent` and `--member-knob` and the mark `data-member-switch`
+on the member's panel (`.mb-det`) and its settings page (`.ms-pane`'s host), and styles.css gives
+`[data-member-switch] .tg[aria-checked="true"]` those. On the white theme the track is the bubble's colour, on the black theme
+the lighter colour send wears (the bubble's darker shade would sink into the black panel); the outline is send's colour. The
+knob follows the bubble's rule for light colours: white, dark on a yellow or white-ish slime (whose bubble takes dark words;
+on the black theme dark wherever white does not stand 3:1 off the track). The off state is untouched, and the Settings
+dialog, Home, the store and Connect apps carry no mark. A routine is only read in the panel (its view has no switch), so
+no routine editor has switches to colour.
+
+The scenes: member-switch (the panel's routine), member-switch-yellow and member-switch-white (light slimes, with the
+check `member-switch-light`), member-switch-raphael, member-switch-tools, member-switch-tools-yellow,
+member-switch-skills, member-switch-notify and member-switch-notify-off (the settings page) and settings-switch-neutral (Settings keeps the accent).
+`member-switch` asserts the track is the conversation's bubble colour (white theme) or send colour (black theme), the outline
+is send's colour, the knob stands 3:1 off the track and follows the white-or-dark rule, and an off switch is as before
+(`member-switch-off`).
+
+```powershell
+npm run look -- member-switch member-switch-yellow member-switch-white member-switch-raphael member-switch-tools member-switch-tools-yellow member-switch-skills member-switch-notify member-switch-notify-off settings-switch-neutral member-panel-details details raphael-details member-settings-tools member-settings-notify --theme both --width 1120,720,1920x1080
+```
+
 ## Member settings page (2026-11-08)
 
 Owner request: a member's settings are a page of their own, where the conversation is (R-PANEL-05).
