@@ -1192,16 +1192,23 @@ only that documented route is live-verified. Memory provenance and owner-only pe
 R-UI-121 (owner, 2026-11-11, after a report from real use): a press outside an open menu, picker, popover or dialog closes it
 and is delivered to what was pressed in the same press, so a member in the sidebar opens at once even while the avatar
 picker, a row menu, the composer's model menu or a dialog is open. One shared policy does it (`app/src/main/dismissals.ts`):
-a press on a control closes the panel without being stopped; a press on a scrim closes the panel and the element under the
-pointer receives the focus and one click; bare scrim only closes; a menu open over a dialog is closed first and the dialog by the
+a press on a control closes the panel without being stopped; a drawer's scrim closes the panel and the element under the
+pointer receives the focus and one click; a dialog's scrim (Connect apps, Settings, the member creator, the model chooser, the
+delete question) only closes it and the press is spent (owner, 2026-11-13: 「如果點 dialog 外面就是把 dialog 關掉就好 不用可以直接點到
+後面的東西」): nothing behind it is pressed, focused or right-clicked; a menu open over a dialog is closed first and the dialog by the
 next press. Unit proof: `app/src/main/dismissals.test.ts` and `app/src/main/dialog-outside-close.test.ts`.
 
 Each scene presses once with the real mouse on a control that is not part of what is open and fails if either half is missing;
 `checks.mjs` `press-through-*` waits only for the page to draw the result, never presses again. At 720 the list is the rail of faces, always on screen, so the press on a face is one press.
 
 ```text
-npm run look -- press-through-avatar-picker press-through-row-menu press-through-right-click press-through-delete-dialog press-through-model-menu press-through-page-frame --theme both --width 1120,720,1920x1080
+npm run look -- press-through-avatar-picker press-through-row-menu press-through-right-click press-through-delete-dialog press-through-scrim-settings press-through-scrim-connect-apps press-through-scrim-member-maker press-through-scrim-model-chooser press-through-model-menu press-through-page-frame --theme both --width 1120,720,1920x1080
 ```
+
+`press-through-delete-dialog` and the four `press-through-scrim-*` scenes press once on something behind a dialog's scrim (a member, the
+sidebar's +, a tab of Settings) and fail if anything behind it moved: no member opened or focused, no menu opened, nothing deleted or
+made, and the dialog closed (the chooser closes alone and leaves Settings on its tab). `opener-toggle-*` still prove that the opener is
+the toggle.
 
 ## The control that opened a thing is its toggle (2026-11-11)
 

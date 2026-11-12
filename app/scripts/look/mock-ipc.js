@@ -744,6 +744,8 @@ export function installMock(fixture, config = {}, target = window) {
     data.home.calendar_days=Object.keys(data.home.calendar_counts);
   }
   // The owner has not set up his own Google yet: its row is in the store (R-CONNECT-02).
+  // One store row for each mark of the set (`iconMarks`): the tile of each is checked in the real browser (check `icon-colours`).
+  if (variant.iconMarks) for (const id of variant.iconMarks) data.services.push({ ...data.services[0], id: `mark-${id}`, name: `Mark ${id}`, publisher: "icon-mark", icon: id, category: "other", popular: false, server_id: null, auth: "oauth" });
   if (variant.noOwnGoogle) data.managedConnectors = data.managedConnectors.filter(c => c.id !== "google");
   if (variant.calendarComposio) {
     data.managedConnectors = data.managedConnectors.filter(c=>c.id!=="google" && c.id!=="composio:googlecalendar");

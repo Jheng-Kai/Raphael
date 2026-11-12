@@ -218,3 +218,54 @@ describe("the marks of well-known programs", () => {
     }
   });
 });
+
+// The colour of every one-colour mark is its owner's: on the white tile of 連結應用程式 and in its chip, as everywhere (owner, 2026-11-13: 「Spotify
+// 它不是綠色的嗎？Discord 是藍色的」). The official colours are Simple Icons' hex of each brand (https://simpleicons.org); a mark that is black
+// in its official form takes the tile's near-black. The real browser's computed colours are the look check `icon-colours`.
+const OFFICIAL: Record<string, string> = {
+  notion: "black", github: "black", googledrive: "multi", gmail: "multi", googlecalendar: "multi", linear: "#5E6AD2", figma: "multi",
+  spotify: "#1ED760", discord: "#5865F2", slack: "multi", todoist: "#E44332", obsidian: "#7C3AED", atlassian: "#0052CC", cloudflare: "#F38020",
+  sentry: "#362D59", stripe: "#635BFF", n8n: "#EA4B71", zapier: "#FF4F00", paypal: "#002991", webflow: "#146EF5", wix: "#0C6EFC",
+  netlify: "#00C7B7", neon: "#00E599", prisma: "#2D3748", airtable: "multi", calendly: "#006BFF", posthog: "black", postman: "#FF6C37",
+  sanity: "#F03E2F", bitly: "#EE6123", telegram: "#26A5E4", openrouter: "black", brave: "#FB542B", searxng: "#3050FF",
+};
+
+describe("the colour of a mark on a tile", () => {
+  const css = readFileSync("src/main/connections.css", "utf8").replace(/\r\n/g, "\n").replace(/\/\*[\s\S]*?\*\//g, "");
+  const rule = (selector: string): string | undefined =>
+    [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)].filter(([, selectors]) => selectors!.split(",").map((one) => one.trim()).includes(selector)).pop()?.[2];
+
+  test("every mark of the set is covered, and each is in its official colour", () => {
+    expect(Object.keys(SERVICE_ICONS).sort()).toEqual(Object.keys(OFFICIAL).sort());
+    for (const [id, official] of Object.entries(OFFICIAL)) {
+      const key = id as keyof typeof SERVICE_ICONS;
+      if (official === "multi") {
+        expect(new Set(COLOURED_MARKS[key]?.parts.map(([fill]) => fill.toUpperCase())).size, id).toBeGreaterThan(2);
+      } else if (official === "black") {
+        expect(BRAND_COLORS[key], id).toBeUndefined();
+      } else {
+        expect(BRAND_COLORS[key]?.toUpperCase(), id).toBe(official);
+        expect(brandStyle(key).toUpperCase(), id).toContain(official);
+      }
+    }
+  });
+
+  test("on the tile and in the chip a mark with a brand colour keeps it: the rule for it wins over the plain mark's", () => {
+    const specificity = (selector: string): number => (selector.match(/\.[\w-]+|\[[^\]]+\]/g) ?? []).length;
+    for (const host of [".cs-tile", ".cs-mini"]) {
+      const plain = `${host} .mono`, coloured = `${host} .logo-mono[style]`;
+      expect(rule(coloured), coloured).toMatch(/color:\s*var\(--brand\)/);
+      expect(specificity(coloured), coloured).toBeGreaterThan(specificity(plain));
+      // a near-black one is light-dark(): the tile and the chip are light in both themes
+      expect(rule(host), host).toMatch(/color-scheme:\s*light/);
+    }
+    // every mark with a brand colour is drawn as `.logo-mono` carrying it, the wrapper the rule reaches
+    for (const id of Object.keys(BRAND_COLORS) as (keyof typeof SERVICE_ICONS)[]) {
+      // a brand with a logo file draws that full-colour picture instead (Cloudflare), which no rule recolours
+      if (hasLogo(id as never)) { expect(iconHTML(id, id, "md"), id).toContain("logo-art"); continue; }
+      const html = iconHTML(id, id, "md");
+      expect(html, id).toContain('class="mono md logo-mono"');
+      expect(html, id).toContain("--brand:");
+    }
+  });
+});

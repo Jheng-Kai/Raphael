@@ -68,28 +68,29 @@ test("a press on a control outside an open popover closes it and the control's h
   expect(document.activeElement).toBe(other);
 });
 
-test("a press on a scrim over a control closes the dialog and activates that control once", () => {
+// Owner, 2026-11-13: 「如果點 dialog 外面就是把 dialog 關掉就好，不用可以直接點到後面的東西」: a dialog's scrim closes it and the press is spent.
+test("a press on a scrim over a control closes the dialog and presses nothing behind it", () => {
   const button = document.createElement("button"), act = vi.fn(), close = vi.fn();
   document.body.append(button); button.addEventListener("click", act);
   const { scrim } = scrimWith(close);
   const over = pointerOver(button, scrim);
-  const { up } = press(scrim, scrim, { x: 30, y: 40 });
+  const { down, up } = press(scrim, scrim, { x: 30, y: 40 });
   expect(close).toHaveBeenCalledTimes(1);
-  expect(act).toHaveBeenCalledTimes(1);
-  expect(document.activeElement).toBe(button);
-  // The scrim was out of the way for the look under it, and its own press is spent.
-  expect(over.seen).toEqual(["none"]);
+  expect(act).not.toHaveBeenCalled();
+  // Nothing behind was looked for, focused or clicked, and the press is spent (no selection starts, nothing hears its release).
+  expect(over.seen).toEqual([]);
+  expect(document.activeElement).not.toBe(button);
+  expect(down.defaultPrevented).toBe(true);
   expect(up.defaultPrevented).toBe(true);
-  expect(act.mock.calls[0]![0]).toMatchObject({ clientX: 30, clientY: 40, detail: 1, bubbles: true });
 });
 
-test("a delegated handler above the pressed element hears the delivered click", () => {
+test("a delegated handler above what lies behind a scrim hears nothing of the press that closes the dialog", () => {
   const list = document.createElement("div"), row = document.createElement("span"), heard = vi.fn();
   list.append(row); document.body.append(list); list.addEventListener("click", event => heard(event.target));
   const { scrim } = scrimWith(() => {});
   pointerOver(row, scrim);
   press(scrim);
-  expect(heard).toHaveBeenCalledWith(row);
+  expect(heard).not.toHaveBeenCalled();
 });
 
 test("a press on bare scrim only closes: nothing is pressed under it", () => {
@@ -128,7 +129,7 @@ test("a drag from the scrim to a control beyond it closes the dialog, and the br
   expect(scrim.isConnected).toBe(false);
 });
 
-test("a stacked dialog gives the press to what is under the top one only when nothing else is open", () => {
+test("a press on the top one of two stacked dialogs closes only that one and presses nothing", () => {
   const first = vi.fn(), second = vi.fn(), action = vi.fn();
   const lower = scrimWith(second), upper = scrimWith(first);
   lower.panel.querySelector("#in")!.addEventListener("click", action);
@@ -140,7 +141,7 @@ test("a stacked dialog gives the press to what is under the top one only when no
   expect(action).not.toHaveBeenCalled();
 });
 
-test("a menu open over a dialog is closed first and the press goes no further, the next press closes the dialog and goes on", () => {
+test("a menu open over a dialog is closed first and the press goes no further, the next press closes the dialog and goes no further either", () => {
   const button = document.createElement("button"), act = vi.fn(), close = vi.fn();
   document.body.append(button); button.addEventListener("click", act);
   const { scrim, panel } = scrimWith(close);
@@ -153,7 +154,7 @@ test("a menu open over a dialog is closed first and the press goes no further, t
   expect(act).not.toHaveBeenCalled();
   press(scrim);
   expect(close).toHaveBeenCalledTimes(1);
-  expect(act).toHaveBeenCalledTimes(1);
+  expect(act).not.toHaveBeenCalled();
 });
 
 test("a panel that may not close keeps its old promise: the press is spent and nothing is pressed", () => {
@@ -197,15 +198,14 @@ test("a right click outside closes the popover and still opens the menu of what 
   expect(event.defaultPrevented).toBe(false);
 });
 
-test("a right click on a scrim closes the dialog and hands the right click to what is under it", () => {
+test("a right click on a scrim closes the dialog and is spent: the row behind it opens no menu", () => {
   const row = document.createElement("div"), opened = vi.fn(), close = vi.fn();
   document.body.append(row); row.addEventListener("contextmenu", opened);
   const { scrim } = scrimWith(close);
   pointerOver(row, scrim);
   scrim.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, button: 2, clientX: 12, clientY: 14 }));
   expect(close).toHaveBeenCalledTimes(1);
-  expect(opened).toHaveBeenCalledTimes(1);
-  expect(opened.mock.calls[0]![0]).toMatchObject({ clientX: 12, clientY: 14, button: 2 });
+  expect(opened).not.toHaveBeenCalled();
 });
 
 test("a press outside an 'are you sure' step abandons it and goes on to what it pressed", () => {
@@ -221,7 +221,7 @@ test("a press outside an 'are you sure' step abandons it and goes on to what it 
   expect(act).toHaveBeenCalledTimes(1);
 });
 
-test("a dialog's scrim hands the press to a control beside it, the way the sidebar's member is pressed", () => {
+test("a dialog's scrim does not hand the press to a control beside it: the sidebar's member behind it is not opened or focused", () => {
   const member = document.createElement("button"), pick = vi.fn(), after = vi.fn();
   document.body.append(member); member.addEventListener("click", pick);
   const dialog = openDialog({ title: "Dialog", body: "<input>", actions: {}, onAct: () => {}, onClose: after });
@@ -230,8 +230,8 @@ test("a dialog's scrim hands the press to a control beside it, the way the sideb
   press(scrim);
   expect(dialog.el.isConnected).toBe(false);
   expect(after).toHaveBeenCalledTimes(1);
-  expect(pick).toHaveBeenCalledTimes(1);
-  expect(document.activeElement).toBe(member);
+  expect(pick).not.toHaveBeenCalled();
+  expect(document.activeElement).not.toBe(member);
 });
 
 // ---------- R-UI-124: the control that opened a panel is its toggle ----------
@@ -259,7 +259,7 @@ function keyPress(target: Element, key: "Enter" | " "): { click: MouseEvent } {
   return { click };
 }
 
-test("a press on the control that opened a dialog closes it through the scrim and does not open it again", () => {
+test("a press on the scrim over the control that opened a dialog closes it and does not open it again", () => {
   const { button, opened, closed, scrim } = dialogOpener();
   press(button);
   expect(opened).toHaveBeenCalledTimes(1);
@@ -267,15 +267,15 @@ test("a press on the control that opened a dialog closes it through the scrim an
   press(scrim());
   expect(closed).toHaveBeenCalledTimes(1);
   expect(scrim().isConnected).toBe(false);
-  // The opener lay under the scrim and was found there, and not pressed: it is the dialog's toggle.
-  expect(over.seen).toEqual(["none"]);
+  // Nothing behind the scrim is looked for, so the opener is not pressed: it is the dialog's toggle.
+  expect(over.seen).toEqual([]);
   expect(opened).toHaveBeenCalledTimes(1);
   // With nothing open any more it opens again, as a control does.
   press(button);
   expect(opened).toHaveBeenCalledTimes(2);
 });
 
-test("a press through a scrim still reaches every control that did not open the dialog", () => {
+test("a press on a scrim reaches no control behind it, the opener or any other", () => {
   const { button, opened, closed, scrim } = dialogOpener();
   const other = document.createElement("button"), act = vi.fn();
   document.body.append(other); other.addEventListener("click", act);
@@ -283,7 +283,7 @@ test("a press through a scrim still reaches every control that did not open the 
   pointerOver(other, scrim());
   press(scrim());
   expect(closed).toHaveBeenCalledTimes(1);
-  expect(act).toHaveBeenCalledTimes(1);
+  expect(act).not.toHaveBeenCalled();
   expect(opened).toHaveBeenCalledTimes(1);
 });
 
@@ -301,12 +301,12 @@ test("an opener that the page drew again is still the opener: its twin is not pr
   press(scrim);
   expect(closed).toHaveBeenCalledTimes(1);
   expect(opened).toHaveBeenCalledTimes(1);
-  expect(over.seen).toEqual(["none"]);
-  // The row beside it is another control, and is pressed as always.
+  expect(over.seen).toEqual([]);
+  // The row beside it is not pressed either: a scrim hands nothing down.
   const second = scrimWith(vi.fn());
   pointerOver(list.querySelector('[data-k="more:3"]'), second.scrim);
   press(second.scrim);
-  expect(opened).toHaveBeenCalledTimes(2);
+  expect(opened).toHaveBeenCalledTimes(1);
 });
 
 test("a menu's anchor is the menu's toggle: the second press closes it and the first press opened it once", () => {
