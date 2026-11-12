@@ -10,7 +10,7 @@ import { noticeHTML } from "./missing";
 import * as api from "./api";
 import { type InventoryView, appOf, connectedCount, isConnected, whyNot } from "./apps-inventory";
 import { openConnectionSetup } from "./connection-setup";
-import { openDialog as openMemberDialog } from "./member-dialogs";
+import { confirmDelete, openDialog as openMemberDialog } from "./member-dialogs";
 import { managedGroup, pluginTool, storePlugin, type ManagedConnector } from "./plugins-data";
 import { openMcpImport } from "./mcp-import";
 import { isTopLayer, registerDismissal } from "./dismissals";
@@ -22,7 +22,10 @@ import { serviceIconOf } from "./service-icons";
 import { entryIcon } from "./service-mark";
 export { entryIcon, iconHTML } from "./service-mark";
 import type { AuditEntry, ConnectionGroup, ConnectionTool, MainEvent, NewConnection, StoreService, Words } from "./types";
-import { DISCONNECT_CONFIRM_MS, type Choice, actionRow, btn, closeMenu, copyButton, esc, fieldHTML, ico, iconButton, openPopover, row, sel, st, tg, toaster } from "./ui";
+import { DISCONNECT_CONFIRM_MS, type Choice, actionRow, btn, closeMenu, copyButton, esc, fieldHTML, ico, iconBtn, iconButton, openPopover, row, sel, st, tg, toaster } from "./ui";
+
+/** How long the next sign-in waits for the one it cancelled to give its account back before it gives up beginning. */
+const LOGIN_STOP_MS = 15_000;
 
 /** `t` for a key that is chosen at run time (its placeholders, if any, are none). */
 const tr = t as unknown as (key: MessageKey) => string;
@@ -271,7 +274,9 @@ function loginFailure(kind: string): string {
 }
 
 const loginErrorHTML = (v: ConnectionsView, target: string): string =>
-  v.loginError?.target === target ? `<div class="note" role="alert">${st("err", loginFailure(v.loginError.kind))}</div>` : "";
+  v.loginError?.target !== target ? ""
+  : v.loginError.kind === "timeout" ? `<div class="note" role="status">${st("idle", loginFailure("timeout"))}</div>`
+  : `<div class="note" role="alert">${st("err", loginFailure(v.loginError.kind))}</div>`;
 
 const dialogNoticeHTML = (v: ConnectionsView): string => v.dialogNotice
   ? `<div class="note" role="${v.dialogNotice.kind === "err" ? "alert" : "status"}" data-cs-notice>${st(v.dialogNotice.kind, v.dialogNotice.text)}</div>` : "";
@@ -384,9 +389,9 @@ const tileHTML = (mark: string, size: "" | "lg" = ""): string => `<span class="c
 function joinControl(s: StoreService, v: ConnectionsView): string {
   const here = v.login?.target === s.id;
   if (s.server_id) return `<span class="cs-state">${ico("check")}<span>${esc(t("conn.tab.installed"))}</span></span>`;
-  // Managed sign-in has no cancellation RPC; keep the shared action disabled until it completes.
-  if (here) return btn(esc(t("conn.cancel")), "cs-connect", ` data-conn="cancel-login"${s.source ? " disabled" : ""}`);
-  return btn(esc(t("conn.connect")), "cs-connect", ` data-conn="join" data-id="${esc(s.id)}" aria-label="${esc(t("conn.connectAria", { p0: s.name }))}"${v.login ? " disabled" : ""}`);
+  // A sign-in that waits can be cancelled whatever it signs in to, and it holds no other app back: connecting another one cancels it.
+  if (here) return btn(esc(t("conn.cancel")), "cs-connect", ' data-conn="cancel-login"');
+  return btn(esc(t("conn.connect")), "cs-connect", ` data-conn="join" data-id="${esc(s.id)}" aria-label="${esc(t("conn.connectAria", { p0: s.name }))}"`);
 }
 
 /** An app that is set up in the conversation rather than here: a server of the owner's own, or a developer app of theirs. */
@@ -701,7 +706,7 @@ function accountsHTML(g: ConnectionGroup): string {
     : g.auth !== "none" ? [{ label: t("conn.account"), ...(needsLogin(g) ? { kind: "err" as const, text: t("conn.status.relogin") } : { kind: "ok" as const, text: t("conn.signedIn") }) }]
     : [];
   if (!rows.length) return "";
-  return `<div class="cs-accts cs-box">${rows.map((r, n) => `<div class="cs-acct">${ico("person")}<span class="nm">${esc(r.label)}</span>${st(r.kind, r.text)}${g.accounts?.[n]?.id ? btn(esc(t("account.label")), "sm", ` data-conn="account-label" data-id="${esc(g.id)}" data-account="${esc(g.accounts[n].id!)}"`) : ""}</div>`).join("")}${g.source === "composio" ? btn(esc(t("account.add")), "sm", ` data-conn="add-account" data-id="${esc(g.id)}"`) : ""}</div>`;
+  return `<div class="cs-accts cs-box">${rows.map((r, n) => `<div class="cs-acct">${ico("person")}<span class="nm">${esc(r.label)}</span>${st(r.kind, r.text)}${g.accounts?.[n]?.id ? iconBtn("more", t("mcp.actions"), ` data-conn="account-menu" data-id="${esc(g.id)}" data-account="${esc(g.accounts[n].id!)}" aria-haspopup="menu"`) : ""}</div>`).join("")}${g.source === "composio" ? btn(esc(t("account.add")), "sm", ` data-conn="add-account" data-id="${esc(g.id)}"`) : ""}</div>`;
 }
 
 /** How an app is signed in to, in a word, from what the catalog says it needs; null when it is not known. */
@@ -765,8 +770,8 @@ function appPageHTML(s: StoreService | undefined, g: ConnectionGroup | undefined
       serviceSwitch(g, ` data-conn="enable"${id} data-k="cs-dlg-enable"${busy ? " disabled" : ""}`) +
       iconButton("more", t("mcp.actions"), ` data-conn="server-menu"${id} aria-haspopup="menu"${busy ? " disabled" : ""}`)
     : loggingIn
-      ? `<span class="cs-wait" role="status">${esc(t(s!.auth === "none" ? "conn.connecting" : "conn.loggingIn"))}</span>` + btn(esc(t("conn.cancel")), "cs-connect", ` data-conn="cancel-login"${s!.source ? " disabled" : ""}`)
-      : btn(esc(t("conn.connect")), "pri cs-connect", ` data-conn="join" data-id="${esc(s!.id)}"${v.login ? " disabled" : ""}`);
+      ? `<span class="cs-wait" role="status">${esc(t(s!.auth === "none" ? "conn.connecting" : "conn.loggingIn"))}</span>` + btn(esc(t("conn.cancel")), "cs-connect", ' data-conn="cancel-login"')
+      : btn(esc(t("conn.connect")), "pri cs-connect", ` data-conn="join" data-id="${esc(s!.id)}"`);
   const head = `<div class="cs-head">${tileHTML(mark, "lg")}<h2 class="big" id="cs-page-title">${esc(name)}</h2><div class="cs-join">${action}</div></div>`;
   const about = `<p class="cs-desc">${esc(g?.description || (s ? words(s.about) : t("conn.customServer")))}</p>`;
   const secrets = g ? [...g.env, ...g.headers] : [];
@@ -774,7 +779,7 @@ function appPageHTML(s: StoreService | undefined, g: ConnectionGroup | undefined
   const lead = !g && s?.needs === "key" && !inChat(s) ? `<p class="cs-needs">${esc(t("setup.leadKey", { p0: s.name }))}</p>` : "";
   const alert = g && needsLogin(g)
     ? `<div class="ca-alert">${ico("info")}<span class="msg">${esc(t("conn.status.relogin"))}</span>` +
-      btn(esc(v.login?.target === g.id ? t("conn.loggingIn") : t("conn.relogin")), "sm", ` data-conn="relogin"${id} data-k="cs-relogin-top"${busy || v.login ? " disabled" : ""}`) +
+      btn(esc(v.login?.target === g.id ? t("conn.loggingIn") : t("conn.relogin")), "sm", ` data-conn="relogin"${id} data-k="cs-relogin-top"${busy || v.login?.target === g.id ? " disabled" : ""}`) +
       `</div>`
     : g?.status === "error"
       ? `<div class="ca-alert">${ico("info")}<span class="msg">${esc(t("conn.status.error", { p0: failureText(g.error) }))}</span></div>`
@@ -785,7 +790,7 @@ function appPageHTML(s: StoreService | undefined, g: ConnectionGroup | undefined
       cls: "cs-acts",
       primary: example ? { label: esc(t("conn.tryIt")), attrs: ` data-conn="try"${id} data-k="cs-try"` } : undefined,
       secondary: (g.auth !== "none" && !needsLogin(g)
-        ? btn(esc(v.login?.target === g.id ? t("conn.loggingIn") : t("conn.relogin")), "sm", ` data-conn="relogin"${id} data-k="cs-relogin"${busy || v.login ? " disabled" : ""}`)
+        ? btn(esc(v.login?.target === g.id ? t("conn.loggingIn") : t("conn.relogin")), "sm", ` data-conn="relogin"${id} data-k="cs-relogin"${busy || v.login?.target === g.id ? " disabled" : ""}`)
         : "") +
       btn(esc(busy ? t("conn.refreshing") : t("conn.refresh")), "sm", ` data-conn="refresh"${id} data-k="cs-refresh"${busy ? " disabled" : ""}`) +
       (g.auth === "device" && g.catalog_id && GRANTS_URL[g.catalog_id] ? btn(esc(t("conn.revokeOpen", { p0: g.name })), "sm", ` data-conn="open-grants"${id}`) : ""),
@@ -1207,6 +1212,10 @@ export function createConnections(host: ConnectionsHost): Connections {
       return;
     }
     confirming = null;
+    disconnectNow(id);
+  }
+
+  function disconnectNow(id: string): void {
     const group = groupById(id);
     void act(id, async () => {
       if (group?.source) await api.connectorsDisconnect(id);
@@ -1214,6 +1223,28 @@ export function createConnections(host: ConnectionsHost): Connections {
       if (open && (open.id === id || openedGroup()?.id === id)) open = null;
       if (group) notify(t(group.auth !== "none" ? "conn.disconnectedLogin" : "conn.disconnected", { p0: group.name }));
     });
+  }
+
+  /**
+   * Removes one account of an app (R-ACCT-01). One that is not connected (waiting, expired, revoked, failed) goes at once; a connected
+   * one asks first, in the app's one delete question. The last connected account is the app itself: that is the app's own disconnect,
+   * with its own question (the same two presses the app's menu asks), and the owner's own Google, which has one account, is that too.
+   */
+  async function removeAccount(id: string, accountId: string): Promise<void> {
+    const group = groupById(id);
+    const account = group?.accounts?.find((a) => a.id === accountId);
+    if (!group || !account) return;
+    const connected = account.status === "ACTIVE";
+    if (group.source === "google" || (connected && (group.accounts ?? []).filter((a) => a.status === "ACTIVE").length === 1)) {
+      if (!connected) { disconnectNow(id); return; }
+      disconnect(id);
+      const anchor = Array.from((host.root ?? document).querySelectorAll<HTMLElement>('[data-conn="server-menu"]')).find((a) => a.dataset.id === id);
+      if (anchor) { click(anchor); document.querySelector<HTMLButtonElement>('.menu [data-conn="disconnect"]')?.focus(); }
+      return;
+    }
+    const name = account.label || t("conn.accountN", { p0: (group.accounts ?? []).indexOf(account) + 1 });
+    if (connected && !(await confirmDelete(name, { words: { title: t("account.removeConfirm", { p0: name }), hint: t("account.removeHint"), action: t("account.remove") } }))) return;
+    void act(id, async () => { await api.connectorsRemoveAccount(id, accountId); });
   }
 
   function nameAccount(id: string, account: { id?: string; label?: string }): void {
@@ -1232,10 +1263,26 @@ export function createConnections(host: ConnectionsHost): Connections {
     dialog.el.querySelector<HTMLInputElement>("[data-account-name]")?.focus();
   }
 
+  /** Ends the sign-in that waits, and waits (a little) for its call to come back so that the next one can begin. */
+  async function stopLogin(): Promise<void> {
+    try {
+      await api.integrationsConnectCancel();
+    } catch (err) {
+      notify(describeError(err), "err");
+      return;
+    }
+    for (let waited = 0; login && waited < LOGIN_STOP_MS; waited += 50) await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+
   /** Opens the browser login for a store entry (`catalog_id`) or for a service that must sign in again (`id`). */
   async function signIn(target: { catalog_id: string } | { id: string }, name: string, again: boolean): Promise<void> {
-    if (login) return;
     const key = "catalog_id" in target ? target.catalog_id : target.id;
+    // One sign-in waits at a time, and it holds no other app back: the next one ends it (the core gives back the account it made).
+    if (login) {
+      if (login.target === key) return;
+      await stopLogin();
+      if (login) return;
+    }
     const previousAccounts = new Set((Array.isArray(groups) ? groups : []).flatMap(group => (group.accounts ?? []).map(account => account.id)));
     const fromDialog = open && (open.id === key || entryById(open.id)?.id === key || openedGroup()?.id === key) ? open : null;
     dialogNotice = null;
@@ -1259,7 +1306,8 @@ export function createConnections(host: ConnectionsHost): Connections {
     } else if (result.error !== "cancelled") {
       // Closing or replacing a page discards its pending failure as well as its visible one.
       if (!fromDialog || open === fromDialog) loginError = { target: key, kind: result.error ?? "error" };
-      if (!fromDialog) notify(result.error === "toolkit_not_allowed" ? failureText(result.error) : t("plugins.connectFailed"), "err");
+      // A sign-in left unfinished until it ran out is not an error: the line on the app's page says so, and no toast.
+      if (!fromDialog && result.error !== "timeout") notify(result.error === "toolkit_not_allowed" ? failureText(result.error) : t("plugins.connectFailed"), "err");
     }
     await load();
     if (result.connected) {
@@ -1274,7 +1322,10 @@ export function createConnections(host: ConnectionsHost): Connections {
    * the core in one call and to nothing else), then the core adds it, and for a developer app the browser signs in.
    */
   async function addWithForm(entry: StoreService, needs: "key" | "own_app"): Promise<void> {
-    if (login) return;
+    if (login) {
+      await stopLogin();
+      if (login) return;
+    }
     const added = await openConnectionSetup({ slug: entry.id, name: entry.name, needs }, {
       connect: async (fields) => {
         login = { target: entry.id, name: entry.name };
@@ -1512,7 +1563,6 @@ export function createConnections(host: ConnectionsHost): Connections {
         break;
       }
       case "cancel-login":
-        if (login && (entryById(login.target)?.source || groupById(login.target)?.source)) break;
         void api.integrationsConnectCancel().catch((err) => notify(describeError(err), "err"));
         break;
       case "form-cancel":
@@ -1524,6 +1574,25 @@ export function createConnections(host: ConnectionsHost): Connections {
         break;
       case "configure-composio": keyOpen = true; keyError = ""; redraw(); focusOn("#conn-key"); break;
       case "save-key": void saveKey(); break;
+      case "account-menu": {
+        const group = groupById(id);
+        const accountId = button.dataset.account ?? "";
+        if (!group?.accounts?.some((a) => a.id === accountId)) return true;
+        const attrs = ` data-id="${esc(id)}" data-account="${esc(accountId)}"`;
+        const panel = openPopover(button,
+          `<button type="button" role="menuitem" data-conn="account-label"${attrs}>${esc(t("members.rename"))}</button>` +
+          `<button type="button" role="menuitem" class="danger" data-conn="account-remove"${attrs}>${esc(t("account.remove"))}</button>`,
+          { className: "menu", role: "menu", label: t("mcp.actions") });
+        panel.addEventListener("click", (event) => {
+          const action = (event.target as Element).closest("[data-conn]");
+          if (action) { closeMenu(); click(action); }
+        });
+        panel.querySelector<HTMLButtonElement>("button")?.focus();
+        break;
+      }
+      case "account-remove":
+        void removeAccount(id, button.dataset.account ?? "");
+        break;
       case "account-label": {
         const account = groupById(id)?.accounts?.find(a => a.id === button.dataset.account);
         if (account) nameAccount(id, account);

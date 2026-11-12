@@ -245,13 +245,15 @@ test.each([false, true])("saving a key never retains or echoes its value (failur
 test("one login at a time, connecting state, notification refresh and installed result", async () => {
   let finish!: (value: unknown) => void;
   api.connectorsConnect.mockReturnValue(new Promise(resolve => { finish = resolve; }));
+  api.integrationsConnectCancel.mockResolvedValue({ cancelled: true });
   const { c, root, click } = setup(); await c.load(); await settle();
   click("join", "github"); click("join", "github");
   expect(api.connectorsConnect).toHaveBeenCalledTimes(1);
   expect(api.connectorsConnect).toHaveBeenCalledWith("github");
   expect(root.querySelector(".cs-card .sub.wait")).not.toBeNull();
-  expect(root.querySelector<HTMLButtonElement>('[data-conn="cancel-login"]')?.disabled).toBe(true);
-  click("cancel-login"); expect(api.integrationsConnectCancel).not.toHaveBeenCalled();
+  // a managed sign-in is cancelled like any other: 取消 is live and tells the core
+  expect(root.querySelector<HTMLButtonElement>('[data-conn="cancel-login"]')?.disabled).toBe(false);
+  click("cancel-login"); expect(api.integrationsConnectCancel).toHaveBeenCalledTimes(1);
   connectors.push({ ...connectors[0]!, id: "composio:github", name: "GitHub", disabled_tools: [] });
   c.followEvent({ type: "ConnectionsChanged" }); await settle();
   expect(c.view().groups).toHaveLength(4);
@@ -388,8 +390,7 @@ test.each(["available", "added", "connecting", "needs-key"])("both sources of ap
   }
   if (state === "connecting") {
     expect(own.querySelector<HTMLButtonElement>('[data-conn="cancel-login"]')!.disabled).toBe(false);
-    const cancel = managed.querySelector<HTMLButtonElement>('[data-conn="cancel-login"]')!;
-    expect(cancel.disabled).toBe(true); cancel.removeAttribute("disabled");
+    expect(managed.querySelector<HTMLButtonElement>('[data-conn="cancel-login"]')!.disabled).toBe(false);
   }
   expect(managed.outerHTML).toBe(own.outerHTML);
   // What an app asks for is said on its page, not on its row; the button is live and nothing is explained only by a hover title.

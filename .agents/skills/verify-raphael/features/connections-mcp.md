@@ -45,6 +45,28 @@ Owner decision 2026-10-30: Settings > Connections is the only connected-app entr
 The sidebar has no app entry or badge. The installed tab retains the shared inventory
 count and its unknown/loading state; connection and permission behavior is unchanged.
 
+## Accounts of an app, and a sign-in that waits (2026-11-13): R-ACCT-01, R-ACCT-02
+
+Owner, 2026-11-13: 「帳號登入如果中途取消都要可以拿掉 不然他會有超級多沒有用的帳號卡在這裡」 and 「為什麼大部分人都沒有辦法連結？」.
+
+- An app's accounts card (a Composio app): each row is a person, a name, a status and a quiet ⋯ (no 帳號名稱 button). The ⋯ opens 重新命名
+  and then 移除 in red. A row that is not connected (等待登入, 已過期, 已撤銷, 失敗, 未啟用) is removed at once; a connected one asks the app's
+  delete question first (「移除「name」？」, one sentence, 取消 and a red 移除); the last connected account is the app, so its 移除 is the app's own
+  two-press disconnect (the menu then says 「確定中斷？」). 加入另一個帳號 is unchanged.
+- A sign-in that was given up leaves no account: the core gives back (Composio and the list) the account of a flow that was cancelled, closed,
+  failed or ran out, and any waiting one older than ten minutes when the list is read. `look` cannot prove that (the core is a mock there):
+  `core/tests/test_connector_accounts.py` does, and the scene `accounts-card` shows the list after the core gave the old one back.
+- A waiting sign-in holds nothing back: the waiting row says 請在瀏覽器登入… with an enabled 取消 (a Composio one too), every other 連結
+  stays pressable, and pressing another one ends the waiting one at the core first (`integrations.connect_cancel`).
+- Driving it: open Connect Apps (`#nav .sidebar-apps`), the chip 已連結, the app's row; the ⋯ is `[data-conn="account-menu"][data-account]`.
+  Gotchas: the menu's items are `account-label` and `account-remove`; a stale account is a fixture row with `stale: true` that the mock
+  drops on `connectors.status`; a waiting sign-in is the fixture flag `pluginsConnecting` (the mock holds the connect call until
+  `integrations.connect_cancel`).
+
+```powershell
+npm run look -- accounts-card accounts-menu accounts-remove-ask accounts-remove-yes accounts-remove-waiting accounts-remove-last account-labels account-label-edit sign-in-waits sign-in-replaced sign-in-cancelled --theme both --width 1120,720,1920x1080
+```
+
 ## Setup in the conversation (owner, 2026-11-09)
 
 Owner: 「這種設定不管是 composio 還是甚麼的 一律全部都在對話中進行…除非真的是登入就結束 或是輸入金鑰匙就結束」. In the

@@ -408,6 +408,8 @@ export const connectorsConnect = (toolkit: string, fields?: Record<string, strin
   connectorCall("connectors.connect", fields ? { toolkit, fields } : { toolkit });
 export const connectorsGoogleConnect = (): Promise<{ connected: boolean; error?: string; connector?: import("./plugins-data").ManagedConnector }> => connectorCall("connectors.google.connect");
 export const connectorsDisconnect = (id: string): Promise<unknown> => connectorCall("connectors.disconnect", { id });
+/** Removes one account of an app: a waiting, expired or failed one at once, a connected one after the owner's yes (the last connected one is a disconnect). */
+export const connectorsRemoveAccount = (id: string, accountId: string): Promise<unknown> => connectorCall("connectors.remove_account", { id, account_id: accountId });
 export const connectorsSetKey = (key: string): Promise<{ configured: boolean }> => connectorCall("connectors.set_key", { key });
 
 export const toolsetsList = (): Promise<{ groups: ConnectionGroup[] }> => core("toolsets.list");

@@ -84,6 +84,7 @@ pub fn timeout_for(method: &str) -> Duration {
         | "connectors.toolkit"
         | "connectors.status"
         | "connectors.disconnect"
+        | "connectors.remove_account"
         | "connectors.tools"
         | "connectors.set_tools"
         | "connectors.set_key" => 120,

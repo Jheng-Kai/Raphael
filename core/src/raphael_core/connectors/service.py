@@ -7,6 +7,7 @@ import os
 import re
 import time
 from dataclasses import asdict
+from datetime import datetime, timezone
 from contextvars import ContextVar
 
 from ..agent.policy import Tier
@@ -35,6 +36,21 @@ RPC_TIMEOUT_S = 30.0
 # How long the app store's list of apps counts as fresh, and the file that keeps the last good one between runs.
 CATALOG_TTL_S = 3600
 CATALOG_FILE = "connectors-catalog.json"
+# A sign-in that was started and not finished is given up after this long (the wait for the browser ends then too),
+# and the account Composio made for it goes with it.
+WAITING = ("INITIALIZING", "INITIATED")
+SIGN_IN_LIMIT_S = 600
+
+
+def _created_at(value) -> float | None:
+    """When Composio made an account, in seconds since 1970, from its `created_at`; None when it says nothing usable."""
+    if not isinstance(value, str):
+        return None
+    try:
+        moment = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return (moment if moment.tzinfo else moment.replace(tzinfo=timezone.utc)).timestamp()
 
 
 def _text(params: dict, key: str, *, optional=False) -> str:
@@ -102,6 +118,8 @@ class ConnectorsService:
         self.poll_timeout = poll_timeout
         self._lock = asyncio.Lock()
         self._connect_task: asyncio.Task | None = None
+        # The accounts a sign-in of this run is waiting for: a read of the list never gives these up before the wait ends.
+        self._signing_in: set[str] = set()
         self._tool_catalog: dict[str, list[dict]] = {}
         self._tool_load_locks: dict[str, asyncio.Lock] = {}
         self._store_catalog: tuple[float, dict] | None = None
@@ -119,6 +137,7 @@ class ConnectorsService:
         methods = {"catalog": self.catalog, "categories": self.categories, "toolkit": self.toolkit, "connect": self.connect,
                    "status": self.status, "disconnect": self.disconnect, "tools": self.tools,
                    "set_tools": self.set_tools, "set_key": self.set_key, "label": self.label,
+                   "remove_account": self.remove_account,
                    "google.configure": self.google_configure, "google.connect": self.google_connect}
         for name, handler in methods.items():
             router.register("connectors." + name, self._handler(handler, name))
@@ -216,7 +235,86 @@ class ConnectorsService:
         data = account.get("data") if isinstance(account.get("data"), dict) else {}
         address = account.get("email") or data.get("email") or ""
         label = old.get("label") or (address if isinstance(address, str) and len(address) <= 100 else "")
-        return {"id": account["id"], "status": account["status"], "label": label}
+        view = {"id": account["id"], "status": account["status"], "label": label}
+        if account["status"] in WAITING:
+            # When a sign-in began: Composio's own created time, else the time Raphael started it. A sign-in nobody can
+            # date (one an earlier build left behind) has none, and counts as old.
+            since = _created_at(account.get("created_at")) or old.get("since")
+            if since:
+                view["since"] = since
+        return view
+
+    def _stale(self, account) -> bool:
+        """Whether a sign-in still waiting has outlived the limit and is not the one being waited for now."""
+        if account["status"] not in WAITING or account["id"] in self._signing_in:
+            return False
+        since = account.get("since")
+        return not since or self._wall() - since > SIGN_IN_LIMIT_S
+
+    async def _delete_account(self, account, *, revoke=False) -> None:
+        """Give one connected account back to Composio (an ACTIVE one is revoked there too). An account that is already
+        gone counts as given back; any other failure is raised and the account stays."""
+        try:
+            result = await self.composio.request("DELETE", "/connected_accounts/" + segment(account["id"]),
+                                                 **({"params": {"revoke_on_delete": "true"}} if revoke else {}))
+            if revoke and result.get("success") is not True:
+                raise ConnectorFailure("revocation_failed")
+        except ConnectorFailure as error:
+            if error.kind != "gone":
+                raise
+
+    async def _delete_quietly(self, account) -> bool:
+        """The same for an account nobody asked about (a sign-in given up): Composio unreachable leaves it for the next
+        read, which tries again."""
+        try:
+            await self._delete_account(account)
+        except ConnectorFailure:
+            return False
+        return True
+
+    @staticmethod
+    def _settle(entry: Connector) -> None:
+        """The status of an app from its accounts: connected when any is, else the first one's, else not connected."""
+        entry.status = "ACTIVE" if any(a["status"] == "ACTIVE" for a in entry.accounts) else (
+            entry.accounts[0]["status"] if entry.accounts else "INACTIVE")
+
+    async def _give_up(self, entry: Connector, account_id: str) -> None:
+        """A sign-in that ended without success leaves no account: the one it made, if it is still waiting, goes back to
+        Composio and off the list. One that became something else (connected, failed, expired) is not touched."""
+        account = next((a for a in entry.accounts if a["id"] == account_id), None)
+        if account is not None and account["status"] in WAITING and await self._delete_quietly(account):
+            entry.accounts = [a for a in entry.accounts if a["id"] != account_id]
+
+    async def _sweep(self) -> None:
+        """Give up every sign-in that waited longer than the limit (the page was closed, or the owner walked away).
+        Run whenever the accounts are read; an ACTIVE account is never touched. Composio unreachable: they stay."""
+        for entry in self.store.connectors.values():
+            if entry.kind != "composio":
+                continue
+            gone = [a for a in entry.accounts if self._stale(a) and await self._delete_quietly(a)]
+            if gone:
+                entry.accounts = [a for a in entry.accounts if a not in gone]
+                self._settle(entry)
+                self._save()
+
+    async def remove_account(self, params):
+        """Remove one account of an app. One that is waiting, expired, revoked, failed or not active goes at once; an
+        ACTIVE one is revoked at Composio first. The last connected account is the app itself: that is a disconnect."""
+        entry = self._entry(params)
+        account_id = _text(params, "account_id")
+        if entry.kind != "composio":
+            raise invalid_params("Only an app of Composio has accounts to remove")
+        account = next((a for a in entry.accounts if a["id"] == account_id), None)
+        if account is None:
+            raise invalid_params("No such connected account")
+        active = account["status"] == "ACTIVE"
+        if active and sum(a["status"] == "ACTIVE" for a in entry.accounts) == 1:
+            return await self.disconnect({"id": entry.id})
+        await self._delete_account(account, revoke=active)
+        entry.accounts = [a for a in entry.accounts if a["id"] != account_id]
+        self._settle(entry)
+        self._save()
+        return {"connector": self._view(entry)}
 
     def _view(self, entry: Connector) -> dict:
         view = asdict(entry)
@@ -576,7 +674,9 @@ class ConnectorsService:
             entry.logo = (details.get("meta") or {}).get("logo", "")
             prior_active = entry.status == "ACTIVE"
             entry.status = "INITIALIZING"
-            entry.accounts = [a for a in entry.accounts if a["id"] != account_id] + [{"id": account_id, "status": "INITIALIZING"}]
+            entry.accounts = [a for a in entry.accounts if a["id"] != account_id] + [
+                {"id": account_id, "status": "INITIALIZING", "since": self._wall()}]
+            self._signing_in.add(account_id)
             self._save()
             try:
                 await self._open(url)
@@ -605,12 +705,18 @@ class ConnectorsService:
                         return {"connected": False, "error": status.lower(), "connector": self._view(entry)}
                     await self.sleep(2)
                 entry.status = "ACTIVE" if prior_active else "EXPIRED"
+                # Nobody finished it: the account Composio made for it goes back, so none is left waiting.
+                await self._give_up(entry, account_id)
                 self._save()
                 return {"connected": False, "error": "timeout", "connector": self._view(entry)}
             except BaseException:
                 entry.status = "ACTIVE" if prior_active else "INACTIVE"
+                # Closed, cancelled or failed on the way: the same.
+                await self._give_up(entry, account_id)
                 self._save()
                 raise
+            finally:
+                self._signing_in.discard(account_id)
         finally:
             if not connected:
                 # Restore the prior toolkit permissions on refusal, timeout or cancellation.
@@ -708,17 +814,23 @@ class ConnectorsService:
                     status = account.get("status")
                     if isinstance(slug, str) and status in STATUSES and isinstance(account.get("id"), str):
                         prior = self.store.connectors.get("composio:" + slug)
-                        by_slug.setdefault(slug, []).append(self.account_view(account, prior.accounts if prior else []))
+                        view = self.account_view(account, prior.accounts if prior else [])
+                        if self._stale(view) and await self._delete_quietly(view):
+                            continue  # a sign-in nobody finished is given back, not listed
+                        by_slug.setdefault(slug, []).append(view)
                 for entry in self.store.connectors.values():
                     if entry.kind == "composio":
                         entry.accounts = by_slug.get(entry.id.split(":", 1)[1], [])
-                        entry.status = "ACTIVE" if any(a["status"] == "ACTIVE" for a in entry.accounts) else (
-                            entry.accounts[0]["status"] if entry.accounts else "INACTIVE")
+                        self._settle(entry)
                 await self._session()
                 await self.composio.pages("/tool_router/session/" + segment(self.store.session_id) + "/toolkits",
                                           {"is_connected": "true", "limit": 50})
                 await self._patch()
                 self._save()
+        elif self.vault.get(KEY) and not self._lock.locked() and any(
+                self._stale(a) for c in self.store.connectors.values() if c.kind == "composio" for a in c.accounts):
+            async with self._lock:
+                await self._sweep()
         return {"connectors": [self._view(c) for c in self.store.connectors.values()],
                 "composio_configured": bool(self.vault.get(KEY)),
                 "google_configured": bool(self.vault.get(PREFIX + "client_id")),
