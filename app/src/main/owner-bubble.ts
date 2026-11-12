@@ -36,10 +36,29 @@ export const memberColor = (member: { id: number; avatar?: string | null }): str
  * theme and lightened on the black one only until it stands 3:1 off the panel, the least a control needs.
  */
 export function memberAccent(color: string): string {
+  const { light, dark } = accentPair(color);
+  return `light-dark(${hexOf(light)}, ${hexOf(dark)})`;
+}
+
+/** The member's colour as each theme's panel needs it (see `memberAccent`). */
+function accentPair(color: string): { light: number[]; dark: number[] } {
   let light = channels(color), dark = channels(color);
   while (contrast(light, WHITE) < 3) light = light.map(value => Math.round(value * 0.97));
   while (contrast(dark, DARK_PANEL) < 3) dark = dark.map(value => Math.round(value + (255 - value) * 0.06));
-  return `light-dark(${hexOf(light)}, ${hexOf(dark)})`;
+  return { light, dark };
+}
+
+/**
+ * A switch that is on in the member's own places (its panel and its settings page): its track is the colour the owner's bubble
+ * wears on the white theme and the lightened `memberAccent` on the black one (as that colour stands off the black panel, the
+ * bubble's darker shade does not), its outline `memberAccent`. The knob follows the bubble's rule for light colours: white,
+ * or dark on a slime too light for white (a yellow one, a nearly white one), so it always shows on its track.
+ */
+export function memberSwitch(color: string): { track: string; knob: string } {
+  const bubble = ownerBubble(color), { dark } = accentPair(color);
+  const knobLight = bubble.words === "light" ? "var(--on-tint-light)" : "var(--on-tint-dark)";
+  const knobDark = contrast(dark, WHITE) >= 3 ? "var(--on-tint-light)" : "var(--on-tint-dark)";
+  return { track: `light-dark(${bubble.fill}, ${hexOf(dark)})`, knob: `light-dark(${knobLight}, ${knobDark})` };
 }
 
 /** A member's name in its colour, to identify each speaker in a conversation. */

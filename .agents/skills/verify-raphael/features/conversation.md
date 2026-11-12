@@ -32,13 +32,40 @@ npm run look -- composer-shape composer-shape-room composer-shape-quote composer
 npm run look -- chat page-composer-grows page-buy page-inplace composer mode composer-model-menu opener-toggle-model-menu opener-toggle-permission-menu question-card-composer-waiting --theme both --width 1120,720,1920x1080
 ```
 
+## The delete dialog is Grok Bot's (owner, 2026-11-12)
+
+Owner: 「刪除的 UI，跟我跟你說的那個好像不太一樣，這邊你可能要改一下」. The question before a deletion or a history
+clearing (`confirmDelete` in member-dialogs.ts: a member, a group, a room, a conversation's history) is one dialog
+(R-UI-146), the class `.mb-delete` on the `.mb-confirm` shell, measured on Grok Bot's screenshot
+(`h90-delete-dialog.png`, local research, not in the repository):
+
+| | Grok Bot | Raphael |
+| --- | --- | --- |
+| box | 320 x 152 | 320 x 151 (one sentence line of 2) |
+| padding (top, right, bottom, left) | 13, 12, 12, 16 | 12, 16, 12, 16 |
+| title | 14-15 px, bold | 14 px (`--fs-sm`), the app's semibold |
+| title to sentence | 6 px | 8 px (`--sp-2`) |
+| sentence to buttons | 23 px | 24 px (`--sp-5`) |
+| buttons | 32 px tall, 140 + 140, 10 px apart, pill | 30 px tall (`--h-field`), 139 + 139, 8 px apart, pill |
+| colours | Cancel quiet grey, Delete red, white words | Cancel `--btn`, Delete `--close` with `--on-close` |
+
+`delete-confirmation` asserts the shape (box 320, two buttons of one width filling it, 刪除 at the right in the
+red, no ×, no rule line, the focus on 取消) and returns these numbers. The restore and reset confirmations and
+新增成員 keep the 440 px shell with hairlines (`member-maker`, `member-maker-taken`, `computer-file-confirm`).
+
+```powershell
+npm run look -- member-delete-ask member-delete-ask-computer member-delete press-through-delete-dialog room-delete polish-caption-confirm quick-clear-confirm quick-cleared member-maker member-maker-taken --theme both --width 1120,720,1920x1080
+```
+
 ## Card buttons at the right; confirmations as Grok Bot's (owner, 2026-11-10)
 
 Owner: 「那個卡片的按鈕盡量放在右側 然後你可以看一下刪除的 dialog 可以參考 grok bot 的 UI」. A conversation card's
 `.card-actions` stands at its right (`row-reverse`): the primary rightmost, the others and the quiet exit to its left,
-the primary still first in the markup (R-CARD-01). A confirmation (`.mb-confirm`: delete, clear, restore, reset) is
-Grok Bot's dialog: 440 px, a compact semibold question over a hairline, the consequence in secondary words, a footer
-over a hairline with Cancel then the action at the right, and no × beside a Cancel (R-UI-27). A card drawn failed keeps
+the primary still first in the markup (R-CARD-01). A confirmation (`.mb-confirm`: restore, reset) is a 440 px
+dialog: a compact semibold question over a hairline, the consequence in secondary words, a footer
+over a hairline with Cancel then the action at the right, and no × beside a Cancel (R-UI-27). The question before a
+deletion or a history clearing is the exception since 2026-11-12 (R-UI-146, see
+[Delete dialog](#the-delete-dialog-is-grok-bots-owner-2026-11-12)). A card drawn failed keeps
 one ×: `cardFailure` reuses it instead of adding a second (it had two on a message that could not be sent). Checks:
 the card shell (`the card's buttons stand at its right`), `delete-confirmation`, card-send-failed. A card's and a
 confirmation's text buttons stand at the field height (`--h-field`), not the compact one (owner, 2026-11-10:

@@ -1,6 +1,10 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { scene, member, click, hover, wait, check, key, scroll, waitScrollEnd } from './steps.mjs';
 import { learnedSkill, sharedSourceSkill } from './chat.mjs';
 
+const fixture = JSON.parse(readFileSync(join(import.meta.dirname, '../fixture.json'), 'utf8'));
+const withSlime = (id, avatar) => fixture.members.map(item => item.id === id ? {...item, avatar} : item);
 // The member settings page (member-settings.ts): the panel's gear opens it where the conversation is.
 const gear = [{ action: 'open-details' }, click('.mb-det [data-det="gear"]'), wait('.ms-pane:not([hidden]) .ms-name'), wait('.ms-pane .ms-nav [data-cat][aria-current="page"]')];
 const page = [member(1), ...gear];
@@ -27,4 +31,10 @@ export default [
   scene('member-settings-back-bottom', 'Back from the settings page a thread that was at its bottom is at its bottom', [member(1), wait('.tn[data-id="300050"]'), waitScrollEnd('.mb-chat .ra-scroll'), ...back, waitScrollEnd('.mb-chat .ra-scroll'), check('member-settings-place-bottom')], longThread),
   scene('member-settings-back-kept', 'Back from the settings page a thread read higher up stays where it was', [member(1), wait('.tn[data-id="300035"]'), { ...scroll('.tn[data-id="300035"]'), block: 'center' }, check('member-settings-place-before'), ...back, check('member-settings-place-kept')], longThread),
   scene('member-settings-back', 'Escape and the arrow return to the member\'s conversation, and the panel is as it was', [...page, key('Escape'), wait('.page-agent:not([hidden]) .mb-chat .composer'), check('member-settings-back')], filled),
+  // A member's colour is on the switches of its settings page too (owner, 2026-11-12), light slimes keeping a knob that shows.
+  scene('member-switch-tools', 'The tools kind: the switches that are on wear the member\'s colour, the drafts switch under them too', [...page, ...kind('tools', '.ms-pane [data-k="ms-tools"]'), wait('.ms-pane .tg[aria-checked="true"]'), check('member-switch')], filled),
+  scene('member-switch-tools-yellow', 'A yellow slime\'s settings switches keep a knob that shows', [...page, ...kind('tools', '.ms-pane [data-k="ms-tools"]'), wait('.ms-pane .tg[aria-checked="true"]'), check('member-switch-light')], { ...filled, members: withSlime(1, 'slime:ramiris') }),
+  scene('member-switch-skills', 'The skills kind: a skill that is on wears the member\'s colour', [...page, ...kind('skills', '.ms-pane [data-k="ms-skills"]'), wait('.ms-pane .tg[aria-checked="true"]'), check('member-switch')], filled),
+  scene('member-switch-notify', 'The notifications kind: its one switch, once on, wears the member\'s colour', [...page, ...kind('notify', '.ms-pane [data-k="ms-notify"]'), wait('.ms-pane [data-ms="notify"][aria-checked="true"]'), check('member-switch')], { ...filled, members: fixture.members.map(item => item.id === 1 ? { ...item, notify: true } : item) }),
+  scene('member-switch-notify-off', 'A switch that is off keeps its look in the member\'s settings: no colour, the grey knob at the left', [...page, ...kind('notify', '.ms-pane [data-k="ms-notify"]'), wait('.ms-pane [data-ms="notify"][aria-checked="false"]'), check('member-switch-off')], { ...filled, members: fixture.members.map(item => item.id === 1 ? { ...item, notify: false } : item) }),
 ];

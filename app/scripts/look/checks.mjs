@@ -2762,6 +2762,55 @@ export function checkRendered(name, context = {}) {
     }
     return {check:name,background:style.backgroundColor,ratio:Number(ratio.toFixed(2))};
   }
+  if (name === "member-switch" || name === "member-switch-light" || name === "member-switch-off" || name === "switch-neutral") {
+    // A switch that is on wears the member's colour in the member's own places (its panel and its settings page), as the owner's bubble
+    // does in its conversation (owner, 2026-11-12); everywhere else (the Settings dialog, Home, the store) it is as it was.
+    const token = (prop, value) => { const probe = document.createElement('i'); probe.style[prop] = value; document.body.append(probe); const out = getComputedStyle(probe)[prop]; probe.remove(); return out; };
+    const channel = value => value / 255 <= 0.03928 ? value / 255 / 12.92 : ((value / 255 + 0.055) / 1.055) ** 2.4;
+    const light = color => { const [r, g, b] = color.match(/[\d.]+/g).map(Number); return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b); };
+    const ratio = (a, b) => (Math.max(light(a), light(b)) + 0.05) / (Math.min(light(a), light(b)) + 0.05);
+    const knobOf = node => getComputedStyle(node, '::after').backgroundColor;
+    if (name === "switch-neutral") {
+      const switches = [...document.querySelectorAll('.modal-scrim .tg[aria-checked="true"]')].filter(visible);
+      require(switches.length > 0, "the Settings dialog shows a switch that is on");
+      for (const node of switches) {
+        require(!node.closest('[data-member-switch]'), "the Settings dialog is no member's place");
+        require(getComputedStyle(node).backgroundColor === token('backgroundColor', 'var(--accent)') && knobOf(node) === token('backgroundColor', 'var(--on-accent)'), `a switch outside a member's places keeps the accent (${getComputedStyle(node).backgroundColor}, knob ${knobOf(node)})`);
+      }
+      return { check: name, switches: switches.length };
+    }
+    const chat = document.querySelector('.mb-chat');
+    // The colour comes from the conversation: its bubble's, and the accent its send button wears (agent.ts drawFaces).
+    const inChat = (prop, value) => { const probe = document.createElement('i'); probe.style[prop] = value; chat.append(probe); const out = getComputedStyle(probe)[prop]; probe.remove(); return out; };
+    const dark = document.documentElement.dataset.theme === 'dark';
+    const bubbleColour = inChat('backgroundColor', 'var(--member-bubble)'), accentColour = inChat('backgroundColor', 'var(--member-accent)');
+    require(bubbleColour !== 'rgba(0, 0, 0, 0)' && accentColour !== 'rgba(0, 0, 0, 0)', "the conversation has the member's colour (the one its bubble and send button wear)");
+    // On the white theme the track is the owner's bubble, on the black one the lighter colour that stands off the panel.
+    const colour = dark ? accentColour : bubbleColour;
+    const places = [...document.querySelectorAll('.mb-det, .ms-pane')].filter(visible);
+    require(places.length > 0, "the member's panel or settings page is open");
+    const on = places.flatMap(place => [...place.querySelectorAll('.tg[aria-checked="true"]')]).filter(visible);
+    const off = places.flatMap(place => [...place.querySelectorAll('.tg[aria-checked="false"]')]).filter(visible);
+    if (name === "member-switch-off") require(on.length === 0 && off.length > 0, "only switches that are off are shown here");
+    else require(on.length > 0, "a switch that is on is shown in the member's place");
+    for (const node of on) {
+      const style = getComputedStyle(node), knob = knobOf(node);
+      require(node.closest('[data-member-switch]'), "the place carries the member's colour");
+      require(style.backgroundColor === colour && style.borderTopColor === accentColour, `a switch that is on wears the member's colour (${style.backgroundColor} with ${style.borderTopColor}, wanted ${colour} with ${accentColour})`);
+      // The knob is white on a colour white stands 3:1 off, dark on a light one (a yellow or white-ish slime), and always stands off the track.
+      const white = token('backgroundColor', 'var(--on-tint-light)'), wanted = ratio(white, colour) >= 3 ? white : token('backgroundColor', 'var(--on-tint-dark)');
+      require(knob === wanted && ratio(knob, colour) >= 3, `the knob stands off the colour (${knob} on ${colour}: ${ratio(knob, colour).toFixed(2)})`);
+      // The black theme's colour stands off its panel; the white theme's outline does (`memberAccent` holds 3:1 off white, the panel is #f7f7f7).
+      const panel = getComputedStyle(node.closest('.mb-det, .ms-pane')).backgroundColor;
+      if (panel !== 'rgba(0, 0, 0, 0)') require(ratio(accentColour, panel) >= 2.7, `the colour stands off its surface (${ratio(accentColour, panel).toFixed(2)})`);
+      if (name === "member-switch-light") require(light(knob) < 0.1, `a light slime's knob is dark (${knob} on ${colour})`);
+    }
+    for (const node of off) {
+      const style = getComputedStyle(node);
+      require(style.backgroundColor === 'rgba(0, 0, 0, 0)' && knobOf(node) === token('backgroundColor', 'var(--text-2)') && style.borderTopColor === token('borderTopColor', 'var(--text-3)'), `a switch that is off keeps its look (${style.backgroundColor}, knob ${knobOf(node)})`);
+    }
+    return { check: name, on: on.length, off: off.length, colour, knob: on[0] ? knobOf(on[0]) : null };
+  }
   if (name === "sidebar-folded") {
     // The rail of faces on a narrow window has no folder headings to press.
     if (matchMedia('(max-width: 859px)').matches) return {check:name,compact:true};
@@ -4639,29 +4688,46 @@ export function checkRendered(name, context = {}) {
     return { check: name, rows: rows.length, minimumGap: Number.isFinite(minimumGap) ? minimumGap : null };
   }
   if (name === "delete-confirmation") {
+    // The app's one delete dialog, Grok Bot's (owner, 2026-11-12): a small box, the title over one sentence, then one row of two
+    // buttons of the same width that fill the box, Cancel then a red Delete; no × and no line inside; the focus on Cancel.
     const dialogs = [...document.querySelectorAll('.mb-dialog.mb-confirm')];
     const dialog = dialogs.at(-1);
-    require(visible(dialog), "the confirmation is visible");
+    require(visible(dialog) && dialog.classList.contains('mb-delete'), "the delete confirmation is the shared delete dialog");
+    const px = value => parseFloat(value) || 0;
+    const token = (prop, name) => { const probe = document.createElement('i'); probe.style[prop] = `var(${name})`; document.body.append(probe); const value = getComputedStyle(probe)[prop]; probe.remove(); return value; };
     const buttons = [...dialog.querySelectorAll('.mb-dlg-act .btn')];
     require(buttons.map(button => button.dataset.dlg).join('|') === 'cancel|delete', "Cancel precedes Delete visually and in keyboard order");
-    require(document.activeElement === buttons[0], "Cancel receives initial focus");
+    require(document.activeElement === buttons[0], "Cancel receives initial focus, so Enter never deletes");
     require(visible(document.getElementById(dialog.getAttribute('aria-describedby'))), "the irreversible-action description is announced");
-    require(buttons[1].classList.contains('pri'), "Delete uses the skin's primary accent");
-    // As Grok Bot's dialogs (owner, 2026-11-10): a compact head over a hairline, a footer over a hairline with Cancel
-    // then Delete at the right, and no × beside a Cancel.
-    const head = dialog.querySelector('.mb-dlg-head'), act = dialog.querySelector('.mb-dlg-act');
-    require(parseFloat(getComputedStyle(head).borderBottomWidth) > 0 && parseFloat(getComputedStyle(act).borderTopWidth) > 0, "hairlines part the head and the footer");
-    require(parseFloat(getComputedStyle(head.querySelector('h2')).fontSize) <= parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--fs-sm')) + 0.5, "the question is a compact heading");
-    require(!visible(dialog.querySelector('[data-dlg="close"]')), "no × stands beside Cancel");
-    const end = act.getBoundingClientRect().right - parseFloat(getComputedStyle(act).paddingRight);
+    // No ×, no rule line: nothing inside the box but the buttons draws a border, and the head and the footer have none.
+    require(!dialog.querySelector('[data-dlg="close"], .btn.icon'), "no × in the box");
+    const lines = [...dialog.querySelectorAll('*')].filter(node => !node.closest('.btn') && ['Top', 'Right', 'Bottom', 'Left'].some(side => px(getComputedStyle(node)[`border${side}Width`]) > 0));
+    require(lines.length === 0, `no line inside the box (${lines.map(node => node.className || node.tagName).join(', ')})`);
+    require(!dialog.querySelector('hr, [role="separator"]'), "no separator element");
+    // The box: 320 px wide (less in a narrower window), centred in the window.
+    const box = dialog.getBoundingClientRect(), style = getComputedStyle(dialog);
+    require(Math.abs(box.width - Math.min(320, innerWidth - 2 * px(getComputedStyle(dialog.parentElement).paddingLeft))) <= 1, `the box is 320 px wide (${box.width})`);
+    require(box.left >= 0 && box.right <= innerWidth && Math.abs((box.left + box.right) / 2 - innerWidth / 2) <= 2, "the box is centred in the window");
+    // One row of two equal buttons that fill the box's inner width.
     const [cancel, remove] = buttons.map(button => button.getBoundingClientRect());
-    require(Math.abs(remove.right - end) <= 1 && cancel.right <= remove.left, "Cancel then Delete stand at the right");
-    // The dialog's text buttons share the app's small radius, like every other text button.
-    const small = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--r-sm'));
-    require(buttons.every(button => parseFloat(getComputedStyle(button).borderRadius) === small), "actions share the app's small button radius");
-    const box = dialog.getBoundingClientRect();
-    require(box.width <= 442 && box.left >= 0 && box.right <= innerWidth, "the compact panel fits the window");
-    return { check: name, width: box.width, height: box.height };
+    const inner = { left: box.left + px(style.borderLeftWidth) + px(style.paddingLeft), right: box.right - px(style.borderRightWidth) - px(style.paddingRight) };
+    require(Math.abs(cancel.width - remove.width) <= 1, `the two buttons are the same width (${cancel.width} and ${remove.width})`);
+    require(Math.abs(cancel.top - remove.top) <= 0.5 && Math.abs(cancel.height - remove.height) <= 0.5, "the two buttons are one row of one height");
+    require(Math.abs(cancel.left - inner.left) <= 1 && Math.abs(remove.right - inner.right) <= 1 && remove.left >= cancel.right, `the buttons fill the box (${cancel.left}..${remove.right} in ${inner.left}..${inner.right})`);
+    require(Math.abs(cancel.height - px(token('height', '--h-field'))) <= 0.5, `the buttons take the field height (${cancel.height})`);
+    require(buttons.every(button => px(getComputedStyle(button).borderTopLeftRadius) >= cancel.height / 2), "both buttons have fully rounded ends");
+    // Delete is red with white words, at the right; Cancel is the quiet button colour.
+    const [cancelStyle, removeStyle] = buttons.map(button => getComputedStyle(button));
+    require(removeStyle.backgroundColor === token('backgroundColor', '--close') && removeStyle.color === token('color', '--on-close'), `Delete is the danger red with white words (${removeStyle.backgroundColor} on ${removeStyle.color})`);
+    require(cancelStyle.backgroundColor === token('backgroundColor', '--btn'), `Cancel is the quiet button colour (${cancelStyle.backgroundColor})`);
+    // The words: a title and one sentence in the ordinary text colour.
+    const title = dialog.querySelector('h2'), sentences = [...dialog.querySelectorAll('.mb-dlg-body p')];
+    require(sentences.length === 1 && getComputedStyle(sentences[0]).color === token('color', '--text'), "one sentence in the ordinary text colour");
+    require(px(getComputedStyle(title).fontSize) <= px(token('fontSize', '--fs-sm')) + 0.5, "the title is a compact heading");
+    require(title.getBoundingClientRect().bottom <= sentences[0].getBoundingClientRect().top + 1 && sentences[0].getBoundingClientRect().bottom <= cancel.top, "the title, the sentence and the buttons stand in that order");
+    return { check: name, width: box.width, height: box.height, padding: [style.paddingTop, style.paddingRight, style.paddingBottom, style.paddingLeft].map(px),
+      titleSize: px(getComputedStyle(title).fontSize), titleToSentence: sentences[0].getBoundingClientRect().top - title.getBoundingClientRect().bottom,
+      sentenceToButtons: cancel.top - sentences[0].getBoundingClientRect().bottom, buttonHeight: cancel.height, cancelWidth: cancel.width, deleteWidth: remove.width, gap: remove.left - cancel.right };
   }
   if (name.startsWith("cli-account-")) {
     const row = document.querySelector('[data-cli-menu="codex"], [data-cli="codex"]')?.closest('.cli-card');
