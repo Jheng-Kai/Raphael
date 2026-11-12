@@ -58,6 +58,8 @@
    mark is drawn in its own colours (or near-black), and the dark theme's light twin of a dark logo is not used. */
 .cs-tile { display: inline-grid; place-items: center; flex: none; width: 40px; height: 40px; border-radius: var(--r-md); background: var(--tile); box-shadow: inset 0 0 0 1px var(--tile-edge); color: var(--on-tile); color-scheme: light; overflow: hidden; }
 .cs-tile .mono { width: 24px; height: 24px; color: var(--on-tile); }
+/* A mark with an official colour keeps it on the tile and in the chip (a near-black one takes its own near-black, the tile being light): the rule above is only for the plain ones. */
+.cs-tile .logo-mono[style], .cs-mini .logo-mono[style] { color: var(--brand); }
 .cs-tile .mono > .i { width: 20px; height: 20px; }
 .cs-tile.lg { width: 56px; height: 56px; border-radius: var(--r-lg); }
 .cs-tile.lg .mono { width: 32px; height: 32px; }
