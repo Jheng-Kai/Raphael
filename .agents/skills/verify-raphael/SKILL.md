@@ -126,6 +126,9 @@ engine and never starts Docker. It never runs implicitly, with `--core`, or in C
 An image build can download the base image and image dependencies; the host gets no
 new dependency. `RAPHAEL_CORE_PYTHON` can select an installed repository interpreter.
 
+It also makes the product's own driver connection (`VmTools._connection`) twice on each
+computer, the second as a core started again, and calls a tool through it (R-COMP-DRIVER-01:
+a set-up argument the driver refuses fails every screen tool, and fakes take anything).
 This drives `LocalVm` and the image helper: 1, 3 and 6 outputs, panels, boot readiness,
 authenticated clipped RFB views, screen-local launcher input and raw pixels, restart,
 helper/view recovery, X-server loss, the core's `DesktopViewer` relay, and available

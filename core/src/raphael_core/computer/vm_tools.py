@@ -9,6 +9,7 @@ import json
 import logging
 import mimetypes
 import re
+import secrets
 import shlex
 import time
 from contextlib import contextmanager
@@ -169,6 +170,9 @@ class VmTools:
         self.vm.busy = lambda key: key in self.leases and self.scope_busy(self.leases[key])
         self.listed = set()
         self.connections, self.labels = {}, itertools.count(1)
+        # The driver in a running computer remembers every session label that has ended and refuses it for good. A
+        # core that starts again beside a computer still running must therefore never count from 1 once more.
+        self.session_prefix = f"raphael-{secrets.token_hex(4)}"
         self.logins = None
         self.private_pages = {}
         self.payment_holds = set() if conn is None else {row[0] for row in conn.execute("SELECT target FROM computer_payment_holds")}
@@ -1006,10 +1010,13 @@ class VmTools:
         await self._disconnect(target.key)
         client = self.bridge(self.vm, target)
         await client.__aenter__()
-        session = f"raphael-{next(self.labels)}"
+        session = f"{self.session_prefix}-{next(self.labels)}"
         try:
+            # The driver refuses an argument its schema does not name (`additionalProperties: false`), and a refused
+            # set-up call fails every tool of the computer. cua-driver 0.37.0 `describe set_agent_cursor_enabled`:
+            # `enabled` and `session` only; the cursor is the session's.
             for name, arguments in (("set_config", {"max_image_dimension": 1456}),
-                                    ("set_agent_cursor_enabled", {"enabled": False, "cursor_id": session})):
+                                    ("set_agent_cursor_enabled", {"enabled": False})):
                 if member is not None and target != self.vm.target(member):
                     raise VmError("computer_changed")
                 if target.key in self.vm.held:
