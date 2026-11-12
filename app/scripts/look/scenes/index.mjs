@@ -42,6 +42,7 @@ import overlay from "./overlay.mjs";
 import languageOverlay from "./language-overlay.mjs";
 import home from "./home.mjs";
 import apps from "./apps.mjs";
+import connectApps from "./connect-apps.mjs";
 import contextMenu from "./context-menu.mjs";
 import ownerRound from "./owner-round.mjs";
 import ownerRound3 from "./owner-round3.mjs";
@@ -81,6 +82,10 @@ for (const scene of scenes) if (['slime-states', 'presence-states-sidebar', 'bus
   const freeze = scene.steps.findIndex(step => step.action === 'freeze-motion');
   scene.steps.splice(freeze < 0 ? scene.steps.length : freeze, 0, { action: 'motion-cost', ...(process.env.LOOK_TRACE==='1'?{measure:{name:'motion-cost',enforce:false}}:{}) });
 }
+scenes.push(...connectApps);
+// R-FLOAT-01: what floats (a dialog, a menu, a popover, a floating card) stands on the floating surface and its edge in every theme.
+const FLOAT_SCENES = new Set(['member-delete-ask', 'member-maker', 'context-menu-member', 'composer-model-small', 'composer-model-sources', 'automations-detail-own', 'automations-create-slot', 'appearance-menu', 'model-choices-answer', 'profile', 'connections-add-menu', 'server-menu', 'connections-delete']);
+for (const scene of scenes) if (FLOAT_SCENES.has(scene.name)) scene.steps.push({ action: "check", name: "float-surface" });
 scenes.push(...topRow);
 for (const scene of scenes) if (TOP_ROW_SCENES.has(scene.name)) scene.steps.push({ action: "check", name: "conversation-top-row" });
 if (new Set(scenes.map(scene => scene.name)).size !== scenes.length) throw new Error("Duplicate look scene name");

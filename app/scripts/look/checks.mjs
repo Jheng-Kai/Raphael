@@ -782,7 +782,7 @@ export function checkRendered(name, context = {}) {
     return { check: name, button: Math.round(pick.width) };
   }
   if (name.startsWith("skills-") || ["growing-skills", "member-shared-source"].includes(name)) {
-    for (const label of document.querySelectorAll('[data-skill-provenance], .mp-resource p, .ms-meta, .cs-item .ds, .cs-dialog > .cs-desc')) {
+    for (const label of document.querySelectorAll('[data-skill-provenance], .mp-resource p, .ms-meta, .cs-linked .ds, .cs-page .cs-desc')) {
       const text = label.textContent.trim(), title = label.getAttribute('title') ?? '';
       require(!/^(learned|owner|imported)$/i.test(text) && !/(?:local:|github:|plugin:|[/\\]plugins[/\\]cache[/\\])/i.test(text + title), "R-SKILL-08: skill origins never show raw source values or plugin cache paths");
     }
@@ -1831,8 +1831,6 @@ export function checkRendered(name, context = {}) {
     const note = [...document.querySelectorAll(noteScope)].find(visible);
     if (name === 'missing-onboarding-repair') {
       require(visible(document.querySelector('[data-act="rerun-guide"]')), 'repair reaches the existing Start tour action');
-    } else if (name === 'missing-store-repair') {
-      require(visible(document.querySelector('[data-k="conn-tab:store"][aria-selected="true"]')), 'repair switches the existing settings to Store');
     } else if (name === 'missing-provider-repair') {
       require(visible(document.querySelector('#pv-dialog')), 'provider repair opens the existing provider card');
       require(document.activeElement === document.querySelector('#pv-dialog [data-pv="replace"]'), 'provider repair focuses its credential action');
@@ -4077,12 +4075,12 @@ export function checkRendered(name, context = {}) {
       const form = settings.querySelector('.cs-form .add-grid');
       const contentRight = form ? form.getBoundingClientRect().left + form.clientWidth - parseFloat(getComputedStyle(form).paddingRight) : edge.right;
       if (visible(action)) require(Math.abs(action.getBoundingClientRect().right - contentRight) <= 1, "settings header action shares the content right edge");
-      for (const selector of ['.cs:has(.cs-store-groups) .cs-find .field', '.cs-store-groups', '.cs-results']) {
+      for (const selector of ['.cs-apps .cs-chips', '.cs-results']) {
         const control = settings.querySelector(selector);
         if (visible(control)) require(Math.abs(control.getBoundingClientRect().right - edge.right) <= 1, `settings toolbar shares the content right edge: ${selector}`);
       }
     }
-    for (const grid of document.querySelectorAll('.cs-store .cs-grid')) {
+    for (const grid of document.querySelectorAll('.cs-apps .cs-grid')) {
       if (!visible(grid)) continue;
       const tracks = getComputedStyle(grid).gridTemplateColumns.split(/\s+/).map(Number.parseFloat);
       for (const [index, card] of [...grid.children].entries())
@@ -4099,7 +4097,7 @@ export function checkRendered(name, context = {}) {
       // The details panel's rows follow the panel's width: the panel's drag bounds them.
       ['card', '.cs-card:not([data-standalone] .cs-card), .run-tile, .au-occurrence, .icard, .keys-card:not(.page-overview .keys-card)'],
       // A store row in Connect apps on its own is one of two columns in a wide dialog: a reading line.
-      ['reading', '.ho-line, .card:not(.activity):not(.keys-card), .row, .list, .slist, .hist-top, .hrow, .cs-item, [data-standalone] .cs-card, .mb-row, .mb-rt, .conversation-row, .ask-card, .bgq-card'],
+      ['reading', '.ho-line, .card:not(.activity):not(.keys-card), .row:not([data-standalone] .cs-box .row), .list, .slist, .hist-top, .hrow, .cs-item, [data-standalone] .cs-card, .mb-row, .mb-rt, .conversation-row, .ask-card, .bgq-card'],
       ['thread', '.ra-col, .composer'],
       // Connected apps are two columns of short rows: the list is a page-wide grid, each row a reading line.
       ['page', '.page:not(.page-agent), .modal, .ho-hero, .page-overview .keys-card, .cs-list'],
@@ -4730,7 +4728,7 @@ export function checkRendered(name, context = {}) {
     // Delete is red with white words, at the right; Cancel is the quiet button colour.
     const [cancelStyle, removeStyle] = buttons.map(button => getComputedStyle(button));
     require(removeStyle.backgroundColor === token('backgroundColor', '--close') && removeStyle.color === token('color', '--on-close'), `Delete is the danger red with white words (${removeStyle.backgroundColor} on ${removeStyle.color})`);
-    require(cancelStyle.backgroundColor === token('backgroundColor', '--btn'), `Cancel is the quiet button colour (${cancelStyle.backgroundColor})`);
+    require(cancelStyle.backgroundColor === token('backgroundColor', '--float-ctl'), `Cancel is the control colour of a floating surface (${cancelStyle.backgroundColor})`);
     // The words: a title and one sentence in the ordinary text colour.
     const title = dialog.querySelector('h2'), sentences = [...dialog.querySelectorAll('.mb-dlg-body p')];
     require(sentences.length === 1 && getComputedStyle(sentences[0]).color === token('color', '--text'), "one sentence in the ordinary text colour");
@@ -6391,16 +6389,157 @@ export function checkRendered(name, context = {}) {
     }
     return { check: name, rows: document.querySelectorAll(".look-slime-board > div").length };
   }
+  // ---------- 連結應用程式 as Grok Bot's Connect Apps (R-APPS-01, R-APPS-02) and one colour for everything that floats (R-FLOAT-01) ----------
+  const colourOf = (prop, tokenName) => { const probe = document.createElement('i'); probe.style[prop] = `var(${tokenName})`; document.body.append(probe); const out = getComputedStyle(probe)[prop]; probe.remove(); return out; };
+  const connectModal = () => document.querySelector('.modal-scrim[data-standalone="connections"] .modal');
+  if (name === "float-surface") {
+    // Whatever floats in this picture stands on the floating surface and its edge, and a control on it is filled with the control colour.
+    const surface = colourOf('backgroundColor', '--float'), edge = colourOf('borderTopColor', '--float-edge'), control = colourOf('backgroundColor', '--float-ctl');
+    const found = [...document.querySelectorAll('.menu:not(.cb-menu), .cb-card, .mb-dialog, .modal, .au-pop, .cs-dialog, .link-hover')].filter(node => visible(node) && (getComputedStyle(node).position !== 'static' || node.matches('.cb-card, .mb-dialog, .cs-dialog')));
+    require(found.length > 0, "something floats in this picture");
+    for (const node of found) {
+      const style = getComputedStyle(node);
+      require(style.backgroundColor === surface, `${node.className.split(' ')[0]} stands on the floating surface (${style.backgroundColor}, not ${surface})`);
+      require(style.borderTopColor === edge && parseFloat(style.borderTopWidth) === 1, `${node.className.split(' ')[0]} has the floating edge (${style.borderTopColor} ${style.borderTopWidth})`);
+    }
+    // A text button standing on the surface is filled with the control colour (its frame), unless it is the primary or a bare icon.
+    const buttons = found.flatMap(node => [...node.querySelectorAll('.btn:not(.pri):not(.icon):not(.danger)')]).filter(button => visible(button) && button.textContent.trim() && !button.matches('.cs-main, .cs-have, .mc-source, .gr, .cs-viewall, [role="menuitem"]'));
+    for (const button of buttons) require(getComputedStyle(button).backgroundColor !== surface, `a button on a floating surface is told from it by its fill, ${control} (${button.textContent.trim()})`);
+    return { check: name, surfaces: found.map(node => node.className.split(' ')[0]), buttons: buttons.length };
+  }
+  if (name === "connections-empty") {
+    const view = connectModal()?.querySelector('.cs-apps');
+    require(visible(view) && !view.querySelector('[data-conn="connected"]'), "with nothing connected the chip of the connected apps is not there");
+    require(view.querySelectorAll('.cs-card').length > 0, "the one view still offers apps to connect");
+    return { check: name };
+  }
+  if (name === "connect-apps-view" || name === "connect-apps-scrolled") {
+    const modal = connectModal(), view = modal?.querySelector('.cs-apps'), frame = modal.getBoundingClientRect();
+    require(visible(view), "the one view of the apps is open");
+    const results = view.querySelector('.cs-results');
+    const title = view.querySelector('.cs-top h1'), chip = view.querySelector('[data-conn="connected"]'), close = modal.querySelector('.modal-x');
+    require(visible(title) && title.textContent.trim() === '連結應用程式', "the title is at the top left");
+    require(!view.querySelector('[role="tab"], [data-conn="tab"], .tabs, .cs-store-pages'), "there are no tabs and no pages");
+    require(!/\d{3,}/.test(view.textContent.replace(/Acme Ledger \d+|\d+ 個已連結/g, '')), "no count of the catalogue is shown");
+    const search = view.querySelector('#conn-search');
+    const chips = view.querySelector('.cs-chips');
+    if (name === "connect-apps-scrolled") {
+      require(results.scrollTop > 0, `the list was scrolled (${results.scrollTop})`);
+      // The top row, the search and the chips stand still while only the list scrolls under them.
+      for (const node of [title, search, ...[...chips.children].filter(child => !child.hidden)]) {
+        const box = node.getBoundingClientRect(), hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+        require(box.top >= frame.top && node.contains(hit), "the title, the search and the chips stay put while the list scrolls");
+      }
+      return { check: name, scrollTop: results.scrollTop };
+    }
+    require(visible(chip) && /\d/.test(chip.textContent) && chip.querySelectorAll('.cs-mini').length >= 1 && chip.querySelectorAll('.cs-mini').length <= 4 && chip.querySelectorAll('.cs-mini').length === Math.min(4, Number(chip.textContent.match(/\d+/)[0])), `a chip of up to four marks, exactly the connected apps its number counts (${chip?.textContent.trim()}, ${chip.querySelectorAll('.cs-mini').length} marks)`);
+    require(close && chip.getBoundingClientRect().right <= close.getBoundingClientRect().left - 4, "the chip stands clear of the dialog's ✕");
+    require(search.getAttribute('placeholder') === '搜尋應用程式' && visible(view.querySelector('[data-k="conn-add"]')), "the search over the whole catalog, and 新增 beside it");
+    const shown = [...chips.children].filter(child => !child.hidden);
+    require(getComputedStyle(chips).flexWrap === 'nowrap' && chips.scrollWidth <= chips.clientWidth + 1, `the chips never wrap or scroll (${chips.scrollWidth} in ${chips.clientWidth})`);
+    require(shown.every(child => Math.abs(child.getBoundingClientRect().top - shown[0].getBoundingClientRect().top) <= 1), "every chip is on one row");
+    const all = chips.querySelector('[data-conn="store-group"][data-id=""]'), other = chips.querySelector('[data-conn="store-group"]:not([data-id=""]):not([hidden])');
+    require(all.getAttribute('aria-pressed') === 'true' && getComputedStyle(all).backgroundColor === colourOf('backgroundColor', '--float-sel') && getComputedStyle(all).color === colourOf('color', '--float-on-sel'), "全部 is chosen: a light fill with dark words");
+    require(getComputedStyle(other).backgroundColor === colourOf('backgroundColor', '--float-ctl'), "an unchosen chip is filled with the control colour of a floating surface");
+    require(visible(chips.querySelector('[data-k="conn-more"]')), "更多 holds the rest");
+    const heads = [...view.querySelectorAll('.cs-sec > .cs-sec-head h2')].map(node => node.textContent);
+    require(heads[0] === '為你推薦' && heads.length >= 3, `為你推薦 and then a section for each category (${heads})`);
+    const tile = view.querySelector('.cs-card .cs-tile'), box = tile.getBoundingClientRect();
+    require(getComputedStyle(tile).backgroundColor === 'rgb(255, 255, 255)' && Math.round(box.width) === 40 && Math.round(box.height) === 40 && parseFloat(getComputedStyle(tile).borderTopLeftRadius) > 4, "the mark stands on a white rounded tile of 40 px");
+    const connect = view.querySelector('.cs-card [data-conn="join"]'), connectBox = connect.getBoundingClientRect(), connectStyle = getComputedStyle(connect);
+    require(connectStyle.backgroundColor === colourOf('backgroundColor', '--float-ctl') && parseFloat(connectStyle.borderTopLeftRadius) >= connectBox.height / 2 && connect.textContent.trim() === '連結', "連結 is a round button filled with the control colour");
+    require(connectBox.height === 26 && connectBox.width < 120, `its height is the control token and its width hugs its words (${connectBox.width}x${connectBox.height})`);
+    const done = view.querySelector('.cs-card .cs-state');
+    require(done && !done.closest('.cs-card').querySelector('button.cs-connect') && done.textContent.includes('已連結'), "a connected app says 已連結 in quiet words and has no button");
+    const surface = getComputedStyle(modal);
+    require(surface.backgroundColor === colourOf('backgroundColor', '--float') && surface.borderTopColor === colourOf('borderTopColor', '--float-edge'), "the dialog stands on the floating surface and its edge");
+    const body = modal.querySelector('.modal-body');
+    require(body.scrollWidth <= body.clientWidth + 1 && results.scrollWidth <= results.clientWidth + 1, "the dialog never scrolls sideways");
+    require(results.getBoundingClientRect().bottom <= frame.bottom + 1 && results.getBoundingClientRect().top > chips.getBoundingClientRect().bottom - 1, "the list scrolls between the chips and the dialog's lower edge");
+    return { check: name, chips: shown.length, sections: heads.length };
+  }
+  if (name === "connect-apps-category") {
+    const view = connectModal().querySelector('.cs-apps'), chips = view.querySelector('.cs-chips');
+    const chosen = chips.querySelector('[aria-pressed="true"]');
+    require(chosen.dataset.id === 'productivity' && getComputedStyle(chosen).backgroundColor === colourOf('backgroundColor', '--float-sel'), "the chosen chip is a light fill with dark words");
+    require(!view.querySelector('.cs-sec') && view.querySelectorAll('.cs-results > .cs-body > .cs-grid').length === 1, "a chosen category is one list, with no sections");
+    const rows = [...view.querySelectorAll('.cs-card')];
+    require(rows.length > 0 && rows.length <= 48 + 6, `its apps are listed, a screenful at a time (${rows.length})`);
+    require(!/\d{3,}/.test(view.querySelector('.cs-results').textContent.replace(/Acme Ledger \d+/g, '')), "no count is shown");
+    return { check: name, rows: rows.length };
+  }
+  if (name === "connect-apps-more") {
+    const view = connectModal().querySelector('.cs-apps'), more = view.querySelector('[data-k="conn-more"]'), menu = document.querySelector('#app-popover');
+    require(visible(menu) && more.getAttribute('aria-expanded') === 'true', "更多 opens a menu");
+    const items = [...menu.querySelectorAll('button')].map(node => node.textContent.trim());
+    const standing = [...view.querySelectorAll('.cs-chips [data-conn="store-group"]:not([hidden])')].map(node => node.textContent.trim());
+    const hidden = [...view.querySelectorAll('.cs-chips [data-conn="store-group"][hidden]')].map(node => node.textContent.trim());
+    require(items.length > 0 && JSON.stringify(items) === JSON.stringify(hidden), `it offers exactly the categories that are not in the row (${items} / ${hidden})`);
+    require(!items.some(item => standing.includes(item)), "no category is in both");
+    const style = getComputedStyle(menu);
+    require(style.backgroundColor === colourOf('backgroundColor', '--float') && style.borderTopColor === colourOf('borderTopColor', '--float-edge'), "the menu stands on the floating surface");
+    return { check: name, items: items.length };
+  }
+  if (name === "connect-apps-search") {
+    const view = connectModal().querySelector('.cs-apps'), query = view.querySelector('#conn-search').value;
+    require(query.length > 0 && !view.querySelector('.cs-sec'), "the search's results take the place of the sections");
+    const rows = [...view.querySelectorAll('.cs-card')];
+    require(rows.length > 0 && rows.every(row => row.querySelector('[data-conn="open-store"]')), "the results are rows of the whole catalog");
+    require(!view.querySelector('.cs-chips [aria-pressed="true"]'), "no chip is chosen while there is a search");
+    return { check: name, rows: rows.length, query };
+  }
+  if (name === "connect-apps-connected") {
+    const view = connectModal().querySelector('.cs-connected'), back = view?.querySelector('[data-conn="back"]');
+    require(visible(view) && visible(back) && back.tagName === 'BUTTON' && back.getAttribute('aria-label') === '返回', "the connected list has a back chevron at the top left");
+    require(!view.querySelector('.cs-chips, #conn-search') && view.querySelector('.cs-top-t')?.textContent === '已連結', "it is the list alone, under its own title");
+    const rows = [...view.querySelectorAll('.cs-linked')];
+    require(rows.length > 0 && rows.every(row => visible(row.querySelector('.cs-tile')) && row.querySelector('[role="switch"]')), "each row has its tile, its name and its switch");
+    const heads = [...view.querySelectorAll('.cs-body > .cs-sec > .cs-sec-head h2')].map(node => node.textContent);
+    require(heads[0] === '應用程式' && heads[heads.length - 1] === '已關閉' && !heads.includes('尚未連結') , `the connected first, then 已關閉 for what is switched off (${heads})`);
+    const offRows = [...view.querySelectorAll('.cs-body > .cs-sec:last-child .cs-linked')];
+    require(offRows.length > 0 && offRows.every(row => row.querySelector('[role="switch"]').getAttribute('aria-checked') === 'false'), "every row under 已關閉 is switched off, and keeps its switch");
+    const edge = connectModal().querySelector('.modal-body').getBoundingClientRect().left;
+    require(back.getBoundingClientRect().left - edge <= 40, "the chevron stands at the top left");
+    return { check: name, rows: rows.length };
+  }
+  if (name === "connect-app-oauth" || name === "connect-app-key" || name === "connect-app-connected") {
+    const modal = connectModal(), page = modal.querySelector('.cs-page'), back = page.querySelector('[data-conn="back"]'), close = modal.querySelector('.modal-x');
+    require(visible(page) && !page.querySelector('.cs-top') && visible(back) && back.tagName === 'BUTTON', "an app's page has a bare back chevron and no title row");
+    require(page.querySelector('.cs-vh')?.getBoundingClientRect().width <= 2, "the dialog's title is for a screen reader only");
+    require(visible(close) && close.getBoundingClientRect().top < page.querySelector('.cs-head').getBoundingClientRect().top, "the dialog's bare ✕ stands at the top right");
+    const head = page.querySelector('.cs-head'), tile = head.querySelector('.cs-tile.lg'), tileBox = tile.getBoundingClientRect(), nameNode = head.querySelector('h2.big');
+    require(Math.round(tileBox.width) === 56 && Math.round(tileBox.height) === 56 && getComputedStyle(tile).backgroundColor === 'rgb(255, 255, 255)', "the mark is on a white rounded tile of 56 px");
+    require(nameNode.getBoundingClientRect().left > tileBox.right && Math.abs((nameNode.getBoundingClientRect().top + nameNode.getBoundingClientRect().bottom) - (tileBox.top + tileBox.bottom)) <= 4, "the name is beside the tile");
+    const join = head.querySelector('[data-conn="join"]'), state = head.querySelector('.cs-state');
+    if (name === "connect-app-connected") {
+      require(!join && visible(state) && state.textContent.includes('已連結'), "a connected app shows its connected state in the place of 連結");
+      require(visible(head.querySelector('[data-k="cs-dlg-enable"]')) && visible(head.querySelector('[data-conn="server-menu"]')), "with its switch and its ⋯ in that same place");
+      require([...page.querySelectorAll('h3')].some(node => node.textContent === '工具') && visible(page.querySelector('.cs-tools')), "its tools are in a bordered card under 工具");
+    } else {
+      require(join && join.className.includes('pri') && join.textContent.trim() === '連結' && getComputedStyle(join).backgroundColor === colourOf('backgroundColor', '--accent'), "a white round 連結 button (the primary)");
+      require(parseFloat(getComputedStyle(join).borderTopLeftRadius) >= join.getBoundingClientRect().height / 2 && !page.textContent.includes('Share') && !page.textContent.includes('分享'), "it is fully round, and there is no Share");
+      require(!page.querySelector('.cs-tools'), "tools are known only for a connected app, so there is no 工具 card");
+    }
+    const info = page.querySelector('.cs-info'), rows = [...(info?.querySelectorAll('.cs-info-row') ?? [])];
+    require(visible(info) && rows.length >= 2 && [...page.querySelectorAll('h3')].some(node => node.textContent === '資訊'), "a bordered card of information under 資訊");
+    require(rows.every(row => Math.round(row.getBoundingClientRect().height) === 38 && row.querySelector('.k').getBoundingClientRect().left < row.querySelector('.v').getBoundingClientRect().left), "its rows are 38 px, the label at the left and the value at the right");
+    const border = getComputedStyle(info);
+    require(parseFloat(border.borderTopWidth) === 1 && border.borderTopColor === colourOf('borderTopColor', '--float-edge') && parseFloat(border.borderTopLeftRadius) > 4, "the card has a 1 px edge on the dialog surface, rounded");
+    const facts = Object.fromEntries(rows.map(row => [row.querySelector('.k').textContent, row.querySelector('.v').textContent]));
+    if (name === "connect-app-oauth") require(facts['登入方式'] === 'OAuth' && facts['類別'] && facts['提供者'], `the facts we have: ${JSON.stringify(facts)}`);
+    if (name === "connect-app-key") require(facts['登入方式'] === 'API 金鑰' && visible(page.querySelector('.cs-needs')), `the key page says how it signs in, once (${JSON.stringify(facts)})`);
+    const body = modal.querySelector('.modal-body');
+    require(body.scrollWidth <= body.clientWidth + 1, "the page never scrolls sideways");
+    return { check: name, facts };
+  }
   if (name === "connections-recommended") {
-    const section = document.querySelector('.cs-recommended');
-    require(visible(section) && section.querySelector('h2').textContent === '推薦', "a 推薦 section under the connected apps");
+    const section = document.querySelector('.cs-apps .cs-sec');
+    require(visible(section) && section.querySelector('h2').textContent === '為你推薦', "為你推薦 stands first under the chips");
     const cards = [...section.querySelectorAll('.cs-card')];
-    require(cards.length > 0 && cards.length <= 6, `a few popular apps (${cards.length})`);
-    require(cards.every(card => visible(card.querySelector('.cs-icon, img, svg')) && card.querySelector('[data-conn="join"]')?.tagName === 'BUTTON'), "each with its mark and an add button in place");
+    require(cards.length > 0 && cards.length <= 6, `a few well-known apps (${cards.length})`);
+    require(cards.every(card => visible(card.querySelector('.cs-tile')) && card.querySelector('[data-conn="join"]')?.tagName === 'BUTTON'), "each with its mark on its tile and a 連結 button in place");
     const names = cards.map(card => card.querySelector('.nm').textContent);
     require(!names.includes('Notion') && !names.includes('Gmail'), `nothing already there is recommended: ${names}`);
-    const list = document.querySelector('.cs-list:last-of-type');
-    require(!list || section.getBoundingClientRect().top >= list.getBoundingClientRect().bottom - 1, "below the apps already there");
     return { check: name, cards: cards.length };
   }
   if (name === "member-face-hover") {
@@ -6502,34 +6641,40 @@ export function checkRendered(name, context = {}) {
   if (name === "connectors-only") {
     // Connect apps lists connectors only. Skills belong to each member and are managed in that member's panel.
     const body = document.querySelector('.cs-body');
-    require(visible(body) && body.querySelector('.cs-item'), "the connectors are listed");
+    require(visible(body) && body.querySelector('.cs-linked'), "the connectors are listed");
     require(!document.querySelector('[data-skills-section], [data-conn="skill-discover"], [data-conn^="skill-"], [data-conn^="set-"], [data-conn^="marketplace-"], .cs-skill, [data-library-skill], [data-skill-set]'), "no skills section, import button, skill row or plugin set");
     const text = document.querySelector('.modal-scrim .modal-body').textContent;
     require(!/技能|Skills|スキル/.test(text), `no word of skills in the dialog: ${text.slice(0, 80)}`);
-    return { check: name, rows: body.querySelectorAll('.cs-item').length };
+    return { check: name, rows: body.querySelectorAll('.cs-linked').length };
   }
   if (name === "apps-count") {
-    const tab = document.querySelector('.modal-scrim [data-conn="tab"][data-id="installed"] .n');
-    require(visible(tab) && !document.querySelector('.nav-apps'), "Settings alone contains the connected app count");
-    const rows = document.querySelectorAll('.modal-scrim .cs-body [data-stagger="installed"] > .cs-item').length;
+    // The one number is the core's, on the chip at the top right of the view (the list of the connected is behind it): the roster's and the rows' agree.
+    const rows = document.querySelectorAll('.modal-scrim .cs-body > .cs-sec:first-child .cs-linked, .modal-scrim .cs-body > .cs-grid > .cs-linked').length;
+    const chip = document.querySelector('.modal-scrim [data-conn="connected"] .cs-have-t');
     return window.__TAURI_INTERNALS__.invoke("core_call", {method:"members.list",params:{}}).then(({team_context:roster})=>{
-      require(String(roster.connected) === tab.textContent.trim() && rows === roster.connected, "Settings count agrees with the shared roster and installed rows");
+      require(!document.querySelector('.nav-apps'), "Settings alone contains the connected app count");
+      // On the list of the connected the chip is replaced by a back chevron: the number is on the view, so this reads the roster against the rows alone.
+      if (chip) require(chip.textContent.trim() === `${roster.connected} 個已連結`, `the chip says the roster's count (${chip.textContent})`);
+      require(rows === roster.connected, `the connected rows are the roster's count (${rows} of ${roster.connected})`);
       return {check:name,count:roster.connected,apps:roster.apps.length};
     });
   }
   if (name === "apps-unreadable") {
-    const tab=document.querySelector('.modal-scrim [data-conn="tab"][data-id="installed"] .n');
-    require(visible(tab) && tab.textContent.trim() === "—", "Settings states an unknown count without inventing a number");
+    const chip = document.querySelector('.modal-scrim [data-conn="connected"] .cs-have-t');
+    require(!chip || chip.textContent.trim() === "已連結", "Settings states an unknown count without inventing a number");
+    require(!/\d/.test(document.querySelector('.modal-scrim .cs-top')?.textContent ?? ""), "no number is on the top row");
     return window.__TAURI_INTERNALS__.invoke("core_call",{method:"members.list",params:{}}).then(({team_context:roster})=>{
       require(roster.connected === null && roster.inventory_state !== "complete", "the roster states no number either");
       return {check:name,state:roster.inventory_state};
     });
   }
   if (name === "connections-dialog-actions") {
-    const dialog = document.querySelector('.cs-scrim .cs-dialog');
+    const dialog = document.querySelector('.cs-page');
     const buttons = [...(dialog?.querySelectorAll('.action-row button') ?? [])];
-    require(visible(dialog) && buttons.length > 0, "the dialog has footer actions");
+    require(visible(dialog) && buttons.length > 0, "the page has its action row");
     for (const button of buttons) {
+      // The page scrolls inside the dialog: an action below the fold is brought into view before it is pressed.
+      button.scrollIntoView?.({ block: 'center' });
       const box = button.getBoundingClientRect();
       const hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
       require(box.width > 0 && box.height > 0 && (hit === button || button.contains(hit)), `footer action "${button.textContent.trim()}" is covered by a toast or another element`);
@@ -6543,8 +6688,8 @@ export function checkRendered(name, context = {}) {
     return { check: name, switches: controls.length };
   }
   if (name === "connector-link-refused") {
-    require(document.querySelector('.cs-dialog .note[role="alert"]')?.textContent.includes('Composio 尚未允許這個應用程式登入，請重試連結。'), "a toolkit refusal has dedicated actionable copy inside the app dialog");
-    require(![...document.querySelectorAll('.toast')].some(node => node.textContent.includes('Composio 尚未允許')), "the sign-in refusal never covers the dialog as a toast");
+    require(document.querySelector('.cs-page .note[role="alert"]')?.textContent.includes('Composio 尚未允許這個應用程式登入，請重試連結。'), "a toolkit refusal has dedicated actionable copy on the app's page");
+    require(![...document.querySelectorAll('.toast')].some(node => node.textContent.includes('Composio 尚未允許')), "the sign-in refusal never covers the page as a toast");
     require(window.__look.calls.some(call => call.method === 'connectors.connect' && call.params.toolkit === 'notion'), "the real managed sign-in boundary was used");
     require(!document.body.textContent.includes('ToolRouterV2_ToolkitNotAllowed'), "provider error slugs never reach the interface");
     return { check: name };
@@ -6558,8 +6703,8 @@ export function checkRendered(name, context = {}) {
     return { check: name, calls: calls.length };
   }
   if (name === "connector-folded") {
-    const dialog = document.querySelector(".modal-scrim .cs-dialog");
-    require(visible(dialog) && dialog.querySelectorAll('[data-conn="enable"]').length === 1, "the app's dialog has its one switch");
+    const dialog = document.querySelector(".modal-scrim .cs-page");
+    require(visible(dialog) && dialog.querySelectorAll('[data-conn="enable"]').length === 1, "the app's page has its one switch");
     require(dialog.querySelector('[data-conn="enable"]').getAttribute("aria-checked") === "true", "the app stays enabled independently of tools");
     const kinds = [...dialog.querySelectorAll('[data-conn="kind"]')];
     require(kinds.length === 2 && kinds[0].dataset.kind === 'write' && kinds[1].dataset.kind === 'read', "both kinds are reachable above the folded list");
@@ -6569,18 +6714,15 @@ export function checkRendered(name, context = {}) {
     const calls = window.__look.calls.filter(call => call.method === 'integrations.set_tools_enabled' && call.params.id === 'github');
     require(calls.length === 3 && calls[0].params.tools.length === 16 && calls[0].params.enabled && calls[1].params.tools.length === 30 && calls[1].params.enabled && !calls[2].params.enabled, "each kind changes in a single bulk RPC");
     require(!window.__look.calls.some(call => call.method === 'integrations.set_tool_enabled' || call.method === 'integrations.set_enabled'), "kind switches never rewrite the app or loop through per-tool RPCs");
-    require(dialog.scrollHeight <= dialog.clientHeight + 1, "the folded dialog fits without scrolling");
     return { check: name };
   }
   if (name === "connector-tools") {
     // An app's page: the account it is signed in with, N of its M tools on with a switch for each, and its actions flush with the dialog's edge.
-    const dialog = document.querySelector(".modal-scrim .cs-dialog"), switches = [...(dialog?.querySelectorAll('[data-conn="tool"]') ?? [])];
+    const dialog = document.querySelector(".modal-scrim .cs-page"), switches = [...(dialog?.querySelectorAll('[data-conn="tool"]') ?? [])];
     require(visible(dialog) && switches.length > 0, "the app's page and the switches of its tools are visible");
     require(dialog.querySelectorAll(".cs-acct").length > 0, "the account it is signed in with is listed");
     const on = switches.filter(node => node.getAttribute("aria-checked") === "true").length, count = dialog.querySelector('[data-k="cs-count"]')?.textContent ?? "";
     require(count.includes(`${on}/${switches.length}`), `the page says "${count}" while ${on} of ${switches.length} tools are on`);
-    const acts = dialog.querySelector(".action-row.is-sticky"), box = acts.getBoundingClientRect(), frame = dialog.getBoundingClientRect();
-    require(acts.contains(document.elementFromPoint(box.left + box.width / 2, frame.bottom - 3)), "no tool shows through under the actions");
     const calls = window.__look.calls.filter(call => call.method === 'connectors.set_tools' && call.params.id === 'composio:notion');
     require(calls.length === 4 && calls.every(call => !('enabled' in call.params)), "managed kind switches only update disabled_tools");
     require(calls[0].params.disabled_tools.length === 3 && calls[1].params.disabled_tools.length === 0 && calls[2].params.disabled_tools.length === 6 && calls[3].params.disabled_tools.length === 0, "write and read permissions change independently and return on");
@@ -6877,19 +7019,16 @@ export function checkRendered(name, context = {}) {
     return { check: name, crowned: crowned[0].dataset.tooltip, members };
   }
   if (name === "store-toolbar-visible") {
-    const pane = document.querySelector('.modal-body'), frame = pane.getBoundingClientRect();
-    const strip = document.querySelector('.cs-store-groups').getBoundingClientRect();
-    const controls = [document.querySelector('#conn-search'), ...[...document.querySelectorAll('.cs-store-groups button')].filter(button => {
-      const box = button.getBoundingClientRect();
-      return box.left >= strip.left && box.right <= strip.right;
-    })];
+    // The top row, the search and the chips stand still while only the list scrolls under them (as Grok Bot's search row does).
+    const pane = document.querySelector('.modal-body'), frame = document.querySelector('.modal').getBoundingClientRect();
+    const controls = [document.querySelector('.cs-top h1'), document.querySelector('#conn-search'), ...[...document.querySelectorAll('.cs-chips > :not([hidden])')]];
     for (const control of controls) {
       const box = control.getBoundingClientRect();
       const hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
-      require(box.top >= frame.top && box.bottom <= frame.bottom && control.contains(hit), "search and group chips stay visible while results scroll");
+      require(box.top >= frame.top && box.bottom <= frame.bottom && control.contains(hit), "the title, the search and the chips stay visible while the list scrolls");
     }
     const results = document.querySelector('.cs-results');
-    require(results && results.scrollTop > 0 && pane.scrollTop === 0, "only the catalog results scroll");
+    require(results && results.scrollTop > 0 && pane.scrollTop === 0, "only the list scrolls");
     return { check: name, scrollTop: results.scrollTop, controls: controls.length };
   }
   if (name === "connections-form-edges" || name === "connections-form-end") {
@@ -6917,53 +7056,41 @@ export function checkRendered(name, context = {}) {
   }
   if (name === "plugins-store-empty") {
     require(visible(document.querySelector('.cs-none')) && document.querySelectorAll('.cs-card').length === 0, "empty query has a clear state and no stale rows");
-    require(visible(document.querySelector('#conn-search')) && document.querySelectorAll('[data-conn="store-group"]').length === 10, "search and broad groups stay reachable");
+    require(visible(document.querySelector('#conn-search')) && document.querySelectorAll('.cs-chips [data-conn="store-group"]').length === 10, "search and the categories stay reachable");
     return { check: name };
   }
   if (["plugins-store-groups", "plugins-store-search", "plugins-store-category"].includes(name)) {
-    const groups = document.querySelector('.cs-store-groups');
-    const style = getComputedStyle(groups), chips = [...groups.querySelectorAll('button')];
-    require(style.flexWrap === 'nowrap' && style.overflowX === 'auto' && style.scrollbarWidth === 'none', "category chips scroll on one row without a visible scrollbar");
-    const chipRow = groups.closest('[data-chip-row]'), end = groups.scrollWidth - groups.clientWidth;
-    require(style.maskImage.includes('linear-gradient') && chipRow.hasAttribute('data-more-before') === groups.scrollLeft > 1 && chipRow.hasAttribute('data-more-after') === groups.scrollLeft < end - 1, "category overflow fades only at an end with more chips behind it");
-    require([['-1', 'data-more-before'], ['1', 'data-more-after']].every(([dir, more]) => !!visible(chipRow.querySelector(`[data-chip-step="${dir}"]`)) === chipRow.hasAttribute(more)), "an arrow stands only at an end with more categories behind it");
-    require(chips.every(chip => Math.abs(chip.getBoundingClientRect().top - chips[0].getBoundingClientRect().top) <= 1), "every category chip shares one row");
+    const groups = document.querySelector('.cs-chips'), style = getComputedStyle(groups);
+    const shown = [...groups.children].filter(chip => !chip.hidden);
+    require(style.flexWrap === 'nowrap' && style.overflowX === 'hidden', "category chips stand on one row that never wraps and never scrolls sideways");
+    require(groups.scrollWidth <= groups.clientWidth + 1, `the chips fit their row (${groups.scrollWidth} in ${groups.clientWidth})`);
+    require(shown.every(chip => Math.abs(chip.getBoundingClientRect().top - shown[0].getBoundingClientRect().top) <= 1), "every category chip shares one row");
+    const more = groups.querySelector('[data-k="conn-more"]');
+    require(visible(more) && more.getAttribute('aria-haspopup') === 'menu', "更多 holds the categories that are not in the row");
     const rows = [...document.querySelectorAll('.cs-card')];
     const ids = rows.map(row => row.querySelector('[data-conn="open-store"]').dataset.id);
-    require(new Set(ids).size === rows.length, "each app appears once");
-    require(rows.length <= 42, "connected, popular and result pages keep DOM bounded");
+    require(new Set(ids).size === rows.length || document.querySelector('.cs-sec'), "each app appears once in a list");
+    require(rows.length <= 130, "sections and lists keep the DOM bounded");
     require(!document.querySelector('[data-k="conn-category"]'), "provider categories do not become a dropdown");
-    require(document.querySelectorAll('[data-conn="store-group"]').length === 10, "nine broad groups and All are available");
-    require(window.__look.calls.filter(c => c.method === 'connectors.catalog').every(c => !c.params?.search && !c.params?.category && !c.params?.cursor), "query and group changes search the complete local index");
-    const pager = document.querySelector('.cs-store-pages .num');
-    if (pager) require(Number(pager.textContent.split('/')[1].trim()) === Number(document.querySelector('[data-k="conn-tab:store"] .n').textContent), "store tab and pager count the same addable apps");
-    if (name === "plugins-store-search") require(rows.length === 1 && rows[0].textContent.includes('360'), "search reaches the last app across groups");
-    if (name === "plugins-store-category") require(document.querySelector('[data-conn="store-group"][data-id="productivity"]').getAttribute('aria-pressed') === 'true', "the chosen broad group stays pressed");
+    require(document.querySelectorAll('.cs-chips [data-conn="store-group"]').length === 10, "nine categories and 全部 are available");
+    require(window.__look.calls.filter(c => c.method === 'connectors.catalog').every(c => !c.params?.search && !c.params?.category && !c.params?.cursor), "query and category changes search the complete local index");
+    if (name === "plugins-store-search") require(rows.length === 1 && rows[0].textContent.includes('360'), "search reaches the last app across categories");
+    if (name === "plugins-store-category") require(document.querySelector('[data-conn="store-group"][data-id="productivity"]').getAttribute('aria-pressed') === 'true' && !document.querySelector('.cs-sec'), "the chosen category stays pressed and lists its apps without sections");
     return { check: name, rows: rows.length, ids };
   }
-  if (name === "store-groups-wheel" || name === "store-groups-start") {
-    const groups = document.querySelector('.cs-store-groups'), chipRow = groups.closest('[data-chip-row]'), body = document.querySelector('.modal-body');
-    const before = chipRow.querySelector('[data-chip-step="-1"]'), after = chipRow.querySelector('[data-chip-step="1"]');
-    const reachable = button => { const box = button.getBoundingClientRect(); return visible(button) && button.contains(document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2)); };
-    require(groups.scrollWidth > groups.clientWidth + 1, "the categories are wider than their row at this size");
-    if (name === "store-groups-wheel") {
-      require(groups.scrollLeft > 0 && chipRow.hasAttribute('data-more-before') && reachable(before), "the mouse wheel moved the categories sideways and the left arrow can be pressed");
-      require(!body || body.scrollTop === 0, "the wheel over the categories did not scroll the page under them");
-    } else require(groups.scrollLeft <= 1 && !visible(before) && reachable(after), "the left arrow brought the categories back to the start, where only the right arrow stands");
-    return { check: name, scrollLeft: groups.scrollLeft };
-  }  if (name === "store-group-focus") {
-    const groups = document.querySelector('.cs-store-groups'), chip = document.activeElement;
+  if (name === "store-group-focus") {
+    const groups = document.querySelector('.cs-chips'), chip = document.activeElement;
     require(groups?.contains(chip) && chip.matches('[data-conn="store-group"]'), "keyboard focus reaches a category chip");
     const frame = groups.getBoundingClientRect(), box = chip.getBoundingClientRect();
     require(box.left >= frame.left - 1 && box.right <= frame.right + 1 && chip.contains(document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2)), "the focused category is fully visible and clickable");
-    return { check: name, category: chip.dataset.id, scrollLeft: groups.scrollLeft };
+    return { check: name, category: chip.dataset.id };
   }
   if (name === "store-group-end") {
-    const groups = document.querySelector('.cs-store-groups'), frame = groups.getBoundingClientRect();
-    const last = groups.querySelector('[data-id="other"]'), box = last.getBoundingClientRect();
-    require(last.getAttribute('aria-pressed') === 'true' && document.activeElement === last, "keyboard selection retains the last category and focus after redraw");
-    require(box.left >= frame.left - 1 && box.right <= frame.right + 1 && last.contains(document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2)), "the last category is fully visible and reachable after horizontal scrolling");
-    return { check: name, scrollLeft: groups.scrollLeft };
+    const groups = document.querySelector('.cs-chips'), frame = groups.getBoundingClientRect();
+    const chosen = groups.querySelector('[aria-pressed="true"]'), box = chosen.getBoundingClientRect();
+    require(chosen.dataset.id && document.activeElement === chosen, "keyboard selection retains the chosen category and its focus after the list is drawn again");
+    require(box.left >= frame.left - 1 && box.right <= frame.right + 1 && chosen.contains(document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2)), "the chosen category is fully visible and reachable");
+    return { check: name, chosen: chosen.dataset.id };
   }
   if (name === "plugins-store-settled") {
     const rows = [...document.querySelectorAll('.cs-card')];
@@ -6976,29 +7103,27 @@ export function checkRendered(name, context = {}) {
   }
   if (name === "plugins-store-rows") {
     const rows = [...document.querySelectorAll('.cs-card')];
-    require(rows.length > 0, "the store has app rows");
+    require(rows.length > 0, "the view has app rows");
     const add = [...document.querySelectorAll('.cs-card [data-conn="join"]')];
-    require(add.length > 0 && add.every(button => button.className === add[0].className && button.className === 'btn sm'), "every store add button has the same outlined class list");
+    require(add.length > 0 && add.every(button => button.className === add[0].className && button.className === 'btn cs-connect'), "every 連結 button has the same class list");
     for (const row of rows) {
       const [main, action] = row.children;
       require(row.className === 'cs-card' && row.children.length === 2, "every app row has the same two slots");
-      require(main.tagName === 'BUTTON' && main.className === 'btn cs-main' && main.dataset.conn === 'open-store', "every source uses the same detail button");
-      require(main.children.length === 2 && main.children[0].className === 'ic' && main.children[1].className === 'tx', "every row has the same mark and text structure");
+      require(main.tagName === 'BUTTON' && main.className === 'btn cs-main' && main.dataset.conn === 'open-store', "every source uses the same page button");
+      require(main.children.length === 2 && main.children[0].className === 'cs-tile' && main.children[1].className === 'tx', "every row has the same tile and text structure");
       const [title, summary] = main.children[1].children;
-      // Compact rows show a name alone; the line under it only says what the app asks for, or that its sign-in waits.
-      require(main.children[1].children.length === 2 && title.tagName === 'SPAN' && title.className === 'nm' && summary.tagName === 'SPAN' && ['sub', 'sub wait'].includes(summary.className), "every row has the same name and its line slot");
-      require(!summary.textContent.trim() || summary.querySelector('.need') || summary.classList.contains('wait'), "a row's line is only what the app asks for, or its waiting sign-in");
-      require(action.matches('button.btn.sm[data-conn="join"], button.btn.sm[data-conn="cancel-login"], span.cs-state'), "every state stays in the shared inline action slot");
+      // A row is the tile and the name; the line under it only says that a sign-in waits.
+      require(title.tagName === 'SPAN' && title.className === 'nm' && (!summary || summary.classList.contains('wait')), "a row's line is only its waiting sign-in");
+      require(action.matches('button.btn.cs-connect[data-conn="join"], button.btn.cs-connect[data-conn="cancel-login"], span.cs-state'), "every state stays in the one action slot");
       const style = window.getComputedStyle(row);
-      const divider = window.getComputedStyle(row, '::after');
-      require(style.display === 'grid' && style.gridTemplateColumns.trim().split(/\s+/).length === 2 && parseFloat(style.borderRadius) > 0 && parseFloat(style.borderBottomWidth) === 0 && parseFloat(style.borderLeftWidth) === 0 && divider.height === '1px', "every source keeps the same compact row, a rounded hover and an inset divider");
+      require(style.display === 'flex' && !row.querySelector('.need'), "every row is one line with nothing it would have to explain");
       const frame = row.getBoundingClientRect();
-      require([main, action, title, summary].filter(visible).every(node => {
+      require([main, action, title].filter(visible).every(node => {
         const box = node.getBoundingClientRect();
         return box.top >= frame.top - 1 && box.bottom <= frame.bottom + 1;
-      }), "store names, summaries and actions fit inside their row");
+      }), "names and actions fit inside their row");
     }
-    return { check: name, rows: rows.length, addClass: add[0].className };
+    return { check: name, rows: rows.length };
   }
   if (name === "typo-mention") {
     const first = document.querySelector('#app-popover[data-team-mentions] [data-value]');
@@ -7132,7 +7257,7 @@ export function checkRendered(name, context = {}) {
     const card = document.querySelector('[data-conn="open-store"][data-id="google"]')?.closest('.cs-card');
     require(card && card.textContent.includes("Google（私人連接）"), "the owner's own Google has its row");
     require(card.querySelector('.logo-art, .logo-mono, svg') && !card.querySelector('.need'), "it wears Gmail's mark and asks nothing it would have to explain on its row");
-    require(card.querySelector('[data-conn="join"]'), "it is added from its row like any app");
+    require(card.querySelector('[data-conn="join"]'), "it is connected from its row like any app");
     return { check: name };
   }
   if (name === "store-google-in-chat") {
@@ -7146,22 +7271,19 @@ export function checkRendered(name, context = {}) {
     require(card?.querySelector('.logo-mono svg path'), "n8n carries its own mark, not the generic plug");
     // What it needs is said in the conversation it is set up in, not on its row (owner, 2026-11-09).
     require(card && !card.querySelector('.need'), "its row asks nothing it would have to explain");
-    require(card?.querySelector('[data-conn="join"]'), "it is added from its row like any app");
+    require(card?.querySelector('[data-conn="join"]'), "it is connected from its row like any app");
     return { check: name };
   }
   if (name === "plugins-store") {
     const cards = [...document.querySelectorAll('.cs-card')];
     const ids = cards.map(card => card.querySelector('[data-conn="open-store"]')?.dataset.id);
-    require(document.querySelectorAll('.cs-card [data-conn="join"]').length <= Number(document.querySelector('[data-k="conn-tab:store"] .n').textContent), "tab count includes all addable matches beyond the visible page");
-    require(document.querySelector('[data-stagger="store:all"] .cs-card') && document.querySelectorAll('.cs-results .cs-sec').length === 1, "the store is one list");
-    require(!document.querySelector('.cs-results .cs-state'), "the store shows only apps not added yet");
-    if (!document.querySelector('.cs-store-groups [aria-pressed="true"]:not([data-id=""])')) require(document.querySelector('[data-conn="open-store"][data-id="n8n"]') || document.querySelector('.cs-store-pages'), "n8n is in the store, as the owner's own server");
+    require(!document.querySelector('.cs-apps [data-conn="tab"], .cs-apps [role="tab"], .cs-apps .cs-store-pages'), "there are no tabs and no pages: the apps are one view");
+    require(document.querySelector('.cs-results .cs-sec') && document.querySelector('.cs-results .cs-sec h2').textContent === '為你推薦', "the view starts with 為你推薦 and its sections");
+    require(!/\b\d{3,}\b/.test([...document.querySelectorAll('.cs-apps h2, .cs-chips, .cs-top')].map(node => node.textContent).join(' ')), "no count of the catalogue is anywhere on the view");
     require(window.__look.calls.some(c => c.method === 'integrations.catalog'), "built-in catalog uses the real IPC boundary");
-    require(!document.querySelector('#conn-key'), "key form does not replace the store");
-    require(new Set(ids).size === cards.length, "duplicate apps appear once");
+    require(!document.querySelector('#conn-key'), "key form does not replace the view");
     if (window.__look.data.composioConfigured) {
-      require(document.querySelector('.cs-store-groups'), "all catalog sources share broad group chips");
-      require(document.querySelector('[data-conn="open-store"][data-id="notion"]'), "the built-in app wins over its managed duplicate");
+      require(document.querySelector('.cs-chips'), "all catalog sources share the category chips");
     } else {
       require(document.querySelector('[data-conn="configure-composio"]'), "optional Composio row follows the built-ins");
       require(!window.__look.calls.some(c => c.method === 'connectors.catalog'), "missing key never requests the managed catalog");
@@ -7815,27 +7937,24 @@ export function checkRendered(name, context = {}) {
     return { check: name, words };
   }
   if (name === "plugins-store-needs") {
-    // The store says in words what each app asks for, on its row, before anything is pressed; no 加入 is dead.
-    // A key is said on the row; a developer app is set up in the conversation, so its row asks nothing (owner, 2026-11-09).
-    const expected = { "acme-ledger": "需要 API 金鑰", "parcel-desk": "需要 API 金鑰" };
-    const orbit = document.querySelector('[data-conn="open-store"][data-id="orbit-ads"]');
-    require(orbit && !orbit.querySelector(".sub .need"), "orbit-ads, set up in the conversation, has no need on its row");
-    for (const [slug, words] of Object.entries(expected)) {
+    // A row is as plain as Grok Bot's: the mark, the name, 連結. What an app asks for is on its page (R-APPS-02), and no 連結 is dead.
+    for (const slug of ["acme-ledger", "parcel-desk", "orbit-ads"]) {
       const open = document.querySelector(`[data-conn="open-store"][data-id="${slug}"]`);
-      require(open, `${slug} is in the store`);
-      const need = open.querySelector('.sub .need');
-      require(visible(need) && need.textContent === words, `${slug}'s row says "${words}" in visible words, not only in a title (${need?.textContent})`);
+      require(open, `${slug} is in the view`);
+      require(!open.querySelector('.sub, .need') && !/API 金鑰|開發者/.test(open.closest('.cs-card').textContent), `${slug}'s row says nothing of what it asks`);
       const join = open.closest('.cs-card').querySelector('[data-conn="join"]');
-      require(join && !join.disabled && !join.hasAttribute('title'), `${slug}'s 加入 is a live button with nothing hidden in a hover title`);
+      require(join && !join.disabled && !join.hasAttribute('title'), `${slug}'s 連結 is a live button with nothing hidden in a hover title`);
     }
     const dead = [...document.querySelectorAll('.cs-card [data-conn="join"]')].filter(button => button.disabled);
-    require(dead.length === 0, `no 加入 in the store is disabled (${dead.length})`);
-    return { check: name, rows: Object.keys(expected).length };
+    require(dead.length === 0, `no 連結 in the view is disabled (${dead.length})`);
+    return { check: name, rows: 3 };
   }
   if (name === "plugins-store-needs-page") {
     const line = document.querySelector('.cs-page .cs-needs'), join = document.querySelector('.cs-page [data-conn="join"]');
-    require(visible(line) && line.textContent.startsWith("需要 API 金鑰") && line.textContent.includes("Acme Ledger"), `the page says what the app needs (${line?.textContent})`);
-    require(join && !join.disabled && join.textContent.includes("加入"), "加入 on the page is live");
+    require(visible(line) && line.textContent.includes("API 金鑰") && line.textContent.includes("Acme Ledger"), `the page says what the app needs (${line?.textContent})`);
+    const way = [...document.querySelectorAll('.cs-page .cs-info-row')].find(row => row.querySelector('.k').textContent === '登入方式');
+    require(way?.querySelector('.v').textContent === 'API 金鑰', "its 登入方式 row says API 金鑰");
+    require(join && !join.disabled && join.textContent.includes("連結"), "連結 on the page is live");
     return { check: name, words: line.textContent };
   }
   if (name === "setup-added") {
@@ -7844,7 +7963,7 @@ export function checkRendered(name, context = {}) {
     const sent = calls.filter(call => call.method === "connectors.connect");
     require(sent.length === 1 && sent[0].params.fields.generic_api_key === key && sent[0].params.toolkit === "acme-ledger", "the key crossed one call, connectors.connect, and no other");
     require(!JSON.stringify(calls.filter(call => call.method !== "connectors.connect")).includes(key) && !document.body.textContent.includes(key), "the key is on no page text and in no other call");
-    require(visible(document.querySelector('[data-conn="open"][data-id="composio:acme-ledger"]')), "the app is among the connected ones");
+    require(visible(document.querySelector('.cs-card:has([data-conn="open-store"][data-id="acme-ledger"]) .cs-state')), "the app is connected: its row says so");
     return { check: name };
   }
   if (name === "card-setup-form") {

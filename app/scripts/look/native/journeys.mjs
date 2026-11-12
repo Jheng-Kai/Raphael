@@ -1279,7 +1279,8 @@ await page.waitForFunction(role => document.querySelector('.ms-pane #ms-role')?.
         await page.waitForFunction(() => !!document.querySelector('[data-connector][data-card-state="cancelled"]'));
       }
     }
-    // 連結應用程式 opens from the sidebar only, as a dialog of its own (R-UI-111).2    await click(page, '#nav .sidebar-apps');2    await click(page, '[data-conn="tab"][data-id="store"]');
+    // 連結應用程式 opens from the sidebar only, as a dialog of its own (R-UI-111); it is one view of the apps (R-APPS-01).
+    await click(page, '#nav .sidebar-apps');
     await type(page, '#conn-search', app);
     const previousAccounts = new Set((await pendingAccounts()).map(account => account.id));
     await page.waitForSelector(`[data-conn="join"][data-id="${app}"]`, { timeout: 30000 });
@@ -1298,7 +1299,8 @@ await page.waitForFunction(role => document.querySelector('.ms-pane #ms-role')?.
     return;
   }
   if (name === "store-finder") {
-    // 連結應用程式 opens from the sidebar only, as a dialog of its own (R-UI-111).2    await click(page, '#nav .sidebar-apps');2    await click(page, '[data-conn="tab"][data-id="store"]');
+    // 連結應用程式 opens from the sidebar only, as a dialog of its own (R-UI-111); it is one view of the apps (R-APPS-01).
+    await click(page, '#nav .sidebar-apps');
     const catalog = await context.rpc("connectors.catalog", {});
     result.catalog = catalog;
     if (catalog.ok === false) throw new Error(`Real catalog unavailable: ${catalog.error}`);

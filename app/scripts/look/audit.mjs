@@ -284,11 +284,13 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
       // Navigation cards, list choices and disclosures are not text action buttons; an event line
       // that opens its room navigates like the sidebar's room rows. Pending question rows reveal their card.
       // Keep this inventory explicit: ordinary action buttons never opt out by an attribute.
-      const navigation = element.matches('.pending-questions > .pending-question, .conversation-trigger, .conversation-open, .mb-panel-row, .mb-panel-back, .ms-open, .mb-det .mb-rt, .mb-det .mb-computer-row, .mb-chat-choice, .mc-source, .room-row, .cs-open, .cs-main, .au-room-row > .btn:first-child, .event-open, .menu-reactions .reaction, .reaction-bar .reaction, .ho-row, .ho-stat, .lib-row, .lib-pic, .tpr-row, .au-edit, .cal-chip, .cal-more, .au-day-num, .au-date-nav > .au-today, .steps-sum, .task-sum, .desktop-panel .desktop-screen > .btn.desktop-open') || element.closest('.mb-col, .au-month-grid, .au-drag-members, .au-segment, .mc-segments') || element.hasAttribute('aria-expanded') || element.matches('.conversation-card > .card-actions > .card-quiet');
+      const navigation = element.matches('.pending-questions > .pending-question, .conversation-trigger, .conversation-open, .mb-panel-row, .mb-panel-back, .ms-open, .mb-det .mb-rt, .mb-det .mb-computer-row, .mb-chat-choice, .mc-source, .room-row, .cs-open, .cs-main, .cs-have, .cs-viewall, .au-room-row > .btn:first-child, .event-open, .menu-reactions .reaction, .reaction-bar .reaction, .ho-row, .ho-stat, .lib-row, .lib-pic, .tpr-row, .au-edit, .cal-chip, .cal-more, .au-day-num, .au-date-nav > .au-today, .steps-sum, .task-sum, .desktop-panel .desktop-screen > .btn.desktop-open') || element.closest('.mb-col, .au-month-grid, .au-drag-members, .au-segment, .mc-segments') || element.hasAttribute('aria-expanded') || element.matches('.conversation-card > .card-actions > .card-quiet');
       const hasBorder = ['Top', 'Right', 'Bottom', 'Left'].some(side => parseFloat(style[`border${side}Width`]) > 0 && !['transparent', 'rgba(0, 0, 0, 0)'].includes(style[`border${side}Color`]) && !['none', 'hidden'].includes(style[`border${side}Style`]));
       if (!floatingLatest && element.classList.contains('icon') && hasBorder) violation('R-UI-18', 'Icon button has a visible border');
       const routineNavigation = element.matches('.chat-message .routine-origin > button.routine-run-link[data-act="open-routine"]');
-      if (!navigation && !routineNavigation && !element.classList.contains('icon') && element.textContent.trim() && !hasBorder) violation('R-UI-18', 'Text action button has no frame');
+      // On a floating surface (R-FLOAT-01) a control is framed by its fill (`--float-ctl`), as Grok Bot's chips and 「Connect」 buttons are.
+      const filledOnFloat = !!element.closest('.modal, .mb-dialog, .cs-dialog, .au-pop, .cb-card, .menu') && !/rgba\(0, 0, 0, 0\)|transparent/.test(style.backgroundColor);
+      if (!navigation && !routineNavigation && !element.classList.contains('icon') && element.textContent.trim() && !hasBorder && !filledOnFloat) violation('R-UI-18', 'Text action button has no frame');
     }
     // The guide's row follows the rule like any other: since 2026-11-11 its round arrow (or ×) is at the left of the black
     // primary, no longer stacked above it (owner guide), so nothing in the guide is exempt.
@@ -304,7 +306,7 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
     if (element.matches('select,input[type="time"]')) nativeControls.push(description);
     // Owner-authored text is data; labels, titles and placeholders remain UI copy. So is the name of a file a member
     // delivered (its Library's rows).
-    const authored = element.matches(".modal-body .data-record > .data-record-text, .output-path, .output-name, .template-path, .lib-title, .thread :is(.message-text, .message-code code, .message-table td, .message-table th) mark[data-find-match]") || element.closest("textarea, .checkpoint summary, .checkpoint pre code, .checkpoint-uncovered li");
+    const authored = element.matches(".cs-info-row .v, .modal-body .data-record > .data-record-text, .output-path, .output-name, .template-path, .lib-title, .thread :is(.message-text, .message-code code, .message-table td, .message-table th) mark[data-find-match]") || element.closest("textarea, .checkpoint summary, .checkpoint pre code, .checkpoint-uncovered li");
     const strings = authored ? [] : [...element.childNodes].filter(node => node.nodeType === 3).map(node => node.textContent);
     // The output folder's button names the owner's own folder in its label: that name is data too.
     for (const attribute of ["aria-label", "title", "placeholder"]) if (element.hasAttribute(attribute) && !element.matches(".output-chosen")) strings.push(element.getAttribute(attribute));

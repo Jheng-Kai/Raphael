@@ -1,35 +1,47 @@
-/* The 「連接」 tab of the settings, drawn like Codex's page of plugins: quiet tabs and a search, one
-   rounded list of the connected services, a dialog for each over the settings, and the store as cards
-   in two columns. Colours are the app's tokens. */
-.cs { width: 100%; max-width: var(--layout-reading-max); margin-top: var(--sp-4); container: connections / inline-size; }
-.cs h2.big { margin: 0; font: 500 var(--fs-lg)/1.3 var(--display); }
-.cs h2 { margin: 0 0 var(--sp-2) var(--sp-1); font-size: var(--fs-md); font-weight: var(--weight-semibold); }
-.cs h3 { margin: 0 0 var(--sp-2) var(--sp-1); font-size: var(--fs-sm); font-weight: var(--weight-semibold); color: var(--text-2); }
+/* 連結應用程式, one view as Grok Bot's Connect Apps (owner, 2026-11-12): the title and a chip of the connected apps, a search, a row of
+   category chips, then the apps in two columns, each on a white tile; an app's page replaces the view. It stands on the floating surface
+   (styles.css: `--float`), and what is on it (a chip, a button) is filled `--float-ctl`. Colours are the app's tokens. */
+.cs { width: 100%; max-width: var(--layout-reading-max); container: connections / inline-size; }
+.cs h2 { margin: 0; font-size: var(--fs-md); font-weight: var(--weight-semibold); }
+.cs h3 { margin: 0 0 var(--sp-2); font-size: var(--fs-sm); font-weight: var(--weight-semibold); color: var(--text-2); }
+.cs h2.big { font: 500 var(--fs-lg)/1.3 var(--display); }
+/* The title as a heading only a screen reader meets, over a page that has no title row. */
+.cs-vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.modal-body .cs-vh > h1 { padding: 0; font-size: 0; line-height: 0; }
 
-/* The bar: 已安裝 N and 商店 N as quiet tabs, the search on the right */
-.cs-bar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2) var(--sp-3); margin-bottom: var(--sp-3); }
-.cs-find { display: flex; width: 100%; margin: 0; min-width: 0; }
-/* 新增 ends the row of the two views, away from the dialog's ✕. */
-.cs-bar > .cs-add { margin-left: auto; flex: none; }
-.cs-find { gap: var(--sp-2); }
-.cs-find .sel { max-width: 180px; }
-.cs-find .sel span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-/* One search for both views, so switching tabs never reshapes it. */
-.cs-find .field { width: 100%; height: 40px; }
-.cs-store-groups-row { margin-bottom: var(--sp-3); }
-.cs-store-groups { display: flex; flex-wrap: nowrap; gap: var(--sp-2); }
-.cs-store-groups .btn { flex: 0 0 auto; border-radius: var(--r-pill); font-size: var(--fs-xs); }
-/* The chosen chip is filled, not only outlined. */
-.cs-store-groups [aria-pressed="true"], .cs-store-groups [aria-pressed="true"]:hover:not(:disabled) { color: var(--on-accent); background: var(--accent); border-color: var(--accent); }
-.cs-store-pages { display: flex; align-items: center; justify-content: center; gap: var(--sp-3); margin: var(--sp-3) 0; }
-/* Keep search and groups outside the results scrollport, including after a page change. */
-.modal-body:has(.cs-store) { display: flex; flex-direction: column; overflow: hidden; }
-.modal-body:has(.cs-store) > .set-content { display: flex; flex-direction: column; flex: 1; min-height: 0; }
-.cs-store, .cs-store > .cs-body { display: flex; flex-direction: column; flex: 1; min-height: 0; }
-.cs-store > .cs-bar, .cs-store .cs-store-groups-row, .cs-store > .cs-device { flex: none; }
-.cs-results { flex: 1; min-height: 0; contain: strict; overflow-y: auto; overflow-x: hidden; scroll-padding-block: var(--sp-4); }
+/* The top row: the title at the left; at the right a quiet chip with the marks of up to four connected apps and how many, clear of the dialog's ✕ */
+.cs-top { display: flex; align-items: center; gap: var(--sp-3); min-height: 36px; padding-right: 40px; }
+.cs-top > h1 { flex: 1; min-width: 0; margin: 0; padding: 0; font: 500 var(--fs-lg)/1.3 var(--display); letter-spacing: 0; }
+.cs-top-t { flex: 1; min-width: 0; font: 500 var(--fs-lg)/1.3 var(--display); }
+.btn.cs-have { display: inline-flex; flex: none; align-items: center; gap: var(--sp-2); height: var(--h-ctl); padding: 0 var(--sp-1) 0 var(--sp-2); border: 0; border-radius: var(--r-pill); background: transparent; color: var(--text-2); font-size: var(--fs-sm); cursor: pointer; }
+.btn.cs-have:hover:not(:disabled), .btn.cs-have:active:not(:disabled) { background: transparent; color: var(--text); }
+.cs-have > .i { color: var(--text-3); }
+.cs-minis { display: inline-flex; align-items: center; }
+.cs-mini { display: inline-grid; place-items: center; flex: none; width: 24px; height: 24px; margin-left: -6px; border-radius: var(--r-pill); background: var(--tile); box-shadow: 0 0 0 2px var(--float), inset 0 0 0 1px var(--tile-edge); color: var(--on-tile); color-scheme: light; overflow: hidden; }
+.cs-mini:first-child { margin-left: 0; }
+.cs-mini .mono { width: 16px; height: 16px; color: var(--on-tile); }
+.cs-mini .mono > .i { width: 16px; height: 16px; }
+.cs-have-t { white-space: nowrap; }
+
+/* The search over the whole catalog, with 新增 beside it; then the row of chips, which never wraps (the ones that do not fit are in 更多) */
+.cs-bar { display: flex; align-items: center; gap: var(--sp-2); margin-top: var(--sp-4); }
+.cs-find { display: flex; flex: 1; min-width: 0; margin: 0; }
+.cs-find .field { width: 100%; border-radius: var(--r-pill); padding-inline: var(--sp-3); }
 .cs-find .field .i { color: var(--text-3); }
+.cs-bar > .cs-add { flex: none; border-radius: var(--r-pill); height: var(--h-field); }
+.cs-chips { display: flex; flex-wrap: nowrap; align-items: center; gap: var(--sp-2); margin-top: var(--sp-3); overflow: hidden; }
+.cs-chips > * { flex: none; }
+.cs-chip.btn, .cs-chip.sel { height: var(--h-ctl); min-height: var(--h-ctl); padding: 0 var(--sp-3); border-radius: var(--r-pill); border-color: transparent; font-size: var(--fs-sm); }
+.cs-chip.sel { gap: var(--sp-1); padding-right: var(--sp-2); }
+/* The chosen chip is a light fill with dark words (Grok Bot's 「All」). */
+.cs-chip[aria-pressed="true"], .cs-chip[aria-pressed="true"]:hover:not(:disabled) { color: var(--float-on-sel); background: var(--float-sel); border-color: transparent; }
 .cs-none { margin: var(--sp-5) var(--sp-1); font-size: var(--fs-sm); line-height: 1.6; color: var(--text-3); text-align: center; text-wrap: pretty; }
+/* The top, the search and the chips stand still; only the apps scroll under them. */
+.modal-body:has(.cs-apps) { display: flex; flex-direction: column; overflow: hidden; }
+.modal-body:has(.cs-apps) > .set-content { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.cs-apps { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.cs-apps > :is(.cs-top, .cs-bar, .cs-chips, .cs-device, .core-note) { flex: none; }
+.cs-results { flex: 1; min-height: 0; margin-top: var(--sp-3); contain: strict; overflow-y: auto; overflow-x: hidden; scroll-padding-block: var(--sp-4); }
 
 /* The picture of a service: its mark bare, or a neutral plug. Marks use the text colour, or the brand's where it reads on both themes. */
 .mono { display: inline-grid; place-items: center; flex: none; width: 28px; height: var(--h-ctl-sm); color: var(--text); font: 500 var(--fs-lg)/1 var(--display); }
@@ -42,147 +54,172 @@
 :root[data-theme="dark"] .logo-art .lg-d { display: block; }
 :root[data-theme="dark"] .logo-art .lg-d ~ .lg-l, :root[data-theme="dark"] .logo-art .lg-l:has(+ .lg-d) { display: none; }
 
-/* 已連結: two columns side by side, so a page holds more of them; a row is
-   the mark, the name and its line, the switch and a chevron, none of them boxed. */
-.cs-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-2) var(--sp-3); border: 0; border-radius: 0; background: transparent; }
-.cs-item { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto 18px; align-items: center; gap: var(--sp-3); min-width: 0; padding-right: var(--sp-3); border-radius: var(--r-md); cursor: pointer; }
-/* Dividers are lines of their own, so a rounded hover does not bend them; they step aside for the row under the pointer. */
-.cs-item::after { content: ""; position: absolute; bottom: 0; left: var(--sp-3); right: var(--sp-3); height: 1px; background: var(--line); }
-.cs-item:hover::after { opacity: 0; }
-.cs-grp > .btn.gr + .btn.gr::before { content: ""; position: absolute; top: 0; left: var(--sp-3); right: var(--sp-3); height: 1px; background: var(--line); }
-:is(.cs-grp > .btn.gr:hover, .cs-grp > .btn.gr:hover + .btn.gr)::before { opacity: 0; }
-.cs-item:hover { background: var(--hover); }
-.cs-item .btn.cs-open { justify-content: flex-start; gap: var(--sp-3); min-width: 0; min-height: 60px; padding: var(--sp-2) 0 var(--sp-2) var(--sp-3); border: 0; border-radius: 0; background: transparent; text-align: left; white-space: normal; }
-.cs-item .btn.cs-open:hover:not(:disabled), .cs-item .btn.cs-open:active:not(:disabled) { background: transparent; }
-.cs-item:has(.cs-open:active:not(:disabled)) { background: var(--pressed); }
-.cs-item .btn.cs-open:focus-visible { outline: none; }
-:where(:root[data-keys]) .cs-item:has(.cs-open:focus-visible) { box-shadow: inset 0 0 0 2px var(--focus); }
-.cs-item .ic, .cs-card .ic { display: inline-grid; place-items: center; width: 30px; flex: none; }
-.cs-open .tx, .cs-main .tx { display: grid; grid-template-columns: minmax(0, 1fr); flex: 1; min-width: 0; }
-.cs-open .nm, .cs-main .nm { font-size: var(--fs-md); font-weight: var(--weight-semibold); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.cs-open .ds { margin-top: var(--sp-1); font-size: var(--fs-2xs); line-height: 1.45; color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.cs-open .ds .st { font-size: var(--fs-2xs); }
-.cs-item .chev { display: inline-flex; align-items: center; justify-content: center; color: var(--text-3); }
+/* The mark of an app stands on a white rounded tile (Grok Bot's), 40 px in a row and 56 px on its page, whichever theme the dialog is in: the
+   mark is drawn in its own colours (or near-black), and the dark theme's light twin of a dark logo is not used. */
+.cs-tile { display: inline-grid; place-items: center; flex: none; width: 40px; height: 40px; border-radius: var(--r-md); background: var(--tile); box-shadow: inset 0 0 0 1px var(--tile-edge); color: var(--on-tile); color-scheme: light; overflow: hidden; }
+.cs-tile .mono { width: 24px; height: 24px; color: var(--on-tile); }
+.cs-tile .mono > .i { width: 20px; height: 20px; }
+.cs-tile.lg { width: 56px; height: 56px; border-radius: var(--r-lg); }
+.cs-tile.lg .mono { width: 32px; height: 32px; }
+.cs-tile.lg .mono > .i { width: 20px; height: 20px; }
+:root[data-theme="dark"] .cs-tile .logo-art .lg-d { display: none; }
+:root[data-theme="dark"] .cs-tile .logo-art .lg-l, :root[data-theme="dark"] .cs-tile .logo-art .lg-l:has(+ .lg-d) { display: block; }
 
-/* The dialog of a service: over the whole settings window, all of it dimmed (R-UI-111), its own close and switch at the top */
-.cs-scrim { position: absolute; inset: 0; z-index: 5; display: grid; grid-template-columns: minmax(0, 1fr); place-items: center; padding: var(--sp-5); background: var(--scrim); }
-.cs-scrim:not(.again) { animation: scrim-in 0.2s ease-out; }
-.cs-scrim:not(.again) > .cs-dialog { animation: dialog-in 0.2s cubic-bezier(0.2, 0.8, 0.2, 1); }
-.cs-scrim.leaving { animation: scrim-out 0.14s ease-in forwards; pointer-events: none; }
-.cs-scrim.leaving > .cs-dialog { animation: dialog-out 0.14s ease-in forwards; }
-.cs-dialog { display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; gap: var(--sp-3); width: min(440px, 100%); max-height: 100%; overflow-x: hidden; overflow-y: auto; padding: var(--sp-4); border-radius: var(--r-lg); background: var(--panel); box-shadow: var(--pop); }
-.cs-dialog:focus { outline: none; }
-/* The sticky actions also cover the dialog's bottom padding, so a long list of tools scrolls under them and not through the gap beneath. */
-.cs-dialog > .action-row.is-sticky { bottom: calc(var(--sp-4) * -1); margin-bottom: calc(var(--sp-4) * -1); padding-bottom: calc(var(--sp-3) + var(--sp-4)); }
-.cs-dlg-head { display: flex; align-items: center; gap: var(--sp-2); }
-.cs-dlg-head .sp { flex: 1; }
-.cs-dlg-head .tg { margin-right: var(--sp-1); }
-.cs-dlg-head.sub .cs-dlg-name { flex: 1; min-width: 0; font-size: var(--fs-md); }
-.cs-dlg-name { margin: 0; font: 500 var(--fs-lg)/1.3 var(--display); overflow-wrap: anywhere; }
-.cs-dialog em.num, .cs-grp em.num { margin-left: var(--sp-1); font-style: normal; font-weight: 500; color: var(--text-3); }
-.cs-dialog .cs-desc { margin: 0; font-size: var(--fs-sm); line-height: 1.6; color: var(--text-2); text-wrap: pretty; }
-.cs-dialog .cs-meta { margin: 0; }
-.cs-dialog .ca-alert, .cs-dialog .cs-device { margin: 0; }
+/* Sections: a small name, 查看全部 at the right, then the apps in two columns. A row is the tile and the name, and at the right 「連結」 or 「✓ 已連結」. */
+.cs-sec { margin-top: var(--sp-5); }
+.cs-sec:first-child, .cs-top + .cs-sec { margin-top: 0; }
+.cs-sec-head { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); margin-bottom: var(--sp-2); }
+.cs-sec-head h2 { margin: 0; font-size: var(--fs-sm); font-weight: var(--weight-semibold); }
+.btn.cs-viewall { flex: none; min-height: var(--h-ctl-sm); padding: 0 var(--sp-1); border: 0; background: transparent; color: var(--text-3); font-size: var(--fs-xs); }
+.btn.cs-viewall:hover:not(:disabled), .btn.cs-viewall:active:not(:disabled) { background: transparent; color: var(--text); }
+.cs-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 var(--sp-6); }
+.cs-card, .cs-linked { display: flex; align-items: center; gap: var(--sp-3); min-width: 0; min-height: 56px; }
+.cs-card .btn.cs-main, .cs-linked .btn.cs-main { flex: 1; min-width: 0; justify-content: flex-start; gap: var(--sp-3); align-self: stretch; min-height: 56px; padding: 0; border: 0; border-radius: var(--r-md); background: transparent; text-align: left; white-space: normal; }
+.cs-card .btn.cs-main:hover:not(:disabled), .cs-card .btn.cs-main:active:not(:disabled), .cs-linked .btn.cs-main:hover:not(:disabled), .cs-linked .btn.cs-main:active:not(:disabled) { background: transparent; }
+.cs-card .btn.cs-main:focus-visible, .cs-linked .btn.cs-main:focus-visible { outline: none; }
+:where(:root[data-keys]) .cs-card .btn.cs-main:focus-visible { box-shadow: 0 0 0 2px var(--focus); }
+:where(:root[data-keys]) .cs-linked .btn.cs-main:focus-visible { box-shadow: 0 0 0 2px var(--focus); }
+.cs-main .tx { display: grid; grid-template-columns: minmax(0, 1fr); flex: 1; min-width: 0; }
+.cs-main .nm { font-size: var(--fs-sm); font-weight: var(--weight-semibold); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* One line each, so paired rows keep one height. */
+.cs-main .sub, .cs-main .ds { margin-top: var(--sp-1); font-size: var(--fs-2xs); line-height: 1.45; color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cs-main .sub.wait { color: var(--accent-text); }
+.cs-main .ds .st { font-size: var(--fs-2xs); }
+.btn.cs-connect { flex: none; padding-inline: var(--sp-4); border-radius: var(--r-pill); border-color: transparent; font-size: var(--fs-sm); }
+.btn.cs-connect.pri { border-color: var(--accent); }
+/* Connected: quiet words with a check, and no button. */
+.cs-state { display: inline-flex; flex: none; align-items: center; gap: var(--sp-1); color: var(--text-3); font-size: var(--fs-sm); white-space: nowrap; }
+.cs-state > .i { color: var(--ok); }
+.cs-linked > .tg { flex: none; }
+
+/* An app's page: a bare back chevron at the top left (the dialog's own ✕ is at the other corner), the mark on a white tile with the name beside
+   it and what can be done at the right, a paragraph on the app, then bordered cards of what is known of it. */
+.cs-back.btn { margin: 0 0 var(--sp-3) calc(var(--sp-2) * -1); }
+.cs-connected > .cs-top { margin-bottom: var(--sp-4); }
+.cs-connected > .cs-top > .cs-back.btn { margin: 0 0 0 calc(var(--sp-2) * -1); }
+.cs-head { display: flex; align-items: center; gap: var(--sp-3); }
+.cs-head h2.big { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.cs-join { display: flex; align-items: center; gap: var(--sp-2); flex: none; }
+.cs-wait { font-size: var(--fs-sm); color: var(--accent-text); }
+.cs-desc { margin: var(--sp-4) 0 0; font-size: var(--fs-sm); line-height: 1.6; color: var(--text-2); text-wrap: pretty; }
+.cs-needs { margin: var(--sp-3) 0 0; font-size: var(--fs-sm); line-height: 1.55; color: var(--text-2); text-wrap: pretty; }
+.cs .note { margin-top: var(--sp-3); }
+.cs .ca-alert { margin-top: var(--sp-3); }
+.cs-page .cs-sec h3 { margin-left: 0; }
+.cs-say { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); margin: 0; padding: 0; list-style: none; }
+.cs-say li { display: flex; align-items: center; gap: var(--sp-2); padding: var(--sp-1) 0; font-size: var(--fs-xs); line-height: 1.5; }
+.cs-say .i { color: var(--text-3); }
+/* A card: a thin line round it, rows of 38 px with a thin line between them, a label at the left and its value at the right. */
+.cs-box { border: 1px solid var(--float-edge); border-radius: var(--r-md); overflow: hidden; }
+.cs-info-row { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-4); min-height: 38px; padding: 0 var(--sp-4); font-size: var(--fs-sm); }
+.cs-info-row + .cs-info-row { border-top: 1px solid var(--float-edge); }
+.cs-info-row .k { flex: none; color: var(--text); }
+.cs-info-row .v { min-width: 0; overflow-wrap: anywhere; text-align: right; color: var(--text-2); }
+.cs-page .cs-acts { margin-top: var(--sp-5); padding-top: 0; border-top: 0; background: transparent; }
 .cs-count { margin: 0; font-size: var(--fs-2xs); color: var(--text-3); }
-.cs-plugin-tools { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-4); }
+.cs-plugin-tools { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-4); margin-top: var(--sp-4); }
 .cs-plugin-tools h3 { margin: 0 0 var(--sp-1); }
-.cs-plugin-tools .cs-tool-list { padding: 0; }
+.cs em.num { margin-left: var(--sp-1); font-style: normal; font-weight: 500; color: var(--text-3); }
 /* Bulk permissions stay above the folded per-tool list. */
-.cs-kind-list > .row { min-height: 42px; padding: var(--sp-2) var(--sp-3); }
-.cs-kind-list > .row + .row { border-top: 1px solid var(--line); }
-.cs-kind-list .t { font-size: var(--fs-xs); }
-.cs-grp { border: 0; border-radius: 0; overflow: hidden; }
-.cs-grp > .btn.gr { position: relative; width: 100%; justify-content: space-between; min-height: 44px; padding: var(--sp-2) var(--sp-3); border: 0; border-radius: var(--r-md); background: transparent; font-size: var(--fs-xs); text-align: left; }
+.cs-kind-list > .row { min-height: 38px; padding: 0 var(--sp-4); }
+.cs-kind-list > .row + .row { border-top: 1px solid var(--float-edge); }
+.cs-kind-list .t { font-size: var(--fs-sm); }
+.cs-grp > .btn.gr { position: relative; width: 100%; justify-content: space-between; min-height: 38px; padding: 0 var(--sp-4); border: 0; border-top: 1px solid var(--float-edge); border-radius: 0; background: transparent; font-size: var(--fs-xs); text-align: left; }
 .cs-grp > .btn.gr:hover:not(:disabled) { background: var(--hover); }
 .cs-grp > .btn.gr:active:not(:disabled) { background: var(--pressed); }
 .cs-grp > .btn.gr:focus-visible { outline: none; }
 :where(:root[data-keys]) .cs-grp > .btn.gr:focus-visible { box-shadow: inset 0 0 0 2px var(--focus); }
 .cs-grp .gt { flex: 1; min-width: 0; }
 .cs-grp .btn.gr .i { color: var(--text-3); }
-.cs-audit .audit { padding: 0 var(--sp-3) var(--sp-2); border-top: 1px solid var(--line); }
+.cs-audit { margin-top: var(--sp-5); }
+.cs-audit .audit { padding: 0 var(--sp-4) var(--sp-2); border-top: 1px solid var(--float-edge); }
 .cs-audit .audit > .row { min-height: 44px; padding: var(--sp-1) 0; }
-.cs-audit .audit > .row + .row::before { content: ""; position: absolute; top: 0; left: 0; right: 0; height: 1px; background: var(--line); }
+.cs-audit .audit > .row + .row::before { content: ""; position: absolute; top: 0; left: 0; right: 0; height: 1px; background: var(--float-edge); }
 .cs-audit .foot { margin: var(--sp-1) 0 0; }
 .conn-audit .t { overflow-wrap: anywhere; font-size: var(--fs-xs); }
 .conn-audit .d { margin-top: 0; font-size: var(--fs-xs); }
 /* The tools of one kind: a row each, its switch on the right */
-.cs-tool-list { --slist-pad: 14px; padding: 0 var(--slist-pad); border: 0; border-radius: 0; overflow: hidden; }
+.cs-tool-list { padding: 0 var(--sp-4); }
 .cs-tool-list > .row { min-height: 52px; padding: var(--sp-2) 0; }
-.cs-tool-list > .row + .row::before { content: ""; position: absolute; top: 0; left: 0; right: 0; height: 1px; background: var(--line); }
+.cs-tool-list > .row + .row::before { content: ""; position: absolute; top: 0; left: 0; right: 0; height: 1px; background: var(--float-edge); }
 .cs-tool-list > .row > .lbl { min-width: 0; }
 .cs-tool-list .row .t { font-size: var(--fs-xs); }
 .cs-tool-list .row .t .tool-name { color: var(--text); overflow-wrap: anywhere; }
 .cs-tool-list .row .d { margin-top: var(--sp-1); font-size: var(--fs-xs); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .code { font-family: var(--mono); font-size: var(--fs-xs); }
-.cs-meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-1) var(--sp-4); margin-top: var(--sp-3); font-size: var(--fs-2xs); color: var(--text-3); }
+.cs-meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-1) var(--sp-4); margin-top: var(--sp-4); font-size: var(--fs-2xs); color: var(--text-3); }
 .cs-meta > span { display: inline-flex; align-items: center; gap: var(--sp-1); min-width: 0; overflow-wrap: anywhere; }
 .cs-key { color: var(--text-2); }
 
 /* The account(s) a service is signed in with, by status only: a row each, the name on the left and the state on the right */
-.cs-accts { display: grid; grid-template-columns: minmax(0, 1fr); }
-.cs-acct { display: flex; align-items: center; gap: var(--sp-2); min-height: 34px; padding: 0 var(--sp-1); font-size: var(--fs-xs); }
+.cs-accts { display: grid; grid-template-columns: minmax(0, 1fr); margin-top: var(--sp-4); }
+.cs-acct { display: flex; align-items: center; gap: var(--sp-2); min-height: 38px; padding: 0 var(--sp-3); font-size: var(--fs-xs); }
 .cs-acct > .i { flex: none; color: var(--text-3); }
 .cs-acct .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-2); }
 .cs-acct .st { flex: none; font-size: var(--fs-xs); }
-.cs-acct + .cs-acct { border-top: 1px solid var(--line); }
+.cs-acct + .cs-acct { border-top: 1px solid var(--float-edge); }
+.cs-accts > .btn { margin: var(--sp-2) var(--sp-3); justify-self: start; }
+.cs-sec > .cs-box, .cs-sec > .note { margin-top: 0; }
+.cs-page .cs-sec { margin-top: var(--sp-5); }
+.cs-page .cs-head + .cs-desc + .cs-sec { margin-top: var(--sp-5); }
 
 /* A notice that something waits for the user */
 .ca-alert { display: flex; align-items: center; gap: var(--sp-3); padding: var(--sp-2) var(--sp-2) var(--sp-2) var(--sp-3); border-radius: var(--r-lg); background: var(--warn-soft); border: 1px solid var(--warn-edge); font-size: var(--fs-sm); }
 .ca-alert > .i { color: var(--warn); }
 .ca-alert .msg { flex: 1; min-width: 0; }
 
-/* A store page: back, the head, what to say, what it is */
-.cs-back { margin-bottom: var(--sp-4); }
-.cs-head { display: flex; align-items: center; gap: var(--sp-3); }
-.cs-head .tx { flex: 1; min-width: 0; }
-.cs-head .by { margin-top: var(--sp-1); font-size: var(--fs-sm); color: var(--text-3); }
-.cs-join { display: flex; align-items: center; gap: var(--sp-2); flex: none; }
-.cs-state { display: inline-flex; align-items: center; }
-.cs-wait { font-size: var(--fs-sm); color: var(--accent-text); }
-.cs-desc { margin: var(--sp-3) 0 0; font-size: var(--fs-xs); line-height: 1.6; color: var(--text-2); text-wrap: pretty; }
-.cs .note { margin-top: var(--sp-3); }
-.cs .ca-alert { margin-top: var(--sp-3); }
-.cs-sec { margin-top: var(--sp-5); }
-.cs-sec:first-child { margin-top: 0; }
-.cs-sec > .data-heading h2 { margin: 0 0 0 var(--sp-1); }
-.cs-say { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); margin: 0; padding: 0; list-style: none; }
-.cs-say li { display: flex; align-items: center; gap: var(--sp-2); padding: var(--sp-2) var(--sp-3); border-radius: 0; border: 0; background: transparent; font-size: var(--fs-xs); line-height: 1.5; }
-.cs-say .i { color: var(--text-3); }
-/* A store page's headings, examples and words share one left edge with its head. */
-.cs-page .cs-sec h3 { margin-left: 0; }
-.cs-page .cs-say li { padding-inline: 0; }
-
-/* Store rows share the detail button, action slot and divider across both catalogs. */
-.cs-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-2) var(--sp-3); }
-.cs-card { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: var(--sp-2); min-width: 0; min-height: 64px; padding-right: var(--sp-3); border: 0; border-radius: var(--r-md); background: transparent; }
-.cs-card::after { content: ""; position: absolute; bottom: 0; left: var(--sp-3); right: var(--sp-3); height: 1px; background: var(--line); }
-.cs-card:is(:hover, :has(+ .cs-card:hover))::after { opacity: 0; }
-.cs-card:hover { background: var(--hover); }
-.cs-card .btn.cs-main { flex: 1; min-width: 0; justify-content: flex-start; gap: var(--sp-3); align-self: stretch; min-height: 62px; padding: var(--sp-2) var(--sp-1) var(--sp-2) var(--sp-3); border: 0; border-radius: var(--r-lg); background: transparent; text-align: left; white-space: normal; }
-.cs-card .btn.cs-main:hover:not(:disabled), .cs-card .btn.cs-main:active:not(:disabled) { background: transparent; }
-.cs-card:has(.cs-main:active:not(:disabled)) { background: var(--pressed); }
-.cs-card .btn.cs-main:focus-visible { outline: none; }
-:where(:root[data-keys]) .cs-card:has(.cs-main:focus-visible) { box-shadow: inset 0 0 0 2px var(--focus); }
-.cs-main .nm { font-size: var(--fs-xs); }
-/* One line each, so paired rows keep one height; the columns pair only where that line has room (see the container rules). */
-.cs-main .sub { font-size: var(--fs-2xs); line-height: 1.45; color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.cs-main .sub.wait { color: var(--accent-text); }
-/* What an app asks for (its own key, or its own developer app) comes first on its row, in words, never only a title. */
-.cs-main .sub .need { font-weight: var(--weight-semibold); color: var(--text-2); }
-.cs-needs { margin: var(--sp-3) 0 0; font-size: var(--fs-sm); line-height: 1.55; color: var(--text-2); text-wrap: pretty; }
-.cs-needs b { color: var(--text); font-weight: var(--weight-semibold); }
-.cs-card > .btn { flex: none; padding-inline: var(--sp-2); }
-.cs-card > .cs-state { flex: none; font-size: var(--fs-xs); }
-.cs-card .cs-state .st { font-size: var(--fs-xs); color: var(--text-3); }
-.cs-key-form { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-3); width: 100%; }
-.cs-composio-setup { display: flex; align-items: center; gap: var(--sp-3); margin-top: var(--sp-5); padding: var(--sp-4) 0; border-top: 1px solid var(--edge); }
+/* The dialog of Composio's key (and the dialogs of 工具 and the model providers, which are drawn the same): over the settings, all of it dimmed (R-UI-111), its own close at the top */
+.cs-scrim { position: absolute; inset: 0; z-index: 5; display: grid; grid-template-columns: minmax(0, 1fr); place-items: center; padding: var(--sp-5); background: var(--scrim); }
+.cs-scrim:not(.again) { animation: scrim-in 0.2s ease-out; }
+.cs-scrim:not(.again) > .cs-dialog { animation: dialog-in 0.2s cubic-bezier(0.2, 0.8, 0.2, 1); }
+.cs-scrim.leaving { animation: scrim-out 0.14s ease-in forwards; pointer-events: none; }
+.cs-scrim.leaving > .cs-dialog { animation: dialog-out 0.14s ease-in forwards; }
+.cs-dialog { display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; gap: var(--sp-3); width: min(440px, 100%); max-height: 100%; overflow-x: hidden; overflow-y: auto; padding: var(--sp-4); border-radius: var(--r-lg); background: var(--float); border: 1px solid var(--float-edge); box-shadow: var(--pop); }
+.cs-dialog:focus { outline: none; }
+/* The sticky actions also cover the dialog's bottom padding, so a long list scrolls under them and not through the gap beneath. */
+.cs-dialog > .action-row.is-sticky { bottom: calc(var(--sp-4) * -1); margin-bottom: calc(var(--sp-4) * -1); padding-bottom: calc(var(--sp-3) + var(--sp-4)); }
+.cs-dlg-head { display: flex; align-items: center; gap: var(--sp-2); }
+.cs-dlg-head .sp { flex: 1; }
+.cs-dlg-head .tg { margin-right: var(--sp-1); }
+.cs-dlg-head.sub .cs-dlg-name { flex: 1; min-width: 0; font-size: var(--fs-md); }
+.cs-dlg-name { margin: 0; font: 500 var(--fs-lg)/1.3 var(--display); overflow-wrap: anywhere; }
+.cs-dialog em.num { margin-left: var(--sp-1); font-style: normal; font-weight: 500; color: var(--text-3); }
+.cs-dialog .cs-desc { margin: 0; }
+.cs-dialog .ca-alert, .cs-dialog .cs-device { margin: 0; }
+.cs-composio-setup { display: flex; align-items: center; gap: var(--sp-3); margin-top: var(--sp-5); padding: var(--sp-4) 0; border-top: 1px solid var(--float-edge); }
 .cs-composio-setup > span:nth-child(2) { flex: 1; min-width: 0; font-size: var(--fs-sm); }
 .cs-composio-setup > button { flex: none; }
 .cs-composio-mark { color: var(--text-2); }
 .cs-composio-mark svg { width: 20px; height: 20px; }
+.cs-key-form { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-3); width: 100%; }
 .cs-key-form label { font-size: var(--fs-sm); font-weight: var(--weight-semibold); }
 .cs-key-form > p { margin: 0; font-size: var(--fs-xs); color: var(--err); }
 .cs-key-form > .note { font-size: var(--fs-sm); color: var(--text-2); }
+
+/* The rows of a list of services as 工具 and the model providers draw them (services.css, providers.css): the mark, the name and its line, a
+   switch and a chevron, none of them boxed. */
+.cs-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-2) var(--sp-3); border: 0; border-radius: 0; background: transparent; }
+.cs-item { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto 18px; align-items: center; gap: var(--sp-3); min-width: 0; padding-right: var(--sp-3); border-radius: var(--r-md); cursor: pointer; }
+/* Dividers are lines of their own, so a rounded hover does not bend them; they step aside for the row under the pointer. */
+.cs-item::after { content: ""; position: absolute; bottom: 0; left: var(--sp-3); right: var(--sp-3); height: 1px; background: var(--line); }
+.cs-item:hover::after { opacity: 0; }
+.cs-item:hover { background: var(--hover); }
+.cs-item .btn.cs-open { justify-content: flex-start; gap: var(--sp-3); min-width: 0; min-height: 60px; padding: var(--sp-2) 0 var(--sp-2) var(--sp-3); border: 0; border-radius: 0; background: transparent; text-align: left; white-space: normal; }
+.cs-item .btn.cs-open:hover:not(:disabled), .cs-item .btn.cs-open:active:not(:disabled) { background: transparent; }
+.cs-item:has(.cs-open:active:not(:disabled)) { background: var(--pressed); }
+.cs-item .btn.cs-open:focus-visible { outline: none; }
+:where(:root[data-keys]) .cs-item:has(.cs-open:focus-visible) { box-shadow: inset 0 0 0 2px var(--focus); }
+.cs-item .ic { display: inline-grid; place-items: center; width: 30px; flex: none; }
+.cs-open .tx { display: grid; grid-template-columns: minmax(0, 1fr); flex: 1; min-width: 0; }
+.cs-open .nm { font-size: var(--fs-md); font-weight: var(--weight-semibold); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cs-open .ds { margin-top: var(--sp-1); font-size: var(--fs-2xs); line-height: 1.45; color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cs-open .ds .st { font-size: var(--fs-2xs); }
+.cs-item .chev { display: inline-flex; align-items: center; justify-content: center; color: var(--text-3); }
+:is(.cs-item) .ic .mono { width: 24px; height: 24px; }
+:is(.cs-item) .ic .mono > .i { width: 20px; height: 20px; }
+@container connections (max-width: 680px) {
+  .cs-list { grid-template-columns: minmax(0, 1fr); }
+}
 
 /* The form that connects a server of the user's own */
 .cd-help { margin: var(--sp-1) 0 0; font-size: var(--fs-sm); line-height: 1.5; color: var(--text-2); text-wrap: pretty; }
@@ -202,23 +239,14 @@
 .trust > .i { color: var(--warn); margin-top: var(--sp-1); }
 .trust b { color: var(--text); font-weight: var(--weight-semibold); }
 
-/* Store rows are a name and at most a short need, so they pair down to a narrow dialog; a connected row also
-   has its line and switch, so it pairs only where that line has room. */
-@container connections (max-width: 480px) {
+/* Rows pair down to one column in a narrow dialog. */
+@container connections (max-width: 640px) {
   .cs-grid { grid-template-columns: minmax(0, 1fr); }
 }
-@container connections (max-width: 680px) {
-  .cs-list { grid-template-columns: minmax(0, 1fr); }
-}
 .cs-main .sub:empty { display: none; }
-/* Every mark in a row stands bare (R-UI-34) in one 24 px slot, and a generic plug fills it as the brand marks do, so the
-   column of marks keeps one size and weight (R-UI-19). */
-:is(.cs-item, .cs-card) .ic .mono { width: 24px; height: 24px; }
-:is(.cs-item, .cs-card) .ic .mono > .i { width: 20px; height: 20px; }
 
 @media (max-width: 720px) {
   .cs-find { margin-left: 0; width: 100%; }
-  .cs-find .field { flex: 1; width: auto; }
   .add-grid .two { grid-template-columns: minmax(0, 1fr); }
   .cs-scrim { padding: var(--sp-4); }
 }

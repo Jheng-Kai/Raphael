@@ -28,8 +28,8 @@ export default [
   ]),
   scene('daily-press-surfaces','Quiet Home, connections and calendar controls retain visible stationary press feedback',[
     page('home'),{action:'press-feedback',selectors:['.ho-stat.btn','.ho-schedule .ho-event','.ho-schedule header .btn.icon']},
-    ...settings('connections'),{action:'press-feedback',selectors:['.cs-open']},
-    click('[data-conn="tab"][data-id="store"]'),wait('.cs-card'),{action:'press-feedback',selectors:['.cs-main']},
+    ...settings('connections'),wait('.cs-card'),{action:'press-feedback',selectors:['.cs-main']},
+    click('[data-conn="connected"]'),wait('.cs-linked'),{action:'press-feedback',selectors:['.cs-linked .cs-main']},
     key('Escape'),waitGone('.modal-scrim:not([hidden])'),
     ...automationScenes.find(item=>item.name==='automations-sparse').steps,
     {action:'calendar-tools'},

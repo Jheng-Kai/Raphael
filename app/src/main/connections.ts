@@ -1,14 +1,14 @@
-// One connected view joins managed toolkits, private Google and custom MCP servers; it holds connectors only, since a
-// member's skills are managed in that member's own panel:
-// the apps that can be called now first (their number is the core's, the one the sidebar and every model's roster
-// show), then the ones that cannot. Details group tool switches by write/read and say how many are
-// on; removal stays in the overflow menu. The store starts with built-in services and offers Composio as an optional catalog.
-// Existing custom MCP setup and device reauthentication stay available.
+// 連結應用程式, one view as Grok Bot's Connect Apps (owner, 2026-11-12): a search over the whole catalog, a row of category chips, then
+// 為你推薦 and a section for each category (or one list for a chosen chip or a search); the connected and the ones to connect stand together,
+// with no tabs and no count of the catalogue. A chip at the top right opens the list of the connected apps (managed toolkits, private Google and
+// custom MCP servers; connectors only, since a member's skills are managed in that member's own panel: the number is the core's, the one the
+// sidebar and every model's roster show). An app's page, connected or not, replaces the view: its tools by write/read with their switches
+// and how many are on, its information, and removal in the overflow menu. Existing custom MCP setup and device reauthentication stay available.
 // Secrets go directly to the core vault and never enter the render snapshot.
 
 import { noticeHTML } from "./missing";
 import * as api from "./api";
-import { type InventoryView, appOf, countText, isConnected, whyNot } from "./apps-inventory";
+import { type InventoryView, appOf, connectedCount, isConnected, whyNot } from "./apps-inventory";
 import { openConnectionSetup } from "./connection-setup";
 import { openDialog as openMemberDialog } from "./member-dialogs";
 import { managedGroup, pluginTool, storePlugin, type ManagedConnector } from "./plugins-data";
@@ -16,15 +16,13 @@ import { openMcpImport } from "./mcp-import";
 import { isTopLayer, registerDismissal } from "./dismissals";
 import { dayLabel, describeError, formatClock } from "./format";
 import { getLocale, t } from "./i18n";
-import { STORE_GROUPS, STORE_PAGE_SIZE, popularApp, storeGroup, storeMatches, storeNear } from "./store-finder";
-import { findsName } from "./find-match";
+import { STORE_GROUPS, popularApp, popularRank, storeGroup, storeMatches, storeNear } from "./store-finder";
 import type { MessageKey } from "./i18n/zh-TW";
 import { serviceIconOf } from "./service-icons";
-import { chipSteps, revealChip } from "./chip-scroll";
 import { entryIcon } from "./service-mark";
 export { entryIcon, iconHTML } from "./service-mark";
 import type { AuditEntry, ConnectionGroup, ConnectionTool, MainEvent, NewConnection, StoreService, Words } from "./types";
-import { DISCONNECT_CONFIRM_MS, type Choice, actionRow, btn, closeMenu, copyButton, esc, fieldHTML, ico, iconButton, leave, openPopover, row, sel, st, swapHTML, tabs, tg, toaster } from "./ui";
+import { DISCONNECT_CONFIRM_MS, type Choice, actionRow, btn, closeMenu, copyButton, esc, fieldHTML, ico, iconButton, openPopover, row, sel, st, tg, toaster } from "./ui";
 
 /** `t` for a key that is chosen at run time (its placeholders, if any, are none). */
 const tr = t as unknown as (key: MessageKey) => string;
@@ -47,12 +45,16 @@ const GRANTS_URL: Record<string, string> = { github: "https://github.com/setting
 const AUDIT_SHOWN = 5;
 /** How many of the latest actions are read, to find each service's own among them. */
 const AUDIT_READ = 50;
-/** How long the dialog of a service takes to go (styles.css: the way out of `.cs-scrim`). */
-const DIALOG_OUT_MS = 140;
 
-// ---------- what the tab is drawn from ----------
+// ---------- what the dialog is drawn from ----------
 
-export type Tab = "installed" | "store";
+/** What the dialog shows when no app's page is open: the one view of the apps, or the list of the connected ones. */
+export type Screen = "apps" | "connected";
+/** An app's page: an app of the catalog (by its id) or a connected one (by the id of its connection). */
+export interface OpenApp {
+  kind: "app" | "group";
+  id: string;
+}
 export type ToolKind = ConnectionTool["kind"];
 
 export interface PairDraft {
@@ -111,17 +113,21 @@ export interface ConnectionsView {
   /** Built-in services, loaded independently from the optional managed catalog. */
   catalog: StoreService[] | "loading" | "failed";
   composioCatalog: StoreService[] | "loading" | "failed";
-  /** The owner's apps as the core counts them: the number beside 「已連結」 is its count, the one of the sidebar and the roster. */
+  /** The owner's apps as the core counts them: the number on the chip at the top is its count, the one of the sidebar and the roster. */
   inventory: InventoryView;
   /** Which section each row took when this visit first read it. */
   placed?: ReadonlyMap<string, boolean | null>;
   audit: AuditEntry[];
-  tab: Tab;
+  /** The one view of the apps, or the list of the connected ones (the chip at the top right). */
+  screen: Screen;
   /** What was typed in the search box. */
   search: string;
-  storePage?: number;
-  /** What is open: the dialog of a connected service over the list, or the page of a store entry in its place. */
-  open: { tab: Tab; id: string } | null;
+  /** How many rows of a long list are drawn; more are drawn as it is scrolled. */
+  shown?: number;
+  /** 為你推薦 shows every one of its apps, not the first few. */
+  recommendedAll?: boolean;
+  /** What is open: an app's page, in the place of the dialog's view. */
+  open: OpenApp | null;
   /** The dialog's list of tools is unfolded. */
   toolsOpen: boolean;
   /** The dialog's latest actions are unfolded. */
@@ -133,7 +139,7 @@ export interface ConnectionsView {
   login: Login | null;
   /** The code to type, while a device login waits for it. */
   device: DeviceCode | null;
-  /** What went wrong with the latest login, for its store page or connected-app dialog. */
+  /** What went wrong with the latest login, for the app's page. */
   loginError: { target: string; kind: string } | null;
   /** Feedback stays inside the open dialog, clear of its actions. */
   dialogNotice: { text: string; kind: "ok" | "err" } | null;
@@ -148,7 +154,7 @@ export const emptyConnectionsView = (): ConnectionsView => ({
   composioCatalog: "loading",
   inventory: "loading",
   audit: [],
-  tab: "installed",
+  screen: "apps",
   search: "",
   open: null,
   toolsOpen: false,
@@ -311,80 +317,302 @@ function lineOf(g: ConnectionGroup, v: ConnectionsView): string {
   return esc(g.description || (entry ? words(entry.summary) : where(g)));
 }
 
-const matches = (query: string, ...texts: string[]): boolean => {
-  const q = query.trim().toLowerCase();
-  // As typed anywhere in its words, or its name nearly spelled (`find-match.ts`).
-  return !q || texts.some((text) => text.toLowerCase().includes(q)) || findsName(texts.slice(0, 1), q);
-};
+// ---------- the dialog's one view, as Grok Bot's Connect Apps ----------
+// (owner, 2026-11-12: 「它不會分已連結跟商店，他們都在一起…上面放你已連接的，下面放一些推薦的…分全部、溝通、生產力、開發之類的…也不會顯示它現在有幾個」)
 
-// ---------- the bar: the two views and the search; the menu that adds, beside the tab's name ----------
+/** The chip at the top right: the marks of up to four connected apps, overlapped, then how many are connected. */
+const HAVE_MARKS = 4;
 
-/** 「新增 ▾」, the menu that adds a server of the user's own: on the row of the two views, clear of the dialog's ✕. */
+/** How many apps a section of 全部 shows before 查看全部, and how many rows a list shows before the next ones are drawn as it scrolls. */
+const SECTION_SIZE = 6;
+const LIST_STEP = 24;
+/** The category chips that stand in the row; the rest are in 更多 (a chosen one always stands). */
+const CHIP_CAP = 5;
+
+const groupLabel = (group: string): string => tr(STORE_GROUP_LABELS[group] ?? STORE_GROUP_LABELS.other!);
+const byRank = (a: StoreService, b: StoreService): number => popularRank(a) - popularRank(b) || a.name.localeCompare(b.name);
+
+/** Every app the store offers, connected or not: built in, the owner's own, then Composio's. */
+function everyApp(v: ConnectionsView): StoreService[] {
+  return [...(Array.isArray(v.catalog) ? v.catalog : []), ...presetEntries(v), ...uniqueComposio(v)];
+}
+
+/** What a search finds over the whole catalog: as typed first, then the apps whose names it only nearly spells, nearest first. */
+function searchApps(apps: StoreService[], query: string): StoreService[] {
+  const found = apps.filter((s) => storeMatches(s, query)).sort(byRank);
+  const have = new Set(found);
+  const near = apps.filter((s) => !have.has(s)).map((s) => [s, storeNear(s, query)] as const).filter(([, score]) => score < Infinity);
+  return [...found, ...near.sort((a, b) => a[1] - b[1] || a[0].name.localeCompare(b[0].name)).map(([s]) => s)];
+}
+
+/** Well-known apps that are not connected yet, in the order the catalog ranks them; never one that is there already, however it was added. */
+function recommendedApps(v: ConnectionsView, apps: StoreService[]): StoreService[] {
+  const groups = Array.isArray(v.groups) ? v.groups : [];
+  // Never an app already there, however it was added (Notion directly, Gmail through the Google connection).
+  const fold = (text: string): string => text.toLowerCase().replace(/[^a-z0-9]/g, "");
+  const present = groups.map((g) => fold(`${g.id} ${g.name} ${g.description ?? ""} ${entryOf(g, v)?.id ?? ""}`));
+  const added = (s: StoreService): boolean => [fold(s.id.replace(/^composio:/i, "")), fold(s.name)].some((key) => key.length > 2 && present.some((text) => text.includes(key)));
+  return apps.filter((s) => !s.server_id && popularApp(s) && !added(s)).sort(byRank);
+}
+
+interface AppsLayout {
+  /** What the search or the chosen chip lists; null under 全部 with nothing typed. */
+  list: StoreService[] | null;
+  recommended: StoreService[];
+  recommendedMore: boolean;
+  sections: { group: string; items: StoreService[]; more: boolean }[];
+}
+
+function layoutOf(v: ConnectionsView): AppsLayout {
+  const apps = everyApp(v);
+  if (v.search.trim()) return { list: searchApps(apps, v.search), recommended: [], recommendedMore: false, sections: [] };
+  if (v.category) return { list: apps.filter((s) => storeGroup(s) === v.category).sort(byRank), recommended: [], recommendedMore: false, sections: [] };
+  const all = recommendedApps(v, apps);
+  const recommended = v.recommendedAll ? all : all.slice(0, SECTION_SIZE);
+  const shown = new Set(recommended);
+  const sections = STORE_GROUPS.map((group) => {
+    const items = apps.filter((s) => storeGroup(s) === group && !shown.has(s)).sort(byRank);
+    return { group, items: items.slice(0, SECTION_SIZE), more: items.length > SECTION_SIZE };
+  }).filter((section) => section.items.length);
+  return { list: null, recommended, recommendedMore: all.length > recommended.length, sections };
+}
+
+/** The mark of an app on the white tile of its row (Grok Bot's): bare, in its own colours, whichever theme the dialog is in. */
+const tileHTML = (mark: string, size: "" | "lg" = ""): string => `<span class="cs-tile${size ? ` ${size}` : ""}" aria-hidden="true">${mark}</span>`;
+
+/** The button that connects an app, or what takes its place: the wait for its login, or that it is connected. */
+function joinControl(s: StoreService, v: ConnectionsView): string {
+  const here = v.login?.target === s.id;
+  if (s.server_id) return `<span class="cs-state">${ico("check")}<span>${esc(t("conn.tab.installed"))}</span></span>`;
+  // Managed sign-in has no cancellation RPC; keep the shared action disabled until it completes.
+  if (here) return btn(esc(t("conn.cancel")), "cs-connect", ` data-conn="cancel-login"${s.source ? " disabled" : ""}`);
+  return btn(esc(t("conn.connect")), "cs-connect", ` data-conn="join" data-id="${esc(s.id)}" aria-label="${esc(t("conn.connectAria", { p0: s.name }))}"${v.login ? " disabled" : ""}`);
+}
+
+/** An app that is set up in the conversation rather than here: a server of the owner's own, or a developer app of theirs. */
+const inChat = (s: StoreService): boolean => !!PRESET_FORMS[s.id] || s.id === OWN_GOOGLE || s.needs === "own_app";
+
+const storeMark = (s: StoreService): string => entryIcon(s, "md").replace(/<img /g, '<img decoding="async" ');
+
+/** A row of the dialog: the mark on its tile and the name open the app's page; 「連結」 (or 「✓ 已連結」) stands at the right. */
+function appRowHTML(s: StoreService, v: ConnectionsView): string {
+  const here = v.login?.target === s.id;
+  const wait = here ? `<span class="sub wait">${esc(t(s.auth === "none" ? "conn.connecting" : "conn.loggingIn"))}</span>` : "";
+  const summary = words(s.summary);
+  return (
+    `<div class="cs-card">` +
+    btn(
+      `${tileHTML(storeMark(s))}<span class="tx"><span class="nm">${esc(s.name)}</span>${wait}</span>`,
+      "cs-main",
+      ` data-conn="open-store" data-id="${esc(s.id)}" data-k="cs-store:${esc(s.id)}"${summary ? ` title="${esc(summary)}"` : ""}`,
+    ) +
+    `${joinControl(s, v)}</div>`
+  );
+}
+
+const gridHTML = (apps: StoreService[], v: ConnectionsView): string => `<div class="cs-grid">${apps.map((s) => appRowHTML(s, v)).join("")}</div>`;
+
+function sectionHTML(title: string, apps: StoreService[], v: ConnectionsView, more: { attrs: string } | null): string {
+  const viewAll = more ? btn(esc(t("common.showAll")), "cs-viewall", more.attrs) : "";
+  return `<section class="cs-sec"><div class="cs-sec-head"><h2>${esc(title)}</h2>${viewAll}</div>${gridHTML(apps, v)}</section>`;
+}
+
+function keyErrorMessage(kind: ConnectionsView["keyError"]): string {
+  switch (kind) {
+    case "openrouter_key": return t("plugins.keyOpenRouter");
+    case "consumer_key": return t("plugins.keyConsumer");
+    case "auth": return t("plugins.keyRefused");
+    case "unreachable": return t("plugins.keyUnreachable");
+    default: return t("plugins.keyFailed");
+  }
+}
+
+/** What a Composio key that was not saved is told as, from the core's word for why (the store and the guide alike). */
+export function composioKeyProblem(kind: string): string {
+  return keyErrorMessage(kind === "openrouter_key" || kind === "consumer_key" || kind === "auth" ? kind : kind === "network" || kind === "timeout" ? "unreachable" : "unknown");
+}
+
+/** Built-in apps win over matching managed slugs or names, regardless of the current filter. */
+function uniqueComposio(v: ConnectionsView): StoreService[] {
+  if (!v.configured || !Array.isArray(v.composioCatalog)) return [];
+  const identity = (value: string): string => value.toLowerCase().replace(/[^a-z0-9]/g, "");
+  const owned = new Set((Array.isArray(v.catalog) ? v.catalog : []).flatMap(s => [identity(s.id), identity(s.name)]));
+  const seen = new Set<string>();
+  return v.composioCatalog.filter(s => {
+    const id = identity(s.id), name = identity(s.name);
+    if (owned.has(id) || owned.has(name) || seen.has(id)) return false;
+    seen.add(id); return true;
+  });
+}
+
+/** Composio's mark, drawn in the text's colour: the store and the guide's services step both show it. */
+export const COMPOSIO_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h6v10H4zM14 7h6v10h-6zM10 10h4m-4 4h4"/></svg>`;
+const composioMark = (): string => `<span class="cs-icon md cs-composio-mark" aria-hidden="true">${COMPOSIO_SVG}</span>`;
+
+/** The dialog's close button, as the key dialog has it. */
+const closeButton = (): string => iconButton("x", t("common.close"), ' data-conn="close" data-k="cs-close"');
+
+function keyDialogHTML(v: ConnectionsView): string {
+  return `<div class="cs-scrim" data-conn="scrim" data-dialog="composio-key"><div class="cs-dialog" id="cs-dialog" role="dialog" aria-modal="true" aria-labelledby="cs-dlg-title" tabindex="-1" data-trap>` +
+    `<div class="cs-dlg-head">${composioMark()}<h2 class="cs-dlg-name" id="cs-dlg-title">Composio</h2><span class="sp"></span>${closeButton()}</div>` +
+    `<div class="cs-key-form"><label for="conn-key">${esc(t("plugins.keyPrompt"))}</label><p class="note">${esc(t("missing.composioGuide"))}</p>` +
+    `<input class="field" type="password" id="conn-key" autocomplete="new-password" spellcheck="false"${v.keyBusy ? " disabled" : ""}${v.keyError ? ' aria-invalid="true" aria-describedby="conn-key-error"' : ""}>` +
+    (v.keyError ? `<p id="conn-key-error" role="alert">${esc(keyErrorMessage(v.keyError))}</p>` : "") + dialogNoticeHTML(v) +
+    actionRow({ primary: { label: esc(t("plugins.saveKey")), attrs: ` data-conn="save-key"${v.keyBusy ? " disabled" : ""}` } }) + `</div></div></div>`;
+}
+
+/** What is under the chips: the sections of 全部, or one list (a chosen category, or what a search finds). */
+export function bodyHTML(v: ConnectionsView): string {
+  const retry = (action: string): string => `<div class="alert core-note" role="alert">${st("err", t("conn.loadFailed"))}${btn(esc(t("plugins.retry")), "sm", ` data-conn="${action}"`)}</div>`;
+  const loading = `<p class="settings-loading" role="status">${esc(t("conn.loading"))}</p>`;
+  let html = v.catalog === "loading" ? loading : v.catalog === "failed" ? retry("retry-builtin-store") : "";
+  const layout = layoutOf(v);
+  if (layout.list) {
+    const limit = Math.max(v.shown ?? LIST_STEP, LIST_STEP);
+    if (layout.list.length) html += gridHTML(layout.list.slice(0, limit), v);
+    else if (Array.isArray(v.catalog) && (!v.configured || Array.isArray(v.composioCatalog))) html += `<p class="cs-none" role="status">${esc(t("conn.noMatch"))}</p>`;
+  } else {
+    if (layout.recommended.length) html += sectionHTML(t("conn.recommendedFor"), layout.recommended, v, layout.recommendedMore ? { attrs: ' data-conn="recommended-all"' } : null);
+    for (const section of layout.sections) html += sectionHTML(groupLabel(section.group), section.items, v, section.more ? { attrs: ` data-conn="store-group" data-id="${section.group}"` } : null);
+  }
+  if (v.configured) {
+    if (v.composioCatalog === "loading") html += loading;
+    else if (v.composioCatalog === "failed") html += retry("retry-store");
+  } else if (v.configured === false) {
+    html += `<div class="cs-composio-setup">${composioMark()}<span>${esc(t("plugins.moreApps"))}</span>${btn(esc(t("plugins.configure")), "sm", ' data-conn="configure-composio"')}</div>`;
+  }
+  return html;
+}
+
+/** Are there more rows of the list than are drawn? */
+export function moreRows(v: ConnectionsView): boolean {
+  const layout = layoutOf(v);
+  return !!layout.list && layout.list.length > Math.max(v.shown ?? LIST_STEP, LIST_STEP);
+}
+
+/** The category chips: 全部, the first few categories, then 更多 for the rest. The chips that do not fit are hidden in the dialog (`fitChips`). */
+function chipsHTML(v: ConnectionsView): string {
+  const standing = STORE_GROUPS.slice(0, CHIP_CAP);
+  if (v.category && !standing.includes(v.category)) standing[CHIP_CAP - 1] = v.category;
+  const chip = (group: string, label: string, hidden: boolean): string =>
+    btn(esc(label), "cs-chip", ` data-conn="store-group" data-id="${group}" aria-pressed="${!v.search.trim() && v.category === group}"${hidden ? " hidden data-capped" : ""}`);
+  return `<div class="cs-chips" data-cs-chips role="group" aria-label="${esc(t("plugins.category"))}">` +
+    chip("", t("conn.all"), false) + STORE_GROUPS.map((group) => chip(group, groupLabel(group), !standing.includes(group))).join("") +
+    `<button type="button" class="sel cs-chip cs-more" aria-haspopup="menu" aria-expanded="false" data-k="conn-more"><span>${esc(t("conn.moreCategories"))}</span>${ico("down")}</button></div>`;
+}
+
+/**
+ * Hides the chips at the end of the row that do not fit (the row never wraps and never scrolls sideways); they are in 更多. A chosen
+ * chip stays, and so does every one that was capped to begin with. 更多 stands only while a chip is hidden.
+ */
+export function fitChips(row: HTMLElement): void {
+  const chips = [...row.querySelectorAll<HTMLElement>('[data-conn="store-group"]:not([data-capped])')];
+  for (const chip of chips) chip.hidden = false;
+  const more = row.querySelector<HTMLElement>(".cs-more");
+  const hiddenSome = (): boolean => !!row.querySelector('[data-conn="store-group"][hidden]');
+  if (more) more.hidden = !hiddenSome();
+  for (let at = chips.length - 1; at >= 0 && row.scrollWidth > row.clientWidth + 1; at--) {
+    const chip = chips[at]!;
+    if (chip.getAttribute("aria-pressed") === "true") continue;
+    chip.hidden = true;
+    if (more) more.hidden = false;
+  }
+  if (typeof ResizeObserver !== "undefined" && !watched.has(row)) {
+    watched.add(row);
+    new ResizeObserver(() => { if (row.isConnected) fitChips(row); }).observe(row);
+  }
+}
+const watched = new WeakSet<HTMLElement>();
+
+/** The categories that are not in the row of chips, in order: what 更多 offers. */
+function hiddenCategories(root: ParentNode | null, v: ConnectionsView): string[] {
+  const chips = root?.querySelector("[data-cs-chips]");
+  if (chips) return [...chips.querySelectorAll<HTMLElement>('[data-conn="store-group"][hidden]')].map((chip) => chip.dataset.id ?? "").filter(Boolean);
+  const standing = STORE_GROUPS.slice(0, CHIP_CAP);
+  if (v.category && !standing.includes(v.category)) standing[CHIP_CAP - 1] = v.category;
+  return STORE_GROUPS.filter((group) => !standing.includes(group));
+}
+
+// ---------- the top of the dialog ----------
+
+/** The apps whose tools can be called now: the ones the chip counts and the connected list leads with. */
+function connectedGroups(v: ConnectionsView): ConnectionGroup[] {
+  if (!Array.isArray(v.groups)) return [];
+  const connected = (g: ConnectionGroup): boolean => (v.placed?.get(g.id) ?? isConnected(v.inventory, g.id)) !== false;
+  // Exactly the apps the chip counts: one that is switched off, waits for a sign-in or failed is not connected, so it has no mark.
+  return v.groups.filter(connected);
+}
+
+/** The quiet chip at the top right: up to four marks, overlapped, and how many apps are connected. It opens the list of them. */
+function haveChipHTML(v: ConnectionsView): string {
+  if (!Array.isArray(v.groups) || !v.groups.length) return "";
+  const count = connectedCount(v.inventory);
+  const marks = connectedGroups(v).slice(0, HAVE_MARKS).map((g) => `<span class="cs-mini">${groupIcon(g, v, "md")}</span>`).join("");
+  return `<button type="button" class="btn cs-have" data-conn="connected" data-k="cs-have"><span class="cs-minis" aria-hidden="true">${marks}</span>` +
+    `<span class="cs-have-t">${esc(count ? t("conn.have", { p0: count }) : t("conn.haveSome"))}</span>${ico("right")}</button>`;
+}
+
+/** The bar: the search over the whole catalog, and 新增 beside it for a server of the owner's own. */
+function barHTML(v: ConnectionsView): string {
+  return `<div class="cs-bar"><div class="cs-find">${fieldHTML(t("conn.searchApps"), v.search, { id: "conn-search", icon: "search", label: t("conn.searchApps") })}</div>${connectionsAddHTML()}</div>`;
+}
+
+/** 「新增 ▾」, the menu that adds a server of the user's own, beside the search. */
 export const connectionsAddHTML = (): string =>
   `<button type="button" class="sel cs-add" aria-haspopup="menu" aria-expanded="false" data-k="conn-add">` +
   `<span>${esc(t("conn.addMenu"))}</span>${ico("down")}</button>`;
 
-function barHTML(v: ConnectionsView, entries: StoreEntries): string {
-  // 「已連結」 counts the apps whose tools can be called now, as the core counts them (the sidebar's number and the roster's): not the rows below it.
-  const installed = countText(v.inventory);
-  const store = entries.count;
-  const tab = (id: Tab, label: string, count: number | string) => ({ id, label, count, attrs: ` data-conn="tab" data-id="${id}" data-k="conn-tab:${id}"` });
-  return (
-    `<div class="cs-bar">` +
-    tabs([tab("installed", t("conn.tab.installed"), installed), tab("store", t("conn.tab.store"), store)], v.tab, { label: t("conn.tabs"), kind: "nav", plain: true }) +
-    connectionsAddHTML() +
-    `<div class="cs-find">${fieldHTML(t("conn.search"), v.search, { id: "conn-search", icon: "search", label: t("conn.search") })}</div></div>`
-  );
-}
+/** A bare chevron at the top left: back from an app's page or from the list of the connected apps. */
+const backHTML = (): string => iconButton("left", t("conn.back"), ' data-conn="back" data-k="cs-back"', "cs-back");
 
-// ---------- 已安裝: one list, a row for each service ----------
+// ---------- the connected apps: one list ----------
 
 /** The app switch reflects only the app's enabled flag; tool exclusions stay independent. */
 function serviceSwitch(g: ConnectionGroup, attrs: string): string {
   return tg(g.enabled, t("conn.switch", { p0: g.name }), attrs);
 }
 
-/**
- * A row of the list. The row itself opens the dialog (a click on its chevron, or anywhere but the
- * switch); its name is a real button for the keyboard; the switch is the whole service's.
- */
+/** A row of the connected list: the row opens the app's page; its name is a real button for the keyboard; the switch is the whole service's. */
 function itemHTML(g: ConnectionGroup, v: ConnectionsView): string {
   const busy = v.busy.has(g.id) || v.login?.target === g.id;
   const id = esc(g.id);
   return (
-    `<div class="cs-item" data-conn="open" data-id="${id}">` +
+    `<div class="cs-linked" data-conn="open" data-id="${id}">` +
     btn(
-      `<span class="ic">${groupIcon(g, v, "md")}</span><span class="tx"><span class="nm">${esc(g.name)}</span><span class="ds">${lineOf(g, v)}</span></span>`,
-      "cs-open",
-      ` data-conn="open" data-id="${id}" data-k="cs-open:${id}" aria-haspopup="dialog" title="${esc(t("conn.open", { p0: g.name }))}"`,
+      `${tileHTML(groupIcon(g, v, "md"))}<span class="tx"><span class="nm">${esc(g.name)}</span><span class="ds">${lineOf(g, v)}</span></span>`,
+      "cs-main",
+      ` data-conn="open" data-id="${id}" data-k="cs-open:${id}"`,
     ) +
     serviceSwitch(g, ` data-conn="enable" data-id="${id}" data-k="cs-enable:${id}"${busy ? " disabled" : ""}`) +
-    `<span class="chev" aria-hidden="true">${ico("right")}</span></div>`
+    `</div>`
   );
 }
 
 function installedHTML(v: ConnectionsView): string {
   if (v.groups === "loading") return `<p class="settings-loading" role="status">${esc(t("conn.loading"))}</p>`;
   if (v.groups === "failed") return `<div class="alert core-note">${st("err", t("conn.loadFailed"))}${btn(esc(t("plugins.retry")), "sm", ' data-conn="retry-connections"')}</div>`;
-  const shown = v.groups.filter((g) => matches(v.search, g.name, g.description ?? "", entryOf(g, v) ? words(entryOf(g, v)!.summary) : where(g)));
   if (!v.groups.length) return noticeHTML("emptyApps", "store", "apps");
-  if (!shown.length) return `<p class="cs-none">${esc(t("conn.noMatch"))}</p>`;
   // The apps that can be called now first, then the ones that cannot (waiting for a sign-in, failed, off, a second way to an app already
-  // counted): each still has its switch and its dialog. While the inventory is not read, or cannot be, they are one list as before.
+  // counted): each still has its switch and its page. While the inventory is not read, or cannot be, they are one list as before.
   // A row keeps its section for the whole visit: flipping its switch must not move it from under the pointer.
   const connected = (g: ConnectionGroup): boolean => (v.placed?.get(g.id) ?? isConnected(v.inventory, g.id)) !== false;
-  const counted = shown.filter(connected);
-  const others = shown.filter((g) => !connected(g));
-  const list = (groups: ConnectionGroup[], key: string): string => `<div class="cs-list" data-stagger="${key}">${groups.map((g) => itemHTML(g, v)).join("")}</div>`;
+  const counted = v.groups.filter(connected);
+  const others = v.groups.filter((g) => !connected(g));
+  // The connected first; then what is on but cannot be called (waiting for a sign-in, failed, a second way to an app already counted); then
+  // what is switched off, under 「已關閉」, each with its switch (owner's coordinator, 2026-11-12). A section with nothing in it is not drawn.
+  const waiting = others.filter((g) => g.enabled);
+  const off = others.filter((g) => !g.enabled);
+  const list = (groups: ConnectionGroup[]): string => `<div class="cs-grid">${groups.map((g) => itemHTML(g, v)).join("")}</div>`;
   const named = others.length > 0;
-  const section = (title: string, body: string): string => `<section class="cs-sec"><h2>${esc(title)}</h2>${body}</section>`;
+  const section = (title: string, body: string): string => `<section class="cs-sec"><div class="cs-sec-head"><h2>${esc(title)}</h2></div>${body}</section>`;
   return (
-    (counted.length ? (named ? section(t("conn.apps"), list(counted, "installed")) : list(counted, "installed")) : "") +
-    (others.length ? section(t("conn.notConnected"), list(others, "installed-not")) : "")
+    (counted.length ? (named ? section(t("conn.apps"), list(counted)) : list(counted)) : "") +
+    (waiting.length ? section(t("conn.notConnected"), list(waiting)) : "") +
+    (off.length ? section(t("conn.off"), list(off)) : "")
   );
 }
 
-// ---------- the dialog of a connected service ----------
+// ---------- an app's page, as Grok Bot's ----------
 
 /**
  * The name of a tool for the screen: the title its server gives it, else its name made readable (the
@@ -416,9 +644,6 @@ function toolRow(g: ConnectionGroup, tool: ConnectionTool, busy: boolean): strin
 }
 
 const kindName = (kind: ToolKind): string => t(kind === "write" ? "conn.group.write" : "conn.group.read");
-
-/** The dialog's close button, the same in both of its views. */
-const closeButton = (): string => iconButton("x", t("common.close"), ' data-conn="close" data-k="cs-close"');
 
 /** The latest actions of one service, folded under a row that says how many there are. */
 function auditHTML(v: ConnectionsView, server: string): string {
@@ -476,250 +701,119 @@ function accountsHTML(g: ConnectionGroup): string {
     : g.auth !== "none" ? [{ label: t("conn.account"), ...(needsLogin(g) ? { kind: "err" as const, text: t("conn.status.relogin") } : { kind: "ok" as const, text: t("conn.signedIn") }) }]
     : [];
   if (!rows.length) return "";
-  return `<div class="cs-accts">${rows.map((r, n) => `<div class="cs-acct">${ico("person")}<span class="nm">${esc(r.label)}</span>${st(r.kind, r.text)}${g.accounts?.[n]?.id ? btn(esc(t("account.label")), "sm", ` data-conn="account-label" data-id="${esc(g.id)}" data-account="${esc(g.accounts[n].id!)}"`) : ""}</div>`).join("")}${g.source === "composio" ? btn(esc(t("account.add")), "sm", ` data-conn="add-account" data-id="${esc(g.id)}"`) : ""}</div>`;
+  return `<div class="cs-accts cs-box">${rows.map((r, n) => `<div class="cs-acct">${ico("person")}<span class="nm">${esc(r.label)}</span>${st(r.kind, r.text)}${g.accounts?.[n]?.id ? btn(esc(t("account.label")), "sm", ` data-conn="account-label" data-id="${esc(g.id)}" data-account="${esc(g.accounts[n].id!)}"`) : ""}</div>`).join("")}${g.source === "composio" ? btn(esc(t("account.add")), "sm", ` data-conn="add-account" data-id="${esc(g.id)}"`) : ""}</div>`;
 }
 
-/** The dialog's first view: what the service is and holds, what to try, and the rarer actions. */
-function summaryHTML(g: ConnectionGroup, v: ConnectionsView): string {
-  const busy = v.busy.has(g.id);
+/** How an app is signed in to, in a word, from what the catalog says it needs; null when it is not known. */
+function signInWords(s: StoreService | undefined, g: ConnectionGroup | undefined): string | null {
+  if (s) {
+    if (s.id === OWN_GOOGLE) return "OAuth";
+    if (s.needs === "key" || PRESET_FORMS[s.id]) return t("conn.info.key");
+    if (s.needs === "own_app") return t("conn.info.ownApp");
+    if (s.auth === "none") return t("conn.info.none");
+    return "OAuth";
+  }
+  if (!g) return null;
+  return g.auth === "none" ? t("conn.info.none") : "OAuth";
+}
+
+/** Who provides the app: Composio, Google, or the app itself when it is built in; none for a server of the owner's own. */
+function providerWords(s: StoreService | undefined): string | null {
+  if (!s) return null;
+  if (s.source === "composio") return "Composio";
+  if (s.id === OWN_GOOGLE) return "Google";
+  return PRESET_FORMS[s.id] ? s.publisher : t("conn.info.builtIn");
+}
+
+/** A card of rows with a thin line round it and between them: a label at the left and its value at the right. */
+const infoRow = (label: string, value: string): string => `<div class="cs-info-row"><span class="k">${esc(label)}</span><span class="v">${esc(value)}</span></div>`;
+
+/** What is the app's tools, one card: the kinds with their switches, how many are on, and the tools themselves unfolded. */
+function toolsHTML(g: ConnectionGroup, v: ConnectionsView, busy: boolean, loggingIn: boolean): string {
   const id = ` data-id="${esc(g.id)}"`;
-  const entry = entryOf(g, v);
-  const loggingIn = v.login?.target === g.id;
-  const head =
-    `<div class="cs-dlg-head">${groupIcon(g, v, "xl")}<span class="sp"></span>` +
-    serviceSwitch(g, ` data-conn="enable"${id} data-k="cs-dlg-enable"${busy ? " disabled" : ""}`) +
-    iconButton("more", t("mcp.actions"), ` data-conn="server-menu"${id} aria-haspopup="menu"${busy ? " disabled" : ""}`) +
-    closeButton() +
-    `</div><h2 class="cs-dlg-name" id="cs-dlg-title">${esc(g.name)}</h2>`;
-  const about = `<p class="cs-desc">${esc(g.description || (entry ? words(entry.about) : t("conn.customServer")))}</p>`;
-  const secrets = [...g.env, ...g.headers];
-  // A server of the user's own says where it is and which secrets it was given, by name.
-  const meta = entry || g.source
-    ? ""
-    : `<div class="cs-meta"><span>${ico("link")}<span class="code">${esc(g.transport === "http" ? g.url : g.command)}</span></span>` +
-      (secrets.length ? `<span>${ico("lock")}<span class="code">${esc(secrets.join(", "))}</span></span>` : "") +
-      `</div>`;
-  const alert = needsLogin(g)
+  const kinds = (["write", "read"] as const).filter((kind) => g.tools.some((tool) => tool.kind === kind));
+  const on = g.tools.filter((tool) => tool.enabled).length;
+  // Tools that are known stay while they are read again (a switch just pressed): the page would otherwise shrink and scroll from under the pointer.
+  if (g.tools_state === "loading" && !g.tools.length) return `<p role="status">${esc(t("conn.loading"))}</p>`;
+  if (g.tools_state === "failed") return `<div class="note" role="alert">${esc(t("conn.loadFailed"))}${btn(esc(t("plugins.retry")), "sm", ` data-conn="refresh"${id}`)}</div>`;
+  if (!g.tools.length) return `<p class="cs-count conn-empty">${esc(t("conn.noTools"))}</p>`;
+  return `<section class="cs-sec"><h3>${esc(t("conn.toolsHeading"))}</h3><div class="cs-box cs-grp cs-tools"><div class="cs-kind-list">${(["write", "read"] as const).map(kind => {
+      const list = g.tools.filter(tool => tool.kind === kind), enabled = list.filter(tool => tool.enabled).length;
+      return row(`${esc(kindName(kind))}<em class="num">${enabled}/${list.length}</em>`, "",
+        tg(list.length > 0 && enabled === list.length, t("conn.groupSwitch", { p0: kindName(kind) }),
+          ` data-conn="kind"${id} data-kind="${kind}" data-k="cs-kind:${kind}"${busy || loggingIn || !list.length ? " disabled" : ""}`), { cls: "cs-kind" });
+    }).join("")}</div>` +
+    btn(`<span class="gt">${esc(t("conn.tools.enabled", { p0: on, p1: g.tools.length, p2: g.write_count, p3: g.read_count }))}</span>${ico(v.toolsOpen ? "down" : "right")}`,
+      "gr", ` data-conn="tool-list" aria-expanded="${v.toolsOpen}" data-k="cs-count"`) +
+    `</div>${v.toolsOpen ? `<div class="cs-plugin-tools">${kinds.map(kind => `<section><h3>${esc(kindName(kind))}</h3><div class="cs-box cs-tool-list">${g.tools.filter(tool => tool.kind === kind).map(tool => toolRow(g, tool, busy)).join("")}</div></section>`).join("")}</div>` : ""}</section>`;
+}
+
+/**
+ * An app's page, in the dialog's place: a back chevron (the dialog's own × is at the other corner), the app's mark on a white tile with its
+ * name and, at the right, 「連結」 (or, when it is connected, its state, its switch and its ⋯), a paragraph on it, then what is known of it in
+ * bordered cards: its tools, and its information. It is the page of an app of the catalog, of a connected one, and of a server of the owner's own.
+ */
+function appPageHTML(s: StoreService | undefined, g: ConnectionGroup | undefined, v: ConnectionsView): string {
+  const name = g?.name ?? s!.name;
+  const key = g?.id ?? s!.id;
+  const busy = v.busy.has(key);
+  const loggingIn = !!v.login && (v.login.target === g?.id || v.login.target === s?.id);
+  const id = ` data-id="${esc(g?.id ?? "")}"`;
+  const mark = g ? groupIcon(g, v, "xl") : entryIcon(s!, "xl");
+  const action = g
+    ? `<span class="cs-state">${ico("check")}<span>${esc(t("conn.tab.installed"))}</span></span>` +
+      serviceSwitch(g, ` data-conn="enable"${id} data-k="cs-dlg-enable"${busy ? " disabled" : ""}`) +
+      iconButton("more", t("mcp.actions"), ` data-conn="server-menu"${id} aria-haspopup="menu"${busy ? " disabled" : ""}`)
+    : loggingIn
+      ? `<span class="cs-wait" role="status">${esc(t(s!.auth === "none" ? "conn.connecting" : "conn.loggingIn"))}</span>` + btn(esc(t("conn.cancel")), "cs-connect", ` data-conn="cancel-login"${s!.source ? " disabled" : ""}`)
+      : btn(esc(t("conn.connect")), "pri cs-connect", ` data-conn="join" data-id="${esc(s!.id)}"${v.login ? " disabled" : ""}`);
+  const head = `<div class="cs-head">${tileHTML(mark, "lg")}<h2 class="big" id="cs-page-title">${esc(name)}</h2><div class="cs-join">${action}</div></div>`;
+  const about = `<p class="cs-desc">${esc(g?.description || (s ? words(s.about) : t("conn.customServer")))}</p>`;
+  const secrets = g ? [...g.env, ...g.headers] : [];
+  // What signing in asks of the owner, said once, in a line, where the old page said it twice.
+  const lead = !g && s?.needs === "key" && !inChat(s) ? `<p class="cs-needs">${esc(t("setup.leadKey", { p0: s.name }))}</p>` : "";
+  const alert = g && needsLogin(g)
     ? `<div class="ca-alert">${ico("info")}<span class="msg">${esc(t("conn.status.relogin"))}</span>` +
-      btn(esc(loggingIn ? t("conn.loggingIn") : t("conn.relogin")), "sm", ` data-conn="relogin"${id} data-k="cs-relogin-top"${busy || v.login ? " disabled" : ""}`) +
+      btn(esc(v.login?.target === g.id ? t("conn.loggingIn") : t("conn.relogin")), "sm", ` data-conn="relogin"${id} data-k="cs-relogin-top"${busy || v.login ? " disabled" : ""}`) +
       `</div>`
-    : g.status === "error"
+    : g?.status === "error"
       ? `<div class="ca-alert">${ico("info")}<span class="msg">${esc(t("conn.status.error", { p0: failureText(g.error) }))}</span></div>`
       : "";
-  const kinds = (["write", "read"] as const).filter((kind) => g.tools.some((tool) => tool.kind === kind));
-  // Kind switches change tool permissions; the app switch never rewrites them.
-  const on = g.tools.filter((tool) => tool.enabled).length;
-  const tools = g.tools_state === "loading" ? `<p role="status">${esc(t("conn.loading"))}</p>`
-    : g.tools_state === "failed" ? `<div class="note" role="alert">${esc(t("conn.loadFailed"))}${btn(esc(t("plugins.retry")), "sm", ` data-conn="refresh"${id}`)}</div>`
-    : g.tools.length
-    ? `<div class="cs-grp cs-tools"><div class="cs-kind-list">${(["write", "read"] as const).map(kind => {
-        const list = g.tools.filter(tool => tool.kind === kind), enabled = list.filter(tool => tool.enabled).length;
-        return row(`${esc(kindName(kind))}<em class="num">${enabled}/${list.length}</em>`, "",
-          tg(list.length > 0 && enabled === list.length, t("conn.groupSwitch", { p0: kindName(kind) }),
-            ` data-conn="kind"${id} data-kind="${kind}" data-k="cs-kind:${kind}"${busy || loggingIn || !list.length ? " disabled" : ""}`), { cls: "cs-kind" });
-      }).join("")}</div>` +
-      btn(`<span class="gt">${esc(t("conn.tools.enabled", { p0: on, p1: g.tools.length, p2: g.write_count, p3: g.read_count }))}</span>${ico(v.toolsOpen ? "down" : "right")}`,
-        "gr", ` data-conn="tool-list" aria-expanded="${v.toolsOpen}" data-k="cs-count"`) +
-      (v.toolsOpen ? `<div class="cs-plugin-tools">${kinds.map(kind => `<section><h3>${esc(kindName(kind))}</h3><div class="cs-tool-list">${g.tools.filter(tool => tool.kind === kind).map(tool => toolRow(g, tool, busy)).join("")}</div></section>`).join("")}</div>` : "") +
-      `</div>`
-    : `<p class="cs-count conn-empty">${esc(t("conn.noTools"))}</p>`;
-  const example = examplePrompt(entry);
-  const acts = actionRow({
-    cls: "cs-acts", sticky: true,
-    primary: example ? { label: esc(t("conn.tryIt")), attrs: ` data-conn="try"${id} data-k="cs-try"` } : undefined,
-    secondary: (g.auth !== "none" && !needsLogin(g)
-      ? btn(esc(loggingIn ? t("conn.loggingIn") : t("conn.relogin")), "sm", ` data-conn="relogin"${id} data-k="cs-relogin"${busy || v.login ? " disabled" : ""}`)
-      : "") +
-    btn(esc(busy ? t("conn.refreshing") : t("conn.refresh")), "sm", ` data-conn="refresh"${id} data-k="cs-refresh"${busy ? " disabled" : ""}`) +
-    (g.auth === "device" && g.catalog_id && GRANTS_URL[g.catalog_id] ? btn(esc(t("conn.revokeOpen", { p0: g.name })), "sm", ` data-conn="open-grants"${id}`) : ""),
-  });
-  return head + about + meta + accountsHTML(g) + alert + loginErrorHTML(v, g.id) + dialogNoticeHTML(v) + (loggingIn ? deviceHTML(v) : "") + tools + auditHTML(v, g.name) + acts;
-}
-
-/**
- * The dialog of a connected service, over the settings with the page under it dimmed. It grows in
- * when it opens (`data-dialog`, ui.ts `swapHTML`), not each time it is drawn again; a click on the
- * dimmed part closes it, as Esc and its × do.
- */
-function dialogHTML(g: ConnectionGroup, v: ConnectionsView): string {
-  const inner = summaryHTML(g, v);
+  const example = g ? examplePrompt(s ?? entryOf(g, v)) : null;
+  const acts = g
+    ? actionRow({
+      cls: "cs-acts",
+      primary: example ? { label: esc(t("conn.tryIt")), attrs: ` data-conn="try"${id} data-k="cs-try"` } : undefined,
+      secondary: (g.auth !== "none" && !needsLogin(g)
+        ? btn(esc(v.login?.target === g.id ? t("conn.loggingIn") : t("conn.relogin")), "sm", ` data-conn="relogin"${id} data-k="cs-relogin"${busy || v.login ? " disabled" : ""}`)
+        : "") +
+      btn(esc(busy ? t("conn.refreshing") : t("conn.refresh")), "sm", ` data-conn="refresh"${id} data-k="cs-refresh"${busy ? " disabled" : ""}`) +
+      (g.auth === "device" && g.catalog_id && GRANTS_URL[g.catalog_id] ? btn(esc(t("conn.revokeOpen", { p0: g.name })), "sm", ` data-conn="open-grants"${id}`) : ""),
+    })
+    : "";
+  const tryItems = !g && s ? (s.examples[getLocale()] ?? s.examples.en ?? []).map((text) => `<li>${ico("chat")}<span>${esc(text)}</span></li>`).join("") : "";
+  const facts: string[] = [];
+  const provider = providerWords(s);
+  if (provider) facts.push(infoRow(t("conn.info.provider"), provider));
+  if (s) facts.push(infoRow(t("conn.info.category"), groupLabel(storeGroup(s))));
+  const signIn = signInWords(s, g);
+  if (signIn) facts.push(infoRow(t("conn.info.signIn"), signIn));
+  const where = s?.url || (g?.transport === "http" ? g.url : "");
+  if (where) facts.push(infoRow(t("conn.server"), where));
+  if (g && g.tools_state !== "failed" && g.tools.length) facts.push(infoRow(t("conn.toolsHeading"), String(g.tools.length)));
+  // A server of the owner's own says where it is and which secrets it was given, by name.
+  const meta = g && !s && !g.source
+    ? `<div class="cs-meta"><span>${ico("link")}<span class="code">${esc(g.transport === "http" ? g.url : g.command)}</span></span>` +
+      (secrets.length ? `<span>${ico("lock")}<span class="code">${esc(secrets.join(", "))}</span></span>` : "") + `</div>`
+    : "";
   return (
-    `<div class="cs-scrim" data-conn="scrim" data-dialog="${esc(g.id)}">` +
-    `<div class="cs-dialog" id="cs-dialog" role="dialog" aria-modal="true" aria-labelledby="cs-dlg-title" tabindex="-1" data-trap>${inner}</div></div>`
-  );
-}
-
-// ---------- 商店: the services that can be added ----------
-
-/** The button that adds a store entry, or what takes its place: the wait for the login, or that it is added. */
-function joinControl(s: StoreService, v: ConnectionsView, deferIcon = false): string {
-  const here = v.login?.target === s.id;
-  if (s.server_id) return `<span class="cs-state">${st("ok", t("conn.installed"))}</span>`;
-  // Managed sign-in has no cancellation RPC; keep the shared action disabled until it completes.
-  if (here) return btn(esc(t("conn.cancel")), "sm", ` data-conn="cancel-login"${s.source ? " disabled" : ""}`);
-  return btn(`${deferIcon ? '<span class="i" aria-hidden="true"></span>' : ico("plus")}${esc(t("conn.join"))}`, "sm", ` data-conn="join" data-id="${esc(s.id)}" aria-label="${esc(t("conn.joinAria", { p0: s.name }))}"${v.login ? " disabled" : ""}`);
-}
-
-/** An app set up in the conversation rather than here: a server of the owner's own, or a developer app of theirs. */
-const inChat = (s: StoreService): boolean => !!PRESET_FORMS[s.id] || s.id === OWN_GOOGLE || s.needs === "own_app";
-
-/**
- * What adding the entry asks of the owner, in words, for the row and the page to show before anything is pressed: only a key.
- * What an app set up in the conversation needs is said there, so its row shows nothing it would have to explain.
- */
-const needWords = (s: StoreService): string => (s.needs === "key" && !inChat(s) ? t("setup.needsKey") : "");
-const needHTML = (text: string): string => `<b class="need">${esc(text)}</b>`;
-
-/**
- * The line under an entry's name: what adding it asks, in
- * words, or the wait for its login. What the app does is on its own page and in the row's title.
- */
-function subLine(s: StoreService, here: boolean): string {
-  if (here) return esc(t(s.auth === "none" ? "conn.connecting" : "conn.loggingIn"));
-  const need = needWords(s);
-  return need ? needHTML(need) : "";
-}
-
-const storeMark = (s: StoreService): string => entryIcon(s, "md").replace(/<img /g, '<img decoding="async" ');
-
-function cardHTML(s: StoreService, v: ConnectionsView, deferDetails = false): string {
-  const here = v.login?.target === s.id;
-  const mark = deferDetails ? "" : storeMark(s);
-  const need = here ? "" : needWords(s);
-  return (
-    `<div class="cs-card"${deferDetails ? ` data-cs-pending="${esc(s.id)}"` : ""}>` +
-    btn(
-      `<span class="ic">${mark}</span><span class="tx"><span class="nm">${esc(s.name)}</span><span class="sub${here ? " wait" : ""}">${deferDetails ? (need ? needHTML(need) : "&nbsp;") : subLine(s, here)}</span></span>`,
-      "cs-main",
-      ` data-conn="open-store" data-id="${esc(s.id)}" data-k="cs-store:${esc(s.id)}" title="${esc(`${s.name}: ${need ? `${need} · ` : ""}${words(s.summary)}`)}"`,
-    ) +
-    `${joinControl(s, v, deferDetails)}</div>`
-  );
-}
-
-function keyErrorMessage(kind: ConnectionsView["keyError"]): string {
-  switch (kind) {
-    case "openrouter_key": return t("plugins.keyOpenRouter");
-    case "consumer_key": return t("plugins.keyConsumer");
-    case "auth": return t("plugins.keyRefused");
-    case "unreachable": return t("plugins.keyUnreachable");
-    default: return t("plugins.keyFailed");
-  }
-}
-
-/** What a Composio key that was not saved is told as, from the core's word for why (the store and the guide alike). */
-export function composioKeyProblem(kind: string): string {
-  return keyErrorMessage(kind === "openrouter_key" || kind === "consumer_key" || kind === "auth" ? kind : kind === "network" || kind === "timeout" ? "unreachable" : "unknown");
-}
-
-/** Built-in apps win over matching managed slugs or names, regardless of the current filter. */
-function uniqueComposio(v: ConnectionsView): StoreService[] {
-  if (!v.configured || !Array.isArray(v.composioCatalog)) return [];
-  const identity = (value: string): string => value.toLowerCase().replace(/[^a-z0-9]/g, "");
-  const owned = new Set((Array.isArray(v.catalog) ? v.catalog : []).flatMap(s => [identity(s.id), identity(s.name)]));
-  const seen = new Set<string>();
-  return v.composioCatalog.filter(s => {
-    const id = identity(s.id), name = identity(s.name);
-    if (owned.has(id) || owned.has(name) || seen.has(id)) return false;
-    seen.add(id); return true;
-  });
-}
-
-interface StoreEntries {
-  connected: StoreService[];
-  available: StoreService[];
-  count: number;
-}
-
-/** One filtered snapshot counts and pages every addable app, including popular apps. */
-function storeEntries(v: ConnectionsView): StoreEntries {
-  const inGroup = (s: StoreService): boolean => !v.category || storeGroup(s) === v.category;
-  const every = [...(Array.isArray(v.catalog) ? v.catalog : []), ...presetEntries(v), ...uniqueComposio(v)].filter(inGroup);
-  const all = every.filter(s => storeMatches(s, v.search)).sort((a, b) => a.name.localeCompare(b.name));
-  // After what the search finds as typed come the apps whose names it only nearly spells, nearest first.
-  if (v.search.trim()) {
-    const found = new Set(all);
-    const near = every.filter(s => !found.has(s)).map(s => [s, storeNear(s, v.search)] as const).filter(([, score]) => score < Infinity);
-    all.push(...near.sort((a, b) => a[1] - b[1] || a[0].name.localeCompare(b[0].name)).map(([s]) => s));
-  }
-  const connected = all.filter(s => s.server_id);
-  const available = all.filter(s => !s.server_id);
-  if (!v.search.trim() && !v.category) available.sort((a, b) => Number(popularApp(b)) - Number(popularApp(a)));
-  return { connected, available, count: available.length };
-}
-
-/** Composio's mark, drawn in the text's colour: the store and the guide's services step both show it. */
-export const COMPOSIO_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h6v10H4zM14 7h6v10h-6zM10 10h4m-4 4h4"/></svg>`;
-const composioMark = (): string => `<span class="cs-icon md cs-composio-mark" aria-hidden="true">${COMPOSIO_SVG}</span>`;
-
-function keyDialogHTML(v: ConnectionsView): string {
-  return `<div class="cs-scrim" data-conn="scrim" data-dialog="composio-key"><div class="cs-dialog" id="cs-dialog" role="dialog" aria-modal="true" aria-labelledby="cs-dlg-title" tabindex="-1" data-trap>` +
-    `<div class="cs-dlg-head">${composioMark()}<h2 class="cs-dlg-name" id="cs-dlg-title">Composio</h2><span class="sp"></span>${closeButton()}</div>` +
-    `<div class="cs-key-form"><label for="conn-key">${esc(t("plugins.keyPrompt"))}</label><p class="note">${esc(t("missing.composioGuide"))}</p>` +
-    `<input class="field" type="password" id="conn-key" autocomplete="new-password" spellcheck="false"${v.keyBusy ? " disabled" : ""}${v.keyError ? ' aria-invalid="true" aria-describedby="conn-key-error"' : ""}>` +
-    (v.keyError ? `<p id="conn-key-error" role="alert">${esc(keyErrorMessage(v.keyError))}</p>` : "") + dialogNoticeHTML(v) +
-    actionRow({ primary: { label: esc(t("plugins.saveKey")), attrs: ` data-conn="save-key"${v.keyBusy ? " disabled" : ""}` } }) + `</div></div></div>`;
-}
-
-function storeHTML(v: ConnectionsView, entries: StoreEntries = storeEntries(v), pending?: StoreService[]): string {
-  let drawn = 0;
-  const card = (s: StoreService): string => {
-    if (pending) {
-      pending.push(s);
-      // Six rows cover the results viewport; keep the remaining row tracks stable.
-      if (drawn++ >= 12) return `<div class="cs-card" data-cs-pending="${esc(s.id)}" aria-hidden="true"></div>`;
-    }
-    return cardHTML(s, v, !!pending);
-  };
-  const section = (key: string, title: string, list: StoreService[]): string =>
-    list.length ? `<section class="cs-sec"><h2>${esc(title)}</h2><div class="cs-grid" data-stagger="store:${key}">${list.map(card).join("")}</div></section>` : "";
-  const retry = (action: string): string => `<div class="alert core-note" role="alert">${st("err", t("conn.loadFailed"))}${btn(esc(t("plugins.retry")), "sm", ` data-conn="${action}"`)}</div>`;
-  const loading = `<p class="settings-loading" role="status">${esc(t("conn.loading"))}</p>`;
-  // The store is only what is not added yet, in one list; popular apps still come first while browsing.
-  const page = Math.min(v.storePage ?? 0, Math.max(0, Math.ceil(entries.count / STORE_PAGE_SIZE) - 1));
-  const shown = entries.available.slice(page * STORE_PAGE_SIZE, (page + 1) * STORE_PAGE_SIZE);
-  const chips = `<div class="cs-store-groups-row" data-chip-row><div class="cs-store-groups" data-chip-scroll role="group" aria-label="${esc(t("plugins.category"))}">${["", ...STORE_GROUPS].map(group =>
-    btn(esc(group ? tr(STORE_GROUP_LABELS[group]) : t("conn.all")), "sm", ` data-conn="store-group" data-id="${group}" aria-pressed="${v.category === group}"`)).join("")}</div>${chipSteps()}</div>`;
-  let html = (v.catalog === "loading" ? loading : v.catalog === "failed" ? retry("retry-builtin-store") : "") +
-    // Under a chosen chip the list is that group, so it is named for it rather than 「全部」.
-    section("all", v.category ? tr(STORE_GROUP_LABELS[v.category]) : t("conn.all"), shown);
-  if (entries.count > STORE_PAGE_SIZE) html += `<nav class="cs-store-pages" aria-label="${esc(t("conn.all"))}">` +
-    btn(esc(t("store.previous")), "sm", ` data-conn="store-page" data-id="${page - 1}"${page === 0 ? " disabled" : ""}`) +
-    `<span class="num" role="status">${page * STORE_PAGE_SIZE + 1}–${Math.min((page + 1) * STORE_PAGE_SIZE, entries.count)} / ${entries.count}</span>` +
-    btn(esc(t("store.next")), "sm", ` data-conn="store-page" data-id="${page + 1}"${(page + 1) * STORE_PAGE_SIZE >= entries.count ? " disabled" : ""}`) + `</nav>`;
-  if (!entries.count && Array.isArray(v.catalog) && (!v.configured || Array.isArray(v.composioCatalog))) html += `<p class="cs-none" role="status">${esc(t("conn.noMatch"))}</p>`;
-  if (v.configured) {
-    if (v.composioCatalog === "loading") html += loading;
-    else if (v.composioCatalog === "failed") html += retry("retry-store");
-  } else if (v.configured === false) {
-    html += `<div class="cs-composio-setup">${composioMark()}<span>${esc(t("plugins.moreApps"))}</span>${btn(esc(t("plugins.configure")), "sm", ' data-conn="configure-composio"')}</div>`;
-  }
-  return chips + `<div class="cs-results">${html}</div>`;
-}
-
-const backHTML = (): string => `<div class="cs-back">${btn(`${ico("left")}${esc(t("conn.back"))}`, "", ' data-conn="back"')}</div>`;
-
-function storePageHTML(s: StoreService, v: ConnectionsView): string {
-  const here = v.login?.target === s.id;
-  const action = s.server_id
-    ? `<span class="cs-state">${st("ok", t("conn.installed"))}</span>` +
-      btn(esc(t("conn.manage")), "", ` data-conn="manage" data-id="${esc(s.server_id)}"`)
-    : here
-      ? `<span class="cs-wait" role="status">${esc(t(s.auth === "none" ? "conn.connecting" : "conn.loggingIn"))}</span>` + btn(esc(t("conn.cancel")), "", ` data-conn="cancel-login"${s.source ? " disabled" : ""}`)
-      : btn(`${ico("plus")}${esc(t("conn.join"))}`, "pri", ` data-conn="join" data-id="${esc(s.id)}"${v.login ? " disabled" : ""}`);
-  const failed = loginErrorHTML(v, s.id);
-  const need = s.server_id ? "" : needWords(s);
-  const needs = need ? `<p class="cs-needs"><b>${esc(need)}</b> · ${esc(t("setup.leadKey", { p0: s.name }))}</p>` : "";
-  const examples = (s.examples[getLocale()] ?? s.examples.en ?? []).map((text) => `<li>${ico("chat")}<span>${esc(text)}</span></li>`).join("");
-  return (
-    backHTML() +
-    `<div class="cs-head">${entryIcon(s, "xl")}<div class="tx"><h2 class="big">${esc(s.name)}</h2><div class="by">${esc(t("conn.by", { p0: s.publisher }))}</div></div>` +
-    `<div class="cs-join">${action}</div></div>` +
-    needs +
-    failed +
-    (examples ? `<div class="cs-sec"><h3>${esc(t("conn.try"))}</h3><ul class="cs-say">${examples}</ul></div>` : "") +
-    `<div class="cs-sec"><h3>${esc(t("conn.about"))}</h3><p class="cs-desc">${esc(words(s.about))}</p></div>` +
-    (s.url ? `<div class="cs-meta"><span>${ico("link")}<span class="cs-key">${esc(t("conn.server"))}</span><span class="code">${esc(s.url)}</span></span></div>` : "")
+    backHTML() + head + about + lead + alert + loginErrorHTML(v, key) + dialogNoticeHTML(v) +
+    (loggingIn && g ? deviceHTML(v) : "") +
+    (g ? accountsHTML(g) : "") +
+    (tryItems ? `<section class="cs-sec"><h3>${esc(t("conn.try"))}</h3><ul class="cs-say">${tryItems}</ul></section>` : "") +
+    (g ? toolsHTML(g, v, busy, loggingIn) : "") +
+    (facts.length ? `<section class="cs-sec"><h3>${esc(t("conn.info"))}</h3><div class="cs-box cs-info">${facts.join("")}</div></section>` : "") +
+    meta + (g ? auditHTML(v, g.name) : "") + acts
   );
 }
 
@@ -779,41 +873,40 @@ function deviceHTML(v: ConnectionsView): string {
   );
 }
 
-// ---------- the tab ----------
+// ---------- the dialog ----------
 
-/** What is under the bar: the list, or the store. */
-export function bodyHTML(v: ConnectionsView, entries?: StoreEntries, pending?: StoreService[]): string {
-  return v.tab === "installed" ? installedHTML(v) + recommendedHTML(v, entries ?? storeEntries(v)) : storeHTML(v, entries, pending);
-}
-
-/** Under the apps already there, a few popular ones not added yet, each addable in place. Hidden while searching; the store keeps the whole catalogue. */
-function recommendedHTML(v: ConnectionsView, entries: StoreEntries): string {
-  if (v.search.trim() || !Array.isArray(v.groups)) return "";
-  // Never an app already there, however it was added (Notion directly, Gmail through the Google connection).
-  const fold = (text: string): string => text.toLowerCase().replace(/[^a-z0-9]/g, "");
-  const present = v.groups.map((g) => fold(`${g.id} ${g.name} ${g.description ?? ""} ${entryOf(g, v)?.id ?? ""}`));
-  const added = (s: StoreService): boolean => [fold(s.id.replace(/^composio:/i, "")), fold(s.name)].some((key) => key.length > 2 && present.some((text) => text.includes(key)));
-  const picks = entries.available.filter((s) => popularApp(s) && !added(s)).slice(0, 6);
-  return picks.length ? `<section class="cs-sec cs-recommended"><h2>${esc(t("conn.recommended"))}</h2>` +
-    `<div class="cs-grid" data-stagger="installed:recommended">${picks.map((s) => cardHTML(s, v)).join("")}</div></section>` : "";
-}
-
-/** The connected service whose dialog is open, if it is still there. */
-const openGroup = (v: ConnectionsView): ConnectionGroup | undefined =>
-  v.open?.tab === "installed" && Array.isArray(v.groups) ? v.groups.find((x) => x.id === v.open!.id) : undefined;
-
-/** The tab, below its name and purpose: the form, a store page, or the bar and its view (with a service's dialog over it). */
-export function connectionsHTML(v: ConnectionsView): string {
-  if (v.form) return `<div class="cs cs-form">${formHTML(v.form)}</div>`;
-  if (v.open?.tab === "store") {
-    const s = [...(Array.isArray(v.catalog) ? v.catalog : []), ...presetEntries(v), ...uniqueComposio(v)].find(x => x.id === v.open!.id);
-    if (s) return `<div class="cs cs-page">${deviceHTML(v)}${storePageHTML(s, v)}</div>`;
+/** What is open: the page of an app of the catalog, of a connected one, or of a server of the owner's own. */
+function openTarget(v: ConnectionsView): { entry?: StoreService; group?: ConnectionGroup } | null {
+  if (!v.open) return null;
+  const groups = Array.isArray(v.groups) ? v.groups : [];
+  if (v.open.kind === "group") {
+    const group = groups.find((g) => g.id === v.open!.id);
+    return group ? { group, entry: entryOf(group, v) ?? everyApp(v).find((s) => s.server_id === group.id) } : null;
   }
-  const g = openGroup(v);
-  // A device login started from a service's dialog shows its code there instead.
-  const device = g && v.login?.target === g.id ? "" : deviceHTML(v);
-  const entries = storeEntries(v);
-  return `<div class="cs${v.tab === "store" ? " cs-store" : ""}">${device}${barHTML(v, entries)}<div class="cs-body" data-cs-body>${bodyHTML(v, entries)}</div></div>` + (v.keyOpen ? keyDialogHTML(v) : g ? dialogHTML(g, v) : "");
+  const entry = everyApp(v).find((s) => s.id === v.open!.id);
+  return entry ? { entry, group: entry.server_id ? groups.find((g) => g.id === entry.server_id) : undefined } : null;
+}
+
+/** The dialog's title as a heading only a screen reader meets, over a page that has no title row. */
+const quietHeading = (heading: string): string => (heading ? `<div class="cs-vh">${heading}</div>` : "");
+
+/**
+ * The dialog, below its title: the form, an app's page, the list of the connected apps, or the one view of the apps (a search, the
+ * chips of its categories, then the sections). The key dialog of Composio stands over any of them.
+ */
+export function connectionsHTML(v: ConnectionsView, heading = ""): string {
+  const key = v.keyOpen ? keyDialogHTML(v) : "";
+  if (v.form) return `<div class="cs cs-form">${formHTML(v.form)}</div>`;
+  const target = openTarget(v);
+  if (target) return `<div class="cs cs-page">${quietHeading(heading)}${appPageHTML(target.entry, target.group, v)}</div>` + key;
+  if (v.screen === "connected" && Array.isArray(v.groups) && v.groups.length) {
+    return `<div class="cs cs-connected"><div class="cs-top">${backHTML()}<h2 class="cs-top-t">${esc(t("conn.tab.installed"))}</h2></div>${quietHeading(heading)}${deviceHTML(v)}` +
+      `<div class="cs-body" data-cs-body>${installedHTML(v)}</div></div>` + key;
+  }
+  // The connected apps could not be read: the chip that would open them says so instead, with the way to read them again.
+  const unread = v.groups === "failed" ? `<div class="alert core-note">${st("err", t("conn.loadFailed"))}${btn(esc(t("plugins.retry")), "sm", ' data-conn="retry-connections"')}</div>` : "";
+  return `<div class="cs cs-apps">${deviceHTML(v)}<div class="cs-top">${heading}${haveChipHTML(v)}</div>${unread}${barHTML(v)}${chipsHTML(v)}` +
+    `<div class="cs-results" data-cs-scroll><div class="cs-body" data-cs-body>${bodyHTML(v)}</div></div></div>` + key;
 }
 
 // ---------- doing ----------
@@ -832,7 +925,7 @@ export interface ConnectionMenu {
 
 export interface ConnectionsHost {
   root?: HTMLElement;
-  /** The tab is on screen. */
+  /** The dialog is on screen. */
   visible(): boolean;
   /** Draws the page again. */
   redraw(): void;
@@ -844,17 +937,21 @@ export interface Connections {
   view(): ConnectionsView;
   /** Reads the services, the store and the latest actions. */
   load(): Promise<void>;
-  /** A click on one of this tab's buttons or switches; false for anything else. */
+  /** A click on one of this dialog's buttons or switches; false for anything else. */
   click(target: Element): boolean;
-  /** Something typed in one of this tab's fields; false for any other input. */
+  /** Something typed in one of this dialog's fields; false for any other input. */
   input(input: HTMLInputElement): boolean;
-  /** Enter in one of the form's fields, or Esc with a service's dialog open; false for any other key. */
+  /** Enter in one of the form's fields, or Esc with an app's page, the connected list or the key's dialog open; false for any other key. */
   key(e: KeyboardEvent): boolean;
-  /** The menu of a dropdown of this tab, by its `data-k`. */
+  /** The menu of a dropdown of this dialog, by its `data-k`. */
   menuFor(k: string): ConnectionMenu | null;
+  /** The dialog was drawn: the row of chips is fitted to its width. */
+  painted(): void;
+  /** Something scrolled: a long list draws its next rows when its end is near. */
+  scrolled(target: Element): void;
   /** An event of the main window: the code of a device login. */
   followEvent(event: MainEvent): void;
-  /** The panel is closed or leaves the tab: drop what must not stay (an unsent form, a pending disconnect). */
+  /** The panel is closed or leaves the dialog: drop what must not stay (an unsent form, a pending disconnect). */
   reset(): void;
 }
 
@@ -874,10 +971,10 @@ export function createConnections(host: ConnectionsHost): Connections {
   let inventory: InventoryView = "loading";
   const placed = new Map<string, boolean | null>();
   let audit: AuditEntry[] = [];
-  let tab: Tab = "installed";
+  let screen: Screen = "apps";
   let search = "";
-  let storePage = 0;
-  let searchTimer: ReturnType<typeof setTimeout> | undefined;
+  let shown = LIST_STEP;
+  let recommendedAll = false;
   let open: ConnectionsView["open"] = null;
   let toolsOpen = false;
   let auditOpen = false;
@@ -890,26 +987,21 @@ export function createConnections(host: ConnectionsHost): Connections {
   let dialogNotice: ConnectionsView["dialogNotice"] = null;
   let form: ConnectionForm | null = null;
   let loads = 0;
-  let firstLoad = true;
-  let storePaint = 0;
-  let storePreview: { catalog: ConnectionsView["catalog"]; managed: ConnectionsView["composioCatalog"]; configured: boolean | null; locale: string; entries: StoreEntries; html: string; pending: StoreService[] } | null = null;
-  /** The dialog is on its way out (140 ms): a second close waits for the first. */
-  let closing = false;
   let stopOutside: (() => void) | null = null;
 
-  /** A dialog is over the list: an app's or the key's. */
-  const dialogOpen = (): boolean => keyOpen || open?.tab === "installed";
+  /** Something is over the view: an app's page, or the key's dialog. */
+  const dialogOpen = (): boolean => keyOpen || open !== null;
 
   const redraw = (): void => {
-    storePaint++;
     if (host.visible()) host.redraw();
-    if (dialogOpen() && !stopOutside && typeof document !== "undefined") {
+    // The key's dialog is the one that stands over the page; a press outside it closes it.
+    if (keyOpen && !stopOutside && typeof document !== "undefined") {
       const root = host.root ?? document.querySelector("#cs-dialog")?.parentElement?.parentElement;
       if (root) stopOutside = registerDismissal(() => root.querySelector<HTMLElement>("#cs-dialog"), closeDialog);
-    } else if (!dialogOpen()) { stopOutside?.(); stopOutside = null; }
+    } else if (!keyOpen) { stopOutside?.(); stopOutside = null; }
   };
 
-  /** Connection actions report inside the active dialog instead of covering its footer. */
+  /** Connection actions report inside the open page instead of covering its footer. */
   const notify = (text: string, kind: "ok" | "err" = "ok"): void => {
     if (dialogOpen()) { dialogNotice = { text, kind }; redraw(); }
     else toaster.info(text);
@@ -917,46 +1009,44 @@ export function createConnections(host: ConnectionsHost): Connections {
 
   const view = (): ConnectionsView => ({
     configured, categories, category, keyOpen, keyBusy, keyError,
-    groups, catalog, composioCatalog, inventory, placed, audit, tab, search, storePage, open, toolsOpen, auditOpen, confirmingDisconnect: confirming, busy, login, device, loginError, dialogNotice, form, now: Date.now(),
+    groups, catalog, composioCatalog, inventory, placed, audit, screen, search, shown, recommendedAll, open, toolsOpen, auditOpen, confirmingDisconnect: confirming, busy, login, device, loginError, dialogNotice, form, now: Date.now(),
   });
 
-  /** Prepare the default first screen while the installed catalog is being read. */
-  function prepareStore(): void {
-    storePreview = null;
-    if (tab !== "installed" || category || search || storePage || login || !Array.isArray(catalog) || (configured && !Array.isArray(composioCatalog))) return;
-    const current = view(), entries = storeEntries(current), pending: StoreService[] = [];
-    storePreview = { catalog, managed: composioCatalog, configured, locale: getLocale(), entries, pending, html: storeHTML(current, entries, pending) };
-  }
+  /** The dialog's scrolling list. */
+  const scroller = (): HTMLElement | null => (typeof document !== "undefined" ? (host.root ?? document).querySelector<HTMLElement>("[data-cs-scroll]") : null);
 
-  /** Draws only what is under the bar (the search box keeps its focus and its input method). */
-  function repaintBody(): void {
-    storePaint++;
-    const body = typeof document !== "undefined" ? document.querySelector<HTMLElement>("[data-cs-body]") : null;
+  /**
+   * Draws only what is under the search: the chips and the list (the search box keeps its focus and its input method). A new
+   * category or a new search starts at the top of the list; the rows drawn further down keep their place.
+   */
+  function repaintBody(top = false, withChips = true): void {
+    const root = typeof document !== "undefined" ? host.root ?? document : null;
+    const body = root?.querySelector<HTMLElement>("[data-cs-body]");
+    const chips = root?.querySelector<HTMLElement>("[data-cs-chips]");
+    if (!body || !chips || !host.visible() || screen !== "apps" || open) { redraw(); return; }
     const current = view();
-    const entries = storeEntries(current);
-    if (body && host.visible()) {
-      const offset = body.querySelector(".cs-store-groups")?.scrollLeft ?? 0;
-      const active = body.contains(document.activeElement) ? (document.activeElement as HTMLElement)?.dataset : undefined;
-      const focusedGroup = active?.conn === "store-group" ? active.id : undefined;
-      body.innerHTML = bodyHTML(current, entries);
-      const groups = body.querySelector<HTMLElement>(".cs-store-groups");
-      if (groups) {
-        groups.scrollLeft = offset;
-        const revealed = [...groups.querySelectorAll<HTMLButtonElement>("button")].find(button => button.dataset.id === (focusedGroup ?? current.category));
-        if (revealed) {
-          if (focusedGroup !== undefined) revealed.focus({ preventScroll: true });
-          revealChip(revealed);
-        }
+    // The chips change only when a category is chosen or a search starts or ends: a letter typed in the search leaves them alone.
+    if (withChips) {
+      const active = document.activeElement instanceof HTMLElement && chips.contains(document.activeElement) ? document.activeElement.dataset : undefined;
+      chips.outerHTML = chipsHTML(current);
+      const next = root!.querySelector<HTMLElement>("[data-cs-chips]");
+      if (next) {
+        fitChips(next);
+        if (active?.conn === "store-group") next.querySelector<HTMLElement>(`[data-conn="store-group"][data-id="${active.id}"]`)?.focus({ preventScroll: true });
       }
-    } else redraw();
-    const count = typeof document !== "undefined" ? (host.root ?? document).querySelector('[data-k="conn-tab:store"] .n') : null;
-    if (count) count.textContent = String(entries.count);
+    }
+    body.innerHTML = bodyHTML(current);
+    if (top) { const list = scroller(); if (list) list.scrollTop = 0; }
   }
 
   const groupById = (id: string): ConnectionGroup | undefined => (Array.isArray(groups) ? groups.find((g) => g.id === id) : undefined);
-  const entryById = (id: string): StoreService | undefined => {
-    const v = view();
-    return [...(Array.isArray(catalog) ? catalog : []), ...presetEntries(v), ...uniqueComposio(v)].find(s => s.id === id);
+  const entryById = (id: string): StoreService | undefined => everyApp(view()).find(s => s.id === id);
+  /** The connection of what is open: an app's page of a connected app is its connection's. */
+  const openedGroup = (): ConnectionGroup | undefined => {
+    if (!open) return undefined;
+    if (open.kind === "group") return groupById(open.id);
+    const server = entryById(open.id)?.server_id;
+    return server ? groupById(server) : undefined;
   };
 
   async function load(): Promise<void> {
@@ -981,14 +1071,7 @@ export function createConnections(host: ConnectionsHost): Connections {
       server_id: managed.find(c => c.id === `composio:${s.id}` && c.status === "ACTIVE")?.id ?? null } : s);
     if (recent.status === "fulfilled") audit = recent.value.entries;
     // what is open is gone (removed from elsewhere): back to the list
-    if (open && !(open.tab === "installed" ? groupById(open.id) : entryById(open.id))) open = null;
-    // Nothing connected yet: the store is where there is something to do. A read before the page is shown (the launch
-    // warm-up) leaves that choice to the opening, in reset().
-    if (firstLoad && Array.isArray(groups) && host.visible()) {
-      firstLoad = false;
-      if (!groups.length) tab = "store";
-    }
-    prepareStore();
+    if (open && !(open.kind === "group" ? groupById(open.id) : entryById(open.id))) open = null;
     redraw();
     if (configured && status.status === "fulfilled" && !Array.isArray(composioCatalog)) await loadCatalog();
   }
@@ -1008,13 +1091,12 @@ export function createConnections(host: ConnectionsHost): Connections {
       const unchanged = before && JSON.stringify(before) === JSON.stringify(next) && JSON.stringify(categories) === JSON.stringify(nextCategories);
       composioCatalog = next;
       categories = nextCategories;
-      if (unchanged) { prepareStore(); return; }
+      if (unchanged) return;
     } catch (error) {
       if (mine !== catalogLoads) return;
       if (error instanceof Error && error.message === "missing_key") { configured = false; composioCatalog = []; }
       else composioCatalog = before ?? "failed";
     }
-    prepareStore();
     redraw();
   }
 
@@ -1068,12 +1150,12 @@ export function createConnections(host: ConnectionsHost): Connections {
     }
     busy.delete(id);
     await load();
-    if (open?.id === id) await loadTools(id);
+    if (openedGroup()?.id === id) await loadTools(id);
   }
 
-  /** Opens the dialog of a connected service, at its summary, with the focus in it. */
-  function openDialog(id: string): void {
-    open = { tab: "installed", id };
+  /** Opens an app's page in the place of the view, and reads its tools when it is connected. */
+  function openPage(next: OpenApp): void {
+    open = next;
     loginError = null;
     dialogNotice = null;
     toolsOpen = false;
@@ -1081,37 +1163,36 @@ export function createConnections(host: ConnectionsHost): Connections {
     clearTimeout(confirmTimer);
     confirming = null;
     redraw();
-    focusOn("#cs-dialog");
-    void loadTools(id);
+    const group = openedGroup();
+    if (group) void loadTools(group.id);
   }
 
-  /**
-   * Closes the dialog: it shrinks and fades away (140 ms), then the list is drawn without it and the
-   * focus goes back to the row it was opened from.
-   */
+  /** The key's dialog closes, and the focus goes back to what opened it. */
   function closeDialog(): void {
-    if (closing) return;
     loginError = null;
     dialogNotice = null;
-    if (keyOpen) {
-      keyOpen = false; keyError = ""; keySaves++; keyBusy = false;
-      redraw(); focusOn('[data-conn="configure-composio"]'); return;
-    }
-    if (!open || open.tab !== "installed") return;
-    const id = open.id;
-    closing = true;
-    const scrim = typeof document !== "undefined" ? document.querySelector<HTMLElement>(".cs-scrim") : null;
-    leave(scrim, DIALOG_OUT_MS, () => {
-      closing = false;
-      if (open?.tab !== "installed" || open.id !== id) return;
+    if (!keyOpen) return;
+    keyOpen = false; keyError = ""; keySaves++; keyBusy = false;
+    redraw(); focusOn('[data-conn="configure-composio"]');
+  }
+
+  /** Steps back: from an app's page to the view it was opened from, or from the list of the connected apps to the one view. */
+  function back(): void {
+    clearTimeout(confirmTimer);
+    confirming = null;
+    loginError = null;
+    dialogNotice = null;
+    const from = open;
+    if (from) {
       open = null;
       toolsOpen = false;
       auditOpen = false;
-      clearTimeout(confirmTimer);
-      confirming = null;
-      redraw();
-      focusOn(`[data-k="cs-open:${typeof CSS !== "undefined" ? CSS.escape(id) : id}"]`);
-    });
+    } else if (screen === "connected") screen = "apps";
+    else return;
+    redraw();
+    // The focus returns to the row (or the chip) that was pressed.
+    if (from) focusOn(`[data-k="${from.kind === "group" ? "cs-open" : "cs-store"}:${typeof CSS !== "undefined" ? CSS.escape(from.id) : from.id}"]`);
+    else focusOn('[data-k="cs-have"]');
   }
 
   function disconnect(id: string): void {
@@ -1130,7 +1211,7 @@ export function createConnections(host: ConnectionsHost): Connections {
     void act(id, async () => {
       if (group?.source) await api.connectorsDisconnect(id);
       else await api.integrationsDisconnect(id);
-      if (open?.id === id) open = null;
+      if (open && (open.id === id || openedGroup()?.id === id)) open = null;
       if (group) notify(t(group.auth !== "none" ? "conn.disconnectedLogin" : "conn.disconnected", { p0: group.name }));
     });
   }
@@ -1156,7 +1237,7 @@ export function createConnections(host: ConnectionsHost): Connections {
     if (login) return;
     const key = "catalog_id" in target ? target.catalog_id : target.id;
     const previousAccounts = new Set((Array.isArray(groups) ? groups : []).flatMap(group => (group.accounts ?? []).map(account => account.id)));
-    const fromDialog = open?.tab === "installed" && open.id === key ? open : null;
+    const fromDialog = open && (open.id === key || entryById(open.id)?.id === key || openedGroup()?.id === key) ? open : null;
     dialogNotice = null;
     login = { target: key, name };
     loginError = null;
@@ -1175,13 +1256,9 @@ export function createConnections(host: ConnectionsHost): Connections {
     if (result.connected) {
       loginError = null;
       if (!fromDialog || open === fromDialog || !dialogOpen()) notify(t(again ? "conn.relogged" : "conn.connected", { p0: name }));
-      if (!again) {
-        tab = "installed";
-        open = null;
-      }
     } else if (result.error !== "cancelled") {
-      // Closing or replacing a dialog discards its pending failure as well as its visible one.
-      if (!fromDialog || (open === fromDialog && !closing)) loginError = { target: key, kind: result.error ?? "error" };
+      // Closing or replacing a page discards its pending failure as well as its visible one.
+      if (!fromDialog || open === fromDialog) loginError = { target: key, kind: result.error ?? "error" };
       if (!fromDialog) notify(result.error === "toolkit_not_allowed" ? failureText(result.error) : t("plugins.connectFailed"), "err");
     }
     await load();
@@ -1214,11 +1291,7 @@ export function createConnections(host: ConnectionsHost): Connections {
       },
       composioKey: () => { keyOpen = true; keyError = ""; redraw(); focusOn("#conn-key"); },
     });
-    if (added) {
-      tab = "installed";
-      open = null;
-      notify(t("conn.connected", { p0: entry.name }));
-    }
+    if (added) notify(t("conn.connected", { p0: entry.name }));
     await load();
   }
 
@@ -1271,7 +1344,7 @@ export function createConnections(host: ConnectionsHost): Connections {
       if (f.id) await api.integrationsUpdate(f.id, request);
       else await api.integrationsAdd(request);
       form = null; // the values were sent to the core's vault: nothing of them stays here
-      tab = "installed";
+      screen = "connected";
       notify(t("conn.connected", { p0: request.name }));
       await load();
       return;
@@ -1295,64 +1368,6 @@ export function createConnections(host: ConnectionsHost): Connections {
       f.testReport = result.ok ? `${t("mcp.testOk")} (${result.tools.length}): ${result.tools.join(", ")}` : `${t("mcp.testFailed")}: ${result.error ?? ""}`;
     } catch (error) { const message = describeError(error); f.error = () => message; }
     f.busy = false; redraw();
-  }
-
-  /** Shows another view; what was typed in the form is dropped with it. */
-  function show(next: Tab): void {
-    const paint = ++storePaint;
-    clearTimeout(confirmTimer);
-    confirming = null;
-    open = null;
-    search = "";
-    tab = next;
-    dialogNotice = null;
-    loginError = null;
-    const root = typeof document !== "undefined" ? host.root ?? document : null;
-    const shell = root?.querySelector<HTMLElement>(".cs:has(> [data-cs-body])");
-    if (shell && host.visible() && !root?.querySelector(".cs-scrim")) {
-      // Keep the clicked tab alive: replacing it and restoring focus forces synchronous layout.
-      const keepFocus = shell.contains(document.activeElement);
-      const current = view();
-      const cached = tab === "store" && !category && !storePage && !login && typeof requestAnimationFrame !== "undefined"
-        && storePreview?.catalog === catalog && storePreview.managed === composioCatalog && storePreview.configured === configured && storePreview.locale === getLocale() ? storePreview : null;
-      const entries = cached?.entries ?? storeEntries(current);
-      shell.classList.toggle("cs-store", tab === "store");
-      shell.querySelectorAll<HTMLElement>('[data-conn="tab"]').forEach(button => {
-        button.setAttribute("aria-selected", String(button.dataset.id === tab));
-      });
-      const input = shell.querySelector<HTMLInputElement>("#conn-search");
-      if (input) input.value = search;
-      const count = shell.querySelector('[data-k="conn-tab:store"] .n');
-      if (count) count.textContent = String(entries.count);
-      const body = shell.querySelector<HTMLElement>("[data-cs-body]")!;
-      const pending: StoreService[] = cached?.pending.slice() ?? [];
-      swapHTML(body, cached?.html ?? bodyHTML(current, entries, typeof requestAnimationFrame !== "undefined" ? pending : undefined));
-      const fill = (): void => {
-        if (paint !== storePaint || !host.visible() || !body.isConnected) return;
-        // Names and actions are ready; fill two rows per task after the first paint.
-        for (const entry of pending.splice(0, 2)) {
-          const placeholder = [...body.querySelectorAll<HTMLElement>("[data-cs-pending]")].find(node => node.dataset.csPending === entry.id);
-          if (placeholder) {
-            if (!placeholder.querySelector(".ic")) { placeholder.outerHTML = cardHTML(entry, current); continue; }
-            placeholder.querySelector<HTMLElement>(".ic")!.innerHTML = storeMark(entry);
-            placeholder.querySelector<HTMLElement>(".sub")!.innerHTML = subLine(entry, current.login?.target === entry.id);
-            const addIcon = placeholder.querySelector<HTMLElement>('[data-conn="join"] > span.i');
-            if (addIcon) addIcon.outerHTML = ico("plus");
-            placeholder.removeAttribute("data-cs-pending");
-          }
-        }
-        if (pending.length) requestAnimationFrame(() => setTimeout(fill, 0));
-      };
-      if (pending.length && typeof requestAnimationFrame !== "undefined") requestAnimationFrame(() => setTimeout(fill, 0));
-      if (keepFocus && !shell.contains(document.activeElement)) shell.querySelector<HTMLElement>(`[data-conn="tab"][data-id="${tab}"]`)?.focus({ preventScroll: true });
-    } else redraw();
-    if (tab === "installed") setTimeout(() => { if (paint === storePaint) prepareStore(); }, 0);
-    if (tab === "store" && configured) {
-      if (Array.isArray(composioCatalog) && typeof requestAnimationFrame !== "undefined") requestAnimationFrame(() => setTimeout(() => {
-        if (paint === storePaint && tab === "store" && host.visible()) void loadCatalog();
-      }, 0));
-      else void loadCatalog();
-    }
   }
 
   function click(target: Element): boolean {
@@ -1387,18 +1402,20 @@ export function createConnections(host: ConnectionsHost): Connections {
       case "edit-server": {
         const group = groupById(id);
         if (!group || group.catalog_id) return true;
-        closeDialog();
+        open = null;
         form = { ...emptyForm(), id, type: group.transport, name: group.name, command: group.command, args: group.args.join("\n"), url: group.url, limit: group.result_size_limit ?? 8000,
           pairLines: (group.transport === "stdio" ? group.env : group.headers).map(name => `${name}=`).join("\n") };
         redraw(); focusOn("#conn-name");
         break;
       }
       case "test-draft": void testDraft(); break;
-      case "tab":
-        if (id === "installed" || id === "store") show(id);
+      case "connected":
+        screen = "connected";
+        redraw();
+        focusOn('[data-k="cs-back"]');
         break;
       case "open":
-        if (groupById(id)) openDialog(id);
+        if (groupById(id)) openPage({ kind: "group", id });
         break;
       case "scrim":
         // Outside gestures are handled by the shared dismissal layer.
@@ -1417,24 +1434,15 @@ export function createConnections(host: ConnectionsHost): Connections {
         break;
       case "try": {
         const group = groupById(id);
-        const text = group ? examplePrompt(entryOf(group, view())) : null;
+        const text = group ? examplePrompt(entryOf(group, view()) ?? everyApp(view()).find(s => s.server_id === group.id)) : null;
         if (text) host.tryPrompt(text);
         break;
       }
       case "open-store":
-        open = { tab: "store", id };
-        redraw();
-        break;
-      case "manage":
-        tab = "installed";
-        search = "";
-        openDialog(id);
+        if (entryById(id)) openPage({ kind: "app", id });
         break;
       case "back":
-        clearTimeout(confirmTimer);
-        confirming = null;
-        open = null;
-        redraw();
+        back();
         break;
       case "enable": {
         const group = groupById(id);
@@ -1525,9 +1533,13 @@ export function createConnections(host: ConnectionsHost): Connections {
       case "retry-connections": void load(); break;
       case "retry-builtin-store": void load(); break;
       case "store-group":
-        if (id === category && storePage === 0) { revealChip(button); break; }
-        category = id; storePage = 0; repaintBody(); break;
-      case "store-page": storePage = Math.max(0, Number(id) || 0); repaintBody(); break;
+        // A chip clears the search and lists its category (全部 goes back to the sections); pressing the chosen one again changes nothing.
+        chooseCategory(id);
+        break;
+      case "recommended-all":
+        recommendedAll = true;
+        repaintBody();
+        break;
       case "retry-store": void (configured ? loadCatalog() : load()); break;
       default:
         return false;
@@ -1537,10 +1549,10 @@ export function createConnections(host: ConnectionsHost): Connections {
 
   function input(el: HTMLInputElement): boolean {
     if (el.id === "conn-search") {
-      search = el.value; storePage = 0;
-      clearTimeout(searchTimer);
-      if (tab === "store") searchTimer = setTimeout(repaintBody, 80);
-      else repaintBody();
+      // The search is over the whole catalog: its results take the place of the sections while it has words.
+      const searching = search.trim() !== "";
+      search = el.value; shown = LIST_STEP;
+      repaintBody(true, searching !== (search.trim() !== ""));
       return true;
     }
     if (el.id === "conn-key") return true;
@@ -1570,9 +1582,11 @@ export function createConnections(host: ConnectionsHost): Connections {
     if (e.key === "Enter" && (e.target as HTMLElement)?.id === "conn-key") { e.preventDefault(); void saveKey(); return true; }
     const panel = typeof document !== "undefined" ? (host.root ?? document).querySelector<HTMLElement>("#cs-dialog") : null;
     if (e.key === "Escape" && panel && !isTopLayer(panel)) return false;
-    if (e.key === "Escape" && dialogOpen() && !e.defaultPrevented) {
+    // Escape steps back (the key's dialog, then an app's page, then the list of the connected apps); once there is nothing to step back
+    // from it is the settings' own, and closes the dialog.
+    if (e.key === "Escape" && !e.defaultPrevented && (keyOpen || open || screen === "connected")) {
       e.preventDefault();
-      closeDialog();
+      if (keyOpen) closeDialog(); else back();
       return true;
     }
     const el = e.target as HTMLElement | null;
@@ -1582,8 +1596,42 @@ export function createConnections(host: ConnectionsHost): Connections {
     return true;
   }
 
+  /** A category is chosen (a chip, or 更多): its list replaces the sections, and the search is cleared. */
+  function chooseCategory(id: string): void {
+    if (id === category && !search.trim()) return;
+    category = id; search = ""; shown = LIST_STEP;
+    const input = typeof document !== "undefined" ? (host.root ?? document).querySelector<HTMLInputElement>("#conn-search") : null;
+    if (input) input.value = "";
+    repaintBody(true);
+  }
+
+  /** Fits the row of chips to the width the dialog has now. */
+  function painted(): void {
+    const row = typeof document !== "undefined" ? (host.root ?? document).querySelector<HTMLElement>("[data-cs-chips]") : null;
+    if (row) fitChips(row);
+  }
+
+  /** A long list draws its next rows when the end of what is drawn comes near. */
+  function scrolled(target: Element): void {
+    if (!(target instanceof HTMLElement) || !target.matches("[data-cs-scroll]") || screen !== "apps" || open) return;
+    if (target.scrollTop + target.clientHeight < target.scrollHeight - 320) return;
+    const from = shown;
+    const list = layoutOf(view()).list;
+    if (!list || list.length <= from) return;
+    shown = from + LIST_STEP;
+    const grid = target.querySelector<HTMLElement>("[data-cs-body] > .cs-grid");
+    if (grid) grid.insertAdjacentHTML("beforeend", list.slice(from, shown).map((s) => appRowHTML(s, view())).join(""));
+    else repaintBody();
+  }
+
   function menuFor(k: string): ConnectionMenu | null {
     switch (k) {
+      case "conn-more":
+        return {
+          choices: hiddenCategories(typeof document !== "undefined" ? host.root ?? document : null, view()).map((group) => ({ value: group, label: groupLabel(group) })),
+          current: category,
+          pick: chooseCategory,
+        };
       case "conn-add":
         return {
           choices: [{ value: "custom", label: t("mcp.add") }, { value: "paste", label: t("mcp.paste") }, { value: "import", label: t("mcp.fromApps") }],
@@ -1619,9 +1667,8 @@ export function createConnections(host: ConnectionsHost): Connections {
 
   function reset(): void {
     placed.clear();
-    storePaint++;
     catalogLoads++;
-    category = ""; storePage = 0; clearTimeout(searchTimer);
+    category = ""; shown = LIST_STEP; recommendedAll = false;
     keyError = ""; keyOpen = false; keySaves++; keyBusy = false;
     stopOutside?.(); stopOutside = null;
     clearTimeout(confirmTimer);
@@ -1630,15 +1677,13 @@ export function createConnections(host: ConnectionsHost): Connections {
     open = null;
     toolsOpen = false;
     auditOpen = false;
-    closing = false;
     search = "";
-    tab = "installed";
-    if (firstLoad && Array.isArray(groups)) { firstLoad = false; if (!groups.length) tab = "store"; }
+    screen = "apps";
     loginError = null;
     dialogNotice = null;
     // the code stays: the login still waits for it in the core, which does not send it again
     loads++;
   }
 
-  return { view, load, click, input, key, menuFor, followEvent, reset };
+  return { view, load, click, input, key, menuFor, painted, scrolled, followEvent, reset };
 }

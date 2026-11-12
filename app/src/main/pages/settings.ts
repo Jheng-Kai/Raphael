@@ -465,6 +465,8 @@ export function createSettings(app: AppContext): SettingsPage {
       if (anchor && openK === "languages") openLanguages(anchor);
       else if (anchor && menu) showMenu(anchor, menu);
     }
+    // The row of category chips never wraps: those that do not fit are in 更多, so it is fitted to the width the dialog has.
+    if (pane === "connections") connections.painted();
   }
 
   // ---------- the tabs ----------
@@ -1173,6 +1175,8 @@ export function createSettings(app: AppContext): SettingsPage {
     const input = e.target as HTMLInputElement;
     if (input.id === "limit-input") commitLimit(input);
   });
+  // A long list of apps draws its next rows as it is scrolled (scroll does not bubble: the capture phase sees it).
+  el.addEventListener("scroll", (e) => { if (pane === "connections" && e.target instanceof Element) connections.scrolled(e.target); }, true);
   el.addEventListener("input", (e) => {
     const input = e.target as HTMLInputElement;
     providers.input(input);
@@ -1337,7 +1341,6 @@ export function createSettings(app: AppContext): SettingsPage {
         } else if (target === "store") {
           await connections.load();
           if (mine !== loads || !visible) return;
-          el.querySelector<HTMLButtonElement>('[data-k="conn-tab:store"]')?.click();
           if (resource === "composio" || resource === "google") el.querySelector<HTMLButtonElement>('[data-conn="configure-composio"]')?.click();
         } else if (target === "general") {
           const field = el.querySelector<HTMLElement>('[data-act="rerun-guide"]');

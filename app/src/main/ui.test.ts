@@ -154,7 +154,8 @@ describe("the main window's actions", () => {
     expect(btn("變更", "sm")).toBe('<button type="button" class="btn sm">變更</button>');
     const css = read(path.join(root, "styles.css"));
     expect(css).toMatch(/\.btn \{[^}]*border: 1px solid var\(--btn-edge\)/);
-    expect(css).toMatch(/\.btn:hover:not\(:disabled\) \{[^}]*background: var\(--hover\)/);
-    expect(css).toMatch(/\.btn:active:not\(:disabled\) \{[^}]*background: var\(--pressed\)/);
+    // A floating surface (menu, dialog, popover) sets `--btn-hover` and `--btn-pressed` to its own fills; everywhere else they are `--hover` and `--pressed`.
+    expect(css).toMatch(/\.btn:hover:not\(:disabled\) \{[^}]*background: var\(--btn-hover, var\(--hover\)\)/);
+    expect(css).toMatch(/\.btn:active:not\(:disabled\) \{[^}]*background: var\(--btn-pressed, var\(--pressed\)\)/);
   });
 });
