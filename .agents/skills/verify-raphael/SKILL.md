@@ -144,8 +144,16 @@ layer 4 image is a named skip. Every failure includes expected/observed evidence
 `python -m raphael_core.evaluate.computer_acceptance --screens 1,4,6 --out <folder>`;
 omit `--out` to print only. Offline protocol/parser/isolation regressions are in
 `core/tests/evaluate/test_computer_acceptance.py`. Their fakes do not prove containers.
-Real container acceptance proves the core relay, not the native app's panel around
-it, a remote SSH host, or later stages' shared member seats. Keep those separate.
+The default Stage C shared block follows the per-count blocks: two real members
+use product LocalVm/VmTools/CuaBridge for seat window isolation, targeted native
+concurrency and timings, one computer-owned browser with independent session-bound
+windows, clipped product PNGs, owner holds during peer vm_exec, independent session
+closure and idle LRU displacement/window cleanup. --no-shared explicitly skips
+this block. Its real bridge argv also pass the same IsolatedDocker owner guard.
+Offline coverage includes the full shared journey with injected transport and
+in-memory RFB-to-PNG round trips. Fakes do not establish image or native behavior.
+Real acceptance proves the core relay and shared tool path, not the native app's
+panel around it or a remote SSH host. Keep those separate.
 
 ## Guardian hand-off gates
 

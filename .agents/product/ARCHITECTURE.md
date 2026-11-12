@@ -1,5 +1,71 @@
 # Raphael architecture and checked boundaries
 
+## Shared computer seats, stages B2 and C (2026-11-12)
+
+R-COMP-SEAT-01 supersedes the old single-screen shared rotation model. The default
+remains per-bot. Target.key is key_for(host, member) for both kinds. Target.container
+is shared for the common computer and empty for a per-bot computer. Target.unit is
+container or key. Shared unit state uses the host as well as the unit, and physical
+Target cache keys normalize the seat number. Container labels name the unit.
+
+LocalVm.seats uses ComputerSeats and migration 81. target() reads without assigning:
+unassigned members have screen 0 and an empty viewer_url. VmTools.prepare and a real
+DesktopViewer._open take a seat. Previews and status reads do not. A displaced idle
+member loses its driver connection and viewer sessions; the old route returns
+computer_changed. close_displaced_seat_windows(target) joins wmctrl -lG/-lx rows
+after disconnect, closing every screen window except its panel
+with best-effort wmctrl calls. Every busy seat yields seats_full, projected to the existing tool
+computer_busy notice or viewer unavailable error. Deletion releases every host's
+seat and keeps the historical ComputerData per-bot deletion path.
+
+Tools, catalogs, routes, leases between a member's turns/tasks, driver connections
+and sessions, viewer tokens and owners, active counts, held keys and private pages
+remain keyed by seat. LocalVm.unit_active/unit_held/unit_busy aggregate these seats.
+Physical locks, preparation, lifecycle/maintenance, running confirmations, activity,
+repair revisions and disk probes are keyed by unit on its host. Capacity, recovery,
+idle sweep, timezone reconciliation and shutdown enumerate physical units once.
+Shared resources are 6 GiB and 4 CPUs with RAPHAEL_SCREENS=6; per-bot resources stay
+3 GiB and 2 CPUs. Known old one-screen shared layer 3/4/5 shapes preserve mounts on
+rebuild, including a layer 5 shape already using the current image.
+
+NATIVE_INPUT_TOOLS in vm_catalog.py names calls that touch physical input. VmTools
+locks one unit around each such driver request, including nested composite steps;
+page calls and reads do not take that lock. A hold belongs to one seat: all calls
+from that seat are refused. Other seats' native input waits the existing bounded
+time then returns computer_busy held by the owner; their page calls and reads go
+on. Handback removes only its own seat's hold. Native move_cursor and the browser
+launching browser_prepare participate in the same lock. A session timeout/cancel
+still closes only that seat's connection. No shared driver session is introduced.
+
+Stage C makes the seat wall the core's responsibility: VmTools._seat_driver_call
+checks a fresh list_windows in the same session for every supplied window_id/pid,
+inside the unit lock for native calls. Native calls require an own window; desktop
+scope and ambient focus calls are refused. move_cursor is the explicit exception:
+seat-local input is bounds-checked and offset to canvas coordinates. Lists include
+only own windows and panel; window placement and pointer results use seat coordinates.
+AX nodes and window-local screenshot coordinates retain their window frame.
+
+Shared get_desktop_state never asks the driver for canvas pixels. LocalVm's
+viewer_connection supplies core-only credentials to asyncio.to_thread(rfb_view.capture),
+which authenticates /websockify?token=screen-N, requests raw 32-bit pixels and emits
+1280x900 8-bit RGB PNG using zlib and filter-zero rows. Acceptance imports the same
+WebSocket/Rfb implementation. No image library, service or transport is added.
+
+Layer 6 grants existing-profile attachment. raphael-seat-browser starts the
+computer's Chromium outside driver sessions, preserving the existing driver/main
+workspace profile. It opens about:blank, moves and maximizes the window, and waits
+for measured screen geometry. Each seat attaches its own window using existing_profile,
+then binds and navigates in its own session. Per-bot computers retain driver-owned
+browser launch. launch_app moves newly discovered foreign-screen windows with wmctrl
+under the native lock. Owner takeover checks its own non-command activity and the
+unit native lock before and after a status await; other seats' activity is allowed.
+
+Clipboard, files, sign-ins, OS user and physical pointer remain common. Teaching
+and dataset stay disabled in shared mode. The opt-in --computer acceptance now
+includes two real members through LocalVm, VmTools and CuaBridge after the per-count
+blocks; --no-shared skips it. Offline fakes prove contracts, while final image,
+geometry, native timing, browser lifetime and remote hosts need real acceptance.
+
 ## A report shared as a file (2026-11-10)
 
 The window draws the file (report-page.ts `reportFile`: the same escaping drawing, the theme's
