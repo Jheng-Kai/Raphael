@@ -722,7 +722,8 @@ Image layer 8 (R-COMP-READY-01, R-COMP-SIGNIN-01, R-COMP-OWNER-INPUT-01). Owner:
   file, and the Noto CJK and colour emoji fonts. Nothing in a computer is root: what is missing is added here.
 - The shared computer has one browser. Its Browser icon opens a window of the members' own.
 - The members' browser keeps no password, card or address (the profile is every member's); sign-ins stay as
-  cookies.
+  cookies. By its managed policy it is never signed in to as a browser and never syncs, so an owner's own
+  passwords and history cannot come down into it. Chrome says "Managed by your organization" in its menu.
 - Layer 7 computers, the shared six-screen one among them, are made again on layer 8 at their next start.
 - An owner's own click and keys reach the seat it holds: the acceptance sends them through the app's relay path, and
   the `shared-computer` native journey takes a seat from the conversation's card after a member asks for a sign-in.

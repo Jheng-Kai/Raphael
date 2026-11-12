@@ -963,6 +963,10 @@ async def test_shared_acceptance_drives_real_tools_through_every_numbered_check(
             return vm.Result(0 if guest[2] in owner_files else 1, "")
         if guest[:1] == ["dpkg"]:
             return vm.Result(0, "arm64\n")
+        if guest[:1] == ["cat"] and guest[1].endswith("/policies/managed/raphael.json"):
+            assert guest[1].startswith("/etc/chromium/"), "this world's browser is Chromium"
+            return vm.Result(0, json.dumps({"BrowserSignin": 0, "SyncDisabled": True, "PasswordManagerEnabled": False,
+                                            "AutofillCreditCardEnabled": False, "AutofillAddressEnabled": False}))
         if guest[:1] == ["cat"] and guest[1].endswith("/Default/Preferences"):
             return vm.Result(0, json.dumps({"credentials_enable_service": False, "profile": {"password_manager_enabled": False},
                                             "autofill": {"credit_card_enabled": False, "profile_enabled": False}}))

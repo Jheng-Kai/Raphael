@@ -1681,9 +1681,17 @@ class Acceptance:
                 offers = {"passwords": kept.get("credentials_enable_service"), "password manager": (kept.get("profile") or {}).get("password_manager_enabled"),
                           "cards": (kept.get("autofill") or {}).get("credit_card_enabled"), "addresses": (kept.get("autofill") or {}).get("profile_enabled")}
                 require(all(value is False for value in offers.values()), f"Expected the members' browser to keep nothing typed into it, observed {offers}")
+                # As the browser's own policy too, which holds whatever the profile says: and never signed in to as a
+                # browser, never syncing an owner's own passwords and history into the profile every member reads.
+                folder = "/etc/opt/chrome/policies/managed" if chrome else "/etc/chromium/policies/managed"
+                managed = json.loads(await self.text(target, ["cat", folder + "/raphael.json"]))
+                wanted = {"BrowserSignin": 0, "SyncDisabled": True, "PasswordManagerEnabled": False,
+                          "AutofillCreditCardEnabled": False, "AutofillAddressEnabled": False}
+                require(managed == wanted, f"Expected the members' browser policy {wanted}, observed {managed}")
                 version = (await self.text(target, [binary, "--version"])).strip()
                 return (f"{version} ({binary}); navigator.webdriver is false; started with --test-type and no crash bubble; "
-                        "the Browser icon opens a window of the same browser; it keeps no password, card or address")
+                        "the Browser icon opens a window of the same browser; it keeps no password, card or address, "
+                        "and by policy is never signed in to as a browser and never syncs")
             if browsers_ok:
                 await self.check("shared browser is a person's", persons_browser)
             else:

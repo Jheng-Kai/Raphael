@@ -483,6 +483,19 @@ def test_the_computer_starts_with_googles_chrome_the_tools_and_the_fonts():
     assert "if [ -x /opt/google/chrome/chrome ]; then" in launcher and "chromium=/usr/lib/chromium/chromium window_class=chromium-browser" in launcher
 
 
+def test_the_members_browser_is_never_signed_in_to_as_a_browser_and_keeps_nothing_typed():
+    # Every member reads the one profile. Google's own Chrome offers an owner who signs in to Google on a page to
+    # "turn on sync": his own passwords, history and bookmarks would come down into that profile. As policy, which
+    # holds whatever a profile says, for Chrome and for Chromium.
+    dockerfile = (Path(module.__file__).parent / "image" / "Dockerfile").read_text(encoding="utf-8")
+    written = next(line for line in dockerfile.splitlines() if "BrowserSignin" in line)
+    policy = json.loads(written[written.index("'{") + 1:written.index("}'") + 1])
+    assert policy == {"BrowserSignin": 0, "SyncDisabled": True, "PasswordManagerEnabled": False,
+                      "AutofillCreditCardEnabled": False, "AutofillAddressEnabled": False}
+    assert "for folder in /etc/opt/chrome/policies/managed /etc/chromium/policies/managed; do" in dockerfile
+    assert 'chmod 0644 "$folder/raphael.json"' in dockerfile
+
+
 def test_the_shared_computers_browser_icon_opens_the_members_own_browser():
     # What an owner signs in to has to be every member's: the icon of a shared computer gives a window of the one
     # browser, on the screen the pointer is on, and never starts a second browser with a profile of its own.

@@ -148,6 +148,18 @@ RUN set -eux; \
       rm -rf /var/lib/apt/lists/* /etc/apt/sources.list.d/raphael-google-chrome.list; \
       /opt/google/chrome/chrome --version; \
     fi
+# What the members' browser keeps, and whose it is, as the browser's own policy: it holds whatever a profile says and
+# whether or not the profile could be written. Every member reads the one profile. So the browser is never signed in
+# to as a browser and never syncs: an owner who signs in to Google on a page is otherwise offered "Turn on sync",
+# and his own saved passwords, history and bookmarks would come down into a profile every member reads. And it
+# keeps no password, card or address that is typed into it. Signing in to a site is untouched: that is a cookie.
+RUN set -eux; \
+    for folder in /etc/opt/chrome/policies/managed /etc/chromium/policies/managed; do \
+      install -d -m 0755 "$folder"; \
+      printf '%s\n' '{"BrowserSignin": 0, "SyncDisabled": true, "PasswordManagerEnabled": false, "AutofillCreditCardEnabled": false, "AutofillAddressEnabled": false}' > "$folder/raphael.json"; \
+      chmod 0644 "$folder/raphael.json"; \
+      /usr/bin/python3 -c 'import json,sys; json.load(open(sys.argv[1]))' "$folder/raphael.json"; \
+    done
 # The helper is standard library only: Debian's Python runs it without anything from /opt/venv.
 # Its X readiness wait also handles supervisor starting before the X socket is ready.
 # Without CAP_KILL, supervisor only restarts what exits; the helper ends its own children.
