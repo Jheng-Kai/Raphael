@@ -259,7 +259,9 @@
 .mb-dialog.mb-confirm.mb-delete { width: min(320px, 100%); gap: var(--sp-2); padding: var(--sp-3) var(--sp-4); }
 .mb-confirm.mb-delete .mb-dlg-head { min-height: 0; padding: 0; border-bottom: 0; }
 .mb-confirm.mb-delete .mb-dlg-head h2 { font-size: var(--fs-sm); line-height: 1.5; }
-.mb-confirm.mb-delete .mb-dlg-body { padding: 0; line-height: 1.5; color: var(--text); text-wrap: balance; }
+/* The sentence runs to the box's right edge as ordinary text does; `pretty` only keeps a lone word or two off its last line
+   (owner, 2026-11-12: 「為什麼字會卡在左邊」 when `balance` cut it into two half-width lines). */
+.mb-confirm.mb-delete .mb-dlg-body { padding: 0; line-height: 1.5; color: var(--text); text-wrap: pretty; }
 .mb-confirm.mb-delete .mb-dlg-act { flex-wrap: nowrap; gap: var(--sp-2); margin-top: calc(var(--sp-5) - var(--sp-2)); padding: 0; border-top: 0; }
 .mb-confirm.mb-delete .mb-dlg-act .btn { flex: 1 1 0; min-width: 0; padding-inline: var(--sp-3); border-radius: var(--r-pill); font-size: var(--fs-sm); }
 .mb-confirm.mb-delete .mb-dlg-act .btn.pri { border-color: var(--close); background: var(--close); color: var(--on-close); }

@@ -249,6 +249,9 @@ export function createSettings(app: AppContext): SettingsPage {
     if (event.type === "SettingsChanged") void api.settingsGet().then(result => { brain = result.settings; if (visible) render(); }, () => {});
     cliBrains.followEvent(event);
     if (event.type === "ProvidersChanged" && visible) void loadCatalog(true);
+    // A QuotaChanged while this page's own reading is under way is that reading's own finding (the core tells every
+    // reader when a live read changed the windows): it brings the numbers, and asking again would start a second read.
+    if (event.type === "QuotaChanged" && (backgroundRead || usageRefresh)) return;
     if (event.type === "ProvidersChanged" || event.type === "AgentTurn" || event.type === "QuotaChanged" || event.type === "RoutinesChanged" || event.type === "Dictation" && event.phase === "pasted") refreshUsage();
   });
 
@@ -371,24 +374,26 @@ export function createSettings(app: AppContext): SettingsPage {
   }
   const usageMount = (): UsageAnalyticsMount =>
     usage ??= mountUsageAnalytics(usageHost, { usageAllowances: api.usageAllowances, chatgptStatus: api.chatgptStatus, openExternalUrl: api.openExternalUrl });
-  /** Opening Settings again within this long of a good reading shows that reading. */
+  /** The models' catalogue and the speech models opened again within this long of a good reading are not read again. */
   const REFRESH_REUSE_MS = 30_000;
   let backgroundRead: Promise<void> | null = null, backgroundReadAt = -Infinity;
   /**
    * Every opening of Settings, on whatever tab, reads 模型與用量 again at once and unseen, so that the allowances are
    * current when they are reached: what was last known stays on the page, and a new value replaces it in place (the
    * pieces draw only what changed). No spinner, no toast; a reading that fails leaves what is shown. An opening while
-   * one is under way joins it, and one soon after a good reading reuses it. No model turn is spent: `usage.allowances`
-   * asks Codex's app-server for its windows, and has Claude's and Antigravity's from what their turns reported.
+   * one is under way joins it. The allowances are asked at every opening, however soon after the last (owner,
+   * 2026-11-11, and again 2026-11-12: a reset must show at the next opening); only the catalogue and the speech models
+   * are reused soon after a good reading. No model turn is spent: `usage.allowances` asks Codex's app-server for its
+   * windows, and has Claude's and Antigravity's from what their turns reported.
    */
   function refreshInBackground(): Promise<void> {
     if (backgroundRead) return backgroundRead;
-    if (Date.now() - backgroundReadAt < REFRESH_REUSE_MS) return Promise.resolve();
     // The first mount reads for itself; later ones are read again.
     const first = usage === null, mount = usageMount();
+    const others = Date.now() - backgroundReadAt >= REFRESH_REUSE_MS;
     const reading = (async () => {
-      const results = await Promise.allSettled([loadCatalog(true), loadLocalModels(), first ? mount.ready : mount.refresh()]);
-      if (catalog !== "failed" && providers.view().state !== "failed" && results.every(result => result.status === "fulfilled")) backgroundReadAt = Date.now();
+      const results = await Promise.allSettled([others ? loadCatalog(true) : Promise.resolve(), others ? loadLocalModels() : Promise.resolve(), first ? mount.ready : mount.refresh()]);
+      if (others && catalog !== "failed" && providers.view().state !== "failed" && results.every(result => result.status === "fulfilled")) backgroundReadAt = Date.now();
     })().finally(() => { backgroundRead = null; });
     backgroundRead = reading;
     return reading;

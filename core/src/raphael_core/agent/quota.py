@@ -12,6 +12,9 @@ _LIMIT = re.compile(r"quota|usage.?limit|limit.{0,24}(?:reached|exceeded)|resour
 
 # A subscription window with this share or less left is nine-tenths used: the owner hears it once (owner, 2026-11-09).
 WARN_AT_REMAINING = 10
+# A told window read again with this share or more left was reset (a new window, a voucher): its next fall to the last
+# tenth is told again. The gap keeps two sources that round one window differently from telling it twice.
+REARM_AT_REMAINING = 20
 # settings: "provider/period" -> when the window the owner was last told about resets (unix seconds, or null).
 _WARNED = "quota_warned"
 # A reset derived from "resets in N s" moves by a second or two between readings of one window; the next window of a
@@ -164,16 +167,18 @@ class Quotas:
         self.conn, self.now_ms, self.notify = conn, now_ms, notify
         self.credits: dict[str, dict] = {}
 
-    def record(self, provider: str, data: dict, *, notify: bool = True) -> None:
-        """Store a reading. `notify` is for `quota.changed` alone (a usage read must not reload its own readers); a
-        window that reaches its last tenth is told once as `quota.warning`, whoever read it."""
+    def record(self, provider: str, data: dict, *, notify: bool = True, replace: bool = False) -> None:
+        """Store a reading. `notify` is for `quota.changed` alone, and it fires only when what is stored really changed
+        (so a reading that finds the same numbers moves nothing); a window that reaches its last tenth is told once as
+        `quota.warning`, whoever read it. `replace` is for a complete live reading: the windows it did not name are
+        gone, so a window the provider no longer reports cannot go on blocking or showing an old number."""
         if provider not in ("codex", "claude", "gemini"):
             return
         before = self._state(provider)
         reset = data.get("reset_at_ms")
         if isinstance(data.get("credits"), dict):
             self.credits[provider] = data["credits"]
-        low = []
+        low, kept, risen = [], [], []
         with self.conn:
             for window in data.get("windows", []):
                 period, status = window.get("period"), window.get("status")
@@ -182,11 +187,19 @@ class Quotas:
                 remaining, stamp = window.get("remaining_percent"), window.get("resets_at")
                 remaining = remaining if type(remaining) in (int, float) and math.isfinite(remaining) and 0 <= remaining <= 100 else None
                 stamp = stamp if type(stamp) is int and stamp > 0 else None
+                kept.append(period)
+                if remaining is not None and remaining >= REARM_AT_REMAINING and status != "rejected":
+                    risen.append(period)
                 self.conn.execute("INSERT INTO subscription_allowances VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(provider, period) DO UPDATE SET remaining_percent=excluded.remaining_percent, resets_at=excluded.resets_at, status=excluded.status, updated_at_ms=excluded.updated_at_ms",
                                   (provider, period, remaining, stamp, status, self.now_ms()))
                 # A spent window has its own notice; a report of a window already over says nothing about now.
                 if remaining is not None and remaining <= WARN_AT_REMAINING and status != "rejected" and (stamp is None or stamp * 1000 > self.now_ms()):
                     low.append({"period": period, "remaining_percent": remaining, "resets_at": stamp})
+            if replace and kept:
+                marks = ", ".join("?" for _ in kept)
+                self.conn.execute(f"DELETE FROM subscription_allowances WHERE provider = ? AND period NOT IN ({marks})", (provider, *kept))
+            if risen:
+                self._rearm(provider, risen)
             if not data.get("terminal") and (data.get("windows") or not data.get("exhausted") and self.allowances(provider)):
                 # A healthy short window must not clear a still-rejected weekly window.
                 rejected = [w for w in self.allowances(provider) if w["status"] == "rejected"
@@ -207,6 +220,21 @@ class Quotas:
         # Only words for the owner: which model answers stays the owner's choice (R-MODEL-02).
         for warning in warnings:
             self.notify("quota.warning", warning)
+
+    def _rearm(self, provider: str, periods: list[str]) -> None:
+        """A window read with more than its last tenth left is no longer the one the owner was told about (a reset, a
+        voucher): when it falls to the last tenth again he hears it again."""
+        row = self.conn.execute("SELECT value FROM settings WHERE key = ?", (_WARNED,)).fetchone()
+        try:
+            told = json.loads(row[0]) if row else {}
+        except ValueError:
+            return
+        if not isinstance(told, dict) or not any(f"{provider}/{period}" in told for period in periods):
+            return
+        for period in periods:
+            told.pop(f"{provider}/{period}", None)
+        self.conn.execute("INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                          (_WARNED, json.dumps(told, sort_keys=True)))
 
     def _unwarned(self, provider: str, low: list[dict]) -> list[dict]:
         """The windows of `low` the owner was not told about yet, marked as told. None while no one listens, or while

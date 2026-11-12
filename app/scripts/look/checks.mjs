@@ -725,7 +725,7 @@ export function checkRendered(name, context = {}) {
     const title = dialog.querySelector('h2').textContent;
     require(window.__look.data.members.some(person => title === `刪除「${person.name}」？`), `the title names the member (${title})`);
     const sentences = [...dialog.querySelectorAll('p')].map(node => node.textContent);
-    require(sentences.length === 1 && sentences[0] === '永久刪除這位成員和對話紀錄，此操作無法復原。', `one sentence says the member and its conversation go for good (${sentences.join(' | ')})`);
+    require(sentences.length === 1 && sentences[0] === '永久刪除這位成員和對話紀錄，無法復原。', `one sentence says the member and its conversation go for good (${sentences.join(' | ')})`);
     const buttons = [...dialog.querySelectorAll('button')].filter(visible).map(button => button.textContent.trim());
     require(buttons.join('|') === '取消|刪除', `two buttons, Cancel then Delete (${buttons.join('|')})`);
     require(!dialog.querySelector('.row, .tg, [role="switch"], [role="checkbox"], input, select, textarea, [data-remove-computer]'), 'no row, switch or field stands in the question');
@@ -4736,7 +4736,14 @@ export function checkRendered(name, context = {}) {
     require(sentences.length === 1 && getComputedStyle(sentences[0]).color === token('color', '--text'), "one sentence in the ordinary text colour");
     require(px(getComputedStyle(title).fontSize) <= px(token('fontSize', '--fs-sm')) + 0.5, "the title is a compact heading");
     require(title.getBoundingClientRect().bottom <= sentences[0].getBoundingClientRect().top + 1 && sentences[0].getBoundingClientRect().bottom <= cancel.top, "the title, the sentence and the buttons stand in that order");
-    return { check: name, width: box.width, height: box.height, padding: [style.paddingTop, style.paddingRight, style.paddingBottom, style.paddingLeft].map(px),
+    // A sentence of two lines or more runs to the box's right edge: no line-balancing that leaves half the box empty
+    // (owner, 2026-11-12: 「為什麼字會卡在左邊」). Its longest line takes at least three quarters of the inner width.
+    const words = document.createRange();
+    words.selectNodeContents(sentences[0]);
+    const runs = [...words.getClientRects()].filter(rect => rect.width > 0), tops = new Set(runs.map(rect => Math.round(rect.top)));
+    const longest = Math.max(...[...tops].map(top => { const line = runs.filter(rect => Math.round(rect.top) === top); return Math.max(...line.map(rect => rect.right)) - Math.min(...line.map(rect => rect.left)); }));
+    require(tops.size < 2 || longest >= 0.75 * (inner.right - inner.left), `the sentence fills the box's width (longest line ${Math.round(longest)} of ${Math.round(inner.right - inner.left)} px over ${tops.size} lines)`);
+    return { check: name, sentenceLines: tops.size, longestLine: Math.round(longest), width: box.width, height: box.height, padding: [style.paddingTop, style.paddingRight, style.paddingBottom, style.paddingLeft].map(px),
       titleSize: px(getComputedStyle(title).fontSize), titleToSentence: sentences[0].getBoundingClientRect().top - title.getBoundingClientRect().bottom,
       sentenceToButtons: cancel.top - sentences[0].getBoundingClientRect().bottom, buttonHeight: cancel.height, cancelWidth: cancel.width, deleteWidth: remove.width, gap: remove.left - cancel.right };
   }
