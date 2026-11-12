@@ -594,6 +594,24 @@ CalendarDate/CalendarEventFocus boundary. Calendar highlights the requested item
 
 ## Computer host transport (2026-11-01)
 
+Layer 6 (2026-11-12, R-COMP-PICTURE-01, R-COMP-KEYS-01, R-COMP-XLOSS-01, R-COMP-LAYER-01):
+image `driver-0.37.0-v6`. Three things changed in the image and one in the core, and layer 5
+joined 3 and 4 as a shape `known_previous` recognises (one screen that says its count,
+3 GiB), so every released computer rebuilds on its next start and keeps its workspace.
+The desktop's picture has one starter: `LocalVm._wallpaper`, at the end of a start that
+found the computer ready, ends any `wallpaper.py --watch` and starts its own, with the
+owner's JPEG when there is one; the session's `prepare-desktop` no longer starts a
+watcher, and the image carries `librsvg2-common` so the town's SVG is drawn (its build
+checks for the loader). What was started is remembered per computer together with the
+picture's time and size, and forgotten when the computer stops or is restarted. The
+helper `screens.py`, for any number of screens and before the ready mark, sets one
+workspace and unbinds the keys that act on the whole desktop (and, with more than one
+screen, those that reach every screen or start a program), after waiting for the session
+to have copied its default keys. In its supervising loop it looks at the X server's
+socket every two seconds without starting a process; a server that is gone takes the
+mark away for one screen as for six, and the 20-poll restart described below brings the
+computer back. In the core, `record_repair` only counts: nothing announces a repair.
+
 Stage A (2026-11-11, R-COMP-SCREEN-01): image `driver-0.37.0-v5`, layer 5,
 adds the standalone stdlib `image/desktop/screens.py` supervisor helper. It waits
 for X, disables XFCE display prompts, authenticates to main VNC using pure Python

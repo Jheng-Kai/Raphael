@@ -473,19 +473,43 @@ async def test_computer_block_prints_duration_including_stop_even_when_start_fai
     assert float(lines[-1].split(": ")[1].removesuffix(" s")) >= 0
 
 
+def test_the_desktop_picture_verdict_tells_the_picture_the_town_and_a_flat_colour_apart():
+    teal, orange, navy = acceptance.TEAL, acceptance.ORANGE, bytes((47, 33, 21))
+    picture = [teal] * 640 + [orange] * 640
+    flat = [navy] * 1280
+    town = [bytes((value % 256, 40, 90)) for value in range(0, 1280 * 3, 3)]
+    # The owner's picture: shown only when both halves are its colours.
+    assert acceptance.desktop_shows(picture, picture * 2, True)[0]
+    assert not acceptance.desktop_shows(flat, flat * 2, True)[0]
+    assert not acceptance.desktop_shows(town, town * 2, True)[0]
+    # No picture: the town is many colours; the flat colour layer 5 showed is not a town, nor is a picture left up.
+    assert acceptance.desktop_shows(town, town * 2, False)[0]
+    assert not acceptance.desktop_shows(flat, flat * 2, False) [0]
+    assert not acceptance.desktop_shows(picture, picture * 2, False)[0]
+    assert acceptance.desktop_shows(flat, flat * 2, False)[1] == (0.0, 0.0, 1)
+    # The embedded picture is a JPEG the product accepts as an owner's picture.
+    assert acceptance.OWN_PICTURE[:3] == b"\xff\xd8\xff" and len(acceptance.OWN_PICTURE) < 2000
+
+
 def test_previous_fixture_matches_release_shape_without_changing_vm(tmp_path, monkeypatch):
     machine = vm.LocalVm(tmp_path, runner=object())
     target = machine.target(1)
     monkeypatch.setattr(vm, "IMAGE", "raphael-acceptance/cua-local-vm:test")
     args = acceptance.previous_args(target, machine.owner, "private")
     current = vm.run_args(target, machine.owner, "private")
-    assert args[-1] == acceptance.OLD_IMAGE
+    assert args[-1] == acceptance.OLD_IMAGES["4"] == "raphael/cua-local-vm:driver-0.37.0-v4"
     assert f"{vm.LABEL}.layer=4" in args
     assert f"{vm.LABEL}.owner={machine.owner}" in args
     assert not any(value.startswith(("RAPHAEL_SCREENS=", "VNC_RESOLUTION=")) for value in args)
     for flag in ("--memory", "--memory-swap", "--cpus", "--pids-limit", "--ipc", "--cgroupns", "--cap-drop", "--cap-add", "--shm-size", "--mount", "-p"):
         assert args[args.index(flag) + 1] == current[current.index(flag) + 1]
     assert "RAPHAEL_SCREENS=1" in current and current[-1] == vm.IMAGE
+    # Layer 5, the one every released computer is on today, differs from the current shape by label and image only.
+    fifth = acceptance.previous_args(target, machine.owner, "private", "5")
+    assert fifth[-1] == acceptance.OLD_IMAGES["5"] == "raphael/cua-local-vm:driver-0.37.0-v5"
+    assert [a for a, b in zip(fifth, current) if a != b] == [f"{vm.LABEL}.layer=5", acceptance.OLD_IMAGES["5"]]
+    assert len(fifth) == len(current) and f"{vm.LABEL}.layer=" + vm.IMAGE_LABELS[f"{vm.LABEL}.layer"] not in fifth
+    assert vm.IMAGE not in acceptance.OLD_IMAGES.values()
 
 
 class FakeDocker:
@@ -542,6 +566,30 @@ async def test_owner_guard_accepts_product_exec_and_exact_recovery_filter(tmp_pa
     assert all(args[args.index("-u") + 1] == "cua" for args in runner.calls if args[0] == "exec")
 
 
+async def test_guard_lets_only_this_runs_own_picture_into_its_own_computer(tmp_path):
+    runner = FakeDocker()
+    machine = vm.LocalVm(tmp_path, runner=runner)
+    target = machine.target(2)
+    runner.containers[target.name] = raw_container(target.name, machine.owner)
+    picture = tmp_path / vm.OWN_WALLPAPER
+    destination = target.name + ":" + vm.GUEST_OWN_WALLPAPER
+    told = acceptance.IsolatedDocker(runner, machine.owner, "raphael-acceptance/cua-local-vm:test", picture=picture)
+    await told(["cp", str(picture), destination])
+    for refused in (["cp", str(tmp_path / "another.jpg"), destination],
+                    ["cp", str(picture), target.name + ":/home/cua/workspace/own.jpg"],
+                    ["cp", str(picture), target.name + ":/opt/raphael-desktop/wallpaper.py"]):
+        with pytest.raises(AssertionError, match="Expected product wallpaper copy only"):
+            await told(refused)
+    untold = acceptance.IsolatedDocker(runner, machine.owner, "raphael-acceptance/cua-local-vm:test")
+    with pytest.raises(AssertionError, match="Expected product wallpaper copy only"):
+        await untold(["cp", str(picture), destination])
+    foreign = "raphael-computer-other-member"
+    runner.containers[foreign] = raw_container(foreign, "other")
+    with pytest.raises(AssertionError, match="expected owner"):
+        await told(["cp", str(picture), foreign + ":" + vm.GUEST_OWN_WALLPAPER])
+    assert [args for args in runner.calls if args[0] == "cp"] == [["cp", str(picture), destination]]
+
+
 async def test_guard_drives_real_local_vm_start_status_viewer_and_stop(tmp_path, monkeypatch):
     from computer.test_vm import Runtime, container
     runner = Runtime()
@@ -549,14 +597,20 @@ async def test_guard_drives_real_local_vm_start_status_viewer_and_stop(tmp_path,
     monkeypatch.setattr(vm, "IMAGE", "raphael-acceptance/cua-local-vm:test")
     target = replace(machine.target(17), screens=3)
     runner.raw = container(machine, target, runner)
-    machine.run = acceptance.IsolatedDocker(runner, machine.owner, "raphael-acceptance/cua-local-vm:test")
+    picture = tmp_path / vm.OWN_WALLPAPER
+    picture.write_bytes(acceptance.OWN_PICTURE)
+    machine.run = acceptance.IsolatedDocker(runner, machine.owner, "raphael-acceptance/cua-local-vm:test", picture=picture)
     try:
         assert (await machine.start(target))["ready"]
         assert (await machine.status(target))["ready"]
         assert await machine.viewer_connection(target) == (6080, "private")
         assert not machine.repair_revisions
-        assert len([args for args, _ in runner.calls if args[0] == "cp"]) == 2
-        assert any(args[:2] == ["exec", "-d"] for args, _ in runner.calls)
+        # The product's own start reaches the desktop with the run's picture: a guard that refused this copy made
+        # the first real "desktop picture" check show the desktop's default drawing instead.
+        copies = [args for args, _ in runner.calls if args[0] == "cp"]
+        assert len(copies) == 3 and copies[-1] == ["cp", str(picture), target.name + ":" + vm.GUEST_OWN_WALLPAPER]
+        watcher = next(args[-1] for args, _ in runner.calls if args[:2] == ["exec", "-d"])
+        assert "--watch --image " + vm.GUEST_OWN_WALLPAPER in watcher
         await machine.stop(target)
         assert runner.raw["State"]["Running"] is False
     finally:
@@ -585,12 +639,14 @@ async def test_start_retries_slow_engine_once_after_pause(error, tmp_path, monke
 
 @pytest.mark.parametrize("args", [
     ["system", "prune"], ["container", "prune"], ["pull", vm.BASE],
+    ["image", "rm", "raphael/cua-local-vm:driver-0.37.0-v6"],
     ["image", "rm", "raphael/cua-local-vm:driver-0.37.0-v5"],
-    ["image", "inspect", "raphael/cua-local-vm:driver-0.37.0-v5"],
+    ["image", "inspect", "raphael/cua-local-vm:driver-0.37.0-v6"],
     ["ps", "-a", "--filter", "label=org.raphael.computer", "--format", "{{.ID}}"],
     ["container", "inspect", "someone-elses-container"],
     ["exec", "-u", "root", "ours", "true"],
     ["stop", "foreign", "ours"], ["rm", "foreign", "ours"], ["start", "foreign", "ours"],
+    ["build", "--tag", "raphael/cua-local-vm:driver-0.37.0-v6", "image"],
     ["build", "--tag", "raphael/cua-local-vm:driver-0.37.0-v5", "image"],
 ])
 async def test_isolation_refuses_broad_or_unrelated_commands_before_runner(args):
@@ -642,7 +698,8 @@ async def test_run_uses_private_tag_and_owner_and_cleans_even_after_failure(keep
     assert not any("prune" in args or args[0] == "pull" for args in runner.calls)
     report = json.loads((tmp_path / "report/computer-acceptance.json").read_text(encoding="utf-8"))
     assert all(set(row) == {"name", "result", "detail", "seconds"} for row in report["checks"])
-    assert any(row["result"] == "skipped" and row["name"] == "previous layer" for row in report["checks"])
+    for layer in ("4", "5"):
+        assert any(row["result"] == "skipped" and row["name"] == f"previous layer {layer}" for row in report["checks"])
     assert " ok, " in capsys.readouterr().out
     if keep:
         assert run.root.exists() and run.tag in runner.images
