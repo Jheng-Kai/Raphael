@@ -24,7 +24,7 @@ from ..integrations.audit import AuditLog
 from ..services.attachments import Attachment, MAX_FILE_BYTES, sniff_ok
 from .vm import VmError, engine_start_allowed
 from .vm_bridge import CuaBridge
-from .vm_catalog import DRIVER_TOOLS, FRESH_READS, NATIVE_INPUT_TOOLS, NOTICES, PAGE_TOOLS, READS, SCREEN_READS, SHARED_ARGUMENTS, definition as driver_definition, offline_catalog, shared_argument_paths, shared_native_input
+from .vm_catalog import DRIVER_TOOLS, FRESH_READS, NATIVE_INPUT_TOOLS, NOTICES, PAGE_TOOLS, READS, SCREEN_READS, SHARED_ARGUMENTS, BROWSER_APPS, definition as driver_definition, offline_catalog, shared_argument_paths, shared_native_input
 from .takeover import TAKEOVER
 from . import seat_view
 from ..worker.computer_verification import meaningful_expectation
@@ -1281,7 +1281,7 @@ class VmTools:
         # The caller holds the unit native lock across discovery, launcher and attach.
         canvas = await self._canvas_windows(client, session)
         own = seat_view.windows(canvas, target.screen, target.screens)["windows"]
-        found = [row for row in own if row.get("app_name", "").lower() == "chromium-browser"]
+        found = [row for row in own if row.get("app_name", "").lower() in BROWSER_APPS]
         if found:
             return min(found, key=lambda row: row["window_id"])
         return await self.vm.seat_browser(target)
@@ -1358,7 +1358,7 @@ class VmTools:
             # page's state, a field before a saved value is typed) must be the tab it asked for or nothing.
             canvas = await self._canvas_windows(client, session)
             fits = [row for row in seat_view.windows(canvas, target.screen, target.screens)["windows"]
-                    if row.get("app_name", "").lower() == "chromium-browser" and args.get("pid", row.get("pid")) == row.get("pid")]
+                    if row.get("app_name", "").lower() in BROWSER_APPS and args.get("pid", row.get("pid")) == row.get("pid")]
             if len(fits) != 1:
                 return self._seat_error("The bound window is not on this member's screen. Call list_windows and bind an own window again."
                                         if "target_id" in args else

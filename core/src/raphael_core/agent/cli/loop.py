@@ -283,6 +283,8 @@ class CliLoop:
         self._completed_buffer, self._separated = False, []
         # Speech not yet shown (`_release_held`), whether the one opening was shown, and whether a step has started.
         self._held, self._opened, self._worked = [], False, False
+        # Whether this turn was started again after it had begun to answer (`_publish`).
+        self._again = False
         self._thought = ""
         self._final_nudged = False
         self._calls = 0
@@ -337,6 +339,11 @@ class CliLoop:
             return
         lines = reply.messages or [reply.text]
         lines = pending_replies(self._published if final else previous, lines)
+        if self._again and not final:
+            # Started again (the completion check, a changed tool list), the CLI gives its answer a second time: what
+            # the owner has already been shown in this turn is not shown again, what is new is.
+            shown = {line.strip() for line in self._published}
+            lines = [line for line in lines if line.strip() not in shown]
         if lines and not (final or settled):
             # Speech before the outcome waits for the CLI's next event: work after it makes it progress.
             self._held.append((reply, lines))
@@ -864,6 +871,7 @@ class CliLoop:
                         if failure in ("tools_changed", "owner_input"):
                             self.catalog_changed = False
                             if failure == "tools_changed":
+                                self._again = True
                                 # Counted by the real-app journey: every member's first use of its computer once
                                 # started its turn again here, and the call that had just been made lost its result.
                                 logger.info("CLI turn starts again, tools changed: %s", self.reload_note.partition(".")[0])

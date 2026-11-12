@@ -1224,7 +1224,7 @@ await page.waitForFunction(role => document.querySelector('.ms-pane #ms-role')?.
     if (result.computer.seats[first.id] !== 1 || result.computer.seats[second.id] !== 2) throw new Error(`Expected seats 1 and 2, observed ${JSON.stringify(result.computer.seats)}`);
     // Each member's browser window is still on its own screen after the other was seated beside it and opened its own.
     result.computer.windows = await context.computerWindows();
-    const browsers = result.computer.windows.geometry.map(line => line.trim().split(/\s+/)).filter(parts => /Chromium$/.test(parts.at(-1)) || parts.slice(7).join(" ").includes("Chromium"))
+    const browsers = result.computer.windows.geometry.map(line => line.trim().split(/\s+/)).filter(parts => /(Chromium|Google Chrome)$/.test(parts.slice(7).join(" ")))
       .map(parts => ({ id: parts[0], x: Number(parts[2]), y: Number(parts[3]), width: Number(parts[4]), height: Number(parts[5]) }));
     const screenOf = row => { const cx = row.x + row.width / 2, cy = row.y + row.height / 2; return cy < 900 ? Math.floor(cx / 1280) + 1 : Math.floor(cx / 1280) + 4; };
     result.computer.browserScreens = browsers.map(screenOf).sort();
@@ -1277,6 +1277,58 @@ await page.waitForFunction(role => document.querySelector('.ms-pane #ms-role')?.
       if (close && await close.isVisible()) await close.click();
     }
     if (targets.size !== 2) throw new Error("Both members report the same seat target");
+    // A member asks its owner to sign in at its seat, which is how an owner gives every member his own account: the
+    // owner opens that screen larger, takes it and types. An owner was shown "you are in control" there with nothing
+    // getting in (2026-11-13). A computer per member has had this journey since it was built; a seat had not.
+    const third = people.find(row => row.name === "NativeSeatC");
+    if (!third) throw new Error("The journey's third member is missing");
+    await context.computerSignin(third.id);
+    await perform(page, { action: "member", id: third.id });
+    await wait(page, ".composer .cmp-input");
+    const asked = "Complete the local test sign-in [native-computer:seat-signin]";
+    await type(page, ".composer .cmp-input", asked);
+    await click(page, ".cmp-send");
+    const panelSays = async () => ({ panel: await page.$eval('.desktop-panel', el => ({ ...el.dataset })).catch(() => null),
+      mode: await page.$eval('.desktop-mode-label', el => el.textContent).catch(() => null),
+      take: await page.$eval('[data-desktop="take"]', el => ({ hidden: el.hidden, disabled: el.disabled })).catch(() => null),
+      status: await context.rpc("computer.viewer_status", { member_id: third.id }).then(({ viewer_url, ...rest }) => rest).catch(reason => String(reason)) });
+    const step = async (label, action) => { try { return await action(); } catch (error) { result.computer.signinFailure = { step: label, ...await panelSays() }; throw error; } };
+    await step("the member asks", () => page.waitForSelector('[data-desktop-work][data-work-state="waiting_control"]', { visible: true, timeout: 180000 }));
+    await picture("signin-asked");
+    const callsBefore = (await computerCalls()).length;
+    // The conversation's own card is where the app offers the seat: a picture of it, and "take over".
+    await click(page, '[data-desktop-work][data-work-state="waiting_control"] .card-actions [data-card-desktop="take"], [data-desktop-work][data-work-state="waiting_control"] button.pri[data-card-desktop="take"]');
+    await step("the seat opens larger", () => page.waitForSelector('.desktop-panel[data-expanded]', { visible: true, timeout: 60000 }));
+    await step("the seat is the owner's", () => page.waitForSelector('.desktop-panel[data-interactive="true"]', { visible: true, timeout: 60000 }));
+    result.computer.signinPanel = await panelSays();
+    const seat = await (await page.$('.desktop-panel iframe')).contentFrame();
+    await seat.waitForSelector('#noVNC_container canvas', { visible: true, timeout: 60000 });
+    const canvas = await seat.$('#noVNC_container canvas'), box = await canvas.boundingBox();
+    // The page gives its first field the focus when its background is pressed; every key goes through the real noVNC.
+    await canvas.click({ offset: { x: Math.floor(box.width * 0.1), y: Math.floor(box.height * 0.75) } });
+    // Typed as a person types it, Shift held for the at sign. A seat's screen is served by a server that presses
+    // exactly the keys it is sent: a character sent without its Shift (a script's "@", capitals from a Caps Lock that
+    // was on before the view opened) is not typed there. A computer of a member's own adds the Shift itself.
+    await page.keyboard.type("owner");
+    await page.keyboard.down("Shift"); await page.keyboard.press("Digit2"); await page.keyboard.up("Shift");
+    await page.keyboard.type("example.test"); await page.keyboard.press("Tab");
+    await page.keyboard.type("native-only-dummy"); await page.keyboard.press("Tab"); await page.keyboard.press("Enter");
+    await pause(1000);
+    if ((await computerCalls()).length !== callsBefore) throw new Error("A member's computer call completed while the owner held its seat");
+    await capture("seat-signin-owner");
+    await click(page, '[data-desktop="return"]');
+    let resumed;
+    for (let attempt = 0; attempt < 300; attempt++) {
+      resumed = (await snapshot()).agent_turns.find(turn => turn.member_id === third.id && turn.question === asked && ["done", "error"].includes(turn.status));
+      if (resumed) break;
+      await pause(200);
+    }
+    const after = (await computerCalls()).slice(callsBefore).map(row => `${row.tool}:${row.outcome}`);
+    result.computer.signin = { status: resumed?.status, text: resumed?.text?.slice(0, 80), after, seat: (await seats())[third.id] };
+    // The member's own check of the page is what says the owner's typing arrived: it reads the page's state and
+    // continues only when the form was sent.
+    if (resumed?.status !== "done" || !resumed.text.includes("繼續一次")) { result.computer.signinFailure = { step: "the member continues", ...await panelSays() }; throw new Error(`The owner's sign-in did not reach the member's page: ${JSON.stringify(result.computer.signin)}`); }
+    await picture("signin-continued");
     return;
   }
   if (name === "skill-growth") {

@@ -170,6 +170,11 @@ elif operation == "init":
         from raphael_core.members.store import MemberStore
         for name in ("NativeSeatA", "NativeSeatB"):
             MemberStore(connection).create_member(name=name, role="Computer jobs", instructions="Do the small job asked, on your own computer: files, commands and web pages.")
+        # A third on the scripted brain (the journey gives the other two the real Codex): what it does is fixed, so
+        # that what is watched is the owner taking its seat.
+        from raphael_core.brain.settings import DEFAULTS
+        MemberStore(connection).create_member(name="NativeSeatC", role="Computer jobs", model=DEFAULTS["agent_model"],
+                                              instructions="Do the small job asked, on your own computer: files, commands and web pages.")
     if len(sys.argv) > 3 and sys.argv[3] == "member-computer":
         # This journey is the computer-per-member mode's: its smoke uses that mode's own tool forms.
         settings["computer_vm_mode"] = "per-bot"

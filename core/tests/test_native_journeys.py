@@ -37,6 +37,13 @@ def test_computer_signin_fixture_is_private_to_each_journey_member(tmp_path, mon
         vm_signin_fixture(tmp_path, 1)
     assert not (tmp_path / "vm-homes").exists()
     monkeypatch.setenv("RAPHAEL_TEST_NATIVE", "1")
+    from raphael_core.brain.db import connect
+    from raphael_core.brain.settings import SettingsStore
+    # The page goes where this data folder's computers keep a member's files. A folder that asks for a computer per
+    # member (the member-computer journey's) gives each member its own.
+    conn = connect(tmp_path / "raphael.db")
+    SettingsStore(conn).set("computer_vm_mode", "per-bot")
+    conn.close()
     vm_signin_fixture(tmp_path, 0)
     vm_signin_fixture(tmp_path, 1)
     vm = LocalVm(tmp_path)
@@ -44,6 +51,24 @@ def test_computer_signin_fixture_is_private_to_each_journey_member(tmp_path, mon
     assert one != two
     assert (one / "native-signin.py").read_bytes() == (two / "native-signin.py").read_bytes()
     assert not (vm.target(2).workspace / "native-signin.py").exists()
+
+
+def test_computer_signin_fixture_goes_to_the_workspace_every_member_shares(tmp_path, monkeypatch):
+    # A new data folder's computer is the one every member shares (the shared-computer journey's): the member that
+    # asks its owner to sign in at its seat starts the page from that one workspace.
+    from raphael_core.brain.db import connect
+    from raphael_core.brain.settings import SettingsStore
+    from raphael_core.computer.vm import LocalVm
+    from raphael_core.native_journeys import vm_signin_fixture
+    monkeypatch.setenv("RAPHAEL_TEST_NATIVE", "1")
+    vm_signin_fixture(tmp_path, 3)
+    conn = connect(tmp_path / "raphael.db")
+    try:
+        shared = LocalVm(tmp_path, settings=SettingsStore(conn), conn=conn).target(3)
+    finally:
+        conn.close()
+    assert shared.container == "shared" and (shared.workspace / "native-signin.py").is_file()
+    assert not (LocalVm(tmp_path).target(3).workspace / "native-signin.py").exists()
 
 
 @pytest.mark.asyncio

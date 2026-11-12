@@ -1,7 +1,49 @@
 #!/bin/sh
 set -eu
 # No browser is started with the desktop. Keep profile storage in the member's volume.
-for browser in /usr/bin/google-chrome-stable /usr/bin/google-chrome /usr/bin/chromium /usr/bin/chromium-browser; do
+profile=/home/cua/workspace/.browser-profiles/driver/main
+export DISPLAY="${DISPLAY:-:1}"
+# The computer every member shares has one browser, the members' own: what an owner signs in to there is every
+# member's. The Browser icon, and a link another program opens, give a window of it on the screen the pointer is
+# on. A second browser with a profile of its own would be where an owner signs in for nobody.
+width=$(xprop -root _NET_DESKTOP_GEOMETRY 2>/dev/null | awk '{print $3 + 0}')
+if [ "${width:-0}" -gt 1280 ]; then
+    origin=$(/usr/bin/python3 - <<'PY'
+import ctypes
+x11 = ctypes.CDLL("libX11.so.6")
+x11.XOpenDisplay.restype = ctypes.c_void_p
+x11.XDefaultRootWindow.argtypes = [ctypes.c_void_p]
+x11.XDefaultRootWindow.restype = ctypes.c_ulong
+display = x11.XOpenDisplay(None)
+if not display:
+    raise SystemExit(1)
+window = ctypes.c_ulong()
+x, y, ignored = ctypes.c_int(), ctypes.c_int(), ctypes.c_int()
+mask = ctypes.c_uint()
+x11.XQueryPointer.argtypes = [ctypes.c_void_p, ctypes.c_ulong] + [ctypes.c_void_p] * 7
+x11.XQueryPointer(display, x11.XDefaultRootWindow(display), ctypes.byref(window), ctypes.byref(window),
+                  ctypes.byref(x), ctypes.byref(y), ctypes.byref(ignored), ctypes.byref(ignored), ctypes.byref(mask))
+print(max(0, x.value) // 1280 * 1280, max(0, y.value) // 900 * 900)
+PY
+    ) || origin="0 0"
+    # shellcheck disable=SC2086
+    /usr/local/bin/raphael-seat-browser $origin 1280 900 >/dev/null
+    [ "$#" -gt 0 ] || exit 0
+    if [ -x /opt/google/chrome/chrome ]; then browser=/opt/google/chrome/chrome; else browser=/usr/lib/chromium/chromium; fi
+    exec "$browser" --user-data-dir="$profile" "$@"
+fi
+# A computer of a member's own: its driver starts the member's browser, and this is the desktop's.
+# Nothing in a computer can make a browser's own sandbox (every capability is dropped; the container is one).
+# Debian's Chromium is told so in /etc/chromium.d; Google's Chrome is told here, and --test-type keeps its warning
+# bar about it away.
+for browser in /usr/bin/google-chrome-stable /usr/bin/google-chrome; do
+    if [ -x "$browser" ]; then
+        exec "$browser" --no-sandbox --test-type --disable-background-networking --disable-background-mode \
+            --disable-extensions --disable-sync --no-first-run --no-default-browser-check \
+            --disable-features=MediaRouter --renderer-process-limit=4 "$@"
+    fi
+done
+for browser in /usr/bin/chromium /usr/bin/chromium-browser; do
     if [ -x "$browser" ]; then
         exec "$browser" --disable-background-networking --disable-background-mode \
             --disable-extensions --disable-sync --no-first-run --no-default-browser-check \

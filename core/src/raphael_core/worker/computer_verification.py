@@ -6,6 +6,10 @@ import re
 NOTE = ("Before finishing computer work, check the result with verify_state and an expectation, "
         "or read the intended get_window_state/get_browser_state. Do not claim success without that check.")
 READS = {"get_window_state", "get_browser_state", "get_desktop_state", "verify_state"}
+# browser_open answers with the page it opened (its references and text): the change and its read in one call. Asked
+# to read that page again before answering, every "open this page and tell me" turn was started again and said its
+# answer twice (real members, 2026-11-13).
+OPENED = {"browser_open"}
 CHANGES = {"click", "double_click", "right_click", "type_text", "press_key", "hotkey", "scroll", "drag",
            "launch_app", "bring_to_front", "clipboard_write", "browser_open", "browser_navigate", "browser_click",
            "browser_type", "browser_select", "browser_pointer", "browser_dialog", "browser_set_input_files", "fill_login", "fill_contact", "fill_card"}
@@ -61,7 +65,9 @@ class ComputerVerification:
             # A failed batch may have changed the screen before stopping.
             self.required = not ok
         elif ok and kind not in ("computer_busy", "screen_changed"):
-            if verb in CHANGES:
+            if verb in OPENED:
+                self.required = False
+            elif verb in CHANGES:
                 self.required = True
             # The driver's verify_state takes its expectations as `expect`; `predicates` was the name in an older schema,
             # and a check written to the real one was not counted, so a member that had verified was asked to again.

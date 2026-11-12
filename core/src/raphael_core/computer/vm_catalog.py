@@ -45,6 +45,9 @@ DRIVER_TOOLS = {
 }
 
 PAGE_TOOLS = ("browser_", "get_browser_state")
+# What the driver calls a window of the computer's own browser: Google's Chrome where the image has it (amd64),
+# Chromium elsewhere.
+BROWSER_APPS = frozenset({"google-chrome", "chromium-browser"})
 
 # Each call can move the physical pointer, focus or clipboard, including browser launch.
 NATIVE_INPUT_TOOLS = frozenset({

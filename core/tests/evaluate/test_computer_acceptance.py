@@ -572,7 +572,9 @@ def test_previous_fixture_matches_release_shape_without_changing_vm(tmp_path, mo
     assert len(fifth) == len(current) and f"{vm.LABEL}.layer=" + vm.IMAGE_LABELS[f"{vm.LABEL}.layer"] not in fifth
     sixth = acceptance.previous_args(target, machine.owner, "private", "6")
     assert [a for a, b in zip(sixth, current) if a != b] == [f"{vm.LABEL}.layer=6", acceptance.OLD_IMAGES["6"]]
-    assert vm.IMAGE not in acceptance.OLD_IMAGES.values() and list(acceptance.OLD_IMAGES) == ["4", "5", "6"]
+    seventh = acceptance.previous_args(target, machine.owner, "private", "7")
+    assert [a for a, b in zip(seventh, current) if a != b] == [f"{vm.LABEL}.layer=7", acceptance.OLD_IMAGES["7"]]
+    assert vm.IMAGE not in acceptance.OLD_IMAGES.values() and list(acceptance.OLD_IMAGES) == ["4", "5", "6", "7"]
 
 
 class FakeDocker:
@@ -702,14 +704,16 @@ async def test_start_retries_slow_engine_once_after_pause(error, tmp_path, monke
 
 @pytest.mark.parametrize("args", [
     ["system", "prune"], ["container", "prune"], ["pull", vm.BASE],
+    ["image", "rm", "raphael/cua-local-vm:driver-0.37.0-v8"],
     ["image", "rm", "raphael/cua-local-vm:driver-0.37.0-v7"],
     ["image", "rm", "raphael/cua-local-vm:driver-0.37.0-v6"],
     ["image", "rm", "raphael/cua-local-vm:driver-0.37.0-v5"],
-    ["image", "inspect", "raphael/cua-local-vm:driver-0.37.0-v7"],
+    ["image", "inspect", "raphael/cua-local-vm:driver-0.37.0-v8"],
     ["ps", "-a", "--filter", "label=org.raphael.computer", "--format", "{{.ID}}"],
     ["container", "inspect", "someone-elses-container"],
     ["exec", "-u", "root", "ours", "true"],
     ["stop", "foreign", "ours"], ["rm", "foreign", "ours"], ["start", "foreign", "ours"],
+    ["build", "--tag", "raphael/cua-local-vm:driver-0.37.0-v8", "image"],
     ["build", "--tag", "raphael/cua-local-vm:driver-0.37.0-v7", "image"],
     ["build", "--tag", "raphael/cua-local-vm:driver-0.37.0-v6", "image"],
     ["build", "--tag", "raphael/cua-local-vm:driver-0.37.0-v5", "image"],
@@ -902,6 +906,7 @@ async def test_shared_acceptance_drives_real_tools_through_every_numbered_check(
     rows = [window(100 + i, (i - 1) * 1280 + 560, "Xfce4-panel") for i in range(1, 4)]
     for row in rows:
         row["bounds"].update(y=851, width=146, height=49)
+        row["title"] = "xfce4-panel"  # as the window manager lists a real one
     pending, files, bindings, urls = {}, {}, {}, {}
     form_refs, form_values = {}, {}
     closed_windows = set()
@@ -909,6 +914,7 @@ async def test_shared_acceptance_drives_real_tools_through_every_numbered_check(
     pointer = [0, 0]
     active = [None]
     launches, attachments = [], []
+    viewers, owner_files = [], set()
     original_runtime = runtime.__call__
 
     async def runner(args, **kwargs):
@@ -927,6 +933,10 @@ async def test_shared_acceptance_drives_real_tools_through_every_numbered_check(
                 return vm.Result(0, "0x00a00028 -1 0    0    3840 1800 host Desktop\n" + "\n".join(f'0x{row["window_id"]:x} 0 ' +
                     " ".join(str(row["bounds"][key]) for key in ("x", "y", "width", "height")) +
                     f' host {row["title"]}' for row in rows))
+            if command[1] == "-l":
+                return vm.Result(0, "\n".join(f'0x{row["window_id"]:08x}  0 host {row["title"]}' for row in rows))
+            if command[1] == "-lp":
+                return vm.Result(0, "\n".join(f'0x{row["window_id"]:08x}  0 {99 if "chromium" in row["app_name"].lower() else 1} host {row["title"]}' for row in rows))
             if command[1] == "-lx":
                 return vm.Result(0, "0x00a00028 -1 xfdesktop.Xfdesktop   host Desktop\n" + "\n".join(
                     f'0x{row["window_id"]:x} 0 {row["app_name"]}.{row["app_name"]} host {row["title"]}' for row in rows))
@@ -941,7 +951,34 @@ async def test_shared_acceptance_drives_real_tools_through_every_numbered_check(
                 if int(width) > 0 and int(height) > 0:
                     row['bounds'].update(width=int(width), height=int(height))
         if "pgrep" in args:
+            if "-af" in args:
+                return vm.Result(0, "99 /usr/lib/chromium/chromium --remote-debugging-port=0 --user-data-dir=/home/cua/workspace/"
+                                 ".browser-profiles/driver/main --no-sandbox --disable-blink-features=AutomationControlled "
+                                 "--test-type --hide-crash-restore-bubble\n")
             return vm.Result(0, "99\n")
+        guest = args[args.index(machine.shared_target("", 9201, 1).name) + 1:] if args[0] == "exec" else []
+        if guest[:2] == ["test", "-x"]:
+            return vm.Result(1, "")
+        if guest[:2] == ["test", "-e"]:
+            return vm.Result(0 if guest[2] in owner_files else 1, "")
+        if guest[:1] == ["dpkg"]:
+            return vm.Result(0, "arm64\n")
+        if guest[:1] == ["cat"] and guest[1].endswith("/policies/managed/raphael.json"):
+            assert guest[1].startswith("/etc/chromium/"), "this world's browser is Chromium"
+            return vm.Result(0, json.dumps({"BrowserSignin": 0, "SyncDisabled": True, "PasswordManagerEnabled": False,
+                                            "AutofillCreditCardEnabled": False, "AutofillAddressEnabled": False}))
+        if guest[:1] == ["cat"] and guest[1].endswith("/Default/Preferences"):
+            return vm.Result(0, json.dumps({"credentials_enable_service": False, "profile": {"password_manager_enabled": False},
+                                            "autofill": {"credit_card_enabled": False, "profile_enabled": False}}))
+        if guest[:1] == ["raphael-browser"]:
+            rows.append(window(556, 60, "Chromium-browser"))
+            return vm.Result(0, "")
+        if guest[:1] == ["/usr/lib/chromium/chromium"]:
+            if "--version" in guest:
+                return vm.Result(0, "Chromium 156.0.0.0\n")
+            rows.append(window(555, 40, "Chromium-browser"))
+            rows[-1]["title"] = "raphael-webdriver-false - Chromium"
+            return vm.Result(0, "")
         if "xprop" in args:
             if "-root" in args:
                 return vm.Result(0, "_NET_NUMBER_OF_DESKTOPS(CARDINAL) = 1\n_NET_CURRENT_DESKTOP(CARDINAL) = 0\n"
@@ -1113,8 +1150,35 @@ async def test_shared_acceptance_drives_real_tools_through_every_numbered_check(
         target = await machine.seat(params["member_id"])
         self.sessions["owner"] = Session(target, machine.clock() + 100, member_id=params["member_id"])
         self.sessions["owner"].sockets.add("fake-listener")
-        return {"session": "owner"}
+        viewers.append(self)
+        return {"session": "owner", "url": "http://127.0.0.1:18080/owner/vnc.html"}
     monkeypatch.setattr(acceptance.DesktopViewer, "open", opened)
+
+    class OwnerHands:
+        """The owner's end of a seat's view: what it sends reaches the seat only while the owner's session holds it."""
+        typed = ""
+
+        def held(self):
+            session = viewers[-1].sessions.get("owner")
+            return bool(session and viewers[-1].owners.get(session.target.key) == "owner")
+
+        def pointer(self, x, y, buttons=0):
+            # The third launcher of the seat's panel opens a terminal there.
+            if buttons and self.held() and y > 851 and not any(row["window_id"] == 777 for row in rows):
+                rows.append(window(777, 1280 + 300, "Xfce4-terminal"))
+
+        def keys(self, *keysyms):
+            if not self.held():
+                return
+            for key in keysyms:
+                if key == 0xff0d:
+                    owner_files.add(self.typed.removeprefix("touch "))
+                    self.typed = ""
+                else:
+                    self.typed += chr(key)
+
+    monkeypatch.setattr(run, "http", lambda port, path, origin=None: (200, json.dumps({"path": "/owner/websockify/1", "password": "private"}).encode()))
+    monkeypatch.setattr(run, "connect", lambda port, path, password, origin=None: (SimpleNamespace(close=lambda: None), OwnerHands()))
 
     async def tree(target):
         return [acceptance.Window(hex(row["window_id"]), row["title"], tuple(row["bounds"][key] for key in ("x", "y", "width", "height")),
@@ -1156,7 +1220,7 @@ async def test_shared_acceptance_drives_real_tools_through_every_numbered_check(
     assert not [row for row in run.results if row["result"] != "ok"], run.results
     assert [row["name"] for row in run.results] == ["shared carry seed", "shared prepares", "shared window lists", "shared member datasets", "shared terminal wall",
         "shared pointer wall", "shared target forms", "shared native text", "shared seat-local verify", "shared global shortcuts",
-        "shared simultaneous native typing", "shared computer browser", "shared typed form", "shared page text", "shared clipped product pictures", "shared owner control",
+        "shared simultaneous native typing", "shared computer browser", "shared typed form", "shared browser is a person's", "shared page text", "shared clipped product pictures", "shared owner control", "shared owner input",
         "shared seat teaching", "shared session ends independently", "shared seat displacement", "shared carried home", "shared stop"]
     assert seed_calls == [9201] and len(carry_checks) == 1
     assert launches == [1, 2]

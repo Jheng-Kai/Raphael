@@ -5,6 +5,7 @@ import base64
 import json
 import shutil
 import subprocess
+import sys
 from copy import deepcopy
 from pathlib import Path
 from unittest.mock import AsyncMock
@@ -454,9 +455,10 @@ def test_layer_seven_installs_computer_browser_and_existing_profile_grant():
     dockerfile = (image / "Dockerfile").read_text(encoding="utf-8")
     assert '--permission-mode standard --grant existing-profile' in dockerfile
     assert 'install -m 0755 /opt/raphael-desktop/raphael-seat-browser /usr/local/bin/raphael-seat-browser' in dockerfile
-    # Layer 6 is main's (the desktop's picture, its keys, a lost X server); the seat browser and the grant come on top.
-    assert module.IMAGE.endswith("-v7") and module.IMAGE_LABELS[f"{module.LABEL}.layer"] == "7"
-    assert 'org.raphael.computer.layer="7"' in dockerfile and "librsvg2-common" in dockerfile
+    # Layer 6 is main's (the desktop's picture, its keys, a lost X server); the seat browser and the grant came on top
+    # as 7, and 8 is what a computer has from its first start (Google's Chrome, the tools, the fonts).
+    assert module.IMAGE.endswith("-v8") and module.IMAGE_LABELS[f"{module.LABEL}.layer"] == "8"
+    assert 'org.raphael.computer.layer="8"' in dockerfile and "librsvg2-common" in dockerfile
     launcher = (image / "desktop/raphael-seat-browser").read_text(encoding="utf-8")
     assert "wmctrl -lG" in launcher and '"$attempt" -lt 50' in launcher
     assert 'data:text/html,<title>$marker</title>' in launcher and '${5' not in launcher
@@ -465,7 +467,106 @@ def test_layer_seven_installs_computer_browser_and_existing_profile_grant():
     assert '$3 == pid' in launcher and 'if ($i == marker)' in launcher and '$6 == marker' not in launcher
 
 
-def test_launcher_difference_excludes_disappeared_windows_and_attributes_same_pid_popups():
+def test_the_computer_starts_with_googles_chrome_the_tools_and_the_fonts():
+    # Owner, 2026-11-13, of Grok Bot's computer: 「他們會有 chrome 等等之類的 我們一開始就要把環境架設好了 不會只有 cua」.
+    # Nothing in a computer is root: what is not in the image a member cannot add.
+    image = Path(module.__file__).parent / "image"
+    dockerfile = (image / "Dockerfile").read_text(encoding="utf-8")
+    for package in ("git", "wget", "zip", "unzip", "jq", "ripgrep", "npm", "sqlite3", "poppler-utils", "build-essential",
+                    "fonts-noto-cjk", "fonts-noto-color-emoji"):
+        assert f" {package}" in dockerfile, package
+    # Google's own build, from Google's repository and under Google's key, only where there is one.
+    assert 'if [ "$(dpkg --print-architecture)" = amd64 ]; then' in dockerfile
+    assert "signed-by=/usr/share/keyrings/google-linux.asc] https://dl.google.com/linux/chrome/deb/ stable main" in dockerfile
+    assert "apt-get install -y --no-install-recommends google-chrome-stable;" in dockerfile
+    launcher = (image / "desktop/raphael-seat-browser").read_text(encoding="utf-8")
+    assert "if [ -x /opt/google/chrome/chrome ]; then" in launcher and "chromium=/usr/lib/chromium/chromium window_class=chromium-browser" in launcher
+
+
+def test_the_members_browser_is_never_signed_in_to_as_a_browser_and_keeps_nothing_typed():
+    # Every member reads the one profile. Google's own Chrome offers an owner who signs in to Google on a page to
+    # "turn on sync": his own passwords, history and bookmarks would come down into that profile. As policy, which
+    # holds whatever a profile says, for Chrome and for Chromium.
+    dockerfile = (Path(module.__file__).parent / "image" / "Dockerfile").read_text(encoding="utf-8")
+    written = next(line for line in dockerfile.splitlines() if "BrowserSignin" in line)
+    policy = json.loads(written[written.index("'{") + 1:written.index("}'") + 1])
+    assert policy == {"BrowserSignin": 0, "SyncDisabled": True, "PasswordManagerEnabled": False,
+                      "AutofillCreditCardEnabled": False, "AutofillAddressEnabled": False}
+    assert "for folder in /etc/opt/chrome/policies/managed /etc/chromium/policies/managed; do" in dockerfile
+    assert 'chmod 0644 "$folder/raphael.json"' in dockerfile
+
+
+def test_the_shared_computers_browser_icon_opens_the_members_own_browser():
+    # What an owner signs in to has to be every member's: the icon of a shared computer gives a window of the one
+    # browser, on the screen the pointer is on, and never starts a second browser with a profile of its own.
+    script = (Path(module.__file__).parent / "image/desktop/raphael-browser").read_text(encoding="utf-8")
+    shared = script[script.index('if [ "${width:-0}" -gt 1280 ]; then'):script.index("\nfi\n")]
+    assert "/usr/local/bin/raphael-seat-browser $origin 1280 900" in shared and "XQueryPointer" in shared
+    assert 'exec "$browser" --user-data-dir="$profile" "$@"' in shared and "--no-sandbox" not in shared
+    assert script.count("profile=/home/cua/workspace/.browser-profiles/driver/main") == 1
+    # A computer of a member's own keeps the desktop's browser, and Google's Chrome there is told what Debian's
+    # Chromium reads from /etc/chromium.d: without it the icon opened nothing.
+    own = script[script.index("\nfi\n"):]
+    chrome = own[own.index("google-chrome-stable"):own.index("for browser in /usr/bin/chromium")]
+    assert "--no-sandbox --test-type" in chrome and "exec firefox" in own
+    shell = shutil.which("sh")
+    if shell is not None:
+        assert subprocess.run([shell, "-n"], input=script, text=True, capture_output=True, timeout=10).returncode == 0
+
+
+def test_the_members_browser_is_one_a_person_signs_in_with():
+    # An owner signing in to Google for his members (2026-11-13): "This browser or app may not be secure", a yellow
+    # bar about --no-sandbox, and "Restore pages?". A browser started with --remote-debugging-port=0 tells every
+    # page it is automated; --test-type keeps the unsupported-flag bars away; a computer is stopped by ending its
+    # processes, so the profile is marked as closed before the browser is started.
+    launcher = (Path(module.__file__).parent / "image/desktop/raphael-seat-browser").read_text(encoding="utf-8")
+    flags = next(line for line in launcher.splitlines() if line.startswith('flags="'))
+    for flag in ("--disable-blink-features=AutomationControlled", "--test-type", "--hide-crash-restore-bubble", "--no-sandbox"):
+        assert flag in flags.split('"')[1].split(), flag
+    assert "--enable-automation" not in launcher and "--headless" not in launcher
+    first = launcher[launcher.index('  mkdir -p "$profile"'):launcher.index("new=\nattempt=0")]
+    assert first.index("ended_cleanly") < first.index('setsid "$chromium" --remote-debugging-port=0')
+
+
+KEEPS_NOTHING = {"credentials_enable_service": False, "credentials_enable_autosignin": False,
+                 "autofill": {"profile_enabled": False, "credit_card_enabled": False}}
+
+
+@pytest.mark.parametrize("before,after", [
+    ('{"profile":{"exit_type":"Crashed","exited_cleanly":false,"name":"Person 1","password_manager_enabled":true},"browser":{"x":1},'
+     '"autofill":{"credit_card_enabled":true,"last_version_deduped":157},"credentials_enable_service":true}',
+     {"profile": {"exit_type": "Normal", "exited_cleanly": True, "name": "Person 1", "password_manager_enabled": False},
+      "browser": {"x": 1}, **KEEPS_NOTHING,
+      "autofill": {"profile_enabled": False, "credit_card_enabled": False, "last_version_deduped": 157}}),
+    ('{"browser":{"x":1}}', {"browser": {"x": 1}, **KEEPS_NOTHING,
+                              "profile": {"exit_type": "Normal", "exited_cleanly": True, "password_manager_enabled": False}}),
+    # A computer's first browser: the profile is made with what it must say before the browser writes the rest.
+    (None, {**KEEPS_NOTHING, "profile": {"exit_type": "Normal", "exited_cleanly": True, "password_manager_enabled": False}}),
+    ("not json", None), ('["a list"]', None), ('{"profile":"odd"}', None), ('{"autofill":7}', None),
+])
+def test_a_profile_whose_browser_was_ended_is_marked_closed_and_any_other_file_is_left(tmp_path, before, after):
+    # The same step keeps passwords, cards and addresses out of the profile every member reads (2026-11-13: an owner
+    # signing in at a seat was offered "Save password?").
+    launcher = (Path(module.__file__).parent / "image/desktop/raphael-seat-browser").read_text(encoding="utf-8")
+    source = launcher[launcher.index("<<'PY' || true\n") + len("<<'PY' || true\n"):launcher.index("\nPY\n")]
+    preferences = tmp_path / "Default" / "Preferences"
+    if before is not None:
+        preferences.parent.mkdir()
+        preferences.write_text(before, encoding="utf-8")
+    result = subprocess.run([sys.executable, "-", str(preferences)], input=source, text=True, capture_output=True, timeout=30)
+    assert result.returncode == 0, result.stderr
+    if after is None:
+        assert (preferences.read_text(encoding="utf-8") if before is not None else None) == before
+    else:
+        assert json.loads(preferences.read_text(encoding="utf-8")) == after
+    assert not preferences.with_name("Preferences.raphael").exists()
+
+
+@pytest.mark.parametrize("prefix,window_class", [
+    ("chromium-browser", "chromium-browser (/home/cua/workspace/.browser-profiles/driver/main).Chromium-browser"),
+    ("google-chrome", "google-chrome (/home/cua/workspace/.browser-profiles/driver/main).Google-chrome"),
+])
+def test_launcher_difference_excludes_disappeared_windows_and_attributes_same_pid_popups(prefix, window_class):
     launcher = (Path(module.__file__).parent / "image/desktop/raphael-seat-browser").read_text(encoding="utf-8")
     # Run the shipped selection itself against a pure shell wmctrl double; no browser, X or Docker.
     selection = launcher[launcher.index("  candidates=$("):launcher.index('  [ -n "$new" ]')]
@@ -481,11 +582,13 @@ now='0x2
 0x6'
 main=99
 marker=raphael-seat-test
-class='chromium-browser (/home/cua/workspace/.browser-profiles/driver/main).Chromium-browser'
+window_class=PREFIX
+class='WINDOW_CLASS'
 wmctrl() { printf '%s\\n' "0x2  0 99   $class  host old - Chromium" "0x3  0 99   $class  host peer-popup - Chromium" "0x4  0 100  $class  host raphael-seat-test - Chromium" "0x5  0 99   $class  host raphael-seat-test - Chromium" '0x6  0 99   chromium-browser.Chromium-browser  host raphael-seat-testing - Chromium'; }
 '''
     # The rows are `wmctrl -lpx` as a real computer printed them on 2026-11-12: the class has a space in it, which
     # is where a title looked for at a fixed column was never found and no seat got a browser.
+    script = script.replace("PREFIX", prefix).replace("WINDOW_CLASS", window_class)
     result = subprocess.run([shell], input=script + selection + '\nprintf "%s\\n" "$new"\n',
                             text=True, capture_output=True, timeout=10)
     assert result.returncode == 0, result.stderr
@@ -514,6 +617,25 @@ wmctrl() {{ printf '%s\\n' '0x4  0 0 0 1280 851 host other' '0x5  0 {geometry} h
     assert result.stdout.strip() == ("settled" if settled else "waiting")
     # The exact geometry is still asked for first; the looser test only after a second and a half.
     assert '[ "$attempt" -ge 15 ] && filling' in launcher
+
+
+async def test_the_shared_computer_of_layer_seven_is_made_again_on_the_next_layer(shared_vm):
+    # The owner's own computer on the day layer 8 came: six screens, 6 GiB, four cores, labelled layer 7. The
+    # acceptance run found that layer 7 was not yet named as a released one, and such a computer did not start.
+    vm, runtime = shared_vm
+    target = await vm.seat(1)
+    raw = container(vm, target, runtime)
+    raw["Config"]["Labels"][f"{module.LABEL}.layer"] = "7"
+    raw["Image"] = "sha256:layer-seven-image"
+    assert "RAPHAEL_SCREENS=6" in raw["Config"]["Env"] and raw["HostConfig"]["Memory"] == 6 * 1024**3
+    assert not module.compatible(raw, target, vm.owner, runtime.image_id)
+    assert module.known_previous(raw, target, vm.owner)
+    runtime.raw = raw
+    assert await vm._upgrade_image(target) == {"state": "missing", "image": True}
+    assert [args[0] for args, _ in runtime.calls if args[0] in ("stop", "rm")][-1] == "rm"
+    # Nothing but the released shape: another memory limit is somebody else's container.
+    raw["HostConfig"]["Memory"] = 4 * 1024**3
+    assert not module.known_previous(raw, target, vm.owner)
 
 
 @pytest.mark.parametrize("shared,screens", [(False, 1), (True, 1), (True, 6)])
