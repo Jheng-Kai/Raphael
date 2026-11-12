@@ -2,6 +2,8 @@
 
 from collections.abc import Mapping
 from copy import deepcopy
+import json
+import re
 
 from .vm import screen_grid
 
@@ -73,3 +75,77 @@ def windows_text(result):
 
 def mine(window_id, result, screen, screens):
     return any(window["window_id"] == window_id for window in windows(result, screen, screens)["windows"])
+
+
+def canvas_windows(reply):
+    """Read structured rows or the measured signed-geometry driver text, never guess ownership."""
+    if reply.get("isError"):
+        raise ValueError("Cannot read canvas windows")
+    state = reply.get("structuredContent")
+    if isinstance(state, dict) and isinstance(state.get("windows"), list):
+        return state
+    for block in reply.get("content", []):
+        if block.get("type") != "text":
+            continue
+        text = block.get("text", "")
+        try:
+            state = json.loads(text)
+        except ValueError:
+            state = None
+        if isinstance(state, dict) and isinstance(state.get("windows"), list):
+            return state
+        header = re.search(r"Found (\d+) windows:", text)
+        if header:
+            rows = []
+            for match in re.finditer(r'window_id=(\d+) pid=(\d+) "([^\n]*)" (\d+)x(\d+)([+-]\d+)([+-]\d+) app=([^\n]+)', text):
+                identifier, pid, title, width, height, x, y, app = match.groups()
+                rows.append(dict(window_id=int(identifier), pid=int(pid), title=title, app_name=app,
+                                 bounds=dict(zip(("x", "y", "width", "height"), map(int, (x, y, width, height))))))
+            if len(rows) == int(header[1]):
+                return {"windows": rows}
+    raise ValueError("Unrecognized canvas window list")
+
+
+def window_state(result, screen, screens):
+    """Translate window placement only. Accessibility and screenshot nodes are window-local."""
+    local = deepcopy(result)
+    left, top, _, _ = rectangle(screen, screens)
+    for record in (local, local.get("window"), local.get("window_info")):
+        if not isinstance(record, dict):
+            continue
+        for key in ("bounds", "frame", "window_bounds"):
+            bounds = record.get(key)
+            if isinstance(bounds, dict) and {"x", "y"} <= bounds.keys():
+                bounds["x"] -= left
+                bounds["y"] -= top
+        if "x" in record and "y" in record:
+            record["x"] -= left
+            record["y"] -= top
+    return local
+
+
+def projected_reply(reply, state, text=None):
+    """Replace both output channels so canvas coordinates cannot linger in driver prose."""
+    result = deepcopy(reply)
+    result["structuredContent"] = state
+    result["content"] = [dict(type="text", text=text if text is not None else json.dumps(state))]
+    result["content"].extend(block for block in reply.get("content", []) if block.get("type") == "image")
+    return result
+
+
+def wmctrl_windows(geometry, classes):
+    """Join the prototype's measured -lG and -lx shapes for disconnected-seat cleanup."""
+    apps = {int(parts[0], 16): parts[2].split(".")[0] for line in classes.splitlines()
+            if len(parts := line.split(None, 4)) >= 4}
+    rows = []
+    for line in geometry.splitlines():
+        parts = line.split(None, 7)
+        if len(parts) < 8:
+            continue
+        identifier = int(parts[0], 16)
+        # Unknown classes fail closed: never close a panel we could not identify.
+        if identifier not in apps:
+            continue
+        rows.append(dict(window_id=identifier, pid=0, app_name=apps[identifier], title=parts[7],
+                         bounds=dict(zip(("x", "y", "width", "height"), map(int, parts[2:6])))))
+    return {"windows": rows}

@@ -44,7 +44,7 @@ async def test_another_turn_of_one_seat_waits_and_looks_at_the_screen_again(desk
         # The screen is not what the model last saw: it looks first, and then acts.
         assert moved.ok and moved.kind == "screen_changed"
         assert (await hub.call(shot.key, {}, approver="auto")).ok
-        assert (await hub.call(click.key, {}, approver="auto")).kind is None
+        assert (await hub.call(click.key, {"pid": 1, "window_id": 1}, approver="auto")).kind is None
     assert len(lines) == 1
     assert lines == ["正在等 Raphael 用完電腦"]
 
@@ -156,6 +156,7 @@ async def test_two_members_keep_independent_turns_without_waiting_or_staling_eac
     for member in (0, 2, 0):
         with vm_scope(("turn", member, member + 1), progress=lines.append):
             assert (await hub.call(tools[member]["get_desktop_state"], {}, approver="auto")).kind is None
-            assert (await hub.call(tools[member]["click"], {}, approver="auto")).kind is None
+            window_id = vm.target(member).screen
+            assert (await hub.call(tools[member]["click"], {"pid": window_id, "window_id": window_id}, approver="auto")).kind is None
     assert not lines and len(hub.leases) == 2
     await hub.aclose()

@@ -13,7 +13,7 @@ from raphael_core.computer.vm_bridge import CuaBridge
 from raphael_core.computer.vm_catalog import DRIVER_TOOLS, offline_catalog
 from raphael_core.computer.vm_tools import VmTools, vm_scope
 from raphael_core.services.attachment_store import AttachmentStore
-from .test_vm import CatalogBridge, EmptyHub, desktop  # noqa: F401
+from .test_vm import CatalogBridge, EmptyHub, per_bot_desktop as desktop  # noqa: F401
 
 
 def tool(hub, name):

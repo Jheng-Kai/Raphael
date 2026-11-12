@@ -83,9 +83,22 @@ def container(vm, target, runtime):
 
 
 @pytest.fixture
-async def desktop(tmp_path, conn):
+async def desktop(tmp_path, conn, monkeypatch):
+    # Shared desktop pictures now come from the clipped view, not the driver fake.
+    monkeypatch.setattr("raphael_core.computer.rfb_view.capture", lambda *args, **kwargs: b"\x89PNG\r\n\x1a\nimage")
     settings = SettingsStore(conn)
     settings.set("computer_vm_mode", "shared")
+    runtime = Runtime()
+    vm = LocalVm(tmp_path, settings=settings, runner=runtime, clock=lambda: 0)
+    target = await vm.seat()
+    runtime.raw = container(vm, target, runtime)
+    return vm, target, runtime
+
+
+@pytest.fixture
+async def per_bot_desktop(tmp_path, conn):
+    settings = SettingsStore(conn)
+    settings.set("computer_vm_mode", "per-bot")
     runtime = Runtime()
     vm = LocalVm(tmp_path, settings=settings, runner=runtime, clock=lambda: 0)
     target = await vm.seat()
@@ -594,6 +607,12 @@ class Bridge:
         if method == "tools/list":
             return {"tools": [{"name": name, "description": name, "inputSchema": {"type": "object"}}
                               for name in ("get_desktop_state", "get_window_state", "list_windows", "click", "type_text", "scroll", "launch_app")]}
+        if params["name"] == "list_windows":
+            from raphael_core.computer.vm import screen_grid
+            state = {"windows": [dict(window_id=number, pid=number, title="Terminal", app_name="Xfce4-terminal",
+                        bounds=dict(x=x + 20, y=y + 20, width=600, height=400))
+                        for number, (x, y, _, _) in enumerate(screen_grid(self.target.screens)[0], 1)]}
+            return {"structuredContent": state, "content": [{"type": "text", "text": json.dumps(state)}]}
         return {"content": [{"type": "image", "data": base64.b64encode(b"\x89PNG\r\n\x1a\nimage").decode(), "mimeType": "image/png"}]}
 
 
@@ -745,10 +764,10 @@ def test_the_image_carries_the_labels_the_core_checks():
         assert f'{key}="{value}"' in dockerfile
 
 
-async def test_a_computer_keeps_one_driver_connection_and_session_until_it_breaks(desktop, tmp_path):
+async def test_a_computer_keeps_one_driver_connection_and_session_until_it_breaks(per_bot_desktop, tmp_path):
     # The driver ends a session with the connection that used it: live, the browser browser_prepare opened was gone by the
     # next call, every later call was refused as "session has ended", and a drag never found the screenshot read before it.
-    vm, target, runtime = desktop
+    vm, target, runtime = per_bot_desktop
     class Recording(CatalogBridge):
         calls, opened, closed = [], [], []
         async def __aenter__(self):
@@ -904,7 +923,7 @@ async def test_tools_share_snapshot_and_gate_and_owner_control(desktop, conn, tm
     click = next(tool for tool in hub.offered() if tool.name == "click")
     execute = next(tool for tool in hub.offered() if tool.name == "vm_exec")
     shot = next(tool for tool in hub.offered() if tool.name == "get_desktop_state")
-    calls = [(shot, {}), (click, {}), (execute, {"command": "printf hello"})]
+    calls = [(shot, {}), (click, {"pid": 1, "window_id": 1}), (execute, {"command": "printf hello"})]
     assert gate.reads_only("computer", "get_desktop_state", {}) and not gate.reads_only("computer", "vm_exec", {"command": "x"})
     for tool, arguments in calls:
         assert gate.tier(tool.key) == Tier.T0
@@ -952,7 +971,7 @@ async def test_sandbox_steps_do_not_reenter_per_action_safety_screening(desktop,
 
 
 async def test_vm_tool_descriptions_require_owner_yes_before_outward_actions(desktop, tmp_path):
-    from raphael_core.computer.vm_tools import ATTACH
+    from raphael_core.computer.vm_tools import ATTACH, SHARED_CONTRACT
 
     vm, target, runtime = desktop
     hub = VmTools(EmptyHub(), vm, attachments=AttachmentStore(tmp_path), bridge=Bridge)
@@ -972,7 +991,7 @@ async def test_vm_tool_descriptions_require_owner_yes_before_outward_actions(des
                 assert "Every use needs owner approval" in description and "request_takeover" in description
             continue
         if tool.name == "attach_file":
-            assert tool.description == ATTACH["description"]
+            assert tool.description == ATTACH["description"] + SHARED_CONTRACT
             continue
         if tool.name == "request_takeover":
             assert "Never request secrets in chat" in definitions["computer__request_takeover"]["description"]
@@ -984,11 +1003,11 @@ async def test_vm_tool_descriptions_require_owner_yes_before_outward_actions(des
             assert clause in description
 
 
-async def test_native_vm_journey_checks_no_approval_and_owner_control(desktop, tmp_path, monkeypatch):
+async def test_native_vm_journey_checks_no_approval_and_owner_control(per_bot_desktop, tmp_path, monkeypatch):
     from raphael_core.computer import vm as vm_module, vm_tools
     from raphael_core.native_journeys import vm_smoke
 
-    vm, target, runtime = desktop
+    vm, target, runtime = per_bot_desktop
     monkeypatch.setenv("RAPHAEL_TEST_NATIVE", "1")
     monkeypatch.setattr(vm_module, "LocalVm", lambda *args, **kwargs: vm)
     payload = b"Raphael VM smoke\n"

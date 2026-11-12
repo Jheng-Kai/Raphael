@@ -271,7 +271,7 @@ async def test_self_repair_is_once_in_the_current_turn_and_never_replays_uncerta
     try:
         key = next(tool.key for tool in hub.offered() if tool.name == 'click')
         with vm_scope(0, private=True, progress=lines.append, language='zh-TW'):
-            result = await hub.call(key, {}, approver='auto')
+            result = await hub.call(key, {'pid': 1, 'window_id': 1}, approver='auto')
         assert result.ok == (phase == 'connect')
         assert Driver.clicks == 1
         assert sum('已自動修復' in line for line in lines) == 1

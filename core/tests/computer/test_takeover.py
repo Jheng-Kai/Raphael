@@ -16,7 +16,8 @@ from .test_vm import Runtime, container, Bridge, EmptyHub
 
 
 @pytest.fixture
-async def rig(tmp_path, conn):
+async def rig(tmp_path, conn, monkeypatch):
+    monkeypatch.setattr("raphael_core.computer.rfb_view.capture", lambda *args, **kwargs: b"\x89PNG\r\n\x1a\nimage")
     from raphael_core.brain.settings import SettingsStore
     settings = SettingsStore(conn)
     settings.set("computer_vm_mode", "shared")
@@ -90,8 +91,8 @@ async def test_private_takeover_blocks_every_tool_and_resumes_once_after_explici
             assert (await call("vm_exec", {"command": "true"})).kind == "desktop_check_required"
             assert (await call("list_windows")).ok
             assert (await call("vm_exec", {"command": "true"})).kind == "desktop_check_required"
-            assert (await call("get_window_state", {"pid": 7, "window_id": 9})).ok
-            assert (await call("click")).ok
+            assert (await call("get_window_state", {"pid": 1, "window_id": 1})).ok
+            assert (await call("click", {"pid": 1, "window_id": 1})).ok
     finally:
         task.cancel()
         await asyncio.gather(task, return_exceptions=True)

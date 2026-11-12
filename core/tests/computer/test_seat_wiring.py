@@ -221,6 +221,9 @@ async def test_native_driver_calls_serialize_but_page_calls_overlap(shared_vm, t
     class Client:
         async def request(self, method, params):
             nonlocal inside, peak
+            if params["name"] == "list_windows":
+                from .test_seat_tools import window
+                return {"structuredContent": {"windows": [window(1, 20), window(2, 1300)]}}
             inside += 1
             peak = max(peak, inside)
             await asyncio.sleep(.02)
@@ -228,11 +231,13 @@ async def test_native_driver_calls_serialize_but_page_calls_overlap(shared_vm, t
             return {}
 
     client = Client()
-    await asyncio.gather(*(hub._driver_call(target, client, name, {}) for target in (first, second)))
+    await asyncio.gather(*(hub._driver_call(target, client, name, {"window_id": target.screen, "pid": target.screen}
+                                           if native else {}) for target in (first, second)))
     assert peak == (1 if native else 2)
 
 
-async def test_a_hold_refuses_its_seat_but_only_blocks_other_seats_native_input(shared_vm, tmp_path):
+async def test_a_hold_refuses_its_seat_but_only_blocks_other_seats_native_input(shared_vm, tmp_path, monkeypatch):
+    monkeypatch.setattr("raphael_core.computer.rfb_view.capture", lambda *args, **kwargs: b"\x89PNG\r\n\x1a\nimage")
     vm, runtime = shared_vm
     hub = VmTools(EmptyHub(), vm, attachments=AttachmentStore(tmp_path), bridge=CatalogBridge)
     for member in (1, 2):
@@ -368,7 +373,10 @@ async def test_takeover_request_refuses_input_already_running_on_another_seat(sh
     hub = VmTools(EmptyHub(), vm, attachments=AttachmentStore(tmp_path), bridge=Bridge)
     await hub.prepare(1)
     vm.active[second.key] = 1
+    lock = hub.native_actions.setdefault(second.state_key, asyncio.Lock())
+    await lock.acquire()
     key = next(tool.key for tool in hub.offered_for(1) if tool.name == "request_takeover")
     with vm_scope(("turn", 1, 1), turn_id=1, private=True):
         result = await asyncio.wait_for(hub.call(key, {"reason": "sign_in"}, approver="auto"), .1)
     assert result.kind == "computer_busy" and not vm.held
+    lock.release()

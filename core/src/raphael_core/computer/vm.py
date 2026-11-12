@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 
 BASE = "docker.io/trycua/xfce-cua@sha256:274eb636f5cf3fc58f705916ee72b7a701270b3877369d08533a385c5325be9b"
 VERSION = "0.37.0"
-IMAGE = "raphael/cua-local-vm:driver-0.37.0-v5"
+IMAGE = "raphael/cua-local-vm:driver-0.37.0-v6"
 GUEST = "/home/cua/workspace"
 SHARED = "/home/cua/team"
 MEMORY_GB = 3
@@ -38,7 +38,7 @@ DRIVER = "/usr/local/libexec/raphael/cua-driver"
 SOCKET = "/run/user/1000/raphael-cua.sock"
 SCREENS_READY = "/dev/shm/raphael-screens.ready"
 LABEL = "org.raphael.computer"
-IMAGE_LABELS = {LABEL: "1", f"{LABEL}.driver": VERSION, f"{LABEL}.base": BASE, f"{LABEL}.layer": "5"}
+IMAGE_LABELS = {LABEL: "1", f"{LABEL}.driver": VERSION, f"{LABEL}.base": BASE, f"{LABEL}.layer": "6"}
 MAX_OUTPUT = 50_000  # what a task may be shown of a result at most (`worker.guards`)
 # The longest a command may be waited for, and the longest a job started in the background may run.
 FOREGROUND_S = 1800
@@ -219,6 +219,14 @@ def exec_args(target, command, *, interactive=False, detached=False):
             "-e", "CUA_DRIVER_RS_TELEMETRY_ENABLED=0", target.name, *command]
 
 
+def move_window_args(target, window_id):
+    from .seat_view import rectangle
+    x, y, _, _ = rectangle(target.screen, target.screens)
+    if type(window_id) is not int or window_id <= 0:
+        raise ValueError("Expected a positive window id")
+    return exec_args(target, ["wmctrl", "-i", "-r", str(window_id), "-e", f"0,{x + 20},{y + 20},-1,-1"])
+
+
 def healthy(raw):
     try:
         report = json.loads(raw)
@@ -280,7 +288,7 @@ def mounts_match(mounts, configured, target):
 
 
 def known_previous(raw, target, owner):
-    """Recognize previous single-screen shapes with all other guards intact."""
+    """Recognize released shapes with all other guards intact."""
     import copy
     try:
         previous = copy.deepcopy(raw)
@@ -288,11 +296,12 @@ def known_previous(raw, target, owner):
         labels, env = config.get("Labels") or {}, config.get("Env") or []
         layer = labels.get(f"{LABEL}.layer")
         shared_upgrade = target.container == "shared" and target.screens == 6
-        memory = {"3": 2, "4": 3, **({"5": 3} if shared_upgrade else {})}.get(layer)
         screens = [entry for entry in env if entry.startswith("RAPHAEL_SCREENS=")]
+        six = shared_upgrade and layer == "5" and screens == ["RAPHAEL_SCREENS=6"]
+        memory = 6 if six else {"3": 2, "4": 3, "5": 3}.get(layer)
         if ((target.screens != 1 and not shared_upgrade) or memory is None
-                or screens != (["RAPHAEL_SCREENS=1"] if layer == "5" else [])
-                or host.get("NanoCpus") != 2_000_000_000
+                or screens != ([f"RAPHAEL_SCREENS={6 if six else 1}"] if layer == "5" else [])
+                or host.get("NanoCpus") != (4 if six else 2) * 1_000_000_000
                 or host.get("Memory") != memory * 1024**3 or host.get("MemorySwap") != memory * 1024**3):
             return False
         labels[f"{LABEL}.layer"] = IMAGE_LABELS[f"{LABEL}.layer"]
@@ -314,6 +323,8 @@ class LocalVm:
         self.locks, self.targets = {}, {}
         self.task = None
         self.busy = lambda key: False
+        self.native_busy = lambda target: False
+        self.input_busy = lambda target: bool(self.active.get(target.key))
         self.timezone = lambda: None
         self.timezone_pending = False
         from .desktop_host import DockerDesktop
@@ -376,7 +387,42 @@ class LocalVm:
             await self.disconnect_driver(other.key)
 
     async def close_displaced_seat_windows(self, target):
-        """Stage B3 hook: close the displaced seat's windows once window ownership is wired."""
+        """Close a displaced screen's windows, preserving its panel; cleanup is best effort."""
+        from .seat_view import windows
+        try:
+            found = windows(await self.seat_windows(target), target.screen, target.screens)
+            for window in found["windows"]:
+                if window.get("app_name", "").lower() == "xfce4-panel":
+                    continue
+                try:
+                    await self.run_for(target, exec_args(target, ["wmctrl", "-i", "-c", str(window["window_id"])]))
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+    async def seat_windows(self, target):
+        # The displaced session is already closed. Keep cleanup on the injected Docker boundary.
+        from .seat_view import wmctrl_windows
+        geometry = await self.run_for(target, exec_args(target, ["wmctrl", "-lG"]))
+        classes = await self.run_for(target, exec_args(target, ["wmctrl", "-lx"]))
+        if geometry.code or classes.code or geometry.truncated or classes.truncated:
+            raise VmError("window_list_unavailable")
+        return wmctrl_windows(geometry.stdout, classes.stdout)
+
+    async def move_window(self, target, window_id):
+        result = await self.run_for(target, move_window_args(target, window_id))
+        if result.code:
+            raise VmError("window_move_failed")
+
+    async def seat_browser(self, target):
+        from .seat_view import rectangle
+        result = await self.run_for(target, exec_args(target, ["raphael-seat-browser",
+            *map(str, rectangle(target.screen, target.screens))]), timeout=30)
+        match = re.fullmatch(r"pid=([1-9][0-9]*) window_id=([1-9][0-9]*)", result.stdout.strip())
+        if result.code or result.truncated or not match:
+            raise VmError("browser_window_missing")
+        return dict(zip(("pid", "window_id"), map(int, match.groups())))
 
     async def release_member_seats(self, member):
         for host, identifier in list(self.seats.rows):

@@ -416,12 +416,12 @@ class DesktopViewer:
         if held:
             if owner not in (None, token) or (target.key in self.vm.held and owner != token and not pending):
                 raise invalid_params("desktop already held")
-            if self.vm.unit_active(target):
+            if self.vm.input_busy(target) or self.vm.native_busy(target):
                 raise invalid_params("desktop busy")
             if not session.sockets and (await self.status_for(target))["state"] != "running":
                 raise invalid_params("desktop unavailable")
             # Check again after the asynchronous probe. New tools see the phase A hold.
-            if self.vm.unit_active(target) or self.owners.get(target.key) not in (None, token):
+            if self.vm.input_busy(target) or self.vm.native_busy(target) or self.owners.get(target.key) not in (None, token):
                 raise invalid_params("desktop busy")
             self.session(params)
             self.owners[target.key] = token

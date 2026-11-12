@@ -35,8 +35,9 @@ async def test_batch_uses_each_gate_once_and_returns_only_final_observation(desk
     gate._door = door
     try:
         result = await gate.call_plugin(key(hub, "run_steps"), {"steps": [
-            {"name": "click", "arguments": {}}, {"name": "type_text", "arguments": {"text": "synthetic"}}],
-            "observation": {"name": "get_window_state", "arguments": {"pid": 7, "window_id": 9}}})
+            {"name": "click", "arguments": {"pid": 1, "window_id": 1}},
+            {"name": "type_text", "arguments": {"pid": 1, "window_id": 1, "text": "synthetic"}}],
+            "observation": {"name": "get_window_state", "arguments": {"pid": 1, "window_id": 1}}})
         assert result.ok
         assert [name.rsplit("/", 1)[-1] for name in seen] == ["run_steps", "click", "type_text", "get_window_state"]
         assert "synthetic" not in result.text
@@ -104,7 +105,7 @@ def test_restored_completion_evidence_uses_only_the_result_header(read_ok):
     assert check.required is not read_ok
 
 
-IMAGE_NAME = "raphael/cua-local-vm:driver-0.37.0-v5"
+IMAGE_NAME = "raphael/cua-local-vm:driver-0.37.0-v6"
 
 
 def answer(code, out="", err="", config="host studio\nuser jack2\nhostname 192.168.8.178\n"):

@@ -563,7 +563,7 @@ async def test_run_uses_private_tag_and_owner_and_cleans_even_after_failure(keep
             raise RuntimeError("synthetic failure on first computer")
         run.record(f"{count} screens fake", "ok", "fake computer only")
     monkeypatch.setattr(run, "computer", computer)
-    code = await run.run([1, 3])
+    code = await run.run([1, 3], shared=False)
     assert code == (1 if crash else 0)
     assert len(observed) == 2  # Failure on one computer does not suppress the next.
     assert vm.IMAGE == original_image
@@ -649,3 +649,198 @@ def test_image_loading_preserves_build_context():
     for count in (1, 3, 6):
         assert helper.grid(count) == vm.screen_grid(count)
     assert not list(acceptance.IMAGE_FOLDER.rglob("__pycache__"))
+
+
+async def test_shared_block_defaults_on_after_counts_and_no_shared_skips_it(monkeypatch):
+    for enabled in (True, False):
+        run = acceptance.Acceptance(FakeDocker())
+        order = []
+        async def computer(count, largest):
+            order.append(count)
+        async def shared():
+            order.append("shared")
+            return "fake shared boundary"
+        async def previous():
+            order.append("previous")
+        monkeypatch.setattr(run, "computer", computer)
+        monkeypatch.setattr(run, "shared", shared)
+        monkeypatch.setattr(run, "previous", previous)
+        assert await run.run([1, 3], shared=enabled) == 0
+        assert order == [1, 3, *(["shared"] if enabled else []), "previous"]
+
+
+def test_no_shared_cli_option_reaches_the_same_acceptance_runner(monkeypatch):
+    seen = []
+    async def run(self, counts, *, shared=True):
+        seen.append((counts, shared))
+        return 0
+    monkeypatch.setattr(acceptance.Acceptance, "run", run)
+    assert acceptance.main(["--screens", "1,6", "--no-shared"]) == 0
+    assert seen == [([1, 6], False)]
+
+
+async def test_guard_authorizes_real_bridge_exec_without_running_it_and_keeps_owner_checks(tmp_path):
+    runner = FakeDocker()
+    machine = vm.LocalVm(tmp_path, runner=runner)
+    target = machine.target(1)
+    runner.containers[target.name] = raw_container(target.name, machine.owner)
+    guard = acceptance.IsolatedDocker(runner, machine.owner, "raphael-acceptance/cua-local-vm:test")
+    await guard.authorize(vm.exec_args(target, [vm.DRIVER, "mcp", "--socket", vm.SOCKET], interactive=True))
+    assert all(args[:2] == ["container", "inspect"] for args in runner.calls)
+    runner.containers[target.name]["Config"]["Labels"][f"{vm.LABEL}.owner"] = "foreign"
+    with pytest.raises(AssertionError):
+        await guard.authorize(vm.exec_args(target, ["wmctrl", "-lG"]))
+
+
+async def test_shared_acceptance_drives_real_tools_through_every_numbered_check(tmp_path, monkeypatch):
+    """Fake only transport, guest programs and the viewer listener; product seat/tool logic runs."""
+    from copy import deepcopy
+    from types import SimpleNamespace
+    from computer.test_seat_tools import window
+    from computer.test_vm import Runtime, container
+    from raphael_core.computer import rfb_view
+    from raphael_core.computer.vm_bridge import CuaBridge
+    from raphael_core.computer.viewer import Session
+
+    runtime = Runtime()
+    run = acceptance.Acceptance(runtime)
+    run.root = tmp_path
+    run.machine = machine = vm.LocalVm(tmp_path, runner=runtime)
+    run.docker = acceptance.IsolatedDocker(runtime, machine.owner, run.tag)
+    machine.run = run.docker
+    monkeypatch.setattr(vm, "IMAGE", run.tag)
+    rows = [window(100 + i, (i - 1) * 1280 + 560, "Xfce4-panel") for i in range(1, 4)]
+    for row in rows:
+        row["bounds"].update(y=851, width=146, height=49)
+    pending, files, bindings, urls = {}, {}, {}, {}
+    launches, attachments = [], []
+    original_runtime = runtime.__call__
+
+    async def runner(args, **kwargs):
+        if args[0] == "run":
+            runtime.raw = container(machine, machine.shared_target("", 9201, 1), runtime)
+        if "wmctrl" in args:
+            command = args[args.index("wmctrl"):]
+            if command[1] == "-lG":
+                return vm.Result(0, "\n".join(f'0x{row["window_id"]:x} 0 ' +
+                    " ".join(str(row["bounds"][key]) for key in ("x", "y", "width", "height")) +
+                    f' host {row["title"]}' for row in rows))
+            if command[1] == "-lx":
+                return vm.Result(0, "\n".join(f'0x{row["window_id"]:x} 0 {row["app_name"]}.{row["app_name"]} host {row["title"]}'
+                                            for row in rows))
+            identifier = int(command[3])
+            if command[2] == "-c":
+                rows[:] = [row for row in rows if row["window_id"] != identifier]
+            else:
+                row = next(row for row in rows if row["window_id"] == identifier)
+                _, x, y, _, _ = command[-1].split(",")
+                row["bounds"].update(x=int(x), y=int(y))
+        if "pgrep" in args:
+            return vm.Result(0, "99\n")
+        return await original_runtime(args, **kwargs)
+    run.docker.runner = runner
+
+    async def bridge_command(target, args):
+        return args
+    monkeypatch.setattr(machine, "bridge_command", bridge_command)
+
+    async def enter(self):
+        self.process = SimpleNamespace(returncode=None)
+        return self
+    async def leave(self, *args):
+        self.process = None
+    async def request(self, method, params=None, **kwargs):
+        if method == "tools/list":
+            from raphael_core.computer.vm_catalog import offline_catalog
+            return {"tools": [dict(name=name, description=name, inputSchema=item["parameters"])
+                              for name, item in offline_catalog().items()]}
+        name, args = params["name"], params["arguments"]
+        state = {}
+        if name == "list_windows":
+            state = {"windows": deepcopy(rows)}
+        elif name == "launch_app":
+            rows.append(window(len(rows) + 200, 2600))
+            launches.append(self.target.screen)
+        elif name == "get_window_state":
+            state = deepcopy(next(row for row in rows if row["window_id"] == args["window_id"]))
+        elif name == "type_text":
+            pending[args["window_id"]] = args["text"]
+        elif name == "press_key" and args["window_id"] in pending:
+            text = pending.pop(args["window_id"])
+            text, path = text.split(" > ")
+            files[path] = text.split(" ")[-1] + "\n"
+        elif name == "browser_prepare":
+            assert args["strategy"] == {"kind": "existing_profile"}
+            assert not {"allow_launch", "profile"} & args.keys()
+            attachments.append((args["session"], args["window_id"]))
+        elif name in ("get_browser_state", "browser_navigate"):
+            session = args["session"]
+            if "window_id" in args:
+                identifier = args["window_id"]
+                target = f"target-{session}"
+                bindings[target] = session, identifier
+                urls.setdefault(identifier, "about:blank")
+            else:
+                target = args["target_id"]
+                if target not in bindings or bindings[target][0] != session:
+                    return {"isError": True, "content": [{"type": "text", "text": "protected_resource_scope_invalid"}]}
+                identifier = bindings[target][1]
+            if name == "browser_navigate":
+                urls[identifier] = args["url"]
+            state = dict(target_id=target, url=urls[identifier], tabs=[dict(tab_id="tab", active=True, url=urls[identifier])])
+        return dict(content=[dict(type="text", text=json.dumps(state))], structuredContent=state)
+    monkeypatch.setattr(CuaBridge, "__aenter__", enter)
+    monkeypatch.setattr(CuaBridge, "__aexit__", leave)
+    monkeypatch.setattr(CuaBridge, "request", request)
+
+    async def browser(target):
+        assert machine.native_busy(target)
+        row = window(300 + target.screen, (target.screen - 1) * 1280 + 20, "Chromium-browser", 99)
+        rows.append(row)
+        return {key: row[key] for key in ("pid", "window_id")}
+    monkeypatch.setattr(machine, "seat_browser", browser)
+
+    original_sleep = asyncio.sleep
+    async def execute(target, command, timeout=60, **kwargs):
+        if command.startswith("sleep"):
+            await original_sleep(.1)
+            return dict(exit_code=0, output="")
+        path = command.removeprefix("cat ")
+        return dict(exit_code=0 if path in files else 1, output=files.get(path, ""))
+    monkeypatch.setattr(machine, "execute", execute)
+    monkeypatch.setattr(machine, "checkpoint", lambda *args, **kwargs: original_sleep(0))
+
+    async def opened(self, params):
+        target = await machine.seat(params["member_id"])
+        self.sessions["owner"] = Session(target, machine.clock() + 100, member_id=params["member_id"])
+        self.sessions["owner"].sockets.add("fake-listener")
+        return {"session": "owner"}
+    monkeypatch.setattr(acceptance.DesktopViewer, "open", opened)
+
+    async def tree(target):
+        return [acceptance.Window(hex(row["window_id"]), row["title"], tuple(row["bounds"][key] for key in ("x", "y", "width", "height")),
+                                  "terminal" in row["app_name"].lower()) for row in rows]
+    monkeypatch.setattr(run, "tree", tree)
+
+    def capture(port, password, screen, **kwargs):
+        pixels = [b"\x05\x05\x05"] * (1280 * 900)
+        for row in rows:
+            if "terminal" not in row["app_name"].lower():
+                continue
+            bounds = row["bounds"]
+            if bounds["x"] // 1280 + 1 != screen:
+                continue
+            x = bounds["x"] % 1280
+            for y in range(bounds["y"], bounds["y"] + 50):
+                pixels[y * 1280 + x:y * 1280 + x + bounds["width"]] = [b"\xff\xff\xff"] * bounds["width"]
+        return rfb_view.png(pixels)
+    monkeypatch.setattr(rfb_view, "capture", capture)
+    result = await run.shared()
+    assert "completed" in result
+    assert not [row for row in run.results if row["result"] != "ok"], run.results
+    assert [row["name"] for row in run.results] == ["shared prepares", "shared window lists", "shared terminal wall",
+        "shared simultaneous native typing", "shared computer browser", "shared clipped product pictures", "shared owner control",
+        "shared session ends independently", "shared seat displacement", "shared stop"]
+    assert launches == [1, 2]
+    assert len(attachments) == 2 and len({session for session, _ in attachments}) == 2
+    assert len(files) == 4

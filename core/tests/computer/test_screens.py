@@ -408,7 +408,7 @@ def test_image_installs_screen_views_and_preserves_the_single_token_port():
     assert 'install -d -o cua -g cua /home/cua/.config/xfce4/panel;' in dockerfile
     assert '[program:raphael-screens]' in dockerfile
     assert 'command=/usr/bin/python3 /opt/raphael-desktop/screens.py' in dockerfile
-    assert 'org.raphael.computer.layer="5"' in dockerfile
+    assert 'org.raphael.computer.layer="6"' in dockerfile
     assert 'stopasgroup' not in dockerfile and 'killasgroup' not in dockerfile
     assert 'supervisor only restarts what exits; the helper ends its own children' in dockerfile
     assert 'Nothing may call supervisorctl stop or restart in a computer' in dockerfile

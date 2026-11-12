@@ -11,7 +11,7 @@ import mimetypes
 import re
 import shlex
 import time
-from contextlib import contextmanager
+from contextlib import asynccontextmanager, contextmanager
 from contextvars import ContextVar
 from pathlib import PurePosixPath
 
@@ -25,6 +25,7 @@ from .vm import VmError, engine_start_allowed
 from .vm_bridge import CuaBridge
 from .vm_catalog import DRIVER_TOOLS, FRESH_READS, NATIVE_INPUT_TOOLS, NOTICES, PAGE_TOOLS, READS, SCREEN_READS, offline_catalog, without_session
 from .takeover import TAKEOVER
+from . import seat_view
 
 _SCOPE = ContextVar("computer_scope", default=None)
 _TURN = ContextVar("computer_turn", default=(0, False, None))
@@ -97,6 +98,7 @@ VM_CONTRACT = (
     "or verify_state with an expectation. Keep files, browser profiles and installed packages under "
     "/home/cua/workspace: anything outside it is lost on image/timezone rebuilds."
 )
+SHARED_CONTRACT = " Shared with other members: one screen each; clipboard and files shared."
 
 RUN_STEPS = {"description": VM_CONTRACT + " Perform 1–10 short driver actions, then return one window/page observation. Every step uses the ordinary gate and current control checks. Stop on the first failure; failed_step is one-based. Never batch shell commands, secrets, takeover or another composite.",
     "parameters": {"type": "object", "properties": {
@@ -170,6 +172,8 @@ class VmTools:
         self.listed = set()
         self.connections, self.labels = {}, itertools.count(1)
         self.connection_locks, self.native_actions = {}, {}
+        self.vm.native_busy = lambda target: bool(self.native_actions.get(target.state_key) and self.native_actions[target.state_key].locked())
+        self.vm.input_busy = lambda target: self.vm.active.get(target.key, 0) > self.commands.get(target.key, 0)
         self.logins = None
         self.private_pages = {}
         self.payment_holds = set() if conn is None else {row[0] for row in conn.execute("SELECT target FROM computer_payment_holds")}
@@ -330,10 +334,17 @@ class VmTools:
             description = definition["description"]
             if name in DRIVER_TOOLS and not description.startswith(VM_CONTRACT):
                 description = VM_CONTRACT + " " + description
-            self.tools[key] = PluginTool(key, "computer", name, description, definition["parameters"], Tier.T3 if name == "fill_card" else Tier.T0, pinned=True,
+            parameters = definition["parameters"]
+            if target.container:
+                description += SHARED_CONTRACT
+                if name == "browser_open":
+                    from copy import deepcopy
+                    parameters = deepcopy(parameters)
+                    parameters["properties"]["url"]["pattern"] = "^(https?://|about:blank(?:#.*)?$)"
+            self.tools[key] = PluginTool(key, "computer", name, description, parameters, Tier.T3 if name == "fill_card" else Tier.T0, pinned=True,
                                          deferred=name in ("vault_entries", "fill_contact", "fill_card"))
             self.routes[key] = target
-            self.schemas[key] = definition.get("validation", definition["parameters"])
+            self.schemas[key] = parameters if name == "browser_open" and target.container else definition.get("validation", parameters)
             keys.append(key)
         self.catalogs[target.key] = keys
 
@@ -643,9 +654,7 @@ class VmTools:
                 return PluginResult(False, "desktop_check_required")
             if tool.name == "request_takeover":
                 # Never over input that is already running at the screen (a long command in the workspace is none).
-                if any(self.vm.active.get(seat.key, 0) > self.commands.get(seat.key, 0) or (
-                        self.actions.get(seat.key) and self.actions[seat.key].locked())
-                        for seat in self.vm.unit_targets(target)):
+                if self.vm.input_busy(target) or self.vm.native_busy(target):
                     return self._busy(target, None, 0.0)
                 data = await self.vm.work.request(work, arguments["reason"])
                 if arguments["reason"] == "payment" and target.key in self.payment_holds:
@@ -760,6 +769,9 @@ class VmTools:
                         else:
                             data = await self._driver_call(target, client, tool.name, sent)
                     except (VmError, ConnectionError, TimeoutError) as error:
+                        if target.container and isinstance(error, VmError) and str(error) in ("computer_busy", "owner_holds_control", "computer_changed"):
+                            # Waiting for shared input is not a broken session: its bound pages must survive.
+                            raise
                         self.vm.invalidate(target)
                         await self._disconnect(target.key)
                         if isinstance(error, ConnectionError) or isinstance(error, VmError) and str(error) in ("transport_closed", "unavailable", "viewer_tunnel_failed"):
@@ -887,32 +899,40 @@ class VmTools:
                 raise VmError("browser_open_failed")
             return reply
 
-        prepared = await call("browser_prepare", {"allow_launch": True, "profile": {"mode": "isolated_named", "name": "main"}})
-        prepared_pid = (prepared.get("structuredContent") or {}).get("pid")
-        until = time.monotonic() + self.browser_window_wait_s
-        while True:
-            windows = await call("list_windows", {})
-            state = windows.get("structuredContent") or {}
-            if not state:
-                for block in windows.get("content", []):
-                    if block.get("type") == "text":
-                        try:
-                            state = json.loads(block["text"])
-                            break
-                        except ValueError:
-                            state = {"windows": [{"window_id": int(match[1]), "pid": int(match[2]), "app_name": match[3]}
-                                for match in re.finditer(r'window_id=(\d+) pid=(\d+) "[^"]*"[^\n]*app=([^\n]+)', block["text"])]}
-            rows = state if isinstance(state, list) else state.get("windows", [])
-            matches = [row for row in rows if "chrom" in str(row.get("app_name", row.get("title", ""))).lower()
-                       and isinstance(row.get("pid"), int) and isinstance(row.get("window_id"), int)
-                       and (not prepared_pid or row["pid"] == prepared_pid)]
-            if len(matches) == 1:
-                break
-            if matches or time.monotonic() >= until:
-                raise VmError("browser_window_ambiguous" if matches else "browser_window_missing")
-            # Preparing the CDP endpoint can finish before the window manager maps its window.
-            await asyncio.sleep(min(self.browser_window_poll_s, max(0, until - time.monotonic())))
-        window = matches[0]
+        if target.container:
+            async with self._native_lock(target):
+                window = await self._shared_browser_window(target, client, session)
+                prepared = await self._seat_driver_call(target, client, "browser_prepare", {
+                    "pid": window["pid"], "window_id": window["window_id"], "session": session})
+                if prepared.get("isError"):
+                    raise VmError("browser_open_failed")
+        else:
+            prepared = await call("browser_prepare", {"allow_launch": True, "profile": {"mode": "isolated_named", "name": "main"}})
+            prepared_pid = (prepared.get("structuredContent") or {}).get("pid")
+            until = time.monotonic() + self.browser_window_wait_s
+            while True:
+                windows = await call("list_windows", {})
+                state = windows.get("structuredContent") or {}
+                if not state:
+                    for block in windows.get("content", []):
+                        if block.get("type") == "text":
+                            try:
+                                state = json.loads(block["text"])
+                                break
+                            except ValueError:
+                                state = {"windows": [{"window_id": int(match[1]), "pid": int(match[2]), "app_name": match[3]}
+                                    for match in re.finditer(r'window_id=(\d+) pid=(\d+) "[^"]*"[^\n]*app=([^\n]+)', block["text"])]}
+                rows = state if isinstance(state, list) else state.get("windows", [])
+                matches = [row for row in rows if "chrom" in str(row.get("app_name", row.get("title", ""))).lower()
+                           and isinstance(row.get("pid"), int) and isinstance(row.get("window_id"), int)
+                           and (not prepared_pid or row["pid"] == prepared_pid)]
+                if len(matches) == 1:
+                    break
+                if matches or time.monotonic() >= until:
+                    raise VmError("browser_window_ambiguous" if matches else "browser_window_missing")
+                # Preparing the CDP endpoint can finish before the window manager maps its window.
+                await asyncio.sleep(min(self.browser_window_poll_s, max(0, until - time.monotonic())))
+            window = matches[0]
         bound = await call("get_browser_state", {"pid": window["pid"], "window_id": window["window_id"],
             "include_screenshot": False, "snapshot_format": "semantic_v2"})
         page = bound.get("structuredContent") or {}
@@ -1018,8 +1038,15 @@ class VmTools:
             return PluginResult(False, "entry_not_filled", '{"filled": false}')
 
     async def _driver_call(self, target, client, name, arguments):
-        if not target.container or name not in NATIVE_INPUT_TOOLS:
+        if not target.container:
             return await client.request("tools/call", {"name": name, "arguments": arguments})
+        if name in NATIVE_INPUT_TOOLS:
+            async with self._native_lock(target):
+                return await self._seat_driver_call(target, client, name, arguments)
+        return await self._seat_driver_call(target, client, name, arguments)
+
+    @asynccontextmanager
+    async def _native_lock(self, target):
         began = time.monotonic()
         lock = self.native_actions.setdefault(target.state_key, asyncio.Lock())
         while True:
@@ -1037,9 +1064,101 @@ class VmTools:
             member = self.vm.seats.holders(target.remote).get(target.screen)
             if member is None or self.vm.shared_target(target.remote, member, target.screen) != target:
                 raise VmError("computer_changed")
-            return await client.request("tools/call", {"name": name, "arguments": arguments})
+            yield
         finally:
             lock.release()
+
+    async def _canvas_windows(self, client, session, filters=None):
+        reply = await client.request("tools/call", {"name": "list_windows", "arguments": {**(filters or {}), "session": session}})
+        try:
+            return seat_view.canvas_windows(reply)
+        except (ValueError, KeyError, TypeError):
+            raise VmError("window_list_unavailable") from None
+
+    async def _shared_browser_window(self, target, client, session):
+        # The caller holds the unit native lock across discovery, launcher and attach.
+        canvas = await self._canvas_windows(client, session)
+        own = seat_view.windows(canvas, target.screen, target.screens)["windows"]
+        found = [row for row in own if row.get("app_name", "").lower() == "chromium-browser"]
+        if found:
+            return min(found, key=lambda row: row["window_id"])
+        return await self.vm.seat_browser(target)
+
+    @staticmethod
+    def _seat_error(text):
+        return {"isError": True, "content": [{"type": "text", "text": text}]}
+
+    async def _seat_driver_call(self, target, client, name, arguments):
+        session = arguments.get("session")
+        args = dict(arguments)
+        window_native = NATIVE_INPUT_TOOLS - {"move_cursor", "launch_app", "clipboard_write", "browser_prepare"}
+        if name in window_native and (not args.get("window_id") or args.get("scope") == "desktop"):
+            return self._seat_error("The computer's focus and pointer are shared. Please name one of this member's own windows; call list_windows.")
+        if "window_id" in args or ("pid" in args and name != "list_windows"):
+            canvas = await self._canvas_windows(client, session)
+            identifier = args.get("window_id")
+            rows = [row for row in canvas["windows"] if row.get("window_id") == identifier]
+            if (not seat_view.mine(identifier, canvas, target.screen, target.screens)
+                    or "pid" in args and not any(row.get("pid") == args["pid"] for row in rows)):
+                return self._seat_error("The window is not on this member's screen. Call list_windows and name an own window.")
+        if name == "browser_prepare":
+            window = (args if args.get("window_id") else await self._shared_browser_window(target, client, session))
+            args = {"pid": window["pid"], "window_id": window["window_id"],
+                    "strategy": {"kind": "existing_profile"}, "session": session}
+            # A newly launched window must pass the same fresh wall as an existing one.
+            canvas = await self._canvas_windows(client, session)
+            if (not seat_view.mine(args["window_id"], canvas, target.screen, target.screens)
+                    or not any(row["window_id"] == args["window_id"] and row["pid"] == args["pid"] for row in canvas["windows"])):
+                return self._seat_error("The window is not on this member's screen. Call list_windows.")
+        if name == "get_browser_state" and not (args.get("window_id") or args.get("target_id")):
+            return self._seat_error("Name one of this member's own windows or a bound target_id; call list_windows.")
+        if name == "move_cursor":
+            _, _, width, height = seat_view.rectangle(target.screen, target.screens)
+            if not (0 <= args["x"] < width and 0 <= args["y"] < height):
+                return self._seat_error("Cursor coordinates must be inside this member's screen.")
+            args["x"], args["y"] = seat_view.to_canvas(target.screen, target.screens, args["x"], args["y"])
+            args["scope"] = "desktop"
+        if name in ("list_windows", "get_desktop_state"):
+            canvas = await self._canvas_windows(client, session, args if name == "list_windows" else None)
+            local = seat_view.windows(canvas, target.screen, target.screens)
+            if name == "list_windows" and "pid" in args:
+                local["windows"] = [row for row in local["windows"] if row["pid"] == args["pid"]]
+            reply = seat_view.projected_reply({}, local, seat_view.windows_text(local))
+            if name == "get_desktop_state":
+                from .rfb_view import capture
+                port, password = await self.vm.viewer_connection(target)
+                picture = await asyncio.to_thread(capture, port, password, target.screen)
+                reply["content"].append({"type": "image", "mimeType": "image/png", "data": base64.b64encode(picture).decode()})
+            return reply
+        before = await self._canvas_windows(client, session) if name == "launch_app" else None
+        reply = await client.request("tools/call", {"name": name, "arguments": args})
+        if before is not None:
+            after = await self._canvas_windows(client, session)
+            existing = {row["window_id"] for row in before["windows"]}
+            for row in after["windows"]:
+                if row["window_id"] not in existing and not seat_view.mine(row["window_id"], after, target.screen, target.screens):
+                    await self.vm.move_window(target, row["window_id"])
+        if reply.get("isError"):
+            return reply
+        state = reply.get("structuredContent")
+        if not isinstance(state, dict):
+            for block in reply.get("content", []):
+                if block.get("type") == "text":
+                    try:
+                        state = json.loads(block["text"])
+                    except ValueError:
+                        continue
+                    if isinstance(state, dict):
+                        break
+        if name == "get_cursor_position":
+            if not isinstance(state, dict) or not {"x", "y"} <= state.keys():
+                return self._seat_error("Pointer position is unavailable.")
+            point = seat_view.to_seat(target.screen, target.screens, state["x"], state["y"])
+            return seat_view.projected_reply(reply, dict(x=point[0], y=point[1]) if point else {},
+                                             None if point else "The pointer is on another screen.")
+        if isinstance(state, dict) and name in ("get_window_state", "verify_state", "get_browser_state", "browser_prepare", "launch_app"):
+            return seat_view.projected_reply(reply, seat_view.window_state(state, target.screen, target.screens))
+        return reply
 
     async def _connection(self, target, *, member=None):
         async with self.connection_locks.setdefault(target.key, asyncio.Lock()):

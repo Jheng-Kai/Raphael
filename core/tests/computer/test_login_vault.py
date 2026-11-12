@@ -140,7 +140,7 @@ async def test_removing_the_request_turn_keeps_restart_redaction_for_the_saved_l
     await hub._discover(target)
     tool = next(item for item in hub.offered() if item.name == "get_browser_state")
     with vm_scope(("turn", 0, 9), turn_id=9, private=True):
-        result = await hub.call(tool.key, {}, approver="auto")
+        result = await hub.call(tool.key, {"target_id": "bound-own"}, approver="auto")
     assert result.ok and "[private]" in result.text
     for value in private.values():
         assert value not in repr(result) and json.dumps(value)[1:-1] not in repr(result)

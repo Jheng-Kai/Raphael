@@ -280,7 +280,8 @@ async def test_the_shared_computer_is_never_owed_to_a_deleted_member(rig, vm, en
     vm.data.made(shared)
     shared.workspace.mkdir(parents=True)
     assert await delete(rig, one.id) == {"deleted": True}
-    assert vm.data.task is None and owed(vm) == {} and shared.workspace.exists() and engine.calls == []
+    assert vm.data.task is None and owed(vm) == {} and shared.workspace.exists()
+    assert [args[-2:] for args in engine.calls] == [["wmctrl", "-lG"], ["wmctrl", "-lx"]]
     assert vm.seats.seat("", one.id) is None
 
 
