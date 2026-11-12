@@ -538,6 +538,8 @@ export const de = {
   "desktop.invalidAlias": "SSH-Konfigurationsalias verwenden: Buchstaben, Ziffern, Punkte, Unter- und Bindestriche; mit Buchstabe oder Ziffer beginnen.",
   "conn.err.invalid_request": "Diese Version ist mit dem Dienst nicht kompatibel. Raphael aktualisieren; falls aktuell, Verbindungsproblem melden.",
   "desktop.take": "Kontrolle übernehmen",
+  "desktop.taking": "Kontrolle wird übernommen…",
+  "desktop.takeFailed": "Übernahme fehlgeschlagen: Der Computer hat nicht geantwortet. Tippe noch einmal auf „Kontrolle übernehmen“.",
   "desktop.release": "Beenden",
   "computer.row.asleep": "Schläft",
   "computer.row.connecting": "Verbindet",

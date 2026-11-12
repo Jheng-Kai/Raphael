@@ -12,7 +12,7 @@ import pytest
 
 from raphael_core.computer import vm
 from raphael_core.evaluate import computer_acceptance as acceptance
-from computer.fixtures.driver_contract import SCHEMAS, catalog, validate_call, runtime_refusal
+from computer.fixtures.driver_contract import KEPT, SCHEMAS, catalog, validate_call, runtime_refusal
 
 
 @pytest.fixture(autouse=True)
@@ -339,23 +339,44 @@ async def test_driver_check_starts_no_driver_process_in_another_owners_container
     assert MemoryDriver.calls == []
 
 
-@pytest.mark.parametrize("changed", [False, True])
-async def test_live_schema_check_requires_every_reviewed_parameter_set(tmp_path, monkeypatch, changed):
+@pytest.mark.parametrize("changed", [None, "parameter", "words", "order"])
+async def test_live_schema_check_requires_the_kept_list_to_be_the_drivers_own(tmp_path, monkeypatch, changed):
+    # Anything a member reads of a parameter is part of its tool list: a kept list with other words or another order
+    # is replaced at the member's first use of the computer, as one with other parameters is.
+    from computer.fixtures.generate_driver_tools import snapshot
     run, target = driver_run(tmp_path, monkeypatch)
+    run.out = tmp_path / "out"
     original = MemoryDriver.request
     async def request(self, method, params=None, **kwargs):
         reply = await original(self, method, params, **kwargs)
         if method == "tools/list" and changed:
-            from copy import deepcopy
-            reply = deepcopy(reply)
-            reply["tools"][0]["inputSchema"]["properties"]["future_parameter"] = {"type": "boolean"}
+            tool = next(tool for tool in reply["tools"] if tool["name"] == "get_guide")
+            properties = tool["originalInputSchema"]["properties"]
+            if changed == "parameter":
+                properties["future_parameter"] = {"type": "boolean"}
+            elif changed == "words":
+                properties["topic"]["description"] = "Other words."
+            else:
+                tool["originalInputSchema"]["properties"] = dict(reversed(properties.items()))
         return reply
     monkeypatch.setattr(MemoryDriver, "request", request)
     if changed:
-        with pytest.raises(AssertionError, match="Driver parameters changed"):
+        with pytest.raises(AssertionError, match="Driver parameters changed.*driver-tools.json"):
             await run.driver_schema(target)
     else:
-        assert "All 30 DRIVER_TOOLS" in await run.driver_schema(target)
+        detail = await run.driver_schema(target)
+        assert "All 30 DRIVER_TOOLS" in detail and "left the 40 offered tools as they were" in detail
+    # What the driver listed is kept beside the report: the file the two kept lists are written from.
+    assert (json.dumps(snapshot(run.out / "driver-tools.json")["tools"]) == json.dumps(KEPT)) == (changed is None)
+
+
+async def test_live_schema_check_fails_when_asking_the_driver_changes_the_offer(tmp_path, monkeypatch):
+    run, target = driver_run(tmp_path, monkeypatch)
+    from raphael_core.computer import vm_tools
+    monkeypatch.setattr(vm_tools, "driver_definition", lambda name, schema, original=None:
+                        {"description": "Other words.", "parameters": schema, "validation": schema})
+    with pytest.raises(AssertionError, match="leave the offered tools as they were"):
+        await run.driver_schema(target)
 
 
 class SteeringDesktop:

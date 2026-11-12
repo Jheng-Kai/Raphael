@@ -538,6 +538,8 @@ export const tr = {
   "desktop.invalidAlias": "SSH yapılandırma takma adı kullanın: harf, rakam, nokta, alt çizgi ve kısa çizgi; harf veya rakamla başlayın.",
   "conn.err.invalid_request": "Bu sürüm hizmetle uyumlu bağlanamıyor. Raphael’i güncelleyin; güncelse bağlantı sorununu bildirin.",
   "desktop.take": "Denetimi al",
+  "desktop.taking": "Denetim alınıyor…",
+  "desktop.takeFailed": "Denetim alınamadı: bilgisayar yanıt vermedi. Denetimi al'a yeniden basın.",
   "desktop.release": "Durdur",
   "computer.row.asleep": "Uykuda",
   "computer.row.connecting": "Bağlanıyor",

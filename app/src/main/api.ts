@@ -76,6 +76,8 @@ const SHARED_READS = new Set(["members.list", "settings.get", "rooms.list", "hom
   // Settings reads the allowances at every opening and the page asks again after a turn: a reading under way is joined, and
   // asking is not a change that makes the reads of the start-up ask the core again.
   "usage.allowances", "chatgpt.status"]);
+/** Shared only while under way: an answer a moment old is never the answer (R-UI-109: every opening of Settings reads the allowances, however soon after the account menu did). */
+const ASKED_AGAIN = new Set(["usage.allowances"]);
 let changes = 0;
 const reading = new Map<string, { answer: Promise<unknown>; changes: number }>();
 /** Events that say something may have changed; the microphone's loudness and the like do not. */
@@ -104,14 +106,14 @@ export function core<T>(method: string, params: object = {}): Promise<T> {
   const key = `${method} ${JSON.stringify(params)}`;
   const under = reading.get(key);
   if (under && under.changes === changes) return under.answer.then(answer => structuredClone(answer) as T);
-  const before = recent.get(key);
+  const before = ASKED_AGAIN.has(method) ? undefined : recent.get(key);
   if (before && !optionalReadsOpen() && before.changes === changes && before.heard === heard && performance.now() - before.at < RECENT_MS)
     return Promise.resolve(structuredClone(before.value) as T);
   const answer = ask<T>(method, params);
   const entry = { answer, changes }, askedAt = heard;
   reading.set(key, entry);
   const done = (): void => { if (reading.get(key) === entry) reading.delete(key); };
-  answer.then(value => { if (reading.get(key) === entry && !optionalReadsOpen()) recent.set(key, { value, at: performance.now(), changes: entry.changes, heard: askedAt }); done(); }, done);
+  answer.then(value => { if (reading.get(key) === entry && !optionalReadsOpen() && !ASKED_AGAIN.has(method)) recent.set(key, { value, at: performance.now(), changes: entry.changes, heard: askedAt }); done(); }, done);
   return answer;
 }
 

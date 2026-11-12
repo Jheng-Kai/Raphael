@@ -54,3 +54,17 @@ test("once start-up is over every read goes to the core, as before", async () =>
   await api.membersList();
   expect(asked("members.list")).toBe(2);
 });
+
+test("the allowances are asked of the core at every call, even while the window starts up, and one under way is joined", async () => {
+  reads.holdOptionalReads();
+  await api.usageAllowances();
+  await api.usageAllowances();
+  expect(asked("usage.allowances")).toBe(2);
+
+  let finish!: (value: unknown) => void;
+  invoke.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+  const first = api.usageAllowances(), second = api.usageAllowances();
+  expect(asked("usage.allowances")).toBe(3);
+  finish({ brains: [] });
+  await Promise.all([first, second]);
+});

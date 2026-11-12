@@ -166,7 +166,7 @@ export default [
     click('.modal-scrim [data-pane="models"]'), click('[data-models-tab="usage"]'), wait(".run-subscription"), check("usage-plain"), check("usage-open-arm"),
     click(".modal-x"), { action: "advance-time", ms: 31000 }, ...settings("models"), click('[data-models-tab="usage"]'), wait(".run-subscription"), check("usage-open-same"),
     check("usage-open-lower"), click(".modal-x"), { action: "advance-time", ms: 31000 }, ...settings("models"), click('[data-models-tab="usage"]'), wait(".run-subscription"), check("usage-open-changed"), check("usage-plain"),
-  ]),
+  ], { traceCalls: true }),
   ...["overview", "history", "dictionary"].map(tab => scene(`dictation-${tab}`, `Dictation ${tab}`, [...dictation(tab), ...(tab === "history" ? [wait(".hrow"), check("history-sent-to")] : []), ...(tab === "dictionary" ? [wait(".wrow"), click('[data-act="word-menu"]'), wait('#app-popover [data-pick="delete"]'), key("Escape")] : [])], tab === "dictionary" ? {
     dictionary: ["Raphael", "Methelia", "GitHub", "Composio", "OpenRouter", "Notion", "Slack", "Telegram", "Calendar", "Claude", "Codex", "Gemini"].map((word, index) => ({ id: index + 1, word, misheard: index === 0 ? ["Rafael"] : [], source: index % 2 ? "learned" : "manual", created_at_ms: 1792720800000 })),
   } : {})),

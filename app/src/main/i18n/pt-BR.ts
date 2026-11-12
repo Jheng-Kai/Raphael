@@ -538,6 +538,8 @@ export const ptBR = {
   "desktop.invalidAlias": "Use um alias da configuração SSH: letras, números, pontos, sublinhados e hífens; comece com letra ou número.",
   "conn.err.invalid_request": "Esta versão não é compatível com o serviço. Atualize o Raphael; se já estiver atualizado, relate o problema de conexão.",
   "desktop.take": "Assumir controle",
+  "desktop.taking": "Assumindo o controle…",
+  "desktop.takeFailed": "Não foi possível assumir o controle: o computador não respondeu. Toque em Assumir controle de novo.",
   "desktop.release": "Parar",
   "computer.row.asleep": "Dormindo",
   "computer.row.connecting": "Conectando",

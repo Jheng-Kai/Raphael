@@ -94,8 +94,10 @@ See [Member computer](member-computer.md#responsive-computer-tools-2026-11-04)
 for R-COMP-PERF-01 through R-COMP-PERF-06: 45-second preflight confirmation,
 bounded targeted reads, browser_open, resource/image limits, cancellable timed
 reads and the full offline offer. The brief requires fake-only checks and forbids
-Docker, network, look and native. Exact Linux 0.37.0 schema capture and real
-container timing remain unverified; compatibility definitions disclose provenance.
+Docker, network, look and native, so that unit left the exact Linux 0.37.0 schema
+capture and real container timing unverified. The capture has been made since: from
+2026-11-13 the kept list is the driver's own (R-COMP-DRIVER-02). Timings on real
+containers are in [Member computer](member-computer.md).
 
 ## Pending questions and readable Composio results (2026-11-04)
 

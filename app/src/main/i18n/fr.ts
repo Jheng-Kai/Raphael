@@ -538,6 +538,8 @@ export const fr = {
   "desktop.invalidAlias": "Utilisez un alias SSH : lettres, chiffres, points, traits de soulignement et traits d’union ; commencez par une lettre ou un chiffre.",
   "conn.err.invalid_request": "Cette version ne peut pas se connecter de façon compatible au service. Mettez Raphael à jour ; s’il l’est déjà, signalez ce problème de connexion.",
   "desktop.take": "Prendre le contrôle",
+  "desktop.taking": "Prise de contrôle…",
+  "desktop.takeFailed": "Impossible de prendre le contrôle : l’ordinateur n’a pas répondu. Appuyez de nouveau sur « Prendre le contrôle ».",
   "desktop.release": "Arrêter",
   "computer.row.asleep": "En veille",
   "computer.row.connecting": "Connexion",
