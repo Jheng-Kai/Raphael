@@ -15,8 +15,11 @@ member loses its driver connection and viewer sessions; the old route returns
 computer_changed. close_displaced_seat_windows(target) joins wmctrl -lG/-lx rows
 after disconnect, closing every screen window except its panel
 with best-effort wmctrl calls. Every busy seat yields seats_full, projected to the existing tool
-computer_busy notice or viewer unavailable error. Deletion releases every host's
-seat and keeps the historical ComputerData per-bot deletion path.
+computer_busy notice or viewer unavailable error. Deletion holds seat_lock through driver/viewer/window cleanup, then releases every host's
+seat and keeps the historical ComputerData per-bot deletion path. Window cleanup
+rechecks the current holder immediately before each close. Viewer open checks
+member/Target/holder after each await and before registration; request, peer registration,
+renew and control revoke stale sessions, including after asynchronous probes.
 
 Tools, catalogs, routes, leases between a member's turns/tasks, driver connections
 and sessions, viewer tokens and owners, active counts, held keys and private pages
@@ -28,22 +31,34 @@ Shared resources are 6 GiB and 4 CPUs with RAPHAEL_SCREENS=6; per-bot resources 
 3 GiB and 2 CPUs. Known old one-screen shared layer 3/4/5 shapes preserve mounts on
 rebuild, including a layer 5 shape already using the current image.
 
-NATIVE_INPUT_TOOLS in vm_catalog.py names calls that touch physical input. VmTools
-locks one unit around each such driver request, including nested composite steps;
-page calls and reads do not take that lock. A hold belongs to one seat: all calls
-from that seat are refused. Other seats' native input waits the existing bounded
-time then returns computer_busy held by the owner; their page calls and reads go
-on. Handback removes only its own seat's hold. Native move_cursor and the browser
-launching browser_prepare participate in the same lock. A session timeout/cancel
-still closes only that seat's connection. No shared driver session is introduced.
+NATIVE_INPUT_TOOLS in vm_catalog.py retains native calls. In shared mode,
+shared_native_input also locks every request dispatched with delivery_mode=foreground,
+including browser_click, browser_pointer, explicit DOM routes and dialog accept/dismiss.
+Read-only dialog inspect has no implicit foreground posture; an explicit foreground
+request still locks. Background page input and CDP reads/navigation/type/select/files/
+download keep their page route. The unit lock is reentrant only within the same task
+for composites and window fitting. All calls from the held seat are refused; peers'
+foreground input waits the bounded time then returns computer_busy. Handback removes
+only its own seat's hold. Browser prepare preserves delivery_mode. A session timeout
+or cancellation closes only that seat's connection and clears its native page bindings.
 
-Stage C makes the seat wall the core's responsibility: VmTools._seat_driver_call
-checks a fresh list_windows in the same session for every supplied window_id/pid,
-inside the unit lock for native calls. Native calls require an own window; desktop
-scope and ambient focus calls are refused. move_cursor is the explicit exception:
-seat-local input is bounds-checked and offset to canvas coordinates. Lists include
-only own windows and panel; window placement and pointer results use seat coordinates.
-AX nodes and window-local screenshot coordinates retain their window frame.
+Stage C makes the seat wall the core's responsibility. vm_catalog.SHARED_ARGUMENTS
+classifies every top-level and nested property of all DRIVER_TOOLS as pass, check,
+translate or refuse. _seat_driver_call rejects unknown properties, target, from_zoom,
+capture_id, screenshot_out_file and caller-supplied desktop scope/coordinate_frame.
+A fresh same-session canvas list checks each named window/pid and each target_id's
+recorded native window. A centre-owned straddling/oversized window is fitted under
+the unit input lock and freshly confirmed wholly inside the seat before reads or
+input; otherwise it is refused. Native window-relative gesture points are checked
+against the seat rectangle, including both endpoints of the straight interpolated
+drag; menus outside the window but within the seat remain reachable. move_cursor
+checks seat-local input and offsets it to canvas coordinates. verify_state translates
+expect[].window.bounds to canvas and observed_json placements back to the seat.
+Lists include only own windows and panel. Structured placements use seat coordinates;
+AX and screenshot nodes stay window-local. Driver tree/token prose is preserved,
+page JSON is appended once, pointer prose uses seat coordinates and click trailers
+naming canvas points are removed. Every page target and private/vault state read
+shares the same fresh ownership gate; moved bindings are dropped.
 
 Shared get_desktop_state never asks the driver for canvas pixels. LocalVm's
 viewer_connection supplies core-only credentials to asyncio.to_thread(rfb_view.capture),
@@ -52,15 +67,18 @@ which authenticates /websockify?token=screen-N, requests raw 32-bit pixels and e
 WebSocket/Rfb implementation. No image library, service or transport is added.
 
 Layer 6 grants existing-profile attachment. raphael-seat-browser starts the
-computer's Chromium outside driver sessions, preserving the existing driver/main
-workspace profile. It opens about:blank, moves and maximizes the window, and waits
-for measured screen geometry. Each seat attaches its own window using existing_profile,
-then binds and navigates in its own session. Per-bot computers retain driver-owned
-browser launch. launch_app moves newly discovered foreign-screen windows with wmctrl
-under the native lock. Owner takeover checks its own non-command activity and the
-unit native lock before and after a status await; other seats' activity is allowed.
+computer's Chromium outside driver sessions in the existing driver/main workspace
+profile. A title-only data page carries a unique launch marker. The launcher selects
+now-minus-before windows and matches both marker and browser main pid, then moves,
+maximizes and waits for settled seat geometry. Each seat attaches its own window
+using existing_profile, binds and navigates in its own session. Per-bot computers
+retain driver-owned browser launch. launch_app moves only new foreign-screen windows
+attributed to reply pid/launcher_pid or a pid with no earlier window, under the unit
+lock; windows[] is filtered and projected after movement. Owner takeover checks its
+own non-command activity and the unit native lock before and after a status await;
+other seats' background page/read/command activity is allowed.
 
-Clipboard, files, sign-ins, OS user and physical pointer remain common. Teaching
+Clipboard, files, sign-ins, OS user and physical pointer remain common. Shared foreground/background vm_exec shells remove DISPLAY to avoid accidental windows on the pointer's screen; members use launch_app to open a window. This is not an adversarial shell isolation boundary. Vault filling resolves the current tab_id from either a tab snapshot or an active-tab window bind before every browser_type call; member-facing fill parameters are unchanged. Teaching
 and dataset stay disabled in shared mode. The opt-in --computer acceptance now
 includes two real members through LocalVm, VmTools and CuaBridge after the per-count
 blocks; --no-shared skips it. Offline fakes prove contracts, while final image,

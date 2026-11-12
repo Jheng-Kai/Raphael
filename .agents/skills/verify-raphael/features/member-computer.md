@@ -10,58 +10,83 @@ previews and status do not. The seventh member evicts an idle least-recently-use
 seat, disconnects its driver and closes its viewer tokens. The old route returns
 computer_changed. All busy seats return the existing computer_busy notice with
 "every screen of the computer is in use". close_displaced_seat_windows now closes all displaced screen windows except the
-panel with best-effort wmctrl calls after disconnecting the old session.
+panel with best-effort wmctrl calls after disconnecting the old session. Deletion
+holds seat_lock until cleanup finishes before releasing the seat; every close
+rechecks the holder. Viewer opens and request/renew/control/peer entry points
+recheck member/Target/holder after awaits and revoke stale sessions.
 
 Physical lifecycle, locks, preparation, caches, capacity and idle time use the
 unit on its host. Every seat must be idle and unheld for maintenance and restore.
 Each seat retains its own tools, catalog, leases, driver connection/session,
-viewer sessions, work and hold. Native input is serialized for one driver call
-per unit, including composite native substeps. Another seat's page calls and
-reads continue during an owner hold, and its native input waits then reports
-computer_busy. The held seat refuses all calls. Handback releases only that seat.
+viewer sessions, work and hold. Native input and every foreground driver call are serialized per unit, including
+composite native substeps, browser_click/pointer and dialog accept/dismiss. Other
+seats' background page calls, dialog inspection and reads continue during an owner
+hold; foreground page/native input waits then reports computer_busy. Explicit
+foreground always locks, including DOM routes; inspect has no implicit foreground. The held seat refuses all calls. Handback releases only that seat.
 Shared kind uses six screens, 6 GiB and 4 CPUs; recognized one-screen layer 3/4/5
 shared containers rebuild while keeping home and team mounts. Deletion releases
 all hosts' seats without erasing shared storage and retains historic per-bot cleanup.
 Dataset and teaching remain disabled in shared mode.
 
-Stage C: the core wall checks fresh same-session canvas rows for every named
-window/pid, including internal composites. Foreign windows and desktop/ambient
-native input are refused before dispatch. Own lists and window placements use seat
-coordinates; the pointer on another screen has no reported coordinates. move_cursor
-is bounds-checked and offset. Desktop pixels come only from the authenticated
-screen-N RFB view in rfb_view.py, encoded as 1280x900 RGB PNG without Pillow/numpy.
-Window-local AX and screenshot coordinates stay local. launch_app moves new windows
-onto the caller's screen while holding the unit native lock.
+Stage C2: SHARED_ARGUMENTS classifies every offered driver's top-level and nested
+property. Unreviewed parameters, target/from_zoom/capture_id/screenshot_out_file,
+caller desktop scope and desktop coordinate_frame are refused. Fresh same-session
+canvas rows check every window/pid and every page target's recorded native window,
+including private-picture and vault helper reads. A moved target is revoked. A
+centre-owned straddling or oversized window must be fitted and freshly confirmed
+wholly inside its seat before reading or input; otherwise it is refused. All native
+window-relative points and the straight drag path stay inside the seat, allowing
+menus outside the window but inside the screen. move_cursor checks and offsets
+seat coordinates. verify_state translates input bounds to canvas and observed_json
+placements back. Driver tree/element_token prose stays intact; page replies append
+one JSON line. Pointer prose and move summary use seat coordinates; click canvas
+trailers are removed. Desktop pictures still use authenticated clipped screen-N
+RFB, 1280x900 RGB PNG. AX/screenshot nodes remain window-local. launch_app moves
+only new windows attributed by reply pid/launcher_pid or a pid without prior windows,
+and filters/projects windows[] after movement.
 
 The browser belongs to the computer. Layer 6 adds the existing-profile grant and
-installs raphael-seat-browser. The launcher always opens about:blank in the lasting
-driver/main profile, places/maximizes it on the seat, and waits up to five seconds
-for settled geometry (the measured panel height is 49 pixels). Each session attaches
-its own Chromium-browser window with existing_profile, binds it, then navigates.
-A shared member's browser_prepare never sends allow_launch/profile. Per-bot browser
-launch stays unchanged. An owner takeover checks its seat's non-command activity
-and the unit native lock; another seat's page/read/command activity does not refuse
-it. Other native input waits/busy during the hold, and resumes after handback.
+installs raphael-seat-browser. The launcher uses now-minus-before plus a unique
+title-only data page marker and the main browser pid to identify this launch's
+window, excluding disappeared windows and concurrent same-pid peer popups. It
+places/maximizes the window and waits up to five seconds for settled geometry
+(the measured panel height is 49 pixels). Each seat attaches with existing_profile,
+binds, then browser_open navigates to the requested URL. Shared browser_prepare
+normalizes profile/strategy to existing_profile and preserves delivery_mode.
+Per-bot launch stays unchanged. Takeover checks the seat's non-command activity
+and unit input lock; other seats' background page/read/command work continues.
+Foreground page input waits/busy during the hold and resumes after handback.
 
 Offline scope: tests/computer, tests/evaluate/test_computer_acceptance.py and
  tests/members/test_deleted_member_computer.py, with the repository Python,
 worktree PYTHONPATH=core/src, RAPHAEL_TEST_MODELS=0, PYTHONUTF8=1,
 PYTHONDONTWRITEBYTECODE=1, -q -W error -p no:cacheprovider. New seat-wall tests are in
 test_seat_tools.py; RFB fake-server PNG round trips are in test_rfb_view.py. The
-acceptance offline fake exercises all nine shared checks through real product tools.
+acceptance offline fake exercises every named shared check through real product tools,
+using separate measured window-bind and tab-snapshot shapes. All driver doubles
+validate the reduced measured fixture, with unknown top-level arguments refused
+even where the live page schema allows extras. Classification coverage includes
+nested properties; driver upgrades require fixture/table review. Vault fill calls
+include the current tab_id resolved from the existing page read.
 
-The maintainer runs npm run verify -- --computer on the final tree. After the
-per-count blocks the default shared block checks one 6 GiB/4 CPU/six-screen computer,
-seat-local lists and terminals, rejected foreign-window reads/clicks without driver
-dispatch, concurrent targeted typing with exact files and timings, one browser pid
-with independent session-bound windows/URLs and foreign-target refusal, clipped
-product PNG title strips before/after movement, owner holds during long peer commands,
-peer read/page progress and bounded native waits, session-independent browser lifetime,
-and free-seat versus count=2 idle LRU displacement with window cleanup. --no-shared
-is an explicit skip. The same IsolatedDocker owner guard covers guest exec and real
-interactive bridge argv, with no new broad Docker operation.
+The maintainer runs npm run verify -- --computer on the final tree. Each per-count
+block compares every DRIVER_TOOLS live parameter-name set to the pinned 0.37.0
+fixture directly after driver connection. The shared block retains the two-member
+lists/terminal/typing/browser/picture/control/disconnect/displacement journey and
+adds: out-of-seat click refusal before dispatch with the real pointer unchanged;
+desktop coordinate_frame and target refusal; seat-2 tree/token prose, one page JSON
+line and pointer seat coordinates; satisfied seat-local verify_state bounds; one
+workspace, peer mapped windows and own-seat focus after ctrl+F2, ctrl+alt+d and
+alt+Tab; foreground browser_click blocked/busy during a peer hold while browser
+navigation continues. Unrun dependent checks are explicit skips; successful detail
+claims only observed behavior, and an inner shared failure fails the outer block.
+--no-shared remains an explicit skip and IsolatedDocker guards guest/bridge calls.
+The shortcut image changes and one-screen X-loss changes are maintained separately.
 
-Clipboard, files and sign-ins are shared. Shell/browser still run as cua. Offline
+Clipboard, files and sign-ins are shared. Shell/browser still run as cua, but shared
+foreground/background vm_exec removes DISPLAY: the shell has no screen here; use
+launch_app for a window. Deliberate shell access restoration is outside this
+accidental-input boundary. Offline
 success proves no real image, driver, XFCE geometry, native timing, remote host or
 native app panel behavior. The measured launcher panel height and result shapes,
 window mapping delay, profile attachment/lifetime and frame strip thresholds must
