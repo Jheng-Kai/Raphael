@@ -6,7 +6,7 @@ import { visibilityGate, windowVisible } from "../window-visibility";
 // owner's words for it in the member's composer. Home opens it.
 import * as api from "../api";
 import { closePanel, openEventDetail, openEventEditor, panelOpen, type EventDraft } from "../calendar-popover";
-import { allDayBars, chipClock, chipColor, chipHTML, dayLayout, dismissOffer, entryOfItem, googleMark, googleNoticeHTML, GOOGLE_SOURCE, isAllDayRow, isRunException, memberSource, monthEntries, OWN_SOURCE, routineEntries, type CalendarEntry, type Segment } from "../calendar-view";
+import { allDayBars, chipClock, chipColor, chipHTML, dayLayout, dismissOffer, entryOfItem, fittedRange, googleMark, googleNoticeHTML, GOOGLE_SOURCE, isAllDayRow, isRunException, memberSource, monthEntries, OWN_SOURCE, routineEntries, type CalendarEntry, type Segment } from "../calendar-view";
 import { describeError, formatClock, formatDate } from "../format";
 import { getLocale, onLocaleChange, t } from "../i18n";
 import { dayName, faceHTML, primaryFirst, primaryIdOf } from "../members";
@@ -209,7 +209,7 @@ export function createAutomationsPage(app: AppContext): Page {
     if (!draft || draft.allDay || dateKey(new Date(draft.start)) !== key) return "";
     const at = new Date(draft.start), hours = (draft.end - draft.start) / 3_600_000;
     return `<div class="au-event au-draft" style="top:calc(${at.getHours() + at.getMinutes() / 60} * var(--au-hour));height:calc(${Math.max(hours, 0.4)} * var(--au-hour) - 2px);left:1px;width:calc(100% - 3px)">` +
-      `<span class="cal-chip btn is-own${hours < 0.75 ? " is-line" : ""}"><span class="cal-chip-copy"><time>${esc(`${formatClock(draft.start)} – ${formatClock(draft.end)}`)}</time><b>${esc(draftTitle())}</b></span></span></div>`;
+      `<span class="cal-chip btn is-own${hours < 0.75 ? " is-line" : ""}"><span class="cal-chip-copy"><time data-from="${draft.start}" data-to="${draft.end}">${esc(`${formatClock(draft.start)} – ${formatClock(draft.end)}`)}</time><b>${esc(draftTitle())}</b></span></span></div>`;
   }
   function gridHTML(start: Date, n: number, entries: CalendarEntry[]): string {
     const now = new Date(), today = dateKey(now);
@@ -275,7 +275,7 @@ export function createAutomationsPage(app: AppContext): Page {
     wasNarrow = narrow();
     el.innerHTML = toolbarHTML(start, end) + (pending ? `<div class="au-empty" role="status">${esc(t("common.loading"))}</div>`
       : `<div class="au-calendar">${railHTML()}<div class="au-calendar-main">${period === "month" ? monthHTML(entries) : gridHTML(start, n, entries)}${all.length || draft ? "" : emptyHint()}</div></div>`);
-    if (period === "month") fitMonth(); else fitHours(previousHour);
+    if (period === "month") fitMonth(); else { fitHours(previousHour); fitRanges(); }
     if (!pending) resetPosition = false;
     if (reopenTools) openTools();
   }
@@ -311,6 +311,7 @@ export function createAutomationsPage(app: AppContext): Page {
     if (period === "month") { fitMonth(); return; }
     const grid = el.querySelector<HTMLElement>(".au-calendar-scroll");
     fitHours(grid ? grid.scrollTop / hourHeight() : null);
+    fitRanges();
   }) : null;
   resize?.observe(el);
   const poll = visibilityGate(tick, () => visible);
@@ -472,9 +473,25 @@ export function createAutomationsPage(app: AppContext): Page {
       : { start: new Date(start).toISOString(), end: new Date(end).toISOString() };
     void api.calendarUpdate(entry.eventId!, fields).catch(error => { toaster.info(describeError(error)); void load(); });
   }
+  /**
+   * The time of a new event's draft and of a chip being moved or stretched: from start to end where the chip is wide enough for it,
+   * otherwise its start alone, as every other chip says it (R-UI-142). Asked of the chip as drawn, so it holds for a column of any width;
+   * the whole range then stands in the draft's tooltip.
+   */
+  function setRange(time: HTMLElement, start: number, end: number): void {
+    time.dataset.from = String(start); time.dataset.to = String(end);
+    const chip = time.closest<HTMLElement>(".cal-chip");
+    const { text, range, short } = fittedRange(start, end, words => {
+      time.textContent = words;
+      return time.scrollWidth <= time.clientWidth + 1 && !(chip && time.getBoundingClientRect().right > chip.getBoundingClientRect().right - 1);
+    });
+    time.textContent = text;
+    if (chip?.closest(".au-draft")) { if (short) chip.title = range; else chip.removeAttribute("title"); }
+  }
+  const fitRanges = (): void => { for (const time of el.querySelectorAll<HTMLElement>("time[data-from]")) setRange(time, Number(time.dataset.from), Number(time.dataset.to)); };
   function ghostTime(wrap: HTMLElement, start: number, end: number): void {
-    const time = wrap.querySelector("time");
-    if (time) time.textContent = `${formatClock(start)} – ${formatClock(end)}`;
+    const time = wrap.querySelector<HTMLElement>("time");
+    if (time) setRange(time, start, end);
   }
   function onPointerDown(e: PointerEvent): void {
     if (e.button !== 0 || panelOpen() || document.querySelector("#app-popover")) return;

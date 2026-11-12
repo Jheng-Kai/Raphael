@@ -5330,6 +5330,19 @@ export function checkRendered(name, context = {}) {
     }
     return { check: name, toggles: toggles.map(toggle => toggle.textContent), chips: chips.length, rows: state.rows };
   }
+  // A new event's draft and the ghost of a drag say their time from start to end where the chip has room for it, and their start alone where it has not (R-UI-142); the whole range then stands in the tooltip.
+  if (name === "calendar-draft-time") {
+    const times = [...document.querySelectorAll('.au-page:not([hidden]) .au-draft time')].filter(visible);
+    require(times.length > 0, "the scene has a draft with a time");
+    const range = /^\d{2}:\d{2} – \d{2}:\d{2}$/, start = /^\d{2}:\d{2}$/;
+    for (const time of times) {
+      const chip = time.closest('.cal-chip'), words = time.textContent;
+      require(time.scrollWidth <= time.clientWidth + 1 && time.getBoundingClientRect().right <= chip.getBoundingClientRect().right, `the draft's time is whole in its chip: ${words}`);
+      if (range.test(words)) require(!chip.title, "a draft that has room for the range has no tooltip repeating it");
+      else require(start.test(words) && range.test(chip.title) && chip.title.startsWith(words), "a draft too narrow for the range says its start and holds the range in its tooltip");
+    }
+    return { check: name, words: times.map(time => time.textContent) };
+  }
   if (name === "calendar-all-day") {
     require(visible(document.querySelector('.au-all-day-event')), "all-day events remain in the pinned header");
     return { check: name };
