@@ -373,7 +373,9 @@ class IsolatedDocker:
                     and args[-1] in ("{{.ID}}", "{{.Names}}"),
                     "Expected exact owner-only container listing")
         elif args[:2] == ["container", "inspect"]:
-            require(len(args) == 3 and args[2].startswith(self.prefix), "Expected this run's container name")
+            require(len(args) == 3 and (args[2].startswith(self.prefix)
+                                       or re.fullmatch(re.escape(f'raphael-carry-{self.owner}-') + '[0-9a-f]{16}', args[2])),
+                    "Expected this run's container name")
         elif args[:2] == ["image", "inspect"]:
             require(len(args) == 3 and args[2] in (self.tag, *OLD_IMAGES.values()), "Expected isolated/previous image inspect")
         elif args[:2] == ["image", "rm"]:

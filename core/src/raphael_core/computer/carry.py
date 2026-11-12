@@ -68,19 +68,41 @@ async def helper(vm, source, target, arguments):
         try:
             result = await vm.run_for(target, helper_args(source, target, arguments), timeout=HELPER_SECONDS, limit=200000)
         except TimeoutError:
-            await ended(vm, target, ['kill', name], 15)
+            await stopped(vm, source, target)
             raise
         if not result.code and not result.truncated:
             return json.loads(result.stdout)
+        if again:
+            break
         # The name may be held by a helper an earlier core left running: it is reading this home now. Keep the
         # guard until it has ended, then ask once more (its folder is found by its mark, nothing is copied twice).
-        if again or not await ended(vm, target, ['wait', name], HELPER_SECONDS):
+        waited = await ended(vm, target, ['wait', name], HELPER_SECONDS)
+        if waited is None:
+            await stopped(vm, source, target)
+        if not waited:
             break
     raise VmError('carry_failed')
 
 
+async def stopped(vm, source, target):
+    """End a hung helper by name. When it cannot be seen to have ended or to be absent, its home stays closed to its
+    old computer for as long as this core lives (LocalVm.start answers busy): a reader may still be there."""
+    name = helper_name(source)
+    if await ended(vm, target, ['kill', name], 15):
+        return
+    try:
+        seen = await vm.run_for(target, ['container', 'inspect', name], timeout=15, limit=4000)
+        if seen.code and 'no such' in (seen.stdout + seen.stderr).lower():
+            return
+    except Exception:
+        pass
+    vm.carry_lost.add(source.state_key)
+    logger.error('A carry helper could not be ended; its home stays closed to its old computer')
+
+
 async def ended(vm, target, command, seconds):
-    """Run the command that ends, or waits for the end of, a helper; True when a helper was there and has ended.
+    """Run the command that ends, or waits for the end of, a helper: True when a helper was there and has ended,
+    False when the engine says otherwise (none by that name), None when the command itself did not answer.
     A kill is seen through even when its caller is cancelled meanwhile (then the caller is cancelled): the old
     home's guard must outlive its reader. A wait is not: a closing core does not sit out another's copy."""
     work = asyncio.ensure_future(vm.run_for(target, command, timeout=seconds))
@@ -97,12 +119,7 @@ async def ended(vm, target, command, seconds):
             break
     if cancelled:
         raise asyncio.CancelledError
-    if work.exception() is None:
-        return not work.result().code
-    if command[0] == 'wait':
-        # It never ended: it is hung, and nothing else will ever end it.
-        await ended(vm, target, ['kill', command[1]], 15)
-    return False
+    return None if work.exception() is not None else not work.result().code
 
 
 async def journal(vm, target, record=None):
@@ -229,7 +246,8 @@ async def carry(vm, target):
         await journal(vm, target, record)
     finally:
         for source, lock in held:
-            vm.maintenance.pop(source.state_key, None)
+            if source.state_key not in vm.carry_lost:
+                vm.maintenance.pop(source.state_key, None)
             lock.release()
 
 

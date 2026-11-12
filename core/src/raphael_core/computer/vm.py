@@ -360,7 +360,7 @@ class LocalVm:
         from .seats import ComputerSeats
         self.seats = ComputerSeats(conn)
         self.seat_lock = asyncio.Lock()
-        self.carry_lock, self.carry_attempted, self.carry_tasks = asyncio.Lock(), set(), {}
+        self.carry_lock, self.carry_attempted, self.carry_tasks, self.carry_lost = asyncio.Lock(), set(), {}, set()
         self.physical_active, self.held_targets, self.lease_targets = {}, {}, {}
         async def close_seat_viewers(target):
             pass

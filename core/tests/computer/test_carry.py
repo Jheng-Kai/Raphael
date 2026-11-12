@@ -430,6 +430,43 @@ async def test_a_helper_that_failed_is_not_retried_unless_another_was_seen_to_en
     assert [command[0] for command in commands] == expected[waiting]
 
 
+@pytest.mark.parametrize('kill,seen,lost', [
+    (vm.Result(0, ''), None, False),
+    (vm.Result(1, '', 'Error response from daemon: No such container: gone'), vm.Result(1, '', 'Error: No such container: gone'), False),
+    (vm.Result(1, '', 'cannot kill container'), vm.Result(0, '[{"State": {"Running": true}}]'), True),
+    (TimeoutError(), TimeoutError(), True),
+    (ConnectionError('engine'), vm.Result(1, '', 'error during connect'), True)])
+async def test_a_hung_helper_that_cannot_be_seen_to_end_keeps_its_home_closed_to_its_old_computer(tmp_path, monkeypatch, kill, seen, lost):
+    # Third check, D3-01: a kill that failed was taken for an ended helper and its home was released while a
+    # reader could still be there. The home's lock is released (nothing may wait on it for ever); its old
+    # computer is refused as busy for as long as this core lives.
+    async def copy():
+        raise AssertionError('The copy is not reached')
+    machine, target, source, state, copies = await carry_rig(tmp_path, monkeypatch, copy)
+    monkeypatch.undo()
+    monkeypatch.setattr(carry, 'journal', AsyncMock(return_value={}))
+    monkeypatch.setattr(carry, 'candidates', AsyncMock(return_value=[(source, 'Ada')]))
+    monkeypatch.setattr(machine, 'inspect', AsyncMock(return_value=None))
+    commands = []
+    async def run_for(target, args, **kwargs):
+        commands.append(args[0] if args[0] != 'container' else 'inspect')
+        if args[0] == 'run':
+            raise TimeoutError
+        answer = kill if args[0] == 'kill' else seen
+        if isinstance(answer, Exception):
+            raise answer
+        return answer
+    monkeypatch.setattr(machine, 'run_for', run_for)
+    # As in the product, the carry is a task of its own: the guard it leaves names that task, not its caller.
+    await asyncio.create_task(carry.carry(machine, target))
+    assert commands == (['run', 'kill'] if seen is None else ['run', 'kill', 'inspect'])
+    assert not machine.locks[source.state_key].locked()
+    assert (source.state_key in machine.maintenance) is lost and (source.state_key in machine.carry_lost) is lost
+    if lost:
+        with pytest.raises(vm.VmError, match='busy'):
+            await machine.start(source)
+
+
 async def test_a_closing_core_does_not_sit_out_another_cores_copy(tmp_path, monkeypatch):
     waiting = asyncio.Event()
     async def answer(args, count):
