@@ -213,8 +213,6 @@ async def test_maintenance_rpc_pins_host_and_target_before_docker(desktop):
 async def test_missing_driver_socket_repairs_one_exact_container_without_workspace_removal(desktop):
     vm, target, runtime = desktop
     original = vm.run
-    notices = []
-    vm.repair_notice = lambda captured: notices.append(captured)
     async def runner(args, **kwargs):
         if 'test' in args and '-S' in args:
             runtime.calls.append((args, kwargs)); return Result(1)
@@ -222,7 +220,7 @@ async def test_missing_driver_socket_repairs_one_exact_container_without_workspa
     vm.run = runner
     await repair_connection(vm, target)
     assert [args for args, _ in runtime.calls if args[0] == 'restart'] == [['restart','--time','10',target.name]]
-    assert notices == [target]
+    assert list(vm.repair_revisions.values()) == [1]
     assert not any(args[0] in ('rm','volume') for args, _ in runtime.calls)
 
 
@@ -274,7 +272,9 @@ async def test_self_repair_is_once_in_the_current_turn_and_never_replays_uncerta
             result = await hub.call(key, {}, approver='auto')
         assert result.ok == (phase == 'connect')
         assert Driver.clicks == 1
-        assert sum('已自動修復' in line for line in lines) == 1
+        # The repair happened once and said nothing: the owner asked that no line about it reach a member's progress.
+        assert list(vm.repair_revisions.values()) == [1]
+        assert not any('修復' in line or 'epair' in line for line in lines), lines
         if phase == 'action':
             assert result.kind == 'connection_repaired' and 'not replayed' in result.text
             with vm_scope(0, private=True, progress=lines.append, language='zh-TW'):
@@ -284,10 +284,9 @@ async def test_self_repair_is_once_in_the_current_turn_and_never_replays_uncerta
         await hub.aclose()
 
 
-async def test_viewer_tunnel_gets_one_retry_and_reports_repair(desktop):
+async def test_viewer_tunnel_gets_one_retry_and_counts_the_repair(desktop):
     vm, target, _ = desktop
-    attempts, lines = [], []
-    vm.repair_notice = lines.append
+    attempts = []
     async def connection(captured):
         attempts.append(captured)
         if len(attempts) == 1:
@@ -295,7 +294,7 @@ async def test_viewer_tunnel_gets_one_retry_and_reports_repair(desktop):
         return 1234, 'not-public'
     vm._viewer_connection = connection
     assert await vm.viewer_connection(target) == (1234, 'not-public')
-    assert attempts == [target, target] and lines == [target]
+    assert attempts == [target, target] and list(vm.repair_revisions.values()) == [1]
 
 
 async def test_remote_reset_removes_only_the_confirmed_workspace_volume(desktop):

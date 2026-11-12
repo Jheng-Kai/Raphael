@@ -313,7 +313,6 @@ class LocalVm:
         async def disconnect_driver(key):
             pass
         self.disconnect_driver = disconnect_driver
-        self.repair_notice = lambda target: None
         self.repair_admit = lambda target: True
         self.repair_revisions = {}
         # The computers made here and the ones a deleted member leaves behind (removals.py).
@@ -321,8 +320,8 @@ class LocalVm:
         self.data = ComputerData(self, conn)
 
     def record_repair(self, target):
+        # Counted, never announced: a connection that repaired itself says nothing, to the owner or in a member's progress.
         self.repair_revisions[target.key] = self.repair_revisions.get(target.key, 0) + 1
-        self.repair_notice(target)
 
     @property
     def remote(self):

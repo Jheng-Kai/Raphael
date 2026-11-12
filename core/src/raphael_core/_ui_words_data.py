@@ -13144,32 +13144,6 @@ WORDS = {'This version cannot connect compatibly to {name}. Update Raphael. If i
                                                                                                      'mi? Tutar: {p2}. '
                                                                                                      'Son ödemeyi siz '
                                                                                                      'tamamlarsınız.'},
- 'Repaired the computer connection; workspace and sign-ins were kept': {'zh-CN': '已自动修复电脑连接，工作区与登录数据已保留',
-                                                                        'ko': '컴퓨터 연결을 복구했습니다. 작업 공간과 로그인은 보존되었습니다',
-                                                                        'es': 'Se reparó la conexión al ordenador; se '
-                                                                              'conservaron el espacio de trabajo y las '
-                                                                              'sesiones',
-                                                                        'fr': 'Connexion à l’ordinateur réparée ; '
-                                                                              'espace de travail et connexions '
-                                                                              'conservés',
-                                                                        'de': 'Computerverbindung repariert; '
-                                                                              'Arbeitsbereich und Anmeldungen wurden '
-                                                                              'beibehalten',
-                                                                        'pt-BR': 'Conexão do computador reparada; '
-                                                                                 'espaço de trabalho e logins '
-                                                                                 'preservados',
-                                                                        'it': 'Connessione al computer ripristinata; '
-                                                                              'area di lavoro e accessi conservati',
-                                                                        'ru': 'Соединение с компьютером восстановлено; '
-                                                                              'рабочее пространство и входы сохранены',
-                                                                        'vi': 'Đã sửa kết nối máy tính; giữ nguyên '
-                                                                              'không gian làm việc và đăng nhập',
-                                                                        'th': 'ซ่อมการเชื่อมต่อคอมพิวเตอร์แล้ว '
-                                                                              'เก็บพื้นที่ทำงานและการเข้าสู่ระบบไว้',
-                                                                        'id': 'Koneksi komputer diperbaiki; ruang '
-                                                                              'kerja dan sesi masuk dipertahankan',
-                                                                        'tr': 'Bilgisayar bağlantısı onarıldı; çalışma '
-                                                                              'alanı ve oturumlar korundu'},
  'The computer disk is nearly full. Largest folders: {p0}. Which should I clean up? I will ask before deleting anything.': {'zh-CN': '电脑磁盘快满了。最大的文件夹：{p0}。要我清理哪些？删除前会先征求你的同意。',
                                                                                                                             'ko': '컴퓨터 '
                                                                                                                                   '디스크가 '

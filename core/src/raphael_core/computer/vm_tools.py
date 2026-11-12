@@ -182,7 +182,6 @@ class VmTools:
         self.vm.rebuild_notice = self._rebuild_notice
         self.vm.engine_notice = self._engine_notice
         self.vm.disconnect_driver = self._disconnect
-        self.vm.repair_notice = self._repair_notice
         self.vm.repair_admit = self._repair_admit
 
     def _repair_admit(self, target):
@@ -198,12 +197,6 @@ class VmTools:
         progress, language = _NOTE.get()
         if progress:
             progress(ENGINE_STARTING.get(language, ENGINE_STARTING["en"]))
-
-    def _repair_notice(self, target):
-        progress, language = _NOTE.get()
-        if progress:
-            progress(with_ui_words({"zh-TW": "已自動修復電腦連線，工作區與登入資料已保留", "ja": "接続を自動修復しました。ワークスペースとログインは保持されています", "en": "Repaired the computer connection; workspace and sign-ins were kept"}, lambda _ui_language: ui_word('Repaired the computer connection; workspace and sign-ins were kept', _ui_language)).get(language,
-                "Repaired the computer connection; workspace and sign-ins were kept"))
 
     async def _disk_notice(self, target):
         from .lifecycle import disk_pressure
