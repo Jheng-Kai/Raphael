@@ -1153,7 +1153,9 @@ class VmTools:
         refused.extend(key for key in args if "." in key or "[" in key)
         if refused:
             return self._seat_error("Unsupported shared-screen arguments: " + ", ".join(sorted(refused)))
-        if args.get("scope") == "desktop" or args.get("coordinate_frame") == "desktop":
+        # move_cursor's "desktop" is the driver's own word for "the real pointer": the point is still this member's,
+        # checked against its screen and translated below. Everywhere else a desktop frame names the whole canvas.
+        if name != "move_cursor" and args.get("scope") == "desktop" or args.get("coordinate_frame") == "desktop":
             return self._seat_error("Desktop targeting is unavailable here; name one of this member's own windows.")
         window_native = NATIVE_INPUT_TOOLS - {"move_cursor", "launch_app", "clipboard_write", "browser_prepare"}
         if name in window_native and (not args.get("window_id") or args.get("scope") == "desktop"):
@@ -1242,7 +1244,7 @@ class VmTools:
                 return self._seat_error("Pointer position is unavailable.")
             point = seat_view.to_seat(target.screen, target.screens, state["x"], state["y"])
             return seat_view.projected_reply(reply, dict(x=point[0], y=point[1]) if point else {},
-                                             f"Cursor at ({point[0]}, {point[1]})" if point else "The pointer is on another screen.")
+                                             f"✅ Cursor at ({point[0]}, {point[1]})" if point else "The pointer is on another screen.")
         if name == "get_browser_state" and isinstance(state, dict) and state.get("target_id") and window:
             self.page_windows[(target.key, state["target_id"])] = (session, window["window_id"], window["pid"])
         if name == "move_cursor":

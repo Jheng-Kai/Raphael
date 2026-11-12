@@ -146,7 +146,7 @@ async def test_pid_mismatch_and_window_moved_since_previous_call_are_refused(sea
 async def test_cursor_and_window_results_use_seat_coordinates(seat_tools):
     hub, vm, _ = seat_tools
     result = await call(hub, 2, "get_cursor_position", {})
-    assert result.text == "Cursor at (30, 40)"
+    assert result.text == "✅ Cursor at (30, 40)"  # the driver's own sentence, with this screen's point
     result = await call(hub, 1, "get_cursor_position", {})
     assert "another screen" in result.text and '"x"' not in result.text
     result = await call(hub, 2, "get_window_state", dict(pid=20, window_id=20))
@@ -159,6 +159,9 @@ async def test_cursor_and_window_results_use_seat_coordinates(seat_tools):
     await call(hub, 2, "move_cursor", dict(x=40, y=50))
     client, _ = hub.connections[vm.target(2).key]
     assert client.calls[-1][1]["x"] == 1320
+    # "desktop" is how the driver's own guide says to move the real pointer: the same point, the same translation.
+    await call(hub, 2, "move_cursor", dict(x=40, y=50, scope="desktop"))
+    assert client.calls[-1][0] == "move_cursor" and (client.calls[-1][1]["x"], client.calls[-1][1]["y"], client.calls[-1][1]["scope"]) == (1320, 50, "desktop")
 
 
 async def test_desktop_picture_uses_only_the_seat_rfb_view(seat_tools, monkeypatch):
