@@ -1045,6 +1045,8 @@ export function installMock(fixture, config = {}, target = window) {
           session.held = true;
         } else if (p.action === 'stop' || p.action === 'draft') {
           if (session) session.held = false;
+          // The recording ends but the member's brain gives no draft (its computer or model is out of reach).
+          if (variant.teachFails) { teaching.state = 'stopped'; throw new Error('Demonstration draft failed'); }
           teaching.state = 'draft';
           teaching.text = '---\nname: checked-report\ndescription: Prepare a checked report\n---\n\n## When to use\nWhen the owner asks for a report.\n\n## Inputs\nreport_title: the new report title.\n\n## Procedure\n1. Open the report editor and locate its title field.\n2. Enter report_title and save the report.\n\n## Pitfalls\nAsk the owner to take over for sign-in.\n\n## Verification\nCheck the saved title and report contents.';
         } else if (p.action === 'save') {

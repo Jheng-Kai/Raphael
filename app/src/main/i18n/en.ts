@@ -406,6 +406,8 @@ export const en = {
   "desktop.invalidAlias": "Use an SSH config alias: letters, numbers, dots, underscores and hyphens; start with a letter or number.",
   "conn.err.invalid_request": "This version cannot connect compatibly to the service. Update Raphael; if it is current, report this connection problem.",
   "desktop.take": "Take control",
+  "desktop.taking": "Taking control…",
+  "desktop.takeFailed": "Couldn't take control: the computer didn't respond. Press Take control again.",
   "desktop.release": "Stop",
   "computer.row.asleep": "Asleep",
   "computer.row.connecting": "Connecting",

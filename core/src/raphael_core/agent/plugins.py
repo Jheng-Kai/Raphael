@@ -82,6 +82,9 @@ class PluginTool:
     tier: Tier
     pinned: bool = False  # Core-owned tools stay together and do not consume the plugin cap.
     deferred: bool = False  # Discover through find_tools instead of expanding every default offer.
+    # Its description is shown to a model whole: the core wrote it and keeps its length (the member's computer).
+    # Cut at DESCRIPTION_CHARS, every computer tool read as the same opening words of the approval rule.
+    whole: bool = False
 
 
 @dataclass
@@ -155,7 +158,7 @@ class Offer:
             "type": "function",
             "function": {
                 "name": alias,
-                "description": f"[{tool.server}] {tool.description[:DESCRIPTION_CHARS]}".strip(),
+                "description": f"[{tool.server}] {tool.description if tool.whole else tool.description[:DESCRIPTION_CHARS]}".strip(),
                 "parameters": tool.schema if tool.schema.get("type") == "object" else _EMPTY,
             },
         }

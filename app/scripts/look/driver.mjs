@@ -891,7 +891,8 @@ export async function perform(page, step, evidenceDirectory) {
     }
     case 'desktop-owner-typing': {
       await page.waitForFunction(() => document.querySelector('.desktop-panel')?.dataset.interactive === 'true');
-      const handle = await page.$('[data-card-desktop-screen] iframe');
+      // The stream the owner holds: the larger view a card's 接手 opens (R-PANEL-09), or the card's own screen.
+      const handle = await page.$('.desktop-panel[data-expanded] .desktop-screen iframe, [data-card-desktop-screen] iframe');
       const frame = await handle.contentFrame();
       await frame.click('canvas');
       await page.keyboard.type('synthetic-owner-input');

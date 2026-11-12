@@ -903,27 +903,60 @@ class Acceptance:
         return f"VmTools set up driver sessions {sessions[0]} and, as a core started again, {sessions[1]}; {text.splitlines()[0]}"
 
     async def driver_schema(self, target):
-        from ..computer.vm_catalog import DRIVER_TOOLS
-        fixture = Path(__file__).resolve().parents[3] / "tests/computer/fixtures/driver_tools_0.37.0.json"
-        expected = json.loads(fixture.read_text(encoding="utf-8"))
+        """The running driver's list is the one kept with the code, and asking it through the product leaves a
+        member's offer as it was. A kept list that differs replaces every tool at the member's first use of the
+        computer: a CLI turn starts again there and loses that call's result."""
+        from ..computer.vm_catalog import DRIVER_TOOLS, offline_catalog
+        kept = json.loads(Path(vm.__file__).with_name("driver_schemas.json").read_text(encoding="utf-8"))["tools"]
         await self.docker.owned(target.name)
-        found, cursor = {}, None
+        listed, cursor = [], None
         async with CuaBridge(self.machine, target) as client:
             for _ in range(10):
                 page = await client.request("tools/list", {"cursor": cursor} if cursor else {})
-                for tool in page.get("tools", []):
-                    if tool.get("name") in DRIVER_TOOLS:
-                        require(tool["name"] not in found, f"Duplicate driver tool {tool['name']}")
-                        found[tool["name"]] = set(tool["inputSchema"].get("properties", {}))
+                listed.extend(tool for tool in page.get("tools", []) if tool.get("name") in DRIVER_TOOLS)
                 cursor = page.get("nextCursor")
                 if not cursor:
                     break
             else:
                 raise AssertionError("Driver tools/list pagination did not end")
-        wanted = {name: set(schema.get("properties", {})) for name, schema in expected.items()}
-        require(found == wanted, f"Driver parameters changed; review fixture and SHARED_ARGUMENTS: "
-                f"{ {name: dict(expected=sorted(wanted.get(name, set())), observed=sorted(found.get(name, set()))) for name in wanted.keys() | found.keys() if wanted.get(name) != found.get(name)} }")
-        return f"All {len(wanted)} DRIVER_TOOLS parameter sets match the reviewed 0.37.0 fixture"
+        require(len({tool["name"] for tool in listed}) == len(listed), "Duplicate driver tool")
+        source = "the running driver's tools/list"
+        if self.out:
+            # What tests/computer/fixtures/generate_driver_tools.py reads to write both kept files again.
+            self.out.mkdir(parents=True, exist_ok=True)
+            source = str(self.out / "driver-tools.json")
+            Path(source).write_text(json.dumps(listed, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
+        # The driver's schema as it gives it: the bridge keeps that beside its own reading of it.
+        found = {tool["name"]: tool.get("originalInputSchema", tool.get("inputSchema")) for tool in listed}
+        written = lambda value: json.dumps(value, ensure_ascii=False)  # key order included: a provider caches the text
+        names = lambda schema: sorted((schema or {}).get("properties", {}))
+        changed = {name: dict(expected=names(kept.get(name)), observed=names(found.get(name)))
+                   for name in sorted(kept.keys() | found.keys()) if written(kept.get(name)) != written(found.get(name))}
+        require(not changed, f"Driver parameters changed; write driver_schemas.json and the fixture again from {source} "
+                f"(generate_driver_tools.py) and review SHARED_ARGUMENTS. Equal names mean other words, types or order: {changed}")
+        guard = self.docker
+
+        class Bridge(CuaBridge):
+            async def __aenter__(self):
+                await guard.owned(self.target.name)
+                return await super().__aenter__()
+
+        tools = VmTools(NoHub(), self.machine, attachments=AttachmentStore(self.root / "driver-check"), bridge=Bridge)
+        try:
+            tools._catalog(target, offline_catalog())
+            # By tool: the driver lists in its own order and a member's list is put in order by name.
+            offer = lambda: {tool.name: written([tool.description, tool.schema, tools.schemas[tool.key]])
+                             for tool in (tools.tools[key] for key in tools.catalogs[target.key])}
+            before = offer()
+            await tools._discover(target)
+            after = offer()
+            differing = sorted(name for name in before.keys() | after.keys() if before.get(name) != after.get(name))
+            require(target.key in tools.listed and not differing,
+                    f"Expected asking the driver through VmTools to leave the offered tools as they were; changed: {differing}")
+        finally:
+            await tools.aclose()
+        return (f"All {len(kept)} DRIVER_TOOLS schemas are the kept 0.37.0 list to the byte; asking the driver through "
+                f"VmTools left the {len(after)} offered tools as they were")
 
     async def app_path(self, target):
         original = self.machine.target
