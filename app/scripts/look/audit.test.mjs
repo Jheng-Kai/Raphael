@@ -276,6 +276,44 @@ describe("rendered look checks", () => {
     expect(result.mixedLanguage.map(item => item.word)).toEqual(['Save']);
     window.happyDOM.abort();
   });
+  it("rejects a control that something else stands over, and lets a layer fixed to the window stand over the page", () => {
+    const win = new Window();
+    win.document.body.innerHTML = '<main><button id="under"><span>Open</span></button><div id="panel">card</div><div id="drawer" style="position:absolute;z-index:3">drawer</div></main><div id="menu" style="position:fixed">menu</div><div id="dim" class="mb-det-scrim"></div>';
+    const rect = { left: 10, top: 10, right: 110, bottom: 40, width: 100, height: 30 };
+    for (const element of win.document.querySelectorAll('*')) element.getBoundingClientRect = () => rect;
+    const found = cover => {
+      win.document.elementFromPoint = () => cover && win.document.getElementById(cover);
+      return auditDocument(win.document, { width: 1120, height: 900 }, [], []).productRules.filter(item => item.rule === 'R-UI-145');
+    };
+    const hit = found('panel');
+    expect(hit).toHaveLength(1);
+    expect(hit[0]).toMatchObject({ tag: 'button', reason: expect.stringContaining('div') });
+    expect(found('under')).toEqual([]);
+    expect(found(null)).toEqual([]);
+    win.document.elementFromPoint = () => win.document.querySelector('#under span');
+    expect(auditDocument(win.document, { width: 1120, height: 900 }, [], []).productRules.filter(item => item.rule === 'R-UI-145')).toEqual([]);
+    expect(found('menu')).toEqual([]);
+    expect(found('drawer')).toEqual([]);
+    expect(found('dim')).toEqual([]);
+    win.happyDOM.abort();
+  });
+  it("lets a pane's top row stand over what scrolls under it, and still rejects a covered control of the row itself", () => {
+    const win = new Window();
+    win.document.body.innerHTML = '<section><header id="row" data-window-drag><span id="pill">name</span><button id="tool">Share</button></header><div id="panel">card</div><ol><li><button id="file">Open file</button></li></ol></section>';
+    const rect = { left: 10, top: 10, right: 110, bottom: 40, width: 100, height: 30 };
+    for (const element of win.document.querySelectorAll('*')) element.getBoundingClientRect = () => rect;
+    const found = cover => {
+      win.document.elementFromPoint = () => win.document.getElementById(cover);
+      return auditDocument(win.document, { width: 1120, height: 900 }, [], []).productRules.filter(item => item.rule === 'R-UI-145').map(item => item.text);
+    };
+    // The thread's file card has scrolled under the row: the row, or its pill, stands there on purpose.
+    expect(found('row')).toEqual([]);
+    // A part of the row over the thread's file card is the row doing its work; over the row's own button it is a finding.
+    expect(found('pill')).toEqual(['Share']);
+    // Anything else over the row's own button, or over the thread's, is still a finding.
+    expect(found('panel')).toEqual(['Share', 'Open file']);
+    win.happyDOM.abort();
+  });
   it("completion checks reject a lost alias result and an inner scrollbar", () => {
     const win = new Window();
     win.document.body.innerHTML = `<div class="composer"><textarea></textarea></div><div id="app-popover" style="position:fixed;overflow-y:hidden"><div class="menu-head" aria-hidden="true">連接的服務</div>${Array.from({length:8},(_,i)=>`<button style="background:transparent" data-value="Notebook ${i}">Notebook ${i}</button>`).join('')}</div>`;
@@ -568,7 +606,8 @@ describe("rendered look checks", () => {
   it("rejects known English interface labels while preserving user content and brands", () => {
     const window = new Window();
     window.document.body.innerHTML = '<button>Save</button><button>Raphael</button><p class="message-text">Save</p><button hidden>Cancel</button>';
-    for (const element of window.document.querySelectorAll('*')) element.getBoundingClientRect = () => ({ left: 10, top: 10, right: 110, bottom: 40, width: 100, height: 30 });
+    // A browser gives a hidden button no box; the DOM double does not, so say it (R-UI-140 asks for the box).
+    for (const element of window.document.querySelectorAll('*')) { element.getBoundingClientRect = () => ({ left: 10, top: 10, right: 110, bottom: 40, width: 100, height: 30 }); if (element.hidden) element.getClientRects = () => []; }
     const result = auditDocument(window.document, { width: 1120, height: 900 }, [], null, ['Save', 'Cancel', 'Raphael']);
     expect(result.productRules.map(item => item.rule)).toEqual(['R-UI-14']);
   });
@@ -1030,6 +1069,90 @@ describe("rendered look checks", () => {
     const result = auditDocument(window.document, { width: 1120, height: 900 }, ["members", "settings"]);
     expect(result.missingI18nKeys.map(item => item.key)).toEqual(["members.missingLabel"]);
     expect(result.nativeControls.map(item => item.tag)).toEqual(["select", "input"]);
+  });
+
+  it("fails an element with the hidden attribute that a stylesheet draws anyway (R-UI-140)", () => {
+    const window = new Window();
+    window.document.body.innerHTML = '<div id="tab" hidden style="display:flex"><span>Slimes</span></div><div id="closed" hidden><p id="inner" hidden style="display:block">Inner</p></div><div id="held" hidden style="display:flex"></div>';
+    const box = { left: 10, top: 10, right: 100, bottom: 40, width: 90, height: 30 };
+    for (const element of window.document.querySelectorAll("*")) { element.getBoundingClientRect = () => box; element.getClientRects = () => []; }
+    // Only the drawn one has a box: `inner` sits in a hidden parent and `held` is hidden yet its own rule is overridden with no box in the tree.
+    window.document.getElementById("tab").getClientRects = () => [box];
+    const drawn = auditDocument(window.document, { width: 1120, height: 900 }, []).productRules.filter(item => item.rule === "R-UI-140");
+    expect(drawn.map(item => item.id)).toEqual(["tab"]);
+    window.document.getElementById("tab").style.display = "none";
+    expect(auditDocument(window.document, { width: 1120, height: 900 }, []).productRules.filter(item => item.rule === "R-UI-140")).toEqual([]);
+  });
+
+  it("fails a settings card whose rows are laid out two ways (R-UI-144)", () => {
+    const window = new Window();
+    const rowHTML = (name, cls = "") => `<div class="row ${cls}" id="${name}"><div class="lbl">L</div><div class="ctl">C</div></div>`;
+    window.document.body.innerHTML = `<div class="slist">${rowHTML("a")}${rowHTML("b")}${rowHTML("m", "row-model")}</div>`;
+    const place = (selector, rect) => { window.document.querySelector(selector).getBoundingClientRect = () => ({ ...rect, width: rect.right - rect.left, height: rect.bottom - rect.top }); };
+    const beside = id => { place(`#${id}`, { left: 0, top: 0, right: 400, bottom: 60 }); place(`#${id} .lbl`, { left: 0, top: 10, right: 168, bottom: 30 }); place(`#${id} .ctl`, { left: 168, top: 10, right: 400, bottom: 40 }); };
+    const stacked = id => { place(`#${id}`, { left: 0, top: 0, right: 400, bottom: 90 }); place(`#${id} .lbl`, { left: 0, top: 10, right: 168, bottom: 30 }); place(`#${id} .ctl`, { left: 40, top: 40, right: 400, bottom: 70 }); };
+    place(".slist", { left: 0, top: 0, right: 400, bottom: 300 });
+    const faults = () => auditDocument(window.document, { width: 1120, height: 900 }, []).productRules.filter(item => item.rule === "R-UI-144").map(item => item.id);
+    beside("a"); stacked("b"); stacked("m");
+    expect(faults()).toEqual(["b"]);
+    beside("b");
+    expect(faults()).toEqual([]);
+    stacked("a"); stacked("b");
+    expect(faults()).toEqual([]);
+  });
+
+  it("fails a truncated title left less room than one letter (R-UI-143)", () => {
+    const window = new Window();
+    window.document.body.innerHTML = '<b class="title" style="text-overflow:ellipsis;font-size:12px">專案筆記</b>';
+    for (const element of window.document.querySelectorAll("*")) element.getBoundingClientRect = () => ({ left: 10, top: 10, right: 100, bottom: 40, width: 90, height: 30 });
+    const title = window.document.querySelector("b");
+    const reasons = () => auditDocument(window.document, { width: 1120, height: 900 }, []).productRules.filter(item => item.rule === "R-UI-143");
+    Object.defineProperty(title, "scrollWidth", { value: 48, configurable: true });
+    Object.defineProperty(title, "clientWidth", { value: 9, configurable: true });
+    expect(reasons()).toHaveLength(1);
+    Object.defineProperty(title, "clientWidth", { value: 30, configurable: true });
+    expect(reasons()).toEqual([]);
+  });
+
+  it("fails a calendar chip whose time is cut by the chip's edge (R-UI-142)", () => {
+    const window = new Window();
+    window.document.body.innerHTML = '<button class="cal-chip"><div class="cal-chip-copy"><time>11:00</time><b>Visit</b></div></button>';
+    for (const element of window.document.querySelectorAll("*")) element.getBoundingClientRect = () => ({ left: 10, top: 10, right: 100, bottom: 40, width: 90, height: 30 });
+    const time = window.document.querySelector("time");
+    const reasons = () => auditDocument(window.document, { width: 1120, height: 900 }, []).productRules.filter(item => item.rule === "R-UI-142");
+    Object.defineProperty(time, "clientWidth", { value: 24, configurable: true });
+    Object.defineProperty(time, "scrollWidth", { value: 31, configurable: true });
+    expect(reasons()).toHaveLength(1);
+    Object.defineProperty(time, "scrollWidth", { value: 24, configurable: true });
+    expect(reasons()).toEqual([]);
+  });
+
+  it("fails a caption strip that is a block of another colour than the surface just below it (R-UI-141)", () => {
+    const window = new Window();
+    window.document.body.innerHTML = '<div class="window-chrome"></div><div id="page"></div><div id="panel"></div>';
+    const rects = { ".window-chrome": { left: 296, top: 0, right: 1920, bottom: 32, width: 1624, height: 32 }, "#page": { left: 296, top: 32, right: 1920, bottom: 1080, width: 1624, height: 1048 }, "#panel": { left: 1460, top: 0, right: 1920, bottom: 1080, width: 460, height: 1080 } };
+    for (const [selector, rect] of Object.entries(rects)) window.document.querySelector(selector).getBoundingClientRect = () => rect;
+    window.document.querySelector("#page").style.backgroundColor = "rgb(10, 10, 10)";
+    window.document.querySelector("#panel").style.backgroundColor = "rgb(0, 0, 0)";
+    const strip = () => auditDocument(window.document, { width: 1920, height: 1080 }, []).productRules.filter(item => item.rule === "R-UI-141");
+    const stack = { under: ["#page"], over: ["#panel", "#page"] };
+    // The panel shows at the strip's right end while the page lies below the strip: a black block over a page of another colour.
+    window.document.elementsFromPoint = (x, y) => (y < 32 && x >= 1460 ? stack.over : stack.under).map(selector => window.document.querySelector(selector));
+    expect(strip().map(item => item.rule)).toEqual(["R-UI-141"]);
+    // Where the strip is the page's own surface (the fix), nothing stands apart.
+    window.document.elementsFromPoint = () => [window.document.querySelector("#page")];
+    expect(strip()).toEqual([]);
+    // Under a dialog's dim the strip has no surface of its own: a bright one over the dim is a broken layer.
+    window.document.body.insertAdjacentHTML("beforeend", '<div class="mb-scrim"></div>');
+    const scrim = window.document.querySelector(".mb-scrim");
+    window.document.querySelector(".window-chrome").style.backgroundColor = "rgb(255, 255, 255)";
+    // A scrim that is kept closed dims nothing, so the strip's own surface is no fault.
+    scrim.getBoundingClientRect = () => ({ left: 0, top: 0, right: 0, bottom: 0, width: 0, height: 0 });
+    expect(strip()).toEqual([]);
+    scrim.getBoundingClientRect = () => ({ left: 0, top: 0, right: 1920, bottom: 1080, width: 1920, height: 1080 });
+    expect(strip().map(item => item.rule)).toEqual(["R-UI-141"]);
+    window.document.querySelector(".window-chrome").style.backgroundColor = "transparent";
+    expect(strip()).toEqual([]);
   });
 
   it("distinguishes explicit provider JSON paths from untranslated keys elsewhere", () => {

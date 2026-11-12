@@ -100,10 +100,33 @@ async def test_window_reads_are_bounded_and_driver_images_and_cursor_are_configu
         sent = next(call["arguments"] for call in calls if call["name"] == "get_window_state")
         assert sent["max_elements"] == 200 and sent["include_screenshot"] is False and sent["query"] == "Save"
         assert next(call["arguments"] for call in calls if call["name"] == "set_config")["max_image_dimension"] == 1456
+        # The real driver's schema for this call is `enabled` and `session`, nothing else: one more key and the
+        # connection, and with it every tool of the computer, is refused (seen in real containers, 2026-11-12).
         cursor = next(call["arguments"] for call in calls if call["name"] == "set_agent_cursor_enabled")
-        assert cursor["enabled"] is False and cursor["cursor_id"] == cursor["session"]
+        assert cursor == {"enabled": False, "session": cursor["session"]} and cursor["session"].startswith("raphael-")
+        config = next(call["arguments"] for call in calls if call["name"] == "set_config")
+        assert config == {"max_image_dimension": 1456, "session": cursor["session"]}
     finally:
         await hub.aclose()
+
+
+async def test_a_core_started_again_never_reuses_a_driver_session_label(desktop, tmp_path):
+    # The driver in a computer that kept running refuses a label that has ended: a second core that counted from
+    # "raphael-1" again had its set-up refused (seen in a real container, 2026-11-12).
+    vm, _, _ = desktop
+    class Driver(CatalogBridge):
+        calls = []
+    labels = []
+    for _ in range(2):
+        hub = VmTools(EmptyHub(), vm, attachments=AttachmentStore(tmp_path), bridge=Driver)
+        await hub.prepare()
+        try:
+            first = (await hub._connection(vm.target()))[1]
+            await hub._disconnect(vm.target().key)
+            labels += [first, (await hub._connection(vm.target()))[1]]
+        finally:
+            await hub.aclose()
+    assert len(set(labels)) == 4 and all(label.startswith("raphael-") for label in labels)
 
 
 @pytest.mark.parametrize("failure", [VmError("transport_closed"), ConnectionError(), TimeoutError()])

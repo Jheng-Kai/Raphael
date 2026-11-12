@@ -23,12 +23,12 @@ export default [
   // A page's card is no opener of this kind any more: its page stands in the thread's place with no scrim over the card (R-PAGE-03).
   // Menus and popovers beside their opener.
   toggle("add-menu", "The sidebar's + opens its menu and a second press on the + closes it", [column],
-    '.mb-col [data-col="add"]', "#app-popover", "#app-popover"),
+    '#nav [data-col="add"]', "#app-popover", "#app-popover"),
   // 新增成員 is a dialog over the dimmed window: the press lands on the scrim over the + and closes it (the dialog registers with the shared dismissal).
   scene("opener-toggle-member-maker", "With 新增成員 open, a press on the sidebar's + behind the scrim closes it and does not open the menu or the dialog again",
-    [column, watchOpens(".cr-dialog", { gone: ".cr-dialog", over: "scrim" }), click('.mb-col [data-col="add"]'), click('#app-popover [data-pick="member"]'), wait(".cr-dialog"), pressOpener('.mb-col [data-col="add"]'), check("opener-toggle-member-maker")]),
+    [column, watchOpens(".cr-dialog", { gone: ".cr-dialog", over: "scrim" }), click('#nav [data-col="add"]'), click('#app-popover [data-pick="member"]'), wait(".cr-dialog"), pressOpener('#nav [data-col="add"]'), check("opener-toggle-member-maker")]),
   toggle("search-card", "The sidebar's search button opens the search card and a second press closes it", [column],
-    '.mb-col [data-col="search"]', ".side-search", ".side-search"),
+    '#nav [data-col="search"]', ".side-search", ".side-search"),
   toggle("model-menu", "The composer's model button opens its card and a second press closes it", [member(1)],
     ".composer .cmp-model .mp-trigger", ".cb-menu .cb-now", ".cb-menu"),
   toggle("permission-menu", "The composer's permission button opens its card and a second press closes it", [member(1)],
@@ -54,6 +54,6 @@ export default [
     [column, watchOpens("#app-popover"), rightClick('.mb-col [data-member-item="2"]'), wait("#app-popover"), rightClick('.mb-col [data-member-item="2"]'), check("opener-toggle-row-again")]),
   // Enter and Space on the opener while its menu is open (focus put there, as a screen reader or Shift+Tab would): close, and stay closed.
   scene("opener-toggle-keyboard", "Enter and Space on a + that has its menu open close the menu and do not open it again",
-    [column, watchOpens("#app-popover"), focus('.mb-col [data-col="add"]'), key("Enter"), wait("#app-popover"), focus('.mb-col [data-col="add"]'), key("Enter"),
-      key("Space"), wait("#app-popover"), focus('.mb-col [data-col="add"]'), key("Space"), check("opener-toggle-keyboard")]),
+    [column, watchOpens("#app-popover"), focus('#nav [data-col="add"]'), key("Enter"), wait("#app-popover"), focus('#nav [data-col="add"]'), key("Enter"),
+      key("Space"), wait("#app-popover"), focus('#nav [data-col="add"]'), key("Space"), check("opener-toggle-keyboard")]),
 ];

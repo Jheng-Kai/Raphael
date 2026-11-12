@@ -76,7 +76,7 @@ restriction still defers judge; do not infer design acceptance from look alone.
 Existing deferred native journeys: readable-layout, locale-sweep and
 delete-conversation. Additional native acceptance steps still need a journey in
 the existing native runner: actual Ctrl/Alt routing, editable/IME suppression,
-sidebar drawer/rail, private and room find, per-member conversation movement,
+sidebar rail, private and room find, per-member conversation movement,
 folder persistence/restart and authorized delivery to an isolated temporary
 folder. Confirm an existing file stays in its old folder after a preference
 change. No live brain or real owner file is authorized here.

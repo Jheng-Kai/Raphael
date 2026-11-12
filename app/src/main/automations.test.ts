@@ -455,7 +455,8 @@ describe("what the calendar says of Google",()=>{
   expect(page.el.querySelector('.cal-notice')!.textContent).toContain("can't be read");
   expect(page.el.querySelector('[data-calendar-dismiss]')).toBeNull();
   expect(page.el.querySelector('[data-entry="own:4"]')).not.toBeNull();
-  expect(page.el.querySelector('[data-calendar-go]')!.textContent).toContain("Settings");
+  // The button names the sidebar's own entry (Connect apps), never a Settings path that no longer exists.
+  expect(page.el.querySelector('[data-calendar-go]')!.textContent).toContain("Connect apps");
   click('[data-calendar-go]');expect(go).toHaveBeenCalledWith("settings","connections");
   page.hide();
  });

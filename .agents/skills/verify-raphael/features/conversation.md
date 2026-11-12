@@ -272,6 +272,25 @@ gigabyte in unit tests. Actual native upload/playback and upgrades remain unveri
 npm run look -- attachment-limits attachment-too-large --theme both --width 1120,720,1920x1080
 ```
 
+## Looking at the conversation's pictures (2026-11-11, R-UI-145)
+
+Three defects that every check had passed were found by a person looking at a picture
+(the slimes of every closed tab drawn over the open tab's, a dialog that reopened itself,
+a note piled up six times). The look audit therefore asks the page itself, in every scene,
+what stands over each visible control (five points of each button, link, field, menu item,
+tab, switch and option); only a layer made to stand over the page may cover one. A scene's
+own check is no longer the only guard. The audit also lists, without failing, the words a box
+cuts off without an ellipsis (`clippedText`) and, in the dark theme, bright borders and large
+bright surfaces (`lightEdges`) in `report.json`, for whoever reads the pictures.
+
+Found by reading the pictures of the conversation scenes (all of them, both themes, three sizes):
+the permission card of the composer opened right-aligned to a button at the composer's left and
+reached over the sidebar (`mode`, `composer`; it now begins at its button); a note stood a fixed
+height above the window's foot and lay over the attachments of a tall composer (`attachment-limits`;
+the note now stands over the composer's top edge, and `toast-clearance` asks it); the armed
+Escape (1.5 s of real time) was gone before the 1920 capture of a passing check (`esc-*-armed`,
+`composer-stop-armed-with-words`; the check now holds the window open for the picture).
+
 ## Commands and conversation shortcuts (2026-11-05)
 
 R-NAV-01 reuses the shared popover, cross-conversation search and the existing
@@ -2313,8 +2332,8 @@ while the search bar stands under the row) as its top padding, and its mask fade
 At the right the tools end 14 px short of the window's three buttons (`--pa-top-end`) where the pane reaches the window's edge. With the
 details panel open as a column (1120 and wider) the panel's own head (`.mb-det-head`) is the row over it, its last button 14 px short of the
 window's buttons, and the conversation's tools go to the pane's edge; under 1120 px the panel lies over the chat and its scrim dims the
-header. A group's side thread does the same with its header. Under 860 px the sidebar's menu button stands at the window's top left and the
-pill row starts clear of it (`--pa-top-start`).
+header. A group's side thread does the same with its header. Under 860 px the sidebar is the 88px rail of faces beside the pane (no menu button),
+so the pill row starts at the pane's own edge.
 
 Dragging: the header carries `data-window-drag` (and the panel's and the side thread's heads, and the peer view's), so its empty parts move
 the window and a double press maximises, as the strip does; while a conversation's header is shown the strip (`.window-chrome`, whose drag

@@ -251,6 +251,73 @@ async def test_layout_passes_posix_token_and_mark_paths_to_docker_on_windows(tmp
         assert ["exec", "-u", "cua", "-e", "DISPLAY=:1", target.name, "cat", path] in run.runner.calls
 
 
+class MemoryDriver:
+    """The driver's end of the product's connection. Like the real one (cua-driver 0.37.0 `describe`), it refuses an
+    argument its schema does not name."""
+
+    accepted = {"set_config": {"max_image_dimension", "session"}, "set_agent_cursor_enabled": {"enabled", "session"},
+                "list_windows": {"session", "pid", "on_screen_only"}}
+    calls = []
+
+    def __init__(self, machine, target):
+        self.target, self.alive = target, False
+
+    async def __aenter__(self):
+        self.alive = True
+        return self
+
+    async def __aexit__(self, *exc):
+        self.alive = False
+
+    async def request(self, method, params=None, **kwargs):
+        name, arguments = params["name"], params["arguments"]
+        type(self).calls.append((name, dict(arguments)))
+        unknown = set(arguments) - self.accepted[name]
+        if unknown:
+            return {"isError": True, "content": [{"type": "text", "text": f"{name}: unknown argument {sorted(unknown)[0]}"}]}
+        text = 'Found 1 windows:\n  window_id=7 pid=9 "Desktop" 1280x900+0+0 app=Xfdesktop' if name == "list_windows" else "ok"
+        return {"content": [{"type": "text", "text": text}]}
+
+
+def driver_run(tmp_path, monkeypatch, *, owner=None):
+    monkeypatch.setattr(acceptance, "CuaBridge", MemoryDriver)
+    MemoryDriver.calls = []
+    run = acceptance.Acceptance(FakeDocker())
+    run.root = tmp_path
+    run.machine = vm.LocalVm(tmp_path, runner=run.runner)
+    target = run.machine.target(1)
+    run.runner.containers[target.name] = raw_container(target.name, owner or run.machine.owner)
+    run.docker = acceptance.IsolatedDocker(run.runner, run.machine.owner, run.tag)
+    return run, target
+
+
+async def test_driver_check_makes_the_products_own_connection_with_arguments_the_driver_accepts(tmp_path, monkeypatch):
+    run, target = driver_run(tmp_path, monkeypatch)
+    detail = await run.driver(target)
+    assert "driver sessions raphael-" in detail and "Found 1 windows:" in detail
+    assert [name for name, _ in MemoryDriver.calls] == ["set_config", "set_agent_cursor_enabled", "list_windows"] * 2
+    assert all(set(arguments) <= MemoryDriver.accepted[name] for name, arguments in MemoryDriver.calls)
+    # The second connection is a core started again: it must not reuse the label the first one ended.
+    labels = [arguments["session"] for name, arguments in MemoryDriver.calls if name == "list_windows"]
+    assert len(set(labels)) == 2
+
+
+async def test_driver_check_fails_when_the_driver_refuses_a_set_up_argument(tmp_path, monkeypatch):
+    run, target = driver_run(tmp_path, monkeypatch)
+    # What the product sent until 2026-11-12: the real driver answered "unknown argument cursor_id".
+    monkeypatch.setitem(MemoryDriver.accepted, "set_agent_cursor_enabled", {"session"})
+    with pytest.raises(vm.VmError, match="^driver_configuration_failed$"):
+        await run.driver(target)
+    assert not MemoryDriver.calls or MemoryDriver.calls[-1][0] == "set_agent_cursor_enabled"
+
+
+async def test_driver_check_starts_no_driver_process_in_another_owners_container(tmp_path, monkeypatch):
+    run, target = driver_run(tmp_path, monkeypatch, owner="someone-else")
+    with pytest.raises(AssertionError, match="Refused container"):
+        await run.driver(target)
+    assert MemoryDriver.calls == []
+
+
 class SteeringDesktop:
     """Two in-memory views: dark wallpaper and a black terminal with light window chrome."""
 

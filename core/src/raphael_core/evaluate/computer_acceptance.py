@@ -24,6 +24,9 @@ from urllib.parse import urlsplit
 from ..computer import lifecycle, vm
 from ..computer.viewer import DesktopViewer
 from ..computer.rfb_view import Rfb, WebSocket, UpgradeRefused, exact
+from ..computer.vm_bridge import CuaBridge
+from ..computer.vm_tools import VmTools
+from ..services.attachment_store import AttachmentStore
 
 OLD_IMAGE = "raphael/cua-local-vm:driver-0.37.0-v4"
 IMAGE_FOLDER = Path(vm.__file__).parent / "image"
@@ -144,6 +147,17 @@ def previous_args(target, owner, password):
         result.append(OLD_IMAGE if value == vm.IMAGE else value)
         index += 1
     return result
+
+
+class NoHub:
+    """What VmTools asks of the app's tool hub, for a check that offers no tool to a model."""
+
+    def offered(self): return []
+    def tier_of(self, key): return None
+    def kind_of(self, server, name): return None
+    def tier_for_call(self, key, arguments): return None
+    def kind_for_call(self, server, name, arguments): return None
+    def record_unrun(self, *args, **kwargs): pass
 
 
 class IsolatedDocker:
@@ -558,6 +572,33 @@ class Acceptance:
             await asyncio.sleep(.1)
         raise AssertionError("Expected mark removed within 5 s of X server loss; observed mark retained")
 
+    async def driver(self, target):
+        """The connection the product makes before any screen tool. The driver refuses a set-up call whose arguments
+        its schema does not name, and then every screen tool of the computer fails: fakes cannot show that."""
+        guard = self.docker
+
+        class Bridge(CuaBridge):
+            async def __aenter__(self):
+                await guard.owned(self.target.name)  # a driver process only inside this run's own container
+                return await super().__aenter__()
+
+        sessions = []
+        # Twice, each with its own VmTools: the second is a core started again beside the computer that kept running,
+        # whose driver refuses every session label the first one ended.
+        for _ in range(2):
+            tools = VmTools(NoHub(), self.machine, attachments=AttachmentStore(self.root / "driver-check"), bridge=Bridge)
+            try:
+                client, session = await tools._connection(target)
+                reply = await client.request("tools/call", {"name": "list_windows", "arguments": {"session": session}})
+                text = "".join(block.get("text", "") for block in reply.get("content", []) if block.get("type") == "text")
+                require(not reply.get("isError") and text.startswith("Found "),
+                        f"Expected the driver to list windows through the product's own connection, observed {text[:200]!r}")
+                sessions.append(session)
+            finally:
+                await tools.aclose()
+        require(sessions[0] != sessions[1], f"Expected a core started again to use a new session label, observed {sessions}")
+        return f"VmTools set up driver sessions {sessions[0]} and, as a core started again, {sessions[1]}; {text.splitlines()[0]}"
+
     async def app_path(self, target):
         original = self.machine.target
         # Stage A has no seats yet: capture a last-screen target through the real viewer path.
@@ -641,6 +682,7 @@ class Acceptance:
             await self.check(prefix + " boot mark", lambda: self.boot_mark(target))
             await self.check(prefix + " layout", lambda: self.layout(target))
             await self.check(prefix + " views", lambda: self.views(target))
+            await self.check(prefix + " driver connection", lambda: self.driver(target))
             if count > 1:
                 for seat in (1, count):
                     await self.check(prefix + f" steering screen {seat}", lambda seat=seat: self.steer(target, seat))

@@ -1,7 +1,7 @@
 // The members of the 拉斐爾 page, put together: the list the core keeps (`members.list`), the column
 // on the left (member-column.ts), the details panel on the right (member-details.ts), the dialogs
 // (member-dialogs.ts) and the member identity used by the stacked conversation title.
-// The main window mounts this column globally; below 860 px it opens in the same sidebar drawer.
+// The main window mounts this column globally; below 860 px it is the rail of faces (sidebar.css).
 //
 // A new member of a group with places to look comes with the routine the core offers
 // (「每天早上的進度」): the owner is asked, and only 「加入」 makes it.
@@ -31,6 +31,8 @@ import { mountEdge, savedWidth, saveWidth } from "./edge-drag";
 
 /** The details panel's widths (px): it opens at about 453 and drags to about 685; narrower than PANEL_CLOSE it closes. */
 const PANEL_MIN = 300, PANEL_MAX = 720, PANEL_CLOSE = 240;
+/** The conversation keeps at least this much (agent.css `--pa-conv-min`): a panel dragged wider gives way to it first. */
+const PANE_MIN = 386;
 const PANEL_KEY = "raphael.panel.width";
 import {
   askGroupName,
@@ -225,7 +227,9 @@ export function createMembers(host: MembersHost): MembersShell {
     width: () => details.el.getBoundingClientRect().width,
     resize: next => {
       if (next < PANEL_CLOSE) { setDetails(false); return false; }
-      panelWidth = Math.round(Math.min(PANEL_MAX, innerWidth * 0.6, Math.max(PANEL_MIN, next)));
+      // Beside the conversation (1120 px and wider) only; narrower, the panel lies over it.
+      const room = innerWidth >= 1120 ? innerWidth - (document.getElementById("nav")?.getBoundingClientRect().width ?? 0) - PANE_MIN : Infinity;
+      panelWidth = Math.round(Math.min(PANEL_MAX, innerWidth * 0.6, Math.max(PANEL_MIN, room), Math.max(PANEL_MIN, next)));
       placePanel();
     },
     done: () => saveWidth(PANEL_KEY, panelWidth),
@@ -482,7 +486,6 @@ export function createMembers(host: MembersHost): MembersShell {
   }
 
   function newMember(groupId: number | null): void {
-    window.dispatchEvent(new Event("raphael:close-sidebar"));
     openMemberCreator({
       groupId,
       taken: (list?.members ?? []).map((m) => m.name),
@@ -565,12 +568,10 @@ export function createMembers(host: MembersHost): MembersShell {
 
   window.addEventListener("raphael:new-member", () => newMember(null));
   window.addEventListener("raphael:member-store", () => {
-    window.dispatchEvent(new Event("raphael:close-sidebar"));
     openMemberStore({ groupId: null, create: createMember });
   });
   // A template file opened from the file manager (template-open.ts): its import review, the same as the template gallery's 開啟.
   window.addEventListener("raphael:template-file", (event) => {
-    window.dispatchEvent(new Event("raphael:close-sidebar"));
     void previewTemplateFile(String((event as CustomEvent<string>).detail ?? ""), createMember, null, () => {});
   });
   onLocaleChange(() => { drawAll(); });
