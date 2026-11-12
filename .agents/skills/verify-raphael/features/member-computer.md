@@ -66,8 +66,7 @@ refuses its view with 403. VmTools.prepare and a real viewer open assign a seat;
 previews and status do not. The seventh member evicts an idle least-recently-used
 seat, disconnects its driver and closes its viewer tokens. The old route returns
 computer_changed. All busy seats return the existing computer_busy notice with
-"every screen of the computer is in use". close_displaced_seat_windows now closes all displaced screen windows except the
-panel with best-effort wmctrl calls after disconnecting the old session. Deletion
+"every screen of the computer is in use". close_displaced_seat_windows gently closes the windows touching the screen except the desktop's own (panel and the canvas-wide xfdesktop window, measured on a real computer: counting that window left every screen occupied for ever) and confirms emptiness within LocalVm.seat_clean_seconds. Every new holder, on either a displaced or free screen, requires a successful empty-screen list or proof that the unit is absent/stopped. Failed displacement restores the exact old screen; dirty free screens are skipped; existing holders are never cleaned. Deletion
 holds seat_lock until cleanup finishes before releasing the seat; every close rechecks the holder. Displacement also holds seat_lock: revoke the old holder first, clean its driver/viewers/windows, then publish the new holder. The cached-route reproducer verifies that a returning member cannot launch during pending cleanup. Viewer opens and request/renew/control/peer entry points
 recheck member/Target/holder after awaits and revoke stale sessions.
 
@@ -292,6 +291,29 @@ Offline framing, authentication, parser and isolation tests live in
 those tests. They establish contracts only. This command exercises the core relay;
 the native app's own panel, remote SSH host, a viewer retained across a clipped
 server death, and member seat/lease stages remain outside its acceptance scope.
+
+The form check (round 5, per-bot and shared, through product calls and the common fill helper): a
+main-document Name field that starts with a value, a same-origin frame holding a field of the same name,
+and a second loopback origin. It proves replacement, refusal of the frame's field, window and desktop
+pictures withheld after a private fill and after same-origin navigation, the another-origin read timing,
+and a closed tab (a real ctrl+w with a spare tab open) retiring its mark so pictures return. The shared
+block also moves the marked window onto the peer's screen (the peer's desktop and window pictures come
+back empty), refuses a hand-over when one window list fails at the IsolatedDocker boundary (exact holder
+restored, `computer_busy`), and shows a free screen's leftover window gone before its new holder.
+Offline fakes do not prove driver or X11 behaviour: round 5 passed 1205 offline tests and thirteen
+rule-removal mutations and still could not seat anyone on a real computer (the desktop window spans every
+screen), knew only one of the driver's two closed-tab replies, and displaced the wrong member on a retry.
+Regressions: `test_login_vault.py::test_saved_field_selection_and_replacement`,
+`test_login_visibility.py::test_private_marks_follow_windows_on_the_same_shared_computer`,
+`::test_only_the_measured_closed_tab_error_retires_a_mark`,
+`::test_a_launched_browsers_closed_tab_retires_a_mark_only_as_measured`,
+`test_seat_tools.py::test_a_moved_private_window_withholds_peer_product_pictures`,
+`test_seat_wiring.py::test_a_new_holder_requires_proof_of_an_empty_screen`,
+`::test_the_desktops_own_windows_never_keep_a_screen_from_a_new_holder`,
+`::test_a_failed_hand_over_leaves_the_idle_member_first_in_line`,
+`::test_cleanup_has_a_total_bound_even_when_the_window_list_never_answers`,
+`::test_failed_restore_cannot_give_leftover_windows_to_the_next_holder`,
+`test_seat_view.py::test_cleanup_window_lists_retain_unknown_classes_and_reject_incomplete_geometry`.
 
 First real runs (2026-11-12, this PC's Docker Desktop): the first found three defects of the
 command itself that 179 offline tests had passed (guest paths built with the host's path type
@@ -1212,10 +1234,9 @@ lines without diff headers; incomplete coverage never promises a complete restor
 
 request_secret(site) extends the existing secure card with username/password.
 Credential Manager holds the values; SQLite holds only member/origin/reference
-metadata, independently of the requesting turn. fill_login, fill_contact and fill_card share _type_page_fields: resolve member refs before internal reads, match one typeable frame/role/name row per fresh exact-tab snapshot, retain per-field HTTPS/grant/label/amount checks, and require exact delivered_count without effect=refused. Fill reads make the member picture stale through stale/screen_changed and require a fresh read before another action. It never submits. Takeover remains available. Driver results and all
-fill exceptions yield only filled true/false. Later page text/errors redact plain
+metadata, independently of the requesting turn. fill_login, fill_contact and fill_card share _type_page_fields: before internal reads, resolve unique remembered main-document meanings; match one typeable main frame/role/name row per fresh exact-tab snapshot; retain per-field HTTPS/grant/label/amount checks; always set replace=true and require exact delivered_count without effect=refused. Fill reads make the member picture stale through stale/screen_changed and require a fresh read before another action. It never submits. Takeover remains available. Driver results and untrusted fill exceptions yield only filled true/false; trusted frame and ambiguity refusals also include fixed value-free request_takeover guidance. Later page text/errors redact plain
 and JSON-escaped values on computer results before model/history/events. Delegate
-results pass through untouched. Filled-page pictures stay hidden while any exact target/tab mark remains. Only a complete read of that same tab showing that it left its origin can lift the mark (same-origin navigation and lost fields never do); no timer, other-tab read or rebind lifts suppression, and probes leave the current member tab unchanged. Saving a login alone hides nothing.
+results pass through untouched. Filled-page pictures stay hidden while any exact target/tab mark remains. A complete read of that same tab showing another HTTP(S) origin and no filled refs, or the driver's reply during its private-picture probe that the tab is gone (two measured forms: an error for a browser the seat attached to, a non-error browser_tab_not_found refusal for one the driver launched; the first version knew only the first and per-bot pictures never came back), lifts the mark; same-origin navigation, lost fields, timeout, disconnect, other-tab reads and rebinding never do. Shared peer pictures also follow the mark's original native window whenever it overlaps their screen, with fresh-list failure withholding pictures. Probes leave the current member tab unchanged. Saving a login alone hides nothing.
 Vault read failures log only the exception type and never fail prepare. Login fields
 are full-width labelled rows, with Save below. Explicit safety denials still win over
 full permission on the API and shared CLI/background gate. Slack uses the supplied

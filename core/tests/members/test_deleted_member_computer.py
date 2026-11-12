@@ -281,7 +281,9 @@ async def test_the_shared_computer_is_never_owed_to_a_deleted_member(rig, vm, en
     shared.workspace.mkdir(parents=True)
     assert await delete(rig, one.id) == {"deleted": True}
     assert vm.data.task is None and owed(vm) == {} and shared.workspace.exists()
-    assert [args[-2:] for args in engine.calls] == [["wmctrl", "-lG"], ["wmctrl", "-lx"]]
+    # The unit does not exist, so allocation and deletion establish that without a window-list shell.
+    assert all(args[:2] == ['container', 'inspect'] or args[:1] == ['info'] for args in engine.calls)
+    assert engine.verbs.count('container') == 2
     assert vm.seats.seat("", one.id) is None
 
 

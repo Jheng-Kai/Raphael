@@ -145,6 +145,37 @@ FILL_CONTACT = fill_definition("contact", ("name", "address", "phone", "email"))
 FILL_CARD = fill_definition("card", ("name", "number", "expiry", "cvc"))
 
 
+class SavedFieldRefused(ValueError):
+    """Fixed, value-free guidance for a saved field that cannot be safely selected."""
+
+
+CLOSED_TAB_ATTACH = re.compile(
+    r"cannot attach to tab target [0-9A-F]{32}: CDP Target\.attachToTarget failed \(-32602\): No target with given id found")
+
+
+def closed_private_tab(reply, tab_id):
+    """Whether the driver's answer to a read of exactly this tab proves the tab is gone.
+
+    Driver 0.37.0 says it in two ways, both measured on real computers, each matched whole and only as measured:
+    - a browser the seat attached to (shared): an error, refusal.message
+      "confirmation provider failed: tab <tab id> no longer has a live CDP page target";
+    - a browser the driver launched (per-bot): NOT an error, status "refused", refusal.code
+      "browser_tab_not_found", refusal.message "cannot attach to tab target <CDP id>: CDP Target.attachToTarget
+      failed (-32602): No target with given id found".
+    A tab id the driver never knew has the same codes and other words ("tab <id> is not known for target ..."),
+    so only the message tells; anything else keeps the mark.
+    """
+    data = reply.get("structuredContent") or {}
+    refusal = data.get("refusal") or {}
+    message = refusal.get("message")
+    if not tab_id or not isinstance(message, str):
+        return False
+    if reply.get("isError"):
+        return message == f"confirmation provider failed: tab {tab_id} no longer has a live CDP page target"
+    return (data.get("status") == "refused" and refusal.get("code") == "browser_tab_not_found"
+            and bool(CLOSED_TAB_ATTACH.fullmatch(message)))
+
+
 class VmTools:
     # How long a member waits for another to finish with the screen, and how often it looks: a bounded wait,
     # then a result that says who holds it and for how long.
@@ -461,6 +492,10 @@ class VmTools:
         picture_target = self.routes.get(key, self.vm.target(member))
         private_before = picture_target.key in self.payment_holds or any(
             page[0] == picture_target.key for page in self.private_pages)
+        # Only a computer tool can picture a seat before the look that follows the call; the windows are not
+        # listed for every other tool a member with a seat happens to call.
+        if key in self.tools:
+            private_before = await self._shared_private_picture(picture_target) or private_before
         began = time.monotonic()
         repair_budget = _REPAIRS.set(set())
         reading = key in self.tools and self.tools[key].name in SCREEN_READS | {"browser_open"}
@@ -495,7 +530,7 @@ class VmTools:
                 result.text = self.logins.redact(identifier, result.text)
                 if result.kind:
                     result.kind = self.logins.redact(identifier, result.kind)
-        if (reading and result.ok) or result.blocks:
+        if (reading and result.ok and (picture_target.container != "shared" or result.kind not in NOTICES)) or result.blocks:
             if picture_target != self.vm.target(member):
                 return PluginResult(False, "computer_changed")
             private_after = await self._private_picture(picture_target, arguments)
@@ -512,7 +547,7 @@ class VmTools:
                 # This value-free tree is the snapshot actually handed to the member.
                 # Record its refs without changing the member's current tab to the probe's tab.
                 self._remember_page_refs(picture_target, tree)
-                result.text = json.dumps(self._without_values(tree), ensure_ascii=False) + "\nPrivate fields are hidden until a complete read of the filled tab shows it has left its origin or lost its fields. Use page references or request_takeover; no screenshot was returned."
+                result.text = json.dumps(self._without_values(tree), ensure_ascii=False) + "\nPrivate fields are hidden until the filled tab is closed or a complete read shows another site. Use page references or request_takeover; no screenshot was returned."
                 if self.logins:
                     for identifier in private_members:
                         result.text = self.logins.redact(identifier, result.text)
@@ -610,6 +645,25 @@ class VmTools:
         protected["origins"].add((parsed.scheme.lower(), parsed.hostname, parsed.port or (443 if parsed.scheme == "https" else 80)))
         protected["refs"].update(refs)
         protected["fields"].update(fields)
+        protected["computer"] = target.physical
+        binding = self.page_windows.get((target.key, identifier))
+        if binding:
+            protected["window"] = binding[1]
+
+    async def _shared_private_picture(self, target):
+        if not target.container or not target.screen:
+            return False
+        marks = [mark for key, mark in self.private_pages.items()
+                 if key[0] != target.key and mark.get("computer") == target.physical and mark.get("window")]
+        if not marks:
+            return False
+        try:
+            canvas = await self.vm.window_bounds(target)
+            identifiers = {mark["window"] for mark in marks}
+            return any(row["window_id"] in identifiers and seat_view.overlaps(row["bounds"], target.screen, target.screens)
+                       for row in canvas["windows"])
+        except Exception:
+            return True
 
     async def _private_picture(self, target, arguments):
         keys = [key for key in self.private_pages if key[0] == target.key]
@@ -623,11 +677,15 @@ class VmTools:
                 state = await self._driver_call(target, client, "get_browser_state", {
                     "target_id": key[1], "tab_id": key[2], "session": session, "include_screenshot": False, "snapshot_format": "semantic_v2"}, remember=False)
                 page = state.get("structuredContent") or {}
-                if not state.get("isError"):
+                if closed_private_tab(state, key[2]):
+                    self.private_pages.pop(key, None)
+                # A refusal is not a page: a launched browser's refusals carry no isError (measured).
+                if not state.get("isError") and page.get("status") != "refused":
                     self.private_tree[target.key] = page
             except Exception:
                 pass
-        return target.key in self.payment_holds or any(key in self.private_pages for key in keys)
+        return (target.key in self.payment_holds or any(key in self.private_pages for key in keys)
+                or await self._shared_private_picture(target))
 
     async def _call(self, key, arguments, *, approver, task_id=None, pool=None):
         if key not in self.tools:
@@ -1024,6 +1082,11 @@ class VmTools:
             raise ValueError()
         tab_id, meanings = candidates[0]
         resolved = [(meanings[ref], text) for ref, text in fields]
+        for meaning, _ in resolved:
+            if meaning[0] != "main":
+                raise SavedFieldRefused("The field is inside an embedded frame. Saved values are typed only into the page's own fields; ask the owner to take over with request_takeover.")
+            if sum(value == meaning for value in meanings.values()) != 1:
+                raise SavedFieldRefused("The fields have the same name and cannot be told apart. Ask the owner to take over with request_takeover.")
         if skip_empty:
             resolved = [(meaning, text) for meaning, text in resolved if text]
         if not tab_id or not resolved:
@@ -1048,10 +1111,10 @@ class VmTools:
                     or actual_tab != tab_id or target != self.vm.target(member) or target.key in self.vm.held):
                 raise ValueError()
             check_page(state, url)
-            matches = [row for row in page.get("refs", []) if self._field_identity(row) == meaning]
+            matches = [row for row in page.get("refs", []) if row.get("frame") == "main" and self._field_identity(row) == meaning]
             if len(matches) != 1:
                 raise ValueError()
-            call = {"target_id": identifier, "tab_id": tab_id, "ref": matches[0]["ref"], "text": text}
+            call = {"target_id": identifier, "tab_id": tab_id, "ref": matches[0]["ref"], "text": text, "replace": True}
             if "delivery_mode" in schema.get("properties", {}):
                 call["delivery_mode"] = "foreground"
             if not Draft202012Validator(schema).is_valid(call):
@@ -1078,6 +1141,8 @@ class VmTools:
             await self._type_page_fields(target, member, args["target_id"],
                 [(args[field + "_ref"], values[field]) for field in ("username", "password")], check_page)
             return PluginResult(True, text='{"filled": true}')
+        except SavedFieldRefused as error:
+            return PluginResult(False, "login_not_filled", json.dumps({"filled": False, "hint": str(error)}))
         except Exception:
             self.vm.invalidate(target)
             # Transport and vault exceptions may echo input; none of their diagnostics leave this boundary.
@@ -1112,6 +1177,8 @@ class VmTools:
             await self._type_page_fields(target, member, args["target_id"],
                 [(ref, values[field]) for field, ref in args["fields"].items()], check_page, skip_empty=True)
             return PluginResult(True, text=json.dumps({"filled": True, "owner_finishes": kind == "card"}))
+        except SavedFieldRefused as error:
+            return PluginResult(False, "entry_not_filled", json.dumps({"filled": False, "hint": str(error)}))
         except Exception:
             self.vm.invalidate(target)
             return PluginResult(False, "entry_not_filled", '{"filled": false}')

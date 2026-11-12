@@ -9,6 +9,89 @@ from .test_vm import desktop, CatalogBridge, EmptyHub
 from .fixtures.driver_contract import bind_page, catalog, window_reply
 
 
+@pytest.mark.parametrize("shared", [False, True])
+@pytest.mark.parametrize("case", ["frame", "duplicate", "fresh-frame", "prefilled", "retry", "clear"])
+async def test_saved_field_selection_and_replacement(desktop, tmp_path, shared, case):
+    from raphael_core.computer.vm_tools import VmTools, SavedFieldRefused
+    from raphael_core.services.attachment_store import AttachmentStore
+    from .test_vm import container
+    vm, _, runtime = desktop
+    vm.settings.set("computer_vm_mode", "shared" if shared else "per-bot")
+    runtime.raw = container(vm, vm.target(), runtime)
+    calls = []
+    class Browser(CatalogBridge):
+        changed = False
+        half = case == "retry"
+        @measured(("Name", "Secret"))
+        async def request(self, method, params=None):
+            if method == "tools/list":
+                return catalog(("get_browser_state", "browser_type"))
+            name, args = params["name"], params["arguments"]
+            calls.append(name)
+            if name == "list_windows":
+                return window_reply(self.target)
+            if name == "get_browser_state":
+                return {"structuredContent": dict(target_id="own", tab_id="tab", page={"url": "https://example.com"})}
+            if name == "browser_type" and self.half and args["text"] == "secret":
+                self.half = False
+                return {"structuredContent": {"delivery": {"delivered_count": 0}}}
+            return {"content": []}
+    original = Browser.request
+    async def request(self, method, params=None):
+        reply = await original(self, method, params)
+        if method == "tools/call" and params["name"] == "get_browser_state":
+            rows = reply["structuredContent"]["refs"]
+            name = next(row for row in rows if row["name"] == "Name")
+            if case == "frame" or case == "fresh-frame" and self.changed:
+                name["frame"] = "iframe"
+            if case == "duplicate" and not self.changed:
+                rows.append({**name, "ref": "same-name"})
+            self.changed = True
+        return reply
+    Browser.request = request
+    hub = VmTools(EmptyHub(), vm, attachments=AttachmentStore(tmp_path), bridge=Browser)
+    await hub.prepare()
+    target = vm.target()
+    await bind_page(hub, target)
+    client, session = await hub._connection(target)
+    client.semantic_values[("own", "tab"), "Name"] = "existing"
+    new_name = "" if case == "clear" else "new-name"
+    def fields():
+        return [(member_ref(hub, target, "own", "Name"), new_name),
+                (member_ref(hub, target, "own", "Secret"), "secret")]
+    calls.clear()
+    try:
+        if case in ("frame", "duplicate", "fresh-frame"):
+            with pytest.raises(SavedFieldRefused if case != "fresh-frame" else ValueError) as error:
+                await hub._type_page_fields(target, 0, "own", fields(), lambda *_: None)
+            assert "browser_type" not in calls
+            if case != "fresh-frame":
+                assert not calls  # Original ambiguity/frame is refused even before an internal read.
+                assert "request_takeover" in str(error.value)
+                assert ("embedded frame" if case == "frame" else "same name") in str(error.value)
+                from types import SimpleNamespace
+                hub.logins = SimpleNamespace(load=lambda *_: dict(username='new-name', password='secret'),
+                    entry=lambda *_: (dict(label='Test'), dict(name='new-name')))
+                for kind in ('login', 'contact', 'card'):
+                    args = dict(reference='synthetic', site='https://example.com', target_id='own', label='Test',
+                        fields={'name': fields()[0][0]}, username_ref=fields()[0][0], password_ref=fields()[1][0])
+                    result = await hub._fill_login(target, 0, args) if kind == 'login' else await hub._fill_entry(target, 0, args, kind)
+                    response = json.loads(result.text)
+                    assert not result.ok and response['filled'] is False and 'request_takeover' in response['hint']
+                    assert 'secret' not in result.text and 'new-name' not in result.text
+        else:
+            if case == "retry":
+                with pytest.raises(ValueError):
+                    await hub._type_page_fields(target, 0, "own", fields(), lambda *_: None)
+                assert client.semantic_values[("own", "tab"), "Name"] == "new-name"
+                await hub._driver_call(target, client, "get_browser_state", dict(target_id="own", tab_id="tab", session=session))
+            await hub._type_page_fields(target, 0, "own", fields(), lambda *_: None)
+            assert client.semantic_values[("own", "tab"), "Name"] == new_name
+            assert client.semantic_values[("own", "tab"), "Secret"] == "secret"
+    finally:
+        await hub.aclose()
+
+
 @pytest.mark.parametrize("failure", [False, True])
 async def test_private_values_and_json_escapes_never_reach_results_or_errors(desktop, tmp_path, conn, caplog, failure):
     from raphael_core.computer.vm import VmError

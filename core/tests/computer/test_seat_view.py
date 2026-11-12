@@ -173,3 +173,16 @@ def test_windows_and_mine_validate_the_seat_even_for_empty_results():
     for operation in (lambda: windows({"windows": []}, 7, 6), lambda: mine(1, {"windows": []}, 0, 6)):
         with pytest.raises(ValueError):
             operation()
+
+
+def test_cleanup_window_lists_retain_unknown_classes_and_reject_incomplete_geometry():
+    from raphael_core.computer.seat_view import wmctrl_windows
+    listed = wmctrl_windows('0x10 0 1279 30 600 400 host Untitled', '')
+    assert listed['windows'][0]['window_id'] == 16 and listed['windows'][0]['app_name'] == ''
+    # A window with no title is a whole row: seven parts, never a reason to refuse every hand-over.
+    untitled = wmctrl_windows('0x11 0 10 30 600 400 host', '0x11 0 app.App host')
+    assert untitled['windows'] == [dict(window_id=17, pid=0, app_name='app', title='', bounds=dict(x=10, y=30, width=600, height=400))]
+    with pytest.raises(ValueError, match='Incomplete window geometry'):
+        wmctrl_windows('partial listing', '')
+    with pytest.raises(ValueError):
+        wmctrl_windows('0x12 0 ten 30 600 400 host title', '')

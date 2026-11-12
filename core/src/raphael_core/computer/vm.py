@@ -386,23 +386,47 @@ class LocalVm:
         for other in self.unit_targets(target):
             await self.disconnect_driver(other.key)
 
+    # The desktop's own windows: a panel on each screen and ONE desktop window across the whole canvas (measured on
+    # six screens: `xfdesktop.Xfdesktop`, 3840x1800 at 0,0). They are nobody's, are never closed, and a screen that
+    # holds only these is empty; counting the desktop window would leave every screen occupied for ever.
+    DESKTOP_WINDOWS = ("xfce4-panel", "xfdesktop")
+    # Every list and every close is a command through the container boundary (measured on a Windows host: a list is
+    # two of them), so the bound covers a screen full of windows; a list that never answers still ends here.
+    seat_clean_seconds = 8
+
     async def close_displaced_seat_windows(self, target):
-        """Close a displaced screen's windows, preserving its panel; cleanup is best effort."""
-        from .seat_view import windows
+        """Gently close touching windows, then prove the screen empty within a bounded time."""
+        from .seat_view import overlaps
         holder = self.seats.holders(target.remote).get(target.screen)
+        async def clean():
+            raw = await self.inspect(target)
+            if raw is None or raw.get("State", {}).get("Running") is False:
+                return True
+            for attempt in range(10):
+                found = await self.seat_windows(target)
+                touching = [window for window in found["windows"]
+                            if window.get("app_name", "").lower() not in self.DESKTOP_WINDOWS
+                            and overlaps(window["bounds"], target.screen, target.screens)]
+                if self.seats.holders(target.remote).get(target.screen) != holder:
+                    return False
+                if not touching:
+                    return True
+                if attempt == 0:
+                    for window in touching:
+                        if self.seats.holders(target.remote).get(target.screen) != holder:
+                            return False
+                        if not window.get("app_name"):
+                            continue
+                        try:
+                            await self.run_for(target, exec_args(target, ["wmctrl", "-i", "-c", str(window["window_id"])]))
+                        except Exception:
+                            pass
+                await asyncio.sleep(.05)
+            return False
         try:
-            found = windows(await self.seat_windows(target), target.screen, target.screens)
-            for window in found["windows"]:
-                if window.get("app_name", "").lower() == "xfce4-panel":
-                    continue
-                try:
-                    if self.seats.holders(target.remote).get(target.screen) != holder:
-                        return
-                    await self.run_for(target, exec_args(target, ["wmctrl", "-i", "-c", str(window["window_id"])]))
-                except Exception:
-                    pass
+            return await asyncio.wait_for(clean(), self.seat_clean_seconds)
         except Exception:
-            pass
+            return False
 
     async def seat_windows(self, target):
         # The displaced session is already closed. Keep cleanup on the injected Docker boundary.
@@ -412,6 +436,18 @@ class LocalVm:
         if geometry.code or classes.code or geometry.truncated or classes.truncated:
             raise VmError("window_list_unavailable")
         return wmctrl_windows(geometry.stdout, classes.stdout)
+
+    async def window_bounds(self, target):
+        """Where every window is, in one command: all it takes to tell whose screen a window touches.
+
+        A full list is two commands (about half a second on a Windows host, measured); this is asked before and
+        after every picture while a seat's private page stands, so it asks for no more than it needs.
+        """
+        from .seat_view import wmctrl_windows
+        geometry = await self.run_for(target, exec_args(target, ["wmctrl", "-lG"]))
+        if geometry.code or geometry.truncated:
+            raise VmError("window_list_unavailable")
+        return wmctrl_windows(geometry.stdout, "")
 
     async def move_window(self, target, window_id):
         result = await self.run_for(target, move_window_args(target, window_id))
@@ -588,23 +624,35 @@ class LocalVm:
                 raise VmError("seats_full") from None
             if displaced is not None:
                 old = previous[displaced]
+                last_used = self.seats.rows[target.remote, displaced][1]
                 # Revoke the old route before yielding; publish the new holder only after cleanup.
                 self.seats.release(target.remote, displaced)
                 try:
                     await self.disconnect_driver(old.key)
                     await self.close_seat_viewers(old)
-                    await self.close_displaced_seat_windows(old)
-                    self.seats.take(target.remote, member_id, busy=busy)
+                    if not await self.close_displaced_seat_windows(old):
+                        raise VmError("seats_full")
+                    self.seats.restore(target.remote, member_id, number)
                 except BaseException:
                     # A cancelled/failed transition must not expose an uncleaned free screen.
                     try:
-                        self.seats.restore(target.remote, displaced, number)
+                        self.seats.restore(target.remote, displaced, number, last_used)
                     except Exception as error:
                         raise VmError("seat_restore_failed") from error
                     raise
                 self.targets.pop(old.key, None)
             else:
-                self.seats.take(target.remote, member_id, busy=busy)
+                if self.seats.seat(target.remote, member_id) is not None:
+                    self.seats.touch(target.remote, member_id)
+                else:
+                    occupied = self.seats.holders(target.remote)
+                    for free in range(1, self.seats.count + 1):
+                        if free not in occupied and await self.close_displaced_seat_windows(
+                                self.shared_target(target.remote, member_id, free)):
+                            self.seats.restore(target.remote, member_id, free)
+                            break
+                    else:
+                        raise VmError("seats_full")
             return self.target(member_id)
 
     async def available(self, target=None):

@@ -205,6 +205,7 @@ async def test_old_shared_shape_rebuilds_to_six_screens_and_keeps_mounts(shared_
 async def test_seat_targets_are_never_erased_or_recorded_as_member_computers(shared_vm):
     vm, runtime = shared_vm
     target = await vm.seat(1)
+    runtime.calls.clear()
     vm.data.made(target)
     assert not vm.data.rows
     with pytest.raises(VmError, match="shared"):
@@ -377,8 +378,9 @@ async def test_member_deletion_cleans_up_before_a_replacement_can_take_the_scree
     vm.disconnect_driver = disconnect
     cleaned = []
     async def cleanup(old):
-        assert old == target and vm.seats.holders("")[1] == 1
+        assert old.screen == target.screen
         cleaned.append(1)
+        return True
     vm.close_displaced_seat_windows = cleanup
     deletion = asyncio.create_task(vm.release_member_seats(1))
     await entered.wait()
@@ -387,7 +389,7 @@ async def test_member_deletion_cleans_up_before_a_replacement_can_take_the_scree
     assert not replacement.done()
     resume.set()
     await deletion
-    assert (await replacement).screen == 1 and cleaned == [1]
+    assert (await replacement).screen == 1 and cleaned == [1, 1]
     assert vm.seats.holders("")[1] == 2
 
 
@@ -395,9 +397,10 @@ async def test_displaced_window_cleanup_rechecks_holder_after_window_list_await(
     from .test_seat_tools import window
     vm, runtime = shared_vm
     target = await vm.seat(1)
+    runtime.raw = container(vm, target, runtime)
     async def rows(_):
         vm.seats.release("", 1)
-        await vm.seat(2)
+        vm.seats.restore("", 2, 1)
         return dict(windows=[window(10, 20)])
     vm.seat_windows = rows
     await vm.close_displaced_seat_windows(target)
@@ -616,6 +619,7 @@ async def test_final_seat_publish_failure_restores_the_exact_screen_or_reports_f
     async def cleanup(target):
         assert target == old and vm.seat_lock.locked()
         vm.seats.release('', 3)
+        return True
     vm.close_displaced_seat_windows = cleanup
     conn.executescript("""
         CREATE TRIGGER reject_new_seat BEFORE INSERT ON computer_seats
@@ -633,3 +637,172 @@ async def test_final_seat_publish_failure_restores_the_exact_screen_or_reports_f
     assert not vm.seat_lock.locked() and vm.target(1).screen == 0
     assert vm.target(2).screen == (0 if restore_failure else 3)
     assert [tuple(row) for row in conn.execute('SELECT seat FROM computer_seats WHERE member_id=2')] == ([] if restore_failure else [(3,)])
+
+
+@pytest.mark.parametrize("failure", ["list", "close", "timeout", "stays", "unknown-class"])
+@pytest.mark.parametrize("displace", [False, True])
+async def test_a_new_holder_requires_proof_of_an_empty_screen(shared_vm, failure, displace):
+    from raphael_core.computer.seats import ComputerSeats
+    from .test_seat_tools import window
+    vm, runtime = shared_vm
+    vm.seats = ComputerSeats(count=1)
+    if displace:
+        await vm.seat(1)
+    target = vm.shared_target("", 2, 1)
+    runtime.raw = container(vm, target, runtime)
+    async def rows(_):
+        if failure == "list":
+            raise OSError("list failed")
+        if failure == "timeout":
+            raise TimeoutError()
+        return {"windows": [window(10, 1279, "" if failure == "unknown-class" else "Chromium-browser")]}
+    vm.seat_windows = rows
+    original = vm.run_for
+    async def run(target, args, **kwargs):
+        if "-c" in args and failure == "close":
+            raise OSError("close failed")
+        return await original(target, args, **kwargs)
+    vm.run_for = run
+    with pytest.raises(VmError, match="seats_full"):
+        await vm.seat(2)
+    assert vm.seats.holders("") == ({1: 1} if displace else {})
+    assert vm.target(2).screen == 0 and not vm.seat_lock.locked()
+    assert not any("kill" in part for args, _ in runtime.calls for part in args)
+    # A failed attempt leaves no durable quarantine; a new attempt must list again.
+    vm.seat_windows = AsyncMock(return_value={"windows": []})
+    assert (await vm.seat(2)).screen == 1
+    vm.seat_windows.assert_awaited_once()
+
+
+async def test_cleanup_has_a_total_bound_even_when_the_window_list_never_answers(shared_vm):
+    from raphael_core.computer.seats import ComputerSeats
+    vm, runtime = shared_vm
+    vm.seats = ComputerSeats(count=1)
+    old = await vm.seat(1)
+    runtime.raw = container(vm, old, runtime)
+    async def stalled(_):
+        await asyncio.sleep(10)
+    vm.seat_windows = stalled
+    vm.seat_clean_seconds = 1
+    with pytest.raises(VmError, match='seats_full'):
+        await asyncio.wait_for(vm.seat(2), 3)
+    assert vm.target(1) == old and vm.target(2).screen == 0
+
+
+async def test_a_failed_hand_over_leaves_the_idle_member_first_in_line(shared_vm):
+    # Seen on a real computer: the holder put back after a failed hand-over was stamped "just used", so the
+    # retry took the other, busier member's screen.
+    from raphael_core.computer.seats import ComputerSeats
+    vm, runtime = shared_vm
+    ticks = iter(range(1, 100))
+    vm.seats = ComputerSeats(count=2, clock=lambda: next(ticks))
+    first = await vm.seat(1)
+    await vm.seat(2)
+    runtime.raw = container(vm, first, runtime)
+    stamp = vm.seats.rows["", 1][1]
+    vm.seat_windows = AsyncMock(side_effect=OSError("list failed"))
+    with pytest.raises(VmError, match="seats_full"):
+        await vm.seat(3)
+    assert vm.seats.rows["", 1] == (1, stamp) and vm.seats.holders("") == {1: 1, 2: 2}
+    vm.seat_windows = AsyncMock(return_value={"windows": []})
+    assert (await vm.seat(3)).screen == 1
+    assert vm.seats.holders("") == {1: 3, 2: 2}
+
+
+async def test_the_desktops_own_windows_never_keep_a_screen_from_a_new_holder(shared_vm):
+    # As an idle six-screen computer lists itself (measured): ONE desktop window across the whole canvas and a
+    # panel on each screen. Counting the desktop window left every screen occupied: no member could ever sit down.
+    from raphael_core.computer.seat_view import wmctrl_windows
+    vm, runtime = shared_vm
+    panels = [(0x00c00003, 567, 851), (0x00c00007, 1847, 851), (0x00c0000b, 3127, 851),
+              (0x00c0000f, 567, 1751), (0x00c00013, 1847, 1751), (0x00c00017, 3127, 1751)]
+    geometry = "0x00a00028 -1 0    0    3840 1800 host Desktop\n" + "".join(
+        f"0x{identifier:08x} -1 {x}  {y}  146  49   host xfce4-panel\n" for identifier, x, y in panels)
+    classes = "0x00a00028 -1 xfdesktop.Xfdesktop   host Desktop\n" + "".join(
+        f"0x{identifier:08x} -1 xfce4-panel.Xfce4-panel  host xfce4-panel\n" for identifier, _, _ in panels)
+    runtime.raw = container(vm, vm.shared_target("", 1, 1), runtime)
+    vm.seat_windows = AsyncMock(return_value=wmctrl_windows(geometry, classes))
+    assert [(await vm.seat(member)).screen for member in (1, 2, 3)] == [1, 2, 3]
+    assert not any("wmctrl" in args and "-c" in args for args, _ in runtime.calls)
+    # A member's window on the next screen is still in the way, and it is the only thing closed.
+    listed = wmctrl_windows(geometry + "0x02000003  0 100 950 600 400 host Terminal\n",
+                            classes + "0x02000003  0 xfce4-terminal.Xfce4-terminal  host Terminal\n")
+    vm.seat_windows = AsyncMock(side_effect=[listed, wmctrl_windows(geometry, classes)])
+    assert (await vm.seat(4)).screen == 4
+    closed = [args[args.index("-c") + 1] for args, _ in runtime.calls if "wmctrl" in args and "-c" in args]
+    assert closed == [str(0x02000003)]
+
+
+async def test_dirty_free_screens_are_skipped_and_delayed_closure_is_observed(shared_vm):
+    from .test_seat_tools import window
+    vm, runtime = shared_vm
+    target = vm.shared_target("", 2, 1)
+    runtime.raw = container(vm, target, runtime)
+    calls = []
+    async def rows(target):
+        calls.append(target.screen)
+        # The first window only overlaps screen 1; it is centre-owned by screen 2.
+        # Screen 2 cannot be claimed either until that same window has gone.
+        return {"windows": [window(10, 1279)] if target.screen == 1 or calls.count(2) == 1 else [window(99, 1300, "xfce4-panel")]}
+    vm.seat_windows = rows
+    taken = await vm.seat(2)
+    assert taken.screen == 2 and calls.count(1) == 10 and calls.count(2) == 2
+    closes = [args for args, _ in runtime.calls if "wmctrl" in args and "-c" in args]
+    assert len(closes) == 2 and all(args[-1] == "10" for args in closes)
+
+
+async def test_an_existing_holder_is_never_cleaned_and_stopped_computers_need_no_list(shared_vm):
+    vm, runtime = shared_vm
+    target = await vm.seat(1)
+    vm.seat_windows = AsyncMock(side_effect=AssertionError("Unexpected list"))
+    runtime.raw = container(vm, target, runtime)
+    vm.close_displaced_seat_windows = AsyncMock(side_effect=AssertionError("Unexpected cleanup"))
+    assert await vm.seat(1) == target
+    vm.close_displaced_seat_windows.assert_not_awaited()
+    del vm.close_displaced_seat_windows
+    runtime.raw["State"]["Running"] = False
+    assert (await vm.seat(2)).screen == 2
+    vm.seat_windows.assert_not_awaited()
+
+
+async def test_failed_restore_cannot_give_leftover_windows_to_the_next_holder(shared_vm, conn):
+    from raphael_core.computer.seats import ComputerSeats
+    from .test_seat_tools import window
+    vm, runtime = shared_vm
+    vm.seats = ComputerSeats(conn, count=1)
+    old = await vm.seat(1)
+    runtime.raw = container(vm, old, runtime)
+    vm.disconnect_driver = AsyncMock(side_effect=OSError("Disconnect failed"))
+    conn.executescript("""
+        CREATE TRIGGER reject_restoration BEFORE INSERT ON computer_seats
+        WHEN NEW.member_id=1 BEGIN SELECT RAISE(ABORT, 'restore failure'); END;
+    """)
+    with pytest.raises(VmError, match="seat_restore_failed"):
+        await vm.seat(2)
+    assert not vm.seats.holders("")
+    vm.seat_windows = AsyncMock(return_value={"windows": [window(10, 20)]})
+    with pytest.raises(VmError, match="seats_full"):
+        await vm.seat(3)
+    assert vm.target(3).screen == 0
+    vm.seat_windows = AsyncMock(return_value={"windows": []})
+    assert (await vm.seat(3)).screen == 1
+
+
+async def test_a_cached_displaced_route_keeps_the_busy_answer_when_cleanup_cannot_be_proved(shared_vm, tmp_path):
+    from raphael_core.computer.seats import ComputerSeats
+    vm, runtime = shared_vm
+    vm.seats = ComputerSeats(count=1)
+    hub = VmTools(EmptyHub(), vm, attachments=AttachmentStore(tmp_path), bridge=Bridge)
+    try:
+        await hub.prepare(1)
+        cached = next(tool.key for tool in hub.offered_for(1) if tool.name == 'list_windows')
+        await vm.seat(2)
+        runtime.raw = container(vm, vm.target(2), runtime)
+        vm.seat_windows = AsyncMock(side_effect=OSError('List failed'))
+        with vm_scope(('turn', 1, 1)):
+            result = await hub.call(cached, {}, approver='auto')
+        assert result.ok and result.kind == 'computer_busy'
+        assert 'every screen of the computer is in use' in result.text and not result.blocks
+        assert vm.target(1).screen == 0 and vm.target(2).screen == 1
+    finally:
+        await hub.aclose()

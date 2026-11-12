@@ -48,6 +48,12 @@ def contains(bounds, screen, screens):
     return width > 0 and height > 0 and left <= x and top <= y and x + width <= left + wide and y + height <= top + high
 
 
+def overlaps(bounds, screen, screens):
+    x, y, width, height = _bounds(bounds)
+    left, top, wide, high = rectangle(screen, screens)
+    return width > 0 and height > 0 and x < left + wide and left < x + width and y < top + high and top < y + height
+
+
 def windows(result, screen, screens):
     left, top, _, _ = rectangle(screen, screens)
     canvas = (0, 0, *screen_grid(screens)[1])
@@ -156,12 +162,11 @@ def wmctrl_windows(geometry, classes):
     rows = []
     for line in geometry.splitlines():
         parts = line.split(None, 7)
-        if len(parts) < 8:
-            continue
+        # id, desktop, x, y, width, height, host, then the title: a window with no title has seven parts.
+        if len(parts) < 7:
+            raise ValueError("Incomplete window geometry")
         identifier = int(parts[0], 16)
-        # Unknown classes fail closed: never close a panel we could not identify.
-        if identifier not in apps:
-            continue
-        rows.append(dict(window_id=identifier, pid=0, app_name=apps[identifier], title=parts[7],
+        # Keep unknown classes visible: they cannot prove a screen empty or be closed as a known non-panel.
+        rows.append(dict(window_id=identifier, pid=0, app_name=apps.get(identifier, ""), title=parts[7] if len(parts) > 7 else "",
                          bounds=dict(zip(("x", "y", "width", "height"), map(int, parts[2:6])))))
     return {"windows": rows}

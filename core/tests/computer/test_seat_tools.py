@@ -86,6 +86,35 @@ async def call(hub, member, name, args):
         return await hub.call(tool.key, args, approver="auto")
 
 
+@pytest.mark.parametrize('name', ['get_window_state', 'get_desktop_state'])
+async def test_a_moved_private_window_withholds_peer_product_pictures(seat_tools, monkeypatch, name):
+    from raphael_core.computer.rfb_view import png
+    hub, vm, _ = seat_tools
+    first, second = vm.target(1), vm.target(2)
+    client, session = hub.connections[second.key]
+    rows = client.rows
+    rows[0]['bounds']['x'] = 1300
+    hub.page_windows[first.key, 'private-target'] = ('marker-session', 10, 10)
+    hub._protect_page(first, 'private-target', 'https://example.com', ['secret'], tab_id='private-tab')
+    monkeypatch.setattr(vm, 'window_bounds', AsyncMock(return_value={'windows': rows}))
+    picture = png([b'\x00\x00\x00'], 1, 1)
+    monkeypatch.setattr('raphael_core.computer.rfb_view.capture', lambda *args: picture)
+    original = client.request
+    async def request(method, params):
+        reply = await original(method, params)
+        if params['name'] == 'get_window_state':
+            reply['content'].append(dict(type='image', mimeType='image/png', data=base64.b64encode(picture).decode()))
+        return reply
+    client.request = request
+    args = dict(pid=10, window_id=10, include_screenshot=True) if name == 'get_window_state' else {}
+    hidden = await call(hub, 2, name, args)
+    assert hidden.ok and not hidden.blocks and 'no screenshot was returned' in hidden.text
+    own = await call(hub, 1, 'get_desktop_state', {})
+    assert own.ok and not own.blocks  # The marker's seat stays protected even while its window is elsewhere.
+    hub.private_pages.clear()
+    assert (await call(hub, 2, name, args)).blocks
+
+
 async def test_lists_only_own_windows_in_seat_coordinates(seat_tools):
     hub, vm, _ = seat_tools
     result = await call(hub, 2, "list_windows", {})

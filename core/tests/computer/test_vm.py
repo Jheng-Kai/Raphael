@@ -52,6 +52,8 @@ class Runtime:
             if "/dev/shm/raphael-screens.ready" in args and not self.screens_ready:
                 return Result(42, "cua-driver 0.37.0")
             return Result(0, "cua-driver 0.37.0")
+        if args[0] == "exec" and "wmctrl" in args and args[-1] in ("-lG", "-lx"):
+            return Result(0, "")
         if "health_report" in args:
             return Result(0, '{"schema_version":"1","overall":"ok","checks":[]}')
         if any(arg.startswith('"""Guest-only file checkpoints') for arg in args):
@@ -92,6 +94,7 @@ async def desktop(tmp_path, conn, monkeypatch):
     vm = LocalVm(tmp_path, settings=settings, runner=runtime, clock=lambda: 0)
     target = await vm.seat()
     runtime.raw = container(vm, target, runtime)
+    runtime.calls.clear()  # Seat allocation has its own empty-screen check; consumers start after setup.
     return vm, target, runtime
 
 

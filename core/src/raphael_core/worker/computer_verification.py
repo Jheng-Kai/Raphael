@@ -23,6 +23,7 @@ def meaningful_expectation(expect):
                 isinstance(window.get("bounds"), dict) and all(type(window['bounds'].get(key)) in (int, float)
                     for key in ('x', 'y', 'width', 'height'))):
             return True
+        # A selector made only of whitespace, including label_contains=" ", names nothing.
         if isinstance(element, dict) and isinstance(element.get("selector"), dict) and any(
                 isinstance(value, str) and bool(value.strip()) for value in element["selector"].values()):
             return True

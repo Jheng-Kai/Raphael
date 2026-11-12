@@ -30,7 +30,8 @@ def measured(fields=("username", "password")):
                     return reply
                 if "delivery" in (reply.get("structuredContent") or {}):
                     return reply
-                self.semantic_values[key, row["name"]] = sent["text"]
+                old = self.semantic_values.get((key, row["name"]), row.get("value")) or ""
+                self.semantic_values[key, row["name"]] = sent["text"] if sent.get("replace") else sent["text"] + old
                 return {**reply, "structuredContent": {"effect": "unverifiable", "route": "trusted_input",
                     "delivery": {"delivered_count": len(sent["text"]), "mode": "background"}}}
             reply = await request(self, method, params, *args, **kwargs)

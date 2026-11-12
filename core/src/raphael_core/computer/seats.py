@@ -84,11 +84,16 @@ class ComputerSeats:
         rows[ident] = (rows[ident][0], used)
         self._write(rows, [("UPDATE computer_seats SET used=? WHERE host=? AND member_id=?", (used, host, member_id))])
 
-    def restore(self, host, member_id, number):
-        """Restore the exact reserved screen; never silently select another free seat."""
+    def restore(self, host, member_id, number, used=None):
+        """Put a member on exactly this screen; never silently select another free seat.
+
+        `used` gives a displaced holder back its own last use. A hand-over that failed must not make the idle
+        member look recently used: the next attempt would then take a busier member's screen instead (seen on a
+        real computer: the retry displaced the other member).
+        """
         if number in self.holders(host):
             raise SeatsFull("The reserved screen is no longer free")
-        used = self.clock()
+        used = self.clock() if used is None else used
         rows = {**self.rows, (host, member_id): (number, used)}
         self._write(rows, [("INSERT INTO computer_seats(host, member_id, seat, used) VALUES (?, ?, ?, ?)",
                             (host, member_id, number, used))])
