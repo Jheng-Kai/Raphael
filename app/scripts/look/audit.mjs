@@ -396,6 +396,9 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
       const layers = [];
       let big = null;
       for (const element of doc.elementsFromPoint(x, y)) {
+        // A picture is no surface to compare: over a member's cover picture the window buttons keep a backing of their own, so that
+        // they can be read on whatever the owner chose (member-settings.css; red on main since the audit came, 2026-11-12).
+        if (element.localName === 'img') return null;
         const style = win.getComputedStyle(element);
         if (style.backgroundImage && style.backgroundImage !== 'none') return null;
         const color = parsed(style.backgroundColor);

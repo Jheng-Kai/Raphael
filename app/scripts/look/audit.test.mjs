@@ -1155,6 +1155,24 @@ describe("rendered look checks", () => {
     expect(strip()).toEqual([]);
   });
 
+  it("leaves the window buttons their backing over a picture: a cover the owner chose is no surface to compare (R-UI-141)", () => {
+    const window = new Window();
+    window.document.body.innerHTML = '<div class="window-chrome"><div class="window-controls"></div></div><div id="page"><img id="cover"></div>';
+    const rects = { ".window-chrome": { left: 348, top: 0, right: 1120, bottom: 32, width: 772, height: 32 }, ".window-controls": { left: 982, top: 0, right: 1120, bottom: 32, width: 138, height: 32 }, "#page": { left: 348, top: 0, right: 1120, bottom: 900, width: 772, height: 900 }, "#cover": { left: 348, top: 0, right: 1120, bottom: 176, width: 772, height: 176 } };
+    for (const [selector, rect] of Object.entries(rects)) window.document.querySelector(selector).getBoundingClientRect = () => rect;
+    window.document.querySelector("#page").style.backgroundColor = "rgb(10, 10, 10)";
+    window.document.querySelector(".window-controls").style.backgroundColor = "rgba(10, 10, 10, 0.72)";
+    const strip = () => auditDocument(window.document, { width: 1120, height: 900 }, []).productRules.filter(item => item.rule === "R-UI-141");
+    const at = selectors => selectors.map(selector => window.document.querySelector(selector));
+    // The buttons' backing stands over the cover picture at the strip's right end, and the bare picture just below it.
+    window.document.elementsFromPoint = (x, y) => at(y < 32 && x >= 982 ? [".window-controls", "#cover", "#page"] : ["#cover", "#page"]);
+    expect(strip()).toEqual([]);
+    // The same kind of backing over a plain surface, with no picture under it, is still a block of its own colour.
+    window.document.querySelector(".window-controls").style.backgroundColor = "rgba(200, 200, 200, 0.72)";
+    window.document.elementsFromPoint = (x, y) => at(y < 32 && x >= 982 ? [".window-controls", "#page"] : ["#page"]);
+    expect(strip().map(item => item.rule)).toEqual(["R-UI-141"]);
+  });
+
   it("distinguishes explicit provider JSON paths from untranslated keys elsewhere", () => {
     const window = new Window();
     window.document.body.innerHTML = '<code data-json-paths>data.issue.id · event.data.title · members.missingLabel</code><p>data.issue.id</p>';
