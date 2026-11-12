@@ -22,7 +22,7 @@ test("a member's deletion asks one sentence, Cancel and Delete, and nothing abou
   const answer = confirmDelete("小晴", { member: true });
   const dialog = document.querySelector<HTMLElement>(".mb-dialog")!;
   expect(dialog.querySelector("h2")!.textContent).toBe("刪除「小晴」？");
-  expect([...dialog.querySelectorAll("p")].map(p => p.textContent)).toEqual(["永久刪除這位成員和對話紀錄，此操作無法復原。"]);
+  expect([...dialog.querySelectorAll("p")].map(p => p.textContent)).toEqual(["永久刪除這位成員和對話紀錄，無法復原。"]);
   expect([...dialog.querySelectorAll(".mb-dlg-act .btn")].map(b => b.textContent)).toEqual(["取消", "刪除"]);
   expect(dialog.querySelector(".row, .tg, [role=switch], input, [data-remove-computer]")).toBeNull();
   expect(dialog.textContent).not.toMatch(/電腦|computer/i);

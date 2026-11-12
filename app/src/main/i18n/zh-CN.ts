@@ -1705,7 +1705,7 @@ export const zhCN = {
   "members.toggleGroup": "展开或收合「{p0}」",
   "members.moveTo": "移到分组",
   "members.deleteConfirm": "删除「{p0}」？",
-  "members.deleteForever": "永久删除这位成员和对话记录，此操作无法复原。",
+  "members.deleteForever": "永久删除这位成员和对话记录，无法复原。",
   "members.deleteHint": "此操作无法复原。",
   "members.deleted": "已删除「{p0}」",
   "members.rename": "重命名",

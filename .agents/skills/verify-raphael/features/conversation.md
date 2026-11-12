@@ -9,7 +9,7 @@ clearing (`confirmDelete` in member-dialogs.ts: a member, a group, a room, a con
 
 | | Grok Bot | Raphael |
 | --- | --- | --- |
-| box | 320 x 152 | 320 x 151 (one sentence line of 2) |
+| box | 320 x 152 | 320 x 130 (the member's sentence fits one line since 2026-11-12) |
 | padding (top, right, bottom, left) | 13, 12, 12, 16 | 12, 16, 12, 16 |
 | title | 14-15 px, bold | 14 px (`--fs-sm`), the app's semibold |
 | title to sentence | 6 px | 8 px (`--sp-2`) |
@@ -18,7 +18,9 @@ clearing (`confirmDelete` in member-dialogs.ts: a member, a group, a room, a con
 | colours | Cancel quiet grey, Delete red, white words | Cancel `--btn`, Delete `--close` with `--on-close` |
 
 `delete-confirmation` asserts the shape (box 320, two buttons of one width filling it, 刪除 at the right in the
-red, no ×, no rule line, the focus on 取消) and returns these numbers. The restore and reset confirmations and
+red, no ×, no rule line, the focus on 取消, a sentence of two lines whose longest line takes at least three quarters of
+the box) and returns these numbers. The sentence wraps as ordinary text (`text-wrap: pretty`): `balance` cut it into two
+half-width lines with the right of the box empty (owner, 2026-11-12: 「為什麼字會卡在左邊」). The restore and reset confirmations and
 新增成員 keep the 440 px shell with hairlines (`member-maker`, `member-maker-taken`, `computer-file-confirm`).
 
 ```powershell
