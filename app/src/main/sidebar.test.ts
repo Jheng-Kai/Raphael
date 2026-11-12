@@ -177,8 +177,9 @@ test("a window under 860 px shows the rail of faces: no menu button or drawer, s
     expect(document.querySelector('[data-sidebar="open"], .sidebar-toggle, .sidebar-scrim')).toBeNull();
     expect(nav.inert).toBe(false);
     expect([...nav.querySelectorAll(".side-foot [data-col]")].map(button => button.getAttribute("data-col"))).toEqual(["search", "add"]);
-    // The rail's Connections button is a bare icon, so it alone keeps its name under the pointer.
-    expect(nav.querySelector<HTMLElement>(".sidebar-apps")!.dataset.tooltip).toBeTruthy();
+    // The Connections button shows nothing under the pointer on the rail either; a screen reader still has its name.
+    expect(nav.querySelector<HTMLElement>(".sidebar-apps")!.hasAttribute("data-tooltip")).toBe(false);
+    expect(nav.querySelector<HTMLElement>(".sidebar-apps")!.getAttribute("aria-label")).toBeTruthy();
   } finally { read.mockRestore(); vi.unstubAllGlobals(); document.documentElement.removeAttribute("data-sidebar-collapsed"); document.documentElement.removeAttribute("data-sidebar-narrow"); }
 });
 

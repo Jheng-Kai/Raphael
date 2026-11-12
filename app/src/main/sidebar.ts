@@ -34,10 +34,7 @@ export function createSidebar(nav: HTMLElement, column: HTMLElement, app?: Pick<
   const drawApps = (): void => {
     const label = entryLabel(inventory), name = t("nav.apps");
     if (apps.getAttribute("aria-label") !== label) apps.setAttribute("aria-label", label);
-    // In the list the pill says its own words, so nothing more shows under the pointer (owner, 2026-11-12). Only the rail's bare
-    // icon is named, as its faces are.
-    const tip = document.documentElement.hasAttribute("data-sidebar-collapsed") ? label : undefined;
-    if (apps.dataset.tooltip !== tip) { if (tip) apps.dataset.tooltip = tip; else delete apps.dataset.tooltip; }
+    // Nothing shows under the pointer over this button, in the list or on the rail (owner, 2026-11-12): its name is for a screen reader.
     if (apps.querySelector(".nav-t")!.textContent !== name) apps.querySelector(".nav-t")!.textContent = name;
     const marks = typeof inventory === "object" ? [...inventory.apps].filter(item => item.connected)
       .sort((a, b) => (b.last_used_at ?? 0) - (a.last_used_at ?? 0))
@@ -86,7 +83,6 @@ export function createSidebar(nav: HTMLElement, column: HTMLElement, app?: Pick<
     if (folded) foot.prepend(search, add); else header?.append(search, add);
     if (!folded) nav.querySelectorAll(".mb-row[data-tooltip], .sidebar-account[data-tooltip]").forEach(row => row.removeAttribute("data-tooltip"));
     placeWidth();
-    drawApps();
   };
   const keep = (): void => {
     try { localStorage.setItem("raphael.sidebar.collapsed", String(collapsed)); } catch { /* Keep the current session choice. */ }
