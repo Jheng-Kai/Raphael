@@ -6370,6 +6370,69 @@ export function checkRendered(name, context = {}) {
   // ---------- 連結應用程式 as Grok Bot's Connect Apps (R-APPS-01, R-APPS-02) and one colour for everything that floats (R-FLOAT-01) ----------
   const colourOf = (prop, tokenName) => { const probe = document.createElement('i'); probe.style[prop] = `var(${tokenName})`; document.body.append(probe); const out = getComputedStyle(probe)[prop]; probe.remove(); return out; };
   const connectModal = () => document.querySelector('.modal-scrim[data-standalone="connections"] .modal');
+  if (name === "icon-colours") {
+    // The owner's colours on the tile (Simple Icons' hex of each brand; "black" = black in its official form; "multi" = drawn in several colours).
+    const official = { notion: "black", github: "black", googledrive: "multi", gmail: "multi", googlecalendar: "multi", linear: "#5E6AD2", figma: "multi", spotify: "#1ED760", discord: "#5865F2", slack: "multi",
+      todoist: "#E44332", obsidian: "#7C3AED", atlassian: "#0052CC", cloudflare: "#F38020", sentry: "#362D59", stripe: "#635BFF", n8n: "#EA4B71", zapier: "#FF4F00", paypal: "#002991", webflow: "#146EF5",
+      wix: "#0C6EFC", netlify: "#00C7B7", neon: "#00E599", prisma: "#2D3748", airtable: "multi", calendly: "#006BFF", posthog: "black", postman: "#FF6C37", sanity: "#F03E2F", bitly: "#EE6123",
+      telegram: "#26A5E4", openrouter: "black", brave: "#FB542B", searxng: "#3050FF" };
+    const rgb = hex => `rgb(${[1, 3, 5].map(at => parseInt(hex.slice(at, at + 2), 16)).join(', ')})`;
+    const seen = [];
+    for (const card of document.querySelectorAll('.cs-card')) {
+      const id = card.querySelector('[data-conn="open-store"]').dataset.id.replace(/^mark-/, '');
+      const want = official[id];
+      if (!want) continue;
+      const tile = card.querySelector('.cs-tile'), mark = tile.querySelector('.mono');
+      require(visible(tile) && getComputedStyle(tile).backgroundColor === 'rgb(255, 255, 255)', `${id} stands on the white tile`);
+      seen.push(id);
+      if (mark.matches('.logo-art')) { require(mark.querySelector('img.logo'), `${id}'s own full-colour logo is shown`); continue; }
+      const fills = [...mark.querySelectorAll('path')].map(path => getComputedStyle(path).fill);
+      if (want === 'multi') { require(new Set(fills).size > 2, `${id} is drawn in several colours (${[...new Set(fills)]})`); continue; }
+      const colour = getComputedStyle(mark).color;
+      if (want === 'black') {
+        const [r, g, b] = colour.match(/\d+/g).map(Number);
+        require(Math.max(r, g, b) < 60 && fills.every(fill => fill === 'currentcolor' || fill === colour || fill === 'rgb(10, 10, 10)'), `${id} is black on the tile (${colour})`);
+      } else require(colour === rgb(want) && fills.every(fill => fill === colour), `${id} is ${want} on the tile, not ${colour} (${[...new Set(fills)]})`);
+    }
+    require(seen.length === Object.keys(official).length, `every mark of the set was checked (${seen.length} of ${Object.keys(official).length}: missing ${Object.keys(official).filter(id => !seen.includes(id))})`);
+    return { check: name, marks: seen.length };
+  }
+  if (name === "float-cards") {
+    // Inside a floating surface an inner card stands apart the Grok Bot way (R-FLOAT-02): the surface's own colour with a 1 px edge, or the control fill for a
+    // control. Never a near-identical grey without an edge, never a darker hole. Controls (buttons, fields, switches) are told from the surface by their fill.
+    const channels = value => { const m = value.match(/[\d.]+/g)?.map(Number); return m && m.length >= 3 ? { r: m[0], g: m[1], b: m[2], a: m.length > 3 ? m[3] : 1 } : null; };
+    const lum = ({ r, g, b }) => [r, g, b].map(v => v / 255).map(v => v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4).reduce((sum, v, i) => sum + v * [0.2126, 0.7152, 0.0722][i], 0);
+    const ratio = (x, y) => { const [hi, lo] = [lum(x), lum(y)].sort((p, q) => q - p); return (hi + 0.05) / (lo + 0.05); };
+    const dark = document.documentElement.dataset.theme === 'dark';
+    const surfaces = [...document.querySelectorAll('.menu:not(.cb-menu), .cb-card, .mb-dialog, .modal, .au-pop, .cs-dialog')].filter(node => visible(node) && getComputedStyle(node).backgroundColor !== 'rgba(0, 0, 0, 0)');
+    require(surfaces.length > 0, "something floats in this picture");
+    const control = 'button, input, textarea, select, .btn, .sel, .field, .tab, .tg, .mb-fin, .mail-in, [role="switch"], [role="tab"], [role="menuitem"], [role="option"], [role="slider"], .mc-range, .mc-track, .emoji-find, .chip, .cs-chip, kbd, .cs-cap';
+    const selected = '[aria-pressed="true"], [aria-selected="true"], [aria-current], [aria-checked="true"], [data-on="true"], .is-selected, .is-active, .active, .on, [data-selected]';
+    const bad = [];
+    const seen = new Set();
+    for (const root of surfaces) for (const node of root.querySelectorAll('*')) {
+      if (seen.has(node) || node.namespaceURI === 'http://www.w3.org/2000/svg' || !visible(node)) continue;
+      seen.add(node);
+      if (surfaces.includes(node) || node.matches(':hover')) continue;
+      const style = getComputedStyle(node), fill = channels(style.backgroundColor), box = node.getBoundingClientRect();
+      if (!fill || fill.a < 0.5 || box.width < 36 || box.height < 24 || node.matches('img, canvas, video, iframe, progress, .cs-tile, .cs-mini, .av, .mono, .logo, [class*="slime"], .scrim, .mb-scrim, .modal-scrim, .cs-scrim, .owner-photo-edit, .trust, .ca-alert, .problem-notice, [role="alert"], [role="status"]')) continue;
+      if (node.closest('svg, .toast, [class*="slime"], .av, .cr-preview, .av-crop-view, .desktop-screen, .tpl-art, .mp-thumb')) continue;
+      let under = node.parentElement, ground = null;
+      while (under && !ground) { const c = channels(getComputedStyle(under).backgroundColor); if (c && c.a >= 0.5) ground = c; else under = under.parentElement; }
+      // what stands inside a control (the owner's photo disc in its button) is part of it
+      if (!ground || (under && under.matches(control))) continue;
+      const edge = ['Top', 'Right', 'Bottom', 'Left'].some(side => parseFloat(style[`border${side}Width`]) >= 1 && style[`border${side}Style`] !== 'none' && (channels(style[`border${side}Color`])?.a ?? 0) >= 0.3 && ratio(channels(style[`border${side}Color`]), fill) > 1.08)
+        || /inset 0px 0px 0px 1px/.test(style.boxShadow);
+      const c = ratio(fill, ground), darker = lum(fill) < lum(ground) - 0.0005, isControl = node.matches(control);
+      if (node.matches(selected)) continue;
+      const hole = dark && darker && c > 1.03 && !node.matches('input, textarea, .field, .mb-fin, .mail-in, select, .mc-range');
+      // a card is the surface itself with an edge (c ~ 1): any grey between is the near-identical one; a control is told from what it stands on by its fill
+      const same = isControl ? (c < 1.06 && !edge) : (c < 1.02 ? !edge : c < 1.45);
+      if (hole || same) bad.push(`${node.tagName.toLowerCase()}.${String(node.className).split(' ')[0]} ${Math.round(box.width)}x${Math.round(box.height)} ${style.backgroundColor} on ${ground.r},${ground.g},${ground.b} (${c.toFixed(2)}${hole ? ', darker' : ''})`);
+    }
+    require(bad.length === 0, `${bad.length} inner element(s) lose their background or stand as a near-identical grey without an edge: ${bad.slice(0, 14).join(' | ')}`);
+    return { check: name, surfaces: surfaces.length };
+  }
   if (name === "float-surface") {
     // Whatever floats in this picture stands on the floating surface and its edge, and a control on it is filled with the control colour.
     const surface = colourOf('backgroundColor', '--float'), edge = colourOf('borderTopColor', '--float-edge'), control = colourOf('backgroundColor', '--float-ctl');
@@ -6382,7 +6445,7 @@ export function checkRendered(name, context = {}) {
     }
     // A text button standing on the surface is filled with the control colour (its frame), unless it is the primary or a bare icon.
     const buttons = found.flatMap(node => [...node.querySelectorAll('.btn:not(.pri):not(.icon):not(.danger)')]).filter(button => visible(button) && button.textContent.trim() && !button.matches('.cs-main, .cs-have, .mc-source, .gr, .cs-viewall, [role="menuitem"]'));
-    for (const button of buttons) require(getComputedStyle(button).backgroundColor !== surface, `a button on a floating surface is told from it by its fill, ${control} (${button.textContent.trim()})`);
+    for (const button of buttons) require(getComputedStyle(button).backgroundColor !== surface || parseFloat(getComputedStyle(button).borderTopWidth) >= 1, `a button on a floating surface is told from it by its fill, ${control} (${button.textContent.trim()})`);
     return { check: name, surfaces: found.map(node => node.className.split(' ')[0]), buttons: buttons.length };
   }
   if (name === "connections-empty") {
@@ -7344,9 +7407,8 @@ export function checkRendered(name, context = {}) {
       require(visible(document.querySelector('.modal-scrim [data-pane="general"][aria-current="page"]')) && !document.querySelector('[data-models-tab]'), "Settings is open on 一般, not on the allowances' tab");
       require(window.__look.calls.some(call => call.from), "the scene traces where each call comes from");
       require(!document.querySelector('[data-act="models-refresh"]'), "no refresh button exists");
-      // Opened through the account menu, Settings starts its reading a moment after it is drawn.
+      // Settings asks at its opening, before its first tab is drawn; the account menu it was opened from asked on its own (api.ts ASKED_AGAIN: no earlier answer stands in for it).
       return (async () => {
-        for (let waited = 0; waited < 2000 && asked() < 1; waited += 25) await new Promise(resolve => setTimeout(resolve, 25));
         await new Promise(resolve => setTimeout(resolve, 150));
         require(asked() === 1, `the allowances were asked for once, at the opening (${asked()}; all readings: ${JSON.stringify(window.__look.calls.filter(call => call.method === "usage.allowances").map(call => String(call.from).split(" < ").slice(3, 6).join(" < ")))})`);
         return { check: name, asked: asked() };
@@ -8374,6 +8436,29 @@ export function checkRendered(name, context = {}) {
     require(handed.length === 1 && handed[0].params.choice === "yes" && draftCalls.length === 1, "handing over was answered once, and nothing was saved");
     return { check: name, version: card.dataset.version };
   }
+  if (name.startsWith("press-through-scrim-")) {
+    // A press on a dialog's scrim closes that dialog and is spent: what lies behind it is not pressed, focused or opened.
+    return (async () => {
+      // On a window narrower than 860 px the sidebar is a rail under the dialog and the scene has nothing outside the dialog to press: its step is left out.
+      if ((name === "press-through-scrim-settings" || name === "press-through-scrim-connect-apps") && matchMedia("(max-width: 859px)").matches) return { check: name, skipped: "narrow" };
+      await new Promise(resolve => setTimeout(resolve, 450));
+      const behind = document.querySelector('.mb-col [data-member="1"]');
+      const current = document.querySelector('.mb-col [data-member][aria-current="true"]')?.dataset.member;
+      if (name !== "press-through-scrim-model-chooser") {
+        require(current === '0', `the member behind the scrim was not opened: the open one is ${current}`);
+        require(!behind || (document.activeElement !== behind && !behind.contains(document.activeElement)), "the member behind the scrim did not take the focus");
+        require(!document.querySelector('.modal-scrim:not([hidden]), .cr-dialog, .mb-dialog, .cs-scrim'), "the dialog closed with the press");
+        require(!document.querySelector('#app-popover'), "the control behind the scrim did not open its menu or card");
+      }
+      if (name === "press-through-scrim-delete") require(window.__look.data.members.some(row => row.id === 2) && document.querySelector('.mb-col [data-member="2"]'), "nothing was deleted");
+      if (name === "press-through-scrim-member-maker") require(!window.__look.calls.some(call => /^members\.(create|add)/.test(call.method ?? "")), "nobody was made");
+      if (name === "press-through-scrim-model-chooser") {
+        require(!document.querySelector('.model-chooser'), "the chooser closed with the press");
+        require(document.querySelector('.modal-scrim:not([hidden])') && document.querySelector('.modal-scrim [data-pane="models"][aria-current="page"]'), "Settings stayed open on its own tab: the tab behind the scrim was not pressed");
+      }
+      return { check: name };
+    })();
+  }
   if (name.startsWith("press-through-")) {
     // R-UI-121 (owner, 2026-11-11): one press closes what was open AND acts on what was pressed. The scene pressed once; what the
     // press did must already be true, so this waits only for the page to draw it (and never presses again).
@@ -8396,10 +8481,7 @@ export function checkRendered(name, context = {}) {
     return (async () => {
       if (name === "press-through-avatar-picker") await opened(2);
       else if (name === "press-through-row-menu") await opened(1);
-      else if (name === "press-through-delete-dialog") {
-        await opened(1);
-        require(!document.querySelector('.mb-dialog') && rows.some(row => row.id === 2) && document.querySelector('.mb-col [data-member="2"]'), "the confirmation was abandoned: member 2 is still there and nothing was deleted");
-      } else if (name === "press-through-right-click") {
+      else if (name === "press-through-right-click") {
         await until(() => document.querySelector('#app-popover'), "the right click on the other row left no menu");
         require(document.querySelectorAll('#app-popover').length === 1, "one menu is open, not two");
         require(document.querySelector('.mb-col [data-member-more="1"][aria-expanded="true"]') && !document.querySelector('.mb-col [data-member-more="2"][aria-expanded="true"]'),

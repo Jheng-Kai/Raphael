@@ -85,6 +85,14 @@ for (const scene of scenes) if (['slime-states', 'presence-states-sidebar', 'bus
 scenes.push(...connectApps);
 // R-FLOAT-01: what floats (a dialog, a menu, a popover, a floating card) stands on the floating surface and its edge in every theme.
 const FLOAT_SCENES = new Set(['member-delete-ask', 'member-maker', 'context-menu-member', 'composer-model-small', 'composer-model-sources', 'automations-detail-own', 'automations-create-slot', 'appearance-menu', 'model-choices-answer', 'profile', 'connections-add-menu', 'server-menu', 'connections-delete']);
+// R-FLOAT-02: inside a floating surface an inner card is the surface with a 1 px edge, a control is filled with the control colour: every tab of Settings and every
+// dialog, menu and popover that holds cards, fields, rows and wells.
+export const FLOAT_CARD_SCENES = new Set(['profile', 'appearance', 'models', 'dictation', 'tools', 'safety', 'about', 'usage', 'usage-allowances-chatgpt', 'model-choices-answer', 'model-choices-local', 'chooser-chatgpt-signed-out',
+  'quick-model-menu', 'quick-effort-menu', 'cli-account-menu', 'member-maker', 'member-maker-chosen', 'slime-picker', 'member-avatar', 'member-delete-ask', 'context-menu-member', 'foot-account-menu', 'foot-usage-submenu',
+  'composer-model-small', 'composer-model-sources', 'composer-model-favorites', 'automations-detail-own', 'automations-create-slot', 'automations-create-time-menu', 'emoji-picker', 'connections', 'connections-add-menu',
+  'plugins-detail', 'connect-apps', 'connect-apps-more', 'connect-app-oauth', 'connect-app-connected', 'vault-new-login', 'missing-vision', 'primary-contact-picker', 'settings-chatgpt-row',
+  'template-preview', 'template-review-pages', 'template-export-review', 'details-routine-view', 'room-rename', 'sidebar-owner-crop', 'computer-file-confirm', 'connections-command', 'connections-edit', 'automations-detail-routine', 'automations-create-button', 'member-template-gallery', 'missing-provider-repair', 'missing-search-repair']);
+for (const scene of scenes) if (FLOAT_CARD_SCENES.has(scene.name)) scene.steps.push({ action: "check", name: "float-cards" });
 for (const scene of scenes) if (FLOAT_SCENES.has(scene.name)) scene.steps.push({ action: "check", name: "float-surface" });
 scenes.push(...topRow);
 for (const scene of scenes) if (TOP_ROW_SCENES.has(scene.name)) scene.steps.push({ action: "check", name: "conversation-top-row" });

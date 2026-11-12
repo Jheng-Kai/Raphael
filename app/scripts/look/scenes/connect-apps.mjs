@@ -6,6 +6,11 @@ import { scene, click, wait, check, type, scroll, settings } from "./steps.mjs";
 const open = [...settings("connections"), wait(".cs-card")];
 const linked = [...settings("connections"), click('[data-conn="connected"]'), wait(".cs-linked")];
 
+// Every one-colour and coloured mark of `service-icons.ts` (SERVICE_ICONS), as a row of the apps on its tile (R-APPS-01).
+const MARKS = ["notion", "github", "googledrive", "gmail", "googlecalendar", "linear", "figma", "spotify", "discord", "slack", "todoist", "obsidian", "atlassian", "cloudflare",
+  "sentry", "stripe", "n8n", "zapier", "paypal", "webflow", "wix", "netlify", "neon", "prisma", "airtable", "calendly", "posthog", "postman", "sanity", "bitly", "telegram",
+  "openrouter", "brave", "searxng"];
+
 export default [
   scene("connect-apps", "One view: the title and the chip of the connected apps, the search, the chips of the categories, then 為你推薦 and a section for each category of six apps", [...open, check("connect-apps-view"), check("float-surface")]),
   scene("connect-apps-scrolled", "The list scrolls under the title, the search and the chips, which stay put", [...open, scroll(".cs-sec:last-of-type .cs-card:last-child"), check("connect-apps-scrolled")]),
@@ -16,4 +21,7 @@ export default [
   scene("connect-app-oauth", "An app that signs in with OAuth: its page has the mark on a tile, the name, a white 連結 and a card of information", [...open, click('[data-conn="open-store"][data-id="gmail"]'), wait(".cs-page"), check("connect-app-oauth")]),
   scene("connect-app-key", "An app that asks for an API key: its page says how it signs in, once, and 連結 opens the form for the key", [...open, click('[data-conn="open-store"][data-id="acme-ledger"]'), wait(".cs-page .cs-needs"), check("connect-app-key")]),
   scene("connect-app-connected", "A connected app's page shows its connected state, its switch and its ⋯ in the place of 連結, and its tools in a card", [...linked, click('[data-conn="open"][data-id="composio:notion"]'), wait(".cs-page .cs-tools"), check("connect-app-connected")]),
+  scene("connect-icons", "Every mark of the set stands on its white tile in its owner's colour: Spotify green, Discord blue, Jira blue, the near-black ones near-black", [
+    ...open, type("#conn-search", "icon-mark"), wait(".cs-card"), scroll(".cs-card:last-child"), scroll(".cs-card:last-child"), check("icon-colours"),
+  ], { iconMarks: MARKS }),
 ];

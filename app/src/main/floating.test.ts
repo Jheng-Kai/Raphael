@@ -66,7 +66,7 @@ describe("everything that floats", () => {
     const listed = scope![1]!.split(",").map((part) => part.trim());
     const body = scope![2]!;
     // Inside a floating surface the ordinary tokens point at the floating ones.
-    for (const pair of ["--btn: var(--float-ctl)", "--hover: var(--float-hover)", "--edge: var(--float-edge)", "--line: var(--float-edge)", "--panel: var(--float-ctl)"]) expect(body).toContain(pair);
+    for (const pair of ["--btn: var(--float-ctl)", "--hover: var(--float-hover)", "--edge: var(--float-edge)", "--line: var(--float-edge)", "--panel: var(--float)", "--field: var(--float-ctl)"]) expect(body).toContain(pair);
     for (const [file, selector, name] of SURFACES) {
       expect(listed, `${selector} is in the scope`).toContain(name);
       const rule = ruleOf(file, selector);
@@ -83,5 +83,30 @@ describe("everything that floats", () => {
     expect(css).toMatch(/\.cs-tile\s*\{[^}]*background:\s*var\(--tile\)/);
     // A button's hover and press come from the surface it stands on.
     expect(styles).toMatch(/\.btn:hover:not\(:disabled\)\s*\{\s*background:\s*var\(--btn-hover, var\(--hover\)\)/);
+  });
+});
+
+// R-FLOAT-02: inside a floating surface an inner card is the surface itself with a 1 px hairline and its radius (as Grok Bot's Skills and Information cards),
+// a control is filled with the control colour, and nothing wears a light outline but a focus ring (owner, 2026-11-13).
+describe("inner cards on a floating surface", () => {
+  const rule = (file: string, selector: string): string => ruleOf(file, selector);
+
+  test("a card stands on the surface with a hairline, a field and a control on the control fill", () => {
+    expect(rule("styles.css", ".modal-body .slist")).toMatch(/border:\s*1px solid var\(--float-edge\)[^}]*background:\s*var\(--panel\)/);
+    expect(rule("styles.css", ".modal-nav")).toMatch(/background:\s*transparent/);
+    expect(rule("styles.css", ".field")).toMatch(/background:\s*var\(--field, var\(--panel\)\)/);
+    expect(rule("members.css", ".mb-fin")).toMatch(/background:\s*var\(--field, var\(--panel\)\)/);
+  });
+
+  test("the model chooser is one tone with a hairline between its columns, the chosen row the selected fill and no light edge", () => {
+    expect(rule("model-picker.css", ".mc-rail")).toMatch(/background:\s*transparent[^}]*border-right:\s*1px solid var\(--line\)/);
+    expect(rule("model-picker.css", ".mc-pane")).toMatch(/background:\s*transparent/);
+    expect(rule("model-picker.css", '.mc-row[aria-checked="true"]')).toMatch(/background:\s*var\(--float-hover\)[^}]*border-color:\s*var\(--line\)/);
+    expect(rule("model-picker.css", '.mc-rail .btn.mc-source[aria-pressed="true"]')).toMatch(/background:\s*var\(--float-hover\)[^}]*border-color:\s*transparent/);
+    expect(rule("model-picker.css", '.lm-row:has(.lm-main[aria-checked="true"])')).toMatch(/border-color:\s*var\(--line\)/);
+    for (const file of ["model-picker.css", "members.css", "automations.css", "composer-brain.css", "connections.css"]) {
+      const light = [...strip(read(file)).matchAll(/([^{}]+)\{([^{}]*)\}/g)].filter(([, selector, body]) => !/focus|outline/.test(selector!) && /border(?:-color)?\s*:[^;]*var\(--(?:accent-text|text)\)/.test(body!) && /aria-(?:checked|pressed|selected)/.test(selector!));
+      expect(light.map(([, selector]) => `${file}: ${selector!.trim()}`), file).toEqual([]);
+    }
   });
 });

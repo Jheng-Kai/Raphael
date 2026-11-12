@@ -4,9 +4,10 @@
 // open (owner, 2026-11-11). Two shapes of outside, one rule:
 //   - a menu or popover has nothing over the page: the press is simply not stopped, so the page element receives its own
 //     pointerdown, focus and click, and the panel closes between pointerup and click;
-//   - a scrim (a dialog, the settings window, a drawer) sits over the page and catches the press: the panel closes, then the
-//     element under the pointer is found and activated once, with the focus, as the press would have done.
-// A press on bare scrim only closes. A press that began inside, or a drag that ended outside, never closes or passes through.
+//   - a scrim (a dialog, the settings window) sits over the page and catches the press: the panel closes and the press is spent
+//     (owner, 2026-11-13: 「如果點 dialog 外面就是把 dialog 關掉就好，不用可以直接點到後面的東西」): nothing behind the scrim is pressed,
+//     focused or right-clicked. Only a drawer's scrim (`closeAndPress`, the narrow sidebar and the details panel) hands the press down.
+// A press that began inside, or a drag that ended outside, never closes or passes through.
 // A panel that may not close right now (canClose) keeps the modal's old promise instead: the press is spent and goes nowhere.
 //
 // The control that opened a panel is a toggle (R-UI-124). Every panel records its opener when it registers: the control the
@@ -128,16 +129,13 @@ interface Plan {
   close: { layer: Layer; panel: HTMLElement }[];
   /** The scrim of a panel that the press landed on, if any. */
   scrim: HTMLElement | null;
-  /** The press may go on to what is under that scrim: its panel is the last one open. */
-  deliver: boolean;
   /** The press is on the control that opened a panel it closes: it only closes, and its click is spent. */
   onOpener: boolean;
 }
 
 /**
  * A scrim hides everything under it, so a press on one is spent on the panels above that scrim, one layer of menus per
- * press, and reaches the page only when its own panel is the last one: a menu open over a dialog is closed first, and the
- * dialog by the next press. A press on no scrim (a menu over the page, a control beside the panel) closes every panel it is
+ * press, and never reaches the page: a menu open over a dialog is closed first, and the dialog by the next press. A press on no scrim (a menu over the page, a control beside the panel) closes every panel it is
  * outside of and reaches its target itself, unless that target opened one of them: then it only closes (R-UI-124).
  */
 function planOf(down: EventTarget | null, up: EventTarget | null, activating = true): Plan {
@@ -150,9 +148,9 @@ function planOf(down: EventTarget | null, up: EventTarget | null, activating = t
     // A right click activates nothing, so it never toggles.
     const toggled = activating && stop && !caption(down) && !caption(up) && !stop.panel.contains(down as Node) && !stop.panel.contains(up as Node) && pressesOpener(stop.layer, down, up) ? [stop] : [];
     const close = [...stack, ...toggled];
-    return { close, scrim: null, deliver: false, onOpener: close.some(({ layer }) => pressesOpener(layer, down, up)) };
+    return { close, scrim: null, onOpener: close.some(({ layer }) => pressesOpener(layer, down, up)) };
   }
-  return { close: stack.slice(0, Math.max(1, modal)), scrim: up as HTMLElement, deliver: modal === 0 && stack.length === 1 && down === up, onOpener: false };
+  return { close: stack.slice(0, Math.max(1, modal)), scrim: up as HTMLElement, onOpener: false };
 }
 
 /** A target that holds a panel and is no more than the ground around it: a scrim, which catches presses meant for the page. */
@@ -279,7 +277,6 @@ function listen(): void {
       // The press went to the control that opened the panel: it closed it, and its click is not the control's to act on.
       press.swallow = true;
     }
-    if (closed && plan.deliver && plan.scrim) deliverBeneath(plan.scrim, event.clientX, event.clientY, "click", plan.close.map(({ layer }) => layer.opener));
   }, true);
   const cancel = (): void => { if (gesture) gesture.void = true; };
   document.addEventListener("pointercancel", cancel, true);
@@ -326,7 +323,6 @@ function listen(): void {
     noteActivation(event);
   }, true);
   // A right click outside closes what is open and then opens the menu of what it pressed, if that has one (context-menu.ts).
-  // Over a scrim the pressed thing is under it, so the right click is handed down the same way a left click is.
   document.addEventListener("contextmenu", (event) => {
     if (delivering || event.button !== 2) return;
     const plan = planOf(event.target, event.target, false);
@@ -335,9 +331,9 @@ function listen(): void {
     let closed: boolean;
     try { closed = closeAll(plan.close); } finally { passing = false; }
     if (closed && !plan.scrim) return;
+    // Over a scrim the right click closes the dialog and is spent, as a left press is.
     event.preventDefault();
     event.stopImmediatePropagation();
-    if (closed && plan.deliver && plan.scrim) deliverBeneath(plan.scrim, event.clientX, event.clientY, "contextmenu");
   }, true);
 }
 
