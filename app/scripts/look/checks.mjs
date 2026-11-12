@@ -3071,6 +3071,10 @@ export function checkRendered(name, context = {}) {
     if(name==='computer-takeover-done')require(calls.filter(call=>call.method==='computer.viewer_control'&&!call.params.held&&call.params.takeover==='private-takeover-request').length===1,'one explicit handback with the current nonce');
     if(name==='computer-takeover-owner'||name==='desktop-owner'){
       require(panel.dataset.interactive==='true'&&getComputedStyle(frame).pointerEvents==='auto','click enables input in place');
+      // Only the pill under the screen says who holds it; the screen carries no badge of its own (owner, 2026-11-13:
+      // 「明明下方就有顯示我正在控制的，為什麼左邊還要再顯示一次？」).
+      const saying=[...document.querySelectorAll('body *')].filter(node=>node.childElementCount===0&&visible(node)&&node.textContent.trim()==='你正在控制');
+      require(saying.length<=1&&!document.querySelector('.desktop-owner'),`你正在控制 shows once (${saying.length})`);
         require(calls.filter(call=>call.method==='computer.viewer_open'&&call.params.member_id===1).length===1,'takeover keeps the same member session');
       require(frame.contentDocument.defaultView.__desktopConnections===1,'takeover keeps the same noVNC connection');
       const latency=Number(panel.dataset.controlLatencyMs);require(Number.isFinite(latency)&&latency<300,`local click-to-interactive ${latency}ms < 300ms`);

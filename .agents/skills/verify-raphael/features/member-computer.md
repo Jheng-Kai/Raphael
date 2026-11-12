@@ -1173,7 +1173,9 @@ prepares it. The Computer tab, its host control and its maintenance menu stay as
 a decision for the owner, not made here).
 
 The larger view's pill: watching offers Take control; in control reads 你正在控制 with a quiet 停止 that hands the
-computer back through the same takeover (the sign-in request's button stays 我完成了).
+computer back through the same takeover (the sign-in request's button stays 我完成了). The pill is the only place that
+says it: the screen has no badge of its own (owner, 2026-11-13: 「明明下方就有顯示我正在控制的，為什麼左邊還要再顯示一次？」;
+`desktop-owner` asserts 你正在控制 shows once).
 
 The conversation shows no line or card for a running, finished or stopped computer task any more
 (`desktop-timeline.ts`); only a handoff the owner must act on is a card.
