@@ -871,8 +871,6 @@ export type MainEvent =
   | { type: "RoomsChanged"; room_id: number }
   | { type: "RoutinesChanged"; member_id: number }
   | { type: "CalendarChanged" }
-  /** Home's daily summaries were written (`home.changed`). */
-  | { type: "HomeChanged" }
   | { type: "MembersChanged" }
   | { type: "ProvidersChanged" }
   | { type: "SettingsChanged" }
@@ -1182,14 +1180,14 @@ export interface MicAccess {
 }
 
 /** The pages the tray's menu can open. */
-export type TrayPage = "home" | "history" | "dictionary" | "settings";
+export type TrayPage = "agent" | "history" | "dictionary" | "settings";
 
 /** What the tray asks the page to do once it is open: start adding a word to the dictionary. */
 export type TrayAction = "add-word";
 
 // ---------- what the pages share with main.ts ----------
 
-export type PageId = "home" | "agent" | "dictation" | "history" | "dictionary" | "settings" | "automations";
+export type PageId = "agent" | "dictation" | "history" | "dictionary" | "settings" | "automations";
 export type MainPageId = Exclude<PageId, "settings" | "history" | "dictionary">;
 export type DictationTab = "overview" | "history" | "dictionary";
 

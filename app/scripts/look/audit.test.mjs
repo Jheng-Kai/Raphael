@@ -263,7 +263,7 @@ describe("rendered look checks", () => {
     const files = scenes.filter(scene => scene.name.startsWith('computer-file-'));
     expect(files).toHaveLength(5);
     for (const scene of files) expect(needsDesktopFixture([scene]), scene.name).toBe(true);
-    expect(needsDesktopFixture([{name:'home', fixture:{}}])).toBe(false);
+    expect(needsDesktopFixture([{name:'sidebar', fixture:{}}])).toBe(false);
     expect(needsDesktopFixture([{name:'desktop-owner', fixture:{}}])).toBe(true);
     expect(needsDesktopFixture([{name:'card-sheet', fixture:{cardDeck:true}}])).toBe(true);
   });
@@ -813,7 +813,7 @@ describe("rendered look checks", () => {
     expect(audit().productRules.map(item => item.rule)).toEqual(['R-UI-16', 'R-UI-18']);
   });
   it("allows the specified round sidebar action surface while rejecting unrelated icon surfaces", () => {
-    const { audit } = productAudit('<nav class="side"><button class="btn icon sidebar-home" style="border:0;background:gray"></button></nav><button class="btn icon" style="border:0;background:gray"></button>');
+    const { audit } = productAudit('<nav class="side"><button class="btn icon sidebar-tool" style="border:0;background:gray"></button></nav><button class="btn icon" style="border:0;background:gray"></button>');
     expect(audit().productRules.filter(item => item.rule === 'R-UI-16')).toHaveLength(1);
   });
   it("lets the guide's round arrow keep the grey surface of the pill it replaced, and no other icon (R-UI-16)", () => {

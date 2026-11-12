@@ -6,7 +6,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 /** The app's icon names and the Lucide icon each one draws. */
 const MAP = {
   menu: "menu", sidebar: "panel-left", person: "user", crown: "crown", reply: "reply", pin: "pin", eyeOff: "eye-off",
-  home: "house", clock: "clock", book: "book", down: "chevron-down", up: "chevron-up", plus: "plus", copy: "copy",
+  clock: "clock", book: "book", down: "chevron-down", up: "chevron-up", plus: "plus", copy: "copy",
   trash: "trash-2", search: "search", x: "x", gear: "settings", mic: "mic", wallet: "wallet", sparkle: "sparkle",
   info: "info", lock: "lock", left: "chevron-left", right: "chevron-right", refresh: "refresh-cw", link: "link",
   chat: "message-square", globe: "globe", monitor: "monitor", expand: "maximize", open: "maximize-2", shrink: "minimize-2",
@@ -15,7 +15,7 @@ const MAP = {
   plug: "plug", bell: "bell", calendar: "calendar", news: "newspaper", folder: "folder", memory: "brain", attach: "paperclip",
   voice: "audio-lines", database: "database", smile: "smile", smilePlus: "smile-plus", play: "play", pause: "pause",
   external: "external-link", minus: "minus", image: "image", file: "file", download: "download", more: "ellipsis",
-  repeat: "repeat", mail: "mail", swap: "arrow-left-right", report: "file-chart-column", pinOff: "pin-off", store: "store",
+  repeat: "repeat", mail: "mail", swap: "arrow-left-right", report: "file-chart-column", pinOff: "pin-off", store: "store", fileDown: "file-down", gauge: "gauge", gridPlus: "grid-2x2-plus",
 };
 
 const root = new URL("../../", import.meta.url);

@@ -12,10 +12,9 @@ export const journeys = [
   { name: "typing", description: "200 human-paced keys on 150 persisted rich turns with concurrent offline brains; Event Timing, long frames and CPU profile" },
   { name: "appearance", description: "Real Appearance dropdown, theme persistence and narrow rows at three native sizes" },
   { name: "owner-face", description: "A window that may load before the core still hears it: a saved owner photo reaches the sidebar" },
-  { name: "sidebar-home", description: "Inspect the resizable sidebar, in-place search and Home emblem in the real WebView" },
+  { name: "sidebar-foot", description: "Inspect the resizable sidebar, in-place search, the foot (the face and the Connections pill) and the account menu in the real WebView" },
   { name: "rich-content", description: "Persisted rich reply renders tables, highlighted code and SVG; remote images require consent" },
   { name: "owner-round10", description: "Native learned batch Undo, hover/expiry, passive window and stable conversation controls" },
-  { name: "home-timing", description: "Measure first painted Home against a two-second offline CLI allowance read" },
   { name: "hidden-window", description: "Close to tray and minimize suspend page timers; returning catches up a fake reply completed while hidden" },
   { name: "hidden-window-refused", description: "The same returns while WebView2 refuses the normal-memory step (0x8007139F): the page still shows and runs" },
   { name: "startup-rooms", description: "Ten normal and ten slow-core owner-path launches keep seeded group chats in the sidebar, without a page reload" },
@@ -42,7 +41,7 @@ export const journeys = [
   { name: "delete-conversation", description: "Delete conversations/member after real exchanges and room reports; detect stale timeline rows" },
   { name: "gmail-connect", description: "Owner-only Composio card sign-in; stop before approving Google consent" },
   { name: "self-diagnosis", description: "Force an offline connection card failure; the same member checks and explains the real reason" },
-  { name: "calendar", description: "The real core and SQLite: the owner makes, moves and removes an event on the Calendar page, a member told 加到今天的行程 adds one with the real tool, and Home draws them" },
+  { name: "calendar", description: "The real core and SQLite: the owner makes, moves and removes an event on the Calendar page, a member told 加到今天的行程 adds one with the real tool, and the Calendar page draws them" },
   { name: "store-finder", description: "Real Composio catalog: measure all-app paint, DOM size and long tasks" },
   { name: "catalog-connect", description: "Raphael and member find/connect a non-Gmail catalog app; stop before consent" },
 ];
@@ -329,7 +328,7 @@ export async function drive(name, context) {
       }
     }
     await page.reload({waitUntil:'domcontentloaded'});
-    await page.waitForSelector('.page-home:not([hidden]) .ho-hero');
+    await page.waitForSelector('.page-agent:not([hidden]) .conversation-trigger');
     await page.waitForSelector(':root[data-theme="dark"]');
     await capture('dark-restored');
     return;
@@ -341,17 +340,24 @@ export async function drive(name, context) {
     result.face = true;
     return;
   }
-  if (name === "sidebar-home") {
+  if (name === "sidebar-foot") {
     result.layout = [];
     for (const width of [1120, 720, 1920]) {
       await page.setViewport({ width, height: width === 1920 ? 1080 : 900 });
       await pause(250);
-      result.layout.push(await page.evaluate(checkRendered, "home-hero"));
+      result.layout.push(await page.evaluate(checkRendered, "foot-rest"));
       result.layout.push(await page.evaluate(checkRendered, "sidebar-shell"));
-      await page.evaluate(checkRendered, "sidebar-search-before");
-      await click(page, '[data-col="search"]');
-      result.layout.push(await page.evaluate(checkRendered, "sidebar-search-open"));
-      await capture(`home-sidebar-${width}`);
+      // The rail (under 860px) has no search button; the wide list keeps its own.
+      if (width >= 860) {
+        await page.evaluate(checkRendered, "sidebar-search-before");
+        await click(page, '[data-col="search"]');
+        result.layout.push(await page.evaluate(checkRendered, "sidebar-search-open"));
+        await capture(`sidebar-foot-${width}`);
+        await page.keyboard.press('Escape'); await pause(150);
+      } else await capture(`sidebar-foot-${width}`);
+      await perform(page, { action: "account-menu" });
+      result.layout.push(await page.evaluate(checkRendered, "foot-account-menu"));
+      await capture(`account-menu-${width}`);
       await page.keyboard.press('Escape'); await pause(150);
     }
     return;
@@ -379,14 +385,6 @@ export async function drive(name, context) {
     result.richContent.push(await page.evaluate(checkRendered, "rich-expand")); await capture("expanded");
     result.stored = (await snapshot()).agent_turns.filter(turn => turn.session_id === "native-rich-content");
     if (result.stored.length !== 1 || !result.stored[0].text.includes('```mermaid')) throw new Error("Rich reply source was not persisted intact");
-    return;
-  }
-  if (name === "home-timing") {
-    await page.waitForFunction(() => window.__homeTiming?.firstPaintMs !== null);
-    result.homeTiming = await page.evaluate(() => window.__homeTiming);
-    await capture("first-paint");
-    // Home shows no allowances, but the core still reads them for its overview: that read must not hold Home up.
-    if (result.homeTiming.firstPaintMs >= 1500) throw new Error(`Home waited for CLI allowances: ${result.homeTiming.firstPaintMs.toFixed(1)} ms`);
     return;
   }
   if (name === "voice-keys") {
@@ -949,7 +947,7 @@ await page.waitForFunction(role => document.querySelector('.ms-pane #ms-role')?.
     await perform(page, { action: "scroll", selector: ".pg-card" });
     await capture("dark");
     await page.reload({ waitUntil: "domcontentloaded" });
-    await page.waitForSelector(".page-home:not([hidden]) .ho-hero", { visible: true, timeout: 90000 });
+    await page.waitForSelector(".page-agent:not([hidden]) .conversation-trigger", { visible: true, timeout: 90000 });
     await chat(page);
     await wait(page, '.pg-body[data-state="ready"] iframe');
     await refuseAsk();
@@ -1345,9 +1343,9 @@ await page.waitForFunction(role => document.querySelector('.ms-pane #ms-role')?.
     const data = await snapshot();
     result.upgraded = { members: data.members.length, turns: data.agent_turns.length, conversations: data.conversations.length };
     if (!data.members.length || !data.agent_turns.length) throw new Error("The older data did not come through");
-    await page.waitForSelector(".page-home:not([hidden]) .ho-hero", { visible: true, timeout: 60000 });
+    await page.waitForSelector(".page-agent:not([hidden]) .conversation-trigger", { visible: true, timeout: 60000 });
     await pause(1500);
-    await capture("home");
+    await capture("start");
     await chat(page); await pause(1000);
     await capture("chief");
     for (const member of data.members.slice(0, 6)) {
@@ -1429,13 +1427,12 @@ await page.waitForFunction(role => document.querySelector('.ms-pane #ms-role')?.
       await inspect("details-dismissed-720", ["conversation-header"]);
     }
     await scrim?.dispose();
-    await click(page, '#nav [data-go="home"]'); await wait(page, '.ho-hero h1');
-    await inspect("home-720", ["sidebar-shell", "home-hero", "home-overview"]);
+    await inspect("start-720", ["sidebar-shell", "foot-rest"]);
     await page.setViewport({ width: 1920, height: 1080 });
-    await inspect("home-1920", ["home-hero", "home-overview"]);
+    await inspect("start-1920", ["foot-rest"]);
     await page.setViewport({ width: 1280, height: 800 });
-    await inspect("home-1280", ["home-hero", "home-overview"]);
-    await click(page, '.ho-schedule header [data-home-go="calendar"]'); await wait(page, '.au-day-col'); await pause(200);
+    await inspect("start-1280", ["foot-rest"]);
+    await perform(page, { action: "account-menu", item: "calendar" }); await wait(page, '.au-day-col'); await pause(200);
     await inspect("calendar-week-1280", ["calendar-shell"]);
     await click(page, '[data-au="view"]'); await click(page, '#app-popover [data-value="day"]');
     await inspect("calendar-day-1280", ["calendar-shell"]);
@@ -1459,8 +1456,8 @@ await page.waitForFunction(role => document.querySelector('.ms-pane #ms-role')?.
       const summary = (await context.rpc("rooms.list", {})).rooms.find(item => item.id === room.id);
       await page.waitForFunction((id, preview) => document.querySelector(`[data-room="${id}"] .mb-row-p`)?.textContent.endsWith(preview.replace(/\s+/g, ' ')), {}, room.id, summary.preview);
       await inspect(`sidebar-room-${count}-1280`, ["sidebar-room-avatar", "sidebar-room-summary", "sidebar-selection"], {roomId:room.id, latest:{text:summary.preview, created:summary.last_at}});
-      await click(page, '#nav [data-go="home"]'); await wait(page, '.ho-hero h1');
-      await inspect(`sidebar-home-after-room-${count}-1280`, ["sidebar-selection"]);
+      await perform(page, { action: "account-menu", item: "calendar" }); await wait(page, '.au-day-col');
+      await inspect(`sidebar-calendar-after-room-${count}-1280`, ["sidebar-selection"]);
     }
   } else if (name === "calendar") {
     const events = async () => (await snapshot()).calendar_events;
@@ -1470,7 +1467,7 @@ await page.waitForFunction(role => document.querySelector('.ms-pane #ms-role')?.
     };
     const inspectPage = async (label, checks) => { await pause(200); for (const check of checks) await page.evaluate(checkRendered, check); await capture(label); };
     await page.setViewport({ width: 1280, height: 800 });
-    await click(page, '.ho-schedule header [data-home-go="calendar"]'); await wait(page, ".au-day-col");
+    await perform(page, { action: "account-menu", item: "calendar" }); await wait(page, ".au-day-col");
     await inspectPage("week-empty", ["calendar-shell", "calendar-now"]);
     // The owner, by hand: 建立, then the small form beside the placeholder.
     await click(page, '[data-au="new"]');
@@ -1512,13 +1509,13 @@ await page.waitForFunction(role => document.querySelector('.ms-pane #ms-role')?.
     const state = await snapshot();
     if (!state.agent_steps.some(step => step.tool === "calendar_add" && step.outcome === "ok")) throw new Error("The member's turn has no successful calendar_add step");
     await capture("member-added");
-    // Home draws both, and a click on the member's event opens it on the Calendar page.
-    await perform(page, { action: "click", selector: '#nav [data-go="home"]' });
-    await wait(page, ".ho-hero h1");
-    const eventOnHome = `.ho-schedule [data-home-event="own:${added.id}"]`;
-    await wait(page, eventOnHome);
-    await inspectPage("home", ["home-calendar-language"]);
-    await click(page, eventOnHome);
+    // The Calendar page draws both (it opens on today from the account menu), and a click on the member's event opens its detail.
+    await perform(page, { action: "account-menu", item: "calendar" });
+    await wait(page, ".au-day-col");
+    const memberEvent = `.cal-chip.is-own[data-entry="own:${added.id}"]`;
+    await wait(page, memberEvent);
+    await inspectPage("member-event", ["calendar-shell"]);
+    await click(page, memberEvent);
     await wait(page, ".au-pop-detail");
     const detail = await page.$eval(".au-pop-detail", node => node.textContent);
     if (!detail.includes("NativeSecretary") || !detail.includes("From the member")) throw new Error(`The detail does not say who added it: ${detail}`);
@@ -1598,8 +1595,9 @@ await page.waitForFunction(role => document.querySelector('.ms-pane #ms-role')?.
         await capture(`${locale}-settings-${pane}`);
       }
       await click(page, '.modal-scrim [data-act="close"]');
-      for (const destination of ["home", "agent", "dictation"]) {
-        await click(page, destination === "agent" ? ".mb-chief" : `#nav [data-go="${destination}"]`); await pause(200);
+      for (const destination of ["agent", "dictation"]) {
+        if (destination === "agent") await click(page, ".mb-chief"); else await perform(page, { action: "account-menu", item: destination });
+        await pause(200);
         const tabs = destination === "dictation" ? ["overview", "history", "dictionary"] : [null];
         for (const tab of tabs) {
           if (tab) { await click(page, `[data-dictation-tab="${tab}"]`); await pause(150); }

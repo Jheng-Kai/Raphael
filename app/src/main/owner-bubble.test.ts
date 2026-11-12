@@ -89,5 +89,5 @@ test("only a member's panel and settings page wear the colour on switches, the r
   // A refresh that changes nothing touches nothing in the panel: the colour is written only when it differs.
   expect(source).toContain("if (place.style.getPropertyValue(name) !== value) place.style.setProperty(name, value);");
   // Nothing else marks a place: the Settings dialog, Home and the store never carry the mark.
-  for (const file of ["pages/home.ts", "owner-settings.ts", "member-store.ts"]) expect(readFileSync(join(__dirname, file), "utf8"), file).not.toContain("memberSwitch");
+  for (const file of ["owner-settings.ts", "member-store.ts"]) expect(readFileSync(join(__dirname, file), "utf8"), file).not.toContain("memberSwitch");
 });

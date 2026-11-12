@@ -1,4 +1,4 @@
-// What the Calendar page and Home's calendar draw alike: one chip, one time format, one colour for each source and one
+// What the Calendar page draws: one chip, one time format, one colour for each source and one
 // way of saying what Google is. An own event is ink on the page; a routine takes the colour of its member's slime; a
 // Google event is an outline with Google's mark.
 import { formatClock } from "./format";
@@ -93,7 +93,7 @@ export function chipBody(entry: ChipEntry, o: { clock?: boolean; face?: number; 
   return entry.rhythm ? `${lead}${copy}` : `${copy}${status}${lead}`;
 }
 
-/** The one chip of the calendar, on the page and on Home. `cls` and `attrs` place it. */
+/** The one chip of the calendar. `cls` and `attrs` place it. */
 export function chipHTML(entry: ChipEntry, cls = "", attrs = "", o: { clock?: boolean; face?: number; timing?: boolean } = {}): string {
   const style = entry.kind === "routine" || entry.kind === "own" ? chipColor(entry.member) : "";
   return btn(chipBody(entry, o), `cal-chip is-${entry.kind}${entry.rhythm ? " is-rhythm" : ""}${cls ? ` ${cls}` : ""}`, `${style}${attrs}`);
@@ -114,7 +114,7 @@ export function clockRange(entry: Pick<CalendarEntry, "start" | "end" | "allDay"
   return entry.kind === "routine" ? formatClock(entry.start) : `${formatClock(entry.start)} – ${formatClock(entry.end)}`;
 }
 
-/** An entry of Home's projection: an own event, or a connected one. */
+/** An entry of the calendar projection (`home.overview`): an own event, or a connected one. */
 export function entryOfItem(item: HomeItem): CalendarEntry {
   const allDay = item.all_day === true;
   const end = item.end_ms ?? item.at_ms + (allDay ? 24 * HOUR : HOUR);
@@ -199,7 +199,7 @@ export function monthEntries(entries: readonly CalendarEntry[], key: string): Ca
 
 const OFFER_KEY = "raphael.calendar.googleOffer";
 
-/** The owner closed the offer to connect: it is not made again, here or on Home. */
+/** The owner closed the offer to connect: it is not made again. */
 export function offerDismissed(state: GoogleCalendarState): boolean {
   try { return localStorage.getItem(`${OFFER_KEY}.${state}`) === "dismissed"; } catch { return false; }
 }

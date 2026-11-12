@@ -17,10 +17,18 @@ describe("real app entry with the shared look fixture", () => {
     HTMLElement.prototype.scrollIntoView = () => {};
     state = installMock(fixture);
     await import("../../src/main/main.ts");
-    await vi.waitFor(() => expect(document.querySelector('.page-home:not([hidden]) .ho-hero')).not.toBeNull());
+    await vi.waitFor(() => expect(document.querySelector('.page-agent:not([hidden]) .conversation-trigger')).not.toBeNull());
   }, 30000);
+  // The owner's face at the sidebar's foot opens the account menu; its rows are the ways to dictation, the calendar and the settings.
+  const viaAccountMenu = async item => {
+    document.querySelector('#nav .sidebar-account').click();
+    await vi.waitFor(() => expect(document.querySelector('#app-popover.account-menu')).not.toBeNull());
+    document.querySelector(`#app-popover.account-menu [data-account="${item}"]`).click();
+  };
   it("boots and navigates all primary destinations and settings without unmocked calls", async () => {
-    expect(document.querySelector('#nav [data-go="home"]')).not.toBeNull();
+    // The app opens on Raphael's conversation: no Home, no page button in the sidebar's foot.
+    expect(document.querySelector('.page-home, #nav [data-go]')).toBeNull();
+    expect(document.querySelector('.mb-chief[aria-current="true"]')).not.toBeNull();
     document.querySelector('.mb-chief').click();
     await vi.waitFor(() => expect(document.querySelector(".page-agent:not([hidden]) .conversation-trigger")).not.toBeNull());
     await vi.waitFor(() => expect(document.querySelector(".conversation-caption").hidden).toBe(true));
@@ -30,17 +38,16 @@ describe("real app entry with the shared look fixture", () => {
       expect(reply?.querySelector(".message-text")?.textContent).toContain("這週的研究有三個重點");
       expect(reply?.closest("[hidden]")).toBeNull();
     });
-    for (const destination of ["home", "dictation", "agent"]) {
-      document.querySelector(destination === "agent" ? ".mb-chief" : `#nav [data-go="${destination}"]`).click();
-      await vi.waitFor(() => expect(document.querySelector(destination === "agent" ? ".page.page-agent:not([hidden])" : `#nav [data-go="${destination}"][aria-current="page"]`), destination).not.toBeNull());
+    for (const destination of ["dictation", "agent"]) {
+      if (destination === "agent") document.querySelector(".mb-chief").click(); else await viaAccountMenu(destination);
+      await vi.waitFor(() => expect(document.querySelector(`.page.page-${destination}:not([hidden])`), destination).not.toBeNull());
     }
-    document.querySelector('#nav [data-go="home"]').click();
-    await vi.waitFor(() => expect(document.querySelector('.ho-schedule header [data-home-go="calendar"]')).not.toBeNull());
     expect(document.querySelector('#nav .nav[data-go="automations"]')).toBeNull();
-    document.querySelector('.ho-schedule header [data-home-go="calendar"]').click();
+    await viaAccountMenu("calendar");
     await vi.waitFor(() => expect(document.querySelector('.au-page:not([hidden]) .au-calendar-scroll')).not.toBeNull());
-    expect(document.querySelector('#nav [data-go][aria-current="page"]').dataset.go).toBe("home");
-    document.querySelector('#nav .nav[data-go="settings"]').click();
+    // Away from the conversation no sidebar row is selected.
+    expect(document.querySelector('#nav [aria-current="page"], #nav .nav[aria-current="true"]')).toBeNull();
+    await viaAccountMenu("settings");
     await vi.waitFor(() => expect(document.querySelector('.modal-scrim [data-pane="general"]')).not.toBeNull());
     // 連結應用程式 is no tab: the sidebar opens it as a dialog of its own (R-UI-111).
     // Grok Bot's six tabs (owner, 2026-11-07): appearance is a section of 一般.
@@ -60,7 +67,7 @@ describe("real app entry with the shared look fixture", () => {
   });
   it("deletes a dictionary word through its overflow menu and keeps undo available", async () => {
     document.querySelector('.modal-scrim [data-act="close"]').click();
-    document.querySelector('#nav [data-go="dictation"]').click();
+    await viaAccountMenu("dictation");
     await vi.waitFor(() => expect(document.querySelector('[data-dictation-tab="dictionary"]')).not.toBeNull());
     document.querySelector('[data-dictation-tab="dictionary"]').click();
     await vi.waitFor(() => expect(document.querySelectorAll('.wrow')).toHaveLength(2));

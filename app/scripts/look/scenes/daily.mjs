@@ -13,21 +13,18 @@ const faces=count=>({rooms:fixture.rooms.map(item=>({...item,member_ids:item.id=
 export default [
   scene('daily-footer-hover','Connections pill has an outlined quiet hover and, in the list, no tooltip',[{action:'member-column',collapsed:false},hover('.sidebar-apps'),check('daily-footer-hover'),check('sidebar-shell')]),
   scene('daily-footer-marks','Three connected service marks share the outlined door',[{action:'member-column',collapsed:false},wide(wait('.sidebar-app-marks .mono')),check('daily-marks'),check('sidebar-shell')],marks),
-  scene('daily-footer-home','Home retains the selected icon surface',[page('home'),{action:'member-column',collapsed:false},check('sidebar-shell'),check('sidebar-selection')]),
+  scene('daily-footer-away','Away from the conversation (the calendar, opened from the account menu) no sidebar row is selected, and the foot stays as it was',[page('automations'),wait('.au-page:not([hidden])'),{action:'member-column',collapsed:false},check('sidebar-shell'),check('sidebar-selection'),check('foot-rest')]),
   scene('daily-press-feedback','Ordinary and selected sidebar controls answer a press without moving',[
     page('agent'),{action:'member-column',collapsed:false},
-    {action:'press-feedback',selectors:['.sidebar-apps','.sidebar-account','.sidebar-dictation','.sidebar-home','.mb-chief']},
+    {action:'press-feedback',selectors:['.sidebar-apps','.sidebar-account','.mb-chief']},
     hover('.mb-chat:not([hidden]) .ra .chat-message'),
     // A reply keeps only react, reply and ⋯ beside it (its Copy is in the ⋯ menu), so the ⋯ is the control pressed here.
     {action:'press-feedback',selectors:['.mb-chat:not([hidden]) .ra [data-act="more-message"]']},
     type(input,'Press feedback sample'),
     {action:'press-feedback',selectors:['.mb-chat:not([hidden]) .cmp-attach','.mb-chat:not([hidden]) .cmp-send','.mb-chat:not([hidden]) .cmp-mode','.mb-chat:not([hidden]) .conversation-trigger']},
     room(1),{action:'press-feedback',selectors:['[data-room="1"]']},
-    page('home'),{action:'press-feedback',selectors:['.sidebar-home']},
-    page('dictation'),{action:'press-feedback',selectors:['.sidebar-dictation']},
   ]),
-  scene('daily-press-surfaces','Quiet Home, connections and calendar controls retain visible stationary press feedback',[
-    page('home'),{action:'press-feedback',selectors:['.ho-stat.btn','.ho-schedule .ho-event','.ho-schedule header .btn.icon']},
+  scene('daily-press-surfaces','Quiet connections and calendar controls retain visible stationary press feedback',[
     ...settings('connections'),{action:'press-feedback',selectors:['.cs-open']},
     click('[data-conn="tab"][data-id="store"]'),wait('.cs-card'),{action:'press-feedback',selectors:['.cs-main']},
     key('Escape'),waitGone('.modal-scrim:not([hidden])'),
@@ -54,7 +51,7 @@ export default [
     ...(kind==='room'?[click('.au-room-thread .ra [data-room-act="copy-message"], .au-room-thread .ra [data-act="copy-message"]')]:[click('.mb-chat:not([hidden]) .ra [data-act="more-message"]'),click('#app-popover [data-pick="copy"]')]),check('daily-copy'),
   ])),
   scene('daily-draft-member','A member draft waits through other conversations and Home',[
-    member(1),type(input,'Unfinished sample draft'),member(2),type(input,'Another sample draft'),member(1),page('home'),member(1),check('daily-draft-member'),
+    member(1),type(input,'Unfinished sample draft'),member(2),type(input,'Another sample draft'),member(1),page('dictation'),member(1),check('daily-draft-member'),
   ]),
   scene('daily-draft-room','Room words wait through another room and member',[
     room(1),type('#room-message','Unfinished sample draft'),room(2),type('#room-message','Another room draft'),member(1),room(1),check('daily-draft-room'),

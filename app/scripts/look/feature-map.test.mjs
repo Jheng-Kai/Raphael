@@ -9,7 +9,7 @@ const skill = resolve(root, ".agents/skills/verify-raphael");
 // RAPHAEL_STAGED_DOCS names a folder that mirrors the tree with edited documents not applied yet.
 const staged = process.env.RAPHAEL_STAGED_DOCS ? resolve(root, process.env.RAPHAEL_STAGED_DOCS, ".agents/skills/verify-raphael") : null;
 const readMap = file => readFileSync(staged && existsSync(resolve(staged, file)) ? resolve(staged, file) : resolve(skill, file), "utf8");
-const names = ["home", "conversation", "members", "automations", "team-and-rooms", "dictation", "settings-appearance", "connections-mcp", "usage", "onboarding", "owner-polish", "composer-discovery", "performance"];
+const names = ["navigation", "conversation", "members", "automations", "team-and-rooms", "dictation", "settings-appearance", "connections-mcp", "usage", "onboarding", "owner-polish", "composer-discovery", "performance"];
 
 function expectIndexedNotes(index, files) {
   const linked = [...new Set([...index.matchAll(/\]\((?:\.\/)?([\w.-]+\.md)(?:#[^\s)]*)?\)/g)].map(([, file]) => file))];
@@ -18,16 +18,16 @@ function expectIndexedNotes(index, files) {
 
 describe("maintained verification feature map", () => {
   it("accepts new notes linked from the index without extending the required names", () => {
-    expectIndexedNotes("[Home](home.md) [Future](./future-note.md#checks) [Again](future-note.md)",
-      ["README.md", "home.md", "future-note.md"]);
+    expectIndexedNotes("[Navigation](navigation.md) [Future](./future-note.md#checks) [Again](future-note.md)",
+      ["README.md", "navigation.md", "future-note.md"]);
   });
   it("rejects notes absent from the index and index links without a note", () => {
-    expect(() => expectIndexedNotes("[Home](home.md)", ["README.md", "home.md", "unlinked.md"])).toThrow();
-    expect(() => expectIndexedNotes("[Home](home.md) [Missing](missing.md)", ["README.md", "home.md"])).toThrow();
+    expect(() => expectIndexedNotes("[Navigation](navigation.md)", ["README.md", "navigation.md", "unlinked.md"])).toThrow();
+    expect(() => expectIndexedNotes("[Navigation](navigation.md) [Missing](missing.md)", ["README.md", "navigation.md"])).toThrow();
   });
   it("does not accept external or parent-document links as local feature notes", () => {
-    expectIndexedNotes("[Home](home.md) [Web](https://example.test/external.md) [Parent](../SKILL.md) [Section](#checks)",
-      ["README.md", "home.md"]);
+    expectIndexedNotes("[Navigation](navigation.md) [Web](https://example.test/external.md) [Parent](../SKILL.md) [Section](#checks)",
+      ["README.md", "navigation.md"]);
   });
   it("uses explicit modifier fields instead of unsupported Puppeteer key chords", () => {
     expect(scenes.flatMap(scene => scene.steps.filter(step => step.action === 'key' && /(?:Shift|Control|Alt|Meta)\+/.test(step.key)).map(step => `${scene.name}: ${step.key}`))).toEqual([]);
@@ -45,7 +45,7 @@ describe("maintained verification feature map", () => {
       for (const [, command] of commands) {
         const options = parseOptions(command.trim().split(/\s+/), scenes);
         expect(options.themes, `${name}: ${command}`).toEqual(["light", "dark"]);
-        const wide = ["home", "automations", "dictation", "members", "conversation", "team-and-rooms", "connections-mcp", "usage"].includes(name) || options.selected.some(scene => scene.name.startsWith("quick-") || scene.name.startsWith("cli-account-") || scene.name.startsWith("window-hover-") );
+        const wide = ["navigation", "automations", "dictation", "members", "conversation", "team-and-rooms", "connections-mcp", "usage"].includes(name) || options.selected.some(scene => scene.name.startsWith("quick-") || scene.name.startsWith("cli-account-") || scene.name.startsWith("window-hover-") );
         const allowedWidths = wide ? [[1120, 720, 1920]] : [[1120, 720], [1120, 720, 1920]];
         allowedWidths.push([1120,720,1920,1180,1280]);
         allowedWidths.push([1120,720,1920,1280]);

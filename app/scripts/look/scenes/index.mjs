@@ -10,6 +10,7 @@ import handoffGroup from "./handoff-group.mjs";
 import menus from "./menus.mjs";
 import presence from "./presence.mjs";
 import sidebar from "./sidebar.mjs";
+import foot from "./foot.mjs";
 import pressThrough from "./press-through.mjs";
 import openerToggle from "./opener-toggle.mjs";
 import shortcuts from "./shortcuts.mjs";
@@ -40,7 +41,6 @@ import composerVoice from "./composer-voice.mjs";
 import settings from "./settings.mjs";
 import overlay from "./overlay.mjs";
 import languageOverlay from "./language-overlay.mjs";
-import home from "./home.mjs";
 import apps from "./apps.mjs";
 import contextMenu from "./context-menu.mjs";
 import ownerRound from "./owner-round.mjs";
@@ -49,7 +49,7 @@ import ownerRound10 from "./owner-round10.mjs";
 import ownerRound9 from "./owner-round9.mjs";
 import { withOwnerRound4, noNaming } from "./owner-round4.mjs";
 
-export const scenes = withOwnerRound4([...polish, ...mcpProposals, ...workBatch, ...batch, ...missing, ...ownerQuestions, ...richContent, ...sidebar, ...shortcuts, ...slime, ...pages, ...home, ...chat, ...desktop, ...automations, ...mentions, ...history, ...composerVoice, ...settings, ...apps, ...contextMenu, ...overlay, ...ownerRound, ...ownerRound3, ...ownerRound9, ...ownerRound10, noNaming]);
+export const scenes = withOwnerRound4([...polish, ...mcpProposals, ...workBatch, ...batch, ...missing, ...ownerQuestions, ...richContent, ...sidebar, ...foot, ...shortcuts, ...slime, ...pages, ...chat, ...desktop, ...automations, ...mentions, ...history, ...composerVoice, ...settings, ...apps, ...contextMenu, ...overlay, ...ownerRound, ...ownerRound3, ...ownerRound9, ...ownerRound10, noNaming]);
 scenes.push(...colleagues);
 scenes.push(...memberStore);
 scenes.push(...mediaData);
@@ -76,7 +76,7 @@ for (const scene of scenes) if (['admin-approval','room-question-card','composer
   scene.motion=true;
   scene.steps.push({action:'motion-audit'});
 }
-for (const scene of scenes) if (['slime-states', 'presence-states-sidebar', 'busy-team-thread', 'busy-team-home', 'busy-team-room', 'running'].includes(scene.name)) {
+for (const scene of scenes) if (['slime-states', 'presence-states-sidebar', 'busy-team-thread', 'busy-team-room', 'running'].includes(scene.name)) {
   scene.motion = true;
   const freeze = scene.steps.findIndex(step => step.action === 'freeze-motion');
   scene.steps.splice(freeze < 0 ? scene.steps.length : freeze, 0, { action: 'motion-cost', ...(process.env.LOOK_TRACE==='1'?{measure:{name:'motion-cost',enforce:false}}:{}) });

@@ -159,10 +159,6 @@ elif operation == "init":
     with connection:
         for key, value in settings.items():
             connection.execute("INSERT OR REPLACE INTO settings(key,value) VALUES (?,?)", (key, json.dumps(value)))
-    if len(sys.argv) > 3 and sys.argv[3] == "home-timing":
-        from raphael_core.agent.quota import Quotas
-        Quotas(connection).record("codex", {"windows": [{"period": "fiveHour", "remaining_percent": 75,
-            "resets_at": 2000000000, "status": "allowed"}], "exhausted": False})
     if len(sys.argv) > 3 and sys.argv[3] == "model-picker":
         import os
         import time

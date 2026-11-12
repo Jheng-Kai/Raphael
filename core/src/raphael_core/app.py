@@ -1020,8 +1020,8 @@ class App(Router):
         )
         self.agent.register(self)
         self.rooms.turn_view = lambda turn: self.agent._turn_views([turn])[0]
-        from .native_journeys import bot_homes_brain, home_timing_brain
-        native_brain = bot_homes_brain(fake_llm, data_dir) or home_timing_brain(fake_llm, data_dir)
+        from .native_journeys import bot_homes_brain
+        native_brain = bot_homes_brain(fake_llm, data_dir)
         if native_brain is not None:
             self.agent._cli_brains = native_brain
             self.memory._cli_brains = native_brain
@@ -1038,6 +1038,7 @@ class App(Router):
         self.calendar.shown, self.calendar.zone, self.calendar.google_state = self.home.between, self.home.zone, self.home.google_state
         self.vm.timezone = lambda: self.home.timezone_name
         self.home.timezone_changed = self.vm.refresh_timezone
+        self.members.timezone_seen = self.home.note_timezone
         self.background.use_team(self.members, self.agent.team_tool)
         self.background.use_owner_tools(self.agent.background_owner_tool)
         self.background.use_attachment_store(self.attachment_store)
@@ -1260,7 +1261,6 @@ class App(Router):
             self._conn.close()
 
         steps: list[tuple[str, Callable[[], Awaitable[None]]]] = [
-            ("stop Home narratives", self.home.aclose),
             ("stop the calendar refresh", self.home.calendar_events.aclose),
             ("end room routing calls", self.rooms.aclose),
             ("cancel the dictation", close_dictation),

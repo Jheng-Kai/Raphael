@@ -234,7 +234,7 @@
 .cal-chip.btn.is-past { opacity: 0.6; }
 .cal-chip.is-own.btn.is-past, .cal-chip.is-own.btn.is-past:hover:not(:disabled) { opacity: 1; background: var(--surface-2); color: var(--text-2); }
 .cal-chip.is-own.btn.is-past:active:not(:disabled) { background: var(--pressed); }
-/* The event whose panel is open, or that Home opened, lifts when its details are open; a ring stays keyboard focus's (R-UI-31). */
+/* The event whose panel is open, or that a link opened, lifts when its details are open; a ring stays keyboard focus's (R-UI-31). */
 .cal-chip.is-home-focus, .cal-chip[aria-current="true"] { z-index: 2; box-shadow: var(--pop); }
 .cal-chip.is-event.is-home-focus, .cal-chip.is-event[aria-current="true"] { box-shadow: inset 0 0 0 1px var(--btn-edge), var(--pop); }
 .au-history-mark { position: absolute; right: var(--sp-1); bottom: var(--sp-1); width: 6px; height: 6px; border-radius: var(--r-pill); background: var(--err); pointer-events: none; }

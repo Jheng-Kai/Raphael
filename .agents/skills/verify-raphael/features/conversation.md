@@ -600,7 +600,7 @@ Offline fixtures do not prove native microphone, providers or transport.
 
 ## How to get to it (user POV)
 
-From Home, click Raphael in the rail or open a member report. Select Raphael or another member in the sidebar (compact width:
+The app opens on Raphael's conversation; select another member in the rail or open a member report. Select Raphael or another member in the sidebar (compact width:
 member picker). Raphael stays first with his original large bare emblem and name. The column's top-left arrow toggles a remembered 56px face strip, including at compact width. Other expanded rows retain their 40px faces, time and preview. Click the stacked member/conversation title to toggle details. The title displays
 the current session only; conversation creation, search, switching and row menus
 live in the details list. The header's only tool is the computer, for Raphael too (2026-11-05). Use sidebar search, or
@@ -1573,14 +1573,14 @@ acceptance.
 
 R-UI-71: unchanged refreshes retain DOM identity and scroll position. Private threads and rooms share the keyed line diff; private carry hooks retain typed, mail and page card state. Live labels paint synchronously through updateLiveTimes and tick independently of HTML identity. Cached previews paint before a frame. Member rows, heading faces, details, Home and Calendar patch or skip unchanged data. Loaded tasks and handoffs refresh promptly; unrelated workers poll at most once per second. Slow private reads coalesce without starving their result. MemberActivity and AgentTurn retain roster state and unread updates.
 
-Pressure scenes: busy-team-thread (quiet control reaches the bottom), busy-team-up, busy-team-steps (one changed turn and ready cached cards), busy-team-typing (real input and caret intact; nearest-rank key-to-frame P90 at most 100 ms, long tasks at most 50 ms; all samples and the slowest key remain in the report), busy-team-follow, busy-team-anchor, busy-team-hover, busy-team-room and busy-team-home. Unchanged thread/room limits: lines/cards/faces 0, all reads 24, member reads 6, long tasks 600 ms, bottom distance 80 px; scrolling-up writes 0. Room messages currently render plain links, so room card identity is vacuous; private scenes exercise actual preview cards. Home keeps faces.
+Pressure scenes: busy-team-thread (quiet control reaches the bottom), busy-team-up, busy-team-steps (one changed turn and ready cached cards), busy-team-typing (real input and caret intact; nearest-rank key-to-frame P90 at most 100 ms, long tasks at most 50 ms; all samples and the slowest key remain in the report), busy-team-follow, busy-team-anchor, busy-team-hover and busy-team-room. Unchanged thread/room limits: lines/cards/faces 0, all reads 24, member reads 6, long tasks 600 ms, bottom distance 80 px; scrolling-up writes 0. Room messages currently render plain links, so room card identity is vacuous; private scenes exercise actual preview cards.
 
-Regression consumers: composer-stop-background, composer-stop-navigation, composer-task-stop, polish-scroll, polish-search-chief, polish-search-room, polish-room-recording, generated-video-running, home-calendar-rhythm, search and calendar-rhythm-week. Run these and the pressure scenes with both themes at 1120, 720 and 1920x1080. Inspect contact sheets and relevant full-size images. Browser fixture evidence does not establish judge, native, live-provider or network acceptance.
+Regression consumers: composer-stop-background, composer-stop-navigation, composer-task-stop, polish-scroll, polish-search-chief, polish-search-room, polish-room-recording, generated-video-running, search and calendar-rhythm-week. Run these and the pressure scenes with both themes at 1120, 720 and 1920x1080. Inspect contact sheets and relevant full-size images. Browser fixture evidence does not establish judge, native, live-provider or network acceptance.
 
 Unit evidence: app/scripts/look/event-storm.test.mjs (nearest-rank P90, retained slowest frame and exact threshold), ui-patch.test.ts (identity, focus, listener and keyed reorder), pages/agent-stop.test.ts (same-page skip, task scope, slow reads), timeline.test.ts (clock-independent HTML), chat-work.test.ts (visible ticking labels and queued fallback), group-chats.test.ts (room identity and event scope), automations.test.ts (unchanged Calendar), link-previews.test.ts (synchronous cache paint).
 
 ```powershell
-npm run look -- busy-team-thread busy-team-up busy-team-steps busy-team-typing busy-team-follow busy-team-anchor busy-team-hover busy-team-room busy-team-home --theme both --width 1120,720,1920x1080
+npm run look -- busy-team-thread busy-team-up busy-team-steps busy-team-typing busy-team-follow busy-team-anchor busy-team-hover busy-team-room --theme both --width 1120,720,1920x1080
 ```
 
 Activity listener audit also covers Settings usage: unchanged allowances retain their nodes; changed values use the shared DOM patch. Evidence: usage-analytics.test.ts. Representative additional consumers:
@@ -1599,7 +1599,7 @@ npm run look -- composer-voice-recording empty-conversation-recording --theme bo
 Review follow-up (2026-11-02): unchanged roster loads still restore viewing and read the visible unread thread; CoreReady invalidates both roster and viewing memory. Returning from a room to the same member refreshes retained turns. The page snapshot includes the local date. Evidence: pages/agent-members.test.ts (returning, unread on show, core restart, zero storm viewing and room return) and pages/agent-stop.test.ts (local midnight).
 
 ```powershell
-npm run look -- busy-team-thread busy-team-up busy-team-steps busy-team-typing busy-team-follow busy-team-anchor busy-team-hover busy-team-room busy-team-home sidebar-unread conversation-midnight --theme both --width 1120,720,1920x1080
+npm run look -- busy-team-thread busy-team-up busy-team-steps busy-team-typing busy-team-follow busy-team-anchor busy-team-hover busy-team-room sidebar-unread conversation-midnight --theme both --width 1120,720,1920x1080
 ```
 
 ## Folded colleague exchanges (2026-11-02)
@@ -1741,9 +1741,9 @@ transcript-clean, transcript-working, transcript-time-gap,
 event-routine-line, sidebar-row-time,
 sidebar-group-author. Capture both themes at 1120,720,1920x1080.
 
-Affected consumers: busy-team-thread/up/steps/typing/follow/anchor/hover/room/home,
+Affected consumers: busy-team-thread/up/steps/typing/follow/anchor/hover/room,
 composer-stop scenes, reply, conversation-running/midnight, handoff-group scenes,
-centred-system-events, representative room and Home scenes, search and polish-search
+centred-system-events, representative room and start-conversation scenes, search and polish-search
 scenes. Work-dots and pending-work assert one live avatar without a second waiting style or clock.
 Quick-question-result checks the same model receipt in message hover actions.
 
@@ -1776,7 +1776,7 @@ while reply bubbles retain their reading-width limit.
 
 Review regression coverage (R-UI-79): test_event_readers.py exercises both search
 RPCs, repaired historical indexes, model context, voice and Telegram delivery;
-test_home.py covers Home and sidebar readers. presence-transcript.test.ts covers
+test_home.py covers the calendar projection (home.overview) and sidebar readers. presence-transcript.test.ts covers
 find, highlight, copy and rendered thread selection for all four receipt kinds;
 message-search.test.ts covers event-only result snippets; receipts add no gap between
 bubbles (owner, 2026-11-05). Run event-routine-line, event-routine-spacing, event-calendar-line,
@@ -1798,7 +1798,7 @@ npm run look -- event-routine-find-group --theme both --width 1120,720,1920x1080
 R-UI-85..91: fixed sidebar actions, newest window entry, group heading press, copy feedback, isolated drafts, long paste files and bare overlapping room identities. See README daily section for affected existing sidebar consumers and performance assertions.
 
 ```powershell
-npm run look -- daily-footer-hover daily-footer-marks daily-footer-home daily-press-feedback daily-press-surfaces daily-press-card daily-press-desktop daily-newest daily-folder-heading daily-copy-chief daily-copy-member daily-copy-room daily-draft-member daily-draft-room daily-paste-chief daily-paste-room daily-long-draft daily-faces-2-rail daily-faces-3-rail daily-faces-4-rail daily-faces-2 daily-faces-3 daily-faces-4 --theme both --width 1120,720,1920x1080
+npm run look -- daily-footer-hover daily-footer-marks daily-footer-away daily-press-feedback daily-press-surfaces daily-press-card daily-press-desktop daily-newest daily-folder-heading daily-copy-chief daily-copy-member daily-copy-room daily-draft-member daily-draft-room daily-paste-chief daily-paste-room daily-long-draft daily-faces-2-rail daily-faces-3-rail daily-faces-4-rail daily-faces-2 daily-faces-3 daily-faces-4 --theme both --width 1120,720,1920x1080
 ```
 
 Local unit authorization excludes judge, native, network and providers. Browser fixture evidence remains separate from native and design acceptance.

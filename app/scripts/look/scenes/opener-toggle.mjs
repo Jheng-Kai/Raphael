@@ -1,4 +1,4 @@
-import { scene, click, wait, check, focus, hover, key, member, rightClick, watchOpens, pressOpener } from "./steps.mjs";
+import { scene, click, wait, check, focus, hover, key, member, rightClick, watchOpens, pressOpener, accountMenu } from "./steps.mjs";
 
 // R-UI-124 (owner, 2026-11-11): the control that opened a menu, popover, picker, card or dialog is its toggle. Each scene opens a
 // thing once from its control, then presses that same control again with the real mouse; the check finds it closed, closed for good,
@@ -18,8 +18,13 @@ export default [
   // A scrim dialog: the press arrives on the scrim over the sidebar and used to be handed to 「連接應用程式」, which opened it again.
   toggle("connect-apps", "With 「連接應用程式」 open, a press on the sidebar's 「連接應用程式」 behind the scrim closes it and does not open it again", [],
     "#nav .sidebar-apps", '.modal-scrim[data-standalone="connections"] .modal-body .cs', ":root[data-window-modal]", { over: "scrim", attribute: "data-window-modal" }),
-  toggle("settings", "With Settings open, a press on the account button behind the scrim closes it and does not open it again", [],
-    '#nav [data-go="settings"]', ".modal-scrim [data-pane]", ":root[data-window-modal]", { over: "scrim", attribute: "data-window-modal" }),
+  // Settings opens from the account menu's 設定; the face that opened the menu is the opener of what the menu opened (dismissals.ts), so a press on it
+  // behind the scrim closes Settings and opens neither the menu nor Settings again.
+  scene("opener-toggle-settings", "With Settings open (from the account menu), a press on the face behind the scrim closes it and does not open the menu or Settings again", [
+    watchOpens(":root[data-window-modal]", { gone: ":root[data-window-modal]", over: "scrim", attribute: "data-window-modal" }),
+    accountMenu("settings"), wait(".modal-scrim [data-pane]"), pressOpener("#nav .sidebar-account"), check("opener-toggle-settings")]),
+  toggle("account-menu", "The owner's face opens the account menu and a second press on the face closes it", [],
+    "#nav .sidebar-account", "#app-popover.account-menu", "#app-popover"),
   // A page's card is no opener of this kind any more: its page stands in the thread's place with no scrim over the card (R-PAGE-03).
   // Menus and popovers beside their opener.
   toggle("add-menu", "The sidebar's + opens its menu and a second press on the + closes it", [column],
@@ -27,8 +32,9 @@ export default [
   // 新增成員 is a dialog over the dimmed window: the press lands on the scrim over the + and closes it (the dialog registers with the shared dismissal).
   scene("opener-toggle-member-maker", "With 新增成員 open, a press on the sidebar's + behind the scrim closes it and does not open the menu or the dialog again",
     [column, watchOpens(".cr-dialog", { gone: ".cr-dialog", over: "scrim" }), click('#nav [data-col="add"]'), click('#app-popover [data-pick="member"]'), wait(".cr-dialog"), pressOpener('#nav [data-col="add"]'), check("opener-toggle-member-maker")]),
-  toggle("search-card", "The sidebar's search button opens the search card and a second press closes it", [column],
-    '#nav [data-col="search"]', ".side-search", ".side-search"),
+  // The search button is in the list's top row only: the rail has none (owner, 2026-11-12 23:25), so its steps run on the wide list.
+  (scene => ({ ...scene, steps: scene.steps.map(step => ({ ...step, wide: true })) }))(toggle("search-card", "The sidebar's search button opens the search card and a second press closes it", [column],
+    '#nav [data-col="search"]', ".side-search", ".side-search")),
   toggle("model-menu", "The composer's model button opens its card and a second press closes it", [member(1)],
     ".composer .cmp-model .mp-trigger", ".cb-menu .cb-now", ".cb-menu"),
   toggle("permission-menu", "The composer's permission button opens its card and a second press closes it", [member(1)],

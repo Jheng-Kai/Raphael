@@ -56,9 +56,9 @@ existing row, icon and typography with ordinary routines and event error rows.
 
 ## Calendar navigation review (2026-11-01)
 
-The general Home calendar entrance resumes its in-memory date and view. Explicit date/event links still jump. View choice persists in guarded browser storage across reload; the date starts on today in a fresh launch. Week uses all seven columns at content widths of at least 520px, otherwise a short range with an explicit date title. All-day and rhythm bars align with the hour columns. Previous/Today/next share a quiet borderless group; Today dims in its current range without moving.
+The account menu's 行事曆 (Home's calendar icon before 2026-11-12) resumes its in-memory date and view. Explicit date/event links still jump. View choice persists in guarded browser storage across reload; the date starts on today in a fresh launch. Week uses all seven columns at content widths of at least 520px, otherwise a short range with an explicit date title. All-day and rhythm bars align with the hour columns. Previous/Today/next share a quiet borderless group; Today dims in its current range without moving.
 
-Selected scenes: calendar-remember, calendar-view-reload, calendar-week-fit, calendar-today-controls. Run both themes at 1120,900,720,1920x1080,480. Check return through Home and conversation, true page reload, seven columns at 1120/720, narrow fallback dates, bar edges, hover surface and stable button geometry. At 480, month overflow counts fit their buttons and the rhythm shows only face and title.
+Selected scenes: calendar-remember, calendar-view-reload, calendar-week-fit, calendar-today-controls. Run both themes at 1120,900,720,1920x1080,480. Check return through the account menu and a conversation, true page reload, seven columns at 1120/720, narrow fallback dates, bar edges, hover surface and stable button geometry. At 480, month overflow counts fit their buttons and the rhythm shows only face and title.
 
 ```powershell
 npm run look -- calendar-remember calendar-view-reload calendar-week-fit calendar-today-controls --theme both --width 1120,720,1920x1080
@@ -85,12 +85,12 @@ and report navigation. Edit/off share one row height and text baseline at every 
 both use existing overflow counts. Daily, weekly, once and every 24 hours stay timed.
 
 ```powershell
-npm run look -- calendar-rhythm-week calendar-rhythm-day calendar-rhythm-month calendar-rhythm-popover calendar-rhythm-hidden home-calendar-rhythm automations-google-composio automations-calendar automations-all-day details-routines home-own-events --theme both --width 1120,720,1920x1080
+npm run look -- calendar-rhythm-week calendar-rhythm-day calendar-rhythm-month calendar-rhythm-popover calendar-rhythm-hidden automations-google-composio automations-calendar automations-all-day details-routines --theme both --width 1120,720,1920x1080
 ```
 
 Inspect all contact sheets and full-size narrow/wide bars, month lines, exception
 chips, popovers and time menus. Compare editors with automation-edit, member rows
-with details-routines, and Home chips with home-own-events. Checks assert no ordinary
+with details-routines. Checks assert no ordinary
 rhythm chip in the hours, error/confirm exceptions, daily chips, one month line,
 status icons, shared controls and saved window values.
 
@@ -144,7 +144,7 @@ destination/end conditions are what the member sets when the owner asks; the win
 
 ## How to get to it (user POV)
 
-From Home click the calendar block, a date or an event. Home remains highlighted in the rail; there is no separate Automations entry.
+Press the owner's face at the sidebar's foot, then 行事曆. No sidebar row stands selected; there is no separate Automations entry.
 
 - **Top bar:** 今天, the arrows, the title, and on the right the view dropdown (日 週 月) in the shared menu.
 - **Left rail:** 建立, the month with its own arrows and today marked, then what the calendar shows with a check for each: 行程, each member's routines, Google when connected. A check hides that source and is remembered. A member's row still drags onto a slot to start a routine. Keep awake stands at its foot, and the line about Google above it.
@@ -158,7 +158,7 @@ From Home click the calendar block, a date or an event. Home remains highlighted
 
 Mini month weekdays use narrow names (one Chinese character each); event titles truncate with full tooltips and times remain complete. Advanced routine fields are under More. Member details also exposes routines; aggregate usage and CSV are in Settings > Models > Usage.
 
-The rail and Home say what Google is, in one quiet line with the place to go (R-UI-66): not connected is offered until its × closes it for good, after which the rail keeps the bare words and Home nothing; could not be read names 設定 › 連接 until it reads again; connected through Composio is drawn from the same cached reading as direct Google sign-in. An empty period stays calm with one line and 建立.
+The rail says what Google is, in one quiet line with the place to go (R-UI-66): not connected is offered until its × closes it for good, after which the rail keeps the bare words; could not be read names 設定 › 連接 until it reads again; connected through Composio is drawn from the same cached reading as direct Google sign-in. An empty period stays calm with one line and 建立.
 
 ## Driving it with look
 
@@ -176,7 +176,7 @@ and vertical calendar scroll. `calendar-shell` asserts no horizontal grid overfl
 keeps a long event's time beside its start. The save scene waits for the editor to close
 and the new title to appear before checking the persisted fixture event, so an existing chip cannot satisfy its wait.
 
-`npm run native -- calendar` drives the real core and SQLite: the owner makes, moves and resizes an event, a member told 加到今天的行程 adds one through the real tool on a scripted provider choice, Home draws them, and the ⋯ deletes one.
+`npm run native -- calendar` drives the real core and SQLite: the owner makes, moves and resizes an event, a member told 加到今天的行程 adds one through the real tool on a scripted provider choice, the Calendar page draws them, and the ⋯ deletes one.
 For scheduling work extend scenes through save/reopen and assert fixture records.
 In an authorized isolated native run, schedule a harmless task, observe its actual
 due-time execution and persisted accounting, disable/delete it and verify it does not run again.
@@ -226,7 +226,7 @@ Day and week share a viewport-derived hour height (28-54px), fitting eleven work
 hours below the sticky date/all-day header at 1280x800. Initial position shows the time
 now, two and a half hours down, or the first event of a period that does not hold today.
 Navigation resets the position; refresh and resize retain the viewed hour. All-day
-events stay above timed events. The cached Home event window paints first, and when
+events stay above timed events. The core's cached event window paints first, and when
 Google is connected one live read of the month in view follows.
 calendar-shell enforces hour density, working-day fit and the pinned all-day row;
 calendar-all-day checks its visible event. Cover empty/sparse/full day and week.
@@ -235,7 +235,7 @@ calendar-all-day checks its visible event. Cover empty/sparse/full day and week.
 npm run look -- automations-day-empty automations-sparse automations-day-sparse automations-all-day --theme both --width 1120,720,1920x1080,1280x800
 ```
 
-Title priority review: calendar-rhythm-week, calendar-rhythm-day, calendar-rhythm-month and home-calendar-rhythm use a long routine title. Check its visible width at 1120/720 and require timing to be whole or hidden, never truncated. Run the same four scenes in both themes at 1120,720,1920x1080.
+Title priority review: calendar-rhythm-week, calendar-rhythm-day and calendar-rhythm-month use a long routine title. Check its visible width at 1120/720 and require timing to be whole or hidden, never truncated. Run the same four scenes in both themes at 1120,720,1920x1080.
 
 ## A busy day: every all-day item in reach (owner, 2026-11-12)
 

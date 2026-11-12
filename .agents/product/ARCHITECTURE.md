@@ -331,7 +331,7 @@ result label when no app slug is present.
 ## Shared calendar reading and rhythm projection (2026-11-01)
 
 ConnectedCalendar owns the most recent 24 in-memory range readings and attempts, one-minute refresh admission and
-background provider tasks. calendar.changed invalidates Home and Calendar;
+background provider tasks. calendar.changed invalidates the Calendar;
 calendar_list reuses a covering reading, even an empty one, or awaits its first range read under the shared 12-second provider timeout. Readable connections start connected; only a failed read makes them unreadable. App shutdown
 cancels refresh tasks before closing services or SQLite. call_calendar pins the
 sole read slug and validates ordinary Google list arguments. A task-local core
@@ -341,11 +341,11 @@ at data.results[0].response.data; every envelope failure is refused.
 
 Schedule owns local-day window math. Migration 54 retains the lowest id, all runs
 and unique receipts; duplicates retain their most advanced state. calendar-view
-owns quiet bars and status icons. Home's bounded projection emits one rhythm per
-local date. routines.runs and Home share the SQL projection of unfinished turn status and actual pending owner_questions/worker_questions in live background tasks. Owner questions are confirm; waiting for delegated children alone remains running. No new RPC, Rust allowlist entry, setting or brain
+owns quiet bars and status icons. The calendar's bounded projection emits one rhythm per
+local date. routines.runs and the calendar projection share the SQL projection of unfinished turn status and actual pending owner_questions/worker_questions in live background tasks. Owner questions are confirm; waiting for delegated children alone remains running. No new RPC, Rust allowlist entry, setting or brain
 loop is introduced.
 
-Calendar page instances retain their current date/view until the app closes. Home resumes that instance without a date argument; explicit date/event links keep their navigation semantics. Only view choice is persisted as raphael.calendar.view, guarded and validated with a week default. Grid width determines seven-day layout (fallback below 520px); all-day and timed grids share column templates. The Today navigation group has a scoped R-UI-18 audit exception, without changing other text actions.
+Calendar page instances retain their current date/view until the app closes. The account menu's 行事曆 resumes that instance without a date argument (Home's icon did before 2026-11-12); explicit date/event links keep their navigation semantics. Only view choice is persisted as raphael.calendar.view, guarded and validated with a week default. Grid width determines seven-day layout (fallback below 520px); all-day and timed grids share column templates. The Today navigation group has a scoped R-UI-18 audit exception, without changing other text actions.
 ## Member media and datasets (2026-11-01)
 
 GenerationTools wraps the existing hub for API, authenticated RaphaelMcp and background
@@ -406,7 +406,7 @@ The existing routine tools, history, task engine and worker safety state carry
 matches as untrusted external data. A deterministic per-item task session recovers
 the interval between committed task submission and its receipt write without
 submitting a second task. Baseline and pending item data persist in SQLite.
-Event routines have no clock occurrences in Home or Calendar.
+Event routines have no clock occurrences in the Calendar.
 Tests: core/tests/members/test_events.py, test_event_harness.py (API/CLI),
 core/tests/brain/test_db.py and the existing member/routine suites.
 Offline tests and fixture scenes do not prove real provider result shapes, remote
@@ -621,7 +621,7 @@ execution (A-01/A-03/A-04); native CLI memory remains disabled; assigned native 
 ## Single sidebar (owner decision 2026-10-30)
 
 `main.ts` mounts the agent-owned member column once in `sidebar.ts`, outside the
-page container. Home, dictation, calendar and conversations share that one DOM
+page container. Dictation, calendar and conversations share that one DOM
 and the existing MembersShell, member actions, groups and rooms RPCs. There is
 no Team page, route or spatial canvas. Chief swapping remains `memberDisplayList`.
 Details owns the member brain picker. The Everyone room uses `is_team` and follows
@@ -630,7 +630,7 @@ the current roster without duplicating members or a conversation loop.
 Owner identity uses existing `owner_name`/`owner_photo` settings, the shared avatar
 picker/cropper and bounded image conversion. Sidebar footer and outgoing messages
 consume `owner-avatar.ts`. Settings > Connections is the sole connected-app entry.
-Home's mini calendar remains the full calendar entry. Migration 44 adds room pin,
+The account menu's 行事曆 is the full calendar entry (Home's mini calendar was before 2026-11-12). Migration 44 adds room pin,
 hide and read-message position to the existing rooms table; `rooms.list` resolves
 previews/unread from the same visible messages, while `rooms.update` saves actions.
 The mock IPC boundary projects those same summary fields from fixture messages.
@@ -640,7 +640,7 @@ Composite faces keep their own round backing and a 2px surface-coloured separato
 only that group context frames Raphael's otherwise bare emblem.
 No new RPC boundary, settings registry or provider loop is introduced (A-01/06/08/11).
 
-Home month navigation keeps its visible month in page state, requests month-scoped
+The calendar page keeps its visible month in page state, requests month-scoped
 home.overview data, and uses the shared monthDays local-date grid. It sends a
 CalendarDate through the existing app.go boundary to the full day calendar. The
 projection retains the bounded seven-day preview and adds compact month date marks
@@ -652,7 +652,7 @@ and respects reduced motion.
 `own_calendar.py` holds the one thing in the app that can be changed by hand: one-time
 events in the `calendar_events` table, a timed one as two instants and an all-day one as
 two local dates. The window's `calendar.*` RPCs and the `calendar_*` tools share its one
-check. `home.overview` stays the sole projection for Home and the Calendar page, and adds
+check. `home.overview` stays the sole projection for the Calendar page (Home, its other reader, was removed on 2026-11-12, and with it the model-written daily line, the health check, the charts and the allowance, spend, dictation and status figures), and adds
 own events to what it computes; `HomeOverview.between` serves a member's `calendar_list`
 from the same sources. Tools are offered on every path through `take_snapshot`; the API
 and CLI turns reach them through `_harness_call`, a background task through
@@ -660,7 +660,7 @@ and CLI turns reach them through `_harness_call`, a background task through
 (connected, not connected, unreadable) so that none of them reads as an
 empty calendar. Everything else the app shows is computed and gets no tools.
 
-The final Home calendar uses a size container: 900px width plus 460px height selects
+The final calendar uses a size container: 900px width plus 460px height selects
 the full event-chip month; smaller containers use mini month plus selected-day
 agenda (stacked below 680px). Both read the same bounded three-items-per-date
 projection and daily counts. Month controls stay outside the animated grid and
@@ -842,7 +842,7 @@ Migration 52 installs login cards and computer_logins before migration 53 instal
 
 ## Moving routine triggers (2026-11-01)
 
-Schedule JSON extends the existing registry with monthly day and every minutes, without rewriting routines. Home and Calendar retain R-CAL-03 rhythm projection; Home's bounded month projection now covers the five-minute minimum. MembersService advances skipped schedule slots while its existing TaskStore says that same routine has queued/running/waiting work.
+Schedule JSON extends the existing registry with monthly day and every minutes, without rewriting routines. The Calendar retains R-CAL-03 rhythm projection; the bounded month projection now covers the five-minute minimum. MembersService advances skipped schedule slots while its existing TaskStore says that same routine has queued/running/waiting work.
 
 The internal routine_webhook_port setting reuses SettingsStore, with no UI switch or migration. The listener rebinds that port across restarts; only address-in-use permits a random replacement and address_changed notice. members/webhooks.py owns the lazy loopback asyncio listener, exact-body HMAC, bounded requests, rate admission and vault-only per-routine secrets. App passes its existing OS vault. The existing when_json stores only {webhook:true}; polling ignores it. Shutdown cancels only its own clients and closes its own listener. POST feeds wrap_untrusted into the existing member/background engine. No relay, tunnel, public listener or provider is introduced. routines.webhook is an owner-window RPC on the Rust allowlist; model tools never expose its secret.
 
@@ -937,7 +937,7 @@ the existing routines.runs projection until finished, including confirmations.
 Schedule JSON gains validated optional IANA timezone metadata; the shared registry
 adds routine_timezone and internal routine_detected_timezone. Owner-window
 members.viewing reports the detected zone and pins legacy schedules before future
-zone changes. Home remains read-only. Existing schedule parsing/next_run and the
+zone changes. The calendar projection remains read-only. Existing schedule parsing/next_run and the
 calendar occurrence engine own saved-zone/DST behavior, with no separate scheduler.
 The shared timezones.ts selector uses ui.ts popovers and the existing settings.set.
 

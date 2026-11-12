@@ -10,7 +10,7 @@ import { ownerFaceHTML, ownerName, setOwnerProfile } from "./owner-avatar";
 import { roomAvatarHTML } from "./group-chats";
 import type { Member } from "./types";
 
-test("the footer opens Connections, keeps named icon actions and refreshes only changed app marks", async () => {
+test("the foot is one row, the owner's face and the Connections pill, and refreshes only changed app marks", async () => {
   const inventory = { state: "complete", count: 4, apps: [
     { name: "Unknown sample", connected: true, last_used_at: 10 },
     { name: "GitHub", connected: true, last_used_at: 9 },
@@ -27,19 +27,19 @@ test("the footer opens Connections, keeps named icon actions and refreshes only 
   await vi.waitFor(() => expect(nav.querySelectorAll('.sidebar-app-marks .mono')).toHaveLength(3));
   // 連結應用程式 opens its own dialog, not a page of Settings (R-UI-111).
   expect(nav.querySelector('.side-foot .sidebar-apps')?.hasAttribute('data-connect-apps')).toBe(true);
-  expect([...nav.querySelectorAll('.side-foot [data-go]')].map(el => [el.getAttribute('data-go'), el.getAttribute('data-pane')])).toEqual([
-    ['settings', 'general'], ['dictation', null], ['home', null],
-  ]);
+  // One row, as Grok Bot's (R-SIDE-01): the face (a button named by the owner's name, opening the account menu), then the pill; no page buttons.
+  expect([...nav.querySelector('.sidebar-foot-row')!.children].map(el => el.className.split(' ').filter(name => name.startsWith('sidebar-'))[0])).toEqual(['sidebar-account', 'sidebar-apps']);
+  expect(nav.querySelectorAll('.side-foot [data-go], .sidebar-dictation, .sidebar-home')).toHaveLength(0);
+  const account = nav.querySelector<HTMLElement>('.sidebar-account')!;
+  expect(account.tagName).toBe('BUTTON');
+  expect(account.getAttribute('aria-label')).toBe(ownerName());
+  expect(account.getAttribute('aria-haspopup')).toBe('menu');
+  expect(account.querySelector('.owner-face')).not.toBeNull();
   expect(nav.querySelector('.sidebar-apps')?.getAttribute('aria-label')).toContain('4');
   // The pill says its own words: nothing more shows under the pointer (owner, 2026-11-12).
   expect(nav.querySelector('.sidebar-apps')?.hasAttribute('data-tooltip') || nav.querySelector('.sidebar-apps')?.hasAttribute('title')).toBe(false);
-  for (const id of ['dictation', 'home']) {
-    const button = nav.querySelector(`[data-go="${id}"]`)!;
-    expect(button.classList.contains('icon')).toBe(true);
-    expect(button.querySelector('.nav-t')).toBeNull();
-    expect(button.getAttribute('aria-label')).toBeTruthy();
-    expect(button.hasAttribute('title') && button.hasAttribute('data-tooltip')).toBe(false);
-  }
+  // Each mark knows its place against the middle one, for the pill's hover: -1, 0 and +1 of the 3 px spread.
+  expect([...nav.querySelectorAll<HTMLElement>('.sidebar-app-mark')].map(mark => mark.style.getPropertyValue('--spread'))).toEqual(['-1', '0', '1']);
   const mutations: MutationRecord[] = [];
   const observer = new MutationObserver(records => mutations.push(...records));
   observer.observe(nav.querySelector('.sidebar-apps')!, { attributes: true, childList: true, subtree: true });
@@ -67,7 +67,7 @@ test("the chief is an ordinary row until it is pinned, then a larger centered fa
   expect(el.querySelectorAll('[data-member="0"]')).toHaveLength(1);
 });
 
-test("the sidebar has no brand and no fold button, names Home in each language, and its edge drags it to a rail and back", () => {
+test("the sidebar has no brand and no fold button, names its face by the owner in each language, and its edge drags it to a rail and back", () => {
   localStorage.clear();
   document.documentElement.removeAttribute("data-sidebar-collapsed");
   document.documentElement.style.removeProperty("--sidebar-width");
@@ -77,9 +77,9 @@ test("the sidebar has no brand and no fold button, names Home in each language, 
   column.innerHTML = '<div class="mb-top"><button type="button" data-col="search"></button><button type="button" data-col="add"></button></div>';
   createSidebar(nav, column);
   expect(nav.querySelector(".brand, .app-icon, [data-sidebar='collapse']")).toBeNull();
-  for (const [locale, label] of [["zh-TW", "回到首頁"], ["en", "Back to home"], ["ja", "ホームへ"]] as const) {
+  for (const [locale, label] of [["zh-TW", "連結應用程式"], ["en", "Connect apps"], ["ja", "アプリを連携"]] as const) {
     setLocale(locale);
-    expect(nav.querySelector('[data-go="home"]')!.getAttribute("aria-label")).toBe(label);
+    expect(nav.querySelector(".sidebar-apps .nav-t")!.textContent).toBe(label);
   }
   setLocale("zh-TW");
   const edge = nav.querySelector<HTMLElement>(".side-edge")!;
@@ -104,7 +104,8 @@ test("the sidebar has no brand and no fold button, names Home in each language, 
   expect(document.documentElement.hasAttribute("data-sidebar-collapsed")).toBe(true);
   expect(document.documentElement.style.getPropertyValue("--sidebar-width")).toBe("");
   expect(add.parentElement!.className).toBe("side-foot");
-  expect(pair()).toEqual(["search", "add"]);
+  // The rail has no search (owner, 2026-11-12 23:25): only the plus stands in its foot.
+  expect(pair()).toEqual(["add"]);
   expect(localStorage.getItem("raphael.sidebar.collapsed")).toBe("true");
   drag(72, 110);
   expect(document.documentElement.hasAttribute("data-sidebar-collapsed")).toBe(true);
@@ -161,7 +162,7 @@ test("a slow drag through the fold point folds the list once and opens it once, 
   document.documentElement.removeAttribute("data-sidebar-collapsed");
 });
 
-test("a window under 860 px shows the rail of faces: no menu button or drawer, search and plus in its foot", () => {
+test("a window under 860 px shows the rail of faces: no menu button or drawer, and only the plus in its foot", () => {
   localStorage.clear();
   document.documentElement.removeAttribute("data-sidebar-collapsed");
   document.documentElement.removeAttribute("data-sidebar-narrow");
@@ -176,7 +177,7 @@ test("a window under 860 px shows the rail of faces: no menu button or drawer, s
     expect(document.documentElement.hasAttribute("data-sidebar-narrow")).toBe(true);
     expect(document.querySelector('[data-sidebar="open"], .sidebar-toggle, .sidebar-scrim')).toBeNull();
     expect(nav.inert).toBe(false);
-    expect([...nav.querySelectorAll(".side-foot [data-col]")].map(button => button.getAttribute("data-col"))).toEqual(["search", "add"]);
+    expect([...nav.querySelectorAll(".side-foot [data-col]")].map(button => button.getAttribute("data-col"))).toEqual(["add"]);
     // The Connections button shows nothing under the pointer on the rail either; a screen reader still has its name.
     expect(nav.querySelector<HTMLElement>(".sidebar-apps")!.hasAttribute("data-tooltip")).toBe(false);
     expect(nav.querySelector<HTMLElement>(".sidebar-apps")!.getAttribute("aria-label")).toBeTruthy();
@@ -237,18 +238,23 @@ test("the rail is 88 px, and under 860 px there is no drawer: the list stays in 
   expect(css).not.toMatch(/translateX\(-100%\)|sidebar-scrim|sidebar-toggle|data-sidebar-open/);
 });
 
-test("a row is a 54 px highlight 58 px from the next, and the foot keeps its two rows", () => {
+test("a row is a 54 px highlight 58 px from the next, and the foot is one row", () => {
   const css = readFileSync("src/main/sidebar.css", "utf8");
   expect(css).toContain("--side-row: 54px; --side-face: 36px;");
   expect(css).toMatch(/\.side :is\(\.mb-list, \.mb-gclip\) \{ gap: var\(--sp-1\); \}/);
   expect(css).toMatch(/\.side \.nav\.mb-row \{[^}]*min-height: var\(--side-row\)[^}]*border-radius: var\(--r-md\)/);
   expect(css).toMatch(/\.side \.mb-row-t b \{ font-size: var\(--fs-sm\)/);
   expect(css).toMatch(/\.side \.mb-row-p \{ font-size: var\(--fs-xs\)/);
-  // The Connections pill has a row to itself; the account, the microphone and Home share the row under it. Only the rail unwraps it.
+  // The face and the Connections pill share one row (the face 32 px, the pill 36 px and round, on --surface-2); only the rail unwraps it.
   expect(css).toMatch(/\.side \.side-foot \{ display: grid; grid-template-columns: minmax\(0, 1fr\);/);
   expect(css).toMatch(/\n\.sidebar-foot-row \{ display: flex; align-items: center;/);
   expect(css).toMatch(/:root\[data-sidebar-collapsed\] \.sidebar-foot-row \{ display: contents; \}/);
-  expect(css).not.toMatch(/\.sidebar-account-name \{ display: none; \}/);
+  expect(css).toMatch(/\.side \.sidebar-account \{[^}]*width: 32px; height: 32px/);
+  expect(css).toMatch(/\.sidebar-apps \{[^}]*height: 36px[^}]*border-radius: var\(--r-pill\); background: var\(--surface-2\)/);
+  // The hover's values live in named custom properties on the pill, and the motion is a transform under no-preference only.
+  expect(css).toMatch(/--marks-spread: 3px; --marks-lift: 1\.5px; --marks-scale: 1\.1; --marks-turn: 8deg; --marks-time-in: 180ms; --marks-ease-in: ease-out; --marks-time-out: 280ms; --marks-ease-out: ease-in-out/);
+  expect(css).toMatch(/@media \(prefers-reduced-motion: no-preference\) \{[^@]*\.sidebar-apps:hover \.sidebar-app-mark \{[^}]*transform: translate\(/);
+  expect(css).not.toMatch(/sidebar-account-name|sidebar-dictation|sidebar-home/);
   expect(readFileSync("src/main/sidebar.ts", "utf8")).not.toMatch(/placeTools|FOOT_TOOLS_MIN/);
 });
 

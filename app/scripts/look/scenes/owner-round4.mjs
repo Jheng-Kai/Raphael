@@ -12,7 +12,7 @@ export function withOwnerRound4(scenes) {
     ...original.steps.flatMap(step => original.name === "details" && step.action === "icon-interactions"
       ? [check("details-pointer-focus"), step] : [step]),
     ...(checks[original.name] ? [check(checks[original.name])] : []),
-    ...(["home", "automations-calendar", "dictation-overview", "chat"].includes(original.name) ? [check("sidebar-shell")] : []),
+    ...(["automations-calendar", "dictation-overview", "chat"].includes(original.name) ? [check("sidebar-shell")] : []),
     ...(original.name === "raphael-details" ? [check("details-quick-once")] : []),
     ...(original.name === "connector-reconnected" ? [check("conversation-scroll-edge")] : []),
     ...(["quick-cleared", "conversation-delete-main", "member-delete"].includes(original.name) ? [check("toast-clearance")] : []),

@@ -1,18 +1,16 @@
-"""Home projections of existing services, with nonblocking daily narrative caching."""
+"""The calendar's projection of existing services: own events, routine runs and the connected Google calendar."""
 
 import asyncio
 import logging
 from collections import OrderedDict
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime, timedelta, tzinfo
-from typing import Any, NotRequired, TypedDict
+from typing import NotRequired, TypedDict
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from .clock import wall_clock_ms
-from .agent.history import UNFINISHED
 from .agent.speaker import RAPHAEL_NAMES
 from .agent.owner_questions import OwnerQuestions
-from .home_digest import DailyNarratives, activity, health
 from .connectors.http import ConnectorFailure
 from .members.schedule import next_run
 from .members.store import ROUTINE_RUN_STATUS_SQL
@@ -55,24 +53,8 @@ class HomeItem(TypedDict):
     run_status: NotRequired[str]
 
 
-class DictationNumbers(TypedDict):
-    words: int
-    time_saved_seconds: float
-    speed_wpm: float | None
-    audio_seconds: float
-    daily: list[int]
-
-
-class HomeUsage(TypedDict):
-    month_usd: float
-    limit_usd: float
-    daily: list[float]
-    allowances: dict[str, Any]
-
-
 class Overview(TypedDict):
     generated_at_ms: int
-    report: dict[str, Any]
     today: list[HomeItem]
     reports: list[HomeItem]
     calendar: list[HomeItem]
@@ -81,12 +63,7 @@ class Overview(TypedDict):
     calendar_google: str
     calendar_items: list[HomeItem]
     calendar_counts: dict[str, int]
-    usage: HomeUsage
-    dictation: DictationNumbers
     counts: dict[str, int]
-    today_plan: dict[str, Any]
-    health: dict[str, Any]
-    activity: dict[str, Any]
 
 
 async def no_calendar_events(start_ms: int, end_ms: int) -> list[HomeItem]:
@@ -261,15 +238,9 @@ class HomeOverview:
         self._calendar_failed = False
         self.timezone_name = getattr(tz, "key", None)
         self.timezone_changed = None
-        self._allowance_task = None
-        self._allowance_read_at = None
         self._calendar_task = None
         self._calendar_key = None
         self._calendar = []
-        self.narratives = DailyNarratives(conn, members, now_ms)
-
-    async def aclose(self):
-        await self.narratives.aclose()
 
     def register(self):
         self.router.register("home.overview", self.read)
@@ -278,23 +249,24 @@ class HomeOverview:
         """The owner's time zone as the window last said it, which is what a member's words about today mean too."""
         return ZoneInfo(self.timezone_name) if self.timezone_name else self.tz
 
+    def note_timezone(self, name: str) -> None:
+        """The owner's time zone as the window says it, from any call that carries `tz`: what a member's words about today mean,
+        and the computers' clock. Home was the page that said it at every start; the open conversation says it now (`members.viewing`)."""
+        try:
+            zone = ZoneInfo(name)
+        except (ValueError, ZoneInfoNotFoundError):
+            return
+        changed = self.timezone_name != zone.key
+        self.timezone_name = zone.key
+        if changed and self.timezone_changed:
+            # Reconciling desktops can recreate a container; the answer must not wait for it.
+            self._timezone_task = asyncio.create_task(self._sync_timezone())
+
     async def _sync_timezone(self):
         try:
             await self.timezone_changed()
         except Exception as exc:
             logger.warning("Desktop time zone sync failed: %s", type(exc).__name__)
-
-    async def _allowances(self, refresh):
-        if not refresh or ((self._allowance_task is None or self._allowance_task.done()) and self._allowance_read_at is not None and self.now_ms() - self._allowance_read_at < 300_000):
-            return await self.router.call("usage.allowances", {"refresh": False})
-        # Concurrent refreshes share one CLI read, without persisting a second allowance store.
-        if self._allowance_task is None or self._allowance_task.done():
-            self._allowance_read_at = self.now_ms()
-            self._allowance_task = asyncio.create_task(self.router.call("usage.allowances"))
-        try:
-            return await asyncio.wait_for(asyncio.shield(self._allowance_task), timeout=12)
-        except (RpcError, TimeoutError):
-            return await self.router.call("usage.allowances", {"refresh": False})
 
     async def _events(self, start, end, refresh):
         if isinstance(self.calendar_events, ConnectedCalendar):
@@ -398,11 +370,7 @@ class HomeOverview:
                 zone = ZoneInfo(params["tz"])
             except (ValueError, ZoneInfoNotFoundError):
                 raise invalid_params("tz must be an IANA time zone") from None
-            changed = self.timezone_name != zone.key
-            self.timezone_name = zone.key
-            if changed and self.timezone_changed:
-                # Reconciling desktops can recreate a container; Home must answer without waiting for it.
-                self._timezone_task = asyncio.create_task(self._sync_timezone())
+            self.note_timezone(zone.key)
         now = self.now_ms()
         day = datetime.fromtimestamp(now / 1000, zone).replace(hour=0, minute=0, second=0, microsecond=0)
         start, tomorrow, end = [int((day + timedelta(days=n)).timestamp() * 1000) for n in (0, 1, 7)]
@@ -461,7 +429,6 @@ class HomeOverview:
             title = question.get("question") or question.get("title") or (parent["question"] if parent else "") or question["kind"]
             today.append(item("question", f"owner:{question['id']}", mid, title, parent["created_at_ms"] if parent else now,
                               turn=turn, conversation=parent["conversation_id"] if parent else None))
-        questions = list(today)
         routines = self.members.store.routines()
         calendar = []
         calendar_days = set()
@@ -541,12 +508,7 @@ class HomeOverview:
                         value = item("routine", f"{routine.id}:{run['at']}", routine.member_id, routine.title, run["at"], routine=routine.id, turn=run["turn_id"])
                         value["run_status"] = run["current_status"]
                         month_item(value)
-        if refresh:
-            events, allowances = await asyncio.gather(self._events(month_start, month_end, refresh), self._allowances(refresh))
-        else:
-            # Cached local projections do not need two scheduled tasks and a coroutine resumption.
-            events = await self._events(month_start, month_end, False)
-            allowances = await self._allowances(False)
+        events = await self._events(month_start, month_end, refresh)
         events = [*self._own_items(month_start, month_end, zone, people), *events]
         for event in events:
             month_item(event)
@@ -557,43 +519,8 @@ class HomeOverview:
         calendar.extend(event for event in events if start <= event["at_ms"] < end)
         today.sort(key=lambda r: (r["at_ms"], r["id"]))
         calendar.sort(key=lambda r: (r["at_ms"], r["id"]))
-        status = await self.router.call("status.get")
-        stats = await self.router.call("stats.summary", {"days": 14})
-        spend = status["spend"]
-        language = self.members._ui_language(params)
-        unfinished = [{"id": f"task:{row['id']}", "kind": "unfinished", "member_id": row["member_id"],
-                       "title": " ".join(row["text"].split())[:240], "state": row["state"], "at_ms": row["created_at_ms"]}
-                      for row in self.conn.execute("SELECT id,member_id,text,state,created_at_ms FROM worker_tasks WHERE state IN ('queued','running','waiting','failed','interrupted','limit') ORDER BY created_at_ms,id")
-                      if row["member_id"] in people]
-        unfinished += [{"id": f"turn:{row['id']}", "kind": "unfinished", "member_id": row["member_id"],
-                        "title": " ".join(row["question"].split())[:240], "state": row["status"], "at_ms": row["created_at_ms"]}
-                       for row in self.conn.execute(
-                           "SELECT t.id,t.member_id,t.question,t.status,t.created_at_ms FROM agent_turns t WHERE t.status IN (?,?,?,?) AND t.source NOT IN ('routine','member')"
-                           " AND t.route NOT IN ('routine','exchange') AND NOT EXISTS (SELECT 1 FROM worker_tasks w WHERE w.turn_id=t.id)"
-                           " ORDER BY t.created_at_ms,t.id", UNFINISHED) if row["member_id"] in people]
         google = await self.google_state()
-        plan = {"date": day.date().isoformat(), "items": [*today, *unfinished], "calendar_google": google}
-
-        async def prepared_plan():
-            if not isinstance(self.calendar_events, ConnectedCalendar):
-                return plan
-            # Share the window's pending read before wording a daily plan. Only the background
-            # narrative waits, never home.overview, and a failed calendar remains explicit data.
-            first, last = (month_start, month_end) if month_start <= start and tomorrow <= month_end else (start, tomorrow)
-            connected = await self.calendar_events.read(first, last)
-            items = [value for value in today if value["kind"] != "event"]
-            items += [value for value in connected if value["at_ms"] < tomorrow and value.get("end_ms", value["at_ms"] + 1) > start]
-            items.sort(key=lambda value: (value["at_ms"], value["id"]))
-            return {**plan, "items": [*items, *unfinished], "calendar_google": await self.google_state()}
-        charts = activity(self.conn, people, day, zone, routines_due=sum(value["kind"] == "routine" for value in today),
-                          events=sum(value["kind"] in ("event", "own") for value in today), questions=len(questions))
-        return {"generated_at_ms": now, "report": status, "today": today, "reports": reports[:REPORT_LIMIT], "activity": charts,
-                "today_plan": self.narratives.read("today_plan", day.date().isoformat(), zone, language, plan, prepare=prepared_plan),
-                "health": health(self.members, language),
+        return {"generated_at_ms": now, "today": today, "reports": reports[:REPORT_LIMIT],
                 "calendar": calendar[:CALENDAR_LIMIT], "calendar_days": sorted(calendar_days), "calendar_events": events,
                 "calendar_google": google, "counts": {"today": len(today), "reports": len(reports), "calendar": len(calendar)},
-                "calendar_items": [value for key in sorted(month_items) for value in month_items[key]], "calendar_counts": month_counts,
-                "usage": {"month_usd": spend["month_usd"], "limit_usd": spend["limit_usd"], "daily": spend["daily"][-14:], "allowances": allowances},
-                "dictation": {"words": stats["all"]["words"], "audio_seconds": stats["all"]["audio_seconds"],
-                              "time_saved_seconds": stats["time_saved_seconds"], "speed_wpm": stats.get("speed_wpm"),
-                              "daily": [day["words"] for day in stats.get("by_day", [])][-14:]}}
+                "calendar_items": [value for key in sorted(month_items) for value in month_items[key]], "calendar_counts": month_counts}
