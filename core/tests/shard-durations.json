@@ -320,7 +320,6 @@
   "tests/members/test_harness.py": 16.39,
   "tests/members/test_home.py": 24.07,
   "tests/members/test_home_cost.py": 5.39,
-  "tests/members/test_home_health.py": 18.71,
   "tests/members/test_local_commands.py": 1.27,
   "tests/members/test_management.py": 67.95,
   "tests/members/test_management_batch.py": 10.44,

@@ -7329,7 +7329,9 @@ export function checkRendered(name, context = {}) {
     // Settings reads the allowances each time it opens, on whatever tab and unseen: asked for once at the opening, the
     // numbers already on their tab, a reading that finds the same numbers touches nothing, a new number replaces the old
     // in the same card, and no busy state or message is ever drawn.
-    const stage = name.slice("usage-open-".length), asked = () => window.__look.calls.filter(call => call.method === "usage.allowances").length;
+    // Only the Settings' own readings count (they go through the usage card, usage-analytics.ts): the account menu that
+    // Settings is opened from reads the allowances too, at its own opening (R-SIDE-02); the scene traces each call's origin.
+    const stage = name.slice("usage-open-".length), asked = () => window.__look.calls.filter(call => call.method === "usage.allowances" && String(call.from ?? "").includes("usage-analytics")).length;
     const root = () => document.querySelector('.usage-analytics'), keep = () => (window.__lookUsage ??= { touched: 0, busy: false });
     const count = (state, records) => {
       for (const record of records) {
@@ -7340,9 +7342,15 @@ export function checkRendered(name, context = {}) {
     const watched = () => { const state = keep(); count(state, state.observer?.takeRecords() ?? []); return state; };
     if (stage === "general") {
       require(visible(document.querySelector('.modal-scrim [data-pane="general"][aria-current="page"]')) && !document.querySelector('[data-models-tab]'), "Settings is open on 一般, not on the allowances' tab");
-      require(asked() === 1, `the allowances were asked for once, at the opening (${asked()})`);
+      require(window.__look.calls.some(call => call.from), "the scene traces where each call comes from");
       require(!document.querySelector('[data-act="models-refresh"]'), "no refresh button exists");
-      return { check: name, asked: asked() };
+      // Opened through the account menu, Settings starts its reading a moment after it is drawn.
+      return (async () => {
+        for (let waited = 0; waited < 2000 && asked() < 1; waited += 25) await new Promise(resolve => setTimeout(resolve, 25));
+        await new Promise(resolve => setTimeout(resolve, 150));
+        require(asked() === 1, `the allowances were asked for once, at the opening (${asked()}; all readings: ${JSON.stringify(window.__look.calls.filter(call => call.method === "usage.allowances").map(call => String(call.from).split(" < ").slice(3, 6).join(" < ")))})`);
+        return { check: name, asked: asked() };
+      })();
     }
     if (stage === "arm") {
       require(asked() === 1, `reaching the tab asks for nothing more (${asked()})`);
