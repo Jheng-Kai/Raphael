@@ -1,6 +1,8 @@
 // @vitest-environment happy-dom
 // The dialogs of the members (member-dialogs.ts): the question before
 // a delete, the routine the core offers, and a group's places.
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { confirmDelete, editSources, offerRoutine, pictureType, pickPicture } from "./member-dialogs";
 import { registerDismissal } from "./dismissals";
@@ -26,6 +28,22 @@ test("a member's deletion asks one sentence, Cancel and Delete, and nothing abou
   expect(dialog.textContent).not.toMatch(/電腦|computer/i);
   document.querySelector<HTMLButtonElement>('[data-dlg="delete"]')!.click();
   expect(await answer).toBe(true);
+});
+
+test("the delete question is Grok Bot's small box: no ×, Cancel holds the focus, Escape and a press beside it cancel", async () => {
+  const escape = confirmDelete("小晴", { member: true });
+  const dialog = document.querySelector<HTMLElement>(".mb-dialog")!;
+  expect(dialog.classList.contains("mb-delete")).toBe(true);
+  expect(dialog.querySelector('[data-dlg="close"], .btn.icon')).toBeNull();
+  expect(document.activeElement).toBe(dialog.querySelector('[data-dlg="cancel"]'));
+  document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  expect(await escape).toBe(false);
+  expect(document.querySelector(".mb-dialog")).toBeNull();
+  // The new look is the destructive question's own: the small 新增成員 style dialogs keep the shared shell and their ×.
+  const css = readFileSync(join(__dirname, "members.css"), "utf8");
+  expect(css).toContain(".mb-dialog.mb-confirm.mb-delete { width: min(320px, 100%);");
+  expect(css).toMatch(/\.mb-confirm\.mb-delete \.mb-dlg-act \.btn\.pri \{[^}]*background: var\(--close\)[^}]*color: var\(--on-close\)/);
+  expect(readFileSync(join(__dirname, "member-creator.ts"), "utf8")).not.toContain("mb-delete");
 });
 
 test("a language change dismisses a translated confirmation before it can show stale actions", async () => {

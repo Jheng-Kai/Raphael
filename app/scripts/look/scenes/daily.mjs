@@ -11,7 +11,7 @@ const marks={appsInventory:{state:'complete',count:3,apps:['GitHub','Notion','Sl
 const faces=count=>({rooms:fixture.rooms.map(item=>({...item,member_ids:item.id===1?[0,1,2,3].slice(0,count):item.member_ids})),members:fixture.members.map(item=>({...item,avatar:{1:'slime:diablo',2:'slime:rigurd',3:'slime:shion'}[item.id]??item.avatar}))});
 
 export default [
-  scene('daily-footer-hover','Connections pill has an outlined quiet hover',[{action:'member-column',collapsed:false},hover('.sidebar-apps'),check('sidebar-shell')]),
+  scene('daily-footer-hover','Connections pill has an outlined quiet hover and, in the list, no tooltip',[{action:'member-column',collapsed:false},hover('.sidebar-apps'),check('daily-footer-hover'),check('sidebar-shell')]),
   scene('daily-footer-marks','Three connected service marks share the outlined door',[{action:'member-column',collapsed:false},wide(wait('.sidebar-app-marks .mono')),check('daily-marks'),check('sidebar-shell')],marks),
   scene('daily-footer-home','Home retains the selected icon surface',[page('home'),{action:'member-column',collapsed:false},check('sidebar-shell'),check('sidebar-selection')]),
   scene('daily-press-feedback','Ordinary and selected sidebar controls answer a press without moving',[

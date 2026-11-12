@@ -60,6 +60,15 @@ def test_an_owner_picture_replaces_the_hourly_choice(monkeypatch):
     assert [argv[-1] for argv in calls if "/backdrop/screen0/monitor0/workspace0/last-image" in argv] == [str(picture)]
 
 
+def test_the_session_starts_no_watcher_of_its_own():
+    # A watcher started with the session ran beside the core's and put the town back over the owner's picture; one
+    # that was already running made the core leave it. The core is the one place a watcher starts.
+    script = (DESKTOP / "prepare-desktop").read_text(encoding="utf-8")
+    commands = [line for line in script.splitlines() if line.strip() and not line.lstrip().startswith("#")]
+    assert commands == ["set -eu", "xfconf-query -c xfce4-session -p /general/SaveOnExit -n -t bool -s false"]
+    assert script.startswith("#!/bin/sh\n") and "\r" not in script
+
+
 def test_startup_sets_the_wallpaper_even_before_xfce_has_a_last_image(monkeypatch):
     apply = runpy.run_path(str(DESKTOP / "wallpaper.py"))["apply_wallpaper"]
     process = apply.__globals__["subprocess"]

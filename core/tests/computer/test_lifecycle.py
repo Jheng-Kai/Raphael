@@ -25,13 +25,14 @@ def previous_computer(desktop, request):
     runtime.raw = container(vm, target, runtime)
     runtime.raw['Image'] = 'sha256:previous-image'
     runtime.raw['Config']['Labels'][f'{LABEL}.layer'] = str(layer)
-    runtime.raw['Config']['Env'] = ['VNC_PW=private', 'TZ=UTC']
+    # Layer 5 was the first to say its screen count; the two before it had no such entry.
+    runtime.raw['Config']['Env'] = ['VNC_PW=private', 'TZ=UTC'] + (['RAPHAEL_SCREENS=1', 'VNC_RESOLUTION=1280x900'] if layer == 5 else [])
     memory = (2 if layer == 3 else 3) * 1024**3
     runtime.raw['HostConfig'].update(Memory=memory, MemorySwap=memory)
     return vm, target, runtime
 
 
-@pytest.mark.parametrize('previous_computer', [(remote, layer) for remote in (False, True) for layer in (3, 4)], indirect=True)
+@pytest.mark.parametrize('previous_computer', [(remote, layer) for remote in (False, True) for layer in (3, 4, 5)], indirect=True)
 @pytest.mark.parametrize('action', ['restart', 'update', 'repair', 'reset'])
 async def test_previous_computer_maintenance_rebuilds_without_starting_old_image(previous_computer, action):
     vm, target, runtime = previous_computer
@@ -52,7 +53,7 @@ async def test_previous_computer_maintenance_rebuilds_without_starting_old_image
         [['volume', 'rm', str(target.workspace)]] if action == 'reset' and target.remote else [])
 
 
-@pytest.mark.parametrize('previous_computer', [(remote, layer) for remote in (False, True) for layer in (3, 4)], indirect=True)
+@pytest.mark.parametrize('previous_computer', [(remote, layer) for remote in (False, True) for layer in (3, 4, 5)], indirect=True)
 async def test_previous_member_data_deletion_needs_no_new_image_or_start(previous_computer):
     vm, target, runtime = previous_computer
     runtime.built = False
@@ -213,8 +214,6 @@ async def test_maintenance_rpc_pins_host_and_target_before_docker(desktop):
 async def test_missing_driver_socket_repairs_one_exact_container_without_workspace_removal(desktop):
     vm, target, runtime = desktop
     original = vm.run
-    notices = []
-    vm.repair_notice = lambda captured: notices.append(captured)
     async def runner(args, **kwargs):
         if 'test' in args and '-S' in args:
             runtime.calls.append((args, kwargs)); return Result(1)
@@ -222,7 +221,7 @@ async def test_missing_driver_socket_repairs_one_exact_container_without_workspa
     vm.run = runner
     await repair_connection(vm, target)
     assert [args for args, _ in runtime.calls if args[0] == 'restart'] == [['restart','--time','10',target.name]]
-    assert notices == [target]
+    assert list(vm.repair_revisions.values()) == [1]
     assert not any(args[0] in ('rm','volume') for args, _ in runtime.calls)
 
 
@@ -274,7 +273,9 @@ async def test_self_repair_is_once_in_the_current_turn_and_never_replays_uncerta
             result = await hub.call(key, {}, approver='auto')
         assert result.ok == (phase == 'connect')
         assert Driver.clicks == 1
-        assert sum('已自動修復' in line for line in lines) == 1
+        # The repair happened once and said nothing: the owner asked that no line about it reach a member's progress.
+        assert list(vm.repair_revisions.values()) == [1]
+        assert not any('修復' in line or 'epair' in line for line in lines), lines
         if phase == 'action':
             assert result.kind == 'connection_repaired' and 'not replayed' in result.text
             with vm_scope(0, private=True, progress=lines.append, language='zh-TW'):
@@ -284,10 +285,9 @@ async def test_self_repair_is_once_in_the_current_turn_and_never_replays_uncerta
         await hub.aclose()
 
 
-async def test_viewer_tunnel_gets_one_retry_and_reports_repair(desktop):
+async def test_viewer_tunnel_gets_one_retry_and_counts_the_repair(desktop):
     vm, target, _ = desktop
-    attempts, lines = [], []
-    vm.repair_notice = lines.append
+    attempts = []
     async def connection(captured):
         attempts.append(captured)
         if len(attempts) == 1:
@@ -295,7 +295,7 @@ async def test_viewer_tunnel_gets_one_retry_and_reports_repair(desktop):
         return 1234, 'not-public'
     vm._viewer_connection = connection
     assert await vm.viewer_connection(target) == (1234, 'not-public')
-    assert attempts == [target, target] and lines == [target]
+    assert attempts == [target, target] and list(vm.repair_revisions.values()) == [1]
 
 
 async def test_remote_reset_removes_only_the_confirmed_workspace_volume(desktop):

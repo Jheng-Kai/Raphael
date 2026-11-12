@@ -115,6 +115,8 @@ export function installMock(fixture, config = {}, target = window) {
   if (variant.coverPicture) data.members.find(member => member.id === 1).cover = { kind: "image", url: "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='960' height='240'><rect width='960' height='240' fill='%233a6f5c'/><circle cx='760' cy='70' r='90' fill='%2396c8b0'/><rect y='170' width='960' height='70' fill='%23264d40'/></svg>" };
   if (variant.computerHost) data.settings.computer_ssh_alias = variant.computerHost;
   if (variant.routineEmpty) data.routines = [];
+  // What the first member's personality page holds (member-settings.ts): its name, role, personality and instructions as the scene gives them.
+  if (variant.persona) Object.assign(data.members.find(member => member.id === 1), variant.persona);
 
   if (variant.ownerOutputFolder) data.settings.owner_output_folder = "C:\\Owner\\Deliveries";
   if (variant.routineGuard) for (const routine of data.routines.filter(item => item.member_id === 1)) {
@@ -715,6 +717,13 @@ export function installMock(fixture, config = {}, target = window) {
     own(21, "發薪日", octoberAt(20, 0), octoberAt(21, 0), { all_day: true }),
     ...[8, 9, 10, 11, 13, 14, 16].map((hour, index) => own(30 + index, `第 ${index + 1} 場訪談`, octoberAt(28, hour), octoberAt(28, hour + 1))),
   );
+  // A busy day of the owner's task board, read through a connected calendar: `calendarManyAllDay` all-day items on today, some of them a day overdue (逾期：), some due (今天：), and one long enough to run on into the next day.
+  if (variant.calendarManyAllDay) {
+    const prefix = ["逾期：", "今天：", ""], names = ["預留角色素材的雲端儲存空間", "健康報告裡的其他問題", "在正式環境建立供應商隔離設定", "整理本週要寄出的合約與附件", "回覆供應商關於交期的來信", "校對標題非常長的一份文件與所有附件，確認每一個版本都一致"];
+    const sample = data.home.calendar_events.find(item => item.kind === "event");
+    data.home.calendar_events.push(...Array.from({ length: variant.calendarManyAllDay }, (_, index) => ({ ...sample, id: `event:many-${String(index).padStart(2, "0")}`, kind: "event", routine_id: null, all_day: true,
+      at_ms: octoberAt(24, 0), end_ms: octoberAt(index === 3 ? 26 : 25, 0), title: `${prefix[index % 3]}${names[index % names.length]}${index >= names.length ? ` ${index + 1}` : ""}` })));
+  }
   const reproject = () => {
     const monthly = [...(variant.homeSparse || variant.homeEmpty ? [] : [daily]), ...data.home.calendar_events].sort((a,b)=>a.at_ms-b.at_ms);
     data.home.calendar_counts = {};

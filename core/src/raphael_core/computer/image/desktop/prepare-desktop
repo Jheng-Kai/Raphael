@@ -1,5 +1,6 @@
 #!/bin/sh
 set -eu
 # Run inside the XFCE session, on its own bus, after the display is ready.
+# The desktop's picture is not started here: the core starts its one watcher when the computer is ready, with the
+# owner's picture when there is one. A second watcher started here put the town back over that picture.
 xfconf-query -c xfce4-session -p /general/SaveOnExit -n -t bool -s false
-exec /opt/venv/bin/python /opt/raphael-desktop/wallpaper.py --watch

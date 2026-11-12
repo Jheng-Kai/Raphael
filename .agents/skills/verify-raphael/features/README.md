@@ -1,5 +1,14 @@
 # Raphael feature map
 
+## Delete dialog and the member's colour on switches (2026-11-12)
+
+See [Conversation](conversation.md#the-delete-dialog-is-grok-bots-owner-2026-11-12) for R-UI-146: the one delete
+dialog is Grok Bot's small box (title, one sentence, two equal pill buttons, red 刪除, no × and no lines). See
+[Members](members.md#a-members-colour-on-its-switches-owner-2026-11-12) for R-UI-147: a switch that is on in a
+member's panel or settings page wears the member's colour. Selected scenes: the delete scenes listed in both
+sections, member-maker, member-maker-taken, member-panel-details, details, raphael-details, the member-switch
+scenes, member-settings-tools and settings-switch-neutral, both themes at 1120,720,1920x1080.
+
 ## Deleting a member removes its computer (2026-11-11)
 
 See [Member computer](member-computer.md#deleting-a-member-removes-its-computer-2026-11-11): the delete

@@ -293,14 +293,14 @@ def command(args):
     return subprocess.run(args, check=True, capture_output=True, text=True, timeout=10).stdout
 
 
-def wait_for(args):
-    for _ in range(45):
+def wait_for(args, attempts=45):
+    for _ in range(attempts):
         try:
             command(args)
             return
         except (subprocess.SubprocessError, OSError):
             time.sleep(1)
-    raise TimeoutError(f'{args[0]} did not become ready within 45 seconds')
+    raise TimeoutError(f'{args[0]} did not become ready within {attempts} seconds')
 
 
 def configure_panels(count):
@@ -329,6 +329,63 @@ def configure_dock_shadow(count):
         current = ''
     if current != 'false':
         command(xfconf_args('xfwm4', '/general/show_dock_shadow', 'bool', ['false']))
+
+
+# What the window manager does to the whole desktop at a key: with these bound, ctrl+F2 (and ctrl+F4, an ordinary
+# "close this tab") moved the computer to another workspace and every window was gone from every screen.
+WHOLE_DESKTOP_KEYS = re.compile(
+    r'^(workspace_\d+|(left|right|up|down)_workspace|move_window_(left|right|up|down)|move_window_(next|prev)_workspace'
+    r'|move_window_workspace_\d+|add_workspace|add_adjacent_workspace|del_workspace|del_active_workspace|show_desktop)_key$')
+# With several screens these walk over every screen's windows, and a program started by a key opens wherever the
+# one pointer happens to be.
+EVERY_SCREEN_KEYS = re.compile(r'^(cycle_windows|cycle_reverse_windows|switch_window|switch_application)_key$')
+WHOLE_DESKTOP_COMMANDS = ('xfce4-session-logout', 'xflock4', 'xkill', 'xfce4-display-settings')
+
+
+def shortcut_removals(listing, count):
+    """The bound keys to take away, from `xfconf-query -c xfce4-keyboard-shortcuts -l -v`."""
+    removals = []
+    for line in listing.splitlines():
+        property, _, value = line.strip().partition(' ')
+        value = value.strip()
+        if property.endswith(('/override', '/startup-notify')) or not value:
+            continue
+        if property.startswith('/xfwm4/custom/'):
+            if WHOLE_DESKTOP_KEYS.match(value) or count > 1 and EVERY_SCREEN_KEYS.match(value):
+                removals.append(property)
+        elif property.startswith('/commands/custom/'):
+            if count > 1 or value.split()[0] in WHOLE_DESKTOP_COMMANDS:
+                removals.append(property)
+    return removals
+
+
+def configure_shortcuts(count):
+    """One workspace, and no key that acts on the whole desktop. Never a reason to hold the screens back."""
+    try:
+        command(xfconf_args('xfwm4', '/general/workspace_count', 'int', ['1']))
+        # The session copies its default keys into these two branches when it starts; before that there is
+        # nothing to take away, and what is copied afterwards would all be bound.
+        for branch in ('xfwm4', 'commands'):
+            wait_for(['xfconf-query', '-c', 'xfce4-keyboard-shortcuts', '-p', f'/{branch}/custom/override'], attempts=20)
+        listing = command(['xfconf-query', '-c', 'xfce4-keyboard-shortcuts', '-l', '-v'])
+        for property in shortcut_removals(listing, count):
+            command(['xfconf-query', '-c', 'xfce4-keyboard-shortcuts', '-p', property, '-r', '-R'])
+    except (subprocess.SubprocessError, OSError, TimeoutError) as error:
+        print(f'raphael-screens: the keys were left as they were: {error}', file=sys.stderr)
+
+
+X_SOCKET = '/tmp/.X11-unix/X1'
+
+
+def x_alive():
+    """Whether the X server still takes a connection: a look that starts no process."""
+    try:
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sock:
+            sock.settimeout(2)
+            sock.connect(X_SOCKET)
+        return True
+    except OSError:
+        return False
 
 
 def view_command(index, rectangle):
@@ -386,7 +443,14 @@ def serve(count, rectangles):
         # The mark says this boot's screens are set up. It stays while a view or this helper restarts: the members'
         # work needs the screens, not a view, and a viewer reports a refused connection itself.
         atomic_write(READY, str(count) + '\n')
+        ticks = 0
         while not stopping:
+            ticks += 1
+            # One screen has no view that dies with its X server, and a computer whose X server was gone kept its
+            # mark and was called ready for good. Look at the server itself, for any number of screens.
+            if ticks % 4 == 0 and not x_alive():
+                READY.unlink(missing_ok=True)
+                raise RuntimeError('The X server is gone; setting the screens up again')
             for i, child in list(children.items()):
                 if child.poll() is not None:
                     # A view also dies with its X server. On a lost layout the mark goes and the set-up runs again.
@@ -439,6 +503,7 @@ def main():
             if count > 1:
                 configure_dock_shadow(count)
                 configure_panels(count)
+            configure_shortcuts(count)
             serve(count, rectangles)
             return 0
         except (OSError, EOFError, ValueError, RuntimeError, subprocess.SubprocessError) as error:

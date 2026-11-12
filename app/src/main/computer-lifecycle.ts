@@ -20,7 +20,6 @@ export function mountComputerLifecycle(_host: HTMLElement, panel: HTMLElement, m
   header.insertBefore(holder, header.querySelector('[data-det="gear"]'));
   const button = holder.querySelector<HTMLButtonElement>('[data-computer-menu]')!;
   const label = holder.querySelector<HTMLElement>('[role="status"]')!;
-  const repaired = document.createElement('p'); repaired.className = 'computer-repair-note'; repaired.hidden = true; repaired.setAttribute('role','status'); panel.append(repaired);
   const fail = (): void => { const error = panel.querySelector<HTMLElement>('.desktop-error')!; error.textContent = t('desktop.maintenanceFailed'); error.hidden = false; };
   function menu(): void {
     const captured = read(); if (!captured) return;
@@ -53,8 +52,7 @@ export function mountComputerLifecycle(_host: HTMLElement, panel: HTMLElement, m
     const state = read();
     // R-UI-71: an unchanged renewal writes nothing here either.
     const set = <T extends object, K extends keyof T>(target: T, key: K, value: T[K]): void => { if (target[key] !== value) target[key] = value; };
-    set(repaired, 'hidden', !state?.repair_revision);
-    if (state?.repair_revision) set(repaired, 'textContent', t('desktop.repaired'));
+    // A connection that repaired itself is not news to the owner: nothing is said of it (owner, 2026-11-12, R-UI-93).
     const available = !!state && state.state !== 'absent';
     // No words over a computer that is not running: its state shows once its screen is up.
     set(label, 'hidden', !state || state.state !== 'running'); set(button, 'hidden', !available);

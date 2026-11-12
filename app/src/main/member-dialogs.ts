@@ -50,6 +50,8 @@ export interface DialogOptions {
   onClose?(): void;
   /** A class of the dialog's own, for its layout. */
   cls?: string;
+  /** No × in the head: the dialog is answered by its buttons, Escape and a press beside it (a question's compact box). */
+  noClose?: boolean;
 }
 
 /** Opens a dialog over the window (see the top of the file). The first field, or the first button, has the focus. */
@@ -61,7 +63,7 @@ export function openDialog(o: DialogOptions): Dialog {
   const id = `mb-dlg-${Math.random().toString(36).slice(2, 8)}`;
   scrim.innerHTML =
     `<div class="mb-dialog${o.cls ? ` ${o.cls}` : ""}" role="dialog" aria-modal="true" aria-labelledby="${id}"${o.describedByBody ? ` aria-describedby="${id}-body"` : ""}>` +
-    `<div class="mb-dlg-head"><h2 id="${id}">${esc(o.title)}</h2>${iconButton("x", t("common.close"), ' data-dlg="close"')}</div>` +
+    `<div class="mb-dlg-head"><h2 id="${id}">${esc(o.title)}</h2>${o.noClose ? "" : iconButton("x", t("common.close"), ' data-dlg="close"')}</div>` +
     `<div class="mb-dlg-body" id="${id}-body">${o.body}</div>` +
     // A dialog that only shows something has no footer: its × closes it.
     (o.actions.primary || o.actions.secondary || o.actions.destructive ? actionRow({ ...o.actions, cls: "mb-dlg-act" }) : "") +
@@ -142,9 +144,10 @@ export function openDialog(o: DialogOptions): Dialog {
 }
 
 /**
- * Confirms deletion or history clearing with the shared compact destructive dialog: the title, one sentence and the two
- * buttons, as Grok Bot's. A member's own says that the member and its conversation go for good. Nothing is asked about
- * what the deletion also clears (a member's computer is the app's to remove, without a word to the owner).
+ * Confirms deletion or history clearing with the app's one delete dialog, Grok Bot's (owner, 2026-11-12): a small box with the
+ * title, one sentence and one row of two equal buttons, Cancel then a red Delete, no × and no lines (members.css `.mb-delete`).
+ * A member's own says that the member and its conversation go for good. Nothing is asked about what the deletion also clears
+ * (a member's computer is the app's to remove, without a word to the owner). The focus starts on Cancel, so Enter never deletes.
  */
 export function confirmDelete(name: string, options: { clearHistory?: boolean; member?: boolean } = {}): Promise<boolean> {
   return new Promise((resolve) => {
@@ -153,7 +156,8 @@ export function confirmDelete(name: string, options: { clearHistory?: boolean; m
       title: options.clearHistory ? t("conversations.clearConfirm", { p0: name }) : t("members.deleteConfirm", { p0: name }),
       body: `<p>${esc(t(options.member ? "members.deleteForever" : "members.deleteHint"))}</p>`,
       describedByBody: true,
-      cls: "mb-confirm",
+      cls: "mb-confirm mb-delete",
+      noClose: true,
       actions: { secondary: btn(esc(t("common.cancel")), "", ' data-dlg="cancel"'), primary: { label: esc(options.clearHistory ? t("conversations.clear") : t("members.delete")), attrs: ' data-dlg="delete"' } },
       onAct(act, _target, dialog) {
         answer = act === "delete";

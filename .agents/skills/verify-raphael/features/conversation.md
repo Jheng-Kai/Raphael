@@ -1,44 +1,39 @@
 # Conversation
 
-## A one-row composer (owner, 2026-11-12, R-COMPOSER-01)
+## The delete dialog is Grok Bot's (owner, 2026-11-12)
 
-Owner: 「我不知道為什麼我們的UI 就是沒有像是grokbot 這麼clean 不管頁面大小都是 可以幫我不管排版 大小 文字都盡量達到他們的水準嗎」.
-Measured beside Grok Bot at the same window sizes, its composer is one row of 44 px, 17 px above the window's edge; ours was two rows
-of 90 px, 29 px above it. Now (`composerHTML`, `.composer` and `.cmp-row` in agent.css) the composer is one pill, 44 px at every
-size with corners of 22 px (a taller box keeps them): one grid `auto minmax(200px, 1fr) auto` whose items end at the row's bottom edge,
-the + (`.cmp-attach`), the field (`.cmp-field`), then `.cmp-end` with the permission mode, the model button (a member's only) and the
-one send / voice / Stop button. Every control is 32 px and shares the field's vertical centre; a longer draft grows the field upward
-(six lines, then it scrolls) and the controls stay on the last line, level with the last line of words. A failure line
-(`.composer-failure`), a quoted reply (`.cmp-quote`), waiting files (`.cmp-file`) and the page note (`.cmp-page-note`, which stood
-below the controls until now) are rows of the same box above the row. 16 px stand under the box at every size (`--pa-dock-bottom`;
-the old short-window override is gone). The field keeps 200 px and nothing goes to a second row: the composer is a size container
-(`container: cmp`), and at 452 px or less (the details panel open at 1120 px of window gives 438) the model gives up its depth word and
-the permission mode its word (its shield stays), so the model keeps its name, at 372 px or less (the panel dragged to its widest gives 301)
-the model keeps only its arrow, and the field may be 120 px. The minimum window is 720 px, where the composer is 688 px wide and nothing is shortened.
+Owner: 「刪除的 UI，跟我跟你說的那個好像不太一樣，這邊你可能要改一下」. The question before a deletion or a history
+clearing (`confirmDelete` in member-dialogs.ts: a member, a group, a room, a conversation's history) is one dialog
+(R-UI-146), the class `.mb-delete` on the `.mb-confirm` shell, measured on Grok Bot's screenshot
+(`h90-delete-dialog.png`, local research, not in the repository):
 
-`composer-shape:<state>` in checks.mjs measures every state and asserts the shape (the box 44 px, the field and every control within
-2 px of one centre for an empty or one-line draft; for a grown draft the same bottom edge, the same control centres and the controls
-within 2 px of the last line of words). The states and their scenes: empty, one line, three lines, twelve lines (the field stops at its
-six and scrolls) and one waiting file in `composer-shape` (a member's conversation) and `composer-shape-room`; a quoted reply in
-`composer-shape-quote` and `composer-shape-room-quote`; words placed by a page in `composer-shape-page-note`; a page open in the
-thread's place in `composer-shape-page-open`; dictation in `composer-shape-recording`; a running task's Stop in `composer-shape-stop`
-and, with Escape armed, `composer-shape-stop-armed`; a send that failed in `composer-shape-failure`; a waiting question's placeholder
-in `composer-shape-waiting` and `composer-shape-room-waiting`; the @ and / menus in `composer-shape-mention` and
-`composer-shape-slash`; an address chip in the field in `composer-shape-mention-chip`; the details panel open in
-`composer-shape-panel` and, dragged wide, `composer-shape-narrow`. A send that is disabled (an empty draft) is the voice emblem in the same slot, which every scene shows.
+| | Grok Bot | Raphael |
+| --- | --- | --- |
+| box | 320 x 152 | 320 x 151 (one sentence line of 2) |
+| padding (top, right, bottom, left) | 13, 12, 12, 16 | 12, 16, 12, 16 |
+| title | 14-15 px, bold | 14 px (`--fs-sm`), the app's semibold |
+| title to sentence | 6 px | 8 px (`--sp-2`) |
+| sentence to buttons | 23 px | 24 px (`--sp-5`) |
+| buttons | 32 px tall, 140 + 140, 10 px apart, pill | 30 px tall (`--h-field`), 139 + 139, 8 px apart, pill |
+| colours | Cancel quiet grey, Delete red, white words | Cancel `--btn`, Delete `--close` with `--on-close` |
+
+`delete-confirmation` asserts the shape (box 320, two buttons of one width filling it, 刪除 at the right in the
+red, no ×, no rule line, the focus on 取消) and returns these numbers. The restore and reset confirmations and
+新增成員 keep the 440 px shell with hairlines (`member-maker`, `member-maker-taken`, `computer-file-confirm`).
 
 ```powershell
-npm run look -- composer-shape composer-shape-room composer-shape-quote composer-shape-room-quote composer-shape-page-note composer-shape-page-open composer-shape-recording composer-shape-stop composer-shape-stop-armed composer-shape-failure composer-shape-waiting composer-shape-room-waiting composer-shape-mention composer-shape-mention-chip composer-shape-slash composer-shape-panel composer-shape-narrow --theme both --width 1120,720,1920x1080
-npm run look -- chat page-composer-grows page-buy page-inplace composer mode composer-model-menu opener-toggle-model-menu opener-toggle-permission-menu question-card-composer-waiting --theme both --width 1120,720,1920x1080
+npm run look -- member-delete-ask member-delete-ask-computer member-delete press-through-delete-dialog room-delete polish-caption-confirm quick-clear-confirm quick-cleared member-maker member-maker-taken --theme both --width 1120,720,1920x1080
 ```
 
 ## Card buttons at the right; confirmations as Grok Bot's (owner, 2026-11-10)
 
 Owner: 「那個卡片的按鈕盡量放在右側 然後你可以看一下刪除的 dialog 可以參考 grok bot 的 UI」. A conversation card's
 `.card-actions` stands at its right (`row-reverse`): the primary rightmost, the others and the quiet exit to its left,
-the primary still first in the markup (R-CARD-01). A confirmation (`.mb-confirm`: delete, clear, restore, reset) is
-Grok Bot's dialog: 440 px, a compact semibold question over a hairline, the consequence in secondary words, a footer
-over a hairline with Cancel then the action at the right, and no × beside a Cancel (R-UI-27). A card drawn failed keeps
+the primary still first in the markup (R-CARD-01). A confirmation (`.mb-confirm`: restore, reset) is a 440 px
+dialog: a compact semibold question over a hairline, the consequence in secondary words, a footer
+over a hairline with Cancel then the action at the right, and no × beside a Cancel (R-UI-27). The question before a
+deletion or a history clearing is the exception since 2026-11-12 (R-UI-146, see
+[Delete dialog](#the-delete-dialog-is-grok-bots-owner-2026-11-12)). A card drawn failed keeps
 one ×: `cardFailure` reuses it instead of adding a second (it had two on a message that could not be sent). Checks:
 the card shell (`the card's buttons stand at its right`), `delete-confirmation`, card-send-failed. A card's and a
 confirmation's text buttons stand at the field height (`--h-field`), not the compact one (owner, 2026-11-10:

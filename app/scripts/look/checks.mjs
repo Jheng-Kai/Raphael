@@ -353,7 +353,7 @@ export function checkRendered(name, context = {}) {
     // The face sits inside the avatar button since 415811f0 (a bot opens from its name), so it is found beneath the identity.
     const face = panel.querySelector('.mb-panel-identity .av').getBoundingClientRect(), named = panel.querySelector('.mb-panel-identity > b').getBoundingClientRect();
     require(face.width >= 56 && face.bottom <= named.top + 1 && Math.abs(face.left + face.width / 2 - (named.left + named.width / 2)) <= 1, 'a large face stands centred above the name');
-    for (const button of [...panel.querySelectorAll('.mb-det-head .btn.icon'), ...document.querySelectorAll('.page-agent .mb-head .btn.icon, .page-agent .cmp-row .cmp-attach')].filter(visible)) {
+    for (const button of [...panel.querySelectorAll('.mb-det-head .btn.icon'), ...document.querySelectorAll('.page-agent .mb-head .btn.icon, .page-agent .cmp-bar .cmp-attach')].filter(visible)) {
       const style = getComputedStyle(button), box = button.getBoundingClientRect();
       require(parseFloat(style.borderRadius) >= box.width / 2 - 0.5 && Math.abs(box.width - box.height) < 1 && style.backgroundColor !== 'rgba(0, 0, 0, 0)', `the buttons on the window's edges are soft round buttons (${button.getAttribute('aria-label') ?? button.dataset.act})`);
     }
@@ -980,9 +980,18 @@ export function checkRendered(name, context = {}) {
     return {check:name};
   }  if(name === "daily-newest") {const reads=window.__look.calls.filter(call=>call.method==='agent.history.list'&&!call.params?.member_id&&call.params?.conversation_id!==undefined);require(reads.length>0&&reads.every(call=>call.params.conversation_id===77),'the newest standard conversation (not the default one, not the quick questions) is the one read');require(document.querySelector('.conversation-caption').hidden,'the header names only the member while a standard conversation is open (R-UI-103)');return {check:name,reads:reads.map(call=>call.params.conversation_id)};}
   if(name === "daily-copy") {const copied={"zh-TW":"已複製",en:"Copied",ja:"コピーしました"}[document.documentElement.lang];const tick=[...document.querySelectorAll('.thread button, .cn-setup-dialog button, .au-routine-dialog button')].find(el=>el.getAttribute('aria-label')===copied);require(tick&&tick.querySelector('svg'),'the pressed copy control displays its tick and copied name');require(tick.scrollWidth<=tick.clientWidth,'copied words fit in the fixed button width');return {check:name};}
+  if(name === "daily-footer-hover") {
+    // The pointer is on the Connections button: nothing more shows under it, in the list (it says its own words) or on the rail
+    // (owner, 2026-11-12; there its tooltip also covered the microphone, Home and the composer's edge).
+    const pill=document.querySelector('#nav .sidebar-apps'),tips=[...document.querySelectorAll('[role="tooltip"]')].filter(visible);
+    require(pill.matches(':hover'),'the pointer is on the Connections pill');
+    const rail=document.documentElement.hasAttribute('data-sidebar-collapsed');
+    require(tips.length===0&&!pill.hasAttribute('data-tooltip')&&!pill.hasAttribute('title')&&pill.getAttribute('aria-label'),`nothing shows under the pointer over the Connections button: ${tips.map(tip=>tip.textContent)}`);
+    require(rail?!visible(pill.querySelector('.nav-t')):visible(pill.querySelector('.nav-t')),'the list shows its words, the rail its icon alone');
+    return {check:name,tips:tips.length};}
   if(name === "daily-marks") {
-    // The rail of faces (a window under 860px) has no room for marks: the Connections button is an icon there, named by its tooltip and still the door to the same dialog.
-    if(document.documentElement.hasAttribute('data-sidebar-collapsed')){const door=document.querySelector('#nav .sidebar-apps[data-connect-apps]'),box=door.getBoundingClientRect();require(visible(door)&&Math.abs(box.width-36)<1&&Math.abs(box.height-36)<1&&door.getAttribute('aria-label')&&door.dataset.tooltip&&!visible(door.querySelector('.nav-t'))&&![...door.querySelectorAll('.sidebar-app-marks .mono')].some(visible),'on the rail the Connections door is a 36px icon with its name as tooltip and no marks');return {check:name,rail:true};}
+    // The rail of faces (a window under 860px) has no room for marks: the Connections button is an icon there, with no tooltip, and still the door to the same dialog.
+    if(document.documentElement.hasAttribute('data-sidebar-collapsed')){const door=document.querySelector('#nav .sidebar-apps[data-connect-apps]'),box=door.getBoundingClientRect();require(visible(door)&&Math.abs(box.width-36)<1&&Math.abs(box.height-36)<1&&door.getAttribute('aria-label')&&!door.hasAttribute('data-tooltip')&&!visible(door.querySelector('.nav-t'))&&![...door.querySelectorAll('.sidebar-app-marks .mono')].some(visible),'on the rail the Connections door is a 36px icon with no tooltip and no marks');return {check:name,rail:true};}
     require(document.querySelectorAll('.sidebar-app-marks .mono').length===3,'three connected known apps show bare marks');return {check:name};}
   if(name === "daily-draft-member" || name === "daily-draft-room") {const input=document.querySelector(name.endsWith('room')?'#room-message':'.page-agent .mb-chat:not([hidden]) .cmp-input');require(input.value==='Unfinished sample draft','navigation restores this composer words');require(input.selectionStart===input.value.length,'caret returns to the end');return {check:name};}
   if (name === "group-live-line") {
@@ -1890,10 +1899,10 @@ export function checkRendered(name, context = {}) {
       require(sends.length===(name.endsWith('retry')?2:1) && sends.every(call=>call.text==='Please review the project note.'), 'the exact restored words cross only the send boundary');
       if (name.endsWith('failed')) {
         require(document.querySelector('.cmp-input').value==='Please review the project note.' && visible(document.querySelector('.composer-failure [data-card-retry]')), 'failure keeps the draft and retry beside the composer');
-        const failed=document.querySelector('.composer-failure'), card=failed.querySelector('.conversation-card'), field=failed.closest('.composer');
+        const failed=document.querySelector('.composer-failure'), card=failed.querySelector('.conversation-card'), field=document.querySelector('.cmp-field')??document.querySelector('.cmp-input');
         require(failed.querySelectorAll('.card-status.is-failed').length===1 && !failed.querySelector('.card-failure p'), 'the failure is said once, in the status: no sentence repeats it');
         const box=card.getBoundingClientRect(), row=field.getBoundingClientRect();
-        require(box.left-row.left>=0 && box.left-row.left<=14, `the failed card starts at the composer's left, inside its box, never centred between gutters (card ${Math.round(box.left)}, composer ${Math.round(row.left)})`);
+        require(Math.abs(box.left-row.left)<=8, `the failed card starts where the field starts, never centred between gutters (card ${Math.round(box.left)}, field ${Math.round(row.left)})`);
       }
       else require(document.querySelector('.cmp-input').value==='' && !document.querySelector('.composer-failure'), 'successful retry clears the draft and failure');
     }
@@ -2371,13 +2380,13 @@ export function checkRendered(name, context = {}) {
     require(pair.map(button=>button.dataset.col).join()==='search,add'&&!column.querySelector('input'),'search then plus, with no field standing in the list');
     for(const button of pair.filter(visible)){const box=button.getBoundingClientRect(),style=getComputedStyle(button);require(Math.abs(box.width-36)<1&&Math.abs(box.height-36)<1&&parseFloat(style.borderRadius)>=18&&style.backgroundColor!=='rgba(0, 0, 0, 0)'&&style.borderTopColor==='rgba(0, 0, 0, 0)','search and plus are 36px soft round buttons with no frame');}
     if(!rail&&pair.every(visible))require(pair.every(button=>button.parentElement===header)&&Math.abs(pair[0].getBoundingClientRect().top-pair[1].getBoundingClientRect().top)<1&&pair[1].getBoundingClientRect().right>pair[0].getBoundingClientRect().right,'search and plus stand side by side in the top row');
-    // Dictation and Home stand beside the account on the foot's one row, or in the top row when the list is too narrow for them.
-    require(nav.querySelector('.side-foot > .sidebar-apps[data-connect-apps]')&&['settings','dictation','home'].every(go=>nav.querySelector(`.side-foot [data-go="${go}"], .mb-top [data-go="${go}"]`)),'footer opens Connect apps (its own dialog, R-UI-111) beside account, dictation and Home');
+    // Dictation and Home stand beside the account on the foot's second row, under the Connections pill (R-SIDE-01).
+    require(nav.querySelector('.side-foot > .sidebar-apps[data-connect-apps]')&&['settings','dictation','home'].every(go=>nav.querySelector(`.side-foot [data-go="${go}"]`)),'footer opens Connect apps (its own dialog, R-UI-111) above account, dictation and Home');
     if(!document.documentElement.hasAttribute('data-sidebar-collapsed')){const home=nav.querySelector('.sidebar-home'),box=home.getBoundingClientRect();require(Math.abs(box.width-36)<1&&Math.abs(box.height-36)<1&&getComputedStyle(home).borderRadius===getComputedStyle(nav.querySelector('.sidebar-dictation')).borderRadius,'Home keeps the shared icon surface');}
     for(const button of nav.querySelectorAll('.btn.icon:not([data-col]), .side-foot .nav'))if(visible(button)&&!visible(button.querySelector('.nav-t'))){const box=button.getBoundingClientRect(),corner=parseFloat(getComputedStyle(button).borderRadius);require(corner>0&&corner<Math.min(box.width,box.height)/2,`sidebar buttons are rounded squares, never circles (${button.className})`);}
     require(nav.querySelector('.side-foot [data-go="dictation"]').getAttribute('aria-label')&&!nav.querySelector('.side-foot [data-go="dictation"] .nav-t'),'dictation is a named icon button');
     require(nav.querySelector('.sidebar-account .owner-face')&&nav.querySelector('.sidebar-account').getAttribute('aria-label'),'account has its own face and accessible name');
-    require(!nav.querySelector('.sidebar-account > svg.i')&&visible(nav.querySelector('.sidebar-account .owner-face')),'account shows its face alone (its name is its accessible name), without a gear');
+    require(!nav.querySelector('.sidebar-account > svg.i')&&visible(nav.querySelector('.sidebar-account .owner-face'))&&(rail||visible(nav.querySelector('.sidebar-account-name'))),'account shows its face and name (the face alone on the rail), without a gear');
     require(!nav.querySelector('.au-rooms-section .mb-ghead, [data-room-new], .mb-sec[data-group="none"] .mb-ghead'),'only owner-created sections have headings');
     require(getComputedStyle(nav.querySelector('.side-foot')).borderTopWidth==='0px','footer has no separator');
     // The list is always on screen: a rail of faces under 860 px (no menu button, drawer or scrim), else 348 px wide as Grok Bot's
@@ -2500,18 +2509,20 @@ export function checkRendered(name, context = {}) {
       if(prev)near(centre-box(prev).bottom,26,'a label stands 26px under the row above it');
       near(box(section.querySelector('.mb-row')).top-centre,18,'a label stands 18px over its first row');
     }
-    // The foot is one row: the account's face at the left, the pill filling the rest, and the microphone and Home at its end while the pill keeps 180px.
+    // The foot keeps its two rows at every width of the list (owner, 2026-11-12): the Connections pill on a row of its own, and under it
+    // the account's face and name with the microphone and Home at the row's end. The pill says its own words, so it has no tooltip.
     const foot=nav.querySelector('.side-foot'),account=foot.querySelector('.sidebar-account'),pill=foot.querySelector('.sidebar-apps'),mic=nav.querySelector('.sidebar-dictation'),home=nav.querySelector('.sidebar-home');
-    near(box(pill).height,36,'the pill is 36px tall');near(box(account).top,box(pill).top,'the account and the pill stand on one row');
-    require(box(account).right<=box(pill).left&&Math.abs(box(account).left-n.left-12)<=1,"the account's face is at the left, the pill after it");
-    if(n.width>=336){
-      near(box(mic).top,box(pill).top,"the microphone stands on the foot's row");near(box(home).top,box(pill).top,"Home stands on the foot's row");
-      require(box(pill).width>=180&&Math.abs(n.right-12-box(home).right)<=1,`the pill keeps ${Math.round(box(pill).width)}px and Home ends the row`);
-      near(box(foot).height,44,'the foot is one row');
-    }else{
-      require(mic.closest('.mb-top')&&home.closest('.mb-top'),'in a narrow list the microphone and Home stand in the top row with search and plus');
-      require(Math.abs(box(pill).right-(n.right-12))<=1&&box(pill).width>=140,"the pill fills the foot's row");
-    }
+    const middle=el=>box(el).top+box(el).height/2,ownerName=account.querySelector('.sidebar-account-name');
+    near(box(pill).height,40,'the pill is 40px tall');
+    require(Math.abs(box(pill).left-n.left-12)<=1&&Math.abs(n.right-12-box(pill).right)<=1,"the pill has the foot's first row to itself");
+    require(visible(pill.querySelector('.nav-t'))&&pill.querySelector('.nav-t').scrollWidth<=pill.querySelector('.nav-t').clientWidth+1,"the pill's words stand whole on one line");
+    require(box(account).top>=box(pill).bottom&&Math.abs(box(account).left-n.left-12)<=1,'the account stands under the pill, from the left edge');
+    near(box(account.querySelector('.owner-face')).width,32,"the account's face is 32px");
+    require(visible(ownerName)&&ownerName.textContent.trim().length>0&&box(ownerName).width>=40,"the account shows the owner's name beside the face");
+    require(mic.closest('.sidebar-foot-row')&&home.closest('.sidebar-foot-row'),'the microphone and Home stay in the foot at every width');
+    near(middle(mic),middle(account),"the microphone stands on the account's row");near(middle(home),middle(account),"Home stands on the account's row");
+    require(box(account).right<=box(mic).left+1&&box(mic).right<=box(home).left+1&&Math.abs(n.right-12-box(home).right)<=1,'the account, the microphone, then Home, which ends the row');
+    require(!pill.hasAttribute('data-tooltip')&&!pill.hasAttribute('title'),'nothing shows under the pointer over the pill');
     return {check:name,narrow:false,rows:rows.length,pitch:pairs.slice(0,3).map(([a,b])=>box(b).top-box(a).top),foot:Math.round(box(foot).height),width:Math.round(n.width)};
   }
   // A dragged row (sidebar-drag-row): dimmed in its place, with one line over the row it will land before.
@@ -2590,7 +2601,7 @@ export function checkRendered(name, context = {}) {
     return {check:name, width:Math.round(width)};
   }
   // The details panel dragged as wide as it goes beside the conversation: the panel gives way, so the conversation keeps its 386px
-  // (what it had beside the old 296px list and a 440px panel at 1120px) and the one-row composer keeps all its controls (R-UI-110).
+  // (what it had beside the old 296px list and a 440px panel at 1120px) and the composer keeps all its controls (R-UI-110).
   if (name === "panel-widest") {
     const nav = document.getElementById('nav').getBoundingClientRect(), panel = document.querySelector('.page-agent .mb-det').getBoundingClientRect();
     const pane = document.querySelector('.page-agent .mb-chat').getBoundingClientRect(), composer = document.querySelector('.page-agent .composer')?.getBoundingClientRect();
@@ -2763,6 +2774,55 @@ export function checkRendered(name, context = {}) {
       }
     }
     return {check:name,background:style.backgroundColor,ratio:Number(ratio.toFixed(2))};
+  }
+  if (name === "member-switch" || name === "member-switch-light" || name === "member-switch-off" || name === "switch-neutral") {
+    // A switch that is on wears the member's colour in the member's own places (its panel and its settings page), as the owner's bubble
+    // does in its conversation (owner, 2026-11-12); everywhere else (the Settings dialog, Home, the store) it is as it was.
+    const token = (prop, value) => { const probe = document.createElement('i'); probe.style[prop] = value; document.body.append(probe); const out = getComputedStyle(probe)[prop]; probe.remove(); return out; };
+    const channel = value => value / 255 <= 0.03928 ? value / 255 / 12.92 : ((value / 255 + 0.055) / 1.055) ** 2.4;
+    const light = color => { const [r, g, b] = color.match(/[\d.]+/g).map(Number); return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b); };
+    const ratio = (a, b) => (Math.max(light(a), light(b)) + 0.05) / (Math.min(light(a), light(b)) + 0.05);
+    const knobOf = node => getComputedStyle(node, '::after').backgroundColor;
+    if (name === "switch-neutral") {
+      const switches = [...document.querySelectorAll('.modal-scrim .tg[aria-checked="true"]')].filter(visible);
+      require(switches.length > 0, "the Settings dialog shows a switch that is on");
+      for (const node of switches) {
+        require(!node.closest('[data-member-switch]'), "the Settings dialog is no member's place");
+        require(getComputedStyle(node).backgroundColor === token('backgroundColor', 'var(--accent)') && knobOf(node) === token('backgroundColor', 'var(--on-accent)'), `a switch outside a member's places keeps the accent (${getComputedStyle(node).backgroundColor}, knob ${knobOf(node)})`);
+      }
+      return { check: name, switches: switches.length };
+    }
+    const chat = document.querySelector('.mb-chat');
+    // The colour comes from the conversation: its bubble's, and the accent its send button wears (agent.ts drawFaces).
+    const inChat = (prop, value) => { const probe = document.createElement('i'); probe.style[prop] = value; chat.append(probe); const out = getComputedStyle(probe)[prop]; probe.remove(); return out; };
+    const dark = document.documentElement.dataset.theme === 'dark';
+    const bubbleColour = inChat('backgroundColor', 'var(--member-bubble)'), accentColour = inChat('backgroundColor', 'var(--member-accent)');
+    require(bubbleColour !== 'rgba(0, 0, 0, 0)' && accentColour !== 'rgba(0, 0, 0, 0)', "the conversation has the member's colour (the one its bubble and send button wear)");
+    // On the white theme the track is the owner's bubble, on the black one the lighter colour that stands off the panel.
+    const colour = dark ? accentColour : bubbleColour;
+    const places = [...document.querySelectorAll('.mb-det, .ms-pane')].filter(visible);
+    require(places.length > 0, "the member's panel or settings page is open");
+    const on = places.flatMap(place => [...place.querySelectorAll('.tg[aria-checked="true"]')]).filter(visible);
+    const off = places.flatMap(place => [...place.querySelectorAll('.tg[aria-checked="false"]')]).filter(visible);
+    if (name === "member-switch-off") require(on.length === 0 && off.length > 0, "only switches that are off are shown here");
+    else require(on.length > 0, "a switch that is on is shown in the member's place");
+    for (const node of on) {
+      const style = getComputedStyle(node), knob = knobOf(node);
+      require(node.closest('[data-member-switch]'), "the place carries the member's colour");
+      require(style.backgroundColor === colour && style.borderTopColor === accentColour, `a switch that is on wears the member's colour (${style.backgroundColor} with ${style.borderTopColor}, wanted ${colour} with ${accentColour})`);
+      // The knob is white on a colour white stands 3:1 off, dark on a light one (a yellow or white-ish slime), and always stands off the track.
+      const white = token('backgroundColor', 'var(--on-tint-light)'), wanted = ratio(white, colour) >= 3 ? white : token('backgroundColor', 'var(--on-tint-dark)');
+      require(knob === wanted && ratio(knob, colour) >= 3, `the knob stands off the colour (${knob} on ${colour}: ${ratio(knob, colour).toFixed(2)})`);
+      // The black theme's colour stands off its panel; the white theme's outline does (`memberAccent` holds 3:1 off white, the panel is #f7f7f7).
+      const panel = getComputedStyle(node.closest('.mb-det, .ms-pane')).backgroundColor;
+      if (panel !== 'rgba(0, 0, 0, 0)') require(ratio(accentColour, panel) >= 2.7, `the colour stands off its surface (${ratio(accentColour, panel).toFixed(2)})`);
+      if (name === "member-switch-light") require(light(knob) < 0.1, `a light slime's knob is dark (${knob} on ${colour})`);
+    }
+    for (const node of off) {
+      const style = getComputedStyle(node);
+      require(style.backgroundColor === 'rgba(0, 0, 0, 0)' && knobOf(node) === token('backgroundColor', 'var(--text-2)') && style.borderTopColor === token('borderTopColor', 'var(--text-3)'), `a switch that is off keeps its look (${style.backgroundColor}, knob ${knobOf(node)})`);
+    }
+    return { check: name, on: on.length, off: off.length, colour, knob: on[0] ? knobOf(on[0]) : null };
   }
   if (name === "sidebar-folded") {
     // The rail of faces on a narrow window has no folder headings to press.
@@ -4618,29 +4678,46 @@ export function checkRendered(name, context = {}) {
     return { check: name, rows: rows.length, minimumGap: Number.isFinite(minimumGap) ? minimumGap : null };
   }
   if (name === "delete-confirmation") {
+    // The app's one delete dialog, Grok Bot's (owner, 2026-11-12): a small box, the title over one sentence, then one row of two
+    // buttons of the same width that fill the box, Cancel then a red Delete; no × and no line inside; the focus on Cancel.
     const dialogs = [...document.querySelectorAll('.mb-dialog.mb-confirm')];
     const dialog = dialogs.at(-1);
-    require(visible(dialog), "the confirmation is visible");
+    require(visible(dialog) && dialog.classList.contains('mb-delete'), "the delete confirmation is the shared delete dialog");
+    const px = value => parseFloat(value) || 0;
+    const token = (prop, name) => { const probe = document.createElement('i'); probe.style[prop] = `var(${name})`; document.body.append(probe); const value = getComputedStyle(probe)[prop]; probe.remove(); return value; };
     const buttons = [...dialog.querySelectorAll('.mb-dlg-act .btn')];
     require(buttons.map(button => button.dataset.dlg).join('|') === 'cancel|delete', "Cancel precedes Delete visually and in keyboard order");
-    require(document.activeElement === buttons[0], "Cancel receives initial focus");
+    require(document.activeElement === buttons[0], "Cancel receives initial focus, so Enter never deletes");
     require(visible(document.getElementById(dialog.getAttribute('aria-describedby'))), "the irreversible-action description is announced");
-    require(buttons[1].classList.contains('pri'), "Delete uses the skin's primary accent");
-    // As Grok Bot's dialogs (owner, 2026-11-10): a compact head over a hairline, a footer over a hairline with Cancel
-    // then Delete at the right, and no × beside a Cancel.
-    const head = dialog.querySelector('.mb-dlg-head'), act = dialog.querySelector('.mb-dlg-act');
-    require(parseFloat(getComputedStyle(head).borderBottomWidth) > 0 && parseFloat(getComputedStyle(act).borderTopWidth) > 0, "hairlines part the head and the footer");
-    require(parseFloat(getComputedStyle(head.querySelector('h2')).fontSize) <= parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--fs-sm')) + 0.5, "the question is a compact heading");
-    require(!visible(dialog.querySelector('[data-dlg="close"]')), "no × stands beside Cancel");
-    const end = act.getBoundingClientRect().right - parseFloat(getComputedStyle(act).paddingRight);
+    // No ×, no rule line: nothing inside the box but the buttons draws a border, and the head and the footer have none.
+    require(!dialog.querySelector('[data-dlg="close"], .btn.icon'), "no × in the box");
+    const lines = [...dialog.querySelectorAll('*')].filter(node => !node.closest('.btn') && ['Top', 'Right', 'Bottom', 'Left'].some(side => px(getComputedStyle(node)[`border${side}Width`]) > 0));
+    require(lines.length === 0, `no line inside the box (${lines.map(node => node.className || node.tagName).join(', ')})`);
+    require(!dialog.querySelector('hr, [role="separator"]'), "no separator element");
+    // The box: 320 px wide (less in a narrower window), centred in the window.
+    const box = dialog.getBoundingClientRect(), style = getComputedStyle(dialog);
+    require(Math.abs(box.width - Math.min(320, innerWidth - 2 * px(getComputedStyle(dialog.parentElement).paddingLeft))) <= 1, `the box is 320 px wide (${box.width})`);
+    require(box.left >= 0 && box.right <= innerWidth && Math.abs((box.left + box.right) / 2 - innerWidth / 2) <= 2, "the box is centred in the window");
+    // One row of two equal buttons that fill the box's inner width.
     const [cancel, remove] = buttons.map(button => button.getBoundingClientRect());
-    require(Math.abs(remove.right - end) <= 1 && cancel.right <= remove.left, "Cancel then Delete stand at the right");
-    // The dialog's text buttons share the app's small radius, like every other text button.
-    const small = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--r-sm'));
-    require(buttons.every(button => parseFloat(getComputedStyle(button).borderRadius) === small), "actions share the app's small button radius");
-    const box = dialog.getBoundingClientRect();
-    require(box.width <= 442 && box.left >= 0 && box.right <= innerWidth, "the compact panel fits the window");
-    return { check: name, width: box.width, height: box.height };
+    const inner = { left: box.left + px(style.borderLeftWidth) + px(style.paddingLeft), right: box.right - px(style.borderRightWidth) - px(style.paddingRight) };
+    require(Math.abs(cancel.width - remove.width) <= 1, `the two buttons are the same width (${cancel.width} and ${remove.width})`);
+    require(Math.abs(cancel.top - remove.top) <= 0.5 && Math.abs(cancel.height - remove.height) <= 0.5, "the two buttons are one row of one height");
+    require(Math.abs(cancel.left - inner.left) <= 1 && Math.abs(remove.right - inner.right) <= 1 && remove.left >= cancel.right, `the buttons fill the box (${cancel.left}..${remove.right} in ${inner.left}..${inner.right})`);
+    require(Math.abs(cancel.height - px(token('height', '--h-field'))) <= 0.5, `the buttons take the field height (${cancel.height})`);
+    require(buttons.every(button => px(getComputedStyle(button).borderTopLeftRadius) >= cancel.height / 2), "both buttons have fully rounded ends");
+    // Delete is red with white words, at the right; Cancel is the quiet button colour.
+    const [cancelStyle, removeStyle] = buttons.map(button => getComputedStyle(button));
+    require(removeStyle.backgroundColor === token('backgroundColor', '--close') && removeStyle.color === token('color', '--on-close'), `Delete is the danger red with white words (${removeStyle.backgroundColor} on ${removeStyle.color})`);
+    require(cancelStyle.backgroundColor === token('backgroundColor', '--btn'), `Cancel is the quiet button colour (${cancelStyle.backgroundColor})`);
+    // The words: a title and one sentence in the ordinary text colour.
+    const title = dialog.querySelector('h2'), sentences = [...dialog.querySelectorAll('.mb-dlg-body p')];
+    require(sentences.length === 1 && getComputedStyle(sentences[0]).color === token('color', '--text'), "one sentence in the ordinary text colour");
+    require(px(getComputedStyle(title).fontSize) <= px(token('fontSize', '--fs-sm')) + 0.5, "the title is a compact heading");
+    require(title.getBoundingClientRect().bottom <= sentences[0].getBoundingClientRect().top + 1 && sentences[0].getBoundingClientRect().bottom <= cancel.top, "the title, the sentence and the buttons stand in that order");
+    return { check: name, width: box.width, height: box.height, padding: [style.paddingTop, style.paddingRight, style.paddingBottom, style.paddingLeft].map(px),
+      titleSize: px(getComputedStyle(title).fontSize), titleToSentence: sentences[0].getBoundingClientRect().top - title.getBoundingClientRect().bottom,
+      sentenceToButtons: cancel.top - sentences[0].getBoundingClientRect().bottom, buttonHeight: cancel.height, cancelWidth: cancel.width, deleteWidth: remove.width, gap: remove.left - cancel.right };
   }
   if (name.startsWith("cli-account-")) {
     const row = document.querySelector('[data-cli-menu="codex"], [data-cli="codex"]')?.closest('.cli-card');
@@ -5250,6 +5327,98 @@ export function checkRendered(name, context = {}) {
     if (own) require(rows.length > 0 && rows[0].classList.contains('is-now') && rows[0].querySelector('b').textContent === own.title, "the owner's own event is on now, first");
     return { check: name, rows: rows.length };
   }
+  // A busy day (R-UI-144): the all-day band folds to three rows and counts the rest; 「還有 N 個」 opens it in place to every item, 「收合」 folds it again.
+  if (name === "calendar-more-focus") {
+    const toggle = document.activeElement;
+    require(toggle?.dataset.au === "all-day-toggle", "the keyboard stays on the button it pressed, whichever way the band went");
+    return { check: name, words: toggle.textContent, expanded: toggle.getAttribute('aria-expanded') };
+  }
+  if (name === "calendar-more-month") {
+    const cell = document.querySelector('[data-month-day="2026-10-24"] .cal-more:not([hidden])');
+    require(visible(cell) && /^還有 \d+ 個$/.test(cell.textContent) && cell.dataset.au === "open-day", "a month's day that does not fit counts the rest and opens that day");
+    require(!document.querySelector('#app-popover [role], .au-month-more, .au-day-list'), "no second list over the month");
+    return { check: name, words: cell.textContent };
+  }
+  if (name.startsWith("calendar-more-")) {
+    const scroll = document.querySelector('.au-page:not([hidden]) .au-calendar-scroll'), band = scroll.querySelector('.au-all-day-row'), head = scroll.querySelector('.au-grid-head');
+    const columns = [...band.querySelectorAll('.au-all-day[data-all-day]')], chips = [...band.querySelectorAll('.au-bar:not(.au-draft) .au-all-day-event')];
+    const toggles = [...band.querySelectorAll('[data-au="all-day-toggle"]')], open = head.classList.contains('is-open');
+    const gap = parseFloat(getComputedStyle(band).rowGap), pitch = parseFloat(getComputedStyle(band).gridTemplateRows.split(' ')[0]) + gap;
+    const overlapping = (a, b) => Math.min(a.right, b.right) - Math.max(a.left, b.left) > 1 && Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > 1;
+    // The items the data holds for a day, and the ones the band draws against its column.
+    const dayOf = column => { const [y, m, d] = column.dataset.allDay.split('-').map(Number); return [new Date(y, m - 1, d).getTime(), new Date(y, m - 1, d + 1).getTime()]; };
+    const expected = column => { const [from, to] = dayOf(column); return window.__look.data.home.calendar_events.filter(item => (item.all_day || item.end_ms - item.at_ms >= 86_400_000) && item.at_ms < to && item.end_ms > from); };
+    const standing = column => { const box = column.getBoundingClientRect(); return chips.filter(chip => { const b = chip.getBoundingClientRect(); return b.left < box.right - 1 && b.right > box.left + 1; }); };
+    const state = { rows: Number(band.dataset.rows), hoursTop: scroll.querySelector('.au-hours').offsetTop, bandHeight: band.offsetHeight, slot: scroll.querySelector('.au-slot').getBoundingClientRect().height };
+    require(columns.length >= 1 && columns.every(column => expected(column).length >= standing(column).length), "the band draws nothing the data does not hold");
+    require(band.scrollHeight <= band.clientHeight + 1 && getComputedStyle(band).overflowY === 'visible' && getComputedStyle(head).overflowY === 'visible', "the band has no scrollbar of its own");
+    for (const chip of chips) { const box = chip.getBoundingClientRect(), edge = band.getBoundingClientRect(); require(box.bottom <= edge.bottom + 1 && box.height > 0, "no chip of the band is cut off by its edge"); }
+    for (const [index, chip] of chips.entries()) for (const other of chips.slice(index + 1)) require(!overlapping(chip.getBoundingClientRect(), other.getBoundingClientRect()), "no two chips of the band overlap");
+    for (const toggle of toggles) {
+      require(toggle.tagName === 'BUTTON' && !toggle.disabled && toggle.tabIndex >= 0 && visible(toggle) && toggle.getAttribute('aria-controls') === band.id, "the toggle is a real button a keyboard reaches, and it names what it opens");
+      require(toggle.getBoundingClientRect().bottom <= band.getBoundingClientRect().bottom + 1 && toggle.scrollWidth <= toggle.clientWidth + 1, "the toggle stands whole inside the band");
+      for (const chip of chips) require(!overlapping(toggle.getBoundingClientRect(), chip.getBoundingClientRect()), "the toggle covers no chip");
+    }
+    if (open) {
+      require(toggles.length === 1 && toggles[0].getAttribute('aria-expanded') === 'true' && toggles[0].textContent === '收合', "an open band has one button, 「收合」, saying it is expanded");
+      for (const column of columns) {
+        const wanted = expected(column), seen = new Set(standing(column).map(chip => chip.dataset.entry));
+        require(wanted.length === seen.size && wanted.every(item => seen.has(item.id)), `every item of ${column.dataset.allDay} is in the band: ${seen.size} of ${wanted.length}`);
+      }
+      // Every chip is in the document and, once scrolled to, whole and under the pointer (the day names that stay on top do not cover it).
+      const port = scroll.getBoundingClientRect(), top = port.top + Math.max(...[...head.querySelectorAll('.au-day-head')].map(day => day.getBoundingClientRect().height));
+      for (const chip of chips) {
+        chip.scrollIntoView({ block: 'center' });
+        const box = chip.getBoundingClientRect(), at = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+        require(box.top >= top - 1 && box.bottom <= port.bottom + 1 && at?.closest('.au-all-day-event') === chip, "every item can be scrolled to and pressed: " + chip.textContent);
+      }
+      scroll.scrollTop = 0;
+      // A month's count lands on the open day with no folded band before it to compare with.
+      const before = window.__look.calendarMore, growth = before ? state.bandHeight - before.bandHeight : 0;
+      if (before) {
+        require(Math.abs(state.hoursTop - before.hoursTop - growth) <= 1 && Math.abs((state.rows - before.rows) * pitch - growth) <= 1, "the hours moved down by what the band grew");
+        require(Math.abs(state.slot - before.slot) <= .5, "opening the band moves the hours and never resizes them");
+      }
+      // The first timed event is still there: scrolled to it, it is whole under the day names; the last hour is at the end.
+      const events = [...scroll.querySelectorAll('.au-day-col > .au-event:not(.au-draft)')].sort((a, b) => a.offsetTop - b.offsetTop);
+      require(events.length > 0, "the scene has a timed event");
+      scroll.scrollTop += events[0].getBoundingClientRect().top - top - 8;
+      const box = events[0].getBoundingClientRect();
+      require(box.top >= top - 1 && box.bottom <= port.bottom + 1, "the first timed event can be scrolled to under the day names");
+      scroll.scrollTop = scroll.scrollHeight;
+      require(scroll.querySelector('.au-slot[data-hour="23"]').getBoundingClientRect().bottom <= port.bottom + 1, "the last hour of the day can be scrolled to");
+      scroll.scrollTop = 0;
+      return { check: name, items: chips.length, rows: state.rows, growth };
+    }
+    // Folded: three rows at most, each day's button says how many are left and nothing else is hidden.
+    require(!band.querySelector('[data-au="open-day"]'), "the band's count is no link to the day it already shows");
+    require(new Set(chips.map(chip => chip.closest('.au-bar').style.gridRow)).size <= 3, "a folded band draws three rows at most");
+    for (const toggle of toggles) {
+      const column = columns.find(item => item.dataset.allDay === toggle.dataset.date), words = toggle.textContent.match(/^還有 (\d+) 個$/);
+      require(column && words && toggle.getAttribute('aria-expanded') === 'false', "a folded band's button counts what is left and says it is not expanded");
+      require(Number(words[1]) === expected(column).length - standing(column).length, `the button counts the hidden items: ${words[1]} for ${expected(column).length - standing(column).length}`);
+    }
+    for (const column of columns) require((expected(column).length > standing(column).length) === toggles.some(toggle => toggle.dataset.date === column.dataset.allDay), "a day with items left has a button, a day without has none");
+    if (name === "calendar-more-folded") window.__look.calendarMore = state;
+    else {
+      const before = window.__look.calendarMore;
+      require(before && state.rows === before.rows && Math.abs(state.hoursTop - before.hoursTop) <= 1 && Math.abs(state.bandHeight - before.bandHeight) <= 1, "folded again, the band and the hours are where they were");
+    }
+    return { check: name, toggles: toggles.map(toggle => toggle.textContent), chips: chips.length, rows: state.rows };
+  }
+  // A new event's draft and the ghost of a drag say their time from start to end where the chip has room for it, and their start alone where it has not (R-UI-142); the whole range then stands in the tooltip.
+  if (name === "calendar-draft-time") {
+    const times = [...document.querySelectorAll('.au-page:not([hidden]) .au-draft time')].filter(visible);
+    require(times.length > 0, "the scene has a draft with a time");
+    const range = /^\d{2}:\d{2} – \d{2}:\d{2}$/, start = /^\d{2}:\d{2}$/;
+    for (const time of times) {
+      const chip = time.closest('.cal-chip'), words = time.textContent;
+      require(time.scrollWidth <= time.clientWidth + 1 && time.getBoundingClientRect().right <= chip.getBoundingClientRect().right, `the draft's time is whole in its chip: ${words}`);
+      if (range.test(words)) require(!chip.title, "a draft that has room for the range has no tooltip repeating it");
+      else require(start.test(words) && range.test(chip.title) && chip.title.startsWith(words), "a draft too narrow for the range says its start and holds the range in its tooltip");
+    }
+    return { check: name, words: times.map(time => time.textContent) };
+  }
   if (name === "calendar-all-day") {
     require(visible(document.querySelector('.au-all-day-event')), "all-day events remain in the pinned header");
     return { check: name };
@@ -5647,93 +5816,6 @@ export function checkRendered(name, context = {}) {
     }
     require(!window.__look.calls.some(call => call.command === "agent_ask_text" || ["rooms.send", "owner_questions.answer"].includes(call.method)), "a page never sends an owner message or answers a question");
     return { check: name, text: input.value, note: note.textContent };
-  }
-  // The composer's shape (owner, 2026-11-12: Grok Bot's one-row composer, 44 px, 16 px above the window). `composer-metrics:<state>` only
-  // measures; `composer-shape:<state>` measures and asserts: `empty` and `one-line` are one row of 44 px on one vertical centre, `grown`
-  // is a box that grew upward with the controls still on its last line, `files` has the files above a row that is still 44 px.
-  if (name.startsWith("composer-metrics:") || name.startsWith("composer-shape:")) {
-    const state = name.slice(name.indexOf(":") + 1), asserting = name.startsWith("composer-shape:");
-    const form = [...document.querySelectorAll('.composer')].find(el => visible(el) && !el.closest('[hidden]'));
-    require(form, "a composer is on screen");
-    const round = n => Math.round(n * 10) / 10;
-    const box = el => { const b = el.getBoundingClientRect(); return { top: round(b.top), bottom: round(b.bottom), height: round(b.height), left: Math.round(b.left), right: Math.round(b.right), cy: round((b.top + b.bottom) / 2) }; };
-    const own = selector => [...form.querySelectorAll(selector)].find(visible);
-    const parts = {};
-    for (const [key, selector] of [["field", ".cmp-input"], ["attach", ".cmp-attach"], ["mode", ".cmp-mode"], ["model", ".cmp-model .mp-trigger, .cmp-model"], ["send", ".cmp-send, .cmp-voice"]]) { const el = own(selector); if (el) parts[key] = box(el); }
-    const composer = box(form), under = round(innerHeight - form.getBoundingClientRect().bottom), row = box(form.querySelector(':scope > .cmp-row'));
-    const style = getComputedStyle(form), input = form.querySelector('.cmp-input'), lh = parseFloat(getComputedStyle(input).lineHeight), pad = parseFloat(getComputedStyle(input).paddingBottom);
-    // Where the last line of words stands: the field's bottom less its padding, half a line up.
-    const lastLine = round(parts.field.bottom - pad - lh / 2);
-    const controls = ["attach", "mode", "model", "send"].filter(key => parts[key]);
-    const measured = { check: name, composer, under, row, lastLine, viewport: [innerWidth, innerHeight], ...parts };
-    if (!asserting) return measured;
-    require(style.display === "grid", "the composer is one grid");
-    require(Math.abs(parseFloat(style.borderTopLeftRadius) - 22) <= 0.5 && Math.abs(parseFloat(style.borderBottomRightRadius) - 22) <= 0.5, `the corners are half a 44 px row, whatever the height: ${style.borderTopLeftRadius}`);
-    require(Math.abs(under - 16.5) <= 2, `16 or 17 px stand under it, as Grok Bot's: ${under}`);
-    require(controls.length >= 3 && parts.attach && parts.mode && parts.send, `the + , the permission and send are in the row (${controls})`);
-    // Every control stands on the row's bottom edge, whatever the words are: the same offset from the box's bottom at every state.
-    for (const key of controls) require(Math.abs(parts[key].cy - parts.attach.cy) <= 2, `${key} is level with the + : ${parts[key].cy} against ${parts.attach.cy}`);
-    for (const key of controls) require(parts[key].top >= row.top - 0.5 && parts[key].bottom <= row.bottom + 0.5, `${key} stays inside the one row (${parts[key].top}-${parts[key].bottom} in ${row.top}-${row.bottom})`);
-    require(controls.every((key, index) => index === 0 || parts[key].left >= parts[controls[index - 1]].right - 1), "the controls stand in the order + , permission, model, send, none over another");
-    require(parts.field.left >= parts.attach.right - 1 && parts.field.right <= parts.mode.left + 1, "the words are between the + and the permission");
-    const fieldMin = state === "narrow" ? 120 : 200;
-    require(parts.field.right - parts.field.left >= fieldMin - 1, `the field keeps its ${fieldMin} px: ${parts.field.right - parts.field.left}`);
-    // Words placed by a page are added on a new line, so that state has two lines and the controls on the last of them.
-    const grows = state === "grown" || state === "long", twoLines = state === "page-note";
-    if (!grows && !twoLines) {
-      // Whatever stands above the words, the row itself is the one row of 44 px, and the controls share the field's centre.
-      require(Math.abs(row.height - 32) <= 2, `the row is the 32 px controls inside the box's 5 px of air: ${row.height}`);
-      for (const key of controls) require(Math.abs(parts[key].cy - parts.field.cy) <= 2, `${key} shares the field's vertical centre: ${parts[key].cy} against ${parts.field.cy}`);
-    }
-    const above = selector => { const el = own(selector); require(el, `${selector} is shown`); require(el.getBoundingClientRect().bottom <= row.top + 1 && el.getBoundingClientRect().top >= composer.top - 0.5, `${selector} stands above the row, inside the box: ${box(el).top}-${box(el).bottom} against the row at ${row.top}`); return el; };
-    if (state === "empty" || state === "one-line") {
-      require(Math.abs(composer.height - 44) <= 2, `one row, 44 px tall (Grok Bot's): ${composer.height}`);
-      require(Math.abs(composer.cy - parts.field.cy) <= 2, `and the box's: ${composer.cy} against ${parts.field.cy}`);
-      window.__composerOne = measured;
-    } else if (grows) {
-      const one = window.__composerOne;
-      require(one, "a one-line state was measured first");
-      require(composer.height >= 44 + lh, `the box grew by lines (${composer.height})`);
-      require(Math.abs(composer.bottom - one.composer.bottom) <= 1 && composer.top < one.composer.top, "it grew upward, its bottom edge where it was");
-      for (const key of controls) require(Math.abs(parts[key].cy - one[key].cy) <= 1, `${key} did not move when the box grew: ${parts[key].cy} against ${one[key].cy}`);
-      for (const key of controls) require(Math.abs(parts[key].cy - lastLine) <= 2, `${key} is level with the last line of words: ${parts[key].cy} against ${lastLine}`);
-      if (state === "long") require(input.scrollHeight > input.clientHeight && parts.field.height <= 6 * lh + 3, `the field stops at its six lines and scrolls: ${parts.field.height} px`);
-    } else if (state === "files") {
-      const chips = [...form.querySelectorAll('.cmp-file .cmp-chip')].filter(visible);
-      require(chips.length >= 1, "a waiting file is shown");
-      above(".cmp-file");
-      require(chips.every(chip => chip.getBoundingClientRect().top >= composer.top && chip.getBoundingClientRect().bottom <= composer.bottom), "the files are inside the box");
-      require(composer.height > 44 + 40, `the box holds the files and the row (${composer.height})`);
-    } else if (state === "quote") {
-      above(".cmp-quote");
-      require(own(".cmp-quote .message-quote, .cmp-quote > span") && own('.cmp-quote .btn'), "the quote is shown with the button that removes it");
-    } else if (state === "page-note") {
-      const note = above(".cmp-page-note");
-      require(note.getBoundingClientRect().height <= parseFloat(getComputedStyle(note).lineHeight) * 1.2, "the note stays on one line");
-      require(input.value.length > 0, "the placed words are in the field");
-      for (const key of controls) require(Math.abs(parts[key].cy - lastLine) <= 2, `${key} is level with the last line of words: ${parts[key].cy} against ${lastLine}`);
-    } else if (state === "failure") {
-      const failed = above(".composer-failure");
-      require(failed.querySelector('[data-card-retry]') && visible(failed.querySelector('[data-card-retry]')), "the failure keeps its retry");
-      require(failed.getBoundingClientRect().left >= composer.left && failed.getBoundingClientRect().right <= composer.right, "the failure is inside the box's sides");
-    } else if (state === "recording") {
-      require(form.dataset.taskState === "recording" && own('.cmp-voice svg.cmp-plane') && !own('.cmp-send'), "recording shows the send glyph in the one slot");
-    } else if (state === "stop") {
-      require(["ack", "running", "waiting"].includes(form.dataset.taskState) && own('.cmp-voice svg') && !own('.cmp-send'), "a running task shows Stop in the one slot");
-      require(Math.abs(parts.send.right - parts.send.left - 32) <= 1 && Math.abs(parts.send.height - 32) <= 1, `and it is the same 32 px button: ${parts.send.right - parts.send.left} x ${parts.send.height}`);
-    } else if (state === "waiting") {
-      require(input.placeholder === "輸入你的回答，或聊點別的", `the field says it takes the answer: ${input.placeholder}`);
-    } else if (state === "narrow") {
-      require(parts.model && parts.model.right <= parts.send.left + 1, "the model button is still in the row, short, before send");
-      require(parts.send.right <= row.right + 1, `nothing runs out of the row at its right: ${parts.send.right} against ${row.right}`);
-    } else if (state === "menu") {
-      const menu = document.querySelector('#app-popover, .slash-menu');
-      require(menu && visible(menu), "the completion menu is open");
-      const at = menu.getBoundingClientRect();
-      require(at.bottom <= composer.top + 1 || at.top >= composer.bottom - 1 || at.bottom <= parts.field.top + 4, `the menu hangs above the line it completes (as it always did) and covers none of the controls: ${round(at.top)}-${round(at.bottom)} over the box at ${composer.top}`);
-    }
-    require(document.documentElement.scrollWidth <= innerWidth, "nothing runs out sideways");
-    return measured;
   }
   if (name === "composer-grows-before" || name === "composer-grows-keeps-bottom") {
     // The composer grows under a thread whose last item is a card: the thread stays at its bottom and the card stays whole.
@@ -7253,8 +7335,11 @@ export function checkRendered(name, context = {}) {
     require(solid(getComputedStyle(back).backgroundColor), `the way back has a solid surface (${getComputedStyle(back).backgroundColor})`);
     if (view === "main") {
       const edge = cover.getBoundingClientRect(), mark = face.getBoundingClientRect();
-      require(arrow.top >= edge.top && arrow.bottom <= edge.bottom, "the way back is on the cover");
-      require(arrow.bottom <= mark.top || arrow.right <= mark.left, "the way back is clear of the face");
+      // Once the page has scrolled (a long field opened low on a short window) the arrow stands on its own band and the cover has gone under it.
+      if (!pane.hasAttribute("data-scrolled")) {
+        require(arrow.top >= edge.top && arrow.bottom <= edge.bottom, "the way back is on the cover");
+        require(arrow.bottom <= mark.top || arrow.right <= mark.left, "the way back is clear of the face");
+      }
       const change = cover.querySelector('[data-ms="cover"]');
       // At rest the two share one surface; under the pointer an edge button is a step lighter, as everywhere.
       if (change && !back.matches(":hover") && !change.matches(':hover, [aria-expanded="true"]')) require(getComputedStyle(change).backgroundColor === getComputedStyle(back).backgroundColor, "the cover's two icons share one surface");
@@ -7390,6 +7475,111 @@ export function checkRendered(name, context = {}) {
       require(visible(box) && document.activeElement === box, "the box opens in place and has the keyboard");
       require(box.closest(".ms-list") && !box.closest("button"), "the box stands in the section's list");
       require(box.getBoundingClientRect().width > 200, "the box is as wide as its list");
+    }
+    if (name.startsWith("member-settings-persona-")) {
+      // The personality and the instructions (owner, 2026-11-12: 「我不是很喜歡這個個性的欄位的 UI UX」) are one kind of thing, so
+      // one kind of quiet row: its words whole with a pencil, or one line of what could stand there; a press makes it a field.
+      const stage = name.slice("member-settings-persona-".length);
+      const stored = window.__look.data.members.find(item => item.id === 1);
+      const fields = ["personality", "instructions"];
+      const slot = field => pane.querySelector(`.ms-section[data-k="ms-${field}"]`);
+      const rowOf = field => slot(field).querySelector('[data-ms="edit"]');
+      const fieldOf = field => slot(field).querySelector("textarea");
+      const here = field => rowOf(field) ?? fieldOf(field);
+      const at = element => element.getBoundingClientRect();
+      const lineOf = element => parseFloat(getComputedStyle(element).lineHeight);
+      const edited = stage === "editing" ? "personality" : stage === "editing-long" ? "instructions" : null;
+      require(pane.querySelector('.ms-content[data-cat="soul"]') && fields.every(field => visible(slot(field))), "the kind holds the personality and the instructions");
+      // No box until a row is pressed (owner: 「一個巨大的空框」): at most the one field that was pressed is a textarea.
+      const boxes = [...pane.querySelectorAll("textarea")].filter(visible).map(item => item.id);
+      require(boxes.join() === (edited ? `ms-${edited}` : ""), `textareas on the page: ${boxes.join() || "none"}`);
+      // The two are one kind: the same box edges, one left edge and one right edge, inset as the other kinds' rows are in their cards.
+      const [first, second] = fields.map(here);
+      require(visible(first) && visible(second) && Math.abs(at(first).left - at(second).left) <= 0.5 && Math.abs(at(first).right - at(second).right) <= 0.5, "the two share one left edge and one right edge");
+      for (const field of fields) {
+        const list = slot(field).querySelector(".ms-list"), pad = parseFloat(getComputedStyle(list).paddingLeft), mine = at(here(field));
+        require(Math.abs(mine.left - (at(list).left + pad)) <= 0.5 && Math.abs(mine.right - (at(list).right - pad)) <= 0.5, `${field}: its row or field fills its card inside the card's padding`);
+      }
+      for (const field of fields.filter(item => item !== edited)) {
+        const row = rowOf(field), label = row?.querySelector(".ms-label");
+        require(row && row.tagName === "BUTTON" && visible(label), `${field} is a row you press`);
+        const words = (stored[field] ?? "").trim(), style = getComputedStyle(label), line = lineOf(label);
+        require(label.scrollWidth <= label.clientWidth + 1 && label.scrollHeight <= label.clientHeight + 1, `${field}: its words are not cut`);
+        require(style.whiteSpace === "pre-wrap" && style.textOverflow !== "ellipsis" && style.overflowY === "visible", `${field}: its words wrap, a line break of the owner's stays, nothing is ellipsised`);
+        require(at(label).width <= parseFloat(style.maxWidth) + 1, `${field}: its lines are no wider than ${style.maxWidth}`);
+        require(at(row).height >= at(label).height, `${field}: its row holds all its words`);
+        const pencil = row.querySelector("svg.i");
+        require(visible(pencil) && Math.abs((at(pencil).top + at(pencil).bottom) / 2 - (at(label).top + line / 2)) <= 1.5 && at(pencil).right <= at(row).right, `${field}: the pencil stands at the right, level with the first line`);
+        if (words) {
+          require(label.textContent === words && !label.classList.contains("is-empty"), `${field}: the row says the words as they are`);
+          require(Math.round(at(label).height / line) >= words.split("\n").length, `${field}: every line of it shows`);
+          require(style.color === getComputedStyle(row).color, `${field}: its words are in the text colour`);
+        } else {
+          // Nothing written: one quiet line in the secondary colour, what could stand there, a pencil, no box.
+          require(label.classList.contains("is-empty") && label.textContent.trim() && !label.textContent.includes("\n"), `${field}: one quiet line of what could stand here`);
+          require(Math.round(at(label).height / line) === 1 && Math.abs(at(row).height - 44) <= 1, `${field}: the empty state is one line (${Math.round(at(row).height)} px)`);
+          require(style.color === getComputedStyle(slot(field).querySelector("h2")).color, `${field}: the line is in the secondary colour, as the heading`);
+        }
+        if (!words.includes("\n") && words && at(label).height <= line * 1.2) require(Math.abs(at(row).height - 44) <= 1, `${field}: a one-line row is as tall as the other kinds' rows`);
+      }
+      require(fields.every(field => slot(field).querySelector(".ms-head h2")?.textContent.trim() && !slot(field).querySelector(".ms-head small, .ms-head p, .ms-note")), "each heading is its name alone, with no small print");
+      if (edited) {
+        const input = fieldOf(edited), other = fields.find(field => field !== edited), style = getComputedStyle(input), line = lineOf(input);
+        require(document.activeElement === input, "the field has the keyboard");
+        require(style.resize === "none" && !input.matches("[rows]:not([rows='1'])"), "the field has no grip of its own");
+        require(input.scrollHeight <= input.clientHeight + 1, "no scrollbar inside the field");
+        // Its words stand exactly where the row's words stood, in the same type: nothing moves under the pointer.
+        const label = rowOf(other).querySelector(".ms-label");
+        require(Math.abs(at(input).left + parseFloat(style.borderLeftWidth) + parseFloat(style.paddingLeft) - at(label).left) <= 0.5, "the words in the field stand where a row's words stand");
+        require(style.fontSize === getComputedStyle(label).fontSize && style.lineHeight === getComputedStyle(label).lineHeight, "the field is set in the row's own type");
+        // As tall as its words: a whole number of lines plus the row's own measure, and it grows and shrinks with them.
+        const frame = 44 - line, lines = (at(input).height - frame) / line;
+        require(Math.abs(lines - Math.round(lines)) < 0.05 && Math.round(lines) >= input.value.split("\n").length, `the field is as tall as its words (${lines.toFixed(2)} lines)`);
+        if (stage === "editing") require(Math.round(lines) === 2, `two typed lines are two lines tall (${lines.toFixed(2)})`);
+        if (stage === "editing-long") require(Math.round(lines) >= 20, `twenty lines open whole (${lines.toFixed(2)})`);
+        const before = at(input).height, kept = input.value;
+        input.value = kept + "\n一\n二\n三";
+        const grown = at(input).height;
+        input.value = kept;
+        require(grown >= before + 2.9 * line && Math.abs(at(input).height - before) <= 1, "the field grows by the lines added to it and comes back with them");
+      }
+      if (stage === "saved") {
+        const label = rowOf("personality").querySelector(".ms-label");
+        require(stored.personality.trim() !== "" && label.textContent === stored.personality.trim(), "the row is back with the words that were saved");
+        // Saved without a word, as the name and the role are: no note, no badge, and the pencil is back.
+        require(![...document.querySelectorAll(".toast")].some(visible), "nothing is said once it has saved");
+        require(!pane.querySelector(".spin, [aria-busy]") && visible(rowOf("personality").querySelector("svg.i")), "nothing is still being saved and the pencil is back");
+        require(window.__look.calls.some(call => call.method === "members.update" && call.params?.personality === stored.personality), "it was saved");
+      }
+      if (stage === "escape") {
+        const label = rowOf("instructions").querySelector(".ms-label");
+        require(label.textContent === stored.instructions.trim(), "the old words are back");
+        require(!window.__look.calls.some(call => call.method === "members.update" && call.params?.instructions !== undefined), "nothing was saved");
+        require(![...document.querySelectorAll(".toast")].some(visible), "and nothing said");
+      }
+      // Beside the other kinds: the same cards, the same inset, the same headings and the same distances (not while a field is open:
+      // leaving the kind would leave it).
+      if (!edited && stage !== "saved") {
+        const measure = () => {
+          const lists = [...pane.querySelectorAll(".ms-content .ms-list")].filter(visible), heads = [...pane.querySelectorAll(".ms-content .ms-head h2")].filter(visible);
+          const list = lists[0], row = list.querySelector(".ms-row, .ms-open"), style = getComputedStyle(list), h2 = heads[0] ? getComputedStyle(heads[0]) : null;
+          return { left: at(list).left, right: at(list).right, rowLeft: at(row).left, rowRight: at(row).right, rowTop: at(row).top - at(list).top,
+            card: [style.backgroundColor, style.borderTopLeftRadius, style.padding].join(" "),
+            title: h2 ? [h2.fontSize, h2.fontWeight, h2.color, h2.lineHeight].join(" ") : "", titleLeft: heads[0] ? at(heads[0]).left - at(list).left : 0,
+            titleGap: heads[0] ? at(list).top - at(heads[0]).bottom : 0, between: heads[1] ? at(heads[1]).top - at(lists[0]).bottom : 0 };
+        };
+        const mine = measure();
+        const others = Object.fromEntries(["tools", "skills", "notify"].map(id => { pane.querySelector(`.ms-nav [data-cat="${id}"]`).click(); return [id, measure()]; }));
+        pane.querySelector('.ms-nav [data-cat="soul"]').click();
+        require(pane.querySelector('.ms-content[data-cat="soul"]') && measure().left === mine.left, "the kind is as it was after looking at the others");
+        for (const [id, other] of Object.entries(others)) for (const key of ["left", "right", "rowLeft", "rowRight", "rowTop", "card"]) {
+          require(typeof other[key] === "string" ? other[key] === mine[key] : Math.abs(other[key] - mine[key]) <= 0.5, `beside ${id}: ${key} is ${mine[key]}, there ${other[key]}`);
+        }
+        for (const key of ["title", "titleLeft", "titleGap", "between"]) {
+          require(typeof others.skills[key] === "string" ? others.skills[key] === mine[key] : Math.abs(others.skills[key] - mine[key]) <= 0.5, `beside skills: the headings' ${key} is ${mine[key]}, there ${others.skills[key]}`);
+        }
+      }
+      return { check: name, stage };
     }
     if (name === "member-settings-skill") {
       const text = pane.querySelector("#ms-skill-text");
@@ -8108,6 +8298,12 @@ export function checkRendered(name, context = {}) {
         require(document.querySelectorAll('#app-popover').length === 1, "one menu is open, not two");
         require(document.querySelector('.mb-col [data-member-more="1"][aria-expanded="true"]') && !document.querySelector('.mb-col [data-member-more="2"][aria-expanded="true"]'),
           "the open menu is the pressed row's, and the first row's menu is gone");
+      } else if (name === "press-through-page-frame") {
+        // The page is another document, so the app sees no pointer event of the press: it knows only that the focus went into the frame.
+        await until(() => !document.querySelector('.cb-menu, #app-popover'), "the press inside the page left the model card open");
+        const frame = document.querySelector('.pgv-frame-box iframe:not([inert])');
+        require(frame && document.activeElement === frame, "the page is still open and has the press");
+        require(document.querySelector('.composer .cmp-model .mp-trigger')?.getAttribute('aria-expanded') !== "true", "the model button no longer says its card is open");
       } else if (name === "press-through-model-menu") {
         await until(() => document.querySelector('.conversation-trigger[aria-expanded="true"]') && document.querySelector('.mb-det:not([hidden])'), "the press on the header button did not open the details");
         require(!document.querySelector('.cb-menu, #app-popover'), "the model menu went with the same press");

@@ -32,6 +32,17 @@ test("the calendar's Google notice button names the sidebar's own entry, never a
   }
 });
 
+test("the calendar's busy-day words, a count of what is left and its fold, are in every language",()=>{
+  expect(Object.keys(catalogs)).toHaveLength(15);
+  for (const [locale, catalog] of Object.entries(catalogs)) {
+    const messages = catalog as Record<string, string>;
+    expect(messages["overview.moreEvents"], `${locale} overview.moreEvents`).toContain("{p0}");
+    expect(messages["common.showLess"]?.trim(), `${locale} common.showLess`).toBeTruthy();
+  }
+  expect(catalogs["zh-TW"]["overview.moreEvents"]).toBe("還有 {p0} 個");
+  expect(catalogs["zh-TW"]["common.showLess"]).toBe("收合");
+});
+
 const CJK = /[\u3400-\u9fff\u3040-\u30ff]/;
 
 /** The string literals in `files` (TypeScript sources) that hold Chinese or Japanese text, except 《…》 notices. */
@@ -214,7 +225,8 @@ describe("main window translations", () => {
       scan(ast);
     }
     expect(Object.keys(catalogs["zh-TW"]).filter((key) => !written.has(key))).toEqual([]);
-  });
+    // It parses every source as the test below does, and timed out the same way under the whole suite's load (2026-11-12).
+  }, 60_000);
 
   test("main-window source has no hard-coded CJK UI literals outside the catalogue", () => {
     const root = path.resolve(import.meta.dirname, "..");

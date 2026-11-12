@@ -127,7 +127,8 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
     // page, so it may cover what is behind it; anything else may not stand over a control.
     if (element.matches(PRESSABLE) && box.width >= 6 && box.height >= 6 && !element.closest(NEVER_COVERED_EXEMPT)) {
       const rect = shownRect(element);
-      if (rect) {
+      // A row of a list that has scrolled out of its box leaves a sliver at the edge (a menu's 09:00 under 09:15, 1px of it in the box's padding): a control with less than 6px of itself in view is not one a press can land on.
+      if (rect && rect.width >= 6 && rect.height >= 6) {
         const at = [[.5, .5], [.2, .2], [.8, .2], [.2, .8], [.8, .8]].map(([x, y]) => [rect.left + rect.width * x, rect.top + rect.height * y]);
         const covers = at.map(([x, y]) => coverOf(element, x, y)).filter(Boolean);
         // The centre alone is enough; the corners only count when most of them are covered, so a rounded edge is not a finding.
@@ -396,6 +397,9 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
       const layers = [];
       let big = null;
       for (const element of doc.elementsFromPoint(x, y)) {
+        // A picture is no surface to compare: over a member's cover picture the window buttons keep a backing of their own, so that
+        // they can be read on whatever the owner chose (member-settings.css; red on main since the audit came, 2026-11-12).
+        if (element.localName === 'img') return null;
         const style = win.getComputedStyle(element);
         if (style.backgroundImage && style.backgroundImage !== 'none') return null;
         const color = parsed(style.backgroundColor);

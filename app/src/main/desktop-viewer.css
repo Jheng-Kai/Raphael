@@ -50,7 +50,7 @@
 .desktop-shell .desktop-heading .btn.icon:active:not(:disabled) { color: var(--desktop-frame-text); }
 .desktop-shell .desktop-heading .btn.icon:active:not(:disabled) { color: color-mix(in srgb, var(--desktop-frame-text) 85%, transparent); }
 .desktop-heading h2 { margin: 0; overflow: hidden; color: inherit; font-size: var(--fs-sm); font-weight: 400; text-overflow: ellipsis; white-space: nowrap; }
-.desktop-request, .computer-repair-note { margin: 0; color: var(--text-2); font-size: var(--fs-sm); overflow-wrap: anywhere; }
+.desktop-request { margin: 0; color: var(--text-2); font-size: var(--fs-sm); overflow-wrap: anywhere; }
 .desktop-panel[data-expanded] > .desktop-request { padding: 0 var(--sp-3); }
 /* Every state keeps the running screen's proportions, so the wallpaper is never squeezed. The clip,
    unlike hidden, leaves the box free to grow past its ratio when a narrow panel's words and buttons need the height. */

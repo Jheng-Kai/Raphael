@@ -83,7 +83,7 @@ import { mountMailActions } from "../mail-actions";
 import { answerOwnerPage, mountOwnerQuestions, questionWaits } from "../owner-questions";
 import { mountPendingQuestions } from "../pending-questions";
 import { approvalCopy, permissionFor } from "../permission-card";
-import { memberAccent, memberColor, ownerBubble } from "../owner-bubble";
+import { memberAccent, memberColor, memberSwitch, ownerBubble } from "../owner-bubble";
 import { openPeerChat, type PeerChatView } from "../peer-chat";
 import { exchangeView } from "../exchange-line";
 import { dayLabel, describeError } from "../format";
@@ -728,6 +728,13 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     memberChat.dataset.memberBubble = bubble.words;
     memberChat.style.setProperty("--member-bubble", bubble.fill);
     memberChat.style.setProperty("--member-accent", memberAccent(color));
+    // The member's own places, its panel and its settings page, wear the same colour on a switch that is on (styles.css `.tg`).
+    // Written only when it differs: a refresh that changes nothing touches nothing in the panel (agent-members.test.ts).
+    const { track, knob } = memberSwitch(color), tint = { "--member-accent": memberAccent(color), "--member-switch": track, "--member-knob": knob };
+    for (const place of [members.details, members.settings.el]) {
+      if (place.dataset.memberSwitch === undefined) place.dataset.memberSwitch = "";
+      for (const [name, value] of Object.entries(tint)) if (place.style.getPropertyValue(name) !== value) place.style.setProperty(name, value);
+    }
     voice.redraw();
   }
 

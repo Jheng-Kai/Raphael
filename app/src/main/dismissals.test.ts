@@ -451,3 +451,51 @@ test("closeAndPress closes a drawer's scrim and presses what was under it, but a
   expect(close).toHaveBeenCalledTimes(2);
   expect(act).toHaveBeenCalledTimes(1);
 });
+
+// ---------- A frame is another document: the app sees no pointer event of a press inside it, only the focus going there ----------
+
+/** What the browser does when a frame is pressed: the frame takes the focus, the pointer is over it, and the window blurs. */
+async function pressFrame(frame: HTMLIFrameElement, pointerOverIt = true): Promise<void> {
+  const matches = frame.matches.bind(frame);
+  (frame as { matches(selector: string): boolean }).matches = selector => selector === ":hover" ? pointerOverIt : matches(selector);
+  Object.defineProperty(document, "activeElement", { configurable: true, get: () => frame });
+  try {
+    window.dispatchEvent(new Event("blur"));
+    await new Promise(resolve => setTimeout(resolve, 5));
+  } finally {
+    delete (document as { activeElement?: unknown }).activeElement;
+  }
+}
+
+test("a press inside a frame closes every panel the frame is outside of, and the frame keeps the focus", async () => {
+  document.body.innerHTML = '<button id="model">Model</button><section id="card"></section><section id="sub"></section><iframe id="page"></iframe>';
+  const frame = document.querySelector<HTMLIFrameElement>("#page")!, focus = vi.fn();
+  const closeCard = vi.fn(), closeSub = vi.fn();
+  document.querySelector<HTMLElement>("#model")!.addEventListener("focus", focus);
+  disposers.push(registerDismissal(document.querySelector<HTMLElement>("#card")!, closeCard), registerDismissal(document.querySelector<HTMLElement>("#sub")!, closeSub));
+  await pressFrame(frame);
+  expect(closeSub).toHaveBeenCalledOnce();
+  expect(closeCard).toHaveBeenCalledOnce();
+  // Nothing is handed back to the control that opened the card: the page has the press.
+  expect(focus).not.toHaveBeenCalled();
+});
+
+test("a frame that takes the focus with no pointer over it, or that stands inside the open panel, closes nothing", async () => {
+  document.body.innerHTML = '<section id="card"><iframe id="inner"></iframe></section><iframe id="page"></iframe>';
+  const close = vi.fn(), refuse = vi.fn();
+  disposers.push(registerDismissal(document.querySelector<HTMLElement>("#card")!, close));
+  // The focus went into the frame by itself (a page that focuses a field, the Tab key): nobody pressed it.
+  await pressFrame(document.querySelector<HTMLIFrameElement>("#page")!, false);
+  expect(close).not.toHaveBeenCalled();
+  // A frame that is part of what is open is inside it.
+  await pressFrame(document.querySelector<HTMLIFrameElement>("#inner")!);
+  expect(close).not.toHaveBeenCalled();
+  // The window losing the focus to another program is no press either.
+  window.dispatchEvent(new Event("blur"));
+  await new Promise(resolve => setTimeout(resolve, 5));
+  expect(close).not.toHaveBeenCalled();
+  // A panel that may not close now stays, as for any outside press.
+  disposers.push(registerDismissal(document.createElement("section"), refuse, () => false));
+  await pressFrame(document.querySelector<HTMLIFrameElement>("#page")!);
+  expect(refuse).not.toHaveBeenCalled();
+});

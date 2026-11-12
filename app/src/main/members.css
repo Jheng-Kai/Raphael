@@ -252,6 +252,18 @@
 /* With nothing to say under the question, one hairline parts it from the buttons, not two. */
 .mb-confirm:has(.mb-dlg-body:empty) .mb-dlg-act { border-top: 0; }
 .mb-confirm .mb-dlg-act .btn { padding-inline: var(--sp-4); }
+/* The delete question, the app's one (owner, 2026-11-12: 「刪除的 UI，跟我跟你說的那個好像不太一樣」), measured on Grok Bot's at 1068 px: a 320 px
+   box with 16 px at the sides and 12 px over and under, no × and no line inside; the title over one sentence in the ordinary text
+   colour (6 px between them, 8 here), then, 24 px lower, one row of two buttons of the same width filling the box, Cancel in the
+   quiet button colour and Delete in red with white words, fully rounded (Grok Bot's are 32 px tall, 140 px wide and 10 px apart). */
+.mb-dialog.mb-confirm.mb-delete { width: min(320px, 100%); gap: var(--sp-2); padding: var(--sp-3) var(--sp-4); }
+.mb-confirm.mb-delete .mb-dlg-head { min-height: 0; padding: 0; border-bottom: 0; }
+.mb-confirm.mb-delete .mb-dlg-head h2 { font-size: var(--fs-sm); line-height: 1.5; }
+.mb-confirm.mb-delete .mb-dlg-body { padding: 0; line-height: 1.5; color: var(--text); text-wrap: balance; }
+.mb-confirm.mb-delete .mb-dlg-act { flex-wrap: nowrap; gap: var(--sp-2); margin-top: calc(var(--sp-5) - var(--sp-2)); padding: 0; border-top: 0; }
+.mb-confirm.mb-delete .mb-dlg-act .btn { flex: 1 1 0; min-width: 0; padding-inline: var(--sp-3); border-radius: var(--r-pill); font-size: var(--fs-sm); }
+.mb-confirm.mb-delete .mb-dlg-act .btn.pri { border-color: var(--close); background: var(--close); color: var(--on-close); }
+.mb-confirm.mb-delete .mb-dlg-act .btn.pri:hover:not(:disabled), .mb-confirm.mb-delete .mb-dlg-act .btn.pri:active:not(:disabled) { border-color: var(--close); background: var(--close); filter: brightness(0.9); }
 /* A dialog's footer buttons are the field height, as a card's are (owner, 2026-11-10: 「上下寬度可以再胖一點」). */
 .mb-dlg-act .btn:not(.icon) { min-height: var(--h-field); padding-block: 0; line-height: calc(var(--h-field) - 2px); }
 .mb-addrow { display: flex; gap: var(--sp-2); }
