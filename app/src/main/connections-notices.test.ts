@@ -60,9 +60,12 @@ it.each([
   api.connectorsConnect.mockResolvedValue({ connected: false, error });
   const { root, click } = await mount();
   click("open"); click("relogin");
-  await vi.waitFor(() => expect(root.querySelector('.cs-page .note[role="alert"]')?.textContent).toBe(words));
+  // A sign-in left until it ran out is a quiet line (a status, in the idle colour); every other failure is an alert.
+  const note = error === "timeout" ? '.cs-page .note[role="status"]' : '.cs-page .note[role="alert"]';
+  await vi.waitFor(() => expect(root.querySelector(note)?.textContent).toBe(words));
+  expect(root.querySelector(`${note} .dot`)!.classList.contains(error === "timeout" ? "idle" : "err")).toBe(true);
   // told at the top of the app's page, before its accounts and its actions, on the page itself
-  const alert = root.querySelector('.cs-page .note[role="alert"]')!;
+  const alert = root.querySelector(note)!;
   expect(alert.compareDocumentPosition(root.querySelector(".cs-page .cs-acct")!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   expect(alert.compareDocumentPosition(root.querySelector('.cs-page .action-row [data-conn="relogin"]')!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   expect(root.querySelector(".cs-dialog, .cs-scrim")).toBeNull();

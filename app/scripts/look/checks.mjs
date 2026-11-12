@@ -268,6 +268,76 @@ export function checkRendered(name, context = {}) {
     if (name === "colleague-output-cancel") require(calls.some(call => call.command === "pick_output_folder") && !calls.some(call => call.method === "settings.set" && call.params.key === "owner_output_folder"), "cancel never writes the folder setting");
     return {check:name};
   }
+  // R-ACCT-01: the accounts of an app, and a sign-in that waits.
+  if (name.startsWith("accounts-") || name.startsWith("sign-in-")) {
+    const log = window.__look.calls, made = method => log.filter(call => call.method === method);
+    const card = document.querySelector(".cs-accts"), rows = [...(card?.querySelectorAll(".cs-acct") ?? [])];
+    const inside = (node, box) => { const a = node.getBoundingClientRect(), b = box.getBoundingClientRect(); return a.left >= b.left - 0.5 && a.right <= b.right + 0.5 && a.top >= b.top - 0.5 && a.bottom <= b.bottom + 0.5; };
+    if (name === "accounts-card") {
+      require(visible(card) && rows.length === 2, `the card lists the connected account and the young sign-in, not the old one (${rows.length} rows)`);
+      require(rows.map(row => row.querySelector(".nm").textContent).join("|") === "Jack|帳號 2", "the rows are named Jack and 帳號 2");
+      require(rows.map(row => row.querySelector(".st").textContent).join("|") === "已連結|等待登入", "the rows say 已連結 and 等待登入");
+      require(rows.every(row => row.querySelector(".i") && row.querySelector('[data-conn="account-menu"]')), "each row is a person, a name, a status and a ⋯");
+      require(!card.querySelector('[data-conn="account-label"]') && !card.textContent.includes("帳號名稱"), "the 帳號名稱 button is gone");
+      require(rows.every(row => { const more = row.querySelector('[data-conn="account-menu"]'); return visible(more) && inside(more, row) && more.getBoundingClientRect().height <= 30; }), "every ⋯ is whole inside its row and at most 30 px");
+      require(rows.every(row => Math.abs(row.getBoundingClientRect().height - rows[0].getBoundingClientRect().height) < 1), "the rows are one height");
+      require(rows.every(row => row.scrollWidth <= row.clientWidth + 1), "no row is cut at its side");
+      require(visible(card.querySelector('[data-conn="add-account"]')), "加入另一個帳號 is still there");
+      require(made("connectors.status").length > 0, "the list was read from the core");
+    }
+    if (name === "accounts-menu") {
+      const items = [...document.querySelectorAll('#app-popover [role="menuitem"]')];
+      require(items.map(item => item.textContent).join("|") === "重新命名|移除", "the menu has 重新命名 and 移除, in that order");
+      require(items[1].classList.contains("danger") && !items[0].classList.contains("danger"), "移除 is red and last");
+      require(items.every(item => visible(item)) && inside(document.querySelector("#app-popover"), document.documentElement), "the menu is whole in the window");
+      require(document.querySelector('[data-conn="account-menu"][data-account="ca_wait"]').getAttribute("aria-expanded") === "true", "the ⋯ that opened it says so");
+    }
+    if (name === "accounts-remove-ask") {
+      const dialog = document.querySelector(".mb-delete");
+      require(visible(dialog) && inside(dialog, document.documentElement), "the question is whole in the window");
+      require(dialog.querySelector("h2, .mb-dlg-title, [id*=title]")?.textContent === "移除「工作信箱」？", "the title is 移除「工作信箱」？");
+      require(dialog.querySelector("p")?.textContent === "成員將無法再使用這個帳號。", "one sentence says members lose this account");
+      const buttons = [...dialog.querySelectorAll(".mb-dlg-act .btn, .action-row .btn")];
+      require(buttons.map(button => button.textContent).join("|") === "取消|移除", "the buttons are 取消 and 移除");
+      require(made("connectors.remove_account").length === 0, "nothing is removed before the answer");
+      require(document.activeElement === buttons[0], "the focus starts on 取消");
+    }
+    if (name === "accounts-removed") {
+      const call = made("connectors.remove_account");
+      require(call.length === 1 && call[0].params.id === "composio:gmail" && call[0].params.account_id === "ca_me", "the core was asked to remove that one account");
+      require(rows.map(row => row.querySelector(".nm").textContent).join("|") === "Jack" && !document.querySelector(".mb-delete"), "only Jack is left and the question is closed");
+    }
+    if (name === "accounts-removed-waiting") {
+      const call = made("connectors.remove_account");
+      require(call.length === 1 && call[0].params.account_id === "ca_wait", "the core was asked to remove the waiting sign-in");
+      require(!document.querySelector(".mb-delete") && rows.length === 1, "no question was asked and one row is left");
+    }
+    if (name === "accounts-remove-last") {
+      require(made("connectors.remove_account").length === 0 && !document.querySelector(".mb-delete"), "the last connected account asks the app's own question, not another");
+      const confirm = document.querySelector('.menu [data-conn="disconnect"]');
+      require(visible(confirm) && confirm.textContent === "確定中斷？", "the app's menu asks 確定中斷？");
+    }
+    if (name === "sign-in-waits") {
+      const cancel = document.querySelector('[data-conn="cancel-login"]'), joins = [...document.querySelectorAll('[data-conn="join"]')];
+      require(visible(cancel) && !cancel.disabled && cancel.textContent === "取消", "the waiting row has an enabled 取消");
+      require(joins.length > 3 && joins.every(button => !button.disabled), `every other 連結 is pressable (${joins.length} buttons)`);
+      require(made("connectors.connect").length === 1 && made("connectors.connect")[0].params.toolkit === "slack", "one sign-in was started");
+      require(!document.querySelector(".toast"), "nothing is said");
+    }
+    if (name === "sign-in-replaced") {
+      const connects = made("connectors.connect").map(call => call.params.toolkit);
+      require(connects.join("|") === "slack|gmail", `the second 連結 started after the first (${connects.join("|")})`);
+      require(made("integrations.connect_cancel").length === 1, "the first sign-in was ended at the core once");
+      require(document.querySelectorAll('[data-conn="cancel-login"]').length === 1, "only one sign-in waits");
+      require(!document.querySelector('[data-conn="join"][data-id="slack"]')?.disabled && visible(document.querySelector('[data-conn="join"][data-id="slack"]')), "Slack is 連結 again");
+      require(!document.querySelector(".toast"), "the ended sign-in says nothing");
+    }
+    if (name === "sign-in-cancelled") {
+      require(made("integrations.connect_cancel").length === 1 && made("connectors.connect").length === 1, "取消 told the core once");
+      require(!document.querySelector('[data-conn="cancel-login"]') && !document.querySelector(".toast"), "no wait is left and nothing is said");
+    }
+    return { check: name };
+  }
   if (name === 'reaction-layout-rest' || name === 'reaction-layout-hover') {
     const rows = [...document.querySelectorAll('.chat-message > .message-reactions')].filter(visible);
     require(rows.length > 0, 'there are saved reactions to inspect');
