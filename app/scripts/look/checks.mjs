@@ -980,6 +980,14 @@ export function checkRendered(name, context = {}) {
     return {check:name};
   }  if(name === "daily-newest") {const reads=window.__look.calls.filter(call=>call.method==='agent.history.list'&&!call.params?.member_id&&call.params?.conversation_id!==undefined);require(reads.length>0&&reads.every(call=>call.params.conversation_id===77),'the newest standard conversation (not the default one, not the quick questions) is the one read');require(document.querySelector('.conversation-caption').hidden,'the header names only the member while a standard conversation is open (R-UI-103)');return {check:name,reads:reads.map(call=>call.params.conversation_id)};}
   if(name === "daily-copy") {const copied={"zh-TW":"已複製",en:"Copied",ja:"コピーしました"}[document.documentElement.lang];const tick=[...document.querySelectorAll('.thread button, .cn-setup-dialog button, .au-routine-dialog button')].find(el=>el.getAttribute('aria-label')===copied);require(tick&&tick.querySelector('svg'),'the pressed copy control displays its tick and copied name');require(tick.scrollWidth<=tick.clientWidth,'copied words fit in the fixed button width');return {check:name};}
+  if(name === "daily-footer-hover") {
+    // The pointer is on the Connections pill. In the list it says its own words, so nothing more shows under the pointer (owner,
+    // 2026-11-12); on the rail it is a bare icon, and its name is its tooltip as a face's is.
+    const pill=document.querySelector('#nav .sidebar-apps'),tips=[...document.querySelectorAll('[role="tooltip"]')].filter(visible);
+    require(pill.matches(':hover'),'the pointer is on the Connections pill');
+    if(document.documentElement.hasAttribute('data-sidebar-collapsed'))require(pill.dataset.tooltip&&!visible(pill.querySelector('.nav-t')),"the rail's bare icon keeps its name as its tooltip");
+    else require(tips.length===0&&!pill.hasAttribute('data-tooltip')&&!pill.hasAttribute('title')&&visible(pill.querySelector('.nav-t')),`nothing shows under the pointer over the pill: ${tips.map(tip=>tip.textContent)}`);
+    return {check:name,tips:tips.length};}
   if(name === "daily-marks") {
     // The rail of faces (a window under 860px) has no room for marks: the Connections button is an icon there, named by its tooltip and still the door to the same dialog.
     if(document.documentElement.hasAttribute('data-sidebar-collapsed')){const door=document.querySelector('#nav .sidebar-apps[data-connect-apps]'),box=door.getBoundingClientRect();require(visible(door)&&Math.abs(box.width-36)<1&&Math.abs(box.height-36)<1&&door.getAttribute('aria-label')&&door.dataset.tooltip&&!visible(door.querySelector('.nav-t'))&&![...door.querySelectorAll('.sidebar-app-marks .mono')].some(visible),'on the rail the Connections door is a 36px icon with its name as tooltip and no marks');return {check:name,rail:true};}
@@ -2369,13 +2377,13 @@ export function checkRendered(name, context = {}) {
     require(pair.map(button=>button.dataset.col).join()==='search,add'&&!column.querySelector('input'),'search then plus, with no field standing in the list');
     for(const button of pair.filter(visible)){const box=button.getBoundingClientRect(),style=getComputedStyle(button);require(Math.abs(box.width-36)<1&&Math.abs(box.height-36)<1&&parseFloat(style.borderRadius)>=18&&style.backgroundColor!=='rgba(0, 0, 0, 0)'&&style.borderTopColor==='rgba(0, 0, 0, 0)','search and plus are 36px soft round buttons with no frame');}
     if(!rail&&pair.every(visible))require(pair.every(button=>button.parentElement===header)&&Math.abs(pair[0].getBoundingClientRect().top-pair[1].getBoundingClientRect().top)<1&&pair[1].getBoundingClientRect().right>pair[0].getBoundingClientRect().right,'search and plus stand side by side in the top row');
-    // Dictation and Home stand beside the account on the foot's one row, or in the top row when the list is too narrow for them.
-    require(nav.querySelector('.side-foot > .sidebar-apps[data-connect-apps]')&&['settings','dictation','home'].every(go=>nav.querySelector(`.side-foot [data-go="${go}"], .mb-top [data-go="${go}"]`)),'footer opens Connect apps (its own dialog, R-UI-111) beside account, dictation and Home');
+    // Dictation and Home stand beside the account on the foot's second row, under the Connections pill (R-SIDE-01).
+    require(nav.querySelector('.side-foot > .sidebar-apps[data-connect-apps]')&&['settings','dictation','home'].every(go=>nav.querySelector(`.side-foot [data-go="${go}"]`)),'footer opens Connect apps (its own dialog, R-UI-111) above account, dictation and Home');
     if(!document.documentElement.hasAttribute('data-sidebar-collapsed')){const home=nav.querySelector('.sidebar-home'),box=home.getBoundingClientRect();require(Math.abs(box.width-36)<1&&Math.abs(box.height-36)<1&&getComputedStyle(home).borderRadius===getComputedStyle(nav.querySelector('.sidebar-dictation')).borderRadius,'Home keeps the shared icon surface');}
     for(const button of nav.querySelectorAll('.btn.icon:not([data-col]), .side-foot .nav'))if(visible(button)&&!visible(button.querySelector('.nav-t'))){const box=button.getBoundingClientRect(),corner=parseFloat(getComputedStyle(button).borderRadius);require(corner>0&&corner<Math.min(box.width,box.height)/2,`sidebar buttons are rounded squares, never circles (${button.className})`);}
     require(nav.querySelector('.side-foot [data-go="dictation"]').getAttribute('aria-label')&&!nav.querySelector('.side-foot [data-go="dictation"] .nav-t'),'dictation is a named icon button');
     require(nav.querySelector('.sidebar-account .owner-face')&&nav.querySelector('.sidebar-account').getAttribute('aria-label'),'account has its own face and accessible name');
-    require(!nav.querySelector('.sidebar-account > svg.i')&&visible(nav.querySelector('.sidebar-account .owner-face')),'account shows its face alone (its name is its accessible name), without a gear');
+    require(!nav.querySelector('.sidebar-account > svg.i')&&visible(nav.querySelector('.sidebar-account .owner-face'))&&(rail||visible(nav.querySelector('.sidebar-account-name'))),'account shows its face and name (the face alone on the rail), without a gear');
     require(!nav.querySelector('.au-rooms-section .mb-ghead, [data-room-new], .mb-sec[data-group="none"] .mb-ghead'),'only owner-created sections have headings');
     require(getComputedStyle(nav.querySelector('.side-foot')).borderTopWidth==='0px','footer has no separator');
     // The list is always on screen: a rail of faces under 860 px (no menu button, drawer or scrim), else 348 px wide as Grok Bot's
@@ -2498,18 +2506,20 @@ export function checkRendered(name, context = {}) {
       if(prev)near(centre-box(prev).bottom,26,'a label stands 26px under the row above it');
       near(box(section.querySelector('.mb-row')).top-centre,18,'a label stands 18px over its first row');
     }
-    // The foot is one row: the account's face at the left, the pill filling the rest, and the microphone and Home at its end while the pill keeps 180px.
+    // The foot keeps its two rows at every width of the list (owner, 2026-11-12): the Connections pill on a row of its own, and under it
+    // the account's face and name with the microphone and Home at the row's end. The pill says its own words, so it has no tooltip.
     const foot=nav.querySelector('.side-foot'),account=foot.querySelector('.sidebar-account'),pill=foot.querySelector('.sidebar-apps'),mic=nav.querySelector('.sidebar-dictation'),home=nav.querySelector('.sidebar-home');
-    near(box(pill).height,36,'the pill is 36px tall');near(box(account).top,box(pill).top,'the account and the pill stand on one row');
-    require(box(account).right<=box(pill).left&&Math.abs(box(account).left-n.left-12)<=1,"the account's face is at the left, the pill after it");
-    if(n.width>=336){
-      near(box(mic).top,box(pill).top,"the microphone stands on the foot's row");near(box(home).top,box(pill).top,"Home stands on the foot's row");
-      require(box(pill).width>=180&&Math.abs(n.right-12-box(home).right)<=1,`the pill keeps ${Math.round(box(pill).width)}px and Home ends the row`);
-      near(box(foot).height,44,'the foot is one row');
-    }else{
-      require(mic.closest('.mb-top')&&home.closest('.mb-top'),'in a narrow list the microphone and Home stand in the top row with search and plus');
-      require(Math.abs(box(pill).right-(n.right-12))<=1&&box(pill).width>=140,"the pill fills the foot's row");
-    }
+    const middle=el=>box(el).top+box(el).height/2,ownerName=account.querySelector('.sidebar-account-name');
+    near(box(pill).height,40,'the pill is 40px tall');
+    require(Math.abs(box(pill).left-n.left-12)<=1&&Math.abs(n.right-12-box(pill).right)<=1,"the pill has the foot's first row to itself");
+    require(visible(pill.querySelector('.nav-t'))&&pill.querySelector('.nav-t').scrollWidth<=pill.querySelector('.nav-t').clientWidth+1,"the pill's words stand whole on one line");
+    require(box(account).top>=box(pill).bottom&&Math.abs(box(account).left-n.left-12)<=1,'the account stands under the pill, from the left edge');
+    near(box(account.querySelector('.owner-face')).width,32,"the account's face is 32px");
+    require(visible(ownerName)&&ownerName.textContent.trim().length>0&&box(ownerName).width>=40,"the account shows the owner's name beside the face");
+    require(mic.closest('.sidebar-foot-row')&&home.closest('.sidebar-foot-row'),'the microphone and Home stay in the foot at every width');
+    near(middle(mic),middle(account),"the microphone stands on the account's row");near(middle(home),middle(account),"Home stands on the account's row");
+    require(box(account).right<=box(mic).left+1&&box(mic).right<=box(home).left+1&&Math.abs(n.right-12-box(home).right)<=1,'the account, the microphone, then Home, which ends the row');
+    require(!pill.hasAttribute('data-tooltip')&&!pill.hasAttribute('title'),'nothing shows under the pointer over the pill');
     return {check:name,narrow:false,rows:rows.length,pitch:pairs.slice(0,3).map(([a,b])=>box(b).top-box(a).top),foot:Math.round(box(foot).height),width:Math.round(n.width)};
   }
   // A dragged row (sidebar-drag-row): dimmed in its place, with one line over the row it will land before.
@@ -2588,7 +2598,7 @@ export function checkRendered(name, context = {}) {
     return {check:name, width:Math.round(width)};
   }
   // The details panel dragged as wide as it goes beside the conversation: the panel gives way, so the conversation keeps its 386px
-  // (what it had beside the old 296px list and a 440px panel at 1120px) and the one-row composer keeps all its controls (R-UI-110).
+  // (what it had beside the old 296px list and a 440px panel at 1120px) and the composer keeps all its controls (R-UI-110).
   if (name === "panel-widest") {
     const nav = document.getElementById('nav').getBoundingClientRect(), panel = document.querySelector('.page-agent .mb-det').getBoundingClientRect();
     const pane = document.querySelector('.page-agent .mb-chat').getBoundingClientRect(), composer = document.querySelector('.page-agent .composer')?.getBoundingClientRect();
@@ -8022,6 +8032,12 @@ export function checkRendered(name, context = {}) {
         require(document.querySelectorAll('#app-popover').length === 1, "one menu is open, not two");
         require(document.querySelector('.mb-col [data-member-more="1"][aria-expanded="true"]') && !document.querySelector('.mb-col [data-member-more="2"][aria-expanded="true"]'),
           "the open menu is the pressed row's, and the first row's menu is gone");
+      } else if (name === "press-through-page-frame") {
+        // The page is another document, so the app sees no pointer event of the press: it knows only that the focus went into the frame.
+        await until(() => !document.querySelector('.cb-menu, #app-popover'), "the press inside the page left the model card open");
+        const frame = document.querySelector('.pgv-frame-box iframe:not([inert])');
+        require(frame && document.activeElement === frame, "the page is still open and has the press");
+        require(document.querySelector('.composer .cmp-model .mp-trigger')?.getAttribute('aria-expanded') !== "true", "the model button no longer says its card is open");
       } else if (name === "press-through-model-menu") {
         await until(() => document.querySelector('.conversation-trigger[aria-expanded="true"]') && document.querySelector('.mb-det:not([hidden])'), "the press on the header button did not open the details");
         require(!document.querySelector('.cb-menu, #app-popover'), "the model menu went with the same press");

@@ -89,7 +89,8 @@ test("quick questions scope history, quote the entire answer, send their ID, and
   page.el.querySelector<HTMLButtonElement>('.ra [data-act="more-message"]')!.click(); await flush();
   document.querySelector<HTMLButtonElement>('#app-popover [data-lead="+"]')!.click();
   expect(document.querySelector("#app-popover.emoji-picker")).not.toBeNull();
-  await vi.waitFor(() => expect(document.querySelector('#app-popover .emoji-cell[data-emoji="🚀"]')).not.toBeNull());
+  // The picker reads its emoji on first use: that takes more than the default second on a busy machine (failed twice, 2026-11-12).
+  await vi.waitFor(() => expect(document.querySelector('#app-popover .emoji-cell[data-emoji="🚀"]')).not.toBeNull(), { timeout: 10_000 });
   document.querySelector<HTMLButtonElement>('#app-popover .emoji-cell[data-emoji="🚀"]')!.click(); await flush();
   expect(api.core).toHaveBeenCalledWith("agent.react", { member_id: 0, conversation_id: 2, turn_id: 2, message_key: "reply", emoji: "🚀", active: true });
   expect(api.core).not.toHaveBeenCalledWith("agent.speak", expect.anything());
@@ -98,7 +99,7 @@ test("quick questions scope history, quote the entire answer, send their ID, and
   expect([...document.querySelectorAll<HTMLElement>('#app-popover [data-pick]')].map(item => item.dataset.pick)).toEqual(["reply", "copy", "edit"]);
   expect(document.querySelector('#app-popover .menu-reactions')).toBeNull();
   page.hide();
-});
+}, 30_000);
 
 test("a question typed in the quick conversation names the quick destination, and a formal one never does", async () => {
   api.agentQuestionOpen.mockResolvedValue(null);

@@ -175,7 +175,6 @@ export const zhCN = {
   "output.folder": "输出文件夹",
   "output.helpPick": "成员交付给你的文件会存在这里；变更后不会移动既有文件。",
   "output.change": "变更输出文件夹（目前是 {p0}）",
-  "desktop.repaired": "已自动修复电脑连接，工作区与登录数据已保留。",
   "desktop.wait": "稍候",
   "desktop.waitHint": "保留所有数据，不移除任何内容；先等目前的工作完成。",
   "desktop.restart": "重新启动",

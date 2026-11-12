@@ -175,7 +175,6 @@ export const ptBR = {
   "output.folder": "Pasta de saída",
   "output.helpPick": "Os membros salvam aqui os arquivos que entregam a você. Alterar a pasta não move arquivos existentes.",
   "output.change": "Alterar pasta de saída (atual: {p0})",
-  "desktop.repaired": "Conexão reparada; espaço de trabalho e sessões preservados.",
   "desktop.wait": "Aguardar",
   "desktop.waitHint": "Mantém tudo e aguarda o trabalho atual terminar.",
   "desktop.restart": "Reiniciar",

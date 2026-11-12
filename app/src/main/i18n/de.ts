@@ -175,7 +175,6 @@ export const de = {
   "output.folder": "Ausgabeordner",
   "output.helpPick": "Mitglieder speichern hier ihre gelieferten Dateien. Ein Wechsel verschiebt keine bestehenden Dateien.",
   "output.change": "Ausgabeordner ändern (aktuell {p0})",
-  "desktop.repaired": "Computerverbindung repariert; Arbeitsbereich und Anmeldungen blieben erhalten.",
   "desktop.wait": "Warten",
   "desktop.waitHint": "Behält alles bei und wartet auf den Abschluss der aktuellen Arbeit.",
   "desktop.restart": "Neu starten",

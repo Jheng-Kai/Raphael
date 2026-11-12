@@ -175,7 +175,6 @@ export const ko = {
   "output.folder": "출력 폴더",
   "output.helpPick": "멤버가 전달하는 파일을 여기에 저장합니다. 폴더를 바꿔도 기존 파일은 이동하지 않습니다.",
   "output.change": "출력 폴더 변경 (현재 {p0})",
-  "desktop.repaired": "컴퓨터 연결을 복구했습니다. 작업 공간과 로그인은 유지되었습니다.",
   "desktop.wait": "대기",
   "desktop.waitHint": "모든 항목을 유지하고 현재 작업이 끝날 때까지 기다립니다.",
   "desktop.restart": "재시작",

@@ -175,7 +175,6 @@ export const es = {
   "output.folder": "Carpeta de salida",
   "output.helpPick": "Los miembros guardan aquí los archivos que te entregan. Cambiar la carpeta no mueve los archivos existentes.",
   "output.change": "Cambiar carpeta de salida (actual: {p0})",
-  "desktop.repaired": "Conexión reparada; se conservaron el espacio de trabajo y las sesiones.",
   "desktop.wait": "Esperar",
   "desktop.waitHint": "Conserva todo y espera a que termine el trabajo actual.",
   "desktop.restart": "Reiniciar",

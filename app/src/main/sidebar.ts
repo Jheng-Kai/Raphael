@@ -20,9 +20,6 @@ const CONVERSATION_MIN = 604;
  *  Opening needs the wider one: between the two nothing changes, so a pointer held near the fold point cannot flicker the
  *  list between its two shapes. */
 const RAIL_WIDTH = 88, TO_RAIL = 150, FROM_RAIL = 170;
-/** Below this width the foot has no room for the microphone and Home beside the account and the Connections pill (the pill keeps
- *  at least 180 px), so the two stand in the top row with search and plus. */
-const FOOT_TOOLS_MIN = 336;
 const WIDTH_KEY = "raphael.sidebar.width";
 const clampWidth = (width: number): number => Math.round(Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, width)));
 
@@ -37,7 +34,10 @@ export function createSidebar(nav: HTMLElement, column: HTMLElement, app?: Pick<
   const drawApps = (): void => {
     const label = entryLabel(inventory), name = t("nav.apps");
     if (apps.getAttribute("aria-label") !== label) apps.setAttribute("aria-label", label);
-    if (apps.dataset.tooltip !== label) apps.dataset.tooltip = label;
+    // In the list the pill says its own words, so nothing more shows under the pointer (owner, 2026-11-12). Only the rail's bare
+    // icon is named, as its faces are.
+    const tip = document.documentElement.hasAttribute("data-sidebar-collapsed") ? label : undefined;
+    if (apps.dataset.tooltip !== tip) { if (tip) apps.dataset.tooltip = tip; else delete apps.dataset.tooltip; }
     if (apps.querySelector(".nav-t")!.textContent !== name) apps.querySelector(".nav-t")!.textContent = name;
     const marks = typeof inventory === "object" ? [...inventory.apps].filter(item => item.connected)
       .sort((a, b) => (b.last_used_at ?? 0) - (a.last_used_at ?? 0))
@@ -59,8 +59,6 @@ export function createSidebar(nav: HTMLElement, column: HTMLElement, app?: Pick<
   const search = column.querySelector<HTMLElement>('[data-col="search"]')!;
   const add = column.querySelector<HTMLElement>('[data-col="add"]')!;
   const foot = nav.querySelector<HTMLElement>(".side-foot")!;
-  const footRow = nav.querySelector<HTMLElement>(".sidebar-foot-row")!;
-  const tools = [nav.querySelector<HTMLElement>(".sidebar-dictation")!, nav.querySelector<HTMLElement>(".sidebar-home")!];
   // Under 860 px the list is its rail of faces: the conversation keeps the room, and every member is one press away.
   const compactWindow = matchMedia("(max-width: 859px)");
   let collapsed = false;
@@ -81,12 +79,6 @@ export function createSidebar(nav: HTMLElement, column: HTMLElement, app?: Pick<
     edge.setAttribute("aria-valuemax", String(MAX_WIDTH));
   };
   const rail = (): boolean => collapsed || compactWindow.matches;
-  // The microphone and Home stand beside the account on the foot's one row when the list is wide enough for them, else in the top row.
-  const placeTools = (): void => {
-    const inTop = !rail() && nav.getBoundingClientRect().width > 0 && nav.getBoundingClientRect().width < FOOT_TOOLS_MIN;
-    const home = inTop ? header : footRow;
-    if (home && tools[0].parentElement !== home) home.append(...tools);
-  };
   const placeRail = (): void => {
     const folded = rail();
     document.documentElement.toggleAttribute("data-sidebar-collapsed", folded);
@@ -94,7 +86,7 @@ export function createSidebar(nav: HTMLElement, column: HTMLElement, app?: Pick<
     if (folded) foot.prepend(search, add); else header?.append(search, add);
     if (!folded) nav.querySelectorAll(".mb-row[data-tooltip], .sidebar-account[data-tooltip]").forEach(row => row.removeAttribute("data-tooltip"));
     placeWidth();
-    placeTools();
+    drawApps();
   };
   const keep = (): void => {
     try { localStorage.setItem("raphael.sidebar.collapsed", String(collapsed)); } catch { /* Keep the current session choice. */ }
@@ -115,7 +107,7 @@ export function createSidebar(nav: HTMLElement, column: HTMLElement, app?: Pick<
         if (next <= FROM_RAIL) return;
         collapsed = false; width = clampWidth(next); placeRail();
       } else if (next < TO_RAIL) { collapsed = true; placeRail(); }
-      else { width = clampWidth(next); placeWidth(); placeTools(); }
+      else { width = clampWidth(next); placeWidth(); }
     },
     done: keep,
     toggle: toggleRail,
@@ -140,13 +132,11 @@ export function createSidebar(nav: HTMLElement, column: HTMLElement, app?: Pick<
     dictation.title = t("nav.dictation"); home.title = t("nav.home");
     drawApps();
     const account = nav.querySelector<HTMLElement>(".sidebar-account")!;
-    account.innerHTML = `${ownerFaceHTML(36)}<span class="sidebar-account-name">${esc(ownerName())}</span>`;
+    account.innerHTML = `${ownerFaceHTML(32)}<span class="sidebar-account-name">${esc(ownerName())}</span>`;
     account.setAttribute("aria-label", `${ownerName()} · ${t("nav.settings")}`);
   };
   compactWindow.addEventListener("change", placeRail);
   // The list's own width never squeezes the conversation on a window narrower than it was dragged on.
   window.addEventListener("resize", () => placeWidth());
-  // A dragged list or a resized window changes what the foot has room for.
-  if (typeof ResizeObserver !== "undefined") new ResizeObserver(placeTools).observe(nav);
   onLocaleChange(draw); onOwnerProfile(draw); placeRail(); draw();
 }
