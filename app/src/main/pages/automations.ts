@@ -6,7 +6,7 @@ import { visibilityGate, windowVisible } from "../window-visibility";
 // owner's words for it in the member's composer. Home opens it.
 import * as api from "../api";
 import { closePanel, openEventDetail, openEventEditor, panelOpen, type EventDraft } from "../calendar-popover";
-import { allDayBars, chipClock, chipColor, chipHTML, dayLayout, dismissOffer, entryOfItem, googleMark, googleNoticeHTML, GOOGLE_SOURCE, isAllDayRow, isRunException, memberSource, monthEntries, OWN_SOURCE, routineEntries, type CalendarEntry, type Segment } from "../calendar-view";
+import { allDayBars, chipClock, chipColor, chipHTML, dayLayout, dismissOffer, entryOfItem, fittedRange, googleMark, googleNoticeHTML, GOOGLE_SOURCE, isAllDayRow, isRunException, memberSource, monthEntries, OWN_SOURCE, routineEntries, type CalendarEntry, type Segment } from "../calendar-view";
 import { describeError, formatClock, formatDate } from "../format";
 import { getLocale, onLocaleChange, t } from "../i18n";
 import { dayName, faceHTML, primaryFirst, primaryIdOf } from "../members";
@@ -48,6 +48,8 @@ export function createAutomationsPage(app: AppContext): Page {
   let focusedHomeItem = "", detailOnLoad = false, createOnLoad = false;
   let visible = false, awake = false, loads = 0, pending = true;
   let resetPosition = true;
+  /** The range (view and first day) whose all-day band shows every item; any other range folds it again. */
+  let openBand = "";
   let timer: ReturnType<typeof setInterval> | undefined;
   let tools: HTMLElement | null = null;
   let draft: EventDraft | null = null;
@@ -67,6 +69,14 @@ export function createAutomationsPage(app: AppContext): Page {
     try { localStorage.setItem(VIEW_KEY,value); } catch { /* The choice still holds for this window. */ }
   };
   const hourHeight = (): number => parseFloat(el.style.getPropertyValue("--au-hour")) || 48;
+  const bandKey = (start: Date): string => `${period}:${dateKey(start)}`;
+  /** The grid's head as it stands when its all-day band is folded: the hours are sized by it, so opening the band moves them and never resizes them. */
+  function foldedHeadHeight(head: HTMLElement): number {
+    const band = head.querySelector<HTMLElement>(".au-all-day-row"), day = head.querySelector<HTMLElement>(".au-day-head");
+    if (!head.classList.contains("is-open") || !band || !day) return head.offsetHeight;
+    const style = getComputedStyle(band), pitch = parseFloat(style.gridTemplateRows.split(" ")[0]!) + parseFloat(style.rowGap);
+    return day.offsetHeight + band.offsetHeight - (Number(band.dataset.rows) - Number(band.dataset.foldedRows)) * pitch + parseFloat(getComputedStyle(head).borderBottomWidth);
+  }
   /** A routine is read; a new one at a day and time is asked of a member in its conversation, Raphael by default. */
   const edit = (routine?: Routine, memberId?: number, day?: string, time?: string): void => {
     if (routine) { openRoutineView(routine, members); return; }
@@ -199,26 +209,32 @@ export function createAutomationsPage(app: AppContext): Page {
     if (!draft || draft.allDay || dateKey(new Date(draft.start)) !== key) return "";
     const at = new Date(draft.start), hours = (draft.end - draft.start) / 3_600_000;
     return `<div class="au-event au-draft" style="top:calc(${at.getHours() + at.getMinutes() / 60} * var(--au-hour));height:calc(${Math.max(hours, 0.4)} * var(--au-hour) - 2px);left:1px;width:calc(100% - 3px)">` +
-      `<span class="cal-chip btn is-own${hours < 0.75 ? " is-line" : ""}"><span class="cal-chip-copy"><time>${esc(`${formatClock(draft.start)} – ${formatClock(draft.end)}`)}</time><b>${esc(draftTitle())}</b></span></span></div>`;
+      `<span class="cal-chip btn is-own${hours < 0.75 ? " is-line" : ""}"><span class="cal-chip-copy"><time data-from="${draft.start}" data-to="${draft.end}">${esc(`${formatClock(draft.start)} – ${formatClock(draft.end)}`)}</time><b>${esc(draftTitle())}</b></span></span></div>`;
   }
   function gridHTML(start: Date, n: number, entries: CalendarEntry[]): string {
     const now = new Date(), today = dateKey(now);
     const days = Array.from({ length: n }, (_, i) => shiftDay(start, i));
     const zone = Intl.DateTimeFormat(getLocale(), { timeZoneName: "shortOffset" }).formatToParts(now).find(p => p.type === "timeZoneName")?.value ?? "";
-    const { bars, more, used } = allDayBars(entries, days);
-    const extra = more.some(count => count > 0) ? 1 : 0;
+    const folded = allDayBars(entries, days), hasMore = folded.more.some(count => count > 0);
+    const open = hasMore && openBand === bandKey(start);
+    const { bars, more, used } = open ? allDayBars(entries, days, Infinity) : folded;
+    const extra = open || hasMore ? 1 : 0;
     const draftColumn = draft?.allDay ? days.findIndex(day => dateKey(day) === dateKey(new Date(draft!.start))) : -1;
-    const rows = Math.max(1, used + extra + (draftColumn >= 0 ? 1 : 0));
+    const draftRows = draftColumn >= 0 ? 1 : 0;
+    const rows = Math.max(1, used + extra + draftRows), foldedRows = Math.max(1, folded.used + (hasMore ? 1 : 0) + draftRows);
+    const toggle = open
+      ? btn(esc(t("common.showLess")), "cal-more", ` data-au="all-day-toggle" aria-expanded="true" aria-controls="au-all-day-band" style="grid-column:2/-1;grid-row:${used + 1}"`)
+      : more.map((count, i) => count ? btn(esc(t("overview.moreEvents", { p0: count })), "cal-more", ` data-au="all-day-toggle" data-date="${dateKey(days[i]!)}" aria-expanded="false" aria-controls="au-all-day-band" style="grid-column:${i + 2};grid-row:${used + 1}"`) : "").join("");
     const heads = days.map(day => {
       const key = dateKey(day), label = day.toLocaleDateString(getLocale(), { month: "long", day: "numeric", weekday: "long" });
       return `<div class="au-day-head${key === today ? " is-today" : ""}"${key === today ? ' aria-current="date"' : ""}><span>${esc(dayName(day.getDay()))}</span>${btn(String(day.getDate()), "au-day-num", ` data-au="open-day" data-date="${key}" aria-label="${esc(label)}"`)}</div>`;
     }).join("");
-    const allDay = `<div class="au-all-day-row" style="--au-rows:${rows}"><span class="au-all-day-label">${esc(zone)}</span>` +
+    const allDay = `<div class="au-all-day-row" id="au-all-day-band" data-rows="${rows}" data-folded-rows="${foldedRows}" style="--au-rows:${rows}"><span class="au-all-day-label">${esc(zone)}</span>` +
       days.map((day, i) => `<div class="au-all-day" data-all-day="${dateKey(day)}" style="grid-column:${i + 2}"></div>`).join("") +
       bars.map(bar => barHTML(bar.entry, bar.column, bar.span, bar.row, bar.startsBefore, bar.endsAfter)).join("") +
-      more.map((count, i) => count ? btn(esc(t("overview.moreEvents", { p0: count })), "cal-more", ` data-au="open-day" data-date="${dateKey(days[i]!)}" style="grid-column:${i + 2};grid-row:${used + 1}"`) : "").join("") +
-      (draftColumn >= 0 ? `<div class="au-event au-bar au-draft" style="grid-column:${draftColumn + 2};grid-row:${used + 1}"><span class="cal-chip btn is-own is-line"><span class="cal-chip-copy"><b>${esc(draftTitle())}</b></span></span></div>` : "") + `</div>`;
-    return `<div class="au-calendar-scroll"><div class="au-grid${n === 1 ? " is-one-day" : ""}" style="--au-days:${n}"><div class="au-grid-head"><span></span>${heads}${allDay}</div>` +
+      toggle +
+      (draftColumn >= 0 ? `<div class="au-event au-bar au-draft" style="grid-column:${draftColumn + 2};grid-row:${used + 1 + (open ? 1 : 0)}"><span class="cal-chip btn is-own is-line"><span class="cal-chip-copy"><b>${esc(draftTitle())}</b></span></span></div>` : "") + `</div>`;
+    return `<div class="au-calendar-scroll"><div class="au-grid${n === 1 ? " is-one-day" : ""}" style="--au-days:${n}"><div class="au-grid-head${open ? " is-open" : ""}"><span></span>${heads}${allDay}</div>` +
       `<div class="au-hours">${Array.from({ length: 24 }, (_, h) => `<div>${h ? `<span>${String(h).padStart(2, "0")}:00</span>` : ""}</div>`).join("")}</div>` +
       days.map(day => {
         const key = dateKey(day);
@@ -259,7 +275,7 @@ export function createAutomationsPage(app: AppContext): Page {
     wasNarrow = narrow();
     el.innerHTML = toolbarHTML(start, end) + (pending ? `<div class="au-empty" role="status">${esc(t("common.loading"))}</div>`
       : `<div class="au-calendar">${railHTML()}<div class="au-calendar-main">${period === "month" ? monthHTML(entries) : gridHTML(start, n, entries)}${all.length || draft ? "" : emptyHint()}</div></div>`);
-    if (period === "month") fitMonth(); else fitHours(previousHour);
+    if (period === "month") fitMonth(); else { fitHours(previousHour); fitRanges(); }
     if (!pending) resetPosition = false;
     if (reopenTools) openTools();
   }
@@ -279,14 +295,14 @@ export function createAutomationsPage(app: AppContext): Page {
     for (const timing of el.querySelectorAll<HTMLElement>('.is-rhythm small')) timing.style.visibility = timing.scrollWidth <= timing.clientWidth ? "visible" : "hidden";
     const grid = el.querySelector<HTMLElement>(".au-calendar-scroll"), head = grid?.querySelector<HTMLElement>(".au-grid-head");
     if (!grid || !head || !grid.clientHeight) return;
-    const room = grid.clientHeight - head.offsetHeight, height = Math.max(28, Math.min(54, room / 11));
+    const room = grid.clientHeight - foldedHeadHeight(head), height = Math.max(28, Math.min(54, room / 11));
     el.style.setProperty("--au-hour", `${height}px`);
     const now = new Date(), { start, end } = range();
     const onNow = now >= start && now < end;
     const first = [...shown.values()].filter(entry => !isAllDayRow(entry)).map(entry => new Date(entry.start)).map(at => at.getHours() + at.getMinutes() / 60);
     const focus = onNow ? now.getHours() + now.getMinutes() / 60 : first.length ? Math.min(...first) : 8;
     // Near now, with what comes next below it, and never past the end of the day.
-    const initial = Math.max(0, Math.min(24 - room / height, focus - 2.5));
+    const initial = head.classList.contains("is-open") ? 0 : Math.max(0, Math.min(24 - room / height, focus - 2.5));
     grid.scrollTop = (previousHour ?? initial) * height;
   }
   const resize = typeof ResizeObserver === "function" ? new ResizeObserver(() => {
@@ -295,6 +311,7 @@ export function createAutomationsPage(app: AppContext): Page {
     if (period === "month") { fitMonth(); return; }
     const grid = el.querySelector<HTMLElement>(".au-calendar-scroll");
     fitHours(grid ? grid.scrollTop / hourHeight() : null);
+    fitRanges();
   }) : null;
   resize?.observe(el);
   const poll = visibilityGate(tick, () => visible);
@@ -397,7 +414,17 @@ export function createAutomationsPage(app: AppContext): Page {
     else if (act === "new") startCreate(target);
     else if (act === "entry") { const entry = shown.get(target.dataset.entry!); if (entry) openDetail(target, entry); }
     else if (act === "event-more") { const entry = shown.get(target.dataset.entry!); if (entry) askToDelete(target, entry); }
-    else if (act === "open-day") { choosePeriod("day"); navigate(localDay(target.dataset.date!)); }
+    else if (act === "open-day") {
+      // A month's 「還有 N 個」 lands on a day that shows all of it: the band of the day view is already open.
+      choosePeriod("day");
+      if (target.classList.contains("cal-more")) openBand = `day:${target.dataset.date}`;
+      navigate(localDay(target.dataset.date!));
+    }
+    else if (act === "all-day-toggle") {
+      openBand = target.getAttribute("aria-expanded") === "true" ? "" : bandKey(range().start);
+      resetPosition = true; draw();
+      el.querySelector<HTMLElement>('[data-au="all-day-toggle"]')?.focus({ preventScroll: true });
+    }
     else if (act === "source") {
       const key = target.dataset.source!;
       if (hidden.has(key)) hidden.delete(key); else hidden.add(key);
@@ -446,9 +473,25 @@ export function createAutomationsPage(app: AppContext): Page {
       : { start: new Date(start).toISOString(), end: new Date(end).toISOString() };
     void api.calendarUpdate(entry.eventId!, fields).catch(error => { toaster.info(describeError(error)); void load(); });
   }
+  /**
+   * The time of a new event's draft and of a chip being moved or stretched: from start to end where the chip is wide enough for it,
+   * otherwise its start alone, as every other chip says it (R-UI-142). Asked of the chip as drawn, so it holds for a column of any width;
+   * the whole range then stands in the draft's tooltip.
+   */
+  function setRange(time: HTMLElement, start: number, end: number): void {
+    time.dataset.from = String(start); time.dataset.to = String(end);
+    const chip = time.closest<HTMLElement>(".cal-chip");
+    const { text, range, short } = fittedRange(start, end, words => {
+      time.textContent = words;
+      return time.scrollWidth <= time.clientWidth + 1 && !(chip && time.getBoundingClientRect().right > chip.getBoundingClientRect().right - 1);
+    });
+    time.textContent = text;
+    if (chip?.closest(".au-draft")) { if (short) chip.title = range; else chip.removeAttribute("title"); }
+  }
+  const fitRanges = (): void => { for (const time of el.querySelectorAll<HTMLElement>("time[data-from]")) setRange(time, Number(time.dataset.from), Number(time.dataset.to)); };
   function ghostTime(wrap: HTMLElement, start: number, end: number): void {
-    const time = wrap.querySelector("time");
-    if (time) time.textContent = `${formatClock(start)} – ${formatClock(end)}`;
+    const time = wrap.querySelector<HTMLElement>("time");
+    if (time) setRange(time, start, end);
   }
   function onPointerDown(e: PointerEvent): void {
     if (e.button !== 0 || panelOpen() || document.querySelector("#app-popover")) return;

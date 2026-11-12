@@ -99,6 +99,15 @@ export function chipHTML(entry: ChipEntry, cls = "", attrs = "", o: { clock?: bo
   return btn(chipBody(entry, o), `cal-chip is-${entry.kind}${entry.rhythm ? " is-rhythm" : ""}${cls ? ` ${cls}` : ""}`, `${style}${attrs}`);
 }
 
+/**
+ * The time of a draft or a chip being moved: from start to end where `fits` says the chip has room for the whole range, otherwise
+ * its start alone, as every other chip says it (R-UI-142). `range` is the whole of it, for a tooltip.
+ */
+export function fittedRange(start: number, end: number, fits: (words: string) => boolean): { text: string; range: string; short: boolean } {
+  const range = `${formatClock(start)} – ${formatClock(end)}`, short = !fits(range);
+  return { text: short ? formatClock(start) : range, range, short };
+}
+
 /** Its time from start to end, as a popover says it. */
 export function clockRange(entry: Pick<CalendarEntry, "start" | "end" | "allDay" | "kind">): string {
   if (entry.allDay) return t("auto.allDay");

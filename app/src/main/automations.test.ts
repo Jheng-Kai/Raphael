@@ -8,7 +8,7 @@ import { createAutomationsPage } from "./pages/automations";
 import { dateKey, localDay, monthGrid, shiftDay } from "./schedule-picker";
 import { setLocale } from "./i18n";
 import { closeMenu } from "./ui";
-import { allDayBars, dayLayout, entryOfItem, type CalendarEntry } from "./calendar-view";
+import { allDayBars, dayLayout, entryOfItem, fittedRange, type CalendarEntry } from "./calendar-view";
 import { besidePlacement, closePanel } from "./calendar-popover";
 import type { HomeItem } from "./home-types";
 const person = (id:number,name:string):Member => ({id,name,role:"Research",instructions:"",avatar:"",group_id:id?1:null,model:"",tools:null,position:id,created:0,unread:false,waiting:false,preview:"",last_at:null});
@@ -275,6 +275,31 @@ test("all-day events are bars across their days, in rows, and what does not fit 
  expect(of("next")).toMatchObject({column:5,span:2,row:0,endsAfter:true});
  expect(used).toBe(3);
  expect(more).toEqual([0,1,0,0,0,0,0]);
+});
+
+test("a draft or a dragged chip says its whole time range where there is room for it and its start alone where there is not (R-UI-142)",()=>{
+ const start=at(13,30),end=at(14,30);
+ const wide=fittedRange(start,end,()=>true);
+ expect(wide).toMatchObject({text:wide.range,short:false});
+ expect(wide.range).toContain(" – ");
+ // A week's column of 52px holds "13:30" and not the range: the chip is asked, not the window.
+ const narrow=fittedRange(start,end,words=>words.length<=5);
+ expect(narrow).toEqual({text:wide.range.split(" – ")[0],range:wide.range,short:true});
+ const asked:string[]=[];
+ fittedRange(start,end,words=>{asked.push(words);return true;});
+ expect(asked).toEqual([wide.range]);
+});
+
+test("an opened all-day band draws every item of the days in view, and its folded count is what the open band adds",()=>{
+ const days=[localDay("2026-10-24"),localDay("2026-10-25")];
+ const items=Array.from({length:10},(_,n)=>entry(`item${n}`,at(0,0,24),at(0,0,25),{allDay:true}));
+ const folded=allDayBars(items,days), open=allDayBars(items,days,Infinity);
+ expect(folded.bars).toHaveLength(3);
+ expect(folded.more).toEqual([7,0]);
+ expect(open.more).toEqual([0,0]);
+ expect(open.bars.map(bar=>bar.entry.id).sort()).toEqual(items.map(item=>item.id).sort());
+ expect(open.used).toBe(10);
+ expect(open.bars.length-folded.bars.length).toBe(folded.more[0]);
 });
 
 test("a panel stands beside what it is about and inside the window",()=>{
