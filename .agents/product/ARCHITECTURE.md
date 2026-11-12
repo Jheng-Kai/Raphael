@@ -66,7 +66,7 @@ which authenticates /websockify?token=screen-N, requests raw 32-bit pixels and e
 1280x900 8-bit RGB PNG using zlib and filter-zero rows. Acceptance imports the same
 WebSocket/Rfb implementation. No image library, service or transport is added.
 
-Layer 6 grants existing-profile attachment. raphael-seat-browser starts the
+Layer 7 grants existing-profile attachment. raphael-seat-browser starts the
 computer's Chromium outside driver sessions in the existing driver/main workspace
 profile. A title-only data page carries a unique launch marker. The launcher selects
 now-minus-before windows and matches both marker and browser main pid, then moves,

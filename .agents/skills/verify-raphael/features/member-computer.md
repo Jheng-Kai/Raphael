@@ -103,7 +103,7 @@ RFB, 1280x900 RGB PNG. AX/screenshot nodes remain window-local. launch_app moves
 only new windows attributed by reply pid/launcher_pid or a pid without prior windows,
 and filters/projects windows[] after movement.
 
-The browser belongs to the computer. Layer 6 adds the existing-profile grant and
+The browser belongs to the computer. Layer 7 adds the existing-profile grant and
 installs raphael-seat-browser. The launcher uses now-minus-before plus a unique
 title-only data page marker and the main browser pid to identify this launch's
 window, excluding disappeared windows and concurrent same-pid peer popups. It
