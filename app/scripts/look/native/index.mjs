@@ -96,7 +96,7 @@ async function run(options) {
         if (!process.env.RAPHAEL_NATIVE_MODEL_CATALOG) throw new Error("Set RAPHAEL_NATIVE_MODEL_CATALOG to a recorded public GET /api/v1/models response");
         env.RAPHAEL_TEST_NATIVE_MODEL_PICKER = "1";
       }
-      if (["member-computer", "office-mission"].includes(journey.name)) env.RAPHAEL_TEST_NATIVE_COMPUTER = "1";
+      if (["member-computer", "office-mission", "shared-computer"].includes(journey.name)) env.RAPHAEL_TEST_NATIVE_COMPUTER = "1";
       if (["store-finder", "catalog-connect"].includes(journey.name)) env.RAPHAEL_TEST_NATIVE_CATALOG = "1";
       const database = async (...args) => JSON.parse((await execute(python, [join(import.meta.dirname, "database.py"), data, ...args], { cwd: root, env, windowsHide: true, maxBuffer: 16 * 1024 * 1024 })).stdout);
       try {
@@ -105,6 +105,8 @@ async function run(options) {
           await cp(process.env.RAPHAEL_NATIVE_UPGRADE_FROM, data, { recursive: true });
         } else await database("init", journey.name);
         if (journey.name === "computer-speed") result.computer = await database("computer-speed");
+        // The image is made before the app starts: a member's first turn then waits for a start, not for a build.
+        if (journey.name === "shared-computer") result.computer = { image: await database("vm-image") };
         if (journey.name === "member-computer") {
           result.computer = await database("vm-smoke");
           const image = "member-computer-tool.png";
@@ -182,7 +184,7 @@ async function run(options) {
           report.captures.push({ scene: `${scene}/${label}`, theme: "native", ...viewport, image, failed: !!(result.runtimeErrors.length || result.failures.length) });
         };
         const rpc = (method, params) => page.evaluate(({ method, params }) => window.__TAURI_INTERNALS__.invoke("core_call", { method, params }), { method, params });
-        await drive(journey.name, { page, result, capture, artifacts: journeyDir, learnedPage: async () => (await browser.pages()).find(page => /\/learned\.html/.test(page.url())), windows: () => database("windows", String(owned.pid)), computerOffset: () => database("vm-offset"), computerSignin: member => database("vm-signin", String(member)), snapshot: () => database("snapshot"), nativeLog: () => readFile(join(data, "logs/raphael.log"), "utf8").catch(() => ""), homes: () => database("homes"), memoryHome: member => database("memory-home", String(member)), threadQuery: (member, conversation) => database("thread", String(member), String(conversation)), rpc, audioMs, phrases, catalogApp: process.env.RAPHAEL_NATIVE_APP || "slack",
+        await drive(journey.name, { page, result, capture, artifacts: journeyDir, learnedPage: async () => (await browser.pages()).find(page => /\/learned\.html/.test(page.url())), windows: () => database("windows", String(owned.pid)), computerOffset: () => database("vm-offset"), computerSignin: member => database("vm-signin", String(member)), computerWindows: () => database("vm-windows"), snapshot: () => database("snapshot"), nativeLog: () => readFile(join(data, "logs/raphael.log"), "utf8").catch(() => ""), homes: () => database("homes"), memoryHome: member => database("memory-home", String(member)), threadQuery: (member, conversation) => database("thread", String(member), String(conversation)), rpc, audioMs, phrases, catalogApp: process.env.RAPHAEL_NATIVE_APP || "slack",
           typingBaseline: process.env.RAPHAEL_NATIVE_TYPING_BASELINE === "1",
           windowAction: action => database("window-action", String(owned.pid), action),
           modelRequests: async () => (await readFile(join(data, "model-requests.jsonl"), "utf8")).trim().split(/\r?\n/).filter(Boolean).map(line => JSON.parse(line)) });
@@ -209,7 +211,7 @@ async function run(options) {
         browser = null;
         try { await stopOwned(owned); result.cleanup = owned ? "Owned app/core/WebView2 process tree closed by PID" : "No app process was launched"; } catch (error) { result.failures.push(`Process cleanup: ${error.message}`); }
         owned = null;
-        if (["member-computer", "office-mission"].includes(journey.name)) {
+        if (["member-computer", "office-mission", "shared-computer"].includes(journey.name)) {
           try { await database("vm-stop"); result.vmCleanup = "Journey-owned containers removed; workspaces retained"; }
           catch (error) { result.failures.push(`VM cleanup: ${error.message}`); }
         }

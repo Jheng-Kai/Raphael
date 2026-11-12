@@ -540,7 +540,7 @@ async def test_product_calls_capture_old_physical_activity_and_lease_until_their
     hub.scope_busy = lambda scope: True
     monkeypatch.setattr(hub, '_connection', AsyncMock(return_value=(object(), 'test-session')))
     monkeypatch.setattr(hub, '_refresh', lambda target: None)
-    async def driver(target, client, name, args):
+    async def driver(target, client, name, args, **kwargs):
         assert machine.physical_active[old.physical] == 1
         machine.targets[old.key] = machine.shared_target('', 0, 1)
         assert machine.carry_busy(old)

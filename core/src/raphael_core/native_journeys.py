@@ -62,7 +62,7 @@ async def vm_smoke(directory):
         await hub.prepare()
         assert not docker_commands, "Preparing a turn must not invoke Docker"
         snapshot = take_snapshot(hub)
-        # Default journeys use a separate computer per member.
+        # This journey's data folder asks for a computer per member (database.py init): its calls are that mode's.
         shot = next((name for name in snapshot.refs if name == "computer__get_desktop_state"), None)
         if not shot:
             raise VmError("Desktop tool discovery failed: " + str(hub.problem or "unavailable"))
@@ -176,6 +176,44 @@ def vm_signin_fixture(directory, member_id):
     workspace = LocalVm(directory).target(member_id).workspace
     workspace.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(Path(__file__).parent / "evaluate/signin_fixture.py", workspace / "native-signin.py")
+
+
+async def vm_image(directory):
+    """Make the computer image before the app starts, so a member's first turn does not wait for a build."""
+    from .computer.vm import LocalVm
+    if not native_enabled(True):
+        raise RuntimeError("VM image requires the native runner")
+    vm = LocalVm(directory)
+    try:
+        target = vm.target()
+        await vm.ensure_engine(target)
+        built = not await vm.image(target)
+        if built:
+            await vm.build(target)
+        return {"built": built}
+    finally:
+        await vm.aclose(stop=False)
+
+
+async def vm_windows(directory):
+    """Every window of this journey's shared computer, as the window manager lists it (id, class, geometry)."""
+    from .brain.db import connect
+    from .brain.settings import SettingsStore
+    from .computer.vm import LocalVm, exec_args
+    if not native_enabled(True):
+        raise RuntimeError("VM windows requires the native runner")
+    conn = connect(Path(directory) / "raphael.db")
+    vm = LocalVm(directory, settings=SettingsStore(conn), conn=conn)
+    try:
+        target = vm.shared_target(vm.remote, 0, 1)
+        rows = []
+        for flags in ("-lG", "-lx"):
+            listed = await vm.run_for(target, exec_args(target, ["wmctrl", flags]), timeout=15)
+            rows.append(listed.stdout.splitlines() if not listed.code else [f"exit {listed.code}: {listed.stderr[:200]}"])
+        return {"geometry": rows[0], "classes": rows[1]}
+    finally:
+        await vm.aclose(stop=False)
+        conn.close()
 
 
 async def vm_cleanup(directory):

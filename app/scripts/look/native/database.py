@@ -114,6 +114,14 @@ elif operation == "computer-speed":
     print(json.dumps(result))
     if not result["passed"]:
         sys.exit(1)
+elif operation == "vm-image":
+    import asyncio
+    from raphael_core.native_journeys import vm_image
+    print(json.dumps(asyncio.run(vm_image(directory))))
+elif operation == "vm-windows":
+    import asyncio
+    from raphael_core.native_journeys import vm_windows
+    print(json.dumps(asyncio.run(vm_windows(directory))))
 elif operation == "vm-stop":
     import asyncio
     from raphael_core.native_journeys import vm_cleanup
@@ -156,6 +164,15 @@ elif operation == "init":
     if len(sys.argv) > 3 and sys.argv[3] == "gmail-connect":
         from raphael_core.native_journeys import native_codex_model
         settings["agent_model"] = native_codex_model()
+    if len(sys.argv) > 3 and sys.argv[3] == "shared-computer":
+        # Two members that already have a job: a new member's greeting and set-up card are member-job's subject,
+        # and on a real model they are one more thing that can go another way.
+        from raphael_core.members.store import MemberStore
+        for name in ("NativeSeatA", "NativeSeatB"):
+            MemberStore(connection).create_member(name=name, role="Computer jobs", instructions="Do the small job asked, on your own computer: files, commands and web pages.")
+    if len(sys.argv) > 3 and sys.argv[3] == "member-computer":
+        # This journey is the computer-per-member mode's: its smoke uses that mode's own tool forms.
+        settings["computer_vm_mode"] = "per-bot"
     with connection:
         for key, value in settings.items():
             connection.execute("INSERT OR REPLACE INTO settings(key,value) VALUES (?,?)", (key, json.dumps(value)))
@@ -255,7 +272,7 @@ else:
         result = {}
         for table in tables:
             columns = {row[1] for row in connection.execute(f'PRAGMA table_info("{table}")')}
-            if table in {"calendar_events", "conversations", "members", "worker_tasks", "rooms", "room_messages", "room_exchanges", "agent_steps", "tool_audit", "dictionary", "dictionary_evidence"} or "conversation_id" in columns:
+            if table in {"calendar_events", "conversations", "members", "worker_tasks", "rooms", "room_messages", "room_exchanges", "agent_steps", "tool_audit", "dictionary", "dictionary_evidence", "computer_seats"} or "conversation_id" in columns:
                 result[table] = [dict(row) for row in connection.execute(f'SELECT * FROM "{table}"')]
         print(json.dumps(result, ensure_ascii=False))
     elif operation == "thread":

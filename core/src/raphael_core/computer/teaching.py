@@ -299,7 +299,13 @@ class Teaching:
                 if self.viewer.owners.get(target.key) != token:
                     raise invalid_params("demonstration control expired")
                 if target.container == "shared":
-                    await self.viewer.connection_for(session)
+                    from .vm import VmError
+                    try:
+                        await self.viewer.connection_for(session)
+                    except VmError:
+                        # The seat was taken for a recording that cannot begin: it goes back to its member.
+                        await self.viewer.control({"session": token, "held": False})
+                        raise invalid_params("the computer's view is unavailable") from None
                     self.viewer.session(params)
                     if self.viewer.owners.get(target.key) != token:
                         raise invalid_params("demonstration control expired")

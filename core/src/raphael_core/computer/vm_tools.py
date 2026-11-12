@@ -112,7 +112,7 @@ RUN_STEPS = {"description": VM_CONTRACT + " Perform 1–10 short driver actions,
             "arguments": {"type": "object"}}, "required": ["name", "arguments"], "additionalProperties": False}},
         "required": ["steps", "observation"], "additionalProperties": False}}
 
-EXEC = {"description": VM_CONTRACT + " Run a shell command inside the VM workspace, never on the host. Your own files are in /home/cua/workspace; /home/cua/team is the folder the whole team shares, so what a colleague or the owner needs goes there. Nothing it does shows on the screen the owner watches: use it for files and programs, never to fetch a page in place of opening it in the browser. It waits for the command for at most timeout_seconds (60 by default, 1800 at most) and ends it then. For a build or a server that takes longer, or to work on while it runs, set background: it returns at once with a job and the paths of its log and of its .exit file (the exit code, there once the job has ended); read them with another vm_exec. Other members' commands and the screen are not held up by it.",
+EXEC = {"description": VM_CONTRACT + " Run a Linux shell command (sh, not PowerShell) inside the VM workspace, never on the host. Your own files are in /home/cua/workspace; /home/cua/team is the folder the whole team shares, so what a colleague or the owner needs goes there. Nothing it does shows on the screen the owner watches: use it for files and programs, never to fetch a page in place of opening it in the browser. It waits for the command for at most timeout_seconds (60 by default, 1800 at most) and ends it then. For a build or a server that takes longer, or to work on while it runs, set background: it returns at once with a job and the paths of its log and of its .exit file (the exit code, there once the job has ended); read them with another vm_exec. Other members' commands and the screen are not held up by it.",
         "parameters": {"type": "object", "properties": {"command": {"type": "string", "minLength": 1},
         "timeout_seconds": {"type": "number", "exclusiveMinimum": 0, "maximum": 21600},
         "background": {"type": "boolean"}}, "required": ["command"], "additionalProperties": False}}
@@ -451,7 +451,7 @@ class VmTools:
 
     def tier_of(self, key):
         if key in self.tools:
-            shared = self.vm.settings is not None and self.vm.settings.get("computer_vm_mode") == "shared"
+            shared = self.vm.mode == "shared"
             matches = (self.routes[key].container == "shared") == shared
             return self.tools[key].tier if self.vm.enabled and matches and self.routes[key].remote == self.vm.remote and key in self.catalogs.get(self.routes[key].key, []) else None
         return self.delegate.tier_of(key)
@@ -868,7 +868,7 @@ class VmTools:
                             async with asyncio.timeout(CuaBridge.read_timeout_s):
                                 data = await self._browser_open(target, member, client, session, arguments)
                         else:
-                            data = await self._driver_call(target, client, tool.name, sent)
+                            data = await self._driver_call(target, client, tool.name, sent, own=True)
                     except (VmError, ConnectionError, TimeoutError) as error:
                         if target.container and isinstance(error, VmError) and str(error) in ("computer_busy", "owner_holds_control", "computer_changed"):
                             # Waiting for shared input is not a broken session: its bound pages must survive.
@@ -1186,14 +1186,15 @@ class VmTools:
             self.vm.invalidate(target)
             return PluginResult(False, "entry_not_filled", '{"filled": false}')
 
-    async def _driver_call(self, target, client, name, arguments, *, remember=True):
+    async def _driver_call(self, target, client, name, arguments, *, remember=True, own=False):
+        """`own` is the member's own tool call, as against a read or a fill the core makes for it."""
         if not target.container:
             reply = await client.request("tools/call", {"name": name, "arguments": arguments})
         elif shared_native_input(name, arguments):
             async with self._native_lock(target):
-                reply = await self._seat_driver_call(target, client, name, arguments)
+                reply = await self._seat_driver_call(target, client, name, arguments, own=own)
         else:
-            reply = await self._seat_driver_call(target, client, name, arguments)
+            reply = await self._seat_driver_call(target, client, name, arguments, own=own)
         if not reply.get("isError"):
             self._observe_page(target, reply.get("structuredContent") or {}, remember=remember)
         return reply
@@ -1324,7 +1325,7 @@ class VmTools:
             return None
         return row
 
-    async def _seat_driver_call(self, target, client, name, arguments):
+    async def _seat_driver_call(self, target, client, name, arguments, *, own=False):
         session = arguments.get("session")
         args = dict(arguments)
         policy = SHARED_ARGUMENTS.get(name, {})
@@ -1340,6 +1341,26 @@ class VmTools:
         if name in window_native and (not args.get("window_id") or args.get("scope") == "desktop"):
             return self._seat_error("The computer's focus and pointer are shared. Please name one of this member's own windows; call list_windows.")
         window = None
+        if own and name == "get_browser_state" and not args.get("window_id") and (
+                "target_id" not in args or (target.key, args["target_id"]) not in self.page_windows):
+            # What real members sent at a seat (2026-11-12). The driver's reply to browser_prepare says the next call
+            # is get_browser_state, and a member then names the browser's process, or nothing; and a CLI turn that is
+            # started again when the computer's catalog changes has only a cut record of its last reply, and names
+            # ids it never had ("2"). Each was told its window was not on its screen and gave up. One browser serves
+            # every seat, so its process names no window: the one browser window on this member's own screen is the
+            # one it means, and the reply names the real target and tabs. Only the member's own read: its input still
+            # names its window, a target it did bind is judged as before, and what the core reads for it (a private
+            # page's state, a field before a saved value is typed) must be the tab it asked for or nothing.
+            canvas = await self._canvas_windows(client, session)
+            fits = [row for row in seat_view.windows(canvas, target.screen, target.screens)["windows"]
+                    if row.get("app_name", "").lower() == "chromium-browser" and args.get("pid", row.get("pid")) == row.get("pid")]
+            if len(fits) != 1:
+                return self._seat_error("The bound window is not on this member's screen. Call list_windows and bind an own window again."
+                                        if "target_id" in args else
+                                        "Name one of this member's own windows or a bound target_id; call list_windows.")
+            args.pop("target_id", None)
+            args.pop("tab_id", None)
+            args["window_id"], args["pid"] = fits[0]["window_id"], fits[0]["pid"]
         if "target_id" in args:
             window = await self._bound_window(target, client, args)
             if window is None:
@@ -1347,7 +1368,11 @@ class VmTools:
         if "window_id" in args or ("pid" in args and name != "list_windows"):
             window = await self._own_window(target, client, session, args.get("window_id"), args.get("pid"))
             if window is None:
-                return self._seat_error("The window is not on this member's screen. Call list_windows and name an own window.")
+                # A process alone names no window here, and saying "not on your screen" sends a member away from
+                # a window that is its own.
+                return self._seat_error("The window is not on this member's screen. Call list_windows and name an own window."
+                                        if args.get("window_id") else
+                                        "A process alone names no window on a shared computer: pass window_id with pid. Call list_windows.")
         if name == "browser_prepare":
             window = (args if args.get("window_id") else await self._shared_browser_window(target, client, session))
             args = {"pid": window["pid"], "window_id": window["window_id"],

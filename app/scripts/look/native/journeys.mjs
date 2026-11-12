@@ -30,6 +30,7 @@ export const journeys = [
   { name: "bot-homes", description: "Migrate three copied notes and an imported skill, then answer with an offline Codex child" },
   { name: "upgrade", description: "A copy of an older data folder (RAPHAEL_NATIVE_UPGRADE_FROM) opens on this build with the fake brain: its people, conversations and every settings pane" },
   { name: "member-computer", description: "Docker desktop with fake brain, real MCP screenshot, exec, attachment and noVNC; no host desktop actions" },
+  { name: "shared-computer", description: "The real core, the real Codex CLI and one real computer, as a new owner gets it: two members each work at their own screen of it, one reads the other's file, the app shows each its own screen, and the owner takes one and hands it back" },
   { name: "readable-layout", description: "Inspect the shared sidebar, aligned details and compact drawer in the real WebView" },
   { name: "slime-sharp", description: "Twelve slimes in the real sidebar: moving, each paints the pixels of its pose held still, and what they cost while idle" },
   { name: "locale-sweep", description: "Switch every locale and visit main pages and settings" },
@@ -1158,6 +1159,124 @@ await page.waitForFunction(role => document.querySelector('.ms-pane #ms-role')?.
     if (rows.filter(row => row.tool === "request_takeover" && row.outcome === "ok").length !== 1) throw new Error("Takeover did not resume exactly once");
     result.computer.takeover = { turn: resumed.id, state: resumed.status, resumeCount: 1, noMemberCallsWhileHeld: true };
     await capture("continued-once");
+    return;
+  }
+  if (name === "shared-computer") {
+    await keepFocus(page);
+    // Nothing here chooses the mode: the journey is what a new data folder gets.
+    const mode = (await context.rpc("settings.get", {})).settings.computer_vm_mode;
+    if (mode !== "shared") throw new Error(`A new data folder's computer mode is ${mode}, not shared`);
+    let codex;
+    for (let i = 0; i < 150 && !codex; i++) {
+      const models = (await context.rpc("brains.cli", {})).clis.find(cli => cli.id === "codex")?.models ?? [];
+      codex = models.find(model => model.id.endsWith("gpt-6-luna")) ?? models.at(-1);
+      if (!codex) await pause(200);
+    }
+    if (!codex) throw new Error("The real Codex listed no models");
+    await context.rpc("settings.set", { key: "agent_model", value: `${codex.id}?effort=low` });
+    const people = (await context.rpc("members.list", {})).members;
+    const first = people.find(row => row.name === "NativeSeatA"), second = people.find(row => row.name === "NativeSeatB");
+    if (!first || !second) throw new Error("The journey's two members are missing");
+    const computerCalls = async () => (await snapshot()).tool_audit.filter(row => row.server === "computer");
+    const ask = async (member, text) => {
+      // A member has one conversation: the owner opens it and writes.
+      await perform(page, { action: "member", id: member.id });
+      await wait(page, ".composer .cmp-input");
+      const before = (await computerCalls()).length, began = Date.now();
+      await type(page, ".composer .cmp-input", text);
+      await click(page, ".cmp-send");
+      for (let i = 0; i < 3600; i++) {
+        // A computer tool asks nothing; anything else that asks is not this journey's to approve.
+        if (await page.$('.page-agent [data-act="perm-once"]:not([disabled])')) throw new Error(`A card was shown for: ${text}`);
+        const turn = (await snapshot()).agent_turns.find(row => row.member_id === member.id && row.question === text && ["done", "error"].includes(row.status));
+        if (turn) {
+          const calls = (await computerCalls()).slice(before);
+          return { turn, calls: calls.map(row => `${row.tool}:${row.outcome}`), seconds: Math.round((Date.now() - began) / 1000) };
+        }
+        await pause(250);
+      }
+      throw new Error(`No answer to: ${text}`);
+    };
+    const seats = async () => Object.fromEntries((await snapshot()).computer_seats.map(row => [row.member_id, row.seat]));
+    // The pictures of the conversation are for the reader. Whether the sidebar's slimes have come to rest when one is
+    // taken is another journey's subject (slime-sharp), so here a picture that cannot be taken is written down.
+    const picture = async label => { try { await capture(label); } catch (error) { (result.computer.pictures ??= []).push(`${label}: ${String(error.message).slice(0, 120)}`); } };
+    // "Your computer" is the member's own Linux computer, said so: asked to "run a command", one real turn took it
+    // for the owner's PC (whose commands are off here) and did not look at its computer at all.
+    const one = await ask(first, "請在你自己的那台 Linux 電腦裡（不是我這台 PC）建立檔案 native-seat-a.txt，內容只有一行 alpha，再用那台電腦上的瀏覽器打開 https://example.com ，最後只回答我那個網頁的標題。");
+    result.computer.first = { status: one.turn.status, calls: one.calls, seconds: one.seconds, text: one.turn.text.slice(0, 120) };
+    if (one.turn.status !== "done" || one.turn.member_id !== first.id) throw new Error(`The first member did not finish: ${JSON.stringify(result.computer.first)}`);
+    // Which browser tools it reaches for is the model's choice (the first real run used browser_prepare and
+    // get_browser_state, not browser_open); that the page was read on its computer is what is asked.
+    const browsed = calls => calls.some(call => /^(browser_open|browser_navigate|get_browser_state):ok$/.test(call));
+    if (!browsed(one.calls) || !one.calls.some(call => call === "vm_exec:ok")) throw new Error(`The first member did not use its computer's shell and browser: ${one.calls}`);
+    if (!/Example Domain/i.test(one.turn.text)) throw new Error(`The first member did not read the page: ${one.turn.text.slice(0, 200)}`);
+    await picture("first-answered");
+    const two = await ask(second, "請在你自己的那台 Linux 電腦裡（不是我這台 PC）讀出檔案 native-seat-a.txt 的內容，原樣告訴我；再用那台電腦上的瀏覽器打開 https://example.org ，告訴我那個網頁的標題。");
+    result.computer.second = { status: two.turn.status, calls: two.calls, seconds: two.seconds, text: two.turn.text.slice(0, 120) };
+    if (two.turn.status !== "done" || two.turn.member_id !== second.id) throw new Error(`The second member did not finish: ${JSON.stringify(result.computer.second)}`);
+    // The workspace is one for every member: the second reads what the first wrote.
+    if (!/alpha/.test(two.turn.text)) throw new Error(`The second member did not read the first member's file: ${two.turn.text.slice(0, 200)}`);
+    if (!browsed(two.calls)) throw new Error(`The second member did not use a browser window of its own: ${two.calls}`);
+    if (!/Example Domain/i.test(two.turn.text)) throw new Error(`The second member did not read its page: ${two.turn.text.slice(0, 200)}`);
+    await picture("second-answered");
+    result.computer.seats = await seats();
+    if (result.computer.seats[first.id] !== 1 || result.computer.seats[second.id] !== 2) throw new Error(`Expected seats 1 and 2, observed ${JSON.stringify(result.computer.seats)}`);
+    // Each member's browser window is still on its own screen after the other was seated beside it and opened its own.
+    result.computer.windows = await context.computerWindows();
+    const browsers = result.computer.windows.geometry.map(line => line.trim().split(/\s+/)).filter(parts => /Chromium$/.test(parts.at(-1)) || parts.slice(7).join(" ").includes("Chromium"))
+      .map(parts => ({ id: parts[0], x: Number(parts[2]), y: Number(parts[3]), width: Number(parts[4]), height: Number(parts[5]) }));
+    const screenOf = row => { const cx = row.x + row.width / 2, cy = row.y + row.height / 2; return cy < 900 ? Math.floor(cx / 1280) + 1 : Math.floor(cx / 1280) + 4; };
+    result.computer.browserScreens = browsers.map(screenOf).sort();
+    if (JSON.stringify(result.computer.browserScreens) !== "[1,2]") throw new Error(`Expected one browser window on screen 1 and one on screen 2, observed ${JSON.stringify(browsers)}`);
+    // The app shows each member the screen it sits at, from the one computer.
+    const targets = new Set();
+    for (const [label, member] of [["first", first], ["second", second]]) {
+      const state = await context.rpc("computer.viewer_status", { member_id: member.id });
+      if (state.mode !== "shared" || !state.ready) throw new Error(`${label}: the computer is not a ready shared one: ${JSON.stringify({ mode: state.mode, ready: state.ready, state: state.state })}`);
+      targets.add(state.target);
+      await perform(page, { action: "member", id: member.id });
+      await wait(page, ".composer .cmp-input");
+      if (await page.$eval('.mb-chat .conversation-trigger', button => button.getAttribute('aria-expanded') !== 'true')) await click(page, '.mb-chat .conversation-trigger');
+      await click(page, '#member-tab-computer');
+      try { await page.waitForSelector('.desktop-panel[data-desktop-state="member"]', { visible: true, timeout: 60000 }); }
+      catch (error) {
+        // What the panel and the core said when the view did not come: the evidence a later reader needs.
+        result.computer.viewFailure = { member: label, panel: await page.$eval('.desktop-panel', el => ({ ...el.dataset })).catch(() => null),
+          status: await context.rpc("computer.viewer_status", { member_id: member.id }).then(({ viewer_url, ...rest }) => rest).catch(reason => String(reason)),
+          windows: await context.computerWindows().catch(reason => String(reason)) };
+        throw error;
+      }
+      const desktop = await (await page.$('.desktop-panel iframe')).contentFrame();
+      await desktop.waitForSelector('#noVNC_container canvas', { visible: true, timeout: 60000 });
+      await desktop.waitForFunction(() => document.querySelector('#noVNC_container canvas')?.width > 100, { timeout: 60000 });
+      if (await page.$eval('.desktop-panel iframe', element => /password/i.test(element.src))) throw new Error("Credential in viewer URL");
+      const size = await desktop.evaluate(() => { const canvas = document.querySelector('#noVNC_container canvas'); return [canvas.width, canvas.height]; });
+      // One screen of the six, never the canvas they share.
+      if (size[0] !== 1280 || size[1] !== 900) throw new Error(`${label}: the view is ${size.join("x")}, not one 1280x900 screen`);
+      (result.computer.frames ??= []).push({ state: label, ...await desktop.evaluate(checkRendered, "desktop-frame") });
+      await pause(1500);
+      await capture(`seat-${label}`);
+      if (member === second) {
+        // The owner takes the second member's screen and hands it back; the first member's is not held meanwhile.
+        await click(page, '[data-desktop="enlarge"]');
+        await page.waitForSelector('.desktop-panel[data-expanded] [data-desktop="take"]:not(:disabled)', { visible: true, timeout: 60000 });
+        await click(page, '[data-desktop="take"]');
+        await page.waitForSelector('.desktop-panel[data-interactive="true"]', { visible: true, timeout: 60000 });
+        const held = await context.rpc("computer.viewer_status", { member_id: second.id });
+        const other = await context.rpc("computer.viewer_status", { member_id: first.id });
+        if (held.control !== "owner" || other.control !== "member") throw new Error(`Take control: second ${held.control}, first ${other.control}`);
+        await capture("seat-second-owner");
+        await click(page, '[data-desktop="return"]');
+        await page.waitForSelector('.desktop-panel[data-desktop-state="member"]', { visible: true, timeout: 60000 });
+        if ((await context.rpc("computer.viewer_status", { member_id: second.id })).control !== "member") throw new Error("Handback retained the lease");
+        result.computer.takeover = "second seat taken and handed back; first seat stayed the member's";
+      }
+      // Putting the panel away is tidying, not a thing this journey asks of the app.
+      const close = await page.$('.mb-det [data-det="close"]');
+      if (close && await close.isVisible()) await close.click();
+    }
+    if (targets.size !== 2) throw new Error("Both members report the same seat target");
     return;
   }
   if (name === "skill-growth") {

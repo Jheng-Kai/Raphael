@@ -96,7 +96,9 @@ DEFAULTS: dict[str, Any] = {
     "agent_city": "台北",
     # Shared by every member and the worker; read at each action, never cached per conversation.
     "action_mode": "direct",
-    "computer_vm_mode": "per-bot",
+    # One computer for every member, a screen each, signed in once (owner, 2026-11-07 and 2026-11-12). "per-bot"
+    # stays a stored choice: nothing in the app sets it. On a remote host see LocalVm.mode.
+    "computer_vm_mode": "shared",
     "computer_ssh_alias": "",
     "local_commands_mode": "ask",
     "local_commands_seen": False,
@@ -412,6 +414,10 @@ class SettingsStore:
             return checked_languages("languages", saved)
         except (TypeError, ValueError):
             return list(DEFAULT_LANGUAGES)
+
+    def chosen(self, key: str) -> bool:
+        """Whether `key` has a saved value, as against reading as its default."""
+        return self._conn.execute("SELECT 1 FROM settings WHERE key = ?", (key,)).fetchone() is not None
 
     def get(self, key: str) -> Any:
         """The saved value, else the default. KeyError for a key that is not a setting."""

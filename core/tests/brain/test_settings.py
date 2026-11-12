@@ -88,7 +88,7 @@ def test_the_defaults_are_the_documented_ones():
         "web_read_enabled": True,
         "vision_enabled": True,
         "pdf_enabled": True,
-        "computer_vm_mode": "per-bot",
+        "computer_vm_mode": "shared",
         "computer_ssh_alias": "",
         "local_commands_mode": "ask",
         "local_commands_seen": False,
