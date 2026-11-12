@@ -24,7 +24,7 @@ from ..integrations.audit import AuditLog
 from ..services.attachments import Attachment, MAX_FILE_BYTES, sniff_ok
 from .vm import VmError, engine_start_allowed
 from .vm_bridge import CuaBridge
-from .vm_catalog import DRIVER_TOOLS, FRESH_READS, NATIVE_INPUT_TOOLS, NOTICES, PAGE_TOOLS, READS, SCREEN_READS, SHARED_ARGUMENTS, offline_catalog, shared_argument_paths, shared_native_input, without_session
+from .vm_catalog import DRIVER_TOOLS, FRESH_READS, NATIVE_INPUT_TOOLS, NOTICES, PAGE_TOOLS, READS, SCREEN_READS, SHARED_ARGUMENTS, definition as driver_definition, offline_catalog, shared_argument_paths, shared_native_input
 from .takeover import TAKEOVER
 from . import seat_view
 from ..worker.computer_verification import meaningful_expectation
@@ -90,20 +90,24 @@ def vm_scope(owner, *, turn_id=0, private=False, task=None, progress=None, notic
         _NOTICE.reset(public_notice)
 
 
+# A computer tool's description is shown to a model whole (PluginTool.whole) and says what the tool is for first.
+# This rule used to come first and was more than twice as long, and a description is cut at 400 characters: all
+# thirty-three tools read as its same opening words and not one said what it did (a member sent PowerShell to its
+# Linux shell). How to work on the computer (look before acting, where files are kept) is in the member's
+# instructions once (agent/persona.py), not on every tool.
 VM_CONTRACT = (
     "VM sandbox: no per-action approval; owner control blocks all calls. Before sending a message/email, "
     "publishing/posting, deleting outside the workspace, or paying/buying, call approve (CLI) or the API "
     "harness equivalent and wait for the owner's yes for the exact action/target. If unavailable, denied "
-    "or expired, stop. Sandbox success is not approval. First list_windows then use a bounded get_window_state "
-    "(max_elements 200, query, include_screenshot false unless pixels are needed). Whole-screen pixels use "
-    "get_desktop_state. After meaningful changes and before claiming completion, read the intended window/page "
-    "or verify_state with an expectation. Keep files, browser profiles and installed packages under "
-    "/home/cua/workspace: anything outside it is lost on image/timezone rebuilds."
+    "or expired, stop. Sandbox success is not approval."
 )
-SHARED_CONTRACT = (" Shared with other members: one screen each; clipboard, files and sign-ins shared."
+# Named: "files shared" beside vm_exec's "your own files are in /home/cua/workspace" read as two things.
+SHARED_CONTRACT = (" Shared with other members, a screen each: /home/cua/workspace, the clipboard and sign-ins."
                    " The shell has no screen here; open a window with launch_app.")
+# The tools that sentence is about. On every tool it would be said forty times over.
+SHARED_NOTED = frozenset({"vm_exec", "launch_app", "clipboard_read", "clipboard_write"})
 
-RUN_STEPS = {"description": VM_CONTRACT + " Perform 1–10 short driver actions, then return one window/page observation. Every step uses the ordinary gate and current control checks. Stop on the first failure; failed_step is one-based. Never batch shell commands, secrets, takeover or another composite.",
+RUN_STEPS = {"description": "Perform 1–10 short driver actions, then return one window/page observation. Every step uses the ordinary gate and current control checks. Stop on the first failure; failed_step is one-based. Never batch shell commands, secrets, takeover or another composite. " + VM_CONTRACT,
     "parameters": {"type": "object", "properties": {
         "steps": {"type": "array", "minItems": 1, "maxItems": 10, "items": {"type": "object", "properties": {
             "name": {"type": "string", "enum": [name for name in DRIVER_TOOLS if name not in READS]},
@@ -112,13 +116,13 @@ RUN_STEPS = {"description": VM_CONTRACT + " Perform 1–10 short driver actions,
             "arguments": {"type": "object"}}, "required": ["name", "arguments"], "additionalProperties": False}},
         "required": ["steps", "observation"], "additionalProperties": False}}
 
-EXEC = {"description": VM_CONTRACT + " Run a Linux shell command (sh, not PowerShell) inside the VM workspace, never on the host. Your own files are in /home/cua/workspace; /home/cua/team is the folder the whole team shares, so what a colleague or the owner needs goes there. Nothing it does shows on the screen the owner watches: use it for files and programs, never to fetch a page in place of opening it in the browser. It waits for the command for at most timeout_seconds (60 by default, 1800 at most) and ends it then. For a build or a server that takes longer, or to work on while it runs, set background: it returns at once with a job and the paths of its log and of its .exit file (the exit code, there once the job has ended); read them with another vm_exec. Other members' commands and the screen are not held up by it.",
+EXEC = {"description": "Run a Linux shell command (sh, not PowerShell) inside the VM workspace, never on the host. Your own files are in /home/cua/workspace; /home/cua/team is the folder the whole team shares, so what a colleague or the owner needs goes there. Nothing it does shows on the screen the owner watches: use it for files and programs, never to fetch a page in place of opening it in the browser. It waits for the command for at most timeout_seconds (60 by default, 1800 at most) and ends it then. For a build or a server that takes longer, or to work on while it runs, set background: it returns at once with a job and the paths of its log and of its .exit file (the exit code, there once the job has ended); read them with another vm_exec. Other members' commands and the screen are not held up by it. " + VM_CONTRACT,
         "parameters": {"type": "object", "properties": {"command": {"type": "string", "minLength": 1},
         "timeout_seconds": {"type": "number", "exclusiveMinimum": 0, "maximum": 21600},
         "background": {"type": "boolean"}}, "required": ["command"], "additionalProperties": False}}
 ATTACH = {"description": "Copy an existing file from /home/cua/workspace or /home/cua/team into Raphael's attachment store and return its attachment ID. Paths elsewhere are refused.",
           "parameters": {"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"], "additionalProperties": False}}
-BROWSER_OPEN = {"description": VM_CONTRACT + " Open an http/https URL in the member's persistent browser and return its semantic page references without a screenshot. Use the typed browser tools for follow-ups.",
+BROWSER_OPEN = {"description": "Open an http/https URL in the member's persistent browser and return its semantic page references without a screenshot. Use the typed browser tools for follow-ups. " + VM_CONTRACT,
     "parameters": {"type": "object", "properties": {"url": {"type": "string", "pattern": "^https?://", "maxLength": 8192},
         "query": {"type": "string"}, "scope_ref": {"type": "string"}}, "required": ["url"], "additionalProperties": False}}
 FILL_LOGIN = {"description": "Use vault_entries labels and owner hints to choose a saved login; if two fit, ask_owner. Fill only the current exact HTTPS origin. Never submit or request private values in chat; use request_takeover for owner-only steps. Legacy request_secret(site) references still work. " + VM_CONTRACT,
@@ -366,17 +370,19 @@ class VmTools:
         for name, definition in definitions.items():
             key = tool_key(f"computer-{target.key}", name)
             description = definition["description"]
-            if name in DRIVER_TOOLS and not description.startswith(VM_CONTRACT):
-                description = VM_CONTRACT + " " + description
+            if name in DRIVER_TOOLS:
+                # Outward approval after the tool's own line, on every tool that reaches the driver.
+                description += " " + VM_CONTRACT
             parameters = definition["parameters"]
             if target.container:
-                description += SHARED_CONTRACT
+                if name in SHARED_NOTED:
+                    description += SHARED_CONTRACT
                 if name == "browser_open":
                     from copy import deepcopy
                     parameters = deepcopy(parameters)
                     parameters["properties"]["url"]["pattern"] = "^(https?://|about:blank(?:#.*)?$)"
             self.tools[key] = PluginTool(key, "computer", name, description, parameters, Tier.T3 if name == "fill_card" else Tier.T0, pinned=True,
-                                         deferred=name in ("vault_entries", "fill_contact", "fill_card"))
+                                         deferred=name in ("vault_entries", "fill_contact", "fill_card"), whole=True)
             self.routes[key] = target
             self.schemas[key] = parameters if name == "browser_open" and target.container else definition.get("validation", parameters)
             keys.append(key)
@@ -406,11 +412,10 @@ class VmTools:
                         raise VmError("invalid_tool")
                     if name in ("vm_exec", "attach_file") or not isinstance(schema, dict):
                         raise VmError("invalid_tool")
-                    schema = without_session(schema)
-                    Draft202012Validator.check_schema(schema)
-                    # Outward approval must remain visible when descriptions are shortened.
-                    definitions[name] = {"description": VM_CONTRACT + " " + item.get("description", ""), "parameters": schema,
-                        "validation": without_session(item.get("originalInputSchema", schema))}
+                    # The same reading as the list kept with the code: the pinned driver's list changes nothing a
+                    # member was offered, so its first use of the computer does not start a CLI turn again.
+                    definitions[name] = driver_definition(name, schema, item.get("originalInputSchema"))
+                    Draft202012Validator.check_schema(definitions[name]["parameters"])
                 self._catalog(target, definitions)
                 self.listed.add(target.key)
                 self.problem = None

@@ -1,5 +1,6 @@
 """Measured input validation for every computer-driver double, including subclass overrides."""
 
+from copy import deepcopy
 from functools import wraps
 import json
 from pathlib import Path
@@ -7,7 +8,11 @@ from pathlib import Path
 from jsonschema import Draft202012Validator
 import pytest
 
+from raphael_core.computer import vm_catalog
+
 SCHEMAS = json.loads(Path(__file__).with_name("driver_tools_0.37.0.json").read_text(encoding="utf-8"))
+# The same capture as the driver gives it: what a member is offered before a driver is asked is read from this.
+KEPT = json.loads(Path(vm_catalog.__file__).with_name("driver_schemas.json").read_text(encoding="utf-8"))["tools"]
 # Several measured page schemas allow extras. Keep that evidence intact in the fixture,
 # but make doubles fail on any unreviewed argument, as the acceptance contract requires.
 VALIDATORS = {name: Draft202012Validator({**schema, "additionalProperties": False}) for name, schema in SCHEMAS.items()}
@@ -50,8 +55,13 @@ def checked_request(request):
 
 
 def catalog(names=None):
-    return {"tools": [dict(name=name, description=name, inputSchema=schema)
-                      for name, schema in SCHEMAS.items() if names is None or name in names]}
+    """The bridge's answer to tools/list for the offered tools, as the pinned driver gives them: the driver's own
+    words for each, the session parameter, the schema it checks a call against and the bridge's reading of it. In
+    the driver's order, which is not the order they are kept in."""
+    from raphael_core.computer.vm_bridge import normalize_schema
+    return {"tools": [{"name": name, "description": f"The driver's own words about {name}.",
+                       "inputSchema": normalize_schema(deepcopy(schema)), "originalInputSchema": deepcopy(schema)}
+                      for name, schema in reversed(KEPT.items()) if names is None or name in names]}
 
 
 async def bind_page(hub, target, *, pid=1, window_id=1):

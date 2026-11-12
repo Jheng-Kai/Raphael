@@ -864,6 +864,9 @@ class CliLoop:
                         if failure in ("tools_changed", "owner_input"):
                             self.catalog_changed = False
                             if failure == "tools_changed":
+                                # Counted by the real-app journey: every member's first use of its computer once
+                                # started its turn again here, and the call that had just been made lost its result.
+                                logger.info("CLI turn starts again, tools changed: %s", self.reload_note.partition(".")[0])
                                 self.user = (FINAL_REPORT + "\n" + self._recovery_user() if self._final_nudged else
                                     self.reload_note + "\n" + (RECOVER + "\n" + self._recovery_block() if self._session else self.user))
                             continue

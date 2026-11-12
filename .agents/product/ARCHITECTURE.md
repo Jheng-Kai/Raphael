@@ -864,12 +864,15 @@ screen lease, private-page redaction and takeover boundaries, and adds only
 the browser_open composite to its shared registry. No second worker, RPC, setting
 registry or model loop is introduced (A-01/A-03/A-04/A-08).
 
-The checked-in driver_schemas.json supplies the curated offline compatibility
-offer. Its provenance explicitly distinguishes older-platform schemas and
-reconstructed Linux definitions from an unavailable captured 0.37.0 list. Driver
-discovery runs on an owned background bridge after actual computer use, replacing
-definitions in the same production snapshot. The persistent action connection
-retains its session and receives the image/cursor configuration once.
+The checked-in driver_schemas.json is the pinned driver's own tools/list for the
+offered tools, captured from a running computer: it is the offer before any driver
+is asked. vm_catalog.definition reads it and a running driver's list alike, so
+driver discovery, which runs on an owned background bridge after actual computer
+use, changes nothing for the pinned driver and takes another driver's list in the
+same production snapshot (R-COMP-DRIVER-02). A computer tool's description is
+Raphael's own line on what the tool is for, then the approval rule, shown whole.
+The persistent action connection retains its session and receives the image/cursor
+configuration once.
 
 vm_bridge.py serializes writes only; one reader resolves pending request IDs.
 Screen reads get 120 seconds, actions 60. Cancellation closes only that owned

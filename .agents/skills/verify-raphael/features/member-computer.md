@@ -688,16 +688,31 @@ text; lease notices retain their existing JSON contract.
 All 30 curated driver tools and Raphael-owned browser_open, vm_exec, attach_file, request_takeover, fill_login and dataset are offered offline to every member in both computer modes.
 Every member sees the catalog from turn one. The first actual driver
 operation schedules a bounded background listing on a separate bridge, retaining
-the action session. Missing driver tools are removed and schemas are replaced in
+the action session. For the pinned driver that listing changes nothing a member was
+offered (R-COMP-DRIVER-02): a CLI brain reads its tool list once, and a list that
+changed started the turn again and lost the first call's result. A driver that
+lists something else has its missing tools removed and its schemas taken in
 the existing API/CLI/worker snapshot. Preparing a turn never starts or probes Docker.
 
-Schema provenance limitation: driver_schemas.json is a compatibility offer,
-adapted from OpenMausBot's macOS 0.12.6 schemas and 0.22.1 browser_prepare example,
-plus reconstructed Linux definitions. Neither the exact Linux 0.37.0 wheel nor
-a captured schema list was available offline. It must not be called a verified
-Linux snapshot. Capture and compare the pinned driver's full tools/list on an
-authorized disposable container before release. Apache attribution and NOTICE
-are retained. Packaging explicitly includes this JSON and audits its presence.
+Schema provenance: driver_schemas.json holds the offered tools' schemas from the
+tools/list of cua-driver 0.37.0 in Raphael's computer image, captured from a running
+computer on 2026-11-12 (MIT, see NOTICES). Until 2026-11-13 it was a compatibility
+offer adapted from older macOS schemas with reconstructed Linux definitions, and
+every one of its 30 tools differed from the driver. `npm run verify -- --computer`
+compares a running driver's list with it, words and order included, and writes the
+list it found to driver-tools.json in its run folder;
+core/tests/computer/fixtures/generate_driver_tools.py writes both kept files (this
+one and the doubles' driver_tools_0.37.0.json) from such a list. Packaging
+explicitly includes this JSON and audits its presence.
+
+What a model reads of a computer tool: Raphael's line on what the tool is for
+(vm_catalog.DRIVER_TOOLS, or the tool's own definition), then the approval rule,
+whole. The driver's own description is not offered; its parameters' words are.
+Measured 2026-11-13: 40 tools, descriptions 17.8 thousand characters (18.4 on a
+shared computer), parameters 55.6 thousand. The parameters are the driver's
+verbatim text and are the same size a member's list already had after its first
+use of the computer; before that use the list was 9 thousand characters of
+parameters that the driver did not accept.
 
 Offline scope: tests/computer, tests/agent/test_persona.py,
 tests/agent/test_member_computer_use.py, tests/background/test_computer_lazy.py and
