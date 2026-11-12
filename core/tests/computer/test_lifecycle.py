@@ -25,13 +25,14 @@ def previous_computer(desktop, request):
     runtime.raw = container(vm, target, runtime)
     runtime.raw['Image'] = 'sha256:previous-image'
     runtime.raw['Config']['Labels'][f'{LABEL}.layer'] = str(layer)
-    runtime.raw['Config']['Env'] = ['VNC_PW=private', 'TZ=UTC']
+    # Layer 5 was the first to say its screen count; the two before it had no such entry.
+    runtime.raw['Config']['Env'] = ['VNC_PW=private', 'TZ=UTC'] + (['RAPHAEL_SCREENS=1', 'VNC_RESOLUTION=1280x900'] if layer == 5 else [])
     memory = (2 if layer == 3 else 3) * 1024**3
     runtime.raw['HostConfig'].update(Memory=memory, MemorySwap=memory)
     return vm, target, runtime
 
 
-@pytest.mark.parametrize('previous_computer', [(remote, layer) for remote in (False, True) for layer in (3, 4)], indirect=True)
+@pytest.mark.parametrize('previous_computer', [(remote, layer) for remote in (False, True) for layer in (3, 4, 5)], indirect=True)
 @pytest.mark.parametrize('action', ['restart', 'update', 'repair', 'reset'])
 async def test_previous_computer_maintenance_rebuilds_without_starting_old_image(previous_computer, action):
     vm, target, runtime = previous_computer
@@ -52,7 +53,7 @@ async def test_previous_computer_maintenance_rebuilds_without_starting_old_image
         [['volume', 'rm', str(target.workspace)]] if action == 'reset' and target.remote else [])
 
 
-@pytest.mark.parametrize('previous_computer', [(remote, layer) for remote in (False, True) for layer in (3, 4)], indirect=True)
+@pytest.mark.parametrize('previous_computer', [(remote, layer) for remote in (False, True) for layer in (3, 4, 5)], indirect=True)
 async def test_previous_member_data_deletion_needs_no_new_image_or_start(previous_computer):
     vm, target, runtime = previous_computer
     runtime.built = False

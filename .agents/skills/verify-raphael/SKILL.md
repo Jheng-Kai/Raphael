@@ -132,12 +132,17 @@ a set-up argument the driver refuses fails every screen tool, and fakes take any
 This drives `LocalVm` and the image helper: 1, 3 and 6 outputs, panels, boot readiness,
 authenticated clipped RFB views, screen-local launcher input and raw pixels, restart,
 helper/view recovery, X-server loss, the core's `DesktopViewer` relay, and available
-layer 4 start/update/erase fixtures with preserved workspace files. It uses its own
+layer 4 and layer 5 start/update/erase fixtures with preserved workspace files. Since
+layer 6 it also reads what the desktop shows (the owner's picture, the drawn town once the
+picture is gone, never one flat colour: R-COMP-PICTURE-01), presses ctrl+F2, ctrl+F4 and
+ctrl+alt+d with a window open (R-COMP-KEYS-01), and after ending the X server of the
+one-screen and of the largest computer starts each again (R-COMP-XLOSS-01). It uses its own
 owner, data folder and `raphael-acceptance/cua-local-vm:<run id>` image tag; cleanup
 never touches another owner or the real image tag. `--keep` on the Python module
 retains its resources and prints them; interruption/failure otherwise cleans them.
-Missing/non-Linux Docker exits 2, a failed check exits 1, success exits 0. A missing
-layer 4 image is a named skip. Every failure includes expected/observed evidence.
+Missing/non-Linux Docker exits 2, a failed check exits 1, success exits 0. A released
+layer whose image is not on this PC is a named skip (`previous layer 4`, `previous layer 5`).
+Every failure includes expected/observed evidence.
 
 `computer.log` and `computer-acceptance.json` are in the verify run folder alongside
 `report.json`. Direct use from `core/` is

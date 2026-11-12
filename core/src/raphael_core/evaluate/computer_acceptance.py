@@ -27,8 +27,24 @@ from ..computer.vm_bridge import CuaBridge
 from ..computer.vm_tools import VmTools
 from ..services.attachment_store import AttachmentStore
 
-OLD_IMAGE = "raphael/cua-local-vm:driver-0.37.0-v4"
+# Released layers a computer may still be on. A fixture of each is made from the image itself, which is only read.
+OLD_IMAGES = {"4": "raphael/cua-local-vm:driver-0.37.0-v4", "5": "raphael/cua-local-vm:driver-0.37.0-v5"}
 IMAGE_FOLDER = Path(vm.__file__).parent / "image"
+# A 64x48 JPEG, teal on the left half and orange on the right: an owner's picture no desktop draws by itself.
+OWN_PICTURE = base64.b64decode(
+    "/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAMCAgMCAgMDAwMEAwMEBQgFBQQEBQoHBwYIDAoMDAsKCwsNDhIQDQ4RDgsLEBYQERMU"
+    "FRUVDA8XGBYUGBIUFRT/2wBDAQMEBAUEBQkFBQkUDQsNFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQU"
+    "FBQUFBQUFBT/wAARCAAwAEADASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUF"
+    "BAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVW"
+    "V1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi"
+    "4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAEC"
+    "AxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVm"
+    "Z2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq"
+    "8vP09fb3+Pn6/9oADAMBAAIRAxEAPwDxqiiivuz+VAooooA+taKKK/zXP9YwooooA+SqKKK/0oP8nAooooA+taKKK/zXP9Ywoooo"
+    "A+SqKKK/0oP8nAooooA+taKKK/zXP9YwooooA//Z"
+)
+# The picture's two colours as a view sends a pixel: blue, green, red.
+TEAL, ORANGE = bytes((128, 128, 0)), bytes((0, 140, 255))
 
 
 def image_helper():
@@ -156,6 +172,12 @@ class Rfb:
     def pointer(self, x, y, buttons=0):
         self.stream.sendall(struct.pack(">BBHH", 5, buttons, x, y))
 
+    def keys(self, *keysyms):
+        for key in keysyms:
+            self.stream.sendall(struct.pack(">BBxxI", 4, 1, key))
+        for key in reversed(keysyms):
+            self.stream.sendall(struct.pack(">BBxxI", 4, 0, key))
+
     def close_window(self):
         for key, down in ((0xffe9, 1), (0xffc1, 1), (0xffc1, 0), (0xffe9, 0)):
             self.stream.sendall(struct.pack(">BBxxI", 4, down, key))  # Alt+F4
@@ -254,20 +276,36 @@ def centre(rectangle):
     return x + width // 2, y + height // 2
 
 
-def previous_args(target, owner, password):
-    # This fixture mirrors release 1.2.0's run_args (layer 4, before screen variables).
+def previous_args(target, owner, password, layer="4"):
+    # The run arguments a release of that layer made. Layer 4 (release 1.2.0) had no screen variables yet;
+    # layer 5 differs from today's only by its label and image.
     args = vm.run_args(target, owner, password)
+    current = f"{vm.LABEL}.layer=" + vm.IMAGE_LABELS[f"{vm.LABEL}.layer"]
     result, index = [], 0
     while index < len(args):
         value = args[index]
-        if value == "-e" and args[index + 1].startswith(("RAPHAEL_SCREENS=", "VNC_RESOLUTION=")):
+        if layer == "4" and value == "-e" and args[index + 1].startswith(("RAPHAEL_SCREENS=", "VNC_RESOLUTION=")):
             index += 2
             continue
-        if value == f"{vm.LABEL}.layer=5":
-            value = f"{vm.LABEL}.layer=4"
-        result.append(OLD_IMAGE if value == vm.IMAGE else value)
+        if value == current:
+            value = f"{vm.LABEL}.layer={layer}"
+        result.append(OLD_IMAGES[layer] if value == vm.IMAGE else value)
         index += 1
     return result
+
+
+def colour_share(pixels, colour):
+    return sum(all(abs(a - b) <= 40 for a, b in zip(pixel, colour)) for pixel in pixels) / len(pixels)
+
+
+def desktop_shows(top, lower, own):
+    """Whether one screen shows the owner's picture (teal left, orange right), or else the drawn town.
+
+    `top` is one row of pixels high on the screen, `lower` the two rows the town's houses and slimes cross. The town
+    is many colours there; a desktop that drew nothing is one."""
+    left, right = colour_share(top[100:540], TEAL), colour_share(top[740:1180], ORANGE)
+    seen = (round(left, 2), round(right, 2), len(set(lower)))
+    return (left >= .9 and right >= .9 if own else left < .1 and right < .1 and len(set(lower)) >= 12), seen
 
 
 class NoHub:
@@ -284,7 +322,9 @@ class NoHub:
 class IsolatedDocker:
     """All product and acceptance Docker commands pass through this owner guard."""
 
-    def __init__(self, runner, owner, tag):
+    def __init__(self, runner, owner, tag, picture=None):
+        # The one host file besides the image folder that may be copied into a computer: this run's own picture.
+        self.picture = Path(picture) if picture else None
         self.runner, self.owner, self.tag = runner, owner, tag
         self.label = f"{vm.LABEL}.owner={owner}"
         self.prefix = f"raphael-computer-{owner}-"
@@ -306,7 +346,7 @@ class IsolatedDocker:
             labels = [args[i + 1] for i, value in enumerate(args[:-1]) if value == "--label"]
             require([label for label in labels if label.startswith(f"{vm.LABEL}.owner=")] == [self.label]
                     and args.count("--name") == 1 and args[args.index("--name") + 1].startswith(self.prefix)
-                    and args[-1] in (self.tag, OLD_IMAGE), f"Refused unowned container creation: {args[:6]}")
+                    and args[-1] in (self.tag, *OLD_IMAGES.values()), f"Refused unowned container creation: {args[:6]}")
         elif command in ("exec", "start", "stop", "restart", "rm"):
             if command == "exec":
                 index = 1
@@ -331,7 +371,8 @@ class IsolatedDocker:
             desktop = IMAGE_FOLDER / "desktop"
             require((Path(source), guest_path) in (
                 (desktop / "wallpaper.py", "/opt/raphael-desktop/wallpaper.py"),
-                (desktop / "wallpapers", "/opt/raphael-desktop/")), "Expected product wallpaper copy only")
+                (desktop / "wallpapers", "/opt/raphael-desktop/"),
+                *([(self.picture, vm.GUEST_OWN_WALLPAPER)] if self.picture else [])), "Expected product wallpaper copy only")
             await self.owned(name)
         elif command == "ps":
             require(args[:-1] == ["ps", "-a", "--filter", f"label={self.label}", "--format"]
@@ -340,7 +381,7 @@ class IsolatedDocker:
         elif args[:2] == ["container", "inspect"]:
             require(len(args) == 3 and args[2].startswith(self.prefix), "Expected this run's container name")
         elif args[:2] == ["image", "inspect"]:
-            require(len(args) == 3 and args[2] in (self.tag, OLD_IMAGE), "Expected isolated/previous image inspect")
+            require(len(args) == 3 and args[2] in (self.tag, *OLD_IMAGES.values()), "Expected isolated/previous image inspect")
         elif args[:2] == ["image", "rm"]:
             require(args == ["image", "rm", self.tag], "Expected removal of this run's image tag only")
         elif command == "build":
@@ -439,8 +480,9 @@ class Acceptance:
                 await asyncio.sleep(3)
 
     async def boot_mark(self, target):
-        require(not self.machine.repair_revisions,
-                f"Expected no normal-boot repairs, observed {self.machine.repair_revisions}")
+        # This computer's own: an earlier one that was restarted after losing its X server has a repair on record.
+        repairs = self.machine.repair_revisions.get(getattr(target, "state_key", target.key), 0)
+        require(not repairs, f"Expected no normal-boot repairs of this computer, observed {repairs} in {self.machine.repair_revisions}")
         raw = await self.machine.inspect(target)
         began = datetime.fromisoformat(raw["State"]["StartedAt"].replace("Z", "+00:00")).timestamp()
         written = float(await self.text(target, ["python3", "-c", f"import os; print(os.stat({vm.SCREENS_READY!r}).st_mtime)"]))
@@ -689,6 +731,121 @@ class Acceptance:
             await asyncio.sleep(.1)
         raise AssertionError("Expected mark removed within 5 s of X server loss; observed mark retained")
 
+    async def row(self, target, screen, y):
+        port, password = await self.machine.viewer_connection(target)
+        sock, client = await asyncio.to_thread(self.connect, port, f"/websockify?token=screen-{screen}", password)
+        try:
+            return await asyncio.to_thread(client.pixels, (0, y, 1280, 1))
+        finally:
+            sock.close()
+
+    async def wallpaper(self, target):
+        """What the desktop shows: the owner's picture while there is one, and the drawn town once there is none.
+        Neither was true of layer 5: a watcher that was merely left running kept the town over the picture, and the
+        town (SVG) was never drawn, so the desktop was one flat colour."""
+        picture = self.root / vm.OWN_WALLPAPER
+        aside = picture.with_suffix(".aside")
+
+        async def shown(own):
+            deadline = time.monotonic() + 40
+            while True:
+                observed, matched = {}, True
+                for screen in sorted({1, target.screens}):
+                    top = await self.row(target, screen, 300)
+                    lower = await self.row(target, screen, 600) + await self.row(target, screen, 760)
+                    right, observed[screen] = desktop_shows(top, lower, own)
+                    matched = matched and right
+                if matched and not own:
+                    # Many colours are not yet the town: the desktop's own default picture is a drawing too.
+                    files = {(await self.text(target, ["xfconf-query", "-c", "xfce4-desktop", "-p",
+                                                       f"/backdrop/screen0/monitorVNC-{screen - 1}/workspace0/last-image"])).strip()
+                             for screen in observed}
+                    names = {f"/opt/raphael-desktop/wallpapers/{period}.svg" for period in ("morning", "noon", "dusk", "evening", "night")}
+                    matched = len(files) == 1 and files <= names
+                    observed = {**observed, "file": sorted(files)}
+                if matched:
+                    return observed
+                require(time.monotonic() < deadline,
+                        f"Expected {'the owner picture' if own else 'the drawn town, not one flat colour'} within 40 s; "
+                        f"observed per screen (teal share left, orange share right, colours in two lower rows) {observed}")
+                await asyncio.sleep(1)
+
+        async def again():
+            # A start confirmed moments ago is answered from memory and looks at nothing.
+            self.machine.invalidate(target)
+            await self.start(target)
+
+        first = await shown(True)
+        picture.rename(aside)
+        try:
+            await again()
+            town = await shown(False)
+        finally:
+            aside.rename(picture)
+        await again()
+        await shown(True)
+        watchers = [line for line in (await self.text(target, ["ps", "-eo", "args"])).splitlines()
+                    if line.startswith("/opt/venv/bin/python /opt/raphael-desktop/wallpaper.py")]
+        require(len(watchers) == 1 and "--image" in watchers[0], f"Expected one watcher holding the picture, observed {watchers}")
+        return f"owner picture shown {first}; without it the town is drawn {town}; picture put back and shown; one watcher"
+
+    async def keys(self, target):
+        """One workspace and no key that acts on the whole desktop. Layer 5 had four workspaces and every default
+        key: ctrl+F2 took every window off every screen, and ctrl+F4 (close this tab) did the same."""
+        listing = await self.text(target, ["xfconf-query", "-c", "xfce4-keyboard-shortcuts", "-l", "-v"])
+        bound = [line.split()[-1] for line in listing.splitlines() if line.startswith("/xfwm4/custom/")]
+        whole = [name for name in bound if "workspace" in name or name == "show_desktop_key"]
+        whole += self.helper.shortcut_removals(listing, target.screens)
+        desktops = (await self.text(target, ["wmctrl", "-d"])).splitlines()
+        require(len(desktops) == 1 and not whole and "close_window_key" in bound,
+                f"Expected one workspace, no whole-desktop key and a window's own keys kept; observed "
+                f"{len(desktops)} workspaces, still bound {whole}, kept {bound}")
+        before = {line.split()[0] for line in (await self.text(target, ["wmctrl", "-l"])).splitlines()}
+        await self.guest(target, ["sh", "-c", "xfce4-terminal --disable-server >/dev/null 2>&1 &"])
+        opened, deadline = [], time.monotonic() + 15
+        while not opened:
+            opened = [line.split()[0] for line in (await self.text(target, ["wmctrl", "-l"])).splitlines() if line.split()[0] not in before]
+            require(opened or time.monotonic() < deadline, "Expected a terminal window within 15 s")
+            await asyncio.sleep(.3)
+        try:
+            port, password = await self.machine.viewer_connection(target)
+            sock, client = await asyncio.to_thread(self.connect, port, "/websockify?token=screen-1", password)
+            try:
+                for chord in ((0xffe3, 0xffbf), (0xffe3, 0xffc1), (0xffe3, 0xffe9, 0x64)):  # ctrl+F2, ctrl+F4, ctrl+alt+d
+                    client.keys(*chord)
+                    await asyncio.sleep(.4)
+            finally:
+                sock.close()
+            await asyncio.sleep(1)
+            rows = {line.split()[0]: line.split()[1] for line in (await self.text(target, ["wmctrl", "-l"])).splitlines()}
+            state = await self.guest(target, ["xwininfo", "-id", opened[0]], allow_failure=True)
+            current = [line for line in (await self.text(target, ["wmctrl", "-d"])).splitlines() if " * " in line]
+            require(rows.get(opened[0]) == "0" and "Map State: IsViewable" in state.stdout
+                    and len(current) == 1 and current[0].split()[0] == "0",
+                    f"Expected the window still shown on the one workspace after ctrl+F2, ctrl+F4 and ctrl+alt+d; observed "
+                    f"desktop of the window {rows.get(opened[0])!r}, current {current}, viewable {'IsViewable' in state.stdout}")
+        finally:
+            for identifier in opened:
+                await self.guest(target, ["wmctrl", "-i", "-c", identifier], allow_failure=True)
+            deadline = time.monotonic() + 10
+            while {line.split()[0] for line in (await self.text(target, ["wmctrl", "-l"])).splitlines()} - before:
+                require(time.monotonic() < deadline, "Expected the terminal closed within 10 s")
+                await asyncio.sleep(.3)
+        return (f"one workspace; {len(bound)} window keys kept and none acts on the whole desktop; "
+                "ctrl+F2, ctrl+F4 and ctrl+alt+d left an open window shown where it was")
+
+    async def comes_back(self, target):
+        """A computer whose X server was lost is restarted by the product's own start and is whole again."""
+        began = time.monotonic()
+        self.machine.invalidate(target)
+        await self.start(target)
+        server = (await self.text(target, ["pgrep", "-x", "Xtigervnc"])).split()
+        panels = [window for window in await self.tree(target) if window.title == "xfce4-panel"]
+        mark = await self.mark(target)
+        require(server and panels and mark == str(target.screens),
+                f"Expected a new X server, the panel and the mark; observed X {server}, {len(panels)} panel windows, mark {mark!r}")
+        return f"ready again in {time.monotonic() - began:.1f} s with an X server, the mark and the panel"
+
     async def driver(self, target):
         """The connection the product makes before any screen tool. The driver refuses a set-up call whose arguments
         its schema does not name, and then every screen tool of the computer fails: fakes cannot show that."""
@@ -739,33 +896,38 @@ class Acceptance:
             self.machine.target = original
 
     async def previous(self):
-        result = await self.docker(["image", "inspect", OLD_IMAGE], timeout=60, limit=100000)
+        for number, layer in enumerate(OLD_IMAGES):
+            await self.previous_layer(layer, 9101 + 10 * number)
+
+    async def previous_layer(self, layer, first):
+        name = f"previous layer {layer}"
+        result = await self.docker(["image", "inspect", OLD_IMAGES[layer]], timeout=60, limit=100000)
         if result.code:
-            self.record("previous layer", "skipped", "no layer 4 image here")
+            self.record(name, "skipped", f"no layer {layer} image here")
             return
         image = json.loads(result.stdout)[0]
-        if image.get("Config", {}).get("Labels", {}).get(f"{vm.LABEL}.layer") != "4":
-            self.record("previous layer", "skipped", "no layer 4 image here")
+        if image.get("Config", {}).get("Labels", {}).get(f"{vm.LABEL}.layer") != layer:
+            self.record(name, "skipped", f"no layer {layer} image here")
             return
         fixtures = []
-        for member, operation in ((9101, "start"), (9102, "update"), (9103, "erase")):
+        for member, operation in ((first, "start"), (first + 1, "update"), (first + 2, "erase")):
             target = self.machine.target(member)
             async def fixture(target=target):
                 target.workspace.mkdir(parents=True, exist_ok=True)
                 target.shared.mkdir(parents=True, exist_ok=True)
-                await self.command(previous_args(target, self.machine.owner, secrets.token_urlsafe(24)), timeout=90)
+                await self.command(previous_args(target, self.machine.owner, secrets.token_urlsafe(24), layer), timeout=90)
                 await self.text(target, ["sh", "-c", "printf acceptance > /home/cua/workspace/acceptance.txt"])
                 await self.command(["stop", target.name], timeout=90)
-                return "Created release 1.2.0 container with workspace file, then stopped it"
-            if await self.check(f"previous layer fixture {operation}", fixture):
+                return f"Created a layer {layer} container with workspace file, then stopped it"
+            if await self.check(f"{name} fixture {operation}", fixture):
                 fixtures.append((target, operation))
             else:
-                self.record(f"previous layer {operation}", "skipped", "fixture creation failed")
+                self.record(f"{name} {operation}", "skipped", "fixture creation failed")
         # All three old computers are stopped before any new-code lifecycle operation runs.
         for target, operation in fixtures:
             async def exercise(target=target, operation=operation):
                 state = await self.machine.status(target)
-                require(state["state"] == "incompatible", f"Expected layer 4 incompatible, observed {state}")
+                require(state["state"] == "incompatible", f"Expected layer {layer} incompatible, observed {state}")
                 if operation == "erase":
                     await self.machine.erase(target)
                     require(await self.machine.inspect(target) is None and not target.workspace.exists(),
@@ -780,8 +942,8 @@ class Acceptance:
                     content = await self.text(target, ["cat", vm.GUEST + "/acceptance.txt"])
                     require(content == "acceptance", f"Expected preserved workspace file, observed {content!r}")
                     await self.machine.stop(target)
-                return f"layer 4 {operation}: incompatible -> {'absent with workspace removed' if operation == 'erase' else 'ready on new image, workspace file preserved'}"
-            await self.check(f"previous layer {operation}", exercise)
+                return f"layer {layer} {operation}: incompatible -> {'absent with workspace removed' if operation == 'erase' else 'ready on new image, workspace file preserved'}"
+            await self.check(f"{name} {operation}", exercise)
 
     async def computer(self, count, largest):
         began = time.monotonic()
@@ -800,6 +962,8 @@ class Acceptance:
             await self.check(prefix + " layout", lambda: self.layout(target))
             await self.check(prefix + " views", lambda: self.views(target))
             await self.check(prefix + " driver connection", lambda: self.driver(target))
+            await self.check(prefix + " desktop picture", lambda: self.wallpaper(target))
+            await self.check(prefix + " keys", lambda: self.keys(target))
             if count > 1:
                 for seat in (1, count):
                     await self.check(prefix + f" steering screen {seat}", lambda seat=seat: self.steer(target, seat))
@@ -812,7 +976,10 @@ class Acceptance:
                     await self.check(prefix + " recovers helper", lambda: self.recover(target, helper=True))
                 else:
                     self.record(prefix + " multi-screen recovery/app seat", "skipped", "requires N > 1")
-                await self.check(prefix + " loses X", lambda: self.lose_x(target))
+            # One screen has no clipped view that dies with the X server, so it is its own case.
+            if count in (1, largest):
+                if await self.check(prefix + " loses X", lambda: self.lose_x(target)):
+                    await self.check(prefix + " comes back after X loss", lambda: self.comes_back(target))
         finally:
             try:
                 if not self.keep:
@@ -901,8 +1068,9 @@ class Acceptance:
                 return 2
             self.record("engine", "ok", "Docker is running with a Linux engine")
             self.root = Path(tempfile.mkdtemp(prefix="raphael-acceptance-")).resolve()
+            (self.root / vm.OWN_WALLPAPER).write_bytes(OWN_PICTURE)
             self.machine = vm.LocalVm(self.root, runner=self.runner)
-            self.docker = IsolatedDocker(self.runner, self.machine.owner, self.tag)
+            self.docker = IsolatedDocker(self.runner, self.machine.owner, self.tag, picture=self.root / vm.OWN_WALLPAPER)
             self.machine.run = self.docker
             vm.IMAGE = self.tag
             # Prevent product fallback from pulling or rebuilding the normal image if ours disappears.

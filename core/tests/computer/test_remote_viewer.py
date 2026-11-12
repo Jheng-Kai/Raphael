@@ -319,7 +319,7 @@ async def test_start_automatically_upgrades_legacy_remote_container(remote):
     assert all("-v" not in args and args[:2] != ["volume", "rm"] for args in commands)
 
 
-@pytest.mark.parametrize("layer,memory", [("3", 2), ("4", 3)])
+@pytest.mark.parametrize("layer,memory", [("3", 2), ("4", 3), ("5", 3)])
 async def test_old_remote_computer_of_a_previous_layer_still_upgrades(remote, layer, memory):
     vm, target, runtime = remote
     from raphael_core.computer.vm import LABEL
@@ -327,7 +327,8 @@ async def test_old_remote_computer_of_a_previous_layer_still_upgrades(remote, la
     runtime.raw["NetworkSettings"]["Ports"] = {}
     runtime.raw["Image"] = "sha256:old-image"
     runtime.raw["Config"]["Labels"][f"{LABEL}.layer"] = layer
-    runtime.raw["Config"]["Env"] = [entry for entry in runtime.raw["Config"]["Env"] if not entry.startswith("RAPHAEL_SCREENS=")]
+    if layer != "5":
+        runtime.raw["Config"]["Env"] = [entry for entry in runtime.raw["Config"]["Env"] if not entry.startswith("RAPHAEL_SCREENS=")]
     runtime.raw["HostConfig"].update(Memory=memory * 1024**3, MemorySwap=memory * 1024**3)
     result = await vm._upgrade_image(target)
     assert result == {"state": "missing", "image": True}
