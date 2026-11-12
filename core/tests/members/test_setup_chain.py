@@ -17,6 +17,7 @@ from background.conftest import Rig as BackgroundRig, plugins, report, until  # 
 from raphael_core.agent.cli.drivers import Driver, Event
 from raphael_core.protocol import INVALID_PARAMS, RpcError
 from .test_answering import Team, client, live_said  # noqa: F401
+from .test_cli_brains import fake_brain
 
 FIRST_CARD = {"question": "What should I take on first?", "options": ["Mail", "Schedule and reminders", "Research"], "free_text": True}
 TASK_CARD = {"question": "Which first task?", "options": ["Sort today's mail", "Draft replies"], "free_text": True}
@@ -121,12 +122,29 @@ async def test_a_card_the_question_tool_refuses_is_no_card(chain, client, card):
     assert not rig.background.service.owner_questions.for_turn(turn["id"])
 
 
-async def test_a_card_without_the_members_words_is_a_failed_greeting_that_is_written_again(chain, client):
+async def test_a_card_without_the_members_words_is_sent_back_and_the_greeting_goes_on(chain, client):
     rig = chain
     client.chats.append(chat("", ("ask_owner", FIRST_CARD)))
+    client.chats.append(chat("Hi, I'm Mia, your new colleague.", ("ask_owner", FIRST_CARD)))
+    new = (await rig.call("members.create", {"name": "Mia", "greet": True}))["member"]
+    [turn] = await rig.turns(member_id=new["id"])
+    await until(lambda: rig.history.get(turn["id"]).status == "done")
+    [saved] = await rig.turns(member_id=new["id"])
+    assert saved["text"] == "Hi, I'm Mia, your new colleague." and [item["state"] for item in saved["owner_questions"]] == ["asked"]
+    # The model was told in the same turn what was missing, and wrote it.
+    assert len(client.chat_calls) == 2
+    sent_back = [m["content"] for m in client.chat_calls[1]["messages"] if m["role"] == "tool"]
+    assert len(sent_back) == 1 and "Write your greeting now" in sent_back[0]
+
+
+async def test_a_card_without_the_members_words_is_a_failed_greeting_that_is_written_again(chain, client):
+    rig = chain
+    # Sent back twice, and the model still writes nothing: the greeting fails, as a failed one does.
+    client.chats += [chat("", ("ask_owner", FIRST_CARD)) for _ in range(3)]
     new = (await rig.call("members.create", {"name": "Mia", "greet": True}))["member"]
     [turn] = await rig.turns(member_id=new["id"])
     await until(lambda: rig.history.get(turn["id"]).status == "error")
+    assert len(client.chat_calls) == 3
     assert not rig.background.service.owner_questions.for_turn(turn["id"])
     assert rig.conn.execute("SELECT count(*) FROM worker_tasks WHERE state='waiting'").fetchone()[0] == 0
     # The same retry as before: the failed one goes, the new one is a line and a card.
@@ -204,6 +222,62 @@ async def test_a_cli_brain_greets_with_its_line_and_the_one_card(chain, monkeypa
     [question] = saved["owner_questions"]
     assert question["state"] == "asked" and question["options"] == FIRST_CARD["options"]
     assert saved["task"]["state"] == "waiting"
+    assert not rig.service._cli_loops
+
+
+# A Codex app-server as it was seen live (gpt-6-luna, low effort): the greeting turn's first act is the card, with no
+# words before it. It speaks JSON-RPC on stdin and stdout and reaches the member's MCP server over HTTP, as Codex does.
+CODEX_CARD_FIRST = '''import json, os, sys, urllib.request
+from pathlib import Path
+def send(value): print(json.dumps(value), flush=True)
+url = json.loads(next(arg for arg in sys.argv if arg.startswith("mcp_servers.raphael.url=")).partition("=")[2])
+headers = {"Authorization": "Bearer " + os.environ["RAPHAEL_MCP_TOKEN"], "Content-Type": "application/json"}
+def ask():
+    send({"method": "item/started", "params": {"item": {"id": "call", "type": "mcpToolCall", "server": "raphael", "tool": "ask_owner"}}})
+    packet = {"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "ask_owner", "arguments": CARD}}
+    request = urllib.request.Request(url, data=json.dumps(packet).encode(), headers=headers)
+    return json.load(urllib.request.urlopen(request, timeout=30))["result"]
+def say(text, phase):
+    send({"method": "item/agentMessage/delta", "params": {"delta": text}})
+    send({"method": "item/completed", "params": {"item": {"type": "agentMessage", "id": "words-" + phase, "phase": phase, "text": text}}})
+for line in sys.stdin:
+    msg = json.loads(line)
+    method = msg.get("method")
+    if method == "initialize":
+        send({"jsonrpc": "2.0", "id": msg["id"], "result": {}})
+    elif method == "thread/start":
+        send({"jsonrpc": "2.0", "id": msg["id"], "result": {"thread": {"id": "greeting-thread"}}})
+    elif method == "turn/start":
+        send({"jsonrpc": "2.0", "id": msg["id"], "result": {"turn": {"id": "turn-1"}}})
+        send({"method": "turn/started", "params": {"turn": {"id": "turn-1"}}})
+        first = ask()  # the card, no words before it: the call is held at the owner's question, or refused
+        Path(RECORD).write_text(json.dumps(first), encoding="utf-8")
+        if first["isError"]:
+            say("Hi, I'm Mia, your new colleague.", "commentary" if AGAIN else "final_answer")
+            if AGAIN:
+                ask()
+        send({"method": "turn/completed", "params": {"turn": {"status": "completed"}}})
+        break
+'''
+
+
+@pytest.mark.parametrize("again", [True, False])
+async def test_a_codex_that_calls_the_card_before_any_words_still_greets(chain, tmp_path, again):
+    rig = chain
+    record = tmp_path / "first-call.json"
+    fake_brain(rig, tmp_path, CODEX_CARD_FIRST.replace("CARD", repr(FIRST_CARD)).replace("RECORD", repr(str(record))).replace("AGAIN", repr(again)), name="codex")
+    new = (await rig.call("members.create", {"name": "Mia", "greet": True, "model": "cli:codex:test", "ui_language": "en"}))["member"]
+    [turn] = await rig.turns(member_id=new["id"])
+    await until(lambda: rig.history.get(turn["id"]).status != "running", timeout=30)
+    [saved] = await rig.turns(member_id=new["id"])
+    # Main: the first call parked the greeting at once, no words came with it, and the turn ended in an error.
+    assert saved["status"] == "done" and saved["text"] == "Hi, I'm Mia, your new colleague."
+    assert "Write your greeting now" in json.loads(record.read_text(encoding="utf-8"))["content"][0]["text"]
+    if again:  # the card comes with the words, as an API brain's does
+        [question] = saved["owner_questions"]
+        assert question["state"] == "asked" and question["options"] == FIRST_CARD["options"] and saved["task"]["state"] == "waiting"
+    else:  # the model wrote its line and ended the turn: a greeting without the card, never an error
+        assert not saved.get("owner_questions")
     assert not rig.service._cli_loops
 
 

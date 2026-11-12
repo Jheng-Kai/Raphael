@@ -1004,7 +1004,7 @@ FULL_PERMISSION = (
 GREETING = (
     "You are {name}, a newly created assistant, and this is your first message. Follow your own language instructions. "
     "Write one short greeting of at most two sentences: who you are in your own words, at most one emoji, no list, heading or "
-    "markdown, and no question in it. In the same turn call ask_owner once, the only tool you may call: question = what you should "
+    "markdown, and no question in it. In the same turn, after those words, call ask_owner once, the only tool you may call (a call with no words before it is sent back): question = what you should "
     "take on first, options = three or four short kinds of help (each a few words) built only from the known context below "
     "(gaps in other members' roles, ready connected apps, the owner's saved context); when nothing is known, use everyday ones "
     "such as mail, schedule and reminders, research, documents. Keep free_text on: the owner may answer in their own words. "

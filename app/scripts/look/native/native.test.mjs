@@ -1,9 +1,9 @@
 import { describe, it, expect, vi } from "vitest";
 import { EventEmitter } from "node:events";
-import { launch, stopOwned, freePort, connectWebView } from "./process.mjs";
+import { launch, stopOwned, freePort, connectWebView, CDP_COMMAND_TIMEOUT_MS } from "./process.mjs";
 import { collectErrors, toastError, paidRequests } from "./errors.mjs";
 import { remaining, journeys, assertWindowSlept, forwardMainWindow, nativeLaunches, startupEvidence } from "./journeys.mjs";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { runInNewContext } from "node:vm";
 import { parseOptions } from "../options.mjs";
 
@@ -128,7 +128,10 @@ describe("native process ownership", () => {
       expect(await connectWebView(puppeteer, 1234, { child: { exitCode: null } }, 2000)).toBe("connected");
       expect(fetcher).toHaveBeenCalledTimes(3);
       expect(puppeteer.connect).toHaveBeenCalledOnce();
-      expect(puppeteer.connect).toHaveBeenCalledWith({ browserWSEndpoint: "ws://127.0.0.1:1234/devtools/browser/test", defaultViewport: null, protocolTimeout: 5000 });
+      expect(puppeteer.connect).toHaveBeenCalledWith({ browserWSEndpoint: "ws://127.0.0.1:1234/devtools/browser/test", defaultViewport: null, protocolTimeout: CDP_COMMAND_TIMEOUT_MS });
+      // Attaching enables the page's CDP domains inside this limit: it outlasts a PC busy with other work, and is still bounded.
+      expect(CDP_COMMAND_TIMEOUT_MS).toBeGreaterThanOrEqual(30000);
+      expect(CDP_COMMAND_TIMEOUT_MS).toBeLessThanOrEqual(60000);
     } finally { vi.unstubAllGlobals(); }
   });
 });
@@ -159,5 +162,30 @@ describe("native error and cost collection", () => {
   });
   it("lists every dependent table's remaining rows for the deleted conversation", () => {
     expect(remaining({ conversations: [{ id: 2 }, { id: 3 }], agent_turns: [{ id: 9, conversation_id: 2 }], connect_cards: [{ id: "card", conversation_id: 2 }], conversation_context_summaries: [] }, 2)).toEqual({ conversations: [{ id: 2 }], agent_turns: [{ id: 9, conversation_id: 2 }], connect_cards: [{ id: "card", conversation_id: 2 }], conversation_context_summaries: [] });
+  });
+});
+
+describe("native journeys drive controls the app still has", () => {
+  // Seen twice: `newConversation` pressed [data-conversation-new] after the app had one conversation per member, and every
+  // journey that used it failed at that step. A data attribute a journey selects must still be written by the app's code.
+  it("selects only data attributes that exist in the app", () => {
+    const source = new URL("../../../src/", import.meta.url);
+    const app = readdirSync(source, { recursive: true }).filter(name => /\.(ts|html|css)$/.test(name) && !/\.test\.ts$/.test(name))
+      .map(name => readFileSync(new URL(name.replaceAll("\\", "/"), source), "utf8")).join("\n");
+    // The memory page is gone: the journey that counts its controls expects none.
+    const absent = new Set(["data-mem-space"]);
+    // An attribute may be written only through the element's `dataset`, in camel case.
+    const written = attribute => {
+      const key = attribute.slice(5).replace(/-([a-z0-9])/g, (_, letter) => letter.toUpperCase());
+      return app.includes(attribute) || app.includes("dataset." + key) || app.includes(`dataset, "${key}"`);
+    };
+    const stale = [];
+    for (const file of ["journeys.mjs", "deletion-audit.mjs", "typing.mjs"]) {
+      const text = readFileSync(new URL(file, import.meta.url), "utf8");
+      for (const [, attribute] of text.matchAll(/\[(data-[a-z0-9-]+)(?:[~|^$*]?=[^\]]*)?\]/g)) {
+        if (!absent.has(attribute) && !written(attribute)) stale.push(`${file}: ${attribute}`);
+      }
+    }
+    expect([...new Set(stale)]).toEqual([]);
   });
 });

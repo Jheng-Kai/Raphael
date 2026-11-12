@@ -136,7 +136,7 @@ async function run(options) {
         owned = launch(executable, [], { cwd: app, env, log: value => { log += value.toString(); } });
         result.pid = owned.pid;
         await save();
-        browser = await connectWebView(puppeteer, port, owned, 90000, journey.name === "typing" ? 30000 : 5000);
+        browser = await connectWebView(puppeteer, port, owned, 90000);
         let page;
         for (let i = 0; i < 100; i++) {
           result.targets = browser.targets().map(target => ({ type: target.type(), url: target.url() }));

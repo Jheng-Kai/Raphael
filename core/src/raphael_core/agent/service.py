@@ -500,6 +500,8 @@ class _Ask:
     # For the turn that goes on from the answer to a new member's first card: the question the card asked.
     setup: str = ""
     owner_question: tuple | None = None
+    # How many times a greeting's card came with none of the member's words and was sent back (`GREETING_WORDS_ASKS`).
+    greeting_asks: int = 0
     owner_card_ids: list[str] = field(default_factory=list)
     # The digest of the computer request under way: kept with the card, so that a resume never makes it again.
     computer_digest: str = ""
@@ -601,6 +603,15 @@ DECLINED_NOTE = (
     "The owner said no to an action in this request. It was not done, and nothing else that needs their yes is "
     "done now: do not try another way or another tool to get the same thing done. Say in one short sentence that "
     "it was not done because the owner said no; never say that an app or a service refused it."
+)
+# A new member's first message is its own words and one card (R-COLLEAGUE-02). Live, a Codex model called the card as its
+# first act with nothing written before it; the call is sent back, and the same turn goes on, rather than the greeting
+# failing. The number of times it is sent back; a model that still writes nothing leaves a failed greeting.
+GREETING_WORDS_ASKS = 2
+GREETING_WORDS_FIRST = (
+    "Your greeting is missing: nothing was written before this call, and a card alone is no first message. Write your "
+    "greeting now as plain text (who you are, at most two sentences, no question in it), then call ask_owner again "
+    "with the same card in the same turn."
 )
 # What the model is told when it calls a tool that sends mail and it writes drafts first (the owner sends them).
 DRAFT_FIRST_NOTE = (
@@ -2668,6 +2679,9 @@ class AgentService:
                 return ToolOutcome(False, "bad_arguments")
             if ask.owner_question:
                 return ToolOutcome(False, "bad_arguments", instruction="One card is enough: it is already shown.")
+            if not self._said_with_card(loop, call_id, ask.language) and ask.greeting_asks < GREETING_WORDS_ASKS:
+                ask.greeting_asks += 1
+                return ToolOutcome(False, "greeting_words_required", instruction=GREETING_WORDS_FIRST)
             ask.owner_question = (call_id, args)
             if isinstance(loop, CliLoop):
                 loop.approval_wait_s = float("inf")
