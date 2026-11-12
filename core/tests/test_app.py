@@ -1983,8 +1983,8 @@ async def test_home_overview_is_wired_without_waiting_for_speech(make_app, monke
     await app.home._timezone_task
     assert timezone_updates == ["Asia/Taipei", "Europe/Paris"]
     assert value["today"] == value["reports"] == value["calendar"] == []
-    assert len(value["usage"]["daily"]) == 14
-    assert value["dictation"]["words"] == 0
+    # Home is gone (owner, 2026-11-12): the overview serves the calendar only, with no usage or dictation figures.
+    assert "usage" not in value and "dictation" not in value
 
 
 async def test_home_answers_while_desktops_reconcile_a_new_time_zone(make_app, monkeypatch):

@@ -65,7 +65,6 @@ async function run(options) {
       const env = { ...process.env, RAPHAEL_DATA_DIR: data, RAPHAEL_FAKE_LLM: "1", RAPHAEL_TEST_NATIVE: "1", RAPHAEL_CORE_PYTHON: python, PYTHONPATH: join(root, "core/src"), PYTHONIOENCODING: "utf-8", PYTHONDONTWRITEBYTECODE: "1", CARGO_BUILD_JOBS: "2" };
       delete env.RAPHAEL_TEST_NATIVE_GMAIL;
       delete env.RAPHAEL_TEST_NATIVE_HOMES;
-      delete env.RAPHAEL_TEST_NATIVE_HOME;
       delete env.RAPHAEL_TEST_NATIVE_WINDOW_LIFECYCLE;
       delete env.RAPHAEL_TEST_NATIVE_STARTUP;
       delete env.RAPHAEL_TEST_NATIVE_CORE_DELAY_MS;
@@ -82,7 +81,6 @@ async function run(options) {
       }
       // The owner's frozen return: WebView2 refused one power step and the rest never ran.
       if (journey.name === "hidden-window-refused") env.RAPHAEL_TEST_NATIVE_POWER_REFUSE = "normal memory";
-      if (journey.name === "home-timing") env.RAPHAEL_TEST_NATIVE_HOME = "1";
       if (journey.name === "openrouter-turn") delete env.RAPHAEL_FAKE_LLM;
       if (journey.name === "owner-words") env.RAPHAEL_TEST_NATIVE_LOCAL = "1";
       if (journey.name === "long-think") env.RAPHAEL_NATIVE_THINK_S = "75";
@@ -151,25 +149,13 @@ async function run(options) {
         result.url = page.url();
         if (!journey.startup) await page.setViewport({ width: 1120, height: 900 });
         await collectErrors(page, result.runtimeErrors);
-        if (journey.name === "home-timing") await page.evaluateOnNewDocument(() => {
-          window.__homeTiming = { firstPaintMs: null };
-          const observer = new MutationObserver(() => {
-            const hero = document.querySelector('.page-home:not([hidden]) .ho-hero');
-            if (!hero || window.__homeTiming.firstPaintMs !== null) return;
-            observer.disconnect();
-            requestAnimationFrame(() => requestAnimationFrame(() => {
-              window.__homeTiming.firstPaintMs = performance.now();
-            }));
-          });
-          observer.observe(document, { childList: true, subtree: true, attributes: true });
-        });
         if (!journey.startup) {
           await page.reload({ waitUntil: "domcontentloaded" });
           // Keep every CDP call bounded while the real core imports and starts its workers.
           const readyBy = Date.now() + 90000;
           for (;;) {
-            if (await page.$eval("body", body => !!body.querySelector(".page-home:not([hidden]) .ho-hero"))) break;
-            if (Date.now() >= readyBy) throw new Error("Native Home did not become ready within 90000ms");
+            if (await page.$eval("body", body => !!body.querySelector(".page-agent:not([hidden]) .conversation-trigger"))) break;
+            if (Date.now() >= readyBy) throw new Error("The native conversation did not become ready within 90000ms");
             await pause(200);
           }
         }

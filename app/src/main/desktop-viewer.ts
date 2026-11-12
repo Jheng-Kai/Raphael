@@ -72,7 +72,7 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     `<div class="desktop-dock"><div class="desktop-mode"><span class="desktop-mode-label" role="status">${ico("eye")}<span></span></span>${btn("", "sm", ' data-desktop="take" hidden')}${btn("", "sm", ' data-desktop="return"')}</div>${iconButton("stop", t("agent.stop"), ' data-desktop="stop" hidden')}${iconButton("more", t("chat.more"), ' data-desktop="menu" aria-haspopup="menu" aria-expanded="false"')}</div></div><p class="desktop-request" role="status" hidden></p><div class="desktop-shell">` +
     `<div class="desktop-screen"><img class="desktop-wallpaper" alt=""><img class="desktop-last" alt="" hidden><div class="desktop-placeholder"></div>${btn("", "sm", ' data-desktop="retry" hidden')}` +
     `<iframe referrerpolicy="no-referrer" sandbox="allow-scripts allow-same-origin" hidden></iframe>` +
-    `<button type="button" class="btn desktop-open" data-desktop="enlarge" hidden><span class="desktop-open-pill">${ico("open")}<span></span></span></button><span class="desktop-owner" role="status" hidden></span></div><p class="desktop-caption"></p></div>` +
+    `<button type="button" class="btn desktop-open" data-desktop="enlarge" hidden><span class="desktop-open-pill">${ico("open")}<span></span></span></button></div><p class="desktop-caption"></p></div>` +
     `<p class="desktop-error" role="alert" hidden></p><p class="desktop-recording" role="status" hidden></p><div class="desktop-teach-missing" hidden></div><div class="desktop-actions">${btn("", "sm", ' data-desktop="discard-teach" hidden')}${btn("", "sm", ' data-desktop="teach"')}</div><div class="desktop-review" hidden></div><div class="desktop-try" hidden><input class="mb-fin" data-teach-input maxlength="4000">${btn("", "sm", ' data-desktop="try-teach"')}</div>`;
   const locationHeader = panel.querySelector<HTMLElement>(".desktop-location-header")!;
   const location = mountComputerLocation(locationHeader, draw);
@@ -258,8 +258,6 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     paint(take, "textContent", t("desktop.take")); paint(take, "hidden", !watching || !running || owner || !!demonstration); paint(take, "disabled", changing || !connected);
     paint(frame, "hidden", !running || !connected);
     paint(frame.style, "pointerEvents", interactive && !watching ? "auto" : "none");
-    const status = panel.querySelector<HTMLElement>('.desktop-owner')!;
-    paint(status, "textContent", t("desktop.operating")); paint(status, "hidden", !owner || !connected);
     paint(action, "textContent", t(pending() ? "desktop.done" : "desktop.release")); paint(action, "hidden", watching || !expanded || !!recording || filesOnly);
     paint(panel.querySelector<HTMLElement>('[data-desktop="menu"]')!, "hidden", watching || filesOnly); paint(action, "disabled", changing);
     // A sleeping computer: its face and one short line, and the whole screen wakes it.

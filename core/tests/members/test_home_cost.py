@@ -1,4 +1,4 @@
-"""Owner-sized offline Home timings, query plans and bounded aggregation work."""
+"""Owner-sized offline timings, query plans and bounded aggregation work of the calendar's overview and the team's ended work."""
 
 import cProfile
 import json
@@ -15,7 +15,6 @@ from raphael_core.home_digest import _ended
 async def owner_home(tmp_path, monkeypatch):
     app = App(data_dir=tmp_path, fake_llm=True)
     monkeypatch.setattr(app.memory, "may_spend", lambda member_id=0: False)
-    monkeypatch.setattr("raphael_core.home_digest.selected_available", lambda *args: False)
     # No executable discovery or provider calls on the developer's own accounts.
     app.agent._cli_brains.commands = {}
     app.agent._cli_brains.environ = {}
@@ -76,7 +75,7 @@ async def test_owner_sized_overview_cost(owner_home):
     print("HOME_COST " + json.dumps({"turns": 4000, "tasks": 622, "report_bytes": 622 * 22400, "routine_runs": 1200,
         "overview_ms": [round(ms, 2) for ms in elapsed], "median_ms": round(median(elapsed), 2),
         "queries": query_count, "ended_ms": round(ended_ms, 2), "plans": plans}, sort_keys=True))
-    assert len(value["activity"]["days"]) == 14
+    assert value["calendar_google"] == "not_connected"
     assert all("report_text" not in sql and ".*" not in sql for sql in ended_statements)
     assert not any(step.startswith("SCAN ") for plan in plans.values() for step in plan)
     # A deterministic work bound; elapsed timings above are evidence, not a flaky pass condition.
@@ -95,7 +94,7 @@ async def test_one_request_enters_home_read_once_without_a_gather_resumption(own
     assert calls == [1]
 
 
-async def test_home_and_composer_discovery_share_one_resolution_per_cli(owner_home, monkeypatch):
+async def test_the_overview_resolves_no_cli_and_the_composer_resolves_each_once(owner_home, monkeypatch):
     from raphael_core.agent.cli import discovery
 
     brains = owner_home.agent._cli_brains
@@ -103,6 +102,16 @@ async def test_home_and_composer_discovery_share_one_resolution_per_cli(owner_ho
     calls = []
     monkeypatch.setattr(discovery.shutil, "which", lambda name, **kw: calls.append(name))
     await owner_home.call("home.overview")
+    assert calls == []
     await owner_home.call("brains.cli")
     await owner_home.call("home.overview")
     assert sorted(calls) == ["agy", "claude", "codex"]
+
+
+async def test_the_open_conversation_tells_the_core_the_owners_zone_now_that_home_does_not(owner_home):
+    # Home asked for the overview with the zone at every start; the window opens on a conversation now, and its `members.viewing` carries
+    # the zone to the calendar's own zone and the computers' clock (app.py wires `members.timezone_seen`).
+    assert owner_home.home.timezone_name is None
+    await owner_home.call("members.viewing", {"id": None, "tz": "Asia/Taipei"})
+    assert owner_home.home.timezone_name == "Asia/Taipei"
+    assert owner_home.home.zone().key == "Asia/Taipei"

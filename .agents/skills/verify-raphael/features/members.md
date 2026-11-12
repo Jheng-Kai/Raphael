@@ -107,7 +107,7 @@ Chief swap remains the bot-home primary contact rule. Existing protected Raphael
 identity, row actions and context menus remain authoritative.
 Selection follows the visible page, independently of the remembered conversation.
 Hiding the conversation clears member and room selection immediately; opening it
-restores only its active member or room. Home selects only the Raphael brand row.
+restores only its active member or room. Away from the conversation no row is selected.
 
 
 ## Sub-features
@@ -136,10 +136,10 @@ under it to its first row. The list is 348 px wide from 952 px of window up, `mi
 gets narrower than at 900 px with the old list; a dragged width (240 to 400 px) keeps winning. Under 860 px the list is the rail of faces,
 88 px wide, with no menu button, drawer or scrim: each face 36 px on a 54 px square (lit for the open conversation) 58 px apart, a faint line
 under Raphael's row and between folders, the unread dot on the face's corner, the name as the face's tooltip, a right click opens the row menu,
-and at its foot search and plus side by side (the plus opens the list's own menu), microphone and Home side by side, the Connections icon
-and the account. Folders folded in the list stay folded in the rail, and a folder's heading and the hidden folder are not reachable there
-(widen the window). The wide list's foot keeps its two rows (owner, 2026-11-12): the 40 px Connections pill on a row of its own, with no tooltip, and under it
-the account's face and name with microphone and Home at the row's end, at every width of the list.
+and at its foot the plus alone (the plus opens the list's own menu; the rail has no search, owner 2026-11-12 23:25), the Connections icon
+and the owner's face (the account menu). Folders folded in the list stay folded in the rail, and a folder's heading and the hidden folder are not reachable there
+(widen the window). The wide list's foot is one row (owner, 2026-11-12 evening, R-SIDE-01): the owner's 32 px face and the 36 px Connections pill, with no tooltip,
+at every width of the list.
 `sidebar-metrics` records the numbers (width, pitch, highlight, type, foot, rows that fit), `sidebar-air` asserts them (and the rail's),
 `sidebar-air-foot` the same foot on a list dragged narrow, `panel-widest` (the details panel dragged as wide as it goes beside the conversation: at 1120 the panel stops at 388 px so the conversation keeps 386 px), `sidebar-rail-menu` the right click, `sidebar-drag-row` a dragged row at the new height.
 
@@ -689,7 +689,7 @@ room-group-menu, room-required-chief and room-generated-name journeys click the
 plus button and open group creation at all three mapped widths.
 
 ```powershell
-npm run look -- room-group-menu room-required-chief room-generated-name home-empty home-motion --theme both --width 1120,720,1920x1080
+npm run look -- room-group-menu room-required-chief room-generated-name --theme both --width 1120,720,1920x1080
 ```
 
 slime-board.test.mjs guards the static sharpness comparison: freezing animations
@@ -762,7 +762,7 @@ The named `large-avatar-vector` exception applies only above 72px.
 `motion-cost` audits running infinite animations and repeats Performance.TaskDuration
 under a synthetic eight-working/two-sleeping load. Every sample must stay below
 3 percent of one core. It runs on slime-states, presence-states-sidebar,
-busy-team-thread, busy-team-home, busy-team-room and running. The separate
+busy-team-thread, busy-team-room and running. The separate
 motion-cost-details scene isolates the unchanged animated emblem against its still
 and measures one 96px working vector. It is measurement, not native acceptance.
 motion-idle-cost repeats twelve resting members against starting revision
@@ -800,7 +800,7 @@ Working shares its commensurate 900ms body and 1800ms droplet cycle in
 The representative character DOM budget is protected in slime.test.ts.
 
 ```powershell
-npm run look -- slime-states presence-states-sidebar busy-team-thread busy-team-home busy-team-room running slime-gallery slime-liquid-sheet slime-liquid-still slime-parts slime-sharp slime-motion-change slime-motion-recovery slime-motion-busy slime-motion-moments slime-motion-idle slime-pointer slime-characters-at-rest slime-picker slime-sizes busy-team-up busy-team-steps busy-team-typing busy-team-follow busy-team-anchor busy-team-hover admin-approval room-question-card composer-stop-voice composer-stop-pending motion-cost-comparison motion-cost-details motion-idle-cost --theme both --width 1120,720,1920x1080
+npm run look -- slime-states presence-states-sidebar busy-team-thread busy-team-room running slime-gallery slime-liquid-sheet slime-liquid-still slime-parts slime-sharp slime-motion-change slime-motion-recovery slime-motion-busy slime-motion-moments slime-motion-idle slime-pointer slime-characters-at-rest slime-picker slime-sizes busy-team-up busy-team-steps busy-team-typing busy-team-follow busy-team-anchor busy-team-hover admin-approval room-question-card composer-stop-voice composer-stop-pending motion-cost-comparison motion-cost-details motion-idle-cost --theme both --width 1120,720,1920x1080
 ```
 
 Generated surfaces with unchanged identity, colour, member, tempo and state are retained before parsing their cel markup. Newly parsed subtrees are inserted directly without a duplicate clone. ui-patch.test.ts guards allocation, keyed reorder and changed identity/state. The mixed-load setup changes each selected avatar directly to its measured state once; it does not inject an intermediate idle handover. The same setup applies to the baseline and current implementation.
@@ -811,7 +811,7 @@ gradient rejection remains. The native recognising-light check reads that same
 painted element. Home's
 four-second event storm is bounded to 27 total reads. After the 33-scene matrix,
 the local shimmer/limit corrections are rechecked in composer-stop-voice,
-composer-stop-pending, running and busy-team-home at both themes and all three sizes.
+composer-stop-pending and running at both themes and all three sizes.
 ## Sending a prompt (2026-11-03)
 
 R-PERF-02 times what the owner feels when they press Enter, in `app/scripts/look/send-probe.mjs`: the frame after the key, the longest task and the main-thread share over a whole turn, on a sixty-turn thread, at normal speed and at a quarter of it. Core reads for a computer nobody watches are remembered in `DesktopViewer.unwatched_status`, and a closed details panel neither reads nor draws.

@@ -3,8 +3,10 @@ import { scene, click, hover, type, wait, waitGone, codexArrives, page, settings
 const connections = settings("connections");
 const add = [...connections, click('[data-k="conn-add"]')];
 const custom = [...add, click('.menu [data-value="custom"]')];
-const serverDetail = [...connections, click('[data-conn="open"][data-id="notes"]')];
-const store = [...connections, { ...click('[data-conn="tab"][data-id="store"]'), measure: { name: "store-render-paint", budgetMs: 250, maxLongTaskMs: 50 } }, wait('.cs-card'), waitGone('[data-cs-pending]')];
+// One view (R-APPS-01): the apps are what 連結應用程式 opens on, and the chip at the top right opens the connected ones.
+const linked = [...connections, click('[data-conn="connected"]'), wait('.cs-linked')];
+const serverDetail = [...linked, click('[data-conn="open"][data-id="notes"]'), wait('.cs-page')];
+const store = [...connections, wait('.cs-card')];
 // A key made up for the scenes: it is typed into a masked field and must reach nothing but the one call that adds the app.
 const setupKey = "zk-look-0123456789";
 const usage = [...settings("models"), click('[data-models-tab="usage"]'), wait('[data-row="raphael-spend"]')];
@@ -64,8 +66,8 @@ export default [
   ...["general", "appearance", "connections", "models", "dictation", "tools", "safety", "about"].map(pane => scene(pane === "general" ? "profile" : pane, `${pane} settings pane`, [...settings(pane), ...(pane === "appearance" ? [check("appearance-settings")] : [])])),
   scene("appearance-menu", "One shared theme dropdown without a preview gallery", [...settings("appearance"), click('[data-k="appearance"]'), wait('.menu [data-value="dark"]'), check("appearance-settings")]),
   scene("appearance-keyboard", "Theme choices retain visible keyboard focus in every palette", [...settings("appearance"), click('[data-k="appearance"]'), key('Tab'), {...key('Tab'),shift:true}, key('ArrowDown'), check('appearance-settings'), check('appearance-focus')]),
-  scene("plugins-installed", "Unified managed, private Google and custom MCP plugins", [...connections, wait('[data-conn="open"][data-id="composio:notion"]')]),
-  scene("plugins-detail", "Managed tools grouped by write and read", [...connections, click('[data-conn="open"][data-id="composio:notion"]'), click('[data-conn="tool-list"]'), wait('[data-conn="tool"][data-tool="NOTION_SEARCH"]')]),
+  scene("plugins-installed", "Unified managed, private Google and custom MCP plugins", [...linked, wait('[data-conn="open"][data-id="composio:notion"]')]),
+  scene("plugins-detail", "Managed tools grouped by write and read", [...linked, click('[data-conn="open"][data-id="composio:notion"]'), click('[data-conn="tool-list"]'), wait('[data-conn="tool"][data-tool="NOTION_SEARCH"]')]),
   scene("store-n8n", "n8n is in the store, and 加入 leaves for the conversation with the owner's words, where the member sets it up (owner, 2026-11-09)", [
     ...store, type('#conn-search', 'n8n'), wait('[data-conn="open-store"][data-id="n8n"]'), check("store-n8n"),
     click('[data-conn="join"][data-id="n8n"]'), wait('.page-agent:not([hidden]) .composer textarea'), check("store-in-chat"),
@@ -82,44 +84,37 @@ export default [
     ...store, check("plugins-store"), check("plugins-store-rows"), check("plugins-store-groups"),
     type('#conn-search', '360'), wait('[data-conn="open-store"][data-id$="-359"]'), check("plugins-store-search"),
     click('[data-conn="open-store"][data-id$="-359"]'), wait('.cs-page'), check("plugins-store-last-detail"),
-    click('[data-conn="back"]'), wait('.cs-store-groups'), type('#conn-search', ''), wait('[data-conn="store-page"]'),
+    click('[data-conn="back"]'), wait('.cs-chips'), type('#conn-search', ''), wait('.cs-sec'),
   ], { pluginsMany: true }),
   scene("plugins-store-category", "Broad category chips filter the complete local index", [
     ...store, check("plugins-store-groups"), { action: "focus", selector: '[data-conn="store-group"][data-id=""]' },
-    ...Array.from({ length: 9 }, () => key("Tab")), key("Enter"), check("store-group-end"),
+    key("Tab"), key("Enter"), check("store-group-focus"),
     click('[data-conn="store-group"][data-id="productivity"]'), check("plugins-store-category"), check("plugins-store-rows"),
-  ], { pluginsMany: true }),
-  // The ten category chips fit the sheet from 1120 px up (nothing to scroll, no arrows), so this scene measures the sheet at 720 px, the width where they overflow.
-  scene("plugins-store-wheel", "At 720 px, where the categories overflow their row, the mouse wheel and the arrows move the chips sideways", [
-    { action: "viewport", width: 720, height: 900 }, ...store, check("plugins-store-groups"), { action: "wheel", selector: ".cs-store-groups", deltaY: 300 }, check("store-groups-wheel"), check("plugins-store-groups"),
-    click('[data-chip-step="-1"]'), wait('[data-chip-row]:not([data-more-before])'), check("store-groups-start"), check("plugins-store-groups"),
   ], { pluginsMany: true }),
   scene("plugins-store-search", "Search reaches a late catalog result by keyboard", [
     ...store, { ...type('#conn-search', '360'), measure: { name: "store-search-paint", budgetMs: 250, maxLongTaskMs: 50, readySelector: '[data-conn="open-store"][data-id$="-359"]' } },
     wait('[data-conn="open-store"][data-id$="-359"]'), check("plugins-store-search"), check("plugins-store-rows"),
   ], { pluginsMany: true }),
-  scene("plugins-store-all", "All apps use bounded pages without omitting late entries", [
-    ...store, { ...click('[data-conn="store-group"][data-id=""]'), measure: { name: "store-all-paint", budgetMs: 250, maxLongTaskMs: 50 } }, check("plugins-store-groups"),
-    scroll('.cs-store-pages'), check("store-toolbar-visible"),
-    click('[data-conn="store-page"][data-id="1"]'), check("plugins-store-groups"), check("plugins-store-rows"),
-    scroll('.cs-store-pages'), check("store-toolbar-visible"),
+  scene("plugins-store-all", "A chosen category lists all its apps, a screenful at a time, with the top row and the chips staying put", [
+    ...store, { ...click('[data-conn="store-group"][data-id="productivity"]'), measure: { name: "store-all-paint", budgetMs: 250, maxLongTaskMs: 50 } }, check("plugins-store-groups"),
+    scroll('.cs-card:last-child'), check("store-toolbar-visible"), scroll('.cs-card:last-child'), check("plugins-store-rows"),
   ], { pluginsMany: true }),
   scene("plugins-store-empty", "An unmatched query keeps search and category navigation", [
     ...store, type('#conn-search', 'no-such-catalog-app-xyz'), wait('.cs-none'), check("plugins-store-empty"),
   ], { pluginsMany: true }),
-  { ...scene("plugins-store-motion", "All popular rows finish entering before the native-style capture, without a blank band", [
+  { ...scene("plugins-store-motion", "Every row is there and nothing is still moving before the native-style capture, without a blank band", [
     ...store, { action: "settle-motion" }, check("plugins-store-settled"), check("plugins-store-groups"),
   ], { pluginsMany: true }), motion: true },
   scene("plugins-store-key", "Built-in services with optional Composio setup", [...store, wait('[data-conn="configure-composio"]'), check("plugins-store"), check("plugins-store-rows"), scroll('.cs-composio-setup')], { composioConfigured: false }),
   scene("plugins-store-key-openrouter", "An OpenRouter key gets an actionable, value-free Composio error", [
-    ...connections, click('[data-conn="tab"][data-id="store"]'), wait('[data-conn="configure-composio"]'), click('[data-conn="configure-composio"]'), wait('#conn-key'),
+    ...connections, wait('[data-conn="configure-composio"]'), click('[data-conn="configure-composio"]'), wait('#conn-key'),
     type('#conn-key', 'sk-or-look-synthetic'), click('[data-conn="save-key"]'), wait('.cs-key-form [role="alert"]'), check("plugins-key-openrouter"), check("plugins-store-rows"),
   ], { composioConfigured: false }),
   scene("plugins-store-key-consumer", "A consumer key directs the owner to a Composio project key without echoing it", [
-    ...connections, click('[data-conn="tab"][data-id="store"]'), wait('[data-conn="configure-composio"]'), click('[data-conn="configure-composio"]'), wait('#conn-key'),
+    ...connections, wait('[data-conn="configure-composio"]'), click('[data-conn="configure-composio"]'), wait('#conn-key'),
     type('#conn-key', 'ck_look-synthetic'), click('[data-conn="save-key"]'), wait('.cs-key-form [role="alert"]'), check("plugins-key-consumer"), check("plugins-store-rows"),
   ], { composioConfigured: false }),
-  scene("plugins-store-needs", "A row says in words what the app asks for before anything is pressed: its own key, or its own developer app", [
+  scene("plugins-store-needs", "A row stays as plain as Grok Bot's (the mark, the name, 連結) and says nothing of what the app asks for: its page does", [
     ...store, click('[data-conn="store-group"][data-id="productivity"]'), wait('[data-conn="join"][data-id="acme-ledger"]'), check("plugins-store-needs"), check("plugins-store-rows"),
   ]),
   scene("plugins-store-needs-page", "The page of an app that asks for a key says so beside its 加入, which is never dead", [
@@ -136,7 +131,7 @@ export default [
   ]),
   scene("plugins-setup-added", "The key goes to the core in one call; the dialog closes and the app is among the connected ones", [
     ...store, click('[data-conn="join"][data-id="acme-ledger"]'), wait('.cn-setup-dialog [data-setup-field]'), type('.cn-setup-dialog [data-setup-field]', setupKey),
-    click('.cn-setup-dialog [data-dlg="add"]'), waitGone('.cn-setup-dialog'), wait('[data-conn="open"][data-id="composio:acme-ledger"]'), check("setup-added"),
+    click('.cn-setup-dialog [data-dlg="add"]'), waitGone('.cn-setup-dialog'), wait('.cs-card:has([data-conn="open-store"][data-id="acme-ledger"]) .cs-state'), check("setup-added"),
   ]),
   scene("plugins-setup-rejected", "A key Composio does not accept says so in the dialog, empties the masked field and keeps the form to try again", [
     ...store, click('[data-conn="join"][data-id="acme-ledger"]'), wait('.cn-setup-dialog [data-setup-field]'), type('.cn-setup-dialog [data-setup-field]', setupKey),
@@ -150,7 +145,7 @@ export default [
     ...store, click('[data-conn="join"][data-id="acme-ledger"]'), wait('.cn-setup-dialog [data-dlg="retry"]'), check("setup-plan-failed"),
   ], { toolkitPlanFails: true }),
   scene("plugins-connecting", "Built-in sign-in works without Composio", [...store, click('[data-conn="join"][data-id="github"]'), wait('.cs-card .sub.wait'), check("plugins-builtin-join"), check("plugins-store-rows")], { composioConfigured: false, pluginsConnecting: true }),
-  scene("connections-hover", "MCP server hover", [...connections, hover('[data-k="cs-open:notes"]')]),
+  scene("connections-hover", "MCP server hover", [...linked, hover('[data-k="cs-open:notes"]')]),
   scene("server-menu", "MCP server detail actions", [...serverDetail, click('[data-conn="server-menu"][data-id="notes"]')]),
   scene("connections-add-menu", "Add a connection menu", add),
   scene("connections-command", "Command MCP form keeps its last fields above aligned footer actions", [...custom, check("connections-form-edges"), scroll('#conn-limit'), check("connections-form-end")]),
@@ -161,7 +156,7 @@ export default [
   scene("connections-paste", "Paste MCP JSON", [...add, click('.menu [data-value="paste"]')]),
   scene("connections-paste-preview", "Preview MCP JSON", [...add, click('.menu [data-value="paste"]'), type("[data-mcp-json]", '{"mcpServers":{"專案筆記":{"command":"npx","args":["notes-server"]}}}'), click('[data-dlg="preview"]')]),
   scene("connections-discover", "Discover local MCP definitions", [...add, click('.menu [data-value="import"]')]),
-  scene("connections-empty", "Connections without servers", [...connections, click('[data-conn="tab"][data-id="installed"]')], { servers: [], managedConnectors: [] }),
+  scene("connections-empty", "Connections without servers: the one view, with no chip of the connected apps", [...connections, check("connections-empty")], { servers: [], managedConnectors: [] }),
   scene("connections-discover-empty", "Discovery without candidates", [...add, click('.menu [data-value="import"]')], { servers: [], candidates: [] }),
   scene("usage", "Usage: this month's spending with a coloured bar, what each subscription has left, then the key", [...usage, wait(".run-subscription"), check("usage-plain")]),
   scene("usage-allowances-chatgpt", "ChatGPT sits with the other subscriptions, with the button to its own usage page", [...usage, wait('[data-allowance="chatgpt"]'), scroll('[data-allowance="chatgpt"]'), check("usage-plain")], { chatgptSignedIn: true }),
@@ -171,7 +166,7 @@ export default [
     click('.modal-scrim [data-pane="models"]'), click('[data-models-tab="usage"]'), wait(".run-subscription"), check("usage-plain"), check("usage-open-arm"),
     click(".modal-x"), { action: "advance-time", ms: 31000 }, ...settings("models"), click('[data-models-tab="usage"]'), wait(".run-subscription"), check("usage-open-same"),
     check("usage-open-lower"), click(".modal-x"), { action: "advance-time", ms: 31000 }, ...settings("models"), click('[data-models-tab="usage"]'), wait(".run-subscription"), check("usage-open-changed"), check("usage-plain"),
-  ]),
+  ], { traceCalls: true }),
   ...["overview", "history", "dictionary"].map(tab => scene(`dictation-${tab}`, `Dictation ${tab}`, [...dictation(tab), ...(tab === "history" ? [wait(".hrow"), check("history-sent-to")] : []), ...(tab === "dictionary" ? [wait(".wrow"), click('[data-act="word-menu"]'), wait('#app-popover [data-pick="delete"]'), key("Escape")] : [])], tab === "dictionary" ? {
     dictionary: ["Raphael", "Methelia", "GitHub", "Composio", "OpenRouter", "Notion", "Slack", "Telegram", "Calendar", "Claude", "Codex", "Gemini"].map((word, index) => ({ id: index + 1, word, misheard: index === 0 ? ["Rafael"] : [], source: index % 2 ? "learned" : "manual", created_at_ms: 1792720800000 })),
   } : {})),
@@ -193,5 +188,5 @@ export default [
   scene("onboarding-service-waiting", "A tile waiting for its sign-in keeps its words inside it in every language", [click('[data-ob="next"]'), click('[data-ob="next"]'), wait('[data-ob-services] .ob-tile'), click('[data-item="linear"][data-ob="conn-login"]'), wait('[data-item="linear"] [data-ob="conn-cancel"]'), check("onboarding-services")], { onboarding: true, pluginsConnecting: true }),
   scene("onboarding-abilities", "First-run step 3: the abilities as Settings › 工具's rows, each saying what it uses, with its switch", [click('[data-ob="next"]'), click('[data-ob="next"]'), click('[data-ob="next"]'), wait('[data-ob-abilities] .svc-item'), click('[data-svc="toggle"][data-id="read"]'), wait('[data-svc="toggle"][data-id="read"][aria-checked="false"]'), check("onboarding-abilities")], { onboarding: true }),
   scene("onboarding-abilities-choice", "First-run step 3: an ability opens its choice of service in the card, as in Settings", [click('[data-ob="next"]'), click('[data-ob="next"]'), click('[data-ob="next"]'), wait('[data-ob-abilities] .svc-item'), click('[data-svc="open"][data-id="search"]'), wait('.ob-card #svc-dialog .svc-srv')], { onboarding: true }),
-  scene("after-onboarding", "Finishing the third step opens the home overview", [click('[data-ob="next"]'), click('[data-ob="next"]'), click('[data-ob="next"]'), wait('[data-ob-abilities] .svc-item'), click('[data-ob="next"]'), wait(".page-home:not([hidden]) .ho-hero"), check("home-overview")], { onboarding: true }),
+  scene("after-onboarding", "Finishing the guide opens Raphael's conversation, the app's start", [click('[data-ob="next"]'), click('[data-ob="next"]'), click('[data-ob="next"]'), wait('[data-ob-abilities] .svc-item'), click('[data-ob="next"]'), wait(".page-agent:not([hidden]) .conversation-trigger"), check("foot-rest"), check("sidebar-shell")], { onboarding: true }),
 ];

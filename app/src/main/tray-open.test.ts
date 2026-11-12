@@ -13,10 +13,10 @@ function fakeWindow(inGuide = false): TrayTarget & { done: string[] } {
   };
 }
 
-const open = (page: "home" | "history" | "dictionary" | "settings", action?: "add-word"): MainEvent => ({ type: "TrayOpen", page, action });
+const open = (page: "agent" | "history" | "dictionary" | "settings", action?: "add-word"): MainEvent => ({ type: "TrayOpen", page, action });
 
 describe("the tray's choice of a page", () => {
-  test.each(["home", "history", "dictionary", "settings"] as const)("opens the %s page and nothing more", (page) => {
+  test.each(["agent", "history", "dictionary", "settings"] as const)("opens the %s page and nothing more", (page) => {
     const target = fakeWindow();
     followTray(open(page), target);
     expect(target.done).toEqual([`go ${page}`]);

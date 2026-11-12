@@ -74,7 +74,7 @@ npm run look -- quota-warning quota-warning-weekly --theme both --width 1120,720
 
 Both replay the shell's `QuotaWarning` at the fixture clock (10:00). `quota-warning` is a
 Codex 5-hour window over a conversation: the toast above the composer (`toast-clearance`).
-`quota-warning-weekly` is a Claude weekly Opus window over Home whose reset names its date.
+`quota-warning-weekly` is a Claude weekly Opus window over the calendar whose reset names its date.
 `quota-warning` checks the exact words, the status role, the toast inside the window and that
 no model, member or setting call follows the event.
 

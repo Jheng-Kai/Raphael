@@ -41,15 +41,15 @@ const skills = [
 ];
 
 export default [
-  scene("connect-apps-categories", "Settings opens the store and every category can be focused, revealed and selected", [
-    ...open, click('[data-conn="tab"][data-id="store"]'), wait(".cs-card"),
+  scene("connect-apps-categories", "Every category chip can be focused and chosen by keyboard, and the rest are in 更多", [
+    ...open, wait(".cs-card"),
     { action: "focus", selector: '[data-conn="store-group"][data-id=""]' }, check("store-group-focus"),
-    ...Array.from({ length: 9 }, () => [key("Tab"), check("store-group-focus")]).flat(),
+    ...Array.from({ length: 5 }, () => [key("Tab"), check("store-group-focus")]).flat(),
     key("Enter"), check("store-group-end"),
     click('[data-conn="store-group"][data-id="productivity"]'), check("plugins-store-category"), check("plugins-store-rows"),
   ]),
-  scene("connected-apps-only", "The connected view holds connectors only: apps that can be called now, those that cannot with the reason; one count, and no skills section or import button even when members have skills", [
-    ...open, wait('[data-k="cs-open:composio:notion"]'), wait('[data-stagger="installed-not"] .cs-item'), check("apps-count"), check("connectors-only"),
+  scene("connected-apps-only", "The list of the connected holds connectors only: apps that can be called now, those that cannot with the reason; one count, and no skills section or import button even when members have skills", [
+    ...open, click('[data-conn="connected"]'), wait('[data-k="cs-open:composio:notion"]'), wait('.cs-linked'), check("apps-count"), check("connectors-only"),
   ], {
     managedConnectors: [
       notion(), google,
@@ -59,35 +59,35 @@ export default [
     servers: base.servers.slice(0, 1),
     skills,
   }),
-  scene("connected-apps-unreadable", "A core that cannot list the apps: the tab says 「—」 and give no number, and the apps stay one list", [
-    ...open, wait('[data-k="cs-open:composio:notion"]'), check("apps-unreadable"),
+  scene("connected-apps-unreadable", "A core that cannot list the apps: the chip says only 「已連結」 and gives no number, and the apps stay one list", [
+    ...open, click('[data-conn="connected"]'), wait('[data-k="cs-open:composio:notion"]'), check("apps-unreadable"),
   ], { inventoryUnreadable: true, managedConnectors: [notion(), google], servers: base.servers.slice(0, 1), skills }),
   scene("connections-app-switch", "The app switch has two states and preserves all 18 tool exclusions when disabled and enabled", [
-    ...open, check("connections-binary"), appSwitch("true"), click('[data-conn="enable"][data-id="github"]'), appSwitch("false"),
+    ...open, click('[data-conn="connected"]'), wait('.cs-linked'), check("connections-binary"), appSwitch("true"), click('[data-conn="enable"][data-id="github"]'), appSwitch("false"),
     check("connections-binary"), click('[data-conn="enable"][data-id="github"]'), appSwitch("true"), check("app-switch-all"), check("connections-binary"),
   ], { servers: [github, ...base.servers] }),
   scene("connector-many-tools", "Bulk write and read permissions stay reachable above the folded 46-tool list", [
-    ...open, click('[data-conn="open"][data-id="github"]'), wait('[data-conn="tool-list"][aria-expanded="false"]'), check("connections-binary"),
-    click('.cs-dialog [data-conn="kind"][data-kind="write"]'), wait('.cs-dialog [data-kind="write"][aria-checked="true"]'),
-    click('.cs-dialog [data-conn="kind"][data-kind="read"]'), wait('.cs-dialog [data-kind="read"][aria-checked="true"]'),
-    click('.cs-dialog [data-conn="kind"][data-kind="write"]'), wait('.cs-dialog [data-kind="write"][aria-checked="false"]'),
+    ...open, click('[data-conn="connected"]'), click('[data-conn="open"][data-id="github"]'), wait('[data-conn="tool-list"][aria-expanded="false"]'), check("connections-binary"),
+    click('.cs-page [data-conn="kind"][data-kind="write"]'), wait('.cs-page [data-kind="write"][aria-checked="true"]'),
+    click('.cs-page [data-conn="kind"][data-kind="read"]'), wait('.cs-page [data-kind="read"][aria-checked="true"]'),
+    click('.cs-page [data-conn="kind"][data-kind="write"]'), wait('.cs-page [data-kind="write"][aria-checked="false"]'),
     check("connector-folded"), check("connections-binary"), check("connections-dialog-actions"),
   ], { servers: [github, ...base.servers] }),
   scene("connector-account-tools", "A managed app's read and write switches update whole kinds and keep the per-tool list available", [
-    ...open, click('[data-conn="open"][data-id="composio:notion"]'), wait('.cs-dialog [data-conn="kind"]'),
-    click('.cs-dialog [data-conn="relogin"]'), wait('.cs-dialog .note[role="alert"]'), check("connector-link-refused"), check("connections-dialog-actions"),
-    click('.cs-dialog [data-kind="write"]'), wait('.cs-dialog [data-kind="write"][aria-checked="false"]'), check("connections-binary"),
-    click('.cs-dialog [data-kind="write"]'), wait('.cs-dialog [data-kind="write"][aria-checked="true"]'),
-    click('.cs-dialog [data-kind="read"]'), wait('.cs-dialog [data-kind="read"][aria-checked="false"]'),
-    click('.cs-dialog [data-kind="read"]'), wait('.cs-dialog [data-kind="read"][aria-checked="true"]'),
+    ...open, click('[data-conn="connected"]'), click('[data-conn="open"][data-id="composio:notion"]'), wait('.cs-page [data-conn="kind"]'),
+    click('.cs-page [data-conn="relogin"]'), wait('.cs-page .note[role="alert"]'), check("connector-link-refused"), check("connections-dialog-actions"),
+    click('.cs-page [data-kind="write"]'), wait('.cs-page [data-kind="write"][aria-checked="false"]'), check("connections-binary"),
+    click('.cs-page [data-kind="write"]'), wait('.cs-page [data-kind="write"][aria-checked="true"]'),
+    click('.cs-page [data-kind="read"]'), wait('.cs-page [data-kind="read"][aria-checked="false"]'),
+    click('.cs-page [data-kind="read"]'), wait('.cs-page [data-kind="read"][aria-checked="true"]'),
     click('[data-conn="tool-list"]'), wait('[data-conn="tool"][data-tool="NOTION_SEARCH"]'), wait(".cs-acct"), check("connector-tools"), check("connections-binary"), check("connections-dialog-actions"),
   ], {
     connectorLinkRefused: true,
     managedConnectors: [notion({ accounts: [{ id: "ca_work", status: "ACTIVE" }, { id: "ca_old", status: "EXPIRED" }] }), google],
     pluginTools: { ...base.pluginTools, "composio:notion": notionTools },
   }),
-  scene("connector-uninstalled", "Uninstalling an app on the second press: it leaves the list, and the Settings count goes down with the installed list", [
-    ...open, click('[data-conn="open"][data-id="composio:notion"]'), click('[data-conn="server-menu"][data-id="composio:notion"]'),
+  scene("connector-uninstalled", "Uninstalling an app on the second press: it leaves the list, and the chip's count goes down with the connected list", [
+    ...open, click('[data-conn="connected"]'), click('[data-conn="open"][data-id="composio:notion"]'), click('[data-conn="server-menu"][data-id="composio:notion"]'),
     click('.menu [data-conn="disconnect"]'), click('.menu [data-conn="disconnect"]'), waitGone('[data-k="cs-open:composio:notion"]'), wait(".toast"), check("apps-count"),
   ], {
     managedConnectors: [notion(), google, connector("composio:linear", { name: "Linear", description: "追蹤專案與團隊議題", enabled_tools: ["LINEAR_LIST_ISSUES"] })],

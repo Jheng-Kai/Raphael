@@ -66,16 +66,20 @@
   /* Raphael's blue: his own colour, and the usage bars'. */
   --raphael-color: #1f9fe8;
   --meter: var(--raphael-color);
-  /* Home's chart: work, messages and routines, in the order a bar stacks them (validated for colour blindness). */
-  --series-1: #2a78d6; --series-2: #eb6834; --series-3: #1baf7a;
   --ans-edge: #ececec;
   --btn: #ffffff; --btn-edge: #d4d4d4; --key: #f7f7f7; --key-edge: #d4d4d4;
-  --track: #e5e5e5; --menu: #ffffff; --scrim: rgba(0, 0, 0, 0.3);
+  --track: #e5e5e5; --menu: var(--float); --scrim: rgba(0, 0, 0, 0.3);
+  /* One rule for everything that floats (a dialog, a menu and its submenu, a popover, a floating card), after Grok Bot's: the surface, its edge,
+     the fill of a control standing on it (a chip, a button), what a hovered or pressed row takes, and the chosen chip (owner, 2026-11-12). */
+  --float: #ffffff; --float-edge: #e5e5e5; --float-ctl: #f0f0f0; --float-ctl-hover: #e6e6e6; --float-hover: #f2f2f2; --float-pressed: #e6e6e6;
+  --float-ctl-edge: #e0e0e0; --float-sel: #0a0a0a; --float-on-sel: #ffffff;
+  /* The white rounded tile an app's mark stands on in 連結應用程式 (Grok Bot's), the same in both themes: the marks are drawn for a white ground. */
+  --tile: #ffffff; --on-tile: #0a0a0a; --tile-edge: rgba(0, 0, 0, 0.08);
   --pop: 0 20px 64px rgba(0, 0, 0, 0.14), 0 3px 10px rgba(0, 0, 0, 0.07);
   --tab-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
   --composer-shadow: 0 6px 20px rgba(0, 0, 0, 0.06);
-  /* the window's close button under the pointer: Windows' own red, the same in both themes */
-  --close: #c42b1c; --on-close: #ffffff;
+  /* the window's close button under the pointer, and the delete question's button: Windows' red nudged to keep 3:1 on the floating surface, the same in both themes */
+  --close: #c9301f; --on-close: #ffffff;
   /* What is drawn on a slime's colour: white, as its eyes are, in both themes. */
   --on-slime: #ffffff;
   --toast-action: #e5e5e5; --toast-hover: #404040;
@@ -107,10 +111,13 @@
   --computer-active: #b98aff;
   --raphael-color: #5cc4ff;
   --meter: var(--raphael-color);
-  --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70;
   --ans-edge: #161616;
   --btn: #1f1f1f; --btn-edge: #2e2e2e; --key: #1f1f1f; --key-edge: #2e2e2e;
-  --track: #333333; --menu: #161616; --scrim: rgba(0, 0, 0, 0.65);
+  --track: #333333; --menu: var(--float); --scrim: rgba(0, 0, 0, 0.65);
+  /* Measured from Grok Bot's dark theme: the window is #0e0e0e and what floats over it #1f1f1f with a #353535 edge; a control on it is #282828,
+     a hovered row #292929, the chosen chip a light fill with dark words, and the dimmed window behind a dialog about #050505. */
+  --float: #1f1f1f; --float-edge: #353535; --float-ctl: #282828; --float-ctl-hover: #303030; --float-hover: #292929; --float-pressed: #303030;
+  --float-ctl-edge: #282828; --float-sel: #f5f5f5; --float-on-sel: #0a0a0a;
   --pop: 0 20px 64px rgba(0, 0, 0, 0.5), 0 3px 10px rgba(0, 0, 0, 0.3);
   --tab-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
   /* Black in the dark theme too: a shadow in the text colour would be a light halo (R-UI-118). */
@@ -294,8 +301,8 @@ svg.i { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor;
 .btn { display: inline-flex; align-items: center; justify-content: center; gap: var(--sp-1); min-height: var(--h-ctl); padding: 3px calc(var(--sp-2) + 2px); border-radius: var(--r-sm); border: 1px solid var(--btn-edge); background: var(--btn); font-size: var(--fs-xs); line-height: calc(var(--h-ctl) - 8px); color: var(--text); white-space: nowrap; }
 /* Every action is a button with a shape: an edge at rest, a fill under the pointer, a deeper one
    when pressed. Never a word alone that can be clicked. */
-.btn:hover:not(:disabled) { background: var(--hover); }
-.btn:active:not(:disabled) { background: var(--pressed); filter: none; }
+.btn:hover:not(:disabled) { background: var(--btn-hover, var(--hover)); }
+.btn:active:not(:disabled) { background: var(--btn-pressed, var(--pressed)); filter: none; }
 .btn:disabled { opacity: 0.55; cursor: default; }
 .copy-label { display: inline-grid; grid-template-columns: minmax(0, 1fr); align-items: center; }
 .copy-label > span { grid-area: 1 / 1; display: inline-flex; align-items: center; justify-content: center; gap: var(--sp-1); }
@@ -461,11 +468,17 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
 
 /* ---------- settings: a panel over the window ---------- */
 .modal-scrim { --modal-gap: 24px; --set-nav: 196px; position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; padding: calc(var(--window-controls-height) + var(--modal-gap)) var(--modal-gap) var(--modal-gap); background: var(--scrim); }
-.modal { position: relative; display: grid; grid-template-columns: var(--set-nav) minmax(0, 1fr); width: min(1000px, 100%); height: min(760px, 100%); border-radius: var(--r-lg); overflow: hidden; background: var(--content); border: 1px solid var(--edge); box-shadow: var(--pop); }
-.modal-nav { display: flex; flex-direction: column; gap: var(--sp-1); padding: var(--sp-4) var(--sp-2); background: var(--side); border-right: 0; overflow-x: hidden; overflow-y: auto; min-height: 0; }
+.modal { position: relative; display: grid; grid-template-columns: var(--set-nav) minmax(0, 1fr); width: min(1000px, 100%); height: min(760px, 100%); border-radius: var(--r-lg); overflow: hidden; background: var(--float); border: 1px solid var(--float-edge); box-shadow: var(--pop); }
+.modal-nav { display: flex; flex-direction: column; gap: var(--sp-1); padding: var(--sp-4) var(--sp-2); background: var(--float); border-right: 0; overflow-x: hidden; overflow-y: auto; min-height: 0; }
 /* 連結應用程式 opens alone: one column, no list of Settings (R-UI-111). */
 .modal-scrim[data-standalone] > .modal { grid-template-columns: minmax(0, 1fr); width: min(900px, 100%); }
 .modal-scrim[data-standalone] .modal-nav { display: none; }
+/* Its title, chip and search stand at the top of the dialog as Grok Bot's do, with the apps scrolling under them to its lower edge. */
+.modal-scrim[data-standalone] .modal-body { padding: var(--sp-5) var(--sp-6) 0; }
+.modal-scrim[data-standalone] .modal-x { top: var(--sp-5); right: var(--sp-5); }
+/* Its ✕ is bare, as Grok Bot's is: no fill and no ring, only its colour changes. */
+.modal-scrim[data-standalone] .btn.icon.modal-x { background: transparent; box-shadow: none; }
+.modal-scrim[data-standalone] .btn.icon.modal-x:hover:not(:disabled), .modal-scrim[data-standalone] .btn.icon.modal-x:active:not(:disabled) { background: transparent; color: var(--text); }
 .modal-nav .nav { min-height: 34px; padding: var(--sp-1) var(--sp-2); }
 /* Six tabs, flat: no group names and no search. */
 .set-list { display: flex; flex-direction: column; gap: var(--sp-1); min-height: 0; }
@@ -544,10 +557,23 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
   .slist { --slist-pad: 14px; }
 }
 
+/* ---------- everything that floats: one rule (owner, 2026-11-12: 「我感覺可以把 dialog 都設計成這個顏色，他們感覺是有一套規則的」) ----------
+   A dialog, a menu and its submenu, a popover, a floating card and a tooltip stand on --float with a --float-edge line; what is on them (a chip, a
+   button, a field, a card inside) is filled --float-ctl, and a hovered row takes --float-hover. The surfaces below say it once: inside any of them the
+   ordinary tokens point at the floating ones, so a control needs no rule of its own. The window, the sidebar, the pages, the thread and the composer
+   keep their own colours; a toast is the inverse of the page and is not one of these. */
+:where(.menu, .modal, .mb-dialog, .cs-dialog, .au-pop, .cb-card, .link-hover, .message-tooltip) {
+  --btn: var(--float-ctl); --btn-edge: var(--float-ctl-edge); --btn-hover: var(--float-ctl-hover); --btn-pressed: var(--float-pressed);
+  --key: var(--float-ctl); --key-edge: var(--float-ctl-edge);
+  --hover: var(--float-hover); --pressed: var(--float-pressed); --edge: var(--float-edge); --line: var(--float-edge);
+  --panel: var(--float-ctl); --surface-2: var(--float-ctl);
+}
+.modal { --content: var(--float); }
+
 /* ---------- menu, toast ---------- */
 /* A menu is only so wide, and never wider than the window: a longer label is cut, with its whole
    text as a tooltip (ui.ts). Its right edge lines up with its button's, inside the window (placeMenu). */
-.menu { position: fixed; z-index: 130; min-width: 180px; max-width: min(360px, calc(100vw - 16px)); max-height: calc(100vh - 16px); overflow-x: hidden; overflow-y: auto; padding: var(--sp-1); border-radius: var(--r-md); background: var(--menu); border: 1px solid var(--edge); box-shadow: var(--pop); }
+.menu { position: fixed; z-index: 130; min-width: 180px; max-width: min(360px, calc(100vw - 16px)); max-height: calc(100vh - 16px); overflow-x: hidden; overflow-y: auto; padding: var(--sp-1); border-radius: var(--r-md); background: var(--float); border: 1px solid var(--float-edge); box-shadow: var(--pop); }
 .menu button { display: flex; align-items: center; gap: var(--sp-2); width: 100%; min-height: var(--h-menu); padding: var(--sp-1) var(--sp-2); border: 0; border-radius: var(--r-sm); background: transparent; font-size: var(--fs-sm); line-height: calc(var(--h-menu) - 8px); text-align: left; }
 .menu button:hover { background: var(--hover); }
 .menu button[aria-haspopup="menu"][aria-expanded="true"] { background: var(--hover); }

@@ -1,4 +1,4 @@
-import { check, click, hold, key, member, page, scene, settings, wait, waitGone } from "./steps.mjs";
+import { accountMenu, check, click, hold, key, member, page, scene, settings, wait, waitGone } from "./steps.mjs";
 
 const details = [{ action: "open-details" }, wait('.mb-det:not([hidden])')];
 const open = id => [...details, click(`[data-conversation-open="${id}"]`)];
@@ -16,10 +16,11 @@ export default [
     ...panes.flatMap(pane => [click(`.modal-scrim [data-pane="${pane}"]`), wait(`.modal-scrim [data-pane="${pane}"][aria-current="page"]`), check(`locale-${locale}`)]),
     click('.modal-scrim [data-act="close"]'),
     ...settings("connections"), check(`locale-${locale}`), click('.modal-scrim [data-act="close"]'),
-    ...["home", "agent", "dictation"].flatMap(name => [page(name), check(`locale-${locale}`)]),
+    ...["agent", "dictation"].flatMap(name => [page(name), check(`locale-${locale}`)]),
     ...["history", "dictionary", "overview"].flatMap(tab => [page("dictation"), click(`[data-dictation-tab="${tab}"]`), check(`locale-${locale}`)]),
-    page("home"), click('.ho-schedule header [data-home-go="calendar"]'), wait('.au-page:not([hidden]) .au-day-col'), check(`locale-${locale}`), key("Escape"), waitGone('.au-pop-detail'),
-    click('#nav [data-go="settings"]'), check(`locale-${locale}`), click('.modal-scrim [data-act="close"]'),
+    page("automations"), wait('.au-page:not([hidden]) .au-day-col'), check(`locale-${locale}`), key("Escape"), waitGone('.au-pop-detail'),
+    accountMenu(), check(`locale-${locale}`), key("Escape"), waitGone("#app-popover"),
+    page("settings"), check(`locale-${locale}`), click('.modal-scrim [data-act="close"]'),
     ...settings("general"), check(`locale-${locale}`),
   ])),
   scene("conversation-sections", "Raphael's panel switches between his one conversation and his quick questions", [...details, check("conversation-sections")]),

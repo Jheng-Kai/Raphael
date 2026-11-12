@@ -147,7 +147,7 @@ search and can be restored through their menu. Reading marks only the open room.
 Room previews ignore hidden pass replies and unresolved worker status.
 The look IPC boundary derives preview, timestamp and unread from room messages,
 matching the production rooms.list projection. Reading preserves preview and time.
-Home selects only the brand; only a visible conversation selects its member or room.
+Away from the conversation no row is selected; only a visible conversation selects its member or room.
 
 Run `sidebar-group-avatar`, room-text, room-mentions and the
 affected room action scenes. Native readable-layout, locale-sweep and
@@ -155,10 +155,10 @@ delete-conversation use the shared sidebar. Keep fake brain, isolated data and o
 heavy process at a time.
 
 Owner review regression scenes: sidebar-group-avatar-hover, sidebar-group-avatar-pair,
-sidebar-room-home and sidebar-unread. Run every sidebar-prefixed scene plus home,
-home-row-hover and chat in both themes at 1120, 720 and 1920x1080. The native
+sidebar-room-away and sidebar-unread. Run every sidebar-prefixed scene plus the foot-prefixed scenes
+and chat in both themes at 1120, 720 and 1920x1080. The native
 readable-layout journey checks two- and three-face rooms, production RPC summaries,
-and selection after leaving each room for Home. Inspect contact sheets and full-size
+and selection after leaving each room for the calendar. Inspect contact sheets and full-size
 images separately from automated assertions.
 Keep a requested room ID separate from the complete loaded Room while opening.
 An update can supersede that first refresh: never render an incomplete placeholder,
@@ -177,7 +177,7 @@ Open a room in the global sidebar; in a compact window its face stands in the ra
 
 ```powershell
 npm run look -- sidebar-folders sidebar-folded sidebar-group-avatar sidebar-chief-pinned sidebar-rail sidebar-rail-folded room-text room-mentions --theme both --width 1120,720,1920x1080,1280x800
-npm run look -- sidebar-group-avatar-hover sidebar-group-avatar-pair sidebar-group-avatar-four sidebar-room-home --theme both --width 1120,720,1920x1080
+npm run look -- sidebar-group-avatar-hover sidebar-group-avatar-pair sidebar-group-avatar-four sidebar-room-away --theme both --width 1120,720,1920x1080
 ```
 
 The following retained room and sidebar journeys cover their shared consumers:

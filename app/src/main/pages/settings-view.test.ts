@@ -253,10 +253,11 @@ describe("the tabs", () => {
         const title = PANES.find((p) => p.id === id)!.title();
         const head = `<h1 id="set-title" tabindex="-1">${title.replace("&", "&amp;")}</h1>`;
         expect(html).not.toContain("set-purpose");
-        // Connections' Add stands on the row of its two views, clear of the dialog's ✕.
+        // Connections' Add stands beside its search, clear of the dialog's ✕.
         if (id === "connections") expect(html).toMatch(/<div class="cs-bar">.*?<\/div><button type="button" class="sel cs-add"[^>]*data-k="conn-add"/s);
         // No tab has a button beside its name: 模型與用量 is read again by each opening of Settings, not by a refresh.
-        expect(html.startsWith(head)).toBe(true);
+        // (Connections' name stands in the first row of its one view, where its chip of the connected apps comes after it.)
+        expect(html.startsWith(id === "connections" ? `<div class="cs cs-apps"><div class="cs-top">${head}` : head)).toBe(true);
         expect(html).not.toMatch(/set-head|models-refresh/);
         expect(html).not.toContain('class="purpose"');
       }
@@ -291,6 +292,8 @@ describe("the rules for every tab, in every language", () => {
       doc.body.innerHTML = tab(id);
       // Vault filters browse saved data; they are not mutually exclusive setting values.
       doc.querySelector(".vault .tabs")?.remove();
+      // So do the category chips of 連結應用程式: they narrow a catalogue of apps, they are not the values of a setting.
+      doc.querySelector(".cs-chips")?.remove();
       const html = doc.body.innerHTML;
       expect(html).not.toMatch(/role="radio|aria-pressed|class="tabs"|class="chip|lchip/);
     }

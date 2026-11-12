@@ -1,4 +1,4 @@
-/* One fixed conversation list, shared by Home, chat, calendar and dictation. */
+/* One fixed conversation list, shared by the conversation, the calendar and dictation. */
 /* A row's highlight is 54 px tall and its face 36 px on the rail, as Grok Bot's; the list is 12 px in from its edges. */
 .side { --side-row: 54px; --side-face: 36px; position: relative; overflow: hidden; padding: var(--sp-2) var(--sp-3); gap: var(--sp-2); }
 /* The list is dragged by its edge (edge-drag.ts): no handle is drawn, the cursor changes over it, and a thin
@@ -43,7 +43,7 @@
 :is(.page-agent, .side) .mb-item:has(> .mb-tile) .btn.mb-more { top: 8px; margin-top: 0; }
 /* The rail of faces, Grok Bot's: 88 px wide, each face (36 px) on a 54 px rounded square that is lit for the open conversation,
    no names or lines of text, the unread dot on the face's corner, a faint line under Raphael's row and between folders; at its
-   foot, in a column, search and plus side by side, microphone and Home side by side, the Connections icon and the account. It is what the list becomes on a
+   foot, in a column, the plus alone (no search on the rail, owner 2026-11-12 23:25), then the icon button of 連結應用程式 and the account's face. It is what the list becomes on a
    window narrower than 860 px, and what a drag of the list's edge folds it to; every control keeps working and each face is
    named on hover or focus. */
 :root[data-sidebar-collapsed] { --sidebar-width: 88px; }
@@ -59,22 +59,21 @@
 :root[data-sidebar-collapsed] .side :is(.mb-row > .av, .mb-row > .room-avatar, .mb-pinned .nav.mb-tile.mb-row > .av, .mb-pinned[data-count="1"] .nav.mb-tile.mb-row > .av) { --av: var(--side-face) !important; margin-bottom: 0; }
 :root[data-sidebar-collapsed] .side .mb-row-main, :root[data-sidebar-collapsed] .side .nav.mb-tile b { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 :root[data-sidebar-collapsed] .side .mb-row .mb-dot { position: absolute; top: 6px; right: 6px; }
-:root[data-sidebar-collapsed] .side .side-foot { grid-template-columns: repeat(2, var(--side-face)); justify-content: center; column-gap: var(--sp-1); padding-top: var(--sp-2); }
+:root[data-sidebar-collapsed] .side .side-foot { grid-template-columns: var(--side-face); justify-content: center; column-gap: var(--sp-1); padding-top: var(--sp-2); }
 :root[data-sidebar-collapsed] .side .side-foot > .sidebar-update { grid-column: 1 / -1; justify-self: center; }
-:root[data-sidebar-collapsed] .side .side-foot [data-col="search"] { grid-column: 1; order: 1; }
-:root[data-sidebar-collapsed] .side .side-foot [data-col="add"] { grid-column: 2; order: 2; }
-:root[data-sidebar-collapsed] .side .side-foot .sidebar-dictation { grid-column: 1; order: 3; }
-:root[data-sidebar-collapsed] .side .side-foot .sidebar-home { grid-column: 2; order: 4; }
-:root[data-sidebar-collapsed] .side .side-foot > .sidebar-apps { grid-column: 1 / -1; order: 5; justify-self: center; }
-:root[data-sidebar-collapsed] .side .side-foot .sidebar-account { grid-column: 1 / -1; order: 6; justify-self: center; }
+:root[data-sidebar-collapsed] .side .mb-top [data-col="search"] { display: none; }
+:root[data-sidebar-collapsed] .side .side-foot [data-col="add"] { grid-column: 1 / -1; order: 1; justify-self: center; }
+:root[data-sidebar-collapsed] .side .side-foot .sidebar-apps { grid-column: 1 / -1; order: 3; justify-self: center; }
+:root[data-sidebar-collapsed] .side .side-foot .sidebar-account { grid-column: 1 / -1; order: 4; justify-self: center; width: var(--side-face); height: var(--side-face); }
 :root[data-sidebar-collapsed] .side .sidebar-account .owner-face { --owner-face: var(--side-face) !important; }
 :root[data-sidebar-collapsed] .side .side-foot .nav { justify-content: center; width: 36px; min-height: 36px; height: 36px; padding: 0; border-radius: var(--r-sm); }
-/* Without its words the Connections pill is an icon button: no frame on the rail (R-UI-18), a soft fill under the pointer. */
-:root[data-sidebar-collapsed] .side .side-foot .sidebar-apps { border-color: transparent; }
-:root[data-sidebar-collapsed] .side .side-foot .sidebar-apps:is(:hover, :active) { border-color: transparent; background: var(--hover); }
-:root[data-sidebar-collapsed] .side .side-foot .sidebar-apps:active { background: var(--pressed); }
+/* Without its words the Connections pill is an icon button (the grid with a plus): no frame on the rail (R-UI-18), a soft fill under the pointer. */
+:root[data-sidebar-collapsed] .side .side-foot .sidebar-apps { background: transparent; color: var(--text-2); }
+:root[data-sidebar-collapsed] .side .side-foot .sidebar-apps:is(:hover, :active) { background: transparent; color: var(--text); }
+:root[data-sidebar-collapsed] .side .side-foot .sidebar-apps:active { color: var(--text-3); }
 :root[data-sidebar-collapsed] .sidebar-app-marks { display: none; }
-:root[data-sidebar-collapsed] .side-foot :is(.nav-t, .sidebar-account-name) { display: none; }
+:root[data-sidebar-collapsed] .side-foot .nav-t { display: none; }
+:root[data-sidebar-collapsed] .sidebar-apps-icon { display: inline-flex; }
 :root[data-sidebar-collapsed] .side .side-foot .sidebar-update-btn { width: 36px; height: 36px; padding: 0; justify-content: center; border-color: transparent; }
 :root[data-sidebar-collapsed] .side .side-foot .sidebar-update-act { display: none; }
 :root[data-sidebar-narrow] .side-edge { display: none; }
@@ -88,16 +87,17 @@
 .side .mb-ghead:is(:hover, :focus-within) .mb-fold { opacity: 1; }
 .side .au-rooms-section { border: 0; margin: 0; padding: 0; }
 .side .au-room-row { margin: var(--sp-1) 0 0; }
-/* The foot keeps its two rows (owner, 2026-11-12, R-SIDE-01): the Connections pill on a row of its own, and under it the account's
-   face and name with the microphone and Home at the row's end. Only the rail (above) stands them in a column. */
+/* The foot is one row, as Grok Bot's (owner, 2026-11-12 evening, R-SIDE-01): the owner's face, 32 px and round, then the 連結應用程式 pill
+   taking the rest of the row, 36 px tall and fully round, on --surface-2. The row holds only these two, so the pill's words never wrap.
+   Only the rail (above) stands them in a column. */
 .side .side-foot { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); flex: none; margin: 0; padding: var(--sp-1) 0 0; border: 0; }
-.side .side-foot .nav { justify-content: flex-start; gap: var(--sp-2); min-width: 0; min-height: 40px; padding: 0 var(--sp-2) 0 var(--sp-1); border-radius: var(--r-md); }
-.side .sidebar-account { flex: 1; min-height: 36px; }
-.sidebar-foot-row { display: flex; align-items: center; gap: var(--sp-1); min-width: 0; }
+.sidebar-foot-row { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; }
 :root[data-sidebar-collapsed] .sidebar-foot-row { display: contents; }
-.side .side-foot .btn.icon:not([data-col]) { flex: none; justify-content: center; width: 36px; height: 36px; min-height: 36px; padding: 0; border-radius: var(--r-sm); }
-/* Collapse, plus, dictation and Home only light up: under the pointer or on their page the icon brightens,
-   with no frame and no filled square (2026-11-03). A press dims it for a moment, so it still answers (R-UI-88). */
+.side .sidebar-account { display: inline-flex; flex: none; align-items: center; justify-content: center; width: 32px; height: 32px; min-height: 0; padding: 0; border: 0; border-radius: var(--r-pill); background: transparent; }
+.side .sidebar-account:is(:hover, :active) { background: transparent; }
+.side .sidebar-account:active { opacity: 0.8; }
+/* Search and plus only light up: under the pointer the icon brightens, with no frame and no filled square (2026-11-03). A press
+   dims it for a moment, so it still answers (R-UI-88). */
 .side :is(.btn.mb-tool, .side-foot .btn.icon) { border-color: transparent; background: transparent; color: var(--text-2); }
 .side :is(.btn.mb-tool, .side-foot .btn.icon):is(:hover, :active, [aria-current="page"]):not(:disabled) { border-color: transparent; background: transparent; color: var(--text); }
 .side :is(.btn.mb-tool, .side-foot .btn.icon):is(:hover, :active, [aria-current="page"]):not(:disabled) .i { color: var(--text); }
@@ -113,15 +113,37 @@
 .side .side-foot .sidebar-update-btn:is(:hover, :active):not(:disabled) { background: var(--hover); }
 .side .side-foot .sidebar-update-btn .nav-t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: start; }
 .side .side-foot .sidebar-update-act { flex: none; font-size: var(--fs-xs); font-weight: var(--weight-semibold); color: var(--accent-text); }
-.side .side-foot .sidebar-apps { height: 40px; border: 1px solid var(--line); border-radius: var(--r-pill); padding-inline: 12px; background: transparent; }
+/* The pill, as Grok Bot's: its words and the connected apps' marks form one group centred in it, the marks right after the words, each on its own
+   small white tile and the tiles touching at rest (one strip). The words never wrap; the marks drop first when the row is narrow
+   (sidebar.ts `fitMarks`), and only a translation longer than the whole pill is cut with an ellipsis. */
+.side .side-foot .sidebar-apps { --marks-spread: 3px; --marks-lift: 1.5px; --marks-scale: 1.1; --marks-turn: 8deg; --marks-time-in: 180ms; --marks-ease-in: ease-out; --marks-time-out: 280ms; --marks-ease-out: ease-in-out;
+  --marks-tile: var(--photo-mark); --marks-tile-w: 14px; --marks-tile-h: 16px; --marks-tile-radius: 4px;
+  flex: 1; justify-content: center; gap: var(--sp-2); min-width: 0; height: 36px; min-height: 36px; padding: 0 var(--sp-3); border: 0; border-radius: var(--r-pill); background: var(--surface-2); color: var(--text); font-size: var(--fs-sm); font-weight: var(--weight-medium); }
 .side .sidebar-apps:is(:hover, :active) { color: var(--text); background: var(--hover); }
-.side .sidebar-account:is(:hover, :active) { background: transparent; color: var(--text); }
 .side .sidebar-apps:active { background: var(--pressed); }
-.side .sidebar-account:active .sidebar-account-name { color: var(--text-2); }
-.sidebar-app-marks { display: flex; align-items: center; gap: 6px; margin-left: auto; }
-.sidebar-app-marks .mono { width: 18px; height: 18px; min-width: 18px; }
-.sidebar-app-marks :is(svg, img) { width: 18px; height: 18px; }
-.sidebar-account-name { flex: 1; overflow: hidden; text-align: left; text-overflow: ellipsis; white-space: nowrap; }
+.sidebar-apps .nav-t { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sidebar-apps-icon { display: none; }
+.sidebar-apps-icon .i { width: 18px; height: 18px; }
+/* The marks stand in a box of their own, 4 px wider than they are on each side, so that the hover's lift and spread are never cut. */
+.sidebar-app-marks { display: flex; flex: 0 100 auto; align-items: center; justify-content: flex-start; gap: 0; min-width: 0; height: 24px; margin-inline: -4px; padding-inline: 4px; overflow: hidden; }
+.sidebar-app-mark { display: inline-flex; flex: none; align-items: center; justify-content: center; box-sizing: border-box; width: var(--marks-tile-w); height: var(--marks-tile-h); padding: 2px; border-radius: var(--marks-tile-radius); background: var(--marks-tile); color-scheme: light; }
+.sidebar-app-mark[hidden] { display: none; }
+.sidebar-app-mark .mono { width: 10px; height: 10px; min-width: 0; margin: 0; }
+.sidebar-app-mark .mono > * { width: 100%; height: 100%; }
+.sidebar-app-mark .mono:not([style]) { color: var(--on-tint-dark); }
+/* The tile is white in both themes (`color-scheme: light` makes a near-black brand keep its own ink): a logo that has a twin for the dark theme shows its light one. */
+:root[data-theme="dark"] .side .sidebar-app-mark .logo-art .lg-d { display: none; }
+:root[data-theme="dark"] .side .sidebar-app-mark .logo-art .lg-l, :root[data-theme="dark"] .side .sidebar-app-mark .logo-art .lg-l:has(+ .lg-d) { display: block; }
+/* Under the pointer the marks fan out like a hand of cards, as Grok Bot's do (owner, 2026-11-12; values measured from its frames): the outer ones
+   move 3px away from the middle one and turn 8deg outward, the middle one lifts 1.5px, all grow to 1.1; in 180ms ease-out, out 280ms
+   ease-in-out. Transform only, once each way, none under reduced motion (the fill may change). Retune the values on `.sidebar-apps` above. */
+.side .sidebar-apps { transition: background-color var(--marks-time-out) var(--marks-ease-out); }
+.side .sidebar-apps:hover { transition-duration: var(--marks-time-in); transition-timing-function: var(--marks-ease-in); }
+@media (prefers-reduced-motion: no-preference) {
+  .sidebar-app-mark { transition: transform var(--marks-time-out) var(--marks-ease-out); }
+  .side .sidebar-apps:hover .sidebar-app-mark { transition-duration: var(--marks-time-in); transition-timing-function: var(--marks-ease-in);
+    transform: translate(calc(var(--spread, 0) * var(--marks-spread)), calc(-1 * var(--marks-lift) * (1 - max(var(--spread, 0), -1 * var(--spread, 0))))) rotate(calc(var(--spread, 0) * var(--marks-turn))) scale(var(--marks-scale)); }
+}
 .owner-face { display: inline-flex; flex: none; width: var(--owner-face); height: var(--owner-face); align-items: center; justify-content: center; overflow: hidden; border-radius: var(--r-pill); background: var(--surface-2); color: var(--text-2); }
 .owner-face img { width: 100%; height: 100%; object-fit: cover; }
 .me { gap: var(--sp-2); }
@@ -148,3 +170,13 @@
 .mb-sec.mb-hidden[data-empty]:not(:has([data-hidden-rooms] > *)) { display: none; }
 .mb-hidden-rooms { display: flex; flex-direction: column; gap: var(--sp-1); }
 .mb-hidden-rooms:empty { display: none; }
+/* The account menu (R-SIDE-02): rows of an icon and words, 用量 with its number at the right before its chevron; the submenu names the window, its number
+   and when it resets, then a hairline and 管理用量. Colours are the menu's own tokens. */
+.menu.account-menu { min-width: 232px; }
+.menu.account-menu .account-used { flex: none; margin-left: auto; color: var(--text-3); font-size: var(--fs-xs); white-space: nowrap; }
+.menu.account-menu button > svg.i { flex: none; color: var(--text-3); }
+.menu.account-usage { min-width: 220px; }
+.account-window { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: var(--sp-4); row-gap: 2px; padding: var(--sp-2); font-size: var(--fs-sm); }
+.account-window-name { color: var(--text-3); }
+.account-window-used { color: var(--text-3); text-align: right; white-space: nowrap; }
+.account-window-reset { grid-column: 1 / -1; color: var(--text-3); font-size: var(--fs-xs); }

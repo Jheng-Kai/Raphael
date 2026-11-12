@@ -45,6 +45,8 @@ async function mount() {
     control.click(button!);
   };
   await control.load();
+  await vi.waitFor(() => expect(root.querySelector('[data-conn="connected"]')).not.toBeNull());
+  click("connected");
   await vi.waitFor(() => expect(root.querySelector('[data-conn="open"]')).not.toBeNull());
   return { root, control, click };
 }
@@ -58,14 +60,16 @@ it.each([
   api.connectorsConnect.mockResolvedValue({ connected: false, error });
   const { root, click } = await mount();
   click("open"); click("relogin");
-  await vi.waitFor(() => expect(root.querySelector('.cs-dialog .note[role="alert"]')?.textContent).toBe(words));
-  const account = root.querySelector(".cs-dialog .cs-acct")!;
-  expect(account.compareDocumentPosition(root.querySelector('.cs-dialog .note[role="alert"]')!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-  expect(root.querySelector('.cs-dialog .action-row [data-conn="relogin"]')).not.toBeNull();
+  await vi.waitFor(() => expect(root.querySelector('.cs-page .note[role="alert"]')?.textContent).toBe(words));
+  // told at the top of the app's page, before its accounts and its actions, on the page itself
+  const alert = root.querySelector('.cs-page .note[role="alert"]')!;
+  expect(alert.compareDocumentPosition(root.querySelector(".cs-page .cs-acct")!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(alert.compareDocumentPosition(root.querySelector('.cs-page .action-row [data-conn="relogin"]')!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(root.querySelector(".cs-dialog, .cs-scrim")).toBeNull();
   expect(toaster.info).not.toHaveBeenCalled();
 });
 
-it("clears the failure immediately on retry and reports success inside the dialog", async () => {
+it("clears the failure immediately on retry and reports success on the page", async () => {
   api.connectorsConnect.mockResolvedValueOnce({ connected: false, error: "denied" });
   const { root, control, click } = await mount();
   click("open"); click("relogin");
@@ -73,29 +77,29 @@ it("clears the failure immediately on retry and reports success inside the dialo
   let finish!: (result: { connected: boolean }) => void;
   api.connectorsConnect.mockReturnValueOnce(new Promise(resolve => { finish = resolve; }));
   click("relogin");
-  expect(root.querySelector('.cs-dialog .note[role="alert"]')).toBeNull();
+  expect(root.querySelector('.cs-page .note[role="alert"]')).toBeNull();
   expect(control.view().loginError).toBeNull();
   finish({ connected: true });
-  await vi.waitFor(() => expect(root.querySelector('.cs-dialog [role="status"][data-cs-notice]')?.textContent).toBe("已重新登入 Notion"));
+  await vi.waitFor(() => expect(root.querySelector('.cs-page [role="status"][data-cs-notice]')?.textContent).toBe("已重新登入 Notion"));
   expect(control.view().loginError).toBeNull();
   expect(toaster.info).not.toHaveBeenCalled();
 });
 
-it("drops visible and pending failures when the dialog closes, including reopening the same app", async () => {
+it("drops visible and pending failures when the page is left, including reopening the same app", async () => {
   api.connectorsConnect.mockResolvedValueOnce({ connected: false, error: "denied" });
   const { root, control, click } = await mount();
   click("open"); click("relogin");
   await vi.waitFor(() => expect(control.view().loginError).not.toBeNull());
-  click("close");
+  click("back");
   expect(control.view().loginError).toBeNull();
   click("open");
-  expect(root.querySelector('.cs-dialog .note[role="alert"]')).toBeNull();
+  expect(root.querySelector('.cs-page .note[role="alert"]')).toBeNull();
   let finish!: (result: { connected: boolean; error: string }) => void;
   api.connectorsConnect.mockReturnValueOnce(new Promise(resolve => { finish = resolve; }));
-  click("relogin"); click("close"); click("open");
+  click("relogin"); click("back"); click("open");
   finish({ connected: false, error: "timeout" });
   await vi.waitFor(() => expect(control.view().login).toBeNull());
   expect(control.view().loginError).toBeNull();
-  expect(root.querySelector('.cs-dialog .note[role="alert"]')).toBeNull();
+  expect(root.querySelector('.cs-page .note[role="alert"]')).toBeNull();
   expect(toaster.info).not.toHaveBeenCalled();
 });

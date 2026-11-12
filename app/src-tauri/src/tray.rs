@@ -38,9 +38,9 @@ pub const TRAY_ID: &str = "raphael";
 // A [`Notice`] supplies fixed text for every interface locale; the menu uses it for its labels.
 
 const OPEN: Notice = Notice {
-    zh: "打開 Raphael 首頁",
-    en: "Open Raphael Home",
-    ja: "Raphael のホームを開く",
+    zh: "打開 Raphael",
+    en: "Open Raphael",
+    ja: "Raphael を開く",
 };
 const HISTORY: Notice = Notice {
     zh: "顯示歷史紀錄",
@@ -98,7 +98,7 @@ const QUIT: Notice = Notice {
 /// the menu event gives the id back ([`Action::from_id`]).
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Action {
-    /// 「打開 Raphael 首頁」
+    /// 「打開 Raphael」
     Open,
     /// 「顯示歷史紀錄」
     ShowHistory,
@@ -153,7 +153,7 @@ impl Action {
     /// The page of the main window that this action opens, and what it asks there.
     fn destination(&self) -> Option<(TrayPage, Option<TrayAction>)> {
         match self {
-            Self::Open => Some((TrayPage::Home, None)),
+            Self::Open => Some((TrayPage::Agent, None)),
             Self::ShowHistory => Some((TrayPage::History, None)),
             Self::AddWord => Some((TrayPage::Dictionary, Some(TrayAction::AddWord))),
             Self::Settings => Some((TrayPage::Settings, None)),
@@ -572,7 +572,7 @@ mod tests {
         assert_eq!(
             outline(&menu),
             [
-                "打開 Raphael 首頁",
+                "打開 Raphael",
                 "顯示歷史紀錄",
                 "將單字加入字典",
                 "-",
@@ -594,7 +594,7 @@ mod tests {
         assert_eq!(
             outline(&menu),
             [
-                "Open Raphael Home",
+                "Open Raphael",
                 "Show History",
                 "Add Word to Dictionary",
                 "-",
@@ -615,7 +615,7 @@ mod tests {
         assert_eq!(
             outline(&menu),
             [
-                "Raphael のホームを開く",
+                "Raphael を開く",
                 "履歴を表示",
                 "辞書に単語を追加",
                 "-",
@@ -848,7 +848,7 @@ mod tests {
 
     #[test]
     fn each_page_item_opens_its_page() {
-        assert_eq!(Action::Open.destination(), Some((TrayPage::Home, None)));
+        assert_eq!(Action::Open.destination(), Some((TrayPage::Agent, None)));
         assert_eq!(
             Action::ShowHistory.destination(),
             Some((TrayPage::History, None))

@@ -14,10 +14,10 @@ export default [
     }),
     entry: "learned.html", ready: "#learned-pill:not([hidden])",
   },
-  scene("stable-connections-switch", "The connection switch stays above search in both states", [
-    ...connections, stableClick('[data-conn="tab"][data-id="store"]'), wait('.cs-card'),
+  scene("stable-connections-switch", "The chips stay where they are while a category is chosen and chosen again", [
+    ...connections, wait('.cs-card'),
     stableClick('[data-conn="store-group"][data-id="productivity"]'), stableClick('[data-conn="store-group"][data-id=""]'),
-    stableClick('[data-conn="tab"][data-id="installed"]'),
+    click('[data-conn="connected"]'),
     click('[data-conn="open"][data-id="composio:notion"]'), click('[data-conn="tool-list"]'),
     stableClick('[data-conn="kind"][data-kind="write"]'), stableClick('[data-conn="kind"][data-kind="write"]'),
     stableClick('[data-conn="kind"][data-kind="read"]'), stableClick('[data-conn="kind"][data-kind="read"]'),

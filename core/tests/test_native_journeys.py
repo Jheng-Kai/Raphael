@@ -6,7 +6,6 @@ from raphael_core.device.models import ModelDownloadError, REGISTRY
 from raphael_core.native_journeys import GmailJourneyVault, OfflineModelManager, gmail_enabled
 from raphael_core.app import EchoClient
 from raphael_core.native_journeys import native_codex_model, catalog_enabled, native_connect
-from raphael_core.native_journeys import home_timing_brain
 import json
 
 
@@ -66,15 +65,6 @@ async def test_computer_cleanup_removes_every_recovered_journey_container(tmp_pa
     monkeypatch.setattr(vm_module, "LocalVm", FakeVm)
     await vm_cleanup(tmp_path)
     assert calls == [("journey-one", True), ("journey-two", True), "closed"]
-
-
-@pytest.mark.parametrize(("fake", "native", "timing"), [(False, "1", "1"), (True, "", "1"), (True, "1", "")])
-def test_slow_home_cli_cannot_be_enabled_outside_its_isolated_native_journey(tmp_path, monkeypatch, fake, native, timing):
-    monkeypatch.setenv("RAPHAEL_TEST_NATIVE", native)
-    monkeypatch.setenv("RAPHAEL_TEST_NATIVE_HOME", timing)
-    data = tmp_path / "data"
-    assert home_timing_brain(fake, data) is None
-    assert not data.exists()
 
 
 def test_native_model_manager_never_downloads_missing_models(tmp_path, monkeypatch):
