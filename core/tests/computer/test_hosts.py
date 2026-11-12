@@ -12,6 +12,13 @@ from .test_vm import Runtime, container
 from raphael_core.computer.ssh_tunnel import tunnel_args
 
 
+@pytest.fixture(autouse=True)
+def a_computer_per_member(conn):
+    # This file's subject is the owner's stored choice of a computer per member: how many run on this PC, which is
+    # stopped first, what a remote host is spared. One computer for every member is test_seat_wiring.py's.
+    SettingsStore(conn).set("computer_vm_mode", "per-bot")
+
+
 def test_auto_host_uses_alias_then_installed_local_then_absent(tmp_path, conn):
     settings = SettingsStore(conn)
     settings.set("computer_ssh_alias", "studio-mini")

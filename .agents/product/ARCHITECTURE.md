@@ -751,8 +751,9 @@ never Windows `Path.resolve()`. Attachments still traverse the bounded guest rea
 IPv4 loopback port, with noninteractive SSH and managed process cleanup. Viewer
 session expiry/close, container stop and VM shutdown dispose of owned forwards.
 
-The earlier long-team-work shared-screen description applies only to explicit
-`computer_vm_mode=shared`; the default is now `per-bot`. The existing lease and
+`LocalVm.mode` decides the computer's kind: a saved `computer_vm_mode` wins; with none saved it is `shared`
+(one computer, a seat per member) on this PC and `per-bot` on a remote host, where shared mode has not yet
+been run. The paragraphs below describe the per-bot kind. The existing lease and
 per-target lease remain authoritative. A serialized local start checks owned
 compatible running containers, retains last-use order, and stops only an idle
 computer to make room; held or active computers yield local_capacity. Remote

@@ -606,8 +606,23 @@ same theme/size. The owner-typing scene uses synthetic RFB input only.
 npm run look -- desktop-panel desktop-watch desktop-watch-collapse desktop-watch-owner desktop-takeover desktop-takeover-owner desktop-takeover-done desktop-owner desktop-host-remote desktop-host-invalid desktop-host-health desktop-host-repair member-delete-ask-computer --theme both --width 1120,720,1920x1080
 ```
 
-Native journeys: member-computer; computer-speed (explicit opt-in, never --all or
-verify). computer-speed creates its own random-root/name container, uses an
+Native journeys: member-computer (its data folder saves `computer_vm_mode=per-bot`: the smoke's tool forms are
+that kind's); shared-computer (a new data folder as it comes, so the shared default itself: the real Codex CLI,
+two members made in the app, each at its own screen of one real computer, the second reads the first's file,
+the Computer tab shows each a 1280x900 screen, the owner takes one and hands it back; needs Docker running and
+the Codex login); computer-speed (explicit opt-in, never --all or
+verify).
+What the first real turns at a seat showed (2026-11-12, nine runs of shared-computer on the real Codex, effort
+low), none of it visible to the acceptance run, which drives the tools as a careful caller would: after
+browser_prepare a member reads the page with the browser's pid alone, or with nothing, and a CLI turn that is
+started again when the computer's catalog changes names ids it never had; each was told its own window was not
+on its screen and gave up (now that one read finds the member's own browser window,
+`test_seat_tools.py::test_a_page_read_that_names_the_browser_or_nothing_reads_the_seats_own_browser_window`).
+A member's browser was gone from its screen after a colleague was seated beside it: seating closed whatever
+touched the free screen (`test_seat_wiring.py::test_a_seated_members_window_is_never_a_leftover_of_the_screen_beside_it`;
+the acceptance run now seats a third member beside a window that reaches over the edge). The shell tool did not
+say Linux and got PowerShell twice. A model's own judgement still decides a run (one took "run a command" for
+the owner's PC): the journey's words name the member's own Linux computer, and one pass is not a proof. computer-speed creates its own random-root/name container, uses an
 already running Docker engine and prepared image, serves its own form inside
 that computer, measures five warm first observations, browser_open and five
 browser_type actions via run_steps, and removes only that exact owned container.
@@ -929,9 +944,10 @@ tree cleanup on Stop/app close, and the Docker path after schema discovery.
 Offline fakes and rendered fixture success do not prove Docker, cargo, native
 journeys, network, judge or real subscription commands. Rule IDs: R-PC-01/02/03 and R-AG-13.
 
-The optional Docker desktop defaults to `computer_vm_mode=per-bot`: a durable workspace,
-container and browser profile per member (3 GiB and two CPUs each), plus a shared team
-folder at `/home/cua/team`. Existing explicitly saved shared mode remains supported. Host paths use pathlib and Docker CSV bind
+The optional Docker desktop defaults to one shared computer on this PC (a seat per member, section
+"Shared computer seats" above; 6 GiB and four CPUs) and, on a remote host or when `computer_vm_mode=per-bot`
+is saved, to a durable workspace, container and browser profile per member (3 GiB and two CPUs each), plus
+a shared team folder at `/home/cua/team`. `LocalVm.mode` decides; what follows describes the per-bot kind. Host paths use pathlib and Docker CSV bind
 mounts; no host shell or alternate runtime is used. The core starts an installed Docker Desktop through the host adapter on the first actual
 computer operation. A turn's tool preparation never invokes Docker. When Docker is absent,
 no computer tools are offered; the existing Settings computer area has one requirement line and an official download button.

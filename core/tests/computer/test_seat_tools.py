@@ -146,6 +146,59 @@ async def test_ambient_native_input_is_refused(seat_tools, name, args):
     assert not client.calls
 
 
+@pytest.mark.parametrize("named", [dict(), dict(pid=99), dict(include_screenshot=False),
+                                   dict(target_id="2", tab_id="2"), dict(target_id="peer-target")])
+async def test_a_page_read_that_names_the_browser_or_nothing_reads_the_seats_own_browser_window(seat_tools, named):
+    # A real member's turn at a seat (2026-11-12): browser_prepare, then get_browser_state with the browser's pid
+    # only, was told "the window is not on this member's screen" about its own window, and gave up.
+    hub, vm, _ = seat_tools
+    client, session = hub.connections[vm.target(1).key]
+    client.rows.append(window(50, 100, "Chromium-browser", 99))
+    result = await hub._driver_call(vm.target(1), client, "get_browser_state", {**named, "session": session}, own=True)
+    assert not result.get("isError"), result
+    sent = [args for name, args in client.calls if name == "get_browser_state"]
+    assert len(sent) == 1 and (sent[0]["window_id"], sent[0]["pid"]) == (50, 99)
+    # Ids the member never bound are not sent on: the reply names the real ones.
+    assert "target_id" not in sent[0] and "tab_id" not in sent[0]
+
+
+@pytest.mark.parametrize("rows,named,words", [
+    ([], dict(), "Name one of this member's own windows"),
+    ([], dict(pid=99), "Name one of this member's own windows"),
+    ([(50, 100, 99), (51, 300, 99)], dict(pid=99), "Name one of this member's own windows"),
+    ([(50, 100, 99)], dict(pid=77), "Name one of this member's own windows"),
+    ([], dict(target_id="2"), "bind an own window again"),
+    ([(50, 100, 99), (51, 300, 99)], dict(target_id="2", tab_id="2"), "bind an own window again"),
+])
+async def test_a_page_read_guesses_no_window_when_the_seat_has_none_or_several(seat_tools, rows, named, words):
+    hub, vm, _ = seat_tools
+    client, session = hub.connections[vm.target(1).key]
+    client.rows += [window(identifier, x, "Chromium-browser", pid) for identifier, x, pid in rows]
+    result = await hub._driver_call(vm.target(1), client, "get_browser_state", {**named, "session": session}, own=True)
+    # Window 30 is a browser of the same process on another member's screen: never the one meant.
+    assert result["isError"] and words in str(result)
+    assert all(name != "get_browser_state" for name, _ in client.calls)
+
+
+@pytest.mark.parametrize("named", [dict(), dict(target_id="2", tab_id="2")])
+async def test_what_the_core_reads_for_a_member_never_finds_another_window(seat_tools, named):
+    # The private-page gate and the saved fills read a page by its ids. A read that settled for "the member's
+    # browser window" would judge, or type into, another tab than the one asked for.
+    hub, vm, _ = seat_tools
+    client, session = hub.connections[vm.target(1).key]
+    client.rows.append(window(50, 100, "Chromium-browser", 99))
+    result = await hub._driver_call(vm.target(1), client, "get_browser_state", {**named, "session": session})
+    assert result["isError"] and all(name != "get_browser_state" for name, _ in client.calls)
+
+
+async def test_a_process_alone_is_not_called_a_window_off_the_screen(seat_tools):
+    hub, vm, _ = seat_tools
+    client, session = hub.connections[vm.target(1).key]
+    result = await hub._driver_call(vm.target(1), client, "get_window_state", dict(pid=10, session=session))
+    assert result["isError"] and "pass window_id with pid" in str(result) and "not on this member's screen" not in str(result)
+    assert all(name != "get_window_state" for name, _ in client.calls)
+
+
 async def test_explicit_desktop_scope_is_refused_even_with_an_own_window(seat_tools):
     hub, vm, _ = seat_tools
     client, session = hub.connections[vm.target(1).key]

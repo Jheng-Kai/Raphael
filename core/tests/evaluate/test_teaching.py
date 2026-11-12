@@ -31,6 +31,9 @@ async def test_owner_saved_demonstration_reaches_api_cli_and_routine_turns(tmp_p
         viewer.sessions["demo-viewer"] = Session(target, viewer.vm.clock() + 600, member_id=member)
         monkeypatch.setattr(viewer, "status_for", AsyncMock(return_value={"state":"running", "ready":True, "control":"member"}))
         monkeypatch.setattr(viewer.teaching, "observe", AsyncMock(return_value={"safe":True,"screen":"Report editor","images":[]}))
+        # A new data folder's computer is the shared one: a recording at a seat resolves the seat's view at its start.
+        assert target.container == "shared"
+        monkeypatch.setattr(viewer, "connection_for", AsyncMock(return_value=(1, "synthetic")))
         monkeypatch.setattr(app.memory, "may_spend", lambda member: True)
         class Brain:
             async def complete_json(self, **kwargs):

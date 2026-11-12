@@ -424,6 +424,27 @@ async def test_only_shared_member_shell_loses_display_in_foreground_and_backgrou
         assert (["env", "-u", "DISPLAY"] == args[-6:-3]) is shared
 
 
+async def test_one_computer_for_every_member_is_the_default_on_this_pc_and_a_remote_host_waits(tmp_path, conn):
+    from raphael_core.brain.settings import SettingsStore
+    settings = SettingsStore(conn)
+    vm = LocalVm(tmp_path, settings=settings, runner=Runtime())
+    try:
+        # A new data folder: nothing chose a mode.
+        assert not settings.chosen("computer_vm_mode") and vm.mode == "shared"
+        assert vm.target(1).container == "shared" and vm.target(2).name == vm.target(1).name
+        # Seats, six screens and the carry-over have never run on a real remote host: there the members keep a
+        # computer each until the owner's data says otherwise.
+        settings.set("computer_ssh_alias", "studio-mini")
+        assert vm.mode == "per-bot" and not vm.target(1).container and vm.target(1).name != vm.target(2).name
+        settings.set("computer_vm_mode", "shared")
+        assert vm.mode == "shared" and vm.target(1).container == "shared"
+        settings.set("computer_vm_mode", "per-bot")
+        settings.set("computer_ssh_alias", "")
+        assert vm.mode == "per-bot" and not vm.target(1).container
+    finally:
+        await vm.aclose(stop=False)
+
+
 async def test_shared_catalog_offers_dataset_and_teaching(shared_vm, tmp_path):
     from raphael_core.computer.teaching import Teaching
     vm, _ = shared_vm
@@ -731,6 +752,33 @@ async def test_the_desktops_own_windows_never_keep_a_screen_from_a_new_holder(sh
     assert (await vm.seat(4)).screen == 4
     closed = [args[args.index("-c") + 1] for args, _ in runtime.calls if "wmctrl" in args and "-c" in args]
     assert closed == [str(0x02000003)]
+
+
+async def test_a_seated_members_window_is_never_a_leftover_of_the_screen_beside_it(shared_vm):
+    # Seen in the real app (2026-11-12): member A opened its browser, member B was then given the screen beside it,
+    # and A's screen showed only the wallpaper. Whatever touched the free screen was closed, and a browser's frame
+    # reaches 16 px past its own screen's edge.
+    from raphael_core.computer.seat_view import wmctrl_windows
+    vm, runtime = shared_vm
+    runtime.raw = container(vm, vm.shared_target("", 1, 1), runtime)
+    browser = "0x01e00003  0 -16 -10  1312 893  host Example Domain - Chromium\n"
+    stray = "0x02000003  0 1270 100 600 400 host Terminal\n"
+    classes = "0x01e00003  0 chromium-browser (profile).Chromium-browser  host Example Domain - Chromium\n" \
+              "0x02000003  0 xfce4-terminal.Xfce4-terminal  host Terminal\n"
+    vm.seat_windows = AsyncMock(return_value=wmctrl_windows("", ""))
+    assert (await vm.seat(1)).screen == 1
+    # The browser's centre is on screen 1, which member 1 holds; the terminal's is on screen 2, which nobody holds.
+    listed = [wmctrl_windows(browser + stray, classes), wmctrl_windows(browser, classes)]
+    vm.seat_windows = AsyncMock(side_effect=listed + [listed[-1]] * 20)
+    assert (await vm.seat(2)).screen == 2
+    closed = [args[args.index("-c") + 1] for args, _ in runtime.calls if "wmctrl" in args and "-c" in args]
+    assert closed == [str(0x02000003)]
+    # Once its member is gone the same window is a leftover like any other.
+    vm.seats.release("", 1)
+    vm.seat_windows = AsyncMock(side_effect=[wmctrl_windows(browser, classes)] + [wmctrl_windows("", "")] * 20)
+    assert (await vm.seat(3)).screen == 1
+    closed = [args[args.index("-c") + 1] for args, _ in runtime.calls if "wmctrl" in args and "-c" in args]
+    assert closed == [str(0x02000003), str(0x01e00003)]
 
 
 async def test_dirty_free_screens_are_skipped_and_delayed_closure_is_observed(shared_vm):

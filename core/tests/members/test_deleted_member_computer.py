@@ -61,7 +61,12 @@ def engine():
 
 def new_vm(conn, engine, folder):
     clock = [0.0]
-    fresh = LocalVm(folder, settings=SettingsStore(conn), runner=engine, conn=conn, clock=lambda: clock[0])
+    settings = SettingsStore(conn)
+    if not settings.chosen("computer_vm_mode"):
+        # The computer a deleted member leaves behind is its own: the stored choice of a computer per member. The
+        # two tests of a shared computer's seats choose that mode themselves.
+        settings.set("computer_vm_mode", "per-bot")
+    fresh = LocalVm(folder, settings=settings, runner=engine, conn=conn, clock=lambda: clock[0])
     fresh.now = clock
     return fresh
 

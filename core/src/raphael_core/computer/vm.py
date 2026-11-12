@@ -407,8 +407,15 @@ class LocalVm:
 
     async def close_displaced_seat_windows(self, target):
         """Gently close touching windows, then prove the screen empty within a bounded time."""
-        from .seat_view import overlaps
+        from .seat_view import holder as screen_of, overlaps
         holder = self.seats.holders(target.remote).get(target.screen)
+
+        def neighbours(window):
+            # A window that belongs (by its centre) to another screen someone holds now is that member's own, not
+            # a leftover. A browser's frame can reach a few pixels past its screen's edge (measured: 1312x893 at
+            # -16,-10): closing it because a colleague sat down beside it would end that member's pages.
+            owner = screen_of(window["bounds"], target.screens)
+            return owner not in (None, target.screen) and owner in self.seats.holders(target.remote)
         async def clean():
             raw = await self.inspect(target)
             if raw is None or raw.get("State", {}).get("Running") is False:
@@ -417,7 +424,7 @@ class LocalVm:
                 found = await self.seat_windows(target)
                 touching = [window for window in found["windows"]
                             if window.get("app_name", "").lower() not in self.DESKTOP_WINDOWS
-                            and overlaps(window["bounds"], target.screen, target.screens)]
+                            and overlaps(window["bounds"], target.screen, target.screens) and not neighbours(window)]
                 if self.seats.holders(target.remote).get(target.screen) != holder:
                     return False
                 if not touching:
@@ -609,10 +616,21 @@ class LocalVm:
                       PurePosixPath(f"raphael-computer-{self.owner}-team") if host else self.root / "vm-shared",
                       host)
 
+    @property
+    def mode(self):
+        """One computer for every member is the default where it has been run on real computers: this PC's Docker.
+        On another host the members keep a computer each until the owner's data says otherwise: seats, the six
+        screens and the carry-over have never run on a real remote host (2026-11-12). A saved choice always wins."""
+        if self.settings is None:
+            return "per-bot"
+        chosen = getattr(self.settings, "chosen", None)
+        if self.remote and chosen is not None and not chosen("computer_vm_mode"):
+            return "per-bot"
+        return self.settings.get("computer_vm_mode")
+
     def target(self, member_id=0):
-        mode = "per-bot" if self.settings is None else self.settings.get("computer_vm_mode")
         target = (self.shared_target(self.remote, member_id, self.seats.seat(self.remote, member_id) or 0)
-                  if mode == "shared" else self.target_for(self.remote, self.key_for(self.remote, member_id)))
+                  if self.mode == "shared" else self.target_for(self.remote, self.key_for(self.remote, member_id)))
         self.targets[target.key] = target
         return target
 

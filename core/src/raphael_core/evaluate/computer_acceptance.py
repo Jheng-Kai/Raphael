@@ -1720,14 +1720,30 @@ class Acceptance:
                     await asyncio.sleep(.05)
                 leftover = found[0]['window_id']
                 await machine.move_window(machine.shared_target('', third, 3), leftover)
+                # A window of the member on screen 2 reaches 16 px over the edge of free screen 3, as a browser's
+                # frame can (measured: 1312x893 at -16,-10). It is that member's own: seating a third member beside
+                # it must close the leftover and leave this one.
+                beside = next(row for row in await rows(members[1]) if row['app_name'].lower() != 'xfce4-panel')
+                seat_two = targets[members[1]]
+                for command in (['wmctrl', '-i', '-r', str(beside['window_id']), '-b', 'remove,maximized_vert,maximized_horz'],
+                                ['wmctrl', '-i', '-r', str(beside['window_id']), '-e', '0,1976,100,600,400']):
+                    moved = await machine.run_for(seat_two, vm.exec_args(seat_two, command))
+                    require(not moved.code, f'Expected the neighbouring window placed, observed exit {moved.code}')
+                placed = next(row for row in (await machine.seat_windows(target))['windows'] if row['window_id'] == beside['window_id'])
+                require(seat_view.overlaps(placed['bounds'], 3, 6) and seat_view.holder(placed['bounds'], 6) == 2,
+                        f'Expected a window of screen 2 reaching into screen 3, observed {placed["bounds"]}')
                 await hub.prepare(third)
                 require(machine.target(third).screen == 3 and all(machine.target(member) == targets[member] for member in members),
                         "Expected third member on free seat 3 without displacement")
                 listed = (await machine.seat_windows(target))['windows']
                 # The desktop's own windows are there on every screen; the leftover must be gone, and by its id.
                 require(leftover not in {row['window_id'] for row in listed} and not any(
-                    seat_view.overlaps(row['bounds'], 3, 6) and row['app_name'].lower() not in machine.DESKTOP_WINDOWS for row in listed),
+                    seat_view.overlaps(row['bounds'], 3, 6) and row['app_name'].lower() not in machine.DESKTOP_WINDOWS
+                    and row['window_id'] != beside['window_id'] for row in listed),
                     'Free screen was handed over with a leftover window')
+                require(beside['window_id'] in {row['window_id'] for row in listed},
+                        "A seated member's window was closed because a colleague sat down beside it")
+                await machine.fit_window(seat_two, placed)
                 require(any(row['app_name'].lower() == 'xfdesktop' for row in listed), 'The desktop window was closed with the leftover window')
                 machine.seats = ComputerSeats(count=2)
                 for member in members:
@@ -1764,7 +1780,7 @@ class Acceptance:
                         break
                     require(time.monotonic() < until, f"Expected displaced windows closed, observed {first_ids & remaining}")
                     await asyncio.sleep(.1)
-                return "Free seat 3 is cleaned of a leftover window; failed listing refuses displacement and restores the exact holder; retry replaces the idle LRU seat only after all its non-panel windows close"
+                return "Free seat 3 is cleaned of a leftover window while the neighbour's window that reaches over its edge stays; failed listing refuses displacement and restores the exact holder; retry replaces the idle LRU seat only after all its non-panel windows close"
             await self.check("shared seat displacement", displacement)
             if seed_ok and browsers_ok:
                 # Displacement deliberately closed seat 1. Re-seat its original member before checking its datasets.

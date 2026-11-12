@@ -65,6 +65,18 @@ async def test_shared_recording_holds_own_seat_uses_core_input_and_never_builds_
     teaching.viewer.connection_for.assert_awaited_once_with(session)
 
 
+async def test_a_seat_recording_that_cannot_reach_its_view_hands_the_seat_back(rig):
+    from raphael_core.computer.vm import VmError
+    teaching, member, session = await setup(rig)
+    session.target.container = 'shared'
+    teaching.viewer.connection_for = AsyncMock(side_effect=VmError('viewer_unreachable'))
+    with pytest.raises(RpcError):
+        await teaching.call({'action': 'start', 'session': 'viewer'})
+    assert [call.args[0] for call in teaching.viewer.control.await_args_list] == [
+        {'session': 'viewer', 'held': True}, {'session': 'viewer', 'held': False}]
+    assert not teaching.items
+
+
 async def test_recorded_input_order_password_and_signin_are_redacted_before_disk(rig):
     teaching, member, session = await setup(rig)
     result = await teaching.call({"action": "start", "session": "viewer"})
