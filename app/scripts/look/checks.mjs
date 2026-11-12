@@ -1662,7 +1662,12 @@ export function checkRendered(name, context = {}) {
       }
     }
     if (name === 'completion-mentions' || name === 'completion-group') {
-      require(heads.join('|') === (name === 'completion-group' ? '成員|連接的服務' : '成員|群組|連接的服務'), 'sections follow owner order');
+      // The @ menu is Grok Bot's (owner, 2026-11-13): no headings; the other members, then the apps; what each row is stands quietly at its right.
+      require(heads.length === 0, 'the @ menu has no group headings');
+      const kinds = rows.map(row => row.querySelector('.mtrail')?.textContent);
+      require(kinds.every(kind => kind === '成員' || kind === '應用程式') && kinds.indexOf('應用程式') >= kinds.lastIndexOf('成員'), 'members first, then apps, each saying which it is at the right');
+      require(!values.includes('所有人') && window.__look.data.groups.every(group => !values.includes(group.name)), 'no group and no everyone in the @ menu');
+      if (name === 'completion-mentions') require(!values.includes(window.__look.data.members[0].name), 'the conversation never offers its own member');
       require(values.filter(value => value.startsWith('Notebook')).join('|') === [31,30,29,28,27].map(i=>`Notebook ${i}`).join('|'), 'only the five most recent ready services show');
       require(menu.textContent.includes('顯示全部 32 個'), 'show all is a real action with the full count');
       if (name === 'completion-group') {
@@ -1670,9 +1675,9 @@ export function checkRendered(name, context = {}) {
         require(data.members.filter(member => !allowed.includes(member.id)).every(member => !values.includes(member.name)) && data.groups.every(group => !values.includes(group.name)), 'group membership limits mentions');
       }
     } else if (name === 'completion-filtered') {
-      require(values.length === 8 && heads.join('|') === '連接的服務', 'aliases filter across sections with eight results');
+      require(values.length === 8 && heads.length === 0, 'aliases filter the apps with eight results and no heading');
     } else if (name === 'completion-expanded' || name === 'completion-expanded-last') {
-      require(values.length === 8 && heads.join('|') === '連接的服務' && input.value === '@', 'show all opens bounded service pages in place');
+      require(values.length === 8 && heads.length === 0 && input.value === '@', 'show all opens bounded app pages in place');
       if (name.endsWith('-last')) require(values.includes('Notebook 00') && menu.textContent.includes('需要登入') && menu.textContent.includes('需要金鑰'), 'unready services follow ready services and keep their tags');
     } else {
       require(rows.every(row => row.querySelector('.mdesc')?.textContent), 'commands and skills have descriptions');
@@ -4330,11 +4335,18 @@ export function checkRendered(name, context = {}) {
       const menu = document.querySelector("#app-popover");
       require(visible(menu), "mention menu is visible");
       require(menu.textContent.includes(data.members[1].name), "bot comes from the roster");
-      require(data.servers.some(app => menu.textContent.includes(app.name)), "app comes from the same snapshot");
+      // The apps are the connected ones of the same inventory (a switched-off connection is not one the member can use).
+      const apps = data.managedConnectors.filter(app => app.enabled && app.status === "ACTIVE").map(app => app.name || "Google");
+      require(apps.length > 0 && apps.every(app => menu.textContent.includes(app)), "apps come from the same snapshot");
+      require(!menu.querySelector('.menu-head') && !data.servers.some(app => menu.textContent.includes(app.name)), "no heading, and no connection that is switched off");
       const rows = [...menu.querySelectorAll('button')], row = label => rows.find(item => item.querySelector('.mt').textContent === label);
       for (const item of rows) require(visible(item.querySelector('.mlead > *')), `${item.textContent} leads with a face or a mark`);
-      require(row("@" + data.members[1].name)?.querySelector('.mlead .av'), "a bot shows its member face");
-      for (const app of data.servers) require(row("@" + app.name)?.querySelector('.mlead .mono'), `${app.name} shows its connection mark`);
+      require(row(data.members[1].name)?.querySelector('.mlead .av'), "a bot shows its member face");
+      require(row(data.members[1].name)?.querySelector('.mtrail')?.textContent === "成員", "a bot says it is a member at the right");
+      for (const app of apps) {
+        require(row(app)?.querySelector('.mlead .mono'), `${app} shows its connection mark`);
+        require(row(app).querySelector('.mtrail')?.textContent === "應用程式", `${app} says it is an app at the right`);
+      }
       const columns = selector => rows.map(item => item.querySelector(selector).getBoundingClientRect().left);
       for (const selector of ['.mlead', '.mt']) require(Math.max(...columns(selector)) - Math.min(...columns(selector)) <= 1, `${selector} aligns in one column`);
     }
@@ -4911,6 +4923,73 @@ export function checkRendered(name, context = {}) {
       require(first && first.getBoundingClientRect().left - itemBox.left <= 12 && (!lead || lead.childElementCount > 0), "a completion starts at the row padding with its face, mark or text");
     }
     return { check: name, menuLeft: box.left, characterX: expected, delta: Math.abs(box.left - expected) };
+  }
+  if (name === "mention-menu-signin-pick") {
+    // Pressing an app that is not signed in is a way to its sign-in, not an address: the typed @ goes, the connect dialog opens.
+    const composer = [...document.querySelectorAll('.composer textarea')].find(visible);
+    require(composer && composer.value === "請用 ", `no address is left in the words: ${JSON.stringify(composer?.value)}`);
+    require(!document.querySelector('#app-popover[data-team-mentions]'), "the menu is closed");
+    require(visible(document.querySelector('.modal-scrim[data-standalone="connections"] .modal-body .cs')), "the dialog of the apps is open");
+    return { check: name, words: composer.value };
+  }
+  if (name.startsWith("mention-menu-")) {
+    // The @ menu is Grok Bot's (owner, 2026-11-13): 360 px, rows of the menu's height, a 16 px face or logo, the name, what is wrong with it,
+    // and at the right edge what it is; no heading, no group, no everyone, and the conversation's own member is not in it.
+    const data = window.__look.data, composer = [...document.querySelectorAll('.composer textarea, #room-message')].find(visible);
+    const menu = document.querySelector('#app-popover[data-team-mentions]');
+    require(composer && visible(menu), "the field and the @ menu are on screen");
+    const box = menu.getBoundingClientRect(), rows = [...menu.querySelectorAll('[data-value]')], values = rows.map(row => row.dataset.value);
+    const token = property => parseFloat(getComputedStyle(document.documentElement).getPropertyValue(property));
+    const probe = document.createElement('div');
+    probe.style.cssText = 'position:fixed;visibility:hidden;border:1px solid;background:var(--float);border-color:var(--float-edge)';
+    document.body.append(probe);
+    const wanted = { background: getComputedStyle(probe).backgroundColor, edge: getComputedStyle(probe).borderTopColor };
+    probe.remove();
+    const look = getComputedStyle(menu);
+    require(look.backgroundColor === wanted.background, `the menu stands on --float (${look.backgroundColor} versus ${wanted.background})`);
+    require(look.borderTopColor === wanted.edge, "the menu has the --float-edge line");
+    require(Math.abs(box.width - Math.min(360, innerWidth - 16)) <= 1, `the menu is 360 px wide, or the window's width less its margins: ${box.width}`);
+    require(box.left >= 8 && box.right <= innerWidth - 8 && box.top >= 8 && box.bottom <= innerHeight - 8, "the menu stays inside the window");
+    require(menu.scrollHeight <= menu.clientHeight + 1, "the rows fit without an inner scrollbar");
+    require(!menu.querySelector('.menu-head, .menu-sep'), "no heading and no group");
+    require(!values.includes('所有人') && data.groups.every(group => !values.includes(group.name)), "no group and no everyone");
+    require(rows.length > 0 && rows[0].classList.contains('is-active') && rows[0].getAttribute('aria-selected') === 'true', "the first row is the highlighted one");
+    require(document.activeElement === composer, "the field keeps the focus");
+    const inRoom = name === "mention-menu-room", unit = token('--h-menu');
+    if (!inRoom) require(!values.includes(data.members[0].name), "the conversation's own member is not in its menu");
+    const kinds = rows.map(row => row.querySelector('.mtrail')?.textContent);
+    require(kinds.every(kind => kind === '成員' || kind === '應用程式') && kinds.indexOf('應用程式') >= kinds.lastIndexOf('成員'), "the members come first, then the apps, each saying which it is");
+    const trailRights = [];
+    for (const row of rows) {
+      const frame = row.getBoundingClientRect(), lead = row.querySelector('.mlead'), mark = lead?.firstElementChild, label = row.querySelector('.mt'), tag = row.querySelector('.mtag'), trail = row.querySelector('.mtrail');
+      require(Math.abs(frame.height - unit) <= 1, `${row.dataset.value} is a row of the menu's height (${frame.height} versus ${unit})`);
+      require(lead && Math.abs(lead.getBoundingClientRect().width - 16) <= 0.5 && visible(mark) && mark.getBoundingClientRect().width <= 16.5 && mark.getBoundingClientRect().height <= 16.5, `${row.dataset.value} leads with a 16 px mark`);
+      require(label.scrollWidth <= label.clientWidth + 1, `${row.dataset.value} is not cut`);
+      require(label.getBoundingClientRect().left >= lead.getBoundingClientRect().right, "the name follows the mark");
+      if (tag) require(tag.getBoundingClientRect().left >= label.getBoundingClientRect().right - 0.5 && tag.getBoundingClientRect().right <= trail.getBoundingClientRect().left, "what is wrong stands right after the name, before the word at the right");
+      require(trail.getBoundingClientRect().left >= (tag ?? label).getBoundingClientRect().right - 0.5, "the word at the right stands after the name");
+      const pad = parseFloat(getComputedStyle(row).paddingRight);
+      require(Math.abs(trail.getBoundingClientRect().right - (frame.right - pad)) <= 1.5, "the word stands at the row's right edge");
+      trailRights.push(trail.getBoundingClientRect().right);
+      for (const part of [label, trail, ...(tag ? [tag] : [])]) {
+        const edges = part.getBoundingClientRect();
+        require(edges.top >= frame.top - 0.5 && edges.bottom <= frame.bottom + 0.5, "text stays inside its row");
+      }
+      if (trail.textContent === '應用程式' && lead.querySelector('.logo-mono[style]')) require(getComputedStyle(lead.querySelector('.logo-mono')).color !== getComputedStyle(label).color, "a brand mark keeps its colour");
+    }
+    require(Math.max(...trailRights) - Math.min(...trailRights) <= 1, "the words at the right line up");
+    const row = value => rows.find(item => item.dataset.value === value);
+    if (name === "mention-menu-filter") require(values.join('|') === 'Notion' && kinds[0] === '應用程式', `「@no」 finds Notion (${values})`);
+    if (name === "mention-menu-signin" || name === "mention-menu-room") {
+      require(row('Notion')?.querySelector('.mtag')?.textContent === '需要登入', "Notion says 需要登入 after its name");
+      require(rows.filter(item => item.querySelector('.mtag')).length === 1, "only the app that needs it says so");
+    }
+    if (name === "mention-menu-room") {
+      const allowed = data.rooms.find(room => room.id === 1).member_ids;
+      require(data.members.filter(member => !allowed.includes(member.id)).every(member => !values.includes(member.name)), "a group's menu lists only its members");
+    }
+    if (name === "mention-menu-open") require(!rows.some(item => item.querySelector('.mtag')) && values.includes('Notion'), "an app that is signed in has no tag");
+    return { check: name, rows: values, width: box.width, rowHeight: unit };
   }
   if (name.startsWith("mention-")) {
     // A mention is a chip: its mark where the @ is, then its name, in a quiet pill apart from the words around it, and the words

@@ -329,7 +329,7 @@ describe("rendered look checks", () => {
   });
   it("completion checks reject a lost alias result and an inner scrollbar", () => {
     const win = new Window();
-    win.document.body.innerHTML = `<div class="composer"><textarea></textarea></div><div id="app-popover" style="position:fixed;overflow-y:hidden"><div class="menu-head" aria-hidden="true">連接的服務</div>${Array.from({length:8},(_,i)=>`<button style="background:transparent" data-value="Notebook ${i}">Notebook ${i}</button>`).join('')}</div>`;
+    win.document.body.innerHTML = `<div class="composer"><textarea></textarea></div><div id="app-popover" style="position:fixed;overflow-y:hidden">${Array.from({length:8},(_,i)=>`<button style="background:transparent" data-value="Notebook ${i}">Notebook ${i}</button>`).join('')}</div>`;
     win.__look = {};
     const rect = {left:100,right:300,top:100,bottom:300,width:200,height:200};
     for (const el of win.document.querySelectorAll('*')) el.getBoundingClientRect = () => rect;

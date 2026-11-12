@@ -113,6 +113,8 @@ export function installMock(fixture, config = {}, target = window) {
   }
   // The owner's own picture as the member's cover (members.set_cover): a drawn landscape, so no photo is needed.
   if (variant.coverPicture) data.members.find(member => member.id === 1).cover = { kind: "image", url: "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='960' height='240'><rect width='960' height='240' fill='%233a6f5c'/><circle cx='760' cy='70' r='90' fill='%2396c8b0'/><rect y='170' width='960' height='70' fill='%23264d40'/></svg>" };
+  // Notion's sign-in ran out: the inventory says needs_sign_in, and the @ menu shows it with 「需要登入」.
+  if (variant.mentionSignIn) data.managedConnectors.find(connector => connector.id === "composio:notion").status = "EXPIRED";
   if (variant.computerHost) data.settings.computer_ssh_alias = variant.computerHost;
   if (variant.routineEmpty) data.routines = [];
   // What the first member's personality page holds (member-settings.ts): its name, role, personality and instructions as the scene gives them.
