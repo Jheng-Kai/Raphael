@@ -795,11 +795,13 @@ export function checkRendered(name, context = {}) {
       const dock = panel.querySelector('.desktop-dock'), screenBox = panel.querySelector('.desktop-screen').getBoundingClientRect();
       require(visible(dock) && Math.abs((dock.getBoundingClientRect().left + dock.getBoundingClientRect().right) / 2 - innerWidth / 2) <= 2 && dock.getBoundingClientRect().top >= screenBox.bottom, 'one pill sits centred below the screen');
       require(Math.abs(screenBox.width / screenBox.height - 1280 / 900) < 0.03, 'the screen keeps its own proportions');
-      require(dock.querySelector('.desktop-mode-label').textContent === (panel.dataset.desktopState === 'owner' ? '你正在控制' : '觀看中'), 'the pill says who holds the computer');
+      // Watching is view-only whoever holds the lease, so the pill never says 你正在控制 here (owner, 2026-11-13:
+      // 「明明顯示我正在控制，但我根本就沒辦法控制」).
+      require(dock.querySelector('.desktop-mode-label').textContent === '觀看中', 'the pill says the owner is watching');
       // Grok Bot's two states: watching offers Take control; in control offers Stop (which hands the computer back).
       const take = dock.querySelector('[data-desktop="take"]'), stopControl = dock.querySelector('[data-desktop="return"]');
-      if (panel.dataset.desktopState === 'owner') require(visible(stopControl) && stopControl.textContent === '停止' && !visible(take), 'in control the pill offers Stop and nothing else of control');
-      else require(visible(take) && take.textContent === '接手控制' && !visible(stopControl), 'watching the pill offers Take control and nothing else of control');
+      require(!visible(stopControl), 'watching offers no Stop of control');
+      if (panel.dataset.desktopState !== 'owner') require(visible(take) && take.textContent === '接手控制', 'watching the pill offers Take control');
       if (name === 'desktop-watch' && window.__look.data.desktop.works?.some(work => work.state === 'running')) {
         const stop = panel.querySelector('[data-desktop="stop"]');
         require(visible(stop) && stop.title === stop.getAttribute('aria-label') && stop.title.trim(), 'Stop has its translated tooltip');
@@ -1776,6 +1778,36 @@ export function checkRendered(name, context = {}) {
     require(!document.querySelector('.ra-body video[data-attachment]'), 'cancellation leaves no video artifact');
     return {check:name};
   }
+  if (name === 'computer-foot-layout') {
+    // The owner, 2026-11-13: the failed demonstration's line started at the window's edge over the screen and was cut,
+    // its two buttons floated in the far corner and the file changes ran along the top-left. Everything about the
+    // computer sits in one foot directly under the screen (or the box that takes its place), inside its span.
+    const panel = document.querySelector('.desktop-panel[data-expanded]');
+    require(panel, 'the larger view is open');
+    const stage = [...panel.querySelectorAll('.desktop-screen, .desktop-review, .desktop-checkpoints')].find(visible);
+    require(stage, 'the screen or the box in its place is shown');
+    const s = stage.getBoundingClientRect(), round = box => [box.left, box.top, box.right, box.bottom].map(Math.round).join(',');
+    require(Math.abs(stage.getBoundingClientRect().width / s.height - 1280 / 900) < 0.02, `${stage.className} keeps the screen's proportions (${round(s)})`);
+    require(Math.abs((s.left + s.right) / 2 - innerWidth / 2) <= 2, `${stage.className} is centred in the window (${round(s)})`);
+    const items = [...panel.querySelectorAll('.desktop-notes > *, .desktop-dock > *, .desktop-actions')].filter(visible);
+    require(items.some(item => item.matches('.desktop-mode')) || panel.hasAttribute('data-files-only'), 'the pill is under the screen');
+    for (const item of items) {
+      const box = item.getBoundingClientRect(), label = `${item.className || item.dataset.desktop} (${round(box)} under ${round(s)})`;
+      require(box.left >= s.left - 1 && box.right <= s.right + 1, `${label} stays inside the screen's width`);
+      require(box.top >= s.bottom - 1 && box.bottom <= innerHeight + 1, `${label} sits under the screen, inside the window`);
+      require(item.scrollWidth <= item.clientWidth + 1, `${label} is not cut`);
+    }
+    for (const [index, item] of items.entries()) for (const other of items.slice(index + 1)) {
+      const a = item.getBoundingClientRect(), b = other.getBoundingClientRect();
+      require(Math.min(a.right, b.right) - Math.max(a.left, b.left) <= 1 || Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) <= 1, `${item.className || item.dataset.desktop} and ${other.className || other.dataset.desktop} do not overlap`);
+    }
+    if (items.length) require(Math.min(...items.map(item => item.getBoundingClientRect().top)) - s.bottom <= 24, 'the foot follows the screen directly');
+    const dock = panel.querySelector('.desktop-dock');
+    if (visible(dock)) require(Math.abs((dock.getBoundingClientRect().left + dock.getBoundingClientRect().right) / 2 - (s.left + s.right) / 2) <= 2, `the pill is on the screen's centre line (${round(dock.getBoundingClientRect())} under ${round(s)})`);
+    const notes = [...panel.querySelectorAll('.desktop-notes > p')].filter(visible);
+    require(notes.every(note => getComputedStyle(note).textAlign === 'center'), 'each line under the screen is centred');
+    return {check: name, stage: round(s), items: items.map(item => `${item.className || item.dataset.desktop}:${round(item.getBoundingClientRect())}`)};
+  }
   if (name.startsWith('teach-')) {
     const calls = window.__look.calls.filter(c => c.method === 'computer.teach');
     const actions = calls.map(c => c.params.action);
@@ -1797,6 +1829,11 @@ export function checkRendered(name, context = {}) {
       require(visible(editor) && editor.value.includes('## Inputs') && editor.value.includes('## Verification'), 'the existing editor holds an editable skill with inputs and final checks');
       require(actions.includes('stop') && !actions.includes('save'), 'the draft is not saved automatically');
       require(editor.value.includes('Unsaved sample procedure') && !actions.includes('read'), 'Back preserves the unsaved editor without fetching over it');
+    } else if (name === 'teach-failed') {
+      const notice = panel.querySelector('.desktop-error');
+      require(visible(notice) && notice.getAttribute('role') === 'alert' && notice.textContent.startsWith('示範未完成'), 'the failure is said in one line');
+      require(panel.querySelector('[data-desktop="teach"]').textContent === '審閱示範' && visible(panel.querySelector('[data-desktop="discard-teach"]')), 'review and discard stay offered');
+      require(actions.includes('stop') && !actions.includes('save'), 'a failed draft publishes nothing');
     } else if (name === 'teach-discard') {
       require(actions.includes('discard') && !actions.includes('save') && panel.querySelector('.desktop-recording').hidden, 'discard clears the recording without publication');
       require(!panel.hasAttribute('data-expanded') && visible(document.querySelector('.composer')), 'discard returns to the conversation');
@@ -1980,7 +2017,8 @@ export function checkRendered(name, context = {}) {
     for (const card of cards) {
       disclosureContent(card);
       const box = card.getBoundingClientRect(), style = getComputedStyle(card), pill = card.querySelector('.card-status');
-      require(box.width <= 480.5, `card width is at most 480px: ${box.width}`);
+      // A card that hands the computer to the owner is as wide as the conversation (R-PANEL-09); every other is at most 480 px.
+      require(box.width <= 480.5 || card.matches('.computer-card:is([data-work-state="waiting_control"], [data-card-state="control"])'), `card width is at most 480px: ${box.width}`);
       const draftHost = card.closest('.draft-panel');
       if (draftHost) require(parseFloat(getComputedStyle(draftHost).borderTopWidth) === 0 && parseFloat(getComputedStyle(draftHost).paddingLeft) === 0, 'the draft host adds no second card frame');
       if (card.matches('[data-owner-question][data-card-state="asked"]')) {
@@ -3061,16 +3099,32 @@ export function checkRendered(name, context = {}) {
     // A member working at its computer adds nothing to the conversation (owner, 2026-11-11); only a handoff the owner must act on is a card.
     if(name==='computer-panel')require(events.length===0&&!document.querySelector('.conversation-event-line [data-i="monitor"], [data-desktop-slot]:not(:empty)'),'a working computer draws no line or card in the conversation');
     else if(name.startsWith('computer-'))require(events.length===1&&events[0].matches('.conversation-card')&&events[0].closest('.tn')?.dataset.id==='2','one work presentation belongs to the private turn');
-    if(name==='computer-takeover')require(panel.querySelector('.desktop-request').textContent.includes('登入'),'request sits above the live screen');
+    if(name==='computer-takeover'){
+      require(panel.querySelector('.desktop-request').textContent.includes('登入'),'request sits above the live screen');
+      // R-PANEL-09 (owner, 2026-11-13: 「你這個畫面這麼小，我根本看不到登入的畫面」): the handoff card is as wide as the
+      // conversation and its screen keeps the computer's proportions, the stream filling it with no dark bars.
+      const card=events[0], column=card.closest('.ra-col')??card.parentElement, screen=card.querySelector('[data-card-desktop-screen]');
+      const inner=column.getBoundingClientRect().width-parseFloat(getComputedStyle(column).paddingLeft)-parseFloat(getComputedStyle(column).paddingRight);
+      const cardBox=card.getBoundingClientRect(), screenBox=screen.getBoundingClientRect(), frameBox=frame.getBoundingClientRect();
+      require(cardBox.width>=inner-2,`the handoff card fills the conversation (${Math.round(cardBox.width)} of ${Math.round(inner)})`);
+      require(Math.abs(screenBox.width/screenBox.height-1280/900)<0.02,`the card's screen keeps the computer's proportions (${Math.round(screenBox.width)}x${Math.round(screenBox.height)})`);
+      require(frame.closest('[data-card-desktop-screen]')===screen&&frameBox.width>=screenBox.width-4&&frameBox.height>=screenBox.height-4,'the stream fills the card screen with no bars');
+    }
     if(name==='computer-takeover-owner') {
-      require(visible(document.querySelector('[data-card-desktop="return"]')), 'one explicit done action in the card');
-      require(!panel.hasAttribute('data-expanded') && frame.closest('[data-card-desktop-screen]'), 'owner input stays in the conversation card');
+      // The card's 接手 opened the larger view; its pill offers 我完成了, which gives the request back (R-PANEL-09).
+      const done=panel.querySelector('[data-desktop="return"]');
+      require(visible(done)&&done.textContent==='我完成了'&&panel.querySelector('.desktop-mode-label').textContent==='你正在控制', 'the pill says the owner is in control and offers one explicit done');
+      require(panel.hasAttribute('data-expanded') && frame.closest('.desktop-panel .desktop-screen'), 'owner input is in the larger view, not a small card');
       require(frame.contentDocument.defaultView.__desktopAcceptedKeys > 0, 'synthetic keyboard input reaches the RFB surface');
       require(!calls.some(call => JSON.stringify(call.params ?? {}).includes('synthetic-owner-input')), 'owner input never enters an RPC');
     }
     if(name==='computer-takeover-done')require(calls.filter(call=>call.method==='computer.viewer_control'&&!call.params.held&&call.params.takeover==='private-takeover-request').length===1,'one explicit handback with the current nonce');
     if(name==='computer-takeover-owner'||name==='desktop-owner'){
       require(panel.dataset.interactive==='true'&&getComputedStyle(frame).pointerEvents==='auto','click enables input in place');
+      // Only the pill under the screen says who holds it; the screen carries no badge of its own (owner, 2026-11-13:
+      // 「明明下方就有顯示我正在控制的，為什麼左邊還要再顯示一次？」).
+      const saying=[...document.querySelectorAll('body *')].filter(node=>node.childElementCount===0&&visible(node)&&node.textContent.trim()==='你正在控制');
+      require(saying.length<=1&&!document.querySelector('.desktop-owner'),`你正在控制 shows once (${saying.length})`);
         require(calls.filter(call=>call.method==='computer.viewer_open'&&call.params.member_id===1).length===1,'takeover keeps the same member session');
       require(frame.contentDocument.defaultView.__desktopConnections===1,'takeover keeps the same noVNC connection');
       const latency=Number(panel.dataset.controlLatencyMs);require(Number.isFinite(latency)&&latency<300,`local click-to-interactive ${latency}ms < 300ms`);
@@ -7338,7 +7392,9 @@ export function checkRendered(name, context = {}) {
     // Settings reads the allowances each time it opens, on whatever tab and unseen: asked for once at the opening, the
     // numbers already on their tab, a reading that finds the same numbers touches nothing, a new number replaces the old
     // in the same card, and no busy state or message is ever drawn.
-    const stage = name.slice("usage-open-".length), asked = () => window.__look.calls.filter(call => call.method === "usage.allowances").length;
+    // Only the Settings' own readings count (they go through the usage card, usage-analytics.ts): the account menu that
+    // Settings is opened from reads the allowances too, at its own opening (R-SIDE-02); the scene traces each call's origin.
+    const stage = name.slice("usage-open-".length), asked = () => window.__look.calls.filter(call => call.method === "usage.allowances" && String(call.from ?? "").includes("usage-analytics")).length;
     const root = () => document.querySelector('.usage-analytics'), keep = () => (window.__lookUsage ??= { touched: 0, busy: false });
     const count = (state, records) => {
       for (const record of records) {
@@ -7349,9 +7405,15 @@ export function checkRendered(name, context = {}) {
     const watched = () => { const state = keep(); count(state, state.observer?.takeRecords() ?? []); return state; };
     if (stage === "general") {
       require(visible(document.querySelector('.modal-scrim [data-pane="general"][aria-current="page"]')) && !document.querySelector('[data-models-tab]'), "Settings is open on 一般, not on the allowances' tab");
-      require(asked() === 1, `the allowances were asked for once, at the opening (${asked()})`);
+      require(window.__look.calls.some(call => call.from), "the scene traces where each call comes from");
       require(!document.querySelector('[data-act="models-refresh"]'), "no refresh button exists");
-      return { check: name, asked: asked() };
+      // Opened through the account menu, Settings starts its reading a moment after it is drawn.
+      return (async () => {
+        for (let waited = 0; waited < 2000 && asked() < 1; waited += 25) await new Promise(resolve => setTimeout(resolve, 25));
+        await new Promise(resolve => setTimeout(resolve, 150));
+        require(asked() === 1, `the allowances were asked for once, at the opening (${asked()}; all readings: ${JSON.stringify(window.__look.calls.filter(call => call.method === "usage.allowances").map(call => String(call.from).split(" < ").slice(3, 6).join(" < ")))})`);
+        return { check: name, asked: asked() };
+      })();
     }
     if (stage === "arm") {
       require(asked() === 1, `reaching the tab asks for nothing more (${asked()})`);

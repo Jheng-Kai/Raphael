@@ -405,8 +405,9 @@ async def test_batch_fetches_the_live_observation_schema_before_any_action(deskt
             if method == 'tools/list':
                 result = deepcopy(catalog())
                 definition = next(tool for tool in result['tools'] if tool['name'] == 'get_window_state')
-                # Model a live catalog with a newly required, otherwise ordinary read argument.
-                definition['inputSchema'].setdefault('required', []).append('max_elements')
+                # Model a live catalog with a newly required, otherwise ordinary read argument: in the driver's own
+                # schema, which is what a call is checked against (the bridge's reading of it is what a model reads).
+                definition['originalInputSchema'].setdefault('required', []).append('max_elements')
                 return result
             return await super().request(method, params)
     hub = VmTools(EmptyHub(), vm, attachments=AttachmentStore(tmp_path), bridge=Driver)

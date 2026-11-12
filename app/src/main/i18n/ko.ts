@@ -535,6 +535,8 @@ export const ko = {
   "desktop.invalidAlias": "SSH 설정의 별칭을 사용하세요. 영문자, 숫자, 점, 밑줄, 하이픈만 쓰고 영문자나 숫자로 시작하세요.",
   "conn.err.invalid_request": "이 버전은 서비스에 호환 연결할 수 없습니다. Raphael을 업데이트하세요. 최신 버전이면 이 연결 문제를 보고하세요.",
   "desktop.take": "제어권 가져오기",
+  "desktop.taking": "제어권을 가져오는 중…",
+  "desktop.takeFailed": "제어권을 가져오지 못했습니다. 컴퓨터가 응답하지 않습니다. ‘제어권 가져오기’를 다시 누르세요.",
   "desktop.release": "중지",
   "computer.row.asleep": "절전 중",
   "computer.row.connecting": "연결 중",

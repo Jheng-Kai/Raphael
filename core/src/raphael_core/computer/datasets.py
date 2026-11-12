@@ -21,7 +21,7 @@ SCHEMA = {"type": "object", "properties": {
     "sources": {"type": "array", "minItems": 1, "maxItems": 20, "items": {"type": "string", "maxLength": 2000}, "description": "Workspace paths or attachment:<stored attachment ID>."},
     "sql": {"type": "string", "minLength": 1, "maxLength": 20000},
 }, "required": ["action", "dataset"], "additionalProperties": False}
-DEFINITION = {"description": "Keep a named dataset in your own computer between turns. Import workspace CSV, Excel (.xlsx) or Parquet files into a DuckDB table (multiple files union by column name), query SQL for a bounded table, list tables, or chart a two-column SELECT as an attachment. Use table to name an import. Dependencies install on first use in the workspace; no host access. Only use this on your independent computer, after its existing permission grant.", "parameters": SCHEMA}
+DEFINITION = {"description": "Keep a named dataset in your own computer between turns. Import workspace CSV, Excel (.xlsx) or Parquet files into a DuckDB table (multiple files union by column name), query SQL for a bounded table, list tables, or chart a two-column SELECT as an attachment. Use table to name an import. Dependencies install on first use in the workspace; no host access.", "parameters": SCHEMA}
 
 
 def command_for(arguments):

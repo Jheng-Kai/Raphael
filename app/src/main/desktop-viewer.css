@@ -40,7 +40,9 @@
 .desktop-takeover-bar { display: contents; }
 .desktop-takeover-bar[hidden] { display: none; }
 .desktop-screen > [data-desktop="retry"] { --btn: var(--desktop-frame-bg); --btn-edge: color-mix(in srgb, var(--desktop-frame-text) 30%, var(--desktop-frame-bg)); --hover: color-mix(in srgb, var(--desktop-frame-text) 10%, var(--desktop-frame-bg)); --pressed: color-mix(in srgb, var(--desktop-frame-text) 18%, var(--desktop-frame-bg)); --hover-edge: var(--desktop-frame-text); --focus: var(--desktop-frame-text); position: absolute; left: 50%; bottom: var(--sp-3); transform: translateX(-50%); }
-.desktop-panel:not([data-expanded]) > :is(.desktop-actions, .desktop-teach-missing, .desktop-recording, .desktop-request, .desktop-review, .desktop-try, .desktop-checkpoints) { display: none; }
+/* The small preview keeps only a notice under its screen: the rest of the foot belongs to the larger view. */
+.desktop-panel:not([data-expanded]) :is(.desktop-foot, .desktop-notes) { display: contents; }
+.desktop-panel:not([data-expanded]) :is(.desktop-bar, .desktop-teach-missing, .desktop-recording, .desktop-request, .desktop-review, .desktop-try, .desktop-checkpoints) { display: none; }
 .desktop-panel[data-expanded] .desktop-actions > :is([data-desktop="take"], [data-desktop="revoke"], [data-checkpoint-open]) { display: none; }
 .desktop-panel[data-expanded]:not([data-teaching]) .desktop-actions > [data-desktop="teach"] { display: none; }
 .desktop-heading { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); padding: 0 var(--sp-1) var(--sp-2); }
@@ -51,12 +53,10 @@
 .desktop-shell .desktop-heading .btn.icon:active:not(:disabled) { color: color-mix(in srgb, var(--desktop-frame-text) 85%, transparent); }
 .desktop-heading h2 { margin: 0; overflow: hidden; color: inherit; font-size: var(--fs-sm); font-weight: 400; text-overflow: ellipsis; white-space: nowrap; }
 .desktop-request { margin: 0; color: var(--text-2); font-size: var(--fs-sm); overflow-wrap: anywhere; }
-.desktop-panel[data-expanded] > .desktop-request { padding: 0 var(--sp-3); }
 /* Every state keeps the running screen's proportions, so the wallpaper is never squeezed. The clip,
    unlike hidden, leaves the box free to grow past its ratio when a narrow panel's words and buttons need the height. */
 .desktop-screen { position: relative; width: 100%; aspect-ratio: 1280 / 900; overflow: clip; background: var(--content); border: 1px solid var(--line); border-radius: var(--r-lg); }
 .desktop-screen iframe, [data-card-desktop-screen] iframe, [data-card-screen] iframe { position: relative; z-index: 1; display: block; width: 100%; height: 100%; border: 0; }
-.desktop-owner { position: absolute; z-index: 2; left: var(--sp-2); bottom: var(--sp-2); padding: var(--sp-1) var(--sp-2); border: 1px solid var(--line); border-radius: var(--r-pill); background: var(--panel); color: var(--text); font-size: var(--fs-2xs); pointer-events: none; }
 .desktop-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--sp-2); }
 .desktop-recording { margin: 0; color: var(--text-2); font-size: var(--fs-sm); overflow-wrap: anywhere; }
 .desktop-try { display: flex; gap: var(--sp-2); }
@@ -72,7 +72,6 @@
 .checkpoint-line.is-removed { color: var(--err); }
 .checkpoint-line.is-added { color: var(--ok); }
 .checkpoint-uncovered { margin: 0; padding-left: var(--sp-5); overflow-wrap: anywhere; }
-.desktop-panel:has(.desktop-review:not([hidden])) .desktop-shell { display: none; }
 .desktop-actions:has(> [hidden]:only-child), .desktop-actions:not(:has(> :not([hidden]))) { display: none; }
 .desktop-placeholder { position: relative; min-height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--sp-3); padding: var(--sp-3); overflow-wrap: anywhere; text-align: center; color: var(--text-2); pointer-events: none; }
 .desktop-state-content { display: grid; justify-items: center; gap: var(--sp-2); width: 100%; min-width: 0; }
@@ -84,6 +83,12 @@
 .desktop-panel:not([data-expanded]) .desktop-placeholder { width: 100%; }
 .desktop-placeholder > * { pointer-events: auto; }
 [data-card-desktop-screen] > .desktop-placeholder, [data-card-screen] > .desktop-placeholder { position: absolute; inset: 0; }
+/* R-PANEL-09: a card that hands the computer to the owner (a sign-in, a password, a payment) is as wide as the
+   conversation, and its screen keeps the computer's own proportions, so the page to use is readable at a glance and no
+   dark bars stand beside it (owner, 2026-11-13: 「你這個畫面這麼小，我根本看不到登入的畫面，是要怎麼用」). Every other card stays
+   at most 480 px (R-CARD-01). */
+.page-agent .conversation-card.computer-card:is([data-work-state="waiting_control"], [data-card-state="control"]) { width: 100%; max-width: none; }
+.conversation-card .card-computer-screen:is([data-card-desktop-screen], [data-card-screen]) { aspect-ratio: 1280 / 900; background: var(--desktop-frame-bg); }
 .desktop-message, .desktop-placeholder .missing-note, .desktop-preparation { padding: var(--sp-3) var(--sp-4); border-radius: var(--r-lg); background: color-mix(in srgb, var(--desktop-frame-bg) 82%, transparent); }
 .desktop-placeholder .missing-note, .desktop-placeholder > [data-act="docker-download"] { --btn: var(--desktop-frame-bg); --hover: color-mix(in srgb, var(--desktop-frame-text) 10%, var(--desktop-frame-bg)); --pressed: color-mix(in srgb, var(--desktop-frame-text) 18%, var(--desktop-frame-bg)); }
 .desktop-error { margin: 0; color: var(--err); }
@@ -114,34 +119,57 @@
 :root[data-window-layout][data-desktop-expanded]:not([data-window-modal="true"]):not(:has(.mb-scrim:not(.store-scrim))) .window-chrome { left: 0; border-top-left-radius: 0; background: var(--content); }
 :root[data-desktop-expanded] .mb-det-scroll { height: 100%; max-width: none; overflow-x: hidden; overflow-y: auto; padding: 0; }
 :root[data-desktop-expanded] .mb-det-head, :root[data-desktop-expanded] .mb-det-scroll > :not(.desktop-panel), :root[data-desktop-expanded] .det-edge { display: none; }
-.desktop-panel[data-expanded] { display: flex; flex-direction: column; flex: 1; width: 100%; min-height: 0; height: 100%; margin: 0; gap: 0; padding-bottom: 64px; }
-.desktop-panel[data-expanded] .desktop-shell { flex: 1; min-height: 0; display: grid; grid-template-rows: minmax(0, 1fr); place-items: center; padding: var(--sp-4) var(--sp-6) var(--sp-2); }
+.desktop-panel[data-expanded] { display: flex; flex-direction: column; flex: 1; width: 100%; min-height: 0; height: 100%; margin: 0; gap: 0; }
+/* The shell is the room the screen fits in at its own proportions, keeping --desktop-foot of its height for the foot
+   (a line above the pill; a second line borrows the bottom padding). The screen, the skill review, the file changes and
+   the foot share one width and are centred together, so every line and button under the screen stays inside its span
+   (owner, 2026-11-13). */
+.desktop-panel[data-expanded] .desktop-shell { --desktop-foot: 88px; flex: 1; min-height: 0; container-type: size; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto; align-content: safe center; justify-items: center; row-gap: var(--sp-3); padding: var(--sp-3) var(--sp-6) var(--sp-4); }
+.desktop-panel[data-expanded] :is(.desktop-screen, .desktop-review, .desktop-checkpoints, .desktop-foot) { width: min(100cqw, (100cqh - var(--desktop-foot)) * 1280 / 900); min-width: 0; }
+.desktop-panel[data-expanded] :is(.desktop-screen, .desktop-review, .desktop-checkpoints) { grid-area: 1 / 1; height: auto; min-height: 0; aspect-ratio: 1280 / 900; }
 .desktop-panel[data-expanded] .desktop-caption { display: none; }
-.desktop-panel[data-expanded][data-files] .desktop-shell { display: none; }
-.desktop-panel[data-expanded] .desktop-checkpoints { padding: var(--sp-4); }
-.desktop-panel[data-expanded] .desktop-review { padding: var(--sp-4); }
-.desktop-panel[data-expanded] .desktop-screen { width: min(100%, calc((100vh - var(--window-controls-height) - 64px - var(--sp-4) - var(--sp-2)) * 1280 / 900)); height: auto; min-height: 0; aspect-ratio: 1280 / 900; border-color: transparent; border-radius: var(--r-md); background: var(--desktop-frame-bg); }
-.desktop-panel[data-expanded] .desktop-recording { grid-row: 4; }
-.desktop-panel[data-expanded] .desktop-actions { grid-row: 5; }
+.desktop-panel[data-expanded] .desktop-screen { border-color: transparent; border-radius: var(--r-md); background: var(--desktop-frame-bg); }
+/* The skill review and the file changes take the screen's place, in a quiet box of its size that scrolls on its own. */
+.desktop-panel[data-expanded]:is([data-files], :has(.desktop-review:not([hidden]))) .desktop-screen { display: none; }
+.desktop-panel[data-expanded] :is(.desktop-review, .desktop-checkpoints) { box-sizing: border-box; align-content: start; overflow-y: auto; padding: var(--sp-4) var(--sp-5); border-radius: var(--r-md); background: var(--panel); }
+/* The skill editor brings its own padding. */
+.desktop-panel[data-expanded] .desktop-review { padding: var(--sp-1); }
+.desktop-panel[data-expanded] .desktop-foot { grid-area: 2 / 1; display: grid; grid-template-columns: minmax(0, 1fr); justify-items: center; gap: var(--sp-2); }
+/* One quiet line of state, centred and wrapping inside the screen's width: what the member asks, the recording's
+   privacy line or a failure. */
+.desktop-notes { display: grid; justify-items: center; gap: var(--sp-1); width: 100%; min-width: 0; text-align: center; }
+.desktop-notes:not(:has(> :not([hidden]))) { display: none; }
+.desktop-panel[data-expanded] .desktop-notes > p { max-width: 100%; font-size: var(--fs-sm); line-height: 1.45; }
+.desktop-panel[data-expanded] .desktop-notes > .desktop-try { width: min(100%, 480px); }
+.desktop-panel[data-expanded] .desktop-notes > .desktop-teach-missing { max-width: min(100%, 520px); text-align: left; }
+/* The pill sits on the screen's centre line; a demonstration's actions are a second pill right beside it, which
+   wraps inside its half rather than pass the screen's edge when a language's words are long. */
+.desktop-bar { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; column-gap: var(--sp-2); width: 100%; min-width: 0; }
 :root[data-desktop-expanded] .side { visibility: hidden; }
 /* desktop-viewer.ts moves fold back and Back into the window's top strip, shaped as its own buttons. */
 .window-chrome > .btn.icon:is([data-desktop="collapse"], [data-desktop="back"]) { flex: none; align-self: stretch; width: 46px; height: auto; min-height: 0; margin: 0; padding: 0; border: 0; border-radius: 0; background: transparent; color: var(--text); }
 .window-chrome > .btn.icon:is([data-desktop="collapse"], [data-desktop="back"]):is(:hover, :active):not(:disabled) { border-color: transparent; background: var(--hover); }
 .window-chrome > .btn.icon:is([data-desktop="collapse"], [data-desktop="back"]):active:not(:disabled) { background: var(--pressed); }
 .desktop-dock { display: none; }
-.desktop-panel[data-expanded] .desktop-dock { position: fixed; left: 50%; bottom: var(--sp-4); z-index: 85; display: flex; align-items: center; gap: var(--sp-2); transform: translateX(-50%); }
-.desktop-mode { display: flex; align-items: center; gap: var(--sp-1); height: 36px; padding: 0 4px 0 12px; border: 1px solid var(--line); border-radius: var(--r-pill); background: var(--surface-2); }
+.desktop-panel[data-expanded] .desktop-dock { grid-column: 2; display: flex; align-items: center; gap: var(--sp-2); }
+.desktop-panel[data-expanded][data-files-only] .desktop-dock { display: none; }
+.desktop-mode, .desktop-panel[data-expanded] .desktop-actions { display: flex; align-items: center; gap: var(--sp-1); height: 36px; padding: 0 4px 0 12px; border: 1px solid var(--line); border-radius: var(--r-pill); background: var(--surface-2); }
+.desktop-panel[data-expanded] .desktop-actions { grid-column: 3; justify-self: start; flex-wrap: wrap; justify-content: flex-start; height: auto; min-height: 36px; max-width: 100%; box-sizing: border-box; padding: 6px 4px; row-gap: 6px; }
+/* No demonstration, or nothing of it to press (its review is open): no second pill. */
+.desktop-panel[data-expanded]:not([data-teaching]) .desktop-actions,
+.desktop-panel[data-expanded] .desktop-actions:not(:has(> :is([data-desktop="teach"], [data-desktop="discard-teach"]):not([hidden]))) { display: none; }
 .desktop-mode-label { display: inline-flex; align-items: center; gap: 6px; padding-right: var(--sp-2); color: var(--text-2); font-size: var(--fs-sm); white-space: nowrap; }
 .desktop-mode-label .i { width: 16px; height: 16px; }
-.desktop-mode-label[data-mode="operating"] .i { display: none; }
-.desktop-mode .btn.sm { height: var(--h-ctl-sm); min-height: var(--h-ctl-sm); padding: 0 var(--sp-3); border: 1px solid var(--text); border-radius: var(--r-pill); background: var(--text); color: var(--content); font-size: var(--fs-sm); white-space: nowrap; }
-.desktop-mode .btn.sm:is(:hover, :active):not(:disabled) { border-color: color-mix(in srgb, var(--text) 86%, var(--content)); background: color-mix(in srgb, var(--text) 86%, var(--content)); color: var(--content); }
-.desktop-mode .btn.sm:active:not(:disabled) { border-color: color-mix(in srgb, var(--text) 76%, var(--content)); background: color-mix(in srgb, var(--text) 76%, var(--content)); }
-/* Watching offers Take control; in control offers Stop, quietly (the same two states as Grok Bot's pill). */
-.desktop-mode .btn.sm[data-desktop="return"] { border-color: var(--line); background: color-mix(in srgb, var(--text) 10%, var(--surface-2)); color: var(--text); }
-.desktop-mode .btn.sm[data-desktop="return"]:is(:hover, :active):not(:disabled) { border-color: var(--line); background: color-mix(in srgb, var(--text) 16%, var(--surface-2)); color: var(--text); }
-.desktop-mode .btn.sm[data-desktop="return"]:active:not(:disabled) { background: color-mix(in srgb, var(--text) 22%, var(--surface-2)); }
-.desktop-mode .btn.sm:disabled { border-color: color-mix(in srgb, var(--text) 40%, var(--content)); background: color-mix(in srgb, var(--text) 40%, var(--content)); }
+.desktop-mode-label:is([data-mode="operating"], [data-mode="taking"]) .i { display: none; }
+:is(.desktop-mode, .desktop-actions) .btn.sm { height: var(--h-ctl-sm); min-height: var(--h-ctl-sm); padding: 0 var(--sp-3); border: 1px solid var(--text); border-radius: var(--r-pill); background: var(--text); color: var(--content); font-size: var(--fs-sm); white-space: nowrap; }
+:is(.desktop-mode, .desktop-actions) .btn.sm:is(:hover, :active):not(:disabled) { border-color: color-mix(in srgb, var(--text) 86%, var(--content)); background: color-mix(in srgb, var(--text) 86%, var(--content)); color: var(--content); }
+:is(.desktop-mode, .desktop-actions) .btn.sm:active:not(:disabled) { border-color: color-mix(in srgb, var(--text) 76%, var(--content)); background: color-mix(in srgb, var(--text) 76%, var(--content)); }
+/* Watching offers Take control; in control offers Stop, quietly (the same two states as Grok Bot's pill). Beside it a
+   demonstration's pill offers its review as the one filled button and Discard as quietly as Stop. */
+:is(.desktop-mode, .desktop-actions) .btn.sm:is([data-desktop="return"], [data-desktop="discard-teach"]) { border-color: var(--line); background: color-mix(in srgb, var(--text) 10%, var(--surface-2)); color: var(--text); }
+:is(.desktop-mode, .desktop-actions) .btn.sm:is([data-desktop="return"], [data-desktop="discard-teach"]):is(:hover, :active):not(:disabled) { border-color: var(--line); background: color-mix(in srgb, var(--text) 16%, var(--surface-2)); color: var(--text); }
+:is(.desktop-mode, .desktop-actions) .btn.sm:is([data-desktop="return"], [data-desktop="discard-teach"]):active:not(:disabled) { background: color-mix(in srgb, var(--text) 22%, var(--surface-2)); }
+:is(.desktop-mode, .desktop-actions) .btn.sm:disabled { border-color: color-mix(in srgb, var(--text) 40%, var(--content)); background: color-mix(in srgb, var(--text) 40%, var(--content)); }
 
 .desktop-location-header { display: flex; justify-content: flex-end; min-width: 0; }
 .computer-location { min-width: 0; }
@@ -167,5 +195,5 @@
 .computer-location-error { color: var(--err); }
 
 /* Watching is the same larger view with the member still at the controls: nothing of the owner's tools shows. */
-:root[data-desktop-watch] .desktop-actions { display: none; }
+:root[data-desktop-watch] .desktop-panel :is(.desktop-actions, .desktop-teach-missing) { display: none; }
 [data-card-desktop-screen][data-owner-control] { cursor: auto; }

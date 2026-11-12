@@ -5,6 +5,8 @@ https://cua.ai/docs/cua-driver/reference/mcp-tools
 https://cua.ai/docs/cua-driver/reference/mcp-tools/pointer-cursor-and-browser
 Browser tools support Linux CDP; this is a capability contract, not image smoke proof.
 Raphael owns lifecycle/control and uses vm_exec/attach_file.
+Each line below is all a model is told a tool is for (its parameters carry the driver's own words): the driver's
+description is not offered, so a tool reads the same before and after the driver is asked.
 
 Adapted from OpenMausBot (Apache-2.0); see core/packaging/licenses.
 """
@@ -129,12 +131,24 @@ SCREEN_READS = frozenset({"get_desktop_state", "get_window_state", "get_browser_
 FRESH_READS = frozenset({"get_desktop_state", "get_window_state", "get_browser_state", "browser_open"})
 
 
+def definition(name, schema, original=None):
+    """What a member is offered of one tool a driver lists: Raphael's own line on what it is for, the parameters a
+    model reads and the ones a call is checked against. The list kept with the code and the list a running driver
+    gives are both read here, so for the same driver the two are the same offer."""
+    return {"description": DRIVER_TOOLS[name], "parameters": without_session(schema),
+            "validation": without_session(schema if original is None else original)}
+
+
 def offline_catalog():
+    """The offer before any driver has been asked: the pinned driver's own list (driver_schemas.json), put through
+    the bridge's reading as a running driver's list is. A member's tool list is read once by a CLI brain and cached
+    by a provider, so the first use of the computer must not change it: a list that differed from the driver's
+    started the turn again and lost that first call's result."""
     import json
     from pathlib import Path
-    snapshot = json.loads(Path(__file__).with_name("driver_schemas.json").read_text(encoding="utf-8"))
-    return {name: {"description": description, "parameters": without_session(snapshot["tools"][name])}
-            for name, description in DRIVER_TOOLS.items()}
+    from .vm_bridge import normalize_schema  # the bridge imports this module
+    listed = json.loads(Path(__file__).with_name("driver_schemas.json").read_text(encoding="utf-8"))["tools"]
+    return {name: definition(name, normalize_schema(listed[name]), listed[name]) for name in DRIVER_TOOLS}
 
 
 def without_session(schema):

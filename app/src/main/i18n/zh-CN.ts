@@ -535,6 +535,8 @@ export const zhCN = {
   "desktop.invalidAlias": "请填入 SSH 设置中的名称，只能使用英文字母、数字、点、底线与连字号，并以字母或数字开头。",
   "conn.err.invalid_request": "目前版本的连接功能与服务不兼容，请更新拉斐尔，若已是最新版请回报这项连接问题。",
   "desktop.take": "接手控制",
+  "desktop.taking": "正在接手…",
+  "desktop.takeFailed": "没能接手：电脑没有响应，请再按一次「接手控制」。",
   "desktop.release": "停止",
   "computer.row.asleep": "休眠中",
   "computer.row.connecting": "连接中",
