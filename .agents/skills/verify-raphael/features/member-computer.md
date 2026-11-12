@@ -417,22 +417,38 @@ core's own `DesktopViewer` connection/relay path. The native app's panel around 
 relay, remote SSH hosts, native frame pacing and browser canvas performance still
 need separate acceptance.
 
-## Library: only what the member delivered (owner, 2026-11-07 night)
+## Library: only what the member delivered, drawn as Grok Bot's (owner, 2026-11-07 night; redrawn 2026-11-12)
 
-This supersedes the Library notes below (team-file chips, the workspace/team scan, This week / Earlier). The owner found
-the Library a wall of working screenshots; as Grok Bot's, it now lists only deliverables, read from `members.library`
-(core brief 10: media cards and files or links its replies handed over, pages it published with their first day, verified
-receipts in the owner's output folder; never owner uploads, scratch files or undelivered screenshots). member-panel-work.ts
-groups them by `day`, newest first, under 今天 / 昨天 / a date: pictures as square thumbnails three to a row (a delivered
-attachment loads through `attachments.get` like a chat's; one with no stored copy keeps a tile with the picture icon), every
-other deliverable a row with its kind's icon (document, page, video, audio, archive, file, link), its title and the time;
-nothing framed. Show more adds 12 up to 100. A press opens a picture in the lightbox, a page at the reply that published it,
-a link in the browser, an attachment with `open_attachment`, and a delivered file with the new `open_library_file` command,
-which hands the member id and the Library handle to `members.library_file` (never a path, never `computer.team_file`).
-Delivered file names are data for the look audit's language check (`.lib-title`).
+This supersedes the Library notes below (team-file chips, the workspace/team scan, This week / Earlier, the three-to-a-row
+picture grid, the time on each row, day-by-day groups). The owner found the Library a wall of working screenshots; it lists
+only deliverables, read from `members.library` (core brief 10: media cards and files or links its replies handed over, pages
+it published with their first day, verified receipts in the owner's output folder; never owner uploads, scratch files or
+undelivered screenshots). On 2026-11-12 he showed three pictures of Grok Bot's Library (「它右邊這邊真的做得還蠻不錯的，所以它會分
+all 就是所有的，然後 pages 就是內建的頁面，medias 的話就是可能一些圖片之類的……然後 files 的話就是可能一些 zip 檔等等」) and
+member-panel-work.ts now draws the same:
+
+- A row of chips under the tabs, 全部 / 頁面 / 媒體 / 檔案: pages; pictures, videos and audio; documents, archives and other
+  files. A chip with nothing in it is not shown, and with one kind alone no chips show at all. The pressed chip is the light
+  one (the accent fill with dark words in the dark theme, inverted in the light), the others soft; a filter the data no longer
+  has falls back to 全部. Links are never listed (a link is no deliverable: owner, 2026-11-08), so there is no link chip.
+- A quiet label per recency group, newest first: 今天, 昨天, 過去一週, 更早 (a group with nothing in it is not drawn); the label
+  starts where a row's mark does. Each group's items are one rounded card (the second surface, a hairline edge, 12 px radius,
+  8 px inside).
+- Each item is one 36 px row: a 20 px mark and the title (ellipsis), nothing else. A delivered picture's mark is its own rounded
+  20 px thumbnail (loaded through `attachments.get` like a chat's; one with no stored copy keeps the picture icon); every other
+  kind has its own icon (page: the document with bars, document, archive, video, audio, file). Delivered file names are data
+  for the look audit's language check (`.lib-title`).
+- Everything at once up to the core's bound of 100, scrolling inside the panel; there is no 「顯示更多」 (owner, 2026-11-08).
+  The empty and failed sentences are unchanged.
+- A press opens a picture in the lightbox, a page at the reply that published it, an attachment with `open_attachment`, and a
+  delivered file with the `open_library_file` command, which hands the member id and the Library handle to
+  `members.library_file` (never a path, never `computer.team_file`).
+
+Scenes: `member-panel-library` (全部), one per chip (`-pages`, `-media`, `-files`), `-long` (the `long` fixture: 98 items of
+every kind), `-open` and `-empty`; the checks in scripts/look/checks.mjs read the chips, groups, card, row and mark geometry.
 
 ```powershell
-npm run look -- member-panel-library member-panel-library-open member-panel-library-empty details --theme both --width 1120,720,1920x1080
+npm run look -- member-panel-library member-panel-library-pages member-panel-library-media member-panel-library-files member-panel-library-long member-panel-library-open member-panel-library-empty details --theme both --width 1120,720,1920x1080
 ```
 
 ## Bare screen while the computer is not showing its screen (owner, 2026-11-07)

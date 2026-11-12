@@ -96,24 +96,27 @@
 .mb-det .mb-who:has(.mb-panel-identity) { display: block; }
 /* The routine list: one quiet tinted list, no frame around each row. */
 .mb-rts { display: grid; grid-template-columns: minmax(0, 1fr); padding: var(--sp-1); border-radius: var(--r-lg); background: color-mix(in srgb, var(--text) 5%, transparent); }
-/* The Library: what the member delivered, by day. Pictures in a grid of three square thumbnails,
-   every other deliverable a quiet row: its kind's icon, its title, the time. Nothing framed; a row lights under the pointer. */
-/* The kinds there are, as one quiet segmented filter above the days (only when there is more than one kind). */
-.lib-filters { display: flex; margin-bottom: var(--sp-3); min-width: 0; }
-.lib-day { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); }
-.lib-day + .lib-day { margin-top: var(--sp-4); }
-.lib-pics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--sp-2); }
-.lib-pic.btn { display: grid; grid-template-columns: minmax(0, 1fr); place-items: center; aspect-ratio: 1; max-width: 100%; padding: 0; border: 0; border-radius: var(--r-md); overflow: hidden; background: color-mix(in srgb, var(--text) 6%, transparent); cursor: pointer; }
-.lib-pic.btn > img { display: block; width: 100%; height: 100%; object-fit: cover; }
-.lib-pic.btn:not(:has(img[src])) > img { visibility: hidden; }
-.lib-tile-icon { color: var(--text-3); }
-.lib-rows { display: grid; grid-template-columns: minmax(0, 1fr); }
-.lib-row.btn { display: grid; grid-template-columns: 20px minmax(0, 1fr) auto; align-items: center; gap: var(--sp-2); min-height: 40px; padding: 0 var(--sp-2); border: 0; border-radius: var(--r-sm); background: transparent; color: var(--text); text-align: left; cursor: pointer; }
+/* The Library, as Grok Bot's (owner, 2026-11-12): chips for the kinds there are, a quiet label per recency group, and each
+   group's items in one rounded card of one-line rows: a 20 px mark and the title, nothing else on the row. */
+/* The chips, the labels and the cards sit close: one tighter rhythm than the Details sections. */
+.mb-tab-body:has(> .lib-group) { gap: var(--sp-3); }
+.lib-filters { display: flex; min-width: 0; margin-bottom: var(--sp-2); }
+/* The pressed chip is the light one (the accent fill, dark words in the dark theme); the others stay soft. */
+.lib-filters .tabs .tab:is([aria-pressed="true"], [aria-pressed="true"]:hover) { background: var(--accent); color: var(--on-accent); }
+.lib-group { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); }
+.lib-group + .lib-group { margin-top: var(--sp-2); }
+/* The label starts where a row's mark does: the card's edge, its padding and the row's padding in. */
+.lib-group > .mb-dh { padding-left: calc(var(--sp-4) + 1px); }
+.lib-card { display: grid; grid-template-columns: minmax(0, 1fr); padding: var(--sp-2); border: 1px solid var(--edge); border-radius: var(--r-md); background: var(--surface-2); }
+.lib-row.btn { display: grid; grid-template-columns: 20px minmax(0, 1fr); align-items: center; gap: var(--sp-3); min-height: 36px; padding: 0 var(--sp-2); border: 0; border-radius: var(--r-sm); background: transparent; color: var(--text); text-align: left; cursor: pointer; }
 .lib-row.btn:hover:not(:disabled) { background: var(--hover); }
-.lib-icon { display: inline-flex; color: var(--text-3); }
-.lib-icon .i { width: 16px; height: 16px; }
+.lib-icon { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; color: var(--text-3); }
+.lib-icon .i { width: 20px; height: 20px; }
+/* A picture's own thumbnail: a small rounded square, blank until the picture is read back. */
+.lib-thumb { overflow: hidden; border-radius: calc(var(--r-sm) / 2); background: color-mix(in srgb, var(--text) 8%, transparent); }
+.lib-thumb > img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.lib-thumb > img:not([src]) { visibility: hidden; }
 .lib-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--fs-sm); }
-.lib-row > time { font-size: var(--fs-xs); color: var(--text-3); font-variant-numeric: tabular-nums; }
 /* The computer: one quiet tinted row like a routine, its state in a word or two and a small screen at its right
    (owner, 2026-11-11, after Grok Bot). A PC that cannot give one says so in that row and offers the one action that fixes it. */
 .mb-computer { display: flex; align-items: center; gap: var(--sp-1); padding: var(--sp-1); border-radius: var(--r-lg); background: color-mix(in srgb, var(--text) 5%, transparent); }
