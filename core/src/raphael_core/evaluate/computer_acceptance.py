@@ -765,9 +765,16 @@ class Acceptance:
             return json.loads(result.text.splitlines()[-1])
 
         def active_tab(state):
+            # A tab snapshot (what browser_open answers) names its tab at the top level; a window bind lists tabs.
             tabs = state.get("tabs", [])
             selected = next((tab for tab in tabs if tab.get("active")), tabs[0] if tabs else {})
-            return dict(target_id=state["target_id"], tab_id=selected["tab_id"])
+            tab_id = state.get("tab_id") or selected.get("tab_id")
+            require(tab_id and state.get("target_id"), f"Expected a bound tab, observed {state}")
+            return dict(target_id=state["target_id"], tab_id=tab_id)
+
+        def page_url(state):
+            return ((state.get("page") or {}).get("url") or state.get("url")
+                    or next((tab.get("url") for tab in state.get("tabs", []) if tab.get("active")), None))
 
         async def screenshot(member):
             result = await tool(member, "get_desktop_state", {})
@@ -882,7 +889,7 @@ class Acceptance:
                 await tool(members[0], "browser_navigate", {**active_tab(pages[members[0]]), "url": url})
                 for member in members:
                     state = page(await tool(member, "get_browser_state", active_tab(pages[member])))
-                    observed = state.get("url") or next(tab["url"] for tab in state["tabs"] if tab.get("active"))
+                    observed = page_url(state)
                     require(observed == (url if member == members[0] else "about:blank"), f"Expected independent URL, observed {state}")
                 result = await tool(members[0], "browser_navigate", {**active_tab(pages[members[1]]), "url": "about:blank#foreign"}, allow_refusal=True)
                 require(not result.ok, f"Expected foreign page binding refusal, observed {result.text}")
