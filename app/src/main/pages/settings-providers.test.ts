@@ -284,12 +284,13 @@ test("the allowances are kept across tabs and Settings closing, refresh on compl
   click('[data-models-tab="models"]');
   send({ type: "AgentTurn", turn_id: 43 }); await flush();
   expect(api.usageAllowances).toHaveBeenCalledTimes(calls + 2);
-  // Leaving the tab or closing Settings keeps what was read: coming back soon shows it, and reads nothing again.
+  // Leaving the tab keeps what was read and reads nothing; closing Settings keeps it too, and the next opening reads once.
   click('[data-pane="general"]'); click('[data-pane="models"]'); click('[data-models-tab="usage"]'); await flush();
+  expect(api.usageAllowances).toHaveBeenCalledTimes(calls + 2);
   page.hide(); await page.show("models"); click('[data-models-tab="usage"]'); await flush();
   expect(destroyed).not.toHaveBeenCalled();
   expect(mountAnalytics).toHaveBeenCalledTimes(1);
-  expect(api.usageAllowances).toHaveBeenCalledTimes(calls + 2);
+  expect(api.usageAllowances).toHaveBeenCalledTimes(calls + 3);
   await page.show("general"); click('[data-pane="models"]'); await flush();
   expect(page.el.querySelector('[data-models-tab="usage"][aria-selected="true"]')).not.toBeNull();
   await page.show("models");
@@ -317,12 +318,12 @@ test("every opening of Settings reads the allowances again at once, on any tab, 
     expect(document.querySelector(".usage-analytics")!.getAttribute("aria-busy")).toBe("false");
     expect(api.usageAllowances).toHaveBeenCalledTimes(1);
 
-    // Opened again soon after a good reading: that reading is the answer, and the core is not asked.
+    // Opened again at once after a good reading: the allowances are asked again all the same (owner, 2026-11-12: a reset
+    // must show at the very next opening), however soon, and the same numbers touch nothing.
     page.hide(); await page.show("safety"); await flush();
-    expect(api.usageAllowances).toHaveBeenCalledTimes(1);
+    expect(api.usageAllowances).toHaveBeenCalledTimes(2);
 
-    // Later, on another tab, a new value replaces the old one in place: the same card, no busy state at any moment.
-    vi.setSystemTime(Date.now() + 31_000);
+    // On another tab, a new value replaces the old one in place: the same card, no busy state at any moment.
     api.usageAllowances.mockResolvedValue(windowsOf(72));
     page.hide(); await page.show("models"); click('[data-models-tab="usage"]');
     const card = document.querySelector(".usage-analytics .run-subscription");
@@ -331,13 +332,26 @@ test("every opening of Settings reads the allowances again at once, on any tab, 
     watch.observe(document.querySelector(".usage-analytics")!, { attributes: true, attributeFilter: ["aria-busy"], subtree: true });
     await flush();
     watch.disconnect();
-    expect(api.usageAllowances).toHaveBeenCalledTimes(2);
+    expect(api.usageAllowances).toHaveBeenCalledTimes(3);
     expect(busy).not.toContain("true");
     expect(cardsOf()[0]).toContain("72%");
     expect(document.querySelector(".usage-analytics .run-subscription")).toBe(card);
     expect(document.querySelector(".toast, [role=status]")).toBeNull();
     expect(mountAnalytics).toHaveBeenCalledTimes(1);
   } finally { vi.useRealTimers(); }
+});
+
+test("a window that was reset shows its higher number at the very next opening, with no wait between two openings", async () => {
+  const weekly = (left: number) => ({ brains: [{ id: "claude", name: "Claude", source: "live", windows: [{ period: "weekly", remaining_percent: left, resets_at: 1792900000 }] }] });
+  api.usageAllowances.mockResolvedValue(weekly(4));
+  await mount("models"); click('[data-models-tab="usage"]'); await flush();
+  expect(cardsOf()[0]).toContain("4%");
+  const asked = api.usageAllowances.mock.calls.length;
+  api.usageAllowances.mockResolvedValue(weekly(29));
+  page.hide(); await page.show("models"); click('[data-models-tab="usage"]'); await flush();
+  expect(api.usageAllowances).toHaveBeenCalledTimes(asked + 1);
+  expect(cardsOf()[0]).toContain("29%");
+  expect(cardsOf()[0]).not.toContain("4% ");
 });
 
 test("a reading at an opening that finds the same numbers touches nothing, and one that fails keeps what is shown without a word", async () => {
@@ -442,6 +456,20 @@ test("activity during the initial reading is coalesced into one refresh", async 
   send({ type: "Dictation", phase: "pasted", agent: false });
   expect(api.usageAllowances).toHaveBeenCalledTimes(1);
   finish(result); await flush();
+  expect(api.usageAllowances).toHaveBeenCalledTimes(2);
+});
+
+test("a quota change the page's own reading caused does not start a second reading, one from elsewhere does", async () => {
+  const result = await api.usageAllowances();
+  api.usageAllowances.mockClear();
+  let finish!: (value: unknown) => void;
+  api.usageAllowances.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
+  await mount(); click('[data-models-tab="usage"]');
+  expect(api.usageAllowances).toHaveBeenCalledTimes(1);
+  send({ type: "QuotaChanged" });
+  finish(result); await flush();
+  expect(api.usageAllowances).toHaveBeenCalledTimes(1);
+  send({ type: "QuotaChanged" }); await flush();
   expect(api.usageAllowances).toHaveBeenCalledTimes(2);
 });
 

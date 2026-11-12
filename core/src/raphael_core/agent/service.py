@@ -119,6 +119,7 @@ answered, a city or a key: only routes, kinds, latencies and costs.
 
 from raphael_core.ui_words import ui_word, with_ui_words
 import asyncio
+import copy
 from pathlib import Path
 from ..computer.local_tools import ask_context, command_context, command_of, is_local
 import hashlib
@@ -823,6 +824,8 @@ class AgentService:
         self.pages.tool_call = self._page_tool_call
         self.conversations = Conversations(conn, now_ms)
         self.quotas = Quotas(conn, now_ms, notify)
+        # The one live allowance read under way (`_allowances`): a second asker joins it, never a second CLI process.
+        self._allowance_read: asyncio.Task | None = None
         self._named_conversations: dict[int, Conversation] = {}
         self._confirmations = Confirmations(clock)
         self._plugins = plugins
@@ -929,18 +932,33 @@ class AgentService:
             router.register("integrations.proposal", self._connection_proposals.act)
 
     async def _allowances(self, params: dict) -> dict:
-        from .cli.allowances import cached_allowances, read_allowances
+        from .cli.allowances import cached_allowances
         if type(params.get("refresh", True)) is not bool:
             raise invalid_params("refresh must be a boolean")
         if not params.get("refresh", True):
             return cached_allowances(self._cli_brains, self.quotas)
-        result = await read_allowances(self._cli_brains)
+        # Several askers at once (Settings opened twice, Settings and another reader) share one read and one CLI process.
+        task = self._allowance_read
+        if task is None or task.done():
+            task = self._allowance_read = asyncio.ensure_future(self._read_allowances_live())
+            task.add_done_callback(lambda done: done.cancelled() or done.exception())
+        return copy.deepcopy(await asyncio.shield(task))
+
+    async def _read_allowances_live(self) -> dict:
+        """One live read. What it finds replaces the stored windows, and every reader is told when that changed them;
+        a read that fails or finds no window leaves the last known numbers and says nothing."""
+        from .cli.allowances import cached_allowances, read_allowances
+        try:
+            result = await read_allowances(self._cli_brains)
+        except Exception:
+            logger.warning("Allowance read failed; keeping the last known windows")
+            return cached_allowances(self._cli_brains, self.quotas)
         for brain in result["brains"]:
             if brain["windows"]:
                 brain["source"] = "live"
                 self.quotas.record(brain["id"], {"windows": [
                     {**window, "status": "rejected" if window.get("remaining_percent") == 0 else "allowed"}
-                    for window in brain["windows"]], "credits": brain.get("credits"), "exhausted": False}, notify=False)
+                    for window in brain["windows"]], "credits": brain.get("credits"), "exhausted": False}, replace=True)
             else:
                 brain["windows"] = self.quotas.allowances(brain["id"])
                 brain["source"] = "reported" if brain["windows"] else "unavailable"

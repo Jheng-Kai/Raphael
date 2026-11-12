@@ -1436,7 +1436,7 @@ export const zhTW = {
   "members.moveTo": "移到分組",
   "members.delete": "刪除",
   "members.deleteConfirm": "刪除「{p0}」？",
-  "members.deleteForever": "永久刪除這位成員和對話紀錄，此操作無法復原。",
+  "members.deleteForever": "永久刪除這位成員和對話紀錄，無法復原。",
   "members.deleteHint": "此操作無法復原。",
   "members.deleted": "已刪除「{p0}」",
   "members.rename": "重新命名",

@@ -292,7 +292,7 @@ async def test_usage_allowances_prefers_live_then_timestamped_reports(make_rig, 
     assert result["brains"][1]["windows"][0]["updated_at_ms"] > 0
 
 
-async def test_allowance_reads_persist_windows_without_credits_and_never_notify(make_rig, monkeypatch):
+async def test_allowance_reads_persist_windows_without_credits_and_tell_readers_only_a_real_change(make_rig, monkeypatch):
     from raphael_core.agent.cli.discovery import CliBrains
     monkeypatch.setattr(CliBrains, "command", lambda *args: ["never-spawn"])
     monkeypatch.setattr(CliBrains, "logged_in", lambda *args: True)
@@ -309,7 +309,8 @@ async def test_allowance_reads_persist_windows_without_credits_and_never_notify(
     monkeypatch.setattr("raphael_core.agent.cli.allowances.read_allowances", forbidden)
     cached = await rig.call("usage.allowances", {"refresh": False})
     assert cached["brains"][0]["windows"][0]["remaining_percent"] == 65
-    assert notifications == []
+    # The first read changed what is stored, so the readers are told once; a cached read tells nothing.
+    assert notifications == [("quota.changed", {})]
 
 
 async def test_a_usage_read_at_ninety_percent_warns_once_and_changes_no_model(make_rig, monkeypatch):
@@ -332,6 +333,116 @@ async def test_a_usage_read_at_ninety_percent_warns_once_and_changes_no_model(ma
     monkeypatch.setattr("raphael_core.agent.cli.allowances.read_allowances", live)
     await rig.call("usage.allowances")
     await rig.call("usage.allowances")
-    # The page reading its own numbers is not reloaded (no quota.changed); the owner is told, and nothing else moves.
-    assert notifications == [("quota.warning", {"provider": "codex", "period": "weekly", "remaining_percent": 6, "resets_at": reset})]
+    # The first read changed the stored window (one quota.changed) and the owner is told once; the second found the
+    # same numbers and moves nothing, and no model or setting moves.
+    assert notifications == [("quota.changed", {}),
+                             ("quota.warning", {"provider": "codex", "period": "weekly", "remaining_percent": 6, "resets_at": reset})]
     assert models() == before
+
+
+def _live_codex(*windows, credits=None):
+    row = {"id": "codex", "name": "Codex", "windows": list(windows)}
+    if credits:
+        row["credits"] = credits
+    return {"brains": [row]}
+
+
+def _signed_in_codex(monkeypatch, make_rig):
+    from raphael_core.agent.cli.discovery import CliBrains
+    monkeypatch.setattr(CliBrains, "command", lambda *args: ["never-spawn"])
+    monkeypatch.setattr(CliBrains, "logged_in", lambda *args: True)
+    rig = make_rig()
+    heard = []
+    rig.service.quotas.notify = lambda *args: heard.append(args)
+    return rig, heard
+
+
+async def test_a_live_read_that_finds_a_higher_number_replaces_the_stored_one_and_tells_every_reader(make_rig, monkeypatch):
+    # The owner used a reset voucher: the stored 4% must become 29% at the next read, in the card and for the other readers.
+    rig, heard = _signed_in_codex(monkeypatch, make_rig)
+    reset = rig.service.quotas.now_ms() // 1000 + 5 * 86400
+    rig.service.quotas.record("codex", _window(4, reset, "weekly"), notify=False)
+    heard.clear()
+
+    async def live(_brains):
+        return _live_codex({"period": "weekly", "remaining_percent": 29, "resets_at": reset})
+    monkeypatch.setattr("raphael_core.agent.cli.allowances.read_allowances", live)
+    result = await rig.call("usage.allowances")
+    assert result["brains"][0]["windows"][0]["remaining_percent"] == 29
+    assert rig.service.quotas.allowances("codex")[0]["remaining_percent"] == 29
+    assert ("quota.changed", {}) in heard
+    assert (await rig.call("usage.allowances", {"refresh": False}))["brains"][0]["windows"][0]["remaining_percent"] == 29
+
+
+async def test_a_live_read_drops_the_windows_the_provider_no_longer_reports(make_rig, monkeypatch):
+    # A stale spent 5-hour row would keep the subscription blocked after a reset removed that window.
+    rig, heard = _signed_in_codex(monkeypatch, make_rig)
+    quotas = rig.service.quotas
+    reset = quotas.now_ms() // 1000 + 3600
+    quotas.record("codex", _window(0, reset, "fiveHour", "rejected"))
+    assert quotas.list() == [{"provider": "codex", "reset_at_ms": reset * 1000}]
+
+    async def live(_brains):
+        return _live_codex({"period": "weekly", "remaining_percent": 29, "resets_at": reset + 86400})
+    monkeypatch.setattr("raphael_core.agent.cli.allowances.read_allowances", live)
+    result = await rig.call("usage.allowances")
+    assert [w["period"] for w in quotas.allowances("codex")] == ["weekly"]
+    assert result["quotas"] == [] and quotas.list() == []
+
+
+async def test_a_failed_or_empty_live_read_keeps_the_last_known_numbers_and_says_nothing(make_rig, monkeypatch):
+    rig, heard = _signed_in_codex(monkeypatch, make_rig)
+    quotas = rig.service.quotas
+    reset = quotas.now_ms() // 1000 + 86400
+    quotas.record("codex", _window(29, reset, "weekly"), notify=False)
+    heard.clear()
+
+    async def empty(_brains):
+        return _live_codex()
+    monkeypatch.setattr("raphael_core.agent.cli.allowances.read_allowances", empty)
+    result = await rig.call("usage.allowances")
+    assert result["brains"][0]["windows"][0]["remaining_percent"] == 29 and result["brains"][0]["source"] == "reported"
+
+    async def broken(_brains):
+        raise OSError("app-server vanished")
+    monkeypatch.setattr("raphael_core.agent.cli.allowances.read_allowances", broken)
+    result = await rig.call("usage.allowances")
+    assert result["brains"][0]["windows"][0]["remaining_percent"] == 29
+    assert quotas.allowances("codex")[0]["remaining_percent"] == 29
+    assert heard == []
+
+
+async def test_openings_that_overlap_share_one_live_read_and_the_next_one_reads_again(make_rig, monkeypatch):
+    import asyncio
+    rig, _ = _signed_in_codex(monkeypatch, make_rig)
+    started, release = 0, asyncio.Event()
+
+    async def live(_brains):
+        nonlocal started
+        started += 1
+        await release.wait()
+        return _live_codex({"period": "weekly", "remaining_percent": 100 - started, "resets_at": None})
+    monkeypatch.setattr("raphael_core.agent.cli.allowances.read_allowances", live)
+    first, second = asyncio.ensure_future(rig.call("usage.allowances")), asyncio.ensure_future(rig.call("usage.allowances"))
+    await asyncio.sleep(0.05)
+    assert started == 1
+    release.set()
+    answers = await asyncio.gather(first, second)
+    assert answers[0] == answers[1] and answers[0] is not answers[1]
+    await rig.call("usage.allowances")
+    assert started == 2
+
+
+def test_a_window_read_again_far_above_its_last_tenth_was_reset_and_is_told_again(conn):
+    events = []
+    store = Quotas(conn, lambda: NOW, lambda method, params: events.append((method, params)))
+    reset = NOW // 1000 + 3600
+    store.record("claude", _window(4, reset, "weekly"))
+    voucher = reset  # a reset that keeps the window's end is still a new allowance
+    store.record("claude", _window(29, voucher, "weekly"))
+    store.record("claude", _window(8, voucher, "weekly"))
+    assert [params["remaining_percent"] for method, params in events if method == "quota.warning"] == [4, 8]
+    # A rounding wobble just above the line is the same window: no second telling.
+    store.record("claude", _window(12, voucher, "weekly"))
+    store.record("claude", _window(9, voucher, "weekly"))
+    assert [params["remaining_percent"] for method, params in events if method == "quota.warning"] == [4, 8]
