@@ -200,10 +200,22 @@ class Teaching:
         event = {"order": len(recording.events) + 1, **event}
         recording.events.append(event)
         size = len(json.dumps({**recording.view(), "events": recording.events}, ensure_ascii=False).encode("utf-8"))
-        if len(recording.events) > self.max_events or size > self.max_bytes * 3 // 4 or not self.persist(recording):
+        if len(recording.events) > self.max_events or size > self.max_bytes * 3 // 4 or not self.stored(recording):
             recording.events.pop()
-            recording.state = "full"
-            self.persist(recording)
+            self.fill(recording)
+
+    def stored(self, recording):
+        # A recording that cannot be written (a full disk) is over, like one that has grown too large: an event
+        # kept only in memory would be written later with whatever follows it, and a raise here would end the
+        # viewer's monitor or the owner's press.
+        try:
+            return self.persist(recording)
+        except OSError:
+            return False
+
+    def fill(self, recording):
+        recording.state = "full"
+        self.stored(recording)
 
     async def screen(self, recording):
         if recording.state != "recording" or not self.members.member_exists(recording.member):
@@ -229,15 +241,16 @@ class Teaching:
             return
         async with recording.lock:
             if asyncio.get_running_loop().time() - recording.started > self.max_seconds:
-                recording.state = "full"
-                self.persist(recording)
-                return
-            observation = await self.screen(recording)
-            if recording.state != "recording" or self.viewer.owners.get(recording.target.key) != token:
-                return
-            event = input_event(message, observation)
-            if event:
-                self.append(recording, event)
+                self.fill(recording)
+            else:
+                observation = await self.screen(recording)
+                if recording.state == "recording" and self.viewer.owners.get(recording.target.key) == token:
+                    event = input_event(message, observation)
+                    if event:
+                        self.append(recording, event)
+            # A recording that ended here no longer needs the core before each press.
+            if recording.state == "full" and (publish := getattr(self.viewer, "publish_session", None)):
+                publish(token)
 
     async def tick(self, token):
         recording = self.active(token)
@@ -248,8 +261,7 @@ class Teaching:
             return
         async with recording.lock:
             if asyncio.get_running_loop().time() - recording.started > self.max_seconds:
-                recording.state = "full"
-                self.persist(recording)
+                self.fill(recording)
             else:
                 await self.screen(recording)
 

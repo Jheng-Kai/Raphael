@@ -17,9 +17,13 @@ from .vm import VmError, exec_args
 logger = logging.getLogger(__name__)
 RECORD = '.raphael-carried.json'
 EXCLUDE = sorted(EXCLUDED | {'.raphael-data', RECORD})
-# The member's browser_open waits for this inside CuaBridge.read_timeout_s (120 s), holding the computer's input lock.
-# A copy the budget cuts short goes on by itself in its container; the next start finds its folder and finishes.
+# The member's browser_open waits this long inside CuaBridge.read_timeout_s (120 s), holding the computer's input
+# lock. The carry itself is not cut short: it goes on behind the browser and keeps each old home's guard until that
+# home's copy has ended.
 BUDGET_SECONDS = 75
+# One home's scan or copy. Ending a Docker CLI does not end its container (measured), so a helper that is given up
+# is killed by name before its home's guard is released.
+HELPER_SECONDS = 1800
 # A copy that fails the same way at every start must not be paid for at every start.
 ATTEMPTS = 3
 
@@ -28,9 +32,14 @@ def helper_args(source, target, arguments):
     from .vm import IMAGE
     program = inspect.getsource(carry_runtime)
     script = 'python3 -c ' + shlex.quote(program) + ' ' + shlex.quote(json.dumps(arguments))
-    return ['run', '--rm', '--network', 'none', '--user', '0',
+    return ['run', '--rm', '--network', 'none', '--user', '0', '--name', helper_name(source),
             '-v', str(source.workspace) + ':/from:ro', '-v', str(target.workspace) + ':/to',
             '--entrypoint', 'sh', IMAGE, '-c', script]
+
+
+def helper_name(source):
+    # Not the computers' own prefix: nothing that lists or removes computers by name may ever match a helper.
+    return 'raphael-carry-' + source.name.removeprefix('raphael-computer-')
 
 
 def folder_name(name, key, occupied):
@@ -53,7 +62,15 @@ def folder_name(name, key, occupied):
 
 
 async def helper(vm, source, target, arguments):
-    result = await vm.run_for(target, helper_args(source, target, arguments), timeout=180, limit=200000)
+    try:
+        result = await vm.run_for(target, helper_args(source, target, arguments), timeout=HELPER_SECONDS, limit=200000)
+    except BaseException:
+        # The CLI is gone, its container is not: end it, or it reads the old home after the guard is released.
+        try:
+            await asyncio.shield(vm.run_for(target, ['kill', helper_name(source)], timeout=15))
+        except Exception:
+            pass
+        raise
     if result.code or result.truncated:
         raise VmError('carry_failed')
     return json.loads(result.stdout)
@@ -191,11 +208,19 @@ async def before_browser(vm, target):
     if target.container != 'shared':
         return
     async with vm.carry_lock:
-        if target.physical in vm.carry_attempted:
+        running = vm.carry_tasks.get(target.physical)
+        if target.physical in vm.carry_attempted or running is not None and not running.done():
             return
         vm.carry_attempted.add(target.physical)
-        try:
-            async with asyncio.timeout(BUDGET_SECONDS):
+
+        async def work():
+            try:
                 await carry(vm, target)
-        except Exception as error:
-            logger.warning('Shared computer carry could not finish (%s)', type(error).__name__)
+            except Exception as error:
+                logger.warning('Shared computer carry could not finish (%s)', type(error).__name__)
+
+        task = vm.carry_tasks[target.physical] = asyncio.create_task(work())
+        # Neither the budget nor a cancelled browser call ends the carry: asyncio.wait leaves the task running.
+        done, _ = await asyncio.wait({task}, timeout=BUDGET_SECONDS)
+        if not done:
+            logger.warning('Shared computer carry goes on behind its browser')

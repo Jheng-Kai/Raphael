@@ -360,7 +360,7 @@ class LocalVm:
         from .seats import ComputerSeats
         self.seats = ComputerSeats(conn)
         self.seat_lock = asyncio.Lock()
-        self.carry_lock, self.carry_attempted = asyncio.Lock(), set()
+        self.carry_lock, self.carry_attempted, self.carry_tasks = asyncio.Lock(), set(), {}
         self.physical_active, self.held_targets, self.lease_targets = {}, {}, {}
         async def close_seat_viewers(target):
             pass
@@ -1349,6 +1349,11 @@ print(base64.b64encode(data).decode())
 
     async def aclose(self, *, stop=True):
         await self.data.aclose()
+        # A carry still copying ends with the core: its helper is killed by name as its task is cancelled.
+        for carrying in self.carry_tasks.values():
+            carrying.cancel()
+        await asyncio.gather(*self.carry_tasks.values(), return_exceptions=True)
+        self.carry_tasks.clear()
         for pending in self.preparing.values():
             pending.cancel()
         await asyncio.gather(*self.preparing.values(), return_exceptions=True)

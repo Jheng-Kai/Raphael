@@ -63,6 +63,42 @@ def execute(args, source=Path('/from'), destination=Path('/to')):
     result = {'files': 'left_in_place' if size > LIMIT else 'carried', 'bytes': size,
               'excluded': sorted(excluded), 'skipped_links_or_special': skipped,
               'folder': args['folder'], 'datasets': [], 'profile': 'skipped'}
+
+    def own(tree):
+        # Only ever a tree this run staged inside its own root-only temporary folder: a walk that starts at a
+        # path the members could prepare (a link named .browser-profiles) would hand out whatever it points to.
+        for parent, dirs, names in os.walk(tree, followlinks=False):
+            os.chown(parent, 1000, 1000, follow_symlinks=False)
+            for name in dirs + names:
+                os.chown(Path(parent) / name, 1000, 1000, follow_symlinks=False)
+
+    def own_folders(*relatives):
+        # Folders this run may have made on the way, one by one and checked again; never their contents.
+        for relative in relatives:
+            if os.path.lexists(destination / relative):
+                os.chown(safe(destination, relative), 1000, 1000, follow_symlinks=False)
+
+    # Sign-ins first: they are what can no longer be carried once the browser has started on an empty profile.
+    if args['profile']:
+        target = safe(destination, PROFILE)
+        if os.path.lexists(target):
+            result['profile'] = 'kept_existing'
+        else:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            with tempfile.TemporaryDirectory(prefix='.carry-profile-', dir=target.parent) as temporary:
+                staged = Path(temporary) / 'main'
+                shutil.copytree(safe(source, PROFILE), staged, symlinks=True,
+                                ignore=shutil.ignore_patterns(*PROFILE_LEFT))
+                own(staged)
+                try:
+                    staged.rename(target)
+                    result['profile'] = 'carried'
+                except OSError:
+                    # The browser started meanwhile and made its own profile: that one stays.
+                    if not os.path.lexists(target):
+                        raise
+                    result['profile'] = 'kept_existing'
+            own_folders('.browser-profiles', '.browser-profiles/driver')
     # Above the limit only the files stay where they are: the home's sign-ins and datasets are still carried.
     if size <= LIMIT and not existing:
         # Publish a complete folder once, so failure before rename cannot expose a partial file set.
@@ -74,6 +110,7 @@ def execute(args, source=Path('/from'), destination=Path('/to')):
                 target.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(source / relative, target, follow_symlinks=False)
             (staged / '.raphael-carried-member').write_text(args['key'])
+            own(staged)
             staged.rename(folder)
     databases = source / '.raphael-data'
     if not databases.is_symlink():
@@ -89,32 +126,13 @@ def execute(args, source=Path('/from'), destination=Path('/to')):
                     temporary = Path(stream.name)
                 try:
                     shutil.copy2(database, temporary)
+                    os.chown(temporary, 1000, 1000, follow_symlinks=False)
                     temporary.replace(target)
                 finally:
                     temporary.unlink(missing_ok=True)
                 result['datasets'].append({'name': database.name, 'status': 'carried'})
-    if args['profile']:
-        target = safe(destination, PROFILE)
-        if not os.path.lexists(target):
-            target.parent.mkdir(parents=True, exist_ok=True)
-            with tempfile.TemporaryDirectory(prefix='.carry-profile-', dir=target.parent) as temporary:
-                staged = Path(temporary) / 'main'
-                shutil.copytree(safe(source, PROFILE), staged, symlinks=True,
-                                ignore=shutil.ignore_patterns(*PROFILE_LEFT))
-                staged.rename(target)
-            result['profile'] = 'carried'
-        else:
-            result['profile'] = 'kept_existing'
-    for root in (folder, data, destination / '.browser-profiles'):
-        if not root.exists():
-            continue
-        for parent, dirs, names in os.walk(root, followlinks=False):
-            os.chown(parent, 1000, 1000, follow_symlinks=False)
-            for name in dirs + names:
-                os.chown(Path(parent) / name, 1000, 1000, follow_symlinks=False)
-    for root in (destination / '.raphael-data', destination / '.raphael-data/members'):
-        if root.exists():
-            os.chown(root, 1000, 1000, follow_symlinks=False)
+        if result['datasets']:
+            own_folders('.raphael-data', '.raphael-data/members', '.raphael-data/members/' + args['key'])
     return result
 
 

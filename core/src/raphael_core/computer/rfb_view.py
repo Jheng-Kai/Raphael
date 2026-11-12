@@ -219,7 +219,8 @@ class Rfb:
             self.stream.sendall(struct.pack(">BBxxI", 4, down, key))  # Alt+F4
 
     def updates(self, rectangle):
-        """Ask for raw pixels and yield each framebuffer update's rectangles as (x, y, width, height, BGRX bytes)."""
+        """Ask for raw pixels and yield each rectangle as (x, y, width, height, BGRX bytes), then None when its
+        framebuffer update ends. One rectangle is held at a time: an update may name 4096 of a screen each."""
         x, y, width, height = rectangle
         require(0 <= x < x + width <= 1280 and 0 <= y < y + height <= 900,
                 f"Expected pixel request inside one screen, observed {rectangle}")
@@ -239,28 +240,30 @@ class Rfb:
             require(kind == 0, f"Expected framebuffer update, observed RFB message {kind}")
             count = struct.unpack(">xH", exact(self.stream, 3))[0]
             require(count <= 4096, f"Expected bounded rectangles, observed {count}")
-            rectangles = []
             for _ in range(count):
                 rx, ry, rw, rh, encoding = struct.unpack(">HHHHi", exact(self.stream, 12))
                 require(encoding == 0 and 0 < rw <= 1280 and 0 < rh <= 900 and rx + rw <= 1280 and ry + rh <= 900,
                         f"Expected bounded raw rectangle, observed {(rx, ry, rw, rh, encoding)}")
-                rectangles.append((rx, ry, rw, rh, exact(self.stream, rw * rh * 4)))
-            yield rectangles
+                yield rx, ry, rw, rh, exact(self.stream, rw * rh * 4)
+            yield None
 
     def pixels(self, rectangle):
         x, y, width, height = rectangle
         pixels, covered = [None] * (width * height), 0
-        for rectangles in self.updates(rectangle):
-            for rx, ry, rw, rh, data in rectangles:
-                for yy in range(max(y, ry), min(y + height, ry + rh)):
-                    for xx in range(max(x, rx), min(x + width, rx + rw)):
-                        offset = ((yy - ry) * rw + xx - rx) * 4
-                        index = (yy - y) * width + xx - x
-                        if pixels[index] is None:
-                            covered += 1
-                        pixels[index] = data[offset:offset + 3]
-            if covered == width * height:
-                return pixels
+        for update in self.updates(rectangle):
+            if update is None:
+                # Whole only at an update's end: a bad rectangle later in the same update still refuses the picture.
+                if covered == width * height:
+                    return pixels
+                continue
+            rx, ry, rw, rh, data = update
+            for yy in range(max(y, ry), min(y + height, ry + rh)):
+                for xx in range(max(x, rx), min(x + width, rx + rw)):
+                    offset = ((yy - ry) * rw + xx - rx) * 4
+                    index = (yy - y) * width + xx - x
+                    if pixels[index] is None:
+                        covered += 1
+                    pixels[index] = data[offset:offset + 3]
         raise AssertionError(f"Expected {width * height} raw pixels, observed {covered}")
 
     def frame(self):
@@ -268,14 +271,16 @@ class Rfb:
         Python step per pixel, and an owner's press waits for this picture while a seat is being taught."""
         width, height = 1280, 900
         frame, seen = bytearray(width * height * 4), bytearray(width * height)
-        for rectangles in self.updates((0, 0, width, height)):
-            for rx, ry, rw, rh, data in rectangles:
-                for row in range(rh):
-                    start = (ry + row) * width + rx
-                    frame[start * 4:(start + rw) * 4] = data[row * rw * 4:(row + 1) * rw * 4]
-                    seen[start:start + rw] = b"\x01" * rw
-            if seen.count(1) == width * height:
-                return bytes(frame)
+        for update in self.updates((0, 0, width, height)):
+            if update is None:
+                if seen.count(1) == width * height:
+                    return bytes(frame)
+                continue
+            rx, ry, rw, rh, data = update
+            for row in range(rh):
+                start = (ry + row) * width + rx
+                frame[start * 4:(start + rw) * 4] = data[row * rw * 4:(row + 1) * rw * 4]
+                seen[start:start + rw] = b"\x01" * rw
         raise AssertionError(f"Expected {width * height} raw pixels, observed {seen.count(1)}")
 
 

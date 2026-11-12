@@ -309,9 +309,10 @@ class IsolatedDocker:
         if command == "run":
             if args[1:6] == ['--rm', '--network', 'none', '--user', '0']:
                 from ..computer.carry import helper_args, EXCLUDE, folder_name
-                require(len(args) == 15 and args[6] == args[8] == '-v', 'Expected exact carry run shape')
-                source = self.carry_homes.get(args[7].removesuffix(':/from:ro'))
-                target = self.carry_homes.get(args[9].removesuffix(':/to'))
+                require(len(args) == 17 and args[6] == '--name' and args[8] == args[10] == '-v',
+                        'Expected exact carry run shape')
+                source = self.carry_homes.get(args[9].removesuffix(':/from:ro'))
+                target = self.carry_homes.get(args[11].removesuffix(':/to'))
                 require(source is not None and target is not None and not source.container and target.container == 'shared',
                         'Expected this run\'s registered per-bot and shared homes')
                 program = shlex.split(args[-1])
@@ -329,8 +330,9 @@ class IsolatedDocker:
                             and safe_folder, 'Expected own member destination')
                 else:
                     require(set(data) == {'operation', 'excluded'}, 'Expected exact scan arguments')
-                require(args == helper_args(source, target, data) and args[12] == self.tag,
-                        'Expected exact isolated image and Linux carry program')
+                require(args == helper_args(source, target, data) and args[14] == self.tag
+                        and args[7] == f'raphael-carry-{self.owner}-{source.key}',
+                        'Expected exact isolated image, helper name and Linux carry program')
                 return
             labels = [args[i + 1] for i, value in enumerate(args[:-1]) if value == "--label"]
             require([label for label in labels if label.startswith(f"{vm.LABEL}.owner=")] == [self.label]
@@ -376,6 +378,10 @@ class IsolatedDocker:
             require(len(args) == 3 and args[2] in (self.tag, *OLD_IMAGES.values()), "Expected isolated/previous image inspect")
         elif args[:2] == ["image", "rm"]:
             require(args == ["image", "rm", self.tag], "Expected removal of this run's image tag only")
+        elif command == 'kill':
+            # Only a carry helper of this run, by its exact name: never a computer.
+            require(len(args) == 2 and re.fullmatch(re.escape(f'raphael-carry-{self.owner}-') + '[0-9a-f]{16}', args[1]),
+                    'Expected this run\'s carry helper')
         elif args[:2] == ['volume', 'inspect']:
             require(len(args) == 3 and args[2] in self.carry_homes, 'Expected this run\'s registered workspace volume')
         elif command == "build":
@@ -390,7 +396,7 @@ class IsolatedDocker:
         command = args[0]
         result = await self.runner(args, **kwargs)
         if command == "run" and not result.code:
-            if '--name' in args:
+            if args[1:6] != ['--rm', '--network', 'none', '--user', '0']:
                 name = args[args.index("--name") + 1]
                 self.created.append(name)
                 key = name.removeprefix(self.prefix)

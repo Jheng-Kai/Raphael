@@ -81,7 +81,7 @@ foreground always locks, including DOM routes; inspect has no implicit foregroun
 Shared kind uses six screens, 6 GiB and 4 CPUs; recognized one-screen layer 3/4/5
 shared containers rebuild while keeping home and team mounts. Deletion releases
 all hosts' seats without erasing shared storage and retains historic per-bot cleanup.
-Dataset and teaching are available in shared mode: datasets use .raphael-data/members/<core member key>/ with a common venv/install lock, and teaching records only the member's current seat through core input/tick, the member window projection and a clipped RFB capture. Private-page marks and PRIVATE titles withhold text and images. Historical homes are carried before the shared browser starts by the read-only Linux helper and the core's record, sign-ins first, within a time budget, with busy-source deferral, next-start retry and three attempts. Offline evidence: computer/test_shared_datasets.py, computer/test_shared_teaching.py and computer/test_carry.py; the shared --computer block checks namespaces, a seat-2 recording (with what a press waits for) and persistent-cookie/file/dataset carry on this run's own homes.
+Dataset and teaching are available in shared mode: datasets use .raphael-data/members/<core member key>/ with a common venv/install lock, and teaching records only the member's current seat through core input/tick, the member window projection and a clipped RFB capture. Private-page marks and PRIVATE titles withhold text and images. Historical homes are carried before the shared browser starts by the read-only Linux helper and the core's record, sign-ins first, as a background task the browser waits for only within a budget, with busy-source deferral, next-start retry and three attempts. Offline evidence: computer/test_shared_datasets.py, computer/test_shared_teaching.py and computer/test_carry.py; the shared --computer block checks namespaces, a seat-2 recording (with what a press waits for) and persistent-cookie/file/dataset carry on this run's own homes.
 
 Stage C2: SHARED_ARGUMENTS classifies every offered driver's top-level and nested
 property. Unreviewed parameters, target/from_zoom/capture_id/screenshot_out_file,
@@ -314,6 +314,26 @@ Regressions: `test_login_vault.py::test_saved_field_selection_and_replacement`,
 `::test_cleanup_has_a_total_bound_even_when_the_window_list_never_answers`,
 `::test_failed_restore_cannot_give_leftover_windows_to_the_next_holder`,
 `test_seat_view.py::test_cleanup_window_lists_retain_unknown_classes_and_reject_incomplete_geometry`.
+
+The shared block's three stage D checks (all through product tools, on this run's own homes): two seats
+import a dataset of the same name and each answers and lists only its own; a recording started on seat 2
+holds no window of seat 1, a 1280x900 picture and no canvas-wide driver call, and says what an owner's
+press waits for; a per-bot computer of the run makes a persistent cookie (kept 40 s so the browser writes
+it), a file and a dataset and stops, and after the shared computer's first browser the cookie is sent, the
+file is in the member's folder, the dataset answers on that member's seat, and a second start runs no copy
+helper. `IsolatedDocker` allows exactly the carry helper's `docker run` on homes registered from this
+run's own container creations.
+Measured on the first real run: a press waited 1.03 s for the seat picture against per-bot's 0.23 s,
+because the picture was built one Python step per pixel; `Rfb.frame()` and `png_frame()` make the same
+bytes in 0.20 s, and the check now fails a press that waits more than 0.7 s. No offline test could have
+said so: 113 test files were green. Regressions:
+`test_rfb_view.py::test_the_whole_frame_path_makes_the_same_picture_as_the_per_pixel_path`,
+`test_carry.py::test_large_home_keeps_only_its_files_in_place_and_an_unknown_folder_is_never_merged`,
+`::test_a_copy_that_keeps_failing_is_paid_for_three_times_and_then_left_in_place`,
+`::test_the_browser_waits_only_its_budget_and_a_slow_copy_keeps_the_old_homes_guard`.
+An independent review of stage D (0 blockers, 3 major, 2 minor) found what neither the tests nor the real run had: the helper's ownership pass walked `.browser-profiles` even when a member had made it a link; the budget ended the carry's task and with it the old home's guard while the copy's container went on; a recording that could not be written kept its event in memory and could end the viewer's monitor; a framebuffer update's rectangles were all held at once. All four are fixed with regressions (`test_carry.py::test_a_copy_without_a_profile_hands_over_nothing_a_member_prepared`, `::test_a_helper_that_is_given_up_is_killed_by_name_before_its_error_is_raised`, `members/test_teaching.py::test_a_recording_that_cannot_be_written_ends_as_full_and_keeps_no_unwritten_event`, `test_rfb_view.py::test_one_rectangle_is_held_at_a_time_and_a_picture_is_whole_only_at_an_updates_end`); the fifth, a member swapping its own dataset folder for a link mid-call, is stated in R-COMP-SEAT-01 as outside what the folders are for. The same hand-over had two failures only this machine's whole run showed, in files the author could not run (loopback sockets), and one only the contract showed (a rule naming a renamed test).
+Not covered by the run: a profile after weeks of use (its size and copy time), a remote host's named
+volumes, the app's own viewer during a shared recording.
 
 First real runs (2026-11-12, this PC's Docker Desktop): the first found three defects of the
 command itself that 179 offline tests had passed (guest paths built with the host's path type

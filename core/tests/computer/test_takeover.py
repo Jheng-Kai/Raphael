@@ -68,8 +68,10 @@ async def test_private_takeover_blocks_every_tool_and_resumes_once_after_explici
         before = list(vm.run.calls)
         for ref in list(snapshot.refs.values()):
             if ref.server == "computer":
-                # An unapproved payment is refused before reaching the desktop-control check.
-                result = await call(ref.name)
+                # An unapproved payment is refused before reaching the desktop-control check. A dataset is
+                # offered on a shared computer too; its work is a command in the computer, so a well-formed
+                # call must stop at the owner's hold like every other tool (an ill-formed one never gets there).
+                result = await call(ref.name, {"action": "list", "dataset": "sales"} if ref.name == "dataset" else None)
                 assert not result.ok
                 assert result.kind == ("blocked" if ref.name == "fill_card" else "owner_holds_control")
         assert vm.run.calls == before

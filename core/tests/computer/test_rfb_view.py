@@ -130,3 +130,21 @@ def test_a_frame_that_never_arrives_whole_is_refused():
     served = (struct.pack(">BxH", 0, 1) + struct.pack(">HHHHi", 5, 6, 2, 1, 0) + bytes(8)) * 64
     with pytest.raises(AssertionError, match="Expected 1152000 raw pixels, observed 2"):
         rfb_view.Rfb(RawStream(served)).frame()
+
+
+def test_one_rectangle_is_held_at_a_time_and_a_picture_is_whole_only_at_an_updates_end():
+    # Review D-05: an update may name 4096 rectangles of a whole screen each; holding them all until the update
+    # ended let a view's server make the core hold 18 GB.
+    def rectangle(x, y, width, height):
+        return struct.pack(">HHHHi", x, y, width, height, 0) + bytes(width * height * 4)
+    served = struct.pack(">BxH", 0, 3) + rectangle(0, 0, 4, 2) + rectangle(1, 1, 2, 1) + rectangle(5, 5, 1, 1)
+    stream = RawStream(served)
+    reading = rfb_view.Rfb(stream).updates((0, 0, 1280, 900))
+    assert next(reading)[:4] == (0, 0, 4, 2) and len(stream.data) == len(served) - 4 - 12 - 32
+    assert next(reading)[:4] == (1, 1, 2, 1) and next(reading)[:4] == (5, 5, 1, 1)
+    assert next(reading) is None and not stream.data
+    # A screen that is whole before its update ends is still refused when a later rectangle of that update is bad.
+    whole = struct.pack(">HHHHi", 0, 0, 1280, 900, 0) + bytes(1280 * 900 * 4)
+    bad = struct.pack(">HHHHi", 1279, 0, 2, 1, 0)
+    with pytest.raises(AssertionError, match="bounded raw rectangle"):
+        rfb_view.Rfb(RawStream(struct.pack(">BxH", 0, 2) + whole + bad)).frame()

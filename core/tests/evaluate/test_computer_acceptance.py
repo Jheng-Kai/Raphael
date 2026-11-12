@@ -1173,12 +1173,21 @@ async def test_carry_guard_accepts_only_exact_offline_helper_on_registered_homes
     long_base = carry.folder_name('\u754c' * 100, source.key, set())
     for folder in (long_base, carry.folder_name(long_base, source.key, {long_base})):
         await guard.authorize(carry.helper_args(source, target, {**data, 'folder': folder}))
-    for index, value in ((3, 'host'), (5, 'cua'), (7, str(source.workspace) + ':/from'),
-                         (9, str(tmp_path / 'foreign') + ':/to'), (12, vm.BASE), (14, 'echo unsafe')):
+    assert args[6:8] == ['--name', f'raphael-carry-{machine.owner}-{source.key}']
+    for index, value in ((3, 'host'), (5, 'cua'), (7, f'raphael-carry-{machine.owner}-' + 'b' * 16), (7, source.name),
+                         (9, str(source.workspace) + ':/from'), (11, str(tmp_path / 'foreign') + ':/to'),
+                         (14, vm.BASE), (16, 'echo unsafe')):
         invalid = list(args)
         invalid[index] = value
         with pytest.raises((AssertionError, ValueError)):
             await guard.authorize(invalid)
+    # A helper that is given up is killed by its own name; that permission never reaches a computer.
+    await guard.authorize(['kill', carry.helper_name(source)])
+    for name in (source.name, target.name, 'raphael-carry-foreign-' + source.key, carry.helper_name(source) + '-x'):
+        with pytest.raises(AssertionError):
+            await guard.authorize(['kill', name])
+    with pytest.raises(AssertionError):
+        await guard.authorize(['kill', carry.helper_name(source), source.name])
     for change in ({'key': 'b' * 16}, {'folder': '../other'}, {'folder': None},
                    {'folder': 'Ada-' + source.key + '-' + '2' * 256}, {'excluded': []}, {'extra': True}):
         with pytest.raises(AssertionError):

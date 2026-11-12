@@ -94,6 +94,36 @@ async def test_recording_size_limit_and_single_press_discard(rig):
     assert not recording.path.exists() and recording.id not in teaching.items
 
 
+@pytest.mark.parametrize("via", ["input", "tick"])
+async def test_a_recording_that_cannot_be_written_ends_as_full_and_keeps_no_unwritten_event(rig, via):
+    # Review D-04: a failed write left the key in memory, to be written later with whatever followed, while the
+    # recording still said "recording"; the same failure on a tick ended the viewer's monitor.
+    from unittest.mock import MagicMock
+    teaching, member, session = await setup(rig)
+    teaching.viewer.publish_session = published = MagicMock()
+    result = await teaching.call({"action": "start", "session": "viewer"})
+    recording = teaching.items[result["id"]]
+    written = recording.path.read_text(encoding="utf-8")
+    persist, disk = teaching.persist, {"full": True}
+    def write(item):
+        if disk["full"]:
+            raise OSError(28, "No space left on device")
+        return persist(item)
+    teaching.persist = write
+    if via == "input":
+        await teaching.input("viewer", b"\x04\x01\x00\x00\x00\x00\x00A")
+        published.assert_called_with("viewer")
+    else:
+        teaching.observe.return_value = {"safe": True, "screen": "Another window", "images": []}
+        await teaching.tick("viewer")
+    assert recording.state == "full" and [event["kind"] for event in recording.events] == ["screen"]
+    disk["full"] = False
+    await teaching.input("viewer", b"\x04\x01\x00\x00\x00\x00\x00S")
+    await teaching.tick("viewer")
+    assert [event["kind"] for event in recording.events] == ["screen"]
+    assert recording.path.read_text(encoding="utf-8") == written
+
+
 async def test_draft_is_toolless_untrusted_data_and_only_owner_save_publishes(rig):
     teaching, member, session = await setup(rig)
     calls = []

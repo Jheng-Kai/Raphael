@@ -590,8 +590,8 @@ class DesktopViewer:
             try:
                 await self.teaching.input(token, message)
             except Exception as error:
-                # The relay awaits this before it forwards the press: a recorder that cannot write must not end
-                # the owner's control of the seat. Nothing was recorded, so nothing private was kept.
+                # The relay awaits this before it forwards the press: a recorder that fails must not end the
+                # owner's control of the seat. (A recording that cannot be written ends itself as full.)
                 logging.getLogger(__name__).warning("Seat teaching input was not recorded (%s)", type(error).__name__)
 
     async def flush_teaching(self, token):

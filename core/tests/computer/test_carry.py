@@ -57,9 +57,17 @@ def test_linux_copy_carries_profile_files_and_datasets_with_exclusions_and_sourc
     assert (destination / '.raphael-data/members' / ('a' * 16) / 'sales.duckdb').read_bytes() == b'test dataset'
     assert not list(destination.rglob('venv'))
     assert all((uid, gid) == (1000, 1000) for _, uid, gid in owners)
+    # Files and the profile are handed over while still staged (in the helper's own root-only folder), so
+    # nothing a member could prepare is ever walked; folders made on the way are handed over one by one.
+    owned = {path for path, _, _ in owners}
     assert {destination / '.raphael-data', destination / '.raphael-data/members',
-            destination / 'Ada/report.txt', destination / carry_runtime.PROFILE / 'Default/Cookies',
-            destination / '.raphael-data/members' / ('a' * 16) / 'sales.duckdb'} <= {path for path, _, _ in owners}
+            destination / '.raphael-data/members' / ('a' * 16),
+            destination / '.browser-profiles', destination / '.browser-profiles/driver'} <= owned
+    staged = {path for path in owned if any(part.startswith(('.raphael-carry-', '.carry-profile-')) for part in path.parts)}
+    assert {'report.txt', 'Cookies', '.raphael-carried-member'} <= {path.name for path in staged}
+    assert any(path.parent == destination / '.raphael-data/members' / ('a' * 16) for path in owned)
+    assert not [path for path in owned - staged if path.is_relative_to(destination / 'Ada')
+                or path.is_relative_to(destination / carry_runtime.PROFILE)]
     assert before == {str(p.relative_to(source)): p.read_bytes() for p in source.rglob('*') if p.is_file()}
     assert not (destination / carry.RECORD).exists()
     # A core retry after a later operation failed recognizes its own already published folder.
@@ -80,6 +88,40 @@ def test_large_home_keeps_only_its_files_in_place_and_an_unknown_folder_is_never
     with pytest.raises(ValueError, match='already exists'):
         carry_runtime.execute(arguments(), source, destination)
     assert not list((destination / 'Ada').iterdir())
+
+
+def test_a_copy_without_a_profile_hands_over_nothing_a_member_prepared(homes, monkeypatch):
+    # Review D-02: os.walk follows a link given as its starting point, and the helper is root. A member's
+    # .browser-profiles (a link to anywhere) was walked and handed over even when no profile was copied.
+    source, destination = homes
+    prepared = destination / '.browser-profiles'
+    (prepared / 'elsewhere').mkdir(parents=True)
+    (prepared / 'elsewhere/kept').write_text('made by a member, not by this carry')
+    (destination / '.raphael-data/members' / ('b' * 16)).mkdir(parents=True)
+    owners = []
+    monkeypatch.setattr(carry_runtime.os, 'chown', lambda path, uid, gid, **kwargs: owners.append(Path(path)))
+    result = carry_runtime.execute(arguments(profile=False), source, destination)
+    assert result['profile'] == 'skipped' and result['files'] == 'carried'
+    assert not [path for path in owners if path == prepared or path.is_relative_to(prepared)]
+    assert not [path for path in owners if path.is_relative_to(destination / '.raphael-data/members' / ('b' * 16))]
+
+
+def test_a_profile_the_browser_made_meanwhile_is_kept(homes, monkeypatch):
+    # The carry goes on behind a browser that could not wait: its own new profile wins, the copy is dropped.
+    source, destination = homes
+    target = destination / carry_runtime.PROFILE
+    original = Path.rename
+    def rename(path, new):
+        if Path(new) == target:
+            target.mkdir(parents=True)
+            (target / 'First Run').write_text('the browser was first')
+            raise OSError(39, 'Directory not empty')
+        return original(path, new)
+    monkeypatch.setattr(Path, 'rename', rename)
+    result = carry_runtime.execute(arguments(), source, destination)
+    assert result['profile'] == 'kept_existing' and result['files'] == 'carried'
+    assert [path.name for path in target.iterdir()] == ['First Run']
+    assert not [path for path in target.parent.iterdir() if path.name.startswith('.carry-profile-')]
 
 
 def test_workspace_links_are_skipped_without_copying_their_contents(homes, monkeypatch):
@@ -122,10 +164,13 @@ def test_helper_exact_linux_form_uses_readonly_source_and_same_image(tmp_path, r
     machine = vm.LocalVm(tmp_path, runner=Runtime())
     source, target = machine.target_for(remote, 'a' * 16), machine.shared_target(remote, 1, 1)
     args = carry.helper_args(source, target, arguments())
-    assert args[:7] == ['run', '--rm', '--network', 'none', '--user', '0', '-v']
-    assert args[7] == str(source.workspace) + ':/from:ro'
-    assert args[8:14] == ['-v', str(target.workspace) + ':/to', '--entrypoint', 'sh', vm.IMAGE, '-c']
-    assert 'Singleton*' in args[-1] and '1000' in args[-1]
+    assert args[:6] == ['run', '--rm', '--network', 'none', '--user', '0']
+    # Named, and not with the computers' prefix: a helper that is given up is killed by this name.
+    assert args[6:8] == ['--name', f'raphael-carry-{machine.owner}-' + 'a' * 16] and carry.helper_name(source) == args[7]
+    assert not args[7].startswith('raphael-computer-')
+    assert args[8:10] == ['-v', str(source.workspace) + ':/from:ro']
+    assert args[10:16] == ['-v', str(target.workspace) + ':/to', '--entrypoint', 'sh', vm.IMAGE, '-c']
+    assert 'Singleton*' in args[-1] and '1000' in args[-1] and len(args) == 17
 
 
 @pytest.mark.parametrize('remote', ['', 'test-host'])
@@ -223,17 +268,79 @@ async def test_a_copy_that_keeps_failing_is_paid_for_three_times_and_then_left_i
     assert len(copies) == carry.ATTEMPTS and not machine.maintenance
 
 
-async def test_the_time_budget_ends_a_slow_carry_without_holding_the_browser_or_the_old_computer(tmp_path, monkeypatch):
+async def test_the_browser_waits_only_its_budget_and_a_slow_copy_keeps_the_old_homes_guard(tmp_path, monkeypatch):
+    # Review D-03: cutting the carry short at the budget released the old home while its copy container, which
+    # outlives its Docker CLI, was still reading it. The browser stops waiting; the carry and its guard do not.
+    finish = asyncio.Event()
     async def copy():
-        await asyncio.Event().wait()
+        await finish.wait()
+        return {'profile': 'carried', 'files': 'carried'}
     machine, target, source, state, copies = await carry_rig(tmp_path, monkeypatch, copy)
     monkeypatch.setattr(carry, 'BUDGET_SECONDS', .05)
     await asyncio.wait_for(carry.before_browser(machine, target), 2)
-    # The copy was announced before it began, so the next start knows its folder and counts the attempt.
+    # The copy was announced before it began, so a later start knows its folder and counts the attempt.
     assert state[source.key] == {'status': 'failed', 'folder': 'Ada', 'attempts': 1}
-    assert not machine.maintenance and not machine.locks[source.state_key].locked()
+    assert machine.maintenance and machine.locks[source.state_key].locked()
+    # Another browser of this start, and the next start's first, begin no second carry while this one runs.
+    await carry.before_browser(machine, target)
+    machine.carry_attempted.clear()
     await carry.before_browser(machine, target)
     assert len(copies) == 1
+    finish.set()
+    await machine.carry_tasks[target.physical]
+    assert state[source.key]['status'] == 'done'
+    assert not machine.maintenance and not machine.locks[source.state_key].locked()
+
+
+async def test_a_cancelled_browser_call_does_not_end_the_carry_but_the_core_closing_does(tmp_path, monkeypatch):
+    started = asyncio.Event()
+    async def copy():
+        started.set()
+        await asyncio.Event().wait()
+    machine, target, source, state, copies = await carry_rig(tmp_path, monkeypatch, copy)
+    waiting = asyncio.create_task(carry.before_browser(machine, target))
+    await started.wait()
+    waiting.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await waiting
+    task = machine.carry_tasks[target.physical]
+    assert not task.done() and machine.locks[source.state_key].locked()
+    await machine.aclose(stop=False)
+    assert task.done() and not machine.carry_tasks
+    assert not machine.maintenance and not machine.locks[source.state_key].locked()
+
+
+@pytest.mark.parametrize('ending', ['timeout', 'cancelled'])
+async def test_a_helper_that_is_given_up_is_killed_by_name_before_its_error_is_raised(tmp_path, monkeypatch, ending):
+    # Measured: ending the Docker CLI leaves the container running. Nothing may go on reading an old home.
+    machine = vm.LocalVm(tmp_path, runner=Runtime())
+    source, target = machine.target_for('', 'a' * 16), machine.shared_target('', 1, 1)
+    commands, running = [], asyncio.Event()
+    async def run_for(target, args, **kwargs):
+        commands.append((args[0], args[1] if args[0] == 'kill' else kwargs.get('timeout')))
+        if args[0] == 'run':
+            running.set()
+            if ending == 'timeout':
+                raise TimeoutError
+            await asyncio.Event().wait()
+        return vm.Result(0, '')
+    monkeypatch.setattr(machine, 'run_for', run_for)
+    work = asyncio.create_task(carry.helper(machine, source, target, {'operation': 'scan', 'excluded': carry.EXCLUDE}))
+    await running.wait()
+    if ending == 'cancelled':
+        work.cancel()
+    with pytest.raises(TimeoutError if ending == 'timeout' else asyncio.CancelledError):
+        await work
+    assert commands == [('run', carry.HELPER_SECONDS), ('kill', carry.helper_name(source))]
+    # A helper that ended by itself, well or badly, has no container left to kill.
+    commands.clear()
+    async def failed(target, args, **kwargs):
+        commands.append(args[0])
+        return vm.Result(125, '', 'name already in use')
+    monkeypatch.setattr(machine, 'run_for', failed)
+    with pytest.raises(vm.VmError, match='carry_failed'):
+        await carry.helper(machine, source, target, {'operation': 'scan', 'excluded': carry.EXCLUDE})
+    assert commands == ['run']
 
 
 async def test_shared_activity_is_not_old_activity_but_old_captured_activity_hold_and_lease_are_busy(tmp_path):
