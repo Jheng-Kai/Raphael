@@ -159,6 +159,8 @@ export interface Choice {
   desc?: string;
   /** A small tag after the label in a menu: 「建議」, say. */
   tag?: string;
+  /** A quiet word at the right end of the row: what the choice is (「成員」, 「應用程式」). */
+  trail?: string;
   /** A face or an icon before the label in a menu, as markup from the app's own helpers (faceHTML, ico). */
   lead?: string;
 }
@@ -821,6 +823,7 @@ export function openMenu(
             : `<span class="mt">${esc(o.label)}</span>`) +
           (!o.desc && o.source ? `<small class="msource">${esc(o.source)}</small>` : "") +
           (o.tag ? `<span class="mtag">${esc(o.tag)}</span>` : "") +
+          (o.trail ? `<span class="mtrail">${esc(o.trail)}</span>` : "") +
           (o.detail ? `<span class="md num">${esc(o.detail)}</span>` : "") +
           (placement?.selectionIndicator === false ? "" : `<span class="ck">${o.value === current ? CHECK : ""}</span>`) +
           `</button>`,
