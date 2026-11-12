@@ -51,7 +51,7 @@ export function formatDate(value: string | number): string {
 }
 
 /** The local calendar day `ms` falls on, as a number that grows by one with each day. */
-function dayNumber(ms: number): number {
+export function dayNumber(ms: number): number {
   const d = new Date(ms);
   // Date.UTC of the local date: whole days apart whatever the clock changes in between
   return Math.floor(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / 86_400_000);

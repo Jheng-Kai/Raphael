@@ -1171,8 +1171,17 @@ export function installMock(fixture, config = {}, target = window) {
           { id: "page:weekly", title: sample.page, kind: "page", at_ms: now - hour, turn_id: 2, conversation_id: 11 },
           { id: "delivered-file:notes", title: sample.files[0], kind: "document", at_ms: now - 2 * hour, turn_id: 2, conversation_id: 11 },
           { id: "delivered-file:bundle", title: "交付素材.zip", kind: "archive", at_ms: now - dayMs, turn_id: 2, conversation_id: 11 },
+          { id: "attachment:demo.mp4", title: "操作示範.mp4", kind: "video", mime: "video/mp4", at_ms: now - dayMs - 30 * 60000, turn_id: 2, conversation_id: 11 },
           { id: "link:report", title: "https://example.com/weekly-report", url: "https://example.com/weekly-report", kind: "link", at_ms: now - dayMs - hour, turn_id: 2, conversation_id: 11 },
+          { id: "page:launch", title: "新品上市企劃", kind: "page", at_ms: now - 3 * dayMs, turn_id: 2, conversation_id: 11 },
+          { id: "attachment:voice.m4a", title: "旁白錄音.m4a", kind: "audio", mime: "audio/mp4", at_ms: now - 3 * dayMs - hour, turn_id: 2, conversation_id: 11 },
+          { id: "delivered-file:long", title: "二〇二六年第四季市場調查與競品分析完整報告（含附錄與原始訪談逐字稿）最終版.md", kind: "document", at_ms: now - 5 * dayMs, turn_id: 2, conversation_id: 11 },
           ...Array.from({ length: 8 }, (_, index) => ({ id: `delivered-file:old-${index}`, title: sample.files[index % 3], kind: "document", at_ms: now - (index < 4 ? 10 : 12) * dayMs - index * hour, turn_id: 2, conversation_id: 11 })),
+          // A long Library (the `long` variant): the core's bound of 100 items all at once, every kind, to read the card and its scroll.
+          ...(variant.memberPanelFiles === "long" ? Array.from({ length: 80 }, (_, index) => {
+            const kind = index % 11 === 3 ? "page" : index % 7 === 2 ? "archive" : index % 5 === 1 ? "image" : "document";
+            return { id: `delivered-file:bulk-${index}`, title: kind === "page" ? `頁面 ${index}` : kind === "archive" ? `素材包 ${index}.zip` : kind === "image" ? `圖片 ${index}.png` : `${sample.files[index % 3]}（${index}）`, kind, at_ms: now - (index < 30 ? 14 : 20) * dayMs - index * hour, turn_id: 2, conversation_id: 11 };
+          }) : []),
         ].map(item => ({ ...item, name: item.title, day: dayOf(item.at_ms) }));
         return { files: items.slice(0, limit), has_more: items.length > limit };
       }

@@ -417,30 +417,69 @@ export function checkRendered(name, context = {}) {
       const wide = box.getBoundingClientRect(), list = panel.querySelector('.mb-rts');
       if (list) require(Math.abs(wide.left - list.getBoundingClientRect().left) <= 1 && Math.abs(wide.right - list.getBoundingClientRect().right) <= 1, 'the row is as wide as the routine list');
       require(panel.scrollWidth <= panel.clientWidth + 1 && box.scrollWidth <= box.clientWidth + 1, 'the row does not overflow the panel');
-    } else if (name === 'member-panel-library-images') {
-      const body = panel.querySelector('.mb-tab-body');
-      const pressed = [...body.querySelectorAll('[data-lib-filter]')].filter(button => button.getAttribute('aria-pressed') === 'true').map(button => button.textContent);
-      require(pressed.join() === '圖片', `the 圖片 filter is the one pressed (${pressed})`);
-      require(body.querySelectorAll('.lib-pic').length === 3 && !body.querySelector('.lib-row'), 'only the pictures stay');
-    } else if (name === 'member-panel-library') {
-      // Everything the member delivered, by day: pictures as
-      // thumbnails, every other deliverable a row with its kind's icon, title and time; no links; a filter by kind, never
-      // a 「顯示更多」.
-      const body = panel.querySelector('.mb-tab-body'), days = [...body.querySelectorAll('.lib-day')];
-      require(body.querySelectorAll('[data-panel-file]').length === 14 && !body.querySelector('[data-panel-more]'), 'every deliverable at once, nothing to press for more');
-      require(!body.querySelector('[data-panel-file^="link:"]') && !/example\.com/.test(body.textContent), 'no links');
-      const filters = [...body.querySelectorAll('.lib-filters [data-lib-filter]')].map(button => button.textContent);
-      require(filters.join() === '全部,圖片,檔案' && body.querySelector('.lib-filters').getBoundingClientRect().bottom <= days[0].getBoundingClientRect().top + 1, `one filter of the kinds there are above the days (${filters})`);
-      require(days[0].querySelector('.mb-dh').textContent === '今天' && days[1].querySelector('.mb-dh').textContent === '昨天', 'grouped by day, newest first: 今天, 昨天, then dates');
-      const pictures = [...days[0].querySelectorAll('.lib-pics > .lib-pic')];
-      require(pictures.length === 3 && pictures.every(tile => tile.tagName === 'BUTTON' && tile.querySelector('img[src]') && Math.abs(tile.getBoundingClientRect().width - tile.getBoundingClientRect().height) <= 1), "today's three pictures are square thumbnails, loaded, each a button");
-      require(new Set(pictures.map(tile => Math.round(tile.getBoundingClientRect().top))).size === 1, 'three to a row');
-      const rows = [...body.querySelectorAll('.lib-row')];
-      require(rows.every(row => row.tagName === 'BUTTON' && visible(row.querySelector('.lib-icon .i')) && row.querySelector('.lib-title').textContent && /\d{2}:\d{2}/.test(row.querySelector('time').textContent)), 'every other deliverable is a row: its icon, title and time');
-      require(rows.find(row => row.dataset.panelFile === 'delivered-file:bundle')?.querySelector('.lib-icon').dataset.kind === 'archive', 'the kind sets the icon');
-      for (const row of rows) { const style = getComputedStyle(row); require(parseFloat(style.borderTopWidth) === 0 && (row.matches(':hover') || style.backgroundColor === 'rgba(0, 0, 0, 0)'), 'rows are not framed'); }
-      require(!rows.some(row => row.dataset.panelFile.startsWith('attachment:')), 'pictures are not listed as rows');
-      require(!body.querySelector('.team-file'), 'no file chips any more');
+    } else if (/^member-panel-library(?:-pages|-media|-files|-long)?$/.test(name)) {
+      // The Library, as Grok Bot's (owner, 2026-11-12): chips for the kinds there are, a quiet label per recency group and each
+      // group's items in one rounded card of one-line rows (a 20 px mark and the title). No links, no times, never a 「顯示更多」.
+      const chipName = (/-(pages|media|files)$/.exec(name) ?? [])[1] ?? 'all', long = name.endsWith('-long');
+      const body = panel.querySelector('.mb-tab-body'), groups = [...body.querySelectorAll('.lib-group')], rows = [...body.querySelectorAll('.lib-row')];
+      const bar = body.querySelector('.lib-filters'), chips = [...body.querySelectorAll('.lib-filters [data-lib-filter]')], scroll = panel.querySelector('.mb-det-scroll');
+      const rgb = value => (value.match(/[\d.]+/g) ?? []).slice(0, 3).map(Number);
+      const luminance = value => { const [r, g, b] = rgb(value).map(c => { const s = c / 255; return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4; }); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
+      const contrast = (a, b) => { const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x); return (hi + 0.05) / (lo + 0.05); };
+      require(!body.querySelector('[data-panel-more], .lib-more, .lib-pic, .team-file, time') && !body.querySelector('[data-panel-file^="link:"]') && !/example\.com/.test(body.textContent), 'no links, no times, no 「顯示更多」');
+      // The chips: one row above the groups, each hugging its word, the pressed one the light chip.
+      require(chips.map(button => button.textContent).join() === '全部,頁面,媒體,檔案', `the chips are 全部, 頁面, 媒體, 檔案 (${chips.map(button => button.textContent)})`);
+      require(bar.getBoundingClientRect().bottom <= groups[0].getBoundingClientRect().top + 1, 'the chips stand above the first group');
+      require(new Set(chips.map(button => Math.round(button.getBoundingClientRect().top))).size === 1 && chips.every(button => Math.abs(button.getBoundingClientRect().height - 26) <= 1), 'the chips are one row of 26 px pills');
+      const pressed = chips.filter(button => button.getAttribute('aria-pressed') === 'true');
+      require(pressed.length === 1 && pressed[0].dataset.libFilter === chipName, `the ${chipName} chip is the one pressed (${pressed.map(button => button.dataset.libFilter)})`);
+      const lit = getComputedStyle(pressed[0]), quiet = getComputedStyle(chips.find(button => button !== pressed[0]));
+      require(lit.backgroundColor !== quiet.backgroundColor && contrast(lit.color, lit.backgroundColor) >= 7 && Math.abs(luminance(lit.backgroundColor) - luminance(getComputedStyle(panel).backgroundColor)) > 0.3, 'the pressed chip is the light one with dark words (inverted against the panel)');
+      // The groups: newest first under today, yesterday, past week, older, each one card.
+      const order = ['今天', '昨天', '過去一週', '更早'], labels = groups.map(group => group.querySelector('.mb-dh').textContent);
+      require(labels.length && labels.every(label => order.includes(label)) && labels.join() === order.filter(label => labels.includes(label)).join(), `groups run by recency (${labels})`);
+      const cards = groups.map(group => group.querySelectorAll(':scope > .lib-card'));
+      require(cards.every(found => found.length === 1), 'each group is one card');
+      const box = [...body.querySelectorAll('.lib-card')], first = box[0].getBoundingClientRect();
+      for (const card of box) {
+        const rect = card.getBoundingClientRect(), style = getComputedStyle(card);
+        require(Math.abs(rect.left - first.left) <= 1 && Math.abs(rect.right - first.right) <= 1, 'the cards are one width');
+        require(parseFloat(style.borderTopWidth) === 1 && parseFloat(style.borderTopLeftRadius) >= 11 && style.backgroundColor !== 'rgba(0, 0, 0, 0)' && Math.abs(parseFloat(style.paddingLeft) - 8) <= 1, 'a card is a framed rounded surface with 8 px inside');
+        require(Math.abs(rect.left - chips[0].getBoundingClientRect().left) <= 1, 'the chips start at the card edge');
+      }
+      require(panel.scrollWidth <= panel.clientWidth + 1 && scroll.scrollWidth <= scroll.clientWidth + 1 && first.right <= panel.getBoundingClientRect().right, 'nothing overflows the panel sideways');
+      // The rows: one line of 36 px, a 20 px mark and the title, titles in one column, nothing framed.
+      require(rows.length === ({ all: 18, pages: 2, media: 5, files: 11 }[chipName] + (long ? 80 : 0)), `the ${chipName} chip lists its deliverables (${rows.length})`);
+      const kindsOf = { all: ['page', 'image', 'video', 'audio', 'document', 'archive'], pages: ['page'], media: ['image', 'video', 'audio'], files: ['document', 'archive', 'file'] }[chipName];
+      require(rows.every(row => kindsOf.includes(row.querySelector('.lib-icon').dataset.kind)), `only the ${chipName} kinds are listed`);
+      const titleLeft = rows[0].querySelector('.lib-title').getBoundingClientRect().left;
+      for (const row of rows) {
+        const rect = row.getBoundingClientRect(), mark = row.querySelector('.lib-icon').getBoundingClientRect(), title = row.querySelector('.lib-title'), style = getComputedStyle(row);
+        require(row.tagName === 'BUTTON' && Math.abs(rect.height - 36) <= 1, `a row is a 36 px button (${rect.height})`);
+        require(Math.abs(mark.width - 20) <= 1 && Math.abs(mark.height - 20) <= 1 && row.querySelector('.lib-icon > .i, .lib-icon > img'), 'a 20 px mark');
+        require(title.textContent.trim() && Math.abs(title.getBoundingClientRect().left - titleLeft) <= 1 && title.getBoundingClientRect().left >= mark.right + 8, 'titles start in one column after the mark');
+        require(row.scrollWidth <= row.clientWidth + 1 && title.getBoundingClientRect().right <= rect.right, 'a long title is cut by its row, never wider');
+        require(parseFloat(style.borderTopWidth) === 0 && (row.matches(':hover') || style.backgroundColor === 'rgba(0, 0, 0, 0)'), 'rows are not framed');
+        require(row.children.length === 2, 'a row is its mark and its title, nothing else');
+      }
+      // The group label starts where the marks do.
+      for (const group of groups) {
+        const label = group.querySelector('.mb-dh'), range = document.createRange(); range.selectNodeContents(label);
+        require(Math.abs(range.getBoundingClientRect().left - group.querySelector('.lib-icon').getBoundingClientRect().left) <= 2, 'the label starts where the marks begin');
+      }
+      const marks = new Map(rows.map(row => [row.querySelector('.lib-icon').dataset.kind, row.querySelector('.lib-icon > .i')?.innerHTML]));
+      require(new Set([...marks.values()].filter(Boolean)).size === [...marks.values()].filter(Boolean).length, 'different kinds wear different marks');
+      if (['all', 'media'].includes(chipName) && !long) {
+        const thumbs = [...body.querySelectorAll('.lib-thumb')];
+        require(thumbs.length === 3 && thumbs.every(thumb => thumb.querySelector('img[src]') && Math.abs(thumb.getBoundingClientRect().width - 20) <= 1 && Math.abs(thumb.getBoundingClientRect().height - 20) <= 1 && parseFloat(getComputedStyle(thumb).borderTopLeftRadius) >= 3), "today's three pictures are 20 px rounded thumbnails, loaded");
+        require(!rows.some(row => row.querySelector('.lib-icon[data-kind="image"] > .i')), 'a picture with a stored copy is never the plain icon');
+      }
+      if (['all', 'files'].includes(chipName) && !long) {
+        const word = rows.find(row => row.dataset.panelFile === 'delivered-file:long');
+        require(word && word.querySelector('.lib-title').scrollWidth > word.querySelector('.lib-title').clientWidth, 'a very long file name ends in an ellipsis');
+        require(rows.find(row => row.dataset.panelFile === 'delivered-file:bundle')?.querySelector('.lib-icon').dataset.kind === 'archive', 'the kind sets the mark');
+      }
+      if (long) require(scroll.scrollHeight > scroll.clientHeight * 2, 'a long list scrolls inside the panel');
     } else if (name === 'member-panel-library-open') {
       const opened = window.__look.state?.openedLibraryFile ?? window.__look.openedLibraryFile;
       require(opened?.id === 'delivered-file:bundle' && opened.member_id === 1, `the delivered file opens by its Library handle, never a path (${JSON.stringify(opened)})`);
