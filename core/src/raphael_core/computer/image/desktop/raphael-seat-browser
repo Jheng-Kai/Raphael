@@ -30,9 +30,11 @@ while [ "$attempt" -lt 150 ]; do
   candidates=$(printf '%s\n' "$now" | awk -v before="$before" '
     BEGIN {split(before, rows, "\n"); for (i in rows) old[rows[i]]=1}
     NF && !($0 in old) {print $0}')
+  # With its own profile folder the browser's class is "chromium-browser (<folder>).Chromium-browser": a space
+  # inside it shifts every later column, so the title's marker is looked for in any of them.
   new=$(wmctrl -lpx | awk -v candidates="$candidates" -v pid="$main" -v marker="$marker" '
     BEGIN {split(candidates, rows, "\n"); for (i in rows) fresh[rows[i]]=1}
-    ($1 in fresh) && $3 == pid && $4 ~ /^chromium-browser/ && $6 == marker {print $1; exit}')
+    ($1 in fresh) && $3 == pid && $4 ~ /^chromium-browser/ {for (i = 5; i <= NF; i++) if ($i == marker) {print $1; exit}}')
   [ -n "$new" ] && break
   attempt=$((attempt + 1))
   sleep 0.1
@@ -44,11 +46,26 @@ wmctrl -i -r "$new" -e "0,$((x + 20)),$((y + 20)),$((width - 80)),$((height - 12
 sleep 0.3
 wmctrl -i -r "$new" -b add,maximized_vert,maximized_horz
 # Maximize returns while XFCE is still animating. Publish only settled screen geometry.
+# Once in about twenty launches the browser keeps its own invisible frame while maximized: its content fills the
+# screen and the window reaches a few pixels past it (measured: 1312x893 at -16,-10 of a 1280x851 work area).
+# After a second and a half, maximized and centred on this screen counts as settled; the core brings a window
+# that reaches past its screen back inside before anything is read from it or sent to it.
+filling() {
+  state=$(xprop -id "$new" _NET_WM_STATE 2>/dev/null)
+  case "$state" in *MAXIMIZED_VERT*) ;; *) return 1 ;; esac
+  case "$state" in *MAXIMIZED_HORZ*) ;; *) return 1 ;; esac
+  wmctrl -lG | awk -v id="$new" -v x="$x" -v y="$y" -v w="$width" -v h="$height" '
+    $1 == id && $3 + $5 / 2 >= x && $3 + $5 / 2 < x + w && $4 + $6 / 2 >= y && $4 + $6 / 2 < y + h {found=1}
+    END {exit !found}'
+}
 attempt=0
 while [ "$attempt" -lt 50 ]; do
   if wmctrl -lG | awk -v id="$new" -v x="$x" -v y="$y" -v w="$width" -v h="$height" '
     $1 == id && $3 == x && $4 == y && $5 == w && $6 == h - 49 {found=1}
     END {exit !found}'; then
+    break
+  fi
+  if [ "$attempt" -ge 15 ] && filling; then
     break
   fi
   attempt=$((attempt + 1))

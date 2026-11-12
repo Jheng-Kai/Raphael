@@ -375,7 +375,8 @@ def test_layer_seven_installs_computer_browser_and_existing_profile_grant():
     assert "wmctrl -lG" in launcher and '"$attempt" -lt 50' in launcher
     assert 'data:text/html,<title>$marker</title>' in launcher and '${5' not in launcher
     assert "uniq -u" not in launcher and '!($0 in old)' in launcher
-    assert '$3 == pid' in launcher and '$6 == marker' in launcher
+    # The title is not at a fixed column: the class of a browser with its own profile folder has a space in it.
+    assert '$3 == pid' in launcher and 'if ($i == marker)' in launcher and '$6 == marker' not in launcher
 
 
 def test_launcher_difference_excludes_disappeared_windows_and_attributes_same_pid_popups():
@@ -390,15 +391,43 @@ def test_launcher_difference_excludes_disappeared_windows_and_attributes_same_pi
 now='0x2
 0x3
 0x4
-0x5'
+0x5
+0x6'
 main=99
 marker=raphael-seat-test
-wmctrl() { printf '%s\\n' '0x2 0 99 chromium-browser.Chromium host old' '0x3 0 99 chromium-browser.Chromium host peer-popup' '0x4 0 100 chromium-browser.Chromium host raphael-seat-test' '0x5 0 99 chromium-browser.Chromium host raphael-seat-test'; }
+class='chromium-browser (/home/cua/workspace/.browser-profiles/driver/main).Chromium-browser'
+wmctrl() { printf '%s\\n' "0x2  0 99   $class  host old - Chromium" "0x3  0 99   $class  host peer-popup - Chromium" "0x4  0 100  $class  host raphael-seat-test - Chromium" "0x5  0 99   $class  host raphael-seat-test - Chromium" '0x6  0 99   chromium-browser.Chromium-browser  host raphael-seat-testing - Chromium'; }
 '''
+    # The rows are `wmctrl -lpx` as a real computer printed them on 2026-11-12: the class has a space in it, which
+    # is where a title looked for at a fixed column was never found and no seat got a browser.
     result = subprocess.run([shell], input=script + selection + '\nprintf "%s\\n" "$new"\n',
                             text=True, capture_output=True, timeout=10)
     assert result.returncode == 0, result.stderr
     assert result.stdout.strip() == "0x5"
+
+
+@pytest.mark.parametrize("state,geometry,x,settled", [
+    # Measured on 2026-11-12: maximized, the content filling screen 6, the browser's own frame reaching past it.
+    ("_NET_WM_STATE_MAXIMIZED_HORZ, _NET_WM_STATE_MAXIMIZED_VERT", "2544 890 1312 893", 2560, True),
+    ("_NET_WM_STATE_MAXIMIZED_HORZ, _NET_WM_STATE_MAXIMIZED_VERT", "2544 890 1312 893", 1280, False),  # the next screen's
+    ("_NET_WM_STATE_FOCUSED", "2544 890 1312 893", 2560, False),                                        # not maximized
+    ("_NET_WM_STATE_MAXIMIZED_VERT", "2580 920 1200 851", 2560, False),                                 # half maximized
+])
+def test_launcher_takes_a_maximized_window_that_keeps_its_own_frame_as_settled_on_its_own_screen(state, geometry, x, settled):
+    launcher = (Path(module.__file__).parent / "image/desktop/raphael-seat-browser").read_text(encoding="utf-8")
+    function = launcher[launcher.index("filling() {"):launcher.index("attempt=0\nwhile [ \"$attempt\" -lt 50 ]")]
+    shell = shutil.which("sh")
+    if shell is None:
+        pytest.skip("An installed POSIX shell is required for the launcher's settle test")
+    script = f'''new=0x5 x={x} y=900 width=1280 height=900
+xprop() {{ printf '%s\\n' '_NET_WM_STATE(ATOM) = {state}'; }}
+wmctrl() {{ printf '%s\\n' '0x4  0 0 0 1280 851 host other' '0x5  0 {geometry} host raphael-seat-test - Chromium'; }}
+''' + function + '\nif filling; then echo settled; else echo waiting; fi\n'
+    result = subprocess.run([shell], input=script, text=True, capture_output=True, timeout=10)
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == ("settled" if settled else "waiting")
+    # The exact geometry is still asked for first; the looser test only after a second and a half.
+    assert '[ "$attempt" -ge 15 ] && filling' in launcher
 
 
 @pytest.mark.parametrize("shared,screens", [(False, 1), (True, 1), (True, 6)])
