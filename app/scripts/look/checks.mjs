@@ -1776,6 +1776,36 @@ export function checkRendered(name, context = {}) {
     require(!document.querySelector('.ra-body video[data-attachment]'), 'cancellation leaves no video artifact');
     return {check:name};
   }
+  if (name === 'computer-foot-layout') {
+    // The owner, 2026-11-13: the failed demonstration's line started at the window's edge over the screen and was cut,
+    // its two buttons floated in the far corner and the file changes ran along the top-left. Everything about the
+    // computer sits in one foot directly under the screen (or the box that takes its place), inside its span.
+    const panel = document.querySelector('.desktop-panel[data-expanded]');
+    require(panel, 'the larger view is open');
+    const stage = [...panel.querySelectorAll('.desktop-screen, .desktop-review, .desktop-checkpoints')].find(visible);
+    require(stage, 'the screen or the box in its place is shown');
+    const s = stage.getBoundingClientRect(), round = box => [box.left, box.top, box.right, box.bottom].map(Math.round).join(',');
+    require(Math.abs(stage.getBoundingClientRect().width / s.height - 1280 / 900) < 0.02, `${stage.className} keeps the screen's proportions (${round(s)})`);
+    require(Math.abs((s.left + s.right) / 2 - innerWidth / 2) <= 2, `${stage.className} is centred in the window (${round(s)})`);
+    const items = [...panel.querySelectorAll('.desktop-notes > *, .desktop-dock > *, .desktop-actions')].filter(visible);
+    require(items.some(item => item.matches('.desktop-mode')) || panel.hasAttribute('data-files-only'), 'the pill is under the screen');
+    for (const item of items) {
+      const box = item.getBoundingClientRect(), label = `${item.className || item.dataset.desktop} (${round(box)} under ${round(s)})`;
+      require(box.left >= s.left - 1 && box.right <= s.right + 1, `${label} stays inside the screen's width`);
+      require(box.top >= s.bottom - 1 && box.bottom <= innerHeight + 1, `${label} sits under the screen, inside the window`);
+      require(item.scrollWidth <= item.clientWidth + 1, `${label} is not cut`);
+    }
+    for (const [index, item] of items.entries()) for (const other of items.slice(index + 1)) {
+      const a = item.getBoundingClientRect(), b = other.getBoundingClientRect();
+      require(Math.min(a.right, b.right) - Math.max(a.left, b.left) <= 1 || Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) <= 1, `${item.className || item.dataset.desktop} and ${other.className || other.dataset.desktop} do not overlap`);
+    }
+    if (items.length) require(Math.min(...items.map(item => item.getBoundingClientRect().top)) - s.bottom <= 24, 'the foot follows the screen directly');
+    const dock = panel.querySelector('.desktop-dock');
+    if (visible(dock)) require(Math.abs((dock.getBoundingClientRect().left + dock.getBoundingClientRect().right) / 2 - (s.left + s.right) / 2) <= 2, `the pill is on the screen's centre line (${round(dock.getBoundingClientRect())} under ${round(s)})`);
+    const notes = [...panel.querySelectorAll('.desktop-notes > p')].filter(visible);
+    require(notes.every(note => getComputedStyle(note).textAlign === 'center'), 'each line under the screen is centred');
+    return {check: name, stage: round(s), items: items.map(item => `${item.className || item.dataset.desktop}:${round(item.getBoundingClientRect())}`)};
+  }
   if (name.startsWith('teach-')) {
     const calls = window.__look.calls.filter(c => c.method === 'computer.teach');
     const actions = calls.map(c => c.params.action);
@@ -1797,6 +1827,11 @@ export function checkRendered(name, context = {}) {
       require(visible(editor) && editor.value.includes('## Inputs') && editor.value.includes('## Verification'), 'the existing editor holds an editable skill with inputs and final checks');
       require(actions.includes('stop') && !actions.includes('save'), 'the draft is not saved automatically');
       require(editor.value.includes('Unsaved sample procedure') && !actions.includes('read'), 'Back preserves the unsaved editor without fetching over it');
+    } else if (name === 'teach-failed') {
+      const notice = panel.querySelector('.desktop-error');
+      require(visible(notice) && notice.getAttribute('role') === 'alert' && notice.textContent.startsWith('示範未完成'), 'the failure is said in one line');
+      require(panel.querySelector('[data-desktop="teach"]').textContent === '審閱示範' && visible(panel.querySelector('[data-desktop="discard-teach"]')), 'review and discard stay offered');
+      require(actions.includes('stop') && !actions.includes('save'), 'a failed draft publishes nothing');
     } else if (name === 'teach-discard') {
       require(actions.includes('discard') && !actions.includes('save') && panel.querySelector('.desktop-recording').hidden, 'discard clears the recording without publication');
       require(!panel.hasAttribute('data-expanded') && visible(document.querySelector('.composer')), 'discard returns to the conversation');

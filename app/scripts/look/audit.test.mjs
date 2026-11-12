@@ -356,7 +356,7 @@ describe("rendered look checks", () => {
   });
   it("teaching scenes wait for visible results and check owner publication explicitly", () => {
     const teaching = scenes.filter(scene => scene.name.startsWith('desktop-teach-'));
-    expect(teaching).toHaveLength(6);
+    expect(teaching).toHaveLength(7);
     for (const scene of teaching) {
       expect(scene.steps.some(step => step.action === 'check' && step.name.startsWith('teach-'))).toBe(true);
       for (const step of scene.steps.filter(step => step.action === 'wait')) {
@@ -394,7 +394,7 @@ describe("rendered look checks", () => {
   });
   it("checks the takeover sidebar's CSS visibility rather than its reserved box", () => {
     const browser = new Window();
-    browser.document.body.innerHTML = '<button data-sidebar="open" style="visibility:hidden">Sidebar</button><aside class="mb-det"><section class="desktop-panel" data-expanded><div class="desktop-takeover-bar"><div class="desktop-dock"><span class="desktop-mode-label">你正在控制</span><button data-desktop="return">停止</button></div></div><iframe></iframe></section></aside>';
+    browser.document.body.innerHTML = '<button data-sidebar="open" style="visibility:hidden">Sidebar</button><aside class="mb-det"><section class="desktop-panel" data-expanded><div class="desktop-takeover-bar"></div><div class="desktop-shell"><iframe></iframe><div class="desktop-foot"><div class="desktop-bar"><div class="desktop-dock"><span class="desktop-mode-label">你正在控制</span><button data-desktop="return">停止</button></div></div></div></div></section></aside>';
     for (const element of browser.document.querySelectorAll('*')) element.getBoundingClientRect = () => ({width:720,height:40});
     const frame = browser.document.querySelector('iframe');
     frame.getBoundingClientRect = () => ({width:700,height:492});

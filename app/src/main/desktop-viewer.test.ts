@@ -304,6 +304,24 @@ test('a slow draft can be discarded once and its late answer cannot open an edit
   expect(host.querySelector('#mp-skill-text')).toBeNull();expect(trySent).not.toHaveBeenCalled();
 });
 
+test("the larger view keeps the review, the file changes and one foot inside the screen's shell, and the draft is said once",async()=>{
+  panelOpen=true;mounted.show();await flush();message('connected');
+  const shell = panel().querySelector('.desktop-shell')!, foot = shell.querySelector(':scope > .desktop-foot')!;
+  // R-PANEL-08: the screen, the boxes that take its place and the foot are one column; nothing of the computer sits outside it.
+  expect([...shell.children].map(child => child.className)).toEqual(['desktop-screen', 'desktop-caption', 'desktop-review', 'desktop-checkpoints', 'desktop-foot']);
+  expect([...foot.querySelectorAll(':scope > .desktop-notes > *')].map(child => child.className)).toEqual(['desktop-request', 'desktop-error', 'desktop-recording', 'desktop-teach-missing', 'desktop-try']);
+  expect(foot.querySelector(':scope > .desktop-bar > .desktop-dock [data-desktop="menu"]')).not.toBeNull();
+  expect(foot.querySelector(':scope > .desktop-bar > .desktop-actions [data-desktop="teach"]')).not.toBeNull();
+  api.desktopTeach.mockResolvedValueOnce({id:'demo',state:'recording',text:''});
+  host.querySelector<HTMLButtonElement>('[data-desktop="teach"]')!.click();await flush();
+  api.desktopTeach.mockImplementationOnce(()=>new Promise(()=>{}));
+  host.querySelector<HTMLButtonElement>('[data-desktop="teach"]')!.click();await flush();
+  // While the draft is written the line says so and no button repeats it; Discard stays.
+  expect(shownText(panel()).split('正在整理技能草稿').length - 1).toBe(1);
+  expect(host.querySelector<HTMLButtonElement>('[data-desktop="teach"]')!.hidden).toBe(true);
+  expect(host.querySelector<HTMLButtonElement>('[data-desktop="discard-teach"]')!.hidden).toBe(false);
+});
+
 test('a failed draft can be retried without recording again',async()=>{
   panelOpen=true;mounted.show();await flush();message('connected');
   api.desktopTeach.mockResolvedValueOnce({id:'demo',state:'recording',text:''});

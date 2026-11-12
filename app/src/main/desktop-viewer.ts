@@ -66,14 +66,17 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
   options: { timeline: HTMLElement; conversation: () => number | undefined; name: () => string; face?(): string; closePanel?(): void; openPanel(): void; panelVisible(): boolean; /** The panel shows the computer's row (Details), which keeps a small picture of the screen. */ rowShown?(): boolean; status?(active: boolean): void; changed?(): void; stop?(turnId: number): Promise<unknown>; trySkill?(text: string): void }): { show(): void; hide(close?: boolean): void; refresh(): void; sync(): void; carry(before: Element): void; takeover(): void; files(): void; watch(): void; waitingForOwner(turnId: number): boolean } {
   const panel = document.createElement("section");
   panel.className = "desktop-panel"; panel.id = 'member-computer-panel'; panel.setAttribute('role', 'tabpanel'); panel.setAttribute('aria-labelledby', 'member-tab-computer'); panel.hidden = true;
-  // The preview is one button that opens the larger view; the larger view fills the window, folds back
-  // from beside the window buttons, and keeps what the owner does with it in one pill at the bottom.
-  panel.innerHTML = `<div class="desktop-location-header"></div><div class="desktop-takeover-bar" hidden>${iconButton("left", t("members.panelBack"), ' data-desktop="back" hidden')}${iconButton("shrink", t("desktop.collapse"), ' data-desktop="collapse" hidden')}` +
-    `<div class="desktop-dock"><div class="desktop-mode"><span class="desktop-mode-label" role="status">${ico("eye")}<span></span></span>${btn("", "sm", ' data-desktop="take" hidden')}${btn("", "sm", ' data-desktop="return"')}</div>${iconButton("stop", t("agent.stop"), ' data-desktop="stop" hidden')}${iconButton("more", t("chat.more"), ' data-desktop="menu" aria-haspopup="menu" aria-expanded="false"')}</div></div><p class="desktop-request" role="status" hidden></p><div class="desktop-shell">` +
+  // The preview is one button that opens the larger view; the larger view fills the window and folds back
+  // from beside the window buttons. Everything about the computer sits in one foot directly under the screen and
+  // as wide as it: one quiet line of state above the pill, and a demonstration's actions beside the pill. The
+  // skill review and the file changes take the screen's own place, so the foot never moves (owner, 2026-11-13).
+  panel.innerHTML = `<div class="desktop-location-header"></div><div class="desktop-takeover-bar" hidden>${iconButton("left", t("members.panelBack"), ' data-desktop="back" hidden')}${iconButton("shrink", t("desktop.collapse"), ' data-desktop="collapse" hidden')}</div><div class="desktop-shell">` +
     `<div class="desktop-screen"><img class="desktop-wallpaper" alt=""><img class="desktop-last" alt="" hidden><div class="desktop-placeholder"></div>${btn("", "sm", ' data-desktop="retry" hidden')}` +
     `<iframe referrerpolicy="no-referrer" sandbox="allow-scripts allow-same-origin" hidden></iframe>` +
-    `<button type="button" class="btn desktop-open" data-desktop="enlarge" hidden><span class="desktop-open-pill">${ico("open")}<span></span></span></button></div><p class="desktop-caption"></p></div>` +
-    `<p class="desktop-error" role="alert" hidden></p><p class="desktop-recording" role="status" hidden></p><div class="desktop-teach-missing" hidden></div><div class="desktop-actions">${btn("", "sm", ' data-desktop="discard-teach" hidden')}${btn("", "sm", ' data-desktop="teach"')}</div><div class="desktop-review" hidden></div><div class="desktop-try" hidden><input class="mb-fin" data-teach-input maxlength="4000">${btn("", "sm", ' data-desktop="try-teach"')}</div>`;
+    `<button type="button" class="btn desktop-open" data-desktop="enlarge" hidden><span class="desktop-open-pill">${ico("open")}<span></span></span></button></div><p class="desktop-caption"></p><div class="desktop-review" hidden></div>` +
+    `<div class="desktop-foot"><div class="desktop-notes"><p class="desktop-request" role="status" hidden></p><p class="desktop-error" role="alert" hidden></p><p class="desktop-recording" role="status" hidden></p><div class="desktop-teach-missing" hidden></div><div class="desktop-try" hidden><input class="mb-fin" data-teach-input maxlength="4000">${btn("", "sm", ' data-desktop="try-teach"')}</div></div>` +
+    `<div class="desktop-bar"><div class="desktop-dock"><div class="desktop-mode"><span class="desktop-mode-label" role="status">${ico("eye")}<span></span></span>${btn("", "sm", ' data-desktop="take" hidden')}${btn("", "sm", ' data-desktop="return"')}</div>${iconButton("stop", t("agent.stop"), ' data-desktop="stop" hidden')}${iconButton("more", t("chat.more"), ' data-desktop="menu" aria-haspopup="menu" aria-expanded="false"')}</div>` +
+    `<div class="desktop-actions">${btn("", "sm", ' data-desktop="discard-teach" hidden')}${btn("", "sm", ' data-desktop="teach"')}</div></div></div></div>`;
   const locationHeader = panel.querySelector<HTMLElement>(".desktop-location-header")!;
   const location = mountComputerLocation(locationHeader, draw);
   const frame = panel.querySelector<HTMLIFrameElement>('iframe')!;
@@ -116,6 +119,7 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
   let skillEditor: ReturnType<typeof mountMemberResources> | undefined;
   let teachingBusy = false, drafting = false;
   const checkpoints = mountCheckpoints(panel, member);
+  panel.querySelector('.desktop-foot')!.before(panel.querySelector('.desktop-checkpoints')!);
   const timeline = mountDesktopTimeline(options.timeline);
   let visible = false, generation = 0, timer: ReturnType<typeof setTimeout> | undefined, watching = false;
   let drawn = "", drawnInline: Element | null = null, suspended = false, returnPanelOpen = false, filesOpen = false, filesOnly = false;
@@ -229,6 +233,8 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     paint(panel.querySelector<HTMLElement>('.desktop-takeover-bar')!, 'hidden', !expanded);
     paint(backButton, 'hidden', !filesOpen && (!skillEditor || review.hidden));
     panel.toggleAttribute('data-files', filesOpen);
+    // File changes opened from a result card hold and watch nothing: no pill, Back is the way home.
+    panel.toggleAttribute('data-files-only', filesOnly);
     const request = panel.querySelector<HTMLElement>('.desktop-request')!;
     paint(request, "hidden", !pending()); paint(request, "textContent", pending() ? desktopWorkText(pending()!) : "");
     panel.toggleAttribute("data-request", !!pending());
@@ -238,7 +244,8 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     panel.toggleAttribute('data-teaching', !!recording || drafting || !!demonstration);
     paint(teach, "textContent", t(drafting ? "teach.drafting" : recording ? "teach.stop" : demonstration ? "teach.review" : "teach.start"));
     paint(teach, "disabled", teachingBusy || changing || !demonstration && (!running || !connected || !!pending() || state?.teach_available === false));
-    paint(teach, "hidden", !!skillEditor);
+    // While the draft is written the line above the pill says so; the button would only repeat it.
+    paint(teach, "hidden", !!skillEditor || drafting);
     const missing = panel.querySelector<HTMLElement>('.desktop-teach-missing')!;
     paint(missing, "hidden", state?.teach_available !== false);
     patchHTML(missing, state?.teach_available === false ? noticeHTML('member_computer', 'computer', 'computer') : '');
