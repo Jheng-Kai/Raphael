@@ -55,8 +55,10 @@ messaging) is not here. The kinds are the same for every member and for Raphael,
 (owner, 2026-11-09, memory out of them since 2026-11-11, see [No memory on screen](#no-memory-on-screen-owner-decision-2026-11-11)): 工具 (each
 connected app with its own mark and a switch over the member's `tools` list, then the drafts switch under them),
 技能與指令 (skills as names with switches, a press opens the skill's own view, a plus adds one from a link, delete
-waits in a ⋯ behind a second press; commands), 個性與指示 (personality and instructions, one line each, a press
-opens the box in place and blur saves it; Raphael's too), 通知 (one switch). The model is chosen at the composer
+waits in a ⋯ behind a second press; commands), 個性與指示 (personality and instructions, R-PANEL-07: two quiet rows of
+their words, whole, each with a pencil; a press opens a field in the row's place that is as tall as its words, Enter on
+one line, Ctrl+Enter or leaving it saves without a word (a spinner for the pencil meanwhile), Escape restores; nothing written is one quiet line of
+what could stand there; Raphael's too), 通知 (one switch). The model is chosen at the composer
 alone, members have no voice (the release has none), and the group is the sidebar's. A cover picture moves up and
 down as Notion's Reposition: 調整位置 in the cover's menu, then the picture follows the pointer and 取消 / 儲存位置
 stand where the change icon was (`members.update {cover_position}`, 0 to 100, 50 by default). Raphael's name and
@@ -71,7 +73,7 @@ details-commands, details-notify, raphael-skills, member-edit, speaker-draft-mem
 speaker-draft-chief, member-draft-switch and primary-contact-set.
 
 ```powershell
-npm run look -- member-settings member-settings-raphael member-settings-skills member-settings-tools member-settings-notify member-settings-field member-settings-skill member-settings-command member-settings-cover member-settings-cover-picture member-settings-back-hover member-settings-back member-settings-back-bottom member-settings-back-kept details member-panel-library member-face-hover --theme both --width 1120,720,1920x1080
+npm run look -- member-settings member-settings-raphael member-settings-skills member-settings-tools member-settings-notify member-settings-field member-persona-empty member-persona-filled member-persona-mixed member-persona-long member-persona-editing member-persona-editing-long member-persona-saved member-persona-escape member-settings-skill member-settings-command member-settings-cover member-settings-cover-picture member-settings-back-hover member-settings-back member-settings-back-bottom member-settings-back-kept details member-panel-library member-face-hover --theme both --width 1120,720,1920x1080
 ```
 
 ## No member voices (owner decision, 2026-11-10)

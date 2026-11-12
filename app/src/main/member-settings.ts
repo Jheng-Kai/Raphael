@@ -8,8 +8,10 @@
 // here, nor anywhere in the app (owner, 2026-11-11: 「可以像 Hermes Agent 一樣，都不要讓我們看到記憶好了，所以記憶是在背後
 // 管理的…如果使用者在使用的情況下遇到記憶有錯誤的時候，再跟他說一下，他自己去改就好了」): the core keeps it, the member
 // corrects it when told. The model is chosen at the composer alone, and members have no voice. What the panel beside it
-// already shows (routines, messaging) is not here. A long text (the personality, the instructions, a skill) is one line
-// and opens in place, or in a view of its own, when it is pressed; no row has a text button where an icon says it.
+// already shows (routines, messaging) is not here. The personality and the instructions are one kind of thing, the words the
+// owner gives the member about how to be and what to do, so each is one quiet row of its words, whole, with a pencil: a press
+// turns the row into a field in place (owner, 2026-11-12). A skill opens in a view of its own; no row has a text button where
+// an icon says it.
 import "./member-panel.css";
 import "./member-settings.css";
 import * as api from "./api";
@@ -99,8 +101,10 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
   let category: Category = CATEGORIES[0].id;
   /** The cover picture being moved, as Notion's Reposition: where it was, and where it is now. */
   let reposition: { from: number; at: number } | null = null;
-  /** The long fields that are open to be typed in: closed, each is one line. */
+  /** The long fields that are open to be typed in: closed, each is a row of its words. */
   const editing = new Set<Field>();
+  /** The words of a long field on their way to the core (key `member:field`), shown in its row with a spinner for the pencil until it answers. */
+  const saving = new Map<string, string>();
   let adding = false;
   let skills: Loaded<MemberSkill[]> = "loading";
   let undo: string | null = null;
@@ -153,15 +157,22 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
       `<input class="mb-edit ms-role" id="ms-role" data-member="${member.id}" type="text" maxlength="${ROLE_MAX}" value="${esc(member.role)}" placeholder="${esc(t("members.role"))}" aria-label="${esc(t("members.role"))}" autocomplete="off" spellcheck="false">`;
   }
 
-  /** A long field: one line (or 「未填寫」) behind a press that opens it in place, with a pencil at its end. */
+  /**
+   * A long field, the personality or the instructions: a quiet row of its words as they are, as many lines as they take, with a
+   * pencil at its end, or, when nothing is written, one line saying what could stand there. A press turns the row into a field
+   * in place that is as tall as its words, in the row's own place, size and type, so nothing moves under the pointer.
+   */
   function fieldHTML(member: Member, field: Field): string {
     const label = t(field === "personality" ? "members.personality" : "members.instructions");
-    const value = member[field] ?? "";
+    const hint = t(field === "personality" ? "members.personalityHint" : "members.instructionsHint");
+    const pending = saving.get(`${member.id}:${field}`);
+    const value = pending ?? member[field] ?? "";
     if (editing.has(field)) {
-      return `<div class="ms-edit"><textarea id="ms-${field}" data-member="${member.id}" data-field="${field}" class="mb-fin mb-ta" rows="${field === "personality" ? 3 : 4}" maxlength="${field === "personality" ? PERSONALITY_MAX : INSTRUCTIONS_MAX}" aria-label="${esc(label)}"${field === "personality" ? ` placeholder="${esc(t("members.personalityHint"))}"` : ""}>${esc(value)}</textarea></div>`;
+      return `<textarea id="ms-${field}" data-member="${member.id}" data-field="${field}" class="mb-fin mb-ta ms-field" rows="1" maxlength="${field === "personality" ? PERSONALITY_MAX : INSTRUCTIONS_MAX}" aria-label="${esc(label)}" placeholder="${esc(hint)}" spellcheck="false">${esc(value)}</textarea>`;
     }
-    const peek = value.trim().split(/\r?\n/, 1)[0] || t("members.notSet");
-    return `<button type="button" class="btn ms-open" data-ms="edit" data-field="${field}" data-k="ms-edit:${field}" aria-label="${esc(t("mem.editLabel", { p0: label }))}"><span class="ms-label${value.trim() ? "" : " is-empty"}">${esc(peek)}</span>${ico("pencil")}</button>`;
+    const words = value.trim();
+    const mark = pending === undefined ? ico("pencil") : `<span class="spin" aria-hidden="true"></span>`;
+    return `<button type="button" class="btn ms-open ms-value" data-ms="edit" data-field="${field}" data-k="ms-edit:${field}" aria-label="${esc(t("mem.editLabel", { p0: label }))}"${pending === undefined ? "" : ' aria-busy="true"'}><span class="ms-label${words ? "" : " is-empty"}">${esc(words || hint)}</span>${mark}</button>`;
   }
 
   function skillsHTML(): string {
@@ -366,7 +377,7 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
     // Another member, or the picture taken off, ends a move of the cover that was under way.
     if (reposition && (!sameMember || member.cover?.kind !== "image")) { reposition = null; delete cover.dataset.repositioning; }
     const face = faceHTML(member, 96).replace(/--slime-(?:delay|since):[^;"\s]+;?| data-slime-mounted="[\d.]+"/g, "");
-    const signature = JSON.stringify([stableMember(member), face, view, category, [...editing], adding, skills, undo, commands, toolChoices, skillText, skillBusy, command, getLocale(),
+    const signature = JSON.stringify([stableMember(member), face, view, category, [...editing], [...saving], adding, skills, undo, commands, toolChoices, skillText, skillBusy, command, getLocale(),
       reposition ? reposition.from : null]);
     if (drawn === signature) return;
     drawn = signature;
@@ -504,9 +515,16 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
       if (value !== member.role) await host.update(member.id, { role: value });
     } else if (input instanceof HTMLTextAreaElement && (input.dataset.field === "personality" || input.dataset.field === "instructions")) {
       const field = input.dataset.field;
+      // Leaving the field once it is closed (it went out of the page) asks nothing again.
+      const key = `${member.id}:${field}`;
+      if (saving.has(key)) return;
       const value = input.value.trim();
       editing.delete(field);
-      if (value !== (member[field] ?? "").trim()) await host.update(member.id, { [field]: value });
+      if (value === (member[field] ?? "").trim()) { draw(); return; }
+      saving.set(key, value); draw();
+      // Saved without a word, as the name and the role beside it are: the row shows the new words (a spinner for the pencil)
+      // until the core answers, and a refusal is the host's own note.
+      try { await host.update(member.id, { [field]: value }); } finally { saving.delete(key); }
       draw();
     }
   }
@@ -522,8 +540,14 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
       case "back": if (view.kind === "main") host.back(); else back(); break;
       case "avatar": openMemberAvatarMenu(act, member, host.update); break;
       case "edit": {
-        editing.add(act.dataset.field as Field); draw();
-        el.querySelector<HTMLTextAreaElement>(`#ms-${act.dataset.field}`)?.focus({ preventScroll: true });
+        const field = act.dataset.field as Field;
+        // A field still on its way to the core is not opened again: its row shows the words being saved.
+        if (saving.has(`${member.id}:${field}`)) break;
+        editing.add(field); draw();
+        // The keyboard comes with the caret at the end of the words, where a person goes on writing.
+        const box = el.querySelector<HTMLTextAreaElement>(`#ms-${field}`);
+        box?.focus({ preventScroll: true });
+        box?.setSelectionRange(box.value.length, box.value.length);
         break;
       }
       case "skill-add": adding = !adding; draw(); if (adding) el.querySelector<HTMLInputElement>("#ms-skill-source")?.focus({ preventScroll: true }); break;
@@ -584,6 +608,10 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
     } else if (event.key === "Enter" && !event.isComposing && target.id === "ms-skill-source") {
       event.preventDefault();
       void importSkills();
+    } else if (event.key === "Enter" && !event.isComposing && target instanceof HTMLTextAreaElement && target.dataset.field && (event.ctrlKey || event.metaKey || (!event.shiftKey && !target.value.includes("\n")))) {
+      // A value of one line is saved by Enter, and any value by Ctrl+Enter; Shift+Enter, or Enter in words of several lines, starts a new line.
+      event.preventDefault();
+      target.blur();
     } else if (event.key === "Escape" && field) {
       // Leaving a field with Escape puts back what it held and keeps the page.
       event.preventDefault();
@@ -618,7 +646,7 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
     open() {
       if (!el.hidden) { draw(); return; }
       el.hidden = false;
-      view = { kind: "main" }; category = CATEGORIES[0].id; editing.clear(); adding = false; source = ""; skillText = null; skillBusy = false;
+      view = { kind: "main" }; category = CATEGORIES[0].id; editing.clear(); saving.clear(); adding = false; source = ""; skillText = null; skillBusy = false;
       skills = "loading"; commands = "loading"; toolChoices = "loading"; reposition = null; delete cover.dataset.repositioning;
       drawn = ""; drawnFor = null;
       draw();
