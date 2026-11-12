@@ -27,7 +27,8 @@ export default [
   scene('daily-press-surfaces','Quiet connections and calendar controls retain visible stationary press feedback',[
     ...settings('connections'),wait('.cs-card'),{action:'press-feedback',selectors:['.cs-main']},
     click('[data-conn="connected"]'),wait('.cs-linked'),{action:'press-feedback',selectors:['.cs-linked .cs-main']},
-    key('Escape'),waitGone('.modal-scrim:not([hidden])'),
+    // Esc steps back from the connected list to the view, then closes it (R-APPS-01).
+    key('Escape'),waitGone('.cs-linked'),key('Escape'),waitGone('.modal-scrim:not([hidden])'),
     ...automationScenes.find(item=>item.name==='automations-sparse').steps,
     {action:'calendar-tools'},
     {action:'press-feedback',selectors:['.au-month-grid .btn[aria-pressed="true"]','.au-month-grid .btn[aria-current="date"]']},
