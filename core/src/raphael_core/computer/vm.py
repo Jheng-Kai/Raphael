@@ -1349,10 +1349,10 @@ print(base64.b64encode(data).decode())
 
     async def aclose(self, *, stop=True):
         await self.data.aclose()
-        # A carry still copying ends with the core: its helper is killed by name as its task is cancelled.
-        for carrying in self.carry_tasks.values():
+        # A carry still copying ends with the core. The copy in its container finishes by itself.
+        for carrying, _ in self.carry_tasks.values():
             carrying.cancel()
-        await asyncio.gather(*self.carry_tasks.values(), return_exceptions=True)
+        await asyncio.gather(*(carrying for carrying, _ in self.carry_tasks.values()), return_exceptions=True)
         self.carry_tasks.clear()
         for pending in self.preparing.values():
             pending.cancel()

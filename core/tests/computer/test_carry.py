@@ -106,6 +106,32 @@ def test_a_copy_without_a_profile_hands_over_nothing_a_member_prepared(homes, mo
     assert not [path for path in owners if path.is_relative_to(destination / '.raphael-data/members' / ('b' * 16))]
 
 
+def test_folders_made_on_the_way_are_handed_over_before_a_copy_that_may_fail(homes, monkeypatch):
+    # Second review, D2-06: the helper is root. A profile copy that failed, or was still running when the browser
+    # could wait no longer, left .browser-profiles/driver root-owned: the launcher's own mkdir then fails.
+    source, destination = homes
+    owners = []
+    monkeypatch.setattr(carry_runtime.os, 'chown', lambda path, uid, gid, **kwargs: owners.append(Path(path)))
+    def copytree(*args, **kwargs):
+        assert {destination / '.browser-profiles', destination / '.browser-profiles/driver'} <= set(owners)
+        raise OSError(5, 'synthetic read error')
+    monkeypatch.setattr(carry_runtime.shutil, 'copytree', copytree)
+    with pytest.raises(OSError):
+        carry_runtime.execute(arguments(), source, destination)
+    assert (destination / '.browser-profiles/driver').is_dir() and not (destination / carry_runtime.PROFILE).exists()
+    owners.clear()
+    def copy2(old, new, **kwargs):
+        if Path(old).suffix == '.duckdb':
+            assert {destination / '.raphael-data', destination / '.raphael-data/members',
+                    destination / '.raphael-data/members' / ('a' * 16)} <= set(owners)
+            raise OSError(5, 'synthetic read error')
+        return original(old, new, **kwargs)
+    original = carry_runtime.shutil.copy2
+    monkeypatch.setattr(carry_runtime.shutil, 'copy2', copy2)
+    with pytest.raises(OSError):
+        carry_runtime.execute(arguments(profile=False), source, destination)
+
+
 def test_a_profile_the_browser_made_meanwhile_is_kept(homes, monkeypatch):
     # The carry goes on behind a browser that could not wait: its own new profile wins, the copy is dropped.
     source, destination = homes
@@ -287,7 +313,7 @@ async def test_the_browser_waits_only_its_budget_and_a_slow_copy_keeps_the_old_h
     await carry.before_browser(machine, target)
     assert len(copies) == 1
     finish.set()
-    await machine.carry_tasks[target.physical]
+    await machine.carry_tasks[target.physical][0]
     assert state[source.key]['status'] == 'done'
     assert not machine.maintenance and not machine.locks[source.state_key].locked()
 
@@ -303,44 +329,148 @@ async def test_a_cancelled_browser_call_does_not_end_the_carry_but_the_core_clos
     waiting.cancel()
     with pytest.raises(asyncio.CancelledError):
         await waiting
-    task = machine.carry_tasks[target.physical]
+    task = machine.carry_tasks[target.physical][0]
     assert not task.done() and machine.locks[source.state_key].locked()
     await machine.aclose(stop=False)
     assert task.done() and not machine.carry_tasks
     assert not machine.maintenance and not machine.locks[source.state_key].locked()
 
 
-@pytest.mark.parametrize('ending', ['timeout', 'cancelled'])
-async def test_a_helper_that_is_given_up_is_killed_by_name_before_its_error_is_raised(tmp_path, monkeypatch, ending):
-    # Measured: ending the Docker CLI leaves the container running. Nothing may go on reading an old home.
+def helper_rig(tmp_path, monkeypatch, answer):
     machine = vm.LocalVm(tmp_path, runner=Runtime())
     source, target = machine.target_for('', 'a' * 16), machine.shared_target('', 1, 1)
-    commands, running = [], asyncio.Event()
+    commands = []
     async def run_for(target, args, **kwargs):
-        commands.append((args[0], args[1] if args[0] == 'kill' else kwargs.get('timeout')))
-        if args[0] == 'run':
-            running.set()
-            if ending == 'timeout':
-                raise TimeoutError
-            await asyncio.Event().wait()
-        return vm.Result(0, '')
+        commands.append((args[0], args[1] if args[0] in ('kill', 'wait') else None, kwargs.get('timeout')))
+        return await answer(args, len(commands))
     monkeypatch.setattr(machine, 'run_for', run_for)
-    work = asyncio.create_task(carry.helper(machine, source, target, {'operation': 'scan', 'excluded': carry.EXCLUDE}))
+    return machine, source, target, commands
+
+
+SCAN = {'operation': 'scan', 'excluded': carry.EXCLUDE}
+
+
+async def test_a_hung_helper_is_killed_by_name_before_its_error_is_raised(tmp_path, monkeypatch):
+    # Measured: ending the Docker CLI leaves the container running. A helper out of time is hung, and nothing
+    # else will ever end it; its home's guard is released only after the kill has answered.
+    async def answer(args, count):
+        if args[0] == 'run':
+            raise TimeoutError
+        return vm.Result(0, '')
+    machine, source, target, commands = helper_rig(tmp_path, monkeypatch, answer)
+    with pytest.raises(TimeoutError):
+        await carry.helper(machine, source, target, SCAN)
+    assert commands == [('run', None, carry.HELPER_SECONDS), ('kill', carry.helper_name(source), 15)]
+
+
+async def test_a_closing_core_leaves_its_copy_to_finish_but_sees_a_kill_through(tmp_path, monkeypatch):
+    # A killed copy leaves its staging folder in the workspace for good; a core that closes kills nothing.
+    running = asyncio.Event()
+    async def answer(args, count):
+        running.set()
+        await asyncio.Event().wait()
+    machine, source, target, commands = helper_rig(tmp_path, monkeypatch, answer)
+    work = asyncio.create_task(carry.helper(machine, source, target, SCAN))
     await running.wait()
-    if ending == 'cancelled':
-        work.cancel()
-    with pytest.raises(TimeoutError if ending == 'timeout' else asyncio.CancelledError):
+    work.cancel()
+    with pytest.raises(asyncio.CancelledError):
         await work
-    assert commands == [('run', carry.HELPER_SECONDS), ('kill', carry.helper_name(source))]
-    # A helper that ended by itself, well or badly, has no container left to kill.
-    commands.clear()
-    async def failed(target, args, **kwargs):
-        commands.append(args[0])
-        return vm.Result(125, '', 'name already in use')
-    monkeypatch.setattr(machine, 'run_for', failed)
+    assert [command[0] for command in commands] == ['run']
+    # Second review, D2-02: a cancellation that arrives while a hung helper is being killed must not release the
+    # home before the kill has answered.
+    killing, killed, order = asyncio.Event(), asyncio.Event(), []
+    async def slow_kill(args, count):
+        if args[0] == 'run':
+            raise TimeoutError
+        killing.set()
+        await killed.wait()
+        order.append('kill answered')
+        return vm.Result(0, '')
+    machine, source, target, commands = helper_rig(tmp_path, monkeypatch, slow_kill)
+    work = asyncio.create_task(carry.helper(machine, source, target, SCAN))
+    await killing.wait()
+    work.cancel()
+    await asyncio.sleep(0)
+    await asyncio.sleep(0)
+    assert not work.done()
+    killed.set()
+    with pytest.raises(asyncio.CancelledError):
+        await work
+    order.append('helper returned')
+    assert order == ['kill answered', 'helper returned']
+
+
+async def test_a_helper_an_earlier_core_left_running_is_waited_for_and_then_asked_once_more(tmp_path, monkeypatch):
+    # Second review, D2-02: after a core died its copy may still be reading the old home under the same name.
+    # The new core keeps that home's guard until it has ended; its folder is then found by its mark.
+    async def answer(args, count):
+        if args[0] == 'run':
+            return vm.Result(125, '', 'name already in use') if count == 1 else vm.Result(0, '{"profile": "kept_existing"}')
+        return vm.Result(0, '0')
+    machine, source, target, commands = helper_rig(tmp_path, monkeypatch, answer)
+    assert await carry.helper(machine, source, target, SCAN) == {'profile': 'kept_existing'}
+    assert commands == [('run', None, carry.HELPER_SECONDS), ('wait', carry.helper_name(source), carry.HELPER_SECONDS),
+                        ('run', None, carry.HELPER_SECONDS)]
+
+
+@pytest.mark.parametrize('waiting', ['absent', 'hung', 'failed_again'])
+async def test_a_helper_that_failed_is_not_retried_unless_another_was_seen_to_end(tmp_path, monkeypatch, waiting):
+    async def answer(args, count):
+        if args[0] == 'run':
+            return vm.Result(1, '', 'copy failed')
+        if args[0] == 'wait':
+            if waiting == 'hung':
+                raise TimeoutError
+            return vm.Result(1 if waiting == 'absent' else 0, '', 'No such container')
+        return vm.Result(0, '')
+    machine, source, target, commands = helper_rig(tmp_path, monkeypatch, answer)
     with pytest.raises(vm.VmError, match='carry_failed'):
-        await carry.helper(machine, source, target, {'operation': 'scan', 'excluded': carry.EXCLUDE})
-    assert commands == ['run']
+        await carry.helper(machine, source, target, SCAN)
+    expected = {'absent': ['run', 'wait'], 'hung': ['run', 'wait', 'kill'], 'failed_again': ['run', 'wait', 'run']}
+    assert [command[0] for command in commands] == expected[waiting]
+
+
+async def test_a_closing_core_does_not_sit_out_another_cores_copy(tmp_path, monkeypatch):
+    waiting = asyncio.Event()
+    async def answer(args, count):
+        if args[0] == 'run':
+            return vm.Result(125, '', 'name already in use')
+        waiting.set()
+        await asyncio.Event().wait()
+    machine, source, target, commands = helper_rig(tmp_path, monkeypatch, answer)
+    work = asyncio.create_task(carry.helper(machine, source, target, SCAN))
+    await waiting.wait()
+    work.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await asyncio.wait_for(work, 2)
+    assert [command[0] for command in commands] == ['run', 'wait']
+
+
+async def test_every_browser_of_a_computer_waits_until_the_same_moment_and_another_computer_does_not_queue(tmp_path, monkeypatch):
+    # Second review, D2-05: the lock was held for the whole wait, so a browser of another computer queued behind
+    # it and then began a full budget of its own, past what browser_open allows.
+    finish = asyncio.Event()
+    async def copy():
+        await finish.wait()
+        return {'profile': 'carried', 'files': 'carried'}
+    machine, target, source, state, copies = await carry_rig(tmp_path, monkeypatch, copy)
+    monkeypatch.setattr(carry, 'BUDGET_SECONDS', .3)
+    loop = asyncio.get_running_loop()
+    began = loop.time()
+    first = asyncio.create_task(carry.before_browser(machine, target))
+    await asyncio.sleep(.15)
+    assert not machine.carry_lock.locked()
+    # A second seat's browser waits for what is left of the same budget, not for a budget of its own.
+    await carry.before_browser(machine, machine.shared_target('', 2, 2))
+    waited = loop.time() - began
+    await first
+    assert .25 < waited < .6 and len(copies) == 1
+    # Once the moment has passed nobody waits, though the carry still runs.
+    began = loop.time()
+    await carry.before_browser(machine, target)
+    assert loop.time() - began < .1 and not machine.carry_tasks[target.physical][0].done()
+    finish.set()
+    await machine.carry_tasks[target.physical][0]
 
 
 async def test_shared_activity_is_not_old_activity_but_old_captured_activity_hold_and_lease_are_busy(tmp_path):

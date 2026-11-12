@@ -378,7 +378,7 @@ class IsolatedDocker:
             require(len(args) == 3 and args[2] in (self.tag, *OLD_IMAGES.values()), "Expected isolated/previous image inspect")
         elif args[:2] == ["image", "rm"]:
             require(args == ["image", "rm", self.tag], "Expected removal of this run's image tag only")
-        elif command == 'kill':
+        elif command in ('kill', 'wait'):
             # Only a carry helper of this run, by its exact name: never a computer.
             require(len(args) == 2 and re.fullmatch(re.escape(f'raphael-carry-{self.owner}-') + '[0-9a-f]{16}', args[1]),
                     'Expected this run\'s carry helper')

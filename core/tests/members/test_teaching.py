@@ -124,6 +124,32 @@ async def test_a_recording_that_cannot_be_written_ends_as_full_and_keeps_no_unwr
     assert recording.path.read_text(encoding="utf-8") == written
 
 
+@pytest.mark.parametrize("ending", ["disconnect", "stop", "relay_deadline"])
+async def test_a_recording_that_ends_on_a_full_disk_still_lets_go_of_the_computer(rig, ending):
+    # Second review, D2-03: the write at a recording's end raised into the viewer's close (session removed, the
+    # computer still held, the monitor of every other session ended) and kept stop from handing control back.
+    teaching, member, session = await setup(rig)
+    result = await teaching.call({"action": "start", "session": "viewer"})
+    recording = teaching.items[result["id"]]
+    await teaching.input("viewer", b"\x04\x01\x00\x00\x00\x00\x00A")
+    def write(item):
+        raise OSError(28, "No space left on device")
+    teaching.persist = write
+    if ending == "disconnect":
+        await teaching.disconnected("viewer")
+        assert recording.state == "interrupted"
+    elif ending == "relay_deadline":
+        await teaching.relay_input("viewer", recording.id, '{"full":true}')
+        assert recording.state == "full"
+    else:
+        teaching.viewer.flush_teaching = AsyncMock()
+        teaching.draft = AsyncMock(return_value={"state": "draft"})
+        assert await teaching.call({"action": "stop", "session": "viewer"}) == {"state": "draft"}
+        assert recording.state == "stopped"
+        teaching.viewer.control.assert_awaited_with({"session": "viewer", "held": False})
+    assert [event["kind"] for event in recording.events] == ["screen", "text"]
+
+
 async def test_draft_is_toolless_untrusted_data_and_only_owner_save_publishes(rig):
     teaching, member, session = await setup(rig)
     calls = []

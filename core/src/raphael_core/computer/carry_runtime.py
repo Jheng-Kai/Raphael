@@ -65,8 +65,10 @@ def execute(args, source=Path('/from'), destination=Path('/to')):
               'folder': args['folder'], 'datasets': [], 'profile': 'skipped'}
 
     def own(tree):
-        # Only ever a tree this run staged inside its own root-only temporary folder: a walk that starts at a
-        # path the members could prepare (a link named .browser-profiles) would hand out whatever it points to.
+        # Only ever a tree this run staged inside its own temporary folder: a walk that starts at a path the
+        # members prepared (a link named .browser-profiles) would hand out whatever it points to. A member that
+        # swaps the staging folder's own name while this runs can still turn the walk, but only inside this
+        # throwaway container: its one writable mount is the workspace every member owns, /from is read-only.
         for parent, dirs, names in os.walk(tree, followlinks=False):
             os.chown(parent, 1000, 1000, follow_symlinks=False)
             for name in dirs + names:
@@ -85,6 +87,8 @@ def execute(args, source=Path('/from'), destination=Path('/to')):
             result['profile'] = 'kept_existing'
         else:
             target.parent.mkdir(parents=True, exist_ok=True)
+            # Before the long copy: the browser that could not wait must be able to make its own profile here.
+            own_folders('.browser-profiles', '.browser-profiles/driver')
             with tempfile.TemporaryDirectory(prefix='.carry-profile-', dir=target.parent) as temporary:
                 staged = Path(temporary) / 'main'
                 shutil.copytree(safe(source, PROFILE), staged, symlinks=True,
@@ -94,11 +98,11 @@ def execute(args, source=Path('/from'), destination=Path('/to')):
                     staged.rename(target)
                     result['profile'] = 'carried'
                 except OSError:
-                    # The browser started meanwhile and made its own profile: that one stays.
+                    # The browser started meanwhile and wrote its own profile: that one stays. (A folder its
+                    # launcher has only just made, still empty, is no profile: rename puts the carried one there.)
                     if not os.path.lexists(target):
                         raise
                     result['profile'] = 'kept_existing'
-            own_folders('.browser-profiles', '.browser-profiles/driver')
     # Above the limit only the files stay where they are: the home's sign-ins and datasets are still carried.
     if size <= LIMIT and not existing:
         # Publish a complete folder once, so failure before rename cannot expose a partial file set.
@@ -118,6 +122,8 @@ def execute(args, source=Path('/from'), destination=Path('/to')):
             if database.is_symlink() or not database.is_file():
                 continue
             data.mkdir(parents=True, exist_ok=True)
+            # At once, not after the copies: a copy that fails must not leave the member a folder it cannot use.
+            own_folders('.raphael-data', '.raphael-data/members', '.raphael-data/members/' + args['key'])
             target = safe(data, database.name)
             if target.exists():
                 result['datasets'].append({'name': database.name, 'status': 'kept_existing'})
@@ -131,8 +137,6 @@ def execute(args, source=Path('/from'), destination=Path('/to')):
                 finally:
                     temporary.unlink(missing_ok=True)
                 result['datasets'].append({'name': database.name, 'status': 'carried'})
-        if result['datasets']:
-            own_folders('.raphael-data', '.raphael-data/members', '.raphael-data/members/' + args['key'])
     return result
 
 

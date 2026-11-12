@@ -1182,12 +1182,13 @@ async def test_carry_guard_accepts_only_exact_offline_helper_on_registered_homes
         with pytest.raises((AssertionError, ValueError)):
             await guard.authorize(invalid)
     # A helper that is given up is killed by its own name; that permission never reaches a computer.
-    await guard.authorize(['kill', carry.helper_name(source)])
-    for name in (source.name, target.name, 'raphael-carry-foreign-' + source.key, carry.helper_name(source) + '-x'):
+    for command in ('kill', 'wait'):
+        await guard.authorize([command, carry.helper_name(source)])
+        for name in (source.name, target.name, 'raphael-carry-foreign-' + source.key, carry.helper_name(source) + '-x'):
+            with pytest.raises(AssertionError):
+                await guard.authorize([command, name])
         with pytest.raises(AssertionError):
-            await guard.authorize(['kill', name])
-    with pytest.raises(AssertionError):
-        await guard.authorize(['kill', carry.helper_name(source), source.name])
+            await guard.authorize([command, carry.helper_name(source), source.name])
     for change in ({'key': 'b' * 16}, {'folder': '../other'}, {'folder': None},
                    {'folder': 'Ada-' + source.key + '-' + '2' * 256}, {'excluded': []}, {'extra': True}):
         with pytest.raises(AssertionError):

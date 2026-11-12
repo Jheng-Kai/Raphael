@@ -156,8 +156,7 @@ class Teaching:
                 return
             data = json.loads(payload)
             if data.get("full"):
-                recording.state = "full"
-                self.persist(recording)
+                self.fill(recording)
             else:
                 self.remember_screen(recording, data["observation"])
                 if data["event"]:
@@ -271,7 +270,8 @@ class Teaching:
             # Close holds the viewer control lock; stop holds the recording lock before handback.
             # Invalidate without yielding so neither lock waits on the other.
             recording.state = "interrupted"
-            self.persist(recording)
+            # The viewer is closing this session: a write that fails must not stop it from releasing the computer.
+            self.stored(recording)
 
     def owned(self, params):
         member = params.get("member_id")
@@ -337,7 +337,8 @@ class Teaching:
                 if self.items.get(recording.id) is not recording:
                     raise invalid_params("demonstration discarded")
                 recording.state = "stopped"
-                self.persist(recording)
+                # The draft is made from memory; a write that fails must not keep the computer from the member.
+                self.stored(recording)
                 await self.viewer.control({"session": token, "held": False})
             return await self.draft(recording)
         recording = self.owned(params)

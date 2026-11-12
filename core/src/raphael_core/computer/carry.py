@@ -21,8 +21,9 @@ EXCLUDE = sorted(EXCLUDED | {'.raphael-data', RECORD})
 # lock. The carry itself is not cut short: it goes on behind the browser and keeps each old home's guard until that
 # home's copy has ended.
 BUDGET_SECONDS = 75
-# One home's scan or copy. Ending a Docker CLI does not end its container (measured), so a helper that is given up
-# is killed by name before its home's guard is released.
+# One home's scan or copy. Ending a Docker CLI does not end its container (measured). A helper that runs out of this
+# time is hung: it is killed by name before its home's guard is released. One whose core is closing is left to finish
+# (a killed copy leaves its staging folder behind); the next core finds it by its name and waits for it.
 HELPER_SECONDS = 1800
 # A copy that fails the same way at every start must not be paid for at every start.
 ATTEMPTS = 3
@@ -62,18 +63,46 @@ def folder_name(name, key, occupied):
 
 
 async def helper(vm, source, target, arguments):
-    try:
-        result = await vm.run_for(target, helper_args(source, target, arguments), timeout=HELPER_SECONDS, limit=200000)
-    except BaseException:
-        # The CLI is gone, its container is not: end it, or it reads the old home after the guard is released.
+    name = helper_name(source)
+    for again in (False, True):
         try:
-            await asyncio.shield(vm.run_for(target, ['kill', helper_name(source)], timeout=15))
+            result = await vm.run_for(target, helper_args(source, target, arguments), timeout=HELPER_SECONDS, limit=200000)
+        except TimeoutError:
+            await ended(vm, target, ['kill', name], 15)
+            raise
+        if not result.code and not result.truncated:
+            return json.loads(result.stdout)
+        # The name may be held by a helper an earlier core left running: it is reading this home now. Keep the
+        # guard until it has ended, then ask once more (its folder is found by its mark, nothing is copied twice).
+        if again or not await ended(vm, target, ['wait', name], HELPER_SECONDS):
+            break
+    raise VmError('carry_failed')
+
+
+async def ended(vm, target, command, seconds):
+    """Run the command that ends, or waits for the end of, a helper; True when a helper was there and has ended.
+    A kill is seen through even when its caller is cancelled meanwhile (then the caller is cancelled): the old
+    home's guard must outlive its reader. A wait is not: a closing core does not sit out another's copy."""
+    work = asyncio.ensure_future(vm.run_for(target, command, timeout=seconds))
+    cancelled = False
+    while not work.done():
+        try:
+            await asyncio.shield(work)
+        except asyncio.CancelledError:
+            if command[0] == 'wait':
+                work.cancel()
+                raise
+            cancelled = True
         except Exception:
-            pass
-        raise
-    if result.code or result.truncated:
-        raise VmError('carry_failed')
-    return json.loads(result.stdout)
+            break
+    if cancelled:
+        raise asyncio.CancelledError
+    if work.exception() is None:
+        return not work.result().code
+    if command[0] == 'wait':
+        # It never ended: it is hung, and nothing else will ever end it.
+        await ended(vm, target, ['kill', command[1]], 15)
+    return False
 
 
 async def journal(vm, target, record=None):
@@ -207,20 +236,28 @@ async def carry(vm, target):
 async def before_browser(vm, target):
     if target.container != 'shared':
         return
+    loop = asyncio.get_running_loop()
     async with vm.carry_lock:
         running = vm.carry_tasks.get(target.physical)
-        if target.physical in vm.carry_attempted or running is not None and not running.done():
-            return
-        vm.carry_attempted.add(target.physical)
+        if running is None or running[0].done():
+            if target.physical in vm.carry_attempted:
+                return
+            vm.carry_attempted.add(target.physical)
 
-        async def work():
-            try:
-                await carry(vm, target)
-            except Exception as error:
-                logger.warning('Shared computer carry could not finish (%s)', type(error).__name__)
+            async def work():
+                try:
+                    await carry(vm, target)
+                except Exception as error:
+                    logger.warning('Shared computer carry could not finish (%s)', type(error).__name__)
 
-        task = vm.carry_tasks[target.physical] = asyncio.create_task(work())
-        # Neither the budget nor a cancelled browser call ends the carry: asyncio.wait leaves the task running.
-        done, _ = await asyncio.wait({task}, timeout=BUDGET_SECONDS)
+            running = vm.carry_tasks[target.physical] = asyncio.create_task(work()), loop.time()
+    # Every browser of this computer waits for the same carry until the same moment, so none starts on an empty
+    # profile while the sign-ins are still on their way; after that moment none waits. The lock is not held here:
+    # another computer's browser has its own carry and its own budget. Neither the budget nor a cancelled browser
+    # call ends the carry: asyncio.wait leaves the task running.
+    task, started = running
+    remaining = started + BUDGET_SECONDS - loop.time()
+    if remaining > 0 and not task.done():
+        done, _ = await asyncio.wait({task}, timeout=remaining)
         if not done:
             logger.warning('Shared computer carry goes on behind its browser')
