@@ -175,7 +175,6 @@ export const it = {
   "output.folder": "Cartella di output",
   "output.helpPick": "I membri salvano qui i file che ti consegnano. Cambiare cartella non sposta i file esistenti.",
   "output.change": "Cambia cartella di output (attuale: {p0})",
-  "desktop.repaired": "Connessione riparata; spazio di lavoro e accessi mantenuti.",
   "desktop.wait": "Attendi",
   "desktop.waitHint": "Mantiene tutto e attende la fine del lavoro attuale.",
   "desktop.restart": "Riavvia",

@@ -595,6 +595,14 @@ test('the live view is asked for pictures only while the panel shows one, and as
  inline.remove(); mounted.sync(); expect(asks()).toEqual([true,true,false]);
 });
 
+test('a computer whose connection repaired itself says nothing about it',async()=>{
+ api.desktopStatus.mockResolvedValue({...running,repair_revision:3}); api.desktopRenew.mockResolvedValue({...running,repair_revision:3});
+ panelOpen=true; mounted.show(); await flush(); message('connected');
+ await vi.advanceTimersByTimeAsync(2000); await flush();
+ expect(host.querySelector('.computer-repair-note')).toBeNull();
+ expect(host.textContent).not.toMatch(/修復|repair/i);
+});
+
 test('an unchanged status renewal makes no DOM writes',async()=>{
  panelOpen=true; mounted.show(); await flush(); message('connected');
  const writes: MutationRecord[]=[]; const observer=new MutationObserver(records=>writes.push(...records)); observer.observe(host,{subtree:true,childList:true,attributes:true,characterData:true});

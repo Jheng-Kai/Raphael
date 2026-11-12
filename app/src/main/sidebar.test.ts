@@ -31,6 +31,8 @@ test("the footer opens Connections, keeps named icon actions and refreshes only 
     ['settings', 'general'], ['dictation', null], ['home', null],
   ]);
   expect(nav.querySelector('.sidebar-apps')?.getAttribute('aria-label')).toContain('4');
+  // The pill says its own words: nothing more shows under the pointer (owner, 2026-11-12).
+  expect(nav.querySelector('.sidebar-apps')?.hasAttribute('data-tooltip') || nav.querySelector('.sidebar-apps')?.hasAttribute('title')).toBe(false);
   for (const id of ['dictation', 'home']) {
     const button = nav.querySelector(`[data-go="${id}"]`)!;
     expect(button.classList.contains('icon')).toBe(true);
@@ -175,6 +177,8 @@ test("a window under 860 px shows the rail of faces: no menu button or drawer, s
     expect(document.querySelector('[data-sidebar="open"], .sidebar-toggle, .sidebar-scrim')).toBeNull();
     expect(nav.inert).toBe(false);
     expect([...nav.querySelectorAll(".side-foot [data-col]")].map(button => button.getAttribute("data-col"))).toEqual(["search", "add"]);
+    // The rail's Connections button is a bare icon, so it alone keeps its name under the pointer.
+    expect(nav.querySelector<HTMLElement>(".sidebar-apps")!.dataset.tooltip).toBeTruthy();
   } finally { read.mockRestore(); vi.unstubAllGlobals(); document.documentElement.removeAttribute("data-sidebar-collapsed"); document.documentElement.removeAttribute("data-sidebar-narrow"); }
 });
 
@@ -232,14 +236,19 @@ test("the rail is 88 px, and under 860 px there is no drawer: the list stays in 
   expect(css).not.toMatch(/translateX\(-100%\)|sidebar-scrim|sidebar-toggle|data-sidebar-open/);
 });
 
-test("a row is a 54 px highlight 58 px from the next, and the foot is one row of 36 px", () => {
+test("a row is a 54 px highlight 58 px from the next, and the foot keeps its two rows", () => {
   const css = readFileSync("src/main/sidebar.css", "utf8");
   expect(css).toContain("--side-row: 54px; --side-face: 36px;");
   expect(css).toMatch(/\.side :is\(\.mb-list, \.mb-gclip\) \{ gap: var\(--sp-1\); \}/);
   expect(css).toMatch(/\.side \.nav\.mb-row \{[^}]*min-height: var\(--side-row\)[^}]*border-radius: var\(--r-md\)/);
   expect(css).toMatch(/\.side \.mb-row-t b \{ font-size: var\(--fs-sm\)/);
   expect(css).toMatch(/\.side \.mb-row-p \{ font-size: var\(--fs-xs\)/);
-  expect(css).toMatch(/\.sidebar-foot-row \{ display: contents; \}/);
+  // The Connections pill has a row to itself; the account, the microphone and Home share the row under it. Only the rail unwraps it.
+  expect(css).toMatch(/\.side \.side-foot \{ display: grid; grid-template-columns: minmax\(0, 1fr\);/);
+  expect(css).toMatch(/\n\.sidebar-foot-row \{ display: flex; align-items: center;/);
+  expect(css).toMatch(/:root\[data-sidebar-collapsed\] \.sidebar-foot-row \{ display: contents; \}/);
+  expect(css).not.toMatch(/\.sidebar-account-name \{ display: none; \}/);
+  expect(readFileSync("src/main/sidebar.ts", "utf8")).not.toMatch(/placeTools|FOOT_TOOLS_MIN/);
 });
 
 test("private timeline events use the full conversation column", () => {

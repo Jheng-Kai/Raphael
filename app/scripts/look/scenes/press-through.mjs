@@ -1,5 +1,8 @@
 import { scene, click, wait, check, member, rightClick } from "./steps.mjs";
 
+// A page open in the conversation's place runs in a frame of another origin: a press inside it never reaches the app's own document.
+const pageOpen = [member(1), wait('.pg-body[data-state="ready"] iframe'), { action: "frame-wait", selector: "#hide" }, click(".pg-card .pg-body"), wait(".pgv-frame-box iframe")];
+
 // R-UI-121 (owner, 2026-11-11): a press outside what is open closes it and is delivered to what was pressed, in the same press.
 // Each scene presses once, with the real mouse, on a control that is not part of what is open; the check then finds both halves done.
 const column = { action: "member-column", collapsed: false };
@@ -19,4 +22,6 @@ export default [
   scene("press-through-model-menu", "With the composer's model menu open, one press on the header's conversation button closes it and opens the details", [
     // From 1440 px wide the details stand open by default, and the header button then closes them; the press is meant to open them.
     member(1), { action: "close-details-if-open" }, click(".composer .cmp-model .mp-trigger"), wait(".cb-menu .cb-now"), click(".conversation-trigger"), check("press-through-model-menu")]),
+  scene("press-through-page-frame", "With the composer's model card open over a page in the conversation's place, one press inside the page closes the card and the page keeps the press", [
+    ...pageOpen, click(".composer .cmp-model .mp-trigger"), wait(".cb-menu .cb-now"), { action: "frame-click", selector: "h1" }, check("press-through-page-frame")], { pageTurn: true, pageNews: "only" }),
 ];

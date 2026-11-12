@@ -110,10 +110,10 @@ gets narrower than at 900 px with the old list; a dragged width (240 to 400 px) 
 under Raphael's row and between folders, the unread dot on the face's corner, the name as the face's tooltip, a right click opens the row menu,
 and at its foot search and plus side by side (the plus opens the list's own menu), microphone and Home side by side, the Connections icon
 and the account. Folders folded in the list stay folded in the rail, and a folder's heading and the hidden folder are not reachable there
-(widen the window). The wide list's foot is one row: the account's face at the left and the 36 px Connections pill filling the rest, with
-microphone and Home at its end while the pill keeps 180 px; a list narrower than 336 px puts those two in the top row beside search and plus.
+(widen the window). The wide list's foot keeps its two rows (owner, 2026-11-12): the 40 px Connections pill on a row of its own, with no tooltip, and under it
+the account's face and name with microphone and Home at the row's end, at every width of the list.
 `sidebar-metrics` records the numbers (width, pitch, highlight, type, foot, rows that fit), `sidebar-air` asserts them (and the rail's),
-`sidebar-air-foot` the narrow list, `panel-widest` (the details panel dragged as wide as it goes beside the conversation: at 1120 the panel stops at 388 px so the conversation keeps 386 px and the one-row composer 301 px, `composer-shape-narrow` measures the same), `sidebar-rail-menu` the right click, `sidebar-drag-row` a dragged row at the new height.
+`sidebar-air-foot` the same foot on a list dragged narrow, `panel-widest` (the details panel dragged as wide as it goes beside the conversation: at 1120 the panel stops at 388 px so the conversation keeps 386 px), `sidebar-rail-menu` the right click, `sidebar-drag-row` a dragged row at the new height.
 
 ```powershell
 npm run look -- sidebar-metrics sidebar-air sidebar-air-foot sidebar-rail-menu sidebar-drag-row panel-widest sidebar-rail sidebar-drawer sidebar sidebar-many sidebar-unread --theme both --width 1120,720,1920x1080
@@ -1172,7 +1172,7 @@ Each scene presses once with the real mouse on a control that is not part of wha
 `checks.mjs` `press-through-*` waits only for the page to draw the result, never presses again. At 720 the list is the rail of faces, always on screen, so the press on a face is one press.
 
 ```text
-npm run look -- press-through-avatar-picker press-through-row-menu press-through-right-click press-through-delete-dialog press-through-model-menu --theme both --width 1120,720,1920x1080
+npm run look -- press-through-avatar-picker press-through-row-menu press-through-right-click press-through-delete-dialog press-through-model-menu press-through-page-frame --theme both --width 1120,720,1920x1080
 ```
 
 ## The control that opened a thing is its toggle (2026-11-11)

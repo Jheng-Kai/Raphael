@@ -353,7 +353,7 @@ export function checkRendered(name, context = {}) {
     // The face sits inside the avatar button since 415811f0 (a bot opens from its name), so it is found beneath the identity.
     const face = panel.querySelector('.mb-panel-identity .av').getBoundingClientRect(), named = panel.querySelector('.mb-panel-identity > b').getBoundingClientRect();
     require(face.width >= 56 && face.bottom <= named.top + 1 && Math.abs(face.left + face.width / 2 - (named.left + named.width / 2)) <= 1, 'a large face stands centred above the name');
-    for (const button of [...panel.querySelectorAll('.mb-det-head .btn.icon'), ...document.querySelectorAll('.page-agent .mb-head .btn.icon, .page-agent .cmp-row .cmp-attach')].filter(visible)) {
+    for (const button of [...panel.querySelectorAll('.mb-det-head .btn.icon'), ...document.querySelectorAll('.page-agent .mb-head .btn.icon, .page-agent .cmp-bar .cmp-attach')].filter(visible)) {
       const style = getComputedStyle(button), box = button.getBoundingClientRect();
       require(parseFloat(style.borderRadius) >= box.width / 2 - 0.5 && Math.abs(box.width - box.height) < 1 && style.backgroundColor !== 'rgba(0, 0, 0, 0)', `the buttons on the window's edges are soft round buttons (${button.getAttribute('aria-label') ?? button.dataset.act})`);
     }
@@ -980,6 +980,14 @@ export function checkRendered(name, context = {}) {
     return {check:name};
   }  if(name === "daily-newest") {const reads=window.__look.calls.filter(call=>call.method==='agent.history.list'&&!call.params?.member_id&&call.params?.conversation_id!==undefined);require(reads.length>0&&reads.every(call=>call.params.conversation_id===77),'the newest standard conversation (not the default one, not the quick questions) is the one read');require(document.querySelector('.conversation-caption').hidden,'the header names only the member while a standard conversation is open (R-UI-103)');return {check:name,reads:reads.map(call=>call.params.conversation_id)};}
   if(name === "daily-copy") {const copied={"zh-TW":"已複製",en:"Copied",ja:"コピーしました"}[document.documentElement.lang];const tick=[...document.querySelectorAll('.thread button, .cn-setup-dialog button, .au-routine-dialog button')].find(el=>el.getAttribute('aria-label')===copied);require(tick&&tick.querySelector('svg'),'the pressed copy control displays its tick and copied name');require(tick.scrollWidth<=tick.clientWidth,'copied words fit in the fixed button width');return {check:name};}
+  if(name === "daily-footer-hover") {
+    // The pointer is on the Connections pill. In the list it says its own words, so nothing more shows under the pointer (owner,
+    // 2026-11-12); on the rail it is a bare icon, and its name is its tooltip as a face's is.
+    const pill=document.querySelector('#nav .sidebar-apps'),tips=[...document.querySelectorAll('[role="tooltip"]')].filter(visible);
+    require(pill.matches(':hover'),'the pointer is on the Connections pill');
+    if(document.documentElement.hasAttribute('data-sidebar-collapsed'))require(pill.dataset.tooltip&&!visible(pill.querySelector('.nav-t')),"the rail's bare icon keeps its name as its tooltip");
+    else require(tips.length===0&&!pill.hasAttribute('data-tooltip')&&!pill.hasAttribute('title')&&visible(pill.querySelector('.nav-t')),`nothing shows under the pointer over the pill: ${tips.map(tip=>tip.textContent)}`);
+    return {check:name,tips:tips.length};}
   if(name === "daily-marks") {
     // The rail of faces (a window under 860px) has no room for marks: the Connections button is an icon there, named by its tooltip and still the door to the same dialog.
     if(document.documentElement.hasAttribute('data-sidebar-collapsed')){const door=document.querySelector('#nav .sidebar-apps[data-connect-apps]'),box=door.getBoundingClientRect();require(visible(door)&&Math.abs(box.width-36)<1&&Math.abs(box.height-36)<1&&door.getAttribute('aria-label')&&door.dataset.tooltip&&!visible(door.querySelector('.nav-t'))&&![...door.querySelectorAll('.sidebar-app-marks .mono')].some(visible),'on the rail the Connections door is a 36px icon with its name as tooltip and no marks');return {check:name,rail:true};}
@@ -1888,10 +1896,10 @@ export function checkRendered(name, context = {}) {
       require(sends.length===(name.endsWith('retry')?2:1) && sends.every(call=>call.text==='Please review the project note.'), 'the exact restored words cross only the send boundary');
       if (name.endsWith('failed')) {
         require(document.querySelector('.cmp-input').value==='Please review the project note.' && visible(document.querySelector('.composer-failure [data-card-retry]')), 'failure keeps the draft and retry beside the composer');
-        const failed=document.querySelector('.composer-failure'), card=failed.querySelector('.conversation-card'), field=failed.closest('.composer');
+        const failed=document.querySelector('.composer-failure'), card=failed.querySelector('.conversation-card'), field=document.querySelector('.cmp-field')??document.querySelector('.cmp-input');
         require(failed.querySelectorAll('.card-status.is-failed').length===1 && !failed.querySelector('.card-failure p'), 'the failure is said once, in the status: no sentence repeats it');
         const box=card.getBoundingClientRect(), row=field.getBoundingClientRect();
-        require(box.left-row.left>=0 && box.left-row.left<=14, `the failed card starts at the composer's left, inside its box, never centred between gutters (card ${Math.round(box.left)}, composer ${Math.round(row.left)})`);
+        require(Math.abs(box.left-row.left)<=8, `the failed card starts where the field starts, never centred between gutters (card ${Math.round(box.left)}, field ${Math.round(row.left)})`);
       }
       else require(document.querySelector('.cmp-input').value==='' && !document.querySelector('.composer-failure'), 'successful retry clears the draft and failure');
     }
@@ -2369,13 +2377,13 @@ export function checkRendered(name, context = {}) {
     require(pair.map(button=>button.dataset.col).join()==='search,add'&&!column.querySelector('input'),'search then plus, with no field standing in the list');
     for(const button of pair.filter(visible)){const box=button.getBoundingClientRect(),style=getComputedStyle(button);require(Math.abs(box.width-36)<1&&Math.abs(box.height-36)<1&&parseFloat(style.borderRadius)>=18&&style.backgroundColor!=='rgba(0, 0, 0, 0)'&&style.borderTopColor==='rgba(0, 0, 0, 0)','search and plus are 36px soft round buttons with no frame');}
     if(!rail&&pair.every(visible))require(pair.every(button=>button.parentElement===header)&&Math.abs(pair[0].getBoundingClientRect().top-pair[1].getBoundingClientRect().top)<1&&pair[1].getBoundingClientRect().right>pair[0].getBoundingClientRect().right,'search and plus stand side by side in the top row');
-    // Dictation and Home stand beside the account on the foot's one row, or in the top row when the list is too narrow for them.
-    require(nav.querySelector('.side-foot > .sidebar-apps[data-connect-apps]')&&['settings','dictation','home'].every(go=>nav.querySelector(`.side-foot [data-go="${go}"], .mb-top [data-go="${go}"]`)),'footer opens Connect apps (its own dialog, R-UI-111) beside account, dictation and Home');
+    // Dictation and Home stand beside the account on the foot's second row, under the Connections pill (R-SIDE-01).
+    require(nav.querySelector('.side-foot > .sidebar-apps[data-connect-apps]')&&['settings','dictation','home'].every(go=>nav.querySelector(`.side-foot [data-go="${go}"]`)),'footer opens Connect apps (its own dialog, R-UI-111) above account, dictation and Home');
     if(!document.documentElement.hasAttribute('data-sidebar-collapsed')){const home=nav.querySelector('.sidebar-home'),box=home.getBoundingClientRect();require(Math.abs(box.width-36)<1&&Math.abs(box.height-36)<1&&getComputedStyle(home).borderRadius===getComputedStyle(nav.querySelector('.sidebar-dictation')).borderRadius,'Home keeps the shared icon surface');}
     for(const button of nav.querySelectorAll('.btn.icon:not([data-col]), .side-foot .nav'))if(visible(button)&&!visible(button.querySelector('.nav-t'))){const box=button.getBoundingClientRect(),corner=parseFloat(getComputedStyle(button).borderRadius);require(corner>0&&corner<Math.min(box.width,box.height)/2,`sidebar buttons are rounded squares, never circles (${button.className})`);}
     require(nav.querySelector('.side-foot [data-go="dictation"]').getAttribute('aria-label')&&!nav.querySelector('.side-foot [data-go="dictation"] .nav-t'),'dictation is a named icon button');
     require(nav.querySelector('.sidebar-account .owner-face')&&nav.querySelector('.sidebar-account').getAttribute('aria-label'),'account has its own face and accessible name');
-    require(!nav.querySelector('.sidebar-account > svg.i')&&visible(nav.querySelector('.sidebar-account .owner-face')),'account shows its face alone (its name is its accessible name), without a gear');
+    require(!nav.querySelector('.sidebar-account > svg.i')&&visible(nav.querySelector('.sidebar-account .owner-face'))&&(rail||visible(nav.querySelector('.sidebar-account-name'))),'account shows its face and name (the face alone on the rail), without a gear');
     require(!nav.querySelector('.au-rooms-section .mb-ghead, [data-room-new], .mb-sec[data-group="none"] .mb-ghead'),'only owner-created sections have headings');
     require(getComputedStyle(nav.querySelector('.side-foot')).borderTopWidth==='0px','footer has no separator');
     // The list is always on screen: a rail of faces under 860 px (no menu button, drawer or scrim), else 348 px wide as Grok Bot's
@@ -2498,18 +2506,20 @@ export function checkRendered(name, context = {}) {
       if(prev)near(centre-box(prev).bottom,26,'a label stands 26px under the row above it');
       near(box(section.querySelector('.mb-row')).top-centre,18,'a label stands 18px over its first row');
     }
-    // The foot is one row: the account's face at the left, the pill filling the rest, and the microphone and Home at its end while the pill keeps 180px.
+    // The foot keeps its two rows at every width of the list (owner, 2026-11-12): the Connections pill on a row of its own, and under it
+    // the account's face and name with the microphone and Home at the row's end. The pill says its own words, so it has no tooltip.
     const foot=nav.querySelector('.side-foot'),account=foot.querySelector('.sidebar-account'),pill=foot.querySelector('.sidebar-apps'),mic=nav.querySelector('.sidebar-dictation'),home=nav.querySelector('.sidebar-home');
-    near(box(pill).height,36,'the pill is 36px tall');near(box(account).top,box(pill).top,'the account and the pill stand on one row');
-    require(box(account).right<=box(pill).left&&Math.abs(box(account).left-n.left-12)<=1,"the account's face is at the left, the pill after it");
-    if(n.width>=336){
-      near(box(mic).top,box(pill).top,"the microphone stands on the foot's row");near(box(home).top,box(pill).top,"Home stands on the foot's row");
-      require(box(pill).width>=180&&Math.abs(n.right-12-box(home).right)<=1,`the pill keeps ${Math.round(box(pill).width)}px and Home ends the row`);
-      near(box(foot).height,44,'the foot is one row');
-    }else{
-      require(mic.closest('.mb-top')&&home.closest('.mb-top'),'in a narrow list the microphone and Home stand in the top row with search and plus');
-      require(Math.abs(box(pill).right-(n.right-12))<=1&&box(pill).width>=140,"the pill fills the foot's row");
-    }
+    const middle=el=>box(el).top+box(el).height/2,ownerName=account.querySelector('.sidebar-account-name');
+    near(box(pill).height,40,'the pill is 40px tall');
+    require(Math.abs(box(pill).left-n.left-12)<=1&&Math.abs(n.right-12-box(pill).right)<=1,"the pill has the foot's first row to itself");
+    require(visible(pill.querySelector('.nav-t'))&&pill.querySelector('.nav-t').scrollWidth<=pill.querySelector('.nav-t').clientWidth+1,"the pill's words stand whole on one line");
+    require(box(account).top>=box(pill).bottom&&Math.abs(box(account).left-n.left-12)<=1,'the account stands under the pill, from the left edge');
+    near(box(account.querySelector('.owner-face')).width,32,"the account's face is 32px");
+    require(visible(ownerName)&&ownerName.textContent.trim().length>0&&box(ownerName).width>=40,"the account shows the owner's name beside the face");
+    require(mic.closest('.sidebar-foot-row')&&home.closest('.sidebar-foot-row'),'the microphone and Home stay in the foot at every width');
+    near(middle(mic),middle(account),"the microphone stands on the account's row");near(middle(home),middle(account),"Home stands on the account's row");
+    require(box(account).right<=box(mic).left+1&&box(mic).right<=box(home).left+1&&Math.abs(n.right-12-box(home).right)<=1,'the account, the microphone, then Home, which ends the row');
+    require(!pill.hasAttribute('data-tooltip')&&!pill.hasAttribute('title'),'nothing shows under the pointer over the pill');
     return {check:name,narrow:false,rows:rows.length,pitch:pairs.slice(0,3).map(([a,b])=>box(b).top-box(a).top),foot:Math.round(box(foot).height),width:Math.round(n.width)};
   }
   // A dragged row (sidebar-drag-row): dimmed in its place, with one line over the row it will land before.
@@ -2588,7 +2598,7 @@ export function checkRendered(name, context = {}) {
     return {check:name, width:Math.round(width)};
   }
   // The details panel dragged as wide as it goes beside the conversation: the panel gives way, so the conversation keeps its 386px
-  // (what it had beside the old 296px list and a 440px panel at 1120px) and the one-row composer keeps all its controls (R-UI-110).
+  // (what it had beside the old 296px list and a 440px panel at 1120px) and the composer keeps all its controls (R-UI-110).
   if (name === "panel-widest") {
     const nav = document.getElementById('nav').getBoundingClientRect(), panel = document.querySelector('.page-agent .mb-det').getBoundingClientRect();
     const pane = document.querySelector('.page-agent .mb-chat').getBoundingClientRect(), composer = document.querySelector('.page-agent .composer')?.getBoundingClientRect();
@@ -5649,93 +5659,6 @@ export function checkRendered(name, context = {}) {
     require(!window.__look.calls.some(call => call.command === "agent_ask_text" || ["rooms.send", "owner_questions.answer"].includes(call.method)), "a page never sends an owner message or answers a question");
     return { check: name, text: input.value, note: note.textContent };
   }
-  // The composer's shape (owner, 2026-11-12: Grok Bot's one-row composer, 44 px, 16 px above the window). `composer-metrics:<state>` only
-  // measures; `composer-shape:<state>` measures and asserts: `empty` and `one-line` are one row of 44 px on one vertical centre, `grown`
-  // is a box that grew upward with the controls still on its last line, `files` has the files above a row that is still 44 px.
-  if (name.startsWith("composer-metrics:") || name.startsWith("composer-shape:")) {
-    const state = name.slice(name.indexOf(":") + 1), asserting = name.startsWith("composer-shape:");
-    const form = [...document.querySelectorAll('.composer')].find(el => visible(el) && !el.closest('[hidden]'));
-    require(form, "a composer is on screen");
-    const round = n => Math.round(n * 10) / 10;
-    const box = el => { const b = el.getBoundingClientRect(); return { top: round(b.top), bottom: round(b.bottom), height: round(b.height), left: Math.round(b.left), right: Math.round(b.right), cy: round((b.top + b.bottom) / 2) }; };
-    const own = selector => [...form.querySelectorAll(selector)].find(visible);
-    const parts = {};
-    for (const [key, selector] of [["field", ".cmp-input"], ["attach", ".cmp-attach"], ["mode", ".cmp-mode"], ["model", ".cmp-model .mp-trigger, .cmp-model"], ["send", ".cmp-send, .cmp-voice"]]) { const el = own(selector); if (el) parts[key] = box(el); }
-    const composer = box(form), under = round(innerHeight - form.getBoundingClientRect().bottom), row = box(form.querySelector(':scope > .cmp-row'));
-    const style = getComputedStyle(form), input = form.querySelector('.cmp-input'), lh = parseFloat(getComputedStyle(input).lineHeight), pad = parseFloat(getComputedStyle(input).paddingBottom);
-    // Where the last line of words stands: the field's bottom less its padding, half a line up.
-    const lastLine = round(parts.field.bottom - pad - lh / 2);
-    const controls = ["attach", "mode", "model", "send"].filter(key => parts[key]);
-    const measured = { check: name, composer, under, row, lastLine, viewport: [innerWidth, innerHeight], ...parts };
-    if (!asserting) return measured;
-    require(style.display === "grid", "the composer is one grid");
-    require(Math.abs(parseFloat(style.borderTopLeftRadius) - 22) <= 0.5 && Math.abs(parseFloat(style.borderBottomRightRadius) - 22) <= 0.5, `the corners are half a 44 px row, whatever the height: ${style.borderTopLeftRadius}`);
-    require(Math.abs(under - 16.5) <= 2, `16 or 17 px stand under it, as Grok Bot's: ${under}`);
-    require(controls.length >= 3 && parts.attach && parts.mode && parts.send, `the + , the permission and send are in the row (${controls})`);
-    // Every control stands on the row's bottom edge, whatever the words are: the same offset from the box's bottom at every state.
-    for (const key of controls) require(Math.abs(parts[key].cy - parts.attach.cy) <= 2, `${key} is level with the + : ${parts[key].cy} against ${parts.attach.cy}`);
-    for (const key of controls) require(parts[key].top >= row.top - 0.5 && parts[key].bottom <= row.bottom + 0.5, `${key} stays inside the one row (${parts[key].top}-${parts[key].bottom} in ${row.top}-${row.bottom})`);
-    require(controls.every((key, index) => index === 0 || parts[key].left >= parts[controls[index - 1]].right - 1), "the controls stand in the order + , permission, model, send, none over another");
-    require(parts.field.left >= parts.attach.right - 1 && parts.field.right <= parts.mode.left + 1, "the words are between the + and the permission");
-    const fieldMin = state === "narrow" ? 120 : 200;
-    require(parts.field.right - parts.field.left >= fieldMin - 1, `the field keeps its ${fieldMin} px: ${parts.field.right - parts.field.left}`);
-    // Words placed by a page are added on a new line, so that state has two lines and the controls on the last of them.
-    const grows = state === "grown" || state === "long", twoLines = state === "page-note";
-    if (!grows && !twoLines) {
-      // Whatever stands above the words, the row itself is the one row of 44 px, and the controls share the field's centre.
-      require(Math.abs(row.height - 32) <= 2, `the row is the 32 px controls inside the box's 5 px of air: ${row.height}`);
-      for (const key of controls) require(Math.abs(parts[key].cy - parts.field.cy) <= 2, `${key} shares the field's vertical centre: ${parts[key].cy} against ${parts.field.cy}`);
-    }
-    const above = selector => { const el = own(selector); require(el, `${selector} is shown`); require(el.getBoundingClientRect().bottom <= row.top + 1 && el.getBoundingClientRect().top >= composer.top - 0.5, `${selector} stands above the row, inside the box: ${box(el).top}-${box(el).bottom} against the row at ${row.top}`); return el; };
-    if (state === "empty" || state === "one-line") {
-      require(Math.abs(composer.height - 44) <= 2, `one row, 44 px tall (Grok Bot's): ${composer.height}`);
-      require(Math.abs(composer.cy - parts.field.cy) <= 2, `and the box's: ${composer.cy} against ${parts.field.cy}`);
-      window.__composerOne = measured;
-    } else if (grows) {
-      const one = window.__composerOne;
-      require(one, "a one-line state was measured first");
-      require(composer.height >= 44 + lh, `the box grew by lines (${composer.height})`);
-      require(Math.abs(composer.bottom - one.composer.bottom) <= 1 && composer.top < one.composer.top, "it grew upward, its bottom edge where it was");
-      for (const key of controls) require(Math.abs(parts[key].cy - one[key].cy) <= 1, `${key} did not move when the box grew: ${parts[key].cy} against ${one[key].cy}`);
-      for (const key of controls) require(Math.abs(parts[key].cy - lastLine) <= 2, `${key} is level with the last line of words: ${parts[key].cy} against ${lastLine}`);
-      if (state === "long") require(input.scrollHeight > input.clientHeight && parts.field.height <= 6 * lh + 3, `the field stops at its six lines and scrolls: ${parts.field.height} px`);
-    } else if (state === "files") {
-      const chips = [...form.querySelectorAll('.cmp-file .cmp-chip')].filter(visible);
-      require(chips.length >= 1, "a waiting file is shown");
-      above(".cmp-file");
-      require(chips.every(chip => chip.getBoundingClientRect().top >= composer.top && chip.getBoundingClientRect().bottom <= composer.bottom), "the files are inside the box");
-      require(composer.height > 44 + 40, `the box holds the files and the row (${composer.height})`);
-    } else if (state === "quote") {
-      above(".cmp-quote");
-      require(own(".cmp-quote .message-quote, .cmp-quote > span") && own('.cmp-quote .btn'), "the quote is shown with the button that removes it");
-    } else if (state === "page-note") {
-      const note = above(".cmp-page-note");
-      require(note.getBoundingClientRect().height <= parseFloat(getComputedStyle(note).lineHeight) * 1.2, "the note stays on one line");
-      require(input.value.length > 0, "the placed words are in the field");
-      for (const key of controls) require(Math.abs(parts[key].cy - lastLine) <= 2, `${key} is level with the last line of words: ${parts[key].cy} against ${lastLine}`);
-    } else if (state === "failure") {
-      const failed = above(".composer-failure");
-      require(failed.querySelector('[data-card-retry]') && visible(failed.querySelector('[data-card-retry]')), "the failure keeps its retry");
-      require(failed.getBoundingClientRect().left >= composer.left && failed.getBoundingClientRect().right <= composer.right, "the failure is inside the box's sides");
-    } else if (state === "recording") {
-      require(form.dataset.taskState === "recording" && own('.cmp-voice svg.cmp-plane') && !own('.cmp-send'), "recording shows the send glyph in the one slot");
-    } else if (state === "stop") {
-      require(["ack", "running", "waiting"].includes(form.dataset.taskState) && own('.cmp-voice svg') && !own('.cmp-send'), "a running task shows Stop in the one slot");
-      require(Math.abs(parts.send.right - parts.send.left - 32) <= 1 && Math.abs(parts.send.height - 32) <= 1, `and it is the same 32 px button: ${parts.send.right - parts.send.left} x ${parts.send.height}`);
-    } else if (state === "waiting") {
-      require(input.placeholder === "輸入你的回答，或聊點別的", `the field says it takes the answer: ${input.placeholder}`);
-    } else if (state === "narrow") {
-      require(parts.model && parts.model.right <= parts.send.left + 1, "the model button is still in the row, short, before send");
-      require(parts.send.right <= row.right + 1, `nothing runs out of the row at its right: ${parts.send.right} against ${row.right}`);
-    } else if (state === "menu") {
-      const menu = document.querySelector('#app-popover, .slash-menu');
-      require(menu && visible(menu), "the completion menu is open");
-      const at = menu.getBoundingClientRect();
-      require(at.bottom <= composer.top + 1 || at.top >= composer.bottom - 1 || at.bottom <= parts.field.top + 4, `the menu hangs above the line it completes (as it always did) and covers none of the controls: ${round(at.top)}-${round(at.bottom)} over the box at ${composer.top}`);
-    }
-    require(document.documentElement.scrollWidth <= innerWidth, "nothing runs out sideways");
-    return measured;
-  }
   if (name === "composer-grows-before" || name === "composer-grows-keeps-bottom") {
     // The composer grows under a thread whose last item is a card: the thread stays at its bottom and the card stays whole.
     const field = [...document.querySelectorAll('.page-agent .mb-chat .composer')].find(visible), thread = [...document.querySelectorAll('.page-agent .mb-chat .ra-scroll')].find(visible);
@@ -8109,6 +8032,12 @@ export function checkRendered(name, context = {}) {
         require(document.querySelectorAll('#app-popover').length === 1, "one menu is open, not two");
         require(document.querySelector('.mb-col [data-member-more="1"][aria-expanded="true"]') && !document.querySelector('.mb-col [data-member-more="2"][aria-expanded="true"]'),
           "the open menu is the pressed row's, and the first row's menu is gone");
+      } else if (name === "press-through-page-frame") {
+        // The page is another document, so the app sees no pointer event of the press: it knows only that the focus went into the frame.
+        await until(() => !document.querySelector('.cb-menu, #app-popover'), "the press inside the page left the model card open");
+        const frame = document.querySelector('.pgv-frame-box iframe:not([inert])');
+        require(frame && document.activeElement === frame, "the page is still open and has the press");
+        require(document.querySelector('.composer .cmp-model .mp-trigger')?.getAttribute('aria-expanded') !== "true", "the model button no longer says its card is open");
       } else if (name === "press-through-model-menu") {
         await until(() => document.querySelector('.conversation-trigger[aria-expanded="true"]') && document.querySelector('.mb-det:not([hidden])'), "the press on the header button did not open the details");
         require(!document.querySelector('.cb-menu, #app-popover'), "the model menu went with the same press");

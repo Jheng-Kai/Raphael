@@ -175,7 +175,6 @@ export const vi = {
   "output.folder": "Thư mục đầu ra",
   "output.helpPick": "Thành viên lưu tệp bàn giao cho bạn tại đây. Đổi thư mục không di chuyển tệp hiện có.",
   "output.change": "Đổi thư mục đầu ra (hiện tại {p0})",
-  "desktop.repaired": "Đã sửa kết nối máy tính; giữ nguyên không gian làm việc và phiên đăng nhập.",
   "desktop.wait": "Chờ",
   "desktop.waitHint": "Giữ mọi thứ; chờ công việc hiện tại hoàn tất.",
   "desktop.restart": "Khởi động lại",

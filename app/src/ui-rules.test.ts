@@ -175,7 +175,7 @@ describe("buttons", () => {
       "sidebar.css: .side .btn.icon.mb-tool[data-col]:hover:not(:disabled)", "sidebar.css: .side .btn.icon.mb-tool[data-col]:active:not(:disabled)",
       ...[':is(:hover, [aria-expanded="true"]):not(:disabled)', ":active:not(:disabled)"].flatMap(state => [
         `styles.css: :is(.page-agent .mb-det-head, .page-agent .mb-head .ra-tools, .page-agent .mb-head .mb-head-l, .page-agent .mb-head .room-picker, .mb-dlg-head, .cs-dlg-head, .lb-head, .room-side-thread > header, .desktop-panel[data-expanded] .desktop-dock, .ms-bar, .ms-cover) .btn.icon${state}`,
-        `styles.css: .page-agent .cmp-row .btn.cmp-attach${state}`,
+        `styles.css: .page-agent .cmp-bar .btn.cmp-attach${state}`,
       ]),
       "styles.css: .btn.icon.modal-x:hover:not(:disabled)", "styles.css: .btn.icon.modal-x:active:not(:disabled)",
       // The larger view's fold back and Back live in the window strip and fill as its own buttons do (R-COMP-PERF-07).

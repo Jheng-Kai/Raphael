@@ -151,7 +151,6 @@ export const en = {
   "output.folder": "Output folder",
   "output.helpPick": "Members save the files they deliver to you here. Changing it never moves existing files.",
   "output.change": "Change the output folder (now {p0})",
-  "desktop.repaired": "Repaired the computer connection; workspace and sign-ins were kept.",
   "desktop.wait": "Wait",
   "desktop.waitHint": "Keeps everything; wait for the current work to finish.",
   "desktop.restart": "Restart",

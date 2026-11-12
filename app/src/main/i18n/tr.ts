@@ -175,7 +175,6 @@ export const tr = {
   "output.folder": "Çıktı klasörü",
   "output.helpPick": "Üyeler size teslim ettikleri dosyaları buraya kaydeder. Değiştirmek mevcut dosyaları taşımaz.",
   "output.change": "Çıktı klasörünü değiştir (şu an {p0})",
-  "desktop.repaired": "Bilgisayar bağlantısı onarıldı; çalışma alanı ve oturumlar korundu.",
   "desktop.wait": "Bekle",
   "desktop.waitHint": "Her şeyi korur; mevcut işin bitmesini bekler.",
   "desktop.restart": "Yeniden başlat",

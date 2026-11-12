@@ -214,7 +214,8 @@ describe("main window translations", () => {
       scan(ast);
     }
     expect(Object.keys(catalogs["zh-TW"]).filter((key) => !written.has(key))).toEqual([]);
-  });
+    // It parses every source as the test below does, and timed out the same way under the whole suite's load (2026-11-12).
+  }, 60_000);
 
   test("main-window source has no hard-coded CJK UI literals outside the catalogue", () => {
     const root = path.resolve(import.meta.dirname, "..");

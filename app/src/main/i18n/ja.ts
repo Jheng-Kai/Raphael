@@ -151,7 +151,6 @@ export const ja = {
   "output.folder": "出力フォルダー",
   "output.helpPick": "メンバーが納品するファイルの保存先です。変更しても既存のファイルは移動しません。",
   "output.change": "出力フォルダーを変更（現在：{p0}）",
-  "desktop.repaired": "接続を自動修復しました。ワークスペースとログインは保持されています。",
   "desktop.wait": "待つ",
   "desktop.waitHint": "すべてのデータを保持します。現在の作業が終わるまで待ちます。",
   "desktop.restart": "再起動",

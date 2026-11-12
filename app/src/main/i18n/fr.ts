@@ -175,7 +175,6 @@ export const fr = {
   "output.folder": "Dossier de sortie",
   "output.helpPick": "Les membres enregistrent ici les fichiers qu’ils vous livrent. Changer de dossier ne déplace aucun fichier existant.",
   "output.change": "Changer de dossier de sortie (actuel : {p0})",
-  "desktop.repaired": "Connexion réparée ; espace de travail et sessions conservés.",
   "desktop.wait": "Attendre",
   "desktop.waitHint": "Conserve tout et attend la fin du travail en cours.",
   "desktop.restart": "Redémarrer",

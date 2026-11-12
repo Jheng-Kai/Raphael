@@ -80,16 +80,15 @@
   --pa-step-ic: calc(18px + 4 * var(--pa-u));
   --pa-step-logo: calc(16px + 4 * var(--pa-u));
   --pa-small-btn: calc(24px + 8 * var(--pa-u));
-  /* The composer is one row, 44 px at every window size, as Grok Bot's (owner, 2026-11-12): its controls are 32 px round, so
-     the box is a control and 5 px of air, and its corners are half its height, which a taller box keeps. */
-  --pa-cmp-h: 44px;
-  --pa-cmp-ctl: 32px;
+  --pa-cmp-btn: calc(36px + 8 * var(--pa-u));
+  --pa-cmp-r: calc(26px + 6 * var(--pa-u));
+  --pa-cmp-p: calc(6px + 2 * var(--pa-u));
+  --pa-cmp-py: calc(7px + 1 * var(--pa-u));
   --pa-cmp-fs: calc(15.5px + 1.5 * var(--pa-u));
   --pa-cmp-lh: calc(26.35px + 2.55 * var(--pa-u));
   --pa-dock-x: calc(16px + 8 * var(--pa-u));
   --pa-dock-top: calc(8px + 4 * var(--pa-u));
-  /* 16 px under the composer, Grok Bot's measured 17. */
-  --pa-dock-bottom: var(--sp-4);
+  --pa-dock-bottom: calc(28px + 8 * var(--pa-u));
   --pa-ask-face: calc(30px + 14 * var(--pa-u));
   --pa-ask-fs: var(--fs-md);
   --pa-ask-r: var(--r-lg);
@@ -478,57 +477,40 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 /* In the thread the question is the member's own line: it starts where its replies start and is as wide as a permission
    card, never centred under the owner's message. */
 .page-agent [data-question-turn] .ask-card { width: min(calc(400px + 100 * var(--pa-u)), 100%); margin-inline: 0 auto; }
-/* One pill: the row of 32 px controls and 5 px of air is 44 px, and the corners are half of that, so a draft that grows keeps the same
-   corners (never an ellipse). What stands above the row (a failure, a quote, files, the page note) is inside the same box. */
-.composer { --cmp-pad: calc((var(--pa-cmp-h) - 2px - var(--pa-cmp-ctl)) / 2); --cmp-py: calc((var(--pa-cmp-ctl) - var(--pa-cmp-lh)) / 2); width: 100%; max-width: var(--layout-thread-max); margin-inline: auto; display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); background: var(--panel); border: 1px solid var(--edge); border-radius: calc(var(--pa-cmp-h) / 2); padding: var(--cmp-pad); box-shadow: var(--composer-shadow); transition: border-color 0.16s ease; container: cmp / inline-size; }
+.composer { width: 100%; max-width: var(--layout-thread-max); margin-inline: auto; display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); background: var(--panel); border: 1px solid var(--edge); border-radius: var(--pa-cmp-r); padding: var(--pa-cmp-p) calc(var(--pa-cmp-p) + 1px) var(--pa-cmp-p) calc(var(--pa-cmp-p) + 2px); box-shadow: var(--composer-shadow); transition: border-color 0.16s ease; }
 /* The shadow is always black and focus changes nothing, so opening a conversation (which focuses the field)
    lights no halo around it in the dark theme (owner, 2026-11-09: 「跳轉的時候…不用有亮光」). */
-/* The one row, always the same grid: the + at the left, the words between, the permission, the model and send at the right. Its items
-   end at the row's bottom edge, so a field that grows upward leaves them on its last line, level with the last line of words. The
-   field keeps 200 px: the model's name gives way first (an ellipsis), and in a narrow row its depth goes too. */
-.cmp-row { display: grid; grid-template-columns: auto minmax(200px, 1fr) auto; align-items: end; column-gap: var(--sp-1); }
-.composer .cmp-page-note { display: block; margin: 0; padding-inline: calc(var(--pa-cmp-ctl) + var(--sp-2)) var(--sp-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.cmp-end { display: flex; align-items: center; justify-content: flex-end; gap: var(--sp-1); min-width: 0; height: var(--pa-cmp-ctl); }
-.cmp-model { display: flex; flex: 0 1 auto; min-width: 0; }
+.cmp-row { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); }
+.composer .cmp-page-note { display: block; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Under the words: what to add and how it acts on the left, which model and send on the right. */
+.cmp-bar { display: flex; align-items: center; gap: var(--sp-1); min-width: 0; }
+.cmp-bar-fill { flex: 1; min-width: 0; }
 .cmp-model:empty { display: none; }
-.composer .btn.cmp-mode { flex: none; gap: var(--sp-1); min-height: var(--h-ctl); padding-inline: var(--sp-2); border-color: transparent; background: transparent; color: var(--text-2); font-size: var(--fs-xs); white-space: nowrap; }
+.composer .btn.cmp-mode { gap: var(--sp-1); min-height: var(--h-ctl); padding-inline: var(--sp-2); border-color: transparent; background: transparent; color: var(--text-2); font-size: var(--fs-xs); white-space: nowrap; }
 .composer .btn.cmp-mode:hover:not(:disabled) { color: var(--text); }
 .composer .btn.cmp-mode:active:not(:disabled) { color: color-mix(in srgb, var(--text) 85%, transparent); }
 .composer .btn.cmp-mode .i { width: 16px; height: 16px; }
-.cmp-model .mp-slot { display: inline-flex; flex: 0 1 auto; min-width: 0; }
+.cmp-model .mp-slot { display: inline-flex; min-width: 0; }
 .cmp-model .sel.mp-trigger { width: fit-content; min-width: 0; max-width: 220px; min-height: 32px; gap: var(--sp-1); padding: 0 var(--sp-2); border-color: transparent; background: transparent; color: var(--text-2); font-size: var(--fs-xs); }
 .cmp-model .sel.mp-trigger:hover:not(:disabled) { background: var(--hover); color: var(--text); }
 .cmp-model .mp-source, .cmp-model .mp-trigger .mono { display: none; }
-.cmp-model .mp-ttext { flex: 0 1 auto; min-width: 0; max-width: 170px; }
+.cmp-model .mp-ttext { flex: none; max-width: 170px; }
 .cmp-model .mp-trigger .i { flex: none; width: 16px; height: 16px; }
 .cmp-model .mp-tname { overflow: hidden; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
-/* A narrow composer (the details panel open beside the sidebar) keeps its field and its one row. Under 452 px (a row of 440; 438 with the
-   panel open at 1120) the model gives up its depth word and the permission its word, so the model keeps its name; under 372 px (the panel
-   dragged to its widest at 1120) the model keeps only its arrow and the field may be 120 px. The permission and the model keep their names
-   for a screen reader and open what they opened. The composer is the container, so the row itself can be changed by a query. */
-@container cmp (max-width: 452px) {
-  .cmp-model .cb-depth { display: none; }
-  .cmp-end .cmp-model .mp-ttext, .cmp-end .cmp-model .mp-ttext:has(.cb-depth) { max-width: 14ch; }
-  .composer .btn.cmp-mode > span { display: none; }
-}
-@container cmp (max-width: 372px) {
-  .cmp-row { grid-template-columns: auto minmax(120px, 1fr) auto; }
-  .cmp-end .cmp-model .mp-ttext, .cmp-end .cmp-model .mp-ttext:has(.cb-depth) { display: none; }
-}
-.page-agent .btn.cmp-attach { flex: none; width: var(--pa-cmp-ctl); min-height: var(--pa-cmp-ctl); padding: 0; border-radius: var(--r-sm); border-color: transparent; background: transparent; color: var(--text-2); }
+.page-agent .btn.cmp-attach { flex: none; width: var(--pa-cmp-btn); min-height: var(--pa-cmp-btn); padding: 0; border-radius: var(--r-sm); border-color: transparent; background: transparent; color: var(--text-2); }
 .page-agent .btn.cmp-attach:hover:not(:disabled) { background: transparent; border-color: transparent; color: var(--text); }
 .page-agent .btn.cmp-attach:is(:active, [aria-expanded="true"]):not(:disabled) { color: var(--accent-icon); }
 .page-agent .btn.cmp-attach:active:not(:disabled) { color: color-mix(in srgb, var(--text) 85%, transparent); }
 .btn.cmp-attach .i { width: 20px; height: 20px; }
 /* The field grows with its text by itself, up to six lines: measured from script, every keystroke laid out the whole thread. */
-.cmp-input { flex: 1; min-width: 0; min-height: var(--pa-cmp-ctl); max-height: min(calc(160px + 40 * var(--pa-u)), calc(6lh + 2px)); field-sizing: content; resize: none; border: 0; outline: 0; background: transparent; color: var(--text); font: var(--pa-cmp-fs)/var(--pa-cmp-lh) var(--voice); padding: var(--cmp-py) 4px; overflow-y: auto; }
+.cmp-input { flex: 1; min-width: 0; min-height: var(--pa-cmp-btn); max-height: min(calc(160px + 40 * var(--pa-u)), calc(6lh + 2px)); field-sizing: content; resize: none; border: 0; outline: 0; background: transparent; color: var(--text); font: var(--pa-cmp-fs)/var(--pa-cmp-lh) var(--voice); padding: var(--pa-cmp-py) 4px; overflow-y: auto; }
 .cmp-input::placeholder { color: var(--text-3); }
 .cmp-input:focus-visible { outline: 0; }
 /* The words live in the textarea. While they address someone, its text is not painted and the same words are drawn over it
    (mention-field.ts) with each address as a chip; the caret, selection and input method stay the textarea's own. */
 .cmp-field { position: relative; min-width: 0; }
 .cmp-field > .cmp-input { display: block; width: 100%; }
-.cmp-mirror { display: none; position: absolute; inset: 0; overflow: hidden; pointer-events: none; white-space: pre-wrap; overflow-wrap: break-word; color: var(--text); font: var(--pa-cmp-fs)/var(--pa-cmp-lh) var(--voice); padding: var(--cmp-py) calc(4px + var(--cmp-bar, 0px)) var(--cmp-py) 4px; }
+.cmp-mirror { display: none; position: absolute; inset: 0; overflow: hidden; pointer-events: none; white-space: pre-wrap; overflow-wrap: break-word; color: var(--text); font: var(--pa-cmp-fs)/var(--pa-cmp-lh) var(--voice); padding: var(--pa-cmp-py) calc(4px + var(--cmp-bar, 0px)) var(--pa-cmp-py) 4px; }
 .cmp-field.has-mentions > .cmp-mirror { display: block; }
 .cmp-field.has-mentions > .cmp-input { color: transparent; caret-color: var(--text); }
 .cmp-field.has-mentions > .cmp-input::selection { color: transparent; }
@@ -680,7 +662,7 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
   .page-agent { --pa-gap: var(--sp-5); --pa-gap-in: var(--sp-3); }
   .ra-scroll { padding: var(--sp-1) var(--pa-dock-x) var(--sp-2); }
   .ra-body { gap: var(--sp-1); }
-  .ra-dock { padding-top: var(--sp-1); }
+  .ra-dock { padding-top: var(--sp-1); padding-bottom: var(--sp-3); }
   .media-card { padding: var(--sp-1) var(--sp-2); gap: var(--sp-1); }
 }
 

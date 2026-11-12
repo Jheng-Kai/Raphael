@@ -175,7 +175,6 @@ export const id = {
   "output.folder": "Folder keluaran",
   "output.helpPick": "Anggota menyimpan berkas yang diserahkan kepada Anda di sini. Mengubah folder tidak memindahkan berkas lama.",
   "output.change": "Ubah folder keluaran (sekarang {p0})",
-  "desktop.repaired": "Koneksi diperbaiki; ruang kerja dan sesi login dipertahankan.",
   "desktop.wait": "Tunggu",
   "desktop.waitHint": "Mempertahankan semuanya; menunggu pekerjaan saat ini selesai.",
   "desktop.restart": "Mulai ulang",

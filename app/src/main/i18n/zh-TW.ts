@@ -150,7 +150,6 @@ export const zhTW = {
   "output.folder": "輸出資料夾",
   "output.helpPick": "成員交付給你的檔案會存在這裡；變更後不會移動既有檔案。",
   "output.change": "變更輸出資料夾（目前是 {p0}）",
-  "desktop.repaired": "已自動修復電腦連線，工作區與登入資料已保留。",
   "desktop.wait": "稍候",
   "desktop.waitHint": "保留所有資料，不移除任何內容；先等目前的工作完成。",
   "desktop.restart": "重新啟動",
