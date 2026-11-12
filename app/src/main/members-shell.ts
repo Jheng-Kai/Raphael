@@ -509,7 +509,6 @@ export function createMembers(host: MembersHost): MembersShell {
     const commands: Command[] = [
       { id: "search", label: t("chat.searchAll"), keys: "Ctrl+Shift+F", run: () => command("search") },
       { id: "sidebar", label: t("shortcuts.sidebar"), keys: "Ctrl+B", run: () => command("sidebar") },
-      { id: "home", label: t("nav.home"), run: () => host.app.go("home") },
       { id: "settings", label: t("nav.settings"), run: () => host.app.go("settings", "general") },
       ...orderedMembers(list).map((member, index) => ({ id: "person:" + member.id, label: member.name, keys: index < 9 ? "Ctrl+" + (index + 1) : undefined, run: () => select(member.id) })),
     ];

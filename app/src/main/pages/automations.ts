@@ -3,7 +3,7 @@ import { visibilityGate, windowVisible } from "../window-visibility";
 // or month on the right. Own events are made and changed here by click and drag; routines and Google events are read
 // here and say where they come from. A routine is made or changed by its member in the conversation (owner, 2026-11-09:
 // 「這邊的所有設定都只能透過 Agent 完成 但是我們看的到內容」): a routine opens to read, and 例行任務 at a time puts the
-// owner's words for it in the member's composer. Home opens it.
+// owner's words for it in the member's composer.
 import * as api from "../api";
 import { closePanel, openEventDetail, openEventEditor, panelOpen, type EventDraft } from "../calendar-popover";
 import { allDayBars, chipClock, chipColor, chipHTML, dayLayout, dismissOffer, entryOfItem, fittedRange, googleMark, googleNoticeHTML, GOOGLE_SOURCE, isAllDayRow, isRunException, memberSource, monthEntries, OWN_SOURCE, routineEntries, type CalendarEntry, type Segment } from "../calendar-view";
@@ -104,7 +104,7 @@ export function createAutomationsPage(app: AppContext): Page {
         if (detailOnLoad && target && shown.has(target.dataset.calendarItem!)) { detailOnLoad = false; openDetail(target, shown.get(target.dataset.calendarItem!)!); }
       }
       if (createOnLoad) { createOnLoad = false; startCreate(null); }
-      // Home's cached window serves the first paint; a month of its own is read from Google once it is there to read.
+      // The core's cached window serves the first paint; a month of its own is read from Google once it is there to read.
       if (home.calendar_google === "connected" || home.calendar_google === "unreadable") void refreshGoogle(mine, month);
     } catch (error) { if (mine === loads && visible) { pending = false; draw(); toaster.info(describeError(error)); } }
   }

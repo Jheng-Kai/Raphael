@@ -344,7 +344,7 @@ remote logos load under native CSP, and logs contain no key/token/payload.
 
 For private Google use an owner-provided Desktop client: configure through the
 existing core RPC, sign in, exercise partial consent and refresh, and verify Gmail
-and Calendar tool switches and revocation. Home calendar reads only through the
+and Calendar tool switches and revocation. The calendar reads only through the
 enabled private calendar_list_events tool. From a chat, ask for a nonce mail, connect from its Gmail card,
 cancel once, finish once and reconnect once; only that task resumes and reads the mail. Test a custom local MCP server with
 add/test/edit/paste/discover, a harmless call and removal; stop only that test server.

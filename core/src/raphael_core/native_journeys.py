@@ -444,33 +444,6 @@ for line in sys.stdin:
                      commands={"codex": [sys.executable, str(child), str(home / "receipt.json")]})
 
 
-def home_timing_brain(fake_llm: bool, data: Path):
-    """A slow offline quota transport, used only by the isolated Home timing journey."""
-    if not native_enabled(fake_llm) or os.environ.get("RAPHAEL_TEST_NATIVE_HOME") != "1":
-        return None
-    from .agent.cli.discovery import CliBrains
-    home = data / "native-cli"
-    auth = home / ".codex/auth.json"
-    auth.parent.mkdir(parents=True, exist_ok=True)
-    auth.write_text("{}", encoding="utf-8")
-    child = home / "codex.py"
-    child.write_text('''import json, sys, time
-def send(value): print(json.dumps(value), flush=True)
-if "--version" in sys.argv:
-    print("native-fake-codex 1"); sys.exit()
-for line in sys.stdin:
-    msg = json.loads(line)
-    method = msg.get("method")
-    if method == "initialize": send({"id":msg["id"], "result":{}})
-    elif method == "model/list": send({"id":msg["id"], "result":{"data":[]}})
-    elif method == "account/rateLimits/read":
-        time.sleep(2)
-        send({"id":msg["id"], "result":{"rateLimits":{"primary":{"windowDurationMins":300,"usedPercent":40,"resetsAt":2000000000}}}})
-''', encoding="utf-8")
-    return CliBrains(home=home, environ={**os.environ, "CODEX_HOME": str(auth.parent), "PYTHONUTF8": "1"},
-                     commands={"codex": [sys.executable, str(child)], "claude": [], "gemini": []})
-
-
 def catalog_enabled(fake_llm: bool) -> bool:
     return native_enabled(fake_llm) and os.environ.get("RAPHAEL_TEST_NATIVE_CATALOG") == "1"
 

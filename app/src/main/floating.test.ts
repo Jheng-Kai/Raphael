@@ -28,7 +28,6 @@ const SURFACES: [file: string, selector: string, scope: string][] = [
   ["composer-brain.css", ".cb-card", ".cb-card"],
   ["agent.css", ".link-hover", ".link-hover"],
   ["agent.css", ".message-tooltip", ".message-tooltip"],
-  ["home.css", ".ho-tip", ".ho-tip"],
 ];
 
 const ruleOf = (file: string, selector: string): string => {

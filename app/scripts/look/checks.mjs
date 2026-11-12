@@ -1494,15 +1494,6 @@ export function checkRendered(name, context = {}) {
     require(!document.querySelector('.au-page:not([hidden]) .is-rhythm') && !document.querySelector('.au-page:not([hidden]) [data-entry^="routine:91:"]'),"one member checkbox hides bar and exception chips together");
     return {check:name};
   }
-  if (name==="home-calendar-rhythm") {
-    const bar=[...document.querySelectorAll('.ho-schedule .ho-event.is-rhythm')].find(visible);
-    require(visible(bar) && !bar.querySelector('time').textContent.trim() && visible(bar.querySelector('.ho-repeat')) && /^例行・/.test(bar.querySelector('.ho-kind').textContent) && !bar.querySelector('.av'),"today's rhythm shows its title and whose routine it is in words, never a time or a face (R-CAL-03)");
-    require(bar.querySelector('b').scrollWidth <= bar.querySelector('b').clientWidth + 1 || getComputedStyle(bar.querySelector('b')).textOverflow === 'ellipsis', "its title fits or ends in an ellipsis");
-    const marks=[...document.querySelectorAll('.ho-schedule .cal-run-mark')];
-    require(marks.length > 0, "a failed or waiting run of today is marked");
-    for (const mark of marks) require(!mark.closest('.ho-event').classList.contains('is-past'),"Home exceptions never carry is-past");
-    return {check:name, marks:marks.length};
-  }
   if (name==="calendar-google-composio") {
     require(window.__look.data.managedConnectors.some(c=>c.id==='composio:googlecalendar' && c.status==='ACTIVE') && !window.__look.data.managedConnectors.some(c=>c.id==='google'),"only Composio is connected");
     require(document.querySelector('.au-page .cal-chip.is-event') && !document.querySelector('.au-page .cal-notice'),"the successful Composio reading is drawn");
@@ -2279,24 +2270,6 @@ export function checkRendered(name, context = {}) {
     require(Object.values(tokens).every(value=>/^#([0-9a-f]{2})\1\1$/i.test(value)), "both themes are neutral greys including text, accent, focus and selection");
     return {check:name, surfaces, tokens};
   }
-  if(name==='home-hero'){
-    // His emblem alive at the left (a canvas whose rays reach past the emblem's own size), then the date,
-    // the greeting and his line on today.
-    const page=document.querySelector('.page-home:not([hidden])'), hero=page.querySelector('.ho-hero'), emblem=hero.querySelector('.ho-orb'), canvas=emblem.querySelector(':scope > canvas.ho-emb'), heading=hero.querySelector('h1'), health=hero.querySelector('.ho-line'), date=hero.querySelector('.ho-date');
-    const main=document.querySelector('.main'), expected=main.clientWidth<=760?72:96, root=getComputedStyle(document.documentElement);
-    const style=getComputedStyle(emblem), held=emblem.offsetWidth+parseFloat(style.marginLeft)+parseFloat(style.marginRight);
-    require(Math.abs(held-expected)<=1,`Raphael's emblem holds ${expected}px of the row on Home (${held})`);
-    require(canvas && Math.abs(canvas.getBoundingClientRect().width-expected*1.3)<=1.5 && canvas.width>=Math.round(expected*1.3),`his canvas is drawn at its size with room for the rays (${canvas?.getBoundingClientRect().width} / ${canvas?.width})`);
-    const box=emblem.getBoundingClientRect(), e={right:box.right+parseFloat(style.marginRight)}, h=heading.getBoundingClientRect(), d=date.getBoundingClientRect(), l=health.getBoundingClientRect();
-    require(h.left>=e.right-1 && d.left>=e.right-1 && l.left>=e.right-1,'the date, greeting and his line stand beside the emblem, read from the left');
-    require(d.bottom<=h.top+1 && l.top>=h.bottom-1,'date, greeting and his line stack in that order');
-    require(/^(早安|午安|晚上好)，主人$/.test(heading.textContent.trim()),`a greeting by the time of day: ${heading.textContent}`);
-    require(getComputedStyle(heading).fontSize===root.getPropertyValue('--fs-h1').trim(),'the greeting uses the heading token');
-    require(/^.{6,}。$/.test(health.textContent.trim()),`Raphael's line on today, or the team's health, in plain words: ${health.textContent}`);
-    require(!/[《》]/.test(hero.textContent),"the main window shows his words plainly; 《告。…》 is the desktop caption's (R-UI-42)");
-    require(l.height<=parseFloat(getComputedStyle(health).lineHeight)*3+1,'his line keeps to three lines at most');
-    return {check:name,emblem:expected,heading:getComputedStyle(heading).fontSize};
-  }
   if (name.startsWith("rich-")) {
     const scope = document.querySelector('.page-agent:not([hidden])');
     const cards = [...scope.querySelectorAll('.rich-block')];
@@ -2358,12 +2331,13 @@ export function checkRendered(name, context = {}) {
     return { check:name, cards:cards.length, diagram:diagram?.dataset.diagramState ?? null };
   }
   const selection = () => {
-    const rows = [...document.querySelectorAll('#nav .nav[aria-current="true"], #nav [data-go][aria-current="page"]')];
-    const home = !document.querySelector('.page-home').hidden;
-    require(rows.length === 1, `only the current destination is selected, found ${rows.length}`);
-    if (home) require(rows[0].matches('[data-go="home"]'), "Home selects only its own icon");
-    else if (!document.querySelector('.page-agent').hidden) require(rows[0].matches('[data-member], [data-room]'), "chat selects only its conversation");
-    return rows[0].getAttribute('data-go') ?? rows[0].getAttribute('data-member') ?? rows[0].getAttribute('data-room');
+    // The sidebar holds no page buttons (the account menu is the way to dictation, the calendar and the settings): the open conversation is the
+    // one selected row, and away from the conversation page none is.
+    const rows = [...document.querySelectorAll('#nav .nav[aria-current="true"]')];
+    const chat = !document.querySelector('.page-agent').hidden;
+    require(rows.length === (chat ? 1 : 0), `only the open conversation is selected (none away from it), found ${rows.length}`);
+    if (chat) require(rows[0].matches('[data-member], [data-room]'), "chat selects only its conversation");
+    return chat ? rows[0].getAttribute('data-member') ?? rows[0].getAttribute('data-room') : null;
   };
   // Records the sidebar's geometry (no judgement): width, row pitch, the highlight's box, type sizes, the foot and how many rows fit.
   if (name === "sidebar-metrics") {
@@ -2409,19 +2383,19 @@ export function checkRendered(name, context = {}) {
     require(!document.querySelector('[data-go="team"], .team-page, [data-col="collapse"], .nav-apps, [data-go="automations"]'), "retired navigation and icon rails are absent");
     const header=nav.querySelector('.mb-top');
     const rail=document.documentElement.hasAttribute('data-sidebar-collapsed');
-    require(!nav.querySelector('.brand, .app-icon, [data-sidebar="collapse"]')&&nav.querySelector('.sidebar-foot-row [data-go="home"]'),'no brand and no fold button (the edge drags); Home sits beside the owner');
+    require(!nav.querySelector('.brand, .app-icon, [data-sidebar="collapse"]')&&nav.querySelector('.sidebar-foot-row > .sidebar-account'),'no brand and no fold button (the edge drags); the owner\'s face stands in the foot');
     if(!compact){const edge=nav.querySelector(':scope > .side-edge'),box=edge?.getBoundingClientRect(),side=nav.getBoundingClientRect();require(edge&&edge.getAttribute('role')==='separator'&&getComputedStyle(edge).cursor==='col-resize'&&Math.abs(box.right-side.right)<1&&box.width<=8&&getComputedStyle(edge,'::after').content==='none','the list has a draggable edge at its right, with no handle drawn');}
     const pair=[...nav.querySelectorAll('[data-col]')];
     require(pair.map(button=>button.dataset.col).join()==='search,add'&&!column.querySelector('input'),'search then plus, with no field standing in the list');
+    // The rail has no search (owner, 2026-11-12 23:25): only the plus stands in its foot.
+    if(rail)require(!visible(pair[0])&&visible(pair[1])&&pair[1].closest('.side-foot'),'the rail shows the plus alone, and no search');
     for(const button of pair.filter(visible)){const box=button.getBoundingClientRect(),style=getComputedStyle(button);require(Math.abs(box.width-36)<1&&Math.abs(box.height-36)<1&&parseFloat(style.borderRadius)>=18&&style.backgroundColor!=='rgba(0, 0, 0, 0)'&&style.borderTopColor==='rgba(0, 0, 0, 0)','search and plus are 36px soft round buttons with no frame');}
     if(!rail&&pair.every(visible))require(pair.every(button=>button.parentElement===header)&&Math.abs(pair[0].getBoundingClientRect().top-pair[1].getBoundingClientRect().top)<1&&pair[1].getBoundingClientRect().right>pair[0].getBoundingClientRect().right,'search and plus stand side by side in the top row');
-    // Dictation and Home stand beside the account on the foot's second row, under the Connections pill (R-SIDE-01).
-    require(nav.querySelector('.side-foot > .sidebar-apps[data-connect-apps]')&&['settings','dictation','home'].every(go=>nav.querySelector(`.side-foot [data-go="${go}"]`)),'footer opens Connect apps (its own dialog, R-UI-111) above account, dictation and Home');
-    if(!document.documentElement.hasAttribute('data-sidebar-collapsed')){const home=nav.querySelector('.sidebar-home'),box=home.getBoundingClientRect();require(Math.abs(box.width-36)<1&&Math.abs(box.height-36)<1&&getComputedStyle(home).borderRadius===getComputedStyle(nav.querySelector('.sidebar-dictation')).borderRadius,'Home keeps the shared icon surface');}
-    for(const button of nav.querySelectorAll('.btn.icon:not([data-col]), .side-foot .nav'))if(visible(button)&&!visible(button.querySelector('.nav-t'))){const box=button.getBoundingClientRect(),corner=parseFloat(getComputedStyle(button).borderRadius);require(corner>0&&corner<Math.min(box.width,box.height)/2,`sidebar buttons are rounded squares, never circles (${button.className})`);}
-    require(nav.querySelector('.side-foot [data-go="dictation"]').getAttribute('aria-label')&&!nav.querySelector('.side-foot [data-go="dictation"] .nav-t'),'dictation is a named icon button');
+    // The foot is one row: the owner's face (the account menu) and the Connect apps pill (its own dialog, R-UI-111); no page button anywhere (R-SIDE-01).
+    require(nav.querySelector('.sidebar-foot-row > .sidebar-apps[data-connect-apps]')&&nav.querySelector('.sidebar-foot-row > .sidebar-account[aria-haspopup="menu"]')&&!nav.querySelector('[data-go]'),'the foot is the face (it opens the account menu) and the Connect apps pill, and the sidebar holds no page buttons');
+    for(const button of nav.querySelectorAll('.btn.icon:not([data-col]), .side-foot .nav:not(.sidebar-account)'))if(visible(button)&&!visible(button.querySelector('.nav-t'))){const box=button.getBoundingClientRect(),corner=parseFloat(getComputedStyle(button).borderRadius);require(corner>0&&corner<Math.min(box.width,box.height)/2,`sidebar buttons are rounded squares, never circles (${button.className})`);}
     require(nav.querySelector('.sidebar-account .owner-face')&&nav.querySelector('.sidebar-account').getAttribute('aria-label'),'account has its own face and accessible name');
-    require(!nav.querySelector('.sidebar-account > svg.i')&&visible(nav.querySelector('.sidebar-account .owner-face'))&&(rail||visible(nav.querySelector('.sidebar-account-name'))),'account shows its face and name (the face alone on the rail), without a gear');
+    require(!nav.querySelector('.sidebar-account > svg.i')&&visible(nav.querySelector('.sidebar-account .owner-face'))&&!nav.querySelector('.sidebar-account-name')&&nav.querySelector('.sidebar-account').textContent.trim()==='','the account is its face alone, without a gear or a name beside it');
     require(!nav.querySelector('.au-rooms-section .mb-ghead, [data-room-new], .mb-sec[data-group="none"] .mb-ghead'),'only owner-created sections have headings');
     require(getComputedStyle(nav.querySelector('.side-foot')).borderTopWidth==='0px','footer has no separator');
     // The list is always on screen: a rail of faces under 860 px (no menu button, drawer or scrim), else 348 px wide as Grok Bot's
@@ -2434,14 +2408,139 @@ export function checkRendered(name, context = {}) {
     const chief = column.querySelector('.mb-chief');
     require(chief && chief.querySelector('b') && chief.querySelector('.av'), "the top member shows its face and name");
     if(chief)require(!document.querySelector('.mb-star'),'no member carries a star');
-    if(!rail){const pill=nav.querySelector('.sidebar-apps'),name=pill.querySelector('.nav-t').getBoundingClientRect(),plug=pill.querySelector('.i').getBoundingClientRect();require(name.left>=plug.right+6&&name.left<=plug.right+16,"the pill's words start after its own leading mark");}
-    const mic=nav.querySelector('.sidebar-dictation').getBoundingClientRect(),home=nav.querySelector('.sidebar-home').getBoundingClientRect();require(Math.abs(mic.width-home.width)<1&&Math.abs(mic.height-home.height)<1&&Math.abs(mic.width-36)<1,'both footer icon buttons share the top controls size');
     if(chief&&!rail&&!chief.matches('.mb-tile'))require(Math.abs(chief.querySelector('.av').getBoundingClientRect().width-40)<1&&chief.querySelector('.mb-row-main'),'an unpinned top member is an ordinary row');
     for(const row of column.querySelectorAll('.mb-row')){
       const time=row.querySelector('time');
       if(time&&!row.parentElement.matches(':hover, :focus-within'))require(getComputedStyle(time).opacity!=='0','row time stands beside the name until hover or focus swaps it for the overflow');
     }
     return { check:name, compact, folders:column.querySelectorAll('.mb-sec').length };
+  }
+  // ---- The sidebar's foot and the account menu (owner, 2026-11-12 evening, R-SIDE-01): the face and the Connections pill on one row, as Grok Bot's ----
+  const footBox = el => el.getBoundingClientRect();
+  const footNear = (a, b, message) => require(Math.abs(a - b) <= 1, `${message}: ${Math.round(a * 10) / 10} not ${Math.round(b * 10) / 10}`);
+  const footRail = () => document.documentElement.hasAttribute('data-sidebar-collapsed');
+  if(name==='foot-rest'){
+    // The foot at rest, both shapes: the list's one row (measured by sidebar-air) or the rail's column; the app opens on a conversation, so no Home
+    // and no page button of the foot's remain.
+    const nav=document.getElementById('nav'),account=nav.querySelector('.sidebar-account'),pill=nav.querySelector('.sidebar-apps');
+    require(!document.querySelector('.page-home, .ho-hero, .sidebar-home, .sidebar-dictation, #nav [data-go]'),'Home, the house and the microphone are gone from the foot and the page');
+    require(account.tagName==='BUTTON'&&account.getAttribute('aria-label')&&account.getAttribute('aria-haspopup')==='menu'&&account.getAttribute('aria-expanded')==='false'&&visible(account.querySelector('.owner-face')),"the face is a real button named by the owner, opening a menu");
+    require(!document.querySelector('#app-popover'),'no menu stands open at rest');
+    if(footRail()){
+      footNear(footBox(account).width,36,'the rail\'s face is 36px');footNear(footBox(pill).width,36,'the rail\'s apps icon is 36px');
+      require(visible(pill.querySelector('.sidebar-apps-icon .i'))&&!visible(pill.querySelector('.nav-t'))&&!visible(pill.querySelector('.sidebar-app-marks')),'the rail\'s apps button is an icon alone');
+      require(pill.getAttribute('aria-label')&&!pill.hasAttribute('title')&&!pill.hasAttribute('data-tooltip'),'its name is accessible only, with no tooltip echo');
+      require(footBox(pill).bottom<=footBox(account).top,'the apps icon stands above the face');
+    } else checkRendered('sidebar-air',context);
+    return {check:name,rail:footRail(),face:Math.round(footBox(account).width),pill:[Math.round(footBox(pill).width),Math.round(footBox(pill).height)]};
+  }
+  if(name==='foot-account-menu'){
+    const nav=document.getElementById('nav'),account=nav.querySelector('.sidebar-account'),menu=document.getElementById('app-popover');
+    require(menu&&menu.classList.contains('account-menu')&&menu.getAttribute('role')==='menu'&&visible(menu),'the account menu is open');
+    require(account.getAttribute('aria-expanded')==='true'&&account.getAttribute('aria-controls')==='app-popover','the face says it holds the menu open');
+    const rows=[...menu.querySelectorAll('button[role="menuitem"]')],m=footBox(menu),a=footBox(account);
+    require(rows.length===4&&rows.map(row=>row.dataset.account.replace('usage-settings','usage')).join()==='usage,dictation,calendar,settings','four rows: 用量, 聽寫, 行事曆, 設定');
+    const icons=rows.map(row=>row.querySelector('.ck svg')?.innerHTML??'');
+    require(icons.every(Boolean)&&new Set(icons).size===4,'a Lucide icon on every row, and no two rows share one');
+    const sep=[...menu.querySelectorAll('.menu-sep')];
+    require(sep.length===1&&sep[0].previousElementSibling===rows[2]&&sep[0].nextElementSibling===rows[3]&&footBox(sep[0]).height<=1.5,'one hairline, between 行事曆 and 設定');
+    require(rows.every(row=>visible(row)&&row.querySelector('.mt').scrollWidth<=row.querySelector('.mt').clientWidth+1&&!row.hasAttribute('title')),'every row\'s words show whole, with no tooltip');
+    require(m.left>=0&&m.right<=innerWidth&&m.top>=0&&m.bottom<=innerHeight,'the menu lies inside the window');
+    if(footRail()){
+      const bar=nav.getBoundingClientRect();
+      require(m.left>=bar.right+4&&m.left<=bar.right+16&&Math.abs(m.bottom-a.bottom)<=2,`on the rail the menu opens beside the whole rail (left ${Math.round(m.left)}, rail ends ${Math.round(bar.right)}), ending where the face ends`);
+      require(![...nav.querySelectorAll('[data-col], .sidebar-apps')].some(el=>{const r=footBox(el);return r.width>0&&r.left<m.right&&r.right>m.left&&r.top<m.bottom&&r.bottom>m.top;}),'on the rail the menu covers no button of it');
+    } else {
+      footNear(m.left,a.left,'the menu\'s left edge is the face\'s');
+      require(m.bottom<=a.top-2&&m.bottom>=a.top-8,'the menu opens above the face');
+    }
+    const usage=rows[0],used=usage.querySelector('.account-used'),chevron=usage.querySelector(':scope > svg.i');
+    require(!!used===usage.hasAttribute('aria-haspopup')&&!!used===!!chevron,'用量 has its number and a chevron together, or neither');
+    if(used){
+      require(/\d+\s*%/.test(used.textContent)&&visible(used)&&footBox(used).right<=footBox(chevron).left+1,'the number stands at the right, before the chevron');
+      require(footBox(chevron).right<=m.right-4&&footBox(chevron).right>=m.right-16,'the chevron ends the row');
+    }
+    require(rows.slice(1).every(row=>!row.hasAttribute('aria-haspopup')&&!row.querySelector(':scope > svg.i')),'the other rows are plain');
+    const tokens=(()=>{const probe=document.createElement('span');probe.style.backgroundColor='var(--menu)';document.body.append(probe);const value=getComputedStyle(probe).backgroundColor;probe.remove();return value;})();
+    require(getComputedStyle(menu).backgroundColor===tokens,'the menu wears the app\'s menu token');
+    require(menu.contains(document.activeElement)||!!document.getElementById('app-submenu')?.contains(document.activeElement),'the focus is in the menu or its submenu');
+    return {check:name,rail:footRail(),used:used?.textContent??null,menu:[Math.round(m.left),Math.round(m.top),Math.round(m.width),Math.round(m.height)]};
+  }
+  if(name==='foot-usage-submenu'){
+    const menu=document.getElementById('app-popover'),sub=document.getElementById('app-submenu');
+    require(menu&&sub&&visible(sub)&&sub.classList.contains('account-usage'),'the usage submenu is open beside the menu');
+    const row=menu.querySelector('[data-account="usage"]'),r=footBox(row),s=footBox(sub),m=footBox(menu);
+    require(row.getAttribute('aria-expanded')==='true','the row says its submenu is open');
+    require(s.left>=m.right-2&&s.left<=m.right+12||s.right<=m.left+2,'the submenu stands at the menu\'s edge');
+    require(s.top<=r.bottom&&s.bottom>=r.top,'and level with its row');
+    const name1=sub.querySelector('.account-window-name'),used=sub.querySelector('.account-window-used'),reset=sub.querySelector('.account-window-reset'),manage=sub.querySelector('[data-account="manage"]');
+    require(name1&&/Codex|Claude|Antigravity/.test(name1.textContent)&&/\d+\s*%/.test(used.textContent)&&reset&&/\d/.test(reset.textContent),`the window's name, its number and when it resets: ${sub.textContent}`);
+    require(visible(manage)&&manage.textContent.trim().length>0&&sub.querySelectorAll('.menu-sep').length===1&&sub.querySelector('.menu-sep').nextElementSibling===manage,'a hairline, then 管理用量');
+    require(footBox(used).right>=s.right-16&&footBox(used).left>footBox(name1).left,'the number stands at the right of the window\'s name');
+    require(s.left>=0&&s.right<=innerWidth&&s.bottom<=innerHeight,'the submenu lies inside the window');
+    return {check:name,sub:[Math.round(s.left),Math.round(s.top),Math.round(s.width),Math.round(s.height)],words:sub.textContent};
+  }
+  if(name==='foot-usage-none'){
+    const menu=document.getElementById('app-popover'),row=menu.querySelector('[data-account="usage-settings"]');
+    require(row&&!row.hasAttribute('aria-haspopup')&&!row.querySelector('.account-used')&&!row.querySelector(':scope > svg.i'),'with no window known 用量 has no number, no chevron and no submenu');
+    require(!document.getElementById('app-submenu'),'and opens none');
+    return {check:name};
+  }
+  if(name==='foot-pill-hover'){
+    // The pointer is on the pill: its marks fan out like a hand of cards (Grok Bot's measured values, named on the pill): the outer ones move 3px
+    // away from the middle one and turn 8deg outward, the middle one lifts 1.5px, all grow to 1.1; transform only, the fill may change.
+    const pill=document.querySelector('#nav .sidebar-apps');
+    require(pill.matches(':hover'),'the pointer is on the pill');
+    const style=getComputedStyle(pill),value=key=>style.getPropertyValue(key).trim();
+    const spread=parseFloat(value('--marks-spread')),lift=parseFloat(value('--marks-lift')),scale=parseFloat(value('--marks-scale')),turn=parseFloat(value('--marks-turn'));
+    require(spread===3&&lift===1.5&&scale===1.1&&turn===8&&value('--marks-time-in')==='180ms'&&value('--marks-ease-in')==='ease-out'&&value('--marks-time-out')==='280ms'&&value('--marks-ease-out')==='ease-in-out','the hover\'s values are named custom properties on the pill (3px, 1.5px, 1.1, 8deg, 180ms ease-out in, 280ms ease-in-out out)');
+    const marks=[...pill.querySelectorAll('.sidebar-app-mark:not([hidden])')];
+    if(footRail()){require(marks.every(mark=>!visible(mark)),'the rail has no marks to move');return {check:name,rail:true};}
+    require(marks.length>=2,'two or more marks show');
+    const moved=marks.map(mark=>{const m=new DOMMatrixReadOnly(getComputedStyle(mark).transform);return {x:m.e,y:m.f,scale:Math.hypot(m.a,m.b),turn:Math.atan2(m.b,m.a)*180/Math.PI};});
+    marks.forEach((mark,at)=>{
+      const place=at-(marks.length-1)/2,shift=place*spread,up=lift*(1-Math.abs(place)),angle=place*turn;
+      require(Math.abs(moved[at].x-shift)<0.2&&Math.abs(moved[at].y+up)<0.2&&Math.abs(moved[at].scale-scale)<0.01&&Math.abs(moved[at].turn-angle)<0.3,`mark ${at} moves ${shift}px, lifts ${up}px, turns ${angle}deg and grows to ${scale}: ${JSON.stringify(moved[at])}`);
+      require(getComputedStyle(mark).transitionProperty==='transform'&&getComputedStyle(mark).transitionDuration==='0.18s'&&getComputedStyle(mark).transitionTimingFunction==='ease-out','only the transform moves, in 180ms ease-out');
+    });
+    require(marks.length%2===0||Math.abs(moved[(marks.length-1)/2].x)<0.2&&Math.abs(moved[(marks.length-1)/2].turn)<0.3,'the middle mark only lifts');
+    // The tiles have fanned apart: a thin gap opens between neighbours (Grok Bot's, about 1px).
+    const boxes=marks.map(mark=>mark.getBoundingClientRect());
+    require(boxes.slice(1).every((r,i)=>r.left-boxes[i].right>=-0.5&&Math.abs(r.left-boxes[i].right)<=4),'the tiles fan out from the strip with thin gaps, not overlapping');
+    return {check:name,moved};
+  }
+  if(name==='foot-pill-reduced'){
+    const pill=document.querySelector('#nav .sidebar-apps');
+    require(matchMedia('(prefers-reduced-motion: reduce)').matches,'the window asks for reduced motion');
+    require(pill.matches(':hover')||footRail(),'the pointer is on the pill');
+    require([...pill.querySelectorAll('.sidebar-app-mark')].every(mark=>getComputedStyle(mark).transform==='none'&&getComputedStyle(mark).transitionDuration==='0s'),'no mark moves under the pointer when motion is reduced');
+    return {check:name};
+  }
+  if(name==='foot-pill-still'){
+    // Away from the pill every mark is in its place.
+    const pill=document.querySelector('#nav .sidebar-apps');
+    require(!pill.matches(':hover'),'the pointer is away from the pill');
+    require([...pill.querySelectorAll('.sidebar-app-mark')].every(mark=>getComputedStyle(mark).transform==='none'),'every mark stands in its place away from the pill');
+    return {check:name};
+  }
+  if(name.startsWith('foot-account-focus-')){
+    // Keyboard: the focus stands on the row (by its place in the menu), or on 管理用量 in the submenu.
+    const want=name.slice('foot-account-focus-'.length),menu=document.getElementById('app-popover'),rows=[...menu.querySelectorAll('button[role="menuitem"]')];
+    if(want==='manage')require(document.activeElement===document.querySelector('#app-submenu [data-account="manage"]'),'the focus is on 管理用量 in the submenu');
+    else require(document.activeElement===rows[Number(want)],`the focus is on row ${want}: ${document.activeElement?.className} ${document.activeElement?.textContent}`);
+    return {check:name};
+  }
+  if(name==='foot-account-keys'){
+    // Escape closed the menu and gave the focus back to the face that opened it.
+    const account=document.querySelector('#nav .sidebar-account');
+    require(!document.getElementById('app-popover')&&!document.getElementById('app-submenu'),'Escape closed the menu');
+    require(document.activeElement===account&&account.getAttribute('aria-expanded')==='false','the focus is back on the face, which says the menu is closed');
+    return {check:name};
+  }
+  if(name==='foot-account-outside'){
+    require(!document.getElementById('app-popover')&&!document.getElementById('app-submenu'),'a press outside closed the menu and its submenu');
+    require(document.querySelector('#nav .sidebar-account').getAttribute('aria-expanded')==='false','the face says it is closed');
+    return {check:name};
   }
   if(name==='sidebar-tile'){
     const tile=document.querySelector('#nav .mb-pinned .mb-tile');
@@ -2479,12 +2578,13 @@ export function checkRendered(name, context = {}) {
     const nav=document.getElementById('nav'),compact=matchMedia('(max-width: 859px)').matches;
     require(document.documentElement.hasAttribute('data-sidebar-collapsed')&&Math.abs(nav.getBoundingClientRect().width-88)<1,'the list is an 88px rail of faces');
     require(!compact||!visible(nav.querySelector('.side-edge')),'a narrow window has no edge to drag');
-    require(!visible(nav.querySelector('.sidebar-account-name')),'the rail shows no names');
+    require(!visible(nav.querySelector('.sidebar-apps .nav-t'))&&!visible(nav.querySelector('.sidebar-app-marks')),'the rail shows no names, words or marks');
     const faces=[...nav.querySelectorAll('.mb-row > .av, .mb-row > .room-avatar')].filter(visible);
     require(faces.length>0&&faces.every(face=>{const box=face.getBoundingClientRect();return Math.abs(box.left+box.width/2-44)<1&&Math.abs(box.width-36)<1;}),'every face is 36px and centered in the rail');
     require([...nav.querySelectorAll('.mb-item .btn.mb-more, .au-room-row .btn.au-room-more')].every(button=>getComputedStyle(button).display==='none'),'the rail draws no ⋯ over a face; a right click opens its menu');
-    const search=nav.querySelector('.side-foot [data-col="search"]').getBoundingClientRect(),add=nav.querySelector('.side-foot [data-col="add"]').getBoundingClientRect(),owner=nav.querySelector('.sidebar-account').getBoundingClientRect();
-    require(Math.abs(search.top-add.top)<1&&search.right<=add.left&&add.bottom<=owner.top,'search and plus sit side by side above the owner in the rail');
+    require(!visible(nav.querySelector('[data-col="search"]'))&&!nav.querySelector('.side-foot [data-col="search"]'),'the rail has no search button');
+    const add=nav.querySelector('.side-foot [data-col="add"]').getBoundingClientRect(),apps=nav.querySelector('.sidebar-apps').getBoundingClientRect(),owner=nav.querySelector('.sidebar-account').getBoundingClientRect();
+    require(add.bottom<=apps.top&&apps.bottom<=owner.top,'the plus, then the apps icon, then the owner, in a column in the rail');
     return {check:name,faces:faces.length};
   }
   // The rail of faces and the full list as Grok Bot's (owner, 2026-11-12): measured, at every width.
@@ -2518,11 +2618,11 @@ export function checkRendered(name, context = {}) {
       require(['auto','scroll'].includes(getComputedStyle(scroll).overflowY),'the list scrolls when it is long');
       const pitch=pairs.map(([a,b])=>box(b).top-box(a).top);
       require(pitch.length>0&&pitch.every(d=>Math.abs(d-58)<=1),`faces are 58px apart: ${pitch}`);
-      const foot=nav.querySelector('.side-foot'),parts=['[data-col="search"]','[data-col="add"]','.sidebar-dictation','.sidebar-home','.sidebar-apps','.sidebar-account'].map(sel=>foot.querySelector(sel));
-      require(parts.every(visible),"search, plus, microphone, Home, Connections and the account are all in the rail's foot");
+      const foot=nav.querySelector('.side-foot'),parts=['[data-col="add"]','.sidebar-apps','.sidebar-account'].map(sel=>foot.querySelector(sel));
+      require(parts.every(visible)&&!foot.querySelector('[data-col="search"]'),"the plus, the Connections icon and the account's face are all in the rail's foot, and there is no search");
       require(parts.every(el=>box(el).left>=box(nav).left&&box(el).right<=box(nav).right),'the foot fits the rail');
-      require(box(parts[0]).top<box(parts[4]).top&&box(parts[4]).top<box(parts[5]).top,'the foot is a column: search and plus, then the apps, then the account');
-      require(!visible(foot.querySelector('.nav-t'))&&!visible(foot.querySelector('.sidebar-account-name')),'the foot has icons only');
+      require(box(parts[0]).top<box(parts[1]).top&&box(parts[1]).top<box(parts[2]).top,'the foot is a column: the plus, then the apps, then the account');
+      require(!visible(foot.querySelector('.nav-t'))&&visible(foot.querySelector('.sidebar-apps-icon .i'))&&parts[1].getAttribute('aria-label')&&!parts[1].hasAttribute('title')&&!parts[1].hasAttribute('data-tooltip'),'the foot has icons only, and the apps icon is named without a tooltip');
       require(box(foot).bottom<=innerHeight&&box(scroll).height>=3*58,`the faces keep room above the foot: ${box(scroll).height}`);
       return {check:name,narrow:true,faces:rows.length,foot:Math.round(box(foot).height)};
     }
@@ -2544,19 +2644,28 @@ export function checkRendered(name, context = {}) {
       if(prev)near(centre-box(prev).bottom,26,'a label stands 26px under the row above it');
       near(box(section.querySelector('.mb-row')).top-centre,18,'a label stands 18px over its first row');
     }
-    // The foot keeps its two rows at every width of the list (owner, 2026-11-12): the Connections pill on a row of its own, and under it
-    // the account's face and name with the microphone and Home at the row's end. The pill says its own words, so it has no tooltip.
-    const foot=nav.querySelector('.side-foot'),account=foot.querySelector('.sidebar-account'),pill=foot.querySelector('.sidebar-apps'),mic=nav.querySelector('.sidebar-dictation'),home=nav.querySelector('.sidebar-home');
-    const middle=el=>box(el).top+box(el).height/2,ownerName=account.querySelector('.sidebar-account-name');
-    near(box(pill).height,40,'the pill is 40px tall');
-    require(Math.abs(box(pill).left-n.left-12)<=1&&Math.abs(n.right-12-box(pill).right)<=1,"the pill has the foot's first row to itself");
-    require(visible(pill.querySelector('.nav-t'))&&pill.querySelector('.nav-t').scrollWidth<=pill.querySelector('.nav-t').clientWidth+1,"the pill's words stand whole on one line");
-    require(box(account).top>=box(pill).bottom&&Math.abs(box(account).left-n.left-12)<=1,'the account stands under the pill, from the left edge');
-    near(box(account.querySelector('.owner-face')).width,32,"the account's face is 32px");
-    require(visible(ownerName)&&ownerName.textContent.trim().length>0&&box(ownerName).width>=40,"the account shows the owner's name beside the face");
-    require(mic.closest('.sidebar-foot-row')&&home.closest('.sidebar-foot-row'),'the microphone and Home stay in the foot at every width');
-    near(middle(mic),middle(account),"the microphone stands on the account's row");near(middle(home),middle(account),"Home stands on the account's row");
-    require(box(account).right<=box(mic).left+1&&box(mic).right<=box(home).left+1&&Math.abs(n.right-12-box(home).right)<=1,'the account, the microphone, then Home, which ends the row');
+    // The foot is one row at every width of the list (owner, 2026-11-12 evening, R-SIDE-01, as Grok Bot's): the face 32px, then the pill 36px tall and
+    // fully round on --surface-2 taking the rest of the row, its words whole on one line. The pill says its own words, so it has no tooltip.
+    const foot=nav.querySelector('.side-foot'),account=foot.querySelector('.sidebar-account'),pill=foot.querySelector('.sidebar-apps'),words=pill.querySelector('.nav-t');
+    const middle=el=>box(el).top+box(el).height/2,fill=getComputedStyle(pill).backgroundColor,surface=(()=>{const probe=document.createElement('span');probe.style.backgroundColor='var(--surface-2)';document.body.append(probe);const value=getComputedStyle(probe).backgroundColor;probe.remove();return value;})();
+    near(box(account).width,32,"the face is 32px");near(box(account).height,32,"the face is 32px");
+    near(box(pill).height,36,'the pill is 36px tall');
+    require(parseFloat(getComputedStyle(pill).borderTopLeftRadius)>=18&&getComputedStyle(pill).borderTopWidth==='0px'&&fill===surface,`the pill is fully round, unframed, on --surface-2 (${fill} / ${surface})`);
+    require(Math.abs(box(account).left-n.left-12)<=1&&Math.abs(box(pill).left-box(account).right-8)<=1&&Math.abs(n.right-12-box(pill).right)<=1,'the face, 8px, then the pill to the foot\'s right edge, 12px in from the list');
+    near(middle(account),middle(pill),"the face and the pill share one row, centred on each other");
+    require(foot.querySelectorAll('.sidebar-foot-row').length===1&&[...foot.querySelectorAll('.sidebar-foot-row > *')].length===2,'the row holds only the face and the pill');
+    require(visible(words)&&words.scrollWidth<=words.clientWidth+1&&box(words).height<parseFloat(getComputedStyle(words).lineHeight)*1.5,"the pill's words stand whole on one line, never cut");
+    const tiles=[...pill.querySelectorAll('.sidebar-app-mark:not([hidden])')].filter(visible);
+    for(const mark of tiles)require(box(mark).right<=box(pill).right-12+1&&box(mark).left>=box(words).right,'a mark that shows lies whole inside the pill, after its words');
+    // The words and the marks are one group, centred in the pill, the marks right after the words; the words are not bold.
+    const group=[box(words).left,tiles.length?box(tiles[tiles.length-1]).right:box(words).right];
+    require(Math.abs((group[0]-box(pill).left)-(box(pill).right-group[1]))<=Math.max(8,tiles.length?4:12),`the words and the marks are centred together in the pill (${Math.round(group[0]-box(pill).left)} left, ${Math.round(box(pill).right-group[1])} right)`);
+    require(parseInt(getComputedStyle(words).fontWeight)<=500,'the words are regular or medium, not bold');
+    if(tiles.length){
+      const white=(()=>{const probe=document.createElement('span');probe.style.backgroundColor='var(--photo-mark)';document.body.append(probe);const value=getComputedStyle(probe).backgroundColor;probe.remove();return value;})();
+      require(tiles.every(tile=>getComputedStyle(tile).backgroundColor===white&&Math.abs(box(tile).height-16)<=1&&parseFloat(getComputedStyle(tile).borderTopLeftRadius)>=3),'each mark sits on its own white tile, 16px tall with rounded corners, in both themes');
+      require(tiles.slice(1).every((tile,i)=>Math.abs(box(tile).left-box(tiles[i]).right)<=0.5),'at rest the tiles touch edge to edge, one strip');
+    }
     require(!pill.hasAttribute('data-tooltip')&&!pill.hasAttribute('title'),'nothing shows under the pointer over the pill');
     return {check:name,narrow:false,rows:rows.length,pitch:pairs.slice(0,3).map(([a,b])=>box(b).top-box(a).top),foot:Math.round(box(foot).height),width:Math.round(n.width)};
   }
@@ -3808,144 +3917,6 @@ export function checkRendered(name, context = {}) {
     require(getComputedStyle(close).outlineStyle === 'none', "pointer opening has no focus outline");
     return {check:name};
   }
-  if (name === "home-figures") {
-    // Four figures: today's events, routines done of due, questions waiting and this week against last,
-    // each read from the same data the core sends.
-    const page = document.querySelector('.page-home:not([hidden])'), data = window.__look.data.home, activity = data.activity;
-    const tiles = [...page.querySelectorAll('.ho-stats > .ho-stat')];
-    require(tiles.map(tile => tile.dataset.stat).join() === "events,routines,questions,week", `four figures in order: ${tiles.map(tile => tile.dataset.stat)}`);
-    const value = key => page.querySelector(`.ho-stat[data-stat="${key}"] b`).textContent;
-    const rows = page.querySelectorAll('.ho-schedule .ho-event').length, questions = data.today.filter(item => item.kind === 'question').length;
-    require(value("events") === String(rows), `events count today's rows (${value("events")} / ${rows})`);
-    require(value("routines") === `${activity.today.routines_done}/${activity.today.routines_due}`, `routines done of due: ${value("routines")}`);
-    require(value("questions") === String(questions), `questions waiting: ${value("questions")} / ${questions}`);
-    const done = day => day.work + day.messages + day.routines_ok, week = activity.days.slice(-7).reduce((sum, day) => sum + done(day), 0);
-    require(value("week") === String(week), `this week's finished work: ${value("week")} / ${week}`);
-    for (const tile of tiles) {
-      const style = getComputedStyle(tile), number = tile.querySelector('b');
-      require(parseFloat(style.borderTopWidth) === 0 && parseFloat(style.borderLeftWidth) === 0 && (tile.matches(':hover') || style.backgroundColor === 'rgba(0, 0, 0, 0)'), `a figure is not a box: ${tile.dataset.stat}`);
-      require(parseFloat(getComputedStyle(number).fontSize) >= 30, `its number is large: ${tile.dataset.stat}`);
-      const words = tile.querySelector(':scope > span');
-      require(words.scrollWidth <= words.clientWidth + 1 || getComputedStyle(words).textOverflow === 'ellipsis', `its words fit or end in an ellipsis: ${tile.dataset.stat}`);
-    }
-    require(tiles.filter(tile => tile.tagName === 'BUTTON').map(tile => tile.dataset.stat).join() === (questions ? "events,questions" : "events"), "only a figure that leads somewhere is a button");
-    const main = document.querySelector('.main'), tops = new Set(tiles.map(tile => Math.round(tile.getBoundingClientRect().top)));
-    require(main.clientWidth <= 760 ? tops.size === 2 : tops.size === 1, `four in a row, two by two in a narrow window (${tops.size} rows)`);
-    return { check: name, values: tiles.map(tile => tile.querySelector('b').textContent) };
-  }
-  if (name === "home-trend") {
-    // The last two weeks as stacked bars of work, messages and routines, in the validated chart colours, with a two-line
-    // scale, today's total over its bar, readable day labels and a table for a screen reader.
-    const section = document.querySelector('.page-home:not([hidden]) .ho-trend'), days = window.__look.data.home.activity.days;
-    require(visible(section) && visible(section.querySelector(':scope > header h2')), "the chart is a named section");
-    const cols = [...section.querySelectorAll('.ho-col')], plot = section.querySelector('.ho-plot').getBoundingClientRect();
-    require(cols.length === 14 && cols[13].classList.contains('is-today'), "fourteen days, today last");
-    const done = day => day.work + day.messages + day.routines_ok, top = Math.max(...days.map(done));
-    const busiest = cols[days.findIndex(day => done(day) === top)].querySelector('.ho-bar').getBoundingClientRect();
-    require(busiest.height > plot.height * 0.45 && busiest.height <= plot.height + 1, `the busiest day reaches into the scale (${Math.round(busiest.height)} of ${Math.round(plot.height)})`);
-    for (const [index, col] of cols.entries()) {
-      const bar = col.querySelector('.ho-bar').getBoundingClientRect();
-      require(Math.abs(bar.bottom - plot.bottom) <= 1.5, `every bar stands on the baseline: day ${index}`);
-      const parts = [...col.querySelectorAll('.ho-bar > i')].map(part => part.getBoundingClientRect());
-      for (let i = 1; i < parts.length; i++) require(parts[i - 1].top - parts[i].bottom >= 1.5, `a gap between the parts of a bar: day ${index}`);
-    }
-    const probe = token => { const i = document.createElement('i'); i.style.color = `var(${token})`; document.body.append(i); const c = getComputedStyle(i).color; i.remove(); return c; };
-    const keys = [...section.querySelectorAll('.ho-legend .ho-key')].map(key => getComputedStyle(key).backgroundColor);
-    require(keys.join() === ['--series-1', '--series-2', '--series-3'].map(probe).join() && new Set(keys).size === 3, `the legend shows the three chart colours: ${keys}`);
-    const value = cols[13].querySelector('.ho-bar-value');
-    require(visible(value) && value.textContent === String(done(days[13])) && value.getBoundingClientRect().bottom <= cols[13].querySelector('.ho-bar').getBoundingClientRect().top + 1, "today's total stands over its bar");
-    const labels = [...section.querySelectorAll('.ho-xaxis > span')].filter(label => getComputedStyle(label).visibility !== 'hidden').map(label => label.getBoundingClientRect());
-    for (let i = 1; i < labels.length; i++) require(labels[i].left >= labels[i - 1].right - 1, "the day labels never overlap");
-    require(section.querySelector('.ho-xaxis > .is-today').textContent === '今天', "today is named");
-    const grid = [...section.querySelectorAll('.ho-grid small')].map(label => label.textContent);
-    require(grid.length === 2 && Number(grid[1]) >= top && Number(grid[0]) * 2 === Number(grid[1]), `a two-line scale with a round top: ${grid}`);
-    const hidden = section.querySelector('.ho-sr'), table = hidden?.querySelector('table');
-    require(table && table.querySelectorAll('tbody tr').length === 14 && hidden.getBoundingClientRect().width <= 1, "the same figures as a table for a screen reader");
-    return { check: name, top, scale: grid };
-  }
-  if (name === "home-trend-tip") {
-    const tip = document.querySelector('.page-home:not([hidden]) .ho-tip'), col = document.querySelector('.ho-col.is-today');
-    require(visible(tip) && tip.querySelectorAll('.ho-tip-row').length >= 3, "the day under the pointer shows its figures");
-    const box = tip.getBoundingClientRect(), bar = col.getBoundingClientRect();
-    require(box.left >= 0 && box.right <= innerWidth && box.top >= 0 && box.bottom <= innerHeight, "inside the window");
-    require(box.right <= bar.left + 1 || box.left >= bar.right - 1, "beside its bar, never over it");
-    const legend = document.querySelector('.page-home:not([hidden]) .ho-trend .ho-legend').getBoundingClientRect();
-    require(box.top >= legend.bottom - 1 || box.right <= legend.left + 1 || box.left >= legend.right - 1, "never over the legend");
-    require(getComputedStyle(tip).pointerEvents === 'none', "it never takes the pointer");
-    return { check: name };
-  }
-  if (name === "home-band") {
-    // Today's hours as a band over the table: each timed entry where it falls, routine runs as ticks, the red line of now.
-    const schedule = document.querySelector('.page-home:not([hidden]) .ho-schedule'), band = schedule.querySelector('.ho-band'), track = band.querySelector('.ho-band-track').getBoundingClientRect();
-    require(visible(band) && band.getAttribute('aria-hidden') === 'true', "a picture of the table under it");
-    require(band.getBoundingClientRect().bottom <= (schedule.querySelector('.ho-thead, .ho-empty')?.getBoundingClientRect().top ?? Infinity) + 1, "over the table");
-    const marks = [...band.querySelectorAll('.ho-mark')];
-    require(marks.length > 0, "today's timed entries are marked");
-    for (const mark of marks) {
-      const box = mark.getBoundingClientRect();
-      require(box.left >= track.left - 6 && box.right <= track.right + 6, `a mark falls inside the day: ${mark.dataset.tip}`);
-    }
-    const now = band.querySelector('.ho-now').getBoundingClientRect(), hour = new Date(window.__look.data.home.generated_at_ms);
-    const expected = track.left + track.width * (hour.getHours() * 60 + hour.getMinutes()) / 1440;
-    require(Math.abs(now.left + now.width / 2 - expected) <= 2, "the line of now stands at the time of day");
-    const hours = [...band.querySelectorAll('.ho-band-hours > span')].map(span => span.getBoundingClientRect());
-    for (let i = 1; i < hours.length; i++) require(hours[i].left >= hours[i - 1].right, "the hours never overlap");
-    require(hours[0].left >= track.left - 1 && hours[hours.length - 1].right <= track.right + 1, "the hours stay under the band");
-    return { check: name, marks: marks.length };
-  }
-  if (name === "home-empty-day") {
-    // Nothing yet: calm words, zeros, 建立 for today, and the chart's quiet note over its empty baseline.
-    const page = document.querySelector('.page-home:not([hidden])');
-    require(page.querySelector('.ho-schedule .ho-empty')?.textContent === '今天沒有行程' && visible(page.querySelector('.ho-create')), "an empty day offers 建立");
-    require(page.querySelector('.ho-stat[data-stat="routines"] span').textContent === '今天沒有例行工作' && page.querySelector('.ho-stat[data-stat="questions"] b').textContent === '0', "zeros, said plainly");
-    const note = page.querySelector('.ho-trend .ho-empty');
-    require(visible(note) && note.textContent === '近兩週還沒有完成的事', "the chart says nothing was finished yet");
-    require([...page.querySelectorAll('.ho-trend .ho-bar')].every(bar => bar.classList.contains('is-zero')), "every day is an empty stub");
-    require(page.querySelector('.ho-hero .ho-line').textContent === '告。今天沒有行程，也沒有事在等你。', "his line says the day is quiet, as himself (告。)");
-    return { check: name };
-  }
-  if (name === "home-questions") {
-    const data = window.__look.data.home, questions = data.today.filter(item => item.kind === 'question');
-    const tile = document.querySelector('.page-home:not([hidden]) .ho-stat[data-stat="questions"]');
-    require(tile.tagName === 'BUTTON' && tile.querySelector('b').textContent === String(questions.length), `every waiting question is counted (${tile.querySelector('b').textContent} of ${questions.length})`);
-    require(/^最新：/.test(tile.querySelector('span').textContent), "with the newest one named");
-    return { check: name, questions: questions.length };
-  }
-  if (name === "home-all-rows") {
-    // No 「顯示更多」 or 「還有…」 anywhere: every item of today is a row.
-    const page = document.querySelector('.page-home:not([hidden])');
-    const schedule = page.querySelectorAll('.ho-schedule .ho-event').length;
-    require(schedule > 8, `more than eight rows, all drawn (${schedule})`);
-    require(!page.querySelector('.ho-more, .ho-count'), "no count or button for more");
-    return { check: name, schedule };
-  }
-  if (name === "home-problem") {
-    const alert = document.querySelector('.page-home .ho-alert'), health = document.querySelector('.page-home .ho-line');
-    require(visible(alert) && /OpenRouter/.test(alert.textContent), "a report that needs fixing speaks on Home");
-    require(alert.getBoundingClientRect().top >= health.getBoundingClientRect().bottom - 1, "under his line");
-    const fixes = [...alert.querySelectorAll('button')];
-    require(fixes.length === 1 && fixes[0].dataset.homeGo === 'report' && fixes[0].classList.contains('icon'), "with its one fix, an icon");
-    return { check: name };
-  }
-  if (name === "home-row-hover") {
-    const row = document.querySelector('.ho-schedule .ho-event:hover'), style = getComputedStyle(row);
-    const probe = document.createElement('i'); probe.style.color = 'var(--hover)'; document.body.append(probe); const hover = getComputedStyle(probe).color; probe.remove();
-    require(row && style.backgroundColor === hover, "the row under the pointer lights its own background");
-    require(parseFloat(style.borderTopWidth) === 0 && style.boxShadow === 'none' && style.outlineStyle === 'none', "with no frame");
-    for (const other of document.querySelectorAll('.page-home .ho-row:not(:hover)')) require(getComputedStyle(other).backgroundColor === 'rgba(0, 0, 0, 0)', "every other row stays bare");
-    return { check: name };
-  }
-  if (name === "home-emblem-live") {
-    // The desktop's own emblem, drawn on a canvas and turning.
-    const page = document.querySelector('.page-home:not([hidden])'), canvas = page.querySelector('.ho-orb > canvas.ho-emb');
-    require(!matchMedia('(prefers-reduced-motion: reduce)').matches, "this scene runs with motion allowed");
-    require(canvas && !page.querySelector('.ho-orb img, .ho-orb .av, .ho-orb svg.slime'), "a canvas, not a picture or a slime");
-    const pixels = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data;
-    let drawn = 0; for (let i = 3; i < pixels.length; i += 4) if (pixels[i] > 0) drawn++;
-    require(drawn > canvas.width * canvas.height * 0.05, `he is drawn (${drawn} lit pixels)`);
-    require(!page.querySelector('.ho-hero [data-home-go="agent"]'), "the hero has no ask-Raphael icon");
-    return { check: name, drawn };
-  }
   if(name === "dictation-layout") {
     const cards=[...document.querySelectorAll('.page-overview .icard')].map(el=>el.getBoundingClientRect()), keys=document.querySelector('.keys-card').getBoundingClientRect(), activity=document.querySelector('.activity').getBoundingClientRect();
     require(cards.length===4 && Math.abs(cards[0].top-cards[1].top)<1 && cards[2].top>cards[0].bottom && Math.abs(cards[2].top-cards[3].top)<1,"dictation stats form a 2 by 2 grid");
@@ -4136,10 +4107,10 @@ export function checkRendered(name, context = {}) {
       // The details panel's rows follow the panel's width: the panel's drag bounds them.
       ['card', '.cs-card:not([data-standalone] .cs-card), .run-tile, .au-occurrence, .icard, .keys-card:not(.page-overview .keys-card)'],
       // A store row in Connect apps on its own is one of two columns in a wide dialog: a reading line.
-      ['reading', '.ho-line, .card:not(.activity):not(.keys-card), .row:not([data-standalone] .cs-box .row), .list, .slist, .hist-top, .hrow, .cs-item, [data-standalone] .cs-card, .mb-row, .mb-rt, .conversation-row, .ask-card, .bgq-card'],
+      ['reading', '.card:not(.activity):not(.keys-card), .row:not([data-standalone] .cs-box .row), .list, .slist, .hist-top, .hrow, .cs-item, [data-standalone] .cs-card, .mb-row, .mb-rt, .conversation-row, .ask-card, .bgq-card'],
       ['thread', '.ra-col, .composer'],
       // Connected apps are two columns of short rows: the list is a page-wide grid, each row a reading line.
-      ['page', '.page:not(.page-agent), .modal, .ho-hero, .page-overview .keys-card, .cs-list'],
+      ['page', '.page:not(.page-agent), .modal, .page-overview .keys-card, .cs-list'],
       ['workspace', '.au-page'],
     ];
     const measurements = [];
@@ -4153,21 +4124,7 @@ export function checkRendered(name, context = {}) {
     }
     const violations = measurements.filter(item => item.width > item.max + 1);
     require(violations.length === 0, `stretched content: ${JSON.stringify(violations)}`);
-    const hero = document.querySelector('.page-home:not([hidden]) .ho-hero');
-    let home;
-    if (visible(hero)) {
-      const page = hero.closest('.page-home'), style = getComputedStyle(page);
-      const lead = hero.getBoundingClientRect(), bounds = page.getBoundingClientRect();
-      const sections = [...page.querySelectorAll('.ho-panels > .ho-sec')].filter(visible).map(section => section.getBoundingClientRect());
-      const available = bounds.width - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
-      require(Math.abs(lead.width - available) <= 1, 'Home hero spans the page measure');
-      require(sections.length >= 1 && sections.every(section => section.top >= lead.bottom - 1 && section.width <= lead.width + 1), 'Home hero leads every section');
-      const columns = sections.length > 1 && Math.abs(sections[0].top - sections[1].top) <= 1 ? 2 : 1;
-      // Side by side, today's schedule and the last two weeks share the width.
-      require(columns === 1 || Math.abs(sections[0].width - sections[1].width) <= 1, 'side by side, today and the last two weeks share a width');
-      home = { heroWidth: lead.width, available, columns };
-    }
-    return { check: name, limits, measurements, ...(home ? { home } : {}) };
+    return { check: name, limits, measurements };
   }
   if (name.startsWith("locale-")) return (async () => {
     const { catalogs, getLocale } = await import('/src/main/i18n/index.ts');
@@ -5178,55 +5135,6 @@ export function checkRendered(name, context = {}) {
       poll();
     });
   }
-  if (name === "home-overview") {
-    // Charts, tables, numbers and a little text; no member rows, open-item list, yesterday or health
-    // check, and no slime. No boxes, nothing sideways and no scrolling panel inside; the page itself may scroll.
-    const home = document.querySelector('.page-home:not([hidden])'), main = document.querySelector('.main');
-    require(document.documentElement.scrollWidth <= innerWidth + 1 && main.scrollWidth <= main.clientWidth + 1, "nothing on Home runs out sideways");
-    require(!home.querySelector('.ho-card, .ho-calendar, .ho-meter, .ho-spend, .ho-allowance, .ho-dictation, .ho-target'), "no blocks of spend, allowances, dictation or a month calendar");
-    require(!home.querySelector('.ho-team, .ho-pending, .ho-yesterday, .ho-checks, .ho-member, .ho-who, .av, svg.slime, .slime-surface'), "no member rows, open items, yesterday, health check or faces");
-    const board = home.querySelector('.ho-board');
-    require([...board.children].map(child => child.className).join() === "ho-stats,ho-panels", "the figures, then the panels");
-    const panels = [...board.querySelectorAll('.ho-panels > .ho-sec')], hasChart = !!window.__look.data.home.activity;
-    require(panels.map(panel => panel.classList[1]).join() === (hasChart ? "ho-schedule,ho-trend" : "ho-schedule"), `today's schedule, then the last two weeks: ${panels.map(panel => panel.classList[1])}`);
-    require(!/US\$|\d+\s*%/.test(board.textContent), "no money or percentages");
-    if (panels.length === 2) {
-      const [a, b] = panels.map(panel => panel.getBoundingClientRect()), side = Math.abs(a.top - b.top) <= 1;
-      require(side ? Math.abs(a.width - b.width) <= 1 : b.top >= a.bottom - 1, "side by side at the same width, or one under the other");
-    }
-    for (const section of panels) {
-      const style = getComputedStyle(section);
-      require(style.backgroundColor === 'rgba(0, 0, 0, 0)' && parseFloat(style.borderLeftWidth) === 0 && parseFloat(style.borderTopWidth) === 0 && style.boxShadow === 'none', `no box around a section: ${section.className}`);
-      require(!section.querySelector('.ho-more, .ho-count, [data-home-go="calendar"].btn.sm'), `nothing to press for more, every row shows: ${section.className}`);
-      for (const element of [section, ...section.querySelectorAll('*')]) {
-        const inner = getComputedStyle(element);
-        require(!['auto', 'scroll'].includes(inner.overflowY) || element.scrollHeight <= element.clientHeight + 1, `Home has no scrolling inner panels: ${element.className}`);
-      }
-      require(visible(section.querySelector(':scope > header h2')), `every section is named: ${section.className}`);
-      const box = section.getBoundingClientRect();
-      for (const element of section.querySelectorAll('.ho-rows > *:not(.ho-sr), .ho-col, .ho-mark, .ho-xaxis > span')) if (visible(element)) {
-        const inner = element.getBoundingClientRect();
-        require(inner.left >= box.left - 8 && inner.right <= box.right + 8, `nothing runs out of its section: ${element.className}`);
-      }
-    }
-    for (const row of home.querySelectorAll('.ho-row')) {
-      const style = getComputedStyle(row);
-      require(parseFloat(style.borderTopWidth) === 0 && style.boxShadow === 'none' && (row.matches(':hover') || style.backgroundColor === 'rgba(0, 0, 0, 0)'), `a row is a plain line, no frame: ${row.className}`);
-      require(row.tagName === 'BUTTON', "every row is a real button");
-      const columns = [...row.children].map(cell => cell.getBoundingClientRect()), head = [...home.querySelectorAll('.ho-thead > span')].map(cell => cell.getBoundingClientRect());
-      if (head.length === 3) require(columns.every((cell, i) => Math.abs(cell.left - head[i].left) <= 1), `a row lines up with the table's heading: ${row.textContent}`);
-    }
-    const emblem = home.querySelector('.ho-orb');
-    require(visible(emblem) && emblem.offsetWidth >= 72 && emblem.querySelector('canvas.ho-emb'), "Raphael's emblem is large on Home, drawn on a canvas");
-    require(!!home.querySelector('.ho-hero h1') && !!home.querySelector('.ho-hero .ho-line'), "Raphael greets the owner and gives his line on today");
-    require(!home.querySelector('[data-home-go="agent"], .ho-ask'), "the hero has no ask-Raphael icon: Raphael is asked on his own page");
-    require(document.querySelector('#nav [data-go][aria-current="page"]')?.dataset.go === "home", "Home is the selected rail destination");
-    require(document.querySelector('#nav .sidebar-foot-row [data-go="home"]'), "Home sits beside the owner");
-    // Each page is named on one line in the sidebar, at every width: 連結應用程式 and its number must fit the narrow sidebar too.
-    for (const label of document.querySelectorAll('#nav .nav .nav-t')) if (visible(label))
-      require(label.getBoundingClientRect().height < (parseFloat(getComputedStyle(label).lineHeight) || 20) * 1.5, `"${label.textContent}" does not fit on one line in the sidebar`);
-    return { check: name, rows: home.querySelectorAll('.ho-row').length, width: home.clientWidth };
-  }
   if (name === "calendar-now") {
     const line = document.querySelector('.au-now'), scroll = document.querySelector('.au-calendar-scroll');
     require(visible(line), "today has the current-time line");
@@ -5342,36 +5250,6 @@ export function checkRendered(name, context = {}) {
     require(document.querySelector('.au-page .cal-chip.is-own'), "own events always show");
     return { check: name };
   }
-  if (name === "home-google-off" || name === "home-google-closed" || name === "home-google-failed") {
-    const schedule = document.querySelector('.page-home .ho-schedule'), notice = schedule.querySelector('.cal-notice');
-    if (name === "home-google-closed") require(!notice, "closed, it stays closed");
-    else {
-      require(visible(notice), "Home says it too");
-      const go = notice.querySelector('[data-home-go="connections"]');
-      require(visible(go) && /連結應用程式/.test(go.textContent), "with the place to go");
-      const words = notice.querySelector('.cal-notice-words').textContent;
-      require(name === "home-google-off" ? /未連接/.test(words) : /讀不到/.test(words), `in plain words: ${words}`);
-      const box = notice.getBoundingClientRect(), section = schedule.getBoundingClientRect();
-      require(box.left >= section.left - 1 && box.right <= section.right + 1, "inside today's schedule, within its column");
-    }
-    return { check: name };
-  }
-  if (name === "home-calendar-language") {
-    // Today's schedule speaks the calendar's language without its boxes: its time format and each source's colour as a tick.
-    const rows = [...document.querySelectorAll('.page-home .ho-schedule .ho-event')].filter(visible);
-    require(rows.length > 0, "today's schedule lists today");
-    const own = rows.find(row => row.classList.contains('is-own'));
-    require(own, "with the owner's own events");
-    const probe = document.createElement('i'); probe.style.color = 'var(--accent-icon)'; document.body.append(probe); const ink = getComputedStyle(probe).color; probe.remove();
-    require(getComputedStyle(own.querySelector('.ho-kind'), '::before').backgroundColor === ink && getComputedStyle(own).backgroundColor === 'rgba(0, 0, 0, 0)' && own.querySelector('.ho-kind').textContent === '自己的', "an own event says so beside the calendar's ink as a dot, never a filled box");
-    for (const row of rows) {
-      const time = row.querySelector('time').textContent;
-      if (!row.classList.contains('is-rhythm') && time !== '全天') require(/^\d{2}:\d{2}$/.test(time), `the calendar's time format: ${time}`);
-    }
-    const times = rows.filter(row => /^\d{2}:\d{2}$/.test(row.querySelector('time').textContent)).map(row => row.querySelector('time').textContent);
-    require(times.join() === [...times].sort().join(), `in time order: ${times}`);
-    return { check: name, rows: rows.length };
-  }
   // A busy day (R-UI-144): the all-day band folds to three rows and counts the rest; 「還有 N 個」 opens it in place to every item, 「收合」 folds it again.
   if (name === "calendar-more-focus") {
     const toggle = document.activeElement;
@@ -5482,7 +5360,7 @@ export function checkRendered(name, context = {}) {
       require(day.left >= box.left && day.right <= box.left + grid.clientWidth + 1, "every day fits inside the calendar viewport");
     }
     require(!document.querySelector('.au-page [data-view]'), "the calendar has no list view");
-    require(document.querySelector('#nav [data-go][aria-current="page"]')?.dataset.go === "home", "the calendar belongs to Home in the rail");
+    require(!document.querySelector('#nav [aria-current="page"]'), "no sidebar entry stands for the calendar: it is opened from the account menu");
     require(!document.querySelector('#nav .nav[data-go="automations"]'), "the rail has no automations entry");
     const compact = grid.closest('.au-page').clientWidth <= 760;
     require(visible(side) !== compact, "the month and members remain visible at 1120px; compact tools start below 760px content width");

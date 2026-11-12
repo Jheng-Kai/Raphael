@@ -650,12 +650,6 @@ export function installMock(fixture, config = {}, target = window) {
     data.status.spend.month_usd = 0;
     data.allowances = { brains: [], quotas: [] };
   }
-  if (variant.homeManyQuestions) {
-    // More open questions than the eight rows Home draws, so the rest is counted.
-    const asks = ["確認資料來源範圍", "核准後續研究安排", "選擇報告格式", "確認訪談名單", "核對預算上限", "決定發布日期", "確認翻譯用語", "核准採購清單"];
-    data.home.today.unshift(...asks.map((title, index) => ({ ...data.home.today[0], id: `question:${index + 3}`, turn_id: index + 3, title })));
-    data.home.counts.today = data.home.today.length;
-  }
   if (variant.calendarSparse) data.routines = data.routines.slice(0, 1);
   // The owner has chosen an image model (Settings › Models), so the face picker's 生成 can draw.
   if (variant.imageModel) data.settings = { ...data.settings, image_model: "openrouter:sample-image" };
@@ -699,10 +693,6 @@ export function installMock(fixture, config = {}, target = window) {
   ];
   if (variant.presence === "calendar") data.home.calendar_events.find(item => item.id === "own:1").title = data.presenceSample.calendar;
   if (variant.calendarGoogle && variant.calendarGoogle !== "connected") data.home.calendar_events = data.home.calendar_events.filter(item => item.kind === "own");
-  if (variant.homeOwnEvents) {
-    const preview = data.home.calendar_events.find(item => item.id === "own:1");
-    preview.at_ms = octoberAt(24, 9, 30); preview.end_ms = octoberAt(24, 10, 30);
-  }
   if (variant.calendarBusy) data.home.calendar_events.push(
     own(11, "產品審查", octoberAt(21, 9), octoberAt(21, 10, 30)),
     own(12, "與小晴對齊", octoberAt(21, 9, 30), octoberAt(21, 10), addedBy(1)),
@@ -758,54 +748,28 @@ export function installMock(fixture, config = {}, target = window) {
     data.managedConnectors.push({id:"composio:googlecalendar",kind:"composio",name:"Google Calendar",status:"ACTIVE",enabled:true,enabled_tools:["GOOGLECALENDAR_EVENTS_LIST"],disabled_tools:[]});
     data.home.calendar_google="connected";
   }
-  if (variant.homeSparse || variant.homeEmpty) {
+  // A subscription nearly used up, as the account menu's 用量 shows it (the tightest window): Codex's weekly window 96% used, resetting in six days.
+  if (variant.allowanceTight) {
+    const codex = data.allowances.brains.find(brain => brain.id === "codex");
+    codex.source = "live";
+    codex.windows = [{ period: "weekly", remaining_percent: 4, resets_at: Math.round(data.now / 1000) + 6 * 86400 }, ...codex.windows.filter(window => window.period !== "weekly")];
+  }
+  if (variant.homeEmpty) {
     data.home.calendar_days = []; data.home.calendar_items = []; data.home.calendar_counts = {}; data.home.calendar_events = [];
     data.home.today = []; data.home.reports = []; data.home.calendar = [];
     data.home.counts = { today: 0, reports: 0, calendar: 0 };
-    data.home.usage = { month_usd: 0, limit_usd: 20, daily: Array(14).fill(0), allowances: { brains: [] } };
     data.status.spend = { ...data.status.spend, month_usd: 0, today_usd: 0, daily: Array(14).fill(0) };
-    data.home.dictation = { words: 0, audio_seconds: 0, time_saved_seconds: 0, speed_wpm: null, daily: Array(14).fill(0) };
-    if (variant.homeSparse) {
-      data.home.usage.month_usd = .88;
-      data.home.usage.allowances.brains = [
-        { id: "codex", name: "Codex", windows: [{ period: "weekly", remaining_percent: 0, resets_at: 1793109600 }, { period: "fiveHour", remaining_percent: 60, resets_at: 1792821600 }] },
-        { id: "claude", name: "Claude", windows: [] },
-      ];
-      data.status.spend.month_usd = .88;
-    }
   }
-  // Home as the core sends it: every item of today, his line on today, the offline health check and the
-  // numbers Home charts.
+  // The overview as the core sends it (the calendar's projection): every item of today, routine runs included.
   {
-    const home = data.home, now = home.generated_at_ms, quiet = variant.homeSparse || variant.homeEmpty;
+    const home = data.home, now = home.generated_at_ms;
     const dayKey = at => { const d = new Date(at); return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`; };
     const person = id => data.members.find(member => member.id === id) ?? { name: "", avatar: "" };
     const runs = variant.calendarRhythm ? [8, 11, 14, 17, 20, 23].map(hour => ({ ...daily, id: `routine:91:${octoberAt(24, hour)}`, routine_id: 91, title: "Gmail 與行程檢查",
       member_id: 1, name: person(1).name, avatar: person(1).avatar, at_ms: octoberAt(24, hour), all_day: false,
       ...(hour === 11 ? { run_status: "error" } : hour === 14 ? { run_status: "confirm" } : {}) })) : [];
-    // A full day: more than the eight rows Home draws, so the rest is counted and opens the day on the calendar.
-    const more = variant.homeMore ? ["晨會", "設計審查", "客戶簡報", "午餐會議", "程式碼審查", "週報撰寫"].map((title, index) => own(60 + index, title, octoberAt(24, 8 + index * 2), octoberAt(24, 9 + index * 2))) : [];
-    home.today = [...home.today, ...home.calendar_events.filter(item => dayKey(item.at_ms) === dayKey(now)), ...runs, ...more].sort((a, b) => a.at_ms - b.at_ms);
+    home.today = [...home.today, ...home.calendar_events.filter(item => dayKey(item.at_ms) === dayKey(now)), ...runs].sort((a, b) => a.at_ms - b.at_ms);
     home.counts.today = home.today.length;
-    const story = narrative => quiet ? { narrative: null, state: "unavailable", reason: "model_unavailable", model: null }
-      : { narrative, state: "ready", reason: null, model: "openrouter:sample", generated_at_ms: now };
-    home.today_plan = { date: "2026-10-24", items: home.today, calendar_google: home.calendar_google,
-      ...story("中午前小晴會先整理午間資訊摘要；確認本週研究方向還在等你回答。") };
-    const check = (id, name, status = "ok", detail = null) => ({ id, name, label_key: `health.${id.split(":")[0]}`, status, detail, detail_key: detail ? "health.connection_unavailable" : null });
-    home.health = { reason: null, checks: [check("key:OpenRouter", "OpenRouter"), check("brain:codex", "Codex"), check("brain:claude", "Claude"), check("connection:gmail", "Gmail"),
-      check("connection:notion", "Notion", variant.problem ? "warn" : "ok", variant.problem ? "連線尚未就緒。" : null), check("memory", "")] };
-    // Home's charts: fourteen local days of finished work with a weekday rhythm and one day that went
-    // wrong, and today's routines, events and questions in numbers.
-    const shape = [[3, 1, 6, 0, 0], [5, 2, 6, 0, 0], [4, 0, 6, 1, 1], [6, 3, 6, 0, 0], [2, 1, 6, 0, 0], [0, 0, 4, 0, 0], [1, 0, 4, 0, 0],
-      [4, 2, 6, 0, 0], [7, 1, 6, 0, 0], [5, 4, 5, 1, 2], [6, 2, 6, 0, 0], [3, 1, 6, 0, 0], [1, 0, 4, 0, 0], [2, 1, 3, 1, 0]];
-    const dayAt = back => { const d = new Date(now - back * 86400000); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
-    const routinesToday = home.today.filter(item => item.kind === "routine").length;
-    home.activity = quiet
-      ? { days: Array.from({ length: 14 }, (_, i) => ({ date: dayAt(13 - i), work: 0, routines_ok: 0, routines_failed: 0, messages: 0, failed: 0 })),
-          today: { routines_due: 0, routines_done: 0, routines_failed: 0, events: 0, questions: 0 } }
-      : { days: shape.map(([work, messages, routines_ok, routines_failed, failed], i) => ({ date: dayAt(13 - i), work, routines_ok, routines_failed, messages, failed })),
-          today: { routines_due: Math.max(routinesToday, 6), routines_done: 3, routines_failed: 1, events: home.today.filter(item => item.kind === "event" || item.kind === "own").length,
-            questions: home.today.filter(item => item.kind === "question").length } };
   }
   function usageBill(period) {
     // The shared fixture clock and browser run in Asia/Taipei.
@@ -829,7 +793,7 @@ export function installMock(fixture, config = {}, target = window) {
     return { cost_usd: total, purposes: Object.entries(amounts).map(([purpose, cost_usd]) => ({ purpose, cost_usd, share: total ? cost_usd / total : 0 })) };
   }
   // Sidebar and overview use the same ledger rows, including floating-point totals.
-  if (!variant.homeEmpty && !variant.homeSparse) data.status.spend.month_usd = usageBill("month").cost_usd;
+  if (!variant.homeEmpty) data.status.spend.month_usd = usageBill("month").cost_usd;
   if (variant.cardDeck || variant.cardTaskResult) {
     const base = structuredClone(data.mailTurns.draft);
     Object.assign(base, {id: 980, member_id:1, conversation_id:11, question:'整理專案摘要。', text:'專案摘要已備妥，請確認。', steps:[], messages:[], drafts:[], task:{id:980,state:'done'}});
@@ -1116,12 +1080,12 @@ export function installMock(fixture, config = {}, target = window) {
       case "settings.set": data.settings[p.key] = p.value; notify("SettingsChanged"); return { settings: data.settings };
       case "status.get": return data.status;
       case "home.overview": {
-        if (!p.month) return {...data.home,report:data.status};
+        if (!p.month) return data.home;
         const shift = at => { const old = new Date(at), [year,month] = p.month.split('-').map(Number); return new Date(year,month-1,Math.min(old.getDate(),new Date(year,month,0).getDate()),old.getHours(),old.getMinutes()).getTime(); };
         const project = item => { const at_ms=shift(item.at_ms);return {...item,at_ms,...(item.end_ms===undefined?{}:{end_ms:at_ms+item.end_ms-item.at_ms}),id:item.kind==='routine' && !item.rhythm?`routine:${item.routine_id}:${at_ms}`:item.id}; };
         const calendar_items = data.home.calendar_items.map(project), calendar_events = data.home.calendar_events.map(project);
         const calendar_counts = Object.fromEntries(Object.entries(data.home.calendar_counts).map(([key,count])=>[new Date(shift(new Date(`${key}T12:00:00`).getTime())).toISOString().slice(0,10),count]));
-        return {...data.home,calendar_items,calendar_events,calendar_counts,calendar_days:Object.keys(calendar_counts),report:data.status};
+        return {...data.home,calendar_items,calendar_events,calendar_counts,calendar_days:Object.keys(calendar_counts)};
       }
       case "status.check_openrouter": data.status.openrouter.state = "ok"; return data.status.openrouter;
       case "secrets.status": return { has_key: !variant.problem && !keyRemoved };

@@ -306,26 +306,25 @@ describe("shared look IPC boundary", () => {
     expect(formal.some(turn => turn.status === "done" && turn.text.startsWith("已建立"))).toBe(true);
     expect(target.__look.data.turns.find(turn => turn.conversation_id === 4)).toEqual(quickBefore);
   });
-  it("keeps reports out of today's work in both default and expanded home fixtures", async () => {
-    for (const homeManyQuestions of [false, true]) {
-      const target = {};
-      installMock(fixture, { fixture: { homeManyQuestions } }, target);
-      const home = await target.__TAURI_INTERNALS__.invoke("core_call", { method: "home.overview" });
-      // Since brief 9 today is every item of the day (questions, routine runs, calendar and own events), never a report.
-      expect(home.today.every(item => ["question", "routine", "event", "own"].includes(item.kind))).toBe(true);
-      expect(home.today.some(item => home.reports.some(report => report.id === item.id))).toBe(false);
-      expect(home.counts.today).toBe(home.today.length);
-      expect(home.today.filter(item => item.kind === "question").length).toBe(homeManyQuestions ? 9 : 1);
-      expect(home.today.map(item => item.at_ms)).toEqual([...home.today.map(item => item.at_ms)].sort((a, b) => a - b));
-    }
+  it("keeps reports out of today's work in the calendar's overview", async () => {
+    const target = {};
+    installMock(fixture, { fixture: {} }, target);
+    const home = await target.__TAURI_INTERNALS__.invoke("core_call", { method: "home.overview" });
+    // Today is every item of the day (questions, routine runs, calendar and own events), never a report.
+    expect(home.today.every(item => ["question", "routine", "event", "own"].includes(item.kind))).toBe(true);
+    expect(home.today.some(item => home.reports.some(report => report.id === item.id))).toBe(false);
+    expect(home.counts.today).toBe(home.today.length);
+    expect(home.today.map(item => item.at_ms)).toEqual([...home.today.map(item => item.at_ms)].sort((a, b) => a - b));
+    // What only Home read is not sent any more (2026-11-12).
+    expect(Object.keys(home).filter(key => ["usage", "dictation", "report", "today_plan", "health", "activity"].includes(key))).toEqual([]);
   });
-  it("keeps empty home spend and the sidebar status consistent and exposes connection problems", async () => {
+  it("keeps an empty overview empty and the sidebar status consistent", async () => {
     const target = {};
     installMock(fixture, { fixture: { homeEmpty: true, problem: true } }, target);
     const call = method => target.__TAURI_INTERNALS__.invoke("core_call", { method });
     const home = await call("home.overview"), status = await call("status.get");
-    expect(home.usage.month_usd).toBe(status.spend.month_usd);
-    expect(home.report.openrouter.state).toBe("no_key");
+    expect(status.spend.month_usd).toBe(0);
+    expect(status.openrouter.state).toBe("no_key");
     expect(home.today).toEqual([]);
     expect(JSON.stringify(fixture.home)).not.toMatch(/\?{3}/);
   });

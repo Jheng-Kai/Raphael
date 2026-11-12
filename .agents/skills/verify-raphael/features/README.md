@@ -147,13 +147,12 @@ See [Automations](automations.md#calendar-navigation-review-2026-11-01). Scenes:
 
 ## Calendar rhythms and Composio readings (2026-11-01)
 
-See [Automations](automations.md#calendar-rhythms-and-composio-readings-2026-11-01)
-and [Home](home.md#calendar-rhythm-2026-11-01). Selected scenes:
+See [Automations](automations.md#calendar-rhythms-and-composio-readings-2026-11-01). Selected scenes:
 calendar-rhythm-week, calendar-rhythm-day, calendar-rhythm-month,
-calendar-rhythm-popover, calendar-rhythm-hidden, home-calendar-rhythm,
+calendar-rhythm-popover, calendar-rhythm-hidden,
 automations-google-composio, automation-window, automation-window-menu,
 automation-window-saved, automations-calendar, automations-all-day,
-automation-edit, details-routines and home-own-events. Run both themes at
+automation-edit and details-routines. Run both themes at
 1120,720,1920x1080. Fixtures do not prove network, live/provider, cargo,
 native-journey or judge boundaries.
 ## Work channels, file restore and private login (2026-11-01)
@@ -245,21 +244,21 @@ One sidebar (348px since 2026-11-12, R-SIDE-01) has no brand. Search and plus st
 36px soft round buttons (2026-11-06); search opens a card in the middle of the dimmed window with the
 field, every member as face, name and last line, message results once words are typed, and 新增成員
 at its foot (Enter opens the first row). The edge drags the list down to an 88px rail of faces (hover
-names a face; search and plus move above the owner), which is also what the list is under 860px. The chief, without a star, is the first ordinary row; any pinned member leaves the
+names a face; the plus moves above the owner, with no search on the rail), which is also what the list is under 860px. The chief, without a star, is the first ordinary row; any pinned member leaves the
 rows for a larger centered face above its name at the top, over one continuous list of member rows and unframed group face grids (up to four faces).
 Only owner-created folders have headings; their chevrons appear on hover. Times
 appear on hover, and current-page selection remains unique. The footer is a Notion-like list without a
-separator: one row, the owner's face (Settings) and the Connections pill, with dictation and a square Home at its end. Native `owner-face`
+separator: one row, the owner's face (the account menu, [Navigation](navigation.md)) and the Connections pill. Native `owner-face`
 proves a window that loaded before the core still hears it and shows the saved photo.
 Groups are the owner's own: there is no everyone entry, and an empty former team room is not listed.
 Below 860px the same list is the 88px rail of faces. Team route/canvas are removed. Settings > Connections owns apps;
-Home mini calendar owns full calendar navigation. Owner avatar upload reuses the
+the account menu's 行事曆 owns calendar navigation. Owner avatar upload reuses the
 existing picker/crop component and presets; footer and owner messages share identity.
 
 Selected acceptance: sidebar, sidebar-folders, sidebar-folded, sidebar-many,
 sidebar-unread, sidebar-drawer, sidebar-air, sidebar-air-foot, sidebar-rail-menu, sidebar-drag-row, sidebar-metrics, sidebar-search, sidebar-chief-pinned, sidebar-rail, sidebar-plus, sidebar-group-avatar,
 sidebar-group-avatar-pair, sidebar-group-avatar-four, sidebar-owner, sidebar-owner-upload, sidebar-owner-crop, sidebar-owner-crop-held, chat, details, profile, plugins-installed,
-all home-* scenes (including full/sparse/empty, edge-only hover and month gestures), both themes at 1120,720,1920x1080,1280x800. Home's emblem is 128px (96px compact), its report is --fs-h1 and its date is unchanged. Check these scenes in black at 1120,720,1920x1080 too.
+the calendar scenes (including full/sparse/empty, edge-only hover and month gestures), both themes at 1120,720,1920x1080,1280x800. Check these scenes in black at 1120,720,1920x1080 too.
 Run `npm run verify -- --contract`, then the selected look matrix and inspect every
 contact sheet/relevant full-size image. Native readable-layout, locale-sweep and
 delete-conversation cover navigation in an isolated fake-brain app. No judge,
@@ -333,10 +332,8 @@ CARGO_TARGET_DIR apply.
 
 ## Owner round 9 contracts
 
-Home paints local records before live allowances and calendar data. Four fixed equal
-summary blocks and a full month calendar retain their geometry in empty, sparse and
-full states. Every whole block navigates, including keyboard operation, while inner
-report controls retain their actions. See [Home](home.md). Day/week working hours
+Home was removed on 2026-11-12 (R-UI-114 is retired): the app opens on Raphael's conversation, and the calendar opens from the
+account menu; see [Navigation](navigation.md). Day/week working hours
 fit the viewport below a pinned all-day row; see [Automations](automations.md).
 Owner/member/room messages share eight-line faded previews and the existing
 expand-message control, without inner scrolling. CLI envelope parsing is shared by
@@ -344,9 +341,8 @@ normal, quick, resumed, failure, room and background routes; see
 [Conversation](conversation.md). The ordinary orb has no Stop; focused double-Escape
 and permission/question actions remain. See [Dictation](dictation.md).
 
-Native readable-layout includes Home, compact week/day and long owner expansion;
-home-timing measures stored allowance first paint before a two-second offline CLI
-transport. Run these with self-diagnosis and memory-growth after an offline debug
+Native readable-layout includes the start conversation, the account menu, compact week/day and long owner expansion
+(Home and its allowance-timing journey were removed on 2026-11-12). Run these with self-diagnosis and memory-growth after an offline debug
 build, one heavy process at a time.
 
 ## Owner round 8 contracts
@@ -364,7 +360,7 @@ or the composer. Learned-skill
 notices follow the producing reply; member skills and memory provenance use formatDate
 from format.ts, with explicit zh-TW, ja and en expectations.
 
-The existing details-alignment, conversation-scroll-edge, home-lead-width,
+The existing details-alignment, conversation-scroll-edge,
 dictation-overview, dictation-layout, skill-learned-notice and growing-skills checks
 cover these contracts. toast-clearance covers quick-cleared, composer-learn
 and member-delete. Native deletion audit uses the same
@@ -374,8 +370,8 @@ No brain, tool, core or Rust behavior changed.
 
 ```powershell
 npm run verify
-npm run look -- details member-conversation-sections connector-reconnected home-empty home-many dictation-overview quick-cleared member-text details-skills raphael-skills centred-system-events composer-learn conversation-delete-main member-delete --theme both --width 1120,720,1920x1080
-npm run look -- home-many quick-cleared --theme both --width 1280x800
+npm run look -- details member-conversation-sections connector-reconnected dictation-overview quick-cleared member-text details-skills raphael-skills centred-system-events composer-learn conversation-delete-main member-delete --theme both --width 1120,720,1920x1080
+npm run look -- quick-cleared --theme both --width 1280x800
 $env:RAPHAEL_MODELS_DIR = '<a folder holding the local speech models>'
 npm run native -- skill-growth readable-layout locale-sweep voice-conversation delete-conversation
 ```
@@ -394,15 +390,15 @@ behavior the fixture cannot prove.
 
 | Feature | User-facing scope |
 | --- | --- |
-| [Home](home.md) | Startup overview, pending work, reports, calendar, usage and dictation totals |
+| [Navigation](navigation.md) | The app's start on Raphael's conversation, the sidebar's foot (the face and the Connections pill), the account menu with its usage submenu, the rail's foot and the shortcuts that used to lead to Home |
 | [Conversation](conversation.md) | Threads, details panel, replies, progress status, search, composer and the cards a task pauses on (an app, a key, the owner's turn at the computer, the owner's yes) and an email draft they edit and send |
 | [Member computer](member-computer.md) | Optional Docker sandbox, curated tools pinned outside the plugin cap, shared/per-bot tools without per-action approval, outward-action approval contract, owner-control lease, side-panel live desktop and native fake-brain journey |
 | [Members](members.md) | Identity, resources, voice, the primary contact's star and its chooser, Raphael's approved sidebar administration, and the right click that opens the ⋯ menu of any row (R-UI-44) |
-| [Automations](automations.md) | Home-owned day/week calendar, schedules, advanced options and deletion |
+| [Automations](automations.md) | Day/week calendar opened from the account menu, schedules, advanced options and deletion |
 | [Group chats and folders](team-and-rooms.md) | Sidebar folders, Everyone room, group identity and mentions |
 | [Dictation](dictation.md) | Overview, history, dictionary, shortcuts, microphone and paste |
 | [Settings and appearance](settings-appearance.md) | Profile/preferences, black and white themes, languages, models and app information |
-| [Connections and MCP](connections-mcp.md) | Connect apps as one view after Grok Bot (chip of the connected apps, search, category chips, 為你推薦 and sections, an app's page; 2026-11-12), the one colour of everything that floats, connected apps and their count, an app's accounts and tools, members' private skills, managed catalog, MCP setup/discovery and Home's private Google calendar read |
+| [Connections and MCP](connections-mcp.md) | Connect apps as one view after Grok Bot (chip of the connected apps, search, category chips, 為你推薦 and sections, an app's page; 2026-11-12), the one colour of everything that floats, connected apps and their count, an app's accounts and tools, members' private skills, managed catalog, MCP setup/discovery and the calendar's private Google calendar read |
 | [Usage](usage.md) | Spend overview, CLI allowances read unseen at each opening of Settings (no refresh button), and the once-per-window 90% warning |
 | [Onboarding](onboarding.md) | Welcome, optional setup and immediate conversation |
 
@@ -480,14 +476,12 @@ limits and all measurements in `report.json`. Explicit sidebar pan/zoom is norma
 to layout size so 50/100/150% does not masquerade as responsive stretching. Hidden
 pages are excluded. A 1px tolerance covers fractional layout rounding. Limits are
 calculated from the spacing tokens, not copied from a potentially stretched element.
-Home requires its hero to precede and span the grid and both block rows to fill
-two equal columns. The lead is a page-level element, not a short card.
 Appearance uses the shared theme/language dropdown rows; dictionary entries retain their own grid contract.
 
 Representative main-page acceptance (all consumers of the shared layout):
 
 ```powershell
-npm run look -- home home-empty home-trend-tip home-many home-motion chat details details-routines sidebar sidebar-folders dictation-overview dictation-history dictation-heat-press dictation-dictionary dictation-keyboard profile appearance models dictation agent about plugins-installed plugins-store usage automations-calendar automations-day --theme both --width 1120,720,1920x1080
+npm run look -- chat details details-routines sidebar sidebar-folders dictation-overview dictation-history dictation-heat-press dictation-dictionary dictation-keyboard profile appearance models dictation agent about plugins-installed plugins-store usage automations-calendar automations-day --theme both --width 1120,720,1920x1080
 ```
 
 The dictionary scene uses twelve words to expose column count and wrapping; the
@@ -505,7 +499,7 @@ are assignments, not coverage claims. Current executions live in app/.native/run
 
 | Feature | Native journey needed: drive, assert, brain |
 | --- | --- |
-| Home | Planned home-persistence: start/restart, open report/calendar/pending work; assert real aggregates and navigation against SQLite; fake brain. |
+| Navigation | The sidebar-foot journey measures the foot and the account menu; start/restart opens on Raphael's conversation (Home was removed on 2026-11-12). |
 | Conversation | readable-layout checks shared details edges and compact identity; locale-sweep, voice-conversation, delete-conversation; drive locale/composer/sidebar, real member consultations and room reports, delete recipient conversations/source member; reject old rows/date/exchange chrome in replacement defaults and new named threads, compare actual history IPC with read-only production SQL and NULL conversation rows; native fake brain. Planned conversation-cards: approvals, attachments, Stop and reconnect; fake or signed-in Codex CLI. |
 | Members | delete-conversation creates/deletes members through UI and checks orphan exchange rows/deleted source names. Planned members-persistence: edit/hide/duplicate/primary/resources/voice and right-click menus, restart; assert member/resource/primary state and shared agent path; fake brain, Codex CLI for administration. |
 | Automations | Planned automations-worker: create/edit/delete schedule, trigger worker, cancel/restart; assert schedule, task and report persistence and no late writes; fake brain. |
@@ -535,10 +529,10 @@ both themes. 1280x800 leaves 64 logical pixels for a taskbar on a 1536x864 deskt
 840/860 heights leave only 24/4px. Long Settings catalogs intentionally scroll.
 
 ```powershell
-npm run look -- home home-empty home-many home-motion chat details details-closed member-text room-text no-naming sidebar dictation-overview dictation-history dictation-dictionary profile appearance models dictation agent about plugins-installed plugins-store appearance-menu appearance-black theme-clarity usage automations-calendar onboarding --theme both --width 1120,720,1920x1080,1180x780,1280x800
+npm run look -- chat details details-closed member-text room-text no-naming sidebar dictation-overview dictation-history dictation-dictionary profile appearance models dictation agent about plugins-installed plugins-store appearance-menu appearance-black theme-clarity usage automations-calendar onboarding --theme both --width 1120,720,1920x1080,1180x780,1280x800
 ```
 
-Home, dictation, thread-measure, settings-alignment, sidebar-shell and welcome
+Dictation, thread-measure, settings-alignment, sidebar-shell and welcome
 checks extend the ordinary scenes. Details checks pointer focus before separately
 exercising keyboard focus. The retired first-bot scenarios are replaced by no-naming.
 This is local acceptance; the full CI matrix remains 330 scenes x six combinations.
@@ -725,16 +719,16 @@ mention-field.ts. composer-links.ts preserves full restored URLs and avoids quad
 and the single participant row. No new page, setting, RPC or migration.
 
 Selected look scenes: all existing sidebar.mjs scenes; busy-team-typing;
-daily-footer-hover, daily-footer-marks, daily-footer-home, daily-press-feedback,
+daily-footer-hover, daily-footer-marks, daily-footer-away, daily-press-feedback,
 daily-press-surfaces, daily-press-card, daily-press-desktop, daily-newest,
 daily-folder-heading, daily-copy-chief, daily-copy-member, daily-copy-room, daily-copy-setup, daily-copy-webhook,
 daily-draft-member, daily-draft-room, daily-paste-chief, daily-paste-room,
 daily-long-draft, daily-faces-2, daily-faces-3, daily-faces-4,
 daily-faces-2-rail, daily-faces-3-rail, daily-faces-4-rail.
 Each uses both themes at 1120,720,1920x1080. sidebar-selection remains an assertion
-in sidebar-rail and daily-footer-home, daily-press-feedback. Composer performance steps retain long-task,
+in sidebar-rail and daily-footer-away, daily-press-feedback. Composer performance steps retain long-task,
 storage-write, field-length and chip-count evidence in the existing look report.
-The old footer word alignment and square Home checks now protect sensible name
+The old footer word alignment and square icon checks now protect sensible name
 insets and equal 36px icon actions. The old nonoverlapping round face grid check
 now protects bare overlapping clusters, fixed bounds and one header row. The
 emblem audit includes composite faces; only sidebar controls have a scoped soft
@@ -744,7 +738,7 @@ and the emblem scales to its composite slot, as explicit owner requirements.
 Press feedback follows actual pointer down/up on the real controls, recording
 computed colors and fixed bounds. Source audit preserves working default,
 primary and calendar states; explicit hover overrides receive a distinct pressed
-state. Representative consumers include the sidebar, composer, Home, connections,
+state. Representative consumers include the sidebar, composer, connections,
 calendar, model sources, event receipts, conversation cards and desktop preview. Button surfaces
 that delegate painting to their parent are measured with that parent too.
 

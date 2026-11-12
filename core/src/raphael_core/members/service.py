@@ -299,6 +299,8 @@ class MembersService:
         self._memory = memory
         self._language = language
         self._notify = notify
+        # Told each zone the window says (`members.viewing`): the calendar's own zone and the computers' clock follow it (app.py).
+        self.timezone_seen: Callable[[str], None] | None = None
         # The record of the computers (computer/removals.py `ComputerData`): who has one, and what a deleted member owes.
         self.computer_data = None
         self.remove_messaging = None
@@ -1362,6 +1364,8 @@ class MembersService:
 
     def observe_timezone(self, name: str) -> None:
         """Pin legacy schedules before following a changed computer zone for new routines."""
+        if self.timezone_seen is not None:
+            self.timezone_seen(name)
         previous = self._settings.get("routine_detected_timezone") or name
         if self._settings.get("routine_detected_timezone") == name:
             return

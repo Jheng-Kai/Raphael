@@ -382,7 +382,7 @@ export function swapHTML(host: HTMLElement, html: string): void {
 interface MenuState {
   el: HTMLElement; anchor: HTMLElement; rect: DOMRect; stopOutside(): void;
   onKey?: (e: KeyboardEvent) => boolean; onClose?: () => void;
-  parent: MenuState | null; placement?: "beside" | "start" | "pointer" | "above" | "center"; anchorRect?: () => DOMRect;
+  parent: MenuState | null; placement?: "beside" | "start" | "pointer" | "above" | "center" | "right"; anchorRect?: () => DOMRect;
   /** Set when a right click asked for the menu: it stands at that point rather than under its button. */
   at?: PointerAt;
   stopHover?: () => void;
@@ -553,10 +553,15 @@ export function menuPlacement(
   anchor: Pick<DOMRect, "top" | "bottom" | "right"> & Partial<Pick<DOMRect, "left">>,
   size: { width: number; height: number },
   viewport: { width: number; height: number; headerBottom: number },
-  alignment: "end" | "start" | "pointer" | "above" | "center" = "end",
+  alignment: "end" | "start" | "pointer" | "above" | "center" | "right" = "end",
 ): { left: number; top: number; maxHeight: number } {
   const upper = viewport.headerBottom + 8;
   const lower = Math.max(upper, viewport.height - 8);
+  if (alignment === "right") {
+    // Beside the anchor on its right, ending where the anchor ends (the avatar at the foot of the rail), kept inside the window.
+    const room = Math.max(0, lower - upper), height = Math.min(size.height, room);
+    return { left: Math.max(8, Math.min(anchor.right + 8, viewport.width - size.width - 8)), top: Math.max(upper, Math.min(anchor.bottom - height, lower - height)), maxHeight: room };
+  }
   const belowTop = Math.max(upper, Math.min(anchor.bottom + 4, lower));
   const aboveBottom = Math.min(lower, Math.max(upper, anchor.top - 4));
   const below = lower - belowTop;
@@ -599,7 +604,7 @@ export function placeMenu(): void {
   // Release the previous side's height limit before measuring a menu after scrolling or redraw.
   el.style.maxHeight = `${Math.max(0, innerHeight - headerBottom - 16)}px`;
   const size = { width: el.offsetWidth, height: el.offsetHeight }, viewport = { width: innerWidth, height: innerHeight, headerBottom };
-  const placement = menu.placement === "beside" ? submenuPlacement(r, size, viewport) : menuPlacement(r, size, viewport, menu.placement === "start" || menu.placement === "pointer" || menu.placement === "above" || menu.placement === "center" ? menu.placement : "end");
+  const placement = menu.placement === "beside" ? submenuPlacement(r, size, viewport) : menuPlacement(r, size, viewport, menu.placement === "start" || menu.placement === "pointer" || menu.placement === "above" || menu.placement === "center" || menu.placement === "right" ? menu.placement : "end");
   if (menu.placement === "beside") {
     const first = el.querySelector<HTMLElement>("button");
     const inset = first ? first.getBoundingClientRect().top - el.getBoundingClientRect().top : 0;
@@ -667,8 +672,8 @@ function listenForSubmenus(state: MenuState): void {
 }
 
 export interface PopoverOptions {
-  /** Beside preserves its parent menu; start aligns text completions above their character. */
-  placement?: "beside" | "start" | "above" | "center";
+  /** Beside preserves its parent menu; start aligns text completions above their character; right stands on the anchor's right, ending where it ends. */
+  placement?: "beside" | "start" | "above" | "center" | "right";
   /** A live text/caret rectangle; the field remains the dismissal and focus anchor. */
   anchorRect?: () => DOMRect;
   onClose?: () => void;

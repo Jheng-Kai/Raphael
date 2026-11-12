@@ -2,13 +2,17 @@
 import { afterEach, expect, test, vi } from "vitest";
 vi.mock("../api", () => ({ statusGet: vi.fn(async () => ({ openrouter: { state: "ok" }, spend: { month_usd: 0, limit_usd: 10 } })) }));
 import { createDictation } from "./dictation";
-import { resolvePage } from "../navigation-pages";
+import { resolvePage, START_PAGE } from "../navigation-pages";
 import { samePage } from "../nav-history";
 import type { AppContext, Page } from "../types";
 
 afterEach(() => { localStorage.clear(); document.body.replaceChildren(); });
-test("legacy home returns to conversation; dictation deep links select their tab", () => {
-  expect(resolvePage("home")).toEqual({ page: "home" });
+test("the app starts on Raphael's conversation and no page is named home", () => {
+  expect(START_PAGE).toBe("agent");
+  expect(resolvePage(START_PAGE)).toEqual({ page: "agent" });
+  expect(["agent", "dictation", "automations"].includes(START_PAGE)).toBe(true);
+});
+test("dictation deep links select their tab", () => {
   expect(resolvePage("history")).toEqual({ page: "dictation", tab: "history" });
   expect(resolvePage("dictionary")).toEqual({ page: "dictation", tab: "dictionary" });
   expect(samePage({ page: "dictation", tab: "overview" }, { page: "dictation", tab: "history" })).toBe(false);

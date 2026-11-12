@@ -66,8 +66,6 @@
   /* Raphael's blue: his own colour, and the usage bars'. */
   --raphael-color: #1f9fe8;
   --meter: var(--raphael-color);
-  /* Home's chart: work, messages and routines, in the order a bar stacks them (validated for colour blindness). */
-  --series-1: #2a78d6; --series-2: #eb6834; --series-3: #1baf7a;
   --ans-edge: #ececec;
   --btn: #ffffff; --btn-edge: #d4d4d4; --key: #f7f7f7; --key-edge: #d4d4d4;
   --track: #e5e5e5; --menu: var(--float); --scrim: rgba(0, 0, 0, 0.3);
@@ -113,7 +111,6 @@
   --computer-active: #b98aff;
   --raphael-color: #5cc4ff;
   --meter: var(--raphael-color);
-  --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70;
   --ans-edge: #161616;
   --btn: #1f1f1f; --btn-edge: #2e2e2e; --key: #1f1f1f; --key-edge: #2e2e2e;
   --track: #333333; --menu: var(--float); --scrim: rgba(0, 0, 0, 0.65);
@@ -565,7 +562,7 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
    button, a field, a card inside) is filled --float-ctl, and a hovered row takes --float-hover. The surfaces below say it once: inside any of them the
    ordinary tokens point at the floating ones, so a control needs no rule of its own. The window, the sidebar, the pages, the thread and the composer
    keep their own colours; a toast is the inverse of the page and is not one of these. */
-:where(.menu, .modal, .mb-dialog, .cs-dialog, .au-pop, .cb-card, .link-hover, .message-tooltip, .ho-tip) {
+:where(.menu, .modal, .mb-dialog, .cs-dialog, .au-pop, .cb-card, .link-hover, .message-tooltip) {
   --btn: var(--float-ctl); --btn-edge: var(--float-ctl-edge); --btn-hover: var(--float-ctl-hover); --btn-pressed: var(--float-pressed);
   --key: var(--float-ctl); --key-edge: var(--float-ctl-edge);
   --hover: var(--float-hover); --pressed: var(--float-pressed); --edge: var(--float-edge); --line: var(--float-edge);

@@ -26,6 +26,17 @@ describe("popover placement", () => {
     expect(menuPlacement({ left: 690, right: 690, top: 300, bottom: 320 }, { width: 240, height: 120 }, viewport, "start").left).toBe(472);
   });
 
+  test("a menu on the right of its anchor (the rail's face) ends where the anchor ends and keeps inside the window", () => {
+    // The face at the foot of the 88 px rail: 8 px to the right of it, its bottom edge on the face's bottom.
+    expect(menuPlacement({ left: 26, right: 62, top: 424, bottom: 460 }, { width: 220, height: 160 }, viewport, "right"))
+      .toEqual({ left: 70, top: 300, maxHeight: 432 });
+    // Too tall for the room under the header: it takes all of it, from the top.
+    expect(menuPlacement({ left: 26, right: 62, top: 424, bottom: 460 }, { width: 220, height: 600 }, viewport, "right"))
+      .toEqual({ left: 70, top: 40, maxHeight: 432 });
+    // Too near the window's right edge: it stays inside.
+    expect(menuPlacement({ left: 600, right: 700, top: 424, bottom: 460 }, { width: 220, height: 160 }, viewport, "right").left).toBe(492);
+  });
+
   test("a menu at the pointer starts at the point, prefers the space below and keeps inside the window", () => {
     const point = (x: number, y: number) => ({ left: x, right: x, top: y, bottom: y });
     expect(menuPlacement(point(300, 200), { width: 240, height: 120 }, viewport, "pointer")).toEqual({ left: 300, top: 204, maxHeight: 268 });

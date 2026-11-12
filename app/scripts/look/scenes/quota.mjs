@@ -9,8 +9,8 @@ export default [
   scene("quota-warning", "A subscription window nine-tenths used is said once, in a toast above the conversation's composer: which one, what is left, when it resets",
     [member(1), check("quota-warning-before"), warn({ provider: "codex", period: "fiveHour", remaining_percent: 8, resets_at: NOW_S + 3 * 3600 + 900 }),
       wait(".toast .quota-warning"), check("quota-warning"), check("toast-clearance")]),
-  scene("quota-warning-weekly", "A weekly window that resets days later names its day as well as its time, here over Home",
-    [page("home"), wait(".page-home:not([hidden]) .ho-hero"), check("quota-warning-before"),
+  scene("quota-warning-weekly", "A weekly window that resets days later names its day as well as its time, here over the calendar",
+    [page("automations"), wait(".au-page:not([hidden])"), check("quota-warning-before"),
       warn({ provider: "claude", period: "weeklyOpus", remaining_percent: 7.5, resets_at: NOW_S + 3 * 86400 - 7200 }),
       wait(".toast .quota-warning"), check("quota-warning-weekly")]),
 ];

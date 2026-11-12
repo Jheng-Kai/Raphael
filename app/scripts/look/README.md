@@ -326,9 +326,9 @@ conversations, work/replies/attachments, team/rooms, schedules/runs, usage/CLI a
 MCP servers, providers/models and dictation data. Browser dates are fixed to the fixture's
 `now`, in Asia/Taipei. Change data in that file, not in a second mock.
 
-The normal entry opens Home and waits for Raphael's status strip. Existing non-home
-journeys then click the real Raphael rail destination before driving their steps.
-Home scenes cover rich/empty data, reports, routines and calendar navigation.
+The normal entry opens Raphael's conversation (Home was removed on 2026-11-12) and waits for its header. Every other page is reached
+through the real account menu at the sidebar's foot (`accountMenu` / `page()` in scenes/steps.mjs, the driver's `account-menu` action),
+and the foot scenes (scenes/foot.mjs) cover the face, the pill, the menu, its usage submenu, the rail and the hover.
 
 Add a `scene(name, description, steps, fixtureOverrides)` to a module in `scenes/` and
 export it from `scenes/index.mjs`. Steps include click, type, hover, key (`shift: true` holds Shift), ime (a composition and what commits it, through the browser's own input-method path, with the events it made recorded in `window.__imeLog`), right-click, pointer-drag, wait, scroll,
@@ -338,7 +338,7 @@ can replace collections; `running`, `problem`, `onlyRaphael`, `usageEmpty`
 and `onboarding` select boundary variants; `permissionCard`, `memberDraftFirst`, `mailDraft` and `mailOffer` seed the permission and email cards of a chat (the Conversation feature map, P08c). `overlayEvents` replays the native overlay
 channel contract; `advance-time` advances the shared fixed clock for production timers. Scenes run with reduced motion,
 so nothing moves in a still frame; a scene about something that moves sets `motion: true` and holds every animation at
-one time with `freeze-motion` (`at` in ms), the same frame each run. A scene starts once the home (or the overlay's
+one time with `freeze-motion` (`at` in ms), the same frame each run. A scene starts once Raphael's conversation (or the overlay's
 caption) is up; one that waits for something else names it in `ready` (`overlay-long-answer` waits for its subtitle).
 All scenarios appear in `--list`.
 
@@ -410,7 +410,7 @@ on a 1536x864 logical desktop at 125% scaling. Native window-state restores
 remembered bounds; manual first/second launches show and focus the window,
 while --autostart leaves it in the tray.
 
-Home's four equal blocks and adaptive calendar, two-by-two dictation totals,
+The adaptive calendar, two-by-two dictation totals,
 896px conversation measure, shared settings edges, fixed conversation sidebar and
 centered welcome are asserted by their ordinary feature scenes. no-naming
 replaces the removed first-Bot setup scenes. Details' pointer focus assertion
@@ -427,12 +427,12 @@ interactions are replaced by the conversation sidebar.
 
 `npm run native -- readable-layout` applies the same assertions to an isolated
 WebView/SQLite run. Roster prerequisites use production RPC; folder folding,
-drawer navigation, Home month changes and details controls use the real UI. Captures
+drawer navigation, calendar month changes and details controls use the real UI. Captures
 record their actual viewport dimensions.
 
 ## Conversation layout checks
 
-The feature map names the affected scene matrix and shared checks. Native readable-layout now also checks separate model/source lines, aligned card actions, a single quick-question row label, the conversation fade and Home/sidebar geometry. Keep the pre-fix binary identity separate from exact source build evidence. Run design judge locally from a signed-in shell.
+The feature map names the affected scene matrix and shared checks. Native readable-layout now also checks separate model/source lines, aligned card actions, a single quick-question row label, the conversation fade and the sidebar's geometry. Keep the pre-fix binary identity separate from exact source build evidence. Run design judge locally from a signed-in shell.
 
 The theme-clarity scene records computed surface/filter evidence. Computer desktop-* scenes use the existing member side panel and persistent stream; no desktop dialog or inline screen is mounted. Native member-computer uses the same screen-click and explicit nonce handback.
 ### Stable view controls (R-UI-49)
@@ -442,7 +442,7 @@ layout, performs real clicks and dependent actions, settles motion and rejects a
 position or size change over 1px. Missing controls or anchors fail. Normal click
 steps on tabs, switches, pressed filters, Settings panes and view controls also
 record this assertion, including alongside existing paint measurements. Sidebar
-and Home are excluded while their parallel redesign is owned elsewhere. Evidence
+is excluded while its parallel redesign is owned elsewhere. Evidence
 is stored in the existing action assertions; there is no separate browser harness.
 The learned notification uses the real `learned.html` entry with only IPC mocked.
 

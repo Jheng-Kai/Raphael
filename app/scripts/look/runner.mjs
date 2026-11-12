@@ -174,12 +174,7 @@ export async function run(options) {
         // App readiness and decoded images gate capture. Network-idle also waits
         // for unrelated polling and reloads, which do not establish readiness.
         await page.goto(`${origin}/${scene.entry ?? ""}`, { waitUntil: "domcontentloaded", timeout: 20000 });
-        await page.waitForSelector(scene.ready ?? (scene.entry === "overlay.html" ? "#progress:not([hidden])" : scene.fixture.onboarding ? '#ob:not([hidden]) [data-ob="next"]' : '.page-home:not([hidden]) .ho-hero'), { visible: true, timeout: 10000 });
-        // Existing conversation journeys enter through the real rail after the home is ready.
-        if (!scene.entry && !scene.fixture.onboarding && !scene.name.startsWith("home")) {
-          await perform(page, { action: "click", selector: '.mb-chief' });
-          await page.waitForSelector('.page-agent:not([hidden]) .conversation-trigger', { visible: true, timeout: 10000 });
-        }
+        await page.waitForSelector(scene.ready ?? (scene.entry === "overlay.html" ? "#progress:not([hidden])" : scene.fixture.onboarding ? '#ob:not([hidden]) [data-ob="next"]' : '.page-agent:not([hidden]) .conversation-trigger'), { visible: true, timeout: 10000 });
         for (const step of scene.steps) {
           const trace = process.env.LOOK_TRACE === "1" && step.measure
             ? `${scene.name}-${theme}-${width}-${step.measure.name}.trace.json` : null;

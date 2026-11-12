@@ -810,7 +810,7 @@ the computer is ready (`LocalVm._wallpaper`), under the existing guest TZ; the s
 `prepare-desktop` starts none (R-COMP-PICTURE-01).
 Unchanged workspaces get no writes; late monitors are initialized on the next tick.
 
-desktop-return-stopped leaves through Home and returns through the real member
+desktop-return-stopped leaves through the calendar and returns through the real member
 entry: the unchanged off screen and Start action must remain visible. Failed opens
 clear takeover intent; only a new request nonce resumes watching after handback.
 Packaged data includes the Python watcher. Existing computers receive the same
