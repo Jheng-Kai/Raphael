@@ -66,14 +66,17 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
   options: { timeline: HTMLElement; conversation: () => number | undefined; name: () => string; face?(): string; closePanel?(): void; openPanel(): void; panelVisible(): boolean; /** The panel shows the computer's row (Details), which keeps a small picture of the screen. */ rowShown?(): boolean; status?(active: boolean): void; changed?(): void; stop?(turnId: number): Promise<unknown>; trySkill?(text: string): void }): { show(): void; hide(close?: boolean): void; refresh(): void; sync(): void; carry(before: Element): void; takeover(): void; files(): void; watch(): void; waitingForOwner(turnId: number): boolean } {
   const panel = document.createElement("section");
   panel.className = "desktop-panel"; panel.id = 'member-computer-panel'; panel.setAttribute('role', 'tabpanel'); panel.setAttribute('aria-labelledby', 'member-tab-computer'); panel.hidden = true;
-  // The preview is one button that opens the larger view; the larger view fills the window, folds back
-  // from beside the window buttons, and keeps what the owner does with it in one pill at the bottom.
-  panel.innerHTML = `<div class="desktop-location-header"></div><div class="desktop-takeover-bar" hidden>${iconButton("left", t("members.panelBack"), ' data-desktop="back" hidden')}${iconButton("shrink", t("desktop.collapse"), ' data-desktop="collapse" hidden')}` +
-    `<div class="desktop-dock"><div class="desktop-mode"><span class="desktop-mode-label" role="status">${ico("eye")}<span></span></span>${btn("", "sm", ' data-desktop="take" hidden')}${btn("", "sm", ' data-desktop="return"')}</div>${iconButton("stop", t("agent.stop"), ' data-desktop="stop" hidden')}${iconButton("more", t("chat.more"), ' data-desktop="menu" aria-haspopup="menu" aria-expanded="false"')}</div></div><p class="desktop-request" role="status" hidden></p><div class="desktop-shell">` +
+  // The preview is one button that opens the larger view; the larger view fills the window and folds back
+  // from beside the window buttons. Everything about the computer sits in one foot directly under the screen and
+  // as wide as it: one quiet line of state above the pill, and a demonstration's actions beside the pill. The
+  // skill review and the file changes take the screen's own place, so the foot never moves (owner, 2026-11-13).
+  panel.innerHTML = `<div class="desktop-location-header"></div><div class="desktop-takeover-bar" hidden>${iconButton("left", t("members.panelBack"), ' data-desktop="back" hidden')}${iconButton("shrink", t("desktop.collapse"), ' data-desktop="collapse" hidden')}</div><div class="desktop-shell">` +
     `<div class="desktop-screen"><img class="desktop-wallpaper" alt=""><img class="desktop-last" alt="" hidden><div class="desktop-placeholder"></div>${btn("", "sm", ' data-desktop="retry" hidden')}` +
     `<iframe referrerpolicy="no-referrer" sandbox="allow-scripts allow-same-origin" hidden></iframe>` +
-    `<button type="button" class="btn desktop-open" data-desktop="enlarge" hidden><span class="desktop-open-pill">${ico("open")}<span></span></span></button></div><p class="desktop-caption"></p></div>` +
-    `<p class="desktop-error" role="alert" hidden></p><p class="desktop-recording" role="status" hidden></p><div class="desktop-teach-missing" hidden></div><div class="desktop-actions">${btn("", "sm", ' data-desktop="discard-teach" hidden')}${btn("", "sm", ' data-desktop="teach"')}</div><div class="desktop-review" hidden></div><div class="desktop-try" hidden><input class="mb-fin" data-teach-input maxlength="4000">${btn("", "sm", ' data-desktop="try-teach"')}</div>`;
+    `<button type="button" class="btn desktop-open" data-desktop="enlarge" hidden><span class="desktop-open-pill">${ico("open")}<span></span></span></button></div><p class="desktop-caption"></p><div class="desktop-review" hidden></div>` +
+    `<div class="desktop-foot"><div class="desktop-notes"><p class="desktop-request" role="status" hidden></p><p class="desktop-error" role="alert" hidden></p><p class="desktop-recording" role="status" hidden></p><div class="desktop-teach-missing" hidden></div><div class="desktop-try" hidden><input class="mb-fin" data-teach-input maxlength="4000">${btn("", "sm", ' data-desktop="try-teach"')}</div></div>` +
+    `<div class="desktop-bar"><div class="desktop-dock"><div class="desktop-mode"><span class="desktop-mode-label" role="status">${ico("eye")}<span></span></span>${btn("", "sm", ' data-desktop="take" hidden')}${btn("", "sm", ' data-desktop="return"')}</div>${iconButton("stop", t("agent.stop"), ' data-desktop="stop" hidden')}${iconButton("more", t("chat.more"), ' data-desktop="menu" aria-haspopup="menu" aria-expanded="false"')}</div>` +
+    `<div class="desktop-actions">${btn("", "sm", ' data-desktop="discard-teach" hidden')}${btn("", "sm", ' data-desktop="teach"')}</div></div></div></div>`;
   const locationHeader = panel.querySelector<HTMLElement>(".desktop-location-header")!;
   const location = mountComputerLocation(locationHeader, draw);
   const frame = panel.querySelector<HTMLIFrameElement>('iframe')!;
@@ -116,6 +119,7 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
   let skillEditor: ReturnType<typeof mountMemberResources> | undefined;
   let teachingBusy = false, drafting = false;
   const checkpoints = mountCheckpoints(panel, member);
+  panel.querySelector('.desktop-foot')!.before(panel.querySelector('.desktop-checkpoints')!);
   const timeline = mountDesktopTimeline(options.timeline);
   let visible = false, generation = 0, timer: ReturnType<typeof setTimeout> | undefined, watching = false;
   let drawn = "", drawnInline: Element | null = null, suspended = false, returnPanelOpen = false, filesOpen = false, filesOnly = false;
@@ -138,6 +142,9 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
   /** A stream that has not connected this long is said to be out of reach, with a retry. */
   const STALL_MS = 20_000;
   let stalled = false, everConnected = false, stallTimer: ReturnType<typeof setTimeout> | undefined;
+  /** A lease the screen has not confirmed (its `interactive` answer) this long was not taken: say so and go back to watching. */
+  const TAKE_MS = 6_000;
+  let takeTimer: ReturnType<typeof setTimeout> | undefined;
   let closePending: Promise<unknown> = Promise.resolve(), clickedAt = 0;
   // Nothing is painted until the read answers, so the town never flashes under the owner's picture.
   let ownWallpaper: string | undefined, wallpaperKnown = false, wallpaperRead: Promise<void> | undefined;
@@ -229,6 +236,8 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     paint(panel.querySelector<HTMLElement>('.desktop-takeover-bar')!, 'hidden', !expanded);
     paint(backButton, 'hidden', !filesOpen && (!skillEditor || review.hidden));
     panel.toggleAttribute('data-files', filesOpen);
+    // File changes opened from a result card hold and watch nothing: no pill, Back is the way home.
+    panel.toggleAttribute('data-files-only', filesOnly);
     const request = panel.querySelector<HTMLElement>('.desktop-request')!;
     paint(request, "hidden", !pending()); paint(request, "textContent", pending() ? desktopWorkText(pending()!) : "");
     panel.toggleAttribute("data-request", !!pending());
@@ -238,7 +247,8 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     panel.toggleAttribute('data-teaching', !!recording || drafting || !!demonstration);
     paint(teach, "textContent", t(drafting ? "teach.drafting" : recording ? "teach.stop" : demonstration ? "teach.review" : "teach.start"));
     paint(teach, "disabled", teachingBusy || changing || !demonstration && (!running || !connected || !!pending() || state?.teach_available === false));
-    paint(teach, "hidden", !!skillEditor);
+    // While the draft is written the line above the pill says so; the button would only repeat it.
+    paint(teach, "hidden", !!skillEditor || drafting);
     const missing = panel.querySelector<HTMLElement>('.desktop-teach-missing')!;
     paint(missing, "hidden", state?.teach_available !== false);
     patchHTML(missing, state?.teach_available === false ? noticeHTML('member_computer', 'computer', 'computer') : '');
@@ -253,8 +263,11 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     paint(panel.dataset, "desktopState", label);
     paint(panel.dataset, "interactive", String(interactive));
     // The preview only opens the larger view; input is taken there, with Take control, or from a card (R-PANEL-03).
-    paint(modeLabel.querySelector('span')!, "textContent", t(owner ? "desktop.operating" : "desktop.watching"));
-    paint(modeLabel.dataset, "mode", owner ? "operating" : "watching");
+    // 你正在控制 only once the screen itself says the owner's input reaches it; until then 正在接手 (owner, 2026-11-13:
+    // 「明明顯示我正在控制，但我根本就沒辦法控制」). Watching is view-only whoever holds the lease.
+    const mode = owner && !watching ? interactive ? "operating" : "taking" : "watching";
+    paint(modeLabel.querySelector('span')!, "textContent", t(mode === "operating" ? "desktop.operating" : mode === "taking" ? "desktop.taking" : "desktop.watching"));
+    paint(modeLabel.dataset, "mode", mode);
     paint(take, "textContent", t("desktop.take")); paint(take, "hidden", !watching || !running || owner || !!demonstration); paint(take, "disabled", changing || !connected);
     paint(frame, "hidden", !running || !connected);
     paint(frame.style, "pointerEvents", interactive && !watching ? "auto" : "none");
@@ -301,7 +314,7 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     }
   }
   function closeStream(): void {
-    clearTimeout(lingering); clearTimeout(stallTimer); stalled = false;
+    clearTimeout(lingering); clearTimeout(stallTimer); clearTimeout(takeTimer); stalled = false;
     generation++; takeOnConnect = false; watching = false; filesOnly = false; send(false); framesOn = false; frame.remove(); frame.removeAttribute('src'); connected = interactive = false;
     const previous = session; session = undefined;
     if (previous) closePending = closePending.then(() => api.desktopClose(previous.session)).catch(() => {});
@@ -324,6 +337,7 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     }
     if (event.data.state === 'interactive') {
       interactive = event.data.held === true && state?.control === 'owner';
+      if (interactive) clearTimeout(takeTimer);
       if (interactive && clickedAt) panel.dataset.controlLatencyMs = String(performance.now() - clickedAt);
     } else if (event.data.state === 'input-accepted' && interactive && clickedAt) {
       panel.dataset.acceptedInputLatencyMs = String(performance.now() - clickedAt); clickedAt = 0;
@@ -410,7 +424,7 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
   }
   async function control(held: boolean, pointer?: { x:number; y:number }): Promise<void> {
     if (!session || changing || held && !connected) return;
-    changing = true; error.hidden = true;
+    changing = true; error.hidden = true; clearTimeout(takeTimer);
     // A renewal started before this click must not overwrite the new lease state.
     const current = ++generation, opened = session, request = pending()?.request_id;
     if (held) { clickedAt = performance.now(); delete panel.dataset.controlLatencyMs; delete panel.dataset.acceptedInputLatencyMs; }
@@ -420,9 +434,26 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
       if (current !== generation || session !== opened) return;
       update(next); send(held, pointer);
       if (held) frame.focus({ preventScroll:true });
+      if (held && state?.control === 'owner' && !interactive) takeTimer = setTimeout(() => { if (session === opened && state?.control === 'owner' && !interactive) void takeFailed(opened); }, TAKE_MS);
     } catch {
       if (current === generation) { showNotice(t('desktop.busy')); cardFailure(options.timeline.querySelector('.desktop-takeover-card, .computer-card'), () => { void control(held); }); }
     } finally { changing = false; if (current === generation) draw(); }
+  }
+  /** The core gave the lease but the screen never took the owner's input: give the lease back without counting it as
+   *  done (no request id), say so under the screen, and watch again, where Take control tries once more. */
+  async function takeFailed(opened: DesktopSession): Promise<void> {
+    clearTimeout(takeTimer);
+    const current = ++generation;
+    interactive = false; send(false);
+    try {
+      const next = await api.desktopControl(opened.session, false);
+      if (current === generation && session === opened) update(next);
+    } catch { /* the next renewal says who holds it */ }
+    if (current !== generation || session !== opened) return;
+    if (state) state = { ...state, control: 'member' };
+    if (panel.hasAttribute('data-expanded')) { watching = true; document.documentElement.setAttribute('data-desktop-watch', ''); }
+    showNotice(t('desktop.takeFailed'));
+    draw();
   }
   const expand = (on: boolean): void => {
     if (on && !panel.hasAttribute('data-expanded')) { returnPanelOpen = options.panelVisible(); options.openPanel(); }
@@ -553,12 +584,10 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
   options.timeline.addEventListener('click', event => {
     const button = (event.target as Element).closest<HTMLButtonElement>('[data-card-desktop]');
     if (!button || button.disabled) return;
-    if (button.dataset.cardDesktop === 'take') {
-      // Owner input stays in the conversation's existing RFB iframe.
-      suspended = false; takeOnConnect = true;
-      if (connected) { takeOnConnect = false; void control(true); }
-      else if (state?.state === 'running') void openStream();
-    }
+    // A sign-in is no work for a small picture (owner, 2026-11-13: 「你這個畫面這麼小，我根本看不到登入的畫面」): the
+    // card's screen and its 接手 open the same stream in the larger view and take control there; 我完成了 in its pill
+    // gives the request back.
+    if (button.dataset.cardDesktop === 'take') { visible = true; acquire(); }
     else if (button.dataset.cardDesktop === 'return') void handback();
     else {
       const work = pending();

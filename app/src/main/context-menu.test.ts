@@ -74,9 +74,9 @@ function clicked(event: Event): void {
 }
 
 describe("a right click is the ⋯ of its row", () => {
-  test("the takeover bar exposes its shared menu from a right click", () => {
-    const bar = document.createElement('div'); bar.className = 'desktop-takeover-bar';
-    bar.innerHTML = `<span>Sample member</span>${iconButton('more', 'More', ' data-desktop="menu"')}`;
+  test("the larger view's pill exposes its shared menu from a right click", () => {
+    const bar = document.createElement('div'); bar.className = 'desktop-dock';
+    bar.innerHTML = `<div class="desktop-mode"><span>Sample member</span></div>${iconButton('more', 'More', ' data-desktop="menu"')}`;
     document.body.append(bar);
     expect(overflowAt(bar)?.button).toBe(bar.querySelector('[data-desktop="menu"]'));
     expect(uncoveredOverflows(bar)).toHaveLength(0);

@@ -1215,6 +1215,11 @@ await page.waitForFunction(role => document.querySelector('.ms-pane #ms-role')?.
     if (!browsed(two.calls)) throw new Error(`The second member did not use a browser window of its own: ${two.calls}`);
     if (!/Example Domain/i.test(two.turn.text)) throw new Error(`The second member did not read its page: ${two.turn.text.slice(0, 200)}`);
     await picture("second-answered");
+    // A member's first use of its computer once replaced its whole tool list (the list kept with the code was not
+    // the driver's), so the CLI turn started again and the call just made lost its result. The core writes a line
+    // each time a turn starts again for changed tools.
+    result.computer.restarts = (await context.nativeLog()).split(/\r?\n/).filter(line => line.includes("CLI turn starts again, tools changed")).map(line => line.slice(-90));
+    if (result.computer.restarts.some(line => line.includes("computer tool catalog"))) throw new Error(`A member's use of its computer started its turn again: ${JSON.stringify(result.computer.restarts)}`);
     result.computer.seats = await seats();
     if (result.computer.seats[first.id] !== 1 || result.computer.seats[second.id] !== 2) throw new Error(`Expected seats 1 and 2, observed ${JSON.stringify(result.computer.seats)}`);
     // Each member's browser window is still on its own screen after the other was seated beside it and opened its own.
