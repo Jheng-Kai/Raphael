@@ -113,6 +113,8 @@ export function installMock(fixture, config = {}, target = window) {
   }
   // The owner's own picture as the member's cover (members.set_cover): a drawn landscape, so no photo is needed.
   if (variant.coverPicture) data.members.find(member => member.id === 1).cover = { kind: "image", url: "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='960' height='240'><rect width='960' height='240' fill='%233a6f5c'/><circle cx='760' cy='70' r='90' fill='%2396c8b0'/><rect y='170' width='960' height='70' fill='%23264d40'/></svg>" };
+  // Notion's sign-in ran out: the inventory says needs_sign_in, and the @ menu shows it with 「需要登入」.
+  if (variant.mentionSignIn) data.managedConnectors.find(connector => connector.id === "composio:notion").status = "EXPIRED";
   if (variant.computerHost) data.settings.computer_ssh_alias = variant.computerHost;
   if (variant.routineEmpty) data.routines = [];
   // What the first member's personality page holds (member-settings.ts): its name, role, personality and instructions as the scene gives them.
@@ -1581,7 +1583,19 @@ export function installMock(fixture, config = {}, target = window) {
         const account = entry.accounts.find(a => a.id === p.account_id);
         account.label = p.label; return {connector:entry};
       }
-      case "connectors.status": return { connectors: data.managedConnectors, composio_configured: data.composioConfigured, google_configured: true };
+      case "connectors.status":
+        // A sign-in given up leaves no account (R-ACCT-01): the core gives back a waiting one older than ten minutes when the list is read.
+        for (const c of data.managedConnectors) c.accounts = c.accounts?.filter(a => !a.stale);
+        return { connectors: data.managedConnectors, composio_configured: data.composioConfigured, google_configured: true };
+      case "connectors.remove_account": {
+        const entry = data.managedConnectors.find(c => c.id === p.id);
+        const account = entry?.accounts.find(a => a.id === p.account_id);
+        if (!account) return { ok: false, error: "gone" };
+        const connected = entry.accounts.filter(a => a.status === "ACTIVE");
+        if (account.status === "ACTIVE" && connected.length === 1) { data.managedConnectors = data.managedConnectors.filter(c => c !== entry); state.emit({ type: "ConnectionsChanged" }); return { disconnected: true }; }
+        entry.accounts = entry.accounts.filter(a => a !== account);
+        state.emit({ type: "ConnectionsChanged" }); return { connector: entry };
+      }
       case "connectors.catalog": {
         if (!data.composioConfigured) return { ok: false, error: "missing_key" };
         return { items: data.pluginCatalog, categories: data.pluginCategories, next_cursor: null };
@@ -1609,7 +1623,7 @@ export function installMock(fixture, config = {}, target = window) {
       }
       case "connectors.connect": {
         if (variant.connectorLinkRefused) return { ok: false, error: "toolkit_not_allowed" };
-        if (variant.pluginsConnecting) return new Promise(() => {});
+        if (variant.pluginsConnecting) return new Promise(resolve => { state.signInEnds = resolve; });
         const entry = data.pluginCatalog.find(s => s.slug === p.toolkit);
         // An app that asks for a key or a developer app is not added without it; the fixture never keeps what was given.
         if (entry.needs !== "sign_in" && !p.fields) return { ok: false, error: entry.needs === "key" ? "needs_key" : "needs_own_app" };
@@ -1805,8 +1819,14 @@ export function installMock(fixture, config = {}, target = window) {
       }
       case "toolsets.list": return { groups: data.servers };
       case "integrations.connect": {
-        if (variant.pluginsConnecting) return new Promise(() => {});
+        if (variant.pluginsConnecting) return new Promise(resolve => { state.signInEnds = resolve; });
         return { connected: false, error: "cancelled" };
+      }
+      // The core ends the wait for a sign-in and gives back the account it made (R-ACCT-01); the call that waited answers 「cancelled」.
+      case "integrations.connect_cancel": {
+        const ends = state.signInEnds; state.signInEnds = null;
+        ends?.({ connected: false, error: "cancelled" });
+        return { cancelled: !!ends };
       }
       case "integrations.catalog": return { services: data.services };
       case "integrations.audit": return { entries: [] };

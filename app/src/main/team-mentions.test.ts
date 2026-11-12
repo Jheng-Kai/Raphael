@@ -108,19 +108,60 @@ test("a composer's field gets the menu and the chips together", () => {
   mentions.refresh();
 });
 
-test.each([['ready', null], ['needs_sign_in', '需要登入'], ['needs_secret', '需要金鑰'], ['unknown', null]])("service state %s only tags sign-in or key requirements", (state, tag) => {
+test.each([['ready', null], ['needs_sign_in', '需要登入'], ['needs_secret', '需要金鑰']])("service state %s only tags sign-in or key requirements", (state, tag) => {
   const roster = { ...list, team_context: { apps: [{ name: 'Notion', state }] } } as unknown as MembersList;
   bindTeamMentions(input, () => ({ list: roster }));
   input.value = '@'; input.setSelectionRange(1, 1); input.dispatchEvent(new Event('input'));
   expect(menu()!.querySelector('[data-value="Notion"] .mtag')?.textContent ?? null).toBe(tag);
 });
 
-test("mentions have non-option headings, five recent ready services and an in-place expansion", () => {
+test.each(['disabled', 'duplicate', 'no_tools', 'error', 'unchecked', 'unknown'])("an app that is %s is not offered: only the apps a member can use or sign in are", state => {
+  const roster = { ...list, team_context: { apps: [{ name: 'Notion', state }, { name: 'Gmail', state: 'ready' }] } } as unknown as MembersList;
+  bindTeamMentions(input, () => ({ list: roster }));
+  input.value = '@'; input.setSelectionRange(1, 1); input.dispatchEvent(new Event('input'));
+  expect(rows()).toEqual(['拉斐爾', '小森', '小晴', 'Gmail']);
+});
+
+// Owner, 2026-11-13, with Grok Bot's picture: 「就是看一下 grokbot 它會顯示什麼。像這種分組的話，就不知道可以幹嘛。應該理論上是可以放其他的 bot 還有 plugins 而已」
+test("the menu lists the other members, then the apps, each with what it is at the right, and no group, no everyone", () => {
+  const roster = { ...list, team_context: { apps: [{ name: 'Gmail', state: 'ready' }, { name: 'Notion', state: 'needs_sign_in' }] } } as unknown as MembersList;
+  bindTeamMentions(input, () => ({ list: roster, self: 1 }));
+  input.value = '@'; input.setSelectionRange(1, 1); input.dispatchEvent(new Event('input'));
+  expect(rows()).toEqual(['拉斐爾', '小晴', 'Gmail', 'Notion']);
+  expect(menu()!.querySelector('.menu-head')).toBeNull();
+  expect([...menu()!.querySelectorAll('.mtrail')].map(word => word.textContent)).toEqual(['成員', '成員', '應用程式', '應用程式']);
+  expect([...menu()!.querySelectorAll('.mt')].map(name => name.textContent)).toEqual(['拉斐爾', '小晴', 'Gmail', 'Notion']);
+  expect(menu()!.querySelector('[data-value="Notion"]')!.textContent).toBe('Notion需要登入應用程式');
+  expect(menu()!.querySelector('[data-value="小森"]')).toBeNull();
+  // What is typed by hand is still an address: the chip is drawn and the core reads it.
+  const targets = mentionTargets(roster);
+  expect(mentionRanges('@研究組 @小森', targets).map(range => range.target.kind)).toEqual(['group', 'member']);
+});
+
+test("an app that is not signed in opens the place to sign it in instead of becoming an address", () => {
+  const connect = vi.fn();
+  const roster = { ...list, team_context: { apps: [{ name: 'Gmail', state: 'ready' }, { name: 'Notion', state: 'needs_sign_in' }] } } as unknown as MembersList;
+  bindTeamMentions(input, () => ({ list: roster, connect }));
+  input.value = '請用 @no'; input.setSelectionRange(6, 6); input.dispatchEvent(new Event('input'));
+  expect(rows()).toEqual(['Notion']);
+  document.querySelector<HTMLElement>('#app-popover [data-value="Notion"]')!.click();
+  expect(connect).toHaveBeenCalledTimes(1);
+  expect(input.value).toBe('請用 ');
+  expect(menu()).toBeNull();
+  // A signed-in app is an address as before.
+  input.value = '請用 @gm'; input.setSelectionRange(6, 6); input.dispatchEvent(new Event('input'));
+  document.querySelector<HTMLElement>('#app-popover [data-value="Gmail"]')!.click();
+  expect(connect).toHaveBeenCalledTimes(1);
+  expect(input.value).toBe('請用 @Gmail ');
+});
+
+test("five recent ready services and an in-place expansion, with no headings", () => {
   const apps = Array.from({ length: 30 }, (_, index) => ({ id: `service-${index}`, name: `Service ${index}`, state: index === 0 ? 'needs_sign_in' : 'ready', last_used_at: index }));
   const many = { ...list, team_context: { apps } } as unknown as MembersList;
   bindTeamMentions(input, () => ({ list: many }));
   input.value = '@'; input.setSelectionRange(1, 1); input.dispatchEvent(new Event('input'));
-  expect([...menu()!.querySelectorAll('.menu-head')].map(head => head.textContent)).toEqual(['成員', '群組', '連接的服務']);
+  expect(menu()!.querySelector('.menu-head')).toBeNull();
+  expect(rows().filter(name => !name.startsWith('Service'))).toEqual(['拉斐爾', '小森', '小晴']);
   expect(rows().filter(name => name.startsWith('Service'))).toEqual(['Service 29', 'Service 28', 'Service 27', 'Service 26', 'Service 25']);
   expect(menu()!.querySelector('[data-value^="Service"] .mtag')).toBeNull();
   const all = [...menu()!.querySelectorAll<HTMLButtonElement>('button')].find(row => row.textContent?.includes('顯示全部 30 個'))!;
@@ -142,16 +183,16 @@ test("filtered mentions rank aliases within sections, cap results and honor grou
   expect(menu()).toBeNull();
 });
 
-test("Arrow keys cross section headings and Tab picks without sending or interrupting an input method", () => {
+test("Arrow keys walk the rows and Tab picks without sending or interrupting an input method", () => {
   bindTeamMentions(input, () => ({ list }));
   input.value = '@'; input.setSelectionRange(1, 1); input.dispatchEvent(new Event('input'));
   const send = vi.fn(); input.addEventListener('keydown', send);
   input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', isComposing: true, bubbles: true, cancelable: true }));
   expect(input.value).toBe('@'); expect(send).toHaveBeenCalledTimes(1);
-  for (let index = 0; index < 4; index++) input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true }));
-  expect(document.getElementById(input.getAttribute('aria-activedescendant')!)?.textContent).toContain('研究組');
+  for (let index = 0; index < 3; index++) input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true }));
+  expect(document.getElementById(input.getAttribute('aria-activedescendant')!)?.textContent).toContain('Notion');
   input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }));
-  expect(input.value).toBe('@研究組 '); expect(menu()).toBeNull(); expect(send).toHaveBeenCalledTimes(1);
+  expect(input.value).toBe('@Notion '); expect(menu()).toBeNull(); expect(send).toHaveBeenCalledTimes(1);
 });
 
 test("a roster larger than the available height remains reachable in bounded pages", () => {

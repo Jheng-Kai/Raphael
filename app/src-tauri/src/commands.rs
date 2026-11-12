@@ -586,6 +586,7 @@ const ALLOWED_METHODS: &[&str] = &[
     "members.template_card_export",
     "members.template_card_publish",
     "connectors.label",
+    "connectors.remove_account",
     "members.mark_all_read",
     "members.unread",
     "groups.create",

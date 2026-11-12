@@ -5,7 +5,7 @@ import type { AppsInventory, AuditEntry, ConnectionGroup, InventoryApp, StoreSer
 
 const api = vi.hoisted(() => ({
   connectorsStatus: vi.fn(), connectorsCatalog: vi.fn(), connectorsCategories: vi.fn(), connectorsTools: vi.fn(),
-  connectorsSetTools: vi.fn(), connectorsConnect: vi.fn(), connectorsGoogleConnect: vi.fn(), connectorsDisconnect: vi.fn(), connectorsSetKey: vi.fn(),
+  connectorsSetTools: vi.fn(), connectorsConnect: vi.fn(), connectorsGoogleConnect: vi.fn(), connectorsDisconnect: vi.fn(), connectorsRemoveAccount: vi.fn(), connectorsSetKey: vi.fn(),
   toolsetsList: vi.fn(),
   integrationsCatalog: vi.fn(),
   integrationsAudit: vi.fn(),
@@ -44,6 +44,7 @@ import {
 } from "./connections";
 import { STORE_GROUPS } from "./store-finder";
 import { ico, toaster } from "./ui";
+import { confirmDelete } from "./member-dialogs";
 
 const browsers: Window[] = [];
 afterEach(async () => {
@@ -513,17 +514,18 @@ describe("a row of the apps", () => {
     expect(html).not.toMatch(/class="mono[^"]*tile|background/);
   });
 
-  test("while a login is open the row says so with a button to cancel, and the other 連結 buttons wait", () => {
+  test("while a login is open the row says so with a button to cancel, and the other 連結 buttons stay pressable", () => {
     const login = { target: "linear", name: "Linear" };
     const card = cardOf("linear", { login });
     expect(card.querySelector(".sub.wait")!.textContent).toBe("請在瀏覽器登入…");
     expect(card.querySelector('[data-conn="cancel-login"]')).not.toBeNull();
     expect(card.querySelector('[data-conn="join"]')).toBeNull();
     expect(card.querySelector<HTMLButtonElement>('[data-conn="cancel-login"]')!.disabled).toBe(false);
-    expect(cardOf("sentry", { login }).querySelector<HTMLButtonElement>('[data-conn="join"]')!.disabled).toBe(true);
-    // a managed sign-in has no cancellation: its button waits
+    expect(cardOf("sentry", { login }).querySelector<HTMLButtonElement>('[data-conn="join"]')!.disabled).toBe(false);
+    // a managed sign-in is cancelled like any other (the core gives back the account it made)
     const catalog = [...CATALOG, service("slack", "Slack", { source: "composio" })];
-    expect(cardOf("slack", { catalog, login: { target: "slack", name: "Slack" } }).querySelector<HTMLButtonElement>('[data-conn="cancel-login"]')!.disabled).toBe(true);
+    expect(cardOf("slack", { catalog, login: { target: "slack", name: "Slack" } }).querySelector<HTMLButtonElement>('[data-conn="cancel-login"]')!.disabled).toBe(false);
+    expect(cardOf("slack", { catalog, login }).querySelector<HTMLButtonElement>('[data-conn="join"]')!.disabled).toBe(false);
   });
 
   test("an app that needs no sign-in says it is connecting, not that it waits for the browser", () => {
@@ -996,8 +998,8 @@ describe("the page of an app that is not connected", () => {
     expect(appPage("linear", { loginError: { target: "linear", kind: "timeout" } })).toContain("太久沒有登入");
     expect(appPage("linear", { loginError: { target: "linear", kind: "network" } })).toContain(t("conn.err.network"));
     expect(appPage("sentry", { loginError: { target: "linear", kind: "denied" } })).not.toContain("拒絕");
-    // another sign-in under way: this page's button waits
-    expect(dom(appPage("linear", { login: { target: "sentry", name: "Sentry" } })).querySelector<HTMLButtonElement>('[data-conn="join"]')!.disabled).toBe(true);
+    // another sign-in under way: this page's button stays pressable (pressing it ends the other one)
+    expect(dom(appPage("linear", { login: { target: "sentry", name: "Sentry" } })).querySelector<HTMLButtonElement>('[data-conn="join"]')!.disabled).toBe(false);
   });
 
   test("a code to type, while a device login waits for it, stands over the view and over the page", () => {
@@ -1146,6 +1148,9 @@ describe("what the dialog does", () => {
     const browser = new Window();
     browser.document.body.innerHTML = connectionsHTML(c.view());
     vi.stubGlobal("document", browser.document);
+    vi.stubGlobal("window", browser.window);
+    vi.stubGlobal("innerWidth", 1120);
+    vi.stubGlobal("innerHeight", 720);
     vi.stubGlobal("HTMLElement", browser.HTMLElement);
     return { document: browser.document as unknown as Document, done: async () => { vi.unstubAllGlobals(); await browser.happyDOM.abort(); } };
   };
@@ -1666,7 +1671,7 @@ describe("what the dialog does", () => {
     c.click(button("join", { id: "linear" }));
     expect(api.integrationsConnect).toHaveBeenCalledWith({ catalog_id: "linear" });
     expect(c.view().login).toEqual({ target: "linear", name: "Linear" });
-    c.click(button("join", { id: "sentry" })); // one at a time
+    c.click(button("join", { id: "linear" })); // the same app pressed while it waits starts nothing
     expect(api.integrationsConnect).toHaveBeenCalledTimes(1);
     finish({ connected: true }); await settle();
     expect(c.view().login).toBeNull();
@@ -1716,11 +1721,16 @@ describe("what the dialog does", () => {
     expect(c.view().loginError).toEqual({ target: "linear", kind: "error" });
     c.click(button("back"));
     // from a row the page is not there to say it: a toast does
-    api.integrationsConnect.mockResolvedValueOnce({ connected: false, error: "timeout" });
+    api.integrationsConnect.mockResolvedValueOnce({ connected: false, error: "network" });
     c.click(button("join", { id: "sentry" }));
     await settle();
     expect(lastToast()).toBe(t("plugins.connectFailed"));
     vi.mocked(toaster.info).mockClear();
+    // a sign-in left until it ran out is no error the owner needs a toast for
+    api.integrationsConnect.mockResolvedValueOnce({ connected: false, error: "timeout" });
+    c.click(button("join", { id: "sentry" }));
+    await settle();
+    expect(toaster.info).not.toHaveBeenCalled();
     api.integrationsConnect.mockResolvedValueOnce({ connected: false, error: "cancelled" });
     c.click(button("join", { id: "sentry" }));
     await settle();
@@ -1744,6 +1754,136 @@ describe("what the dialog does", () => {
     c.click(button("cancel-login")); await settle();
     expect(c.view().dialogNotice?.kind).toBe("err");
     c.reset();
+  });
+
+  test("one sign-in waits at a time and holds nothing back: connecting another app ends it first, and a cancelled one says nothing", async () => {
+    let finishFirst: (value: { connected: boolean; error?: string }) => void = () => undefined;
+    api.integrationsConnect.mockImplementationOnce(() => new Promise((resolve) => { finishFirst = resolve; }));
+    api.integrationsConnectCancel.mockImplementation(async () => { finishFirst({ connected: false, error: "cancelled" }); return { cancelled: true }; });
+    api.integrationsConnect.mockReturnValueOnce(new Promise(() => undefined)); // the second one waits for the browser as well
+    const c = createConnections(host);
+    await c.load();
+    c.click(button("join", { id: "linear" }));
+    expect(c.view().login).toEqual({ target: "linear", name: "Linear" });
+    expect(dom(connectionsHTML(c.view())).querySelector<HTMLButtonElement>('[data-conn="join"][data-id="sentry"]')!.disabled).toBe(false);
+    c.click(button("join", { id: "sentry" }));
+    await new Promise((resolve) => setTimeout(resolve, 120));
+    expect(api.integrationsConnectCancel).toHaveBeenCalledTimes(1);
+    expect(api.integrationsConnect).toHaveBeenCalledTimes(2);
+    expect(c.view().login).toEqual({ target: "sentry", name: "Sentry" });
+    expect(c.view().loginError).toBeNull();
+    expect(toaster.info).not.toHaveBeenCalled();
+    // the same app pressed again while it waits starts nothing
+    c.click(button("join", { id: "sentry" }));
+    await settle();
+    expect(api.integrationsConnect).toHaveBeenCalledTimes(2);
+    c.reset();
+  });
+
+  test("a sign-in that cannot be ended starts nothing on top of it", async () => {
+    api.integrationsConnect.mockReturnValue(new Promise(() => undefined));
+    api.integrationsConnectCancel.mockRejectedValueOnce(new Error("gone"));
+    const c = createConnections(host);
+    await c.load();
+    c.click(button("join", { id: "linear" }));
+    c.click(button("join", { id: "sentry" }));
+    await settle();
+    expect(api.integrationsConnect).toHaveBeenCalledTimes(1);
+    expect(c.view().login?.target).toBe("linear");
+    c.reset();
+  });
+
+  describe("the accounts of an app (R-ACCT-01)", () => {
+    const gmail = (accounts: { id: string; status: string; label?: string }[]) => ({
+      id: "composio:gmail", kind: "composio", name: "Gmail", description: "", logo: "", status: accounts.some((a) => a.status === "ACTIVE") ? "ACTIVE" : "INITIATED", enabled: true,
+      accounts, enabled_tools: [], disabled_tools: [],
+    });
+    const openGmail = async (accounts: { id: string; status: string; label?: string }[]) => {
+      api.connectorsStatus.mockResolvedValue({ connectors: [gmail(accounts)], composio_configured: true, google_configured: false });
+      api.connectorsRemoveAccount.mockResolvedValue({ connector: gmail([]) });
+      api.connectorsDisconnect.mockResolvedValue({ disconnected: true });
+      vi.mocked(confirmDelete).mockClear();
+      const c = createConnections(host);
+      await c.load();
+      c.click(button("open", { id: "composio:gmail" }));
+      return c;
+    };
+    const TWO = [{ id: "a1", status: "ACTIVE", label: "Work" }, { id: "a2", status: "ACTIVE", label: "Me" }, { id: "a3", status: "INITIATED" }];
+
+    test("every row is a person, a name, a status and a ⋯; the 帳號名稱 button is gone", async () => {
+      const c = await openGmail(TWO);
+      const d = dom(connectionsHTML(c.view()));
+      expect(texts(d, ".cs-acct .nm")).toEqual(["Work", "Me", "帳號 3"]);
+      expect(texts(d, ".cs-acct .st")).toEqual(["已連結", "已連結", "等待登入"]);
+      expect(d.querySelectorAll('.cs-acct [data-conn="account-menu"]')).toHaveLength(3);
+      expect(d.querySelector('.cs-acct [data-conn="account-label"]')).toBeNull();
+      expect(d.body.textContent).not.toContain("帳號名稱");
+      expect(d.querySelector('.cs-accts [data-conn="add-account"]')).not.toBeNull();
+      c.reset();
+    });
+
+    test("the menu has 重新命名 and then 移除 in red, and renaming is what the 帳號名稱 button did", async () => {
+      const c = await openGmail(TWO);
+      const { document, done } = await mounted(c);
+      try {
+        const more = document.querySelector<HTMLElement>('.cs-acct [data-conn="account-menu"][data-account="a2"]')!;
+        expect(more.getAttribute("aria-label")).toBe("更多動作");
+        c.click(more);
+        const items = Array.from(document.querySelectorAll<HTMLElement>('#app-popover [role="menuitem"]'));
+        expect(items.map((item) => item.textContent)).toEqual(["重新命名", "移除"]);
+        expect(items.map((item) => item.classList.contains("danger"))).toEqual([false, true]);
+        expect(items.map((item) => item.dataset.conn)).toEqual(["account-label", "account-remove"]);
+        expect(items.every((item) => item.dataset.account === "a2" && item.dataset.id === "composio:gmail")).toBe(true);
+      } finally { await done(); }
+    });
+
+    test.each(["INITIATED", "INITIALIZING", "EXPIRED", "REVOKED", "FAILED", "INACTIVE"])("a row that is %s is removed at once, with no question", async (status) => {
+      const c = await openGmail([{ id: "a1", status: "ACTIVE" }, { id: "a9", status }]);
+      c.click(button("account-remove", { id: "composio:gmail", account: "a9" }));
+      await settle();
+      expect(confirmDelete).not.toHaveBeenCalled();
+      expect(api.connectorsRemoveAccount).toHaveBeenCalledWith("composio:gmail", "a9");
+      c.reset();
+    });
+
+    test("a connected account asks the app's delete question first, and only a yes removes it", async () => {
+      const c = await openGmail(TWO);
+      vi.mocked(confirmDelete).mockResolvedValueOnce(false);
+      c.click(button("account-remove", { id: "composio:gmail", account: "a2" }));
+      await settle();
+      expect(confirmDelete).toHaveBeenCalledWith("Me", { words: { title: "移除「Me」？", hint: "成員將無法再使用這個帳號。", action: "移除" } });
+      expect(api.connectorsRemoveAccount).not.toHaveBeenCalled();
+      c.click(button("account-remove", { id: "composio:gmail", account: "a1" }));
+      await settle();
+      expect(confirmDelete).toHaveBeenLastCalledWith("Work", expect.anything());
+      expect(api.connectorsRemoveAccount).toHaveBeenCalledWith("composio:gmail", "a1");
+      c.reset();
+    });
+
+    test("the last connected account is the app: removing it asks the app's own disconnect question, not another", async () => {
+      const c = await openGmail([{ id: "a1", status: "ACTIVE", label: "Work" }, { id: "a3", status: "INITIATED" }]);
+      const { done } = await mounted(c);
+      try {
+        c.click(button("account-remove", { id: "composio:gmail", account: "a1" }));
+        await settle();
+        expect(confirmDelete).not.toHaveBeenCalled();
+        expect(api.connectorsRemoveAccount).not.toHaveBeenCalled();
+        expect(c.view().confirmingDisconnect).toBe("composio:gmail"); // the app's own two presses
+        c.click(button("disconnect", { id: "composio:gmail" }));
+        await settle();
+        expect(api.connectorsDisconnect).toHaveBeenCalledWith("composio:gmail");
+      } finally { await done(); c.reset(); }
+    });
+
+    test("a failure says so in the notice and leaves the row", async () => {
+      const c = await openGmail(TWO);
+      api.connectorsRemoveAccount.mockRejectedValueOnce(new Error("network"));
+      c.click(button("account-remove", { id: "composio:gmail", account: "a3" }));
+      await settle();
+      expect(c.view().dialogNotice).toMatchObject({ kind: "err" });
+      expect(texts(dom(connectionsHTML(c.view())), ".cs-acct .nm")).toEqual(["Work", "Me", "帳號 3"]);
+      c.reset();
+    });
   });
 
   test("switches a service on or off, a tool on or off, and reads its tools again", async () => {

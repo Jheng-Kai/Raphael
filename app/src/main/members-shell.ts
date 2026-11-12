@@ -602,7 +602,7 @@ export function createMembers(host: MembersHost): MembersShell {
     current: () => current,
     nameOf: (id) => memberOf(list, id)?.name ?? "",
     groups: () => [...(list?.groups ?? [])].sort((a, b) => a.position - b.position),
-    bindMentions: input => { fields.add(bindComposerMentions(input, () => ({ list }))); },
+    bindMentions: input => { fields.add(bindComposerMentions(input, () => ({ list, self: current, connect: () => host.app.go("settings", "connections") }))); },
     mentionTargets: () => (list ? mentionTargets(list) : []),
     faceOf(id, size) {
       const found = memberOf(list, id);

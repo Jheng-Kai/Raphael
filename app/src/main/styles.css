@@ -595,6 +595,15 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
 .menu .mlead .mono { width: 20px; height: 20px; margin: 0; color: var(--text-2); }
 .menu .mlead .logo-mono[style] { color: var(--brand); }
 .menu .mlead ~ .mtag { flex: none; margin-left: var(--sp-3); font-size: var(--fs-xs); color: var(--text-3); white-space: nowrap; }
+/* The @ menu (owner, 2026-11-13, after Grok Bot's): 360 px, rows of the menu's own height, a 16 px face or logo, the name with what is wrong with it
+   (「需要登入」) right after it, and what the row is, quietly, at the right edge. */
+.menu .mtrail { flex: none; margin-left: auto; padding-left: var(--sp-3); font-size: var(--fs-xs); color: var(--text-3); white-space: nowrap; }
+.menu.team-mentions-menu { width: 360px; }
+.menu.team-mentions-menu .mt { flex: 0 1 auto; }
+.menu.team-mentions-menu .mlead { width: 16px; height: 16px; }
+.menu.team-mentions-menu .mlead .av { --av: 16px !important; }
+.menu.team-mentions-menu .mlead .mono { width: 16px; height: 16px; }
+.menu.team-mentions-menu .mlead .mono svg { width: 16px; height: 16px; }
 /* A menu whose choices have a detail (a price): the details line up on the right. */
 .menu.detailed { min-width: 340px; }
 .menu .md { flex: none; margin-left: var(--sp-4); font-size: var(--fs-xs); color: var(--text-3); white-space: nowrap; }

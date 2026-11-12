@@ -17,8 +17,18 @@ const discovery = {
   ],
 };
 const before = check("completion-before");
+// Notion's sign-in ran out: the same menu, with the app that needs it.
+const signIn = { mentionSignIn: true };
+const menuOpen = [wait("#app-popover[data-team-mentions]")];
 
 export default [
+  // The @ menu as Grok Bot's (owner, 2026-11-13): the other members, then the apps, nothing else.
+  scene("mention-menu-open", "An @ lists the other members and the connected apps, each saying at the right what it is", [type(field, "@"), ...menuOpen, check("mention-menu-open")], apps),
+  scene("mention-menu-filter", "What follows the @ narrows the rows by the app's one matcher", [type(field, "@no"), ...menuOpen, check("mention-menu-filter")], apps),
+  scene("mention-menu-signin", "An app whose sign-in ran out says 需要登入 after its name", [type(field, "@"), ...menuOpen, check("mention-menu-signin")], signIn),
+  scene("mention-menu-signin-pick", "Pressing that app opens where it is signed in, and leaves no address in the words", [type(field, "請用 @"), ...menuOpen, click('#app-popover [data-value="Notion"]'),
+    wait('.modal-scrim[data-standalone="connections"] .modal-body .cs'), check("mention-menu-signin-pick")], signIn),
+  scene("mention-menu-room", "A group's @ lists its members and the apps, and no group", [room(1), type("#room-message", "@"), ...menuOpen, check("mention-menu-room")], signIn),
   scene("completion-mentions", "Mention headings and five recent services from thirty-two connections", [before, type(field, "@"), wait("#app-popover"), check("completion-mentions")], discovery),
   scene("completion-filtered", "Alias search ranks services and caps visible results", [before, type(field, "@notes"), wait("#app-popover"), check("completion-filtered")], discovery),
   scene("typo-mention", "A typo or swapped letters after the @ still find the app, first", [type(field, "@notoin"), wait("#app-popover[data-team-mentions]"), check("typo-mention")], apps),

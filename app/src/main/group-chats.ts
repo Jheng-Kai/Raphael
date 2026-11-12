@@ -383,7 +383,7 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
     if (roomId === id) await refresh();
     changed();
   }});
-  const mentions = bindComposerMentions(composer.input, () => ({ list, allowed: room?.member_ids }));
+  const mentions = bindComposerMentions(composer.input, () => ({ list, allowed: room?.member_ids, connect: () => _app.go("settings", "connections") }));
   composer.input.addEventListener("input", () => { clearTimeout(draftTimer); draftTimer=setTimeout(saveRoomDraft,300); });
   composer.input.id="room-message";el.querySelector('.ra-dock')!.append(composer.el);
   const drop = mountStageDrop(el.querySelector<HTMLElement>('.ra-stage')!, () => composer.el, list => composer.addFiles(list));
