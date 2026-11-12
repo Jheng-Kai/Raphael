@@ -127,7 +127,8 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
     // page, so it may cover what is behind it; anything else may not stand over a control.
     if (element.matches(PRESSABLE) && box.width >= 6 && box.height >= 6 && !element.closest(NEVER_COVERED_EXEMPT)) {
       const rect = shownRect(element);
-      if (rect) {
+      // A row of a list that has scrolled out of its box leaves a sliver at the edge (a menu's 09:00 under 09:15, 1px of it in the box's padding): a control with less than 6px of itself in view is not one a press can land on.
+      if (rect && rect.width >= 6 && rect.height >= 6) {
         const at = [[.5, .5], [.2, .2], [.8, .2], [.2, .8], [.8, .8]].map(([x, y]) => [rect.left + rect.width * x, rect.top + rect.height * y]);
         const covers = at.map(([x, y]) => coverOf(element, x, y)).filter(Boolean);
         // The centre alone is enough; the corners only count when most of them are covered, so a rounded edge is not a finding.

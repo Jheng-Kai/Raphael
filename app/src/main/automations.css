@@ -209,6 +209,12 @@
 .au-all-day-row { grid-column: 1 / -1; display: grid; grid-template-columns: 52px repeat(var(--au-days), minmax(0, 1fr)); grid-template-rows: repeat(var(--au-rows), 22px); row-gap: 2px; padding-bottom: var(--sp-1); }
 .au-all-day-label { grid-column: 1; grid-row: 1 / -1; padding-top: 2px; font-size: var(--fs-2xs); line-height: 18px; color: var(--text-3); text-align: center; white-space: nowrap; }
 .au-all-day { grid-row: 1 / -1; min-width: 0; margin-bottom: calc(-1 * var(--sp-1)); border-left: 1px solid var(--line); }
+/* Opened with 「還有 N 個」, the band shows every all-day item and has no scroll of its own: the page scrolls. Only the day names stay at the top, the band and the hours move under them. */
+.au-grid-head.is-open { display: contents; }
+.au-grid-head.is-open > .au-day-head, .au-grid-head.is-open > span:first-child { position: sticky; top: 0; z-index: 4; background: var(--content); box-shadow: 0 1px 0 var(--line); }
+.au-grid-head.is-open > .au-all-day-row { border-bottom: 1px solid var(--line); }
+/* The band's button keeps its focus ring inside its own box, so the ring is whole at the band's edge and the count keeps its width. */
+.au-all-day-row > .btn.cal-more:focus-visible { outline-offset: -2px; }
 .au-event { z-index: 1; min-width: 0; }
 .au-day-col > .au-event { position: absolute; }
 .au-bar { position: relative; margin: 0 3px 0 2px; }
