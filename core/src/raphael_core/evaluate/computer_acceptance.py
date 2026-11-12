@@ -3,7 +3,9 @@
 import argparse
 import asyncio
 import base64
+import csv
 from collections import Counter
+from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from datetime import datetime
 import http.client
@@ -12,6 +14,7 @@ import os
 from pathlib import Path
 import re
 import secrets
+import shlex
 import shutil
 import socket
 import struct
@@ -19,6 +22,7 @@ import tempfile
 import time
 import zlib
 from types import ModuleType
+from types import SimpleNamespace
 from urllib.parse import urlsplit
 
 from ..computer import lifecycle, vm
@@ -231,6 +235,50 @@ for data in json.loads(record.read_text()) if record.exists() else []:
   os.kill(data['pid'],signal.SIGTERM)
 """
 
+# Only the explicitly opted-in acceptance executes this loopback server inside its own guest.
+CARRY_SERVER = '''import http.server,json,pathlib,sys
+owner,port=sys.argv[1],int(sys.argv[2])
+class Handler(http.server.BaseHTTPRequestHandler):
+ def do_GET(self):
+  self.send_response(200)
+  if self.path=='/set': self.send_header('Set-Cookie','stage_d='+owner+'; Max-Age=3600; Path=/')
+  self.end_headers()
+  self.wfile.write(('<title>Carry cookie</title><p>'+self.headers.get('Cookie','no cookie')+'</p>').encode())
+ def log_message(self,*args): pass
+server=http.server.HTTPServer(('127.0.0.1',port),Handler)
+pathlib.Path('/tmp/raphael-carry-'+owner+'.json').write_text(json.dumps({'port':server.server_port}))
+server.serve_forever()
+'''
+CARRY_START = '''import json,pathlib,subprocess,sys,time
+owner,port=sys.argv[1],sys.argv[2]
+record=pathlib.Path('/tmp/raphael-carry-'+owner+'.json')
+record.unlink(missing_ok=True)
+program=PROGRAM
+process=subprocess.Popen(['python3','-c',program,owner,port],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,start_new_session=True)
+for attempt in range(100):
+ if process.poll() is not None: raise RuntimeError('Carry cookie server exited')
+ if record.exists():
+  print(record.read_text()); break
+ time.sleep(.05)
+else: raise RuntimeError('Carry cookie server did not start')
+'''.replace('PROGRAM', repr(CARRY_SERVER))
+
+
+@contextmanager
+def canvas_observations():
+    # Acceptance is its own process. Count recorder-created bridges as well as the product tool connection.
+    original = CuaBridge.request
+    calls = []
+    async def counted(bridge, method, params=None, **kwargs):
+        if method == 'tools/call' and (params or {}).get('name') in ('get_accessibility_tree', 'get_desktop_state'):
+            calls.append(params['name'])
+        return await original(bridge, method, params, **kwargs)
+    CuaBridge.request = counted
+    try:
+        yield calls
+    finally:
+        CuaBridge.request = original
+
 
 class IsolatedDocker:
     """All product and acceptance Docker commands pass through this owner guard."""
@@ -243,6 +291,8 @@ class IsolatedDocker:
         self.prefix = f"raphael-computer-{owner}-"
         self.after_start = None
         self.created = []
+        self.carry_homes = {}
+        self.carry_calls = 0
 
     async def owned(self, name):
         raw = await self.runner(["container", "inspect", name], timeout=60, limit=200000)
@@ -257,6 +307,31 @@ class IsolatedDocker:
         require(bool(args), "Expected a Docker command")
         command = args[0]
         if command == "run":
+            if args[1:6] == ['--rm', '--network', 'none', '--user', '0']:
+                from ..computer.carry import helper_args, EXCLUDE, folder_name
+                require(len(args) == 15 and args[6] == args[8] == '-v', 'Expected exact carry run shape')
+                source = self.carry_homes.get(args[7].removesuffix(':/from:ro'))
+                target = self.carry_homes.get(args[9].removesuffix(':/to'))
+                require(source is not None and target is not None and not source.container and target.container == 'shared',
+                        'Expected this run\'s registered per-bot and shared homes')
+                program = shlex.split(args[-1])
+                require(len(program) == 4 and program[:2] == ['python3', '-c'], 'Expected exact carry program')
+                data = json.loads(program[-1])
+                require(data.get('excluded') == EXCLUDE and data.get('operation') in ('scan', 'copy'), 'Expected carry operation')
+                if data['operation'] == 'copy':
+                    folder = data.get('folder', '')
+                    require(isinstance(folder, str), 'Expected member folder')
+                    base = re.sub('-' + re.escape(source.key) + r'(?:-[0-9]+)?$', '', folder)
+                    safe_folder = 0 < len(folder.encode('utf-8')) < 255 and (folder_name(folder, source.key, set()) == folder
+                        or base != folder and folder_name(base, source.key, set()) == base)
+                    require(set(data) == {'operation', 'excluded', 'key', 'folder', 'profile'}
+                            and data['key'] == source.key and type(data['profile']) is bool
+                            and safe_folder, 'Expected own member destination')
+                else:
+                    require(set(data) == {'operation', 'excluded'}, 'Expected exact scan arguments')
+                require(args == helper_args(source, target, data) and args[12] == self.tag,
+                        'Expected exact isolated image and Linux carry program')
+                return
             labels = [args[i + 1] for i, value in enumerate(args[:-1]) if value == "--label"]
             require([label for label in labels if label.startswith(f"{vm.LABEL}.owner=")] == [self.label]
                     and args.count("--name") == 1 and args[args.index("--name") + 1].startswith(self.prefix)
@@ -301,6 +376,8 @@ class IsolatedDocker:
             require(len(args) == 3 and args[2] in (self.tag, *OLD_IMAGES.values()), "Expected isolated/previous image inspect")
         elif args[:2] == ["image", "rm"]:
             require(args == ["image", "rm", self.tag], "Expected removal of this run's image tag only")
+        elif args[:2] == ['volume', 'inspect']:
+            require(len(args) == 3 and args[2] in self.carry_homes, 'Expected this run\'s registered workspace volume')
         elif command == "build":
             require(args == ["build", "--tag", self.tag, str(IMAGE_FOLDER)], "Expected isolated plain Docker build")
         elif command == "info":
@@ -313,7 +390,31 @@ class IsolatedDocker:
         command = args[0]
         result = await self.runner(args, **kwargs)
         if command == "run" and not result.code:
-            self.created.append(args[args.index("--name") + 1])
+            if '--name' in args:
+                name = args[args.index("--name") + 1]
+                self.created.append(name)
+                key = name.removeprefix(self.prefix)
+                workspace = next(args[i + 1] for i, value in enumerate(args[:-1])
+                                 if value == '--mount' and 'target=' + vm.GUEST in args[i + 1])
+                fields = dict(part.split('=', 1) for part in next(csv.reader([workspace])))
+                source = fields['source']
+                if fields['type'] == 'bind':
+                    home = Path(source)
+                    root = home.parent.parent.resolve()
+                    import hashlib
+                    expected_owner = hashlib.sha256(os.path.normcase(str(root)).encode()).hexdigest()[:16]
+                    require(home.resolve() == root / 'vm-homes' / key and expected_owner == self.owner,
+                            'Expected workspace in this run\'s data root')
+                    target = vm.Target(key, name, home)
+                else:
+                    require(source == name + '-workspace', 'Expected exact owned workspace volume')
+                    from pathlib import PurePosixPath
+                    target = vm.Target(key, name, PurePosixPath(source), remote='acceptance-test-host')
+                if key == 'shared':
+                    target = replace(target, container='shared', screens=6)
+                self.carry_homes[source] = target
+            else:
+                self.carry_calls += 1
         if command == "start" and not result.code and self.after_start:
             await self.after_start(args[-1])
         return result
@@ -1040,6 +1141,66 @@ class Acceptance:
                 self.machine.busy, self.machine.native_busy, self.machine.input_busy = old_busy, old_native, old_input
                 self.machine.disconnect_driver = old_disconnect
 
+    async def seed_shared_carry(self, member):
+        """Make a stopped per-bot home using only this run's product tools and owner."""
+        from ..agent.plugins import tool_key
+        from ..computer.vm_tools import vm_scope
+        source_vm = vm.LocalVm(self.root, runner=self.docker)
+        old_command = source_vm.bridge_command
+        async def guarded(target, args):
+            await self.docker.authorize(args)
+            return await old_command(target, args)
+        source_vm.bridge_command = guarded
+        hub = VmTools(NoHub(), source_vm, attachments=AttachmentStore(self.root / 'carry-attachments'))
+        target = source_vm.target(member)
+        async def tool(name, args):
+            with vm_scope(('turn', member, 1)):
+                result = await hub.call(tool_key('computer-' + target.key, name), args, approver='auto')
+            require(result.ok, f'Expected carry seed {name}, observed {result.kind}: {result.text}')
+            return result
+        try:
+            await hub.prepare(member)
+            await source_vm.start(target)
+            await hub._discover(target)
+            script = "from pathlib import Path;p=Path('/home/cua/workspace');(p/'carried.txt').write_text('stage-d');(p/'carry.csv').write_text('n\\n37\\n')"
+            await tool('vm_exec', {'command': 'python3 -c ' + shlex.quote(script)})
+            await tool('dataset', {'action': 'import', 'dataset': 'carried', 'sources': ['carry.csv']})
+            started = await tool('vm_exec', {'command': 'python3 -c ' + shlex.quote(CARRY_START)
+                                           + ' ' + shlex.quote(source_vm.owner) + ' 0'})
+            port = json.loads(json.loads(started.text)['output'].splitlines()[0])['port']
+            await tool('browser_open', {'url': f'http://127.0.0.1:{port}/set'})
+            # Measured: seconds-old cookies can be lost when a driver-owned browser ends.
+            await asyncio.sleep(40)
+            await hub.aclose()
+            await source_vm.stop(target)
+            self.machine.data.made(target)
+            return {'target': target, 'port': port}
+        finally:
+            await hub.aclose()
+            await source_vm.aclose(stop=True)
+
+    async def check_shared_carry(self, tool, seed, target, member):
+        from ..computer.carry import journal
+        started = await tool(member, 'vm_exec', {'command': 'python3 -c ' + shlex.quote(CARRY_START)
+                                               + ' ' + shlex.quote(self.machine.owner) + ' ' + str(seed['port'])})
+        require(json.loads(started.text).get('exit_code') == 0, 'Expected shared cookie server started')
+        state = await tool(member, 'browser_open', {'url': f'http://127.0.0.1:{seed["port"]}/check'})
+        require('stage_d=' + self.machine.owner in state.text, 'Expected persistent cookie from stopped per-bot browser')
+        record = await journal(self.machine, target)
+        carried = record.get(seed['target'].key, {})
+        require(carried.get('status') == 'done' and carried.get('profile') == 'carried', 'Expected carried member journal')
+        result = await tool(member, 'vm_exec', {'command': 'cat ' + shlex.quote(carried['folder'] + '/carried.txt')})
+        require(json.loads(result.text)['output'].strip() == 'stage-d', 'Expected carried file in named member folder')
+        result = await tool(member, 'dataset', {'action': 'query', 'dataset': 'carried', 'sql': 'SELECT n FROM data'})
+        require(json.loads(result.text)['rows'] == [[37]], 'Expected carried member dataset')
+        before = self.docker.carry_calls
+        await self.machine.disconnect_unit(target)
+        await self.machine.stop(target)
+        await self.machine.start(target)
+        await tool(member, 'browser_open', {'url': 'about:blank'})
+        require(self.docker.carry_calls == before, 'Expected second start to copy nothing')
+        return 'Persistent cookie, named folder and member dataset carried; second start ran no copy helper'
+
     async def computer(self, count, largest):
         began = time.monotonic()
         target = replace(self.machine.target(count), screens=count)
@@ -1172,6 +1333,12 @@ class Acceptance:
             return png_pixels(data)
 
         try:
+            seed = None
+            async def carry_seed():
+                nonlocal seed
+                seed = await self.seed_shared_carry(members[0])
+                return 'Per-bot test cookie flushed for 40 seconds, file and dataset made, computer stopped'
+            seed_ok = await self.check('shared carry seed', carry_seed)
             async def prepare():
                 await asyncio.gather(*(hub.prepare(member) for member in members))
                 targets.update((member, machine.target(member)) for member in members)
@@ -1206,6 +1373,22 @@ class Acceptance:
                                 f"Expected seat-local bounds, observed {row}")
                 return "Each list has its own panel and seat-local window centres"
             await self.check("shared window lists", lists)
+
+            async def datasets():
+                for member, value in zip(members, (11, 22)):
+                    command = "python3 -c " + shlex.quote("from pathlib import Path;Path('seat-" + str(member)
+                        + ".csv').write_text('n\\n" + str(value) + "\\n')")
+                    await tool(member, 'vm_exec', {'command': command})
+                    await tool(member, 'dataset', {'action': 'import', 'dataset': 'sales',
+                               'table': 'only_' + str(member), 'sources': [f'seat-{member}.csv']})
+                    result = await tool(member, 'dataset', {'action': 'query', 'dataset': 'sales',
+                                        'sql': 'SELECT n FROM only_' + str(member)})
+                    require(json.loads(result.text)['rows'] == [[value]], 'Expected own same-named dataset rows')
+                for member in members:
+                    result = await tool(member, 'dataset', {'action': 'list', 'dataset': 'sales'})
+                    require(json.loads(result.text)['rows'] == [['only_' + str(member)]], 'Expected only own dataset table')
+                return 'Same dataset name, distinct rows and table lists for both seats'
+            await self.check('shared member datasets', datasets)
 
             async def launches():
                 for member in members:
@@ -1457,6 +1640,51 @@ class Acceptance:
             if not browsers_ok:
                 self.record("shared foreground page hold", "skipped", "shared computer browser failed")
 
+            async def demonstration():
+                from ..bots.homes import BotHomes
+                from ..computer.teaching import Teaching
+                homes = BotHomes(self.root / 'acceptance-member-homes')
+                service = SimpleNamespace(capabilities=SimpleNamespace(homes=homes),
+                                          member_exists=lambda member: member in members)
+                viewer.teaching = recorder = Teaching(viewer, service, None)
+                opened = await viewer.open({'member_id': members[1], 'conversation_id': 1, 'preview': False})
+                try:
+                    with canvas_observations() as wide_calls:
+                        started = await recorder.call({'action': 'start', 'session': opened['session']})
+                        recording = recorder.items[started['id']]
+                        # The owner's press waits for this observation on a shared computer: say what it costs.
+                        began = time.monotonic()
+                        await recorder.input(opened['session'], b'\x05\x01\x00\x0a\x00\x14')
+                        first = time.monotonic() - began
+                        began = time.monotonic()
+                        await recorder.input(opened['session'], b'\x05\x01\x00\x0b\x00\x15')
+                        warm = time.monotonic() - began
+                        await recorder.tick(opened['session'])
+                    screens = [event for event in recording.events if event['kind'] == 'screen']
+                    require(screens, 'Expected a recorded seat screen')
+                    foreign = [row for row in await rows(members[0]) if row['app_name'].lower() != 'xfce4-panel']
+                    for event in screens:
+                        require(not any('window_id=' + str(row['window_id']) + ' ' in event['screen'] for row in foreign),
+                                'Seat 1 window appeared in seat 2 recording')
+                        require(event['images'], 'Expected clipped teaching picture')
+                        picture = base64.b64decode(event['images'][0]['data'])
+                        require(struct.unpack('>II', picture[16:24]) == (1280, 900), 'Expected seat-size teaching PNG')
+                    require(not wide_calls and recording.relay is None, f'Expected zero canvas observations, observed {wide_calls}')
+                    # Measured 2026-11-12 on a Windows host: per-bot's relay capture 0.23 s; this path 1.03 s with the
+                    # per-pixel picture and 0.22 s with Rfb.frame(). A second per press is a recorder nobody can type in.
+                    require(warm < .7, f'Expected an owner press observed within 0.7 s, observed {warm:.3f} s')
+                    return ('Seat 2 recording: no seat 1 window ids, 1280x900 PNG, zero canvas-wide driver calls, core input/tick; '
+                            f'a press waits {first:.3f} s for its first observation and {warm:.3f} s for the next')
+                finally:
+                    for recording in list(recorder.items.values()):
+                        await recorder.call({'action': 'discard', 'member_id': recording.member, 'id': recording.id})
+                    await viewer.close(opened)
+                    viewer.teaching = None
+            if terminals_ok:
+                await self.check('shared seat teaching', demonstration)
+            else:
+                self.record('shared seat teaching', 'skipped', 'shared terminal wall failed')
+
             async def disconnect():
                 pid = next(row["pid"] for row in await rows(members[1]) if row["app_name"].lower() == "chromium-browser")
                 await hub._disconnect(targets[members[0]].key)
@@ -1530,6 +1758,15 @@ class Acceptance:
                     await asyncio.sleep(.1)
                 return "Free seat 3 is cleaned of a leftover window; failed listing refuses displacement and restores the exact holder; retry replaces the idle LRU seat only after all its non-panel windows close"
             await self.check("shared seat displacement", displacement)
+            if seed_ok and browsers_ok:
+                # Displacement deliberately closed seat 1. Re-seat its original member before checking its datasets.
+                hub.leases.clear()
+                await hub.prepare(members[0])
+                targets[members[0]] = machine.target(members[0])
+                await self.check('shared carried home', lambda: self.check_shared_carry(
+                    tool, seed, targets[members[0]], members[0]))
+            else:
+                self.record('shared carried home', 'skipped', 'carry seed or shared browser failed')
             require(not any(row["result"] == "failed" for row in self.results[first_result:]), "One or more shared checks failed; see named results")
             return "Shared product checks completed; see each named shared result"
         finally:

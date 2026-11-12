@@ -218,7 +218,8 @@ class Rfb:
         for key, down in ((0xffe9, 1), (0xffc1, 1), (0xffc1, 0), (0xffe9, 0)):
             self.stream.sendall(struct.pack(">BBxxI", 4, down, key))  # Alt+F4
 
-    def pixels(self, rectangle):
+    def updates(self, rectangle):
+        """Ask for raw pixels and yield each framebuffer update's rectangles as (x, y, width, height, BGRX bytes)."""
         x, y, width, height = rectangle
         require(0 <= x < x + width <= 1280 and 0 <= y < y + height <= 900,
                 f"Expected pixel request inside one screen, observed {rectangle}")
@@ -226,7 +227,6 @@ class Rfb:
         self.stream.sendall(b"\x00\0\0\0" + pixel_format)
         self.stream.sendall(struct.pack(">BxHi", 2, 1, 0))
         self.stream.sendall(struct.pack(">BBHHHH", 3, 0, *rectangle))
-        pixels, covered = [None] * (width * height), 0
         for _ in range(64):
             kind = exact(self.stream, 1)[0]
             if kind == 2:
@@ -239,11 +239,19 @@ class Rfb:
             require(kind == 0, f"Expected framebuffer update, observed RFB message {kind}")
             count = struct.unpack(">xH", exact(self.stream, 3))[0]
             require(count <= 4096, f"Expected bounded rectangles, observed {count}")
+            rectangles = []
             for _ in range(count):
                 rx, ry, rw, rh, encoding = struct.unpack(">HHHHi", exact(self.stream, 12))
                 require(encoding == 0 and 0 < rw <= 1280 and 0 < rh <= 900 and rx + rw <= 1280 and ry + rh <= 900,
                         f"Expected bounded raw rectangle, observed {(rx, ry, rw, rh, encoding)}")
-                data = exact(self.stream, rw * rh * 4)
+                rectangles.append((rx, ry, rw, rh, exact(self.stream, rw * rh * 4)))
+            yield rectangles
+
+    def pixels(self, rectangle):
+        x, y, width, height = rectangle
+        pixels, covered = [None] * (width * height), 0
+        for rectangles in self.updates(rectangle):
+            for rx, ry, rw, rh, data in rectangles:
                 for yy in range(max(y, ry), min(y + height, ry + rh)):
                     for xx in range(max(x, rx), min(x + width, rx + rw)):
                         offset = ((yy - ry) * rw + xx - rx) * 4
@@ -255,16 +263,44 @@ class Rfb:
                 return pixels
         raise AssertionError(f"Expected {width * height} raw pixels, observed {covered}")
 
+    def frame(self):
+        """One whole screen as raw BGRX bytes. Rows are placed whole: pixels() spends a second on a screen, one
+        Python step per pixel, and an owner's press waits for this picture while a seat is being taught."""
+        width, height = 1280, 900
+        frame, seen = bytearray(width * height * 4), bytearray(width * height)
+        for rectangles in self.updates((0, 0, width, height)):
+            for rx, ry, rw, rh, data in rectangles:
+                for row in range(rh):
+                    start = (ry + row) * width + rx
+                    frame[start * 4:(start + rw) * 4] = data[row * rw * 4:(row + 1) * rw * 4]
+                    seen[start:start + rw] = b"\x01" * rw
+            if seen.count(1) == width * height:
+                return bytes(frame)
+        raise AssertionError(f"Expected {width * height} raw pixels, observed {seen.count(1)}")
+
+
+def png_stream(rows, width, height):
+    def chunk(kind, data):
+        return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data))
+    return (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0))
+            + chunk(b"IDAT", zlib.compress(rows)) + chunk(b"IEND", b""))
+
 
 def png(pixels, width=1280, height=900):
     """Encode raw BGR pixels as an 8-bit RGB PNG with filter-zero rows."""
     require(len(pixels) == width * height, "Expected a full screen of pixels")
-    def chunk(kind, data):
-        return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data))
     rows = b"".join(b"\0" + b"".join(pixel[::-1] for pixel in pixels[y * width:(y + 1) * width])
                     for y in range(height))
-    return (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0))
-            + chunk(b"IDAT", zlib.compress(rows)) + chunk(b"IEND", b""))
+    return png_stream(rows, width, height)
+
+
+def png_frame(frame, width=1280, height=900):
+    """The PNG png() makes, from Rfb.frame()'s BGRX bytes, without a Python step per pixel."""
+    require(len(frame) == width * height * 4, "Expected a full screen of pixels")
+    colours = bytearray(width * height * 3)
+    colours[0::3], colours[1::3], colours[2::3] = frame[2::4], frame[1::4], frame[0::4]
+    rows = b"".join(b"\0" + colours[y * width * 3:(y + 1) * width * 3] for y in range(height))
+    return png_stream(rows, width, height)
 
 
 def capture(port, password, screen, *, timeout=10):
@@ -291,4 +327,4 @@ def capture(port, password, screen, *, timeout=10):
         stream = WebSocket(BoundedSocket(), f"127.0.0.1:{port}", f"/websockify?token=screen-{screen}")
         client = Rfb(stream)
         client.authenticate(password)
-        return png(client.pixels((0, 0, 1280, 900)))
+        return png_frame(client.frame())

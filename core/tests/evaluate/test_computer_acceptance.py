@@ -25,6 +25,20 @@ def no_network_or_docker(monkeypatch):
     monkeypatch.setattr(asyncio, "start_server", forbidden)
 
 
+async def test_canvas_counter_includes_separate_recorder_bridges_and_restores_on_failure(monkeypatch):
+    from unittest.mock import AsyncMock
+    original = AsyncMock(return_value={'content': []})
+    monkeypatch.setattr(acceptance.CuaBridge, 'request', original)
+    with pytest.raises(RuntimeError, match='synthetic'):
+        with acceptance.canvas_observations() as calls:
+            recorder = acceptance.CuaBridge(None, None, observation_command=('test-only',))
+            for name in ('get_accessibility_tree', 'list_windows', 'get_desktop_state'):
+                await recorder.request('tools/call', {'name': name, 'arguments': {}}, owner_observation=True)
+            raise RuntimeError('synthetic')
+    assert calls == ['get_accessibility_tree', 'get_desktop_state']
+    assert acceptance.CuaBridge.request is original and original.await_count == 3
+
+
 def server_frame(payload, opcode=2, final=True):
     header = bytes([(128 if final else 0) | opcode])
     if len(payload) < 126:
@@ -1033,11 +1047,42 @@ async def test_shared_acceptance_drives_real_tools_through_every_numbered_check(
         return {key: row[key] for key in ("pid", "window_id")}
     monkeypatch.setattr(machine, "seat_browser", browser)
 
+    seed = {'target': machine.target_for('', machine.key_for('', 9201)), 'port': 18767}
+    seed_calls, carry_checks, dataset_tables = [], [], {}
+    async def carry_seed(member):
+        seed_calls.append(member)
+        return seed
+    async def carried(tool, supplied_seed, target, member):
+        carry_checks.append((supplied_seed, target, member))
+        return 'Synthetic carry boundary; Linux copy and core retry have their own offline tests'
+    monkeypatch.setattr(run, 'seed_shared_carry', carry_seed)
+    monkeypatch.setattr(run, 'check_shared_carry', carried)
+    monkeypatch.setattr('raphael_core.computer.datasets.command_for', lambda args: 'dataset-runtime:' + json.dumps(args))
+
     original_sleep = asyncio.sleep
     async def execute(target, command, timeout=60, **kwargs):
         if command.startswith("sleep"):
             await original_sleep(.1)
             return dict(exit_code=0, output="")
+        if command.startswith('python3 -c '):
+            import ast
+            import shlex
+            script = ast.parse(shlex.split(command)[2])
+            call = script.body[-1].value
+            path = ast.literal_eval(call.func.value.args[0])
+            files[path] = ast.literal_eval(call.args[0])
+            return dict(exit_code=0, output='')
+        if command.startswith('dataset-runtime:'):
+            args = json.loads(command.removeprefix('dataset-runtime:'))
+            tables = dataset_tables.setdefault((args['member_key'], args['dataset']), {})
+            if args['action'] == 'import':
+                tables[args['table']] = int(files[args['sources'][0]].splitlines()[1])
+                result = {'count': 1}
+            elif args['action'] == 'query':
+                result = {'rows': [[tables[args['sql'].split()[-1]]]]}
+            else:
+                result = {'rows': [[table] for table in sorted(tables)]}
+            return dict(exit_code=0, output=json.dumps(result))
         path = command.removeprefix("cat ")
         return dict(exit_code=0 if path in files else 1, output=files.get(path, ""))
     monkeypatch.setattr(machine, "execute", execute)
@@ -1088,13 +1133,14 @@ async def test_shared_acceptance_drives_real_tools_through_every_numbered_check(
     result = await run.shared()
     assert "completed" in result
     assert not [row for row in run.results if row["result"] != "ok"], run.results
-    assert [row["name"] for row in run.results] == ["shared prepares", "shared window lists", "shared terminal wall",
+    assert [row["name"] for row in run.results] == ["shared carry seed", "shared prepares", "shared window lists", "shared member datasets", "shared terminal wall",
         "shared pointer wall", "shared target forms", "shared native text", "shared seat-local verify", "shared global shortcuts",
         "shared simultaneous native typing", "shared computer browser", "shared typed form", "shared page text", "shared clipped product pictures", "shared owner control",
-        "shared session ends independently", "shared seat displacement", "shared stop"]
+        "shared seat teaching", "shared session ends independently", "shared seat displacement", "shared carried home", "shared stop"]
+    assert seed_calls == [9201] and len(carry_checks) == 1
     assert launches == [1, 2]
     assert len(attachments) == 3 and len({session for session, _ in attachments}) == 2
-    assert len(files) == 4
+    assert len(files) == 6
 
 
 async def test_form_server_programs_require_exact_run_owner_before_guest_execution(tmp_path):
@@ -1112,6 +1158,111 @@ async def test_form_server_programs_require_exact_run_owner_before_guest_executi
     runner.containers[target.name]['Config']['Labels'][f'{vm.LABEL}.owner'] = 'foreign'
     with pytest.raises(AssertionError):
         await guard.authorize(['exec', '-u', 'cua', target.name, 'python3', '-c', acceptance.FORM_START, machine.owner])
+
+
+async def test_carry_guard_accepts_only_exact_offline_helper_on_registered_homes_and_image(tmp_path, monkeypatch):
+    from raphael_core.computer import carry
+    machine = vm.LocalVm(tmp_path, runner=FakeDocker())
+    guard = acceptance.IsolatedDocker(machine.run, machine.owner, 'raphael-acceptance/cua-local-vm:test')
+    monkeypatch.setattr(vm, 'IMAGE', guard.tag)
+    source, target = machine.target(1), machine.shared_target('', 1, 1)
+    guard.carry_homes = {str(home.workspace): home for home in (source, target)}
+    data = {'operation': 'copy', 'key': source.key, 'folder': 'Ada', 'profile': True, 'excluded': carry.EXCLUDE}
+    args = carry.helper_args(source, target, data)
+    await guard.authorize(args)
+    long_base = carry.folder_name('\u754c' * 100, source.key, set())
+    for folder in (long_base, carry.folder_name(long_base, source.key, {long_base})):
+        await guard.authorize(carry.helper_args(source, target, {**data, 'folder': folder}))
+    for index, value in ((3, 'host'), (5, 'cua'), (7, str(source.workspace) + ':/from'),
+                         (9, str(tmp_path / 'foreign') + ':/to'), (12, vm.BASE), (14, 'echo unsafe')):
+        invalid = list(args)
+        invalid[index] = value
+        with pytest.raises((AssertionError, ValueError)):
+            await guard.authorize(invalid)
+    for change in ({'key': 'b' * 16}, {'folder': '../other'}, {'folder': None},
+                   {'folder': 'Ada-' + source.key + '-' + '2' * 256}, {'excluded': []}, {'extra': True}):
+        with pytest.raises(AssertionError):
+            await guard.authorize(carry.helper_args(source, target, {**data, **change}))
+    guard.carry_homes.pop(str(source.workspace))
+    with pytest.raises(AssertionError, match='registered'):
+        await guard.authorize(args)
+
+
+@pytest.mark.parametrize('cookie,rows,repeat', [(True, [[37]], False), (False, [[37]], False),
+                                             (True, [[99]], False), (True, [[37]], True)])
+async def test_carried_acceptance_requires_real_outcomes_and_no_copy_on_restart(tmp_path, monkeypatch, cookie, rows, repeat):
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+    from raphael_core.computer import carry
+    run = acceptance.Acceptance(FakeDocker())
+    run.machine = machine = vm.LocalVm(tmp_path, runner=run.runner)
+    target = machine.shared_target('', 1, 1)
+    seed = {'target': machine.target(1), 'port': 18767}
+    run.docker = SimpleNamespace(carry_calls=1)
+    monkeypatch.setattr(carry, 'journal', AsyncMock(return_value={seed['target'].key:
+                        {'status': 'done', 'profile': 'carried', 'folder': 'Ada'}}))
+    machine.disconnect_unit = AsyncMock()
+    machine.stop = AsyncMock()
+    async def start(target):
+        if repeat:
+            run.docker.carry_calls += 1
+    machine.start = start
+    calls = []
+    async def tool(member, name, args):
+        calls.append((name, args))
+        if name == 'vm_exec':
+            data = {'exit_code': 0, 'output': 'stage-d' if args['command'].startswith('cat ') else '{}'}
+        elif name == 'dataset':
+            data = {'rows': rows}
+        else:
+            return SimpleNamespace(text='stage_d=' + machine.owner if cookie else 'no cookie')
+        return SimpleNamespace(text=json.dumps(data))
+    if cookie and rows == [[37]] and not repeat:
+        assert 'second start' in await run.check_shared_carry(tool, seed, target, 1)
+        assert [name for name, _ in calls] == ['vm_exec', 'browser_open', 'vm_exec', 'dataset', 'browser_open']
+        machine.stop.assert_awaited_once_with(target)
+    else:
+        with pytest.raises(AssertionError):
+            await run.check_shared_carry(tool, seed, target, 1)
+
+
+def test_carry_cookie_server_is_persistent_loopback_and_test_owner_scoped():
+    compile(acceptance.CARRY_SERVER, '<carry server>', 'exec')
+    compile(acceptance.CARRY_START, '<carry start>', 'exec')
+    assert "('127.0.0.1',port)" in acceptance.CARRY_SERVER
+    assert 'Max-Age=3600' in acceptance.CARRY_SERVER and "self.path=='/set'" in acceptance.CARRY_SERVER
+    assert "'stage_d='+owner" in acceptance.CARRY_SERVER
+
+
+async def test_carry_seed_uses_product_tools_flushes_cookie_and_stops_source(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+    run = acceptance.Acceptance(FakeDocker())
+    run.root = tmp_path
+    run.machine = vm.LocalVm(tmp_path, runner=run.runner)
+    run.docker = run.runner
+    source = vm.LocalVm(tmp_path, runner=run.runner)
+    source.start, source.stop, source.aclose = AsyncMock(), AsyncMock(), AsyncMock()
+    monkeypatch.setattr(vm, 'LocalVm', lambda *args, **kwargs: source)
+    calls, waits = [], []
+    class Tools:
+        def __init__(self, *args, **kwargs): pass
+        async def prepare(self, member): pass
+        async def _discover(self, target): pass
+        async def aclose(self): calls.append(('close', {}))
+        async def call(self, key, args, **kwargs):
+            calls.append((key, args))
+            return SimpleNamespace(ok=True, kind='ok', text=json.dumps({'output': '{"port":18767}'}))
+    async def sleep(seconds):
+        waits.append(seconds)
+    monkeypatch.setattr(acceptance, 'VmTools', Tools)
+    monkeypatch.setattr(acceptance.asyncio, 'sleep', sleep)
+    seed = await run.seed_shared_carry(9201)
+    assert not seed['target'].container and seed['port'] == 18767
+    assert waits == [40]
+    assert any(key.endswith('dataset') and args['action'] == 'import' for key, args in calls)
+    assert any(key.endswith('browser_open') and args['url'] == 'http://127.0.0.1:18767/set' for key, args in calls)
+    source.stop.assert_awaited_once_with(seed['target'])
 
 
 async def test_one_screen_block_runs_product_form_once_and_other_counts_do_not(tmp_path, monkeypatch):

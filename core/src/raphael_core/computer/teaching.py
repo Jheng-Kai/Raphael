@@ -116,7 +116,7 @@ class Teaching:
     def status(self, member, conversation, target):
         self.recover(member, target)
         recording = next((r for r in self.items.values() if r.member == member and r.conversation == conversation), None)
-        return {"teach_available": target.container != "shared", **({"teaching": recording.view()} if recording else {})}
+        return {"teach_available": True, **({"teaching": recording.view()} if recording else {})}
 
     def recover(self, member, target):
         homes = self.members.capabilities.homes
@@ -168,6 +168,13 @@ class Teaching:
     async def observe(self, target):
         from .vm_bridge import CuaBridge
         try:
+            if target.container == "shared":
+                token = self.viewer.owners.get(target.key)
+                session = self.viewer.sessions.get(token)
+                if (not session or session.target != target or session.preview or not session.connection
+                        or session.expires <= self.viewer.vm.clock()):
+                    return {"safe": False, "screen": "", "images": []}
+                return await self.viewer.vm.seat_observation(target, connection=session.connection)
             async with CuaBridge(self.viewer.vm, target) as bridge:
                 tree = await bridge.request("tools/call", {"name": "get_accessibility_tree", "arguments": {}}, owner_observation=True)
                 if not safe_observation(tree)["safe"]:
@@ -270,7 +277,7 @@ class Teaching:
                 token, session = self.viewer.session(params)
                 target = session.target
                 self.recover(session.member_id, target)
-                if (session.preview or target.container == "shared" or target != self.viewer.vm.target(session.member_id)
+                if (session.preview or target != self.viewer.vm.target(session.member_id)
                         or self.viewer.vm.work.pending(target) or self.active(token)):
                     raise invalid_params("use the member's own available computer")
                 if any(r.member == session.member_id for r in self.items.values()) or len(self.items) >= 16:
@@ -279,13 +286,18 @@ class Teaching:
                 self.viewer.session(params)
                 if self.viewer.owners.get(target.key) != token:
                     raise invalid_params("demonstration control expired")
+                if target.container == "shared":
+                    await self.viewer.connection_for(session)
+                    self.viewer.session(params)
+                    if self.viewer.owners.get(target.key) != token:
+                        raise invalid_params("demonstration control expired")
                 identifier = secrets.token_hex(16)
                 homes = self.members.capabilities.homes
                 folder = homes.safe(homes.home(session.member_id) / "demonstrations")
                 folder.mkdir(parents=True, exist_ok=True)
                 recording = Recording(identifier, session.member_id, session.conversation_id, token, target,
                                       folder / f"{identifier}.json", asyncio.get_running_loop().time())
-                if command_for := getattr(self.viewer.vm, "bridge_command", None):
+                if target.container != "shared" and (command_for := getattr(self.viewer.vm, "bridge_command", None)):
                     from .vm import DRIVER, SOCKET, exec_args
                     command = await command_for(target, exec_args(target, [DRIVER, "mcp", "--socket", SOCKET], interactive=True))
                     self.viewer.session(params)

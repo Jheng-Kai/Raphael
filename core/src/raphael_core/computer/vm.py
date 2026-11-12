@@ -360,6 +360,8 @@ class LocalVm:
         from .seats import ComputerSeats
         self.seats = ComputerSeats(conn)
         self.seat_lock = asyncio.Lock()
+        self.carry_lock, self.carry_attempted = asyncio.Lock(), set()
+        self.physical_active, self.held_targets, self.lease_targets = {}, {}, {}
         async def close_seat_viewers(target):
             pass
         self.close_seat_viewers = close_seat_viewers
@@ -369,6 +371,15 @@ class LocalVm:
                  for number, member in self.seats.holders(target.remote).items()] if target.container else []
         return {other.key: other for other in [target, *self.targets.values(), *seats]
                 if (other.remote, other.name) == (target.remote, target.name)}.values()
+
+    def carry_busy(self, target):
+        """Historical homes share seat keys, but only work on that physical computer protects its browser."""
+        current = self.targets.get(target.key)
+        if current is None or not current.container:
+            return bool(self.unit_active(target) or self.unit_held(target) or self.unit_busy(target))
+        return bool(self.physical_active.get(target.physical)
+                    or self.held_targets.get(target.key) == target
+                    or self.lease_targets.get(target.key) == target and self.busy(target.key))
 
     def unit_active(self, target, *, excluding=None):
         return sum(self.active.get(other.key, 0) for other in self.unit_targets(target) if other.key != excluding)
@@ -470,6 +481,8 @@ class LocalVm:
 
     async def seat_browser(self, target):
         from .seat_view import rectangle
+        from .carry import before_browser
+        await before_browser(self, target)
         result = await self.run_for(target, exec_args(target, ["raphael-seat-browser",
             *map(str, rectangle(target.screen, target.screens))]), timeout=30)
         match = re.fullmatch(r"pid=([1-9][0-9]*) window_id=([1-9][0-9]*)", result.stdout.strip())
@@ -924,6 +937,7 @@ class LocalVm:
         state = await self._reconcile_timezone(target, state, zone)
         already_running = state["state"] == "running"
         if state["state"] != "running":
+            self.carry_attempted.discard(target.physical)
             self.wallpaper_attempted.pop((target.remote, target.name), None)
         if state["state"] == "missing":
             if not state.get("image"):
@@ -1192,8 +1206,10 @@ exec /opt/venv/bin/python /opt/raphael-desktop/wallpaper.py --watch'''
     def hold(self, target, held):
         if held:
             self.held.add(target.key)
+            self.held_targets[target.key] = target
         else:
             self.held.discard(target.key)
+            self.held_targets.pop(target.key, None)
         self.last_activity[target.state_key] = self.clock()
 
     async def checkpoint(self, target, action, **metadata):

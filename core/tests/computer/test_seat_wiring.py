@@ -424,16 +424,16 @@ async def test_only_shared_member_shell_loses_display_in_foreground_and_backgrou
         assert (["env", "-u", "DISPLAY"] == args[-6:-3]) is shared
 
 
-async def test_shared_catalog_keeps_dataset_and_teaching_unavailable(shared_vm, tmp_path):
+async def test_shared_catalog_offers_dataset_and_teaching(shared_vm, tmp_path):
     from raphael_core.computer.teaching import Teaching
     vm, _ = shared_vm
     hub = VmTools(EmptyHub(), vm, attachments=AttachmentStore(tmp_path), bridge=Bridge)
     await hub.prepare(1)
     assert vm.target(1).key == vm.key_for("", 1)
-    assert "dataset" not in {tool.name for tool in hub.offered_for(1)}
+    assert "dataset" in {tool.name for tool in hub.offered_for(1)}
     teaching = Teaching(DesktopViewer(vm), None, None)
     teaching.recover = lambda *args: None
-    assert not teaching.status(1, 1, vm.target(1))["teach_available"]
+    assert teaching.status(1, 1, vm.target(1))["teach_available"]
 
 
 async def test_local_limit_counts_containers_and_cannot_evict_a_busy_seat(shared_vm):

@@ -873,9 +873,9 @@ async def test_real_driver_catalog_offers_only_the_curated_tools(desktop, tmp_pa
     assert len(DRIVER_CATALOG["names"]) == len(set(DRIVER_CATALOG["names"])) == 68
     assert CURATED <= set(DRIVER_CATALOG["names"])
     deferred = {"vault_entries", "fill_contact", "fill_card"}
-    assert {tool.name for tool in hub.offered()} == CURATED | {"request_takeover", "fill_login", "browser_open", "run_steps"} | deferred
+    assert {tool.name for tool in hub.offered()} == CURATED | {"request_takeover", "fill_login", "browser_open", "run_steps", "dataset"} | deferred
     snapshot = take_snapshot(hub)
-    assert {ref.name for ref in snapshot.refs.values() if ref.server == "computer"} == CURATED | {"request_takeover", "fill_login", "browser_open", "run_steps"}
+    assert {ref.name for ref in snapshot.refs.values() if ref.server == "computer"} == CURATED | {"request_takeover", "fill_login", "browser_open", "run_steps", "dataset"}
     assert set(snapshot.hidden()) == {"computer__" + name for name in deferred}
     assert not snapshot.refresh_computer(hub, 0)
     assert all(tool.pinned for tool in hub.offered())
@@ -1006,7 +1006,7 @@ async def test_sandbox_steps_do_not_reenter_per_action_safety_screening(desktop,
     snapshot = take_snapshot(hub)
     caller = SimpleNamespace(_gate=gate, snapshot=snapshot, language="en", ledger=None,
                              _check=lambda **kwargs: None, _guarded=guarded)
-    private_fills = {"fill_login", "fill_contact", "fill_card"}
+    private_fills = {"fill_login", "fill_contact", "fill_card", "dataset"}
     for tool in hub.offered():
         call = SimpleNamespace(tool=tool, arguments={})
         expected = Screening(DENY) if tool.name in private_fills else PASS
@@ -1029,6 +1029,11 @@ async def test_vm_tool_descriptions_require_owner_yes_before_outward_actions(des
     for tool in hub.offered():
         assert tool.tier == (Tier.T3 if tool.name == "fill_card" else Tier.T0)
         description = definitions["computer__" + tool.name]["description"]
+        if tool.name == "dataset":
+            from raphael_core.computer.datasets import DEFINITION
+            assert tool.description == DEFINITION["description"] + SHARED_CONTRACT
+            assert description.startswith('[computer] ' + DEFINITION["description"][:120])
+            continue
         if tool.name == "vault_entries":
             assert "opaque IDs" in description and "Never ask for private values" in description
             continue
@@ -1129,10 +1134,10 @@ async def test_bridge_answers_ping_and_refuses_tools_while_held(desktop):
     assert (await bridge.request("tools/call", {"name": "click"}))["isError"]
 
 
-async def test_owner_observation_allows_only_exact_read_calls_during_takeover(desktop):
+async def test_owner_observation_allows_only_exact_read_calls_during_takeover(per_bot_desktop):
     from types import SimpleNamespace
     from unittest.mock import AsyncMock
-    vm, target, runtime = desktop
+    vm, target, runtime = per_bot_desktop
     bridge = CuaBridge(vm, target)
     vm.hold(target, True)
     bridge._write = AsyncMock()

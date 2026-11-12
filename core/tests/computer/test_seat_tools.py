@@ -34,7 +34,7 @@ class SeatBridge:
         self.vm, self.target, self.calls = vm, target, []
         self.rows = [window(10, 20), window(20, 1300), window(30, 2580, "Chromium-browser", 99)]
 
-    async def request(self, method, params):
+    async def request(self, method, params, **kwargs):
         validate_call(method, params)
         refusal = runtime_refusal(method, params)
         if refusal:

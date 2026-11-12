@@ -22,6 +22,7 @@ class Policy:
     deadline: float
     held: bool
     teaching: object
+    core_teaching: bool = False
 
 
 @dataclass
@@ -35,9 +36,10 @@ class Peer:
 
 
 class ViewerRelay:
-    def __init__(self, prepare, register, unregister, failed, teach, embed):
+    def __init__(self, prepare, register, unregister, failed, teach, embed, core_input=None):
         self.prepare, self.register, self.unregister = prepare, register, unregister
         self.failed, self.teach, self.embed = failed, teach, embed
+        self.core_input = core_input
         self.main = asyncio.get_running_loop()
         self.loop = self.thread = None
         self.policies, self.sequences = {}, {}
@@ -193,7 +195,14 @@ class ViewerRelay:
                 policy = self.policy(peer)
                 if policy is None:
                     return
-                if policy.teaching and any(is_input for is_input, _, _ in packets):
+                if policy.core_teaching and any(is_input for is_input, _, _ in packets):
+                    for is_input, message, opcode in packets:
+                        if is_input:
+                            # Shared recordings have no relay observer: core-owned privacy state must be read there.
+                            await self.on_main(self.core_input(peer.token, peer.revision, message))
+                        if self.forward(peer, frame(message, opcode), inputs=int(is_input)):
+                            await peer.upstream.drain()
+                elif policy.teaching and any(is_input for is_input, _, _ in packets):
                     for is_input, message, opcode in packets:
                         if is_input:
                             async with self.teaching_locks.setdefault(peer.token, asyncio.Lock()):

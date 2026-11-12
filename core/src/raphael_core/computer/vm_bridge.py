@@ -102,6 +102,15 @@ class CuaBridge:
             return {}
         observing = owner_observation and method == "tools/call" and params in (
             {"name": "get_desktop_state", "arguments": {}}, {"name": "get_accessibility_tree", "arguments": {}})
+        if owner_observation and self.vm is not None and self.target.container == 'shared':
+            arguments = (params or {}).get('arguments', {})
+            session = arguments.get('session')
+            observing = method == 'tools/call' and isinstance(session, str) and bool(session) and params in (
+                {'name': 'list_windows', 'arguments': {'session': session}},
+                {'name': 'set_config', 'arguments': {'session': session, 'max_image_dimension': 1456}},
+                {'name': 'set_agent_cursor_enabled', 'arguments': {'session': session, 'enabled': False}})
+            if not observing:
+                raise VmError('observation_only')
         if self.observation_command is not None and method not in ("initialize", "ping") and not observing:
             raise VmError("observation_only")
         if self.vm is not None and method == "tools/call" and self.target.key in self.vm.held and not observing:
