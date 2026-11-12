@@ -142,6 +142,9 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
   /** A stream that has not connected this long is said to be out of reach, with a retry. */
   const STALL_MS = 20_000;
   let stalled = false, everConnected = false, stallTimer: ReturnType<typeof setTimeout> | undefined;
+  /** A lease the screen has not confirmed (its `interactive` answer) this long was not taken: say so and go back to watching. */
+  const TAKE_MS = 6_000;
+  let takeTimer: ReturnType<typeof setTimeout> | undefined;
   let closePending: Promise<unknown> = Promise.resolve(), clickedAt = 0;
   // Nothing is painted until the read answers, so the town never flashes under the owner's picture.
   let ownWallpaper: string | undefined, wallpaperKnown = false, wallpaperRead: Promise<void> | undefined;
@@ -260,8 +263,11 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     paint(panel.dataset, "desktopState", label);
     paint(panel.dataset, "interactive", String(interactive));
     // The preview only opens the larger view; input is taken there, with Take control, or from a card (R-PANEL-03).
-    paint(modeLabel.querySelector('span')!, "textContent", t(owner ? "desktop.operating" : "desktop.watching"));
-    paint(modeLabel.dataset, "mode", owner ? "operating" : "watching");
+    // 你正在控制 only once the screen itself says the owner's input reaches it; until then 正在接手 (owner, 2026-11-13:
+    // 「明明顯示我正在控制，但我根本就沒辦法控制」). Watching is view-only whoever holds the lease.
+    const mode = owner && !watching ? interactive ? "operating" : "taking" : "watching";
+    paint(modeLabel.querySelector('span')!, "textContent", t(mode === "operating" ? "desktop.operating" : mode === "taking" ? "desktop.taking" : "desktop.watching"));
+    paint(modeLabel.dataset, "mode", mode);
     paint(take, "textContent", t("desktop.take")); paint(take, "hidden", !watching || !running || owner || !!demonstration); paint(take, "disabled", changing || !connected);
     paint(frame, "hidden", !running || !connected);
     paint(frame.style, "pointerEvents", interactive && !watching ? "auto" : "none");
@@ -308,7 +314,7 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     }
   }
   function closeStream(): void {
-    clearTimeout(lingering); clearTimeout(stallTimer); stalled = false;
+    clearTimeout(lingering); clearTimeout(stallTimer); clearTimeout(takeTimer); stalled = false;
     generation++; takeOnConnect = false; watching = false; filesOnly = false; send(false); framesOn = false; frame.remove(); frame.removeAttribute('src'); connected = interactive = false;
     const previous = session; session = undefined;
     if (previous) closePending = closePending.then(() => api.desktopClose(previous.session)).catch(() => {});
@@ -331,6 +337,7 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     }
     if (event.data.state === 'interactive') {
       interactive = event.data.held === true && state?.control === 'owner';
+      if (interactive) clearTimeout(takeTimer);
       if (interactive && clickedAt) panel.dataset.controlLatencyMs = String(performance.now() - clickedAt);
     } else if (event.data.state === 'input-accepted' && interactive && clickedAt) {
       panel.dataset.acceptedInputLatencyMs = String(performance.now() - clickedAt); clickedAt = 0;
@@ -417,7 +424,7 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
   }
   async function control(held: boolean, pointer?: { x:number; y:number }): Promise<void> {
     if (!session || changing || held && !connected) return;
-    changing = true; error.hidden = true;
+    changing = true; error.hidden = true; clearTimeout(takeTimer);
     // A renewal started before this click must not overwrite the new lease state.
     const current = ++generation, opened = session, request = pending()?.request_id;
     if (held) { clickedAt = performance.now(); delete panel.dataset.controlLatencyMs; delete panel.dataset.acceptedInputLatencyMs; }
@@ -427,9 +434,26 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
       if (current !== generation || session !== opened) return;
       update(next); send(held, pointer);
       if (held) frame.focus({ preventScroll:true });
+      if (held && state?.control === 'owner' && !interactive) takeTimer = setTimeout(() => { if (session === opened && state?.control === 'owner' && !interactive) void takeFailed(opened); }, TAKE_MS);
     } catch {
       if (current === generation) { showNotice(t('desktop.busy')); cardFailure(options.timeline.querySelector('.desktop-takeover-card, .computer-card'), () => { void control(held); }); }
     } finally { changing = false; if (current === generation) draw(); }
+  }
+  /** The core gave the lease but the screen never took the owner's input: give the lease back without counting it as
+   *  done (no request id), say so under the screen, and watch again, where Take control tries once more. */
+  async function takeFailed(opened: DesktopSession): Promise<void> {
+    clearTimeout(takeTimer);
+    const current = ++generation;
+    interactive = false; send(false);
+    try {
+      const next = await api.desktopControl(opened.session, false);
+      if (current === generation && session === opened) update(next);
+    } catch { /* the next renewal says who holds it */ }
+    if (current !== generation || session !== opened) return;
+    if (state) state = { ...state, control: 'member' };
+    if (panel.hasAttribute('data-expanded')) { watching = true; document.documentElement.setAttribute('data-desktop-watch', ''); }
+    showNotice(t('desktop.takeFailed'));
+    draw();
   }
   const expand = (on: boolean): void => {
     if (on && !panel.hasAttribute('data-expanded')) { returnPanelOpen = options.panelVisible(); options.openPanel(); }
@@ -560,12 +584,10 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
   options.timeline.addEventListener('click', event => {
     const button = (event.target as Element).closest<HTMLButtonElement>('[data-card-desktop]');
     if (!button || button.disabled) return;
-    if (button.dataset.cardDesktop === 'take') {
-      // Owner input stays in the conversation's existing RFB iframe.
-      suspended = false; takeOnConnect = true;
-      if (connected) { takeOnConnect = false; void control(true); }
-      else if (state?.state === 'running') void openStream();
-    }
+    // A sign-in is no work for a small picture (owner, 2026-11-13: 「你這個畫面這麼小，我根本看不到登入的畫面」): the
+    // card's screen and its 接手 open the same stream in the larger view and take control there; 我完成了 in its pill
+    // gives the request back.
+    if (button.dataset.cardDesktop === 'take') { visible = true; acquire(); }
     else if (button.dataset.cardDesktop === 'return') void handback();
     else {
       const work = pending();

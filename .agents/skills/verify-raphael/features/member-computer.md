@@ -35,6 +35,26 @@ rather than overlap, so a new kind of line under the screen needs the reserve re
 inside its half instead of moving the pill. The real failure that the owner saw (the draft step after a
 recording) is a core question; this section covers only where it is said.
 
+### The sign-in card and an honest pill (R-PANEL-09, owner, 2026-11-13)
+
+The owner could not read a sign-in page in the card (480 px, a 16:9 frame around a 1280 x 900 screen), and the
+pill said 你正在控制 while his input reached nothing. A card that hands the computer over (`desktop-timeline.ts`
+waiting_control, `computer-card.ts` control) is now as wide as the conversation with a screen at the computer's
+proportions (CSS in `desktop-viewer.css`, the one exception to R-CARD-01). Its screen and 接手 call `acquire()`:
+the larger view opens with the same frame and takes control; the pill offers 我完成了 (`desktop.done` while a
+request waits), which returns the nonce once. The pill reads 正在接手… (`desktop.taking`) until the frame answers
+`interactive` with held, then 你正在控制; with no answer in 6 s (`TAKE_MS`) the lease is given back without the
+request id, `desktop.takeFailed` stands under the screen and the view watches again. Watching always reads 觀看中.
+Whether the shared computer's seat page sends `held` is the core's question (the shared-computer session).
+
+```powershell
+npm run look -- desktop-takeover desktop-takeover-owner desktop-takeover-done desktop-boot-card desktop-boot-inline desktop-own-wallpaper-card desktop-watch desktop-watch-owner takeover-bar desktop-owner desktop-teach-recording desktop-teach-failed --theme both --width 1120,720,1920x1080
+```
+
+`computer-takeover` asserts the card fills its column, its screen is 1280 / 900 and the stream fills it;
+`computer-takeover-owner` asserts the larger view holds the frame, the pill reads 你正在控制 with 我完成了 and
+synthetic keys reach the RFB surface; `card-shell` exempts only the handoff card from 480 px.
+
 ## Image layer 6: the desktop's picture, its keys, a lost X server (2026-11-12)
 
 R-COMP-PICTURE-01, R-COMP-KEYS-01, R-COMP-XLOSS-01, R-COMP-LAYER-01 cover image
@@ -605,7 +625,8 @@ preserves the guest aspect ratio through noVNC scaleViewport and never acquires
 input. Its thin bar reuses the current public action words, Stop and collapse;
 Esc collapses with the connection intact. Explicit takeover/teaching/files keep
 their earlier behavior. The private request_takeover card now acquires input
-inside its own iframe instead of opening full-window takeover. Its Done action
+inside its own iframe instead of opening full-window takeover (superseded on 2026-11-13 by R-PANEL-09: the card
+is as wide as the conversation and its 接手 opens the larger view with control; see the first section). Its Done action
 returns the current nonce once; Stop/cancel/disconnect never count as Done.
 Owner input travels over RFB only. Held-control screenshots are not forwarded
 to the parent thumbnail cache. Existing private work scope and post-handback

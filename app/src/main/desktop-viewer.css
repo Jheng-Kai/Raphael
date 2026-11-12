@@ -83,6 +83,12 @@
 .desktop-panel:not([data-expanded]) .desktop-placeholder { width: 100%; }
 .desktop-placeholder > * { pointer-events: auto; }
 [data-card-desktop-screen] > .desktop-placeholder, [data-card-screen] > .desktop-placeholder { position: absolute; inset: 0; }
+/* R-PANEL-09: a card that hands the computer to the owner (a sign-in, a password, a payment) is as wide as the
+   conversation, and its screen keeps the computer's own proportions, so the page to use is readable at a glance and no
+   dark bars stand beside it (owner, 2026-11-13: 「你這個畫面這麼小，我根本看不到登入的畫面，是要怎麼用」). Every other card stays
+   at most 480 px (R-CARD-01). */
+.page-agent .conversation-card.computer-card:is([data-work-state="waiting_control"], [data-card-state="control"]) { width: 100%; max-width: none; }
+.conversation-card .card-computer-screen:is([data-card-desktop-screen], [data-card-screen]) { aspect-ratio: 1280 / 900; background: var(--desktop-frame-bg); }
 .desktop-message, .desktop-placeholder .missing-note, .desktop-preparation { padding: var(--sp-3) var(--sp-4); border-radius: var(--r-lg); background: color-mix(in srgb, var(--desktop-frame-bg) 82%, transparent); }
 .desktop-placeholder .missing-note, .desktop-placeholder > [data-act="docker-download"] { --btn: var(--desktop-frame-bg); --hover: color-mix(in srgb, var(--desktop-frame-text) 10%, var(--desktop-frame-bg)); --pressed: color-mix(in srgb, var(--desktop-frame-text) 18%, var(--desktop-frame-bg)); }
 .desktop-error { margin: 0; color: var(--err); }
@@ -154,7 +160,7 @@
 .desktop-panel[data-expanded] .desktop-actions:not(:has(> :is([data-desktop="teach"], [data-desktop="discard-teach"]):not([hidden]))) { display: none; }
 .desktop-mode-label { display: inline-flex; align-items: center; gap: 6px; padding-right: var(--sp-2); color: var(--text-2); font-size: var(--fs-sm); white-space: nowrap; }
 .desktop-mode-label .i { width: 16px; height: 16px; }
-.desktop-mode-label[data-mode="operating"] .i { display: none; }
+.desktop-mode-label:is([data-mode="operating"], [data-mode="taking"]) .i { display: none; }
 :is(.desktop-mode, .desktop-actions) .btn.sm { height: var(--h-ctl-sm); min-height: var(--h-ctl-sm); padding: 0 var(--sp-3); border: 1px solid var(--text); border-radius: var(--r-pill); background: var(--text); color: var(--content); font-size: var(--fs-sm); white-space: nowrap; }
 :is(.desktop-mode, .desktop-actions) .btn.sm:is(:hover, :active):not(:disabled) { border-color: color-mix(in srgb, var(--text) 86%, var(--content)); background: color-mix(in srgb, var(--text) 86%, var(--content)); color: var(--content); }
 :is(.desktop-mode, .desktop-actions) .btn.sm:active:not(:disabled) { border-color: color-mix(in srgb, var(--text) 76%, var(--content)); background: color-mix(in srgb, var(--text) 76%, var(--content)); }

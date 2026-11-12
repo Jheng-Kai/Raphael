@@ -535,6 +535,8 @@ export const id = {
   "desktop.invalidAlias": "Gunakan alias konfigurasi SSH: huruf, angka, titik, garis bawah, dan tanda hubung; awali dengan huruf atau angka.",
   "conn.err.invalid_request": "Versi ini tidak kompatibel dengan layanan. Perbarui Raphael; jika sudah terbaru, laporkan masalah koneksi ini.",
   "desktop.take": "Ambil kendali",
+  "desktop.taking": "Mengambil kendali…",
+  "desktop.takeFailed": "Gagal mengambil kendali: komputer tidak merespons. Tekan Ambil kendali lagi.",
   "desktop.release": "Hentikan",
   "computer.row.asleep": "Tidur",
   "computer.row.connecting": "Menyambung",

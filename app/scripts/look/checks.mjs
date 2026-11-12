@@ -795,11 +795,13 @@ export function checkRendered(name, context = {}) {
       const dock = panel.querySelector('.desktop-dock'), screenBox = panel.querySelector('.desktop-screen').getBoundingClientRect();
       require(visible(dock) && Math.abs((dock.getBoundingClientRect().left + dock.getBoundingClientRect().right) / 2 - innerWidth / 2) <= 2 && dock.getBoundingClientRect().top >= screenBox.bottom, 'one pill sits centred below the screen');
       require(Math.abs(screenBox.width / screenBox.height - 1280 / 900) < 0.03, 'the screen keeps its own proportions');
-      require(dock.querySelector('.desktop-mode-label').textContent === (panel.dataset.desktopState === 'owner' ? '你正在控制' : '觀看中'), 'the pill says who holds the computer');
+      // Watching is view-only whoever holds the lease, so the pill never says 你正在控制 here (owner, 2026-11-13:
+      // 「明明顯示我正在控制，但我根本就沒辦法控制」).
+      require(dock.querySelector('.desktop-mode-label').textContent === '觀看中', 'the pill says the owner is watching');
       // Grok Bot's two states: watching offers Take control; in control offers Stop (which hands the computer back).
       const take = dock.querySelector('[data-desktop="take"]'), stopControl = dock.querySelector('[data-desktop="return"]');
-      if (panel.dataset.desktopState === 'owner') require(visible(stopControl) && stopControl.textContent === '停止' && !visible(take), 'in control the pill offers Stop and nothing else of control');
-      else require(visible(take) && take.textContent === '接手控制' && !visible(stopControl), 'watching the pill offers Take control and nothing else of control');
+      require(!visible(stopControl), 'watching offers no Stop of control');
+      if (panel.dataset.desktopState !== 'owner') require(visible(take) && take.textContent === '接手控制', 'watching the pill offers Take control');
       if (name === 'desktop-watch' && window.__look.data.desktop.works?.some(work => work.state === 'running')) {
         const stop = panel.querySelector('[data-desktop="stop"]');
         require(visible(stop) && stop.title === stop.getAttribute('aria-label') && stop.title.trim(), 'Stop has its translated tooltip');
@@ -2015,7 +2017,8 @@ export function checkRendered(name, context = {}) {
     for (const card of cards) {
       disclosureContent(card);
       const box = card.getBoundingClientRect(), style = getComputedStyle(card), pill = card.querySelector('.card-status');
-      require(box.width <= 480.5, `card width is at most 480px: ${box.width}`);
+      // A card that hands the computer to the owner is as wide as the conversation (R-PANEL-09); every other is at most 480 px.
+      require(box.width <= 480.5 || card.matches('.computer-card:is([data-work-state="waiting_control"], [data-card-state="control"])'), `card width is at most 480px: ${box.width}`);
       const draftHost = card.closest('.draft-panel');
       if (draftHost) require(parseFloat(getComputedStyle(draftHost).borderTopWidth) === 0 && parseFloat(getComputedStyle(draftHost).paddingLeft) === 0, 'the draft host adds no second card frame');
       if (card.matches('[data-owner-question][data-card-state="asked"]')) {
@@ -3096,10 +3099,22 @@ export function checkRendered(name, context = {}) {
     // A member working at its computer adds nothing to the conversation (owner, 2026-11-11); only a handoff the owner must act on is a card.
     if(name==='computer-panel')require(events.length===0&&!document.querySelector('.conversation-event-line [data-i="monitor"], [data-desktop-slot]:not(:empty)'),'a working computer draws no line or card in the conversation');
     else if(name.startsWith('computer-'))require(events.length===1&&events[0].matches('.conversation-card')&&events[0].closest('.tn')?.dataset.id==='2','one work presentation belongs to the private turn');
-    if(name==='computer-takeover')require(panel.querySelector('.desktop-request').textContent.includes('登入'),'request sits above the live screen');
+    if(name==='computer-takeover'){
+      require(panel.querySelector('.desktop-request').textContent.includes('登入'),'request sits above the live screen');
+      // R-PANEL-09 (owner, 2026-11-13: 「你這個畫面這麼小，我根本看不到登入的畫面」): the handoff card is as wide as the
+      // conversation and its screen keeps the computer's proportions, the stream filling it with no dark bars.
+      const card=events[0], column=card.closest('.ra-col')??card.parentElement, screen=card.querySelector('[data-card-desktop-screen]');
+      const inner=column.getBoundingClientRect().width-parseFloat(getComputedStyle(column).paddingLeft)-parseFloat(getComputedStyle(column).paddingRight);
+      const cardBox=card.getBoundingClientRect(), screenBox=screen.getBoundingClientRect(), frameBox=frame.getBoundingClientRect();
+      require(cardBox.width>=inner-2,`the handoff card fills the conversation (${Math.round(cardBox.width)} of ${Math.round(inner)})`);
+      require(Math.abs(screenBox.width/screenBox.height-1280/900)<0.02,`the card's screen keeps the computer's proportions (${Math.round(screenBox.width)}x${Math.round(screenBox.height)})`);
+      require(frame.closest('[data-card-desktop-screen]')===screen&&frameBox.width>=screenBox.width-4&&frameBox.height>=screenBox.height-4,'the stream fills the card screen with no bars');
+    }
     if(name==='computer-takeover-owner') {
-      require(visible(document.querySelector('[data-card-desktop="return"]')), 'one explicit done action in the card');
-      require(!panel.hasAttribute('data-expanded') && frame.closest('[data-card-desktop-screen]'), 'owner input stays in the conversation card');
+      // The card's 接手 opened the larger view; its pill offers 我完成了, which gives the request back (R-PANEL-09).
+      const done=panel.querySelector('[data-desktop="return"]');
+      require(visible(done)&&done.textContent==='我完成了'&&panel.querySelector('.desktop-mode-label').textContent==='你正在控制', 'the pill says the owner is in control and offers one explicit done');
+      require(panel.hasAttribute('data-expanded') && frame.closest('.desktop-panel .desktop-screen'), 'owner input is in the larger view, not a small card');
       require(frame.contentDocument.defaultView.__desktopAcceptedKeys > 0, 'synthetic keyboard input reaches the RFB surface');
       require(!calls.some(call => JSON.stringify(call.params ?? {}).includes('synthetic-owner-input')), 'owner input never enters an RPC');
     }
