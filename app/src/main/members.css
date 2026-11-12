@@ -220,7 +220,7 @@
 .mb-scrim:has(.au-chips) { place-items: start center; overflow-y: auto; }
 .mb-scrim:has(.au-chips) > .mb-dialog { margin-block: auto; }
 .mb-scrim { position: fixed; inset: 0; z-index: 110; display: grid; grid-template-columns: minmax(0, 1fr); place-items: center; padding: calc(var(--window-controls-height) + var(--sp-2)) var(--sp-4) var(--sp-4); background: var(--scrim); animation: scrim-in 0.2s ease-out; }
-.mb-dialog { display: flex; flex-direction: column; gap: calc(14px + 6 * var(--pa-u)); width: min(var(--pa-dlg-w), 100%); max-height: 100%; overflow: hidden; padding: var(--pa-dlg-pad); border-radius: var(--r-lg); background: var(--panel); box-shadow: var(--pop); animation: dialog-in 0.2s cubic-bezier(0.2, 0.8, 0.2, 1); }
+.mb-dialog { display: flex; flex-direction: column; gap: calc(14px + 6 * var(--pa-u)); width: min(var(--pa-dlg-w), 100%); max-height: 100%; overflow: hidden; padding: var(--pa-dlg-pad); border-radius: var(--r-lg); background: var(--float); border: 1px solid var(--float-edge); box-shadow: var(--pop); animation: dialog-in 0.2s cubic-bezier(0.2, 0.8, 0.2, 1); }
 .mb-dlg-head { display: flex; align-items: center; gap: var(--sp-2); }
 .mb-dlg-head h2 { flex: 1; min-width: 0; margin: 0; font: 500 var(--pa-dlg-h2)/1.35 var(--display); overflow-wrap: anywhere; }
 .mb-dialog .btn.icon { width: calc(34px + 8 * var(--pa-u)); min-height: calc(34px + 8 * var(--pa-u)); border-radius: var(--r-sm); }

@@ -1,5 +1,3 @@
-import type { Status } from "./types";
-import type { CliAllowances } from "./usage-analytics-types";
 import type { RoutineSchedule } from "./types";
 
 export interface HomeItem {
@@ -27,34 +25,10 @@ export interface HomeItem {
 }
 /** What the calendar can say of Google: not connected and could-not-read are never taken for an empty calendar. */
 export type GoogleCalendarState = "connected" | "not_connected" | "unreadable";
-/** A short paragraph Raphael's own model writes once a day; pending while it is written, unavailable without a model. */
-export interface HomeNarrative {
-  narrative: string | null;
-  state: "pending" | "ready" | "unavailable";
-  reason: string | null;
-  model: string | null;
-  generated_at_ms?: number;
-}
-/** Work still open today, beside the calendar's items: a task or an owner turn that has not finished. */
-export interface HomeUnfinished { id: string; kind: "unfinished"; member_id: number; title: string; state: string; at_ms: number }
-export interface HomeTodayPlan extends HomeNarrative {
-  date: string;
-  items: (HomeItem | HomeUnfinished)[];
-  calendar_google?: GoogleCalendarState;
-}
-/** One thing the offline self-check looked at: a key, a model, a connected app, memory. */
-export interface HomeCheck { id: string; name?: string; label_key: string; status: "ok" | "warn" | "error"; detail: string | null; detail_key: string | null }
-/** One local day of finished work as Home charts it: the owner's work, routines run well and not, messages handled, and
- * work that failed, was interrupted or hit a limit. Each piece is counted once, on the day it ended. */
-export interface HomeActivityDay { date: string; work: number; routines_ok: number; routines_failed: number; messages: number; failed: number }
-/** Home's charts: the last fourteen days, oldest first and today last, and today's routines, events and questions. */
-export interface HomeActivity {
-  days: HomeActivityDay[];
-  today: { routines_due: number; routines_done: number; routines_failed: number; events: number; questions: number };
-}
+/** What the core's `home.overview` gives: the calendar's projection (own events, routine runs, the connected Google calendar), which
+ * is all the window reads from it since Home was removed (2026-11-12). */
 export interface HomeOverview {
   generated_at_ms: number;
-  report: Status;
   today: HomeItem[];
   reports: HomeItem[];
   calendar: HomeItem[];
@@ -64,9 +38,4 @@ export interface HomeOverview {
   calendar_items?: HomeItem[];
   calendar_counts?: Record<string, number>;
   counts: { today: number; reports: number; calendar: number };
-  usage: { month_usd: number; limit_usd: number; daily: number[]; allowances: CliAllowances };
-  dictation: { words: number; time_saved_seconds: number; speed_wpm: number | null; audio_seconds: number; daily: number[] };
-  today_plan?: HomeTodayPlan;
-  health?: { checks: HomeCheck[]; reason: string | null };
-  activity?: HomeActivity;
 }

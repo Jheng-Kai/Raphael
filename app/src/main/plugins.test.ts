@@ -62,15 +62,21 @@ const settle = () => new Promise(resolve => setTimeout(resolve, 0));
 const apps = (root: ParentNode): Element[] => [...root.querySelectorAll(".cs-card")].filter(card => !card.querySelector('[data-id="n8n"], [data-id="google"]'));
 
 test("unifies managed, private Google and custom MCP without bridge duplicates", async () => {
-  const { c, root } = setup(); await c.load();
+  const { c, root, click } = setup(); await c.load();
   expect(c.view().groups).toHaveLength(3);
-  expect(root.querySelectorAll(".cs-list")).toHaveLength(1);
-  for (const row of root.querySelectorAll(".cs-item")) {
+  // the one view only has the chip; the connected apps are one list behind it
+  expect(root.querySelector(".cs-linked")).toBeNull();
+  expect(root.querySelector('[data-conn="connected"]')).not.toBeNull();
+  click("connected");
+  expect(root.querySelectorAll(".cs-body > .cs-grid")).toHaveLength(1);
+  expect(root.querySelectorAll(".cs-linked")).toHaveLength(3);
+  for (const row of root.querySelectorAll(".cs-linked")) {
     expect(row.querySelector('[data-conn="enable"]')).not.toBeNull();
-    expect(row.querySelector(".chev")).not.toBeNull();
+    expect(row.querySelector("button.cs-main")).not.toBeNull();
     expect(row.querySelector('[data-conn="server-menu"]')).toBeNull();
   }
   expect(root.textContent).toContain("Google (private)");
+  c.reset();
 });
 
 test("managed detail folds its tools into one line that unfolds into a switch each, and contains disconnect only in overflow", async () => {
@@ -86,14 +92,15 @@ test("managed detail folds its tools into one line that unfolds into a switch ea
   expect(document.querySelector('.menu [data-conn="edit-server"]')).toBeNull(); c.reset();
 });
 
-test("a failed managed status read is visible and retry restores the complete list", async () => {
+test("a failed managed status read leaves the apps listed, and a retry restores the complete list of the connected", async () => {
   api.connectorsStatus.mockRejectedValueOnce(new Error("offline"));
   const { c, root, click } = setup(); await c.load();
   expect(c.view().groups).toBe("failed");
-  expect(root.querySelector('[data-conn="retry-connections"]')).not.toBeNull();
+  expect(root.querySelectorAll(".cs-card").length).toBeGreaterThan(0);
   click("retry-connections"); await settle();
   expect(c.view().groups).toHaveLength(3);
-  expect(root.querySelectorAll(".cs-item")).toHaveLength(3); c.reset();
+  click("connected");
+  expect(root.querySelectorAll(".cs-linked")).toHaveLength(3); c.reset();
 });
 
 test("individual tool toggles preserve all other exclusions and refresh immediately", async () => {
@@ -104,7 +111,7 @@ test("individual tool toggles preserve all other exclusions and refresh immediat
 });
 
 test("managed app switches preserve exclusions when disabling and enabling the app", async () => {
-  const { c, root, click } = setup(); await c.load();
+  const { c, root, click } = setup(); await c.load(); click("connected");
   expect(root.querySelector('[data-conn="enable"][data-id="composio:notion"]')?.getAttribute("aria-checked")).toBe("true");
   click("enable", "composio:notion"); await settle();
   expect(api.connectorsSetTools).toHaveBeenLastCalledWith("composio:notion", { enabled: false });
@@ -132,7 +139,7 @@ test("managed kind switches preserve other and unknown exclusions, leave the app
 test.each(["zh-TW", "en", "ja"] as const)("toolkit refusal has its own localized value-free login error in %s", async locale => {
   setLocale(locale);
   api.connectorsConnect.mockRejectedValue(new Error("toolkit_not_allowed"));
-  const { c, root, click } = setup(); await c.load(); click("tab", "store"); await settle(); click("open-store", "github"); click("join", "github"); await settle();
+  const { c, root, click } = setup(); await c.load(); click("open-store", "github"); click("join", "github"); await settle();
   const error = root.querySelector('[role="alert"]')?.textContent;
   expect(error).toBe({ "zh-TW": "Composio 尚未允許這個應用程式登入，請重試連結。", en: "Composio has not allowed this app to sign in. Try connecting again.", ja: "Composio がこのアプリのログインを許可していません。もう一度接続してください。" }[locale]);
   expect(root.innerHTML).not.toContain("ToolRouterV2_ToolkitNotAllowed"); c.reset();
@@ -146,28 +153,34 @@ test("failed tool reads remain visible and can be retried", async () => {
   expect(root.querySelectorAll('[data-conn="tool"]')).toHaveLength(3); c.reset();
 });
 
-test("the store deduplicates and filters broad groups locally", async () => {
+test("the apps are deduplicated, connected ones stay listed with a check, and the categories and the search filter locally", async () => {
   api.connectorsCatalog.mockResolvedValue({ items: [toolkit, toolkit,
     { ...toolkit, slug: "github", name: "GitHub", categories: [{ id: "other", name: "Other" }, "docs"] },
     { ...toolkit, slug: "uncategorized", name: "Uncategorized", categories: [] }],
     categories: [{ id: "other", name: "Other" }, { id: "docs", name: "Documents" }] });
-  const { c, root, click } = setup(); await c.load(); click("tab", "store"); await settle();
+  const { c, root, click } = setup(); await c.load(); await settle();
   expect(root.querySelectorAll('[data-conn="store-group"]')).toHaveLength(10);
-  // Notion is connected, so it is not in the store; the duplicate toolkit is gone too.
-  expect(apps(root)).toHaveLength(2);
-  expect(root.querySelector('[data-conn="open-store"][data-id="notion"]')).toBeNull();
+  // The duplicate toolkit is gone; Notion is connected and stays, with its check and no button to connect.
+  expect(apps(root)).toHaveLength(3);
+  expect(root.querySelectorAll('[data-conn="open-store"][data-id="notion"]')).toHaveLength(1);
+  const notion = root.querySelector('[data-conn="open-store"][data-id="notion"]')!.closest(".cs-card")!;
+  expect(notion.querySelector(".cs-state")).not.toBeNull();
+  expect(notion.querySelector('[data-conn="join"]')).toBeNull();
   expect(root.querySelector('[data-conn="load-more"]')).toBeNull();
+  // the well-known app that is not connected is recommended, once
+  expect(root.querySelector(".cs-sec h2")?.textContent).toBe("Recommended for you");
+  expect(root.querySelectorAll('[data-conn="join"][data-id="github"]')).toHaveLength(1);
   const requests = api.connectorsCatalog.mock.calls.length;
   click("store-group", "other");
   expect(apps(root)).toHaveLength(2);
   expect(root.querySelector('[data-id="github"]')).not.toBeNull();
+  expect(root.querySelector('[data-id="uncategorized"]')).not.toBeNull();
   c.input({ id: "conn-search", value: "GitHub" } as HTMLInputElement);
-  await new Promise(resolve => setTimeout(resolve, 100));
   expect(apps(root)).toHaveLength(1);
   click("store-group", "");
+  expect((root.querySelector("#conn-search") as HTMLInputElement | null)?.value ?? "").toBe("");
   c.input({ id: "conn-search", value: "Workspace" } as HTMLInputElement);
-  await new Promise(resolve => setTimeout(resolve, 100));
-  expect(apps(root)).toHaveLength(2);
+  expect(apps(root)).toHaveLength(3); // the connected one too
   expect(api.connectorsCatalog).toHaveBeenCalledTimes(requests);
   expect(api.connectorsCategories).not.toHaveBeenCalled(); c.reset();
 });
@@ -175,13 +188,14 @@ test("the store deduplicates and filters broad groups locally", async () => {
 test("local filters apply to an in-flight full catalog, and reset ignores a late reply", async () => {
   let finish!: (value: unknown) => void;
   api.connectorsCatalog.mockReturnValueOnce(new Promise(resolve => { finish = resolve; }));
-  const { c, root, click } = setup(); const loaded = c.load(); await settle(); click("tab", "store");
+  const { c, root, click } = setup(); const loaded = c.load(); await settle();
   // Starting a newer full read supersedes the first; neither filter needs a request.
-  await settle(); click("store-group", "other");
+  click("retry-store"); await settle();
+  click("store-group", "other");
   c.input({ id: "conn-search", value: "GitHub" } as HTMLInputElement);
-  await new Promise(resolve => setTimeout(resolve, 100));
+  expect(apps(root)).toHaveLength(1); // a search is over the whole catalog, whatever chip was chosen
   finish({ items: [], categories: [] }); await loaded;
-  expect(root.querySelectorAll(".cs-card")).toHaveLength(0);
+  expect(apps(root)).toHaveLength(1);
   expect(c.view().composioCatalog).toHaveLength(2);
   let late!: (value: unknown) => void;
   api.connectorsCatalog.mockReturnValueOnce(new Promise(resolve => { late = resolve; }));
@@ -189,17 +203,22 @@ test("local filters apply to an in-flight full catalog, and reset ignores a late
   expect(c.view().composioCatalog).toHaveLength(2);
 });
 
-test("a failed refresh preserves the last full store list", async () => {
-  const { c, root, click } = setup(); await c.load(); click("tab", "store"); await settle();
+test("a failed refresh preserves the last full list of apps", async () => {
+  const { c, root, click } = setup(); await c.load(); await settle();
+  const before = root.querySelectorAll(".cs-card").length;
+  expect(before).toBeGreaterThan(0);
   api.connectorsCatalog.mockRejectedValueOnce(new Error("offline"));
   click("retry-store"); await settle();
-  expect(root.querySelectorAll(".cs-card")).toHaveLength(2); c.reset();
+  expect(root.querySelectorAll(".cs-card")).toHaveLength(before);
+  expect(c.view().composioCatalog).toHaveLength(2); c.reset();
 });
 
 test("missing key offers an optional dialog without requesting managed apps", async () => {
   api.connectorsStatus.mockResolvedValue({ connectors: [], composio_configured: false });
-  const { c, root, click } = setup(); await c.load(); click("tab", "store");
+  const { c, root, click } = setup(); await c.load();
   expect(root.querySelector("#conn-key")).toBeNull();
+  expect(root.querySelector(".cs-composio-setup")).not.toBeNull();
+  expect(root.querySelectorAll(".cs-card").length).toBeGreaterThan(0); // the built-in apps are there without a key
   click("configure-composio");
   expect(root.querySelector<HTMLInputElement>("#conn-key")?.type).toBe("password");
   expect(root.querySelector(".cs-key-form .note")?.textContent).toContain("Settings > Project Settings > API Keys");
@@ -211,7 +230,7 @@ test.each([false, true])("saving a key never retains or echoes its value (failur
   api.connectorsStatus.mockResolvedValue({ connectors: [], composio_configured: false });
   if (failed) api.connectorsSetKey.mockRejectedValue(new Error("ak_secret-provider-error"));
   else api.connectorsSetKey.mockResolvedValue({ configured: true });
-  const { c, root, click } = setup(); await c.load(); click("tab", "store"); click("configure-composio");
+  const { c, root, click } = setup(); await c.load(); click("configure-composio");
   root.querySelector<HTMLInputElement>("#conn-key")!.value = "ak_secret";
   click("save-key");
   expect(root.innerHTML).not.toContain("ak_secret"); await settle();
@@ -226,7 +245,7 @@ test.each([false, true])("saving a key never retains or echoes its value (failur
 test("one login at a time, connecting state, notification refresh and installed result", async () => {
   let finish!: (value: unknown) => void;
   api.connectorsConnect.mockReturnValue(new Promise(resolve => { finish = resolve; }));
-  const { c, root, click } = setup(); await c.load(); click("tab", "store"); await settle();
+  const { c, root, click } = setup(); await c.load(); await settle();
   click("join", "github"); click("join", "github");
   expect(api.connectorsConnect).toHaveBeenCalledTimes(1);
   expect(api.connectorsConnect).toHaveBeenCalledWith("github");
@@ -237,7 +256,12 @@ test("one login at a time, connecting state, notification refresh and installed 
   c.followEvent({ type: "ConnectionsChanged" }); await settle();
   expect(c.view().groups).toHaveLength(4);
   finish({ connected: true }); await settle();
-  expect(c.view().tab).toBe("installed"); expect(c.view().login).toBeNull();
+  expect(c.view().screen).toBe("apps"); expect(c.view().login).toBeNull();
+  // the row stays where it was and now says it is connected
+  const github = root.querySelector('[data-conn="open-store"][data-id="github"]')!.closest(".cs-card")!;
+  expect(github.querySelector(".cs-state")).not.toBeNull();
+  expect(github.querySelector('[data-conn="join"], [data-conn="cancel-login"]')).toBeNull();
+  expect(vi.mocked(toaster.info)).toHaveBeenCalledTimes(1);
 });
 
 test("failed login restores actions without echoing provider text", async () => {
@@ -263,7 +287,7 @@ test("only trusted remote logos are rendered and they never send a referrer", ()
     expect(pluginLogoURL(url)).toBeNull();
   // A service the app does not know shows the catalogue's picture; one it knows (Notion) its own mark.
   const unknown: Toolkit = { ...toolkit, slug: "acmecrm", name: "Acmecrm", logo: "https://logos.composio.dev/acmecrm.svg" };
-  const html = connectionsHTML({ ...emptyConnectionsView(), configured: true, tab: "store", catalog: [storePlugin(unknown, []), storePlugin(toolkit, [])] });
+  const html = connectionsHTML({ ...emptyConnectionsView(), configured: true, catalog: [storePlugin(unknown, []), storePlugin(toolkit, [])] });
   expect(html).toContain('src="https://logos.composio.dev/acmecrm.svg"');
   expect(html).toContain('referrerpolicy="no-referrer"');
   expect(html).not.toContain('src="https://logos.composio.dev/notion.svg"');
@@ -278,7 +302,7 @@ test.each(["zh-TW", "en", "ja"] as const)("key failure copy is specific and priv
   };
   setLocale(locale);
   api.connectorsStatus.mockResolvedValue({ connectors: [], composio_configured: false });
-  const { c, root, click } = setup(); await c.load(); click("tab", "store"); click("configure-composio");
+  const { c, root, click } = setup(); await c.load(); click("configure-composio");
   for (const [kind, index] of [["openrouter_key", 0], ["auth", 1], ["network", 2], ["timeout", 2], ["private-provider-payload", 3], ["consumer_key", 4]] as const) {
     api.connectorsSetKey.mockRejectedValueOnce(new Error(kind));
     const candidate = kind === "consumer_key" ? "ck_private-consumer-test-value" : "private-project-key";
@@ -298,16 +322,15 @@ test("built-in services work without a key, search locally, and use their existi
   api.integrationsCatalog.mockResolvedValue({ services: [own] });
   api.connectorsStatus.mockResolvedValue({ connectors: [], composio_configured: false });
   api.integrationsConnect.mockReturnValue(new Promise(() => {}));
-  const { c, root, click } = setup(); await c.load(); click("tab", "store");
-  expect(apps(root)).toHaveLength(1);
-  expect(root.querySelector('[data-k="conn-tab:store"] .n')?.textContent).toBe("3"); // Sentry, n8n and the owner's own Google
+  const { c, root, click } = setup(); await c.load();
+  expect(apps(root)).toHaveLength(1); // Sentry; n8n and the owner's own Google are in the view as well
+  expect(root.querySelector(".n, .num")).toBeNull(); // and nothing says how many there are
   expect(root.querySelector('[data-conn="configure-composio"]')).not.toBeNull();
   c.input({ id: "conn-search", value: "unmatched" } as HTMLInputElement);
-  await new Promise(resolve => setTimeout(resolve, 100));
   expect(root.querySelectorAll(".cs-card")).toHaveLength(0);
-  expect(root.querySelector('[data-k="conn-tab:store"] .n')?.textContent).toBe("0");
+  expect(root.querySelector(".cs-none")?.textContent).toBe("Nothing matches");
   c.input({ id: "conn-search", value: "Sentry" } as HTMLInputElement);
-  await new Promise(resolve => setTimeout(resolve, 100));
+  expect(apps(root)).toHaveLength(1);
   click("join", "sentry");
   expect(api.integrationsConnect).toHaveBeenCalledWith({ catalog_id: "sentry" });
   expect(api.connectorsConnect).not.toHaveBeenCalled();
@@ -317,22 +340,24 @@ test("built-in services work without a key, search locally, and use their existi
 test("own services win across slugs and names, and broad groups filter both sources", async () => {
   api.integrationsCatalog.mockResolvedValue({ services: [{ ...storePlugin(toolkit, []), source: undefined, popular: true }] });
   api.connectorsCatalog.mockResolvedValue({ items: [toolkit, { ...toolkit, slug: "notion-alt" }, { ...toolkit, slug: "github", name: "GitHub", categories: ["developer"] }], categories: [{ id: "docs", name: "Documents" }, { id: "other", name: "Other" }] });
-  const { c, root, click } = setup(); await c.load(); click("tab", "store"); await settle();
+  const { c, root, click } = setup(); await c.load(); await settle();
   expect(apps(root)).toHaveLength(2);
   expect(root.querySelectorAll('[data-conn="join"][data-id="notion"]')).toHaveLength(1);
-  expect(root.querySelector('[data-k="conn-tab:store"] .n')?.textContent).toBe("3"); // and n8n
   click("store-group", "documents"); await settle();
   expect(root.querySelectorAll(".cs-card")).toHaveLength(1);
   expect(root.querySelector('[data-conn="join"][data-id="notion"]')).not.toBeNull();
-  expect(root.querySelector('[data-k="conn-tab:store"] .n')?.textContent).toBe("1"); c.reset();
+  click("store-group", "development");
+  expect(apps(root)).toHaveLength(1);
+  expect(root.querySelector('[data-conn="join"][data-id="github"]')).not.toBeNull(); c.reset();
 });
 
 test("a managed catalog failure leaves built-ins available and a late key reply cannot reopen a closed dialog", async () => {
   api.integrationsCatalog.mockResolvedValue({ services: [{ ...storePlugin(toolkit, []), source: undefined }] });
   api.connectorsCatalog.mockRejectedValue(new Error("offline"));
-  const { c, root, click } = setup(); await c.load(); click("tab", "store"); await settle();
+  const { c, root, click } = setup(); await c.load(); await settle();
   expect(root.querySelector('[data-conn="join"][data-id="notion"]')).not.toBeNull();
   expect(root.querySelector('[data-cs-body] [role="alert"]')).not.toBeNull();
+  expect(root.querySelector('[data-cs-body] [data-conn="retry-store"]')).not.toBeNull();
   api.connectorsStatus.mockResolvedValue({ connectors: [], composio_configured: false }); await c.load();
   let reject!: (error: Error) => void;
   api.connectorsSetKey.mockReturnValue(new Promise((_, no) => { reject = no; }));
@@ -343,32 +368,37 @@ test("a managed catalog failure leaves built-ins available and a late key reply 
 });
 
 
-test.each(["available", "added", "connecting", "needs-key"])("both store sources share their row and action markup, or both leave the store, when %s", state => {
+test.each(["available", "added", "connecting", "needs-key"])("both sources of apps share their row and action markup when %s", state => {
   const base = { ...storePlugin({ ...toolkit, logo: "", needs: state === "needs-key" ? "key" : "sign_in" }, []), server_id: state === "added" ? "existing" : null };
   const render = (managed: boolean) => {
     const item = { ...base, source: managed ? "composio" as const : undefined };
     const root = document.createElement("div");
-    root.innerHTML = connectionsHTML({ ...emptyConnectionsView(), tab: "store", configured: true,
+    root.innerHTML = connectionsHTML({ ...emptyConnectionsView(), configured: true,
       catalog: managed ? [] : [item], composioCatalog: managed ? [item] : [],
       login: state === "connecting" ? { target: item.id, name: item.name } : null });
     return root.querySelector(`[data-conn="open-store"][data-id="${item.id}"]`)?.closest<HTMLElement>(".cs-card") ?? null;
   };
   const own = render(false), managed = render(true);
-  // An app already added is not in the store at all, whichever source it came from.
-  if (state === "added") { expect(own).toBeNull(); expect(managed).toBeNull(); return; }
   if (!own || !managed) throw new Error("the app has no card");
+  // An app already connected stays in the list, whichever source it came from: with its check, and no button to connect.
+  if (state === "added") {
+    for (const card of [own, managed]) { expect(card.querySelector(".cs-state")).not.toBeNull(); expect(card.querySelector('[data-conn="join"]')).toBeNull(); }
+    expect(managed.outerHTML).toBe(own.outerHTML);
+    return;
+  }
   if (state === "connecting") {
     expect(own.querySelector<HTMLButtonElement>('[data-conn="cancel-login"]')!.disabled).toBe(false);
     const cancel = managed.querySelector<HTMLButtonElement>('[data-conn="cancel-login"]')!;
     expect(cancel.disabled).toBe(true); cancel.removeAttribute("disabled");
   }
   expect(managed.outerHTML).toBe(own.outerHTML);
+  // What an app asks for is said on its page, not on its row; the button is live and nothing is explained only by a hover title.
+  expect(managed.querySelector(".need")).toBeNull();
   if (state === "needs-key") {
-    // What it asks for is on the row in words, and 加入 is a live button: nothing is dead or explained only by a hover title.
-    expect(managed.querySelector(".sub .need")?.textContent).toBe("Needs an API key");
     const join = managed.querySelector<HTMLButtonElement>('[data-conn="join"]')!;
     expect(join.disabled).toBe(false); expect(join.hasAttribute("title")).toBe(false);
-  } else expect(managed.querySelector(".sub .need")).toBeNull();
+    expect(managed.textContent).not.toMatch(/API key|key/i);
+  }
 });
 
 const keyApp: Toolkit = { ...toolkit, slug: "acme", name: "Acme", logo: "", needs: "key" };
@@ -379,8 +409,11 @@ test("加入 on an app that needs a key asks in its form first: the key crosses 
   api.connectorsCatalog.mockResolvedValue({ items: [keyApp], categories: [] });
   api.connectorsToolkit.mockResolvedValue(keyPlan);
   api.connectorsConnect.mockResolvedValue({ connected: true });
-  const { c, root, click } = setup(); await c.load(); click("tab", "store"); await settle();
-  expect(root.querySelector(".sub .need")?.textContent).toBe("Needs an API key");
+  const { c, root, click } = setup(); await c.load(); await settle();
+  expect(root.querySelector(".need")).toBeNull(); // the row says nothing of it; the page does
+  click("open-store", "acme");
+  expect(root.querySelector(".cs-needs")?.textContent).toBe("Acme signs in with your own API key.");
+  expect(root.querySelector(".cs-info")?.textContent).toContain("API key");
   click("join", "acme"); await settle();
   expect(api.connectorsConnect).not.toHaveBeenCalled(); // nothing is asked of Composio before the form is filled in
   expect(api.integrationsConnect).not.toHaveBeenCalled();
@@ -394,13 +427,13 @@ test("加入 on an app that needs a key asks in its form first: the key crosses 
   expect(document.querySelector(".cn-setup-dialog")).toBeNull();
   expect(field.value).toBe("");
   expect(document.body.innerHTML + JSON.stringify(c.view())).not.toContain("zk-test-0123");
-  expect(c.view().tab).toBe("installed"); c.reset();
+  expect(c.view().login).toBeNull(); c.reset();
 });
 
 test("a key Composio refuses is told in the form; the missing Composio key offers the place to add it", async () => {
   api.connectorsCatalog.mockResolvedValue({ items: [keyApp], categories: [] });
   api.connectorsToolkit.mockResolvedValue(keyPlan);
-  const { c, root, click } = setup(); await c.load(); click("tab", "store"); await settle();
+  const { c, root, click } = setup(); await c.load(); await settle();
   for (const [error, words] of [["key_rejected", "Acme did not accept this key"], ["missing_key", "no working Composio key"]] as const) {
     api.connectorsConnect.mockRejectedValueOnce(new Error(error));
     click("join", "acme"); await settle();
@@ -421,13 +454,18 @@ test("a key Composio refuses is told in the form; the missing Composio key offer
   expect(root).toBeTruthy();
 });
 
-test("managed store rows open the shared detail and join through their own provider", async () => {
+test("managed rows open the shared page and connect through their own provider", async () => {
   api.connectorsConnect.mockResolvedValue({ connected: false, error: "cancelled" });
-  const { c, root, click } = setup(); await c.load(); click("tab", "store"); await settle();
+  const { c, root, click } = setup(); await c.load(); await settle();
   click("open-store", "github");
   expect(root.querySelector(".cs-page .cs-head")?.textContent).toContain("GitHub");
   expect(root.querySelector(".cs-meta, .cs-say")).toBeNull();
+  expect(root.querySelector(".cs-info")?.textContent).toContain("Composio");
   click("join", "github"); await settle();
   expect(api.connectorsConnect).toHaveBeenCalledWith("github");
-  expect(api.integrationsConnect).not.toHaveBeenCalled(); c.reset();
+  expect(api.integrationsConnect).not.toHaveBeenCalled();
+  // a sign-in that was cancelled leaves the page as it was, with the button back and no failure told
+  expect(root.querySelector(".cs-page")).not.toBeNull();
+  expect(root.querySelector(".cs-join .cs-connect")?.getAttribute("data-conn")).toBe("join");
+  expect(root.querySelector('.note[role="alert"]')).toBeNull(); c.reset();
 });

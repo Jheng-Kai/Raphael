@@ -14,7 +14,8 @@ it("opens custom server actions in an app menu and edits from that menu", async 
   const root = document.createElement("div"); document.body.append(root);
   const control = createConnections({visible:()=>true,redraw:()=>{root.innerHTML=connectionsHTML(control.view());},tryPrompt:vi.fn(),root});
   await control.load();
-  expect(root.querySelector('.cs-item .chev')).not.toBeNull();
+  control.click(root.querySelector('[data-conn="connected"]')!);
+  expect(root.querySelector('.cs-linked [data-conn="enable"]')).not.toBeNull();
   expect(root.querySelector('[data-conn="edit-server"]')).toBeNull();
   control.click(root.querySelector('[data-conn="open"]')!);
   control.click(root.querySelector('[data-conn="server-menu"]')!);

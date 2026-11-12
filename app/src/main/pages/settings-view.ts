@@ -521,7 +521,7 @@ function safetyHTML(v: SettingsView): string {
 
 /** 連接: the services Raphael is connected to and the store that adds them; 「新增」 stands on the row of the two views. */
 function connectionsTabHTML(v: SettingsView): string {
-  return headingHTML(v) + connectionsHTML(v.connections);
+  return connectionsHTML(v.connections, headingHTML(v));
 }
 
 /** The dictation history's retention: the choices, with the one in force too if it is none of them. */

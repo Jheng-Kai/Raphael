@@ -65,7 +65,7 @@ it("portable guard commands use the installed core environment without shell int
 });
 
 it("every captured scene has feature context for the judge", () => {
-  const names = ["home", "conversation", "members", "member-computer", "automations", "team-and-rooms", "dictation", "settings-appearance", "connections-mcp", "usage", "onboarding", "owner-polish", "composer-discovery"];
+  const names = ["navigation", "conversation", "members", "member-computer", "automations", "team-and-rooms", "dictation", "settings-appearance", "connections-mcp", "usage", "onboarding", "owner-polish", "composer-discovery"];
   const mapped = new Set(names.flatMap(name => {
     const path = `.agents/skills/verify-raphael/features/${name}.md`;
     return [...read(path).matchAll(/^npm run look -- (.+)$/gm)].flatMap(([, command]) => command.split(/\s+/));

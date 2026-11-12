@@ -89,7 +89,7 @@ run then saves the device setting `onboarded`, a rerun from Settings does not.
 ## How to get to it (user POV)
 
 Launch with a fresh isolated data directory. Press Start, then Continue through the three steps
-and finish on the third to land on the Home overview. Never reset an installed user's onboarding
+and finish on the third to land on Raphael's conversation. Never reset an installed user's onboarding
 state.
 
 ## Driving it with look

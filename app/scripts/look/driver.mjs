@@ -347,7 +347,7 @@ export async function perform(page, step, evidenceDirectory) {
     }
     case "reload":
       await page.reload({waitUntil:"networkidle0",timeout:20000});
-      await page.waitForSelector('.page-home:not([hidden]) .ho-hero',{visible:true,timeout:10000});
+      await page.waitForSelector('.page-agent:not([hidden]) .conversation-trigger',{visible:true,timeout:10000});
       break;
     case "saved-file": {
       // The file a report was saved as (report_save), opened as a browser opens it: on its own, with nothing of the app.
@@ -383,7 +383,7 @@ export async function perform(page, step, evidenceDirectory) {
       await page.mouse.click(4, 100);
       await page.waitForFunction(el => !el.isConnected || !!el.closest('[hidden]'), {timeout:2000}, dialog);
       await dialog.dispose();
-      if (step.kind === 'settings') await click('#nav [data-go="settings"]');
+      if (step.kind === 'settings') await perform(page, { action: 'account-menu', item: 'settings' }, evidenceDirectory);
       else if (step.kind === 'member') { await perform(page, {action:'open-details'}, evidenceDirectory); await click('.mb-det [data-det="routine-open"]'); }
       else { await click('[data-room-menu]'); await click('[data-pick="delete"]'); }
       await page.evaluate(() => { window.__polishCaptionOutside = true; });
@@ -618,6 +618,14 @@ export async function perform(page, step, evidenceDirectory) {
       // The rail's month where it stands; at a narrow width it is in the drawer, which a date closes again.
       if (await page.evaluate(() => document.querySelector('[data-au="tools"]').getBoundingClientRect().width > 0)) await click('[data-au="tools"]');
       await click(`[data-mini-date="${step.date}"]`);
+      break;
+    }
+    case "account-menu": {
+      // The owner's face at the sidebar's foot opens the account menu (R-SIDE-01); `item` then presses one of its rows. The face is the
+      // same button in the list and on the rail.
+      await click('#nav .sidebar-account');
+      await visible('#app-popover.account-menu');
+      if (step.item) await click(`#app-popover.account-menu [data-account="${step.item}"]`);
       break;
     }
     case "member-column": {
@@ -1091,7 +1099,11 @@ export async function perform(page, step, evidenceDirectory) {
     case "room-row-menu": await click(`[data-room-more="${step.id}"]`); break;
     case "rooms-menu": await visible(".mb-col [data-room]"); break;
     case "search":
-      if (!(await page.$("#app-popover .side-search-input"))) await click('[data-col="search"]');
+      // On the rail there is no search button (owner, 2026-11-12 23:25): the card opens by Ctrl+Shift+F, as it does for the owner.
+      if (!(await page.$("#app-popover .side-search-input"))) {
+        if (await page.$eval('[data-col="search"]', el => el.getClientRects().length > 0)) await click('[data-col="search"]');
+        else { await page.keyboard.down("Control"); await page.keyboard.down("Shift"); await page.keyboard.press("KeyF"); await page.keyboard.up("Shift"); await page.keyboard.up("Control"); }
+      }
       await fill("#app-popover .side-search-input", step.text); break;
     case "drop": case "drag-start": case "drag-over":
       { const element = await visible(step.selector);

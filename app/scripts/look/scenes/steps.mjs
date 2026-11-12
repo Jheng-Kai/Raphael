@@ -29,7 +29,11 @@ export const rightClick = selector => ({ action: "right-click", selector });
 // `gone` is what must be absent afterwards; `over` says where that second press should land: "scrim" (a layer over the control) or "control".
 export const watchOpens = (selector, options = {}) => ({ action: "watch-opens", selector, ...options });
 export const pressOpener = selector => ({ action: "press-opener", selector });
-export const page = name => click(name === "agent" ? ".mb-chief" : `#nav [data-go="${name}"]`);
+// The owner's face at the sidebar's foot opens the account menu (R-SIDE-01); `item` presses one of its rows: dictation, calendar, settings, or
+// usage (when no subscription window is known). The face is the same button in the list and on the rail.
+export const accountMenu = item => ({ action: "account-menu", ...(item ? { item } : {}) });
+// The conversation is the member's row; every other page is a row of the account menu (the calendar opens on today).
+export const page = name => name === "agent" ? click(".mb-chief") : accountMenu(name === "automations" ? "calendar" : name);
 // 連結應用程式 is no tab of Settings: its one way in is the sidebar's button, which opens it as a dialog of its own (R-UI-111).
 // Appearance is a section of 一般 (the six settings tabs): its scenes open 一般 at that section. Messaging has no section
 // there any more: the bots are set up in each member's panel and conversation, so no scene opens it in Settings.

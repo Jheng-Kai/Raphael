@@ -56,7 +56,6 @@
    unlike hidden, leaves the box free to grow past its ratio when a narrow panel's words and buttons need the height. */
 .desktop-screen { position: relative; width: 100%; aspect-ratio: 1280 / 900; overflow: clip; background: var(--content); border: 1px solid var(--line); border-radius: var(--r-lg); }
 .desktop-screen iframe, [data-card-desktop-screen] iframe, [data-card-screen] iframe { position: relative; z-index: 1; display: block; width: 100%; height: 100%; border: 0; }
-.desktop-owner { position: absolute; z-index: 2; left: var(--sp-2); bottom: var(--sp-2); padding: var(--sp-1) var(--sp-2); border: 1px solid var(--line); border-radius: var(--r-pill); background: var(--panel); color: var(--text); font-size: var(--fs-2xs); pointer-events: none; }
 .desktop-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--sp-2); }
 .desktop-recording { margin: 0; color: var(--text-2); font-size: var(--fs-sm); overflow-wrap: anywhere; }
 .desktop-try { display: flex; gap: var(--sp-2); }

@@ -1,5 +1,46 @@
 # Connections and MCP
 
+## Connect apps as Grok Bot's, one view (2026-11-12): read this first
+
+This section supersedes every later paragraph that speaks of the 已連結 and 商店 tabs, the tab counts, the pager of 18-card pages,
+the chip row that scrolls sideways (`plugins-store-wheel`), the store that lists only the apps not added yet, the need words on a
+row, the 推薦 section under a list of the connected, and the dialog of a connected service (`.cs-dialog` over the list). Owner,
+2026-11-12: 「它不會分已連結跟商店，他們都在一起的…上面放你已連接的，下面放一些推薦的…分全部、溝通、生產力、開發之類的…也不會顯示它現在有幾個」
+(R-APPS-01, R-APPS-02, R-FLOAT-01).
+
+- The dialog is one view: the title at the left and, at the right, a quiet chip with the marks of up to four connected apps and
+  「N 個已連結」 (N is the core's count; with nothing connected the chip is not there; with no number to give it says only 「已連結」);
+  a search 「搜尋應用程式」 over the whole catalog with 新增 beside it; one row of chips (全部, the first five categories, 更多 with the
+  rest; a chip that does not fit moves into 更多, the row never wraps or scrolls); then, under 全部, 為你推薦 and a section of six apps for each
+  category, each with 查看全部 (which chooses that chip). A chosen chip lists all its apps, drawn 24 at a time as the list scrolls; a
+  search replaces the sections and ignores the chip; no count of the catalogue is anywhere.
+- A row is the app's mark on a white 40 px tile, its name, and 「連結」 (a round button filled `--float-ctl`) or 「✓ 已連結」. The row opens
+  the app's page; 「連結」 runs the existing flow (sign-in, key form, the conversation for n8n, own Google and developer apps).
+- The chip opens the list of the connected apps in the same dialog (rows with tile, name, line and switch; 應用程式 and 尚未連結
+  headings as before), behind a back chevron. Esc steps back from an app's page, then from that list, then closes.
+- An app's page replaces the view (no title row; a bare back chevron and the dialog's ✕): the mark on a 56 px white tile with the name,
+  and at the right 「連結」 (white, round) or, when connected, 「✓ 已連結」 with its switch and ⋯; a paragraph; accounts; for a connected app
+  a 工具 card (kind switches, the folded tool list); a 資訊 card (提供者, 類別, 登入方式, 伺服器, 工具) of 38 px rows; the latest actions and
+  the 試用, sign-in and refresh buttons. After a sign-in from a page the page stays and shows the connected state.
+- The colour rule for everything that floats (R-FLOAT-01): `--float`, `--float-edge`, `--float-ctl`, `--float-hover`, `--float-sel`,
+  `--float-on-sel` in styles.css, one scope (`:where(.menu, .modal, .mb-dialog, ...)`) that points the ordinary tokens at them, and the
+  `float-surface` check appended to the scenes of its consumers: delete question (`member-delete-ask`), a context menu
+  (`context-menu-member`), the composer's model menu (`composer-model-small`, `composer-model-sources`), the member maker (`member-maker`), the
+  calendar's popovers (`automations-detail-own`, `automations-create-slot`), the model chooser (`model-choices-answer`), the theme menu
+  (`appearance-menu`), the settings dialog (`profile`), and the menus of this dialog (`connections-add-menu`, `server-menu`,
+  `connections-delete`, `connect-apps-more`).
+
+```powershell
+npm run look -- connect-apps connect-apps-scrolled connect-apps-category connect-apps-more connect-apps-search connect-apps-connected connect-app-oauth connect-app-key connect-app-connected --theme both --width 1120,720,1920x1080
+npm run look -- member-delete-ask context-menu-member composer-model-small composer-model-sources member-maker automations-detail-own automations-create-slot appearance-menu model-choices-answer profile connections-add-menu server-menu connections-delete --theme both --width 1120,720,1920x1080
+```
+
+Scene changes of the same round: the scenes of the connected list start with `[data-conn="connected"]` (`plugins-installed`,
+`plugins-detail`, `connections-hover`, `connected-apps-only`, `connections-app-switch`, `connector-*`); the scenes of the apps start
+on the view (`plugins-store*`, `store-n8n`, `plugins-setup-*`); `plugins-store-wheel` and `missing-store-repair` are gone (nothing scrolls
+sideways, and the notice that sent the owner to a store tab is gone with the tab). `plugins-store-needs` now proves a row says
+nothing of what an app asks for; `plugins-store-needs-page` proves the page says it once.
+
 Owner decision 2026-10-30: Settings > Connections is the only connected-app entry.
 The sidebar has no app entry or badge. The installed tab retains the shared inventory
 count and its unknown/loading state; connection and permission behavior is unchanged.
@@ -303,7 +344,7 @@ remote logos load under native CSP, and logs contain no key/token/payload.
 
 For private Google use an owner-provided Desktop client: configure through the
 existing core RPC, sign in, exercise partial consent and refresh, and verify Gmail
-and Calendar tool switches and revocation. Home calendar reads only through the
+and Calendar tool switches and revocation. The calendar reads only through the
 enabled private calendar_list_events tool. From a chat, ask for a nonce mail, connect from its Gmail card,
 cancel once, finish once and reconnect once; only that task resumes and reads the mail. Test a custom local MCP server with
 add/test/edit/paste/discover, a harmless call and removal; stop only that test server.
@@ -467,7 +508,7 @@ did not scroll, then presses it and checks the row is back at its start with
 only the right arrow.
 
 ```powershell
-npm run look -- plugins-store plugins-store-all plugins-store-category plugins-store-search plugins-store-empty plugins-store-key plugins-store-motion plugins-store-wheel --theme both --width 1120,720,1920x1080
+npm run look -- plugins-store plugins-store-all plugins-store-category plugins-store-search plugins-store-empty plugins-store-key plugins-store-motion --theme both --width 1120,720,1920x1080
 ```
 
 Fixture/browser results do not establish native,

@@ -8,7 +8,8 @@ it("native language checks include split source catalogs and accept shared Simpl
   expect(Object.keys(catalogs)).toEqual(UI_LOCALES);
   for (const catalog of Object.values(catalogs)) expect(Object.keys(catalog).sort()).toEqual(Object.keys(catalogs["zh-TW"]).sort());
   const phrases = foreignPhrases(catalogs);
-  expect(phrases["zh-TW"]).not.toContain(catalogs["zh-TW"]["home.greetAfternoon"]);
-  expect(phrases["zh-TW"]).not.toContain(catalogs["zh-TW"]["home.statRoutines"]);
-  expect(phrases["en"]).toContain(catalogs["zh-TW"]["home.greetAfternoon"]);
+  // 「工作方法」 is written the same in Traditional and Simplified Chinese: it is no foreign phrase on either, and one on English.
+  expect(phrases["zh-TW"]).not.toContain(catalogs["zh-TW"]["template.skill"]);
+  expect(phrases["zh-CN"]).not.toContain(catalogs["zh-TW"]["template.skill"]);
+  expect(phrases["en"]).toContain(catalogs["zh-TW"]["template.skill"]);
 });

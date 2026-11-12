@@ -15,10 +15,8 @@ and descendants independently keep `animation: none !important` to avoid
 long-thread freezes. The main console logs
 `main page: document <visibilityState>` once per visibility event.
 
-Home shows local data first. Its timer requests cached allowances within five
-minutes; Home's core service enforces the same TTL across page instances and
-shares in-flight live reads. Month navigation may refresh calendar data inside
-the TTL; the core still uses cached allowances.
+Home was removed on 2026-11-12. The calendar's overview shows local data first and starts no allowance read of its own; the account
+menu reads `usage.allowances` through the existing API at each opening (another unit owns how that read refreshes).
 
 Conversation events use bounded trailing refresh windows and cheap local turn
 revisions. Older cores have no per-turn update timestamp, so a new wire object
@@ -33,11 +31,11 @@ updates at 60 per second while its simulation uses elapsed time.
 
 ## Selected rendered verification
 
-The existing Members, Conversation, Home, Automations, Dictation and Settings
+The existing Members, Conversation, Navigation, Automations, Dictation and Settings
 maps supply these representative consumers. Use both themes and all three sizes:
 
 ```powershell
-npm run look -- slime-states slime-gallery slime-liquid-sheet slime-liquid-still slime-parts slime-motion-idle slime-motion-busy slime-motion-moments slime-motion-change slime-characters-at-rest slime-sizes slime-pointer presence-states-sidebar busy-team-thread busy-team-home busy-team-room busy-team-typing busy-team-follow busy-team-anchor thread-new-divider-stays rich-code rich-diagram conversation-chief-up conversation-member-up conversation-room-up home-empty home-many automations-calendar dictation-overview dictation-notice cli-account-menu overlay-confirm-short-120 overlay-confirm-long-150 --theme both --width 1120,720,1920x1080
+npm run look -- slime-states slime-gallery slime-liquid-sheet slime-liquid-still slime-parts slime-motion-idle slime-motion-busy slime-motion-moments slime-motion-change slime-characters-at-rest slime-sizes slime-pointer presence-states-sidebar busy-team-thread busy-team-room busy-team-typing busy-team-follow busy-team-anchor thread-new-divider-stays rich-code rich-diagram conversation-chief-up conversation-member-up conversation-room-up automations-calendar dictation-overview dictation-notice cli-account-menu overlay-confirm-short-120 overlay-confirm-long-150 --theme both --width 1120,720,1920x1080
 ```
 
 Run judge against that same selected run. The implementation brief delegates look

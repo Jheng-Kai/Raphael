@@ -8,7 +8,6 @@ import { loadGlyphTexture } from "../overlay/emblem";
 import { dropEchoTitles } from "./message-tooltip";
 import * as api from "./api";
 import { createAutomationsPage } from "./pages/automations";
-import { createHome } from "./pages/home";
 import { configureRooms } from "./group-chats";
 import { mountQuestionReminder } from "./question-reminder";
 import { createAgent } from "./pages/agent";
@@ -179,7 +178,7 @@ async function start(): Promise<void> {
   configureRooms(ctx);
   mountQuestionReminder(ctx);
   registerNavigationPages({ automations: createAutomationsPage });
-  const pages: Record<MainPageId | "settings", Page> = { home: createHome(ctx), dictation, agent, settings, automations: createNavigationPage("automations", ctx) };
+  const pages: Record<MainPageId | "settings", Page> = { dictation, agent, settings, automations: createNavigationPage("automations", ctx) };
 
   const nav = document.getElementById("nav")!;
   const main = document.getElementById("main")!;
@@ -193,8 +192,6 @@ watchChipRows(document.body);
   nav.addEventListener("click", (e) => {
     // 連結應用程式 is no page of Settings: it opens its own dialog (R-UI-111).
     if ((e.target as Element).closest("[data-connect-apps]")) { go("settings", "connections"); return; }
-    const target = (e.target as Element).closest<HTMLElement>("[data-go]");
-    if (target) go(target.dataset.go as PageId, target.dataset.pane as SettingsPane | undefined);
   });
   async function refreshOwner(): Promise<void> {
     try {
@@ -294,11 +291,6 @@ watchChipRows(document.body);
     if (tab) dictation.setTab(tab, false);
     current = id;
     for (const page of Object.values(pages)) if (page !== settings) page.el.hidden = page.id !== id;
-    // The calendar opens from Home and has no rail entry of its own.
-    const railId = id === "automations" ? "home" : id;
-    nav.querySelectorAll<HTMLElement>("[data-go]").forEach((item) =>
-      item.setAttribute("aria-current", item.dataset.go === railId ? "page" : "false"),
-    );
     main.scrollTop = 0;
     shownAt = performance.now();
     void pages[id].show(arg);

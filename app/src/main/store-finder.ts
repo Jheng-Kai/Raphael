@@ -32,9 +32,15 @@ export function storeNear(item: StoreService, query: string): number {
   return preparedScore(names, query);
 }
 
+const grouped = new WeakMap<StoreService, string>();
 export function storeGroup(item: StoreService): string {
-  const category = normalize(item.category);
-  return Object.entries(data.groups).find(([, terms]) => terms.some(term => category.includes(term)))?.[0] ?? "other";
+  let group = grouped.get(item);
+  if (group === undefined) {
+    const category = normalize(item.category);
+    group = Object.entries(data.groups).find(([, terms]) => terms.some(term => category.includes(term)))?.[0] ?? "other";
+    grouped.set(item, group);
+  }
+  return group;
 }
 
 export const popularApp = (item: StoreService): boolean => data.popular.includes(item.id);

@@ -3393,28 +3393,6 @@
   },
   "home": {
     "generated_at_ms": 1792807200000,
-    "report": {
-      "openrouter": {
-        "state": "ok",
-        "latency_ms": 120,
-        "checked_at_ms": 1792807200000,
-        "error": null,
-        "key": null,
-        "usage": null
-      },
-      "spend": {
-        "month_usd": 1.24,
-        "today_usd": 0.04,
-        "limit_usd": 20,
-        "forecast_usd": 2,
-        "daily": [
-          0.01,
-          0.04,
-          0.03
-        ]
-      },
-      "last": null
-    },
     "today": [
       {
         "id": "question:1",
@@ -3555,104 +3533,6 @@
       "today": 3,
       "reports": 2,
       "calendar": 5
-    },
-    "usage": {
-      "month_usd": 1.24,
-      "limit_usd": 20,
-      "daily": [
-        0.02,
-        0.03,
-        0.01,
-        0.07,
-        0.04,
-        0.06,
-        0.02,
-        0.08,
-        0.11,
-        0.07,
-        0.09,
-        0.04,
-        0.03,
-        0.04
-      ],
-      "allowances": {
-        "quotas": [],
-        "brains": [
-          {
-            "id": "claude",
-            "name": "Claude CLI",
-            "source": "reported",
-            "windows": [
-              {
-                "period": "fiveHour",
-                "remaining_percent": 76,
-                "resets_at": 1792814400
-              },
-              {
-                "period": "weekly",
-                "remaining_percent": 89,
-                "resets_at": 1792893600
-              }
-            ]
-          },
-          {
-            "id": "codex",
-            "name": "Codex CLI",
-            "source": "reported",
-            "windows": [
-              {
-                "period": "fiveHour",
-                "remaining_percent": 76,
-                "resets_at": 1792814400
-              },
-              {
-                "period": "weekly",
-                "remaining_percent": 89,
-                "resets_at": 1792893600
-              }
-            ]
-          },
-          {
-            "id": "gemini",
-            "name": "Gemini CLI",
-            "source": "reported",
-            "windows": [
-              {
-                "period": "fiveHour",
-                "remaining_percent": 76,
-                "resets_at": 1792814400
-              },
-              {
-                "period": "weekly",
-                "remaining_percent": 89,
-                "resets_at": 1792893600
-              }
-            ]
-          }
-        ]
-      }
-    },
-    "dictation": {
-      "words": 12000,
-      "audio_seconds": 3600,
-      "time_saved_seconds": 5400,
-      "speed_wpm": 200,
-      "daily": [
-        420,
-        0,
-        860,
-        1240,
-        610,
-        0,
-        0,
-        980,
-        1530,
-        720,
-        1100,
-        340,
-        0,
-        890
-      ]
     }
   }
 }
