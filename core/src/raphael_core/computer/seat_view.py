@@ -42,6 +42,12 @@ def to_seat(screen, screens, x, y):
     return None
 
 
+def contains(bounds, screen, screens):
+    x, y, width, height = _bounds(bounds)
+    left, top, wide, high = rectangle(screen, screens)
+    return width > 0 and height > 0 and left <= x and top <= y and x + width <= left + wide and y + height <= top + high
+
+
 def windows(result, screen, screens):
     left, top, _, _ = rectangle(screen, screens)
     canvas = (0, 0, *screen_grid(screens)[1])
@@ -121,15 +127,25 @@ def window_state(result, screen, screens):
         if "x" in record and "y" in record:
             record["x"] -= left
             record["y"] -= top
+    for predicate in local.get("predicates", []):
+        observed = predicate.get("observed_json")
+        if isinstance(observed, str):
+            try:
+                value = json.loads(observed)
+            except ValueError:
+                continue
+            if isinstance(value, dict):
+                predicate["observed_json"] = json.dumps(window_state(value, screen, screens))
     return local
 
 
 def projected_reply(reply, state, text=None):
-    """Replace both output channels so canvas coordinates cannot linger in driver prose."""
+    """Project structured placement, preserving the driver's tree and token prose unless explicitly rewritten."""
     result = deepcopy(reply)
     result["structuredContent"] = state
-    result["content"] = [dict(type="text", text=text if text is not None else json.dumps(state))]
-    result["content"].extend(block for block in reply.get("content", []) if block.get("type") == "image")
+    if text is not None:
+        result["content"] = [dict(type="text", text=text)]
+        result["content"].extend(block for block in reply.get("content", []) if block.get("type") == "image")
     return result
 
 

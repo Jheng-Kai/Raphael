@@ -596,13 +596,21 @@ class EmptyHub:
     def record_unrun(self, *args, **kwargs): pass
 
 
+from .fixtures.driver_contract import checked_request, validate_call
+
+
 class Bridge:
     alive = True
     calls = []
     def __init__(self, vm, target): self.vm, self.target = vm, target
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        if "request" in cls.__dict__:
+            cls.request = checked_request(cls.request)
     async def __aenter__(self): return self
     async def __aexit__(self, *args): pass
     async def request(self, method, params=None):
+        validate_call(method, params)
         self.calls.append((method, params))
         if method == "tools/list":
             return {"tools": [{"name": name, "description": name, "inputSchema": {"type": "object"}}
@@ -780,7 +788,8 @@ async def test_a_computer_keeps_one_driver_connection_and_session_until_it_break
             if method == "tools/list":
                 for item in result["tools"]:
                     if item["name"] in ("browser_pointer", "click", "browser_click"):
-                        item["inputSchema"] = {"type": "object", "properties": {"delivery_mode": {"type": "string"}, "action": {"type": "string"}, "x": {"type": "number"}, "y": {"type": "number"}}}
+                        from .fixtures.driver_contract import SCHEMAS
+                        item["inputSchema"] = SCHEMAS[item["name"]]
             elif params and params["name"] == "get_browser_state":
                 self.calls.append((method, params))
                 return {"content": [{"type": "text", "text": "bound target with 1 tab(s)"}], "structuredContent": {"target_id": "bt-1", "tabs": [{"tab_id": "tab-1"}]}}
@@ -790,8 +799,8 @@ async def test_a_computer_keeps_one_driver_connection_and_session_until_it_break
     tool = lambda name: next(item for item in hub.offered() if item.name == name)
     assert (await hub.call(tool("get_desktop_state").key, {}, approver="auto")).ok
     used = len(Recording.opened)
-    assert (await hub.call(tool("browser_pointer").key, {"action": "drag"}, approver="auto")).ok
-    assert (await hub.call(tool("browser_click").key, {"delivery_mode": "background"}, approver="auto")).ok
+    assert (await hub.call(tool("browser_pointer").key, {"action": "drag", "target_id": "bt-1", "tab_id": "tab-1", "ref": "source", "destination_ref": "dest"}, approver="auto")).ok
+    assert (await hub.call(tool("browser_click").key, {"delivery_mode": "background", "target_id": "bt-1", "tab_id": "tab-1", "ref": "button"}, approver="auto")).ok
     assert (await hub.call(tool("click").key, {"x": 1, "y": 2}, approver="auto")).ok
     sent = {params["name"]: params["arguments"] for method, params in Recording.calls if method == "tools/call"}
     assert len({arguments["session"] for arguments in sent.values()}) == 1 and len(Recording.opened) == used

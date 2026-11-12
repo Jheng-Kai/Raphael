@@ -11,18 +11,28 @@ flags="--user-data-dir=$profile --no-first-run --no-default-browser-check --disa
 export DISPLAY=:1
 windows() { wmctrl -lx | awk '$3 ~ /^chromium-browser/ {print $1}' | sort; }
 before=$(windows)
-main=$(pgrep -f -- "--remote-debugging-port=0 --user-data-dir=$profile" | head -n 1 || true)
+browser_pid() { pgrep -f -- "^$chromium --remote-debugging-port=0 --user-data-dir=$profile( |$)" | head -n 1 || true; }
+main=$(browser_pid)
+# A private title attributes the new window even when another seat opens a popup in the same process.
+marker=raphael-seat-$(cat /proc/sys/kernel/random/uuid)
+start_page="data:text/html,<title>$marker</title>"
 if [ -n "$main" ]; then
-  "$chromium" $flags --new-window about:blank >/dev/null 2>&1 &
+  "$chromium" $flags --new-window "$start_page" >/dev/null 2>&1 &
 else
   mkdir -p "$profile"
-  setsid "$chromium" --remote-debugging-port=0 $flags about:blank >/dev/null 2>&1 &
+  setsid "$chromium" --remote-debugging-port=0 $flags "$start_page" >/dev/null 2>&1 &
 fi
 new=
 attempt=0
 while [ "$attempt" -lt 150 ]; do
   now=$(windows)
-  new=$(printf '%s\n%s\n' "$before" "$now" | grep . | sort | uniq -u | head -n 1 || true)
+  main=$(browser_pid)
+  candidates=$(printf '%s\n' "$now" | awk -v before="$before" '
+    BEGIN {split(before, rows, "\n"); for (i in rows) old[rows[i]]=1}
+    NF && !($0 in old) {print $0}')
+  new=$(wmctrl -lpx | awk -v candidates="$candidates" -v pid="$main" -v marker="$marker" '
+    BEGIN {split(candidates, rows, "\n"); for (i in rows) fresh[rows[i]]=1}
+    ($1 in fresh) && $3 == pid && $4 ~ /^chromium-browser/ && $6 == marker {print $1; exit}')
   [ -n "$new" ] && break
   attempt=$((attempt + 1))
   sleep 0.1

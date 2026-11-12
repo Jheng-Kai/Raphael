@@ -3,6 +3,8 @@
 import asyncio
 import base64
 import json
+import shutil
+import subprocess
 from copy import deepcopy
 from pathlib import Path
 from unittest.mock import AsyncMock
@@ -12,11 +14,12 @@ import pytest
 from raphael_core.computer import vm as module
 from raphael_core.computer.viewer import DesktopViewer, Session
 from raphael_core.computer.vm_tools import VmTools, vm_scope
-from raphael_core.computer.vm_catalog import offline_catalog
+from raphael_core.computer.vm_catalog import DRIVER_TOOLS, offline_catalog, without_session
 from raphael_core.protocol import RpcError
 from raphael_core.services.attachment_store import AttachmentStore
 from .test_seat_wiring import shared_vm
 from .test_vm import EmptyHub, container
+from .fixtures.driver_contract import SCHEMAS, catalog, validate_call
 
 
 def window(identifier, x, app="Xfce4-terminal", pid=None):
@@ -32,6 +35,7 @@ class SeatBridge:
         self.rows = [window(10, 20), window(20, 1300), window(30, 2580, "Chromium-browser", 99)]
 
     async def request(self, method, params):
+        validate_call(method, params)
         assert method == "tools/call"
         name, args = params["name"], params["arguments"]
         self.calls.append((name, deepcopy(args)))
@@ -44,9 +48,15 @@ class SeatBridge:
             state = dict(x=1310, y=40)
         if name == "launch_app":
             self.rows.append(window(40, 2600))
+            state = dict(pid=40, windows=[deepcopy(self.rows[-1])])
         if name == "get_browser_state":
-            state = dict(target_id="own-target", tabs=[dict(tab_id="tab", active=True)])
-        return dict(content=[dict(type="text", text=json.dumps(state))], structuredContent=state)
+            state = dict(target_id="own-target", tabs=[dict(tab_id="tab", active=True, url="https://example.com")])
+        text = json.dumps(state)
+        if name == "get_window_state":
+            text = f"window_id={args['window_id']}\n[1] button\nelement_token for row [1] = s00000001:1"
+        if name.startswith("browser_") or name == "get_browser_state":
+            text = "Bound page with current references."
+        return dict(content=[dict(type="text", text=text)], structuredContent=state)
 
     async def __aexit__(self, *args):
         self.alive = False
@@ -60,6 +70,7 @@ async def seat_tools(shared_vm, tmp_path):
         await hub.prepare(member)
         target = vm.target(member)
         hub.connections[target.key] = SeatBridge(vm, target), f"session-{member}"
+        hub._catalog(target, {name: dict(description=DRIVER_TOOLS[name], parameters=without_session(schema)) for name, schema in SCHEMAS.items()})
         hub.listed.add(target.key)
     runtime.raw = container(vm, vm.target(1), runtime)
     yield hub, vm, runtime
@@ -135,11 +146,14 @@ async def test_pid_mismatch_and_window_moved_since_previous_call_are_refused(sea
 async def test_cursor_and_window_results_use_seat_coordinates(seat_tools):
     hub, vm, _ = seat_tools
     result = await call(hub, 2, "get_cursor_position", {})
-    assert json.loads(result.text) == dict(x=30, y=40)
+    assert result.text == "Cursor at (30, 40)"
     result = await call(hub, 1, "get_cursor_position", {})
     assert "another screen" in result.text and '"x"' not in result.text
     result = await call(hub, 2, "get_window_state", dict(pid=20, window_id=20))
-    state = json.loads(result.text.splitlines()[0])
+    assert result.text.startswith("window_id=20") and "element_token for row [1]" in result.text
+    client, session = hub.connections[vm.target(2).key]
+    reply = await hub._driver_call(vm.target(2), client, "get_window_state", dict(pid=20, window_id=20, session=session))
+    state = reply["structuredContent"]
     assert state["bounds"]["x"] == 20
     assert state["nodes"][0]["bounds"]["x"] == 5
     await call(hub, 2, "move_cursor", dict(x=40, y=50))
@@ -186,7 +200,7 @@ async def test_shared_browser_attaches_computer_window_and_never_launches_driver
     result = await call(hub, 2, "browser_open", dict(url="about:blank"))
     assert result.ok
     prepared = [args for name, args in client.calls if name == "browser_prepare"]
-    assert prepared == [dict(pid=99, window_id=50, strategy=dict(kind="existing_profile"), session="session-2")]
+    assert prepared == [dict(pid=99, window_id=50, strategy=dict(kind="existing_profile"), session="session-2", delivery_mode="foreground")]
     client.calls.clear()
     result = await call(hub, 2, "browser_prepare", dict(allow_launch=True, profile=dict(mode="isolated_new")))
     assert result.ok
@@ -219,6 +233,7 @@ async def test_peer_native_wait_preserves_its_existing_connection_and_bound_page
     first, second = vm.target(1), vm.target(2)
     connection = hub.connections[second.key]
     hub.busy_wait_s = .01
+    assert (await call(hub, 2, "get_browser_state", dict(pid=20, window_id=20))).ok
     vm.hold(first, True)
     try:
         result = await call(hub, 2, "click", dict(pid=20, window_id=20, x=5, y=6))
@@ -303,7 +318,8 @@ async def test_shared_tool_description_additions_are_small_and_per_bot_is_unchan
     from raphael_core.computer.vm_tools import SHARED_CONTRACT
     hub, vm, _ = seat_tools
     shared = {tool.name: tool for tool in hub.offered_for(1)}
-    assert len(SHARED_CONTRACT) <= 72
+    assert len(SHARED_CONTRACT) <= 160
+    assert "The shell has no screen here; open a window with launch_app." in SHARED_CONTRACT
     assert all(tool.description.endswith(SHARED_CONTRACT) for tool in shared.values())
     vm.settings.set("computer_vm_mode", "per-bot")
     await hub.prepare(1)
@@ -352,7 +368,32 @@ def test_layer_six_installs_computer_browser_and_existing_profile_grant():
     assert module.IMAGE.endswith("-v6") and module.IMAGE_LABELS[f"{module.LABEL}.layer"] == "6"
     launcher = (image / "desktop/raphael-seat-browser").read_text(encoding="utf-8")
     assert "wmctrl -lG" in launcher and '"$attempt" -lt 50' in launcher
-    assert 'about:blank' in launcher and '${5' not in launcher
+    assert 'data:text/html,<title>$marker</title>' in launcher and '${5' not in launcher
+    assert "uniq -u" not in launcher and '!($0 in old)' in launcher
+    assert '$3 == pid' in launcher and '$6 == marker' in launcher
+
+
+def test_launcher_difference_excludes_disappeared_windows_and_attributes_same_pid_popups():
+    launcher = (Path(module.__file__).parent / "image/desktop/raphael-seat-browser").read_text(encoding="utf-8")
+    # Run the shipped selection itself against a pure shell wmctrl double; no browser, X or Docker.
+    selection = launcher[launcher.index("  candidates=$("):launcher.index('  [ -n "$new" ]')]
+    shell = shutil.which("sh")
+    if shell is None:
+        pytest.skip("An installed POSIX shell is required for the launcher's awk selection")
+    script = '''before='0x1
+0x2'
+now='0x2
+0x3
+0x4
+0x5'
+main=99
+marker=raphael-seat-test
+wmctrl() { printf '%s\\n' '0x2 0 99 chromium-browser.Chromium host old' '0x3 0 99 chromium-browser.Chromium host peer-popup' '0x4 0 100 chromium-browser.Chromium host raphael-seat-test' '0x5 0 99 chromium-browser.Chromium host raphael-seat-test'; }
+'''
+    result = subprocess.run([shell], input=script + selection + '\nprintf "%s\\n" "$new"\n',
+                            text=True, capture_output=True, timeout=10)
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "0x5"
 
 
 @pytest.mark.parametrize("shared,screens", [(False, 1), (True, 1), (True, 6)])
@@ -367,3 +408,203 @@ async def test_layer_five_shapes_upgrade_with_mounts_kept(shared_vm, shared, scr
     assert module.known_previous(raw, target, vm.owner)
     raw["HostConfig"]["NanoCpus"] += 1
     assert not module.known_previous(raw, target, vm.owner)
+
+
+@pytest.mark.parametrize("name", list(SCHEMAS))
+async def test_unknown_parameters_fail_closed_for_every_offered_driver_tool(seat_tools, name):
+    hub, vm, _ = seat_tools
+    client, session = hub.connections[vm.target(2).key]
+    reply = await hub._driver_call(vm.target(2), client, name, dict(session=session, future_parameter=True))
+    assert reply["isError"] and "future_parameter" in str(reply)
+    assert not client.calls
+
+
+@pytest.mark.parametrize("name", ["click", "double_click", "right_click", "type_text", "press_key", "hotkey", "scroll", "drag"])
+async def test_every_native_window_point_is_checked_against_the_screen_not_the_window(seat_tools, name):
+    hub, vm, _ = seat_tools
+    client, session = hub.connections[vm.target(2).key]
+    args = dict(pid=20, window_id=20, session=session)
+    args.update(dict(type_text=dict(text="hello"), press_key=dict(key="Return"), hotkey=dict(keys=["ctrl", "a"]),
+                     scroll=dict(direction="down")).get(name, {}))
+    if name == "drag":
+        args.update(from_x=5, from_y=6, to_x=1380, to_y=80)
+    else:
+        args.update(x=1380, y=80)
+    reply = await hub._driver_call(vm.target(2), client, name, args)
+    assert reply["isError"] and "inside this member's screen" in str(reply)
+    assert all(sent != name for sent, _ in client.calls)
+    if name == "drag":
+        args.update(from_x=-30, to_x=5)
+        assert (await hub._driver_call(vm.target(2), client, name, args))["isError"]
+        args.update(from_x=5, to_x=700)
+    else:
+        args.update(x=700)  # Beyond the 600px window but within the screen: a menu remains clickable.
+    assert not (await hub._driver_call(vm.target(2), client, name, args)).get("isError")
+
+
+@pytest.mark.parametrize("extra", [dict(coordinate_frame="desktop"), dict(target={"kind": "window", "pid": 20, "window_id": 20}),
+    dict(from_zoom=False), dict(capture_id="old-window-or-desktop-capture")])
+async def test_unreviewed_coordinate_sources_are_refused_before_dispatch(seat_tools, extra):
+    hub, vm, _ = seat_tools
+    client, session = hub.connections[vm.target(2).key]
+    reply = await hub._driver_call(vm.target(2), client, "click", dict(pid=20, window_id=20, x=5, y=6, session=session, **extra))
+    assert reply["isError"] and not client.calls
+
+
+async def test_unreviewed_nested_predicate_parameters_fail_closed_before_dispatch(seat_tools):
+    hub, vm, _ = seat_tools
+    client, session = hub.connections[vm.target(2).key]
+    reply = await hub._driver_call(vm.target(2), client, "verify_state", dict(pid=20, window_id=20, session=session,
+        expect=[dict(window=dict(future_target=dict(x=10000)))]))
+    assert reply["isError"] and "expect[].window.future_target" in str(reply)
+    assert not client.calls
+
+
+@pytest.mark.parametrize("name,args", [("get_window_state", {}), ("verify_state", {"expect": [{"window": {"exists": True}}]}),
+    ("click", {"x": 5, "y": 6})])
+@pytest.mark.parametrize("fits", [False, True])
+async def test_straddling_and_oversized_windows_fit_before_read_or_input_else_refuse(seat_tools, name, args, fits):
+    hub, vm, _ = seat_tools
+    client, session = hub.connections[vm.target(2).key]
+    client.rows[1]["bounds"].update(x=1200, width=2000, height=950)
+    async def fit(target, row):
+        assert vm.native_busy(target)
+        assert all(sent != name for sent, _ in client.calls)
+        if fits:
+            row["bounds"].update(x=1300, y=20, width=1240, height=860)
+            client.rows[1] = deepcopy(row)
+    vm.fit_window = AsyncMock(side_effect=fit)
+    reply = await hub._driver_call(vm.target(2), client, name, dict(pid=20, window_id=20, session=session, **args))
+    assert bool(reply.get("isError")) is not fits
+    vm.fit_window.assert_awaited_once()
+    assert any(sent == name for sent, _ in client.calls) is fits
+
+
+@pytest.mark.parametrize("name,args", [("get_browser_state", {}), ("browser_navigate", dict(tab_id="tab", url="about:blank")),
+    ("browser_type", dict(tab_id="tab", ref="field", text="hello")), ("browser_click", dict(tab_id="tab", ref="button", delivery_mode="foreground"))])
+async def test_bound_page_is_revoked_when_its_native_window_moves_to_a_peer(seat_tools, name, args):
+    hub, vm, _ = seat_tools
+    client, session = hub.connections[vm.target(2).key]
+    assert not (await hub._driver_call(vm.target(2), client, "get_browser_state", dict(pid=20, window_id=20, session=session))).get("isError")
+    client.rows[1]["bounds"]["x"] = 2600
+    client.calls.clear()
+    reply = await hub._driver_call(vm.target(2), client, name, dict(target_id="own-target", session=session, **args))
+    assert reply["isError"] and (vm.target(2).key, "own-target") not in hub.page_windows
+    assert [sent for sent, _ in client.calls] == ["list_windows"]
+
+
+@pytest.mark.parametrize("name,args", [("browser_click", dict(ref="button")),
+    ("browser_pointer", dict(action="drag", ref="source", destination_ref="dest")),
+    ("browser_dialog", dict(action="accept", dialog_id="dialog")), ("browser_dialog", dict(action="dismiss", dialog_id="dialog"))])
+async def test_owner_hold_blocks_foreground_page_input_but_navigation_continues(seat_tools, name, args):
+    hub, vm, _ = seat_tools
+    await call(hub, 2, "get_browser_state", dict(pid=20, window_id=20))
+    client, session = hub.connections[vm.target(2).key]
+    hub.busy_wait_s = .01
+    vm.hold(vm.target(1), True)
+    try:
+        result = await call(hub, 2, name, dict(target_id="own-target", tab_id="tab", delivery_mode="foreground", **args))
+        assert result.kind == "computer_busy" and all(sent != name for sent, _ in client.calls)
+        assert (await call(hub, 2, "browser_navigate", dict(target_id="own-target", tab_id="tab", url="about:blank"))).ok
+        assert (await call(hub, 2, "browser_dialog", dict(target_id="own-target", tab_id="tab", action="inspect"))).ok
+    finally:
+        vm.hold(vm.target(1), False)
+
+
+async def test_seat_two_reply_projection_preserves_prose_and_translates_nested_verification(seat_tools):
+    hub, vm, _ = seat_tools
+    client, session = hub.connections[vm.target(2).key]
+    original = client.request
+    async def request(method, params):
+        if params["name"] == "verify_state":
+            validate_call(method, params)
+            assert params["arguments"]["expect"][0]["window"]["bounds"]["x"] == 1300
+            return dict(content=[dict(type="text", text="Verification satisfied.")], structuredContent=dict(
+                status="satisfied", predicates=[dict(observed_json=json.dumps(dict(bounds=dict(x=1300, y=30, width=600, height=400))))]))
+        return await original(method, params)
+    client.request = request
+    args = dict(pid=20, window_id=20, session=session, expect=[dict(window=dict(bounds=dict(x=20, y=30, width=600, height=400)))])
+    reply = await hub._driver_call(vm.target(2), client, "verify_state", args)
+    assert reply["content"][0]["text"] == "Verification satisfied."
+    assert json.loads(reply["structuredContent"]["predicates"][0]["observed_json"])["bounds"]["x"] == 20
+    assert args["expect"][0]["window"]["bounds"]["x"] == 20
+    result = await call(hub, 2, "get_browser_state", dict(pid=20, window_id=20))
+    assert result.text.startswith("Bound page with current references.\n")
+    assert len([line for line in result.text.splitlines() if line.startswith("{")]) == 1
+
+
+async def test_launch_does_not_take_a_peers_new_popup_from_an_existing_process(seat_tools):
+    hub, vm, _ = seat_tools
+    client, session = hub.connections[vm.target(2).key]
+    original = client.request
+    async def request(method, params):
+        reply = await original(method, params)
+        if params["name"] == "launch_app":
+            client.rows.append(window(51, 2600, "Chromium-browser", 99))
+        return reply
+    client.request = request
+    async def move(target, identifier):
+        row = next(row for row in client.rows if row["window_id"] == identifier)
+        row["bounds"].update(x=1300, y=20)
+    vm.move_window = AsyncMock(side_effect=move)
+    reply = await hub._driver_call(vm.target(2), client, "launch_app", dict(name="xfce4-terminal", session=session))
+    vm.move_window.assert_awaited_once_with(vm.target(2), 40)
+    assert reply["structuredContent"]["windows"][0]["bounds"]["x"] == 20
+    assert client.rows[-1]["bounds"]["x"] == 2600
+
+
+@pytest.mark.parametrize("operation", ["picture", "login", "contact", "card"])
+async def test_private_reads_and_fill_helpers_share_the_moved_target_gate(seat_tools, operation):
+    from types import SimpleNamespace
+    hub, vm, _ = seat_tools
+    target = vm.target(2)
+    client, session = hub.connections[target.key]
+    await hub._driver_call(target, client, "get_browser_state", dict(pid=20, window_id=20, session=session))
+    client.rows[1]["bounds"]["x"] = 2600
+    client.calls.clear()
+    hub.logins = SimpleNamespace(load=lambda *args: dict(username="private-user", password="private-password"),
+        entry=lambda *args: (dict(label="Saved"), dict(name="private-name")), entries=lambda *args: [dict(id="saved", label="Saved")])
+    hub.private_pages[(target.key, "own-target")] = dict(origins=set(), refs={"field"})
+    args = dict(reference="saved", site="https://example.com", target_id="own-target", username_ref="user", password_ref="password",
+                fields=dict(name="field"), label="Saved", amount="")
+    if operation == "picture":
+        assert await hub._private_picture(target, {})
+        assert target.key not in hub.private_tree
+    elif operation == "login":
+        assert not (await hub._fill_login(target, 2, args)).ok
+    else:
+        assert not (await hub._fill_entry(target, 2, args, operation)).ok
+    assert [name for name, _ in client.calls] == ["list_windows"]
+    assert (target.key, "own-target") not in hub.page_windows
+
+
+async def test_native_click_text_drops_only_the_canvas_coordinate_trailer_on_seat_two(seat_tools):
+    hub, vm, _ = seat_tools
+    client, session = hub.connections[vm.target(2).key]
+    original = client.request
+    async def request(method, params):
+        if params["name"] == "click":
+            validate_call(method, params)
+            text = "Clicked the button. [window_point=(5, 6) screen_point=(1305, 36)]"
+            return dict(content=[dict(type="text", text=text)], structuredContent=dict(summary=text))
+        return await original(method, params)
+    client.request = request
+    reply = await hub._driver_call(vm.target(2), client, "click", dict(pid=20, window_id=20, x=5, y=6, session=session))
+    assert reply["content"][0]["text"] == reply["structuredContent"]["summary"] == "Clicked the button."
+
+
+async def test_per_bot_dispatch_retains_the_unmodified_driver_arguments(seat_tools):
+    hub, vm, _ = seat_tools
+    vm.settings.set("computer_vm_mode", "per-bot")
+    target = vm.target(2)
+    client = SimpleRecordingClient()
+    args = dict(target=dict(kind="desktop"), coordinate_frame="desktop", capture_id="capture", from_zoom=True, future_parameter=1)
+    await hub._driver_call(target, client, "click", args)
+    assert client.sent == dict(name="click", arguments=args)
+
+
+class SimpleRecordingClient:
+    async def request(self, method, params):
+        assert method == "tools/call"
+        self.sent = params
+        return {}

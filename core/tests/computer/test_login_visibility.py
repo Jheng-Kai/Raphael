@@ -10,6 +10,7 @@ from raphael_core.computer.vm_tools import VmTools, vm_scope
 from raphael_core.services.attachment_store import AttachmentStore
 from .test_login_vault import Vault
 from .test_vm import desktop, Bridge, EmptyHub
+from .fixtures.driver_contract import bind_page
 
 
 class Browser(Bridge):
@@ -18,10 +19,19 @@ class Browser(Bridge):
         if method == "tools/list":
             return {"tools": [{"name": name, "inputSchema": {"type": "object"}}
                               for name in ("get_desktop_state", "get_browser_state", "browser_type", "browser_navigate")]}
+        if params["name"] == "list_windows":
+            from copy import deepcopy
+            result = await super().request(method, params)
+            second = deepcopy(result["structuredContent"]["windows"][0])
+            second["window_id"] = 11
+            second["bounds"]["x"] = 100
+            result["structuredContent"]["windows"].append(second)
+            return result
         if params["name"] == "browser_navigate":
             type(self).url = params["arguments"]["url"]
         picture = await super().request(method, params)
-        return {**picture, "structuredContent": {"target_id": params["arguments"].get("target_id", "tab"), "url": self.url}}
+        identifier = "other" if params["arguments"].get("window_id") == 11 else "tab"
+        return {**picture, "structuredContent": {"target_id": params["arguments"].get("target_id", identifier), "tab_id": "tab-1", "url": self.url}}
 
 
 async def rig(desktop, tmp_path):
@@ -34,6 +44,8 @@ async def rig(desktop, tmp_path):
     hub.logins.load(0, "https://example.com", reference)
     await hub.prepare()
     await hub._discover(target)
+    await bind_page(hub, target)
+    await bind_page(hub, target, window_id=11)
     return hub, {tool.name: tool.key for tool in hub.offered()}, reference
 
 
@@ -58,6 +70,7 @@ async def test_picture_suppression_survives_navigation_time_and_other_tabs(deskt
         if recovery == "navigation":
             tool = tools["browser_navigate"]
             args["url"] = "https://example.com/done"
+            args["tab_id"] = "tab-1"
         elif recovery == "expiry":
             hub.vm.clock = lambda: 121
         elif recovery == "other-target":

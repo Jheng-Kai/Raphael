@@ -12,6 +12,7 @@ import pytest
 
 from raphael_core.computer import vm
 from raphael_core.evaluate import computer_acceptance as acceptance
+from computer.fixtures.driver_contract import SCHEMAS, catalog, validate_call
 
 
 @pytest.fixture(autouse=True)
@@ -256,7 +257,7 @@ class MemoryDriver:
     argument its schema does not name."""
 
     accepted = {"set_config": {"max_image_dimension", "session"}, "set_agent_cursor_enabled": {"enabled", "session"},
-                "list_windows": {"session", "pid", "on_screen_only"}}
+                "list_windows": set(SCHEMAS["list_windows"]["properties"])}
     calls = []
 
     def __init__(self, machine, target):
@@ -270,11 +271,14 @@ class MemoryDriver:
         self.alive = False
 
     async def request(self, method, params=None, **kwargs):
+        if method == "tools/list":
+            return catalog()
         name, arguments = params["name"], params["arguments"]
         type(self).calls.append((name, dict(arguments)))
         unknown = set(arguments) - self.accepted[name]
         if unknown:
             return {"isError": True, "content": [{"type": "text", "text": f"{name}: unknown argument {sorted(unknown)[0]}"}]}
+        validate_call(method, params)
         text = 'Found 1 windows:\n  window_id=7 pid=9 "Desktop" 1280x900+0+0 app=Xfdesktop' if name == "list_windows" else "ok"
         return {"content": [{"type": "text", "text": text}]}
 
@@ -316,6 +320,25 @@ async def test_driver_check_starts_no_driver_process_in_another_owners_container
     with pytest.raises(AssertionError, match="Refused container"):
         await run.driver(target)
     assert MemoryDriver.calls == []
+
+
+@pytest.mark.parametrize("changed", [False, True])
+async def test_live_schema_check_requires_every_reviewed_parameter_set(tmp_path, monkeypatch, changed):
+    run, target = driver_run(tmp_path, monkeypatch)
+    original = MemoryDriver.request
+    async def request(self, method, params=None, **kwargs):
+        reply = await original(self, method, params, **kwargs)
+        if method == "tools/list" and changed:
+            from copy import deepcopy
+            reply = deepcopy(reply)
+            reply["tools"][0]["inputSchema"]["properties"]["future_parameter"] = {"type": "boolean"}
+        return reply
+    monkeypatch.setattr(MemoryDriver, "request", request)
+    if changed:
+        with pytest.raises(AssertionError, match="Driver parameters changed"):
+            await run.driver_schema(target)
+    else:
+        assert "All 30 DRIVER_TOOLS" in await run.driver_schema(target)
 
 
 class SteeringDesktop:
@@ -759,7 +782,8 @@ async def test_guard_authorizes_real_bridge_exec_without_running_it_and_keeps_ow
         await guard.authorize(vm.exec_args(target, ["wmctrl", "-lG"]))
 
 
-async def test_shared_acceptance_drives_real_tools_through_every_numbered_check(tmp_path, monkeypatch):
+@pytest.mark.parametrize("browser_failure,stop_failure", [(False, False), (True, False), (False, True)])
+async def test_shared_acceptance_drives_real_tools_through_every_numbered_check(tmp_path, monkeypatch, browser_failure, stop_failure):
     """Fake only transport, guest programs and the viewer listener; product seat/tool logic runs."""
     from copy import deepcopy
     from types import SimpleNamespace
@@ -780,6 +804,8 @@ async def test_shared_acceptance_drives_real_tools_through_every_numbered_check(
     for row in rows:
         row["bounds"].update(y=851, width=146, height=49)
     pending, files, bindings, urls = {}, {}, {}, {}
+    pointer = [0, 0]
+    active = [None]
     launches, attachments = [], []
     original_runtime = runtime.__call__
 
@@ -804,6 +830,15 @@ async def test_shared_acceptance_drives_real_tools_through_every_numbered_check(
                 row["bounds"].update(x=int(x), y=int(y))
         if "pgrep" in args:
             return vm.Result(0, "99\n")
+        if "xprop" in args:
+            if "-root" in args:
+                return vm.Result(0, "_NET_NUMBER_OF_DESKTOPS(CARDINAL) = 1\n_NET_CURRENT_DESKTOP(CARDINAL) = 0\n"
+                                 f"_NET_ACTIVE_WINDOW(WINDOW): window id # {hex(active[0])}\n")
+            return vm.Result(0, "_NET_WM_DESKTOP(CARDINAL) = 0\n")
+        if "xwininfo" in args:
+            identifier = int(args[args.index("-id") + 1])
+            assert any(row["window_id"] == identifier for row in rows)
+            return vm.Result(0, "Map State: IsViewable\n")
         return await original_runtime(args, **kwargs)
     run.docker.runner = runner
 
@@ -818,18 +853,33 @@ async def test_shared_acceptance_drives_real_tools_through_every_numbered_check(
         self.process = None
     async def request(self, method, params=None, **kwargs):
         if method == "tools/list":
-            from raphael_core.computer.vm_catalog import offline_catalog
-            return {"tools": [dict(name=name, description=name, inputSchema=item["parameters"])
-                              for name, item in offline_catalog().items()]}
+            return catalog()
+        validate_call(method, params)
         name, args = params["name"], params["arguments"]
         state = {}
+        text = "Action completed."
         if name == "list_windows":
             state = {"windows": deepcopy(rows)}
         elif name == "launch_app":
             rows.append(window(len(rows) + 200, 2600))
+            state = dict(pid=rows[-1]["pid"], windows=[deepcopy(rows[-1])])
             launches.append(self.target.screen)
         elif name == "get_window_state":
             state = deepcopy(next(row for row in rows if row["window_id"] == args["window_id"]))
+            text = f"window_id={args['window_id']}\n[1] terminal\nelement_token for row [1] = s00000001:1"
+        elif name == "move_cursor":
+            pointer[:] = args["x"], args["y"]
+            text = f"Moved the real desktop pointer to ({pointer[0]}, {pointer[1]})."
+            state = dict(summary=text)
+        elif name == "get_cursor_position":
+            state = dict(x=pointer[0], y=pointer[1])
+            text = f"Cursor at ({pointer[0]}, {pointer[1]})"
+        elif name == "bring_to_front":
+            active[0] = args["window_id"]
+        elif name == "verify_state":
+            row = next(row for row in rows if row["window_id"] == args["window_id"])
+            assert args["expect"][0]["window"]["bounds"] == row["bounds"]
+            state = dict(status="satisfied", predicates=[dict(status="satisfied", observed_json=json.dumps(dict(bounds=row["bounds"])) )])
         elif name == "type_text":
             pending[args["window_id"]] = args["text"]
         elif name == "press_key" and args["window_id"] in pending:
@@ -837,6 +887,8 @@ async def test_shared_acceptance_drives_real_tools_through_every_numbered_check(
             text, path = text.split(" > ")
             files[path] = text.split(" ")[-1] + "\n"
         elif name == "browser_prepare":
+            if browser_failure:
+                return {"isError": True, "content": [dict(type="text", text="Synthetic browser failure")]}
             assert args["strategy"] == {"kind": "existing_profile"}
             assert not {"allow_launch", "profile"} & args.keys()
             attachments.append((args["session"], args["window_id"]))
@@ -854,8 +906,10 @@ async def test_shared_acceptance_drives_real_tools_through_every_numbered_check(
                 identifier = bindings[target][1]
             if name == "browser_navigate":
                 urls[identifier] = args["url"]
-            state = dict(target_id=target, url=urls[identifier], tabs=[dict(tab_id="tab", active=True, url=urls[identifier])])
-        return dict(content=[dict(type="text", text=json.dumps(state))], structuredContent=state)
+            state = (dict(target_id=target, tabs=[dict(tab_id="tab", active=True, url=urls[identifier])]) if "window_id" in args else
+                     dict(target_id=target, tab_id="tab", page=dict(url=urls[identifier])))
+            text = "Bound browser page."
+        return dict(content=[dict(type="text", text=text)], structuredContent=state)
     monkeypatch.setattr(CuaBridge, "__aenter__", enter)
     monkeypatch.setattr(CuaBridge, "__aexit__", leave)
     monkeypatch.setattr(CuaBridge, "request", request)
@@ -902,11 +956,29 @@ async def test_shared_acceptance_drives_real_tools_through_every_numbered_check(
                 pixels[y * 1280 + x:y * 1280 + x + bounds["width"]] = [b"\xff\xff\xff"] * bounds["width"]
         return rfb_view.png(pixels)
     monkeypatch.setattr(rfb_view, "capture", capture)
+    if stop_failure:
+        async def failed_stop(target):
+            raise AssertionError("Synthetic stop failure")
+        monkeypatch.setattr(run, "stop", failed_stop)
+        with pytest.raises(AssertionError, match="One or more shared checks failed"):
+            await run.shared()
+        assert any(row["name"] == "shared stop" and row["result"] == "failed" for row in run.results)
+        return
+    if browser_failure:
+        with pytest.raises(AssertionError, match="One or more shared checks failed"):
+            await run.shared()
+        assert any(row["name"] == "shared computer browser" and row["result"] == "failed" for row in run.results)
+        for name in ("shared page text", "shared foreground page hold", "shared session ends independently"):
+            assert any(row["name"] == name and row["result"] == "skipped" for row in run.results)
+        control = next(row for row in run.results if row["name"] == "shared owner control")
+        assert "page/read continue" not in control["detail"]
+        return
     result = await run.shared()
     assert "completed" in result
     assert not [row for row in run.results if row["result"] != "ok"], run.results
     assert [row["name"] for row in run.results] == ["shared prepares", "shared window lists", "shared terminal wall",
-        "shared simultaneous native typing", "shared computer browser", "shared clipped product pictures", "shared owner control",
+        "shared pointer wall", "shared target forms", "shared native text", "shared seat-local verify", "shared global shortcuts",
+        "shared simultaneous native typing", "shared computer browser", "shared page text", "shared clipped product pictures", "shared owner control",
         "shared session ends independently", "shared seat displacement", "shared stop"]
     assert launches == [1, 2]
     assert len(attachments) == 2 and len({session for session, _ in attachments}) == 2

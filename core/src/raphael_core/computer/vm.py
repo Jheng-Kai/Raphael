@@ -388,12 +388,15 @@ class LocalVm:
     async def close_displaced_seat_windows(self, target):
         """Close a displaced screen's windows, preserving its panel; cleanup is best effort."""
         from .seat_view import windows
+        holder = self.seats.holders(target.remote).get(target.screen)
         try:
             found = windows(await self.seat_windows(target), target.screen, target.screens)
             for window in found["windows"]:
                 if window.get("app_name", "").lower() == "xfce4-panel":
                     continue
                 try:
+                    if self.seats.holders(target.remote).get(target.screen) != holder:
+                        return
                     await self.run_for(target, exec_args(target, ["wmctrl", "-i", "-c", str(window["window_id"])]))
                 except Exception:
                     pass
@@ -414,6 +417,20 @@ class LocalVm:
         if result.code:
             raise VmError("window_move_failed")
 
+    async def fit_window(self, target, window):
+        from .seat_view import rectangle
+        x, y, width, height = rectangle(target.screen, target.screens)
+        bounds = window["bounds"]
+        wide, high = min(bounds["width"], width - 40), min(bounds["height"], height - 40)
+        left = max(x + 20, min(bounds["x"], x + width - wide - 20))
+        top = max(y + 20, min(bounds["y"], y + height - high - 20))
+        identifier = str(window["window_id"])
+        for command in (["wmctrl", "-i", "-r", identifier, "-b", "remove,maximized_vert,maximized_horz"],
+                        ["wmctrl", "-i", "-r", identifier, "-e", f"0,{left},{top},{wide},{high}"]):
+            result = await self.run_for(target, exec_args(target, command))
+            if result.code:
+                raise VmError("window_move_failed")
+
     async def seat_browser(self, target):
         from .seat_view import rectangle
         result = await self.run_for(target, exec_args(target, ["raphael-seat-browser",
@@ -424,14 +441,15 @@ class LocalVm:
         return dict(zip(("pid", "window_id"), map(int, match.groups())))
 
     async def release_member_seats(self, member):
-        for host, identifier in list(self.seats.rows):
-            if identifier == member:
-                target = self.shared_target(host, member, self.seats.seat(host, member))
-                self.seats.release(host, member)
-                await self.disconnect_driver(target.key)
-                await self.close_seat_viewers(target)
-                await self.close_displaced_seat_windows(target)
-                self.targets.pop(target.key, None)
+        async with self.seat_lock:
+            for host, identifier in list(self.seats.rows):
+                if identifier == member:
+                    target = self.shared_target(host, member, self.seats.seat(host, member))
+                    await self.disconnect_driver(target.key)
+                    await self.close_seat_viewers(target)
+                    await self.close_displaced_seat_windows(target)
+                    self.seats.release(host, member)
+                    self.targets.pop(target.key, None)
 
     def record_repair(self, target):
         # Counted, never announced: a connection that repaired itself says nothing, to the owner or in a member's progress.
@@ -1133,7 +1151,8 @@ exec /opt/venv/bin/python /opt/raphael-desktop/wallpaper.py --watch'''
         token = secrets.token_hex(16)
         script = 'echo $$ > "$1"; shift; exec timeout --signal=TERM --kill-after=2 "$@"'
         pidfile = f"/tmp/raphael-exec-{token}.pid"
-        args = exec_args(target, ["sh", "-c", script, "sh", pidfile, str(timeout), "sh", "-lc", f"cd {GUEST} && {command}"])
+        shell = ["env", "-u", "DISPLAY", "sh", "-lc"] if target.container else ["sh", "-lc"]
+        args = exec_args(target, ["sh", "-c", script, "sh", pidfile, str(timeout), *shell, f"cd {GUEST} && {command}"])
         try:
             result = await self.run_for(target, args, timeout=timeout + 5)
             output = (result.stdout + result.stderr)[:MAX_OUTPUT]
@@ -1147,7 +1166,8 @@ exec /opt/venv/bin/python /opt/raphael-desktop/wallpaper.py --watch'''
     async def _detached(self, target, command, timeout):
         job = secrets.token_hex(6)
         base = f"{GUEST}/.raphael-jobs/{job}"
-        script = ('mkdir -p "$1" && { timeout --signal=TERM --kill-after=2 "$2" sh -lc "$3"; echo $? > "$5"; } > "$4" 2>&1')
+        shell = "env -u DISPLAY sh" if target.container else "sh"
+        script = ('mkdir -p "$1" && { timeout --signal=TERM --kill-after=2 "$2" ' + shell + ' -lc "$3"; echo $? > "$5"; } > "$4" 2>&1')
         args = exec_args(target, ["sh", "-c", script, "sh", f"{GUEST}/.raphael-jobs", str(timeout),
                                   f"cd {GUEST} && {command}", f"{base}.log", f"{base}.exit"], detached=True)
         result = await self.run_for(target, args, timeout=30)

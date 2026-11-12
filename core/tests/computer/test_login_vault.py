@@ -4,6 +4,7 @@ import pytest
 
 from raphael_core.computer.logins import LoginVault
 from .test_vm import desktop, CatalogBridge, EmptyHub
+from .fixtures.driver_contract import bind_page, catalog, window_reply
 
 
 @pytest.mark.parametrize("failure", [False, True])
@@ -16,12 +17,13 @@ async def test_private_values_and_json_escapes_never_reach_results_or_errors(des
     password, username = 'secret-"\\\n密碼', 'owner-"\\帳號'
     class Browser(CatalogBridge):
         async def request(self, method, params=None):
+            if method == "tools/call" and params["name"] == "list_windows":
+                return window_reply(self.target)
             if method == "tools/list":
-                return {"tools": [{"name": name, "inputSchema": {"type": "object", "properties": {}}}
-                                  for name in ("get_browser_state", "browser_type")]}
+                return catalog(("get_browser_state", "browser_type"))
             if params["name"] == "get_browser_state":
-                return {"structuredContent": {"target_id": "tab", "url": "https://example.com/login"}}
-            if failure:
+                return {"structuredContent": {"target_id": "tab", "tab_id": "tab-1", "page": {"url": "https://example.com/login"}}}
+            if failure and params["name"] == "browser_type":
                 raise VmError(json.dumps({"password": password, "username": username}))
             return {"content": [{"type": "text", "text": json.dumps([password, username])}]}
     hub = VmTools(EmptyHub(), vm, attachments=AttachmentStore(tmp_path), conn=conn, bridge=Browser)
@@ -30,6 +32,7 @@ async def test_private_values_and_json_escapes_never_reach_results_or_errors(des
     reference = hub.logins.reference(0, "https://example.com")
     hub.logins.save(reference, json.dumps({"username": username, "password": password}))
     await hub.prepare()
+    await bind_page(hub, target)
     tool = next(item for item in hub.offered() if item.name == "fill_login")
     args = {"reference": reference, "site": "https://example.com", "target_id": "tab", "username_ref": "u", "password_ref": "p"}
     with vm_scope(("turn", 0, 7), turn_id=7, private=True):
@@ -67,12 +70,13 @@ async def test_fill_login_uses_the_owned_connection_and_never_returns_driver_ech
     class Browser(CatalogBridge):
         calls = []
         async def request(self, method, params=None):
+            if method == "tools/call" and params["name"] == "list_windows":
+                return window_reply(self.target)
             if method == "tools/list":
-                return {"tools": [{"name": "get_browser_state", "inputSchema": {"type": "object", "properties": {"target_id": {"type": "string"}}}},
-                                  {"name": "browser_type", "inputSchema": {"type": "object", "properties": {key: {"type": "string"} for key in ("target_id", "ref", "text")}, "required": ["target_id", "ref", "text"]}}]}
+                return catalog(("get_browser_state", "browser_type"))
             self.calls.append(params)
             if params["name"] == "get_browser_state":
-                return {"structuredContent": {"target_id": "bt-1", "url": "https://example.com/login"}}
+                return {"structuredContent": {"target_id": "bt-1", "tabs": [{"tab_id": "tab-1", "active": True, "url": "https://example.com/login"}]}}
             return {"content": [{"type": "text", "text": "private-owner never-send-this"}]}
     vault = LoginVault(Vault())
     reference = vault.reference(0, "https://example.com")
@@ -81,12 +85,14 @@ async def test_fill_login_uses_the_owned_connection_and_never_returns_driver_ech
     hub.logins = vault
     await hub.prepare()
     await hub._discover(target)
+    await bind_page(hub, target)
     tool = next(item for item in hub.offered() if item.name == "fill_login")
     with vm_scope(("turn", 0, 7), turn_id=7, private=True):
         result = await hub.call(tool.key, {"reference": reference, "site": "https://example.com", "target_id": "bt-1", "username_ref": "u", "password_ref": "p"}, approver="auto")
     assert result.ok and json.loads(result.text) == {"filled": True}
     assert len({call["arguments"]["session"] for call in Browser.calls}) == 1
     assert [call["arguments"]["text"] for call in Browser.calls if call["name"] == "browser_type"] == ["private-owner", "never-send-this"]
+    assert all(call["arguments"]["tab_id"] == "tab-1" for call in Browser.calls if call["name"] == "browser_type")
     assert "private-owner" not in repr(result) + caplog.text and "never-send-this" not in repr(result) + caplog.text
     with vm_scope(("turn", 0, 7), turn_id=7, private=True):
         wrong = await hub.call(tool.key, {"reference": reference, "site": "https://evil.example", "target_id": "bt-1", "username_ref": "u", "password_ref": "p"}, approver="auto")
@@ -130,14 +136,17 @@ async def test_removing_the_request_turn_keeps_restart_redaction_for_the_saved_l
     assert not rig.cards.cards_of(rig.turn)
     class Browser(CatalogBridge):
         async def request(self, method, params=None):
+            if method == "tools/call" and params["name"] == "list_windows":
+                return window_reply(self.target)
             if method == "tools/list":
                 return {"tools": [{"name": "get_browser_state", "inputSchema": {"type": "object"}}]}
-            return {"structuredContent": private, "content": [{"type": "text", "text": json.dumps(private)}]}
+            return {"structuredContent": {"target_id": "bound-own", **private}, "content": [{"type": "text", "text": json.dumps(private)}]}
     vm, target, _ = desktop
     hub = VmTools(EmptyHub(), vm, attachments=AttachmentStore(tmp_path), conn=conn, bridge=Browser)
     hub.logins = LoginVault(rig.vault, conn=conn)
     await hub.prepare()
     await hub._discover(target)
+    await bind_page(hub, target)
     tool = next(item for item in hub.offered() if item.name == "get_browser_state")
     with vm_scope(("turn", 0, 9), turn_id=9, private=True):
         result = await hub.call(tool.key, {"target_id": "bound-own"}, approver="auto")

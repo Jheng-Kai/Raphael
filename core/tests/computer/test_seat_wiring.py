@@ -16,6 +16,7 @@ from raphael_core.computer.vm_tools import VmTools, vm_scope
 from raphael_core.protocol import RpcError
 from raphael_core.services.attachment_store import AttachmentStore
 from .test_vm import Bridge, CatalogBridge, EmptyHub, Runtime, container
+from .fixtures.driver_contract import validate_call
 
 
 @pytest.fixture
@@ -211,7 +212,8 @@ async def test_seat_targets_are_never_erased_or_recorded_as_member_computers(sha
     assert not runtime.calls
 
 
-@pytest.mark.parametrize("name,native", [("click", True), ("browser_navigate", False)])
+@pytest.mark.parametrize("name,native", [("click", True), ("browser_navigate", False),
+    ("browser_click", True), ("browser_pointer", True), ("browser_dialog", True)])
 async def test_native_driver_calls_serialize_but_page_calls_overlap(shared_vm, tmp_path, name, native):
     vm, runtime = shared_vm
     first, second = await vm.seat(1), await vm.seat(2)
@@ -221,6 +223,7 @@ async def test_native_driver_calls_serialize_but_page_calls_overlap(shared_vm, t
     class Client:
         async def request(self, method, params):
             nonlocal inside, peak
+            validate_call(method, params)
             if params["name"] == "list_windows":
                 from .test_seat_tools import window
                 return {"structuredContent": {"windows": [window(1, 20), window(2, 1300)]}}
@@ -231,8 +234,14 @@ async def test_native_driver_calls_serialize_but_page_calls_overlap(shared_vm, t
             return {}
 
     client = Client()
-    await asyncio.gather(*(hub._driver_call(target, client, name, {"window_id": target.screen, "pid": target.screen}
-                                           if native else {}) for target in (first, second)))
+    for target in (first, second):
+        hub.page_windows[(target.key, "own")] = ("test", target.screen, target.screen)
+    extra = {"browser_navigate": dict(url="about:blank"), "browser_click": dict(x=5, y=6, delivery_mode="foreground"),
+             "browser_pointer": dict(action="hover", ref="button", delivery_mode="foreground"),
+             "browser_dialog": dict(action="dismiss", dialog_id="dialog", delivery_mode="foreground")}
+    await asyncio.gather(*(hub._driver_call(target, client, name,
+        {"window_id": target.screen, "pid": target.screen, "x": 5, "y": 6, "session": "test"} if name == "click" else
+        {"target_id": "own", "tab_id": "tab", "session": "test", **extra[name]}) for target in (first, second)))
     assert peak == (1 if native else 2)
 
 
@@ -246,13 +255,17 @@ async def test_a_hold_refuses_its_seat_but_only_blocks_other_seats_native_input(
     first, second = vm.target(1), vm.target(2)
     runtime.raw = container(vm, first, runtime)
     hub.busy_wait_s = .02
+    _, session = await hub._connection(second)
+    hub.page_windows[(second.key, "own")] = (session, 2, 2)
     vm.hold(first, True)
     for member, name, kind in [(1, "get_desktop_state", "owner_holds_control"),
                                 (1, "browser_navigate", "owner_holds_control"), (2, "click", "computer_busy"),
                                 (2, "get_desktop_state", None), (2, "browser_navigate", None)]:
         tool = next(tool for tool in hub.offered_for(member) if tool.name == name)
         with vm_scope(("turn", member, 1)):
-            result = await hub.call(tool.key, {}, approver="auto")
+            args = ({"window_id": 2, "pid": 2, "x": 5, "y": 6} if name == "click" else
+                    {"target_id": "own", "tab_id": "tab", "url": "about:blank"} if name == "browser_navigate" else {})
+            result = await hub.call(tool.key, args, approver="auto")
         assert result.kind == kind
         if kind == "computer_busy":
             assert json.loads(result.text)["held_by"] == "the owner"
@@ -266,6 +279,143 @@ def test_every_native_input_name_is_a_driver_tool():
     from raphael_core.computer.vm_catalog import DRIVER_TOOLS, NATIVE_INPUT_TOOLS
     assert NATIVE_INPUT_TOOLS <= DRIVER_TOOLS.keys()
     assert {"click", "type_text", "move_cursor", "clipboard_write", "browser_prepare"} <= NATIVE_INPUT_TOOLS
+
+
+async def test_waiting_viewer_open_cannot_register_a_seat_displaced_during_status(shared_vm):
+    vm, _ = shared_vm
+    for member in range(1, 7):
+        await vm.seat(member)
+    for member in range(2, 7):
+        vm.active[vm.target(member).key] = 1
+    viewer = DesktopViewer(vm)
+    viewer.server = object()
+    viewer.origin = "http://127.0.0.1:1234"
+    entered, resume = asyncio.Event(), asyncio.Event()
+    async def status(target):
+        entered.set()
+        await resume.wait()
+        return dict(state="running", ready=True)
+    viewer.status_for = status
+    opening = asyncio.create_task(viewer.open(dict(member_id=1)))
+    await entered.wait()
+    await vm.seat(7)
+    resume.set()
+    with pytest.raises(RpcError, match="seat changed"):
+        await opening
+    assert not viewer.sessions
+    assert vm.target(1).screen == 0 and vm.seats.holders("")[1] == 7
+
+
+async def test_viewer_displaced_during_relay_start_keeps_a_usable_server_without_a_stale_session(shared_vm, monkeypatch):
+    from types import SimpleNamespace
+    vm, _ = shared_vm
+    for member in range(1, 7):
+        await vm.seat(member)
+    for member in range(2, 7):
+        vm.active[vm.target(member).key] = 1
+    class Relay:
+        def __init__(self, *args):
+            pass
+        async def start(self):
+            await vm.seat(7)
+            return SimpleNamespace(sockets=[SimpleNamespace(getsockname=lambda: ("127.0.0.1", 1234))])
+        async def aclose(self):
+            pass
+    monkeypatch.setattr("raphael_core.computer.viewer.ViewerRelay", Relay)
+    viewer = DesktopViewer(vm)
+    try:
+        with pytest.raises(RpcError, match="seat changed"):
+            await viewer.open(dict(member_id=1))
+        assert viewer.server and viewer.origin == "http://127.0.0.1:1234" and viewer.monitor
+        assert not viewer.sessions
+    finally:
+        await viewer.aclose()
+
+
+@pytest.mark.parametrize("action", ["renew", "control", "request", "after_connection", "after_status", "register"])
+async def test_stale_viewer_sessions_are_dropped_at_every_entry_and_after_await(shared_vm, action):
+    vm, _ = shared_vm
+    target = await vm.seat(1)
+    viewer = DesktopViewer(vm)
+    viewer.origin = "http://127.0.0.1:1234"
+    viewer.sessions["old"] = session = Session(target, vm.clock() + 100, member_id=1)
+    async def displace():
+        vm.seats.release("", 1)
+        await vm.seat(2)
+    if action in ("after_connection", "after_status"):
+        async def connection(_):
+            await displace()
+            return 2222, "private"
+        async def status(_):
+            await displace()
+            return dict(state="running", ready=True)
+        viewer.connection_for, viewer.status_for = connection, status
+    else:
+        await displace()
+    if action in ("request", "after_connection"):
+        assert await viewer._prepare_request("GET", "/old/connection", dict(host="127.0.0.1:1234")) == {"code": 403}
+    elif action == "register":
+        assert not await viewer._register_peer("old", session.revision, "socket")
+    else:
+        with pytest.raises(RpcError, match="seat changed"):
+            await (viewer.control(dict(session="old", held=True)) if action == "control" else viewer.renew(dict(session="old")))
+    assert "old" not in viewer.sessions and target.key not in viewer.owners
+
+
+async def test_member_deletion_cleans_up_before_a_replacement_can_take_the_screen(shared_vm):
+    from raphael_core.computer.seats import ComputerSeats
+    vm, _ = shared_vm
+    vm.seats = ComputerSeats(count=1)
+    target = await vm.seat(1)
+    entered, resume = asyncio.Event(), asyncio.Event()
+    async def disconnect(key):
+        entered.set()
+        await resume.wait()
+    vm.disconnect_driver = disconnect
+    cleaned = []
+    async def cleanup(old):
+        assert old == target and vm.seats.holders("")[1] == 1
+        cleaned.append(1)
+    vm.close_displaced_seat_windows = cleanup
+    deletion = asyncio.create_task(vm.release_member_seats(1))
+    await entered.wait()
+    replacement = asyncio.create_task(vm.seat(2))
+    await asyncio.sleep(0)
+    assert not replacement.done()
+    resume.set()
+    await deletion
+    assert (await replacement).screen == 1 and cleaned == [1]
+    assert vm.seats.holders("")[1] == 2
+
+
+async def test_displaced_window_cleanup_rechecks_holder_after_window_list_await(shared_vm):
+    from .test_seat_tools import window
+    vm, runtime = shared_vm
+    target = await vm.seat(1)
+    async def rows(_):
+        vm.seats.release("", 1)
+        await vm.seat(2)
+        return dict(windows=[window(10, 20)])
+    vm.seat_windows = rows
+    await vm.close_displaced_seat_windows(target)
+    assert not any("-c" in args for args, _ in runtime.calls)
+
+
+@pytest.mark.parametrize("background", [False, True])
+@pytest.mark.parametrize("shared", [False, True])
+async def test_only_shared_member_shell_loses_display_in_foreground_and_background(shared_vm, shared, background):
+    from raphael_core.computer.vm import Result
+    vm, _ = shared_vm
+    if not shared:
+        vm.settings.set("computer_vm_mode", "per-bot")
+    target = await vm.seat(1)
+    vm.run_for = AsyncMock(return_value=Result(0))
+    await vm.execute(target, "printf hello", background=background)
+    args = vm.run_for.call_args_list[0].args[1]
+    if background:
+        assert ("env -u DISPLAY sh -lc" in args[args.index("sh") + 2]) is shared
+    else:
+        assert (["env", "-u", "DISPLAY"] == args[-6:-3]) is shared
 
 
 async def test_shared_catalog_keeps_dataset_and_teaching_unavailable(shared_vm, tmp_path):

@@ -599,6 +599,29 @@ class Acceptance:
         require(sessions[0] != sessions[1], f"Expected a core started again to use a new session label, observed {sessions}")
         return f"VmTools set up driver sessions {sessions[0]} and, as a core started again, {sessions[1]}; {text.splitlines()[0]}"
 
+    async def driver_schema(self, target):
+        from ..computer.vm_catalog import DRIVER_TOOLS
+        fixture = Path(__file__).resolve().parents[3] / "tests/computer/fixtures/driver_tools_0.37.0.json"
+        expected = json.loads(fixture.read_text(encoding="utf-8"))
+        await self.docker.owned(target.name)
+        found, cursor = {}, None
+        async with CuaBridge(self.machine, target) as client:
+            for _ in range(10):
+                page = await client.request("tools/list", {"cursor": cursor} if cursor else {})
+                for tool in page.get("tools", []):
+                    if tool.get("name") in DRIVER_TOOLS:
+                        require(tool["name"] not in found, f"Duplicate driver tool {tool['name']}")
+                        found[tool["name"]] = set(tool["inputSchema"].get("properties", {}))
+                cursor = page.get("nextCursor")
+                if not cursor:
+                    break
+            else:
+                raise AssertionError("Driver tools/list pagination did not end")
+        wanted = {name: set(schema.get("properties", {})) for name, schema in expected.items()}
+        require(found == wanted, f"Driver parameters changed; review fixture and SHARED_ARGUMENTS: "
+                f"{ {name: dict(expected=sorted(wanted.get(name, set())), observed=sorted(found.get(name, set()))) for name in wanted.keys() | found.keys() if wanted.get(name) != found.get(name)} }")
+        return f"All {len(wanted)} DRIVER_TOOLS parameter sets match the reviewed 0.37.0 fixture"
+
     async def app_path(self, target):
         original = self.machine.target
         # Stage A has no seats yet: capture a last-screen target through the real viewer path.
@@ -683,6 +706,7 @@ class Acceptance:
             await self.check(prefix + " layout", lambda: self.layout(target))
             await self.check(prefix + " views", lambda: self.views(target))
             await self.check(prefix + " driver connection", lambda: self.driver(target))
+            await self.check(prefix + " driver schema", lambda: self.driver_schema(target))
             if count > 1:
                 for seat in (1, count):
                     await self.check(prefix + f" steering screen {seat}", lambda seat=seat: self.steer(target, seat))
@@ -725,13 +749,17 @@ class Acceptance:
             def offered(self):
                 return []
 
-        calls = []
+        calls, observations = [], []
+        first_result = len(self.results)
 
         class RecordingBridge(CuaBridge):
             async def request(self, method, params=None, **kwargs):
                 if method == "tools/call":
                     calls.append((self.target.key, params["name"], dict(params["arguments"])))
-                return await super().request(method, params, **kwargs)
+                reply = await super().request(method, params, **kwargs)
+                if method == "tools/call":
+                    observations.append((self.target.key, params["name"], reply))
+                return reply
 
         machine = self.machine
         old_settings, old_command, old_seats = machine.settings, machine.bridge_command, machine.seats
@@ -804,7 +832,8 @@ class Acceptance:
                 return "Two product VmTools catalogs and sessions, seats 1/2, one six-screen 6 GiB/4 CPU container started once"
 
             if not await self.check("shared prepares", prepare):
-                return "Shared dependent checks skipped after preparation failure (see failed shared prepares)"
+                self.record("shared dependent checks", "skipped", "shared prepares failed")
+                raise AssertionError("Shared preparation failed; dependent checks skipped")
 
             async def lists():
                 for member in members:
@@ -846,6 +875,91 @@ class Acceptance:
                 return "Two seat-local terminals; foreign window read/click refused before driver dispatch"
             terminals_ok = await self.check("shared terminal wall", launches)
 
+            async def pointer_wall():
+                member = members[1]
+                args = {key: terminals[member][key] for key in ("pid", "window_id")}
+                client, session = await hub._connection(targets[member])
+                async def pointer():
+                    reply = await client.request("tools/call", {"name": "get_cursor_position", "arguments": {"session": session}})
+                    require(not reply.get("isError"), f"Expected real pointer read, observed {reply}")
+                    state = reply.get("structuredContent") or {}
+                    if {"x", "y"} <= state.keys():
+                        return state["x"], state["y"]
+                    text = "\n".join(block.get("text", "") for block in reply.get("content", []) if block.get("type") == "text")
+                    match = re.search(r"Cursor at \((-?[\d.]+),\s*(-?[\d.]+)\)", text)
+                    require(match, f"Expected pointer coordinates, observed {text}")
+                    return tuple(map(float, match.groups()))
+                await tool(member, "get_window_state", {**args, "include_screenshot": True})
+                before = await pointer()
+                dispatched = len([call for call in calls if call[1] == "click"])
+                result = await tool(member, "click", {**args, "x": 1380, "y": 80}, allow_refusal=True)
+                require(not result.ok and "inside this member's screen" in result.text, f"Expected out-of-seat refusal, observed {result}")
+                require(dispatched == len([call for call in calls if call[1] == "click"]), "Refused click reached driver")
+                after = await pointer()
+                require(after == before, f"Refused click moved real pointer: {before} -> {after}")
+                return f"Out-of-seat click refused before dispatch; real pointer unchanged at {before}"
+
+            async def target_wall():
+                member = members[1]
+                args = {key: terminals[member][key] for key in ("pid", "window_id")}
+                for extra in ({"coordinate_frame": "desktop"}, {"target": {"kind": "window", **args}}):
+                    before = len([call for call in calls if call[1] == "click"])
+                    result = await tool(member, "click", {**args, "x": 20, "y": 60, **extra}, allow_refusal=True)
+                    require(not result.ok, f"Expected forbidden targeting refusal, observed {result}")
+                    require(before == len([call for call in calls if call[1] == "click"]), f"Forbidden {extra} reached driver")
+                return "coordinate_frame=desktop and target refused before driver dispatch"
+
+            async def native_text():
+                member = members[1]
+                args = {key: terminals[member][key] for key in ("pid", "window_id")}
+                result = await tool(member, "get_window_state", args)
+                require(result.text.startswith("window_id=") and "element_token for row [" in result.text,
+                        f"Expected driver's window/tree/token text on seat 2, observed {result.text[:500]!r}")
+                moved = await tool(member, "move_cursor", {"x": 40, "y": 50})
+                cursor = await tool(member, "get_cursor_position", {})
+                require("Moved the real desktop pointer to (40, 50)." in moved.text and "Cursor at (40, 50)" in cursor.text,
+                        f"Expected seat coordinates in pointer prose, observed {moved.text!r}, {cursor.text!r}")
+                return "Seat 2 retains window_id/tree/element_token prose; move/read pointer says (40, 50)"
+
+            async def verifies():
+                member = members[1]
+                window = next(row for row in await rows(member) if row["window_id"] == terminals[member]["window_id"])
+                args = {key: window[key] for key in ("pid", "window_id")}
+                await tool(member, "verify_state", {**args, "expect": [{"window": {"bounds": window["bounds"]}}]})
+                state = next(reply.get("structuredContent", {}) for key, name, reply in reversed(observations)
+                             if key == targets[member].key and name == "verify_state")
+                require(state.get("status") == "satisfied", f"Expected seat-local bounds satisfied on seat 2, observed {state}")
+                return "verify_state with seat 2's current seat-local bounds is satisfied"
+
+            async def shortcuts():
+                first, second = members
+                args = {key: terminals[first][key] for key in ("pid", "window_id")}
+                await tool(first, "bring_to_front", args)
+                peer = [row["window_id"] for row in await rows(second)]
+                require(peer, "Expected peer windows to observe")
+                for keys in (["ctrl", "F2"], ["ctrl", "alt", "d"], ["alt", "Tab"]):
+                    await tool(first, "hotkey", {**args, "keys": keys})
+                    root = await self.text(targets[first], ["xprop", "-root", "_NET_NUMBER_OF_DESKTOPS", "_NET_CURRENT_DESKTOP", "_NET_ACTIVE_WINDOW"])
+                    require(re.search(r"_NET_NUMBER_OF_DESKTOPS\(CARDINAL\) = 1\b", root)
+                            and re.search(r"_NET_CURRENT_DESKTOP\(CARDINAL\) = 0\b", root), f"Expected one current workspace after {keys}, observed {root}")
+                    active = re.search(r"_NET_ACTIVE_WINDOW\(WINDOW\): window id # (0x[0-9a-fA-F]+)", root)
+                    own = {row["window_id"] for row in await rows(first)}
+                    require(active and int(active[1], 16) in own, f"Expected active window on seat 1 after {keys}, observed {root}")
+                    for identifier in peer:
+                        mapped = await self.text(targets[first], ["xwininfo", "-id", str(identifier), "-stats"])
+                        workspace = await self.text(targets[first], ["xprop", "-id", str(identifier), "_NET_WM_DESKTOP"])
+                        require("Map State: IsViewable" in mapped and re.search(r"= (?:0|4294967295)\s*$", workspace),
+                                f"Expected peer window {identifier} mapped on the one workspace after {keys}: {mapped}, {workspace}")
+                return "ctrl+F2, ctrl+alt+d and alt+Tab retain peer mapped windows on one workspace and seat 1 focus"
+
+            for name, action in (("shared pointer wall", pointer_wall), ("shared target forms", target_wall),
+                                 ("shared native text", native_text), ("shared seat-local verify", verifies),
+                                 ("shared global shortcuts", shortcuts)):
+                if terminals_ok:
+                    await self.check(name, action)
+                else:
+                    self.record(name, "skipped", "shared terminal wall failed")
+
             async def typing():
                 async def type_line(member, suffix):
                     window = terminals[member]
@@ -873,6 +987,8 @@ class Acceptance:
                 return f"Exact independent file lines; alone={alone}, together={together:.3f}s, individual concurrent calls={parallel}"
             if terminals_ok:
                 await self.check("shared simultaneous native typing", typing)
+            else:
+                self.record("shared simultaneous native typing", "skipped", "shared terminal wall failed")
 
             async def browsers():
                 for member in members:
@@ -896,6 +1012,21 @@ class Acceptance:
                 return f"One browser pid {pids[0]}, two windows and private session bindings, independent navigation, foreign target refused"
             browsers_ok = await self.check("shared computer browser", browsers)
 
+            async def page_text():
+                result = await tool(members[1], "get_browser_state", active_tab(pages[members[1]]))
+                lines = []
+                for line in result.text.splitlines():
+                    try:
+                        lines.append(json.loads(line))
+                    except ValueError:
+                        pass
+                require(len(lines) == 1, f"Expected exactly one page JSON line on seat 2, observed {result.text[:500]}")
+                return "Seat 2 page prose is followed by exactly one JSON line"
+            if browsers_ok:
+                await self.check("shared page text", page_text)
+            else:
+                self.record("shared page text", "skipped", "shared computer browser failed")
+
             async def pictures():
                 first, second = members
                 await tool(first, "bring_to_front", {key: terminals[first][key] for key in ("pid", "window_id")})
@@ -918,6 +1049,8 @@ class Acceptance:
                 return f"Two product 1280x900 RGB PNGs; title strip {area}, own_changed={changed[first]:.3f}, neighbour_changed={changed[second]:.3f}"
             if terminals_ok:
                 await self.check("shared clipped product pictures", pictures)
+            else:
+                self.record("shared clipped product pictures", "skipped", "shared terminal wall failed")
 
             async def control():
                 first, second = members
@@ -940,16 +1073,27 @@ class Acceptance:
                         await rows(second)
                         if browsers_ok:
                             await tool(second, "get_browser_state", active_tab(pages[second]))
+                            before = len([call for call in calls if call[1] == "browser_click"])
+                            refused = await tool(second, "browser_click", {**active_tab(pages[second]), "x": 20, "y": 20,
+                                                  "delivery_mode": "foreground"}, allow_refusal=True)
+                            require(refused.kind == "computer_busy", f"Expected held foreground browser click busy, observed {refused}")
+                            require(before == len([call for call in calls if call[1] == "browser_click"]), "Held foreground browser click reached driver")
+                            await tool(second, "browser_navigate", {**active_tab(pages[second]), "url": "about:blank#owner-held"})
                     finally:
                         hub.busy_wait_s = old_wait
                     await viewer.control({**opened, "held": False})
                     await tool(second, "press_key", {**args, "key": "Return"})
-                    return "Takeover during another seat's vm_exec succeeds; own calls refused, peer native waits/busy, page/read continue, handback restores native"
+                    return ("Takeover during peer vm_exec; own calls refused, peer native waits/busy, peer window lists continue, handback restores native"
+                            + ("; foreground browser click waits/busy before dispatch while page read/navigation continue" if browsers_ok else "; browser hold checks skipped"))
                 finally:
                     await command
                     await viewer.close(opened)
             if terminals_ok:
                 await self.check("shared owner control", control)
+            else:
+                self.record("shared owner control", "skipped", "shared terminal wall failed")
+            if not browsers_ok:
+                self.record("shared foreground page hold", "skipped", "shared computer browser failed")
 
             async def disconnect():
                 pid = next(row["pid"] for row in await rows(members[1]) if row["app_name"].lower() == "chromium-browser")
@@ -960,6 +1104,8 @@ class Acceptance:
                 return f"Seat 1 connection ended; browser pid {pid} and seat 2's bound tab survive"
             if browsers_ok:
                 await self.check("shared session ends independently", disconnect)
+            else:
+                self.record("shared session ends independently", "skipped", "shared computer browser failed")
 
             async def displacement():
                 third = 9203
@@ -986,6 +1132,7 @@ class Acceptance:
                     await asyncio.sleep(.1)
                 return "Free seat 3 preserves holders; with count=2 the idle LRU seat is replaced and all its non-panel windows close"
             await self.check("shared seat displacement", displacement)
+            require(not any(row["result"] == "failed" for row in self.results[first_result:]), "One or more shared checks failed; see named results")
             return "Shared product checks completed; see each named shared result"
         finally:
             await viewer.aclose()
@@ -996,6 +1143,7 @@ class Acceptance:
             machine.disconnect_driver, machine.close_seat_viewers = old_disconnect, old_close
             if targets and not self.keep:
                 await self.check("shared stop", lambda: self.stop(next(iter(targets.values()))))
+            require(not any(row["result"] == "failed" for row in self.results[first_result:]), "One or more shared checks failed; see named results")
 
     async def cleanup(self):
         if self.machine:
