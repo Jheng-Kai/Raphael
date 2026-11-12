@@ -11,6 +11,24 @@ CHANGES = {"click", "double_click", "right_click", "type_text", "press_key", "ho
            "browser_type", "browser_select", "browser_pointer", "browser_dialog", "browser_set_input_files", "fill_login", "fill_contact", "fill_card"}
 
 
+def meaningful_expectation(expect):
+    """A completion check must actually constrain a window or identify an element."""
+    if not isinstance(expect, list):
+        return False
+    for predicate in expect:
+        if not isinstance(predicate, dict):
+            continue
+        window, element = predicate.get("window"), predicate.get("element")
+        if isinstance(window, dict) and (type(window.get("exists")) is bool or
+                isinstance(window.get("bounds"), dict) and all(type(window['bounds'].get(key)) in (int, float)
+                    for key in ('x', 'y', 'width', 'height'))):
+            return True
+        if isinstance(element, dict) and isinstance(element.get("selector"), dict) and any(
+                isinstance(value, str) and bool(value.strip()) for value in element["selector"].values()):
+            return True
+    return False
+
+
 class ComputerVerification:
     def __init__(self):
         self.required = False
@@ -46,7 +64,13 @@ class ComputerVerification:
                 self.required = True
             # The driver's verify_state takes its expectations as `expect`; `predicates` was the name in an older schema,
             # and a check written to the real one was not counted, so a member that had verified was asked to again.
-            elif verb in READS and (verb != 'verify_state' or arguments.get('expect') or arguments.get('predicates')):
+            elif verb == 'verify_state':
+                legacy = arguments.get('predicates')
+                # Older records also used a flat window predicate. Only history accepts that shape/name.
+                flat = [{'window': item} for item in legacy if isinstance(item, dict)] if isinstance(legacy, list) else None
+                if meaningful_expectation(arguments.get('expect')) or meaningful_expectation(legacy) or meaningful_expectation(flat):
+                    self.required = False
+            elif verb in READS:
                 self.required = False
 
     def finishing(self):

@@ -109,6 +109,17 @@ def test_restored_completion_evidence_uses_only_the_result_header(read_ok):
     ({"expect": [{"window": {"exists": True}}]}, True),   # the driver's own schema (0.37.0)
     ({"predicates": [{"exists": True}]}, True),            # the name of the older schema, still counted
     ({"expect": []}, False),
+    ({"expect": [{}]}, False),
+    ({"expect": [{"window": {}}]}, False),
+    ({"expect": [{"element": {"selector": {}}}]}, False),
+    ({"expect": "malformed"}, False),
+    ({"expect": {"window": {"exists": True}}}, False),
+    ({"expect": [{"window": {"exists": False}}]}, True),
+    ({"expect": [{"window": {"bounds": {"x": "bad"}}}]}, False),
+    ({"expect": [{"element": {"selector": {"role": "   "}}}]}, False),
+    ({"predicates": [{}]}, False),
+    ({"predicates": "malformed"}, False),
+    ({"expect": [{"element": {"selector": {"role": "button"}}}]}, True),
     ({}, False),
 ])
 def test_a_verify_state_written_to_the_drivers_schema_counts_as_the_check(arguments, checked):
@@ -324,7 +335,7 @@ def test_speed_summary_reports_median_worst_and_strict_budgets_without_running_a
     assert summary['browser_open']['passed'] and summary['run_steps']['passed'] is None
 
 
-@pytest.mark.parametrize("expectation", ["live", "empty", "legacy"])
+@pytest.mark.parametrize("expectation", ["live", "empty", "legacy", "malformed", "empty-predicate", "empty-window", "empty-selector", "invalid-bounds"])
 async def test_batch_verification_observation_uses_live_expect_before_any_action(desktop, tmp_path, expectation):
     from .fixtures.driver_contract import catalog
     vm, target, _ = desktop
@@ -346,10 +357,69 @@ async def test_batch_verification_observation_uses_live_expect_before_any_action
         return await original(child, arguments, **kwargs)
     hub.step_gate = gate
     args = {"pid": 1, "window_id": 1}
-    args.update({"expect": [{"window": {"exists": True}}]} if expectation == "live" else
+    bad = {"malformed": "malformed", "empty-predicate": [{}], "empty-window": [{"window": {}}],
+           "empty-selector": [{"element": {"selector": {}}}], "invalid-bounds": [{"window": {"bounds": {"x": "bad"}}}]}
+    args.update({"expect": bad[expectation]} if expectation in bad else {"expect": [{"window": {"exists": True}}]} if expectation == "live" else
                 {"expect": []} if expectation == "empty" else {"predicates": [{"exists": True}]})
     result = await hub.call(key(hub, "run_steps"), {"steps": [{"name": "click", "arguments": {"pid": 1, "window_id": 1}}],
         "observation": {"name": "verify_state", "arguments": args}}, approver="auto")
     assert result.ok is (expectation == "live")
     assert len(seen) == (2 if expectation == "live" else 0)
+    await hub.aclose()
+
+
+@pytest.mark.parametrize('name,args', [
+    ('get_window_state', {'pid': 'malformed', 'window_id': 1}),
+    ('get_browser_state', {'target_id': 'own', 'tab_id': 'tab', 'snapshot_format': 'malformed'}),
+])
+async def test_batch_validates_the_observations_own_schema_before_dispatch(desktop, tmp_path, name, args):
+    from .fixtures.driver_contract import catalog
+    vm, target, _ = desktop
+    class Driver(CatalogBridge):
+        async def request(self, method, params=None):
+            if method == 'tools/list':
+                return catalog()
+            return await super().request(method, params)
+    hub = VmTools(EmptyHub(), vm, attachments=AttachmentStore(tmp_path), bridge=Driver)
+    await hub.prepare()
+    await hub._discover(target)
+    ToolGate(hub)
+    sent = []
+    async def gate(*args, **kwargs):
+        sent.append(args)
+        return PluginResult(True)
+    hub.step_gate = gate
+    result = await hub.call(key(hub, 'run_steps'), {
+        'steps': [{'name': 'click', 'arguments': {'pid': 1, 'window_id': 1}}],
+        'observation': {'name': name, 'arguments': args}}, approver='auto')
+    assert not result.ok and result.kind == 'bad_arguments' and not sent
+    await hub.aclose()
+
+
+async def test_batch_fetches_the_live_observation_schema_before_any_action(desktop, tmp_path):
+    from .fixtures.driver_contract import catalog
+    from copy import deepcopy
+    vm, _, _ = desktop
+    class Driver(CatalogBridge):
+        async def request(self, method, params=None):
+            if method == 'tools/list':
+                result = deepcopy(catalog())
+                definition = next(tool for tool in result['tools'] if tool['name'] == 'get_window_state')
+                # Model a live catalog with a newly required, otherwise ordinary read argument.
+                definition['inputSchema'].setdefault('required', []).append('max_elements')
+                return result
+            return await super().request(method, params)
+    hub = VmTools(EmptyHub(), vm, attachments=AttachmentStore(tmp_path), bridge=Driver)
+    await hub.prepare()
+    ToolGate(hub)
+    sent = []
+    async def gate(*args, **kwargs):
+        sent.append(args)
+        return PluginResult(True)
+    hub.step_gate = gate
+    result = await hub.call(key(hub, 'run_steps'), {
+        'steps': [{'name': 'click', 'arguments': {'pid': 1, 'window_id': 1}}],
+        'observation': {'name': 'get_window_state', 'arguments': {'pid': 1, 'window_id': 1}}}, approver='auto')
+    assert not result.ok and result.kind == 'bad_arguments' and not sent
+    assert hub.vm.target().key in hub.listed
     await hub.aclose()

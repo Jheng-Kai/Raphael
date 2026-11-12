@@ -868,12 +868,18 @@ async def test_shared_acceptance_drives_real_tools_through_every_numbered_check(
     for row in rows:
         row["bounds"].update(y=851, width=146, height=49)
     pending, files, bindings, urls = {}, {}, {}, {}
+    form_refs, form_values = {}, {}
+    generation = 0
     pointer = [0, 0]
     active = [None]
     launches, attachments = [], []
     original_runtime = runtime.__call__
 
     async def runner(args, **kwargs):
+        if acceptance.FORM_START in args:
+            return vm.Result(0, '{"port": 18765}')
+        if acceptance.FORM_STOP in args:
+            return vm.Result(0, '')
         if args[0] == "run":
             runtime.raw = container(machine, machine.shared_target("", 9201, 1), runtime)
         if "wmctrl" in args:
@@ -916,6 +922,7 @@ async def test_shared_acceptance_drives_real_tools_through_every_numbered_check(
     async def leave(self, *args):
         self.process = None
     async def request(self, method, params=None, **kwargs):
+        nonlocal generation
         if method == "tools/list":
             return catalog()
         validate_call(method, params)
@@ -963,7 +970,7 @@ async def test_shared_acceptance_drives_real_tools_through_every_numbered_check(
             session = args["session"]
             if "window_id" in args:
                 identifier = args["window_id"]
-                target = f"target-{session}"
+                target = f"target-{session}-{len(bindings)}"
                 bindings[target] = session, identifier
                 urls.setdefault(identifier, "about:blank")
             else:
@@ -975,7 +982,23 @@ async def test_shared_acceptance_drives_real_tools_through_every_numbered_check(
                 urls[identifier] = args["url"]
             state = (dict(target_id=target, tabs=[dict(tab_id="tab", active=True, url=urls[identifier])]) if "window_id" in args else
                      dict(target_id=target, tab_id="tab", page=dict(url=urls[identifier])))
+            if name == 'get_browser_state' and urls[identifier].startswith('http://127.0.0.1:') and 'window_id' not in args:
+                generation += 1
+                names = ['Name', 'Secret'] if generation % 2 else ['Secret', 'Name']
+                form_refs[target, 'tab'] = [dict(ref=f'p{generation}:{index}', frame='main', role='textbox', name=name,
+                    actions=['type', 'pointer'], value=('????' if name == 'Secret' and form_values.get((identifier, name)) else form_values.get((identifier, name))))
+                    for index, name in enumerate(names, 1)]
+                state.update(refs=form_refs[target, 'tab'], snapshot=dict(id=f'p{generation}', truncated=False))
             text = "Bound browser page."
+        elif name == 'browser_type':
+            from computer.fixtures.semantic_browser import refused
+            rows_for_tab = form_refs.get((args['target_id'], args['tab_id']), [])
+            row = next((row for row in rows_for_tab if row['ref'] == args['ref']), None)
+            if row is None:
+                return refused(args['ref'])
+            identifier = bindings[args['target_id']][1]
+            form_values[identifier, row['name']] = args['text']
+            state = dict(effect='unverifiable', delivery=dict(delivered_count=len(args['text'])))
         return dict(content=[dict(type="text", text=text)], structuredContent=state)
     monkeypatch.setattr(CuaBridge, "__aenter__", enter)
     monkeypatch.setattr(CuaBridge, "__aexit__", leave)
@@ -1045,8 +1068,113 @@ async def test_shared_acceptance_drives_real_tools_through_every_numbered_check(
     assert not [row for row in run.results if row["result"] != "ok"], run.results
     assert [row["name"] for row in run.results] == ["shared prepares", "shared window lists", "shared terminal wall",
         "shared pointer wall", "shared target forms", "shared native text", "shared seat-local verify", "shared global shortcuts",
-        "shared simultaneous native typing", "shared computer browser", "shared page text", "shared clipped product pictures", "shared owner control",
+        "shared simultaneous native typing", "shared computer browser", "shared typed form", "shared page text", "shared clipped product pictures", "shared owner control",
         "shared session ends independently", "shared seat displacement", "shared stop"]
     assert launches == [1, 2]
-    assert len(attachments) == 2 and len({session for session, _ in attachments}) == 2
+    assert len(attachments) == 3 and len({session for session, _ in attachments}) == 2
     assert len(files) == 4
+
+
+async def test_form_server_programs_require_exact_run_owner_before_guest_execution(tmp_path):
+    runner = FakeDocker()
+    machine = vm.LocalVm(tmp_path, runner=runner)
+    target = machine.target(1)
+    runner.containers[target.name] = raw_container(target.name, machine.owner)
+    guard = acceptance.IsolatedDocker(runner, machine.owner, 'raphael-acceptance/cua-local-vm:test')
+    for program in (acceptance.FORM_START, acceptance.FORM_STOP):
+        compile(program, "<acceptance guest>", "exec")
+        for extra in ([], ['foreign'], [machine.owner, 'extra']):
+            with pytest.raises(AssertionError, match='exact form program'):
+                await guard.authorize(['exec', '-u', 'cua', target.name, 'python3', '-c', program, *extra])
+        await guard.authorize(['exec', '-u', 'cua', target.name, 'python3', '-c', program, machine.owner])
+    runner.containers[target.name]['Config']['Labels'][f'{vm.LABEL}.owner'] = 'foreign'
+    with pytest.raises(AssertionError):
+        await guard.authorize(['exec', '-u', 'cua', target.name, 'python3', '-c', acceptance.FORM_START, machine.owner])
+
+
+async def test_one_screen_block_runs_product_form_once_and_other_counts_do_not(tmp_path, monkeypatch):
+    run = acceptance.Acceptance(FakeDocker())
+    run.root = tmp_path
+    run.machine = vm.LocalVm(tmp_path, runner=run.runner)
+    seen = []
+    async def check(name, action):
+        if name.endswith('typed form'):
+            await action()
+        return True
+    async def form(target, member):
+        seen.append((target.screens, member))
+        return 'synthetic boundary'
+    monkeypatch.setattr(run, 'check', check)
+    monkeypatch.setattr(run, 'per_bot_form', form)
+    for count in (1, 3, 6):
+        await run.computer(count, 6)
+    assert seen == [(1, 1)]
+
+
+@pytest.mark.parametrize("failure", [False, True])
+async def test_per_bot_form_drives_product_open_ref_refusal_and_the_shared_fill_helper(tmp_path, monkeypatch, failure):
+    from types import SimpleNamespace
+    from computer.test_vm import Runtime, container
+    from computer.fixtures.semantic_browser import measured
+    from raphael_core.computer.vm_bridge import CuaBridge
+    runtime = Runtime()
+    run = acceptance.Acceptance(runtime)
+    run.root = tmp_path
+    run.machine = machine = vm.LocalVm(tmp_path, runner=runtime)
+    target = machine.target(1)
+    monkeypatch.setattr(vm, 'IMAGE', run.tag)
+    runtime.raw = container(machine, target, runtime)
+    programs, calls = [], []
+    async def runner(args, **kwargs):
+        if acceptance.FORM_START in args:
+            programs.append('start')
+            return vm.Result(0, '{"port": 18765}')
+        if acceptance.FORM_STOP in args:
+            programs.append('stop')
+            return vm.Result(0, '')
+        return await runtime(args, **kwargs)
+    run.docker = acceptance.IsolatedDocker(runner, machine.owner, run.tag)
+    machine.run = run.docker
+    async def enter(self):
+        self.process = SimpleNamespace(returncode=None)
+        self.url = 'about:blank'
+        return self
+    async def leave(self, *args):
+        self.process = None
+    @measured(('Name', 'Secret'))
+    async def request(self, method, params=None, **kwargs):
+        if method == 'tools/list':
+            return catalog()
+        validate_call(method, params)
+        name, args = params['name'], params['arguments']
+        calls.append((name, dict(args)))
+        if name == 'browser_type' and failure:
+            from computer.fixtures.semantic_browser import refused
+            return refused(args['ref'])
+        if name == 'browser_prepare':
+            assert args['allow_launch'] and args['profile']['mode'] == 'isolated_named'
+            return {'structuredContent': {'pid': 99}}
+        if name == 'list_windows':
+            return {'structuredContent': {'windows': [dict(pid=99, window_id=7, app_name='Chromium-browser')]}}
+        if name == 'browser_navigate':
+            self.url = args['url']
+        if name == 'get_browser_state':
+            if 'window_id' in args:
+                return {'structuredContent': dict(target_id='own', tabs=[dict(tab_id='tab', active=True, url=self.url)])}
+            return {'structuredContent': dict(target_id='own', tab_id='tab', page={'url': self.url})}
+        return {'content': []}
+    monkeypatch.setattr(CuaBridge, '__aenter__', enter)
+    monkeypatch.setattr(CuaBridge, '__aexit__', leave)
+    monkeypatch.setattr(CuaBridge, 'request', request)
+    before = machine.bridge_command, machine.disconnect_driver, machine.busy, machine.native_busy, machine.input_busy
+    if failure:
+        with pytest.raises(ValueError):
+            await run.per_bot_form(target, 1)
+    else:
+        result = await run.per_bot_form(target, 1)
+        assert 'password masked/nonempty' in result
+    assert programs == ['start', 'stop']
+    typed = [args for name, args in calls if name == 'browser_type']
+    assert [args['text'] for args in typed] == (['acceptance 王小明'] if failure else ['acceptance 王小明', 'acceptance-secret'])
+    assert all(args['ref'] != 'p1:1' for args in typed)
+    assert before == (machine.bridge_command, machine.disconnect_driver, machine.busy, machine.native_busy, machine.input_busy)

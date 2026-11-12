@@ -4,6 +4,8 @@ import json
 
 import pytest
 
+from computer.fixtures.semantic_browser import measured, member_ref
+
 from raphael_core.agent.gate import ToolGate
 from raphael_core.agent.safety import DENY, SafetyGuard, SafetyRules
 from raphael_core.brain.settings import SettingsStore
@@ -24,6 +26,7 @@ async def test_full_permission_login_stays_private_and_an_explicit_deny_wins(des
     private = {"username": 'owner-"\\帳號', "password": 'password-"\\\n密碼'}
     forwarded, events = [], []
     class Browser(CatalogBridge):
+        @measured(("username", "password", "name", "address", "phone", "email"))
         async def request(self, method, params=None):
             if method == "tools/list":
                 return {"tools": [{"name": name, "inputSchema": {"type": "object", "properties": {}}}
@@ -48,7 +51,7 @@ async def test_full_permission_login_stays_private_and_an_explicit_deny_wins(des
     await bind_page(hub, vm.target(0))
     forwarded.clear()
     client.chats = [chat("", ("computer__fill_login", {"site": "https://example.com", "reference": reference,
-                     "target_id": "tab", "username_ref": "u", "password_ref": "p"})),
+                     "target_id": "tab", "username_ref": member_ref(hub, vm.target(0), "tab", "username"), "password_ref": member_ref(hub, vm.target(0), "tab", "password")})),
                     *([] if deny else [chat("", ("computer__get_browser_state", {"target_id": "tab", "tab_id": "tab-1"}))]),
                     chat('{"text":"Finished."}')]
     try:
@@ -69,6 +72,7 @@ async def test_contact_values_never_reach_model_history_notifications_or_logs(de
     private = {key: f'private-{key}-"\\\n密碼' for key in ("name", "address", "phone", "email")}
     filled = []
     class Browser(CatalogBridge):
+        @measured(("username", "password", "name", "address", "phone", "email"))
         async def request(self, method, params=None):
             if method == "tools/list":
                 return {"tools": [{"name": name, "inputSchema": {"type": "object"}} for name in ("get_browser_state", "browser_type")]}
@@ -88,7 +92,7 @@ async def test_contact_values_never_reach_model_history_notifications_or_logs(de
     await bind_page(hub, vm.target(0))
     client.chats = [chat("", ("find_tools", {"query": "vault_entries fill_contact"})),
         chat("", use("computer__vault_entries", {})), chat("", use("computer__fill_contact", {"site": "https://example.com", "reference": identifier,
-        "label": "Company", "target_id": "tab", "fields": {key: key + "-ref" for key in private}})),
+        "label": "Company", "target_id": "tab", "fields": {key: member_ref(hub, vm.target(0), "tab", key) for key in private}})),
         chat("", ("computer__get_browser_state", {"target_id": "tab", "tab_id": "tab-1"})), chat('{"text":"Finished."}')]
     try:
         result = await typed(rig, "Fill my work contact details")
@@ -107,6 +111,7 @@ async def test_card_in_the_real_loop_asks_even_with_allow_all(desktop, conn, tmp
     vm, _, _ = desktop
     calls = []
     class Browser(CatalogBridge):
+        @measured(("username", "password", "name", "address", "phone", "email"))
         async def request(self, method, params=None):
             calls.append(method)
             return await super().request(method, params)

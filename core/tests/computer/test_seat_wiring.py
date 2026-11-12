@@ -597,3 +597,39 @@ async def test_incomplete_displacement_restores_the_old_holder_before_unlocking(
     vm.disconnect_driver = AsyncMock()
     assert (await vm.seat(1)).screen == 1
     vm.close_displaced_seat_windows.assert_awaited_once_with(old)
+
+
+@pytest.mark.parametrize("restore_failure", [False, True])
+async def test_final_seat_publish_failure_restores_the_exact_screen_or_reports_failure(shared_vm, conn, restore_failure):
+    import sqlite3
+    from raphael_core.computer.seats import ComputerSeats
+    from raphael_core.computer.vm import VmError
+    vm, _ = shared_vm
+    vm.seats = ComputerSeats(conn, count=3, clock=iter(range(100)).__next__)
+    vm.seats.restore('', 2, 3)
+    # A lower numbered free screen appears during cleanup. Rollback must still restore screen 3.
+    vm.seats.restore('', 3, 1)
+    vm.seats.restore('', 4, 2)
+    old = vm.target(2)
+    vm.disconnect_driver = AsyncMock()
+    vm.close_seat_viewers = AsyncMock()
+    async def cleanup(target):
+        assert target == old and vm.seat_lock.locked()
+        vm.seats.release('', 3)
+    vm.close_displaced_seat_windows = cleanup
+    conn.executescript("""
+        CREATE TRIGGER reject_new_seat BEFORE INSERT ON computer_seats
+        WHEN NEW.member_id = 1
+        BEGIN SELECT RAISE(ABORT, 'synthetic write failure'); END;
+    """)
+    if restore_failure:
+        conn.executescript("""
+            CREATE TRIGGER reject_restored_seat BEFORE INSERT ON computer_seats
+            WHEN NEW.member_id = 2
+            BEGIN SELECT RAISE(ABORT, 'synthetic restore failure'); END;
+        """)
+    with pytest.raises(VmError if restore_failure else sqlite3.Error, match='seat_restore_failed' if restore_failure else 'synthetic write failure'):
+        await vm.seat(1)
+    assert not vm.seat_lock.locked() and vm.target(1).screen == 0
+    assert vm.target(2).screen == (0 if restore_failure else 3)
+    assert [tuple(row) for row in conn.execute('SELECT seat FROM computer_seats WHERE member_id=2')] == ([] if restore_failure else [(3,)])

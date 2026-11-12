@@ -594,12 +594,17 @@ class LocalVm:
                     await self.disconnect_driver(old.key)
                     await self.close_seat_viewers(old)
                     await self.close_displaced_seat_windows(old)
+                    self.seats.take(target.remote, member_id, busy=busy)
                 except BaseException:
                     # A cancelled/failed transition must not expose an uncleaned free screen.
-                    self.seats.take(target.remote, displaced)
+                    try:
+                        self.seats.restore(target.remote, displaced, number)
+                    except Exception as error:
+                        raise VmError("seat_restore_failed") from error
                     raise
                 self.targets.pop(old.key, None)
-            self.seats.take(target.remote, member_id, busy=busy)
+            else:
+                self.seats.take(target.remote, member_id, busy=busy)
             return self.target(member_id)
 
     async def available(self, target=None):

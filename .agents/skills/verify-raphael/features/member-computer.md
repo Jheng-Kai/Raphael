@@ -529,9 +529,7 @@ ToolGate.call_plugin and the existing current tool/schema, grant, action-lock,
 owner hold and audit boundary. Stop on the first error/lease notice; identify the
 one-based failed step and count completed steps without returning intermediate
 screen contents. Never reuse the outer approval for another action. Shell,
-takeover, secrets and nested composites are excluded. Shared API/worker and CLI
-completion guards require a post-action window/page read or nonempty verify_state
-predicates before completion; one correction is allowed, then completion fails.
+takeover, secrets and nested composites are excluded. Shared API/worker and CLI completion guards require a post-action window/page read or verify_state expect containing a meaningful window exists/bounds predicate or an element with a nonempty selector. Historical predicates records remain counted only by the tracker. run_steps validates its observation schema and meaningful expect before dispatching its first action; one correction is allowed, then completion fails.
 
 Thin/empty/consent-wall web_read results escalate through the current member's
 member's own browser. Exact Reject all / necessary-only semantic buttons may be
@@ -1214,14 +1212,10 @@ lines without diff headers; incomplete coverage never promises a complete restor
 
 request_secret(site) extends the existing secure card with username/password.
 Credential Manager holds the values; SQLite holds only member/origin/reference
-metadata, independently of the requesting turn. fill_login checks the exact HTTPS
-origin and current grant before each field through the computer's lasting browser
-connection. It never submits. Takeover remains available. Driver results and all
+metadata, independently of the requesting turn. fill_login, fill_contact and fill_card share _type_page_fields: resolve member refs before internal reads, match one typeable frame/role/name row per fresh exact-tab snapshot, retain per-field HTTPS/grant/label/amount checks, and require exact delivered_count without effect=refused. Fill reads make the member picture stale through stale/screen_changed and require a fresh read before another action. It never submits. Takeover remains available. Driver results and all
 fill exceptions yield only filled true/false. Later page text/errors redact plain
 and JSON-escaped values on computer results before model/history/events. Delegate
-results pass through untouched. Filled-page pictures stay hidden until a different
-origin and a complete tree prove the filled refs absent; no timer or other-tab
-read lifts suppression. Saving a login alone hides nothing.
+results pass through untouched. Filled-page pictures stay hidden while any exact target/tab mark remains. Only a complete read of that same tab showing that it left its origin can lift the mark (same-origin navigation and lost fields never do); no timer, other-tab read or rebind lifts suppression, and probes leave the current member tab unchanged. Saving a login alone hides nothing.
 Vault read failures log only the exception type and never fail prepare. Login fields
 are full-width labelled rows, with Save below. Explicit safety denials still win over
 full permission on the API and shared CLI/background gate. Slack uses the supplied

@@ -193,6 +193,40 @@ class NoHub:
     def record_unrun(self, *args, **kwargs): pass
 
 
+# These exact guest programs create only this run's two synthetic pages and one loopback server.
+FORM_START = """import http.client,json,pathlib,socket,subprocess,sys,time
+root=pathlib.Path('/tmp/raphael-form-'+sys.argv[1]); root.mkdir(exist_ok=False)
+(root/'index.html').write_text('<!doctype html><title>Acceptance form</title><label>Name<input aria-label="Name"></label><label>Secret<input type="password" aria-label="Secret"></label>')
+(root/'other.html').write_text('<!doctype html><title>Acceptance other page</title><p>Done</p>')
+s=socket.socket(); s.bind(('127.0.0.1',0)); port=s.getsockname()[1]; s.close()
+with (root/'server.log').open('w') as log:
+ p=subprocess.Popen(['python3','-m','http.server',str(port),'--bind','127.0.0.1','--directory',str(root)],stdout=log,stderr=log,start_new_session=True)
+stat=pathlib.Path('/proc')/str(p.pid)/'stat'
+(root/'server.json').write_text(json.dumps({'pid':p.pid,'start':stat.read_text().rsplit(')',1)[1].split()[19],'port':port}))
+for attempt in range(100):
+ if p.poll() is not None: raise RuntimeError('Acceptance form server exited')
+ try:
+  c=http.client.HTTPConnection('127.0.0.1',port,timeout=.2); c.request('GET','/'); r=c.getresponse(); ok=r.status==200; r.read(); c.close()
+  if ok: print(json.dumps({'port':port})); break
+ except OSError: pass
+ time.sleep(.05)
+else: raise RuntimeError('Acceptance form server did not become ready')
+"""
+FORM_STOP = """import json,os,pathlib,signal,sys
+root=pathlib.Path('/tmp/raphael-form-'+sys.argv[1]); record=root/'server.json'
+if record.exists():
+ data=json.loads(record.read_text()); proc=pathlib.Path('/proc')/str(data['pid'])
+ try:
+  start=(proc/'stat').read_text().rsplit(')',1)[1].split()[19]
+  cmd=(proc/'cmdline').read_bytes().split(bytes([0]))
+ except FileNotFoundError: pass
+ else:
+  expected=[b'python3',b'-m',b'http.server',str(data['port']).encode(),b'--bind',b'127.0.0.1',b'--directory',str(root).encode(),b'']
+  if start!=data['start'] or cmd!=expected: raise RuntimeError('Refused to stop an unrelated process')
+  os.kill(data['pid'],signal.SIGTERM)
+"""
+
+
 class IsolatedDocker:
     """All product and acceptance Docker commands pass through this owner guard."""
 
@@ -232,6 +266,9 @@ class IsolatedDocker:
                 while args[index] == "-e":
                     index += 2
                 name = args[index]
+                guest = args[index + 1:]
+                if len(guest) >= 3 and guest[:2] == ["python3", "-c"] and guest[2] in (FORM_START, FORM_STOP):
+                    require(guest == ["python3", "-c", guest[2], self.owner], "Expected this run's exact form program")
             else:
                 name = args[-1]
                 forms = {"start": [["start", name]],
@@ -846,6 +883,76 @@ class Acceptance:
                 return f"layer {layer} {operation}: incompatible -> {'absent with workspace removed' if operation == 'erase' else 'ready on new image, workspace file preserved'}"
             await self.check(f"{name} {operation}", exercise)
 
+    async def form(self, hub, target, member):
+        """Type synthetic values through the same page helper used by all saved fills."""
+        from ..agent.plugins import tool_key
+        from ..computer.vm_tools import vm_scope
+        async def tool(name, args):
+            with vm_scope(("turn", member, 1)):
+                result = await hub.call(tool_key(f"computer-{target.key}", name), args, approver="auto")
+            require(result.ok and result.kind not in ("screen_changed", "computer_busy"), f"Form {name} failed: {result.kind}")
+            return result
+        def page(result):
+            for line in reversed(result.text.splitlines()):
+                try:
+                    data = json.loads(line)
+                except ValueError:
+                    continue
+                if isinstance(data, dict) and "refs" in data:
+                    return data
+            raise AssertionError("Expected product semantic form refs")
+        def field(state, name):
+            rows = [row for row in state['refs'] if row.get('name') == name and 'type' in row.get('actions', [])]
+            require(len(rows) == 1, f"Expected one {name} field")
+            return rows[0]
+        try:
+            data = json.loads(await self.text(target, ["python3", "-c", FORM_START, self.machine.owner]))
+            origin = f"http://127.0.0.1:{data['port']}"
+            state = page(await tool("browser_open", {"url": origin + "/"}))
+            address = dict(target_id=state['target_id'], tab_id=state['tab_id'])
+            stale = field(state, 'Name')['ref']
+            state = page(await tool("get_browser_state", address))
+            before = {name: field(state, name).get('value') for name in ('Name', 'Secret')}
+            page_result = await tool("browser_type", {**address, "ref": stale, "text": "must-not-appear"})
+            structured = next((json.loads(line) for line in page_result.text.splitlines() if line.startswith('{')), {})
+            require(structured.get('effect') == 'refused', f"Expected stale-ref refusal, observed {page_result.kind}")
+            state = page(await tool("get_browser_state", address))
+            require(before == {name: field(state, name).get('value') for name in before}, "Stale ref changed the form")
+            def check_page(reply, url):
+                require(urlsplit(url)._replace(path='', query='', fragment='').geturl() == origin, "Form left its loopback origin")
+            # A name as this owner's contacts have them: the count of what was delivered must hold beyond ASCII.
+            name = 'acceptance 王小明'
+            await hub._type_page_fields(target, member, address['target_id'],
+                [(field(state, 'Name')['ref'], name), (field(state, 'Secret')['ref'], 'acceptance-secret')],
+                check_page, private=False)  # Synthetic acceptance data must be observable through the product.
+            state = page(await tool("get_browser_state", address))
+            require(field(state, 'Name').get('value') == name, f"Name was not typed, observed {field(state, 'Name').get('value')!r}")
+            masked = field(state, 'Secret').get('value')
+            require(isinstance(masked, str) and bool(masked) and 'acceptance-secret' not in masked, "Password was not masked and nonempty")
+            await tool("browser_navigate", {**address, "url": origin + "/other.html"})
+            return "Product form: name typed, password masked/nonempty; older snapshot ref refused without changing either field"
+        finally:
+            await self.text(target, ["python3", "-c", FORM_STOP, self.machine.owner])
+
+    async def per_bot_form(self, target, member):
+        old_command = self.machine.bridge_command
+        old_busy, old_native, old_input = self.machine.busy, self.machine.native_busy, self.machine.input_busy
+        old_disconnect = self.machine.disconnect_driver
+        async def guarded_bridge(target, args):
+            await self.docker.authorize(args)
+            return await old_command(target, args)
+        self.machine.bridge_command = guarded_bridge
+        hub = VmTools(NoHub(), self.machine, attachments=AttachmentStore(self.root / "form-attachments"))
+        try:
+            await hub.prepare(member)
+            await hub._discover(target)
+            return await self.form(hub, target, member)
+        finally:
+            await hub.aclose()
+            self.machine.bridge_command = old_command
+            self.machine.busy, self.machine.native_busy, self.machine.input_busy = old_busy, old_native, old_input
+            self.machine.disconnect_driver = old_disconnect
+
     async def computer(self, count, largest):
         began = time.monotonic()
         target = replace(self.machine.target(count), screens=count)
@@ -864,6 +971,8 @@ class Acceptance:
             await self.check(prefix + " views", lambda: self.views(target))
             await self.check(prefix + " driver connection", lambda: self.driver(target))
             await self.check(prefix + " driver schema", lambda: self.driver_schema(target))
+            if count == 1:
+                await self.check(prefix + " typed form", lambda: self.per_bot_form(target, count))
             await self.check(prefix + " desktop picture", lambda: self.wallpaper(target))
             await self.check(prefix + " keys", lambda: self.keys(target))
             if count > 1:
@@ -1173,6 +1282,10 @@ class Acceptance:
                 require(not result.ok, f"Expected foreign page binding refusal, observed {result.text}")
                 return f"One browser pid {pids[0]}, two windows and private session bindings, independent navigation, foreign target refused"
             browsers_ok = await self.check("shared computer browser", browsers)
+            if browsers_ok:
+                await self.check("shared typed form", lambda: self.form(hub, targets[members[0]], members[0]))
+            else:
+                self.record("shared typed form", "skipped", "shared computer browser failed")
 
             async def page_text():
                 result = await tool(members[1], "get_browser_state", active_tab(pages[members[1]]))

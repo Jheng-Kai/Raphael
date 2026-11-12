@@ -2,6 +2,8 @@ import json
 
 import pytest
 
+from .fixtures.semantic_browser import measured, member_ref
+
 from raphael_core.computer.logins import LoginVault
 from .test_vm import desktop, CatalogBridge, EmptyHub
 from .fixtures.driver_contract import bind_page, catalog, window_reply
@@ -16,6 +18,7 @@ async def test_private_values_and_json_escapes_never_reach_results_or_errors(des
     vm, target, _ = desktop
     password, username = 'secret-"\\\n密碼', 'owner-"\\帳號'
     class Browser(CatalogBridge):
+        @measured(("username", "password"))
         async def request(self, method, params=None):
             if method == "tools/call" and params["name"] == "list_windows":
                 return window_reply(self.target)
@@ -34,7 +37,7 @@ async def test_private_values_and_json_escapes_never_reach_results_or_errors(des
     await hub.prepare()
     await bind_page(hub, target)
     tool = next(item for item in hub.offered() if item.name == "fill_login")
-    args = {"reference": reference, "site": "https://example.com", "target_id": "tab", "username_ref": "u", "password_ref": "p"}
+    args = {"reference": reference, "site": "https://example.com", "target_id": "tab", "username_ref": member_ref(hub, vm.target(0), "tab", "username"), "password_ref": member_ref(hub, vm.target(0), "tab", "password")}
     with vm_scope(("turn", 0, 7), turn_id=7, private=True):
         result = await hub.call(tool.key, args, approver="auto")
     assert result.ok is not failure
@@ -69,6 +72,7 @@ async def test_fill_login_uses_the_owned_connection_and_never_returns_driver_ech
     vm, target, runtime = desktop
     class Browser(CatalogBridge):
         calls = []
+        @measured(("username", "password"))
         async def request(self, method, params=None):
             if method == "tools/call" and params["name"] == "list_windows":
                 return window_reply(self.target)
@@ -88,14 +92,18 @@ async def test_fill_login_uses_the_owned_connection_and_never_returns_driver_ech
     await bind_page(hub, target)
     tool = next(item for item in hub.offered() if item.name == "fill_login")
     with vm_scope(("turn", 0, 7), turn_id=7, private=True):
-        result = await hub.call(tool.key, {"reference": reference, "site": "https://example.com", "target_id": "bt-1", "username_ref": "u", "password_ref": "p"}, approver="auto")
+        result = await hub.call(tool.key, {"reference": reference, "site": "https://example.com", "target_id": "bt-1", "username_ref": member_ref(hub, vm.target(0), "bt-1", "username"), "password_ref": member_ref(hub, vm.target(0), "bt-1", "password")}, approver="auto")
     assert result.ok and json.loads(result.text) == {"filled": True}
     assert len({call["arguments"]["session"] for call in Browser.calls}) == 1
     assert [call["arguments"]["text"] for call in Browser.calls if call["name"] == "browser_type"] == ["private-owner", "never-send-this"]
     assert all(call["arguments"]["tab_id"] == "tab-1" for call in Browser.calls if call["name"] == "browser_type")
     assert "private-owner" not in repr(result) + caplog.text and "never-send-this" not in repr(result) + caplog.text
     with vm_scope(("turn", 0, 7), turn_id=7, private=True):
-        wrong = await hub.call(tool.key, {"reference": reference, "site": "https://evil.example", "target_id": "bt-1", "username_ref": "u", "password_ref": "p"}, approver="auto")
+        changed = await hub.call(tool.key, dict(reference=reference, site="https://example.com", target_id="bt-1", username_ref="old", password_ref="old"), approver="auto")
+        assert changed.kind == "screen_changed"
+        read = next(item for item in hub.offered() if item.name == "get_browser_state")
+        await hub.call(read.key, {"target_id": "bt-1", "tab_id": "tab-1"}, approver="auto")
+        wrong = await hub.call(tool.key, {"reference": reference, "site": "https://evil.example", "target_id": "bt-1", "username_ref": member_ref(hub, vm.target(0), "bt-1", "username"), "password_ref": member_ref(hub, vm.target(0), "bt-1", "password")}, approver="auto")
     assert not wrong.ok and json.loads(wrong.text) == {"filled": False}
     assert len([call for call in Browser.calls if call["name"] == "browser_type"]) == 2
     await hub.aclose()
@@ -135,6 +143,7 @@ async def test_removing_the_request_turn_keeps_restart_redaction_for_the_saved_l
         conn.execute("DELETE FROM agent_turns WHERE id=?", (rig.turn,))
     assert not rig.cards.cards_of(rig.turn)
     class Browser(CatalogBridge):
+        @measured(("username", "password"))
         async def request(self, method, params=None):
             if method == "tools/call" and params["name"] == "list_windows":
                 return window_reply(self.target)
@@ -166,6 +175,7 @@ async def test_fill_and_private_picture_use_only_the_tab_observed_for_this_conne
     calls = []
     class Browser(CatalogBridge):
         url = "https://example.com/login"
+        @measured(("username", "password"))
         async def request(self, method, params=None):
             if method == "tools/list":
                 return catalog(("get_browser_state", "browser_type"))
@@ -196,7 +206,7 @@ async def test_fill_and_private_picture_use_only_the_tab_observed_for_this_conne
     target = vm.target(0)
     if shape != "unseen":
         await bind_page(hub, target)
-    args = dict(reference=reference, site="https://example.com", target_id="own", username_ref="u", password_ref="p")
+    args = dict(reference=reference, site="https://example.com", target_id="own", username_ref=member_ref(hub, target, "own", "username"), password_ref=member_ref(hub, target, "own", "password"))
     result = await hub._fill_login(target, 0, args)
     assert result.ok is (shape in ("snapshot", "active"))
     typed = [call for call in calls if call["name"] == "browser_type"]
@@ -215,4 +225,79 @@ async def test_fill_and_private_picture_use_only_the_tab_observed_for_this_conne
     count = len(calls)
     assert await hub._private_picture(target, {})
     assert len(calls) == count
+    await hub.aclose()
+
+
+@pytest.mark.parametrize("shared", [False, True])
+@pytest.mark.parametrize("kind", ["login", "contact", "card"])
+@pytest.mark.parametrize("outcome", ["typed", "refused", "short", "missing", "error", "duplicate", "absent", "unknown"])
+async def test_saved_fill_matches_fresh_semantics_and_requires_exact_delivery(desktop, tmp_path, conn, shared, kind, outcome):
+    from .fixtures.semantic_browser import refused
+    from raphael_core.computer.vm_tools import VmTools, vm_scope
+    from raphael_core.computer.vault_entries import VaultEntries
+    from raphael_core.services.attachment_store import AttachmentStore
+    from .test_vm import container
+    vm, _, runtime = desktop
+    vm.settings.set("computer_vm_mode", "shared" if shared else "per-bot")
+    runtime.raw = container(vm, vm.target(), runtime)
+    typed = []
+    class Browser(CatalogBridge):
+        @measured(("name", "password"))
+        async def request(self, method, params=None):
+            if method == 'tools/list':
+                return catalog(('get_browser_state', 'browser_type', 'get_window_state'))
+            name, args = params['name'], params['arguments']
+            if name == 'list_windows':
+                return window_reply(self.target)
+            if name == 'get_browser_state':
+                return {'structuredContent': {'target_id': 'own', 'tab_id': 'exact-tab', 'page': {'url': 'https://example.com/form'}}}
+            if name == 'browser_type':
+                typed.append(dict(args))
+                if outcome == 'refused':
+                    return refused(args['ref'])
+                if outcome == 'error':
+                    return {'isError': True, 'content': [{'type': 'text', 'text': args['text']}]}
+                if outcome in ('short', 'missing'):
+                    return {'structuredContent': {'delivery': {'delivered_count': len(args['text']) - 1} if outcome == 'short' else {}}}
+            return {'content': []}
+    hub = VmTools(EmptyHub(), vm, attachments=AttachmentStore(tmp_path), bridge=Browser)
+    hub.logins = VaultEntries(Vault(), conn=conn)
+    values = {'username': 'synthetic-name', 'password': 'synthetic-secret'} if kind == 'login' else (
+        {'name': 'synthetic-name', 'address': '', 'phone': '', 'email': ''} if kind == 'contact' else
+        {'name': 'synthetic-name', 'number': '4111111111111111', 'expiry': '12/30', 'cvc': '123'})
+    reference = hub.logins.put({'kind': kind, 'label': 'Test', 'origin': 'https://example.com' if kind == 'login' else '', 'values': values})
+    await hub.prepare()
+    target = vm.target()
+    await bind_page(hub, target)
+    original = Browser.request
+    async def change(self, method, params=None):
+        reply = await original(self, method, params)
+        if method == 'tools/call' and params['name'] == 'get_browser_state':
+            rows = reply['structuredContent']['refs']
+            if outcome == 'duplicate':
+                rows.append({**next(row for row in rows if row['name'] == 'name'), 'ref': 'duplicate'})
+            elif outcome == 'absent':
+                rows[:] = [row for row in rows if row['name'] != 'name']
+        return reply
+    Browser.request = change
+    refs = {name: member_ref(hub, target, 'own', name) for name in ('name', 'password')}
+    if outcome == 'unknown':
+        refs['name'] = 'unknown-ref'
+    args = dict(reference=reference, site='https://example.com', target_id='own')
+    if kind == 'login':
+        args.update(username_ref=refs['name'], password_ref=refs['password'])
+    else:
+        args.update(label='Test', fields={'name': refs['name']})
+        if kind == 'card':
+            args['amount'] = ''
+    with vm_scope(('turn', 0, 17), turn_id=17):
+        result = await hub.call(next(t.key for t in hub.offered() if t.name == 'fill_' + kind), args, approver='user')
+    assert result.ok is (outcome == 'typed')
+    assert json.loads(result.text)['filled'] is (outcome == 'typed')
+    if outcome == 'typed':
+        assert [call['ref'] for call in typed] == (['p2:2', 'p3:2'] if kind == 'login' else ['p2:2'])
+        assert all(call['tab_id'] == 'exact-tab' for call in typed)
+    if outcome in ('unknown', 'duplicate', 'absent'):
+        assert not typed
+    assert all(value not in repr(result) for value in values.values() if value)
     await hub.aclose()

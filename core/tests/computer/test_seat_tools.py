@@ -601,7 +601,10 @@ async def test_private_reads_and_fill_helpers_share_the_moved_target_gate(seat_t
     client.calls.clear()
     hub.logins = SimpleNamespace(load=lambda *args: dict(username="private-user", password="private-password"),
         entry=lambda *args: (dict(label="Saved"), dict(name="private-name")), entries=lambda *args: [dict(id="saved", label="Saved")])
-    hub.private_pages[(target.key, "own-target")] = dict(origins=set(), refs={"field"})
+    hub._observe_page(target, dict(target_id="own-target", tab_id="tab", refs=[
+        dict(ref=ref, frame="main", role="textbox", name=ref, actions=["type"])
+        for ref in ("user", "password", "field")]))
+    hub._protect_page(target, "own-target", "https://example.com", ("field",), tab_id="tab")
     args = dict(reference="saved", site="https://example.com", target_id="own-target", username_ref="user", password_ref="password",
                 fields=dict(name="field"), label="Saved", amount="")
     if operation == "picture":

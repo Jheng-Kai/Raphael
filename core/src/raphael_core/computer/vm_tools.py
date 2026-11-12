@@ -27,6 +27,7 @@ from .vm_bridge import CuaBridge
 from .vm_catalog import DRIVER_TOOLS, FRESH_READS, NATIVE_INPUT_TOOLS, NOTICES, PAGE_TOOLS, READS, SCREEN_READS, SHARED_ARGUMENTS, offline_catalog, shared_argument_paths, shared_native_input, without_session
 from .takeover import TAKEOVER
 from . import seat_view
+from ..worker.computer_verification import meaningful_expectation
 
 _SCOPE = ContextVar("computer_scope", default=None)
 _TURN = ContextVar("computer_turn", default=(0, False, None))
@@ -184,6 +185,7 @@ class VmTools:
         self.private_pages = {}
         self.page_windows = {}
         self.page_tabs = {}
+        self.page_refs = {}
         self.payment_holds = set() if conn is None else {row[0] for row in conn.execute("SELECT target FROM computer_payment_holds")}
         self.checkpointed, self.checkpoint_locks = set(), {}
         self.refreshes = {}
@@ -507,7 +509,10 @@ class VmTools:
                         tree = json.loads(result.text.rsplit("\n", 1)[-1])
                     except ValueError:
                         tree = {}
-                result.text = json.dumps(self._without_values(tree), ensure_ascii=False) + "\nPrivate fields are hidden until the filled page leaves its origin and its fields are absent. Use page references or request_takeover; no screenshot was returned."
+                # This value-free tree is the snapshot actually handed to the member.
+                # Record its refs without changing the member's current tab to the probe's tab.
+                self._remember_page_refs(picture_target, tree)
+                result.text = json.dumps(self._without_values(tree), ensure_ascii=False) + "\nPrivate fields are hidden until a complete read of the filled tab shows it has left its origin or lost its fields. Use page references or request_takeover; no screenshot was returned."
                 if self.logins:
                     for identifier in private_members:
                         result.text = self.logins.redact(identifier, result.text)
@@ -532,18 +537,19 @@ class VmTools:
                 failures[target.state_key] = True
                 logger.warning("File checkpoint skipped: %s", type(error).__name__)
 
-    def _observe_page(self, target, page):
+    def _observe_page(self, target, page, *, remember=True):
         from urllib.parse import urlsplit
         identifier = page.get("target_id")
         url = (page.get("page") or {}).get("url") or page.get("url") or next((tab.get("url") for tab in page.get("tabs", []) if tab.get("active") is True), None)
         key = (target.key, identifier)
-        if identifier:
-            active = next((tab for tab in page.get("tabs", []) if tab.get("active") is True), {})
-            tab_id = page.get("tab_id") or active.get("tab_id")
+        tab_id = page.get("tab_id") or next((tab.get("tab_id") for tab in page.get("tabs", []) if tab.get("active") is True), None)
+        if identifier and remember:
             if tab_id:
                 self.page_tabs[key] = tab_id
             elif "tabs" in page:
                 self.page_tabs.pop(key, None)
+            self._remember_page_refs(target, page)
+        key = (*key, tab_id)
         protected = self.private_pages.get(key)
         if protected and url:
             try:
@@ -553,10 +559,32 @@ class VmTools:
                 current = (parsed.scheme.lower(), parsed.hostname, parsed.port or (443 if parsed.scheme == "https" else 80))
             except (ValueError, TypeError):
                 return
-            nodes = page.get("nodes")
-            if (current not in protected["origins"] and isinstance(nodes, list) and page.get("truncated") is False
-                    and not page.get("has_more") and not self._has_private_refs(nodes, protected["refs"])):
+            nodes = page.get("refs", page.get("nodes"))
+            snapshot = page.get("snapshot")
+            # The driver says a snapshot is whole with `complete` and no `continuation` (0.37.0, measured); the shape
+            # before it said `truncated` and `has_more`. Anything that does not plainly say "whole" is not.
+            if isinstance(snapshot, dict):
+                complete = snapshot.get("complete") is True and snapshot.get("continuation") is None
+            else:
+                complete = page.get("truncated") is False and not page.get("has_more")
+            # Only another origin lifts the mark. The next page of the same site may show what was just filled (an
+            # order's review page shows the card), so losing the fields on the same origin lifts nothing.
+            if (isinstance(nodes, list) and complete and current not in protected["origins"]
+                    and not self._has_private_refs(nodes, protected["refs"])):
                 self.private_pages.pop(key, None)
+
+    @staticmethod
+    def _field_identity(row):
+        if isinstance(row, dict) and "type" in row.get("actions", []) and all(
+                isinstance(row.get(key), str) for key in ("frame", "role", "name")):
+            return row["frame"], row["role"], row["name"]
+
+    def _remember_page_refs(self, target, page):
+        tab_id = page.get("tab_id") or next((tab.get("tab_id") for tab in page.get("tabs", []) if tab.get("active") is True), None)
+        if page.get("target_id") and tab_id and ("refs" in page or "snapshot" in page):
+            self.page_refs[target.key, page["target_id"], tab_id] = {
+                row["ref"]: self._field_identity(row) for row in page.get("refs", [])
+                if self._field_identity(row) is not None and isinstance(row.get("ref"), str)}
 
     @staticmethod
     def _has_private_refs(value, refs):
@@ -574,12 +602,14 @@ class VmTools:
             return [VmTools._without_values(item) for item in value]
         return value
 
-    def _protect_page(self, target, identifier, url, refs):
+    def _protect_page(self, target, identifier, url, refs, *, tab_id=None, fields=()):
         from urllib.parse import urlsplit
         parsed = urlsplit(url)
-        protected = self.private_pages.setdefault((target.key, identifier), {"origins": set(), "refs": set()})
-        protected["origins"].add((parsed.scheme.lower(), parsed.hostname, parsed.port or 443))
+        tab_id = tab_id or self.page_tabs.get((target.key, identifier))
+        protected = self.private_pages.setdefault((target.key, identifier, tab_id), {"origins": set(), "refs": set(), "fields": set()})
+        protected["origins"].add((parsed.scheme.lower(), parsed.hostname, parsed.port or (443 if parsed.scheme == "https" else 80)))
         protected["refs"].update(refs)
+        protected["fields"].update(fields)
 
     async def _private_picture(self, target, arguments):
         keys = [key for key in self.private_pages if key[0] == target.key]
@@ -587,15 +617,13 @@ class VmTools:
         self.private_tree.pop(target.key, None)
         for key in keys:
             try:
-                client, session = await self._connection(target)
-                tab_id = self.page_tabs.get(key)
-                if not tab_id:
+                if key[2] is None or target.key not in self.connections:
                     continue
+                client, session = await self._connection(target)
                 state = await self._driver_call(target, client, "get_browser_state", {
-                    "target_id": key[1], "tab_id": tab_id, "session": session, "include_screenshot": False, "snapshot_format": "semantic_v2"})
+                    "target_id": key[1], "tab_id": key[2], "session": session, "include_screenshot": False, "snapshot_format": "semantic_v2"}, remember=False)
                 page = state.get("structuredContent") or {}
                 if not state.get("isError"):
-                    self._observe_page(target, page)
                     self.private_tree[target.key] = page
             except Exception:
                 pass
@@ -681,8 +709,8 @@ class VmTools:
                 # Another used the screen since this one looked at it: look again before acting on it.
                 result = PluginResult(True, "screen_changed", json.dumps({
                     "status": "screen_changed",
-                    "note": "Another member used the computer while you waited, so the screen is no longer what you last saw. "
-                            "Nothing was done. Read the intended get_window_state, then do this again if it is still needed."}))
+                    "note": "The computer has changed since your last read, so the screen is no longer what you last saw. "
+                            "Nothing was done. Read the intended get_window_state or get_browser_state, then do this again if it is still needed."}))
                 return result
             lock = self.actions.setdefault(target.key, asyncio.Lock()) if screen else None
             if lock is not None:
@@ -882,7 +910,15 @@ class VmTools:
             return PluginResult(False, "blocked")
         if not Draft202012Validator(RUN_STEPS["parameters"]).is_valid(arguments):
             return PluginResult(False, "bad_arguments")
-        if arguments['observation']['name'] == 'verify_state' and not arguments['observation']['arguments'].get('expect'):
+        try:
+            await self._discover(target)
+        except Exception:
+            return PluginResult(False, "tool_changed")
+        observation = arguments['observation']
+        schema = self.schemas.get(tool_key(f"computer-{target.key}", observation['name']))
+        if not schema or not Draft202012Validator(schema).is_valid(observation['arguments']):
+            return PluginResult(False, "bad_arguments")
+        if observation['name'] == 'verify_state' and not meaningful_expectation(observation['arguments'].get('expect')):
             return PluginResult(False, "bad_arguments", "verify_state needs a nonempty expectation before any batch action.")
         completed = 0
         # Subcalls retain the ordinary action lock, audit, lease and private-field redaction.
@@ -972,41 +1008,75 @@ class VmTools:
             raise ValueError("Current browser tab is unavailable")
         return tab_id, url
 
+    async def _type_page_fields(self, target, member, identifier, fields, check_page, *, private=True, skip_empty=False):
+        """Resolve member refs once, then match and type against each freshly checked page.
+
+        check_page receives the same raw reply and URL used for that field. Vault callers
+        keep their HTTPS/grant/amount rules there; acceptance can check its own loopback origin.
+        No driver diagnostics or values leave this boundary.
+        """
+        # The displayed private tree may name a different tab from the last foreground read.
+        # Resolve all refs to one known tab; identical ref strings across tabs are ambiguous.
+        fields = list(fields)
+        candidates = [(key[2], meanings) for key, meanings in self.page_refs.items()
+                      if key[:2] == (target.key, identifier) and all(ref in meanings for ref, _ in fields)]
+        if len(candidates) != 1:
+            raise ValueError()
+        tab_id, meanings = candidates[0]
+        resolved = [(meanings[ref], text) for ref, text in fields]
+        if skip_empty:
+            resolved = [(meaning, text) for meaning, text in resolved if text]
+        if not tab_id or not resolved:
+            raise ValueError()
+        client, session = await self._connection(target, member=member)
+        schema = self.schemas.get(tool_key(f"computer-{target.key}", "browser_type"))
+        if not schema:
+            raise ValueError()
+        # Every read below invalidates member refs, including a read before a refused fill.
+        # Reuse the screen lease's stale marker, which a fresh member read clears.
+        owner = self.leases.get(target.key)
+        if owner is not None:
+            self.stale.add((target.key, owner))
+        self.page_refs.pop((target.key, identifier, tab_id), None)
+        for meaning, text in resolved:
+            state = await self._driver_call(target, client, "get_browser_state", {
+                "target_id": identifier, "tab_id": tab_id, "session": session,
+                "include_screenshot": False, "snapshot_format": "semantic_v2"}, remember=False)
+            page = state.get("structuredContent") or {}
+            actual_tab, url = self._page_tab(page)
+            if (state.get("isError") or page.get("effect") == "refused" or page.get("target_id") != identifier
+                    or actual_tab != tab_id or target != self.vm.target(member) or target.key in self.vm.held):
+                raise ValueError()
+            check_page(state, url)
+            matches = [row for row in page.get("refs", []) if self._field_identity(row) == meaning]
+            if len(matches) != 1:
+                raise ValueError()
+            call = {"target_id": identifier, "tab_id": tab_id, "ref": matches[0]["ref"], "text": text}
+            if "delivery_mode" in schema.get("properties", {}):
+                call["delivery_mode"] = "foreground"
+            if not Draft202012Validator(schema).is_valid(call):
+                raise ValueError()
+            if private:
+                self._protect_page(target, identifier, url, (call["ref"],), tab_id=tab_id, fields=(meaning,))
+            reply = await self._driver_call(target, client, "browser_type", {**call, "session": session}, remember=False)
+            result = reply.get("structuredContent") or {}
+            count = (result.get("delivery") or {}).get("delivered_count")
+            if reply.get("isError") or result.get("effect") == "refused" or type(count) is not int or count != len(text):
+                raise ValueError()
+
     async def _fill_login(self, target, member, args):
         from .logins import origin
         if self.logins is None:
             return PluginResult(False, "login_missing", "Use request_secret with the HTTPS site, or request_takeover.")
         try:
             await self._discover(target)
-            client, session = await self._connection(target)
             values = self.logins.load(member, args["site"], args["reference"])
-            key = tool_key(f"computer-{target.key}", "browser_type")
-            schema = self.schemas.get(key)
-            if not schema:
-                raise ValueError()
-            calls = [{"target_id": args["target_id"], "ref": args[field + "_ref"], "text": values[field]}
-                     for field in ("username", "password")]
-            if "delivery_mode" in schema.get("properties", {}):
-                calls = [{**call, "delivery_mode": "foreground"} for call in calls]
-            for call in calls:
-                tab_id = self.page_tabs.get((target.key, args["target_id"]))
-                if not tab_id:
-                    raise ValueError()
-                state = await self._driver_call(target, client, "get_browser_state", {
-                    "target_id": args["target_id"], "tab_id": tab_id, "session": session})
-                page = state.get("structuredContent") or {}
-                call["tab_id"], url = self._page_tab(page)
-                if not Draft202012Validator(schema).is_valid(call):
-                    raise ValueError()
-                if (state.get("isError") or page.get("target_id") != args["target_id"] or origin(url) != origin(args["site"])
-                        or target != self.vm.target(member) or target.key in self.vm.held):
+            def check_page(state, url):
+                if origin(url) != origin(args["site"]):
                     raise ValueError()
                 self.logins.load(member, args["site"], args["reference"])
-                # Driver echoes and pictures are deliberately discarded, including errors.
-                self._protect_page(target, args["target_id"], url, (call["ref"],))
-                reply = await self._driver_call(target, client, "browser_type", {**call, "session": session})
-                if reply.get("isError"):
-                    return PluginResult(False, "login_not_filled", '{"filled": false}')
+            await self._type_page_fields(target, member, args["target_id"],
+                [(args[field + "_ref"], values[field]) for field in ("username", "password")], check_page)
             return PluginResult(True, text='{"filled": true}')
         except Exception:
             self.vm.invalidate(target)
@@ -1022,28 +1092,8 @@ class VmTools:
             if row["label"] != args["label"]:
                 raise ValueError()
             await self._discover(target)
-            client, session = await self._connection(target, member=member)
-            schema = self.schemas.get(tool_key(f"computer-{target.key}", "browser_type"))
-            if not schema:
-                raise ValueError()
-            calls = [{"target_id": args["target_id"], "ref": ref, "text": values[field]}
-                     for field, ref in args["fields"].items() if values[field]]
-            if not calls:
-                raise ValueError()
-            if "delivery_mode" in schema.get("properties", {}):
-                calls = [{**call, "delivery_mode": "foreground"} for call in calls]
-            for call in calls:
-                tab_id = self.page_tabs.get((target.key, args["target_id"]))
-                if not tab_id:
-                    raise ValueError()
-                state = await self._driver_call(target, client, "get_browser_state", {
-                    "target_id": args["target_id"], "tab_id": tab_id, "session": session})
-                page = state.get("structuredContent") or {}
-                call["tab_id"], url = self._page_tab(page)
-                if not Draft202012Validator(schema).is_valid(call):
-                    raise ValueError()
-                if (state.get("isError") or page.get("target_id") != args["target_id"] or origin(url) != origin(args["site"])
-                        or target != self.vm.target(member) or target.key in self.vm.held):
+            def check_page(state, url):
+                if origin(url) != origin(args["site"]):
                     raise ValueError()
                 if not any(entry["id"] == args["reference"] and entry["label"] == args["label"]
                            for entry in self.logins.entries(member)):
@@ -1059,16 +1109,14 @@ class VmTools:
                     if self.conn is not None:
                         with self.conn:
                             self.conn.execute("INSERT OR IGNORE INTO computer_payment_holds VALUES (?)", (target.key,))
-                self._protect_page(target, args["target_id"], url, (call["ref"],))
-                reply = await self._driver_call(target, client, "browser_type", {**call, "session": session})
-                if reply.get("isError"):
-                    raise ValueError()
+            await self._type_page_fields(target, member, args["target_id"],
+                [(ref, values[field]) for field, ref in args["fields"].items()], check_page, skip_empty=True)
             return PluginResult(True, text=json.dumps({"filled": True, "owner_finishes": kind == "card"}))
         except Exception:
             self.vm.invalidate(target)
             return PluginResult(False, "entry_not_filled", '{"filled": false}')
 
-    async def _driver_call(self, target, client, name, arguments):
+    async def _driver_call(self, target, client, name, arguments, *, remember=True):
         if not target.container:
             reply = await client.request("tools/call", {"name": name, "arguments": arguments})
         elif shared_native_input(name, arguments):
@@ -1077,7 +1125,7 @@ class VmTools:
         else:
             reply = await self._seat_driver_call(target, client, name, arguments)
         if not reply.get("isError"):
-            self._observe_page(target, reply.get("structuredContent") or {})
+            self._observe_page(target, reply.get("structuredContent") or {}, remember=remember)
         return reply
 
     @asynccontextmanager
@@ -1331,7 +1379,7 @@ class VmTools:
         return self.connections[target.key]
 
     async def _disconnect(self, key):
-        for remembered in (self.page_windows, self.page_tabs):
+        for remembered in (self.page_windows, self.page_tabs, self.page_refs):
             for binding in list(remembered):
                 if binding[0] == key:
                     remembered.pop(binding, None)

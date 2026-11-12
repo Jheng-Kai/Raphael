@@ -4,6 +4,8 @@ import json
 
 import pytest
 
+from .fixtures.semantic_browser import measured, member_ref
+
 from raphael_core.agent.gate import ToolGate
 from raphael_core.agent.policy import Action, Confirmations, Tier
 from raphael_core.brain.settings import SettingsStore
@@ -116,6 +118,7 @@ async def test_shared_login_revocation_between_fields_stops_before_the_password(
     vm, target, _ = desktop
     filled = []
     class Browser(CatalogBridge):
+        @measured(("name", "number", "expiry", "cvc", "username", "password"))
         async def request(self, method, params=None):
             if method == "tools/call" and params["name"] == "list_windows":
                 return window_reply(self.target)
@@ -132,7 +135,7 @@ async def test_shared_login_revocation_between_fields_stops_before_the_password(
     await hub.prepare()
     await bind_page(hub, target)
     with vm_scope(("turn", 0, 7), turn_id=7, private=True):
-        result = await hub.call(next(t.key for t in hub.offered() if t.name == "fill_login"), {"reference": identifier, "site": "https://shop.example", "target_id": "tab", "username_ref": "u", "password_ref": "p"}, approver="user")
+        result = await hub.call(next(t.key for t in hub.offered() if t.name == "fill_login"), {"reference": identifier, "site": "https://shop.example", "target_id": "tab", "username_ref": member_ref(hub, vm.target(0), "tab", "username"), "password_ref": member_ref(hub, vm.target(0), "tab", "password")}, approver="user")
     assert not result.ok and filled == ["private-user"]
     await hub.aclose()
 
@@ -142,6 +145,7 @@ async def test_card_always_needs_an_exact_single_use_approval_and_never_submits(
     vm, target, _ = desktop
     calls = []
     class Browser(CatalogBridge):
+        @measured(("name", "number", "expiry", "cvc", "username", "password"))
         async def request(self, method, params=None):
             if method == "tools/call" and params["name"] == "list_windows":
                 return window_reply(self.target)
@@ -159,7 +163,7 @@ async def test_card_always_needs_an_exact_single_use_approval_and_never_submits(
     await bind_page(hub, target)
     calls.clear()
     tools = {t.name: t.key for t in hub.offered()}
-    args = {"reference": identifier, "label": "Company", "site": "https://shop.example", "amount": "NT$ 1,280", "target_id": "tab", "fields": {key: key + "-ref" for key in CARD}}
+    args = {"reference": identifier, "label": "Company", "site": "https://shop.example", "amount": "NT$ 1,280", "target_id": "tab", "fields": {key: member_ref(hub, vm.target(0), "tab", key) for key in CARD}}
     assert gate.needs_confirmation(tools["fill_card"], args)
     with vm_scope(("turn", 0, 7), turn_id=7, private=True):
         assert not (await gate.call_plugin(tools["fill_card"], args)).ok
@@ -219,6 +223,7 @@ async def test_private_fill_fails_closed_and_never_returns_driver_values(desktop
     calls = []
     values = {key: value + '-"\\\n密碼' for key, value in CARD.items()}
     class Browser(CatalogBridge):
+        @measured(("name", "number", "expiry", "cvc", "username", "password"))
         async def request(self, method, params=None):
             if method == "tools/call" and params["name"] == "list_windows":
                 return window_reply(self.target)
@@ -237,7 +242,7 @@ async def test_private_fill_fails_closed_and_never_returns_driver_values(desktop
     await bind_page(hub, target)
     if failure == "revoked": conn.execute("UPDATE vault_entries SET members='[]' WHERE id=?", (identifier,)); conn.commit()
     with vm_scope(("turn", 0, 7), turn_id=7, private=True):
-        result = await hub.call(next(t.key for t in hub.offered() if t.name == "fill_card"), {"reference": identifier, "label": "Company", "site": "https://shop.example", "target_id": "tab", "amount": "NT$ 99" if failure == "amount" else "NT$ 1,280", "fields": {key: key + "-ref" for key in values}}, approver="user")
+        result = await hub.call(next(t.key for t in hub.offered() if t.name == "fill_card"), {"reference": identifier, "label": "Company", "site": "https://shop.example", "target_id": "tab", "amount": "NT$ 99" if failure == "amount" else "NT$ 1,280", "fields": {key: member_ref(hub, vm.target(0), "tab", key) for key in values}}, approver="user")
     assert result.ok is (failure is None)
     if failure in ("origin", "amount", "revoked"): assert not any(call["name"] == "browser_type" for call in calls)
     if failure == "revoked_during_fill": assert sum(call["name"] == "browser_type" for call in calls) == 1

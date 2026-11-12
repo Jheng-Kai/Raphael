@@ -84,6 +84,15 @@ class ComputerSeats:
         rows[ident] = (rows[ident][0], used)
         self._write(rows, [("UPDATE computer_seats SET used=? WHERE host=? AND member_id=?", (used, host, member_id))])
 
+    def restore(self, host, member_id, number):
+        """Restore the exact reserved screen; never silently select another free seat."""
+        if number in self.holders(host):
+            raise SeatsFull("The reserved screen is no longer free")
+        used = self.clock()
+        rows = {**self.rows, (host, member_id): (number, used)}
+        self._write(rows, [("INSERT INTO computer_seats(host, member_id, seat, used) VALUES (?, ?, ?, ?)",
+                            (host, member_id, number, used))])
+
     def release(self, host, member_id):
         rows = self.rows.copy()
         row = rows.pop((host, member_id), None)
