@@ -407,6 +407,8 @@ export const ja = {
   "desktop.invalidAlias": "SSH 設定の名前を入力してください。先頭は英数字、以降は英数字・ドット・下線・ハイフンのみ使えます。",
   "conn.err.invalid_request": "このバージョンはサービスと互換性がありません。ラファエルを更新し、最新版なら接続の問題を報告してください。",
   "desktop.take": "操作を引き継ぐ",
+  "desktop.taking": "引き継いでいます…",
+  "desktop.takeFailed": "引き継げませんでした。コンピューターが応答しません。もう一度「操作を引き継ぐ」を押してください。",
   "desktop.release": "停止",
   "computer.row.asleep": "スリープ中",
   "computer.row.connecting": "接続中",

@@ -406,6 +406,8 @@ export const zhTW = {
   "desktop.invalidAlias": "請填入 SSH 設定中的名稱，只能使用英文字母、數字、點、底線與連字號，並以字母或數字開頭。",
   "conn.err.invalid_request": "目前版本的連線功能與服務不相容，請更新拉斐爾，若已是最新版請回報這項連接問題。",
   "desktop.take": "接手控制",
+  "desktop.taking": "正在接手…",
+  "desktop.takeFailed": "沒能接手：電腦沒有回應，請再按一次「接手控制」。",
   "desktop.release": "停止",
   "computer.row.asleep": "休眠中",
   "computer.row.connecting": "連線中",

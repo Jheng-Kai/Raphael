@@ -1,5 +1,60 @@
 # Member computer (Phases A and B)
 
+## One foot under the larger view's screen (owner, 2026-11-13)
+
+R-PANEL-08. The owner's picture after a failed demonstration: the red line began at the window's edge
+over the screen and was cut, 丟棄示範 and 審閱示範 floated in the far corner, and the file changes ran
+along the top-left. In the larger view (`desktop-viewer.ts`, `.desktop-shell`) the screen, the skill
+review (`.desktop-review`), the file changes (`.desktop-checkpoints`) and one foot (`.desktop-foot`)
+share one width: `min(100cqw, (100cqh - --desktop-foot) * 1280 / 900)` of the shell, a size container.
+The foot holds `.desktop-notes` (request, failure, privacy line, missing-computer note, the trial input),
+centred and wrapping, then `.desktop-bar`: three columns with the pill (`.desktop-dock`) in the middle on
+the screen's centre line and the demonstration's pill (`.desktop-actions`: Discard quiet, review or Stop
+recording filled) right beside it. The review and the file changes take the screen's place in a box of its
+size that scrolls on its own; file changes opened from a result card (`data-files-only`) show no pill.
+While the draft is written the teach button is hidden and the line alone says so. The small preview keeps
+only a notice under its screen (the foot is `display: contents` there).
+
+How to get to it: open a member's computer tab, enlarge the screen, take control, then ⋯ → 教他做一次
+(press it again to stop; `teachFails` in the mock makes the draft fail) or ⋯ → 檔案變更. A result card's
+檔案變更 opens the files-only view.
+
+`computer-foot-layout` (checks.mjs) asserts on every listed scene: the screen or its box keeps the
+proportions and is centred; every line, the pill and the actions lie inside its horizontal span, below it,
+inside the window and uncut; none overlap; the foot starts within 24 px of the screen; the pill is on the
+screen's centre line; lines are centred.
+
+```powershell
+npm run look -- desktop-teach-failed desktop-teach-recording desktop-teach-draft desktop-teach-saved desktop-teach-shared desktop-teach-discard desktop-teach-try computer-file-changes card-task-files takeover-bar takeover-menu desktop-watch desktop-viewer desktop-owner desktop-panel desktop-unavailable --theme both --width 1120,720,1920x1080
+```
+
+Gotchas: `--desktop-foot` is a fixed reserve (88 px: one line and the pill; a second line borrows the
+shell's bottom padding); a foot taller than that aligns the block to the top (`align-content: safe center`)
+rather than overlap, so a new kind of line under the screen needs the reserve rechecked at 1920x1080 and
+720. `level-takeover` wants the screen at least the window's height less 160 px at 1920x1080 (932 px now). Long languages wrap the action pill
+inside its half instead of moving the pill. The real failure that the owner saw (the draft step after a
+recording) is a core question; this section covers only where it is said.
+
+### The sign-in card and an honest pill (R-PANEL-09, owner, 2026-11-13)
+
+The owner could not read a sign-in page in the card (480 px, a 16:9 frame around a 1280 x 900 screen), and the
+pill said 你正在控制 while his input reached nothing. A card that hands the computer over (`desktop-timeline.ts`
+waiting_control, `computer-card.ts` control) is now as wide as the conversation with a screen at the computer's
+proportions (CSS in `desktop-viewer.css`, the one exception to R-CARD-01). Its screen and 接手 call `acquire()`:
+the larger view opens with the same frame and takes control; the pill offers 我完成了 (`desktop.done` while a
+request waits), which returns the nonce once. The pill reads 正在接手… (`desktop.taking`) until the frame answers
+`interactive` with held, then 你正在控制; with no answer in 6 s (`TAKE_MS`) the lease is given back without the
+request id, `desktop.takeFailed` stands under the screen and the view watches again. Watching always reads 觀看中.
+Whether the shared computer's seat page sends `held` is the core's question (the shared-computer session).
+
+```powershell
+npm run look -- desktop-takeover desktop-takeover-owner desktop-takeover-done desktop-boot-card desktop-boot-inline desktop-own-wallpaper-card desktop-watch desktop-watch-owner takeover-bar desktop-owner desktop-teach-recording desktop-teach-failed --theme both --width 1120,720,1920x1080
+```
+
+`computer-takeover` asserts the card fills its column, its screen is 1280 / 900 and the stream fills it;
+`computer-takeover-owner` asserts the larger view holds the frame, the pill reads 你正在控制 with 我完成了 and
+synthetic keys reach the RFB surface; `card-shell` exempts only the handoff card from 480 px.
+
 ## Image layer 6: the desktop's picture, its keys, a lost X server (2026-11-12)
 
 R-COMP-PICTURE-01, R-COMP-KEYS-01, R-COMP-XLOSS-01, R-COMP-LAYER-01 cover image
@@ -570,7 +625,8 @@ preserves the guest aspect ratio through noVNC scaleViewport and never acquires
 input. Its thin bar reuses the current public action words, Stop and collapse;
 Esc collapses with the connection intact. Explicit takeover/teaching/files keep
 their earlier behavior. The private request_takeover card now acquires input
-inside its own iframe instead of opening full-window takeover. Its Done action
+inside its own iframe instead of opening full-window takeover (superseded on 2026-11-13 by R-PANEL-09: the card
+is as wide as the conversation and its 接手 opens the larger view with control; see the first section). Its Done action
 returns the current nonce once; Stop/cancel/disconnect never count as Done.
 Owner input travels over RFB only. Held-control screenshots are not forwarded
 to the parent thumbnail cache. Existing private work scope and post-handback
@@ -905,7 +961,7 @@ an ordinary private member skill on API, CLI and scheduled routine paths.
 Selected local UI matrix:
 
 ```powershell
-npm run look -- desktop-teach-recording desktop-teach-draft desktop-teach-saved desktop-teach-try desktop-teach-discard desktop-teach-shared desktop-owner desktop-absent details-skills --theme both --width 1120,720,1920x1080
+npm run look -- desktop-teach-recording desktop-teach-failed desktop-teach-draft desktop-teach-saved desktop-teach-try desktop-teach-discard desktop-teach-shared desktop-owner desktop-absent details-skills --theme both --width 1120,720,1920x1080
 ```
 
 The teach-* rendered checks assert lease actions, visible privacy/repair, the

@@ -535,6 +535,8 @@ export const vi = {
   "desktop.invalidAlias": "Dùng bí danh cấu hình SSH: chữ cái, số, dấu chấm, gạch dưới và gạch nối; bắt đầu bằng chữ hoặc số.",
   "conn.err.invalid_request": "Phiên bản này không tương thích dịch vụ. Cập nhật Raphael; nếu đã mới nhất, báo lỗi kết nối này.",
   "desktop.take": "Nhận điều khiển",
+  "desktop.taking": "Đang nhận điều khiển…",
+  "desktop.takeFailed": "Không nhận được điều khiển: máy tính không phản hồi. Hãy nhấn Nhận điều khiển lần nữa.",
   "desktop.release": "Dừng",
   "computer.row.asleep": "Đang ngủ",
   "computer.row.connecting": "Đang kết nối",
