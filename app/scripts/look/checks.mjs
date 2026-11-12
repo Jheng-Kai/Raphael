@@ -5677,6 +5677,10 @@ export function checkRendered(name, context = {}) {
     for (const key of controls) require(parts[key].top >= row.top - 0.5 && parts[key].bottom <= row.bottom + 0.5, `${key} stays inside the one row (${parts[key].top}-${parts[key].bottom} in ${row.top}-${row.bottom})`);
     require(controls.every((key, index) => index === 0 || parts[key].left >= parts[controls[index - 1]].right - 1), "the controls stand in the order + , permission, model, send, none over another");
     require(parts.field.left >= parts.attach.right - 1 && parts.field.right <= parts.mode.left + 1, "the words are between the + and the permission");
+    // The model's name is whole or absent (owner's eye, 2026-11-12: "G…" beside the arrow with the panel open at 1120): where it shows,
+    // nothing of it is cut unless at least six characters' width is in sight.
+    const modelName = own(".cmp-model .mp-ttext");
+    if (modelName) require(modelName.scrollWidth <= modelName.clientWidth + 1 || modelName.clientWidth >= 48, `the model's name is whole, or long and cut after a readable part, never a stub: ${modelName.clientWidth} of ${modelName.scrollWidth}`);
     const fieldMin = state === "narrow" ? 120 : 200;
     require(parts.field.right - parts.field.left >= fieldMin - 1, `the field keeps its ${fieldMin} px: ${parts.field.right - parts.field.left}`);
     // Words placed by a page are added on a new line, so that state has two lines and the controls on the last of them.

@@ -502,18 +502,21 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 .cmp-model .mp-ttext { flex: 0 1 auto; min-width: 0; max-width: 170px; }
 .cmp-model .mp-trigger .i { flex: none; width: 16px; height: 16px; }
 .cmp-model .mp-tname { overflow: hidden; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
-/* A narrow composer (the details panel open beside the sidebar) keeps its field and its one row. Under 452 px (a row of 440; 438 with the
-   panel open at 1120) the model gives up its depth word and the permission its word, so the model keeps its name; under 372 px (the panel
-   dragged to its widest at 1120) the model keeps only its arrow and the field may be 120 px. The permission and the model keep their names
-   for a screen reader and open what they opened. The composer is the container, so the row itself can be changed by a query. */
+/* A narrow composer (the details panel open beside the sidebar) keeps its field and its one row. Under 452 px the model gives up its
+   depth word and the permission its word, so the model keeps its name; under 428 px, where the name would be cut to a letter beside a
+   200 px field (the panel open at 1120 gives 386 since the sidebar is 348), the model keeps only its arrow: a name is whole or absent;
+   under 372 px (the panel dragged to its widest at 1120) the field may be 120 px. The permission and the model keep their names for a
+   screen reader and open what they opened. The composer is the container, so the row itself can be changed by a query. */
 @container cmp (max-width: 452px) {
   .cmp-model .cb-depth { display: none; }
   .cmp-end .cmp-model .mp-ttext, .cmp-end .cmp-model .mp-ttext:has(.cb-depth) { max-width: 14ch; }
   .composer .btn.cmp-mode > span { display: none; }
 }
+@container cmp (max-width: 428px) {
+  .cmp-end .cmp-model .mp-ttext, .cmp-end .cmp-model .mp-ttext:has(.cb-depth) { display: none; }
+}
 @container cmp (max-width: 372px) {
   .cmp-row { grid-template-columns: auto minmax(120px, 1fr) auto; }
-  .cmp-end .cmp-model .mp-ttext, .cmp-end .cmp-model .mp-ttext:has(.cb-depth) { display: none; }
 }
 .page-agent .btn.cmp-attach { flex: none; width: var(--pa-cmp-ctl); min-height: var(--pa-cmp-ctl); padding: 0; border-radius: var(--r-sm); border-color: transparent; background: transparent; color: var(--text-2); }
 .page-agent .btn.cmp-attach:hover:not(:disabled) { background: transparent; border-color: transparent; color: var(--text); }

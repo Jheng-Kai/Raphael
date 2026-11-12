@@ -114,6 +114,8 @@ test("the composer is one 44 px pill at every window size, on one grid that ends
   // A narrow composer changes its own row by a query of its own, never by a second row.
   expect(css).toMatch(/\.composer \{[^}]*container: cmp \/ inline-size/);
   expect(css).toMatch(/@container cmp \(max-width: 452px\) \{[^@]*\.cb-depth \{ display: none; \}/);
+  // A name is whole or absent: under 428 px, where it would be cut to a letter beside the field, the model keeps its arrow alone.
+  expect(css).toMatch(/@container cmp \(max-width: 428px\) \{[^@]*\.cmp-model \.mp-ttext[^{]*\{ display: none; \}/);
   expect(css).toMatch(/@container cmp \(max-width: 372px\) \{[^@]*\.cmp-row \{ grid-template-columns: auto minmax\(120px, 1fr\) auto; \}/);
   // The words' line is the controls' height, so a one-line draft is the controls' row and the last line of a longer one is level with them.
   expect(css).toMatch(/\.cmp-input \{[^}]*min-height: var\(--pa-cmp-ctl\)[^}]*padding: var\(--cmp-py\) 4px/);

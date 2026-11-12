@@ -12,9 +12,10 @@ one send / voice / Stop button. Every control is 32 px and shares the field's ve
 (`.composer-failure`), a quoted reply (`.cmp-quote`), waiting files (`.cmp-file`) and the page note (`.cmp-page-note`, which stood
 below the controls until now) are rows of the same box above the row. 16 px stand under the box at every size (`--pa-dock-bottom`;
 the old short-window override is gone). The field keeps 200 px and nothing goes to a second row: the composer is a size container
-(`container: cmp`), and at 452 px or less (the details panel open at 1120 px of window gives 438) the model gives up its depth word and
-the permission mode its word (its shield stays), so the model keeps its name, at 372 px or less (the panel dragged to its widest gives 301)
-the model keeps only its arrow, and the field may be 120 px. The minimum window is 720 px, where the composer is 688 px wide and nothing is shortened.
+(`container: cmp`), and at 452 px or less the model gives up its depth word and
+the permission mode its word (its shield stays), so the model keeps its name, at 428 px or less (the details panel open at 1120 px of window gives 386) the model keeps only its
+arrow (a name is whole or absent, never cut to a letter), at 372 px or less (the panel dragged to its widest gives 301)
+the field may be 120 px. The minimum window is 720 px, where the composer is 688 px wide and nothing is shortened.
 
 `composer-shape:<state>` in checks.mjs measures every state and asserts the shape (the box 44 px, the field and every control within
 2 px of one centre for an empty or one-line draft; for a grown draft the same bottom edge, the same control centres and the controls
