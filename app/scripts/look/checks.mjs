@@ -7344,9 +7344,8 @@ export function checkRendered(name, context = {}) {
       require(visible(document.querySelector('.modal-scrim [data-pane="general"][aria-current="page"]')) && !document.querySelector('[data-models-tab]'), "Settings is open on 一般, not on the allowances' tab");
       require(window.__look.calls.some(call => call.from), "the scene traces where each call comes from");
       require(!document.querySelector('[data-act="models-refresh"]'), "no refresh button exists");
-      // Opened through the account menu, Settings starts its reading a moment after it is drawn.
+      // Settings asks at its opening, before its first tab is drawn; the account menu it was opened from asked on its own (api.ts ASKED_AGAIN: no earlier answer stands in for it).
       return (async () => {
-        for (let waited = 0; waited < 2000 && asked() < 1; waited += 25) await new Promise(resolve => setTimeout(resolve, 25));
         await new Promise(resolve => setTimeout(resolve, 150));
         require(asked() === 1, `the allowances were asked for once, at the opening (${asked()}; all readings: ${JSON.stringify(window.__look.calls.filter(call => call.method === "usage.allowances").map(call => String(call.from).split(" < ").slice(3, 6).join(" < ")))})`);
         return { check: name, asked: asked() };
