@@ -113,6 +113,8 @@ async function chat(page) {
   await click(page, '.mb-chief');
   await wait(page, ".composer .cmp-input");
 }
+// A member has one conversation (the app has no button that makes another): opening the member opens it, and this returns
+// its id. The name stays for the journeys that ask for "a conversation to write in".
 async function newConversation(context, member = 0) {
   await chat(context.page);
   if (member !== 0) {
@@ -120,17 +122,12 @@ async function newConversation(context, member = 0) {
     await wait(context.page, ".composer .cmp-input");
   }
   await details(context.page);
-  const rows = (await context.snapshot()).conversations, before = new Set(rows.map(row => row.id));
-  // One nobody has written in is already new: the button rests on it, or goes to it.
-  const unwritten = rows.find(row => row.member_id === member && !row.title && row.kind !== "quick");
-  if (!await context.page.$eval("[data-conversation-new]", button => button.disabled)) await click(context.page, "[data-conversation-new]");
-  if (unwritten) { await wait(context.page, ".cmp-input"); return unwritten.id; }
   for (let i = 0; i < 80; i++) {
-    const created = (await context.snapshot()).conversations.find(row => !before.has(row.id) && row.kind !== "quick");
-    if (created) { await wait(context.page, ".cmp-input"); return created.id; }
+    const main = (await context.snapshot()).conversations.find(row => row.member_id === member && row.is_default && row.kind !== "quick");
+    if (main) { await wait(context.page, ".cmp-input"); return main.id; }
     await pause(100);
   }
-  throw new Error("New conversation did not persist");
+  throw new Error(`Member ${member} has no conversation`);
 }
 async function typed(context, text, conversation) {
   await type(context.page, ".composer .cmp-input", text); await click(context.page, ".cmp-send");

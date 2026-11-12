@@ -39,7 +39,13 @@ export async function stopOwned(process, executeCommand = execute) {
   await Promise.race([process.closed, new Promise((_, reject) => setTimeout(() => reject(new Error(`PID ${process.pid} did not close`)), 10000).unref())]);
 }
 
-export async function connectWebView(puppeteer, port, process, timeout = 90000, protocolTimeout = 5000) {
+// How long one CDP command may take. Puppeteer enables a page's domains (Audits, Performance, Log, ...) inside this same
+// limit when it attaches to a target, and five seconds was too short while other work loaded the PC (two of nine native
+// runs failed with "Audits.enable timed out" / "Performance.enable timed out" before the journey began). A page that never
+// answers still fails the journey, at thirty seconds.
+export const CDP_COMMAND_TIMEOUT_MS = 30000;
+
+export async function connectWebView(puppeteer, port, process, timeout = 90000, protocolTimeout = CDP_COMMAND_TIMEOUT_MS) {
   const start = Date.now();
   while (Date.now() - start < timeout) {
     if (process.child.exitCode !== null) throw new Error(`App PID ${process.pid} exited: ${JSON.stringify(await process.closed)}`);
