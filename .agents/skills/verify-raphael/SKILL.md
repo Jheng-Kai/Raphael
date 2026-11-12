@@ -145,9 +145,12 @@ Missing/non-Linux Docker exits 2, a failed check exits 1, success exits 0. A rel
 layer whose image is not on this PC is a named skip (`previous layer 4`, `previous layer 5`).
 Every failure includes expected/observed evidence.
 
-Every per-count block checks live tools/list parameter names for all DRIVER_TOOLS
-against core/tests/computer/fixtures/driver_tools_0.37.0.json after driver connection.
-A schema mismatch fails --computer until the fixture and SHARED_ARGUMENTS are reviewed.
+Every per-count block compares the live tools/list of all DRIVER_TOOLS with
+core/src/raphael_core/computer/driver_schemas.json after driver connection, words and
+order included, then asks the driver through VmTools and requires the offered tools to
+stay as they were (R-COMP-DRIVER-02). It writes the list to driver-tools.json in the run
+folder. A mismatch fails --computer until both kept files are written again from that
+list (core/tests/computer/fixtures/generate_driver_tools.py) and SHARED_ARGUMENTS is reviewed.
 The default Stage C2 shared block follows the per-count blocks: real members drive
 product LocalVm/VmTools/CuaBridge for seat isolation, native timings, one computer-owned
 browser with independent bindings, clipped PNGs, owner holds and idle displacement.

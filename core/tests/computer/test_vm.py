@@ -1018,7 +1018,7 @@ async def test_sandbox_steps_do_not_reenter_per_action_safety_screening(desktop,
 
 
 async def test_vm_tool_descriptions_require_owner_yes_before_outward_actions(desktop, tmp_path):
-    from raphael_core.computer.vm_tools import ATTACH, SHARED_CONTRACT
+    from raphael_core.computer.vm_tools import ATTACH
 
     vm, target, runtime = desktop
     hub = VmTools(EmptyHub(), vm, attachments=AttachmentStore(tmp_path), bridge=Bridge)
@@ -1031,8 +1031,8 @@ async def test_vm_tool_descriptions_require_owner_yes_before_outward_actions(des
         description = definitions["computer__" + tool.name]["description"]
         if tool.name == "dataset":
             from raphael_core.computer.datasets import DEFINITION
-            assert tool.description == DEFINITION["description"] + SHARED_CONTRACT
-            assert description.startswith('[computer] ' + DEFINITION["description"][:120])
+            assert tool.description == DEFINITION["description"]
+            assert description == '[computer] ' + DEFINITION["description"]
             continue
         if tool.name == "vault_entries":
             assert "opaque IDs" in description and "Never ask for private values" in description
@@ -1043,7 +1043,7 @@ async def test_vm_tool_descriptions_require_owner_yes_before_outward_actions(des
                 assert "Every use needs owner approval" in description and "request_takeover" in description
             continue
         if tool.name == "attach_file":
-            assert tool.description == ATTACH["description"] + SHARED_CONTRACT
+            assert tool.description == ATTACH["description"]
             continue
         if tool.name == "request_takeover":
             assert "Never request secrets in chat" in definitions["computer__request_takeover"]["description"]

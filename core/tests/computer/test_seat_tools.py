@@ -403,17 +403,18 @@ def test_move_window_argv_preserves_the_host_and_never_uses_a_shell(tmp_path):
 
 
 async def test_shared_tool_description_additions_are_small_and_per_bot_is_unchanged(seat_tools):
-    from raphael_core.computer.vm_tools import SHARED_CONTRACT
+    from raphael_core.computer.vm_tools import SHARED_CONTRACT, SHARED_NOTED
     hub, vm, _ = seat_tools
     shared = {tool.name: tool for tool in hub.offered_for(1)}
     assert len(SHARED_CONTRACT) <= 160
     assert "The shell has no screen here; open a window with launch_app." in SHARED_CONTRACT
-    assert all(tool.description.endswith(SHARED_CONTRACT) for tool in shared.values())
+    # On the tools it is about (the shell, opening a window, the clipboard), not said once per tool.
+    assert SHARED_NOTED == {"vm_exec", "launch_app", "clipboard_read", "clipboard_write"} <= shared.keys()
     vm.settings.set("computer_vm_mode", "per-bot")
     await hub.prepare(1)
     own = {tool.name: tool for tool in hub.offered_for(1)}
     for name in shared:
-        assert shared[name].description == own[name].description + SHARED_CONTRACT
+        assert shared[name].description == own[name].description + (SHARED_CONTRACT if name in SHARED_NOTED else "")
 
 
 async def test_displacement_closes_screen_windows_except_panel_and_never_raises(seat_tools):
