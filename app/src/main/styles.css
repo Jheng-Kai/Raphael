@@ -347,7 +347,7 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
 .dot.ok { background: var(--ok); } .dot.warn { background: var(--warn); } .dot.err { background: var(--err); }
 .dot.idle { background: transparent; border: 1.5px solid var(--text-3); }
 .st.warn { color: var(--warn); } .st.err { color: var(--err); }
-.field { display: inline-flex; align-items: center; gap: var(--sp-1); height: var(--h-field); padding: 0 var(--sp-2); border-radius: var(--r-sm); border: 1px solid var(--btn-edge); background: var(--panel); font-size: var(--fs-sm); }
+.field { display: inline-flex; align-items: center; gap: var(--sp-1); height: var(--h-field); padding: 0 var(--sp-2); border-radius: var(--r-sm); border: 1px solid var(--btn-edge); background: var(--field, var(--panel)); font-size: var(--fs-sm); }
 .field[data-invalid] { border-color: var(--err); }
 .field input { border: 0; outline: 0; background: transparent; width: 100%; min-width: 0; font-size: var(--fs-sm); }
 .field .pre { color: var(--text-3); }
@@ -469,7 +469,7 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
 /* ---------- settings: a panel over the window ---------- */
 .modal-scrim { --modal-gap: 24px; --set-nav: 196px; position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; padding: calc(var(--window-controls-height) + var(--modal-gap)) var(--modal-gap) var(--modal-gap); background: var(--scrim); }
 .modal { position: relative; display: grid; grid-template-columns: var(--set-nav) minmax(0, 1fr); width: min(1000px, 100%); height: min(760px, 100%); border-radius: var(--r-lg); overflow: hidden; background: var(--float); border: 1px solid var(--float-edge); box-shadow: var(--pop); }
-.modal-nav { display: flex; flex-direction: column; gap: var(--sp-1); padding: var(--sp-4) var(--sp-2); background: var(--float); border-right: 0; overflow-x: hidden; overflow-y: auto; min-height: 0; }
+.modal-nav { display: flex; flex-direction: column; gap: var(--sp-1); padding: var(--sp-4) var(--sp-2); background: transparent; border-right: 0; overflow-x: hidden; overflow-y: auto; min-height: 0; }
 /* 連結應用程式 opens alone: one column, no list of Settings (R-UI-111). */
 .modal-scrim[data-standalone] > .modal { grid-template-columns: minmax(0, 1fr); width: min(900px, 100%); }
 .modal-scrim[data-standalone] .modal-nav { display: none; }
@@ -492,7 +492,7 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
 .modal-body > * { max-width: var(--layout-reading-max); }
 .modal-body :is(.list, .slist, .cs-list, .cs) { max-width: var(--layout-reading-max); }
 /* A section of Settings has a small name, then its rows on one rounded card with no lines between them. */
-.modal-body .slist { --slist-pad: var(--sp-4); padding-inline: var(--slist-pad); border-radius: var(--r-lg); background: var(--panel); }
+.modal-body .slist { --slist-pad: var(--sp-4); padding-inline: var(--slist-pad); border-radius: var(--r-lg); border: 1px solid var(--float-edge); background: var(--panel); }
 .modal-body .slist > .row { min-height: 52px; padding: var(--sp-2) 0; }
 .modal-body .slist > .row + .row::before, .modal-body .slist > .note + .row::before { display: none; }
 .modal-body .sgroup > h2, .modal-body .sgroup > .data-heading > h2 { margin: 0 0 var(--sp-2) var(--sp-4); font-weight: 500; font-size: var(--fs-xs); }
@@ -559,16 +559,20 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
 
 /* ---------- everything that floats: one rule (owner, 2026-11-12: 「我感覺可以把 dialog 都設計成這個顏色，他們感覺是有一套規則的」) ----------
    A dialog, a menu and its submenu, a popover, a floating card and a tooltip stand on --float with a --float-edge line; what is on them (a chip, a
-   button, a field, a card inside) is filled --float-ctl, and a hovered row takes --float-hover. The surfaces below say it once: inside any of them the
-   ordinary tokens point at the floating ones, so a control needs no rule of its own. The window, the sidebar, the pages, the thread and the composer
-   keep their own colours; a toast is the inverse of the page and is not one of these. */
+   button, a field) is filled --float-ctl, and a hovered row takes --float-hover. An inner card (a settings group, a subscription, a provider) is not a
+   grey of its own (owner, 2026-11-13: 「他可能根本看不到他原本的背景」): it is the surface itself with a 1 px --float-edge hairline and its radius, as Grok Bot's
+   Skills and Information cards are, so `--panel`, which cards stand on, is the surface there and `--field`, which fields stand on, is the control fill.
+   The surfaces below say it once: inside any of them the ordinary tokens point at the floating ones, so a card or a control needs no rule of its own.
+   The window, the sidebar, the pages, the thread and the composer keep their own colours; a toast is the inverse of the page and is not one of these. */
 :where(.menu, .modal, .mb-dialog, .cs-dialog, .au-pop, .cb-card, .link-hover, .message-tooltip) {
   --btn: var(--float-ctl); --btn-edge: var(--float-ctl-edge); --btn-hover: var(--float-ctl-hover); --btn-pressed: var(--float-pressed);
   --key: var(--float-ctl); --key-edge: var(--float-ctl-edge);
   --hover: var(--float-hover); --pressed: var(--float-pressed); --edge: var(--float-edge); --line: var(--float-edge);
-  --panel: var(--float-ctl); --surface-2: var(--float-ctl);
+  --panel: var(--float); --surface-2: var(--float-ctl); --field: var(--float-ctl);
 }
 .modal { --content: var(--float); }
+/* The cards that were a recessed grey of their own (a template's rows, a review's box, a secret's row) are the surface with a hairline on a floating one. */
+:is(.menu, .modal, .mb-dialog, .cs-dialog, .au-pop, .cb-card) :is(.tpl-card, .tpl-alert, .tpr-list, .tpr-box, .secret-row, .au-rows, .handoff-detail) { background: var(--panel); border: 1px solid var(--float-edge); }
 
 /* ---------- menu, toast ---------- */
 /* A menu is only so wide, and never wider than the window: a longer label is cut, with its whole
