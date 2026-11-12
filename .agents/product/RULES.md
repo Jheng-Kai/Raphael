@@ -1,5 +1,11 @@
 # Raphael product rules
 
+## What the core sends the computer's driver (2026-11-12)
+
+| ID | Date | Rule | Check | Severity | Evidence |
+| --- | --- | --- | --- | --- | --- |
+| R-COMP-DRIVER-01 | 2026-11-12 | Found while proving the shared computer in real containers: from 2026-11-04 the connection set-up sent `set_agent_cursor_enabled` a `cursor_id` the driver's schema does not name, the driver refused it, and every screen and browser tool of every member's computer answered `driver_configuration_failed`. The fake drivers of the tests took any argument. A set-up call carries only what `cua-driver describe` names (`enabled` and `session` for the cursor, `max_image_dimension` and `session` for the config). A driver session label is never used twice: the driver of a computer that kept running refuses a label that has ended, so a core started again does not count from 1 once more. `npm run verify -- --computer` makes the product's own connection twice on a real computer (the second as a core started again) and calls a tool through it. | pytest | hard | core/tests/computer/test_latency.py::test_window_reads_are_bounded_and_driver_images_and_cursor_are_configured; core/tests/computer/test_latency.py::test_a_core_started_again_never_reuses_a_driver_session_label; core/tests/evaluate/test_computer_acceptance.py::test_driver_check_makes_the_products_own_connection_with_arguments_the_driver_accepts; core/tests/evaluate/test_computer_acceptance.py::test_driver_check_fails_when_the_driver_refuses_a_set_up_argument; core/tests/evaluate/test_computer_acceptance.py::test_driver_check_starts_no_driver_process_in_another_owners_container |
+
 ## Computer image screens, stage A (2026-11-11)
 
 | ID | Date | Rule | Check | Severity | Evidence |
