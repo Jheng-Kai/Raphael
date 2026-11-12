@@ -277,6 +277,18 @@ test("all-day events are bars across their days, in rows, and what does not fit 
  expect(more).toEqual([0,1,0,0,0,0,0]);
 });
 
+test("an opened all-day band draws every item of the days in view, and its folded count is what the open band adds",()=>{
+ const days=[localDay("2026-10-24"),localDay("2026-10-25")];
+ const items=Array.from({length:10},(_,n)=>entry(`item${n}`,at(0,0,24),at(0,0,25),{allDay:true}));
+ const folded=allDayBars(items,days), open=allDayBars(items,days,Infinity);
+ expect(folded.bars).toHaveLength(3);
+ expect(folded.more).toEqual([7,0]);
+ expect(open.more).toEqual([0,0]);
+ expect(open.bars.map(bar=>bar.entry.id).sort()).toEqual(items.map(item=>item.id).sort());
+ expect(open.used).toBe(10);
+ expect(open.bars.length-folded.bars.length).toBe(folded.more[0]);
+});
+
 test("a panel stands beside what it is about and inside the window",()=>{
  const viewport={width:1120,height:800,top:32};
  expect(besidePlacement({left:300,right:380,top:200},{width:344,height:300},viewport)).toEqual({left:388,top:200});

@@ -5251,6 +5251,85 @@ export function checkRendered(name, context = {}) {
     require(times.join() === [...times].sort().join(), `in time order: ${times}`);
     return { check: name, rows: rows.length };
   }
+  // A busy day (R-UI-144): the all-day band folds to three rows and counts the rest; 「還有 N 個」 opens it in place to every item, 「收合」 folds it again.
+  if (name === "calendar-more-focus") {
+    const toggle = document.activeElement;
+    require(toggle?.dataset.au === "all-day-toggle", "the keyboard stays on the button it pressed, whichever way the band went");
+    return { check: name, words: toggle.textContent, expanded: toggle.getAttribute('aria-expanded') };
+  }
+  if (name === "calendar-more-month") {
+    const cell = document.querySelector('[data-month-day="2026-10-24"] .cal-more:not([hidden])');
+    require(visible(cell) && /^還有 \d+ 個$/.test(cell.textContent) && cell.dataset.au === "open-day", "a month's day that does not fit counts the rest and opens that day");
+    require(!document.querySelector('#app-popover [role], .au-month-more, .au-day-list'), "no second list over the month");
+    return { check: name, words: cell.textContent };
+  }
+  if (name.startsWith("calendar-more-")) {
+    const scroll = document.querySelector('.au-page:not([hidden]) .au-calendar-scroll'), band = scroll.querySelector('.au-all-day-row'), head = scroll.querySelector('.au-grid-head');
+    const columns = [...band.querySelectorAll('.au-all-day[data-all-day]')], chips = [...band.querySelectorAll('.au-bar:not(.au-draft) .au-all-day-event')];
+    const toggles = [...band.querySelectorAll('[data-au="all-day-toggle"]')], open = head.classList.contains('is-open');
+    const gap = parseFloat(getComputedStyle(band).rowGap), pitch = parseFloat(getComputedStyle(band).gridTemplateRows.split(' ')[0]) + gap;
+    const overlapping = (a, b) => Math.min(a.right, b.right) - Math.max(a.left, b.left) > 1 && Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > 1;
+    // The items the data holds for a day, and the ones the band draws against its column.
+    const dayOf = column => { const [y, m, d] = column.dataset.allDay.split('-').map(Number); return [new Date(y, m - 1, d).getTime(), new Date(y, m - 1, d + 1).getTime()]; };
+    const expected = column => { const [from, to] = dayOf(column); return window.__look.data.home.calendar_events.filter(item => (item.all_day || item.end_ms - item.at_ms >= 86_400_000) && item.at_ms < to && item.end_ms > from); };
+    const standing = column => { const box = column.getBoundingClientRect(); return chips.filter(chip => { const b = chip.getBoundingClientRect(); return b.left < box.right - 1 && b.right > box.left + 1; }); };
+    const state = { rows: Number(band.dataset.rows), hoursTop: scroll.querySelector('.au-hours').offsetTop, bandHeight: band.offsetHeight, slot: scroll.querySelector('.au-slot').getBoundingClientRect().height };
+    require(columns.length >= 1 && columns.every(column => expected(column).length >= standing(column).length), "the band draws nothing the data does not hold");
+    require(band.scrollHeight <= band.clientHeight + 1 && getComputedStyle(band).overflowY === 'visible' && getComputedStyle(head).overflowY === 'visible', "the band has no scrollbar of its own");
+    for (const chip of chips) { const box = chip.getBoundingClientRect(), edge = band.getBoundingClientRect(); require(box.bottom <= edge.bottom + 1 && box.height > 0, "no chip of the band is cut off by its edge"); }
+    for (const [index, chip] of chips.entries()) for (const other of chips.slice(index + 1)) require(!overlapping(chip.getBoundingClientRect(), other.getBoundingClientRect()), "no two chips of the band overlap");
+    for (const toggle of toggles) {
+      require(toggle.tagName === 'BUTTON' && !toggle.disabled && toggle.tabIndex >= 0 && visible(toggle) && toggle.getAttribute('aria-controls') === band.id, "the toggle is a real button a keyboard reaches, and it names what it opens");
+      require(toggle.getBoundingClientRect().bottom <= band.getBoundingClientRect().bottom + 1 && toggle.scrollWidth <= toggle.clientWidth + 1, "the toggle stands whole inside the band");
+      for (const chip of chips) require(!overlapping(toggle.getBoundingClientRect(), chip.getBoundingClientRect()), "the toggle covers no chip");
+    }
+    if (open) {
+      require(toggles.length === 1 && toggles[0].getAttribute('aria-expanded') === 'true' && toggles[0].textContent === '收合', "an open band has one button, 「收合」, saying it is expanded");
+      for (const column of columns) {
+        const wanted = expected(column), seen = new Set(standing(column).map(chip => chip.dataset.entry));
+        require(wanted.length === seen.size && wanted.every(item => seen.has(item.id)), `every item of ${column.dataset.allDay} is in the band: ${seen.size} of ${wanted.length}`);
+      }
+      // Every chip is in the document and, once scrolled to, whole and under the pointer (the day names that stay on top do not cover it).
+      const port = scroll.getBoundingClientRect(), top = port.top + Math.max(...[...head.querySelectorAll('.au-day-head')].map(day => day.getBoundingClientRect().height));
+      for (const chip of chips) {
+        chip.scrollIntoView({ block: 'center' });
+        const box = chip.getBoundingClientRect(), at = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+        require(box.top >= top - 1 && box.bottom <= port.bottom + 1 && at?.closest('.au-all-day-event') === chip, "every item can be scrolled to and pressed: " + chip.textContent);
+      }
+      scroll.scrollTop = 0;
+      // A month's count lands on the open day with no folded band before it to compare with.
+      const before = window.__look.calendarMore, growth = before ? state.bandHeight - before.bandHeight : 0;
+      if (before) {
+        require(Math.abs(state.hoursTop - before.hoursTop - growth) <= 1 && Math.abs((state.rows - before.rows) * pitch - growth) <= 1, "the hours moved down by what the band grew");
+        require(Math.abs(state.slot - before.slot) <= .5, "opening the band moves the hours and never resizes them");
+      }
+      // The first timed event is still there: scrolled to it, it is whole under the day names; the last hour is at the end.
+      const events = [...scroll.querySelectorAll('.au-day-col > .au-event:not(.au-draft)')].sort((a, b) => a.offsetTop - b.offsetTop);
+      require(events.length > 0, "the scene has a timed event");
+      scroll.scrollTop += events[0].getBoundingClientRect().top - top - 8;
+      const box = events[0].getBoundingClientRect();
+      require(box.top >= top - 1 && box.bottom <= port.bottom + 1, "the first timed event can be scrolled to under the day names");
+      scroll.scrollTop = scroll.scrollHeight;
+      require(scroll.querySelector('.au-slot[data-hour="23"]').getBoundingClientRect().bottom <= port.bottom + 1, "the last hour of the day can be scrolled to");
+      scroll.scrollTop = 0;
+      return { check: name, items: chips.length, rows: state.rows, growth };
+    }
+    // Folded: three rows at most, each day's button says how many are left and nothing else is hidden.
+    require(!band.querySelector('[data-au="open-day"]'), "the band's count is no link to the day it already shows");
+    require(new Set(chips.map(chip => chip.closest('.au-bar').style.gridRow)).size <= 3, "a folded band draws three rows at most");
+    for (const toggle of toggles) {
+      const column = columns.find(item => item.dataset.allDay === toggle.dataset.date), words = toggle.textContent.match(/^還有 (\d+) 個$/);
+      require(column && words && toggle.getAttribute('aria-expanded') === 'false', "a folded band's button counts what is left and says it is not expanded");
+      require(Number(words[1]) === expected(column).length - standing(column).length, `the button counts the hidden items: ${words[1]} for ${expected(column).length - standing(column).length}`);
+    }
+    for (const column of columns) require((expected(column).length > standing(column).length) === toggles.some(toggle => toggle.dataset.date === column.dataset.allDay), "a day with items left has a button, a day without has none");
+    if (name === "calendar-more-folded") window.__look.calendarMore = state;
+    else {
+      const before = window.__look.calendarMore;
+      require(before && state.rows === before.rows && Math.abs(state.hoursTop - before.hoursTop) <= 1 && Math.abs(state.bandHeight - before.bandHeight) <= 1, "folded again, the band and the hours are where they were");
+    }
+    return { check: name, toggles: toggles.map(toggle => toggle.textContent), chips: chips.length, rows: state.rows };
+  }
   if (name === "calendar-all-day") {
     require(visible(document.querySelector('.au-all-day-event')), "all-day events remain in the pinned header");
     return { check: name };

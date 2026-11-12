@@ -1,4 +1,4 @@
-import { scene, click, hover, type, wait, waitGone, page, key, scroll, room, newRoom, check, rightClick, member } from "./steps.mjs";
+import { scene, click, hover, type, wait, waitGone, page, key, scroll, room, newRoom, check, rightClick, member, focus } from "./steps.mjs";
 
 const auto = [page("home"), click('.ho-schedule header [data-home-go="calendar"]'), wait(".au-toolbar")];
 const calendar = [...auto, wait(".au-occurrence"), check("calendar-chips"), check("calendar-shell")];
@@ -6,6 +6,7 @@ const view = name => [click('[data-au="view"]'), click(`#app-popover [data-value
 const routineDetail = [...auto, wait(".au-occurrence"), click('.au-occurrence[data-au="entry"]'), wait('[data-pop="open-routine"]')];
 const ownChip = '.cal-chip.is-own[data-entry="own:1"]', slotAt = (day, hour) => `.au-slot[data-slot="${day}"][data-hour="${hour}"]`;
 const today = "2026-10-24";
+const many = count => ({ calendarManyAllDay: count }), moreToggle = '.au-all-day-row [data-au="all-day-toggle"]', isOpen = `${moreToggle}[aria-expanded="true"]`;
 const tools = [...calendar, { action: "calendar-tools" }, check("calendar-tools")];
 const eventRoutine = { id: 90, member_id: 1, title: "客戶來信草稿", prompt: "整理來信，準備草稿交給我。", schedule: null, enabled: true, last_run: 1792803600000, next_run: 1792807380000, last_checked: 1792807200000,
   when: { app: "Gmail", event: { tool: "mcp:Gmail/messages", arguments: { limit: 50 }, items: "messages", id: "id" }, filter: { field: "sender", equals: "client@example.com" } } };
@@ -78,6 +79,16 @@ export default [
   scene("automations-month-busy", "A full month day counts what does not fit and opens the day", [...auto, ...view("month"), check("calendar-month"), check("calendar-month-more"), click('[data-month-day="2026-10-28"] .cal-more'), wait('.au-day-col[data-day="2026-10-28"]')], { calendarBusy: true }),
   scene("automations-busy", "Overlapping events stand side by side, long ones run across the all-day row", [...auto, ...view("week"), { action: "calendar-date", date: "2026-10-21" }, check("calendar-shell"), check("calendar-overlaps")], { calendarBusy: true }),
   scene("automations-busy-day", "One day's overlaps with room to read them", [...auto, ...view("day"), { action: "calendar-date", date: "2026-10-21" }, check("calendar-overlaps")], { calendarBusy: true }),
+  // A busy day (owner, 2026-11-12): 「還有 N 個」 opens the all-day band in place to every item, 「收合」 folds it again, and a month's count lands on the open day.
+  scene("automations-more-day", "A busy day folds its all-day band to three rows and counts the rest in 「還有 7 個」", [...auto, ...view("day"), check("calendar-more-folded")], many(10)),
+  scene("automations-more-day-open", "Pressing 「還有 7 個」 opens the band in place: every all-day item shows and the hours move down", [...auto, ...view("day"), check("calendar-more-folded"), click(moreToggle), wait(isOpen), check("calendar-more-open")], many(10)),
+  scene("automations-more-day-closed", "Pressing 「收合」 folds the band again and the hours are where they were", [...auto, ...view("day"), check("calendar-more-folded"), click(moreToggle), wait(isOpen), check("calendar-more-open"), click(moreToggle), waitGone(".au-grid-head.is-open"), check("calendar-more-closed")], many(10)),
+  scene("automations-more-week", "A busy week opens its all-day band over every day, under the day names that stay", [...auto, check("calendar-more-folded"), click(moreToggle), wait(isOpen), check("calendar-more-open")], many(25)),
+  scene("automations-more-many", "Twenty-five all-day items in one day: all of them, the first timed event still reachable", [...auto, ...view("day"), check("calendar-more-folded"), click(moreToggle), wait(isOpen), check("calendar-more-open")], many(25)),
+  scene("automations-more-sixty", "Sixty all-day items in one day: all of them, nothing cut, the hours still reachable by scrolling", [...auto, ...view("day"), check("calendar-more-folded"), click(moreToggle), wait(isOpen), check("calendar-more-open")], many(60)),
+  scene("automations-more-month-cell", "A month's busy day counts what does not fit in 「還有 N 個」", [...auto, ...view("month"), wait('[data-month-day="2026-10-24"] .cal-more:not([hidden])'), check("calendar-month"), check("calendar-more-month")], many(10)),
+  scene("automations-more-month", "A month's 「還有 N 個」 opens that day in the day view, where every item shows", [...auto, ...view("month"), wait('[data-month-day="2026-10-24"] .cal-more:not([hidden])'), check("calendar-more-month"), click('[data-month-day="2026-10-24"] .cal-more'), wait(`.is-one-day ${isOpen}`), check("calendar-more-open")], many(10)),
+  scene("automations-more-keyboard", "Tab reaches 「還有 7 個」, Enter opens the band and Space folds it, the focus staying on the button", [...auto, ...view("day"), check("calendar-more-folded"), focus(".au-all-day-row > .au-bar:last-of-type .au-all-day-event"), key("Tab"), key("Enter"), wait(isOpen), check("calendar-more-focus"), check("calendar-more-open"), key("Space"), waitGone(".au-grid-head.is-open"), check("calendar-more-focus"), check("calendar-more-closed")], many(10)),
   scene("automations-create-slot", "A click on an empty slot opens the small form beside it", [...auto, click(slotAt(today, 13)), wait(".au-pop-editor"), check("calendar-editor")]),
   scene("automations-create-drag", "Dragging over a range sets the time", [...auto, { action: "pointer-drag", selector: slotAt(today, 12), dx: 0, dy: 90, y: 0.05 }, wait(".au-pop-editor"), check("calendar-editor"), check("calendar-drag-range")]),
   scene("automations-create-button", "建立 opens the same form", [...auto, click('[data-au="new"]'), wait(".au-pop-editor"), check("calendar-editor")]),
