@@ -168,12 +168,19 @@ async def _page_tools(snapshot, gate):
 
 
 def vm_signin_fixture(directory, member_id):
-    """Seed only the isolated journey member's own workspace, without starting Docker."""
+    """Seed only the isolated journey member's own workspace, without starting Docker: the workspace of the kind of
+    computer this data folder gives the member (its own, or the one every member shares)."""
     import shutil
+    from .brain.db import connect
+    from .brain.settings import SettingsStore
     from .computer.vm import LocalVm
     if not native_enabled(True):
         raise RuntimeError("VM sign-in fixture requires the native runner")
-    workspace = LocalVm(directory).target(member_id).workspace
+    conn = connect(Path(directory) / "raphael.db")
+    try:
+        workspace = LocalVm(directory, settings=SettingsStore(conn), conn=conn).target(member_id).workspace
+    finally:
+        conn.close()
     workspace.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(Path(__file__).parent / "evaluate/signin_fixture.py", workspace / "native-signin.py")
 
@@ -467,6 +474,22 @@ def native_computer(messages, offered, seen):
     # Desktop screenshots are appended as user image blocks by the shared loop.
     latest = next((message["content"] for message in reversed(messages)
                    if message.get("role") == "user" and isinstance(message.get("content"), str)), "")
+    if "[native-computer:seat-signin]" in latest:
+        # At a seat the shell has no screen: the page is opened in the member's own window of the computer's browser,
+        # which is where an owner signs in for every member.
+        calls = [
+            ("computer__vm_exec", {"command": "nohup /opt/venv/bin/python /home/cua/workspace/native-signin.py >/dev/null 2>&1 &\nsleep 1"}),
+            ("computer__browser_open", {"url": "http://127.0.0.1:8765"}),
+            ("computer__request_takeover", {"reason": "sign_in"}),
+            ("computer__get_desktop_state", {}),
+            ("computer__vm_exec", {"command": "/opt/venv/bin/python -c 'import urllib.request,json; s=json.load(urllib.request.urlopen(\"http://127.0.0.1:8765/state\")); assert s[\"signed_in\"] and s[\"continued\"]==0; urllib.request.urlopen(\"http://127.0.0.1:8765/finish\",data=b\"\").read(); print(\"Continued once\")'"}),
+        ]
+        if seen >= len(calls):
+            return "reply", "已登入，原本的工作已繼續一次。"
+        name, arguments = calls[seen]
+        if name not in offered:
+            raise ValueError("Native computer tool is absent")
+        return name, arguments
     if "[native-computer:signin]" not in latest:
         return None
     calls = [

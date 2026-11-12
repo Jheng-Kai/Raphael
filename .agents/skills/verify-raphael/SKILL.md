@@ -143,6 +143,11 @@ never touches another owner or the real image tag. `--keep` on the Python module
 retains its resources and prints them; interruption/failure otherwise cleans them.
 Missing/non-Linux Docker exits 2, a failed check exits 1, success exits 0. A released
 layer whose image is not on this PC is a named skip (`previous layer 4`, `previous layer 5`).
+For the layer before the current one it also makes the six-screen computer every member shares in that layer's
+shape and starts it on the new layer (`previous layer 7 shared`): the upgrade an owner's own computer takes.
+The shared block reads the running browser's flags and what a page is told of `navigator.webdriver`, presses the
+Browser icon's command ("shared browser is a person's"), and sends the owner's own click and typed line through
+the app's relay path to a held seat ("shared owner input").
 Every failure includes expected/observed evidence.
 
 Every per-count block compares the live tools/list of all DRIVER_TOOLS with

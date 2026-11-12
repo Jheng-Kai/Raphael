@@ -126,6 +126,17 @@ The Dockerfile installs the pinned `cua-driver` 0.37.0 Linux wheel and checks it
 SHA-256. The base image is pinned by digest. The upstream MIT license is retained
 in the image/package; redistribution must preserve it.
 
+## Software a computer's image installs when it is built
+
+Raphael ships a Dockerfile, not an image: each owner's machine builds its own. From image
+layer 8 that build installs, on amd64, Google Chrome from Google's own repository
+(https://dl.google.com/linux/chrome/deb/, signed with Google's key). Google Chrome is
+Google's proprietary software under Google's terms of service; Raphael does not
+redistribute it. The build also installs Debian packages under their own licences (git,
+wget, zip, unzip, jq, ripgrep, npm, sqlite3, poppler-utils, build-essential, less, nano,
+tree, file) and Debian's `fonts-noto-cjk` and `fonts-noto-color-emoji` (SIL Open Font
+License 1.1); their notices are the packages' own under /usr/share/doc in the image.
+
 ## noVNC (MPL-2.0)
 
 Upstream: https://github.com/novnc/noVNC

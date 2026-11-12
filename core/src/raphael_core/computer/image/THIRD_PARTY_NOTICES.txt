@@ -21,3 +21,13 @@ Noto Sans CJK JP Regular
 SIL Open Font License 1.1. The pinned original license is installed at
 /usr/local/share/licenses/noto-cjk/OFL.txt.
 Source: https://github.com/notofonts/noto-cjk
+
+Google Chrome (amd64 images only)
+Installed when the image is built, from Google's own repository
+(https://dl.google.com/linux/chrome/deb/), under Google's signing key. Google Chrome is
+Google's software under Google's terms of service; its notices are in /opt/google/chrome.
+
+Debian packages added for a member's work (git, wget, zip, unzip, jq, ripgrep, npm,
+sqlite3, poppler-utils, build-essential, less, nano, tree, file) and the fonts
+fonts-noto-cjk and fonts-noto-color-emoji (SIL Open Font License 1.1) are under their
+own licences, kept by Debian under /usr/share/doc/<package>/copyright.

@@ -131,7 +131,21 @@ def test_a_verify_state_written_to_the_drivers_schema_counts_as_the_check(argume
     assert check.required is not checked
 
 
-IMAGE_NAME = "raphael/cua-local-vm:driver-0.37.0-v7"
+def test_opening_a_page_is_its_own_read_and_a_click_after_it_still_needs_one():
+    from raphael_core.worker.computer_verification import ComputerVerification
+    check = ComputerVerification()
+    check.after("computer__browser_open", {"url": "https://example.com"}, True)
+    assert not check.required and check.finishing() is None
+    check.after("computer__browser_click", {}, True)
+    assert check.required
+    # An open that failed read nothing: what was changed before it is still unchecked.
+    check.after("computer__browser_open", {"url": "https://example.com"}, False)
+    assert check.required
+    check.after("computer__browser_open", {"url": "https://example.com"}, True)
+    assert not check.required
+
+
+IMAGE_NAME = "raphael/cua-local-vm:driver-0.37.0-v8"
 
 
 def answer(code, out="", err="", config="host studio\nuser jack2\nhostname 192.168.8.178\n"):

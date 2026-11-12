@@ -711,6 +711,29 @@ This brief prohibits look, native, judge, live, network/provider and real Docker
 acceptance. These remain SKIP; fake connection counts establish sharing, not real
 SSH/macOS/driver compatibility or latency. Check the task report for exact exits.
 
+## What a computer has from its first start, and the owner at a seat (2026-11-13)
+
+Image layer 8 (R-COMP-READY-01, R-COMP-SIGNIN-01, R-COMP-OWNER-INPUT-01). Owner: 「他們會有 chrome 等等之類的 我們一開始
+就要把環境架設好了 不會只有 cua」, and, signing in to Google for his members: "This browser or app may not be secure".
+
+- The members' browser is Google Chrome on amd64 (from Google's repository when the image is built), Chromium on
+  arm64. It is started without the automation mark a page can read, with no warning bar and no "Restore pages?".
+- The image adds git, wget, zip, unzip, jq, ripgrep, npm, sqlite3, poppler-utils, build-essential, less, nano, tree,
+  file, and the Noto CJK and colour emoji fonts. Nothing in a computer is root: what is missing is added here.
+- The shared computer has one browser. Its Browser icon opens a window of the members' own.
+- The members' browser keeps no password, card or address (the profile is every member's); sign-ins stay as
+  cookies.
+- Layer 7 computers, the shared six-screen one among them, are made again on layer 8 at their next start.
+- An owner's own click and keys reach the seat it holds: the acceptance sends them through the app's relay path, and
+  the `shared-computer` native journey takes a seat from the conversation's card after a member asks for a sign-in.
+- A page a member opened with browser_open is read by that call: no second read is asked before its answer, and a
+  turn that is started again shows no line twice (R-COMP-PERF-09).
+
+Stated limits: no test signs in to Google (the owner's own sign-in is the proof); a seat's screen does not add a
+Shift that was not sent (a script's "@", capitals from a Caps Lock that was on before the view opened); Chrome's own
+sandbox stays off in a computer (every capability is dropped and the container is the sandbox); the image is 4.2 GB where
+layer 7 was 2.7 GB (measured), and its first build downloads Chrome and the packages.
+
 ## Responsive computer tools (2026-11-04)
 
 R-COMP-PERF-01 through R-COMP-PERF-06 supersede the earlier full-screen bootstrap,

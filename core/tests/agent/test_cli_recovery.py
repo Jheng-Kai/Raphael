@@ -463,3 +463,48 @@ async def test_large_recovery_context_is_bounded_and_preserves_uncertain_steps(m
     assert next(record for record in kept if record["name"] == "draft_step_0")["status"] == "unknown"
     assert all(len(record["arguments"]) + len(record["result"]) <= 2000 for record in kept)
     assert all(record["truncated"] for record in kept)
+
+
+async def checked_turn(monkeypatch, tmp_path, second_answer):
+    """A member changes its computer and answers without looking; told to check, it looks and answers again."""
+    shown = []
+
+    async def play(loop, attempt):
+        if attempt == 1:
+            await loop._tool("press", "computer__click", {})
+            yield Event("message", "Saved.", {"id": "first", "final": True})
+            yield Event("final", "Saved.")
+        else:
+            await loop._tool("look", "computer__get_window_state", {})
+            yield Event("message", second_answer, {"id": "second", "final": True})
+            yield Event("final", second_answer)
+
+    rig = recovery_rig(monkeypatch, tmp_path, play, reply=lambda reply: shown.extend(reply.messages))
+    outcome = await rig.loop.run()
+    assert outcome.status == "done" and outcome.final == second_answer
+    assert len(rig.calls) == 2 and "Before finishing computer work" in rig.calls[1]["user"]
+    return shown
+
+
+async def test_a_turn_started_again_for_the_completion_check_says_its_answer_once(monkeypatch, tmp_path):
+    # Real members, 2026-11-13: the same answer stood in the conversation twice, as two bubbles.
+    assert await checked_turn(monkeypatch, tmp_path, "Saved.") == ["Saved."]
+
+
+async def test_what_the_check_changed_in_the_answer_is_still_said(monkeypatch, tmp_path):
+    assert await checked_turn(monkeypatch, tmp_path, "It did not save: the dialog is still open.") == [
+        "Saved.", "It did not save: the dialog is still open."]
+
+
+async def test_a_page_that_was_opened_needs_no_second_read_before_the_answer(monkeypatch, tmp_path):
+    # browser_open answers with the page: asked to read it again, every such turn was started a second time.
+    shown = []
+
+    async def play(loop, attempt):
+        await loop._tool("open", "computer__browser_open", {"url": "https://example.com"})
+        yield Event("message", "Example Domain", {"id": "answer", "final": True})
+        yield Event("final", "Example Domain")
+
+    rig = recovery_rig(monkeypatch, tmp_path, play, reply=lambda reply: shown.extend(reply.messages))
+    assert (await rig.loop.run()).final == "Example Domain"
+    assert len(rig.calls) == 1 and shown == ["Example Domain"]

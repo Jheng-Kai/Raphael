@@ -29,12 +29,13 @@ from ..computer import lifecycle, vm
 from ..computer.viewer import DesktopViewer
 from ..computer.rfb_view import Rfb, WebSocket, UpgradeRefused, exact
 from ..computer.vm_bridge import CuaBridge
+from ..computer.vm_catalog import BROWSER_APPS
 from ..computer.vm_tools import VmTools
 from ..services.attachment_store import AttachmentStore
 
 # Released layers a computer may still be on. A fixture of each is made from the image itself, which is only read.
 OLD_IMAGES = {"4": "raphael/cua-local-vm:driver-0.37.0-v4", "5": "raphael/cua-local-vm:driver-0.37.0-v5",
-              "6": "raphael/cua-local-vm:driver-0.37.0-v6"}
+              "6": "raphael/cua-local-vm:driver-0.37.0-v6", "7": "raphael/cua-local-vm:driver-0.37.0-v7"}
 IMAGE_FOLDER = Path(vm.__file__).parent / "image"
 # A 64x48 JPEG, teal on the left half and orange on the right: an owner's picture no desktop draws by itself.
 OWN_PICTURE = base64.b64decode(
@@ -1029,6 +1030,39 @@ class Acceptance:
                     await self.machine.stop(target)
                 return f"layer {layer} {operation}: incompatible -> {'absent with workspace removed' if operation == 'erase' else 'ready on new image, workspace file preserved'}"
             await self.check(f"{name} {operation}", exercise)
+        if layer == "7":
+            await self.previous_shared(layer)
+
+    async def previous_shared(self, layer):
+        """The computer every member shares, as the release before this layer left it on an owner's PC (six screens,
+        its own memory and cores), is made again on this layer at its next start and keeps its workspace."""
+        name = f"previous layer {layer} shared"
+        target = self.machine.shared_target("", 9301, 1)
+
+        async def fixture():
+            await self.machine.stop(target, remove=True)  # this run's own shared computer of the earlier block
+            target.workspace.mkdir(parents=True, exist_ok=True)
+            target.shared.mkdir(parents=True, exist_ok=True)
+            await self.command(previous_args(target, self.machine.owner, secrets.token_urlsafe(24), layer), timeout=90)
+            await self.text(target, ["sh", "-c", "printf shared-acceptance > /home/cua/workspace/acceptance-shared.txt"])
+            await self.command(["stop", target.name], timeout=90)
+            return f"Created a six-screen layer {layer} shared computer with a workspace file, then stopped it"
+        if not await self.check(f"{name} fixture", fixture):
+            self.record(f"{name} start", "skipped", "fixture creation failed")
+            return
+
+        async def exercise():
+            state = await self.machine.status(target)
+            require(state["state"] == "incompatible", f"Expected the layer {layer} shared computer incompatible, observed {state}")
+            await self.start(target)
+            raw = await self.machine.inspect(target)
+            require(raw["Image"] == await self.machine.image(target), "Expected the shared computer made again on the new image")
+            require(f"RAPHAEL_SCREENS={target.screens}" in raw["Config"]["Env"], "Expected six screens kept")
+            content = await self.text(target, ["cat", vm.GUEST + "/acceptance-shared.txt"])
+            require(content == "shared-acceptance", f"Expected the shared workspace file kept, observed {content!r}")
+            await self.machine.stop(target)
+            return f"layer {layer} shared computer: incompatible -> ready on the new image with six screens, workspace file kept"
+        await self.check(f"{name} start", exercise)
 
     async def form(self, hub, target, member, *, peer=None):
         """Type synthetic values through the same page helper used by all saved fills."""
@@ -1575,12 +1609,12 @@ class Acceptance:
             async def browsers():
                 for member in members:
                     pages[member] = page(await tool(member, "browser_open", {"url": "about:blank"}))
-                browser_windows = [[row for row in await rows(member) if row["app_name"].lower() == "chromium-browser"] for member in members]
+                browser_windows = [[row for row in await rows(member) if row["app_name"].lower() in BROWSER_APPS] for member in members]
                 require(all(len(found) == 1 for found in browser_windows), f"Expected one browser window per seat, observed {browser_windows}")
                 require(browser_windows[0][0]["window_id"] != browser_windows[1][0]["window_id"]
                         and browser_windows[0][0]["pid"] == browser_windows[1][0]["pid"],
                         f"Expected two windows of one browser pid, observed {browser_windows}")
-                pids = (await self.text(targets[members[0]], ["pgrep", "-f", "^/usr/lib/chromium/chromium --remote-debugging-port=0 --user-data-dir=/home/cua/workspace/.browser-profiles/driver/main"])).split()
+                pids = (await self.text(targets[members[0]], ["pgrep", "-f", "^[^ ]+ --remote-debugging-port=0 --user-data-dir=/home/cua/workspace/.browser-profiles/driver/main"])).split()
                 require(pids == [str(browser_windows[0][0]["pid"])], f"Expected exactly one main browser process, observed {pids}")
                 require(pages[members[0]]["target_id"] != pages[members[1]]["target_id"], "Expected two session-private bindings")
                 url = "about:blank#member-one"
@@ -1597,6 +1631,63 @@ class Acceptance:
                 await self.check("shared typed form", lambda: self.form(hub, targets[members[0]], members[0], peer=members[1]))
             else:
                 self.record("shared typed form", "skipped", "shared computer browser failed")
+
+            async def persons_browser():
+                """The members' browser is one a person signs in with: Google's own Chrome where there is one, a page
+                is not told it is automated, and nothing warns over the window. An owner signing in to Google for his
+                members met "This browser or app may not be secure", a yellow bar and "Restore pages?" (2026-11-13)."""
+                target = targets[members[0]]
+                profile = "/home/cua/workspace/.browser-profiles/driver/main"
+                line = (await self.text(target, ["pgrep", "-af", f"^[^ ]+ --remote-debugging-port=0 --user-data-dir={profile}"])).splitlines()[0]
+                _, binary, *flags = line.split()
+                chrome = not (await self.guest(target, ["test", "-x", "/opt/google/chrome/chrome"], allow_failure=True)).code
+                amd64 = (await self.text(target, ["dpkg", "--print-architecture"])).strip() == "amd64"
+                require(chrome == amd64, f"Expected Google Chrome in the image exactly where Google builds one (amd64={amd64}), observed {chrome}")
+                require(binary == ("/opt/google/chrome/chrome" if chrome else "/usr/lib/chromium/chromium"),
+                        f"Expected the members' browser to be {'Google Chrome' if chrome else 'Chromium'}, observed {binary}")
+                missing = [flag for flag in ("--disable-blink-features=AutomationControlled", "--test-type", "--hide-crash-restore-bubble")
+                           if flag not in flags]
+                require(not missing, f"Expected the browser started without its warnings and automation mark, missing {missing}")
+                probe = 'data:text/html,<title>raphael-probing</title><script>document.title="raphael-webdriver-"+navigator.webdriver</script>'
+                await self.guest(target, [binary, f"--user-data-dir={profile}", "--new-window", probe])
+                until, titles = time.monotonic() + 15, ""
+                while "raphael-webdriver-" not in titles:
+                    require(time.monotonic() < until, f"Expected the probe page's window, observed {titles[-400:]}")
+                    await asyncio.sleep(.3)
+                    titles = await self.text(target, ["wmctrl", "-l"])
+                said = next(word for line in titles.splitlines() for word in line.split() if word.startswith("raphael-webdriver-"))
+                identifier = next(line.split()[0] for line in titles.splitlines() if said in line)
+                await self.guest(target, ["wmctrl", "-i", "-c", str(int(identifier, 16))])
+                require(said == "raphael-webdriver-false", f"Expected a page to be told this is not an automated browser, observed {said}")
+                # The desktop's Browser icon gives a window of this same browser. A second browser with a profile of
+                # its own is where an owner would sign in for nobody.
+                listed = lambda text: {line.split()[0]: line.split()[2] for line in text.splitlines() if len(line.split()) > 2}
+                before = listed(await self.text(target, ["wmctrl", "-lp"]))
+                await self.guest(target, ["raphael-browser"])
+                until, new = time.monotonic() + 15, {}
+                while not new:
+                    require(time.monotonic() < until, "Expected the Browser icon to open a window")
+                    await asyncio.sleep(.3)
+                    new = {key: pid for key, pid in listed(await self.text(target, ["wmctrl", "-lp"])).items() if key not in before}
+                for key in new:
+                    await self.guest(target, ["wmctrl", "-i", "-c", str(int(key, 16))])
+                mains = [line.split()[0] for line in (await self.text(target, ["pgrep", "-af", "/chrome|/chromium"])).splitlines()
+                         if len(line.split()) > 1 and line.split()[1].rsplit("/", 1)[-1] in ("chrome", "chromium") and "--type=" not in line]
+                main = line.split()[0]
+                require(set(new.values()) == {main} and mains == [main],
+                        f"Expected the Browser icon to open a window of the members' own browser (pid {main}), observed windows {new} and browsers {mains}")
+                # Every member reads this one profile: the browser keeps no password, card or address in it.
+                kept = json.loads(await self.text(target, ["cat", profile + "/Default/Preferences"]))
+                offers = {"passwords": kept.get("credentials_enable_service"), "password manager": (kept.get("profile") or {}).get("password_manager_enabled"),
+                          "cards": (kept.get("autofill") or {}).get("credit_card_enabled"), "addresses": (kept.get("autofill") or {}).get("profile_enabled")}
+                require(all(value is False for value in offers.values()), f"Expected the members' browser to keep nothing typed into it, observed {offers}")
+                version = (await self.text(target, [binary, "--version"])).strip()
+                return (f"{version} ({binary}); navigator.webdriver is false; started with --test-type and no crash bubble; "
+                        "the Browser icon opens a window of the same browser; it keeps no password, card or address")
+            if browsers_ok:
+                await self.check("shared browser is a person's", persons_browser)
+            else:
+                self.record("shared browser is a person's", "skipped", "shared computer browser failed")
 
             async def page_text():
                 result = await tool(members[1], "get_browser_state", active_tab(pages[members[1]]))
@@ -1678,6 +1769,90 @@ class Acceptance:
                 await self.check("shared owner control", control)
             else:
                 self.record("shared owner control", "skipped", "shared terminal wall failed")
+
+            async def owner_input():
+                """The owner's own mouse and keys, sent as the app's page sends them (the session's relay path, on the
+                connection it made while watching), reach the seat the owner holds; before the hold and after the
+                handback they reach nothing. An owner was told "you are in control" with nothing getting in
+                (2026-11-13): until then every check of a hold looked only at what the members were refused."""
+                second = members[1]
+                target = targets[second]
+                rect = vm.screen_grid(target.screens)[0][target.screen - 1]
+                mark = f"/home/cua/workspace/owner-input-{secrets.token_hex(4)}"
+                opened = await viewer.open({"member_id": second})
+                url, sock = urlsplit(opened["url"]), None
+
+                async def seat_terminals():
+                    return {w.identifier: w for w in await self.tree(target) if w.terminal and inside(rect, centre(w.rectangle))}
+
+                async def made(file):
+                    return not (await self.guest(target, ["test", "-e", file], allow_failure=True)).code
+                try:
+                    status, body = await asyncio.to_thread(self.http, url.port, f"/{opened['session']}/connection")
+                    require(status == 200, f"Expected the seat's connection 200, observed {status}")
+                    config = json.loads(body)
+                    sock, client = await asyncio.to_thread(self.connect, url.port, config["path"], config["password"], origin=viewer.origin)
+                    # A panel is as wide as what it holds, and for a moment it holds nothing (seen 12 px wide on a real
+                    # computer while a browser window was settling on its screen): the launcher is pressed once the
+                    # panel is whole, and how long that took is said.
+                    waited, panels, seen = time.monotonic(), [], []
+                    while len(panels) != 1:
+                        seen = [w.rectangle for w in await self.tree(target) if w.title == "xfce4-panel" and inside(rect, centre(w.rectangle))]
+                        panels = [rectangle for rectangle in seen if rectangle[2:] == (146, 49)]
+                        require(len(panels) == 1 or time.monotonic() < waited + 20,
+                                f"Expected one whole panel on screen {target.screen} within 20 s, observed {seen}")
+                        if len(panels) != 1:
+                            await asyncio.sleep(.5)
+                    waited = time.monotonic() - waited
+                    px, py, pw, ph = panels[0]
+                    launcher = (px - rect[0] + pw * 5 // 6, py - rect[1] + ph // 2)
+
+                    def press(point):
+                        client.pointer(*point)
+                        client.pointer(*point, 1)
+                        client.pointer(*point)
+
+                    def type_line(line):
+                        for character in line:
+                            client.keys(ord(character))
+                        client.keys(0xff0d)
+                    before = await seat_terminals()
+                    await asyncio.to_thread(press, launcher)
+                    await asyncio.sleep(2)
+                    require((await seat_terminals()).keys() == before.keys(), "Expected a watching owner's click to reach nothing")
+                    state = await viewer.control({**opened, "held": True})
+                    require(state.get("control") == "owner", f"Expected the hold to be the owner's, observed {state}")
+                    began, new = time.monotonic(), {}
+                    await asyncio.to_thread(press, launcher)
+                    while not new and time.monotonic() < began + 10:
+                        await asyncio.sleep(.2)
+                        new = {key: w for key, w in (await seat_terminals()).items() if key not in before}
+                    require(len(new) == 1, f"Expected the holding owner's click to open one terminal on screen {target.screen} "
+                            f"within 10 s, observed {list(new.values())}")
+                    clicked = time.monotonic() - began
+                    terminal = next(iter(new.values()))
+                    await asyncio.sleep(.5)
+                    await asyncio.to_thread(press, (centre(terminal.rectangle)[0] - rect[0], centre(terminal.rectangle)[1] - rect[1]))
+                    await asyncio.to_thread(type_line, f"touch {mark}")
+                    until = time.monotonic() + 5
+                    while not await made(mark):
+                        require(time.monotonic() < until, "Expected the holding owner's typed line to run in the seat's terminal")
+                        await asyncio.sleep(.2)
+                    await viewer.control({**opened, "held": False})
+                    await asyncio.to_thread(type_line, f"touch {mark}-after")
+                    await asyncio.sleep(1.5)
+                    require(not await made(mark + "-after"), "Expected keys after the handback to reach nothing")
+                    return (f"through the app's relay path on screen {target.screen}: watching, a click reaches nothing; holding, "
+                            f"a click opened a terminal in {clicked:.1f} s and a typed line ran; handed back, keys reach nothing"
+                            + (f"; the screen's panel was whole after {waited:.1f} s" if waited > 1 else ""))
+                finally:
+                    if sock:
+                        sock.close()
+                    await viewer.close(opened)
+            if terminals_ok:
+                await self.check("shared owner input", owner_input)
+            else:
+                self.record("shared owner input", "skipped", "shared terminal wall failed")
             if not browsers_ok:
                 self.record("shared foreground page hold", "skipped", "shared computer browser failed")
 
@@ -1727,10 +1902,10 @@ class Acceptance:
                 self.record('shared seat teaching', 'skipped', 'shared terminal wall failed')
 
             async def disconnect():
-                pid = next(row["pid"] for row in await rows(members[1]) if row["app_name"].lower() == "chromium-browser")
+                pid = next(row["pid"] for row in await rows(members[1]) if row["app_name"].lower() in BROWSER_APPS)
                 await hub._disconnect(targets[members[0]].key)
                 await tool(members[1], "get_browser_state", active_tab(pages[members[1]]))
-                current = next(row["pid"] for row in await rows(members[1]) if row["app_name"].lower() == "chromium-browser")
+                current = next(row["pid"] for row in await rows(members[1]) if row["app_name"].lower() in BROWSER_APPS)
                 require(current == pid, f"Expected browser pid {pid} to survive disconnect, observed {current}")
                 return f"Seat 1 connection ended; browser pid {pid} and seat 2's bound tab survive"
             if browsers_ok:
@@ -1925,7 +2100,10 @@ class Acceptance:
             self.machine.build = no_build
             self.build_attempted = True
             async def build():
-                await self.command(["build", "--tag", self.tag, str(IMAGE_FOLDER)], timeout=1800)
+                # A build says as much as it installs (layer 8 passed what a command's output may be): its exit and
+                # the image it leaves are what is judged, as in the product's own build.
+                result = await self.docker(["build", "--tag", self.tag, str(IMAGE_FOLDER)], timeout=1800)
+                require(result.code == 0, f"Expected build exit 0, observed {result.code}: {result.stderr.strip()[-2000:]}")
                 require(await self.machine.image(), "Expected built image with production labels")
                 return f"Built isolated image {self.tag}"
             if await self.check("build", build):

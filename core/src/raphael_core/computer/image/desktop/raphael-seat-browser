@@ -5,13 +5,51 @@
 set -eu
 x=$1 y=$2 width=$3 height=$4
 profile=/home/cua/workspace/.browser-profiles/driver/main
-chromium=/usr/lib/chromium/chromium
-# The flags the driver itself starts its isolated browser with (measured), so the profile behaves the same.
-flags="--user-data-dir=$profile --no-first-run --no-default-browser-check --disable-background-networking --disable-component-update --disable-default-apps --disable-extensions --password-store=basic --no-sandbox"
+# Google's own Chrome where the image has it (amd64), Chromium elsewhere. Its window class starts with these words.
+if [ -x /opt/google/chrome/chrome ]; then
+  chromium=/opt/google/chrome/chrome window_class=google-chrome
+else
+  chromium=/usr/lib/chromium/chromium window_class=chromium-browser
+fi
+# The flags the driver itself starts its isolated browser with (measured), so the profile behaves the same, and:
+# - AutomationControlled off. A browser started with --remote-debugging-port=0 tells every page it is automated
+#   (navigator.webdriver), and Google then refuses the owner's own sign-in ("This browser or app may not be
+#   secure", owner, 2026-11-13). The owner signs in here by hand; the members use what he signed in to.
+# - --test-type: without it the two flags above it each put a yellow warning bar over every window.
+# - no crash bubble: a computer is stopped by ending its processes, and the next start offered "Restore pages?".
+flags="--user-data-dir=$profile --no-first-run --no-default-browser-check --disable-background-networking --disable-component-update --disable-default-apps --disable-extensions --password-store=basic --no-sandbox --disable-blink-features=AutomationControlled --test-type --hide-crash-restore-bubble"
 export DISPLAY=:1
-windows() { wmctrl -lx | awk '$3 ~ /^chromium-browser/ {print $1}' | sort; }
+windows() { wmctrl -lx | awk -v prefix="$window_class" 'index($3, prefix) == 1 {print $1}' | sort; }
 before=$(windows)
 browser_pid() { pgrep -f -- "^$chromium --remote-debugging-port=0 --user-data-dir=$profile( |$)" | head -n 1 || true; }
+# Before the browser's first start of a computer's run, its profile is made ready:
+# - The profile of a browser that was ended, not closed, says so, and the browser then asks to restore its pages.
+# - The browser keeps no password, card or address. Every member reads this one profile, and a password kept by the
+#   browser can be shown again on its own page: what an owner types at a seat ("Save password?") stays out of it.
+#   Sign-ins stay, as cookies. Saved values belong to the owner's vault.
+# A Preferences file that is not what the browser writes is left as it is.
+ended_cleanly() {
+  /usr/bin/python3 - "$profile/Default/Preferences" <<'PY' || true
+import json, os, sys
+path = sys.argv[1]
+try:
+    with open(path, encoding="utf-8") as file:
+        data = json.load(file)
+except FileNotFoundError:
+    data = {}
+except (OSError, ValueError):
+    raise SystemExit(0)
+if not isinstance(data, dict) or any(not isinstance(data.setdefault(key, {}), dict) for key in ("profile", "autofill")):
+    raise SystemExit(0)
+data["profile"].update(exit_type="Normal", exited_cleanly=True, password_manager_enabled=False)
+data["autofill"].update(profile_enabled=False, credit_card_enabled=False)
+data.update(credentials_enable_service=False, credentials_enable_autosignin=False)
+os.makedirs(os.path.dirname(path), exist_ok=True)
+with open(path + ".raphael", "w", encoding="utf-8") as file:
+    json.dump(data, file, separators=(",", ":"))
+os.replace(path + ".raphael", path)
+PY
+}
 main=$(browser_pid)
 # A private title attributes the new window even when another seat opens a popup in the same process.
 marker=raphael-seat-$(cat /proc/sys/kernel/random/uuid)
@@ -20,6 +58,7 @@ if [ -n "$main" ]; then
   "$chromium" $flags --new-window "$start_page" >/dev/null 2>&1 &
 else
   mkdir -p "$profile"
+  ended_cleanly
   setsid "$chromium" --remote-debugging-port=0 $flags "$start_page" >/dev/null 2>&1 &
 fi
 new=
@@ -30,17 +69,18 @@ while [ "$attempt" -lt 150 ]; do
   candidates=$(printf '%s\n' "$now" | awk -v before="$before" '
     BEGIN {split(before, rows, "\n"); for (i in rows) old[rows[i]]=1}
     NF && !($0 in old) {print $0}')
-  # With its own profile folder the browser's class is "chromium-browser (<folder>).Chromium-browser": a space
-  # inside it shifts every later column, so the title's marker is looked for in any of them.
-  new=$(wmctrl -lpx | awk -v candidates="$candidates" -v pid="$main" -v marker="$marker" '
+  # With its own profile folder the browser's class is "chromium-browser (<folder>).Chromium-browser" (Chrome's:
+  # "google-chrome (<folder>).Google-chrome"): a space inside it shifts every later column, so the title's marker
+  # is looked for in any of them.
+  new=$(wmctrl -lpx | awk -v candidates="$candidates" -v pid="$main" -v marker="$marker" -v prefix="$window_class" '
     BEGIN {split(candidates, rows, "\n"); for (i in rows) fresh[rows[i]]=1}
-    ($1 in fresh) && $3 == pid && $4 ~ /^chromium-browser/ {for (i = 5; i <= NF; i++) if ($i == marker) {print $1; exit}}')
+    ($1 in fresh) && $3 == pid && index($4, prefix) == 1 {for (i = 5; i <= NF; i++) if ($i == marker) {print $1; exit}}')
   [ -n "$new" ] && break
   attempt=$((attempt + 1))
   sleep 0.1
 done
 [ -n "$new" ] || { echo "no browser window appeared" >&2; exit 1; }
-# Chromium opens a new window beside its first, whatever screen the pointer is on: put it on this screen, then fill it.
+# The browser opens a new window beside its first, whatever screen the pointer is on: put it on this screen, then fill it.
 wmctrl -i -r "$new" -b remove,maximized_vert,maximized_horz
 wmctrl -i -r "$new" -e "0,$((x + 20)),$((y + 20)),$((width - 80)),$((height - 120))"
 sleep 0.3

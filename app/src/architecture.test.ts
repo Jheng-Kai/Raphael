@@ -13,6 +13,10 @@ const walk = (dir: string): string[] => readdirSync(dir, { withFileTypes: true }
 const sources = walk(join(root, "app/src/main")).filter(path => path.endsWith(".ts") && !path.endsWith(".test.ts"));
 
 it("mechanical rules link existing named tests", () => {
+  // The rows name the same test files hundreds of times, some of them very long: each is read once. Read once per
+  // reference, this test ran past its five seconds on a busy machine (twice on 2026-11-13).
+  const kept = new Map<string, string>();
+  const once = (path: string): string => { if (!kept.has(path)) kept.set(path, read(path)); return kept.get(path)!; };
   for (const name of ["RULES", "ARCHITECTURE"]) {
     const spec = read(located(`.agents/product/${name}.md`));
     const rows = spec.split("\n").filter(line => /^\| (?:R-[A-Z]+-\d+|A-\d+) \|/.test(line));
@@ -28,7 +32,7 @@ it("mechanical rules link existing named tests", () => {
         const absolute = resolve(root, path!);
         expect(absolute.startsWith(root + "/") || absolute.startsWith(root + "\\"), row).toBe(true);
         expect(existsSync(absolute), row).toBe(true);
-        const source = read(absolute);
+        const source = once(absolute);
         const label = title!.trim();
         expect(source.includes(`"${label}"`) || source.includes(`'${label}'`) || source.includes(`def ${label}(`), row).toBe(true);
       }

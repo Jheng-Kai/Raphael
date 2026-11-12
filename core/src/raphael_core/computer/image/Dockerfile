@@ -125,6 +125,29 @@ RUN set -eux; \
     printf 'export CHROMIUM_FLAGS="$CHROMIUM_FLAGS --no-sandbox --test-type"\n' > /etc/chromium.d/raphael-container; \
     chromium --version; \
     test -n "$(find /usr/lib -name 'libpixbufloader-svg.so' -print -quit)"
+# What a bot's computer has from its first start (owner, 2026-11-13, of Grok Bot's computer: 「他們會有 chrome 等等之類的
+# 我們一開始就要把環境架設好了 不會只有 cua」). Nothing in a computer is root, so a member cannot add a system package
+# later: what its work is likely to reach for is here. The base already has curl, ffmpeg, node and Python 3.13.
+# The CJK and emoji fonts are Debian's: until now only the Japanese cut was there, and Chinese was drawn in its shapes.
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends git wget zip unzip jq ripgrep npm sqlite3 poppler-utils build-essential \
+      less nano tree file fonts-noto-cjk fonts-noto-color-emoji; \
+    rm -rf /var/lib/apt/lists/*; \
+    fc-cache -f; \
+    git --version; npm --version; rg --version | head -n 1
+# Google's own Chrome is the members' browser where Google builds one (amd64): it is what an owner signs in to
+# Google with, and it is taken from Google's own repository, signed with Google's key, at the version that is
+# current when the image is built. There is no Chrome for arm64 Linux: there the browser stays Chromium.
+RUN set -eux; \
+    if [ "$(dpkg --print-architecture)" = amd64 ]; then \
+      curl -fsSL https://dl.google.com/linux/linux_signing_key.pub -o /usr/share/keyrings/google-linux.asc; \
+      printf 'deb [arch=amd64 signed-by=/usr/share/keyrings/google-linux.asc] https://dl.google.com/linux/chrome/deb/ stable main\n' > /etc/apt/sources.list.d/raphael-google-chrome.list; \
+      apt-get update; \
+      apt-get install -y --no-install-recommends google-chrome-stable; \
+      rm -rf /var/lib/apt/lists/* /etc/apt/sources.list.d/raphael-google-chrome.list; \
+      /opt/google/chrome/chrome --version; \
+    fi
 # The helper is standard library only: Debian's Python runs it without anything from /opt/venv.
 # Its X readiness wait also handles supervisor starting before the X socket is ready.
 # Without CAP_KILL, supervisor only restarts what exits; the helper ends its own children.
@@ -148,4 +171,4 @@ RUN install -m 0755 /opt/raphael-desktop/start-novnc.sh /usr/local/bin/start-nov
 LABEL org.raphael.computer="1" \
       org.raphael.computer.driver="0.37.0" \
       org.raphael.computer.base="docker.io/trycua/xfce-cua@sha256:274eb636f5cf3fc58f705916ee72b7a701270b3877369d08533a385c5325be9b" \
-      org.raphael.computer.layer="7"
+      org.raphael.computer.layer="8"
