@@ -363,12 +363,14 @@ async def test_launcher_uses_only_the_seat_rectangle_and_checks_its_output(seat_
             await vm.seat_browser(vm.target(2))
 
 
-def test_layer_six_installs_computer_browser_and_existing_profile_grant():
+def test_layer_seven_installs_computer_browser_and_existing_profile_grant():
     image = Path(module.__file__).parent / "image"
     dockerfile = (image / "Dockerfile").read_text(encoding="utf-8")
     assert '--permission-mode standard --grant existing-profile' in dockerfile
     assert 'install -m 0755 /opt/raphael-desktop/raphael-seat-browser /usr/local/bin/raphael-seat-browser' in dockerfile
-    assert module.IMAGE.endswith("-v6") and module.IMAGE_LABELS[f"{module.LABEL}.layer"] == "6"
+    # Layer 6 is main's (the desktop's picture, its keys, a lost X server); the seat browser and the grant come on top.
+    assert module.IMAGE.endswith("-v7") and module.IMAGE_LABELS[f"{module.LABEL}.layer"] == "7"
+    assert 'org.raphael.computer.layer="7"' in dockerfile and "librsvg2-common" in dockerfile
     launcher = (image / "desktop/raphael-seat-browser").read_text(encoding="utf-8")
     assert "wmctrl -lG" in launcher and '"$attempt" -lt 50' in launcher
     assert 'data:text/html,<title>$marker</title>' in launcher and '${5' not in launcher

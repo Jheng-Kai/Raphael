@@ -168,6 +168,10 @@ async def test_start_installs_the_decorative_wallpaper_once_per_start_and_target
     script = watcher[0][0][-1]
     assert 'pgrep' in script and 'xfce4-session' in script and '/proc/' in script and 'DBUS_SESSION_BUS_ADDRESS' in script
     assert '--watch' in script and '60' in script
+    # A watcher that is already running is ended, never a reason to leave: it holds the picture it was started with.
+    lines = script.splitlines()
+    assert lines.index('pkill -f "$watcher" >/dev/null 2>&1') < next(i for i, line in enumerate(lines) if line.startswith('exec '))
+    assert 'pgrep -f "$watcher"' not in script and script.count('exit 0') == 3
     assert all(options['timeout'] <= 3 for args, options in runtime.calls if args[0] == 'cp' or args == watcher[0][0])
     if remote:
         assert all(args[:2] == ['--host', 'ssh://sample-host'] for args, _ in sent)
@@ -208,6 +212,34 @@ async def test_the_owner_picture_goes_to_the_guest_and_the_watcher_keeps_it(desk
     own = [args for args, _ in runtime.calls if args[0] == 'cp' and args[-1] == target.name + ':/opt/raphael-desktop/wallpapers/own.jpg']
     assert [Path(args[1]).name for args in own] == ['computer-wallpaper.jpg']
     assert '--watch --image /opt/raphael-desktop/wallpapers/own.jpg' in _watcher_script(runtime)
+
+
+async def test_a_changed_or_removed_picture_is_put_up_at_the_next_start_of_a_running_computer(desktop, tmp_path):
+    vm, target, runtime = desktop
+    picture = tmp_path / 'computer-wallpaper.jpg'
+
+    def scripts():
+        return [args[-1] for args, _ in runtime.calls if args[0] == 'exec' and '-d' in args and 'sh' in args]
+
+    async def start_again():
+        vm.invalidate(target)  # a start confirmed moments ago is answered from memory
+        assert (await vm.start(target))['ready']
+
+    picture.write_bytes(b'\xff\xd8\xff first')
+    await start_again()
+    await start_again()
+    assert len(scripts()) == 1 and '--image' in scripts()[0]
+    picture.write_bytes(b'\xff\xd8\xff another picture')
+    await start_again()
+    assert len(scripts()) == 2 and '--image' in scripts()[1]
+    picture.unlink()
+    await start_again()
+    await start_again()
+    assert len(scripts()) == 3 and '--image' not in scripts()[2]
+    picture.write_bytes(b'\xff\xd8\xff back')
+    await start_again()
+    assert len(scripts()) == 4 and '--image' in scripts()[3]
+    assert not any(args[0] in ('stop', 'restart', 'rm') for args, _ in runtime.calls)
 
 
 @pytest.mark.parametrize('content', [None, b'<svg/>', b'\xff\xd8\xff' + b'0' * 8_000_000], ids=['absent', 'not-a-jpeg', 'too-large'])

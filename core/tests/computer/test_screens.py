@@ -10,7 +10,7 @@ import pytest
 
 from raphael_core.computer import vm as vm_module
 from raphael_core.computer.vm import LABEL, VmError, compatible, run_args, screen_grid
-from .test_vm import desktop
+from .test_vm import desktop, per_bot_desktop  # noqa: F401
 
 
 IMAGE = Path(vm_module.__file__).parent / 'image'
@@ -259,6 +259,7 @@ def test_helper_start_preserves_boot_mark_and_skips_matching_layout(monkeypatch,
     monkeypatch.setattr(screens.socket, 'create_connection', lambda *args, **kwargs: pytest.fail('Matching monitors must not send RFB requests or pointer events'))
     monkeypatch.setattr(screens, 'configure_dock_shadow', lambda count: calls.append(('shadow', count)))
     monkeypatch.setattr(screens, 'configure_panels', lambda count: calls.append(('panels', count)))
+    monkeypatch.setattr(screens, 'configure_shortcuts', lambda count: calls.append(('keys', count)))
     monkeypatch.setattr(screens, 'serve', lambda *args: calls.append(('serve', args)))
     assert screens.main() == 0
     assert calls[0] == ('wait', ['xset', 'q'])
@@ -266,6 +267,149 @@ def test_helper_start_preserves_boot_mark_and_skips_matching_layout(monkeypatch,
     assert bool([call for call in calls if call[0] == 'layout']) is not already_configured
     assert bool([call for call in calls if call[0] == 'panels']) is (value == '4')
     assert bool([call for call in calls if call[0] == 'shadow']) is (value == '4')
+    # The keys are taken away for every number of screens, before the screens are called ready.
+    assert [call[0] for call in calls[-2:]] == ['keys', 'serve'] and calls[-2][1] == (4 if value == '4' else 1)
+
+
+# `xfconf-query -c xfce4-keyboard-shortcuts -l -v` as a real computer printed it on 2026-11-12 (an excerpt).
+SHORTCUTS = '''\
+/commands/custom/<Alt>F2                   xfce4-appfinder --collapsed
+/commands/custom/<Alt>F2/startup-notify    true
+/commands/custom/<Primary><Alt>Delete      xfce4-session-logout
+/commands/custom/<Primary><Alt>Escape      xkill
+/commands/custom/<Primary><Alt>l           xflock4
+/commands/custom/<Primary><Alt>t           exo-open --launch TerminalEmulator
+/commands/custom/<Super>p                  xfce4-display-settings --minimal
+/commands/custom/Print                     xfce4-screenshooter
+/commands/custom/XF86Display               xfce4-display-settings --minimal
+/commands/custom/override                  true
+/xfwm4/custom/<Alt>F4                      close_window_key
+/xfwm4/custom/<Alt>Insert                  add_workspace_key
+/xfwm4/custom/<Alt>Delete                  del_workspace_key
+/xfwm4/custom/<Alt>Tab                     cycle_windows_key
+/xfwm4/custom/<Alt><Shift>Tab              cycle_reverse_windows_key
+/xfwm4/custom/<Super>Tab                   switch_window_key
+/xfwm4/custom/<Primary><Alt>Down           down_workspace_key
+/xfwm4/custom/<Primary><Alt>End            move_window_next_workspace_key
+/xfwm4/custom/<Primary><Alt>KP_3           move_window_workspace_3_key
+/xfwm4/custom/<Primary><Alt>d              show_desktop_key
+/xfwm4/custom/<Primary><Shift><Alt>Left    move_window_left_key
+/xfwm4/custom/<Primary>F2                  workspace_2_key
+/xfwm4/custom/<Primary>F4                  workspace_4_key
+/xfwm4/custom/<Super>KP_Left               tile_left_key
+/xfwm4/custom/Escape                       cancel_key
+/xfwm4/custom/override                     true
+'''
+
+
+def test_one_screen_loses_the_keys_that_act_on_the_whole_desktop_and_keeps_its_own():
+    gone = screens.shortcut_removals(SHORTCUTS, 1)
+    assert gone == [
+        '/commands/custom/<Primary><Alt>Delete', '/commands/custom/<Primary><Alt>Escape', '/commands/custom/<Primary><Alt>l',
+        '/commands/custom/<Super>p', '/commands/custom/XF86Display',
+        '/xfwm4/custom/<Alt>Insert', '/xfwm4/custom/<Alt>Delete', '/xfwm4/custom/<Primary><Alt>Down',
+        '/xfwm4/custom/<Primary><Alt>End', '/xfwm4/custom/<Primary><Alt>KP_3', '/xfwm4/custom/<Primary><Alt>d',
+        '/xfwm4/custom/<Primary><Shift><Alt>Left', '/xfwm4/custom/<Primary>F2', '/xfwm4/custom/<Primary>F4']
+    # ctrl+F4 is "close this tab" again, and a single member still walks its own windows and starts its own programs.
+    assert not set(gone) & {'/xfwm4/custom/<Alt>F4', '/xfwm4/custom/<Alt>Tab', '/xfwm4/custom/<Alt><Shift>Tab',
+                            '/xfwm4/custom/<Super>Tab', '/xfwm4/custom/<Super>KP_Left', '/xfwm4/custom/Escape',
+                            '/commands/custom/Print', '/commands/custom/<Alt>F2', '/commands/custom/<Primary><Alt>t'}
+
+
+def test_several_screens_also_lose_the_keys_that_reach_every_screen():
+    gone = set(screens.shortcut_removals(SHORTCUTS, 6))
+    assert gone >= set(screens.shortcut_removals(SHORTCUTS, 1))
+    assert {'/xfwm4/custom/<Alt>Tab', '/xfwm4/custom/<Alt><Shift>Tab', '/xfwm4/custom/<Super>Tab'} <= gone
+    # No key starts a program where the one pointer happens to be.
+    assert {'/commands/custom/<Alt>F2', '/commands/custom/<Primary><Alt>t', '/commands/custom/Print'} <= gone
+    assert not gone & {'/xfwm4/custom/<Alt>F4', '/xfwm4/custom/<Super>KP_Left', '/xfwm4/custom/Escape',
+                       '/xfwm4/custom/override', '/commands/custom/override', '/commands/custom/<Alt>F2/startup-notify'}
+
+
+def test_the_keys_are_taken_away_once_the_session_has_copied_them_and_one_workspace_is_left(monkeypatch):
+    calls = []
+    monkeypatch.setattr(screens, 'wait_for', lambda args, attempts=45: calls.append(('wait', args, attempts)))
+    monkeypatch.setattr(screens, 'command', lambda args: calls.append(('command', args)) or (SHORTCUTS if '-l' in args else ''))
+    screens.configure_shortcuts(1)
+    assert calls[0] == ('command', ['xfconf-query', '-c', 'xfwm4', '-p', '/general/workspace_count', '-n', '-t', 'int', '-s', '1'])
+    assert [call[1][-1] for call in calls[1:3]] == ['/xfwm4/custom/override', '/commands/custom/override']
+    assert all(call[0] == 'wait' and call[2] == 20 for call in calls[1:3])
+    resets = [call[1] for call in calls if call[0] == 'command' and '-r' in call[1]]
+    assert len(resets) == 14 and all(args[-2:] == ['-r', '-R'] and args[:3] == ['xfconf-query', '-c', 'xfce4-keyboard-shortcuts'] for args in resets)
+
+
+@pytest.mark.parametrize('failure', [TimeoutError('The session never copied its keys'), OSError('No xfconf-query'),
+                                     screens.subprocess.CalledProcessError(1, ['xfconf-query'])])
+def test_keys_that_cannot_be_changed_never_hold_the_screens_back(monkeypatch, capsys, failure):
+    def refuse(args, attempts=45):
+        raise failure
+
+    monkeypatch.setattr(screens, 'command', lambda args: '')
+    monkeypatch.setattr(screens, 'wait_for', refuse)
+    screens.configure_shortcuts(6)
+    assert 'the keys were left as they were' in capsys.readouterr().err
+
+
+@pytest.mark.parametrize('count', [1, 4])
+def test_a_lost_x_server_takes_the_mark_away_for_any_number_of_screens(monkeypatch, tmp_path, count):
+    monkeypatch.setattr(screens, 'READY', tmp_path / 'ready')
+    monkeypatch.setattr(screens, 'TOKENS', tmp_path / 'tokens')
+
+    class Child:
+        returncode = None
+
+        def poll(self):
+            return self.returncode
+
+        def terminate(self):
+            self.returncode = -15
+
+        def wait(self, timeout=None):
+            return self.returncode
+
+    looks = []
+
+    def alive():
+        looks.append(screens.READY.exists())
+        return len(looks) < 2
+
+    monkeypatch.setattr(screens.subprocess, 'Popen', lambda args: Child())
+    monkeypatch.setattr(screens.signal, 'signal', lambda signum, callback: None)
+    monkeypatch.setattr(screens.time, 'sleep', lambda duration: None)
+    monkeypatch.setattr(screens, 'wait_for_port', lambda port, child: None)
+    monkeypatch.setattr(screens, 'cleanup_views', lambda: None)
+    monkeypatch.setattr(screens, 'atomic_write', lambda path, text: path.write_text(text, encoding='utf-8'))
+    monkeypatch.setattr(screens, 'x_alive', alive)
+    with pytest.raises(RuntimeError, match='The X server is gone'):
+        screens.serve(count, screens.grid(count)[0])
+    # It was ready while the server answered, and is no longer called ready once it does not.
+    assert looks == [True, True] and not screens.READY.exists()
+
+
+def test_the_look_at_the_x_server_starts_no_process(monkeypatch):
+    monkeypatch.setattr(screens.subprocess, 'run', lambda *args, **kwargs: pytest.fail('The look must not start a process'))
+    monkeypatch.setattr(screens.subprocess, 'Popen', lambda *args, **kwargs: pytest.fail('The look must not start a process'))
+
+    class Refused:
+        def __init__(self, *args):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def settimeout(self, seconds):
+            pass
+
+        def connect(self, address):
+            assert address == '/tmp/.X11-unix/X1'
+            raise ConnectionRefusedError('Synthetic dead server')
+
+    monkeypatch.setattr(screens.socket, 'AF_UNIX', 1, raising=False)
+    monkeypatch.setattr(screens.socket, 'socket', Refused)
+    assert screens.x_alive() is False
 
 
 def test_layout_failures_are_bounded_reported_and_exit_nonzero(monkeypatch, tmp_path, capsys):
@@ -400,15 +544,42 @@ async def test_layer_four_upgrade_refuses_foreign_weakened_busy_or_multiscreen_t
     assert not any(args[0] in ('stop', 'rm') for args, _ in runtime.calls)
 
 
+@pytest.mark.parametrize('layer,env,recognised', [
+    ('5', ['VNC_PW=private', 'RAPHAEL_SCREENS=1', 'VNC_RESOLUTION=1280x900'], True),
+    ('5', ['VNC_PW=private'], False),                          # no released layer 5 lacked its screen count
+    ('5', ['VNC_PW=private', 'RAPHAEL_SCREENS=6'], False),     # six screens were never released on their own
+    ('4', ['VNC_PW=private', 'RAPHAEL_SCREENS=1'], False),
+    ('6', ['VNC_PW=private', 'RAPHAEL_SCREENS=1'], True),
+    ('6', ['VNC_PW=private'], False),
+    ('7', ['VNC_PW=private', 'RAPHAEL_SCREENS=1'], False),     # the current layer on another image is not a previous one
+    ('8', ['VNC_PW=private', 'RAPHAEL_SCREENS=1'], False),
+])
+async def test_layer_five_is_a_previous_layer_only_in_the_shape_it_was_released_in(per_bot_desktop, layer, env, recognised):
+    # A member's own computer: on this branch the plain `desktop` is the six-screen shared one.
+    vm, target, runtime = per_bot_desktop
+    runtime.raw['Image'] = 'sha256:old-image'
+    runtime.raw['Config']['Labels'][f'{LABEL}.layer'] = layer
+    runtime.raw['Config']['Env'] = env
+    if recognised:
+        assert (await vm._upgrade_image(target))['state'] == 'missing'
+        assert [args[0] for args, _ in runtime.calls if args[0] in ('stop', 'rm')][-1] == 'rm'
+    else:
+        with pytest.raises(VmError, match='incompatible'):
+            await vm._upgrade_image(target)
+        assert not any(args[0] in ('stop', 'rm') for args, _ in runtime.calls)
+
+
 def test_image_installs_screen_views_and_preserves_the_single_token_port():
     dockerfile = (IMAGE / 'Dockerfile').read_text(encoding='utf-8')
     novnc = (IMAGE / 'desktop/start-novnc.sh').read_text(encoding='utf-8')
-    assert 'apt-get install -y --no-install-recommends chromium tigervnc-scraping-server wmctrl;' in dockerfile
+    assert 'apt-get install -y --no-install-recommends chromium tigervnc-scraping-server wmctrl librsvg2-common;' in dockerfile
+    # The town is five SVG drawings: a build without the loader that reads them must fail, not ship a flat colour.
+    assert "test -n \"$(find /usr/lib -name 'libpixbufloader-svg.so' -print -quit)\"" in dockerfile
     assert 'for panel in 0 1 2 3 4 5' in dockerfile
     assert 'install -d -o cua -g cua /home/cua/.config/xfce4/panel;' in dockerfile
     assert '[program:raphael-screens]' in dockerfile
     assert 'command=/usr/bin/python3 /opt/raphael-desktop/screens.py' in dockerfile
-    assert 'org.raphael.computer.layer="6"' in dockerfile
+    assert 'org.raphael.computer.layer="7"' in dockerfile
     assert 'stopasgroup' not in dockerfile and 'killasgroup' not in dockerfile
     assert 'supervisor only restarts what exits; the helper ends its own children' in dockerfile
     assert 'Nothing may call supervisorctl stop or restart in a computer' in dockerfile

@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 
 BASE = "docker.io/trycua/xfce-cua@sha256:274eb636f5cf3fc58f705916ee72b7a701270b3877369d08533a385c5325be9b"
 VERSION = "0.37.0"
-IMAGE = "raphael/cua-local-vm:driver-0.37.0-v6"
+IMAGE = "raphael/cua-local-vm:driver-0.37.0-v7"
 GUEST = "/home/cua/workspace"
 SHARED = "/home/cua/team"
 MEMORY_GB = 3
@@ -38,7 +38,7 @@ DRIVER = "/usr/local/libexec/raphael/cua-driver"
 SOCKET = "/run/user/1000/raphael-cua.sock"
 SCREENS_READY = "/dev/shm/raphael-screens.ready"
 LABEL = "org.raphael.computer"
-IMAGE_LABELS = {LABEL: "1", f"{LABEL}.driver": VERSION, f"{LABEL}.base": BASE, f"{LABEL}.layer": "6"}
+IMAGE_LABELS = {LABEL: "1", f"{LABEL}.driver": VERSION, f"{LABEL}.base": BASE, f"{LABEL}.layer": "7"}
 MAX_OUTPUT = 50_000  # what a task may be shown of a result at most (`worker.guards`)
 # The longest a command may be waited for, and the longest a job started in the background may run.
 FOREGROUND_S = 1800
@@ -298,9 +298,10 @@ def known_previous(raw, target, owner):
         shared_upgrade = target.container == "shared" and target.screens == 6
         screens = [entry for entry in env if entry.startswith("RAPHAEL_SCREENS=")]
         six = shared_upgrade and layer == "5" and screens == ["RAPHAEL_SCREENS=6"]
-        memory = 6 if six else {"3": 2, "4": 3, "5": 3}.get(layer)
+        memory = 6 if six else {"3": 2, "4": 3, "5": 3, "6": 3}.get(layer)
+        # Layer 5 was the first to say its screen count; the two before it had no such entry.
         if ((target.screens != 1 and not shared_upgrade) or memory is None
-                or screens != ([f"RAPHAEL_SCREENS={6 if six else 1}"] if layer == "5" else [])
+                or screens != ([f"RAPHAEL_SCREENS={6 if six else 1}"] if layer in ("5", "6") else [])
                 or host.get("NanoCpus") != (4 if six else 2) * 1_000_000_000
                 or host.get("Memory") != memory * 1024**3 or host.get("MemorySwap") != memory * 1024**3):
             return False
@@ -333,7 +334,7 @@ class LocalVm:
         self.capacity_lock = asyncio.Lock()
         self.tunnels = {}
         self.preparation, self.preparing = {}, {}
-        self.wallpaper_attempted = set()
+        self.wallpaper_attempted = {}  # (host, computer) -> the picture its watcher was started with
         # Raised whenever this core starts or stops a computer, so a remembered state is never trusted across it.
         self.changes = 0
         self.status_engines = {}
@@ -862,7 +863,7 @@ class LocalVm:
         state = await self._reconcile_timezone(target, state, zone)
         already_running = state["state"] == "running"
         if state["state"] != "running":
-            self.wallpaper_attempted.discard((target.remote, target.name))
+            self.wallpaper_attempted.pop((target.remote, target.name), None)
         if state["state"] == "missing":
             if not state.get("image"):
                 raise VmError("image_missing")
@@ -904,6 +905,8 @@ class LocalVm:
                         raise VmError("start_failed")
                     repaired = True
                     self.record_repair(target)
+                    # The restart ended the watcher with every other process of the computer.
+                    self.wallpaper_attempted.pop((target.remote, target.name), None)
             await asyncio.sleep(1)
         raise VmError("health_timeout")
 
@@ -934,14 +937,22 @@ class LocalVm:
         return {"state": "missing", "image": True}
 
     async def _wallpaper(self, target):
+        """Put the desktop's picture up: once for each run of a computer, and again when the owner's picture changed.
+
+        This is the one place a watcher is started. It ends the one before it, so the picture on the desktop is the
+        one this start chose: a watcher that was merely left running kept the town over the owner's picture."""
         key = (target.remote, target.name)
-        if key in self.wallpaper_attempted:
+        own = self.own_wallpaper()
+        try:
+            stat = own.stat() if own else None
+        except OSError:
+            own = stat = None
+        picture = (stat.st_mtime_ns, stat.st_size) if stat else None
+        if self.wallpaper_attempted.get(key, False) == picture:
             return
-        self.wallpaper_attempted.add(key)
+        self.wallpaper_attempted[key] = picture
         script = r'''command -v pgrep >/dev/null 2>&1 || exit 0
 watcher='^/opt/venv/bin/python /opt/raphael-desktop/wallpaper[.]py( |$)'
-pgrep -f "$watcher" >/dev/null 2>&1
-[ "$?" = 1 ] || exit 0
 attempt=0
 while [ "$attempt" -lt 60 ]; do
     pid=$(pgrep -x xfce4-session | head -n 1)
@@ -952,8 +963,7 @@ done
 [ -n "$pid" ] || exit 0
 address=$(tr '\000' '\n' < "/proc/$pid/environ" | sed -n 's/^DBUS_SESSION_BUS_ADDRESS=//p' | head -n 1)
 [ -n "$address" ] || exit 0
-pgrep -f "$watcher" >/dev/null 2>&1
-[ "$?" = 1 ] || exit 0
+pkill -f "$watcher" >/dev/null 2>&1
 export DBUS_SESSION_BUS_ADDRESS="$address"
 exec /opt/venv/bin/python /opt/raphael-desktop/wallpaper.py --watch'''
         try:
@@ -964,7 +974,6 @@ exec /opt/venv/bin/python /opt/raphael-desktop/wallpaper.py --watch'''
                     result = await self.run_for(target, ["cp", str(source), f"{target.name}:/opt/raphael-desktop/{destination}"], timeout=2)
                     if result.code:
                         return
-                own = self.own_wallpaper()
                 if own and (await self.run_for(target, ["cp", str(own), f"{target.name}:{GUEST_OWN_WALLPAPER}"], timeout=2)).code:
                     own = None
                 script += f" --image {GUEST_OWN_WALLPAPER}\n" if own else "\n"
@@ -1041,7 +1050,7 @@ exec /opt/venv/bin/python /opt/raphael-desktop/wallpaper.py --watch'''
                         and compatible(raw, target, self.owner, captured_image)):
                     state = {"state": "running" if raw.get("State", {}).get("Running") else "stopped"}
             if state["state"] == "missing":
-                self.wallpaper_attempted.discard((target.remote, target.name))
+                self.wallpaper_attempted.pop((target.remote, target.name), None)
                 return
             if state["state"] not in ("running", "stopped"):
                 raise VmError(state["state"])
@@ -1052,7 +1061,7 @@ exec /opt/venv/bin/python /opt/raphael-desktop/wallpaper.py --watch'''
             self.changes += 1
             if result.code:
                 raise VmError("stop_failed")
-            self.wallpaper_attempted.discard((target.remote, target.name))
+            self.wallpaper_attempted.pop((target.remote, target.name), None)
             if remove and (await self.run_for(target, ["rm", target.name])).code:
                 raise VmError("remove_failed")
             await self.close_viewer(target)
@@ -1117,7 +1126,7 @@ exec /opt/venv/bin/python /opt/raphael-desktop/wallpaper.py --watch'''
         self.last_activity.pop(key, None)
         self.targets.pop(key, None)
         self.running.pop(target.physical, None)
-        self.wallpaper_attempted.discard((target.remote, target.name))
+        self.wallpaper_attempted.pop((target.remote, target.name), None)
 
     def hold(self, target, held):
         if held:

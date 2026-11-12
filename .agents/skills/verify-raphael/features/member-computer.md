@@ -1,5 +1,63 @@
 # Member computer (Phases A and B)
 
+## Image layer 6: the desktop's picture, its keys, a lost X server (2026-11-12)
+
+R-COMP-PICTURE-01, R-COMP-KEYS-01, R-COMP-XLOSS-01, R-COMP-LAYER-01 cover image
+`driver-0.37.0-v6`. Everything here was first seen on a real layer 5 computer and is
+checked on real computers by `npm run verify -- --computer`; the offline tests name the
+exact scripts and commands and prove no container.
+
+The picture. The owner saw a desktop of one flat dark blue (2026-11-12). Two causes,
+both reproduced: the session's `prepare-desktop` started `wallpaper.py --watch` without
+the owner's picture and the core's `_wallpaper`, finding a watcher, exited, so `own.jpg`
+was in the computer and nothing showed it; and gdk-pixbuf had no SVG loader
+(`librsvg2-2` without `librsvg2-common`), so the town was never drawn and xfdesktop fell
+back to its colour. Setting `last-image` to the JPEG by hand showed it at once, and every
+monitor of a six-screen computer had its `/backdrop/screen0/monitorVNC-N` properties, so
+neither the property paths nor multi-screen was the cause. Now the core's start is the
+one place a watcher starts (`pkill -f` the old one, then `exec` the new, with
+`--image /opt/raphael-desktop/wallpapers/own.jpg` when the owner has a picture), keyed by
+the picture's time and size so a new, removed or restored picture is put up at the next
+start of a running computer. A start confirmed within the last 45 seconds is answered
+from memory and looks at nothing, the picture included (R-COMP-PERF-01). With the loader
+installed the desktop's own default drawing renders too, so "many colours" alone does
+not prove the town: the acceptance also reads `last-image` and requires one of the five
+town files.
+
+The keys. `xfconf-query -c xfce4-keyboard-shortcuts -l -v` on layer 5 listed every XFCE
+default under `/xfwm4/custom` and `/commands/custom`, with four workspaces. The session
+copies its defaults into those branches when it starts, so the helper waits (20 s at
+most) for both `override` properties before it takes keys away, and the ready mark now
+follows the session by a few seconds (measured 4.5 s after start for one screen, 8.1 s
+for six; 3.4 s and 9.6 s on layer 5). The acceptance opens a terminal, presses ctrl+F2,
+ctrl+F4 and ctrl+alt+d through the screen's own view and requires the window still
+mapped on workspace 0.
+
+A lost X server. `pkill -x Xtigervnc` on a one-screen layer 5 computer: no X server, no
+window manager and no panel for 76 s, `status` `running, ready=True` throughout, the
+driver answering `list_windows` "Found 0 windows:" without an error. On layer 6 the mark
+went in 1.3 s (one screen) and 1.8 s (six), status turned not ready, and the product's
+next `start` restarted the computer after its 20 polls: ready again in about 85 s with
+an X server, the mark and the panel. The acceptance does this for the one-screen and the
+largest computer; its "boot mark" check therefore counts only the repairs of the
+computer it looks at.
+
+Previous layers. The acceptance makes its fixtures from the released images themselves
+(`driver-0.37.0-v4`, `-v5`) when they are on this PC, under the run's own owner label,
+and only reads those images. Layer 5 start, update and erase: incompatible, then ready
+on the new image with the workspace file preserved, or absent with the workspace
+removed.
+
+The guard. The acceptance's Docker guard allows one host file besides the image folder
+into a computer: the run's own `computer-wallpaper.jpg`, into its own computers. Without
+that the product's copy was refused, swallowed (decoration never fails a start), and the
+first run of the picture check showed the desktop's default drawing.
+
+Real run of 2026-11-12 (`python -m raphael_core.evaluate.computer_acceptance --screens 1,6`,
+Docker Desktop, Linux engine): 44 ok, 0 failed, 0 skipped in 650.718 s.
+
+Not proven: a remote (SSH) host; the native app's own panel around the stream; a
+member's real turn at the desktop.
 ## Shared seats, stages B2 and C (2026-11-12)
 
 R-COMP-SEAT-01 replaces shared mode's old one-screen rotation with one six-screen
@@ -686,7 +744,9 @@ and scroll (R-UI-71); action menus use ui.ts dismissal/anchor behavior (R-UI-73)
 
 The original generated monochrome wallpapers are shared by the guest, off preview
 and fixture RFB transport. wallpaper.py proves each hour's selection and generated
-asset bytes; prepare-desktop runs its 30-second timer under the existing guest TZ.
+asset bytes. Since layer 6 the 30-second timer is the one watcher the core starts when
+the computer is ready (`LocalVm._wallpaper`), under the existing guest TZ; the session's
+`prepare-desktop` starts none (R-COMP-PICTURE-01).
 Unchanged workspaces get no writes; late monitors are initialized on the next tick.
 
 desktop-return-stopped leaves through Home and returns through the real member

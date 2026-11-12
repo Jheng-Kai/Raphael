@@ -563,6 +563,8 @@ async def test_persistent_websocket_gates_input_before_and_after_handback(viewer
     from dataclasses import replace
     session = bridge.sessions[opened['session']]
     session.target = replace(session.target, screen=screen, screens=4 if screen > 1 else 1)
+    # The screen is placed by hand to reach its view; whether a session's seat is still its member's has its own tests.
+    bridge.target_current = lambda target, member: True
     await bridge.control({**opened, "held": True})
     from urllib.parse import urlsplit
     url = urlsplit(opened["url"])

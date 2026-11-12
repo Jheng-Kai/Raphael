@@ -116,12 +116,15 @@ RUN printf '%s\n' \
 # The driver's page tools drive a root-owned system Chromium. With every capability dropped it cannot make its own
 # sandbox, and the container is one already. Chromium opens every new window beside its first, whatever screen the
 # pointer is on, and the driver has no tool that moves one: wmctrl puts a member's window on its own screen.
+# The desktop draws its picture through gdk-pixbuf, which reads SVG only with librsvg's loader: without it the
+# town (five SVG drawings) was never drawn and the desktop stayed one flat colour.
 RUN set -eux; \
     apt-get update; \
-    apt-get install -y --no-install-recommends chromium tigervnc-scraping-server wmctrl; \
+    apt-get install -y --no-install-recommends chromium tigervnc-scraping-server wmctrl librsvg2-common; \
     rm -rf /var/lib/apt/lists/*; \
     printf 'export CHROMIUM_FLAGS="$CHROMIUM_FLAGS --no-sandbox --test-type"\n' > /etc/chromium.d/raphael-container; \
-    chromium --version
+    chromium --version; \
+    test -n "$(find /usr/lib -name 'libpixbufloader-svg.so' -print -quit)"
 # The helper is standard library only: Debian's Python runs it without anything from /opt/venv.
 # Its X readiness wait also handles supervisor starting before the X socket is ready.
 # Without CAP_KILL, supervisor only restarts what exits; the helper ends its own children.
@@ -145,4 +148,4 @@ RUN install -m 0755 /opt/raphael-desktop/start-novnc.sh /usr/local/bin/start-nov
 LABEL org.raphael.computer="1" \
       org.raphael.computer.driver="0.37.0" \
       org.raphael.computer.base="docker.io/trycua/xfce-cua@sha256:274eb636f5cf3fc58f705916ee72b7a701270b3877369d08533a385c5325be9b" \
-      org.raphael.computer.layer="6"
+      org.raphael.computer.layer="7"

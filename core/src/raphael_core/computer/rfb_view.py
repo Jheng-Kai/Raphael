@@ -208,6 +208,12 @@ class Rfb:
     def pointer(self, x, y, buttons=0):
         self.stream.sendall(struct.pack(">BBHH", 5, buttons, x, y))
 
+    def keys(self, *keysyms):
+        for key in keysyms:
+            self.stream.sendall(struct.pack(">BBxxI", 4, 1, key))
+        for key in reversed(keysyms):
+            self.stream.sendall(struct.pack(">BBxxI", 4, 0, key))
+
     def close_window(self):
         for key, down in ((0xffe9, 1), (0xffc1, 1), (0xffc1, 0), (0xffe9, 0)):
             self.stream.sendall(struct.pack(">BBxxI", 4, down, key))  # Alt+F4
