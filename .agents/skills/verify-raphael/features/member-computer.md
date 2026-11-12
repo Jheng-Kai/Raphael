@@ -81,7 +81,7 @@ foreground always locks, including DOM routes; inspect has no implicit foregroun
 Shared kind uses six screens, 6 GiB and 4 CPUs; recognized one-screen layer 3/4/5
 shared containers rebuild while keeping home and team mounts. Deletion releases
 all hosts' seats without erasing shared storage and retains historic per-bot cleanup.
-Dataset and teaching remain disabled in shared mode.
+Dataset and teaching are available in shared mode: datasets use .raphael-data/members/<core member key>/ with a common venv/install lock, and teaching records only the member's current seat through core input/tick, the member window projection and a clipped RFB capture. Private-page marks and PRIVATE titles withhold text and images. Historical homes are carried before the shared browser starts by the read-only Linux helper and the core's record, sign-ins first, as a background task the browser waits for only within a budget, with busy-source deferral, next-start retry and three attempts. Offline evidence: computer/test_shared_datasets.py, computer/test_shared_teaching.py and computer/test_carry.py; the shared --computer block checks namespaces, a seat-2 recording (with what a press waits for) and persistent-cookie/file/dataset carry on this run's own homes.
 
 Stage C2: SHARED_ARGUMENTS classifies every offered driver's top-level and nested
 property. Unreviewed parameters, target/from_zoom/capture_id/screenshot_out_file,
@@ -315,6 +315,26 @@ Regressions: `test_login_vault.py::test_saved_field_selection_and_replacement`,
 `::test_failed_restore_cannot_give_leftover_windows_to_the_next_holder`,
 `test_seat_view.py::test_cleanup_window_lists_retain_unknown_classes_and_reject_incomplete_geometry`.
 
+The shared block's three stage D checks (all through product tools, on this run's own homes): two seats
+import a dataset of the same name and each answers and lists only its own; a recording started on seat 2
+holds no window of seat 1, a 1280x900 picture and no canvas-wide driver call, and says what an owner's
+press waits for; a per-bot computer of the run makes a persistent cookie (kept 40 s so the browser writes
+it), a file and a dataset and stops, and after the shared computer's first browser the cookie is sent, the
+file is in the member's folder, the dataset answers on that member's seat, and a second start runs no copy
+helper. `IsolatedDocker` allows exactly the carry helper's `docker run` on homes registered from this
+run's own container creations.
+Measured on the first real run: a press waited 1.03 s for the seat picture against per-bot's 0.23 s,
+because the picture was built one Python step per pixel; `Rfb.frame()` and `png_frame()` make the same
+bytes in 0.20 s, and the check now fails a press that waits more than 0.7 s. No offline test could have
+said so: 113 test files were green. Regressions:
+`test_rfb_view.py::test_the_whole_frame_path_makes_the_same_picture_as_the_per_pixel_path`,
+`test_carry.py::test_large_home_keeps_only_its_files_in_place_and_an_unknown_folder_is_never_merged`,
+`::test_a_copy_that_keeps_failing_is_paid_for_three_times_and_then_left_in_place`,
+`::test_the_browser_waits_only_its_budget_and_a_slow_copy_keeps_the_old_homes_guard`.
+An independent review of stage D (0 blockers, 3 major, 2 minor) found what neither the tests nor the real run had: the helper's ownership pass walked `.browser-profiles` even when a member had made it a link; the budget ended the carry's task and with it the old home's guard while the copy's container went on; a recording that could not be written kept its event in memory and could end the viewer's monitor; a framebuffer update's rectangles were all held at once. All four are fixed with regressions (`test_carry.py::test_a_copy_without_a_profile_hands_over_nothing_a_member_prepared`, `::test_a_hung_helper_is_killed_by_name_before_its_error_is_raised`, `members/test_teaching.py::test_a_recording_that_cannot_be_written_ends_as_full_and_keeps_no_unwritten_event`, `test_rfb_view.py::test_one_rectangle_is_held_at_a_time_and_a_picture_is_whole_only_at_an_updates_end`); the fifth, a member swapping its own dataset folder for a link mid-call, is stated in R-COMP-SEAT-01 as outside what the folders are for. A second review of those fixes (0 blockers, 2 major, 4 minor) found that a failed or unfinished profile copy left `.browser-profiles/driver` root-owned, so on a host with real ownership the launcher could not make its profile (`::test_folders_made_on_the_way_are_handed_over_before_a_copy_that_may_fail`); that a kill whose answer was not awaited, or a helper left by a core that died, still released a home being read (`::test_a_closing_core_leaves_its_copy_to_finish_but_sees_a_kill_through`, `::test_a_helper_an_earlier_core_left_running_is_waited_for_and_then_asked_once_more`); that the write at a recording's end could still raise into the viewer's close (`members/test_teaching.py::test_a_recording_that_ends_on_a_full_disk_still_lets_go_of_the_computer`); and that the carry's lock was held for the whole wait (`::test_every_browser_of_a_computer_waits_until_the_same_moment_and_another_computer_does_not_queue`). A third, narrow check found one more: a kill that failed was taken for an ended helper (`::test_a_hung_helper_that_cannot_be_seen_to_end_keeps_its_home_closed_to_its_old_computer`). Stated in R-COMP-SEAT-01, not changed: the helper's staging names can be swapped by a member, inside a throwaway container whose one writable mount is the members' own workspace; POSIX rename puts the carried profile in place of a folder the launcher has only just made. The same hand-over had two failures only this machine's whole run showed, in files the author could not run (loopback sockets), and one only the contract showed (a rule naming a renamed test).
+Not covered by the run: a profile after weeks of use (its size and copy time), a remote host's named
+volumes, the app's own viewer during a shared recording.
+
 First real runs (2026-11-12, this PC's Docker Desktop): the first found three defects of the
 command itself that 179 offline tests had passed (guest paths built with the host's path type
 on Windows; a terminal counted as two windows and placed by its frame-relative corner; a
@@ -371,11 +391,7 @@ the relay independently expires connections even while core is blocked. Revoke
 closes that member's viewer sessions but does not stop running commands or containers.
 This supersedes the earlier exception for owner viewers under grant revocation.
 
-Teaching captures privacy context before input on a read-only, relay-owned CuaBridge
-using an immutable command resolved by core at recording start. Only the existing
-accessibility/desktop observation pair is admitted. Privacy-checked immutable JSON
-is queued back for core-owned, ordered recording persistence, without awaiting core
-on the byte path. The queue is bounded (64 pending payloads / 4 MiB, with a small
+Per-bot teaching captures privacy context before input on a read-only, relay-owned CuaBridge using an immutable command resolved by core at recording start. Shared teaching has no relay observer: accepted inputs await core Teaching.input before forwarding, while the existing monitor uses Teaching.tick. Core reads current private-page state, reuses the seat driver connection and the viewer credentials resolved at start, and records only seat-local text, pixels and coordinates. For per-bot relay observations, only the existing accessibility/desktop pair is admitted. Shared owner observations admit only exact seat-session setup and list_windows; get_accessibility_tree and get_desktop_state are forbidden. Per-bot relay observations queue privacy-checked immutable JSON back for core-owned, ordered persistence without awaiting core on the byte path. Shared recordings await core observation and persistence on the input path, so their responsiveness under core load is what the real acceptance measures, not what the fake relay proves. The queue is bounded (64 pending payloads / 4 MiB, with a small
 full-state notification per overflowing recording); Stop disables new captures and
 flushes prior captures/persistence before drafting. Owner/revision/expiry checks
 run again before forwarding and before recording; close cancels outstanding capture.
@@ -391,8 +407,7 @@ owns requesting these pictures; this core-only phase changes no app TypeScript.
 
 Offline checks: `tests/computer`, `tests/members/test_teaching.py`,
 `tests/evaluate/test_teaching.py` and `tests/architecture/test_boundaries.py`.
-The fake VNC and client run independently of core; a synthetic 300 ms main-loop
-block must leave framebuffer, owner/teaching input and relay expiry below 200 ms.
+The fake VNC and client run independently of core; a synthetic 300 ms main-loop block must leave framebuffer, owner input, per-bot teaching input and relay expiry below 200 ms. Shared teaching input awaits the core and does not inherit that responsiveness guarantee.
 Tests also cover both socket ends closing, preview/watch input denial, stale
 handshakes, privacy and the 8-session/64-connection caps. Evidence and exact exits:
 `app/.look/briefs/viewer-path-report.md`. `npm run verify -- --computer` now covers
@@ -655,8 +670,7 @@ invalidates preflight confidence. Member reads emit one localized progress line
 at ten seconds. Elapsed time is included in page JSON when present, otherwise in
 text; lease notices retain their existing JSON contract.
 
-All 30 curated driver tools and Raphael-owned browser_open, vm_exec, attach_file,
-request_takeover, fill_login and per-bot dataset are offered offline to every member.
+All 30 curated driver tools and Raphael-owned browser_open, vm_exec, attach_file, request_takeover, fill_login and dataset are offered offline to every member in both computer modes.
 Every member sees the catalog from turn one. The first actual driver
 operation schedules a bounded background listing on a separate bridge, retaining
 the action session. Missing driver tools are removed and schemas are replaced in
@@ -807,7 +821,7 @@ at the same theme/width.
 
 ## Named datasets (2026-11-01)
 
-The independent computer offers dataset import/query/list/chart. A dataset name
+Both computer modes offer dataset import/query/list/chart; per-bot paths stay unchanged, while shared databases, locks, attachment imports and charts use .raphael-data/members/<core member key>/ and share only the venv and install lock. A dataset name
 selects a persistent workspace DuckDB file; table defaults to data. CSV, Excel
 (.xlsx) and Parquet paths resolve inside that workspace. Stored attachment ids can
 be imported with attachment:<id>; the existing vm_exec gate copies bounded chunks.
@@ -837,23 +851,20 @@ Every nested exec/file call retains the member grant, target and owner-control c
 
 The member computer has one Teach a task / Stop recording button. Starting uses
 the existing input lease and shows a persistent privacy line and one-press discard.
-Only the member's independent computer can record; a shared computer explains the
-missing requirement with the shared computer-settings repair action. Docker absent,
+The member's own available computer can record in either mode. Shared recordings use only the current seat's window list and clipped RFB picture, never canvas-wide accessibility or desktop calls. Docker absent,
 stopped computers and previews retain their existing prerequisite controls.
-The independent-computer requirement uses the shared missing notice renderer.
+Shared mode satisfies the teaching prerequisite; previews, changed targets, pending work and unavailable computers retain their existing prerequisite checks.
 Repair buttons inside the fixed dark desktop frame use that frame's resting, hover and pressed fills,
 so the same light text stays readable in either application theme (R-UI-52).
 
 Recording saves ordered clicks, keys, nonprivate text and changed screenshots in
-the member's home. Password/sign-in or unavailable accessibility observations omit
-both text and images. Clipboard values are omitted. The cap is 4 MiB (including
+the member's home. Password/sign-in titles, unavailable observations and shared private-page marks omit both text and images and turn typed keys into private_input. Clipboard values are omitted. The cap is 4 MiB (including
 reserved draft space), 2000 events and ten minutes. Disconnect interrupts recording;
 restart can review/discard its data but never resumes control. Discard cancels a
 pending draft and removes its recording.
 
 Stop releases control and asks the selected member brain for a tool-less draft.
-It reads ordered actions and accessibility text; retained screenshots are evidence,
-not model attachments.
+It reads ordered actions and safe observation text (per-bot accessibility or shared seat-window text); retained screenshots are evidence, not model attachments.
 The draft treats captured data as untrusted and uses the ordinary skill format
 plus Inputs, semantic goals and final Verification. The existing resource editor
 holds this unsaved document; only Save publishes it. Afterwards, the owner types

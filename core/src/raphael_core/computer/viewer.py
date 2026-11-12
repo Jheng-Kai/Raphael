@@ -295,7 +295,7 @@ class DesktopViewer:
             self.check_open_target(target, params)
         if self.server is None:
             self.relay = ViewerRelay(self._prepare_request, self._register_peer, self._unregister_peer,
-                                     self._peer_failed, self._teach_input, embedded_page)
+                                     self._peer_failed, self._teach_input, embedded_page, self._teach_core_input)
             self.server = await self.relay.start()
             self.origin = f"http://127.0.0.1:{self.server.sockets[0].getsockname()[1]}"
             self.monitor = asyncio.create_task(self._monitor())
@@ -550,7 +550,10 @@ class DesktopViewer:
         if session:
             policy = Policy(session.revision, time.monotonic() + max(0, session.expires - self.vm.clock()),
                             not session.preview and self.owners.get(session.target.key) == token,
-                            self.teaching.relay_hook(token) if self.teaching else None)
+                            self.teaching.relay_hook(token) if self.teaching else None,
+                            bool(self.teaching and session.target.container == "shared"
+                                 and (recording := self.teaching.active(token))
+                                 and recording.state == "recording" and recording.relay_enabled))
         self.relay.publish(token, policy)
 
     async def _register_peer(self, token, revision, identifier):
@@ -579,6 +582,17 @@ class DesktopViewer:
         if (self.teaching and session and session.revision == revision and session.expires > self.vm.clock()
                 and not session.preview and self.owners.get(session.target.key) == token):
             await self.teaching.relay_input(token, identifier, payload)
+
+    async def _teach_core_input(self, token, revision, message):
+        session = self.sessions.get(token)
+        if (self.teaching and session and session.revision == revision and session.expires > self.vm.clock()
+                and not session.preview and self.owners.get(session.target.key) == token):
+            try:
+                await self.teaching.input(token, message)
+            except Exception as error:
+                # The relay awaits this before it forwards the press: a recorder that fails must not end the
+                # owner's control of the seat. (A recording that cannot be written ends itself as full.)
+                logging.getLogger(__name__).warning("Seat teaching input was not recorded (%s)", type(error).__name__)
 
     async def flush_teaching(self, token):
         if self.relay:

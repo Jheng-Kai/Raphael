@@ -92,8 +92,9 @@ async def test_live_view_bytes_do_not_wait_for_a_busy_core_loop(viewer, wire_ups
         async def commit(*args):
             threads["commit"] = threading.get_ident()
         async def idle(*args): pass
+        # A relay-observed recording (per-bot): no core-observed seat recording is active for this session.
         bridge.teaching = SimpleNamespace(relay_hook=lambda token: SimpleNamespace(identifier="fake", capture=capture),
-                                         relay_input=commit, disconnected=idle, tick=idle)
+                                         relay_input=commit, disconnected=idle, tick=idle, active=lambda token: None)
         bridge.publish_session(opened["session"])
     url, request = websocket_request(bridge, opened)
     ready, start = threading.Event(), threading.Event()
@@ -230,7 +231,7 @@ async def test_closing_during_teaching_capture_cannot_forward_late_input(viewer,
     async def commit(*args): commits.append(args)
     async def idle(*args): pass
     bridge.teaching = SimpleNamespace(relay_hook=lambda token: SimpleNamespace(identifier="fake", capture=capture),
-                                     relay_input=commit, disconnected=idle, tick=idle)
+                                     relay_input=commit, disconnected=idle, tick=idle, active=lambda token: None)
     bridge.publish_session(opened["session"])
     url, request = websocket_request(bridge, opened)
     reader, writer = await asyncio.open_connection(url.hostname, url.port)

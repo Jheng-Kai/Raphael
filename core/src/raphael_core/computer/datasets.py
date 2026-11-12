@@ -50,11 +50,16 @@ os.execv(str(python),[str(python),'-c',RUNNER,DATA])
     return "python3 -c " + shlex.quote(bootstrap)
 
 
-async def run_dataset(arguments, call, store=None):
+async def run_dataset(arguments, call, store=None, *, member_key=None):
     from jsonschema import Draft202012Validator
     if not Draft202012Validator(SCHEMA).is_valid(arguments):
         return PluginResult(False, "bad_arguments")
     arguments = {**arguments, "sources": list(arguments.get("sources", []))}
+    if member_key is not None:
+        if not isinstance(member_key, str) or not re.fullmatch(r'[0-9a-f]{16}', member_key):
+            return PluginResult(False, 'bad_arguments')
+        arguments['member_key'] = member_key
+    folder = '.raphael-data' + (f'/members/{member_key}' if member_key is not None else '')
     uploads = []
     for index, source in enumerate(arguments["sources"]):
         if source.startswith('attachment:'):
@@ -62,7 +67,7 @@ async def run_dataset(arguments, call, store=None):
                 path = store.path(source.removeprefix('attachment:'))
                 if path.suffix.lower() not in ('.csv', '.xlsx', '.parquet'):
                     raise ValueError
-                destination = f'.raphael-data/imports/{secrets.token_hex(16)}{path.suffix.lower()}'
+                destination = f'{folder}/imports/{secrets.token_hex(16)}{path.suffix.lower()}'
                 uploads.append((destination, path.read_bytes()))
                 arguments['sources'][index] = destination
             except Exception:
@@ -78,7 +83,13 @@ async def run_dataset(arguments, call, store=None):
         for offset in range(0, max(len(data), 1), 6000):
             encoded = base64.b64encode(data[offset:offset + 6000]).decode()
             script = ("import base64,pathlib;root=pathlib.Path('/home/cua/workspace').resolve();"
+                      + (f"members=root/'.raphael-data/members';member=members/{member_key!r};"
+                         "assert not members.is_symlink() and not member.is_symlink();"
+                         "assert members.resolve().parent==root/'.raphael-data' and member.resolve().parent==members.resolve();"
+                         if member_key is not None else "") +
                       f"path=root/{destination!r};"
+                      + ("assert not path.parent.is_symlink() and not path.is_symlink();"
+                         "assert path.resolve().is_relative_to(member.resolve());" if member_key is not None else "") +
                       "assert path.resolve().is_relative_to(root);path.parent.mkdir(parents=True,exist_ok=True);"
                       "assert path.resolve().is_relative_to(root);"
                       f"path.open({'wb' if offset == 0 else 'ab'!r}).write(base64.b64decode({encoded!r}))")

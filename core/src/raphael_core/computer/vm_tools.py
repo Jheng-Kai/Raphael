@@ -225,6 +225,7 @@ class VmTools:
         self.vm.engine_notice = self._engine_notice
         self.vm.disconnect_driver = self._disconnect
         self.vm.repair_admit = self._repair_admit
+        self.vm.seat_observation = self.seat_observation
 
     def _repair_admit(self, target):
         attempts = _REPAIRS.get()
@@ -359,9 +360,8 @@ class VmTools:
     def _catalog(self, target, definitions):
         definitions.update(vm_exec=EXEC, attach_file=ATTACH, request_takeover=TAKEOVER, fill_login=FILL_LOGIN,
                            vault_entries=ENTRY_CHOICES, fill_contact=FILL_CONTACT, fill_card=FILL_CARD, browser_open=BROWSER_OPEN, run_steps=RUN_STEPS)
-        if target.container != "shared":
-            from .datasets import DEFINITION
-            definitions["dataset"] = DEFINITION
+        from .datasets import DEFINITION
+        definitions["dataset"] = DEFINITION
         keys = []
         for name, definition in definitions.items():
             key = tool_key(f"computer-{target.key}", name)
@@ -697,7 +697,8 @@ class VmTools:
             from .datasets import run_dataset
             async def execute(name, args):
                 return await self.call(tool_key(f"computer-{target.key}", name), args, approver=approver, task_id=task_id, pool=pool)
-            return await run_dataset(arguments, execute, self.attachments)
+            return await run_dataset(arguments, execute, self.attachments,
+                                     **({"member_key": target.key} if target.container == "shared" else {}))
         result = PluginResult(False, "blocked")
         try:
             scope = _SCOPE.get()
@@ -781,6 +782,7 @@ class VmTools:
                 else:
                     await lock.acquire()
             self.vm.active[target.key] = self.vm.active.get(target.key, 0) + 1
+            self.vm.physical_active[target.physical] = self.vm.physical_active.get(target.physical, 0) + 1
             command = tool.name == "vm_exec"
             if command:
                 self.commands[target.key] = self.commands.get(target.key, 0) + 1
@@ -917,6 +919,7 @@ class VmTools:
                     self.stale.discard((target.key, owner))
             finally:
                 self.vm.active[target.key] -= 1
+                self.vm.physical_active[target.physical] -= 1
                 if command:
                     self.commands[target.key] -= 1
                 self.vm.last_activity[target.state_key] = self.vm.clock()
@@ -1223,8 +1226,46 @@ class VmTools:
             self.native_owners.pop(target.state_key, None)
             lock.release()
 
-    async def _canvas_windows(self, client, session, filters=None):
-        reply = await client.request("tools/call", {"name": "list_windows", "arguments": {**(filters or {}), "session": session}})
+    async def seat_observation(self, target, *, connection):
+        """Owner teaching uses the same window projection and clipped pixels as member reads."""
+        from .teaching import safe_observation
+        from .rfb_view import capture
+        unsafe = {"safe": False, "screen": "", "images": []}
+
+        def current():
+            member = self.vm.seats.holders(target.remote).get(target.screen)
+            return member is not None and self.vm.target(member) == target
+
+        def private(canvas):
+            for key, mark in self.private_pages.items():
+                if key[0] == target.key:
+                    return True
+                if mark.get("computer") == target.physical and mark.get("window"):
+                    if any(row["window_id"] == mark["window"] and seat_view.overlaps(
+                            row["bounds"], target.screen, target.screens) for row in canvas["windows"]):
+                        return True
+            return target.key in self.payment_holds
+
+        if not current():
+            return unsafe
+        client, session = await self._connection(target, owner_observation=True)
+        canvas = await self._canvas_windows(client, session, owner_observation=True)
+        if not current() or private(canvas):
+            return unsafe
+        local = seat_view.windows(canvas, target.screen, target.screens)
+        observation = safe_observation(seat_view.projected_reply({}, local, seat_view.windows_text(local)))
+        if not observation["safe"]:
+            return unsafe
+        port, password = connection
+        picture = await asyncio.to_thread(capture, port, password, target.screen)
+        if not current() or private(canvas):
+            return unsafe
+        observation["images"] = [{"type": "image", "mimeType": "image/png", "data": base64.b64encode(picture).decode()}]
+        return observation
+
+    async def _canvas_windows(self, client, session, filters=None, *, owner_observation=False):
+        reply = await client.request("tools/call", {"name": "list_windows", "arguments": {**(filters or {}), "session": session}},
+                                     **({"owner_observation": True} if owner_observation else {}))
         try:
             return seat_view.canvas_windows(reply)
         except (ValueError, KeyError, TypeError):
@@ -1410,11 +1451,11 @@ class VmTools:
             return seat_view.projected_reply(reply, state)
         return reply
 
-    async def _connection(self, target, *, member=None):
+    async def _connection(self, target, *, member=None, owner_observation=False):
         async with self.connection_locks.setdefault(target.key, asyncio.Lock()):
-            return await self._connect(target, member=member)
+            return await self._connect(target, member=member, owner_observation=owner_observation)
 
-    async def _connect(self, target, *, member=None):
+    async def _connect(self, target, *, member=None, owner_observation=False):
         """A computer's one connection to its driver, and its session label. The driver ends a session with the connection
         that used it, and with it the browser it opened, the tab it bound and the screenshot a gesture needs. A new
         connection takes a new label: the driver refuses one that has ended."""
@@ -1433,9 +1474,10 @@ class VmTools:
                                     ("set_agent_cursor_enabled", {"enabled": False})):
                 if member is not None and target != self.vm.target(member):
                     raise VmError("computer_changed")
-                if target.key in self.vm.held:
+                if target.key in self.vm.held and not owner_observation:
                     raise VmError("owner_holds_control")
-                reply = await client.request("tools/call", {"name": name, "arguments": {**arguments, "session": session}})
+                reply = await client.request("tools/call", {"name": name, "arguments": {**arguments, "session": session}},
+                                             **({"owner_observation": True} if owner_observation else {}))
                 if reply.get("isError"):
                     raise VmError("driver_configuration_failed")
         except BaseException:
@@ -1492,6 +1534,7 @@ class VmTools:
                 self.stale.add((target.key, owner))
             self.lease_since[target.key] = self.vm.clock()
         self.leases[target.key] = owner
+        self.vm.lease_targets[target.key] = target
         self.lease_used[target.key] = self.vm.clock()
         return None
 

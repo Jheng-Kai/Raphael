@@ -27,12 +27,8 @@ async def setup(rig):
     return teaching, member, session
 
 
-async def test_teaching_refuses_shared_preview_and_changed_member_computers(rig):
+async def test_teaching_refuses_preview_and_changed_member_computers(rig):
     teaching, member, session = await setup(rig)
-    session.target.container = "shared"
-    with pytest.raises(RpcError):
-        await teaching.call({"action": "start", "session": "viewer"})
-    session.target.container = ""
     session.preview = True
     with pytest.raises(RpcError):
         await teaching.call({"action": "start", "session": "viewer"})
@@ -42,6 +38,31 @@ async def test_teaching_refuses_shared_preview_and_changed_member_computers(rig)
         await teaching.call({"action": "start", "session": "viewer"})
     assert not teaching.items
     teaching.viewer.control.assert_not_called()
+
+
+async def test_shared_recording_holds_own_seat_uses_core_input_and_never_builds_relay(rig):
+    from raphael_core.computer.teaching import Teaching
+    teaching, member, session = await setup(rig)
+    session.target.container = 'shared'
+    session.connection, session.preview, session.expires = (123, 'private'), False, 100
+    teaching.viewer.sessions = {'viewer': session}
+    teaching.viewer.vm.clock = lambda: 0
+    teaching.viewer.connection_for = AsyncMock(return_value=session.connection)
+    teaching.observe = Teaching.observe.__get__(teaching)
+    teaching.viewer.vm.bridge_command = AsyncMock(side_effect=AssertionError('No shared relay bridge'))
+    teaching.viewer.vm.seat_observation = AsyncMock(return_value={'safe': True, 'screen': 'Own window', 'images': []})
+    result = await teaching.call({'action': 'start', 'session': 'viewer'})
+    recording = teaching.items[result['id']]
+    assert recording.relay is None and teaching.relay_hook('viewer') is None
+    teaching.viewer.control.assert_awaited_once_with({'session': 'viewer', 'held': True})
+    await teaching.input('viewer', b'\x05\x01\x00\x0a\x00\x14')
+    assert recording.events[-1]['x'] == 10 and recording.events[-1]['y'] == 20
+    teaching.viewer.vm.seat_observation.return_value = {'safe': False, 'screen': '', 'images': []}
+    await teaching.input('viewer', b'\x04\x01\0\0\0\0\0S')
+    assert recording.events[-1]['kind'] == 'private_input'
+    assert 'S' not in recording.events[-1].get('text', '')
+    teaching.viewer.vm.bridge_command.assert_not_awaited()
+    teaching.viewer.connection_for.assert_awaited_once_with(session)
 
 
 async def test_recorded_input_order_password_and_signin_are_redacted_before_disk(rig):
@@ -71,6 +92,62 @@ async def test_recording_size_limit_and_single_press_discard(rig):
     assert recording.path.stat().st_size <= 600 and recording.state == "full"
     await teaching.call({"action": "discard", "member_id": member, "id": recording.id})
     assert not recording.path.exists() and recording.id not in teaching.items
+
+
+@pytest.mark.parametrize("via", ["input", "tick"])
+async def test_a_recording_that_cannot_be_written_ends_as_full_and_keeps_no_unwritten_event(rig, via):
+    # Review D-04: a failed write left the key in memory, to be written later with whatever followed, while the
+    # recording still said "recording"; the same failure on a tick ended the viewer's monitor.
+    from unittest.mock import MagicMock
+    teaching, member, session = await setup(rig)
+    teaching.viewer.publish_session = published = MagicMock()
+    result = await teaching.call({"action": "start", "session": "viewer"})
+    recording = teaching.items[result["id"]]
+    written = recording.path.read_text(encoding="utf-8")
+    persist, disk = teaching.persist, {"full": True}
+    def write(item):
+        if disk["full"]:
+            raise OSError(28, "No space left on device")
+        return persist(item)
+    teaching.persist = write
+    if via == "input":
+        await teaching.input("viewer", b"\x04\x01\x00\x00\x00\x00\x00A")
+        published.assert_called_with("viewer")
+    else:
+        teaching.observe.return_value = {"safe": True, "screen": "Another window", "images": []}
+        await teaching.tick("viewer")
+    assert recording.state == "full" and [event["kind"] for event in recording.events] == ["screen"]
+    disk["full"] = False
+    await teaching.input("viewer", b"\x04\x01\x00\x00\x00\x00\x00S")
+    await teaching.tick("viewer")
+    assert [event["kind"] for event in recording.events] == ["screen"]
+    assert recording.path.read_text(encoding="utf-8") == written
+
+
+@pytest.mark.parametrize("ending", ["disconnect", "stop", "relay_deadline"])
+async def test_a_recording_that_ends_on_a_full_disk_still_lets_go_of_the_computer(rig, ending):
+    # Second review, D2-03: the write at a recording's end raised into the viewer's close (session removed, the
+    # computer still held, the monitor of every other session ended) and kept stop from handing control back.
+    teaching, member, session = await setup(rig)
+    result = await teaching.call({"action": "start", "session": "viewer"})
+    recording = teaching.items[result["id"]]
+    await teaching.input("viewer", b"\x04\x01\x00\x00\x00\x00\x00A")
+    def write(item):
+        raise OSError(28, "No space left on device")
+    teaching.persist = write
+    if ending == "disconnect":
+        await teaching.disconnected("viewer")
+        assert recording.state == "interrupted"
+    elif ending == "relay_deadline":
+        await teaching.relay_input("viewer", recording.id, '{"full":true}')
+        assert recording.state == "full"
+    else:
+        teaching.viewer.flush_teaching = AsyncMock()
+        teaching.draft = AsyncMock(return_value={"state": "draft"})
+        assert await teaching.call({"action": "stop", "session": "viewer"}) == {"state": "draft"}
+        assert recording.state == "stopped"
+        teaching.viewer.control.assert_awaited_with({"session": "viewer", "held": False})
+    assert [event["kind"] for event in recording.events] == ["screen", "text"]
 
 
 async def test_draft_is_toolless_untrusted_data_and_only_owner_save_publishes(rig):

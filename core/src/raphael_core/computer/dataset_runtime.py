@@ -16,14 +16,31 @@ import tempfile
 import uuid
 
 
-def execute(arguments, root=pathlib.Path('/home/cua/workspace')):
-    import duckdb
-    import fcntl
+def data_folder(arguments, root):
     root = root.resolve()
     folder = root / '.raphael-data'
     folder.mkdir(exist_ok=True)
     if folder.resolve().parent != root:
         raise ValueError('Dataset path refused')
+    if 'member_key' in arguments:
+        key = arguments['member_key']
+        if not isinstance(key, str) or not re.fullmatch(r'[0-9a-f]{16}', key):
+            raise ValueError('Invalid member key')
+        members = folder / 'members'
+        folder = members / key
+        if members.is_symlink() or folder.is_symlink():
+            raise ValueError('Dataset path refused')
+        folder.mkdir(parents=True, exist_ok=True)
+        if members.resolve().parent != root / '.raphael-data' or folder.resolve().parent != members.resolve():
+            raise ValueError('Dataset path refused')
+    return folder
+
+
+def execute(arguments, root=pathlib.Path('/home/cua/workspace')):
+    import duckdb
+    import fcntl
+    root = root.resolve()
+    folder = data_folder(arguments, root)
     name = arguments['dataset']
     if not re.fullmatch(r'[A-Za-z][A-Za-z0-9_]{0,47}', name):
         raise ValueError('Invalid dataset name')

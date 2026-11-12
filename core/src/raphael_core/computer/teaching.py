@@ -116,7 +116,7 @@ class Teaching:
     def status(self, member, conversation, target):
         self.recover(member, target)
         recording = next((r for r in self.items.values() if r.member == member and r.conversation == conversation), None)
-        return {"teach_available": target.container != "shared", **({"teaching": recording.view()} if recording else {})}
+        return {"teach_available": True, **({"teaching": recording.view()} if recording else {})}
 
     def recover(self, member, target):
         homes = self.members.capabilities.homes
@@ -156,8 +156,7 @@ class Teaching:
                 return
             data = json.loads(payload)
             if data.get("full"):
-                recording.state = "full"
-                self.persist(recording)
+                self.fill(recording)
             else:
                 self.remember_screen(recording, data["observation"])
                 if data["event"]:
@@ -168,6 +167,13 @@ class Teaching:
     async def observe(self, target):
         from .vm_bridge import CuaBridge
         try:
+            if target.container == "shared":
+                token = self.viewer.owners.get(target.key)
+                session = self.viewer.sessions.get(token)
+                if (not session or session.target != target or session.preview or not session.connection
+                        or session.expires <= self.viewer.vm.clock()):
+                    return {"safe": False, "screen": "", "images": []}
+                return await self.viewer.vm.seat_observation(target, connection=session.connection)
             async with CuaBridge(self.viewer.vm, target) as bridge:
                 tree = await bridge.request("tools/call", {"name": "get_accessibility_tree", "arguments": {}}, owner_observation=True)
                 if not safe_observation(tree)["safe"]:
@@ -193,10 +199,22 @@ class Teaching:
         event = {"order": len(recording.events) + 1, **event}
         recording.events.append(event)
         size = len(json.dumps({**recording.view(), "events": recording.events}, ensure_ascii=False).encode("utf-8"))
-        if len(recording.events) > self.max_events or size > self.max_bytes * 3 // 4 or not self.persist(recording):
+        if len(recording.events) > self.max_events or size > self.max_bytes * 3 // 4 or not self.stored(recording):
             recording.events.pop()
-            recording.state = "full"
-            self.persist(recording)
+            self.fill(recording)
+
+    def stored(self, recording):
+        # A recording that cannot be written (a full disk) is over, like one that has grown too large: an event
+        # kept only in memory would be written later with whatever follows it, and a raise here would end the
+        # viewer's monitor or the owner's press.
+        try:
+            return self.persist(recording)
+        except OSError:
+            return False
+
+    def fill(self, recording):
+        recording.state = "full"
+        self.stored(recording)
 
     async def screen(self, recording):
         if recording.state != "recording" or not self.members.member_exists(recording.member):
@@ -222,15 +240,16 @@ class Teaching:
             return
         async with recording.lock:
             if asyncio.get_running_loop().time() - recording.started > self.max_seconds:
-                recording.state = "full"
-                self.persist(recording)
-                return
-            observation = await self.screen(recording)
-            if recording.state != "recording" or self.viewer.owners.get(recording.target.key) != token:
-                return
-            event = input_event(message, observation)
-            if event:
-                self.append(recording, event)
+                self.fill(recording)
+            else:
+                observation = await self.screen(recording)
+                if recording.state == "recording" and self.viewer.owners.get(recording.target.key) == token:
+                    event = input_event(message, observation)
+                    if event:
+                        self.append(recording, event)
+            # A recording that ended here no longer needs the core before each press.
+            if recording.state == "full" and (publish := getattr(self.viewer, "publish_session", None)):
+                publish(token)
 
     async def tick(self, token):
         recording = self.active(token)
@@ -241,8 +260,7 @@ class Teaching:
             return
         async with recording.lock:
             if asyncio.get_running_loop().time() - recording.started > self.max_seconds:
-                recording.state = "full"
-                self.persist(recording)
+                self.fill(recording)
             else:
                 await self.screen(recording)
 
@@ -252,7 +270,8 @@ class Teaching:
             # Close holds the viewer control lock; stop holds the recording lock before handback.
             # Invalidate without yielding so neither lock waits on the other.
             recording.state = "interrupted"
-            self.persist(recording)
+            # The viewer is closing this session: a write that fails must not stop it from releasing the computer.
+            self.stored(recording)
 
     def owned(self, params):
         member = params.get("member_id")
@@ -270,7 +289,7 @@ class Teaching:
                 token, session = self.viewer.session(params)
                 target = session.target
                 self.recover(session.member_id, target)
-                if (session.preview or target.container == "shared" or target != self.viewer.vm.target(session.member_id)
+                if (session.preview or target != self.viewer.vm.target(session.member_id)
                         or self.viewer.vm.work.pending(target) or self.active(token)):
                     raise invalid_params("use the member's own available computer")
                 if any(r.member == session.member_id for r in self.items.values()) or len(self.items) >= 16:
@@ -279,13 +298,18 @@ class Teaching:
                 self.viewer.session(params)
                 if self.viewer.owners.get(target.key) != token:
                     raise invalid_params("demonstration control expired")
+                if target.container == "shared":
+                    await self.viewer.connection_for(session)
+                    self.viewer.session(params)
+                    if self.viewer.owners.get(target.key) != token:
+                        raise invalid_params("demonstration control expired")
                 identifier = secrets.token_hex(16)
                 homes = self.members.capabilities.homes
                 folder = homes.safe(homes.home(session.member_id) / "demonstrations")
                 folder.mkdir(parents=True, exist_ok=True)
                 recording = Recording(identifier, session.member_id, session.conversation_id, token, target,
                                       folder / f"{identifier}.json", asyncio.get_running_loop().time())
-                if command_for := getattr(self.viewer.vm, "bridge_command", None):
+                if target.container != "shared" and (command_for := getattr(self.viewer.vm, "bridge_command", None)):
                     from .vm import DRIVER, SOCKET, exec_args
                     command = await command_for(target, exec_args(target, [DRIVER, "mcp", "--socket", SOCKET], interactive=True))
                     self.viewer.session(params)
@@ -313,7 +337,8 @@ class Teaching:
                 if self.items.get(recording.id) is not recording:
                     raise invalid_params("demonstration discarded")
                 recording.state = "stopped"
-                self.persist(recording)
+                # The draft is made from memory; a write that fails must not keep the computer from the member.
+                self.stored(recording)
                 await self.viewer.control({"session": token, "held": False})
             return await self.draft(recording)
         recording = self.owned(params)
