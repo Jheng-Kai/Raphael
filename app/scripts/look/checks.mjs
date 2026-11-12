@@ -7254,8 +7254,11 @@ export function checkRendered(name, context = {}) {
     require(solid(getComputedStyle(back).backgroundColor), `the way back has a solid surface (${getComputedStyle(back).backgroundColor})`);
     if (view === "main") {
       const edge = cover.getBoundingClientRect(), mark = face.getBoundingClientRect();
-      require(arrow.top >= edge.top && arrow.bottom <= edge.bottom, "the way back is on the cover");
-      require(arrow.bottom <= mark.top || arrow.right <= mark.left, "the way back is clear of the face");
+      // Once the page has scrolled (a long field opened low on a short window) the arrow stands on its own band and the cover has gone under it.
+      if (!pane.hasAttribute("data-scrolled")) {
+        require(arrow.top >= edge.top && arrow.bottom <= edge.bottom, "the way back is on the cover");
+        require(arrow.bottom <= mark.top || arrow.right <= mark.left, "the way back is clear of the face");
+      }
       const change = cover.querySelector('[data-ms="cover"]');
       // At rest the two share one surface; under the pointer an edge button is a step lighter, as everywhere.
       if (change && !back.matches(":hover") && !change.matches(':hover, [aria-expanded="true"]')) require(getComputedStyle(change).backgroundColor === getComputedStyle(back).backgroundColor, "the cover's two icons share one surface");
@@ -7391,6 +7394,111 @@ export function checkRendered(name, context = {}) {
       require(visible(box) && document.activeElement === box, "the box opens in place and has the keyboard");
       require(box.closest(".ms-list") && !box.closest("button"), "the box stands in the section's list");
       require(box.getBoundingClientRect().width > 200, "the box is as wide as its list");
+    }
+    if (name.startsWith("member-settings-persona-")) {
+      // The personality and the instructions (owner, 2026-11-12: 「我不是很喜歡這個個性的欄位的 UI UX」) are one kind of thing, so
+      // one kind of quiet row: its words whole with a pencil, or one line of what could stand there; a press makes it a field.
+      const stage = name.slice("member-settings-persona-".length);
+      const stored = window.__look.data.members.find(item => item.id === 1);
+      const fields = ["personality", "instructions"];
+      const slot = field => pane.querySelector(`.ms-section[data-k="ms-${field}"]`);
+      const rowOf = field => slot(field).querySelector('[data-ms="edit"]');
+      const fieldOf = field => slot(field).querySelector("textarea");
+      const here = field => rowOf(field) ?? fieldOf(field);
+      const at = element => element.getBoundingClientRect();
+      const lineOf = element => parseFloat(getComputedStyle(element).lineHeight);
+      const edited = stage === "editing" ? "personality" : stage === "editing-long" ? "instructions" : null;
+      require(pane.querySelector('.ms-content[data-cat="soul"]') && fields.every(field => visible(slot(field))), "the kind holds the personality and the instructions");
+      // No box until a row is pressed (owner: 「一個巨大的空框」): at most the one field that was pressed is a textarea.
+      const boxes = [...pane.querySelectorAll("textarea")].filter(visible).map(item => item.id);
+      require(boxes.join() === (edited ? `ms-${edited}` : ""), `textareas on the page: ${boxes.join() || "none"}`);
+      // The two are one kind: the same box edges, one left edge and one right edge, inset as the other kinds' rows are in their cards.
+      const [first, second] = fields.map(here);
+      require(visible(first) && visible(second) && Math.abs(at(first).left - at(second).left) <= 0.5 && Math.abs(at(first).right - at(second).right) <= 0.5, "the two share one left edge and one right edge");
+      for (const field of fields) {
+        const list = slot(field).querySelector(".ms-list"), pad = parseFloat(getComputedStyle(list).paddingLeft), mine = at(here(field));
+        require(Math.abs(mine.left - (at(list).left + pad)) <= 0.5 && Math.abs(mine.right - (at(list).right - pad)) <= 0.5, `${field}: its row or field fills its card inside the card's padding`);
+      }
+      for (const field of fields.filter(item => item !== edited)) {
+        const row = rowOf(field), label = row?.querySelector(".ms-label");
+        require(row && row.tagName === "BUTTON" && visible(label), `${field} is a row you press`);
+        const words = (stored[field] ?? "").trim(), style = getComputedStyle(label), line = lineOf(label);
+        require(label.scrollWidth <= label.clientWidth + 1 && label.scrollHeight <= label.clientHeight + 1, `${field}: its words are not cut`);
+        require(style.whiteSpace === "pre-wrap" && style.textOverflow !== "ellipsis" && style.overflowY === "visible", `${field}: its words wrap, a line break of the owner's stays, nothing is ellipsised`);
+        require(at(label).width <= parseFloat(style.maxWidth) + 1, `${field}: its lines are no wider than ${style.maxWidth}`);
+        require(at(row).height >= at(label).height, `${field}: its row holds all its words`);
+        const pencil = row.querySelector("svg.i");
+        require(visible(pencil) && Math.abs((at(pencil).top + at(pencil).bottom) / 2 - (at(label).top + line / 2)) <= 1.5 && at(pencil).right <= at(row).right, `${field}: the pencil stands at the right, level with the first line`);
+        if (words) {
+          require(label.textContent === words && !label.classList.contains("is-empty"), `${field}: the row says the words as they are`);
+          require(Math.round(at(label).height / line) >= words.split("\n").length, `${field}: every line of it shows`);
+          require(style.color === getComputedStyle(row).color, `${field}: its words are in the text colour`);
+        } else {
+          // Nothing written: one quiet line in the secondary colour, what could stand there, a pencil, no box.
+          require(label.classList.contains("is-empty") && label.textContent.trim() && !label.textContent.includes("\n"), `${field}: one quiet line of what could stand here`);
+          require(Math.round(at(label).height / line) === 1 && Math.abs(at(row).height - 44) <= 1, `${field}: the empty state is one line (${Math.round(at(row).height)} px)`);
+          require(style.color === getComputedStyle(slot(field).querySelector("h2")).color, `${field}: the line is in the secondary colour, as the heading`);
+        }
+        if (!words.includes("\n") && words && at(label).height <= line * 1.2) require(Math.abs(at(row).height - 44) <= 1, `${field}: a one-line row is as tall as the other kinds' rows`);
+      }
+      require(fields.every(field => slot(field).querySelector(".ms-head h2")?.textContent.trim() && !slot(field).querySelector(".ms-head small, .ms-head p, .ms-note")), "each heading is its name alone, with no small print");
+      if (edited) {
+        const input = fieldOf(edited), other = fields.find(field => field !== edited), style = getComputedStyle(input), line = lineOf(input);
+        require(document.activeElement === input, "the field has the keyboard");
+        require(style.resize === "none" && !input.matches("[rows]:not([rows='1'])"), "the field has no grip of its own");
+        require(input.scrollHeight <= input.clientHeight + 1, "no scrollbar inside the field");
+        // Its words stand exactly where the row's words stood, in the same type: nothing moves under the pointer.
+        const label = rowOf(other).querySelector(".ms-label");
+        require(Math.abs(at(input).left + parseFloat(style.borderLeftWidth) + parseFloat(style.paddingLeft) - at(label).left) <= 0.5, "the words in the field stand where a row's words stand");
+        require(style.fontSize === getComputedStyle(label).fontSize && style.lineHeight === getComputedStyle(label).lineHeight, "the field is set in the row's own type");
+        // As tall as its words: a whole number of lines plus the row's own measure, and it grows and shrinks with them.
+        const frame = 44 - line, lines = (at(input).height - frame) / line;
+        require(Math.abs(lines - Math.round(lines)) < 0.05 && Math.round(lines) >= input.value.split("\n").length, `the field is as tall as its words (${lines.toFixed(2)} lines)`);
+        if (stage === "editing") require(Math.round(lines) === 2, `two typed lines are two lines tall (${lines.toFixed(2)})`);
+        if (stage === "editing-long") require(Math.round(lines) >= 20, `twenty lines open whole (${lines.toFixed(2)})`);
+        const before = at(input).height, kept = input.value;
+        input.value = kept + "\n一\n二\n三";
+        const grown = at(input).height;
+        input.value = kept;
+        require(grown >= before + 2.9 * line && Math.abs(at(input).height - before) <= 1, "the field grows by the lines added to it and comes back with them");
+      }
+      if (stage === "saved") {
+        const label = rowOf("personality").querySelector(".ms-label");
+        require(stored.personality.trim() !== "" && label.textContent === stored.personality.trim(), "the row is back with the words that were saved");
+        // Saved without a word, as the name and the role are: no note, no badge, and the pencil is back.
+        require(![...document.querySelectorAll(".toast")].some(visible), "nothing is said once it has saved");
+        require(!pane.querySelector(".spin, [aria-busy]") && visible(rowOf("personality").querySelector("svg.i")), "nothing is still being saved and the pencil is back");
+        require(window.__look.calls.some(call => call.method === "members.update" && call.params?.personality === stored.personality), "it was saved");
+      }
+      if (stage === "escape") {
+        const label = rowOf("instructions").querySelector(".ms-label");
+        require(label.textContent === stored.instructions.trim(), "the old words are back");
+        require(!window.__look.calls.some(call => call.method === "members.update" && call.params?.instructions !== undefined), "nothing was saved");
+        require(![...document.querySelectorAll(".toast")].some(visible), "and nothing said");
+      }
+      // Beside the other kinds: the same cards, the same inset, the same headings and the same distances (not while a field is open:
+      // leaving the kind would leave it).
+      if (!edited && stage !== "saved") {
+        const measure = () => {
+          const lists = [...pane.querySelectorAll(".ms-content .ms-list")].filter(visible), heads = [...pane.querySelectorAll(".ms-content .ms-head h2")].filter(visible);
+          const list = lists[0], row = list.querySelector(".ms-row, .ms-open"), style = getComputedStyle(list), h2 = heads[0] ? getComputedStyle(heads[0]) : null;
+          return { left: at(list).left, right: at(list).right, rowLeft: at(row).left, rowRight: at(row).right, rowTop: at(row).top - at(list).top,
+            card: [style.backgroundColor, style.borderTopLeftRadius, style.padding].join(" "),
+            title: h2 ? [h2.fontSize, h2.fontWeight, h2.color, h2.lineHeight].join(" ") : "", titleLeft: heads[0] ? at(heads[0]).left - at(list).left : 0,
+            titleGap: heads[0] ? at(list).top - at(heads[0]).bottom : 0, between: heads[1] ? at(heads[1]).top - at(lists[0]).bottom : 0 };
+        };
+        const mine = measure();
+        const others = Object.fromEntries(["tools", "skills", "notify"].map(id => { pane.querySelector(`.ms-nav [data-cat="${id}"]`).click(); return [id, measure()]; }));
+        pane.querySelector('.ms-nav [data-cat="soul"]').click();
+        require(pane.querySelector('.ms-content[data-cat="soul"]') && measure().left === mine.left, "the kind is as it was after looking at the others");
+        for (const [id, other] of Object.entries(others)) for (const key of ["left", "right", "rowLeft", "rowRight", "rowTop", "card"]) {
+          require(typeof other[key] === "string" ? other[key] === mine[key] : Math.abs(other[key] - mine[key]) <= 0.5, `beside ${id}: ${key} is ${mine[key]}, there ${other[key]}`);
+        }
+        for (const key of ["title", "titleLeft", "titleGap", "between"]) {
+          require(typeof others.skills[key] === "string" ? others.skills[key] === mine[key] : Math.abs(others.skills[key] - mine[key]) <= 0.5, `beside skills: the headings' ${key} is ${mine[key]}, there ${others.skills[key]}`);
+        }
+      }
+      return { check: name, stage };
     }
     if (name === "member-settings-skill") {
       const text = pane.querySelector("#ms-skill-text");
