@@ -35,7 +35,7 @@ opening of Settings, on whatever tab, reads Models and usage again at once and u
 `chatgpt.status`), so the numbers are current by the time the tab is reached. The page shows what it last
 knew immediately; a new value replaces the old in place, a reading that finds the same numbers
 touches nothing, one that fails leaves what is shown, an opening while a reading is under way
-joins it and one within 30 seconds of a good reading reuses it. Activity while the page is open
+joins it. Every opening asks again, however soon after the last (owner, 2026-11-12); only the catalogue and the speech models are reused for 30 seconds. In the core, readings that overlap (Settings opened twice, Settings and another reader) share one read and one `codex app-server`; a live reading replaces the stored windows, drops a window the provider no longer reports, and tells the other readers (`quota.changed`) only when something really changed; a reading that fails or finds no window keeps the last known numbers and says nothing. A told warning is told again when its window is later read with 20% or more left and falls to the last tenth again. Activity while the page is open
 (a turn, a provider change) refreshes the allowances quietly as before.
 
 What a reading really asks for, per subscription (no model turn is ever spent):
@@ -43,7 +43,7 @@ What a reading really asks for, per subscription (no model turn is ever spent):
 | Source | What `usage.allowances` does |
 | --- | --- |
 | Codex | Starts `codex app-server` and asks `account/rateLimits/read` (8 s limit): the live 5-hour and weekly windows and credits. |
-| Claude | Nothing live. `claude auth status --json` only says whether it is signed in. The windows are what earlier turns reported in their `rate_limit_event` packets, each naming one window (`rateLimitType`), with the time it was updated. A window that no recent event named keeps its last row for good (the table is keyed by subscription and window) and shows 「更新於 …」, then 「此回報的重設時間已過」 once its reset time has passed. Which window the CLI names is the CLI's choice; Raphael cannot ask for one, so a 5-hour row can stay eleven days old while the weekly row is current. |
+| Claude | Nothing live (no CLI command or file gives its windows without a model turn; `claude auth status` only says whether it is signed in). Its card can therefore keep an old 「接近額度上限」 until a Claude turn names that window again. The windows are what earlier turns reported in their `rate_limit_event` packets, each naming one window (`rateLimitType`), with the time it was updated. A window that no recent event named keeps its last row for good (the table is keyed by subscription and window) and shows 「更新於 …」, then 「此回報的重設時間已過」 once its reset time has passed. Which window the CLI names is the CLI's choice; Raphael cannot ask for one, so a 5-hour row can stay eleven days old while the weekly row is current. |
 | Antigravity (Gemini) | Nothing live; only what its turns reported. |
 | ChatGPT sign-in | No windows are recorded; the card has 管理用量 for ChatGPT's own page. |
 | OpenRouter | Not part of this reading: the spend rows come from `status.get`, the key's own usage is OpenRouter's to show. |
