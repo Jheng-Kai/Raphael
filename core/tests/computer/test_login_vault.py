@@ -2,8 +2,94 @@ import json
 
 import pytest
 
+from .fixtures.semantic_browser import measured, member_ref
+
 from raphael_core.computer.logins import LoginVault
 from .test_vm import desktop, CatalogBridge, EmptyHub
+from .fixtures.driver_contract import bind_page, catalog, window_reply
+
+
+@pytest.mark.parametrize("shared", [False, True])
+@pytest.mark.parametrize("case", ["frame", "duplicate", "fresh-frame", "prefilled", "retry", "clear"])
+async def test_saved_field_selection_and_replacement(desktop, tmp_path, shared, case):
+    from raphael_core.computer.vm_tools import VmTools, SavedFieldRefused
+    from raphael_core.services.attachment_store import AttachmentStore
+    from .test_vm import container
+    vm, _, runtime = desktop
+    vm.settings.set("computer_vm_mode", "shared" if shared else "per-bot")
+    runtime.raw = container(vm, vm.target(), runtime)
+    calls = []
+    class Browser(CatalogBridge):
+        changed = False
+        half = case == "retry"
+        @measured(("Name", "Secret"))
+        async def request(self, method, params=None):
+            if method == "tools/list":
+                return catalog(("get_browser_state", "browser_type"))
+            name, args = params["name"], params["arguments"]
+            calls.append(name)
+            if name == "list_windows":
+                return window_reply(self.target)
+            if name == "get_browser_state":
+                return {"structuredContent": dict(target_id="own", tab_id="tab", page={"url": "https://example.com"})}
+            if name == "browser_type" and self.half and args["text"] == "secret":
+                self.half = False
+                return {"structuredContent": {"delivery": {"delivered_count": 0}}}
+            return {"content": []}
+    original = Browser.request
+    async def request(self, method, params=None):
+        reply = await original(self, method, params)
+        if method == "tools/call" and params["name"] == "get_browser_state":
+            rows = reply["structuredContent"]["refs"]
+            name = next(row for row in rows if row["name"] == "Name")
+            if case == "frame" or case == "fresh-frame" and self.changed:
+                name["frame"] = "iframe"
+            if case == "duplicate" and not self.changed:
+                rows.append({**name, "ref": "same-name"})
+            self.changed = True
+        return reply
+    Browser.request = request
+    hub = VmTools(EmptyHub(), vm, attachments=AttachmentStore(tmp_path), bridge=Browser)
+    await hub.prepare()
+    target = vm.target()
+    await bind_page(hub, target)
+    client, session = await hub._connection(target)
+    client.semantic_values[("own", "tab"), "Name"] = "existing"
+    new_name = "" if case == "clear" else "new-name"
+    def fields():
+        return [(member_ref(hub, target, "own", "Name"), new_name),
+                (member_ref(hub, target, "own", "Secret"), "secret")]
+    calls.clear()
+    try:
+        if case in ("frame", "duplicate", "fresh-frame"):
+            with pytest.raises(SavedFieldRefused if case != "fresh-frame" else ValueError) as error:
+                await hub._type_page_fields(target, 0, "own", fields(), lambda *_: None)
+            assert "browser_type" not in calls
+            if case != "fresh-frame":
+                assert not calls  # Original ambiguity/frame is refused even before an internal read.
+                assert "request_takeover" in str(error.value)
+                assert ("embedded frame" if case == "frame" else "same name") in str(error.value)
+                from types import SimpleNamespace
+                hub.logins = SimpleNamespace(load=lambda *_: dict(username='new-name', password='secret'),
+                    entry=lambda *_: (dict(label='Test'), dict(name='new-name')))
+                for kind in ('login', 'contact', 'card'):
+                    args = dict(reference='synthetic', site='https://example.com', target_id='own', label='Test',
+                        fields={'name': fields()[0][0]}, username_ref=fields()[0][0], password_ref=fields()[1][0])
+                    result = await hub._fill_login(target, 0, args) if kind == 'login' else await hub._fill_entry(target, 0, args, kind)
+                    response = json.loads(result.text)
+                    assert not result.ok and response['filled'] is False and 'request_takeover' in response['hint']
+                    assert 'secret' not in result.text and 'new-name' not in result.text
+        else:
+            if case == "retry":
+                with pytest.raises(ValueError):
+                    await hub._type_page_fields(target, 0, "own", fields(), lambda *_: None)
+                assert client.semantic_values[("own", "tab"), "Name"] == "new-name"
+                await hub._driver_call(target, client, "get_browser_state", dict(target_id="own", tab_id="tab", session=session))
+            await hub._type_page_fields(target, 0, "own", fields(), lambda *_: None)
+            assert client.semantic_values[("own", "tab"), "Name"] == new_name
+            assert client.semantic_values[("own", "tab"), "Secret"] == "secret"
+    finally:
+        await hub.aclose()
 
 
 @pytest.mark.parametrize("failure", [False, True])
@@ -15,13 +101,15 @@ async def test_private_values_and_json_escapes_never_reach_results_or_errors(des
     vm, target, _ = desktop
     password, username = 'secret-"\\\n密碼', 'owner-"\\帳號'
     class Browser(CatalogBridge):
+        @measured(("username", "password"))
         async def request(self, method, params=None):
+            if method == "tools/call" and params["name"] == "list_windows":
+                return window_reply(self.target)
             if method == "tools/list":
-                return {"tools": [{"name": name, "inputSchema": {"type": "object", "properties": {}}}
-                                  for name in ("get_browser_state", "browser_type")]}
+                return catalog(("get_browser_state", "browser_type"))
             if params["name"] == "get_browser_state":
-                return {"structuredContent": {"target_id": "tab", "url": "https://example.com/login"}}
-            if failure:
+                return {"structuredContent": {"target_id": "tab", "tab_id": "tab-1", "page": {"url": "https://example.com/login"}}}
+            if failure and params["name"] == "browser_type":
                 raise VmError(json.dumps({"password": password, "username": username}))
             return {"content": [{"type": "text", "text": json.dumps([password, username])}]}
     hub = VmTools(EmptyHub(), vm, attachments=AttachmentStore(tmp_path), conn=conn, bridge=Browser)
@@ -30,8 +118,9 @@ async def test_private_values_and_json_escapes_never_reach_results_or_errors(des
     reference = hub.logins.reference(0, "https://example.com")
     hub.logins.save(reference, json.dumps({"username": username, "password": password}))
     await hub.prepare()
+    await bind_page(hub, target)
     tool = next(item for item in hub.offered() if item.name == "fill_login")
-    args = {"reference": reference, "site": "https://example.com", "target_id": "tab", "username_ref": "u", "password_ref": "p"}
+    args = {"reference": reference, "site": "https://example.com", "target_id": "tab", "username_ref": member_ref(hub, vm.target(0), "tab", "username"), "password_ref": member_ref(hub, vm.target(0), "tab", "password")}
     with vm_scope(("turn", 0, 7), turn_id=7, private=True):
         result = await hub.call(tool.key, args, approver="auto")
     assert result.ok is not failure
@@ -66,13 +155,15 @@ async def test_fill_login_uses_the_owned_connection_and_never_returns_driver_ech
     vm, target, runtime = desktop
     class Browser(CatalogBridge):
         calls = []
+        @measured(("username", "password"))
         async def request(self, method, params=None):
+            if method == "tools/call" and params["name"] == "list_windows":
+                return window_reply(self.target)
             if method == "tools/list":
-                return {"tools": [{"name": "get_browser_state", "inputSchema": {"type": "object", "properties": {"target_id": {"type": "string"}}}},
-                                  {"name": "browser_type", "inputSchema": {"type": "object", "properties": {key: {"type": "string"} for key in ("target_id", "ref", "text")}, "required": ["target_id", "ref", "text"]}}]}
+                return catalog(("get_browser_state", "browser_type"))
             self.calls.append(params)
             if params["name"] == "get_browser_state":
-                return {"structuredContent": {"target_id": "bt-1", "url": "https://example.com/login"}}
+                return {"structuredContent": {"target_id": "bt-1", "tabs": [{"tab_id": "tab-1", "active": True, "url": "https://example.com/login"}]}}
             return {"content": [{"type": "text", "text": "private-owner never-send-this"}]}
     vault = LoginVault(Vault())
     reference = vault.reference(0, "https://example.com")
@@ -81,15 +172,21 @@ async def test_fill_login_uses_the_owned_connection_and_never_returns_driver_ech
     hub.logins = vault
     await hub.prepare()
     await hub._discover(target)
+    await bind_page(hub, target)
     tool = next(item for item in hub.offered() if item.name == "fill_login")
     with vm_scope(("turn", 0, 7), turn_id=7, private=True):
-        result = await hub.call(tool.key, {"reference": reference, "site": "https://example.com", "target_id": "bt-1", "username_ref": "u", "password_ref": "p"}, approver="auto")
+        result = await hub.call(tool.key, {"reference": reference, "site": "https://example.com", "target_id": "bt-1", "username_ref": member_ref(hub, vm.target(0), "bt-1", "username"), "password_ref": member_ref(hub, vm.target(0), "bt-1", "password")}, approver="auto")
     assert result.ok and json.loads(result.text) == {"filled": True}
     assert len({call["arguments"]["session"] for call in Browser.calls}) == 1
     assert [call["arguments"]["text"] for call in Browser.calls if call["name"] == "browser_type"] == ["private-owner", "never-send-this"]
+    assert all(call["arguments"]["tab_id"] == "tab-1" for call in Browser.calls if call["name"] == "browser_type")
     assert "private-owner" not in repr(result) + caplog.text and "never-send-this" not in repr(result) + caplog.text
     with vm_scope(("turn", 0, 7), turn_id=7, private=True):
-        wrong = await hub.call(tool.key, {"reference": reference, "site": "https://evil.example", "target_id": "bt-1", "username_ref": "u", "password_ref": "p"}, approver="auto")
+        changed = await hub.call(tool.key, dict(reference=reference, site="https://example.com", target_id="bt-1", username_ref="old", password_ref="old"), approver="auto")
+        assert changed.kind == "screen_changed"
+        read = next(item for item in hub.offered() if item.name == "get_browser_state")
+        await hub.call(read.key, {"target_id": "bt-1", "tab_id": "tab-1"}, approver="auto")
+        wrong = await hub.call(tool.key, {"reference": reference, "site": "https://evil.example", "target_id": "bt-1", "username_ref": member_ref(hub, vm.target(0), "bt-1", "username"), "password_ref": member_ref(hub, vm.target(0), "bt-1", "password")}, approver="auto")
     assert not wrong.ok and json.loads(wrong.text) == {"filled": False}
     assert len([call for call in Browser.calls if call["name"] == "browser_type"]) == 2
     await hub.aclose()
@@ -129,19 +226,161 @@ async def test_removing_the_request_turn_keeps_restart_redaction_for_the_saved_l
         conn.execute("DELETE FROM agent_turns WHERE id=?", (rig.turn,))
     assert not rig.cards.cards_of(rig.turn)
     class Browser(CatalogBridge):
+        @measured(("username", "password"))
         async def request(self, method, params=None):
+            if method == "tools/call" and params["name"] == "list_windows":
+                return window_reply(self.target)
             if method == "tools/list":
                 return {"tools": [{"name": "get_browser_state", "inputSchema": {"type": "object"}}]}
-            return {"structuredContent": private, "content": [{"type": "text", "text": json.dumps(private)}]}
+            return {"structuredContent": {"target_id": "bound-own", **private}, "content": [{"type": "text", "text": json.dumps(private)}]}
     vm, target, _ = desktop
     hub = VmTools(EmptyHub(), vm, attachments=AttachmentStore(tmp_path), conn=conn, bridge=Browser)
     hub.logins = LoginVault(rig.vault, conn=conn)
     await hub.prepare()
     await hub._discover(target)
+    await bind_page(hub, target)
     tool = next(item for item in hub.offered() if item.name == "get_browser_state")
     with vm_scope(("turn", 0, 9), turn_id=9, private=True):
-        result = await hub.call(tool.key, {}, approver="auto")
+        result = await hub.call(tool.key, {"target_id": "bound-own", "tab_id": "tab-1"}, approver="auto")
     assert result.ok and "[private]" in result.text
     for value in private.values():
         assert value not in repr(result) and json.dumps(value)[1:-1] not in repr(result)
+    await hub.aclose()
+
+
+@pytest.mark.parametrize("shared", [False, True])
+@pytest.mark.parametrize("shape", ["snapshot", "active", "ambiguous", "unseen", "lost-active"])
+async def test_fill_and_private_picture_use_only_the_tab_observed_for_this_connection(desktop, tmp_path, shared, shape):
+    from raphael_core.computer.vm_tools import VmTools
+    from raphael_core.services.attachment_store import AttachmentStore
+    vm, _, _ = desktop
+    vm.settings.set("computer_vm_mode", "shared" if shared else "per-bot")
+    calls = []
+    class Browser(CatalogBridge):
+        url = "https://example.com/login"
+        @measured(("username", "password"))
+        async def request(self, method, params=None):
+            if method == "tools/list":
+                return catalog(("get_browser_state", "browser_type"))
+            if params["name"] == "list_windows":
+                return window_reply(self.target)
+            if params["name"] in ("get_browser_state", "browser_type"):
+                calls.append(params)
+            if params["name"] == "get_browser_state":
+                page = {"target_id": "own", "page": {"url": self.url}}
+                if "target_id" in params["arguments"]:
+                    assert params["arguments"]["tab_id"] == "exact-tab"
+                    page.update(nodes=[], truncated=False, has_more=False)
+                    if shape == "lost-active":
+                        page["tabs"] = [{"tab_id": "exact-tab"}]
+                    else:
+                        page["tab_id"] = "exact-tab"
+                elif shape == "snapshot":
+                    page["tab_id"] = "exact-tab"
+                else:
+                    page["tabs"] = [{"tab_id": "other"}, {"tab_id": "exact-tab", "active": shape in ("active", "lost-active")}]
+                return {"structuredContent": page}
+            return {"content": []}
+    hub = VmTools(EmptyHub(), vm, attachments=AttachmentStore(tmp_path), bridge=Browser)
+    hub.logins = LoginVault(Vault())
+    reference = hub.logins.reference(0, "https://example.com")
+    hub.logins.save(reference, json.dumps({"username": "owner", "password": "secret"}))
+    await hub.prepare()
+    target = vm.target(0)
+    if shape != "unseen":
+        await bind_page(hub, target)
+    args = dict(reference=reference, site="https://example.com", target_id="own", username_ref=member_ref(hub, target, "own", "username"), password_ref=member_ref(hub, target, "own", "password"))
+    result = await hub._fill_login(target, 0, args)
+    assert result.ok is (shape in ("snapshot", "active"))
+    typed = [call for call in calls if call["name"] == "browser_type"]
+    assert len(typed) == (2 if result.ok else 0)
+    assert all(call["arguments"]["tab_id"] == "exact-tab" for call in typed)
+    if not result.ok:
+        reads = [call for call in calls if call["arguments"].get("target_id")]
+        assert len(reads) == (1 if shape == "lost-active" else 0)
+    hub._protect_page(target, "own", "https://example.com", ("p",))
+    assert await hub._private_picture(target, {})
+    Browser.url = "https://other.example/done"
+    assert (await hub._private_picture(target, {})) is (not result.ok)
+    hub._protect_page(target, "own", "https://example.com", ("p",))
+    await hub._disconnect(target.key)
+    assert not any(key[0] == target.key for key in hub.page_tabs)
+    count = len(calls)
+    assert await hub._private_picture(target, {})
+    assert len(calls) == count
+    await hub.aclose()
+
+
+@pytest.mark.parametrize("shared", [False, True])
+@pytest.mark.parametrize("kind", ["login", "contact", "card"])
+@pytest.mark.parametrize("outcome", ["typed", "refused", "short", "missing", "error", "duplicate", "absent", "unknown"])
+async def test_saved_fill_matches_fresh_semantics_and_requires_exact_delivery(desktop, tmp_path, conn, shared, kind, outcome):
+    from .fixtures.semantic_browser import refused
+    from raphael_core.computer.vm_tools import VmTools, vm_scope
+    from raphael_core.computer.vault_entries import VaultEntries
+    from raphael_core.services.attachment_store import AttachmentStore
+    from .test_vm import container
+    vm, _, runtime = desktop
+    vm.settings.set("computer_vm_mode", "shared" if shared else "per-bot")
+    runtime.raw = container(vm, vm.target(), runtime)
+    typed = []
+    class Browser(CatalogBridge):
+        @measured(("name", "password"))
+        async def request(self, method, params=None):
+            if method == 'tools/list':
+                return catalog(('get_browser_state', 'browser_type', 'get_window_state'))
+            name, args = params['name'], params['arguments']
+            if name == 'list_windows':
+                return window_reply(self.target)
+            if name == 'get_browser_state':
+                return {'structuredContent': {'target_id': 'own', 'tab_id': 'exact-tab', 'page': {'url': 'https://example.com/form'}}}
+            if name == 'browser_type':
+                typed.append(dict(args))
+                if outcome == 'refused':
+                    return refused(args['ref'])
+                if outcome == 'error':
+                    return {'isError': True, 'content': [{'type': 'text', 'text': args['text']}]}
+                if outcome in ('short', 'missing'):
+                    return {'structuredContent': {'delivery': {'delivered_count': len(args['text']) - 1} if outcome == 'short' else {}}}
+            return {'content': []}
+    hub = VmTools(EmptyHub(), vm, attachments=AttachmentStore(tmp_path), bridge=Browser)
+    hub.logins = VaultEntries(Vault(), conn=conn)
+    values = {'username': 'synthetic-name', 'password': 'synthetic-secret'} if kind == 'login' else (
+        {'name': 'synthetic-name', 'address': '', 'phone': '', 'email': ''} if kind == 'contact' else
+        {'name': 'synthetic-name', 'number': '4111111111111111', 'expiry': '12/30', 'cvc': '123'})
+    reference = hub.logins.put({'kind': kind, 'label': 'Test', 'origin': 'https://example.com' if kind == 'login' else '', 'values': values})
+    await hub.prepare()
+    target = vm.target()
+    await bind_page(hub, target)
+    original = Browser.request
+    async def change(self, method, params=None):
+        reply = await original(self, method, params)
+        if method == 'tools/call' and params['name'] == 'get_browser_state':
+            rows = reply['structuredContent']['refs']
+            if outcome == 'duplicate':
+                rows.append({**next(row for row in rows if row['name'] == 'name'), 'ref': 'duplicate'})
+            elif outcome == 'absent':
+                rows[:] = [row for row in rows if row['name'] != 'name']
+        return reply
+    Browser.request = change
+    refs = {name: member_ref(hub, target, 'own', name) for name in ('name', 'password')}
+    if outcome == 'unknown':
+        refs['name'] = 'unknown-ref'
+    args = dict(reference=reference, site='https://example.com', target_id='own')
+    if kind == 'login':
+        args.update(username_ref=refs['name'], password_ref=refs['password'])
+    else:
+        args.update(label='Test', fields={'name': refs['name']})
+        if kind == 'card':
+            args['amount'] = ''
+    with vm_scope(('turn', 0, 17), turn_id=17):
+        result = await hub.call(next(t.key for t in hub.offered() if t.name == 'fill_' + kind), args, approver='user')
+    assert result.ok is (outcome == 'typed')
+    assert json.loads(result.text)['filled'] is (outcome == 'typed')
+    if outcome == 'typed':
+        assert [call['ref'] for call in typed] == (['p2:2', 'p3:2'] if kind == 'login' else ['p2:2'])
+        assert all(call['tab_id'] == 'exact-tab' for call in typed)
+    if outcome in ('unknown', 'duplicate', 'absent'):
+        assert not typed
+    assert all(value not in repr(result) for value in values.values() if value)
     await hub.aclose()

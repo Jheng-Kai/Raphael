@@ -13,7 +13,7 @@ from raphael_core.computer.vm_bridge import CuaBridge
 from raphael_core.computer.vm_catalog import DRIVER_TOOLS, offline_catalog
 from raphael_core.computer.vm_tools import VmTools, vm_scope
 from raphael_core.services.attachment_store import AttachmentStore
-from .test_vm import CatalogBridge, EmptyHub, desktop  # noqa: F401
+from .test_vm import CatalogBridge, EmptyHub, per_bot_desktop as desktop  # noqa: F401
 
 
 def tool(hub, name):
@@ -56,10 +56,10 @@ async def test_configuration_and_explicit_invalidation_drop_preflight(desktop):
 async def test_observed_external_stop_invalidates_preflight_immediately(desktop):
     vm, target, runtime = desktop
     await vm.start(target)
-    assert target in vm.running
+    assert target.physical in vm.running
     runtime.raw["State"]["Running"] = False
     assert (await vm.status(target, probe=False))["state"] == "stopped"
-    assert target not in vm.running
+    assert target.physical not in vm.running
 
 
 @pytest.mark.parametrize("failure", [VmError("incompatible_image"), ConnectionError(), TimeoutError()])
@@ -71,7 +71,7 @@ async def test_status_failure_invalidates_a_previous_confirmation(desktop, failu
     vm.image = failed_image
     with pytest.raises(type(failure)):
         await vm.status(target)
-    assert target not in vm.running
+    assert target.physical not in vm.running
 
 
 async def test_full_catalog_is_offered_to_worker_before_any_docker_or_screen(desktop, tmp_path):
@@ -144,12 +144,12 @@ async def test_bridge_failure_invalidates_start_without_replaying_action(desktop
     await hub.prepare()
     try:
         assert not (await hub.call(tool(hub, "click").key, {}, approver="auto")).ok
-        assert target not in vm.running
+        assert target.physical not in vm.running
         assert sum(params.get("name") == "click" for _, params in Driver.calls) == 1
         runtime.calls.clear()
         Driver.broken = False
         if failure.__class__ is ConnectionError or str(failure) == "transport_closed":
-            assert (await hub.call(tool(hub, "get_window_state").key, {}, approver="auto")).ok
+            assert (await hub.call(tool(hub, "get_window_state").key, {"pid": 7, "window_id": 9}, approver="auto")).ok
         assert (await hub.call(tool(hub, "click").key, {}, approver="auto")).ok
         assert any(args[0] == "info" for args, _ in runtime.calls)
     finally:
@@ -314,7 +314,7 @@ async def test_timeout_or_cancel_closes_owned_bridge_and_releases_waiters(deskto
         task.cancel()
     with pytest.raises(asyncio.CancelledError if cancel else TimeoutError):
         await task
-    assert target not in vm.running and not bridge.lock.locked() and not bridge.pending and bridge.process is None
+    assert target.physical not in vm.running and not bridge.lock.locked() and not bridge.pending and bridge.process is None
 
 
 def test_member_persona_explains_first_turn_tools_and_targeted_reads():

@@ -4,6 +4,8 @@ import json
 
 import pytest
 
+from .fixtures.semantic_browser import measured, member_ref
+
 from raphael_core.agent.gate import ToolGate
 from raphael_core.agent.policy import Action, Confirmations, Tier
 from raphael_core.brain.settings import SettingsStore
@@ -12,6 +14,7 @@ from raphael_core.computer.vm_tools import VmTools, vm_scope
 from raphael_core.services.attachment_store import AttachmentStore
 from .test_login_vault import Vault as LoginTestVault
 from .test_vm import desktop, CatalogBridge, EmptyHub  # noqa: F401
+from .fixtures.driver_contract import bind_page, catalog, window_reply
 
 
 CONTACT = {"name": "private-owner", "address": "private-address", "phone": "private-phone", "email": "private-email"}
@@ -112,23 +115,27 @@ async def test_metadata_edit_does_not_read_or_replace_credentials(conn):
 
 
 async def test_shared_login_revocation_between_fields_stops_before_the_password(desktop, conn, tmp_path):
-    vm, _, _ = desktop
+    vm, target, _ = desktop
     filled = []
     class Browser(CatalogBridge):
+        @measured(("name", "number", "expiry", "cvc", "username", "password"))
         async def request(self, method, params=None):
+            if method == "tools/call" and params["name"] == "list_windows":
+                return window_reply(self.target)
             if method == "tools/list":
-                return {"tools": [{"name": name, "inputSchema": {"type": "object"}} for name in ("get_browser_state", "browser_type")]}
+                return catalog(("get_browser_state", "browser_type"))
             if params["name"] == "browser_type":
                 filled.append(params["arguments"]["text"])
                 with conn:
                     conn.execute("UPDATE vault_entries SET members='[]' WHERE id=?", (identifier,))
-            return {"structuredContent": {"target_id": "tab", "url": "https://shop.example/login"}}
+            return {"structuredContent": {"target_id": "tab", "tab_id": "tab-1", "page": {"url": "https://shop.example/login"}}}
     hub = VmTools(EmptyHub(), vm, conn=conn, attachments=AttachmentStore(tmp_path), bridge=Browser)
     hub.logins = VaultEntries(Vault(), conn=conn)
     identifier = hub.logins.put({"kind": "login", "label": "Travel", "origin": "https://shop.example", "values": {"username": "private-user", "password": "private-password"}})
     await hub.prepare()
+    await bind_page(hub, target)
     with vm_scope(("turn", 0, 7), turn_id=7, private=True):
-        result = await hub.call(next(t.key for t in hub.offered() if t.name == "fill_login"), {"reference": identifier, "site": "https://shop.example", "target_id": "tab", "username_ref": "u", "password_ref": "p"}, approver="user")
+        result = await hub.call(next(t.key for t in hub.offered() if t.name == "fill_login"), {"reference": identifier, "site": "https://shop.example", "target_id": "tab", "username_ref": member_ref(hub, vm.target(0), "tab", "username"), "password_ref": member_ref(hub, vm.target(0), "tab", "password")}, approver="user")
     assert not result.ok and filled == ["private-user"]
     await hub.aclose()
 
@@ -138,11 +145,14 @@ async def test_card_always_needs_an_exact_single_use_approval_and_never_submits(
     vm, target, _ = desktop
     calls = []
     class Browser(CatalogBridge):
+        @measured(("name", "number", "expiry", "cvc", "username", "password"))
         async def request(self, method, params=None):
+            if method == "tools/call" and params["name"] == "list_windows":
+                return window_reply(self.target)
             if method == "tools/list":
-                return {"tools": [{"name": name, "inputSchema": {"type": "object"}} for name in ("get_browser_state", "browser_type", "browser_pointer", "browser_navigate")]}
+                return catalog(("get_browser_state", "browser_type", "browser_pointer", "browser_navigate"))
             calls.append(params)
-            return {"structuredContent": {"target_id": "tab", "url": "https://shop.example/checkout", "total": "NT$ 1,280", **CARD},
+            return {"structuredContent": {"target_id": "tab", "tab_id": "tab-1", "page": {"url": "https://shop.example/checkout"}, "total": "NT$ 1,280", **CARD},
                     "content": [{"type": "text", "text": json.dumps(CARD)}]}
     SettingsStore(conn).set("action_mode", "direct" if mode == "normal" else mode)
     hub = VmTools(EmptyHub(), vm, conn=conn, attachments=AttachmentStore(tmp_path), bridge=Browser)
@@ -150,8 +160,10 @@ async def test_card_always_needs_an_exact_single_use_approval_and_never_submits(
     identifier = hub.logins.put({"kind": "card", "label": "Company", "hint": "Travel only", "values": CARD})
     gate = ToolGate(hub, conn=conn)
     await hub.prepare()
+    await bind_page(hub, target)
+    calls.clear()
     tools = {t.name: t.key for t in hub.offered()}
-    args = {"reference": identifier, "label": "Company", "site": "https://shop.example", "amount": "NT$ 1,280", "target_id": "tab", "fields": {key: key + "-ref" for key in CARD}}
+    args = {"reference": identifier, "label": "Company", "site": "https://shop.example", "amount": "NT$ 1,280", "target_id": "tab", "fields": {key: member_ref(hub, vm.target(0), "tab", key) for key in CARD}}
     assert gate.needs_confirmation(tools["fill_card"], args)
     with vm_scope(("turn", 0, 7), turn_id=7, private=True):
         assert not (await gate.call_plugin(tools["fill_card"], args)).ok
@@ -166,9 +178,10 @@ async def test_card_always_needs_an_exact_single_use_approval_and_never_submits(
         for name, arguments in (("browser_pointer", {}), ("browser_navigate", {"url": "https://shop.example/pay"}), ("vm_exec", {"command": "echo submit"}), ("run_steps", {"steps": [{"name": "browser_pointer", "arguments": {}}], "observe": {"name": "get_browser_state", "arguments": {}}})):
             blocked = await hub.call(tools[name], arguments, approver="user")
             assert not blocked.ok
-        observed = await hub.call(tools["get_browser_state"], {"target_id": "tab"}, approver="user")
+        observed = await hub.call(tools["get_browser_state"], {"target_id": "tab", "tab_id": "tab-1"}, approver="user")
         assert observed.ok
     assert [call["name"] for call in calls].count("browser_type") == 4
+    assert all(call["arguments"]["tab_id"] == "tab-1" for call in calls if call["name"] == "browser_type")
     assert all(call["name"] in ("browser_type", "get_browser_state", "set_config", "set_agent_cursor_enabled") for call in calls)
     seen = repr(result) + repr(observed) + caplog.text + repr(list(conn.iterdump()))
     for value in CARD.values(): assert value not in seen
@@ -210,22 +223,26 @@ async def test_private_fill_fails_closed_and_never_returns_driver_values(desktop
     calls = []
     values = {key: value + '-"\\\n密碼' for key, value in CARD.items()}
     class Browser(CatalogBridge):
+        @measured(("name", "number", "expiry", "cvc", "username", "password"))
         async def request(self, method, params=None):
+            if method == "tools/call" and params["name"] == "list_windows":
+                return window_reply(self.target)
             if method == "tools/list":
-                return {"tools": [{"name": name, "inputSchema": {"type": "object"}} for name in ("get_browser_state", "browser_type")]}
+                return catalog(("get_browser_state", "browser_type"))
             calls.append(params)
             if params["name"] == "browser_type" and failure == "echo": raise ValueError(json.dumps(values))
             if params["name"] == "browser_type" and failure == "revoked_during_fill":
                 with conn:
                     conn.execute("UPDATE vault_entries SET members='[]' WHERE id=?", (identifier,))
-            return {"structuredContent": {"target_id": "tab", "url": "https://evil.example" if failure == "origin" else "https://shop.example/checkout", "total": "NT$ 1,280"}}
+            return {"structuredContent": {"target_id": "tab", "tabs": [{"tab_id": "tab-1", "active": True, "url": "https://evil.example" if failure == "origin" else "https://shop.example/checkout"}], "total": "NT$ 1,280"}}
     hub = VmTools(EmptyHub(), vm, conn=conn, attachments=AttachmentStore(tmp_path), bridge=Browser)
     hub.logins = VaultEntries(Vault(), conn=conn)
     identifier = hub.logins.put({"kind": "card", "label": "Company", "values": values, "members": [0]})
     await hub.prepare()
+    await bind_page(hub, target)
     if failure == "revoked": conn.execute("UPDATE vault_entries SET members='[]' WHERE id=?", (identifier,)); conn.commit()
     with vm_scope(("turn", 0, 7), turn_id=7, private=True):
-        result = await hub.call(next(t.key for t in hub.offered() if t.name == "fill_card"), {"reference": identifier, "label": "Company", "site": "https://shop.example", "target_id": "tab", "amount": "NT$ 99" if failure == "amount" else "NT$ 1,280", "fields": {key: key + "-ref" for key in values}}, approver="user")
+        result = await hub.call(next(t.key for t in hub.offered() if t.name == "fill_card"), {"reference": identifier, "label": "Company", "site": "https://shop.example", "target_id": "tab", "amount": "NT$ 99" if failure == "amount" else "NT$ 1,280", "fields": {key: member_ref(hub, vm.target(0), "tab", key) for key in values}}, approver="user")
     assert result.ok is (failure is None)
     if failure in ("origin", "amount", "revoked"): assert not any(call["name"] == "browser_type" for call in calls)
     if failure == "revoked_during_fill": assert sum(call["name"] == "browser_type" for call in calls) == 1

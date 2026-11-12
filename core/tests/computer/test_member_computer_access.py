@@ -36,10 +36,14 @@ async def test_every_member_is_offered_the_computer_without_a_question_and_nothi
     assert "get_desktop_state" in names and "vm_exec" in names and "request_computer" not in names
     assert hub.has_own_computer(member)
     assert conn.execute("SELECT COUNT(*) FROM computer_grants").fetchone()[0] == 0
-    # Looking at the offer starts nothing and asks Docker nothing: the computer wakes when a call needs it.
+    # Per-bot offers ask nothing; a new shared seat first proves its screen empty without starting it.
     vm.start.assert_not_awaited()
     vm.launch.assert_not_called()
-    assert len(runtime.calls) == before
+    if mode == 'per-bot':
+        assert len(runtime.calls) == before
+    else:
+        assert any(args[:2] == ['container', 'inspect'] for args, _ in runtime.calls[before:])
+        assert not any(args[0] in ('run', 'start', 'stop', 'rm') for args, _ in runtime.calls[before:])
 
 
 async def test_a_never_asked_member_calls_the_computer_and_the_call_starts_it(tmp_path, conn):
@@ -71,7 +75,8 @@ async def test_a_call_on_a_computer_that_is_no_longer_the_members_own_is_refused
     with vm_scope(("turn", 7, 1)):
         result = await hub.call(tool.key, {}, approver="auto")
     assert not result.ok
-    assert len(runtime.calls) == before
+    assert result.kind == 'computer_changed'
+    assert all(args[:2] == ['container', 'inspect'] or 'wmctrl' in args for args, _ in runtime.calls[before:])
 
 
 async def test_a_room_speaker_is_offered_the_computer_the_same_way(tmp_path, conn):

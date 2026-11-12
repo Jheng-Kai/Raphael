@@ -47,7 +47,7 @@ class ComputerData:
     def made(self, target) -> None:
         """A computer is about to exist on `target.remote`. The shared one is never recorded: no member's deletion owes it."""
         ident = (target.remote or "", target.key)
-        if target.key == "shared" or ident in self.rows:
+        if target.container == "shared" or target.unit == "shared" or ident in self.rows:
             return
         self.rows[ident] = [0, 0]
         self._write(ident, commit=True)

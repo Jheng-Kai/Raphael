@@ -44,6 +44,74 @@ DRIVER_TOOLS = {
 
 PAGE_TOOLS = ("browser_", "get_browser_state")
 
+# Each call can move the physical pointer, focus or clipboard, including browser launch.
+NATIVE_INPUT_TOOLS = frozenset({
+    "click", "double_click", "right_click", "type_text", "press_key", "hotkey", "scroll", "drag",
+    "move_cursor", "bring_to_front", "launch_app", "clipboard_write", "browser_prepare",
+})
+
+# Reviewed against the measured 0.37.0 tools/list. Unknown arguments fail closed in shared mode.
+# Each parameter has exactly one disposition: pass, check, translate or refuse.
+# Dotted paths classify nested properties; [] denotes an object in an array.
+SHARED_ARGUMENTS = {
+    "get_guide": {"pass": "session topic"},
+    "get_desktop_state": {"check": "max_image_dimension session", "refuse": "screenshot_out_file"},
+    "get_window_state": {"pass": "capture_mode display_only full_output include_accessibility_tree include_screenshot max_depth max_dimension max_elements max_image_dimension query session since timeout_ms tree_format verbose", "check": "pid window_id", "refuse": "screenshot_out_file"},
+    "get_cursor_position": {"pass": "session"},
+    "click": {"pass": "button count cursor_id delivery_mode element_token modifier session", "check": "coordinate_frame pid scope window_id x y", "refuse": "capture_id from_zoom target"},
+    "double_click": {"pass": "cursor_id delivery_mode element_token session", "check": "coordinate_frame pid window_id x y", "refuse": "from_zoom"},
+    "right_click": {"pass": "cursor_id delivery_mode element_token modifier session", "check": "coordinate_frame pid window_id x y", "refuse": "from_zoom"},
+    "type_text": {"pass": "delivery_mode element_token session text", "check": "coordinate_frame pid scope window_id x y", "refuse": "target"},
+    "press_key": {"pass": "delivery_mode element_token key modifiers session", "check": "coordinate_frame pid scope window_id x y", "refuse": "target"},
+    "hotkey": {"pass": "delivery_mode element_token keys session", "check": "pid scope window_id x y", "refuse": "target"},
+    "scroll": {"pass": "amount by cursor_id delivery_mode direction element_token session", "check": "coordinate_frame pid scope window_id x y", "refuse": "target"},
+    "drag": {"pass": "button cursor_id delivery_mode duration_ms modifier session steps", "check": "coordinate_frame from_x from_y pid scope to_x to_y window_id", "refuse": "from_zoom target"},
+    "move_cursor": {"pass": "cursor_id session", "check": "scope", "translate": "x y", "refuse": "target"},
+    "launch_app": {"pass": "additional_arguments bundle_id launch_path name session urls"},
+    "list_apps": {"pass": "session"},
+    "list_windows": {"pass": "app on_screen_only session", "check": "pid"},
+    "bring_to_front": {"pass": "session", "check": "pid window_id"},
+    "clipboard_read": {"pass": "include_text session"},
+    "clipboard_write": {"pass": "file_path image_path session text"},
+    "verify_state": {"pass": "include_screenshot session stable_samples timeout_ms expect[].element expect[].element.enabled expect[].element.exists expect[].element.selected expect[].element.selector expect[].element.selector.label_contains expect[].element.selector.role expect[].element.value_equals expect[].window expect[].window.bounds expect[].window.bounds.height expect[].window.bounds.tolerance_px expect[].window.bounds.width expect[].window.exists", "check": "pid window_id", "translate": "expect expect[].window.bounds.x expect[].window.bounds.y"},
+    "get_browser_state": {"pass": "continuation include_screenshot query scope_ref session snapshot_format tab_id", "check": "pid target_id window_id"},
+    "browser_prepare": {"pass": "delivery_mode session", "check": "pid window_id", "translate": "allow_launch profile profile.mode profile.name strategy strategy.kind"},
+    "browser_navigate": {"pass": "session tab_id url", "check": "target_id"},
+    "browser_click": {"pass": "delivery_mode input_route ref session tab_id x y", "check": "target_id"},
+    "browser_type": {"pass": "mode ref replace session tab_id text", "check": "target_id"},
+    "browser_select": {"pass": "label ref session tab_id value", "check": "target_id"},
+    "browser_pointer": {"pass": "action delivery_mode delta_x delta_y destination_ref input_route ref session tab_id to_x to_y x y", "check": "target_id"},
+    "browser_dialog": {"pass": "action delivery_mode dialog_id prompt_text session tab_id", "check": "target_id"},
+    "browser_set_input_files": {"pass": "files ref session tab_id", "check": "target_id"},
+    "browser_download": {"pass": "destination_root ref session tab_id", "check": "target_id"},
+}
+SHARED_ARGUMENTS = {tool: {parameter: action for action, parameters in groups.items()
+                          for parameter in parameters.split()} for tool, groups in SHARED_ARGUMENTS.items()}
+for _policy in SHARED_ARGUMENTS.values():
+    if _policy.get("target") == "refuse":
+        _policy.update({"target." + parameter: "refuse" for parameter in ("display_id", "kind", "pid", "window_id")})
+
+
+def shared_argument_paths(arguments, prefix=""):
+    for key, value in arguments.items():
+        path = prefix + key
+        yield path
+        if isinstance(value, dict):
+            yield from shared_argument_paths(value, path + ".")
+        elif isinstance(value, list):
+            for item in value:
+                if isinstance(item, dict):
+                    yield from shared_argument_paths(item, path + "[].")
+
+
+def shared_native_input(name, arguments):
+    """Foreground posture always takes the unit lock, including explicit DOM routes and dialog inspect.
+
+    Background page routes (trusted or DOM), dialog inspect/resolve and CDP typing do not activate X focus.
+    Native tools retain their lock regardless of delivery mode; prepare can launch/move a window.
+    """
+    return name in NATIVE_INPUT_TOOLS or arguments.get("delivery_mode") == "foreground"
+
 # Answers that report how things stand and are not a tool failing: a model told one decides what to do, and
 # nothing it did is evidence of work.
 NOTICES = ("computer_busy", "screen_changed")

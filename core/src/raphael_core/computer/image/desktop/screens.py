@@ -360,7 +360,7 @@ def shortcut_removals(listing, count):
 
 
 def configure_shortcuts(count):
-    """One workspace, and no key that acts on the whole desktop. Never a reason to hold the screens back."""
+    """One workspace and no whole-desktop keys; shared screens require a verified wall."""
     try:
         command(xfconf_args('xfwm4', '/general/workspace_count', 'int', ['1']))
         # The session copies its default keys into these two branches when it starts; before that there is
@@ -369,8 +369,19 @@ def configure_shortcuts(count):
             wait_for(['xfconf-query', '-c', 'xfce4-keyboard-shortcuts', '-p', f'/{branch}/custom/override'], attempts=20)
         listing = command(['xfconf-query', '-c', 'xfce4-keyboard-shortcuts', '-l', '-v'])
         for property in shortcut_removals(listing, count):
-            command(['xfconf-query', '-c', 'xfce4-keyboard-shortcuts', '-p', property, '-r', '-R'])
+            try:
+                command(['xfconf-query', '-c', 'xfce4-keyboard-shortcuts', '-p', property, '-r', '-R'])
+            except (subprocess.SubprocessError, OSError, TimeoutError):
+                if count <= 1:
+                    raise
+        if count > 1:
+            remaining = shortcut_removals(command(['xfconf-query', '-c', 'xfce4-keyboard-shortcuts', '-l', '-v']), count)
+            workspaces = command(['xfconf-query', '-c', 'xfwm4', '-p', '/general/workspace_count']).strip()
+            if remaining or workspaces != '1':
+                raise RuntimeError(f'Shared-screen keys are not isolated: bindings={remaining}, workspace_count={workspaces}')
     except (subprocess.SubprocessError, OSError, TimeoutError) as error:
+        if count > 1:
+            raise
         print(f'raphael-screens: the keys were left as they were: {error}', file=sys.stderr)
 
 

@@ -26,13 +26,13 @@ def previous_computer(desktop, request):
     runtime.raw['Image'] = 'sha256:previous-image'
     runtime.raw['Config']['Labels'][f'{LABEL}.layer'] = str(layer)
     # Layer 5 was the first to say its screen count; the two before it had no such entry.
-    runtime.raw['Config']['Env'] = ['VNC_PW=private', 'TZ=UTC'] + (['RAPHAEL_SCREENS=1', 'VNC_RESOLUTION=1280x900'] if layer == 5 else [])
+    runtime.raw['Config']['Env'] = ['VNC_PW=private', 'TZ=UTC'] + (['RAPHAEL_SCREENS=1', 'VNC_RESOLUTION=1280x900'] if layer in (5, 6) else [])
     memory = (2 if layer == 3 else 3) * 1024**3
     runtime.raw['HostConfig'].update(Memory=memory, MemorySwap=memory)
     return vm, target, runtime
 
 
-@pytest.mark.parametrize('previous_computer', [(remote, layer) for remote in (False, True) for layer in (3, 4, 5)], indirect=True)
+@pytest.mark.parametrize('previous_computer', [(remote, layer) for remote in (False, True) for layer in (3, 4, 5, 6)], indirect=True)
 @pytest.mark.parametrize('action', ['restart', 'update', 'repair', 'reset'])
 async def test_previous_computer_maintenance_rebuilds_without_starting_old_image(previous_computer, action):
     vm, target, runtime = previous_computer
@@ -53,7 +53,7 @@ async def test_previous_computer_maintenance_rebuilds_without_starting_old_image
         [['volume', 'rm', str(target.workspace)]] if action == 'reset' and target.remote else [])
 
 
-@pytest.mark.parametrize('previous_computer', [(remote, layer) for remote in (False, True) for layer in (3, 4, 5)], indirect=True)
+@pytest.mark.parametrize('previous_computer', [(remote, layer) for remote in (False, True) for layer in (3, 4, 5, 6)], indirect=True)
 async def test_previous_member_data_deletion_needs_no_new_image_or_start(previous_computer):
     vm, target, runtime = previous_computer
     runtime.built = False
@@ -106,7 +106,7 @@ async def test_missing_screen_setup_repairs_once_after_twenty_polls(desktop, mon
     expected = [20] if guard in ('allowed', 'fresh', 'persistent') else []
     assert repairs == expected
     # Waking a stopped computer in the middle of a member's call is recorded as a repair of its own.
-    assert vm.repair_revisions.get(target.key, 0) == len(expected) + (guard == 'fresh')
+    assert vm.repair_revisions.get(target.state_key, 0) == len(expected) + (guard == 'fresh')
     assert all(args == ['restart', '--time', '10', target.name] for args, _ in runtime.calls if args[0] == 'restart')
 
 
@@ -168,7 +168,7 @@ async def test_never_sleep_and_remote_idle_keep_the_same_stop_contract(desktop):
     vm, target, runtime = desktop
     assert checked('computer_vm_idle_minutes', 0) == ('computer_vm_idle_minutes', 0)
     vm.settings.set('computer_vm_idle_minutes', 0)
-    vm.last_activity[target.key] = -100000
+    vm.last_activity[target.state_key] = -100000
     await vm.sweep()
     assert not runtime.calls
     vm.settings.set('computer_vm_idle_minutes', 5)
@@ -270,7 +270,7 @@ async def test_self_repair_is_once_in_the_current_turn_and_never_replays_uncerta
     try:
         key = next(tool.key for tool in hub.offered() if tool.name == 'click')
         with vm_scope(0, private=True, progress=lines.append, language='zh-TW'):
-            result = await hub.call(key, {}, approver='auto')
+            result = await hub.call(key, {'pid': 1, 'window_id': 1}, approver='auto')
         assert result.ok == (phase == 'connect')
         assert Driver.clicks == 1
         # The repair happened once and said nothing: the owner asked that no line about it reach a member's progress.
@@ -359,7 +359,7 @@ async def test_a_second_driver_connection_failure_is_returned_without_repair_loo
         with vm_scope(0, private=True, progress=lines.append, language='zh-TW'):
             result = await hub.call(key, {}, approver='auto')
         assert not result.ok and Driver.attempts == 2
-        assert vm.repair_revisions[target.key] == 1
+        assert vm.repair_revisions[target.state_key] == 1
     finally:
         await hub.aclose()
 
@@ -384,7 +384,7 @@ async def test_owner_maintenance_never_evicts_another_computer_at_capacity(deskt
 
 async def test_another_task_cannot_start_a_computer_during_maintenance(desktop):
     vm, target, runtime = desktop
-    vm.maintenance[target.key] = object()
+    vm.maintenance[target.state_key] = object()
     with pytest.raises(VmError, match='busy'):
         await vm.start(target)
     assert not runtime.calls

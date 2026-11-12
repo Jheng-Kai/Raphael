@@ -5,6 +5,7 @@ and paid when its engine can be reached. A fake engine stands in for Docker; not
 import asyncio
 import json
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -274,12 +275,35 @@ async def test_a_remote_host_that_does_not_answer_is_tried_again_only_later_and_
 async def test_the_shared_computer_is_never_owed_to_a_deleted_member(rig, vm, engine):
     vm.settings.set("computer_vm_mode", "shared")
     one = await made(rig)
-    shared = vm.target(one.id)
-    assert shared.key == "shared"
+    shared = await vm.seat(one.id)
+    assert shared.key == vm.key_for("", one.id) and shared.container == "shared"
     vm.data.made(shared)
     shared.workspace.mkdir(parents=True)
     assert await delete(rig, one.id) == {"deleted": True}
-    assert vm.data.task is None and owed(vm) == {} and shared.workspace.exists() and engine.calls == []
+    assert vm.data.task is None and owed(vm) == {} and shared.workspace.exists()
+    # The unit does not exist, so allocation and deletion establish that without a window-list shell.
+    assert all(args[:2] == ['container', 'inspect'] or args[:1] == ['info'] for args in engine.calls)
+    assert engine.verbs.count('container') == 2
+    assert vm.seats.seat("", one.id) is None
+
+
+async def test_deleting_releases_every_hosts_seat_and_keeps_shared_and_historic_cleanup(rig, vm, engine):
+    one = await made(rig)
+    historical = has_computer(vm, engine, one.id)
+    vm.settings.set("computer_vm_mode", "shared")
+    local = await vm.seat(one.id)
+    vm.settings.set("computer_ssh_alias", "studio")
+    remote = await vm.seat(one.id)
+    for target in (local, remote):
+        engine.containers[target.name] = {"Config": {"Labels": {f"{LABEL}.owner": vm.owner, f"{LABEL}.target": target.unit}}}
+    vm.disconnect_driver = AsyncMock()
+    vm.close_seat_viewers = AsyncMock()
+    assert await delete(rig, one.id) == {"deleted": True}
+    assert not vm.seats.rows
+    await vm.data.task
+    assert historical.name not in engine.containers
+    assert local.name in engine.containers and remote.name in engine.containers
+    assert vm.disconnect_driver.await_count == vm.close_seat_viewers.await_count == 2
 
 
 async def test_the_owed_removal_survives_the_core_ending_and_is_paid_at_its_start(rig, vm, engine, tmp_path):

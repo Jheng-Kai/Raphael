@@ -150,6 +150,7 @@ class DesktopViewer:
         self.remembered = {}
         self.status_cache, self.status_locks = {}, {}
         self.vm.viewer_owners = self.owners
+        self.vm.close_seat_viewers = self.close_seat
         self.server = self.monitor = None
         self.origin = ""
         self.relay = None
@@ -242,17 +243,17 @@ class DesktopViewer:
             try:
                 await self.vm.ensure_engine(target, start_desktop=True)
             finally:
-                self.vm.preparation.pop(target.key, None)
+                self.vm.preparation.pop(target.state_key, None)
             self.vm.changes += 1
         if not await self.vm.installed():
             return {"state": "absent", "control": "member", "ready": False, "error": "disabled" if not self.vm.enabled else "docker_missing"}
         state = await self.unwatched_status(target)
         works = self.vm.work.views(params.get("member_id", 0), params.get("conversation_id"))
         return {**state, "host": target.remote, "target": target.key,
-                "mode": "shared" if target.key == "shared" else "per-bot",
+                "mode": target.container or "per-bot",
                 "idle_minutes": self.vm.settings.get("computer_vm_idle_minutes") if self.vm.settings else 15,
-                "lifecycle": self.vm.lifecycle.get(target.key),
-                **({"repair_revision": self.vm.repair_revisions[target.key]} if target.key in self.vm.repair_revisions else {}),
+                "lifecycle": self.vm.lifecycle.get(target.state_key),
+                **({"repair_revision": self.vm.repair_revisions[target.state_key]} if target.state_key in self.vm.repair_revisions else {}),
                 **({"works": works} if works else {}),
                 **(self.teaching.status(params.get("member_id", 0), params.get("conversation_id"), target) if self.teaching else {})}
 
@@ -260,31 +261,64 @@ class DesktopViewer:
         async with self.open_lock:
             return await self._open(params)
 
+    def target_current(self, target, member):
+        if not target.container:
+            return True
+        return (self.member_exists(member) and self.vm.target(member) == target
+                and (target.screen == 0 or self.vm.seats.holders(target.remote).get(target.screen) == member))
+
+    def check_open_target(self, target, params):
+        if not self.target_current(target, params.get("member_id", 0)):
+            raise invalid_params("desktop seat changed")
+
+    async def check_session_target(self, token, session):
+        if not self.target_current(session.target, session.member_id):
+            # Revoke relay policy before any asynchronous cleanup. _control already holds control_lock.
+            if self.relay:
+                self.relay.publish(token, None)
+            await self._close({"session": token})
+            raise invalid_params("desktop seat changed")
+
     async def _open(self, params):
         target = self.target(params)
         if self.closing:
             raise invalid_params("desktop viewer closed")
         if len(self.sessions) >= 8:
             raise invalid_params("too many desktop viewers")
+        if type(params.get("preview", False)) is not bool:
+            raise invalid_params("preview must be a boolean")
+        if not params.get("preview"):
+            try:
+                target = await self.vm.seat(params.get("member_id", 0))
+            except VmError:
+                raise invalid_params("desktop unavailable") from None
+            self.check_open_target(target, params)
         if self.server is None:
             self.relay = ViewerRelay(self._prepare_request, self._register_peer, self._unregister_peer,
                                      self._peer_failed, self._teach_input, embedded_page)
             self.server = await self.relay.start()
             self.origin = f"http://127.0.0.1:{self.server.sockets[0].getsockname()[1]}"
             self.monitor = asyncio.create_task(self._monitor())
+            self.check_open_target(target, params)
         token = secrets.token_urlsafe(32)
-        if type(params.get("preview", False)) is not bool:
-            raise invalid_params("preview must be a boolean")
         session = Session(target, self.vm.clock() + LEASE_SECONDS,
             member_id=params.get("member_id", 0), conversation_id=params.get("conversation_id"), preview=params.get("preview", False))
-        if not params.get("preview") and (await self.status_for(target))["state"] != "running":
-            self.vm.launch(target)
-        if target.remote and (await self.status_for(target))["state"] == "running":
+        if not params.get("preview"):
+            state = await self.status_for(target)
+            self.check_open_target(target, params)
+            if state["state"] != "running":
+                self.vm.launch(target)
+        if target.remote:
+            state = await self.status_for(target)
+            self.check_open_target(target, params)
+        if target.remote and state["state"] == "running":
             try:
                 await self.connection_for(session)
             except VmError:
                 # Keep the session so renew can explain an unreachable live screen.
                 pass
+            self.check_open_target(target, params)
+        self.check_open_target(target, params)
         session.expires = self.vm.clock() + LEASE_SECONDS
         self.sessions[token] = session
         self.publish_session(token)
@@ -324,11 +358,14 @@ class DesktopViewer:
 
     async def renew(self, params):
         token, session = self.session(params)
+        await self.check_session_target(token, session)
         session.expires = self.vm.clock() + LEASE_SECONDS
         if self.owners.get(session.target.key) == token:
             self.vm.hold(session.target, True)
         self.publish_session(token)
-        return await self.session_state(session, read=not session.sockets)
+        state = await self.session_state(session, read=not session.sockets)
+        await self.check_session_target(token, session)
+        return state
 
     async def session_state(self, session, *, read=True):
         # An authenticated live socket already proves the guest is running. Ownership,
@@ -337,10 +374,10 @@ class DesktopViewer:
         works = self.vm.work.views(session.member_id, session.conversation_id)
         token = self.owners.get(session.target.key)
         return {**state, "host": session.target.remote, "target": session.target.key,
-                "mode": "shared" if session.target.key == "shared" else "per-bot",
+                "mode": session.target.container or "per-bot",
                 "idle_minutes": self.vm.settings.get("computer_vm_idle_minutes") if self.vm.settings else 15,
-                "lifecycle": self.vm.lifecycle.get(session.target.key),
-                **({"repair_revision": self.vm.repair_revisions[session.target.key]} if session.target.key in self.vm.repair_revisions else {}),
+                "lifecycle": self.vm.lifecycle.get(session.target.state_key),
+                **({"repair_revision": self.vm.repair_revisions[session.target.state_key]} if session.target.state_key in self.vm.repair_revisions else {}),
                 "control": "owner" if self.sessions.get(token) is session else "member",
                 "preview_allowed": session.target.key not in self.vm.held,
                 **({"works": works} if works else {}),
@@ -350,7 +387,7 @@ class DesktopViewer:
     async def unwatched_status(self, target):
         """Unwatched computers keep the longer cache; active viewers share the short cache."""
         key = (target.remote, target.key)
-        if (target.key in self.vm.preparation or target.key in self.vm.held
+        if (target.state_key in self.vm.preparation or target.key in self.vm.held
                 or any(session.target.key == target.key for session in self.sessions.values())):
             self.remembered.pop(key, None)
             return await self.status_for(target)
@@ -368,7 +405,7 @@ class DesktopViewer:
         async with self.status_locks.setdefault(key, asyncio.Lock()):
             changes, now = self.vm.changes, self.vm.clock()
             kept = self.status_cache.get(key)
-            if target.key in self.vm.preparation:
+            if target.state_key in self.vm.preparation:
                 state = await self.read_status(target)
             elif kept and kept[0] == changes and 0 <= now - kept[1] < 3:
                 state = kept[2]
@@ -381,7 +418,7 @@ class DesktopViewer:
     async def read_status(self, target):
         # Use the exact target captured at open, even if the mode changes meanwhile.
         try:
-            state = self.vm.preparation.get(target.key) or await self.vm.status(target, probe=False)
+            state = self.vm.preparation.get(target.state_key) or await self.vm.status(target, probe=False)
         except (VmError, OSError, TimeoutError):
             state = {"state": "unavailable"}
         return {"state": state["state"], "ready": state["state"] == "running",
@@ -395,6 +432,7 @@ class DesktopViewer:
 
     async def _control(self, params):
         token, session = self.session(params)
+        await self.check_session_target(token, session)
         held = params.get("held")
         if type(held) is not bool:
             raise invalid_params("held must be a boolean")
@@ -410,17 +448,21 @@ class DesktopViewer:
         if held:
             if owner not in (None, token) or (target.key in self.vm.held and owner != token and not pending):
                 raise invalid_params("desktop already held")
-            if self.vm.active.get(target.key):
+            if self.vm.input_busy(target) or self.vm.native_busy(target):
                 raise invalid_params("desktop busy")
-            if not session.sockets and (await self.status_for(target))["state"] != "running":
-                raise invalid_params("desktop unavailable")
+            if not session.sockets:
+                state = await self.status_for(target)
+                await self.check_session_target(token, session)
+                if state["state"] != "running":
+                    raise invalid_params("desktop unavailable")
             # Check again after the asynchronous probe. New tools see the phase A hold.
-            if self.vm.active.get(target.key) or self.owners.get(target.key) not in (None, token):
+            if self.vm.input_busy(target) or self.vm.native_busy(target) or self.owners.get(target.key) not in (None, token):
                 raise invalid_params("desktop busy")
             self.session(params)
             self.owners[target.key] = token
             self.vm.hold(target, True)
             await self.disconnect_target(target, keep=session)
+            await self.check_session_target(token, session)
         elif owner == token:
             if pending and params.get("takeover") != pending.request_id:
                 raise invalid_params("explicit takeover handback required")
@@ -429,7 +471,9 @@ class DesktopViewer:
             self.publish_session(token)
             if self.relay:
                 await self.relay.call(self.relay.release(token))
+                await self.check_session_target(token, session)
             await self.disconnect_target(target, keep=session)
+            await self.check_session_target(token, session)
             self.vm.hold(target, False)
             if pending:
                 self.vm.work.complete(target, params["takeover"])
@@ -438,7 +482,9 @@ class DesktopViewer:
         if session.sockets:
             return {"state": "running", "ready": True, "control": "owner" if self.owners.get(target.key) == token else "member",
                     "works": self.vm.work.views(session.member_id, session.conversation_id)}
-        return await self.session_state(session)
+        state = await self.session_state(session)
+        await self.check_session_target(token, session)
+        return state
 
     async def disconnect_target(self, target, *, keep=None):
         # Invalidate handshakes that fetched their connection before this switch.
@@ -478,9 +524,14 @@ class DesktopViewer:
                 await self.disconnect_target(session.target)
                 if not self.vm.work.pending(session.target):
                     self.vm.hold(session.target, False)
-            if not any(other.target == session.target for other in self.sessions.values()):
+            if not any((other.target.remote, other.target.name) == (session.target.remote, session.target.name) for other in self.sessions.values()):
                 await self.vm.close_viewer(session.target)
         return {}
+
+    async def close_seat(self, target):
+        for token, session in list(self.sessions.items()):
+            if session.target == target:
+                await self.close({"session": token})
 
     async def _monitor(self):
         while True:
@@ -505,6 +556,10 @@ class DesktopViewer:
     async def _register_peer(self, token, revision, identifier):
         session = self.sessions.get(token)
         if not session or session.revision != revision or session.expires <= self.vm.clock():
+            return False
+        try:
+            await self.check_session_target(token, session)
+        except Exception:
             return False
         session.sockets.add(identifier)
         return True
@@ -534,8 +589,13 @@ class DesktopViewer:
         parts = path.split("/", 2)
         token, asset = parts[1:] if len(parts) == 3 else ("", "")
         session = self.sessions.get(token)
+        if session:
+            try:
+                await self.check_session_target(token, session)
+            except Exception:
+                return {"code": 403}
         if (method != "GET" or headers.get("host") != self.origin.removeprefix("http://")
-                or not session or session.expires <= self.vm.clock()
+                or not session or session.target.screen == 0 or session.expires <= self.vm.clock()
                 or headers.get("origin", self.origin) != self.origin
                 or not re.fullmatch(r"[A-Za-z0-9_./-]+", asset) or ".." in asset):
             return {"code": 403}
@@ -551,6 +611,10 @@ class DesktopViewer:
         if websocket and asset != f"websockify/{revision}":
             return {"code": 403}
         port, password = await self.connection_for(session)
+        try:
+            await self.check_session_target(token, session)
+        except Exception:
+            return {"code": 403}
         if self.sessions.get(token) is not session or session.revision != revision or session.expires <= self.vm.clock():
             return {"code": 403}
         if asset == "connection":

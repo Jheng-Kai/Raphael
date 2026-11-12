@@ -1151,6 +1151,8 @@ class MembersService:
             if deleted and computers:
                 self.computer_data.settle_soon()  # in the background: the answer below never waits for it
             if deleted:
+                if self.computer_data is not None:
+                    await self.computer_data.vm.release_member_seats(member_id)
                 await self.webhooks.sync()
                 self._changed()
                 self._changed("routines.changed", member_id)

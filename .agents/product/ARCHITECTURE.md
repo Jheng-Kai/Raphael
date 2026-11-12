@@ -1,5 +1,83 @@
 # Raphael architecture and checked boundaries
 
+## Shared computer seats, stages B2 and C (2026-11-12)
+
+R-COMP-SEAT-01 supersedes the old single-screen shared rotation model. The default
+remains per-bot. Target.key is key_for(host, member) for both kinds. Target.container
+is shared for the common computer and empty for a per-bot computer. Target.unit is
+container or key. Shared unit state uses the host as well as the unit, and physical
+Target cache keys normalize the seat number. Container labels name the unit.
+
+LocalVm.seats uses ComputerSeats and migration 81. target() reads without assigning:
+unassigned members have screen 0 and an empty viewer_url. VmTools.prepare and a real
+DesktopViewer._open take a seat. Previews and status reads do not. A displaced idle member is first selected without mutation by ComputerSeats.candidate. Under seat_lock, LocalVm revokes the old holder, disconnects its driver and closes its viewers, then publishes the new holder with ComputerSeats.restore on the exact checked screen only after a successful list shows no window touching that screen other than the desktop's own (LocalVm.DESKTOP_WINDOWS: its panel and the canvas-wide xfdesktop window), or proof that the computer is absent/stopped. Free screens pass the same gate and existing holders only receive touch; a failed cleanup restores the old exact holder and returns seats_full. Cached routes that try to reacquire the screen wait for that transition and return computer_changed. Cleanup, cancellation and final holder-publication failures restore the displaced holder to its exact previous screen before unlocking; if that persistent restoration also fails, the transition reports seat_restore_failed. Restoring the assignment does not reopen windows already closed by cleanup. close_displaced_seat_windows(target) joins wmctrl -lG/-lx rows, gently closes windows with any overlap except the desktop's own, never those, then rereads at most ten times with 50 ms intervals inside LocalVm.seat_clean_seconds (8 s: measured on a Windows host one list is about half a second and each close is another command; four leftover windows took 2.1 s, ten took 3.6 s). Unknown classes remain visible and malformed geometry refuses emptiness. Release is best effort; allocation requires a successful proof, without a durable quarantine. Every busy seat yields seats_full, projected to the existing tool
+computer_busy notice or viewer unavailable error. Deletion holds seat_lock through driver/viewer/window cleanup, then releases every host's
+seat and keeps the historical ComputerData per-bot deletion path. Window cleanup
+rechecks the current holder immediately before each close. Viewer open checks
+member/Target/holder after each await and before registration; request, peer registration,
+renew and control revoke stale sessions, including after asynchronous probes.
+
+Tools, catalogs, routes, leases between a member's turns/tasks, driver connections
+and sessions, viewer tokens and owners, active counts, held keys and private pages
+remain keyed by seat. LocalVm.unit_active/unit_held/unit_busy aggregate these seats.
+Physical locks, preparation, lifecycle/maintenance, running confirmations, activity,
+repair revisions and disk probes are keyed by unit on its host. Capacity, recovery,
+idle sweep, timezone reconciliation and shutdown enumerate physical units once.
+Shared resources are 6 GiB and 4 CPUs with RAPHAEL_SCREENS=6; per-bot resources stay
+3 GiB and 2 CPUs. Known old one-screen shared layer 3/4/5 shapes preserve mounts on
+rebuild, including a layer 5 shape already using the current image.
+
+NATIVE_INPUT_TOOLS in vm_catalog.py retains native calls. In shared mode,
+shared_native_input also locks every request dispatched with delivery_mode=foreground,
+including browser_click, browser_pointer, explicit DOM routes and dialog accept/dismiss.
+Read-only dialog inspect has no implicit foreground posture; an explicit foreground
+request still locks. Background page input and CDP reads/navigation/type/select/files/
+download keep their page route. The unit lock is reentrant only within the same task
+for composites and window fitting. All calls from the held seat are refused; peers'
+foreground input waits the bounded time then returns computer_busy. Handback removes
+only its own seat's hold. Browser prepare preserves delivery_mode. A session timeout
+or cancellation closes only that seat's connection and clears its native page bindings.
+
+Stage C makes the seat wall the core's responsibility. vm_catalog.SHARED_ARGUMENTS
+classifies every top-level and nested property of all DRIVER_TOOLS as pass, check,
+translate or refuse. _seat_driver_call rejects unknown properties, target, from_zoom,
+capture_id, screenshot_out_file and caller-supplied desktop scope/coordinate_frame.
+A fresh same-session canvas list checks each named window/pid and each target_id's
+recorded native window. A centre-owned straddling/oversized window is fitted under
+the unit input lock and freshly confirmed wholly inside the seat before reads or
+input; otherwise it is refused. Native window-relative gesture points are checked
+against the seat rectangle, including both endpoints of the straight interpolated
+drag; menus outside the window but within the seat remain reachable. move_cursor
+checks seat-local input and offsets it to canvas coordinates. verify_state translates
+expect[].window.bounds to canvas and observed_json placements back to the seat.
+Lists include only own windows and panel. Structured placements use seat coordinates;
+AX and screenshot nodes stay window-local. Driver tree/token prose is preserved,
+page JSON is appended once, pointer prose uses seat coordinates and click trailers
+naming canvas points are removed. Every page target and private/vault state read
+shares the same fresh ownership gate; moved bindings are dropped. The list and dispatch are separate operations in one X server; application-driven geometry changes between them remain possible, so this is not atomic isolation.
+
+Shared get_desktop_state never asks the driver for canvas pixels. LocalVm's
+viewer_connection supplies core-only credentials to asyncio.to_thread(rfb_view.capture),
+which authenticates /websockify?token=screen-N, requests raw 32-bit pixels and emits
+1280x900 8-bit RGB PNG using zlib and filter-zero rows. Acceptance imports the same
+WebSocket/Rfb implementation. No image library, service or transport is added.
+
+Layer 7 grants existing-profile attachment. raphael-seat-browser starts the
+computer's Chromium outside driver sessions in the existing driver/main workspace
+profile. A title-only data page carries a unique launch marker. The launcher selects
+now-minus-before windows and matches both marker and browser main pid, then moves,
+maximizes and waits for settled seat geometry. Each seat attaches its own window
+using existing_profile, binds and navigates in its own session. Per-bot computers
+retain driver-owned browser launch. launch_app, under the unit lock, moves new foreign-screen windows matching reply pid/launcher_pid. Only when none match and exactly one other new window appeared is that window moved as a helper fallback; otherwise unmatched windows stay. A lone concurrent peer window can still be misattributed, and matching pids do not distinguish simultaneous same-process peer windows. windows[] is filtered and projected after movement. Owner takeover checks its
+own non-command activity and the unit native lock before and after a status await;
+other seats' background page/read/command activity is allowed.
+
+Clipboard, files, sign-ins, OS user and physical pointer remain common. Shared foreground/background vm_exec shells remove DISPLAY to avoid accidental windows on the pointer's screen; members use launch_app to open a window. This is not an adversarial shell isolation boundary. VmTools.page_tabs remembers the member-observed tab for each computer/page target in both modes; page_refs remembers each typeable ref and its frame, role and name per computer/page target/tab, replacing that mapping only from member observations. _driver_call feeds _observe_page; fill reads and private probes pass remember=False. If a value-free probe tree is actually returned to the member, its refs are remembered separately without changing the current tab. Fills resolve all supplied refs to one uniquely known tab. Private marks retain the filled target_id and tab_id, and probes read those exact IDs without changing the member current tab. Saved fills first resolve all member refs to original meanings that are unique among the remembered tab refs and have frame main, then uniquely match a main frame/role/name row in each fresh exact-tab read. They always pass replace=true and require non-refused exact delivered_count; unknown refs refuse filling, and frame/ambiguity refusals return fixed takeover guidance. Internal fill reads invalidate member refs through the existing stale/screen_changed gate. _disconnect drops those tabs with the native page bindings. Member-facing fill parameters are unchanged. run_steps validates the observation arguments against its live schema before any action, and verify_state requires a meaningful window or element expectation shared with ComputerVerification. predicates remains a driver reply field and a tracker-only compatibility name for historical records, never a current batch input alias. Teaching
+and dataset stay disabled in shared mode. The opt-in --computer acceptance now
+includes two real members through LocalVm, VmTools and CuaBridge after the per-count
+blocks; --no-shared skips it. Offline fakes prove contracts, while final image,
+geometry, native timing, browser lifetime and remote hosts need real acceptance.
+
 ## A report shared as a file (2026-11-10)
 
 The window draws the file (report-page.ts `reportFile`: the same escaping drawing, the theme's
@@ -1019,9 +1097,7 @@ failure uses the existing per-command ssh:// adapter without a privileged TCP li
 Viewer streams use SSH -W pipes rather than a general local SOCKS proxy; the existing
 capability-protected viewer surface remains the only local viewer listener.
 
-VmTools retains filled origins/refs without a timer. Only a different HTTP(S) origin
-with an explicitly complete semantic tree and no filled refs can remove protection;
-missing, truncated or failed observations fail closed. While any private page remains,
+VmTools retains filled origins, refs and field meanings per exact page target/tab without a timer. Only a complete observation of that same tab showing a different HTTP(S) origin and no filled refs, or the private-picture probe's reply that the tab is gone (closed_private_tab: the two measured forms, an error for an attached browser and a non-error browser_tab_not_found refusal for a launched one), can lift its mark. Same-origin navigation, lost fields, incomplete reads and every other error fail closed. Whole means snapshot.complete with no continuation; the existing explicit whole legacy shape remains accepted. Reads and binds of other tabs cannot lift it. While any private page remains,
 computer screen reads return value-free semantic nodes and a reason, without pixels.
 Payment action holds remain independent and require explicit owner completion.
 

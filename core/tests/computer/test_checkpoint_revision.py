@@ -52,7 +52,7 @@ async def test_one_bounded_snapshot_per_turn_and_no_gesture_snapshot(desktop, tm
         screen = next(item for item in hub.offered() if item.name == "get_desktop_state")
         assert (await hub.call(screen.key, {}, approver="auto")).ok
         click = next(item for item in hub.offered() if item.name == "click")
-        assert (await hub.call(click.key, {"x": 1, "y": 1}, approver="auto")).ok
+        assert (await hub.call(click.key, {"pid": 1, "window_id": 1, "x": 1, "y": 1}, approver="auto")).ok
     assert len(calls) == 1 and calls[0][1] == {"member": 0, "turn": 7}
     with vm_scope(("turn", 0, 8), turn_id=8):
         assert (await hub.call(command.key, {"command": "echo next > a"}, approver="auto")).ok

@@ -10,7 +10,7 @@ import pytest
 
 from raphael_core.computer import vm as vm_module
 from raphael_core.computer.vm import LABEL, VmError, compatible, run_args, screen_grid
-from .test_vm import desktop
+from .test_vm import desktop, per_bot_desktop  # noqa: F401
 
 
 IMAGE = Path(vm_module.__file__).parent / 'image'
@@ -346,7 +346,7 @@ def test_keys_that_cannot_be_changed_never_hold_the_screens_back(monkeypatch, ca
 
     monkeypatch.setattr(screens, 'command', lambda args: '')
     monkeypatch.setattr(screens, 'wait_for', refuse)
-    screens.configure_shortcuts(6)
+    screens.configure_shortcuts(1)
     assert 'the keys were left as they were' in capsys.readouterr().err
 
 
@@ -549,11 +549,14 @@ async def test_layer_four_upgrade_refuses_foreign_weakened_busy_or_multiscreen_t
     ('5', ['VNC_PW=private'], False),                          # no released layer 5 lacked its screen count
     ('5', ['VNC_PW=private', 'RAPHAEL_SCREENS=6'], False),     # six screens were never released on their own
     ('4', ['VNC_PW=private', 'RAPHAEL_SCREENS=1'], False),
-    ('6', ['VNC_PW=private', 'RAPHAEL_SCREENS=1'], False),     # the current layer on another image is not a previous one
-    ('7', ['VNC_PW=private', 'RAPHAEL_SCREENS=1'], False),
+    ('6', ['VNC_PW=private', 'RAPHAEL_SCREENS=1'], True),
+    ('6', ['VNC_PW=private'], False),
+    ('7', ['VNC_PW=private', 'RAPHAEL_SCREENS=1'], False),     # the current layer on another image is not a previous one
+    ('8', ['VNC_PW=private', 'RAPHAEL_SCREENS=1'], False),
 ])
-async def test_layer_five_is_a_previous_layer_only_in_the_shape_it_was_released_in(desktop, layer, env, recognised):
-    vm, target, runtime = desktop
+async def test_layer_five_is_a_previous_layer_only_in_the_shape_it_was_released_in(per_bot_desktop, layer, env, recognised):
+    # A member's own computer: on this branch the plain `desktop` is the six-screen shared one.
+    vm, target, runtime = per_bot_desktop
     runtime.raw['Image'] = 'sha256:old-image'
     runtime.raw['Config']['Labels'][f'{LABEL}.layer'] = layer
     runtime.raw['Config']['Env'] = env
@@ -576,7 +579,7 @@ def test_image_installs_screen_views_and_preserves_the_single_token_port():
     assert 'install -d -o cua -g cua /home/cua/.config/xfce4/panel;' in dockerfile
     assert '[program:raphael-screens]' in dockerfile
     assert 'command=/usr/bin/python3 /opt/raphael-desktop/screens.py' in dockerfile
-    assert 'org.raphael.computer.layer="6"' in dockerfile
+    assert 'org.raphael.computer.layer="7"' in dockerfile
     assert 'stopasgroup' not in dockerfile and 'killasgroup' not in dockerfile
     assert 'supervisor only restarts what exits; the helper ends its own children' in dockerfile
     assert 'Nothing may call supervisorctl stop or restart in a computer' in dockerfile
@@ -721,7 +724,7 @@ def test_image_build_context_has_no_bytecode():
 def test_target_rejects_invalid_screen_numbers_at_construction(desktop, screen, count):
     _, target, _ = desktop
     with pytest.raises(ValueError):
-        replace(target, screen=screen, screens=count)
+        replace(target, container='', screen=screen, screens=count)
 
 
 @pytest.mark.parametrize('phase', ['handshake', 'layout', 'pixels', 'clipboard'])
@@ -827,3 +830,67 @@ def test_simultaneous_view_exits_keep_boot_mark_unless_layout_is_lost(monkeypatc
 def test_supervisor_keeps_retrying_screen_setup_instead_of_entering_fatal():
     program = (IMAGE / 'Dockerfile').read_text(encoding='utf-8').split('[program:raphael-screens]', 1)[1]
     assert "'startretries=1000000'" in program
+
+
+@pytest.mark.parametrize('count', [1, 6])
+@pytest.mark.parametrize('remaining,workspaces', [(True, '1'), (False, '2'), (False, '1')])
+def test_shortcut_failures_try_all_removals_and_shared_readback_gates_readiness(monkeypatch, count, remaining, workspaces):
+    calls, listings = [], []
+    expected = screens.shortcut_removals(SHORTCUTS, count)
+    def command(args):
+        calls.append(args)
+        if '-l' in args:
+            listings.append(1)
+            return SHORTCUTS if len(listings) == 1 or remaining else ''
+        if '-r' in args and args[args.index('-p') + 1] == expected[0]:
+            raise screens.subprocess.CalledProcessError(1, args)
+        return workspaces
+    monkeypatch.setattr(screens, 'command', command)
+    monkeypatch.setattr(screens, 'wait_for', lambda args, attempts: None)
+    if count > 1 and (remaining or workspaces != '1'):
+        with pytest.raises(RuntimeError, match='not isolated'):
+            screens.configure_shortcuts(count)
+    else:
+        screens.configure_shortcuts(count)
+    removals = [args[args.index('-p') + 1] for args in calls if '-r' in args]
+    assert removals == (expected if count > 1 else expected[:1])
+    assert len(listings) == (2 if count > 1 else 1)
+
+
+@pytest.mark.parametrize('failure', [TimeoutError('No defaults'), OSError('No xfconf-query'),
+                                     screens.subprocess.CalledProcessError(1, ['xfconf-query'])])
+def test_shared_shortcut_setup_failures_propagate_to_the_existing_retry(monkeypatch, failure):
+    monkeypatch.setattr(screens, 'command', lambda args: '')
+    def wait(args, attempts):
+        assert attempts == 20
+        raise failure
+    monkeypatch.setattr(screens, 'wait_for', wait)
+    with pytest.raises(type(failure)):
+        screens.configure_shortcuts(6)
+
+
+@pytest.mark.parametrize('recover', [False, True])
+def test_shared_shortcut_failure_retries_before_any_ready_mark_is_written(monkeypatch, tmp_path, recover):
+    ready, tokens = tmp_path / 'ready', tmp_path / 'tokens'
+    monkeypatch.setattr(screens, 'READY', ready)
+    monkeypatch.setattr(screens, 'TOKENS', tokens)
+    monkeypatch.setenv('RAPHAEL_SCREENS', '6')
+    monkeypatch.setattr(screens, 'wait_for', lambda args: None)
+    monkeypatch.setattr(screens, 'command', lambda args: '')
+    monkeypatch.setattr(screens, 'monitors_match', lambda *args: True)
+    monkeypatch.setattr(screens, 'configure_dock_shadow', lambda count: None)
+    monkeypatch.setattr(screens, 'configure_panels', lambda count: None)
+    monkeypatch.setattr(screens.time, 'sleep', lambda seconds: None)
+    attempts = []
+    def shortcuts(count):
+        assert not ready.exists()
+        attempts.append(count)
+        if not recover or len(attempts) == 1:
+            raise RuntimeError('Shared keys remain bound')
+    monkeypatch.setattr(screens, 'configure_shortcuts', shortcuts)
+    def serve(count, rectangles):
+        ready.write_text(str(count), encoding='utf-8')
+    monkeypatch.setattr(screens, 'serve', serve)
+    assert screens.main() == (0 if recover else 1)
+    assert ready.exists() is recover
+    assert len(attempts) == (2 if recover else 3)

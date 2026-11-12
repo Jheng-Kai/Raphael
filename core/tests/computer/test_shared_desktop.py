@@ -1,5 +1,4 @@
-"""Members share one desktop: a bounded wait with one progress line, a result that names who holds it,
-the screen looked at again after waiting, and long commands that never hold the screen."""
+"""Seats have independent turns, bounded waits within one seat, and commands that do not hold its screen."""
 
 import asyncio
 import json
@@ -25,7 +24,7 @@ def tool(hub, name):
     return next(item for item in hub.offered() if item.name == name)
 
 
-async def test_a_member_waits_for_the_desktop_with_one_line_and_looks_at_the_screen_again(desktop, tmp_path):
+async def test_another_turn_of_one_seat_waits_and_looks_at_the_screen_again(desktop, tmp_path):
     vm, target, runtime, hub = await shared(desktop, tmp_path)
     holding = {("turn", 0, 1)}
     hub.scope_busy = lambda owner: owner in holding
@@ -40,16 +39,17 @@ async def test_a_member_waits_for_the_desktop_with_one_line_and_looks_at_the_scr
 
     asyncio.ensure_future(done())
     lines = []
-    with vm_scope(("turn", 2, 3), progress=lines.append, language="zh-TW"):
+    with vm_scope(("turn", 0, 3), progress=lines.append, language="zh-TW"):
         moved = await hub.call(click.key, {}, approver="auto")
         # The screen is not what the model last saw: it looks first, and then acts.
         assert moved.ok and moved.kind == "screen_changed"
         assert (await hub.call(shot.key, {}, approver="auto")).ok
-        assert (await hub.call(click.key, {}, approver="auto")).kind is None
+        assert (await hub.call(click.key, {"pid": 1, "window_id": 1}, approver="auto")).kind is None
+    assert len(lines) == 1
     assert lines == ["正在等 Raphael 用完電腦"]
 
 
-async def test_a_desktop_that_stays_taken_is_reported_with_who_and_for_how_long(desktop, tmp_path):
+async def test_a_seat_that_stays_taken_is_reported_with_who_and_for_how_long(desktop, tmp_path):
     vm, target, runtime, hub = await shared(desktop, tmp_path, wait=0.1)
     clock = [0.0]
     vm.clock = lambda: clock[0]
@@ -60,16 +60,17 @@ async def test_a_desktop_that_stays_taken_is_reported_with_who_and_for_how_long(
         assert (await hub.call(shot.key, {}, approver="auto")).ok
     clock[0] = 125.0
     lines = []
-    with vm_scope(("turn", 2, 3), progress=lines.append, language="en"):
+    with vm_scope(("turn", 0, 3), progress=lines.append, language="en"):
         result = await hub.call(shot.key, {}, approver="auto")
     # Not a tool failure: the model is told how things stand and decides what to do.
     assert result.ok and result.kind == "computer_busy"
     said = json.loads(result.text)
     assert said["held_by"] == "Raphael" and said["held_for_s"] == 125 and said["waited_s"] >= 0
+    assert len(lines) == 1
     assert lines == ["Waiting for Raphael to finish with the computer"]
 
 
-async def test_a_holder_that_has_not_touched_the_screen_for_a_minute_has_let_go_of_it(desktop, tmp_path):
+async def test_a_seats_idle_turn_lets_its_next_turn_use_the_screen(desktop, tmp_path):
     vm, target, runtime, hub = await shared(desktop, tmp_path, wait=0.1)
     clock = [0.0]
     vm.clock = lambda: clock[0]
@@ -79,7 +80,7 @@ async def test_a_holder_that_has_not_touched_the_screen_for_a_minute_has_let_go_
         assert (await hub.call(shot.key, {}, approver="auto")).ok
     click = tool(hub, "click")
     clock[0] = 61.0
-    with vm_scope(("turn", 2, 3)):
+    with vm_scope(("turn", 0, 3)):
         taken = await hub.call(shot.key, {}, approver="auto")
     assert taken.ok and taken.kind is None  # no wait
     clock[0] = 62.0
@@ -141,3 +142,21 @@ async def test_a_background_command_returns_at_once_and_leaves_a_log_to_read(des
     script = args[args.index("-c") + 1] if "-c" in args else " ".join(args)
     assert "npm run build" in " ".join(args) and kwargs["timeout"] <= 30
     assert job["log"] in " ".join(args) and job["exit_file"] in " ".join(args)
+
+
+async def test_two_members_keep_independent_turns_without_waiting_or_staling_each_other(desktop, tmp_path):
+    vm, first, runtime, hub = await shared(desktop, tmp_path, wait=0.0)
+    await hub.prepare(2)
+    second = vm.target(2)
+    await hub._discover(second)
+    assert first.key != second.key and first.unit == second.unit
+    hub.scope_busy = lambda owner: True
+    tools = {member: {item.name: item.key for item in hub.offered_for(member)} for member in (0, 2)}
+    lines = []
+    for member in (0, 2, 0):
+        with vm_scope(("turn", member, member + 1), progress=lines.append):
+            assert (await hub.call(tools[member]["get_desktop_state"], {}, approver="auto")).kind is None
+            window_id = vm.target(member).screen
+            assert (await hub.call(tools[member]["click"], {"pid": window_id, "window_id": window_id}, approver="auto")).kind is None
+    assert not lines and len(hub.leases) == 2
+    await hub.aclose()

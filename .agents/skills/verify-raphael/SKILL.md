@@ -128,7 +128,7 @@ new dependency. `RAPHAEL_CORE_PYTHON` can select an installed repository interpr
 
 It also makes the product's own driver connection (`VmTools._connection`) twice on each
 computer, the second as a core started again, and calls a tool through it (R-COMP-DRIVER-01:
-a set-up argument the driver refuses fails every screen tool, and fakes take anything).
+a set-up argument the driver refuses fails every screen tool; offline doubles now validate the measured input fixture).
 This drives `LocalVm` and the image helper: 1, 3 and 6 outputs, panels, boot readiness,
 authenticated clipped RFB views, screen-local launcher input and raw pixels, restart,
 helper/view recovery, X-server loss, the core's `DesktopViewer` relay, and available
@@ -144,13 +144,23 @@ Missing/non-Linux Docker exits 2, a failed check exits 1, success exits 0. A rel
 layer whose image is not on this PC is a named skip (`previous layer 4`, `previous layer 5`).
 Every failure includes expected/observed evidence.
 
-`computer.log` and `computer-acceptance.json` are in the verify run folder alongside
-`report.json`. Direct use from `core/` is
-`python -m raphael_core.evaluate.computer_acceptance --screens 1,4,6 --out <folder>`;
-omit `--out` to print only. Offline protocol/parser/isolation regressions are in
-`core/tests/evaluate/test_computer_acceptance.py`. Their fakes do not prove containers.
-Real container acceptance proves the core relay, not the native app's panel around
-it, a remote SSH host, or later stages' shared member seats. Keep those separate.
+Every per-count block checks live tools/list parameter names for all DRIVER_TOOLS
+against core/tests/computer/fixtures/driver_tools_0.37.0.json after driver connection.
+A schema mismatch fails --computer until the fixture and SHARED_ARGUMENTS are reviewed.
+The default Stage C2 shared block follows the per-count blocks: real members drive
+product LocalVm/VmTools/CuaBridge for seat isolation, native timings, one computer-owned
+browser with independent bindings, clipped PNGs, owner holds and idle displacement.
+It also observes out-of-seat/desktop-frame/target refusals before dispatch, unchanged
+real pointer on refusal, seat-2 tree/token and single-JSON prose, pointer coordinates,
+seat-local verification, one workspace and peer mapped windows after global shortcuts,
+and foreground browser input blocked while page navigation continues during a hold.
+Dependent checks that did not run are skipped, success detail claims only observations,
+and any inner failure fails the outer shared block. --no-shared explicitly skips it.
+The real bridge argv retain the same IsolatedDocker owner guard. Offline doubles
+validate the measured fixture with every validation keyword retained (strict top-level unknown-argument rejection), while the table guard covers every nested property. Browser fakes additionally reproduce the measured exact-tab requirement and http/https/about navigation restriction. Offline generator tests compare full-schema and fixture refusals for numeric bounds and element_token patterns; this is not real-driver acceptance. Offline protocol/PNG evidence
+does not establish image/native behavior. Final computer acceptance is run by the
+maintainer in an authorized Docker environment; it does not prove the native app
+panel or a remote SSH host.
 
 ## Guardian hand-off gates
 

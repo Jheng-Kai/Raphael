@@ -116,7 +116,7 @@ class Teaching:
     def status(self, member, conversation, target):
         self.recover(member, target)
         recording = next((r for r in self.items.values() if r.member == member and r.conversation == conversation), None)
-        return {"teach_available": target.key != "shared", **({"teaching": recording.view()} if recording else {})}
+        return {"teach_available": target.container != "shared", **({"teaching": recording.view()} if recording else {})}
 
     def recover(self, member, target):
         homes = self.members.capabilities.homes
@@ -270,7 +270,7 @@ class Teaching:
                 token, session = self.viewer.session(params)
                 target = session.target
                 self.recover(session.member_id, target)
-                if (session.preview or target.key == "shared" or target != self.viewer.vm.target(session.member_id)
+                if (session.preview or target.container == "shared" or target != self.viewer.vm.target(session.member_id)
                         or self.viewer.vm.work.pending(target) or self.active(token)):
                     raise invalid_params("use the member's own available computer")
                 if any(r.member == session.member_id for r in self.items.values()) or len(self.items) >= 16:

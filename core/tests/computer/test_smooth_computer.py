@@ -35,8 +35,9 @@ async def test_batch_uses_each_gate_once_and_returns_only_final_observation(desk
     gate._door = door
     try:
         result = await gate.call_plugin(key(hub, "run_steps"), {"steps": [
-            {"name": "click", "arguments": {}}, {"name": "type_text", "arguments": {"text": "synthetic"}}],
-            "observation": {"name": "get_window_state", "arguments": {"pid": 7, "window_id": 9}}})
+            {"name": "click", "arguments": {"pid": 1, "window_id": 1}},
+            {"name": "type_text", "arguments": {"pid": 1, "window_id": 1, "text": "synthetic"}}],
+            "observation": {"name": "get_window_state", "arguments": {"pid": 1, "window_id": 1}}})
         assert result.ok
         assert [name.rsplit("/", 1)[-1] for name in seen] == ["run_steps", "click", "type_text", "get_window_state"]
         assert "synthetic" not in result.text
@@ -104,7 +105,33 @@ def test_restored_completion_evidence_uses_only_the_result_header(read_ok):
     assert check.required is not read_ok
 
 
-IMAGE_NAME = "raphael/cua-local-vm:driver-0.37.0-v6"
+@pytest.mark.parametrize("arguments,checked", [
+    ({"expect": [{"window": {"exists": True}}]}, True),   # the driver's own schema (0.37.0)
+    ({"predicates": [{"exists": True}]}, True),            # the name of the older schema, still counted
+    ({"expect": []}, False),
+    ({"expect": [{}]}, False),
+    ({"expect": [{"window": {}}]}, False),
+    ({"expect": [{"element": {"selector": {}}}]}, False),
+    ({"expect": "malformed"}, False),
+    ({"expect": {"window": {"exists": True}}}, False),
+    ({"expect": [{"window": {"exists": False}}]}, True),
+    ({"expect": [{"window": {"bounds": {"x": "bad"}}}]}, False),
+    ({"expect": [{"element": {"selector": {"role": "   "}}}]}, False),
+    ({"predicates": [{}]}, False),
+    ({"predicates": "malformed"}, False),
+    ({"expect": [{"element": {"selector": {"role": "button"}}}]}, True),
+    ({}, False),
+])
+def test_a_verify_state_written_to_the_drivers_schema_counts_as_the_check(arguments, checked):
+    from raphael_core.worker.computer_verification import ComputerVerification
+    check = ComputerVerification()
+    check.after("computer__click", {}, True)
+    assert check.required
+    check.after("computer__verify_state", {"pid": 1, "window_id": 1, **arguments}, True)
+    assert check.required is not checked
+
+
+IMAGE_NAME = "raphael/cua-local-vm:driver-0.37.0-v7"
 
 
 def answer(code, out="", err="", config="host studio\nuser jack2\nhostname 192.168.8.178\n"):
@@ -242,7 +269,7 @@ async def test_ten_remote_docker_calls_share_one_ssh_connection(desktop, monkeyp
 
 async def test_idle_and_close_preserve_container_and_browser_workspace(desktop):
     vm, target, runtime = desktop
-    vm.last_activity[target.key] = 0
+    vm.last_activity[target.state_key] = 0
     vm.clock = lambda: 100000
     await vm.sweep()
     await vm.aclose()
@@ -250,15 +277,15 @@ async def test_idle_and_close_preserve_container_and_browser_workspace(desktop):
     assert not any(args[0] in ("rm", "kill", "volume") for args, _ in runtime.calls)
 
 
-@pytest.mark.parametrize('layer,memory', [('3', 2), ('4', 3), ('5', 3)])
+@pytest.mark.parametrize('layer,memory', [('3', 2), ('4', 3), ('5', 3), ('6', 3)])
 async def test_image_upgrade_announces_before_removal_and_preserves_workspace(desktop, layer, memory):
     vm, target, runtime = desktop
     old_workspace = target.workspace
     runtime.raw["Image"] = "sha256:old-image"
     from raphael_core.computer.vm import LABEL
     runtime.raw["Config"]["Labels"][f"{LABEL}.layer"] = layer
-    runtime.raw["Config"]["Env"] = ['VNC_PW=private'] + (['RAPHAEL_SCREENS=1'] if layer == '5' else [])
-    runtime.raw["HostConfig"].update(Memory=memory * 1024**3, MemorySwap=memory * 1024**3)
+    runtime.raw["Config"]["Env"] = ['VNC_PW=private'] + (['RAPHAEL_SCREENS=1'] if layer in ('5', '6') else [])
+    runtime.raw["HostConfig"].update(Memory=memory * 1024**3, MemorySwap=memory * 1024**3, NanoCpus=2 * 10**9)
     notices = []
     vm.rebuild_notice = lambda target: notices.append(len(runtime.calls))
     result = await vm._upgrade_image(target)
@@ -270,7 +297,7 @@ async def test_image_upgrade_announces_before_removal_and_preserves_workspace(de
 
 async def test_erasing_never_touches_the_shared_workspace_or_a_container_that_is_not_ours(desktop):
     vm, target, runtime = desktop
-    assert target.key == "shared"
+    assert target.container == "shared" and target.key != target.unit
     with pytest.raises(VmError, match="shared"):
         await vm.erase(target)
     assert not runtime.calls
@@ -306,3 +333,93 @@ def test_speed_summary_reports_median_worst_and_strict_budgets_without_running_a
     summary = computer_speed_summary([{'first_observation': value, 'browser_open': 2, 'run_steps': 3} for value in (1,2,3,4,8)])
     assert summary['first_observation'] == {'median_seconds':3, 'worst_seconds':8, 'budget_seconds':8, 'passed':False}
     assert summary['browser_open']['passed'] and summary['run_steps']['passed'] is None
+
+
+@pytest.mark.parametrize("expectation", ["live", "empty", "legacy", "malformed", "empty-predicate", "empty-window", "empty-selector", "invalid-bounds"])
+async def test_batch_verification_observation_uses_live_expect_before_any_action(desktop, tmp_path, expectation):
+    from .fixtures.driver_contract import catalog
+    vm, target, _ = desktop
+    class Driver(CatalogBridge):
+        async def request(self, method, params=None):
+            if method == "tools/list":
+                return catalog()
+            if params["name"] == "verify_state":
+                return {"structuredContent": {"status": "satisfied"}, "content": [{"type": "text", "text": "Verified"}]}
+            return await super().request(method, params)
+    hub = VmTools(EmptyHub(), vm, attachments=AttachmentStore(tmp_path), bridge=Driver)
+    await hub.prepare()
+    await hub._discover(target)
+    ToolGate(hub)
+    original = hub.step_gate
+    seen = []
+    async def gate(child, arguments, **kwargs):
+        seen.append((child, arguments))
+        return await original(child, arguments, **kwargs)
+    hub.step_gate = gate
+    args = {"pid": 1, "window_id": 1}
+    bad = {"malformed": "malformed", "empty-predicate": [{}], "empty-window": [{"window": {}}],
+           "empty-selector": [{"element": {"selector": {}}}], "invalid-bounds": [{"window": {"bounds": {"x": "bad"}}}]}
+    args.update({"expect": bad[expectation]} if expectation in bad else {"expect": [{"window": {"exists": True}}]} if expectation == "live" else
+                {"expect": []} if expectation == "empty" else {"predicates": [{"exists": True}]})
+    result = await hub.call(key(hub, "run_steps"), {"steps": [{"name": "click", "arguments": {"pid": 1, "window_id": 1}}],
+        "observation": {"name": "verify_state", "arguments": args}}, approver="auto")
+    assert result.ok is (expectation == "live")
+    assert len(seen) == (2 if expectation == "live" else 0)
+    await hub.aclose()
+
+
+@pytest.mark.parametrize('name,args', [
+    ('get_window_state', {'pid': 'malformed', 'window_id': 1}),
+    ('get_browser_state', {'target_id': 'own', 'tab_id': 'tab', 'snapshot_format': 'malformed'}),
+])
+async def test_batch_validates_the_observations_own_schema_before_dispatch(desktop, tmp_path, name, args):
+    from .fixtures.driver_contract import catalog
+    vm, target, _ = desktop
+    class Driver(CatalogBridge):
+        async def request(self, method, params=None):
+            if method == 'tools/list':
+                return catalog()
+            return await super().request(method, params)
+    hub = VmTools(EmptyHub(), vm, attachments=AttachmentStore(tmp_path), bridge=Driver)
+    await hub.prepare()
+    await hub._discover(target)
+    ToolGate(hub)
+    sent = []
+    async def gate(*args, **kwargs):
+        sent.append(args)
+        return PluginResult(True)
+    hub.step_gate = gate
+    result = await hub.call(key(hub, 'run_steps'), {
+        'steps': [{'name': 'click', 'arguments': {'pid': 1, 'window_id': 1}}],
+        'observation': {'name': name, 'arguments': args}}, approver='auto')
+    assert not result.ok and result.kind == 'bad_arguments' and not sent
+    await hub.aclose()
+
+
+async def test_batch_fetches_the_live_observation_schema_before_any_action(desktop, tmp_path):
+    from .fixtures.driver_contract import catalog
+    from copy import deepcopy
+    vm, _, _ = desktop
+    class Driver(CatalogBridge):
+        async def request(self, method, params=None):
+            if method == 'tools/list':
+                result = deepcopy(catalog())
+                definition = next(tool for tool in result['tools'] if tool['name'] == 'get_window_state')
+                # Model a live catalog with a newly required, otherwise ordinary read argument.
+                definition['inputSchema'].setdefault('required', []).append('max_elements')
+                return result
+            return await super().request(method, params)
+    hub = VmTools(EmptyHub(), vm, attachments=AttachmentStore(tmp_path), bridge=Driver)
+    await hub.prepare()
+    ToolGate(hub)
+    sent = []
+    async def gate(*args, **kwargs):
+        sent.append(args)
+        return PluginResult(True)
+    hub.step_gate = gate
+    result = await hub.call(key(hub, 'run_steps'), {
+        'steps': [{'name': 'click', 'arguments': {'pid': 1, 'window_id': 1}}],
+        'observation': {'name': 'get_window_state', 'arguments': {'pid': 1, 'window_id': 1}}}, approver='auto')
+    assert not result.ok and result.kind == 'bad_arguments' and not sent
+    assert hub.vm.target().key in hub.listed
+    await hub.aclose()

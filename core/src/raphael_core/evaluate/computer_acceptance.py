@@ -6,7 +6,6 @@ import base64
 from collections import Counter
 from dataclasses import dataclass, replace
 from datetime import datetime
-import hashlib
 import http.client
 import json
 import os
@@ -18,17 +17,20 @@ import socket
 import struct
 import tempfile
 import time
+import zlib
 from types import ModuleType
 from urllib.parse import urlsplit
 
 from ..computer import lifecycle, vm
 from ..computer.viewer import DesktopViewer
+from ..computer.rfb_view import Rfb, WebSocket, UpgradeRefused, exact
 from ..computer.vm_bridge import CuaBridge
 from ..computer.vm_tools import VmTools
 from ..services.attachment_store import AttachmentStore
 
 # Released layers a computer may still be on. A fixture of each is made from the image itself, which is only read.
-OLD_IMAGES = {"4": "raphael/cua-local-vm:driver-0.37.0-v4", "5": "raphael/cua-local-vm:driver-0.37.0-v5"}
+OLD_IMAGES = {"4": "raphael/cua-local-vm:driver-0.37.0-v4", "5": "raphael/cua-local-vm:driver-0.37.0-v5",
+              "6": "raphael/cua-local-vm:driver-0.37.0-v6"}
 IMAGE_FOLDER = Path(vm.__file__).parent / "image"
 # A 64x48 JPEG, teal on the left half and orange on the right: an owner's picture no desktop draws by itself.
 OWN_PICTURE = base64.b64decode(
@@ -58,166 +60,6 @@ def image_helper():
 def require(condition, detail):
     if not condition:
         raise AssertionError(detail)
-
-
-def exact(sock, size):
-    result = bytearray()
-    while len(result) < size:
-        chunk = sock.recv(size - len(result))
-        if not chunk:
-            raise EOFError(f"Expected {size} bytes, received {len(result)} before disconnect")
-        result.extend(chunk)
-    return bytes(result)
-
-
-class UpgradeRefused(AssertionError):
-    pass
-
-
-class WebSocket:
-    """A bounded binary WebSocket stream, including fragmented messages and ping."""
-
-    def __init__(self, sock, host, path, *, origin=None):
-        self.sock, self.pending = sock, bytearray()
-        self.fragment = False
-        key = base64.b64encode(secrets.token_bytes(16)).decode()
-        request = (f"GET {path} HTTP/1.1\r\nHost: {host}\r\nUpgrade: websocket\r\n"
-                   f"Connection: Upgrade\r\nSec-WebSocket-Key: {key}\r\n"
-                   "Sec-WebSocket-Version: 13\r\nSec-WebSocket-Protocol: binary\r\n")
-        if origin:
-            request += f"Origin: {origin}\r\n"
-        sock.sendall((request + "\r\n").encode("ascii"))
-        header = bytearray()
-        while not header.endswith(b"\r\n\r\n"):
-            require(len(header) < 16384, "Expected bounded WebSocket upgrade headers")
-            header.extend(exact(sock, 1))
-        lines = header.decode("latin1").split("\r\n")
-        if lines[0].split()[1] != "101":
-            raise UpgradeRefused(f"Expected WebSocket 101, observed {lines[0]}")
-        fields = {key.lower(): value for line in lines[1:] if ":" in line for key, value in [line.split(":", 1)]}
-        accept = base64.b64encode(hashlib.sha1((key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11").encode()).digest()).decode()
-        require(fields.get("sec-websocket-accept", "").strip() == accept,
-                "Expected matching Sec-WebSocket-Accept")
-        require(fields.get("sec-websocket-protocol", "").strip() == "binary",
-                "Expected WebSocket binary subprotocol")
-
-    def send_frame(self, payload, opcode=2):
-        length = len(payload)
-        header = bytes([128 | opcode, 128 | min(length, 126)]) if length < 65536 else bytes([128 | opcode, 255])
-        if length >= 65536:
-            header += struct.pack(">Q", length)
-        elif length >= 126:
-            header += struct.pack(">H", length)
-        mask = secrets.token_bytes(4)
-        self.sock.sendall(header + mask + bytes(byte ^ mask[i % 4] for i, byte in enumerate(payload)))
-
-    def sendall(self, payload):
-        self.send_frame(payload)
-
-    def recv(self, size):
-        while not self.pending:
-            first, second = exact(self.sock, 2)
-            opcode, final = first & 15, bool(first & 128)
-            require(not first & 112 and not second & 128, "Expected unmasked server frame without extensions")
-            length = second & 127
-            if length in (126, 127):
-                length = struct.unpack(">H" if length == 126 else ">Q", exact(self.sock, 2 if length == 126 else 8))[0]
-            require(length <= 8 * 1024 * 1024, f"Expected frame <= 8 MiB, observed {length}")
-            if opcode >= 8:
-                require(final and length <= 125, "Expected bounded final control frame")
-            payload = exact(self.sock, length)
-            if opcode == 8:
-                raise EOFError("WebSocket closed before expected RFB data")
-            if opcode == 9:
-                self.send_frame(payload, 10)
-                continue
-            if opcode == 10:
-                continue
-            require(opcode == (0 if self.fragment else 2), f"Expected binary/continuation frame, observed opcode {opcode}")
-            self.fragment = not final
-            self.pending.extend(payload)
-        result = bytes(self.pending[:size])
-        del self.pending[:size]
-        return result
-
-
-class Rfb:
-    def __init__(self, stream, helper):
-        self.stream, self.helper = stream, helper
-
-    def banner(self):
-        banner = exact(self.stream, 12)
-        require(banner == b"RFB 003.008\n", f"Expected RFB 3.8 banner, observed {banner!r}")
-
-    def authenticate(self, password):
-        self.banner()
-        self.stream.sendall(b"RFB 003.008\n")
-        count = exact(self.stream, 1)[0]
-        require(count and 2 in exact(self.stream, count), "Expected VNC authentication security type 2")
-        self.stream.sendall(b"\x02")
-        challenge = exact(self.stream, 16)
-        key = self.helper.vnc_key(password)
-        self.stream.sendall(self.helper.des_encrypt(key, challenge[:8]) + self.helper.des_encrypt(key, challenge[8:]))
-        status = struct.unpack(">I", exact(self.stream, 4))[0]
-        require(status == 0, f"Expected VNC authentication success, observed status {status}")
-        self.stream.sendall(b"\x01")
-        initial = exact(self.stream, 24)
-        width, height = struct.unpack(">HH", initial[:4])
-        length = struct.unpack(">I", initial[20:])[0]
-        require(length <= 65536, f"Expected bounded ServerInit name, observed {length}")
-        exact(self.stream, length)
-        require((width, height) == (1280, 900), f"Expected ServerInit 1280x900, observed {width}x{height}")
-        return width, height
-
-    def pointer(self, x, y, buttons=0):
-        self.stream.sendall(struct.pack(">BBHH", 5, buttons, x, y))
-
-    def keys(self, *keysyms):
-        for key in keysyms:
-            self.stream.sendall(struct.pack(">BBxxI", 4, 1, key))
-        for key in reversed(keysyms):
-            self.stream.sendall(struct.pack(">BBxxI", 4, 0, key))
-
-    def close_window(self):
-        for key, down in ((0xffe9, 1), (0xffc1, 1), (0xffc1, 0), (0xffe9, 0)):
-            self.stream.sendall(struct.pack(">BBxxI", 4, down, key))  # Alt+F4
-
-    def pixels(self, rectangle):
-        x, y, width, height = rectangle
-        require(0 <= x < x + width <= 1280 and 0 <= y < y + height <= 900,
-                f"Expected pixel request inside one screen, observed {rectangle}")
-        pixel_format = struct.pack(">BBBBHHHBBBxxx", 32, 24, 0, 1, 255, 255, 255, 16, 8, 0)
-        self.stream.sendall(b"\x00\0\0\0" + pixel_format)
-        self.stream.sendall(struct.pack(">BxHi", 2, 1, 0))
-        self.stream.sendall(struct.pack(">BBHHHH", 3, 0, *rectangle))
-        pixels, covered = [None] * (width * height), 0
-        for _ in range(64):
-            kind = exact(self.stream, 1)[0]
-            if kind == 2:
-                continue
-            if kind == 3:
-                length = struct.unpack(">xxxI", exact(self.stream, 7))[0]
-                require(length <= 65536, f"Expected bounded clipboard, observed {length}")
-                exact(self.stream, length)
-                continue
-            require(kind == 0, f"Expected framebuffer update, observed RFB message {kind}")
-            count = struct.unpack(">xH", exact(self.stream, 3))[0]
-            require(count <= 4096, f"Expected bounded rectangles, observed {count}")
-            for _ in range(count):
-                rx, ry, rw, rh, encoding = struct.unpack(">HHHHi", exact(self.stream, 12))
-                require(encoding == 0 and rw * rh <= 1280 * 900,
-                        f"Expected bounded raw rectangle, observed {(rx, ry, rw, rh, encoding)}")
-                data = exact(self.stream, rw * rh * 4)
-                for yy in range(max(y, ry), min(y + height, ry + rh)):
-                    for xx in range(max(x, rx), min(x + width, rx + rw)):
-                        offset = ((yy - ry) * rw + xx - rx) * 4
-                        index = (yy - y) * width + xx - x
-                        if pixels[index] is None:
-                            covered += 1
-                        pixels[index] = data[offset:offset + 3]
-            if covered == width * height:
-                return pixels
-        raise AssertionError(f"Expected {width * height} raw pixels, observed {covered}")
 
 
 @dataclass(frozen=True)
@@ -276,6 +118,38 @@ def centre(rectangle):
     return x + width // 2, y + height // 2
 
 
+def png_pixels(data):
+    """Decode the product's filter-zero RGB PNG for the same strip comparison as RFB."""
+    require(data[:8] == b"\x89PNG\r\n\x1a\n", "Expected PNG signature")
+    offset, compressed = 8, bytearray()
+    while offset < len(data):
+        length = int.from_bytes(data[offset:offset + 4], "big")
+        kind, payload = data[offset + 4:offset + 8], data[offset + 8:offset + 8 + length]
+        require(length <= 8_000_000 and len(payload) == length, "Expected bounded complete PNG chunk")
+        require(zlib.crc32(kind + payload) == int.from_bytes(data[offset + 8 + length:offset + 12 + length], "big"),
+                "Expected valid PNG chunk CRC")
+        if kind == b"IHDR":
+            require(payload == struct.pack(">IIBBBBB", 1280, 900, 8, 2, 0, 0, 0), "Expected product 1280x900 RGB PNG")
+        if kind == b"IDAT":
+            compressed.extend(payload)
+        offset += length + 12
+    raw = zlib.decompress(compressed)
+    stride = 1280 * 3 + 1
+    require(len(raw) == stride * 900 and all(raw[y * stride] == 0 for y in range(900)), "Expected filter-zero full PNG rows")
+    return [raw[y * stride + 1 + x * 3:y * stride + 4 + x * 3] for y in range(900) for x in range(1280)]
+
+
+def strip_change(before, after, area):
+    x, y, width, height = area
+    require(width > 0 and height > 0 and 0 <= x < x + width <= 1280 and 0 <= y < y + height <= 900,
+            f"Expected a visible screen strip, observed {area}")
+    indexes = [yy * 1280 + xx for yy in range(y, y + height) for xx in range(x, x + width)]
+    previous = [before[index] for index in indexes]
+    current = [after[index] for index in indexes] if len(after) == 1280 * 900 else after
+    require(len(current) == len(previous), f"Expected {len(previous)} strip pixels, observed {len(current)}")
+    return sum(max(abs(a - b) for a, b in zip(pixel, old)) > 40 for pixel, old in zip(current, previous)) / len(previous)
+
+
 def previous_args(target, owner, password, layer="4"):
     # The run arguments a release of that layer made. Layer 4 (release 1.2.0) had no screen variables yet;
     # layer 5 differs from today's only by its label and image.
@@ -319,6 +193,45 @@ class NoHub:
     def record_unrun(self, *args, **kwargs): pass
 
 
+# These exact guest programs create only this run's synthetic pages and two loopback servers.
+FORM_START = """import http.client,json,pathlib,socket,subprocess,sys,time
+root=pathlib.Path('/tmp/raphael-form-'+sys.argv[1]); root.mkdir(exist_ok=False)
+(root/'index.html').write_text('<!doctype html><title>Acceptance form</title><label>Name<input aria-label="Name" value="existing"></label><label>Secret<input type="password" aria-label="Secret"></label><iframe src="/frame.html" title="Embedded form"></iframe>')
+(root/'frame.html').write_text('<!doctype html><label>Name<input aria-label="Name"></label>')
+(root/'other.html').write_text('<!doctype html><title>Acceptance other page</title><p>Done</p>')
+servers=[]
+for index in range(2):
+ s=socket.socket(); s.bind(('127.0.0.1',0)); port=s.getsockname()[1]; s.close()
+ with (root/('server-'+str(index)+'.log')).open('w') as log:
+  p=subprocess.Popen(['python3','-m','http.server',str(port),'--bind','127.0.0.1','--directory',str(root)],stdout=log,stderr=log,start_new_session=True)
+ stat=pathlib.Path('/proc')/str(p.pid)/'stat'
+ servers.append({'pid':p.pid,'start':stat.read_text().rsplit(')',1)[1].split()[19],'port':port})
+ (root/'server.json').write_text(json.dumps(servers))
+ for attempt in range(100):
+  if p.poll() is not None: raise RuntimeError('Acceptance form server exited')
+  try:
+   c=http.client.HTTPConnection('127.0.0.1',port,timeout=.2); c.request('GET','/'); r=c.getresponse(); ok=r.status==200; r.read(); c.close()
+   if ok: break
+  except OSError: pass
+  time.sleep(.05)
+ else: raise RuntimeError('Acceptance form server did not become ready')
+print(json.dumps({'port':servers[0]['port'],'other_port':servers[1]['port']}))
+"""
+FORM_STOP = """import json,os,pathlib,signal,sys
+root=pathlib.Path('/tmp/raphael-form-'+sys.argv[1]); record=root/'server.json'
+for data in json.loads(record.read_text()) if record.exists() else []:
+ proc=pathlib.Path('/proc')/str(data['pid'])
+ try:
+  start=(proc/'stat').read_text().rsplit(')',1)[1].split()[19]
+  cmd=(proc/'cmdline').read_bytes().split(bytes([0]))
+ except FileNotFoundError: pass
+ else:
+  expected=[b'python3',b'-m',b'http.server',str(data['port']).encode(),b'--bind',b'127.0.0.1',b'--directory',str(root).encode(),b'']
+  if start!=data['start'] or cmd!=expected: raise RuntimeError('Refused to stop an unrelated process')
+  os.kill(data['pid'],signal.SIGTERM)
+"""
+
+
 class IsolatedDocker:
     """All product and acceptance Docker commands pass through this owner guard."""
 
@@ -329,6 +242,7 @@ class IsolatedDocker:
         self.label = f"{vm.LABEL}.owner={owner}"
         self.prefix = f"raphael-computer-{owner}-"
         self.after_start = None
+        self.created = []
 
     async def owned(self, name):
         raw = await self.runner(["container", "inspect", name], timeout=60, limit=200000)
@@ -339,7 +253,7 @@ class IsolatedDocker:
                 f"Refused container {name}: expected owner {self.owner}")
         return data
 
-    async def __call__(self, args, **kwargs):
+    async def authorize(self, args):
         require(bool(args), "Expected a Docker command")
         command = args[0]
         if command == "run":
@@ -357,6 +271,9 @@ class IsolatedDocker:
                 while args[index] == "-e":
                     index += 2
                 name = args[index]
+                guest = args[index + 1:]
+                if len(guest) >= 3 and guest[:2] == ["python3", "-c"] and guest[2] in (FORM_START, FORM_STOP):
+                    require(guest == ["python3", "-c", guest[2], self.owner], "Expected this run's exact form program")
             else:
                 name = args[-1]
                 forms = {"start": [["start", name]],
@@ -390,7 +307,13 @@ class IsolatedDocker:
             require(args == ["info", "--format", "{{.OSType}}"], "Expected Linux engine probe")
         else:
             raise AssertionError(f"Refused Docker command outside acceptance scope: {command}")
+
+    async def __call__(self, args, **kwargs):
+        await self.authorize(args)
+        command = args[0]
         result = await self.runner(args, **kwargs)
+        if command == "run" and not result.code:
+            self.created.append(args[args.index("--name") + 1])
         if command == "start" and not result.code and self.after_start:
             await self.after_start(args[-1])
         return result
@@ -631,10 +554,7 @@ class Acceptance:
             own = await asyncio.to_thread(client.pixels, area)
             neighbour = await asyncio.to_thread(other_client.pixels, area)
             def changed(snapshot, after):
-                ax, ay, aw, ah = area
-                previous = [snapshot[yy * 1280 + xx] for yy in range(ay, ay + ah) for xx in range(ax, ax + aw)]
-                require(len(after) == len(previous), f"Expected {len(previous)} pixels in {area}, observed {len(after)}")
-                return sum(max(abs(a - b) for a, b in zip(pixel, old)) > 40 for pixel, old in zip(after, previous)) / len(previous)
+                return strip_change(snapshot, after, area)
             own_changed = changed(own_before, own)
             neighbour_changed = changed(neighbour_before, neighbour)
             detail = (f"screen {seat}: launcher {click}, terminal {terminal.title!r} absolute rectangle {terminal.rectangle}, "
@@ -873,6 +793,29 @@ class Acceptance:
         require(sessions[0] != sessions[1], f"Expected a core started again to use a new session label, observed {sessions}")
         return f"VmTools set up driver sessions {sessions[0]} and, as a core started again, {sessions[1]}; {text.splitlines()[0]}"
 
+    async def driver_schema(self, target):
+        from ..computer.vm_catalog import DRIVER_TOOLS
+        fixture = Path(__file__).resolve().parents[3] / "tests/computer/fixtures/driver_tools_0.37.0.json"
+        expected = json.loads(fixture.read_text(encoding="utf-8"))
+        await self.docker.owned(target.name)
+        found, cursor = {}, None
+        async with CuaBridge(self.machine, target) as client:
+            for _ in range(10):
+                page = await client.request("tools/list", {"cursor": cursor} if cursor else {})
+                for tool in page.get("tools", []):
+                    if tool.get("name") in DRIVER_TOOLS:
+                        require(tool["name"] not in found, f"Duplicate driver tool {tool['name']}")
+                        found[tool["name"]] = set(tool["inputSchema"].get("properties", {}))
+                cursor = page.get("nextCursor")
+                if not cursor:
+                    break
+            else:
+                raise AssertionError("Driver tools/list pagination did not end")
+        wanted = {name: set(schema.get("properties", {})) for name, schema in expected.items()}
+        require(found == wanted, f"Driver parameters changed; review fixture and SHARED_ARGUMENTS: "
+                f"{ {name: dict(expected=sorted(wanted.get(name, set())), observed=sorted(found.get(name, set()))) for name in wanted.keys() | found.keys() if wanted.get(name) != found.get(name)} }")
+        return f"All {len(wanted)} DRIVER_TOOLS parameter sets match the reviewed 0.37.0 fixture"
+
     async def app_path(self, target):
         original = self.machine.target
         # Stage A has no seats yet: capture a last-screen target through the real viewer path.
@@ -945,6 +888,158 @@ class Acceptance:
                 return f"layer {layer} {operation}: incompatible -> {'absent with workspace removed' if operation == 'erase' else 'ready on new image, workspace file preserved'}"
             await self.check(f"{name} {operation}", exercise)
 
+    async def form(self, hub, target, member, *, peer=None):
+        """Type synthetic values through the same page helper used by all saved fills."""
+        from ..agent.plugins import tool_key
+        from ..computer.vm_tools import vm_scope
+        async def tool(name, args, *, caller=member, allow_refusal=False):
+            current = self.machine.target(caller)
+            with vm_scope(("turn", caller, 1)):
+                result = await hub.call(tool_key(f"computer-{current.key}", name), args, approver="auto")
+            if not allow_refusal:
+                require(result.ok and result.kind not in ("screen_changed", "computer_busy"), f"Form {name} failed: {result.kind}")
+            return result
+        def page(result):
+            for line in reversed(result.text.splitlines()):
+                try:
+                    data = json.loads(line)
+                except ValueError:
+                    continue
+                if isinstance(data, dict) and "refs" in data:
+                    return data
+            raise AssertionError("Expected product semantic form refs")
+        def field(state, name, frame="main"):
+            rows = [row for row in state['refs'] if row.get('name') == name and row.get('frame') == frame and 'type' in row.get('actions', [])]
+            require(len(rows) == 1, f"Expected one {name} field")
+            return rows[0]
+        try:
+            data = json.loads(await self.text(target, ["python3", "-c", FORM_START, self.machine.owner]))
+            origin = f"http://127.0.0.1:{data['port']}"
+            state = page(await tool("browser_open", {"url": origin + "/"}))
+            address = dict(target_id=state['target_id'], tab_id=state['tab_id'])
+            stale = field(state, 'Name')['ref']
+            state = page(await tool("get_browser_state", address))
+            before = {name: field(state, name).get('value') for name in ('Name', 'Secret')}
+            require(before['Name'] == 'existing', "Expected a prefilled Name field")
+            require(not field(state, 'Name', 'iframe').get('value'), "Expected an empty embedded field")
+            page_result = await tool("browser_type", {**address, "ref": stale, "text": "must-not-appear"})
+            structured = next((json.loads(line) for line in page_result.text.splitlines() if line.startswith('{')), {})
+            require(structured.get('effect') == 'refused', f"Expected stale-ref refusal, observed {page_result.kind}")
+            state = page(await tool("get_browser_state", address))
+            require(before == {name: field(state, name).get('value') for name in before}, "Stale ref changed the form")
+            def check_page(reply, url):
+                require(urlsplit(url)._replace(path='', query='', fragment='').geturl() == origin, "Form left its loopback origin")
+            try:
+                await hub._type_page_fields(target, member, address['target_id'],
+                    [(field(state, 'Name', 'iframe')['ref'], 'must-not-appear')], check_page)
+            except ValueError as error:
+                require('embedded frame' in str(error), "Expected actionable frame refusal")
+            else:
+                raise AssertionError("Embedded saved fill was accepted")
+            state = page(await tool("get_browser_state", address))
+            require(not field(state, 'Name', 'iframe').get('value'), "Embedded field changed after refusal")
+            # A name as this owner's contacts have them: the count of what was delivered must hold beyond ASCII.
+            name = 'acceptance 王小明'
+            await hub._type_page_fields(target, member, address['target_id'],
+                [(field(state, 'Name')['ref'], name), (field(state, 'Secret')['ref'], 'acceptance-secret')],
+                check_page, private=False)  # Synthetic acceptance data must be observable through the product.
+            state = page(await tool("get_browser_state", address))
+            require(field(state, 'Name').get('value') == name, f"Name was not typed, observed {field(state, 'Name').get('value')!r}")
+            masked = field(state, 'Secret').get('value')
+            require(isinstance(masked, str) and bool(masked) and 'acceptance-secret' not in masked, "Password was not masked and nonempty")
+            from ..computer import seat_view
+            listed = await tool("list_windows", {})
+            rows = seat_view.canvas_windows({"content": [{"type": "text", "text": listed.text}]})['windows']
+            binding = hub.page_windows.get((target.key, address['target_id']))
+            browser = next(row for row in rows if row['window_id'] == binding[1]) if binding else next(
+                row for row in rows if 'chrom' in row['app_name'].lower())
+            window = {key: browser[key] for key in ('pid', 'window_id')}
+            async def fill_private():
+                current = page(await tool("get_browser_state", address))
+                await hub._type_page_fields(target, member, address['target_id'],
+                    [(field(current, 'Name')['ref'], name), (field(current, 'Secret')['ref'], 'acceptance-secret')], check_page, private=True)
+                require((target.key, address['target_id'], address['tab_id']) in hub.private_pages, "Expected a private mark")
+            def hidden(result):
+                require(not result.blocks and 'no screenshot was returned' in result.text, "Expected private picture withheld with notice")
+            await fill_private()
+            hidden(await tool("get_window_state", {**window, "include_screenshot": True}))
+            hidden(await tool("get_desktop_state", {}))
+            if peer is not None:
+                other = self.machine.target(peer)
+                async def move(screen_target):
+                    x, y, width, height = seat_view.rectangle(screen_target.screen, screen_target.screens)
+                    await self.text(target, ['wmctrl', '-i', '-r', str(window['window_id']), '-b', 'remove,maximized_vert,maximized_horz'])
+                    await self.text(target, ['wmctrl', '-i', '-r', str(window['window_id']), '-e', f'0,{x+40},{y+60},{width-80},{height-120}'])
+                    until = time.monotonic() + 5
+                    while True:
+                        canvas = await self.machine.seat_windows(target)
+                        row = next(row for row in canvas['windows'] if row['window_id'] == window['window_id'])
+                        if seat_view.contains(row['bounds'], screen_target.screen, screen_target.screens):
+                            return
+                        require(time.monotonic() < until, "Private window did not settle on the requested screen")
+                        await asyncio.sleep(.05)
+                try:
+                    await move(other)
+                    hidden(await tool("get_desktop_state", {}, caller=peer))
+                    hidden(await tool("get_window_state", {**window, "include_screenshot": True}, caller=peer))
+                finally:
+                    await move(target)
+            await tool("browser_navigate", {**address, "url": origin + "/other.html"})
+            hidden(await tool("get_window_state", {**window, "include_screenshot": True}))
+            hidden(await tool("get_desktop_state", {}))
+            await tool("browser_navigate", {**address, "url": f"http://127.0.0.1:{data['other_port']}/other.html"})
+            hidden(await tool("get_browser_state", {**address, "include_screenshot": True}))
+            require((await tool("get_browser_state", {**address, "include_screenshot": True})).blocks, "Expected picture after another-origin observation")
+            if peer is not None:
+                require((await tool("get_desktop_state", {}, caller=peer)).blocks, "Expected peer pictures restored")
+            await tool("browser_navigate", {**address, "url": origin + "/"})
+            await fill_private()
+            hidden(await tool("get_window_state", {**window, "include_screenshot": True}))
+            # Open a spare real tab, return to the filled tab, and close it without closing the native window.
+            for keys in (["CTRL", "t"], ["CTRL", "SHIFT", "Tab"], ["CTRL", "w"]):
+                await tool("hotkey", {**window, "keys": keys})
+            # The driver says a closed tab in two ways (both measured): a browser the seat attached to, and one the
+            # driver launched itself. The product must know the one this computer gives.
+            from ..computer.vm_tools import CLOSED_TAB_ATTACH
+            message = f"confirmation provider failed: tab {address['tab_id']} no longer has a live CDP page target"
+            until = time.monotonic() + 5
+            while True:
+                closed = await tool("get_browser_state", address, allow_refusal=True)
+                if message in closed.text or CLOSED_TAB_ATTACH.search(closed.text):
+                    break
+                require(time.monotonic() < until, f"Expected a measured closed-tab refusal, observed {closed.kind!r}: {closed.text[:2000]!r}")
+                await asyncio.sleep(.05)
+            # The private probe retires the mark; pixels captured before that probe still stay withheld.
+            if (target.key, address['target_id'], address['tab_id']) in hub.private_pages:
+                hidden(await tool("get_window_state", {**window, "include_screenshot": True}))
+            require((target.key, address['target_id'], address['tab_id']) not in hub.private_pages, "Closed-tab mark survived its probe")
+            require((await tool("get_window_state", {**window, "include_screenshot": True})).blocks, "Expected pictures after tab closure")
+            return "Product form: prefilled name replaced, password masked/nonempty, iframe refused; private window/desktop pictures withheld across same-origin navigation, restored after another origin and tab closure" + (
+                "; moved private window withheld on peer seat" if peer is not None else "")
+        finally:
+            await self.text(target, ["python3", "-c", FORM_STOP, self.machine.owner])
+
+    async def per_bot_form(self, target, member):
+        old_command = self.machine.bridge_command
+        old_busy, old_native, old_input = self.machine.busy, self.machine.native_busy, self.machine.input_busy
+        old_disconnect = self.machine.disconnect_driver
+        async def guarded_bridge(target, args):
+            await self.docker.authorize(args)
+            return await old_command(target, args)
+        self.machine.bridge_command = guarded_bridge
+        hub = VmTools(NoHub(), self.machine, attachments=AttachmentStore(self.root / "form-attachments"))
+        try:
+            await hub.prepare(member)
+            await hub._discover(target)
+            return await self.form(hub, target, member)
+        finally:
+            try:
+                await hub.aclose()
+            finally:
+                self.machine.bridge_command = old_command
+                self.machine.busy, self.machine.native_busy, self.machine.input_busy = old_busy, old_native, old_input
+                self.machine.disconnect_driver = old_disconnect
+
     async def computer(self, count, largest):
         began = time.monotonic()
         target = replace(self.machine.target(count), screens=count)
@@ -962,6 +1057,9 @@ class Acceptance:
             await self.check(prefix + " layout", lambda: self.layout(target))
             await self.check(prefix + " views", lambda: self.views(target))
             await self.check(prefix + " driver connection", lambda: self.driver(target))
+            await self.check(prefix + " driver schema", lambda: self.driver_schema(target))
+            if count == 1:
+                await self.check(prefix + " typed form", lambda: self.per_bot_form(target, count))
             await self.check(prefix + " desktop picture", lambda: self.wallpaper(target))
             await self.check(prefix + " keys", lambda: self.keys(target))
             if count > 1:
@@ -990,6 +1088,460 @@ class Acceptance:
     async def stop(self, target):
         await self.machine.stop(target)
         return "LocalVm.stop completed for this run's target"
+
+    async def shared(self):
+        """Exercise product tools and sessions on two seats of this run's owned computer."""
+        from ..agent.plugins import tool_key
+        from ..computer import seat_view
+        from ..computer.seats import ComputerSeats
+        from ..computer.vm_bridge import CuaBridge
+        from ..computer.vm_tools import VmTools, vm_scope
+        from ..services.attachment_store import AttachmentStore
+
+        class Settings:
+            def get(self, key):
+                return {"computer_vm_mode": "shared", "computer_ssh_alias": "",
+                        "computer_vm_idle_minutes": 0, "action_mode": "normal"}.get(key)
+
+        class Hub:
+            def offered(self):
+                return []
+
+        calls, observations = [], []
+        first_result = len(self.results)
+
+        class RecordingBridge(CuaBridge):
+            async def request(self, method, params=None, **kwargs):
+                if method == "tools/call":
+                    calls.append((self.target.key, params["name"], dict(params["arguments"])))
+                reply = await super().request(method, params, **kwargs)
+                if method == "tools/call":
+                    observations.append((self.target.key, params["name"], reply))
+                return reply
+
+        machine = self.machine
+        old_settings, old_command, old_seats = machine.settings, machine.bridge_command, machine.seats
+        old_busy, old_native, old_input = machine.busy, machine.native_busy, machine.input_busy
+        old_disconnect, old_close = machine.disconnect_driver, machine.close_seat_viewers
+        machine.settings = Settings()
+
+        async def guarded_bridge(target, args):
+            await self.docker.authorize(args)
+            return await old_command(target, args)
+
+        machine.bridge_command = guarded_bridge
+        hub = VmTools(Hub(), machine, attachments=AttachmentStore(self.root / "acceptance-attachments"), bridge=RecordingBridge)
+        viewer = DesktopViewer(machine)
+        members = (9201, 9202)
+        targets, terminals, pages = {}, {}, {}
+
+        async def tool(member, name, arguments, *, allow_refusal=False):
+            with vm_scope(("turn", member, 1)):
+                result = await hub.call(tool_key(f"computer-{machine.target(member).key}", name), arguments, approver="auto")
+            if not allow_refusal:
+                require(result.ok and result.kind not in ("computer_busy", "screen_changed"),
+                        f"Expected member {member} {name} success, observed {result.kind}: {result.text}")
+            return result
+
+        async def rows(member):
+            result = await tool(member, "list_windows", {})
+            return seat_view.canvas_windows({"content": [{"type": "text", "text": result.text}]})["windows"]
+
+        def page(result):
+            return json.loads(result.text.splitlines()[-1])
+
+        def active_tab(state):
+            # A tab snapshot (what browser_open answers) names its tab at the top level; a window bind lists tabs.
+            tabs = state.get("tabs", [])
+            selected = next((tab for tab in tabs if tab.get("active")), tabs[0] if tabs else {})
+            tab_id = state.get("tab_id") or selected.get("tab_id")
+            require(tab_id and state.get("target_id"), f"Expected a bound tab, observed {state}")
+            return dict(target_id=state["target_id"], tab_id=tab_id)
+
+        def page_url(state):
+            return ((state.get("page") or {}).get("url") or state.get("url")
+                    or next((tab.get("url") for tab in state.get("tabs", []) if tab.get("active")), None))
+
+        async def screenshot(member):
+            result = await tool(member, "get_desktop_state", {})
+            require(len(result.blocks) == 1, f"Expected one seat image, observed {len(result.blocks)}")
+            data = base64.b64decode(result.blocks[0]["data"], validate=True)
+            width, height, depth, color = struct.unpack(">IIBB", data[16:26])
+            require((width, height, depth, color) == (1280, 900, 8, 2),
+                    f"Expected 1280x900 8-bit RGB PNG, observed {(width, height, depth, color)}")
+            return png_pixels(data)
+
+        try:
+            async def prepare():
+                await asyncio.gather(*(hub.prepare(member) for member in members))
+                targets.update((member, machine.target(member)) for member in members)
+                first, second = (targets[member] for member in members)
+                require((first.screen, second.screen) == (1, 2) and first.name == second.name,
+                        f"Expected seats 1 and 2 of one container, observed {first}, {second}")
+                before = self.docker.created.count(first.name)
+                await asyncio.gather(*(self.start(target) for target in (first, second)))
+                require(self.docker.created.count(first.name) - before == 1, "Expected one container creation for two concurrent starts")
+                raw = await machine.inspect(first)
+                host = raw["HostConfig"]
+                require(host["Memory"] == host["MemorySwap"] == 6 * 1024**3 and host["NanoCpus"] == 4_000_000_000
+                        and "RAPHAEL_SCREENS=6" in raw["Config"]["Env"], "Expected 6 GiB, 4 CPUs and six screens")
+                for member in members:
+                    await hub._discover(targets[member])
+                return "Two product VmTools catalogs and sessions, seats 1/2, one six-screen 6 GiB/4 CPU container started once"
+
+            if not await self.check("shared prepares", prepare):
+                self.record("shared dependent checks", "skipped", "shared prepares failed")
+                raise AssertionError("Shared preparation failed; dependent checks skipped")
+
+            async def lists():
+                for member in members:
+                    own = await rows(member)
+                    require(any(row["app_name"].lower() == "xfce4-panel" for row in own),
+                            f"Expected own panel for {member}, observed {own}")
+                    rect = seat_view.rectangle(targets[member].screen, 6)
+                    for row in own:
+                        bounds = row["bounds"]
+                        require(0 <= bounds["x"] + bounds["width"] / 2 < rect[2]
+                                and 0 <= bounds["y"] + bounds["height"] / 2 < rect[3],
+                                f"Expected seat-local bounds, observed {row}")
+                return "Each list has its own panel and seat-local window centres"
+            await self.check("shared window lists", lists)
+
+            async def launches():
+                for member in members:
+                    before = {row["window_id"] for row in await rows(member)}
+                    await tool(member, "launch_app", {"name": "xfce4-terminal", "additional_arguments": ["--disable-server"]})
+                    until = time.monotonic() + 10
+                    while True:
+                        new = [row for row in await rows(member) if row["window_id"] not in before
+                               and "terminal" in row["app_name"].lower()]
+                        if len(new) == 1:
+                            terminals[member] = new[0]
+                            break
+                        require(time.monotonic() < until, f"Expected one terminal on member {member}'s screen, observed {new}")
+                        await asyncio.sleep(.2)
+                foreign = terminals[members[1]]
+                for name in ("get_window_state", "click"):
+                    before = len([call for call in calls if call[1] == name])
+                    args = {key: foreign[key] for key in ("pid", "window_id")}
+                    if name == "click":
+                        args.update(x=20, y=60)
+                    result = await tool(members[0], name, args, allow_refusal=True)
+                    require(not result.ok and "not on this member's screen" in result.text,
+                            f"Expected cross-seat {name} refusal, observed {result.kind}: {result.text}")
+                    require(before == len([call for call in calls if call[1] == name]), f"Expected no {name} driver dispatch")
+                return "Two seat-local terminals; foreign window read/click refused before driver dispatch"
+            terminals_ok = await self.check("shared terminal wall", launches)
+
+            async def pointer_wall():
+                member = members[1]
+                args = {key: terminals[member][key] for key in ("pid", "window_id")}
+                client, session = await hub._connection(targets[member])
+                async def pointer():
+                    reply = await client.request("tools/call", {"name": "get_cursor_position", "arguments": {"session": session}})
+                    require(not reply.get("isError"), f"Expected real pointer read, observed {reply}")
+                    state = reply.get("structuredContent") or {}
+                    if {"x", "y"} <= state.keys():
+                        return state["x"], state["y"]
+                    text = "\n".join(block.get("text", "") for block in reply.get("content", []) if block.get("type") == "text")
+                    match = re.search(r"Cursor at \((-?[\d.]+),\s*(-?[\d.]+)\)", text)
+                    require(match, f"Expected pointer coordinates, observed {text}")
+                    return tuple(map(float, match.groups()))
+                await tool(member, "get_window_state", {**args, "include_screenshot": True})
+                before = await pointer()
+                dispatched = len([call for call in calls if call[1] == "click"])
+                result = await tool(member, "click", {**args, "x": 1380, "y": 80}, allow_refusal=True)
+                require(not result.ok and "inside this member's screen" in result.text, f"Expected out-of-seat refusal, observed {result}")
+                require(dispatched == len([call for call in calls if call[1] == "click"]), "Refused click reached driver")
+                after = await pointer()
+                require(after == before, f"Refused click moved real pointer: {before} -> {after}")
+                return f"Out-of-seat click refused before dispatch; real pointer unchanged at {before}"
+
+            async def target_wall():
+                member = members[1]
+                args = {key: terminals[member][key] for key in ("pid", "window_id")}
+                for extra in ({"coordinate_frame": "desktop"}, {"target": {"kind": "window", **args}}):
+                    before = len([call for call in calls if call[1] == "click"])
+                    result = await tool(member, "click", {**args, "x": 20, "y": 60, **extra}, allow_refusal=True)
+                    require(not result.ok, f"Expected forbidden targeting refusal, observed {result}")
+                    require(before == len([call for call in calls if call[1] == "click"]), f"Forbidden {extra} reached driver")
+                return "coordinate_frame=desktop and target refused before driver dispatch"
+
+            async def native_text():
+                member = members[1]
+                args = {key: terminals[member][key] for key in ("pid", "window_id")}
+                result = await tool(member, "get_window_state", args)
+                require(result.text.startswith("window_id=") and "element_token for row [" in result.text,
+                        f"Expected driver's window/tree/token text on seat 2, observed {result.text[:500]!r}")
+                moved = await tool(member, "move_cursor", {"x": 40, "y": 50})
+                cursor = await tool(member, "get_cursor_position", {})
+                require("Moved the real desktop pointer to (40, 50)." in moved.text and "Cursor at (40, 50)" in cursor.text,
+                        f"Expected seat coordinates in pointer prose, observed {moved.text!r}, {cursor.text!r}")
+                return "Seat 2 retains window_id/tree/element_token prose; move/read pointer says (40, 50)"
+
+            async def verifies():
+                member = members[1]
+                window = next(row for row in await rows(member) if row["window_id"] == terminals[member]["window_id"])
+                args = {key: window[key] for key in ("pid", "window_id")}
+                await tool(member, "verify_state", {**args, "expect": [{"window": {"bounds": window["bounds"]}}]})
+                state = next(reply.get("structuredContent", {}) for key, name, reply in reversed(observations)
+                             if key == targets[member].key and name == "verify_state")
+                require(state.get("status") == "satisfied", f"Expected seat-local bounds satisfied on seat 2, observed {state}")
+                return "verify_state with seat 2's current seat-local bounds is satisfied"
+
+            async def shortcuts():
+                first, second = members
+                args = {key: terminals[first][key] for key in ("pid", "window_id")}
+                await tool(first, "bring_to_front", args)
+                peer = [row["window_id"] for row in await rows(second)]
+                require(peer, "Expected peer windows to observe")
+                for keys in (["ctrl", "F2"], ["ctrl", "alt", "d"], ["alt", "Tab"]):
+                    await tool(first, "hotkey", {**args, "keys": keys})
+                    root = await self.text(targets[first], ["xprop", "-root", "_NET_NUMBER_OF_DESKTOPS", "_NET_CURRENT_DESKTOP", "_NET_ACTIVE_WINDOW"])
+                    require(re.search(r"_NET_NUMBER_OF_DESKTOPS\(CARDINAL\) = 1\b", root)
+                            and re.search(r"_NET_CURRENT_DESKTOP\(CARDINAL\) = 0\b", root), f"Expected one current workspace after {keys}, observed {root}")
+                    active = re.search(r"_NET_ACTIVE_WINDOW\(WINDOW\): window id # (0x[0-9a-fA-F]+)", root)
+                    own = {row["window_id"] for row in await rows(first)}
+                    require(active and int(active[1], 16) in own, f"Expected active window on seat 1 after {keys}, observed {root}")
+                    for identifier in peer:
+                        mapped = await self.text(targets[first], ["xwininfo", "-id", str(identifier), "-stats"])
+                        workspace = await self.text(targets[first], ["xprop", "-id", str(identifier), "_NET_WM_DESKTOP"])
+                        require("Map State: IsViewable" in mapped and re.search(r"= (?:0|4294967295)\s*$", workspace),
+                                f"Expected peer window {identifier} mapped on the one workspace after {keys}: {mapped}, {workspace}")
+                return "ctrl+F2, ctrl+alt+d and alt+Tab retain peer mapped windows on one workspace and seat 1 focus"
+
+            for name, action in (("shared pointer wall", pointer_wall), ("shared target forms", target_wall),
+                                 ("shared native text", native_text), ("shared seat-local verify", verifies),
+                                 ("shared global shortcuts", shortcuts)):
+                if terminals_ok:
+                    await self.check(name, action)
+                else:
+                    self.record(name, "skipped", "shared terminal wall failed")
+
+            async def typing():
+                async def type_line(member, suffix):
+                    window = terminals[member]
+                    args = {key: window[key] for key in ("pid", "window_id")}
+                    await tool(member, "get_window_state", args)
+                    began = time.monotonic()
+                    await tool(member, "type_text", {**args, "text": f"printf '%s\\n' seat-{member} > /home/cua/workspace/seat-{member}-{suffix}.txt"})
+                    await tool(member, "press_key", {**args, "key": "Return"})
+                    return time.monotonic() - began
+                alone = [await type_line(member, "alone") for member in members]
+                began = time.monotonic()
+                parallel = await asyncio.gather(*(type_line(member, "together") for member in members))
+                together = time.monotonic() - began
+                for member in members:
+                    for suffix in ("alone", "together"):
+                        command = f"cat /home/cua/workspace/seat-{member}-{suffix}.txt"
+                        until = time.monotonic() + 5
+                        while True:
+                            data = page(await tool(member, "vm_exec", {"command": command}))
+                            if data["exit_code"] == 0:
+                                break
+                            require(time.monotonic() < until, f"Expected typed file, observed {data}")
+                            await asyncio.sleep(.1)
+                        require(data["output"] == f"seat-{member}\n", f"Expected own exact line, observed {data}")
+                return f"Exact independent file lines; alone={alone}, together={together:.3f}s, individual concurrent calls={parallel}"
+            if terminals_ok:
+                await self.check("shared simultaneous native typing", typing)
+            else:
+                self.record("shared simultaneous native typing", "skipped", "shared terminal wall failed")
+
+            async def browsers():
+                for member in members:
+                    pages[member] = page(await tool(member, "browser_open", {"url": "about:blank"}))
+                browser_windows = [[row for row in await rows(member) if row["app_name"].lower() == "chromium-browser"] for member in members]
+                require(all(len(found) == 1 for found in browser_windows), f"Expected one browser window per seat, observed {browser_windows}")
+                require(browser_windows[0][0]["window_id"] != browser_windows[1][0]["window_id"]
+                        and browser_windows[0][0]["pid"] == browser_windows[1][0]["pid"],
+                        f"Expected two windows of one browser pid, observed {browser_windows}")
+                pids = (await self.text(targets[members[0]], ["pgrep", "-f", "^/usr/lib/chromium/chromium --remote-debugging-port=0 --user-data-dir=/home/cua/workspace/.browser-profiles/driver/main"])).split()
+                require(pids == [str(browser_windows[0][0]["pid"])], f"Expected exactly one main browser process, observed {pids}")
+                require(pages[members[0]]["target_id"] != pages[members[1]]["target_id"], "Expected two session-private bindings")
+                url = "about:blank#member-one"
+                await tool(members[0], "browser_navigate", {**active_tab(pages[members[0]]), "url": url})
+                for member in members:
+                    state = page(await tool(member, "get_browser_state", active_tab(pages[member])))
+                    observed = page_url(state)
+                    require(observed == (url if member == members[0] else "about:blank"), f"Expected independent URL, observed {state}")
+                result = await tool(members[0], "browser_navigate", {**active_tab(pages[members[1]]), "url": "about:blank#foreign"}, allow_refusal=True)
+                require(not result.ok, f"Expected foreign page binding refusal, observed {result.text}")
+                return f"One browser pid {pids[0]}, two windows and private session bindings, independent navigation, foreign target refused"
+            browsers_ok = await self.check("shared computer browser", browsers)
+            if browsers_ok:
+                await self.check("shared typed form", lambda: self.form(hub, targets[members[0]], members[0], peer=members[1]))
+            else:
+                self.record("shared typed form", "skipped", "shared computer browser failed")
+
+            async def page_text():
+                result = await tool(members[1], "get_browser_state", active_tab(pages[members[1]]))
+                lines = []
+                for line in result.text.splitlines():
+                    try:
+                        lines.append(json.loads(line))
+                    except ValueError:
+                        pass
+                require(len(lines) == 1, f"Expected exactly one page JSON line on seat 2, observed {result.text[:500]}")
+                return "Seat 2 page prose is followed by exactly one JSON line"
+            if browsers_ok:
+                await self.check("shared page text", page_text)
+            else:
+                self.record("shared page text", "skipped", "shared computer browser failed")
+
+            async def pictures():
+                first, second = members
+                await tool(first, "bring_to_front", {key: terminals[first][key] for key in ("pid", "window_id")})
+                await asyncio.sleep(.5)
+                before = {member: await screenshot(member) for member in members}
+                target, row = targets[first], terminals[first]
+                tree = await self.tree(target)
+                terminal = next(window for window in tree if int(window.identifier, 16) == row["window_id"])
+                x, y, width, _ = terminal.rectangle
+                top = max(0, y - terminal.frame_offset[1])
+                area = (max(0, x), top, min(1280, x + width) - max(0, x), min(50, 900 - top))
+                await machine.move_window(target, row["window_id"])
+                # Move away from its old title strip so that only this screen changes there.
+                await self.text(target, ["wmctrl", "-i", "-r", str(row["window_id"]), "-e", "0,80,300,-1,-1"])
+                await asyncio.sleep(.5)
+                after = {member: await screenshot(member) for member in members}
+                changed = {member: strip_change(before[member], after[member], area) for member in members}
+                require(changed[first] >= .2 and changed[second] <= .01,
+                        f"Expected own title strip >=20% and neighbour <=1% changed, area={area}, observed {changed}")
+                return f"Two product 1280x900 RGB PNGs; title strip {area}, own_changed={changed[first]:.3f}, neighbour_changed={changed[second]:.3f}"
+            if terminals_ok:
+                await self.check("shared clipped product pictures", pictures)
+            else:
+                self.record("shared clipped product pictures", "skipped", "shared terminal wall failed")
+
+            async def control():
+                first, second = members
+                opened = await viewer.open({"member_id": first})
+                command = asyncio.create_task(tool(second, "vm_exec", {"command": "sleep 3", "timeout_seconds": 10}))
+                try:
+                    until = time.monotonic() + 10
+                    while not hub.commands.get(targets[second].key):
+                        require(not command.done() and time.monotonic() < until, "Expected long vm_exec to be active before takeover")
+                        await asyncio.sleep(.01)
+                    await viewer.control({**opened, "held": True})
+                    refused = await tool(first, "list_windows", {}, allow_refusal=True)
+                    require(refused.kind == "owner_holds_control", f"Expected own hold refusal, observed {refused.kind}")
+                    old_wait = hub.busy_wait_s
+                    hub.busy_wait_s = .2
+                    try:
+                        args = {key: terminals[second][key] for key in ("pid", "window_id")}
+                        refused = await tool(second, "press_key", {**args, "key": "Return"}, allow_refusal=True)
+                        require(refused.kind == "computer_busy", f"Expected peer native input busy, observed {refused.kind}")
+                        await rows(second)
+                        if browsers_ok:
+                            await tool(second, "get_browser_state", active_tab(pages[second]))
+                            before = len([call for call in calls if call[1] == "browser_click"])
+                            refused = await tool(second, "browser_click", {**active_tab(pages[second]), "x": 20, "y": 20,
+                                                  "delivery_mode": "foreground"}, allow_refusal=True)
+                            require(refused.kind == "computer_busy", f"Expected held foreground browser click busy, observed {refused}")
+                            require(before == len([call for call in calls if call[1] == "browser_click"]), "Held foreground browser click reached driver")
+                            await tool(second, "browser_navigate", {**active_tab(pages[second]), "url": "about:blank#owner-held"})
+                    finally:
+                        hub.busy_wait_s = old_wait
+                    await viewer.control({**opened, "held": False})
+                    await tool(second, "press_key", {**args, "key": "Return"})
+                    return ("Takeover during peer vm_exec; own calls refused, peer native waits/busy, peer window lists continue, handback restores native"
+                            + ("; foreground browser click waits/busy before dispatch while page read/navigation continue" if browsers_ok else "; browser hold checks skipped"))
+                finally:
+                    await command
+                    await viewer.close(opened)
+            if terminals_ok:
+                await self.check("shared owner control", control)
+            else:
+                self.record("shared owner control", "skipped", "shared terminal wall failed")
+            if not browsers_ok:
+                self.record("shared foreground page hold", "skipped", "shared computer browser failed")
+
+            async def disconnect():
+                pid = next(row["pid"] for row in await rows(members[1]) if row["app_name"].lower() == "chromium-browser")
+                await hub._disconnect(targets[members[0]].key)
+                await tool(members[1], "get_browser_state", active_tab(pages[members[1]]))
+                current = next(row["pid"] for row in await rows(members[1]) if row["app_name"].lower() == "chromium-browser")
+                require(current == pid, f"Expected browser pid {pid} to survive disconnect, observed {current}")
+                return f"Seat 1 connection ended; browser pid {pid} and seat 2's bound tab survive"
+            if browsers_ok:
+                await self.check("shared session ends independently", disconnect)
+            else:
+                self.record("shared session ends independently", "skipped", "shared computer browser failed")
+
+            async def displacement():
+                third = 9203
+                target = targets[members[0]]
+                before = {row['window_id'] for row in (await machine.seat_windows(target))['windows']}
+                await self.docker(['exec', '-d', '-u', 'cua', '-e', 'DISPLAY=:1', target.name, 'x-terminal-emulator'])
+                until = time.monotonic() + 5
+                while True:
+                    found = [row for row in (await machine.seat_windows(target))['windows']
+                             if row['window_id'] not in before and row['app_name'].lower() != 'xfce4-panel']
+                    if found:
+                        break
+                    require(time.monotonic() < until, 'Expected an external leftover window')
+                    await asyncio.sleep(.05)
+                leftover = found[0]['window_id']
+                await machine.move_window(machine.shared_target('', third, 3), leftover)
+                await hub.prepare(third)
+                require(machine.target(third).screen == 3 and all(machine.target(member) == targets[member] for member in members),
+                        "Expected third member on free seat 3 without displacement")
+                listed = (await machine.seat_windows(target))['windows']
+                # The desktop's own windows are there on every screen; the leftover must be gone, and by its id.
+                require(leftover not in {row['window_id'] for row in listed} and not any(
+                    seat_view.overlaps(row['bounds'], 3, 6) and row['app_name'].lower() not in machine.DESKTOP_WINDOWS for row in listed),
+                    'Free screen was handed over with a leftover window')
+                require(any(row['app_name'].lower() == 'xfdesktop' for row in listed), 'The desktop window was closed with the leftover window')
+                machine.seats = ComputerSeats(count=2)
+                for member in members:
+                    machine.seats.restore('', member, targets[member].screen)
+                # The second member was used more recently, so the first is the idle victim.
+                hub.leases.clear()
+                first_ids = {row["window_id"] for row in await rows(members[0]) if row["app_name"].lower() != "xfce4-panel"}
+                require(first_ids, "Expected windows to close on displaced seat")
+                machine.seats.touch("", members[1])
+                # Fail one list at the injected Docker boundary, keeping the product path intact.
+                original_runner = self.docker.runner
+                failed_lists = []
+                async def fail_one_list(args, **kwargs):
+                    if 'wmctrl' in args and args[-1] == '-lG' and not failed_lists:
+                        failed_lists.append(1)
+                        return vm.Result(1, '', 'Synthetic window list failure')
+                    return await original_runner(args, **kwargs)
+                self.docker.runner = fail_one_list
+                try:
+                    refused = await tool(third, 'list_windows', {}, allow_refusal=True)
+                    require(failed_lists and machine.target(third).screen == 0 and machine.target(members[0]) == targets[members[0]],
+                            'A failed window list handed over a seat or failed to restore its exact holder')
+                    require(refused.kind == 'computer_busy' and 'every screen of the computer is in use' in refused.text,
+                            f'Expected the ordinary every-screen-in-use answer, observed {refused.kind}: {refused.text}')
+                finally:
+                    self.docker.runner = original_runner
+                await hub.prepare(third)
+                require(machine.target(third).screen == 1 and machine.target(members[0]).screen == 0,
+                        "Expected least recently used idle seat 1 displaced")
+                until = time.monotonic() + 5
+                while True:
+                    remaining = {int(window.identifier, 16) for window in await self.tree(targets[members[1]])}
+                    if not first_ids & remaining:
+                        break
+                    require(time.monotonic() < until, f"Expected displaced windows closed, observed {first_ids & remaining}")
+                    await asyncio.sleep(.1)
+                return "Free seat 3 is cleaned of a leftover window; failed listing refuses displacement and restores the exact holder; retry replaces the idle LRU seat only after all its non-panel windows close"
+            await self.check("shared seat displacement", displacement)
+            require(not any(row["result"] == "failed" for row in self.results[first_result:]), "One or more shared checks failed; see named results")
+            return "Shared product checks completed; see each named shared result"
+        finally:
+            await viewer.aclose()
+            await hub.aclose()
+            machine.settings, machine.bridge_command = old_settings, old_command
+            machine.seats = old_seats
+            machine.busy, machine.native_busy, machine.input_busy = old_busy, old_native, old_input
+            machine.disconnect_driver, machine.close_seat_viewers = old_disconnect, old_close
+            if targets and not self.keep:
+                await self.check("shared stop", lambda: self.stop(next(iter(targets.values()))))
+            require(not any(row["result"] == "failed" for row in self.results[first_result:]), "One or more shared checks failed; see named results")
 
     async def cleanup(self):
         if self.machine:
@@ -1044,7 +1596,7 @@ class Acceptance:
                 checks=self.results, seconds=seconds, totals=dict(totals), image=self.tag,
                 owner=self.machine.owner if self.machine else None, kept=self.keep), indent=2) + "\n", encoding="utf-8")
 
-    async def run(self, counts):
+    async def run(self, counts, *, shared=True):
         original_image = vm.IMAGE
         parent = asyncio.current_task()
         cancel_path = os.environ.get("RAPHAEL_COMPUTER_CANCEL_FILE")
@@ -1088,6 +1640,8 @@ class Acceptance:
                         await self.computer(count, max(counts))
                     except Exception as error:
                         self.record(f"{count} screens lifecycle", "failed", f"{type(error).__name__}: {error}")
+                if shared:
+                    await self.check("shared computer", self.shared)
                 await self.previous()
         except (KeyboardInterrupt, asyncio.CancelledError):
             self.record("interrupted", "failed", "Interrupted; cleaning this run's resources")
@@ -1121,10 +1675,11 @@ def screen_counts(value):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--screens", type=screen_counts, default="1,3,6")
+    parser.add_argument("--no-shared", action="store_true", help="Skip the two-member shared computer block")
     parser.add_argument("--keep", action="store_true", help="Leave this run's containers, image tag and data for inspection")
     parser.add_argument("--out", type=Path, help="Write computer-acceptance.json in this folder")
     options = parser.parse_args(argv)
-    return asyncio.run(Acceptance(keep=options.keep, out=options.out).run(options.screens))
+    return asyncio.run(Acceptance(keep=options.keep, out=options.out).run(options.screens, shared=not options.no_shared))
 
 
 if __name__ == "__main__":

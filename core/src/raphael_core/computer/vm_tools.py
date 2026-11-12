@@ -12,7 +12,7 @@ import re
 import secrets
 import shlex
 import time
-from contextlib import contextmanager
+from contextlib import asynccontextmanager, contextmanager
 from contextvars import ContextVar
 from pathlib import PurePosixPath
 
@@ -24,8 +24,10 @@ from ..integrations.audit import AuditLog
 from ..services.attachments import Attachment, MAX_FILE_BYTES, sniff_ok
 from .vm import VmError, engine_start_allowed
 from .vm_bridge import CuaBridge
-from .vm_catalog import DRIVER_TOOLS, FRESH_READS, NOTICES, PAGE_TOOLS, READS, SCREEN_READS, offline_catalog, without_session
+from .vm_catalog import DRIVER_TOOLS, FRESH_READS, NATIVE_INPUT_TOOLS, NOTICES, PAGE_TOOLS, READS, SCREEN_READS, SHARED_ARGUMENTS, offline_catalog, shared_argument_paths, shared_native_input, without_session
 from .takeover import TAKEOVER
+from . import seat_view
+from ..worker.computer_verification import meaningful_expectation
 
 _SCOPE = ContextVar("computer_scope", default=None)
 _TURN = ContextVar("computer_turn", default=(0, False, None))
@@ -98,6 +100,8 @@ VM_CONTRACT = (
     "or verify_state with an expectation. Keep files, browser profiles and installed packages under "
     "/home/cua/workspace: anything outside it is lost on image/timezone rebuilds."
 )
+SHARED_CONTRACT = (" Shared with other members: one screen each; clipboard, files and sign-ins shared."
+                   " The shell has no screen here; open a window with launch_app.")
 
 RUN_STEPS = {"description": VM_CONTRACT + " Perform 1–10 short driver actions, then return one window/page observation. Every step uses the ordinary gate and current control checks. Stop on the first failure; failed_step is one-based. Never batch shell commands, secrets, takeover or another composite.",
     "parameters": {"type": "object", "properties": {
@@ -141,6 +145,37 @@ FILL_CONTACT = fill_definition("contact", ("name", "address", "phone", "email"))
 FILL_CARD = fill_definition("card", ("name", "number", "expiry", "cvc"))
 
 
+class SavedFieldRefused(ValueError):
+    """Fixed, value-free guidance for a saved field that cannot be safely selected."""
+
+
+CLOSED_TAB_ATTACH = re.compile(
+    r"cannot attach to tab target [0-9A-F]{32}: CDP Target\.attachToTarget failed \(-32602\): No target with given id found")
+
+
+def closed_private_tab(reply, tab_id):
+    """Whether the driver's answer to a read of exactly this tab proves the tab is gone.
+
+    Driver 0.37.0 says it in two ways, both measured on real computers, each matched whole and only as measured:
+    - a browser the seat attached to (shared): an error, refusal.message
+      "confirmation provider failed: tab <tab id> no longer has a live CDP page target";
+    - a browser the driver launched (per-bot): NOT an error, status "refused", refusal.code
+      "browser_tab_not_found", refusal.message "cannot attach to tab target <CDP id>: CDP Target.attachToTarget
+      failed (-32602): No target with given id found".
+    A tab id the driver never knew has the same codes and other words ("tab <id> is not known for target ..."),
+    so only the message tells; anything else keeps the mark.
+    """
+    data = reply.get("structuredContent") or {}
+    refusal = data.get("refusal") or {}
+    message = refusal.get("message")
+    if not tab_id or not isinstance(message, str):
+        return False
+    if reply.get("isError"):
+        return message == f"confirmation provider failed: tab {tab_id} no longer has a live CDP page target"
+    return (data.get("status") == "refused" and refusal.get("code") == "browser_tab_not_found"
+            and bool(CLOSED_TAB_ATTACH.fullmatch(message)))
+
+
 class VmTools:
     # How long a member waits for another to finish with the screen, and how often it looks: a bounded wait,
     # then a result that says who holds it and for how long.
@@ -173,8 +208,15 @@ class VmTools:
         # The driver in a running computer remembers every session label that has ended and refuses it for good. A
         # core that starts again beside a computer still running must therefore never count from 1 once more.
         self.session_prefix = f"raphael-{secrets.token_hex(4)}"
+        self.connection_locks, self.native_actions = {}, {}
+        self.native_owners = {}
+        self.vm.native_busy = lambda target: bool(self.native_actions.get(target.state_key) and self.native_actions[target.state_key].locked())
+        self.vm.input_busy = lambda target: self.vm.active.get(target.key, 0) > self.commands.get(target.key, 0)
         self.logins = None
         self.private_pages = {}
+        self.page_windows = {}
+        self.page_tabs = {}
+        self.page_refs = {}
         self.payment_holds = set() if conn is None else {row[0] for row in conn.execute("SELECT target FROM computer_payment_holds")}
         self.checkpointed, self.checkpoint_locks = set(), {}
         self.refreshes = {}
@@ -188,9 +230,9 @@ class VmTools:
         attempts = _REPAIRS.get()
         if attempts is None:
             return True  # The viewer has its own single retry outside a member call.
-        if target in attempts:
+        if target.physical in attempts:
             return False
-        attempts.add(target)
+        attempts.add(target.physical)
         return True
 
     def _engine_notice(self, target):
@@ -292,12 +334,17 @@ class VmTools:
         # Looking for the program runs nothing. With no Docker on this PC there is no computer to offer.
         if self.vm.desktop and not self.vm.desktop.installed():
             return
-        target = self.vm.target(member_id)
+        try:
+            target = await self.vm.seat(member_id)
+        except VmError as error:
+            if str(error) != "seats_full":
+                raise
+            target = self.vm.target(member_id)
         if self.logins:
             try:
                 if hasattr(self.logins, "preload"):
                     self.logins.preload(member_id)
-                for row in self.logins.references(None if target.key == "shared" else member_id):
+                for row in self.logins.references(None if target.container == "shared" else member_id):
                     try:
                         self.logins.load(row["member_id"], row["origin"], row["reference"])
                     except Exception as error:
@@ -312,7 +359,7 @@ class VmTools:
     def _catalog(self, target, definitions):
         definitions.update(vm_exec=EXEC, attach_file=ATTACH, request_takeover=TAKEOVER, fill_login=FILL_LOGIN,
                            vault_entries=ENTRY_CHOICES, fill_contact=FILL_CONTACT, fill_card=FILL_CARD, browser_open=BROWSER_OPEN, run_steps=RUN_STEPS)
-        if target.key != "shared":
+        if target.container != "shared":
             from .datasets import DEFINITION
             definitions["dataset"] = DEFINITION
         keys = []
@@ -321,10 +368,17 @@ class VmTools:
             description = definition["description"]
             if name in DRIVER_TOOLS and not description.startswith(VM_CONTRACT):
                 description = VM_CONTRACT + " " + description
-            self.tools[key] = PluginTool(key, "computer", name, description, definition["parameters"], Tier.T3 if name == "fill_card" else Tier.T0, pinned=True,
+            parameters = definition["parameters"]
+            if target.container:
+                description += SHARED_CONTRACT
+                if name == "browser_open":
+                    from copy import deepcopy
+                    parameters = deepcopy(parameters)
+                    parameters["properties"]["url"]["pattern"] = "^(https?://|about:blank(?:#.*)?$)"
+            self.tools[key] = PluginTool(key, "computer", name, description, parameters, Tier.T3 if name == "fill_card" else Tier.T0, pinned=True,
                                          deferred=name in ("vault_entries", "fill_contact", "fill_card"))
             self.routes[key] = target
-            self.schemas[key] = definition.get("validation", definition["parameters"])
+            self.schemas[key] = parameters if name == "browser_open" and target.container else definition.get("validation", parameters)
             keys.append(key)
         self.catalogs[target.key] = keys
 
@@ -398,7 +452,7 @@ class VmTools:
     def tier_of(self, key):
         if key in self.tools:
             shared = self.vm.settings is not None and self.vm.settings.get("computer_vm_mode") == "shared"
-            matches = (self.routes[key].key == "shared") == shared
+            matches = (self.routes[key].container == "shared") == shared
             return self.tools[key].tier if self.vm.enabled and matches and self.routes[key].remote == self.vm.remote and key in self.catalogs.get(self.routes[key].key, []) else None
         return self.delegate.tier_of(key)
 
@@ -438,6 +492,10 @@ class VmTools:
         picture_target = self.routes.get(key, self.vm.target(member))
         private_before = picture_target.key in self.payment_holds or any(
             page[0] == picture_target.key for page in self.private_pages)
+        # Only a computer tool can picture a seat before the look that follows the call; the windows are not
+        # listed for every other tool a member with a seat happens to call.
+        if key in self.tools:
+            private_before = await self._shared_private_picture(picture_target) or private_before
         began = time.monotonic()
         repair_budget = _REPAIRS.set(set())
         reading = key in self.tools and self.tools[key].name in SCREEN_READS | {"browser_open"}
@@ -466,13 +524,13 @@ class VmTools:
                 result.text = (prefix + "\n" if prefix else "") + json.dumps(data, ensure_ascii=False)
             else:
                 result.text = (result.text + f"\nElapsed: {elapsed:.2f} seconds.").strip()
-        private_members = list(self.logins.values) if self.logins and picture_target.key == "shared" else [member]
+        private_members = list(self.logins.values) if self.logins and picture_target.container == "shared" else [member]
         if self.logins and any(self.logins.values.get(identifier) for identifier in private_members):
             for identifier in private_members:
                 result.text = self.logins.redact(identifier, result.text)
                 if result.kind:
                     result.kind = self.logins.redact(identifier, result.kind)
-        if (reading and result.ok) or result.blocks:
+        if (reading and result.ok and (picture_target.container != "shared" or result.kind not in NOTICES)) or result.blocks:
             if picture_target != self.vm.target(member):
                 return PluginResult(False, "computer_changed")
             private_after = await self._private_picture(picture_target, arguments)
@@ -486,7 +544,10 @@ class VmTools:
                         tree = json.loads(result.text.rsplit("\n", 1)[-1])
                     except ValueError:
                         tree = {}
-                result.text = json.dumps(self._without_values(tree), ensure_ascii=False) + "\nPrivate fields are hidden until the filled page leaves its origin and its fields are absent. Use page references or request_takeover; no screenshot was returned."
+                # This value-free tree is the snapshot actually handed to the member.
+                # Record its refs without changing the member's current tab to the probe's tab.
+                self._remember_page_refs(picture_target, tree)
+                result.text = json.dumps(self._without_values(tree), ensure_ascii=False) + "\nPrivate fields are hidden until the filled tab is closed or a complete read shows another site. Use page references or request_takeover; no screenshot was returned."
                 if self.logins:
                     for identifier in private_members:
                         result.text = self.logins.redact(identifier, result.text)
@@ -497,7 +558,7 @@ class VmTools:
         if plain_read(command):
             return
         ticket = (target.key, member, turn or owner)
-        async with self.checkpoint_locks.setdefault(target.key, asyncio.Lock()):
+        async with self.checkpoint_locks.setdefault(target.state_key, asyncio.Lock()):
             if ticket in self.checkpointed:
                 return
             self.checkpointed.add(ticket)
@@ -506,16 +567,24 @@ class VmTools:
                 self.vm.checkpoint_failures = failures = {}
             try:
                 await asyncio.wait_for(self.vm.checkpoint(target, "begin", member=member, turn=turn), 11)
-                failures.pop(target.key, None)
+                failures.pop(target.state_key, None)
             except Exception as error:
-                failures[target.key] = True
+                failures[target.state_key] = True
                 logger.warning("File checkpoint skipped: %s", type(error).__name__)
 
-    def _observe_page(self, target, page):
+    def _observe_page(self, target, page, *, remember=True):
         from urllib.parse import urlsplit
         identifier = page.get("target_id")
-        url = page.get("url") or next((tab.get("url") for tab in page.get("tabs", []) if tab.get("active") is True), None)
+        url = (page.get("page") or {}).get("url") or page.get("url") or next((tab.get("url") for tab in page.get("tabs", []) if tab.get("active") is True), None)
         key = (target.key, identifier)
+        tab_id = page.get("tab_id") or next((tab.get("tab_id") for tab in page.get("tabs", []) if tab.get("active") is True), None)
+        if identifier and remember:
+            if tab_id:
+                self.page_tabs[key] = tab_id
+            elif "tabs" in page:
+                self.page_tabs.pop(key, None)
+            self._remember_page_refs(target, page)
+        key = (*key, tab_id)
         protected = self.private_pages.get(key)
         if protected and url:
             try:
@@ -525,10 +594,32 @@ class VmTools:
                 current = (parsed.scheme.lower(), parsed.hostname, parsed.port or (443 if parsed.scheme == "https" else 80))
             except (ValueError, TypeError):
                 return
-            nodes = page.get("nodes")
-            if (current not in protected["origins"] and isinstance(nodes, list) and page.get("truncated") is False
-                    and not page.get("has_more") and not self._has_private_refs(nodes, protected["refs"])):
+            nodes = page.get("refs", page.get("nodes"))
+            snapshot = page.get("snapshot")
+            # The driver says a snapshot is whole with `complete` and no `continuation` (0.37.0, measured); the shape
+            # before it said `truncated` and `has_more`. Anything that does not plainly say "whole" is not.
+            if isinstance(snapshot, dict):
+                complete = snapshot.get("complete") is True and snapshot.get("continuation") is None
+            else:
+                complete = page.get("truncated") is False and not page.get("has_more")
+            # Only another origin lifts the mark. The next page of the same site may show what was just filled (an
+            # order's review page shows the card), so losing the fields on the same origin lifts nothing.
+            if (isinstance(nodes, list) and complete and current not in protected["origins"]
+                    and not self._has_private_refs(nodes, protected["refs"])):
                 self.private_pages.pop(key, None)
+
+    @staticmethod
+    def _field_identity(row):
+        if isinstance(row, dict) and "type" in row.get("actions", []) and all(
+                isinstance(row.get(key), str) for key in ("frame", "role", "name")):
+            return row["frame"], row["role"], row["name"]
+
+    def _remember_page_refs(self, target, page):
+        tab_id = page.get("tab_id") or next((tab.get("tab_id") for tab in page.get("tabs", []) if tab.get("active") is True), None)
+        if page.get("target_id") and tab_id and ("refs" in page or "snapshot" in page):
+            self.page_refs[target.key, page["target_id"], tab_id] = {
+                row["ref"]: self._field_identity(row) for row in page.get("refs", [])
+                if self._field_identity(row) is not None and isinstance(row.get("ref"), str)}
 
     @staticmethod
     def _has_private_refs(value, refs):
@@ -546,12 +637,33 @@ class VmTools:
             return [VmTools._without_values(item) for item in value]
         return value
 
-    def _protect_page(self, target, identifier, url, refs):
+    def _protect_page(self, target, identifier, url, refs, *, tab_id=None, fields=()):
         from urllib.parse import urlsplit
         parsed = urlsplit(url)
-        protected = self.private_pages.setdefault((target.key, identifier), {"origins": set(), "refs": set()})
-        protected["origins"].add((parsed.scheme.lower(), parsed.hostname, parsed.port or 443))
+        tab_id = tab_id or self.page_tabs.get((target.key, identifier))
+        protected = self.private_pages.setdefault((target.key, identifier, tab_id), {"origins": set(), "refs": set(), "fields": set()})
+        protected["origins"].add((parsed.scheme.lower(), parsed.hostname, parsed.port or (443 if parsed.scheme == "https" else 80)))
         protected["refs"].update(refs)
+        protected["fields"].update(fields)
+        protected["computer"] = target.physical
+        binding = self.page_windows.get((target.key, identifier))
+        if binding:
+            protected["window"] = binding[1]
+
+    async def _shared_private_picture(self, target):
+        if not target.container or not target.screen:
+            return False
+        marks = [mark for key, mark in self.private_pages.items()
+                 if key[0] != target.key and mark.get("computer") == target.physical and mark.get("window")]
+        if not marks:
+            return False
+        try:
+            canvas = await self.vm.window_bounds(target)
+            identifiers = {mark["window"] for mark in marks}
+            return any(row["window_id"] in identifiers and seat_view.overlaps(row["bounds"], target.screen, target.screens)
+                       for row in canvas["windows"])
+        except Exception:
+            return True
 
     async def _private_picture(self, target, arguments):
         keys = [key for key in self.private_pages if key[0] == target.key]
@@ -559,16 +671,21 @@ class VmTools:
         self.private_tree.pop(target.key, None)
         for key in keys:
             try:
+                if key[2] is None or target.key not in self.connections:
+                    continue
                 client, session = await self._connection(target)
-                state = await client.request("tools/call", {"name": "get_browser_state", "arguments": {
-                    "target_id": key[1], "session": session, "include_screenshot": False, "snapshot_format": "semantic_v2"}})
+                state = await self._driver_call(target, client, "get_browser_state", {
+                    "target_id": key[1], "tab_id": key[2], "session": session, "include_screenshot": False, "snapshot_format": "semantic_v2"}, remember=False)
                 page = state.get("structuredContent") or {}
-                if not state.get("isError"):
-                    self._observe_page(target, page)
+                if closed_private_tab(state, key[2]):
+                    self.private_pages.pop(key, None)
+                # A refusal is not a page: a launched browser's refusals carry no isError (measured).
+                if not state.get("isError") and page.get("status") != "refused":
                     self.private_tree[target.key] = page
             except Exception:
                 pass
-        return target.key in self.payment_holds or any(key in self.private_pages for key in keys)
+        return (target.key in self.payment_holds or any(key in self.private_pages for key in keys)
+                or await self._shared_private_picture(target))
 
     async def _call(self, key, arguments, *, approver, task_id=None, pool=None):
         if key not in self.tools:
@@ -590,7 +707,13 @@ class VmTools:
                 if row is None:
                     return PluginResult(False, "blocked")
                 member = row[0]
+            if target.screen == 0 and target == self.vm.target(member):
+                await self.vm.seat(member)
+                return PluginResult(False, "computer_changed")
             if target != self.vm.target(member):
+                current = self.vm.target(member)
+                if current.container and not current.screen and current.key == target.key:
+                    await self.vm.seat(member)
                 return PluginResult(False, "computer_changed", "This computer is no longer the member's own. Read the refreshed computer tool catalog.")
             if self.tier_of(key) is None or approver == "none" or tool.tier >= Tier.T2 and approver != "user":
                 return result
@@ -628,8 +751,7 @@ class VmTools:
                 return PluginResult(False, "desktop_check_required")
             if tool.name == "request_takeover":
                 # Never over input that is already running at the screen (a long command in the workspace is none).
-                if self.vm.active.get(target.key, 0) > self.commands.get(target.key, 0) or (
-                        self.actions.get(target.key) and self.actions[target.key].locked()):
+                if self.vm.input_busy(target) or self.vm.native_busy(target):
                     return self._busy(target, None, 0.0)
                 data = await self.vm.work.request(work, arguments["reason"])
                 if arguments["reason"] == "payment" and target.key in self.payment_holds:
@@ -645,8 +767,8 @@ class VmTools:
                 # Another used the screen since this one looked at it: look again before acting on it.
                 result = PluginResult(True, "screen_changed", json.dumps({
                     "status": "screen_changed",
-                    "note": "Another member used the computer while you waited, so the screen is no longer what you last saw. "
-                            "Nothing was done. Read the intended get_window_state, then do this again if it is still needed."}))
+                    "note": "The computer has changed since your last read, so the screen is no longer what you last saw. "
+                            "Nothing was done. Read the intended get_window_state or get_browser_state, then do this again if it is still needed."}))
                 return result
             lock = self.actions.setdefault(target.key, asyncio.Lock()) if screen else None
             if lock is not None:
@@ -730,6 +852,8 @@ class VmTools:
                         return PluginResult(False, "bad_arguments", "Read the refreshed computer tool schema.")
                     # The screen is the member's own, and Chromium refuses input addressed to it in the background.
                     foreground = {"delivery_mode": "foreground"} if "delivery_mode" in self.schemas[key].get("properties", {}) else {}
+                    if target.container and tool.name == "browser_dialog" and arguments.get("action") == "inspect":
+                        foreground = {}  # A read-only dialog probe needs no foreground posture.
                     sent = {**foreground, **arguments, "session": session}
                     if tool.name == "get_window_state":
                         sent.update(max_elements=min(arguments.get("max_elements", 200), 200),
@@ -742,8 +866,11 @@ class VmTools:
                             async with asyncio.timeout(CuaBridge.read_timeout_s):
                                 data = await self._browser_open(target, member, client, session, arguments)
                         else:
-                            data = await client.request("tools/call", {"name": tool.name, "arguments": sent})
+                            data = await self._driver_call(target, client, tool.name, sent)
                     except (VmError, ConnectionError, TimeoutError) as error:
+                        if target.container and isinstance(error, VmError) and str(error) in ("computer_busy", "owner_holds_control", "computer_changed"):
+                            # Waiting for shared input is not a broken session: its bound pages must survive.
+                            raise
                         self.vm.invalidate(target)
                         await self._disconnect(target.key)
                         if isinstance(error, ConnectionError) or isinstance(error, VmError) and str(error) in ("transport_closed", "unavailable", "viewer_tunnel_failed"):
@@ -779,7 +906,7 @@ class VmTools:
                         text.append(json.dumps(data["structuredContent"], ensure_ascii=False))
                     combined = "\n".join(text)
                     if self.logins:
-                        for identifier in self.logins.values if target.key == "shared" else (member,):
+                        for identifier in self.logins.values if target.container == "shared" else (member,):
                             combined = self.logins.redact(identifier, combined)
                     limit = 60_000 if tool.name.startswith(PAGE_TOOLS) else 20_000
                     result = PluginResult(not data.get("isError", False), "tool_error" if data.get("isError") else None,
@@ -792,7 +919,11 @@ class VmTools:
                 self.vm.active[target.key] -= 1
                 if command:
                     self.commands[target.key] -= 1
-                self.vm.last_activity[target.key] = self.vm.clock()
+                self.vm.last_activity[target.state_key] = self.vm.clock()
+                if target.container:
+                    holder = self.vm.seats.holders(target.remote).get(target.screen)
+                    if holder is not None and self.vm.key_for(target.remote, holder) == target.key:
+                        self.vm.seats.touch(target.remote, holder)
                 if lock is not None:
                     self.lease_used[target.key] = self.vm.clock()
                     lock.release()
@@ -807,6 +938,10 @@ class VmTools:
             return result
         except VmError as error:
             self.vm.invalidate(target)
+            if str(error) in ("seats_full", "computer_busy"):
+                return self._busy(target, None, self.busy_wait_s if str(error) == "computer_busy" else 0,
+                                  note="every screen of the computer is in use" if str(error) == "seats_full" else None,
+                                  held_by="the owner" if self.vm.unit_held(target) else None)
             result = PluginResult(False, str(error), ENGINE_FAILURES.get(str(error), ""))
             return result
         except ConnectionError:
@@ -833,7 +968,15 @@ class VmTools:
             return PluginResult(False, "blocked")
         if not Draft202012Validator(RUN_STEPS["parameters"]).is_valid(arguments):
             return PluginResult(False, "bad_arguments")
-        if arguments['observation']['name'] == 'verify_state' and not arguments['observation']['arguments'].get('predicates'):
+        try:
+            await self._discover(target)
+        except Exception:
+            return PluginResult(False, "tool_changed")
+        observation = arguments['observation']
+        schema = self.schemas.get(tool_key(f"computer-{target.key}", observation['name']))
+        if not schema or not Draft202012Validator(schema).is_valid(observation['arguments']):
+            return PluginResult(False, "bad_arguments")
+        if observation['name'] == 'verify_state' and not meaningful_expectation(observation['arguments'].get('expect')):
             return PluginResult(False, "bad_arguments", "verify_state needs a nonempty expectation before any batch action.")
         completed = 0
         # Subcalls retain the ordinary action lock, audit, lease and private-field redaction.
@@ -858,37 +1001,45 @@ class VmTools:
             key = tool_key(f"computer-{target.key}", name)
             if name.startswith("browser_") and "delivery_mode" in self.schemas.get(key, {}).get("properties", {}):
                 args = {"delivery_mode": "foreground", **args}
-            reply = await client.request("tools/call", {"name": name, "arguments": {**args, "session": session}})
+            reply = await self._driver_call(target, client, name, {**args, "session": session})
             if reply.get("isError"):
                 raise VmError("browser_open_failed")
             return reply
 
-        prepared = await call("browser_prepare", {"allow_launch": True, "profile": {"mode": "isolated_named", "name": "main"}})
-        prepared_pid = (prepared.get("structuredContent") or {}).get("pid")
-        until = time.monotonic() + self.browser_window_wait_s
-        while True:
-            windows = await call("list_windows", {})
-            state = windows.get("structuredContent") or {}
-            if not state:
-                for block in windows.get("content", []):
-                    if block.get("type") == "text":
-                        try:
-                            state = json.loads(block["text"])
-                            break
-                        except ValueError:
-                            state = {"windows": [{"window_id": int(match[1]), "pid": int(match[2]), "app_name": match[3]}
-                                for match in re.finditer(r'window_id=(\d+) pid=(\d+) "[^"]*"[^\n]*app=([^\n]+)', block["text"])]}
-            rows = state if isinstance(state, list) else state.get("windows", [])
-            matches = [row for row in rows if "chrom" in str(row.get("app_name", row.get("title", ""))).lower()
-                       and isinstance(row.get("pid"), int) and isinstance(row.get("window_id"), int)
-                       and (not prepared_pid or row["pid"] == prepared_pid)]
-            if len(matches) == 1:
-                break
-            if matches or time.monotonic() >= until:
-                raise VmError("browser_window_ambiguous" if matches else "browser_window_missing")
-            # Preparing the CDP endpoint can finish before the window manager maps its window.
-            await asyncio.sleep(min(self.browser_window_poll_s, max(0, until - time.monotonic())))
-        window = matches[0]
+        if target.container:
+            async with self._native_lock(target):
+                window = await self._shared_browser_window(target, client, session)
+                prepared = await self._seat_driver_call(target, client, "browser_prepare", {
+                    "pid": window["pid"], "window_id": window["window_id"], "session": session, "delivery_mode": "foreground"})
+                if prepared.get("isError"):
+                    raise VmError("browser_open_failed")
+        else:
+            prepared = await call("browser_prepare", {"allow_launch": True, "profile": {"mode": "isolated_named", "name": "main"}})
+            prepared_pid = (prepared.get("structuredContent") or {}).get("pid")
+            until = time.monotonic() + self.browser_window_wait_s
+            while True:
+                windows = await call("list_windows", {})
+                state = windows.get("structuredContent") or {}
+                if not state:
+                    for block in windows.get("content", []):
+                        if block.get("type") == "text":
+                            try:
+                                state = json.loads(block["text"])
+                                break
+                            except ValueError:
+                                state = {"windows": [{"window_id": int(match[1]), "pid": int(match[2]), "app_name": match[3]}
+                                    for match in re.finditer(r'window_id=(\d+) pid=(\d+) "[^"]*"[^\n]*app=([^\n]+)', block["text"])]}
+                rows = state if isinstance(state, list) else state.get("windows", [])
+                matches = [row for row in rows if "chrom" in str(row.get("app_name", row.get("title", ""))).lower()
+                           and isinstance(row.get("pid"), int) and isinstance(row.get("window_id"), int)
+                           and (not prepared_pid or row["pid"] == prepared_pid)]
+                if len(matches) == 1:
+                    break
+                if matches or time.monotonic() >= until:
+                    raise VmError("browser_window_ambiguous" if matches else "browser_window_missing")
+                # Preparing the CDP endpoint can finish before the window manager maps its window.
+                await asyncio.sleep(min(self.browser_window_poll_s, max(0, until - time.monotonic())))
+            window = matches[0]
         bound = await call("get_browser_state", {"pid": window["pid"], "window_id": window["window_id"],
             "include_screenshot": False, "snapshot_format": "semantic_v2"})
         page = bound.get("structuredContent") or {}
@@ -905,38 +1056,93 @@ class VmTools:
         reply["content"] = [block for block in reply.get("content", []) if block.get("type") != "image"]
         return reply
 
+    @staticmethod
+    def _page_tab(page):
+        tabs = page.get("tabs", [])
+        selected = next((tab for tab in tabs if tab.get("active") is True), {})
+        tab_id = page.get("tab_id") or selected.get("tab_id")
+        url = (page.get("page") or {}).get("url") or page.get("url") or selected.get("url")
+        if not tab_id:
+            raise ValueError("Current browser tab is unavailable")
+        return tab_id, url
+
+    async def _type_page_fields(self, target, member, identifier, fields, check_page, *, private=True, skip_empty=False):
+        """Resolve member refs once, then match and type against each freshly checked page.
+
+        check_page receives the same raw reply and URL used for that field. Vault callers
+        keep their HTTPS/grant/amount rules there; acceptance can check its own loopback origin.
+        No driver diagnostics or values leave this boundary.
+        """
+        # The displayed private tree may name a different tab from the last foreground read.
+        # Resolve all refs to one known tab; identical ref strings across tabs are ambiguous.
+        fields = list(fields)
+        candidates = [(key[2], meanings) for key, meanings in self.page_refs.items()
+                      if key[:2] == (target.key, identifier) and all(ref in meanings for ref, _ in fields)]
+        if len(candidates) != 1:
+            raise ValueError()
+        tab_id, meanings = candidates[0]
+        resolved = [(meanings[ref], text) for ref, text in fields]
+        for meaning, _ in resolved:
+            if meaning[0] != "main":
+                raise SavedFieldRefused("The field is inside an embedded frame. Saved values are typed only into the page's own fields; ask the owner to take over with request_takeover.")
+            if sum(value == meaning for value in meanings.values()) != 1:
+                raise SavedFieldRefused("The fields have the same name and cannot be told apart. Ask the owner to take over with request_takeover.")
+        if skip_empty:
+            resolved = [(meaning, text) for meaning, text in resolved if text]
+        if not tab_id or not resolved:
+            raise ValueError()
+        client, session = await self._connection(target, member=member)
+        schema = self.schemas.get(tool_key(f"computer-{target.key}", "browser_type"))
+        if not schema:
+            raise ValueError()
+        # Every read below invalidates member refs, including a read before a refused fill.
+        # Reuse the screen lease's stale marker, which a fresh member read clears.
+        owner = self.leases.get(target.key)
+        if owner is not None:
+            self.stale.add((target.key, owner))
+        self.page_refs.pop((target.key, identifier, tab_id), None)
+        for meaning, text in resolved:
+            state = await self._driver_call(target, client, "get_browser_state", {
+                "target_id": identifier, "tab_id": tab_id, "session": session,
+                "include_screenshot": False, "snapshot_format": "semantic_v2"}, remember=False)
+            page = state.get("structuredContent") or {}
+            actual_tab, url = self._page_tab(page)
+            if (state.get("isError") or page.get("effect") == "refused" or page.get("target_id") != identifier
+                    or actual_tab != tab_id or target != self.vm.target(member) or target.key in self.vm.held):
+                raise ValueError()
+            check_page(state, url)
+            matches = [row for row in page.get("refs", []) if row.get("frame") == "main" and self._field_identity(row) == meaning]
+            if len(matches) != 1:
+                raise ValueError()
+            call = {"target_id": identifier, "tab_id": tab_id, "ref": matches[0]["ref"], "text": text, "replace": True}
+            if "delivery_mode" in schema.get("properties", {}):
+                call["delivery_mode"] = "foreground"
+            if not Draft202012Validator(schema).is_valid(call):
+                raise ValueError()
+            if private:
+                self._protect_page(target, identifier, url, (call["ref"],), tab_id=tab_id, fields=(meaning,))
+            reply = await self._driver_call(target, client, "browser_type", {**call, "session": session}, remember=False)
+            result = reply.get("structuredContent") or {}
+            count = (result.get("delivery") or {}).get("delivered_count")
+            if reply.get("isError") or result.get("effect") == "refused" or type(count) is not int or count != len(text):
+                raise ValueError()
+
     async def _fill_login(self, target, member, args):
         from .logins import origin
         if self.logins is None:
             return PluginResult(False, "login_missing", "Use request_secret with the HTTPS site, or request_takeover.")
         try:
             await self._discover(target)
-            client, session = await self._connection(target)
             values = self.logins.load(member, args["site"], args["reference"])
-            key = tool_key(f"computer-{target.key}", "browser_type")
-            schema = self.schemas.get(key)
-            if not schema:
-                raise ValueError()
-            calls = [{"target_id": args["target_id"], "ref": args[field + "_ref"], "text": values[field]}
-                     for field in ("username", "password")]
-            if "delivery_mode" in schema.get("properties", {}):
-                calls = [{**call, "delivery_mode": "foreground"} for call in calls]
-            if not all(Draft202012Validator(schema).is_valid(call) for call in calls):
-                raise ValueError()
-            for call in calls:
-                state = await client.request("tools/call", {"name": "get_browser_state", "arguments": {"target_id": args["target_id"], "session": session}})
-                page = state.get("structuredContent") or {}
-                url = page.get("url") or next((tab.get("url") for tab in page.get("tabs", []) if tab.get("active") is True), None)
-                if (state.get("isError") or page.get("target_id") != args["target_id"] or origin(url) != origin(args["site"])
-                        or target != self.vm.target(member) or target.key in self.vm.held):
+            def check_page(state, url):
+                if origin(url) != origin(args["site"]):
                     raise ValueError()
                 self.logins.load(member, args["site"], args["reference"])
-                # Driver echoes and pictures are deliberately discarded, including errors.
-                self._protect_page(target, args["target_id"], url, (call["ref"],))
-                reply = await client.request("tools/call", {"name": "browser_type", "arguments": {**call, "session": session}})
-                if reply.get("isError"):
-                    return PluginResult(False, "login_not_filled", '{"filled": false}')
+            await self._type_page_fields(target, member, args["target_id"],
+                [(args[field + "_ref"], values[field]) for field in ("username", "password")], check_page)
             return PluginResult(True, text='{"filled": true}')
+        except SavedFieldRefused as error:
+            return PluginResult(False, "login_not_filled", json.dumps({"filled": False, "hint": str(error)}))
         except Exception:
             self.vm.invalidate(target)
             # Transport and vault exceptions may echo input; none of their diagnostics leave this boundary.
@@ -951,24 +1157,8 @@ class VmTools:
             if row["label"] != args["label"]:
                 raise ValueError()
             await self._discover(target)
-            client, session = await self._connection(target, member=member)
-            schema = self.schemas.get(tool_key(f"computer-{target.key}", "browser_type"))
-            if not schema:
-                raise ValueError()
-            calls = [{"target_id": args["target_id"], "ref": ref, "text": values[field]}
-                     for field, ref in args["fields"].items() if values[field]]
-            if not calls:
-                raise ValueError()
-            if "delivery_mode" in schema.get("properties", {}):
-                calls = [{**call, "delivery_mode": "foreground"} for call in calls]
-            if not all(Draft202012Validator(schema).is_valid(call) for call in calls):
-                raise ValueError()
-            for call in calls:
-                state = await client.request("tools/call", {"name": "get_browser_state", "arguments": {"target_id": args["target_id"], "session": session}})
-                page = state.get("structuredContent") or {}
-                url = page.get("url")
-                if (state.get("isError") or page.get("target_id") != args["target_id"] or origin(url) != origin(args["site"])
-                        or target != self.vm.target(member) or target.key in self.vm.held):
+            def check_page(state, url):
+                if origin(url) != origin(args["site"]):
                     raise ValueError()
                 if not any(entry["id"] == args["reference"] and entry["label"] == args["label"]
                            for entry in self.logins.entries(member)):
@@ -984,16 +1174,247 @@ class VmTools:
                     if self.conn is not None:
                         with self.conn:
                             self.conn.execute("INSERT OR IGNORE INTO computer_payment_holds VALUES (?)", (target.key,))
-                self._protect_page(target, args["target_id"], url, (call["ref"],))
-                reply = await client.request("tools/call", {"name": "browser_type", "arguments": {**call, "session": session}})
-                if reply.get("isError"):
-                    raise ValueError()
+            await self._type_page_fields(target, member, args["target_id"],
+                [(ref, values[field]) for field, ref in args["fields"].items()], check_page, skip_empty=True)
             return PluginResult(True, text=json.dumps({"filled": True, "owner_finishes": kind == "card"}))
+        except SavedFieldRefused as error:
+            return PluginResult(False, "entry_not_filled", json.dumps({"filled": False, "hint": str(error)}))
         except Exception:
             self.vm.invalidate(target)
             return PluginResult(False, "entry_not_filled", '{"filled": false}')
 
+    async def _driver_call(self, target, client, name, arguments, *, remember=True):
+        if not target.container:
+            reply = await client.request("tools/call", {"name": name, "arguments": arguments})
+        elif shared_native_input(name, arguments):
+            async with self._native_lock(target):
+                reply = await self._seat_driver_call(target, client, name, arguments)
+        else:
+            reply = await self._seat_driver_call(target, client, name, arguments)
+        if not reply.get("isError"):
+            self._observe_page(target, reply.get("structuredContent") or {}, remember=remember)
+        return reply
+
+    @asynccontextmanager
+    async def _native_lock(self, target):
+        if self.native_owners.get(target.state_key) is asyncio.current_task():
+            yield
+            return
+        began = time.monotonic()
+        lock = self.native_actions.setdefault(target.state_key, asyncio.Lock())
+        while True:
+            if target.key in self.vm.held:
+                raise VmError("owner_holds_control")
+            if not self.vm.unit_held(target) and not lock.locked():
+                await lock.acquire()
+                break
+            remaining = self.busy_wait_s - (time.monotonic() - began)
+            if remaining <= 0:
+                raise VmError("computer_busy")
+            await asyncio.sleep(min(self.busy_poll_s, remaining))
+        try:
+            # No await separates the last hold check and acquisition on the core loop.
+            member = self.vm.seats.holders(target.remote).get(target.screen)
+            if member is None or self.vm.shared_target(target.remote, member, target.screen) != target:
+                raise VmError("computer_changed")
+            self.native_owners[target.state_key] = asyncio.current_task()
+            yield
+        finally:
+            self.native_owners.pop(target.state_key, None)
+            lock.release()
+
+    async def _canvas_windows(self, client, session, filters=None):
+        reply = await client.request("tools/call", {"name": "list_windows", "arguments": {**(filters or {}), "session": session}})
+        try:
+            return seat_view.canvas_windows(reply)
+        except (ValueError, KeyError, TypeError):
+            raise VmError("window_list_unavailable") from None
+
+    async def _shared_browser_window(self, target, client, session):
+        # The caller holds the unit native lock across discovery, launcher and attach.
+        canvas = await self._canvas_windows(client, session)
+        own = seat_view.windows(canvas, target.screen, target.screens)["windows"]
+        found = [row for row in own if row.get("app_name", "").lower() == "chromium-browser"]
+        if found:
+            return min(found, key=lambda row: row["window_id"])
+        return await self.vm.seat_browser(target)
+
+    @staticmethod
+    def _seat_error(text):
+        return {"isError": True, "content": [{"type": "text", "text": text}]}
+
+    async def _own_window(self, target, client, session, identifier, pid=None):
+        canvas = await self._canvas_windows(client, session)
+        row = next((row for row in canvas["windows"] if row.get("window_id") == identifier), None)
+        if (row is None or not seat_view.mine(identifier, canvas, target.screen, target.screens)
+                or pid is not None and row.get("pid") != pid):
+            return None
+        if not seat_view.contains(row["bounds"], target.screen, target.screens):
+            # A centre-owned window must fit wholly before any pixels, tree or input can cross the wall.
+            try:
+                async with self._native_lock(target):
+                    await self.vm.fit_window(target, row)
+            except VmError as error:
+                if str(error) != "window_move_failed":
+                    raise
+                return None
+            for attempt in range(10):
+                canvas = await self._canvas_windows(client, session)
+                fresh = next((item for item in canvas["windows"] if item.get("window_id") == identifier), None)
+                if fresh is None or fresh.get("pid") != row.get("pid"):
+                    return None
+                if seat_view.contains(fresh["bounds"], target.screen, target.screens):
+                    return fresh
+                await asyncio.sleep(.05)
+            return None
+        return row
+
+    async def _bound_window(self, target, client, args):
+        """One fresh gate for public page calls and private-picture/vault reads alike."""
+        key = (target.key, args["target_id"])
+        binding = self.page_windows.get(key)
+        if binding is None or binding[0] != args.get("session"):
+            self.page_windows.pop(key, None)
+            return None
+        _, identifier, pid = binding
+        row = await self._own_window(target, client, args.get("session"), identifier, pid)
+        if row is None or args.get("window_id", identifier) != identifier or args.get("pid", pid) != pid:
+            self.page_windows.pop(key, None)
+            return None
+        return row
+
+    async def _seat_driver_call(self, target, client, name, arguments):
+        session = arguments.get("session")
+        args = dict(arguments)
+        policy = SHARED_ARGUMENTS.get(name, {})
+        refused = [key for key in shared_argument_paths(args) if key not in policy or policy[key] == "refuse"]
+        refused.extend(key for key in args if "." in key or "[" in key)
+        if refused:
+            return self._seat_error("Unsupported shared-screen arguments: " + ", ".join(sorted(refused)))
+        # move_cursor's "desktop" is the driver's own word for "the real pointer": the point is still this member's,
+        # checked against its screen and translated below. Everywhere else a desktop frame names the whole canvas.
+        if name != "move_cursor" and args.get("scope") == "desktop" or args.get("coordinate_frame") == "desktop":
+            return self._seat_error("Desktop targeting is unavailable here; name one of this member's own windows.")
+        window_native = NATIVE_INPUT_TOOLS - {"move_cursor", "launch_app", "clipboard_write", "browser_prepare"}
+        if name in window_native and (not args.get("window_id") or args.get("scope") == "desktop"):
+            return self._seat_error("The computer's focus and pointer are shared. Please name one of this member's own windows; call list_windows.")
+        window = None
+        if "target_id" in args:
+            window = await self._bound_window(target, client, args)
+            if window is None:
+                return self._seat_error("The bound window is not on this member's screen. Call list_windows and bind an own window again.")
+        if "window_id" in args or ("pid" in args and name != "list_windows"):
+            window = await self._own_window(target, client, session, args.get("window_id"), args.get("pid"))
+            if window is None:
+                return self._seat_error("The window is not on this member's screen. Call list_windows and name an own window.")
+        if name == "browser_prepare":
+            window = (args if args.get("window_id") else await self._shared_browser_window(target, client, session))
+            args = {"pid": window["pid"], "window_id": window["window_id"],
+                    "strategy": {"kind": "existing_profile"}, "session": session,
+                    **{key: args[key] for key in ("delivery_mode",) if key in args}}
+            # A newly launched window must pass the same fresh wall as an existing one.
+            window = await self._own_window(target, client, session, args["window_id"], args["pid"])
+            if window is None:
+                return self._seat_error("The window is not on this member's screen. Call list_windows.")
+        if name == "get_browser_state" and not (args.get("window_id") or args.get("target_id")):
+            return self._seat_error("Name one of this member's own windows or a bound target_id; call list_windows.")
+        if name == "move_cursor":
+            _, _, width, height = seat_view.rectangle(target.screen, target.screens)
+            if not (0 <= args["x"] < width and 0 <= args["y"] < height):
+                return self._seat_error("Cursor coordinates must be inside this member's screen.")
+            args["x"], args["y"] = seat_view.to_canvas(target.screen, target.screens, args["x"], args["y"])
+            args["scope"] = "desktop"
+        elif name in window_native:
+            for xkey, ykey in (("x", "y"), ("from_x", "from_y"), ("to_x", "to_y")):
+                if xkey not in args and ykey not in args:
+                    continue
+                if (xkey not in args or ykey not in args or window is None
+                        or seat_view.to_seat(target.screen, target.screens,
+                            window["bounds"]["x"] + args[xkey], window["bounds"]["y"] + args[ykey]) is None):
+                    return self._seat_error("Pointer coordinates must be inside this member's screen.")
+            # The driver's drag interpolates a straight path: both endpoints in this convex rectangle bound every step.
+        if name == "verify_state":
+            from copy import deepcopy
+            args = deepcopy(args)
+            for predicate in args.get("expect", []):
+                bounds = predicate.get("window", {}).get("bounds")
+                if isinstance(bounds, dict):
+                    bounds["x"], bounds["y"] = seat_view.to_canvas(target.screen, target.screens, bounds["x"], bounds["y"])
+        if name in ("list_windows", "get_desktop_state"):
+            canvas = await self._canvas_windows(client, session, args if name == "list_windows" else None)
+            local = seat_view.windows(canvas, target.screen, target.screens)
+            if name == "list_windows" and "pid" in args:
+                local["windows"] = [row for row in local["windows"] if row["pid"] == args["pid"]]
+            reply = seat_view.projected_reply({}, local, seat_view.windows_text(local))
+            if name == "get_desktop_state":
+                from .rfb_view import capture
+                port, password = await self.vm.viewer_connection(target)
+                picture = await asyncio.to_thread(capture, port, password, target.screen)
+                reply["content"].append({"type": "image", "mimeType": "image/png", "data": base64.b64encode(picture).decode()})
+            return reply
+        before = await self._canvas_windows(client, session) if name == "launch_app" else None
+        reply = await client.request("tools/call", {"name": name, "arguments": args})
+        if before is not None and not reply.get("isError"):
+            after = await self._canvas_windows(client, session)
+            existing = {row["window_id"] for row in before["windows"]}
+            launched = reply.get("structuredContent") or {}
+            launch_pids = {launched.get("pid"), launched.get("launcher_pid")} - {None, 0}
+            new = [row for row in after["windows"] if row["window_id"] not in existing]
+            owned = [row for row in new if row["pid"] in launch_pids]
+            candidates = owned or (new if len(new) == 1 else [])
+            for row in candidates:
+                if not seat_view.mine(row["window_id"], after, target.screen, target.screens):
+                    await self.vm.move_window(target, row["window_id"])
+            after = await self._canvas_windows(client, session)
+        if reply.get("isError"):
+            return reply
+        state = reply.get("structuredContent")
+        if not isinstance(state, dict):
+            for block in reply.get("content", []):
+                if block.get("type") == "text":
+                    try:
+                        state = json.loads(block["text"])
+                    except ValueError:
+                        continue
+                    if isinstance(state, dict):
+                        break
+        if name == "get_cursor_position":
+            if not isinstance(state, dict) or not {"x", "y"} <= state.keys():
+                return self._seat_error("Pointer position is unavailable.")
+            point = seat_view.to_seat(target.screen, target.screens, state["x"], state["y"])
+            return seat_view.projected_reply(reply, dict(x=point[0], y=point[1]) if point else {},
+                                             f"✅ Cursor at ({point[0]}, {point[1]})" if point else "The pointer is on another screen.")
+        if name == "get_browser_state" and isinstance(state, dict) and state.get("target_id") and window:
+            self.page_windows[(target.key, state["target_id"])] = (session, window["window_id"], window["pid"])
+        if name == "move_cursor":
+            text = f"Moved the real desktop pointer to ({arguments['x']}, {arguments['y']})."
+            state = {**(state or {}), "summary": text}
+            return seat_view.projected_reply(reply, state, text)
+        if name in ("click", "double_click", "right_click", "drag", "scroll", "type_text", "press_key", "hotkey"):
+            # Only this trailer names canvas coordinates; retain the driver's action wording and evidence.
+            from copy import deepcopy
+            reply = deepcopy(reply)
+            for block in reply.get("content", []):
+                if block.get("type") == "text":
+                    block["text"] = re.sub(r"\s*\[window_point=.*?screen_point=.*?\]", "", block.get("text", ""))
+            if isinstance(state, dict) and isinstance(state.get("summary"), str):
+                state = {**state, "summary": re.sub(r"\s*\[window_point=.*?screen_point=.*?\]", "", state["summary"])}
+                reply["structuredContent"] = state
+        if isinstance(state, dict) and name in ("get_window_state", "verify_state", "get_browser_state", "browser_prepare", "launch_app"):
+            state = seat_view.window_state(state, target.screen, target.screens)
+            if name == "launch_app" and isinstance(state.get("windows"), list):
+                # Use settled bounds after any move, retaining only windows actually named by the launch reply.
+                ids = {row["window_id"] for row in state["windows"]}
+                state["windows"] = seat_view.windows(after, target.screen, target.screens)["windows"]
+                state["windows"] = [row for row in state["windows"] if row["window_id"] in ids]
+            return seat_view.projected_reply(reply, state)
+        return reply
+
     async def _connection(self, target, *, member=None):
+        async with self.connection_locks.setdefault(target.key, asyncio.Lock()):
+            return await self._connect(target, member=member)
+
+    async def _connect(self, target, *, member=None):
         """A computer's one connection to its driver, and its session label. The driver ends a session with the connection
         that used it, and with it the browser it opened, the tab it bound and the screenshot a gesture needs. A new
         connection takes a new label: the driver refuses one that has ended."""
@@ -1025,6 +1446,10 @@ class VmTools:
         return self.connections[target.key]
 
     async def _disconnect(self, key):
+        for remembered in (self.page_windows, self.page_tabs, self.page_refs):
+            for binding in list(remembered):
+                if binding[0] == key:
+                    remembered.pop(binding, None)
         held = self.connections.pop(key, None)
         if held is not None:
             await held[0].__aexit__(None, None, None)
@@ -1070,15 +1495,15 @@ class VmTools:
         self.lease_used[target.key] = self.vm.clock()
         return None
 
-    def _busy(self, target, held, waited):
+    def _busy(self, target, held, waited, *, note=None, held_by=None):
         """Not a tool failing: how things stand, so that the model can do other work or ask again later."""
         held = held or self.leases.get(target.key)
-        name = "someone" if held is None else self._name_of(held)
+        name = held_by or ("someone" if held is None else self._name_of(held))
         since = self.lease_since.get(target.key)
         return PluginResult(True, "computer_busy", json.dumps({
             "status": "computer_busy", "held_by": name,
             "held_for_s": None if since is None else round(self.vm.clock() - since), "waited_s": round(waited),
-            "note": f"{name} is using the computer. Nothing was done. Do other work that does not need it, or call again "
+            "note": note or f"{name} is using the computer. Nothing was done. Do other work that does not need it, or call again "
                     "later; this is not an error."}, ensure_ascii=False))
 
     def _name_of(self, scope):

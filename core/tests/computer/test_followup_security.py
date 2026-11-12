@@ -8,6 +8,7 @@ from raphael_core.computer import remote_host
 from raphael_core.computer.remote_host import RemoteSession
 from raphael_core.computer.vm_tools import vm_scope
 from .test_login_visibility import Browser, rig
+from .fixtures.semantic_browser import member_ref
 from .test_vm import desktop
 
 
@@ -48,19 +49,29 @@ async def test_docker_forward_is_private_or_falls_back_without_a_tcp_listener(tm
 async def test_private_page_requires_changed_origin_and_absent_fields(desktop, tmp_path, monkeypatch, change):
     hub, tools, reference = await rig(desktop, tmp_path)
     original = Browser.request
+    altered = False
     async def request(self, method, params=None):
         data = await original(self, method, params)
-        if method != "tools/list":
+        if method != "tools/list" and altered:
             if change != "different-origin-unknown":
                 data["structuredContent"]["truncated"] = change == "different-origin-incomplete"
             data["structuredContent"]["nodes"] = [] if change in ("different-origin-clear", "different-origin-incomplete", "different-origin-unknown") else [
                 {"ref": "u", "role": "textbox", "value": "sensitive display value"}, {"ref": "p", "role": "textbox"}]
+            if params["name"] == "get_browser_state":
+                snapshot = data['structuredContent']['snapshot']
+                # As the driver says a snapshot is whole (0.37.0, measured): `complete`, and no `continuation`.
+                snapshot.pop('complete', None)
+                if change != 'different-origin-unknown':
+                    snapshot['complete'] = change != 'different-origin-incomplete'
+                if change in ('different-origin-clear', 'different-origin-incomplete', 'different-origin-unknown'):
+                    data['structuredContent']['refs'] = []
         return data
     monkeypatch.setattr(Browser, "request", request)
     with vm_scope(("turn", 0, 7), turn_id=7):
         assert (await hub.call(tools["fill_login"], {"reference": reference, "site": "https://example.com",
-            "target_id": "tab", "username_ref": "u", "password_ref": "p"}, approver="auto")).ok
-        args = {"target_id": "tab"}
+            "target_id": "tab", "username_ref": member_ref(hub, hub.vm.target(0), "tab", "username"), "password_ref": member_ref(hub, hub.vm.target(0), "tab", "password")}, approver="auto")).ok
+        altered = True
+        args = {"target_id": "tab", "tab_id": "tab-1"}
         if change == "same-origin": Browser.url = "https://example.com/done"
         elif change == "time": hub.vm.clock = lambda: 1000000
         elif change == "other-tab": args["target_id"] = "other"
@@ -69,7 +80,7 @@ async def test_private_page_requires_changed_origin_and_absent_fields(desktop, t
             async def broken(*args): raise OSError("offline")
             monkeypatch.setattr(hub, "_connection", broken)
         result = await hub.call(tools["get_browser_state"], args, approver="auto")
-        if change == "different-origin-clear":
+        if change in ("different-origin-clear", "different-origin-fields-remain"):
             assert not result.blocks
             assert (await hub.call(tools["get_browser_state"], args, approver="auto")).blocks
         elif change != "unreadable":
@@ -91,7 +102,7 @@ async def test_a_target_change_during_a_read_does_not_probe_or_return_a_private_
         return data
     monkeypatch.setattr(Browser, "request", change)
     with vm_scope(("turn", 0, 7), turn_id=7):
-        result = await hub.call(tools["get_browser_state"], {"target_id": "tab"}, approver="auto")
+        result = await hub.call(tools["get_browser_state"], {"target_id": "tab", "tab_id": "tab-1"}, approver="auto")
         assert not result.ok and result.kind == "computer_changed" and not result.blocks
     await hub.aclose()
 
@@ -160,7 +171,7 @@ async def test_navigation_after_capture_cannot_release_the_captured_private_pict
     hub, tools, reference = await rig(desktop, tmp_path)
     with vm_scope(("turn", 0, 7), turn_id=7):
         assert (await hub.call(tools["fill_login"], {"reference": reference, "site": "https://example.com",
-            "target_id": "tab", "username_ref": "u", "password_ref": "p"}, approver="auto")).ok
+            "target_id": "tab", "username_ref": member_ref(hub, hub.vm.target(0), "tab", "username"), "password_ref": member_ref(hub, hub.vm.target(0), "tab", "password")}, approver="auto")).ok
         original = Browser.request
         async def navigate_after_capture(self, method, params=None):
             data = await original(self, method, params)
@@ -170,7 +181,7 @@ async def test_navigation_after_capture_cannot_release_the_captured_private_pict
                 Browser.url = "https://other.example/done"
             return data
         monkeypatch.setattr(Browser, "request", navigate_after_capture)
-        first = await hub.call(tools["get_browser_state"], {"target_id": "tab"}, approver="auto")
+        first = await hub.call(tools["get_browser_state"], {"target_id": "tab", "tab_id": "tab-1"}, approver="auto")
         assert not first.blocks
-        assert (await hub.call(tools["get_browser_state"], {"target_id": "tab"}, approver="auto")).blocks
+        assert (await hub.call(tools["get_browser_state"], {"target_id": "tab", "tab_id": "tab-1"}, approver="auto")).blocks
     await hub.aclose()

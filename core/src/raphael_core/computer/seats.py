@@ -44,8 +44,8 @@ class ComputerSeats:
         row = self.rows.get((host, member_id))
         return row[0] if row is not None else None
 
-    def take(self, host, member_id, *, busy=lambda member_id: False):
-        ident = (host, member_id)
+    def candidate(self, host, member_id, *, busy=lambda member_id: False):
+        """Select without publishing; the caller can revoke and clean up before take."""
         number = self.seat(host, member_id)
         displaced = None
         if number is None:
@@ -57,6 +57,11 @@ class ComputerSeats:
                 if victim is None:
                     raise SeatsFull("Every seat on this host is busy")
                 number, displaced = victim
+        return number, displaced
+
+    def take(self, host, member_id, *, busy=lambda member_id: False):
+        number, displaced = self.candidate(host, member_id, busy=busy)
+        ident = (host, member_id)
         used = self.clock()
         rows = self.rows.copy()
         statements = []
@@ -78,6 +83,20 @@ class ComputerSeats:
         rows = self.rows.copy()
         rows[ident] = (rows[ident][0], used)
         self._write(rows, [("UPDATE computer_seats SET used=? WHERE host=? AND member_id=?", (used, host, member_id))])
+
+    def restore(self, host, member_id, number, used=None):
+        """Put a member on exactly this screen; never silently select another free seat.
+
+        `used` gives a displaced holder back its own last use. A hand-over that failed must not make the idle
+        member look recently used: the next attempt would then take a busier member's screen instead (seen on a
+        real computer: the retry displaced the other member).
+        """
+        if number in self.holders(host):
+            raise SeatsFull("The reserved screen is no longer free")
+        used = self.clock() if used is None else used
+        rows = {**self.rows, (host, member_id): (number, used)}
+        self._write(rows, [("INSERT INTO computer_seats(host, member_id, seat, used) VALUES (?, ?, ?, ?)",
+                            (host, member_id, number, used))])
 
     def release(self, host, member_id):
         rows = self.rows.copy()

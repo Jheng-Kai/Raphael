@@ -1,0 +1,77 @@
+#!/bin/sh
+# Give one screen its own window of the computer's own browser.
+# usage: raphael-seat-browser X Y WIDTH HEIGHT   -> prints "pid=<browser pid> window_id=<decimal id>"
+# The browser belongs to the computer, not to a driver session: every seat attaches to it with its own session.
+set -eu
+x=$1 y=$2 width=$3 height=$4
+profile=/home/cua/workspace/.browser-profiles/driver/main
+chromium=/usr/lib/chromium/chromium
+# The flags the driver itself starts its isolated browser with (measured), so the profile behaves the same.
+flags="--user-data-dir=$profile --no-first-run --no-default-browser-check --disable-background-networking --disable-component-update --disable-default-apps --disable-extensions --password-store=basic --no-sandbox"
+export DISPLAY=:1
+windows() { wmctrl -lx | awk '$3 ~ /^chromium-browser/ {print $1}' | sort; }
+before=$(windows)
+browser_pid() { pgrep -f -- "^$chromium --remote-debugging-port=0 --user-data-dir=$profile( |$)" | head -n 1 || true; }
+main=$(browser_pid)
+# A private title attributes the new window even when another seat opens a popup in the same process.
+marker=raphael-seat-$(cat /proc/sys/kernel/random/uuid)
+start_page="data:text/html,<title>$marker</title>"
+if [ -n "$main" ]; then
+  "$chromium" $flags --new-window "$start_page" >/dev/null 2>&1 &
+else
+  mkdir -p "$profile"
+  setsid "$chromium" --remote-debugging-port=0 $flags "$start_page" >/dev/null 2>&1 &
+fi
+new=
+attempt=0
+while [ "$attempt" -lt 150 ]; do
+  now=$(windows)
+  main=$(browser_pid)
+  candidates=$(printf '%s\n' "$now" | awk -v before="$before" '
+    BEGIN {split(before, rows, "\n"); for (i in rows) old[rows[i]]=1}
+    NF && !($0 in old) {print $0}')
+  # With its own profile folder the browser's class is "chromium-browser (<folder>).Chromium-browser": a space
+  # inside it shifts every later column, so the title's marker is looked for in any of them.
+  new=$(wmctrl -lpx | awk -v candidates="$candidates" -v pid="$main" -v marker="$marker" '
+    BEGIN {split(candidates, rows, "\n"); for (i in rows) fresh[rows[i]]=1}
+    ($1 in fresh) && $3 == pid && $4 ~ /^chromium-browser/ {for (i = 5; i <= NF; i++) if ($i == marker) {print $1; exit}}')
+  [ -n "$new" ] && break
+  attempt=$((attempt + 1))
+  sleep 0.1
+done
+[ -n "$new" ] || { echo "no browser window appeared" >&2; exit 1; }
+# Chromium opens a new window beside its first, whatever screen the pointer is on: put it on this screen, then fill it.
+wmctrl -i -r "$new" -b remove,maximized_vert,maximized_horz
+wmctrl -i -r "$new" -e "0,$((x + 20)),$((y + 20)),$((width - 80)),$((height - 120))"
+sleep 0.3
+wmctrl -i -r "$new" -b add,maximized_vert,maximized_horz
+# Maximize returns while XFCE is still animating. Publish only settled screen geometry.
+# Once in about twenty launches the browser keeps its own invisible frame while maximized: its content fills the
+# screen and the window reaches a few pixels past it (measured: 1312x893 at -16,-10 of a 1280x851 work area).
+# After a second and a half, maximized and centred on this screen counts as settled; the core brings a window
+# that reaches past its screen back inside before anything is read from it or sent to it.
+filling() {
+  state=$(xprop -id "$new" _NET_WM_STATE 2>/dev/null)
+  case "$state" in *MAXIMIZED_VERT*) ;; *) return 1 ;; esac
+  case "$state" in *MAXIMIZED_HORZ*) ;; *) return 1 ;; esac
+  wmctrl -lG | awk -v id="$new" -v x="$x" -v y="$y" -v w="$width" -v h="$height" '
+    $1 == id && $3 + $5 / 2 >= x && $3 + $5 / 2 < x + w && $4 + $6 / 2 >= y && $4 + $6 / 2 < y + h {found=1}
+    END {exit !found}'
+}
+attempt=0
+while [ "$attempt" -lt 50 ]; do
+  if wmctrl -lG | awk -v id="$new" -v x="$x" -v y="$y" -v w="$width" -v h="$height" '
+    $1 == id && $3 == x && $4 == y && $5 == w && $6 == h - 49 {found=1}
+    END {exit !found}'; then
+    break
+  fi
+  if [ "$attempt" -ge 15 ] && filling; then
+    break
+  fi
+  attempt=$((attempt + 1))
+  sleep 0.1
+done
+[ "$attempt" -lt 50 ] || { echo "browser window geometry did not settle on the screen within 5 seconds" >&2; exit 1; }
+# The window's own pid is the browser's main process: the one the driver binds a window by.
+main=$(wmctrl -lp | awk -v id="$new" '$1 == id {print $3}')
+echo "pid=$main window_id=$((new))"

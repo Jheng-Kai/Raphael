@@ -52,6 +52,8 @@ class Runtime:
             if "/dev/shm/raphael-screens.ready" in args and not self.screens_ready:
                 return Result(42, "cua-driver 0.37.0")
             return Result(0, "cua-driver 0.37.0")
+        if args[0] == "exec" and "wmctrl" in args and args[-1] in ("-lG", "-lx"):
+            return Result(0, "")
         if "health_report" in args:
             return Result(0, '{"schema_version":"1","overall":"ok","checks":[]}')
         if any(arg.startswith('"""Guest-only file checkpoints') for arg in args):
@@ -63,10 +65,11 @@ class Runtime:
 
 def container(vm, target, runtime):
     raw = {"Name": "/" + target.name, "Image": runtime.image_id,
-        "Config": {"Labels": {**IMAGE_LABELS, f"{LABEL}.owner": vm.owner, f"{LABEL}.target": target.key}, "Env": ["VNC_PW=private", f"RAPHAEL_SCREENS={target.screens}"]},
+        "Config": {"Labels": {**IMAGE_LABELS, f"{LABEL}.owner": vm.owner, f"{LABEL}.target": target.unit}, "Env": ["VNC_PW=private", f"RAPHAEL_SCREENS={target.screens}"]},
         "State": {"Running": True}, "HostConfig": {"Privileged": False, "CapDrop": ["ALL"], "CapAdd": ["SETUID", "SETGID"],
             "IpcMode": "private", "CgroupnsMode": "private", "NetworkMode": "bridge", "RestartPolicy": {"Name": "no"},
-            "Memory": 3 * 1024**3, "MemorySwap": 3 * 1024**3, "NanoCpus": 2_000_000_000, "PidsLimit": 4096,
+            "Memory": (6 if target.container else 3) * 1024**3, "MemorySwap": (6 if target.container else 3) * 1024**3,
+            "NanoCpus": (4 if target.container else 2) * 1_000_000_000, "PidsLimit": 4096,
             "ShmSize": 512 * 1024**2, "PortBindings": {"6901/tcp": [{"HostIp": "127.0.0.1", "HostPort": "6080"}]}},
         "Mounts": [{"Type": "bind", "Source": str(target.workspace), "Destination": GUEST, "RW": True}],
         "NetworkSettings": {"Ports": {"6901/tcp": [{"HostIp": "127.0.0.1", "HostPort": "6080"}]}}}
@@ -82,12 +85,26 @@ def container(vm, target, runtime):
 
 
 @pytest.fixture
-def desktop(tmp_path, conn):
+async def desktop(tmp_path, conn, monkeypatch):
+    # Shared desktop pictures now come from the clipped view, not the driver fake.
+    monkeypatch.setattr("raphael_core.computer.rfb_view.capture", lambda *args, **kwargs: b"\x89PNG\r\n\x1a\nimage")
     settings = SettingsStore(conn)
     settings.set("computer_vm_mode", "shared")
     runtime = Runtime()
     vm = LocalVm(tmp_path, settings=settings, runner=runtime, clock=lambda: 0)
-    target = vm.target()
+    target = await vm.seat()
+    runtime.raw = container(vm, target, runtime)
+    runtime.calls.clear()  # Seat allocation has its own empty-screen check; consumers start after setup.
+    return vm, target, runtime
+
+
+@pytest.fixture
+async def per_bot_desktop(tmp_path, conn):
+    settings = SettingsStore(conn)
+    settings.set("computer_vm_mode", "per-bot")
+    runtime = Runtime()
+    vm = LocalVm(tmp_path, settings=settings, runner=runtime, clock=lambda: 0)
+    target = await vm.seat()
     runtime.raw = container(vm, target, runtime)
     return vm, target, runtime
 
@@ -337,7 +354,7 @@ async def test_start_launches_installed_docker_and_builds_missing_image_once(des
     async def run(args, **kwargs):
         if args[0] in ("pull", "build"):
             kwargs["progress"]("#3 [2/4] Installing desktop tools")
-            progress.append(vm.preparation[target.key].copy())
+            progress.append(vm.preparation[target.state_key].copy())
         if args[0] == "build":
             runtime.built = True
         return await original(args, **kwargs)
@@ -487,7 +504,9 @@ def test_targets_are_isolated_by_default_and_can_explicitly_share(conn, tmp_path
     vm = LocalVm(tmp_path, settings=settings)
     assert vm.target(0) != vm.target(17)
     settings.set("computer_vm_mode", "shared")
-    assert vm.target(0) == vm.target(17)
+    assert vm.target(0) != vm.target(17)
+    assert vm.target(0).unit == vm.target(17).unit == 'shared'
+    assert vm.target(0).workspace == vm.target(17).workspace
     assert vm.target("../../escape").workspace.parent == tmp_path / "vm-homes"
 
 
@@ -547,7 +566,7 @@ async def test_recovery_and_idle_stop_keep_workspace_and_ignore_busy_or_held(des
     file = target.workspace / "keep.txt"
     file.write_text("persistent")
     await vm.recover()
-    assert target.key in vm.last_activity
+    assert target.state_key in vm.last_activity
     vm.clock = lambda: 15 * 60 + 1
     vm.active[target.key] = 1
     await vm.sweep()
@@ -612,17 +631,34 @@ class EmptyHub:
     def record_unrun(self, *args, **kwargs): pass
 
 
+from .fixtures.driver_contract import checked_request, validate_call, runtime_refusal
+
+
 class Bridge:
     alive = True
     calls = []
     def __init__(self, vm, target): self.vm, self.target = vm, target
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        if "request" in cls.__dict__:
+            cls.request = checked_request(cls.request)
     async def __aenter__(self): return self
     async def __aexit__(self, *args): pass
     async def request(self, method, params=None):
+        validate_call(method, params)
+        refusal = runtime_refusal(method, params)
+        if refusal:
+            return refusal
         self.calls.append((method, params))
         if method == "tools/list":
             return {"tools": [{"name": name, "description": name, "inputSchema": {"type": "object"}}
                               for name in ("get_desktop_state", "get_window_state", "list_windows", "click", "type_text", "scroll", "launch_app")]}
+        if params["name"] == "list_windows":
+            from raphael_core.computer.vm import screen_grid
+            state = {"windows": [dict(window_id=number, pid=number, title="Terminal", app_name="Xfce4-terminal",
+                        bounds=dict(x=x + 20, y=y + 20, width=600, height=400))
+                        for number, (x, y, _, _) in enumerate(screen_grid(self.target.screens)[0], 1)]}
+            return {"structuredContent": state, "content": [{"type": "text", "text": json.dumps(state)}]}
         return {"content": [{"type": "image", "data": base64.b64encode(b"\x89PNG\r\n\x1a\nimage").decode(), "mimeType": "image/png"}]}
 
 
@@ -774,10 +810,10 @@ def test_the_image_carries_the_labels_the_core_checks():
         assert f'{key}="{value}"' in dockerfile
 
 
-async def test_a_computer_keeps_one_driver_connection_and_session_until_it_breaks(desktop, tmp_path):
+async def test_a_computer_keeps_one_driver_connection_and_session_until_it_breaks(per_bot_desktop, tmp_path):
     # The driver ends a session with the connection that used it: live, the browser browser_prepare opened was gone by the
     # next call, every later call was refused as "session has ended", and a drag never found the screenshot read before it.
-    vm, target, runtime = desktop
+    vm, target, runtime = per_bot_desktop
     class Recording(CatalogBridge):
         calls, opened, closed = [], [], []
         async def __aenter__(self):
@@ -790,7 +826,8 @@ async def test_a_computer_keeps_one_driver_connection_and_session_until_it_break
             if method == "tools/list":
                 for item in result["tools"]:
                     if item["name"] in ("browser_pointer", "click", "browser_click"):
-                        item["inputSchema"] = {"type": "object", "properties": {"delivery_mode": {"type": "string"}, "action": {"type": "string"}, "x": {"type": "number"}, "y": {"type": "number"}}}
+                        from .fixtures.driver_contract import SCHEMAS
+                        item["inputSchema"] = SCHEMAS[item["name"]]
             elif params and params["name"] == "get_browser_state":
                 self.calls.append((method, params))
                 return {"content": [{"type": "text", "text": "bound target with 1 tab(s)"}], "structuredContent": {"target_id": "bt-1", "tabs": [{"tab_id": "tab-1"}]}}
@@ -800,8 +837,8 @@ async def test_a_computer_keeps_one_driver_connection_and_session_until_it_break
     tool = lambda name: next(item for item in hub.offered() if item.name == name)
     assert (await hub.call(tool("get_desktop_state").key, {}, approver="auto")).ok
     used = len(Recording.opened)
-    assert (await hub.call(tool("browser_pointer").key, {"action": "drag"}, approver="auto")).ok
-    assert (await hub.call(tool("browser_click").key, {"delivery_mode": "background"}, approver="auto")).ok
+    assert (await hub.call(tool("browser_pointer").key, {"action": "drag", "target_id": "bt-1", "tab_id": "tab-1", "ref": "source", "destination_ref": "dest"}, approver="auto")).ok
+    assert (await hub.call(tool("browser_click").key, {"delivery_mode": "background", "target_id": "bt-1", "tab_id": "tab-1", "ref": "button"}, approver="auto")).ok
     assert (await hub.call(tool("click").key, {"x": 1, "y": 2}, approver="auto")).ok
     sent = {params["name"]: params["arguments"] for method, params in Recording.calls if method == "tools/call"}
     assert len({arguments["session"] for arguments in sent.values()}) == 1 and len(Recording.opened) == used
@@ -933,7 +970,7 @@ async def test_tools_share_snapshot_and_gate_and_owner_control(desktop, conn, tm
     click = next(tool for tool in hub.offered() if tool.name == "click")
     execute = next(tool for tool in hub.offered() if tool.name == "vm_exec")
     shot = next(tool for tool in hub.offered() if tool.name == "get_desktop_state")
-    calls = [(shot, {}), (click, {}), (execute, {"command": "printf hello"})]
+    calls = [(shot, {}), (click, {"pid": 1, "window_id": 1}), (execute, {"command": "printf hello"})]
     assert gate.reads_only("computer", "get_desktop_state", {}) and not gate.reads_only("computer", "vm_exec", {"command": "x"})
     for tool, arguments in calls:
         assert gate.tier(tool.key) == Tier.T0
@@ -981,7 +1018,7 @@ async def test_sandbox_steps_do_not_reenter_per_action_safety_screening(desktop,
 
 
 async def test_vm_tool_descriptions_require_owner_yes_before_outward_actions(desktop, tmp_path):
-    from raphael_core.computer.vm_tools import ATTACH
+    from raphael_core.computer.vm_tools import ATTACH, SHARED_CONTRACT
 
     vm, target, runtime = desktop
     hub = VmTools(EmptyHub(), vm, attachments=AttachmentStore(tmp_path), bridge=Bridge)
@@ -1001,7 +1038,7 @@ async def test_vm_tool_descriptions_require_owner_yes_before_outward_actions(des
                 assert "Every use needs owner approval" in description and "request_takeover" in description
             continue
         if tool.name == "attach_file":
-            assert tool.description == ATTACH["description"]
+            assert tool.description == ATTACH["description"] + SHARED_CONTRACT
             continue
         if tool.name == "request_takeover":
             assert "Never request secrets in chat" in definitions["computer__request_takeover"]["description"]
@@ -1013,11 +1050,11 @@ async def test_vm_tool_descriptions_require_owner_yes_before_outward_actions(des
             assert clause in description
 
 
-async def test_native_vm_journey_checks_no_approval_and_owner_control(desktop, tmp_path, monkeypatch):
+async def test_native_vm_journey_checks_no_approval_and_owner_control(per_bot_desktop, tmp_path, monkeypatch):
     from raphael_core.computer import vm as vm_module, vm_tools
     from raphael_core.native_journeys import vm_smoke
 
-    vm, target, runtime = desktop
+    vm, target, runtime = per_bot_desktop
     monkeypatch.setenv("RAPHAEL_TEST_NATIVE", "1")
     monkeypatch.setattr(vm_module, "LocalVm", lambda *args, **kwargs: vm)
     payload = b"Raphael VM smoke\n"
@@ -1126,7 +1163,7 @@ def test_schema_root_combinators_become_plain_object():
     assert set(schema["properties"]) == {"url", "a", "b"} and schema["required"] == ["url"]
 
 
-async def test_shared_desktop_lease_refuses_another_active_turn(desktop, tmp_path):
+async def test_a_seats_lease_refuses_another_active_turn_of_the_same_member(desktop, tmp_path):
     vm, target, runtime = desktop
     hub = VmTools(EmptyHub(), vm, attachments=AttachmentStore(tmp_path), bridge=Bridge)
     await hub.prepare()
@@ -1135,13 +1172,13 @@ async def test_shared_desktop_lease_refuses_another_active_turn(desktop, tmp_pat
     shot = next(tool for tool in hub.offered() if tool.name == "get_desktop_state")
     with vm_scope(("turn", 0, 1)):
         assert (await hub.call(shot.key, {}, approver="auto")).ok
-    with vm_scope(("turn", 2, 3)):
+    with vm_scope(("turn", 0, 3)):
         assert (await hub.call(shot.key, {}, approver="auto")).kind == "computer_busy"
     vm.clock = lambda: 500 * 60
     await vm.sweep()
     assert runtime.raw["State"]["Running"]
     hub.scope_busy = lambda owner: False
-    with vm_scope(("turn", 2, 3)):
+    with vm_scope(("turn", 0, 3)):
         assert (await hub.call(shot.key, {}, approver="auto")).ok
 
 
