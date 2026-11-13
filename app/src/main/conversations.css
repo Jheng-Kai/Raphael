@@ -60,6 +60,14 @@
 /* The empty and waiting states are centred in what the row leaves. */
 .mb-chat .ra-empty { padding-top: calc(var(--row-lead) + var(--sp-4)); }
 .mb-chat .ra-wait { padding-top: calc(var(--row-lead) + var(--sp-5)); }
+/* A waiting question's row (pending-questions.ts) stands first in the stage, which reaches the window's top: it takes the lead the
+   thread gives up, so it stands below the top row, never under the pill where a press would open the member's details. With the
+   search bar open the stage already starts below the row. Its sides are the thread's: the scroller's inset, then the column. */
+.mb-chat .ra-stage > .pending-questions { --q-inset: var(--pa-dock-x); margin-top: var(--row-lead); width: 100%; max-width: calc(var(--pa-colw) + 2 * var(--q-inset)); padding-inline: var(--q-inset); }
+.au-room-pane .ra-stage > .pending-questions { --q-inset: calc(var(--room-pad) + var(--pa-dock-x)); }
+.mb-chat:has(> .ra-find:not([hidden])) .ra-stage > .pending-questions { margin-top: 0; }
+/* Under the row the thread keeps a short lead of its own and fades over it, so a message scrolled up to the row is not cut mid-line. */
+.mb-chat .ra-stage:has(> .pending-questions:not([hidden])) > .ra-scroll { --row-lead: var(--sp-4); mask-image: linear-gradient(to bottom, transparent, var(--text) var(--row-lead)); }
 /* A conversation between members (peer-chat.ts): over the thread and its composer, the pill 「A ⇄ B」 where
    the member's pill was, each message under its speaker's face and coloured name, and 「關閉對話」 where the composer was. */
 /* It keeps the conversation's own sides (`.mb-chat`'s, narrower under 860 px), and its thread the composer's under it, so

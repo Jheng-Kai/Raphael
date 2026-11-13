@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
-// The member panel's Library, as Grok Bot's: only what the member delivered, four chips for the kinds there are, the items
-// grouped by recency and each group one card of one-line rows (a 20 px mark and the title).
+// The member panel's Library, as Grok Bot's: only what the member delivered, four chips always, the items grouped by
+// recency and each group one card of one-line rows (a 20 px mark and the title).
 import { expect, test } from "vitest";
 import { panelLibraryHTML, type LibraryItem } from "./member-panel-work";
 
@@ -46,7 +46,7 @@ test("a group the data has nothing for is not drawn", () => {
   expect([...page.querySelectorAll(".lib-group[data-group=older] .lib-title")].map(title => title.textContent)).toEqual(["Notes.md", "Older plan"]);
 });
 
-test("links are never shown, and the kinds there are become chips (全部, 頁面, 媒體, 檔案) that narrow the list", () => {
+test("links are never shown, and the four chips (全部, 頁面, 媒體, 檔案) narrow the list", () => {
   const all = parse(panelLibraryHTML({ files: mixed, has_more: false }, false, NOW));
   expect(all.textContent).not.toContain("example.com");
   expect([...all.querySelectorAll<HTMLElement>(".lib-filters [data-lib-filter]")].map(b => [b.textContent, b.dataset.libFilter, b.getAttribute("aria-pressed")]))
@@ -59,19 +59,36 @@ test("links are never shown, and the kinds there are become chips (全部, 頁�
   expect([...files.querySelectorAll<HTMLElement>("[data-lib-filter]")].filter(b => b.getAttribute("aria-pressed") === "true").map(b => b.textContent)).toEqual(["檔案"]);
 });
 
-test("a chip with nothing in it is not shown, and one kind alone needs no chips at all", () => {
-  const two = parse(panelLibraryHTML({ files: [mixed[0]!, mixed[2]!], has_more: false }, false, NOW));
-  expect([...two.querySelectorAll(".lib-filters [data-lib-filter]")].map(b => b.textContent)).toEqual(["全部", "媒體", "檔案"]);
-  expect(parse(panelLibraryHTML({ files: [mixed[2]!, mixed[5]!], has_more: false }, false, NOW)).querySelector(".lib-filters")).toBeNull();
-  // A filter the data no longer has falls back to 全部; links alone are nothing to show.
-  expect(parse(panelLibraryHTML({ files: [mixed[2]!, mixed[5]!], has_more: false }, false, NOW, "pages")).querySelectorAll("[data-panel-file]").length).toBe(2);
-  expect(parse(panelLibraryHTML({ files: [mixed[4]!], has_more: false }, false, NOW)).textContent).toBe("還沒有檔案或頁面");
+test("the four chips are always there, and a kind with nothing in it is one quiet line", () => {
+  const chips = (html: string) => [...parse(html).querySelectorAll<HTMLElement>(".lib-filters [data-lib-filter]")].map(b => [b.textContent, b.dataset.libFilter]);
+  const four = [["全部", "all"], ["頁面", "pages"], ["媒體", "media"], ["檔案", "files"]];
+  // One kind alone (the owner's case), two kinds, links alone, nothing yet, loading and failed: always the same four, in order.
+  for (const files of [[mixed[2]!, mixed[5]!], [mixed[0]!, mixed[2]!], [mixed[4]!], [], mixed]) expect(chips(panelLibraryHTML({ files, has_more: false }, false, NOW))).toEqual(four);
+  expect(chips(panelLibraryHTML(null, false, NOW))).toEqual(four);
+  expect(chips(panelLibraryHTML(null, true, NOW))).toEqual(four);
+  // A chip of a kind the member has not delivered is one quiet line in the cards' place, never a blank and never the 全部 sentence.
+  const filesOnly = { files: [mixed[2]!, mixed[5]!], has_more: false };
+  for (const [filter, line] of [["pages", "還沒有頁面"], ["media", "還沒有媒體"]] as const) {
+    const page = parse(panelLibraryHTML(filesOnly, false, NOW, filter));
+    expect([...page.querySelectorAll(".mp-empty")].map(p => p.textContent)).toEqual([line]);
+    expect(page.querySelector(".lib-group, .lib-card, [data-panel-file]")).toBeNull();
+    expect(page.querySelector(".lib-filters + .mp-empty")).not.toBeNull();
+    expect([...page.querySelectorAll<HTMLElement>("[data-lib-filter]")].filter(b => b.getAttribute("aria-pressed") === "true").map(b => b.dataset.libFilter)).toEqual([filter]);
+  }
+  expect(parse(panelLibraryHTML(filesOnly, false, NOW, "files")).querySelectorAll("[data-panel-file]").length).toBe(2);
+  expect(parse(panelLibraryHTML({ files: [mixed[0]!], has_more: false }, false, NOW, "files")).querySelector(".mp-empty")!.textContent).toBe("還沒有檔案");
+  // 全部 keeps its own sentence when there is nothing at all (links alone are nothing to show), and loading and failed keep theirs.
+  for (const files of [[], [mixed[4]!]]) expect(parse(panelLibraryHTML({ files, has_more: false }, false, NOW)).querySelector(".mp-empty")!.textContent).toBe("還沒有檔案或頁面");
+  expect(parse(panelLibraryHTML(null, true, NOW)).querySelector(".mp-empty")!.textContent).toBe("無法讀取，請再試一次");
+  expect(parse(panelLibraryHTML(null, false, NOW)).querySelector(".mp-empty")!.textContent).not.toBe("");
+  // Whatever the filter says, an unknown one falls back to 全部.
+  expect(parse(panelLibraryHTML(filesOnly, false, NOW, "nothing" as never)).querySelectorAll("[data-panel-file]").length).toBe(2);
 });
 
 test("a delivered picture with no stored copy keeps its icon as the mark; an empty or failed Library says so in one line", () => {
   const mark = parse(panelLibraryHTML({ has_more: false, files: [item("delivered-file:shot", "image", "Shot.png", NOW)] }, false, NOW));
   expect(mark.querySelector(".lib-icon img")).toBeNull();
   expect(mark.querySelector(".lib-icon[data-kind=image] > svg.i")).not.toBeNull();
-  expect(parse(panelLibraryHTML({ files: [], has_more: false }, false, NOW)).textContent).toBe("還沒有檔案或頁面");
+  expect(parse(panelLibraryHTML({ files: [], has_more: false }, false, NOW)).querySelector(".mp-empty")!.textContent).toBe("還沒有檔案或頁面");
   expect(parse(panelLibraryHTML(null, true, NOW)).querySelector(".mp-empty")).not.toBeNull();
 });

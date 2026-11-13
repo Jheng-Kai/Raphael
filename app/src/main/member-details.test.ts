@@ -106,7 +106,7 @@ describe("a member's panel", () => {
     current = 4; panel.showMember(); panel.select('library'); await flush();
     resolve({files:[{id:'stale',title:'Stale file',name:'Stale file',kind:'file',at_ms:1,day:'1970-01-01'}],has_more:false}); await flush();
     expect(panel.el.textContent).not.toContain('Stale file');
-    expect(panel.el.querySelector('.mb-tab-body')?.textContent).toBe(t('members.panelNoFiles'));
+    expect(panel.el.querySelector('.mb-tab-body .mp-empty')?.textContent).toBe(t('members.panelNoFiles'));
   });
   test("Raphael's face follows the current custom avatar on redraw", async () => {
     current=0; const panel=mount(); await flush();

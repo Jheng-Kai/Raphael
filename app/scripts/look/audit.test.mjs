@@ -1168,6 +1168,23 @@ describe("rendered look checks", () => {
     expect(strip()).toEqual([]);
   });
 
+  it("leaves a message whose edge lies within the strip's height: a thread passes under the strip (R-UI-141)", () => {
+    const window = new Window();
+    window.document.body.innerHTML = '<div class="window-chrome"></div><div id="page"><div id="scroll" style="overflow-y: auto"><div id="bubble"></div></div></div>';
+    const rects = { ".window-chrome": { left: 348, top: 0, right: 1120, bottom: 32, width: 772, height: 32 }, "#page": { left: 348, top: 0, right: 1120, bottom: 900, width: 772, height: 900 }, "#scroll": { left: 348, top: 0, right: 1120, bottom: 770, width: 772, height: 770 }, "#bubble": { left: 391, top: 9, right: 830, bottom: 152, width: 439, height: 143 } };
+    for (const [selector, rect] of Object.entries(rects)) window.document.querySelector(selector).getBoundingClientRect = () => rect;
+    window.document.querySelector("#page").style.backgroundColor = "rgb(255, 255, 255)";
+    window.document.querySelector("#bubble").style.backgroundColor = "rgb(247, 247, 247)";
+    const strip = () => auditDocument(window.document, { width: 1120, height: 900 }, []).productRules.filter(item => item.rule === "R-UI-141");
+    const at = selectors => selectors.map(selector => window.document.querySelector(selector));
+    // The bubble's top edge (y = 9) lies between the two samples, in the scroller that reaches under the strip.
+    window.document.elementsFromPoint = (x, y) => at(y < 9 ? ["#scroll", "#page"] : ["#bubble", "#scroll", "#page"]);
+    expect(strip()).toEqual([]);
+    // The same colours with no scroller around the bubble are a block of another colour under the strip.
+    window.document.querySelector("#scroll").style.overflowY = "visible";
+    expect(strip().map(item => item.rule)).toEqual(["R-UI-141"]);
+  });
+
   it("leaves the window buttons their backing over a picture: a cover the owner chose is no surface to compare (R-UI-141)", () => {
     const window = new Window();
     window.document.body.innerHTML = '<div class="window-chrome"><div class="window-controls"></div></div><div id="page"><img id="cover"></div>';
