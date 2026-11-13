@@ -1375,7 +1375,12 @@ export function checkRendered(name, context = {}) {
     require(box.left >= 7 && box.right <= innerWidth - 7 && box.top >= 7 && box.bottom <= innerHeight - 7, "the submenu stays inside the window");
     require(getComputedStyle(row).backgroundColor !== 'rgba(0, 0, 0, 0)', "the parent row stays highlighted");
     require(child.querySelector('[aria-checked="true"]'), "the current group keeps its check");
-    if (name === "submenu-flip" && innerWidth === 720) require(box.right <= main.left + 1, "the compact submenu flips left");
+    // R-UI-73: a child opens on the right and flips left only when the right has no room. The member menu opens beside the 88 px rail, so
+    // at the 720 px minimum window a 262 px child fits on the right: the side follows the room, not the width of the window.
+    if (name === "submenu-flip") {
+      const room = innerWidth - 7 - main.right >= box.width;
+      require(room ? box.left >= main.right - 1 : box.right <= main.left + 1, `the child opens ${room ? "right" : "left"} (${Math.round(innerWidth - 7 - main.right)} px of room for ${Math.round(box.width)})`);
+    }
     return { check: name, side: box.left >= main.right - 1 ? "right" : "left", rowTop: anchor.top, firstTop: first.top };
   }
   if (name === "menu-move-picked") {
