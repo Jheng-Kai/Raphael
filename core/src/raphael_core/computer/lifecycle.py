@@ -1,6 +1,7 @@
 """Owner maintenance and bounded disk readings for one captured computer."""
 
 import asyncio
+from dataclasses import dataclass
 from pathlib import Path
 
 from .vm import GUEST, SOCKET, VmError, compatible, exec_args, known_previous
@@ -100,8 +101,44 @@ async def maintain(vm, target, action, *, confirmed=False):
         vm.changes += 1
 
 
+# What the computer's own folders must hold before cleaning them is worth offering as the way to free a disk.
+FOLDERS_MATTER_KIB = 1024 * 1024
+
+
+@dataclass(frozen=True)
+class DiskPressure:
+    """Which disk is nearly full and what the computer's own folders have to do with it. `disk` is "computer" for the
+    container's own disk (`/`) and "files" for the one its workspace is kept on: a folder of this PC (`C:`) or a
+    remote host's volume. A computer whose workspace is on this PC's C: reads that drive's use, not its own."""
+    disk: str
+    filesystem: str
+    percent: int
+    free_kib: int
+    folders: list
+    own_kib: int
+
+    @property
+    def folders_matter(self):
+        return self.own_kib >= FOLDERS_MATTER_KIB
+
+
+def _disk_rows(output):
+    """(filesystem, percent used, free KiB) of each line `df -Pk` printed, in the order its paths were given."""
+    rows = []
+    for line in output.splitlines()[1:]:
+        columns = line.split()
+        if len(columns) >= 6 and columns[-2].endswith("%"):
+            try:
+                rows.append((columns[0], int(columns[-2][:-1]), int(columns[-3])))
+            except ValueError:
+                pass
+    return rows
+
+
 async def disk_pressure(vm, target):
-    """Read only, once per pressure episode, with a five-minute probe interval."""
+    """Read only, once per pressure episode, with a five-minute probe interval. The disk named is the one that is at
+    90 percent: the computer's own, or the one holding its workspace (owner, 2026-11-14: a PC whose C: was at 94 percent
+    was told the computer's few hundred MiB of folders were what filled it)."""
     now = vm.clock()
     if now - vm.disk_checked.get(target.physical, float("-inf")) < 300:
         return None
@@ -109,28 +146,29 @@ async def disk_pressure(vm, target):
     result = await vm.run_for(target, exec_args(target, ["timeout", "--signal=TERM", "--kill-after=1", "4", "df", "-Pk", "/", GUEST]), timeout=5, limit=4000)
     if result.code or result.truncated:
         return None
-    percentages = []
-    for line in result.stdout.splitlines()[1:]:
-        columns = line.split()
-        if len(columns) >= 6 and columns[-2].endswith("%"):
-            try:
-                percentages.append(int(columns[-2][:-1]))
-            except ValueError:
-                pass
-    if not percentages:
+    rows = _disk_rows(result.stdout)
+    if not rows:
         return None
-    if max(percentages) < 90:
+    own = rows[0]
+    files = rows[1] if len(rows) > 1 and rows[1][0] != own[0] else None
+    full = next((("computer" if row is own else "files", row) for row in (own, files) if row and row[1] >= 90), None)
+    if full is None:
         vm.disk_warned.discard(target.physical)
         return None
     if target.physical in vm.disk_warned:
         return None
     sizes = await vm.run_for(target, exec_args(target, ["timeout", "--signal=TERM", "--kill-after=1", "4", "du", "-x", "-k", "--max-depth=1", GUEST, "/home/cua/.cache"]), timeout=5, limit=8000)
-    folders = []
+    folders, workspace = [], None
     for line in sizes.stdout.splitlines() if not sizes.truncated else []:
         size, separator, path = line.partition("\t")
         if separator and size.isdecimal() and (path.startswith(GUEST + "/") or path == "/home/cua/.cache"):
             folders.append((int(size), path))
+        elif separator and size.isdecimal() and path == GUEST:
+            workspace = int(size)
     if not folders:
         return None  # Retry the bounded folder reading later; never invent sizes.
     vm.disk_warned.add(target.physical)
-    return sorted(folders, reverse=True)[:3]
+    kind, (filesystem, percent, free) = full
+    # A drive's name is its letter: `C:\` is shown as `C:`.
+    return DiskPressure(kind, filesystem.rstrip("\\"), percent, free, sorted(folders, reverse=True)[:3],
+                        workspace if workspace is not None else sum(size for size, _ in folders))

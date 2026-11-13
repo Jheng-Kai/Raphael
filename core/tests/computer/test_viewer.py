@@ -399,13 +399,13 @@ async def test_take_control_refuses_active_tools_and_handback_releases_only_its_
     one, two = await bridge.open({}), await bridge.open({})
     target = bridge.vm.target()
     bridge.vm.active[target.key] = 1
-    with pytest.raises(RpcError):
+    bridge.take_wait_s = .3
+    with pytest.raises(RpcError, match="desktop busy"):
         await bridge.control({**one, "held": True})
+    assert target.key not in bridge.vm.held and target.key not in bridge.owners, "a press that was refused holds nothing"
     bridge.vm.active.clear()
     assert (await bridge.control({**one, "held": True}))["control"] == "owner"
     assert target.key in bridge.vm.held
-    with pytest.raises(RpcError):
-        await bridge.control({**two, "held": True})
     revision = bridge.sessions[one["session"]].revision
     await bridge.control({**two, "held": False})
     assert bridge.sessions[one["session"]].revision == revision
@@ -413,6 +413,77 @@ async def test_take_control_refuses_active_tools_and_handback_releases_only_its_
     assert target.key in bridge.vm.held
     assert (await bridge.control({**one, "held": False}))["control"] == "member"
     assert not bridge.vm.held
+
+
+async def test_the_owner_takes_over_from_a_hold_another_view_of_his_left_behind(viewer):
+    """Owner, 2026-11-14: 「理論上不管甚麼時候我都應該要可以接手」. Two views of one computer are the owner's own."""
+    bridge, _, _ = viewer
+    one, two = await bridge.open({}), await bridge.open({})
+    target = bridge.vm.target()
+    assert (await bridge.control({**one, "held": True}))["control"] == "owner"
+    assert (await bridge.control({**two, "held": True}))["control"] == "owner"
+    assert bridge.owners[target.key] == two["session"] and target.key in bridge.vm.held
+    assert (await bridge.renew(one))["control"] == "member"
+    assert bridge.relay.policies[one["session"]].held is False and bridge.relay.policies[two["session"]].held is True
+    # The view that was replaced cannot hand the new holder's control back.
+    await bridge.control({**one, "held": False})
+    assert bridge.owners[target.key] == two["session"] and target.key in bridge.vm.held
+    assert (await bridge.control({**two, "held": False}))["control"] == "member"
+    assert not bridge.vm.held
+
+
+async def test_a_press_between_a_working_members_actions_takes_the_computer_once_the_action_ends(viewer):
+    """Owner, 2026-11-14: take over while a member works. The press holds the screen at once (the member's next action
+    is refused), waits for the action under way, and takes."""
+    bridge, _, _ = viewer
+    opened = await bridge.open({})
+    target = bridge.vm.target()
+    bridge.vm.active[target.key] = 1
+    taking = asyncio.create_task(bridge.control({**opened, "held": True}))
+    await asyncio.sleep(.2)
+    assert not taking.done() and target.key in bridge.vm.held, "from the press on, no new action of a member starts"
+    bridge.vm.active.clear()
+    assert (await asyncio.wait_for(taking, 3))["control"] == "owner"
+    assert bridge.owners[target.key] == opened["session"]
+
+
+async def test_a_refused_press_leaves_a_hold_that_was_there_before_it(viewer):
+    bridge, _, _ = viewer
+    one, two = await bridge.open({}), await bridge.open({})
+    target = bridge.vm.target()
+    await bridge.control({**one, "held": True})
+    bridge.vm.active[target.key] = 1
+    bridge.take_wait_s = .3
+    with pytest.raises(RpcError, match="desktop busy"):
+        await bridge.control({**two, "held": True})
+    assert bridge.owners[target.key] == one["session"] and target.key in bridge.vm.held
+    bridge.vm.active.clear()
+    bridge.vm.hold(target, False)
+    bridge.owners.pop(target.key)
+
+
+async def test_a_hold_nobody_keeps_is_the_owners_to_take(viewer):
+    bridge, _, _ = viewer
+    opened = await bridge.open({})
+    target = bridge.vm.target()
+    bridge.vm.hold(target, True)  # no view holds it and no request waits: it is a leftover
+    assert (await bridge.status({}))["control"] == "owner"
+    assert (await bridge.renew(opened))["control"] == "member"
+    assert (await bridge.control({**opened, "held": True}))["control"] == "owner"
+    assert (await bridge.control({**opened, "held": False}))["control"] == "member"
+    assert not bridge.vm.held
+
+
+async def test_a_recording_is_not_taken_over_by_another_view(viewer):
+    bridge, _, _ = viewer
+    one, two = await bridge.open({}), await bridge.open({})
+    await bridge.control({**one, "held": True})
+    async def idle(*args): pass
+    bridge.teaching = SimpleNamespace(active=lambda token: token == one["session"], tick=idle, disconnected=idle,
+                                      relay_hook=lambda token: None)
+    with pytest.raises(RpcError):
+        await bridge.control({**two, "held": True})
+    assert bridge.owners[bridge.vm.target().key] == one["session"]
 
 
 async def test_closed_and_expired_viewers_release_the_hold_but_renewal_preserves_it(viewer):
@@ -433,6 +504,67 @@ async def test_closed_and_expired_viewers_release_the_hold_but_renewal_preserves
     await bridge.close(opened)
     assert not bridge.vm.held
     await bridge.close(opened)
+
+
+async def test_a_view_that_fails_to_close_still_gives_the_hold_back(viewer):
+    """A hold that outlives its holder blocks every member and every later Take control until the core restarts."""
+    bridge, _, _ = viewer
+    opened = await bridge.open({})
+    await bridge.control({**opened, "held": True})
+    target = bridge.vm.target()
+    async def broken(coroutine):
+        coroutine.close()
+        raise OSError("the relay is gone")
+    bridge.relay.call = broken
+    with pytest.raises(OSError):
+        await bridge.close(opened)
+    assert target.key not in bridge.vm.held and target.key not in bridge.owners and not bridge.sessions
+
+
+async def test_one_view_that_cannot_close_does_not_end_the_watch_over_the_others(viewer):
+    bridge, _, clock = viewer
+    first = await bridge.open({})
+    await bridge.control({**first, "held": True})
+    async def broken(target): raise VmError("tunnel")
+    bridge.vm.close_viewer = broken
+    clock[0] += LEASE_SECONDS + 1
+    await asyncio.sleep(1.2)
+    assert not bridge.vm.held and not bridge.sessions
+    second = await bridge.open({})
+    await bridge.control({**second, "held": True})
+    clock[0] += LEASE_SECONDS + 1
+    await asyncio.sleep(1.2)
+    assert not bridge.vm.held and not bridge.sessions
+
+
+async def test_a_lease_the_owner_stopped_using_is_released_but_a_touched_or_waited_for_one_is_not(viewer):
+    """How long a lease lives: while his input arrives, a sign-in request waits or a recording runs; else OWNER_IDLE_S."""
+    from raphael_core.computer.vm import OWNER_IDLE_S
+    bridge, _, clock = viewer
+    opened = await bridge.open({})
+    token, target = opened["session"], bridge.vm.target()
+    await bridge.control({**opened, "held": True})
+    async def pass_time(seconds):
+        while seconds > 0:
+            step = min(10, seconds)
+            clock[0] += step
+            seconds -= step
+            await bridge.renew(opened)
+        await asyncio.sleep(1.2)
+    await pass_time(OWNER_IDLE_S - 20)
+    assert target.key in bridge.vm.held
+    bridge.relay.sequences[token] = bridge.relay.sequence(token) + 1  # the relay forwarded one of his clicks
+    await pass_time(OWNER_IDLE_S - 20)
+    assert target.key in bridge.vm.held, "a touched screen restarts the wait"
+    bridge.vm.work.pending = lambda t: SimpleNamespace(request_id="nonce", member_id=0, conversation_id=None)
+    await pass_time(OWNER_IDLE_S)
+    assert target.key in bridge.vm.held, "a sign-in the member waits for is not idle"
+    del bridge.vm.work.pending
+    await pass_time(OWNER_IDLE_S + 10)
+    assert target.key not in bridge.vm.held and bridge.owners.get(target.key) is None
+    assert token in bridge.sessions, "the view stays open and watching"
+    state = await bridge.renew(opened)
+    assert state["control"] == "member" and bridge.relay.policies[token].held is False
 
 
 async def test_stopped_unavailable_and_restarted_desktops_keep_the_session(viewer):

@@ -13144,6 +13144,39 @@ WORDS = {'This version cannot connect compatibly to {name}. Update Raphael. If i
                                                                                                      'mi? Tutar: {p2}. '
                                                                                                      'Son ödemeyi siz '
                                                                                                      'tamamlarsınız.'},
+ "The disk the computer's files are kept on ({p0}) is {p1}% full, with {p2} free. The computer's own folders hold only {p3} of it, so cleaning them up would not help. Free some space on {p0} itself.": {'zh-CN': '电脑存放文件的磁盘（{p0}）已用 {p1}%，只剩 {p2}。电脑自己的文件夹只占其中 {p3}，清理它们帮不上忙，需要在 {p0} 本身腾出空间。',
+     'ko': '컴퓨터의 파일이 저장된 디스크({p0})가 {p1}% 찼고 {p2}만 남았습니다. 컴퓨터 자체 폴더는 그중 {p3}뿐이라 정리해도 도움이 되지 않습니다. {p0} '
+           '자체의 공간을 확보해 주세요.',
+     'es': 'El disco donde se guardan los archivos del equipo ({p0}) está lleno al {p1} %, con {p2} '
+           'libres. Las carpetas del propio equipo ocupan solo {p3}, así que limpiarlas no ayudaría. '
+           'Libera espacio en {p0}.',
+     'fr': "Le disque où sont stockés les fichiers de l'ordinateur ({p0}) est plein à {p1} %, avec "
+           "{p2} libres. Les dossiers de l'ordinateur n'en occupent que {p3} : les nettoyer n'aiderait "
+           "pas. Libérez de l'espace sur {p0} lui-même.",
+     'de': 'Der Datenträger, auf dem die Dateien des Computers liegen ({p0}), ist zu {p1} % belegt, '
+           '{p2} sind frei. Die eigenen Ordner des Computers belegen davon nur {p3}, ein Aufräumen '
+           'würde nichts bringen. Schaffe Platz auf {p0} selbst.',
+     'pt-BR': 'O disco onde ficam os arquivos do computador ({p0}) está {p1}% cheio, com {p2} livres. '
+              'As pastas do próprio computador ocupam só {p3}, então limpá-las não ajudaria. Libere '
+              'espaço no próprio {p0}.',
+     'it': 'Il disco in cui sono salvati i file del computer ({p0}) è pieno al {p1}%, con {p2} liberi. '
+           'Le cartelle del computer ne occupano solo {p3}, quindi pulirle non servirebbe. Libera '
+           'spazio su {p0} stesso.',
+     'ru': 'Диск, на котором хранятся файлы компьютера ({p0}), заполнен на {p1} %, свободно {p2}. '
+           'Собственные папки компьютера занимают из этого только {p3}, поэтому их очистка не поможет. '
+           'Освободите место на самом {p0}.',
+     'vi': 'Ổ đĩa lưu tệp của máy tính ({p0}) đã đầy {p1}%, còn trống {p2}. Các thư mục riêng của máy '
+           'tính chỉ chiếm {p3}, nên dọn chúng cũng không giúp được. Hãy giải phóng dung lượng trên '
+           'chính {p0}.',
+     'th': 'ดิสก์ที่เก็บไฟล์ของคอมพิวเตอร์ ({p0}) เต็ม {p1}% เหลือว่าง {p2} '
+           'โฟลเดอร์ของคอมพิวเตอร์เองมีเพียง {p3} การล้างจึงไม่ช่วยอะไร โปรดเพิ่มพื้นที่ว่างบน {p0} '
+           'เอง',
+     'id': 'Disk tempat file komputer disimpan ({p0}) sudah terisi {p1}%, tersisa {p2}. Folder milik '
+           'komputer itu sendiri hanya {p3}, jadi membersihkannya tidak akan membantu. Kosongkan ruang '
+           'di {p0} itu sendiri.',
+     'tr': 'Bilgisayarın dosyalarının tutulduğu disk ({p0}) %{p1} dolu, {p2} boş. Bilgisayarın kendi '
+           'klasörleri bunun yalnızca {p3} kadarını kaplıyor, bu yüzden temizlemek işe yaramaz. '
+           'Doğrudan {p0} üzerinde yer açın.'},
  'The computer disk is nearly full. Largest folders: {p0}. Which should I clean up? I will ask before deleting anything.': {'zh-CN': '电脑磁盘快满了。最大的文件夹：{p0}。要我清理哪些？删除前会先征求你的同意。',
                                                                                                                             'ko': '컴퓨터 '
                                                                                                                                   '디스크가 '

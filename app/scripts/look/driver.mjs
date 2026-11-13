@@ -164,8 +164,8 @@ export async function perform(page, step, evidenceDirectory) {
   if (step.wide && await page.evaluate(() => matchMedia("(max-width: 859px)").matches)) return { action: step.action, skipped: "narrow" };
   let stableAssertion;
   // A collapsed work section can precede the visible reply with the same selector.
-  const visible = async selector => {
-    try { return (await page.waitForFunction(findVisibleElement, { timeout: 6000 }, selector)).asElement(); }
+  const visible = async (selector, timeout = 6000) => {
+    try { return (await page.waitForFunction(findVisibleElement, { timeout }, selector)).asElement(); }
     catch (error) { throw new Error(`No visible match: ${selector}`, { cause: error }); }
   };
   const click = async selector => {
@@ -927,7 +927,7 @@ export async function perform(page, step, evidenceDirectory) {
       await page.emulateMediaFeatures([{name:'prefers-reduced-motion',value:'reduce'}]);
       return {check:'desktop-boot-connect',before,after,fade};
     }
-    case "wait": { const element = await visible(step.selector); await element.dispose(); break; }
+    case "wait": { const element = await visible(step.selector, step.timeout); await element.dispose(); break; }
     case "wait-text":
       try {
         await page.waitForFunction(({ selector, text }) => [...document.querySelectorAll(selector)].some(element =>

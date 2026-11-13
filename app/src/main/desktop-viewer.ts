@@ -265,13 +265,17 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     // The preview only opens the larger view; input is taken there, with Take control, or from a card (R-PANEL-03).
     // 你正在控制 only once the screen itself says the owner's input reaches it; until then 正在接手 (owner, 2026-11-13:
     // 「明明顯示我正在控制，但我根本就沒辦法控制」). Watching is view-only whoever holds the lease.
-    const mode = owner && !watching ? interactive ? "operating" : "taking" : "watching";
+    // A press the core is still deciding (`changing`) is a take too: until it answers the pill says so, and if the core
+    // refuses it the pill watches again with the button, however the press began.
+    const mode = !watching && (owner || changing) ? interactive ? "operating" : "taking" : "watching";
     paint(modeLabel.querySelector('span')!, "textContent", t(mode === "operating" ? "desktop.operating" : mode === "taking" ? "desktop.taking" : "desktop.watching"));
     paint(modeLabel.dataset, "mode", mode);
-    paint(take, "textContent", t("desktop.take")); paint(take, "hidden", !watching || !running || owner || !!demonstration); paint(take, "disabled", changing || !connected);
+    // The owner can take over whenever the pill says 觀看中, whoever the core says holds the lease (owner, 2026-11-14:
+    // 「理論上不管甚麼時候我都應該要可以接手」): a pill that watches always offers the way out of it.
+    paint(take, "textContent", t("desktop.take")); paint(take, "hidden", mode !== "watching" || !running || !expanded || filesOnly || !!demonstration); paint(take, "disabled", changing || !connected);
     paint(frame, "hidden", !running || !connected);
     paint(frame.style, "pointerEvents", interactive && !watching ? "auto" : "none");
-    paint(action, "textContent", t(pending() ? "desktop.done" : "desktop.release")); paint(action, "hidden", watching || !expanded || !!recording || filesOnly);
+    paint(action, "textContent", t(pending() ? "desktop.done" : "desktop.release")); paint(action, "hidden", watching || !expanded || !!recording || filesOnly || !owner && !pending());
     paint(panel.querySelector<HTMLElement>('[data-desktop="menu"]')!, "hidden", watching || filesOnly); paint(action, "disabled", changing);
     // A sleeping computer: its face and one short line, and the whole screen wakes it.
     paint(retry, "textContent", t(state?.error === 'docker_stopped' ? 'desktop.startDocker' : state?.state === 'missing' && state.image === false ? 'desktop.prepareImage' : "desktop.retry"));
@@ -396,6 +400,8 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     if (waking && next.state !== 'stopped' && next.state !== 'missing') waking = false;
     state = maintenance?.member === member() ? { ...next, lifecycle: maintenance.phase } : waking ? { ...next, lifecycle: 'waking' } : next;
     if (pending()) lastFrames.delete(member());
+    // A lease the core no longer gives this view (handed back, idle, replaced) is not input: the screen goes view-only.
+    if (interactive && state.control !== 'owner') { interactive = false; send(false); }
     if (suspended && waitingRequests().some(request => !returnedRequests.includes(request))) suspended = false;
     if (next.state !== 'running') connected = interactive = false;
     timeline.update(next);

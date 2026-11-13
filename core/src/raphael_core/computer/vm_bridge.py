@@ -114,7 +114,7 @@ class CuaBridge:
         if self.observation_command is not None and method not in ("initialize", "ping") and not observing:
             raise VmError("observation_only")
         if self.vm is not None and method == "tools/call" and self.target.key in self.vm.held and not observing:
-            return {"content": [{"type": "text", "text": "owner_holds_control"}], "isError": True}
+            return {"content": [{"type": "text", "text": self.vm.owner_note(self.target)}], "isError": True}
         self.sequence += 1
         identifier = self.sequence
         future = asyncio.get_running_loop().create_future()
@@ -125,7 +125,7 @@ class CuaBridge:
             async with asyncio.timeout(timeout):
                 async with self.lock:
                     if self.vm is not None and method == "tools/call" and self.target.key in self.vm.held and not observing:
-                        return {"content": [{"type": "text", "text": "owner_holds_control"}], "isError": True}
+                        return {"content": [{"type": "text", "text": self.vm.owner_note(self.target)}], "isError": True}
                     await self._write({"jsonrpc": "2.0", "id": identifier, "method": method, "params": params or {}})
                 if self.reader is None or self.reader.done():
                     self.reader = asyncio.create_task(self._read())
