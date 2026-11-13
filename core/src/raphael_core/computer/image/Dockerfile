@@ -160,6 +160,42 @@ RUN set -eux; \
       chmod 0644 "$folder/raphael.json"; \
       /usr/bin/python3 -c 'import json,sys; json.load(open(sys.argv[1]))' "$folder/raphael.json"; \
     done
+# The desktop says which browser it opens, and each of its ways to a browser opens the computer's own (owner,
+# 2026-11-13, of the panel: 「但看起來底下不是顯示 Chrome ㄟ?」). Measured on layer 8: the panel's launcher wore a globe
+# named "Browser" over Google Chrome; XFCE's own "Web Browser" named a helper that does not exist and asked which
+# application to prefer; the menu's Google Chrome and x-www-browser could not start at all (Chrome's own entry makes
+# a sandbox, and nothing in a computer can); the menu's Chromium and Firefox were each a second browser with a
+# profile of its own, where an owner signs in for nobody. So: the launcher and the menu's one browser carry the
+# browser's own name and mark; the helper, the other two browser entries and x-www-browser all start
+# raphael-browser; Firefox stays installed and leaves the menu.
+# Named here and not in desktop/: which browser there is, is known only once the steps above have run.
+RUN set -eux; \
+    if [ -x /opt/google/chrome/chrome ]; then name='Google Chrome' icon=google-chrome; else name=Chromium icon=chromium; fi; \
+    test -e "/usr/share/icons/hicolor/48x48/apps/$icon.png"; \
+    for file in /home/cua/.config/xfce4/panel/launcher-*/browser.desktop /home/cua/.local/share/applications/raphael-browser.desktop; do \
+      sed -i -e "s/^Name=.*/Name=$name/" -e "s/^Icon=.*/Icon=$icon/" "$file"; \
+      grep -qx "Icon=$icon" "$file"; \
+    done; \
+    printf '%s\n' '[Desktop Entry]' 'Version=1.0' 'Type=X-XFCE-Helper' "Name=$name" "Icon=$icon" 'StartupNotify=true' \
+      'X-XFCE-Binaries=raphael-browser;' 'X-XFCE-Category=WebBrowser' 'X-XFCE-Commands=%B;' 'X-XFCE-CommandsWithParameter=%B "%s";' \
+      > /usr/share/xfce4/helpers/raphael-browser.desktop; \
+    sed -i 's/^WebBrowser=.*/WebBrowser=raphael-browser/' /home/cua/.config/xfce4/helpers.rc; \
+    grep -qx 'WebBrowser=raphael-browser' /home/cua/.config/xfce4/helpers.rc; \
+    for entry in google-chrome com.google.Chrome chromium; do \
+      if [ -e "/usr/share/applications/$entry.desktop" ]; then \
+        printf '%s\n' '[Desktop Entry]' 'Type=Application' "Name=$name" 'Exec=raphael-browser %U' "Icon=$icon" 'Terminal=false' 'NoDisplay=true' \
+          > "/home/cua/.local/share/applications/$entry.desktop"; \
+      fi; \
+    done; \
+    if [ -e /usr/share/applications/firefox-esr.desktop ]; then \
+      { printf '%s\n' '[Desktop Entry]' 'NoDisplay=true'; sed -e '0,/^\[Desktop Entry\]$/d' -e '/^NoDisplay=/d' /usr/share/applications/firefox-esr.desktop; } \
+        > /home/cua/.local/share/applications/firefox-esr.desktop; \
+    fi; \
+    chown cua:cua /home/cua/.config/xfce4/helpers.rc /home/cua/.config/xfce4/panel/launcher-*/browser.desktop /home/cua/.local/share/applications/*.desktop; \
+    for link in x-www-browser gnome-www-browser; do \
+      update-alternatives --install "/usr/bin/$link" "$link" /usr/local/bin/raphael-browser 500; \
+    done; \
+    test "$(readlink -f /usr/bin/x-www-browser)" = /usr/local/bin/raphael-browser
 # The helper is standard library only: Debian's Python runs it without anything from /opt/venv.
 # Its X readiness wait also handles supervisor starting before the X socket is ready.
 # Without CAP_KILL, supervisor only restarts what exits; the helper ends its own children.
@@ -183,4 +219,4 @@ RUN install -m 0755 /opt/raphael-desktop/start-novnc.sh /usr/local/bin/start-nov
 LABEL org.raphael.computer="1" \
       org.raphael.computer.driver="0.37.0" \
       org.raphael.computer.base="docker.io/trycua/xfce-cua@sha256:274eb636f5cf3fc58f705916ee72b7a701270b3877369d08533a385c5325be9b" \
-      org.raphael.computer.layer="8"
+      org.raphael.computer.layer="9"

@@ -574,7 +574,9 @@ def test_previous_fixture_matches_release_shape_without_changing_vm(tmp_path, mo
     assert [a for a, b in zip(sixth, current) if a != b] == [f"{vm.LABEL}.layer=6", acceptance.OLD_IMAGES["6"]]
     seventh = acceptance.previous_args(target, machine.owner, "private", "7")
     assert [a for a, b in zip(seventh, current) if a != b] == [f"{vm.LABEL}.layer=7", acceptance.OLD_IMAGES["7"]]
-    assert vm.IMAGE not in acceptance.OLD_IMAGES.values() and list(acceptance.OLD_IMAGES) == ["4", "5", "6", "7"]
+    eighth = acceptance.previous_args(target, machine.owner, "private", "8")
+    assert [a for a, b in zip(eighth, current) if a != b] == [f"{vm.LABEL}.layer=8", acceptance.OLD_IMAGES["8"]]
+    assert vm.IMAGE not in acceptance.OLD_IMAGES.values() and list(acceptance.OLD_IMAGES) == ["4", "5", "6", "7", "8"]
 
 
 class FakeDocker:
@@ -704,15 +706,17 @@ async def test_start_retries_slow_engine_once_after_pause(error, tmp_path, monke
 
 @pytest.mark.parametrize("args", [
     ["system", "prune"], ["container", "prune"], ["pull", vm.BASE],
+    ["image", "rm", "raphael/cua-local-vm:driver-0.37.0-v9"],
     ["image", "rm", "raphael/cua-local-vm:driver-0.37.0-v8"],
     ["image", "rm", "raphael/cua-local-vm:driver-0.37.0-v7"],
     ["image", "rm", "raphael/cua-local-vm:driver-0.37.0-v6"],
     ["image", "rm", "raphael/cua-local-vm:driver-0.37.0-v5"],
-    ["image", "inspect", "raphael/cua-local-vm:driver-0.37.0-v8"],
+    ["image", "inspect", "raphael/cua-local-vm:driver-0.37.0-v9"],
     ["ps", "-a", "--filter", "label=org.raphael.computer", "--format", "{{.ID}}"],
     ["container", "inspect", "someone-elses-container"],
     ["exec", "-u", "root", "ours", "true"],
     ["stop", "foreign", "ours"], ["rm", "foreign", "ours"], ["start", "foreign", "ours"],
+    ["build", "--tag", "raphael/cua-local-vm:driver-0.37.0-v9", "image"],
     ["build", "--tag", "raphael/cua-local-vm:driver-0.37.0-v8", "image"],
     ["build", "--tag", "raphael/cua-local-vm:driver-0.37.0-v7", "image"],
     ["build", "--tag", "raphael/cua-local-vm:driver-0.37.0-v6", "image"],
@@ -767,7 +771,7 @@ async def test_run_uses_private_tag_and_owner_and_cleans_even_after_failure(keep
     assert not any("prune" in args or args[0] == "pull" for args in runner.calls)
     report = json.loads((tmp_path / "report/computer-acceptance.json").read_text(encoding="utf-8"))
     assert all(set(row) == {"name", "result", "detail", "seconds"} for row in report["checks"])
-    for layer in ("4", "5", "6"):
+    for layer in ("4", "5", "6", "7", "8"):
         assert any(row["result"] == "skipped" and row["name"] == f"previous layer {layer}" for row in report["checks"])
     assert " ok, " in capsys.readouterr().out
     if keep:
@@ -915,6 +919,7 @@ async def test_shared_acceptance_drives_real_tools_through_every_numbered_check(
     active = [None]
     launches, attachments = [], []
     viewers, owner_files = [], set()
+    launchers = []
     original_runtime = runtime.__call__
 
     async def runner(args, **kwargs):
@@ -959,6 +964,12 @@ async def test_shared_acceptance_drives_real_tools_through_every_numbered_check(
         guest = args[args.index(machine.shared_target("", 9201, 1).name) + 1:] if args[0] == "exec" else []
         if guest[:2] == ["test", "-x"]:
             return vm.Result(1, "")
+        if guest[:2] == ["test", "-e"] and guest[2].startswith("/usr/share/icons/"):
+            assert guest[2] == "/usr/share/icons/hicolor/48x48/apps/chromium.png", "this world's browser is Chromium"
+            return vm.Result(0, "")
+        if guest[:1] == ["cat"] and guest[1].endswith("/browser.desktop"):
+            launchers.append(guest[1])
+            return vm.Result(0, "[Desktop Entry]\nType=Application\nName=Chromium\nExec=raphael-browser %U\nIcon=chromium\n")
         if guest[:2] == ["test", "-e"]:
             return vm.Result(0 if guest[2] in owner_files else 1, "")
         if guest[:1] == ["dpkg"]:
@@ -1224,6 +1235,8 @@ async def test_shared_acceptance_drives_real_tools_through_every_numbered_check(
         "shared seat teaching", "shared session ends independently", "shared seat displacement", "shared carried home", "shared stop"]
     assert seed_calls == [9201] and len(carry_checks) == 1
     assert launches == [1, 2]
+    # The shared computer's panel on each of its six screens is read for the browser's name and mark.
+    assert launchers == [f"/home/cua/.config/xfce4/panel/launcher-{number}/browser.desktop" for number in (1, 4, 7, 10, 13, 16)]
     assert len(attachments) == 3 and len({session for session, _ in attachments}) == 2
     assert len(files) == 6
 
@@ -1377,6 +1390,61 @@ async def test_one_screen_block_runs_product_form_once_and_other_counts_do_not(t
     for count in (1, 3, 6):
         await run.computer(count, 6)
     assert seen == [(1, 1)]
+
+
+@pytest.mark.parametrize("fault", [None, "globe", "helper", "second browser entry", "dialog"])
+async def test_browser_mark_reads_the_launcher_the_helper_the_menu_and_what_the_web_browser_opens(tmp_path, monkeypatch, fault):
+    # An owner looked at a globe named "Browser" over Google Chrome; XFCE's own "Web Browser" asked which
+    # application to prefer; the menu's Chrome entry was a browser that cannot start in a computer.
+    run = acceptance.Acceptance(FakeDocker())
+    run.machine = vm.LocalVm(tmp_path, runner=run.runner)
+    target = run.machine.target(1)
+    listed = ["0x00c00003 -1 xfce4-panel.Xfce4-panel  host xfce4-panel"]
+    closed = []
+
+    async def guest(target, args, *, allow_failure=False):
+        if args[0] == "test":
+            return vm.Result(0, "")
+        if args[0] == "cat" and args[1].endswith("/launcher-1/browser.desktop"):
+            name, icon = ("Browser", "web-browser") if fault == "globe" else ("Google Chrome", "google-chrome")
+            return vm.Result(0, f"[Desktop Entry]\nType=Application\nName={name}\nExec=raphael-browser %U\nIcon={icon}\n")
+        if args == ["cat", "/home/cua/.config/xfce4/helpers.rc"]:
+            return vm.Result(0, f"WebBrowser={'firefox-esr' if fault == 'helper' else 'raphael-browser'}\nTerminalEmulator=xfce4-terminal\n")
+        if args[0] == "readlink":
+            return vm.Result(0, "/usr/local/bin/raphael-browser\n")
+        if args[:2] == ["sh", "-c"] and args[2] == acceptance.MENU_BROWSERS:
+            chrome = "/usr/bin/google-chrome-stable %U" if fault == "second browser entry" else "raphael-browser %U"
+            return vm.Result(0, f"google-chrome|Exec={chrome}|1\nchromium|Exec=raphael-browser %U|1\n"
+                                "firefox-esr|Exec=/usr/lib/firefox-esr/firefox-esr %u|1\n")
+        if args[:2] == ["sh", "-c"]:
+            assert "exo-open --launch WebBrowser" in args[2]
+            opened = "xfce4-mime-helper.Xfce4-mime-helper" if fault == "dialog" else "google-chrome.Google-chrome"
+            listed.append(f"0x01200004  0 {opened}  host New Tab")
+            return vm.Result(0, "")
+        if args == ["wmctrl", "-lx"]:
+            return vm.Result(0, "\n".join(listed) + "\n")
+        if args[:3] == ["wmctrl", "-i", "-c"]:
+            closed.append(args[3])
+            listed[:] = [line for line in listed if not line.startswith(args[3])]
+            return vm.Result(0, "")
+        raise AssertionError(f"unexpected guest command {args}")
+
+    async def pause(seconds):
+        return None
+    monkeypatch.setattr(run, "guest", guest)
+    monkeypatch.setattr(acceptance.asyncio, "sleep", pause)
+    if fault is None:
+        detail = await run.browser_mark(target)
+        assert "every launcher is Google Chrome under the google-chrome mark" in detail
+        assert "XFCE's Web Browser opened Google Chrome" in detail and "chromium, firefox-esr, google-chrome entries" in detail
+        assert closed == ["0x01200004"] and len(listed) == 1
+        return
+    expected = {"globe": "launcher to be Google Chrome under its own mark", "helper": "Web Browser to be the computer's browser",
+                "second browser entry": "menu's other browser entries", "dialog": "to open Google Chrome, observed"}[fault]
+    with pytest.raises(AssertionError, match=expected):
+        await run.browser_mark(target)
+    # What the check opened is closed again even when it is the wrong thing.
+    assert closed == (["0x01200004"] if fault == "dialog" else [])
 
 
 @pytest.mark.parametrize("failure", [False, True])

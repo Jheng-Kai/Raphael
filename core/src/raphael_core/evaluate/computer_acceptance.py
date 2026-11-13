@@ -34,8 +34,13 @@ from ..computer.vm_tools import VmTools
 from ..services.attachment_store import AttachmentStore
 
 # Released layers a computer may still be on. A fixture of each is made from the image itself, which is only read.
+# The system's browser entries a user has an entry over: what each starts, and whether it is out of the menu.
+MENU_BROWSERS = ('for entry in google-chrome chromium firefox-esr; do [ -e "/usr/share/applications/$entry.desktop" ] || continue; '
+                 'own="/home/cua/.local/share/applications/$entry.desktop"; '
+                 'echo "$entry|$(grep -m1 "^Exec=" "$own")|$(grep -c "^NoDisplay=true$" "$own")"; done')
 OLD_IMAGES = {"4": "raphael/cua-local-vm:driver-0.37.0-v4", "5": "raphael/cua-local-vm:driver-0.37.0-v5",
-              "6": "raphael/cua-local-vm:driver-0.37.0-v6", "7": "raphael/cua-local-vm:driver-0.37.0-v7"}
+              "6": "raphael/cua-local-vm:driver-0.37.0-v6", "7": "raphael/cua-local-vm:driver-0.37.0-v7",
+              "8": "raphael/cua-local-vm:driver-0.37.0-v8"}
 IMAGE_FOLDER = Path(vm.__file__).parent / "image"
 # A 64x48 JPEG, teal on the left half and orange on the right: an owner's picture no desktop draws by itself.
 OWN_PICTURE = base64.b64decode(
@@ -614,6 +619,62 @@ class Acceptance:
             f"Expected one 146x49 panel per output, only 10x10 helpers, no Displays/tooltip; observed panels={panels}, unexpected={bad}")
         return "No viewable Displays dialog or panel tooltip; one panel per screen"
 
+    async def browser_named(self, target):
+        """Which browser this computer has, and that every screen's launcher wears its name and its mark."""
+        chrome = not (await self.guest(target, ["test", "-x", "/opt/google/chrome/chrome"], allow_failure=True)).code
+        name, icon = ("Google Chrome", "google-chrome") if chrome else ("Chromium", "chromium")
+        for screen in range(1, target.screens + 1):
+            entry = (await self.text(target, ["cat", f"/home/cua/.config/xfce4/panel/launcher-{screen * 3 - 2}/browser.desktop"])).splitlines()
+            require({f"Name={name}", f"Icon={icon}", "Exec=raphael-browser %U"} <= set(entry),
+                    f"Expected screen {screen}'s launcher to be {name} under its own mark, observed {entry}")
+        require(not (await self.guest(target, ["test", "-e", f"/usr/share/icons/hicolor/48x48/apps/{icon}.png"], allow_failure=True)).code,
+                f"Expected the {icon} mark among the computer's icons")
+        return name, icon
+
+    async def browser_mark(self, target):
+        """The desktop says which browser it opens, and each of its own ways to a browser opens that one.
+
+        An owner, of the panel of his members' computer (2026-11-13): 「但看起來底下不是顯示 Chrome ㄟ?」. Measured then: the
+        launcher wore a globe named "Browser" over Google Chrome; XFCE's "Web Browser" named a helper that does not
+        exist and asked which application to prefer; the menu's own Chrome entry and x-www-browser could not start
+        (they make a sandbox, and nothing in a computer can); the menu's Chromium and Firefox were second browsers."""
+        name, icon = await self.browser_named(target)
+        helper = (await self.text(target, ["cat", "/home/cua/.config/xfce4/helpers.rc"])).splitlines()
+        require("WebBrowser=raphael-browser" in helper, f"Expected XFCE's Web Browser to be the computer's browser, observed {helper}")
+        link = (await self.text(target, ["readlink", "-f", "/usr/bin/x-www-browser"])).strip()
+        require(link == "/usr/local/bin/raphael-browser", f"Expected x-www-browser to be the computer's browser, observed {link}")
+        # The menu's other browser entries: one a user has over the system's, started as the computer's browser or,
+        # for Firefox, left out of the menu.
+        listed = await self.text(target, ["sh", "-c", MENU_BROWSERS])
+        menu = {parts[0]: parts[1:] for line in listed.splitlines() if len(parts := line.split("|")) == 3}
+        require(menu and all(hidden == "1" and (entry == "firefox-esr" or started == "Exec=raphael-browser %U")
+                             for entry, (started, hidden) in menu.items()),
+                f"Expected the menu's other browser entries hidden and started as the computer's browser, observed {listed!r}")
+
+        def classes(text):
+            return {parts[0]: parts[2] for line in text.splitlines() if len(parts := line.split(None, 3)) >= 3}
+        before = classes(await self.text(target, ["wmctrl", "-lx"]))
+        await self.guest(target, ["sh", "-c", "setsid exo-open --launch WebBrowser about:blank >/dev/null 2>&1 &"])
+        began, new = time.monotonic(), {}
+        try:
+            while not new:
+                require(time.monotonic() < began + 60, "Expected XFCE's Web Browser to open a window within 60 s")
+                await asyncio.sleep(.5)
+                new = {key: value for key, value in classes(await self.text(target, ["wmctrl", "-lx"])).items() if key not in before}
+            took = time.monotonic() - began
+            require(all(value.startswith(icon) for value in new.values()),
+                    f"Expected XFCE's Web Browser to open {name}, observed {sorted(new.values())}")
+        finally:
+            for identifier in new:
+                await self.guest(target, ["wmctrl", "-i", "-c", identifier], allow_failure=True)
+            until = time.monotonic() + 15
+            while new and time.monotonic() < until:
+                if not set(new) & set(classes((await self.guest(target, ["wmctrl", "-lx"], allow_failure=True)).stdout)):
+                    break
+                await asyncio.sleep(.3)
+        return (f"every launcher is {name} under the {icon} mark; XFCE's Web Browser opened {name} in {took:.1f} s; "
+                f"x-www-browser is the computer's browser; the menu's {', '.join(sorted(menu))} entries are out of the menu")
+
     async def steer(self, target, seat):
         rectangles, _ = vm.screen_grid(target.screens)
         rect = rectangles[seat - 1]
@@ -1030,7 +1091,7 @@ class Acceptance:
                     await self.machine.stop(target)
                 return f"layer {layer} {operation}: incompatible -> {'absent with workspace removed' if operation == 'erase' else 'ready on new image, workspace file preserved'}"
             await self.check(f"{name} {operation}", exercise)
-        if layer == "7":
+        if layer in ("7", "8"):
             await self.previous_shared(layer)
 
     async def previous_shared(self, layer):
@@ -1302,6 +1363,7 @@ class Acceptance:
                 for seat in (1, count):
                     await self.check(prefix + f" steering screen {seat}", lambda seat=seat: self.steer(target, seat))
             await self.check(prefix + " no tooltip or dialog", lambda: self.quiet(target))
+            await self.check(prefix + " browser mark", lambda: self.browser_mark(target))
             await self.check(prefix + " restart", lambda: self.restart(target))
             if count == largest:
                 if count > 1:
@@ -1688,9 +1750,12 @@ class Acceptance:
                 wanted = {"BrowserSignin": 0, "SyncDisabled": True, "PasswordManagerEnabled": False,
                           "AutofillCreditCardEnabled": False, "AutofillAddressEnabled": False}
                 require(managed == wanted, f"Expected the members' browser policy {wanted}, observed {managed}")
+                # The panel of every screen names this browser under its own mark: an owner looked at a globe named
+                # "Browser" (2026-11-13).
+                named, _ = await self.browser_named(target)
                 version = (await self.text(target, [binary, "--version"])).strip()
                 return (f"{version} ({binary}); navigator.webdriver is false; started with --test-type and no crash bubble; "
-                        "the Browser icon opens a window of the same browser; it keeps no password, card or address, "
+                        f"every screen's launcher is {named} and opens a window of the same browser; it keeps no password, card or address, "
                         "and by policy is never signed in to as a browser and never syncs")
             if browsers_ok:
                 await self.check("shared browser is a person's", persons_browser)
