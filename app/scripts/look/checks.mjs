@@ -4490,6 +4490,20 @@ export function checkRendered(name, context = {}) {
     else require(visible(document.querySelector('.tn[data-id="301"]')) && !document.querySelector('[data-key="hearing"]'), "the answer replaces the pending line in this thread");
     return { check: name, member: args.memberId, conversation: expected };
   }
+  if (name === "composer-voice-attachment") {
+    // One press on the voice button sends the recording and everything the composer held (owner, 2026-11-14): the picture and the words go to
+    // the recording before its key ends it, and the composer is empty afterwards, as after a typed send.
+    const calls = window.__look.calls, handed = calls.filter(call => call.command === "agent_voice_composed"), keys = calls.filter(call => call.command === "window_hotkey" && ["agent_down", "agent_up"].includes(call.kind));
+    require(handed.length === 1, `the composer was handed over once: ${handed.length}`);
+    const [composed] = handed;
+    require(composed.text === "Look at this picture" && Array.isArray(composed.attachments) && composed.attachments.length === 1 && composed.attachments[0].mime.startsWith("image/") && typeof composed.attachments[0].data === "string" && composed.attachments[0].data.length > 0, `the words and the picture went with the recording: ${JSON.stringify({ ...composed, attachments: (composed.attachments ?? []).map(file => [file.name, file.mime]) })}`);
+    require(keys.length >= 1 && calls.indexOf(composed) < calls.indexOf(keys.at(-1)), "they were handed over before the key ended the recording");
+    require(keys.every(call => call.conversationId === composed.conversationId && (call.memberId ?? 0) === (composed.memberId ?? 0)), "the key and the composer name the same conversation");
+    require(!calls.some(call => call.command === "agent_ask_text"), "no second, typed message was sent");
+    const form = [...document.querySelectorAll('.composer')].find(visible);
+    require(form.querySelector('textarea').value === "" && !form.querySelector('.cmp-chip'), "the composer is empty, as after a typed send");
+    return { check: name, member: composed.memberId ?? 0, conversation: composed.conversationId, files: composed.attachments.length };
+  }
   if (name === "thread-clear-of-fade") {
     const scroller = [...document.querySelectorAll(".ra-scroll")].find(visible), top = scroller.getBoundingClientRect().top + 40;
     const first = scroller.querySelector(".thread > :first-child"), bubble = document.querySelector('[data-key="hearing"] .owner-message');

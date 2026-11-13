@@ -1125,7 +1125,7 @@ class AgentService:
             raise invalid_params("destination must be quick or absent")
         quick = destination == QUICK
         conversation_id = self._destination(member_id, _opt_int(params, "conversation_id"), params.get("source"), quick=quick)
-        if quote is not None and params.get("source") != "app":
+        if quote is not None and params.get("source") not in (None, TYPED, VOICE):
             raise invalid_params("quotes are supported for composer requests")
         replacement = _opt_int(params, "replace_turn_id")
         if replacement is not None and not self._was_cancelled(session):

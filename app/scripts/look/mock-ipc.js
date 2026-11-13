@@ -1924,6 +1924,8 @@ export function installMock(fixture, config = {}, target = window) {
       if (command === "overlay_log") return;
       if (command === "overlay_confirm") return;
       if (command === "overlay_cancel") { state.overlayChannel?.onmessage({type:"hide"});return; }
+      // The composer's words, files and quote handed to the recording the voice button is ending: taken.
+      if (command === "agent_voice_composed") return true;
       if (command === "agent_retract") {
         data.turns=data.turns.filter(turn=>turn.session_id!==args.sessionId&&turn.id!==args.turnId);
         pendingReplies.get(args.sessionId)?.();pendingReplies.delete(args.sessionId);
