@@ -8,6 +8,7 @@ import pytest
 from raphael_core.agent.history import AgentHistory
 from raphael_core.agent.pages import PageStore
 from raphael_core.background.tasks import TaskStore
+from raphael_core.members.library import _kind
 from raphael_core.members.panel import snapshot
 from raphael_core.protocol import RpcError
 
@@ -193,3 +194,20 @@ async def test_output_receipt_is_reverified_on_open_and_not_hashed_on_listing(ri
     result.write_bytes(b'changed')
     with pytest.raises(RpcError):
         await rig.call('members.library_file', {'member_id': 0, 'id': file['id']})
+
+
+@pytest.mark.parametrize('name,mime,key,kind', [
+    ('a.png', 'image/png', '', 'image'), ('a.webp', 'application/octet-stream', '', 'image'), ('shot', 'application/octet-stream', 'k.webp', 'image'),
+    ('a', 'IMAGE/PNG; q=1', '', 'image'), ('clip.mov', '', '', 'video'), ('clip', 'video/mp4', '', 'video'), ('a.opus', 'application/octet-stream', '', 'audio'),
+    ('a.tgz', 'application/x-tar', '', 'archive'), ('bundle', 'application/zip', '', 'archive'), ('a.zst', '', '', 'archive'),
+    ('a.csv', 'application/vnd.ms-excel', '', 'document'), ('a.md', '', '', 'document'), ('a.txt', 'text/plain', '', 'document'), ('a.pdf', '', '', 'document'),
+    ('a.json', 'application/json', '', 'file'), ('a.exe', 'application/x-msdownload', '', 'file'), ('a', '', '', 'file'),
+])
+def test_kind_puts_media_archives_documents_and_other_files_in_their_chip(name, mime, key, kind):
+    assert _kind(name, mime, key) == kind
+
+
+def test_a_delivered_picture_whose_mime_is_unknown_is_still_media(conn):
+    history, identifier = turn(conn)
+    media(history, identifier, name='Sketch', key='c' * 32 + '.webp', mime='application/octet-stream')
+    assert [(item['name'], item['kind']) for item in snapshot(conn, 0)['files']] == [('Sketch', 'image')]

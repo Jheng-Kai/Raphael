@@ -550,12 +550,31 @@ export function checkRendered(name, context = {}) {
         require(rows.find(row => row.dataset.panelFile === 'delivered-file:bundle')?.querySelector('.lib-icon').dataset.kind === 'archive', 'the kind sets the mark');
       }
       if (long) require(scroll.scrollHeight > scroll.clientHeight * 2, 'a long list scrolls inside the panel');
+    } else if (/^member-panel-library-single(?:-pages)?$/.test(name)) {
+      // A Library of one kind alone: the same four chips in order, 26 px pills in one row; the kind it has under 全部, and the chip
+      // of a kind it has not as one quiet line (never a blank, never the 全部 sentence) under the label's inset.
+      const body = panel.querySelector('.mb-tab-body'), chips = [...body.querySelectorAll('.lib-filters [data-lib-filter]')], pages = name.endsWith('-pages');
+      require(chips.map(button => button.dataset.libFilter).join() === 'all,pages,media,files' && chips.map(button => button.textContent).join() === '全部,頁面,媒體,檔案', `a Library of one kind still has the four chips in order (${chips.map(button => button.textContent)})`);
+      require(new Set(chips.map(button => Math.round(button.getBoundingClientRect().top))).size === 1 && chips.every(button => Math.abs(button.getBoundingClientRect().height - 26) <= 1), 'the chips are one row of 26 px pills');
+      const pressed = chips.filter(button => button.getAttribute('aria-pressed') === 'true');
+      require(pressed.length === 1 && pressed[0].dataset.libFilter === (pages ? 'pages' : 'all'), `the ${pages ? 'pages' : 'all'} chip is the one pressed`);
+      require(chips.every(button => button.getBoundingClientRect().right <= panel.getBoundingClientRect().right) && panel.scrollWidth <= panel.clientWidth + 1, 'the four chips fit the panel');
+      if (pages) {
+        const line = body.querySelector('.lib-filters + .mp-empty');
+        require(line && line.textContent === '還沒有頁面' && !body.querySelector('.lib-row, .lib-card'), `the chip of a kind with nothing is one quiet line (${line?.textContent})`);
+        require(line.getBoundingClientRect().top >= body.querySelector('.lib-filters').getBoundingClientRect().bottom && getComputedStyle(line).color !== getComputedStyle(pressed[0]).color, 'the line stands under the chips, quieter than the pressed chip');
+      } else {
+        const rows = [...body.querySelectorAll('.lib-row')], kinds = new Set(rows.map(row => row.querySelector('.lib-icon').dataset.kind));
+        require(rows.length === 5 && [...kinds].every(kind => ['image', 'video', 'audio'].includes(kind)) && !body.querySelector('.mp-empty'), `全部 lists the five pictures, video and audio (${rows.length})`);
+      }
     } else if (name === 'member-panel-library-open') {
       const opened = window.__look.state?.openedLibraryFile ?? window.__look.openedLibraryFile;
       require(opened?.id === 'delivered-file:bundle' && opened.member_id === 1, `the delivered file opens by its Library handle, never a path (${JSON.stringify(opened)})`);
       require(visible(document.querySelector('.media-lightbox img')), 'a picture opens large');
     } else if (name === 'member-panel-library-empty') {
-      require(panel.querySelector('.mb-tab-body').textContent === '還沒有檔案或頁面', 'library has one empty sentence');
+      const body = panel.querySelector('.mb-tab-body'), chips = [...body.querySelectorAll('.lib-filters [data-lib-filter]')];
+      require(body.querySelector('.lib-filters + .mp-empty')?.textContent === '還沒有檔案或頁面' && !body.querySelector('.lib-row'), 'library has one empty sentence');
+      require(chips.map(button => button.textContent).join() === '全部,頁面,媒體,檔案', 'an empty Library still has the four chips');
     } else if (name === 'member-panel-computer-live') {
       require(visible(panel.querySelector('iframe')), 'the existing stream is visible');
       const open = panel.querySelector('[data-desktop="enlarge"]'), screen = panel.querySelector('.desktop-screen').getBoundingClientRect(), cover = open.getBoundingClientRect(), caption = panel.querySelector('.desktop-caption');

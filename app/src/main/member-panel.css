@@ -96,13 +96,15 @@
 .mb-det .mb-who:has(.mb-panel-identity) { display: block; }
 /* The routine list: one quiet tinted list, no frame around each row. */
 .mb-rts { display: grid; grid-template-columns: minmax(0, 1fr); padding: var(--sp-1); border-radius: var(--r-lg); background: color-mix(in srgb, var(--text) 5%, transparent); }
-/* The Library, as Grok Bot's (owner, 2026-11-12): chips for the kinds there are, a quiet label per recency group, and each
-   group's items in one rounded card of one-line rows: a 20 px mark and the title, nothing else on the row. */
+/* The Library, as Grok Bot does it (owner, 2026-11-12): four chips always, then a soft label per recency group, with the
+   items of each group in one rounded card of one-line rows: a 20 px mark and the title, nothing else on the row. A chip
+   with nothing in it (owner, 2026-11-13) shows a single soft line where the cards would be, inset like the labels. */
 /* The chips, the labels and the cards sit close: one tighter rhythm than the Details sections. */
-.mb-tab-body:has(> .lib-group) { gap: var(--sp-3); }
+.mb-tab-body:has(> .lib-filters) { gap: var(--sp-3); }
 .lib-filters { display: flex; min-width: 0; margin-bottom: var(--sp-2); }
 /* The pressed chip is the light one (the accent fill, dark words in the dark theme); the others stay soft. */
 .lib-filters .tabs .tab:is([aria-pressed="true"], [aria-pressed="true"]:hover) { background: var(--accent); color: var(--on-accent); }
+.lib-filters + .mp-empty { margin: 0; padding-left: calc(var(--sp-4) + 1px); }
 .lib-group { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); }
 .lib-group + .lib-group { margin-top: var(--sp-2); }
 /* The label starts where a row's mark does: the card's edge, its padding and the row's padding in. */
