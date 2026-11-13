@@ -497,14 +497,9 @@ def native_computer(messages, offered, seen):
 sleep 1
 profile=/home/cua/workspace/.native-signin-browser
 mkdir -p "$profile"
-if command -v firefox >/dev/null 2>&1; then
-  printf '%s\\n' 'user_pref("browser.shell.checkDefaultBrowser", false);' 'user_pref("browser.aboutwelcome.enabled", false);' 'user_pref("browser.startup.homepage_override.mstone", "ignore");' 'user_pref("signon.rememberSignons", false);' > "$profile/user.js"
-  nohup firefox --no-remote --profile "$profile" --width 1280 --height 900 http://127.0.0.1:8765 >/dev/null 2>&1 &
-else
-  browser=$(command -v chromium || command -v chromium-browser || command -v google-chrome)
-  test -n "$browser" || exit 1
-  nohup "$browser" --no-sandbox --no-first-run --start-maximized --disable-dev-shm-usage --user-data-dir="$profile" http://127.0.0.1:8765 >/dev/null 2>&1 &
-fi
+browser=$(command -v chromium || command -v chromium-browser || command -v google-chrome)
+test -n "$browser" || exit 1
+nohup "$browser" --no-sandbox --no-first-run --start-maximized --disable-dev-shm-usage --user-data-dir="$profile" http://127.0.0.1:8765 >/dev/null 2>&1 &
 sleep 3"""}),
         ("computer__request_takeover", {"reason": "sign_in"}),
         ("computer__get_desktop_state", {}),
