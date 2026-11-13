@@ -1152,7 +1152,8 @@ export function installMock(fixture, config = {}, target = window) {
             const kind = index % 11 === 3 ? "page" : index % 7 === 2 ? "archive" : index % 5 === 1 ? "image" : "document";
             return { id: `delivered-file:bulk-${index}`, title: kind === "page" ? `頁面 ${index}` : kind === "archive" ? `素材包 ${index}.zip` : kind === "image" ? `圖片 ${index}.png` : `${sample.files[index % 3]}（${index}）`, kind, at_ms: now - (index < 30 ? 14 : 20) * dayMs - index * hour, turn_id: 2, conversation_id: 11 };
           }) : []),
-        ].map(item => ({ ...item, name: item.title, day: dayOf(item.at_ms) }));
+        // The `single` variant is a Library of one kind alone (pictures, a video and a recording): the owner's case.
+        ].filter(item => variant.memberPanelFiles !== "single" || ["image", "video", "audio"].includes(item.kind)).map(item => ({ ...item, name: item.title, day: dayOf(item.at_ms) }));
         return { files: items.slice(0, limit), has_more: items.length > limit };
       }
       case "members.list": {

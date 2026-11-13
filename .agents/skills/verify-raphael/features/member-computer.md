@@ -482,10 +482,16 @@ undelivered screenshots). On 2026-11-12 he showed three pictures of Grok Bot's L
 all 就是所有的，然後 pages 就是內建的頁面，medias 的話就是可能一些圖片之類的……然後 files 的話就是可能一些 zip 檔等等」) and
 member-panel-work.ts now draws the same:
 
-- A row of chips under the tabs, 全部 / 頁面 / 媒體 / 檔案: pages; pictures, videos and audio; documents, archives and other
-  files. A chip with nothing in it is not shown, and with one kind alone no chips show at all. The pressed chip is the light
-  one (the accent fill with dark words in the dark theme, inverted in the light), the others soft; a filter the data no longer
-  has falls back to 全部. Links are never listed (a link is no deliverable: owner, 2026-11-08), so there is no link chip.
+- A row of chips under the tabs, always 全部 / 頁面 / 媒體 / 檔案 in that order, as Grok Bot always shows its four tabs (owner,
+  2026-11-13, on the build of 045adbb1: 「它檔案不是我不是跟你說要像是Grokbot這樣子區分開來嗎」; before, a member with one kind
+  alone, or none yet, showed no chips): pages; pictures, videos and audio; documents, archives and other files. A chip of a kind
+  the member has not delivered shows one quiet line in the cards' place (還沒有頁面 / 還沒有媒體 / 還沒有檔案; 全部 keeps 還沒有檔案或頁面,
+  loading and failed keep theirs), under the group labels' inset. The pressed chip is the light one (the accent fill with dark
+  words in the dark theme, inverted in the light), the others soft. Links are never listed (a link is no deliverable: owner,
+  2026-11-08), so there is no link chip. The kind is set by the core (`members/library.py::_kind`): the mime type decides media,
+  and when the host's mime table does not know a type (Windows has none for .webp, an upload can arrive as
+  application/octet-stream) the extension does, so a picture, a recording, an archive (.tgz, .zst) or a document is never filed
+  under 檔案 by mistake.
 - A quiet label per recency group, newest first: 今天, 昨天, 過去一週, 更早 (a group with nothing in it is not drawn); the label
   starts where a row's mark does. Each group's items are one rounded card (the second surface, a hairline edge, 12 px radius,
   8 px inside).
@@ -494,16 +500,18 @@ member-panel-work.ts now draws the same:
   kind has its own icon (page: the document with bars, document, archive, video, audio, file). Delivered file names are data
   for the look audit's language check (`.lib-title`).
 - Everything at once up to the core's bound of 100, scrolling inside the panel; there is no 「顯示更多」 (owner, 2026-11-08).
-  The empty and failed sentences are unchanged.
+  The empty and failed sentences are unchanged, and now stand under the four chips.
 - A press opens a picture in the lightbox, a page at the reply that published it, an attachment with `open_attachment`, and a
   delivered file with the `open_library_file` command, which hands the member id and the Library handle to
   `members.library_file` (never a path, never `computer.team_file`).
 
-Scenes: `member-panel-library` (全部), one per chip (`-pages`, `-media`, `-files`), `-long` (the `long` fixture: 98 items of
-every kind), `-open` and `-empty`; the checks in scripts/look/checks.mjs read the chips, groups, card, row and mark geometry.
+Scenes: `member-panel-library` (全部), one per chip (`-pages`, `-media`, `-files`), `-single` (the `single` fixture: a member whose
+deliverables are all media; the four chips still show, 全部 lists the five) and `-single-pages` (its 頁面 chip: one quiet line),
+`-long` (the `long` fixture: 98 items of every kind), `-open` and `-empty` (four chips and the one sentence); the checks in
+scripts/look/checks.mjs read the chips, groups, card, row, mark and empty-line geometry.
 
 ```powershell
-npm run look -- member-panel-library member-panel-library-pages member-panel-library-media member-panel-library-files member-panel-library-long member-panel-library-open member-panel-library-empty details --theme both --width 1120,720,1920x1080
+npm run look -- member-panel-library member-panel-library-pages member-panel-library-media member-panel-library-files member-panel-library-single member-panel-library-single-pages member-panel-library-long member-panel-library-open member-panel-library-empty details --theme both --width 1120,720,1920x1080
 ```
 
 ## Bare screen while the computer is not showing its screen (owner, 2026-11-07)
