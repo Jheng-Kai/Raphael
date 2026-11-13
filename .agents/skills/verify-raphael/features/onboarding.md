@@ -81,7 +81,8 @@ never a word button; owner, 2026-11-11), so nothing in the guide stacks.
 3. **Abilities** (`onboarding-abilities`, `onboarding-abilities-choice`): the shared abilities
    of Settings > Tools (web search, reading web pages, images and PDFs; no speech since 2026-11-10) as the very rows and
    dialogs of that pane (`createServices`): each says which service it uses, keeps its switch and
-   opens, inside the card, the choice of service with its key, and for images the model picker.
+   opens, inside the card, the choice of service with its key, and for images the model picker. That choice dims the whole
+   window like every dialog, the caption strip included (R-UI-141); the window buttons stay on top of the dim.
 
 Every step can be gone past without choosing. The last step's primary button finishes; a first
 run then saves the device setting `onboarded`, a rerun from Settings does not.

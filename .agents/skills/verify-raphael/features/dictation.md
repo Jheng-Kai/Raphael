@@ -177,7 +177,7 @@ answer appearing after the pasted words (`npm run native -- voice-keys` covers t
 
 ## Sub-features
 
-Four separate totals, activity/shortcuts, horizontal tabs, dated history, dictionary and connection notices; native
+Four separate totals, activity/shortcuts, horizontal tabs, dated history, dictionary and connection notices (a notice's sentence wraps in balanced lines, CJK text breaking at its punctuation, instead of hanging 3 px past its box when the line only fits by trimming its CJK punctuation; `conversation-notice` at 720 px); native
 recording, recognition, cleanup, paste and correction learning. Conversation voice
 and Alt+Space agent questions share cleanup and cleanup spend accounting, including
 the short-clean-sentence shortcut, without a target paste. Since 2026-11-07 (owner) they are kept

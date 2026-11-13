@@ -17,7 +17,7 @@ export default [
   scene("menu-move-keyboard", "Right opens, Left and Escape return to the parent row", [...open, key("ArrowDown"), key("ArrowRight"), wait('#app-submenu'),
     check("submenu-placement"), key("ArrowLeft"), waitGone('#app-submenu'), key("ArrowRight"), wait('#app-submenu'), key("Escape"), waitGone('#app-submenu'),
     key("ArrowRight"), wait('#app-submenu'), check("submenu-placement")]),
-  scene("menu-move-flip", "A right-click menu near the compact edge flips its child left", [column, { action: "menu-edge" },
+  scene("menu-move-flip", "A right-click menu beside the rail opens its long-named child on the side that has room", [column, { action: "menu-edge" },
     hover('#app-popover [data-pick="move"]'), wait('#app-submenu'), check("submenu-placement"), check("submenu-flip")], { menuMoveFlip: true }),
   scene("menu-move-diagonal", "A diagonal trip over a neighbour preserves the chosen submenu", [...hovered, { action: "menu-diagonal" }, check("submenu-placement")]),
 ];

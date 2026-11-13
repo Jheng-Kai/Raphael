@@ -184,7 +184,7 @@ svg.i { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor;
    as a bar of its own colour across the top of a wide window: the strip takes the page's own surface instead. */
 :root[data-window-layout="main"]:has(.main > .page-agent:not([hidden])):has(.mb-scrim.cr-scrim):not(:has(.mb-scrim:not(.cr-scrim))) .window-chrome { background: var(--content); }
 /* A dialog dims the caption with everything else; its buttons still answer on top of the dim. */
-:root:has(.mb-scrim:not(.store-scrim)) .window-chrome, :root:has(.menu.side-search) .window-chrome { background: transparent; border-color: transparent; }
+:root:has(.mb-scrim:not(.store-scrim)) .window-chrome, :root:has(.menu.side-search) .window-chrome, :root:has(.ob .cs-scrim) .window-chrome { background: transparent; border-color: transparent; }
 .window-drag { flex: 1; min-width: 0; }
 /* A conversation's header is the window's top row (members.css): its own empty stretch moves the window (it carries
    data-window-drag, window-chrome.ts), and this strip, whose drag cell would lie over the pill and the round buttons, lets the pointer
@@ -206,7 +206,7 @@ svg.i { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor;
 /* Caption actions retain a visible keyboard outline inside the window. */
 .window-close:hover:focus-visible { outline-color: var(--focus); }
 :root[data-window-modal="true"] .window-button:focus-visible:not(:hover) { background: transparent; }
-:root:has(.mb-scrim:not(.store-scrim)) .window-button:focus-visible:not(:hover), :root:has(.menu.side-search) .window-button:focus-visible:not(:hover) { background: transparent; }
+:root:has(.mb-scrim:not(.store-scrim)) .window-button:focus-visible:not(:hover), :root:has(.menu.side-search) .window-button:focus-visible:not(:hover), :root:has(.ob .cs-scrim) .window-button:focus-visible:not(:hover) { background: transparent; }
 .window-close:hover { background: var(--close); color: var(--on-close); }
 .window-close:active { background: var(--close); color: var(--on-close); }
 .window-restore-glyph { display: none; }
@@ -679,6 +679,8 @@ body:has(.page-agent:not([hidden])[data-det="open"]:not(.is-room)) .toast { max-
 :root[data-window-fixed] .ob-card { border: 0; border-radius: 0; box-shadow: none; }
 :root[data-window-fixed] :is([data-window-action="maximize"], [data-window-resize]) { display: none; }
 .ob-card { position: relative; display: grid; grid-template-columns: minmax(0, 1fr); width: min(1080px, 100%); height: min(720px, 100%); min-height: 0; overflow: hidden; border: 1px solid var(--edge-rim); border-radius: var(--r-lg); background: var(--content); box-shadow: var(--pop); }
+/* A choice opened in the guide dims the whole window like every dialog, the caption strip with it (R-UI-141): the card alone would leave the strip bright over the dim. */
+.ob .cs-scrim { position: fixed; }
 .ob-pane { display: grid; grid-template-rows: minmax(0, 1fr) auto; grid-template-columns: minmax(0, 1fr); min-width: 0; min-height: 0; }
 .ob-body { overflow-x: hidden; overflow-y: auto; padding: calc(var(--sp-6) + var(--sp-2)) var(--sp-6) var(--sp-5); }
 .ob-col { display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; width: min(100%, 640px); min-width: 0; margin-inline: auto; }
