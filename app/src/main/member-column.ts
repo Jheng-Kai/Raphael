@@ -414,14 +414,13 @@ export function createMemberColumn(host: ColumnHost): MemberColumn {
    */
   function openSearch(anchor: HTMLElement): void {
     if (document.querySelector(".side-search")) { closeMenu(); return; }
-    const width = (): number => Math.min(560, innerWidth - 24);
     const panel = openPopover(anchor,
       `<label class="side-search-field">${ico("search")}<input type="search" class="side-search-input" autocomplete="off" spellcheck="false" maxlength="40"></label>` +
       `<div class="side-search-rows"></div>` +
       `<button type="button" class="nav side-search-new" data-search-new>${ico("plus")}<span>${esc(t("members.newMember"))}</span></button>`,
       {
         className: "menu side-search", role: "dialog", label: t("chat.searchAll"),
-        anchorRect: () => new DOMRect((innerWidth - width()) / 2, Math.min(Math.max(48, innerHeight * 0.26), 280), width(), 0),
+        placement: "middle",
         onKey: event => {
           if (event.key !== "Enter" || !(event.target instanceof HTMLInputElement)) return false;
           panel.querySelector<HTMLButtonElement>(".side-search-rows button")?.click();

@@ -312,7 +312,6 @@ export const zhTW = {
   "completion.kindApp": "應用程式",
   "completion.commands": "指令",
   "completion.skills": "技能",
-  "completion.all": "顯示全部 {count} 個",
   "completion.previous": "上一頁",
   "completion.next": "下一頁",
   "media.image": "畫圖",

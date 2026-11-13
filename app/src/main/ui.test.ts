@@ -61,6 +61,16 @@ describe("popover placement", () => {
       .toEqual({ left: 510, top: 296, maxHeight: 356 });
   });
 
+  test("a dialog stands in the middle of the window both ways, whatever its anchor, and stays inside it", () => {
+    const anchor = { top: 40, bottom: 70, left: 10, right: 40 };
+    expect(menuPlacement(anchor, { width: 560, height: 400 }, { width: 1120, height: 800, headerBottom: 32 }, "middle"))
+      .toEqual({ left: 280, top: 200, maxHeight: 752 });
+    // The 720 px window of a short height: the card is as tall as the room under the window controls and keeps its 8 px margins.
+    expect(menuPlacement(anchor, { width: 560, height: 480 }, { width: 720, height: 480, headerBottom: 32 }, "middle"))
+      .toEqual({ left: 80, top: 40, maxHeight: 432 });
+    expect(menuPlacement(anchor, { width: 700, height: 100 }, { width: 400, height: 480, headerBottom: 32 }, "middle").left).toBe(8);
+  });
+
   test("horizontal overflow is clamped while a browser without custom chrome keeps its normal top gap", () => {
     expect(menuPlacement({ top: 100, bottom: 132, right: 900 }, { width: 320, height: 600 }, { ...viewport, headerBottom: 0 }))
       .toEqual({ left: 392, top: 136, maxHeight: 336 });

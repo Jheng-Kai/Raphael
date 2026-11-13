@@ -28,9 +28,9 @@
 /* ---------- the member column ---------- */
 .mb-col { display: flex; flex-direction: column; min-width: 0; min-height: 0; background: var(--side); border-right: 0; padding-top: calc(var(--window-controls-height) + 4px); }
 .mb-top { display: flex; align-items: center; gap: var(--sp-1); padding: 0 var(--pa-pad) 6px; }
-/* The search card: in the middle of the window over a dimmed page, the field above a
+/* The search card: in the middle of the window, both ways (a height of its own, so that the words typed never move it), over a dimmed page, the field above a
    hairline, every member in two lines, what the words find in the messages, and 新增成員 at the foot. */
-.menu.side-search { display: flex; flex-direction: column; width: min(560px, calc(100vw - 24px)); max-width: none; max-height: min(480px, calc(100vh - 96px)); padding: 0; overflow: hidden; border-radius: var(--r-lg); box-shadow: 0 0 0 100vmax var(--scrim), var(--pop); }
+.menu.side-search { display: flex; flex-direction: column; width: min(560px, calc(100vw - 24px)); max-width: none; height: min(480px, calc(100vh - 96px)); padding: 0; overflow: hidden; border-radius: var(--r-lg); box-shadow: 0 0 0 100vmax var(--scrim), var(--pop); }
 .side-search-field { flex: none; display: flex; align-items: center; gap: var(--sp-2); height: 52px; padding: 0 var(--sp-4); border-bottom: 1px solid var(--line); color: var(--text-3); }
 .side-search-field .i { flex: none; width: 16px; height: 16px; }
 .side-search-input { flex: 1; min-width: 0; height: 100%; border: 0; outline: 0; background: transparent; color: var(--text); font-size: var(--fs-sm); }

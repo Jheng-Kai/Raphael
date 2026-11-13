@@ -599,6 +599,8 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
    (「需要登入」) right after it, and what the row is, quietly, at the right edge. */
 .menu .mtrail { flex: none; margin-left: auto; padding-left: var(--sp-3); font-size: var(--fs-xs); color: var(--text-3); white-space: nowrap; }
 .menu.team-mentions-menu { width: 360px; }
+/* Every member and app on one list in a menu of a fixed height: seven rows and half of the next, so that the cut row says it scrolls (the scrollbar is hidden, R-UI-62). */
+.menu.menu-scroll { max-height: calc(var(--h-menu) * 7.5 + var(--sp-1) * 2); overflow-y: auto; overscroll-behavior: contain; }
 .menu.team-mentions-menu .mt { flex: 0 1 auto; }
 .menu.team-mentions-menu .mlead { width: 16px; height: 16px; }
 .menu.team-mentions-menu .mlead .av { --av: 16px !important; }
