@@ -83,6 +83,14 @@ READ_WITHOUT_BROWSER = (
     "This page was fetched without a browser. If its text stops short, asks for a consent or a click, or needs "
     "scripts, and you have a computer, open the page in its browser and read it there before saying it cannot be read."
 )
+# A page that needs a real browser, while the member's computer sleeps: reading a page never wakes it (R-COMP-WAKE-01,
+# owner, 2026-11-14). The member chooses, with its own computer tool, and the conversation then says it did.
+READ_NEEDS_BROWSER = (
+    "This page needs a real browser: its text stops short, asks for a consent or a click, or needs scripts. Your computer "
+    "is asleep and reading a page does not wake it. If you need this page, call browser_open with its address yourself: "
+    "that wakes the computer, the conversation says you did, and you read the page there. Do not say the page cannot be "
+    "read before you have tried that."
+)
 # Reading a file the owner handed over: the vision model, or the PDF service.
 ATTACHMENT_TIMEOUT_S = 70.0
 _SEARCH_SYSTEM = (
@@ -400,15 +408,22 @@ class Tools:
                 if rendered.ok:
                     return ToolResult("web_read", True, {"url": url, "text": rendered.text, "rendered": True,
                         "cookie_policy": "reject_nonessential", "truncated": rendered.truncated}, untrusted=True, detail="member_browser")
+                if rendered.kind == "computer_asleep":
+                    failed = self._failed("web_read", error.kind, service)
+                    failed.instruction = READ_NEEDS_BROWSER
+                    return failed
             return self._failed("web_read", error.kind, service)
         from ..services.web import needs_rendered_read
+        asleep = False
         if needs_rendered_read(page) and self.rendered_read:
             rendered = await self.rendered_read(url)
             if rendered.ok:
                 return ToolResult("web_read", True, {"url": url, "text": rendered.text, "rendered": True,
                     "cookie_policy": "reject_nonessential", "truncated": rendered.truncated}, untrusted=True, detail="member_browser")
+            asleep = rendered.kind == "computer_asleep"
             page = {**page, "rendered_error": rendered.kind, "cookie_policy": "reject_nonessential"}
-        return ToolResult("web_read", True, {"url": url, **page, "if_incomplete": READ_WITHOUT_BROWSER}, untrusted=True, detail=service)
+        return ToolResult("web_read", True, {"url": url, **page, "if_incomplete": READ_NEEDS_BROWSER if asleep else READ_WITHOUT_BROWSER},
+                          untrusted=True, detail=service)
 
     async def read_attachment(
         self, attachment: Attachment, question: str, ledger: Ledger, *, number: int = 1

@@ -16,6 +16,8 @@ export default [
   // or one line with the one action that fixes a PC that cannot give one.
   ...[
     ['asleep', state('stopped'), 'asleep'], ['connecting', state('starting'), 'connecting'], ['awake', state('running'), 'awake'],
+    // A member's own tool woke it (R-COMP-WAKE-01): the line that names the member and why stands where 已喚醒 does.
+    ['awake-woken', state('running', {woken:{member:1,name:'小晴',reason:'page'}}), 'awake'],
     ['docker-missing', state('absent', {error:'docker_missing'}), 'unavailable'], ['docker-stopped', state('unavailable', {error:'docker_stopped'}), 'unavailable'],
     ['remote', {...state('unavailable', {error:'remote_unavailable', host:'studio-mini'}), computerHost:'studio-mini'}, 'unavailable'],
   ].map(([kind, fixture, phase]) => scene(`member-panel-details-computer-${kind}`, 'Details carries one computer row: its state in a word or two and a small screen, or one line and its one fix', [...details,

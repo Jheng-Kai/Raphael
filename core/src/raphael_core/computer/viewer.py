@@ -262,8 +262,14 @@ class DesktopViewer:
                 "idle_minutes": self.vm.settings.get("computer_vm_idle_minutes") if self.vm.settings else 15,
                 "lifecycle": self.vm.lifecycle.get(target.state_key),
                 **({"repair_revision": self.vm.repair_revisions[target.state_key]} if target.state_key in self.vm.repair_revisions else {}),
+                **self.woken(target, state.get("state")),
                 **({"works": works} if works else {}),
                 **(self.teaching.status(params.get("member_id", 0), params.get("conversation_id"), target) if self.teaching else {})}
+
+    def woken(self, target, state):
+        """Who woke the running computer and why, when a member's own tool did it (R-COMP-WAKE-01): the row of its panel says so."""
+        woken = self.vm.woken.get(target.state_key)
+        return {"woken": dict(woken)} if woken and state == "running" else {}
 
     async def open(self, params):
         async with self.open_lock:
@@ -386,6 +392,7 @@ class DesktopViewer:
                 "idle_minutes": self.vm.settings.get("computer_vm_idle_minutes") if self.vm.settings else 15,
                 "lifecycle": self.vm.lifecycle.get(session.target.state_key),
                 **({"repair_revision": self.vm.repair_revisions[session.target.state_key]} if session.target.state_key in self.vm.repair_revisions else {}),
+                **self.woken(session.target, state.get("state")),
                 "control": "owner" if self.sessions.get(token) is session else "member",
                 "preview_allowed": session.target.key not in self.vm.held,
                 **({"works": works} if works else {}),
@@ -578,6 +585,9 @@ class DesktopViewer:
                     if session.expires <= self.vm.clock():
                         await self.close({"session": token})
                     else:
+                        if session.sockets:
+                            # The owner is looking at the screen: a computer he watches is not idle, however quiet its members are.
+                            self.vm.last_activity[session.target.state_key] = self.vm.clock()
                         if self.teaching:
                             await self.teaching.tick(token)
                         await self.release_if_idle(token, session)

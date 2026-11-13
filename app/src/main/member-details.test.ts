@@ -370,6 +370,9 @@ describe("the computer row", () => {
     expect(row(panel)!.querySelector('[data-computer-thumb]')!.getAttribute('data-thumb')).toBe('live');
     expect(row(panel)!.querySelector('.mb-computer-shot')!.getAttribute('src')).toBe('data:image/jpeg;base64,AAAA');
     publishComputerRow({ member: 4, state: 'asleep' }); expect(state()).toBe(t('computer.row.awake'));
+    publishComputerRow({ member: 3, state: 'awake', picture: 'data:image/jpeg;base64,AAAA', note: t('computer.woke.page', { p0: 'Mei' }) });
+    expect(state()).toBe(t('computer.woke.page', { p0: 'Mei' }));
+    publishComputerRow({ member: 3, state: 'asleep', note: 'stale' }); expect(state()).toBe(t('computer.row.asleep'));
   });
   test("pressing it asks the shell to open the computer, and a PC without an engine says so with its one action", async () => {
     api.openExternalUrl.mockResolvedValue(undefined);

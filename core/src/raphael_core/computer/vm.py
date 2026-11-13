@@ -354,6 +354,11 @@ class LocalVm:
         self.real_transport = runner is None
         self.rebuild_notice = lambda target: None
         self.engine_notice = lambda target: None
+        # Called when a computer that was asleep (or never made) has been started. `woken` keeps who woke the
+        # running computer and why, until it sleeps again: a member's own tool call does (VmTools sets both), and
+        # any start the owner asked for (a press, maintenance) leaves it empty. Looking never starts one.
+        self.wake_notice = lambda target: None
+        self.woken = {}
         self.maintenance, self.lifecycle = {}, {}
         self.disk_checked, self.disk_warned = {}, set()
         async def disconnect_driver(key):
@@ -985,6 +990,8 @@ class LocalVm:
             result = Result(0)
         if result.code:
             raise VmError("start_failed")
+        if not already_running:
+            self.wake_notice(target)
         self.last_activity[target.state_key] = self.clock()
         repaired = False
         for attempt in range(45):
@@ -1166,6 +1173,7 @@ exec /opt/venv/bin/python /opt/raphael-desktop/wallpaper.py --watch'''
             if result.code:
                 raise VmError("stop_failed")
             self.wallpaper_attempted.pop((target.remote, target.name), None)
+            self.woken.pop(target.state_key, None)
             if remove and (await self.run_for(target, ["rm", target.name])).code:
                 raise VmError("remove_failed")
             await self.close_viewer(target)
