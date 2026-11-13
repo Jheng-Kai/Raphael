@@ -7,7 +7,8 @@ export const drag = (selector, dx, options = {}) => ({ action: "drag", selector,
 // A step for the full list only: the rail of faces on a narrow window has no folder headings (driver.mjs `perform`).
 export const wide = step => ({ ...step, wide: true });
 export const type = (selector, text) => ({ action: "type", selector, text });
-export const wait = selector => ({ action: "wait", selector });
+// `timeout` (ms) for what the app itself waits for before it shows it (the screen's 6 s to confirm a take-over).
+export const wait = (selector, timeout) => ({ action: "wait", selector, ...(timeout ? { timeout } : {}) });
 export const waitGone = selector => ({ action: "wait-gone", selector });
 export const codexArrives = () => ({ action: "codex-arrives" });
 // A CLI's sign-in console ended: `done`, or `stopped` as when its window was closed first.

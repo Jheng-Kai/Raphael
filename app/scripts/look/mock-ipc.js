@@ -1068,6 +1068,8 @@ export function installMock(fixture, config = {}, target = window) {
       case "computer.viewer_control": {
         const session = desktopSessions.get(p.session);
         if (session.preview) throw new Error("Read-only preview");
+        // The core that cannot give a lease back: it still holds it for the view (`releaseFails`).
+        if (!p.held && variant.releaseFails) throw new Error("desktop busy");
         session.held = p.held;
         data.desktop.control = p.held ? "owner" : "member";
         if (!p.held && p.takeover) for (const work of data.desktop.works ?? []) if (work.request_id === p.takeover) work.state = "running";

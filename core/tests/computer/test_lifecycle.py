@@ -189,7 +189,8 @@ async def test_disk_notice_reads_fake_df_once_per_episode_and_never_deletes(desk
             return Result(0, f'204800\t{GUEST}/downloads\n102400\t{GUEST}/reports\n409600\t{GUEST}\n')
         raise AssertionError(args)
     vm.run = runner
-    assert await disk_pressure(vm, target) == [(204800, GUEST + '/downloads'), (102400, GUEST + '/reports')]
+    first = await disk_pressure(vm, target)
+    assert (first.disk, first.percent, first.folders) == ('computer', 95, [(204800, GUEST + '/downloads'), (102400, GUEST + '/reports')])
     assert await disk_pressure(vm, target) is None
     now[0] += 300
     assert await disk_pressure(vm, target) is None
@@ -198,6 +199,82 @@ async def test_disk_notice_reads_fake_df_once_per_episode_and_never_deletes(desk
     now[0] += 300; percent[0] = 98
     assert await disk_pressure(vm, target)
     assert all('df' in args or 'du' in args for args, _ in runtime.calls)
+
+
+OWNERS_DF = ('Filesystem 1024-blocks Used Available Capacity Mounted on\n'
+             'overlay 1055762868 18704672 983354724 2% /\n'
+             'C:\\ 463602684 434073928 29528756 94% /home/cua/workspace\n')
+
+
+def disk_runner(vm, runtime, df, du):
+    async def runner(args, **kwargs):
+        runtime.calls.append((args, kwargs))
+        if 'df' in args:
+            return Result(0, df)
+        if 'du' in args:
+            return Result(0, du)
+        raise AssertionError(args)
+    vm.run = runner
+
+
+async def test_the_disk_that_is_full_is_the_one_named_not_the_computers_small_folders(desktop):
+    """Owner, 2026-11-14: 「電腦磁碟快滿了。最大的資料夾：.browser-profiles (326 MiB)…」. The computer's own disk was at 2%;
+    the 94% was C: of this PC, where the workspace is kept, and a few hundred MiB of folders were never the cause."""
+    vm, target, runtime = desktop
+    disk_runner(vm, runtime, OWNERS_DF,
+                f'334000\t{GUEST}/.browser-profiles\n12288\t{GUEST}/.raphael-checkpoints\n0\t{GUEST}/member-8527a891e2241369\n346300\t{GUEST}\n')
+    pressure = await disk_pressure(vm, target)
+    assert (pressure.disk, pressure.filesystem, pressure.percent, pressure.free_kib) == ('files', 'C:', 94, 29528756)
+    assert pressure.own_kib == 346300 and not pressure.folders_matter
+    assert await disk_pressure(vm, target) is None
+
+
+async def test_folders_that_hold_the_disk_are_still_offered_for_cleaning(desktop):
+    vm, target, runtime = desktop
+    disk_runner(vm, runtime, OWNERS_DF.replace('2% /\n', '2% /\n', 1), f'6291456\t{GUEST}/downloads\n524288\t{GUEST}/reports\n6815744\t{GUEST}\n')
+    pressure = await disk_pressure(vm, target)
+    assert pressure.disk == 'files' and pressure.folders_matter
+    assert pressure.folders == [(6291456, GUEST + '/downloads'), (524288, GUEST + '/reports')]
+
+
+async def test_a_full_computer_disk_is_named_first_and_a_roomy_pair_says_nothing(desktop):
+    vm, target, runtime = desktop
+    now = [0]
+    vm.clock = lambda: now[0]
+    disk_runner(vm, runtime, OWNERS_DF.replace('2% /\n', '93% /\n', 1), f'204800\t{GUEST}/downloads\n204800\t{GUEST}\n')
+    assert (await disk_pressure(vm, target)).disk == 'computer'
+    now[0] += 300
+    disk_runner(vm, runtime, OWNERS_DF.replace('94%', '60%', 1).replace('93%', '2%'), '')
+    assert await disk_pressure(vm, target) is None
+
+
+@pytest.mark.parametrize('language,expected', [('zh-TW', ['C:', '94%', '清理它們幫不上忙']), ('en', ['(C:)', '94% full', 'would not help']),
+                                               ('ja', ['C:', '94%']), ('de', ['C:', '94 %']), ('zh-CN', ['C:', '94%'])])
+async def test_the_notice_names_the_full_disk_and_never_offers_folders_that_cannot_help(desktop, tmp_path, language, expected):
+    vm, _, runtime = desktop
+    original = vm.run
+    async def runner(args, **kwargs):
+        if 'df' in args:
+            return Result(0, OWNERS_DF)
+        if 'du' in args:
+            return Result(0, f'334000\t{GUEST}/.browser-profiles\n346300\t{GUEST}\n')
+        return await original(args, **kwargs)
+    vm.run = runner
+    hub = VmTools(EmptyHub(), vm, attachments=AttachmentStore(tmp_path), bridge=CatalogBridge)
+    await hub.prepare()
+    notices = []
+    try:
+        key = next(tool.key for tool in hub.offered() if tool.name == 'list_windows')
+        with vm_scope(0, private=True, notice=notices.append, language=language):
+            assert (await hub.call(key, {}, approver='auto')).ok
+        assert len(notices) == 1
+        for word in expected:
+            assert word in notices[0], (word, notices[0])
+        assert '28.2 GiB' in notices[0] and '338 MiB' in notices[0]
+        assert 'browser-profiles' not in notices[0] and '{p' not in notices[0]
+        assert not any(args[0] in ('rm', 'stop', 'volume') for args, _ in runtime.calls)
+    finally:
+        await hub.aclose()
 
 
 async def test_maintenance_rpc_pins_host_and_target_before_docker(desktop):

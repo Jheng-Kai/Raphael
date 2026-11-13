@@ -257,6 +257,58 @@ test('enlarging an owner-held screen disables viewer input without changing the 
   expect(api.desktopControl.mock.calls).toHaveLength(before);
 });
 
+test('watching always offers Take control, whoever the core says holds the lease: one press takes it again (owner, 2026-11-14)', async () => {
+  panelOpen=true; mounted.show(); await flush(); message('connected');
+  enlarge().click(); await flush();
+  const label = (): string => panel().querySelector('.desktop-mode-label')!.textContent!.trim();
+  // An earlier take-over's lease that the core still keeps for this session, while the view only watches.
+  api.desktopRenew.mockResolvedValue({ ...running, control:'owner' });
+  await vi.advanceTimersByTimeAsync(2_500); await flush();
+  expect(label()).toBe(t('desktop.watching'));
+  expect(take().hidden).toBe(false); expect(take().disabled).toBe(false);
+  expect(frame().style.pointerEvents).toBe('none');
+  api.desktopControl.mockResolvedValue({ ...running, control:'owner' });
+  take().click(); await flush();
+  expect(api.desktopControl).toHaveBeenLastCalledWith('one', true);
+  expect(label()).toBe(t('desktop.taking'));
+  message('interactive', { held:true }); await flush();
+  expect(label()).toBe(t('desktop.operating')); expect(take().hidden).toBe(true);
+});
+
+test('a take the core is still deciding reads 正在接手…, and one it refuses leaves Take control to press again (owner, 2026-11-14)', async () => {
+  panelOpen=true; mounted.show(); await flush(); message('connected');
+  enlarge().click(); await flush();
+  const label = (): string => panel().querySelector('.desktop-mode-label')!.textContent!.trim();
+  let refuse!: (error: Error) => void;
+  api.desktopControl.mockImplementationOnce(() => new Promise((_, reject) => { refuse = reject; }));
+  take().click(); await flush();
+  expect(label()).toBe(t('desktop.taking')); expect(take().hidden).toBe(true);
+  // A member's action was still running when the press arrived and the core would not wait for it.
+  refuse(new Error('desktop busy')); await flush();
+  expect(label()).toBe(t('desktop.watching'));
+  expect(take().hidden).toBe(false); expect(take().disabled).toBe(false); expect(handback().hidden).toBe(true);
+  expect(panel().querySelector<HTMLElement>('.desktop-error')!.hidden).toBe(false);
+  api.desktopControl.mockResolvedValue({ ...running, control:'owner' });
+  take().click(); await flush();
+  expect(api.desktopControl).toHaveBeenLastCalledWith('one', true); expect(label()).toBe(t('desktop.taking'));
+});
+
+test('a lease the core gave back is not kept on screen: the pill watches, input stops and Take control returns (owner, 2026-11-14)', async () => {
+  panelOpen=true; mounted.show(); await flush(); message('connected');
+  api.desktopControl.mockResolvedValue({ ...running, control:'owner' });
+  await takeOver(); message('interactive', { held:true }); await flush();
+  const label = (): string => panel().querySelector('.desktop-mode-label')!.textContent!.trim();
+  expect(label()).toBe(t('desktop.operating')); expect(frame().style.pointerEvents).toBe('auto');
+  // The core released it (nothing was typed for a long while): the next renewal says so.
+  api.desktopRenew.mockResolvedValue(running);
+  await vi.advanceTimersByTimeAsync(2_500); await flush();
+  expect(label()).toBe(t('desktop.watching')); expect(frame().style.pointerEvents).toBe('none');
+  expect(take().hidden).toBe(false); expect(handback().hidden).toBe(true);
+  api.desktopControl.mockClear(); api.desktopControl.mockResolvedValue({ ...running, control:'owner' });
+  take().click(); await flush();
+  expect(api.desktopControl).toHaveBeenLastCalledWith('one', true);
+});
+
 test('returning from another page restores an unchanged sleeping screen that wakes with a press',async()=>{
  panelOpen=true; api.desktopStatus.mockResolvedValue({state:'stopped',ready:false,control:'member'});
  mounted.show(); await flush(); mounted.hide(); await flush();

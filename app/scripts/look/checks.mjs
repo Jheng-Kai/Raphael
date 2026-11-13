@@ -911,9 +911,10 @@ export function checkRendered(name, context = {}) {
     window.__look.desktopStream = { frame, document: frame.contentDocument, opens: window.__look.calls.filter(call => call.method === 'computer.viewer_open').length, closes: window.__look.calls.filter(call => call.method === 'computer.viewer_close').length };
     return {check:name};
   }
-  if (name === 'desktop-watch' || name === 'desktop-watch-collapse') {
+  if (name === 'desktop-watch' || name === 'desktop-watch-collapse' || name === 'desktop-watch-retake') {
     const panel = document.querySelector('.desktop-panel'), calls = window.__look.calls;
-    require(!calls.some(call => call.method === 'computer.viewer_control'), 'watching never changes owner control');
+    // An earlier take-over (desktop-watch-retake) has asked the core for the lease; every other watch has not.
+    if (name !== 'desktop-watch-retake') require(!calls.some(call => call.method === 'computer.viewer_control'), 'watching never changes owner control');
     if (name === 'desktop-watch-collapse') {
       require(!panel.hasAttribute('data-expanded'), 'Esc returns to conversation');
       const before = window.__look.desktopStream, frame = document.querySelector('iframe[data-desktop-stream]');
@@ -934,7 +935,15 @@ export function checkRendered(name, context = {}) {
       // Grok Bot's two states: watching offers Take control; in control offers Stop (which hands the computer back).
       const take = dock.querySelector('[data-desktop="take"]'), stopControl = dock.querySelector('[data-desktop="return"]');
       require(!visible(stopControl), 'watching offers no Stop of control');
-      if (panel.dataset.desktopState !== 'owner') require(visible(take) && take.textContent === '接手控制', 'watching the pill offers Take control');
+      // Whoever the core says holds the lease: the owner can take over whenever the pill watches (owner, 2026-11-14:
+      // 「為什麼我沒辦法接手啊 ? 理論上不管甚麼時候我都應該要可以接手」, a picture of 觀看中 with no button).
+      require(visible(take) && take.textContent === '接手控制' && !take.disabled, 'watching the pill offers Take control');
+      if (name === 'desktop-watch-retake') {
+        require(panel.dataset.desktopState === 'owner', `the core still keeps the lease of the earlier take-over (${panel.dataset.desktopState})`);
+        require(calls.filter(call => call.method === 'computer.viewer_control' && call.params.held === true).length === 1
+          && calls.filter(call => call.method === 'computer.viewer_control' && call.params.held === false).length === 1, 'one earlier take and one failed give-back');
+        require(visible(panel.querySelector('.desktop-error')), 'the failed take says so under the screen');
+      }
       if (name === 'desktop-watch' && window.__look.data.desktop.works?.some(work => work.state === 'running')) {
         const stop = panel.querySelector('[data-desktop="stop"]');
         require(visible(stop) && stop.title === stop.getAttribute('aria-label') && stop.title.trim(), 'Stop has its translated tooltip');

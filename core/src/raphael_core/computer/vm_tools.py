@@ -65,6 +65,14 @@ ENGINE_STARTING = with_ui_words({
 })
 
 # What the model is told when Docker Desktop cannot be had, so it never meets a bare kind with nothing to do next.
+DISK_FILES_EN = ("The disk the computer's files are kept on ({p0}) is {p1}% full, with {p2} free. The computer's own folders "
+                 "hold only {p3} of it, so cleaning them up would not help. Free some space on {p0} itself.")
+
+
+def _size_words(kib):
+    return f"{kib / 1048576:.1f} GiB" if kib >= 1048576 else f"{kib / 1024:.0f} MiB"
+
+
 ENGINE_FAILURES = {
     "docker_stopped": "Docker Desktop is not running, so the computer could not start. Tell the owner plainly that Docker Desktop "
                       "is not running, and that opening it (or pressing the computer's screen) lets you try again.",
@@ -252,14 +260,24 @@ class VmTools:
         if not publish:
             return
         try:
-            folders = await disk_pressure(self.vm, target)
+            pressure = await disk_pressure(self.vm, target)
         except (VmError, OSError, TimeoutError):
             return  # Disk diagnostics never block the owner's work.
-        if folders:
-            names = ", ".join(f"{path} ({size / 1024:.0f} MiB)" for size, path in folders)
-            publish(with_ui_words({"zh-TW": f"電腦磁碟快滿了。最大的資料夾：{names}。要我清理哪些？刪除前會先徵求你的同意。",
-                "ja": f"ディスクの空き容量が少なくなっています。大きいフォルダー：{names}。削除する前に確認します。どれを整理しますか？", "en": f"The computer disk is nearly full. Largest folders: {names}. Which should I clean up? I will ask before deleting anything."}, lambda _ui_language: ui_word('The computer disk is nearly full. Largest folders: {p0}. Which should I clean up? I will ask before deleting anything.', _ui_language).format(p0=names)).get(language,
-                f"The computer disk is nearly full. Largest folders: {names}. Which should I clean up? I will ask before deleting anything."))
+        if not pressure:
+            return
+        if pressure.disk == "files" and not pressure.folders_matter:
+            # The disk that is full is not the computer's: folders of a few hundred MiB are not what fills it.
+            fields = (pressure.filesystem, pressure.percent, _size_words(pressure.free_kib), _size_words(pressure.own_kib))
+            publish(with_ui_words({"zh-TW": f"存放電腦檔案的磁碟（{fields[0]}）已用 {fields[1]}%，只剩 {fields[2]}。電腦自己的資料夾只佔 {fields[3]}，清理它們幫不上忙，需要在 {fields[0]} 本身騰出空間。",
+                "ja": f"コンピューターのファイルを置いているディスク（{fields[0]}）が {fields[1]}% 使用され、空きは {fields[2]} です。コンピューター自身のフォルダーは {fields[3]} しかないため、整理しても効果はありません。{fields[0]} 自体の空きを増やしてください。",
+                "en": DISK_FILES_EN.format(p0=fields[0], p1=fields[1], p2=fields[2], p3=fields[3])},
+                lambda _ui_language: ui_word(DISK_FILES_EN, _ui_language).format(p0=fields[0], p1=fields[1], p2=fields[2], p3=fields[3])).get(language,
+                DISK_FILES_EN.format(p0=fields[0], p1=fields[1], p2=fields[2], p3=fields[3])))
+            return
+        names = ", ".join(f"{path} ({size / 1024:.0f} MiB)" for size, path in pressure.folders)
+        publish(with_ui_words({"zh-TW": f"電腦磁碟快滿了。最大的資料夾：{names}。要我清理哪些？刪除前會先徵求你的同意。",
+            "ja": f"ディスクの空き容量が少なくなっています。大きいフォルダー：{names}。削除する前に確認します。どれを整理しますか？", "en": f"The computer disk is nearly full. Largest folders: {names}. Which should I clean up? I will ask before deleting anything."}, lambda _ui_language: ui_word('The computer disk is nearly full. Largest folders: {p0}. Which should I clean up? I will ask before deleting anything.', _ui_language).format(p0=names)).get(language,
+            f"The computer disk is nearly full. Largest folders: {names}. Which should I clean up? I will ask before deleting anything."))
 
     def _rebuild_notice(self, target):
         progress, language = _NOTE.get()
@@ -724,7 +742,7 @@ class VmTools:
             if self.tier_of(key) is None or approver == "none" or tool.tier >= Tier.T2 and approver != "user":
                 return result
             if target.key in self.vm.held:
-                result = PluginResult(False, "owner_holds_control")
+                result = PluginResult(False, "owner_holds_control", self.vm.owner_note(target))
                 return result
             if "session" in arguments or not Draft202012Validator(self.schemas[key]).is_valid(arguments):
                 result = PluginResult(False, "bad_arguments")
@@ -948,9 +966,10 @@ class VmTools:
             self.vm.invalidate(target)
             if str(error) in ("seats_full", "computer_busy"):
                 return self._busy(target, None, self.busy_wait_s if str(error) == "computer_busy" else 0,
-                                  note="every screen of the computer is in use" if str(error) == "seats_full" else None,
+                                  note="every screen of the computer is in use" if str(error) == "seats_full"
+                                  else self.vm.owner_note(target) if self.vm.unit_held(target) else None,
                                   held_by="the owner" if self.vm.unit_held(target) else None)
-            result = PluginResult(False, str(error), ENGINE_FAILURES.get(str(error), ""))
+            result = PluginResult(False, str(error), self.vm.owner_note(target) if str(error) == "owner_holds_control" else ENGINE_FAILURES.get(str(error), ""))
             return result
         except ConnectionError:
             self.vm.invalidate(target)
@@ -971,7 +990,7 @@ class VmTools:
     async def _run_steps(self, key, arguments, *, approver, task_id, pool):
         target = self.routes[key]
         if target.key in self.vm.held:
-            return PluginResult(False, "owner_holds_control")
+            return PluginResult(False, "owner_holds_control", self.vm.owner_note(target))
         if approver == "none" or self.step_gate is None:
             return PluginResult(False, "blocked")
         if not Draft202012Validator(RUN_STEPS["parameters"]).is_valid(arguments):
