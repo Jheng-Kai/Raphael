@@ -94,8 +94,10 @@ def _bits_per_char(text: str) -> float:
 def _readable(run: str) -> bool:
     """Words and numbers joined the way an address joins them, with a few short codes among them: a path someone can read
     (taichung-city/315040/weather-forecast, news/press-release-details/2026/NVIDIA-Announces-CEO-Transition), not a key.
-    A piece that mixes letters and digits beyond a short code, or letters that keep changing case, is a key's."""
-    if "+" in run or "=" in run:
+    A path has a slash: words joined by underscores or hyphens alone (synthetic_private_credential_123456789) are a
+    value given to a key's name as often as a name, and stay judged as keys. A piece that mixes letters and digits beyond
+    a short code, or letters that keep changing case, is a key's."""
+    if "/" not in run or "+" in run or "=" in run:
         return False
     words = codes = 0
     for part in filter(None, _JOINERS.split(run)):

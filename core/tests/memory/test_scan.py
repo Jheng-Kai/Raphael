@@ -113,6 +113,9 @@ def test_the_words_and_numbers_of_an_address_are_not_a_key(text):
         "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
         "123e4567-e89b-12d3-a456-426614174000",
         "aB3dE5fG7hJ9kL1mN3pQ5rS7tU9vW1xY3zA5bC7",
+        # Words and digits joined without a slash are a value, not a path (tests/test_chat_setup_share.py, 2026-11-14).
+        "api_key: synthetic_private_credential_123456789",
+        "synthetic-private-credential-123456789",
     ],
 )
 def test_a_key_inside_an_address_or_split_by_slashes_is_still_one(text):
