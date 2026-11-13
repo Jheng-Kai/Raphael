@@ -144,7 +144,9 @@ retains its resources and prints them; interruption/failure otherwise cleans the
 Missing/non-Linux Docker exits 2, a failed check exits 1, success exits 0. A released
 layer whose image is not on this PC is a named skip (`previous layer 4`, `previous layer 5`).
 For the layer before the current one it also makes the six-screen computer every member shares in that layer's
-shape and starts it on the new layer (`previous layer 7 shared`): the upgrade an owner's own computer takes.
+shape and starts it on the new layer (`previous layer 8 shared`): the upgrade an owner's own computer takes.
+Every count reads its launchers for the browser's own name and mark, the helper, the menu's entries and
+`x-www-browser`, and opens XFCE's "Web Browser" to see which window comes ("N screens browser mark").
 The shared block reads the running browser's flags and what a page is told of `navigator.webdriver`, presses the
 Browser icon's command ("shared browser is a person's"), and sends the owner's own click and typed line through
 the app's relay path to a held seat ("shared owner input").

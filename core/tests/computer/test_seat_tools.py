@@ -456,9 +456,10 @@ def test_layer_seven_installs_computer_browser_and_existing_profile_grant():
     assert '--permission-mode standard --grant existing-profile' in dockerfile
     assert 'install -m 0755 /opt/raphael-desktop/raphael-seat-browser /usr/local/bin/raphael-seat-browser' in dockerfile
     # Layer 6 is main's (the desktop's picture, its keys, a lost X server); the seat browser and the grant came on top
-    # as 7, and 8 is what a computer has from its first start (Google's Chrome, the tools, the fonts).
-    assert module.IMAGE.endswith("-v8") and module.IMAGE_LABELS[f"{module.LABEL}.layer"] == "8"
-    assert 'org.raphael.computer.layer="8"' in dockerfile and "librsvg2-common" in dockerfile
+    # as 7, 8 is what a computer has from its first start (Google's Chrome, the tools, the fonts), and 9 is the
+    # desktop saying which browser that is.
+    assert module.IMAGE.endswith("-v9") and module.IMAGE_LABELS[f"{module.LABEL}.layer"] == "9"
+    assert 'org.raphael.computer.layer="9"' in dockerfile and "librsvg2-common" in dockerfile
     launcher = (image / "desktop/raphael-seat-browser").read_text(encoding="utf-8")
     assert "wmctrl -lG" in launcher and '"$attempt" -lt 50' in launcher
     assert 'data:text/html,<title>$marker</title>' in launcher and '${5' not in launcher
@@ -481,6 +482,51 @@ def test_the_computer_starts_with_googles_chrome_the_tools_and_the_fonts():
     assert "apt-get install -y --no-install-recommends google-chrome-stable;" in dockerfile
     launcher = (image / "desktop/raphael-seat-browser").read_text(encoding="utf-8")
     assert "if [ -x /opt/google/chrome/chrome ]; then" in launcher and "chromium=/usr/lib/chromium/chromium window_class=chromium-browser" in launcher
+
+
+def test_the_desktop_names_the_browser_it_opens_and_every_way_to_a_browser_opens_it():
+    # Owner, 2026-11-13, of the panel of his members' computer: 「但看起來底下不是顯示 Chrome ㄟ?」. Measured on layer 8:
+    # the launcher wore a globe named "Browser" over Google Chrome; XFCE's "Web Browser" named a helper that does
+    # not exist and asked which application to prefer; the menu's own Chrome entry and x-www-browser could not
+    # start (they make a sandbox); the menu's Chromium and Firefox were second browsers with profiles of their own.
+    image = Path(module.__file__).parent / "image"
+    dockerfile = (image / "Dockerfile").read_text(encoding="utf-8")
+    step = dockerfile[dockerfile.index("if [ -x /opt/google/chrome/chrome ]; then name='Google Chrome' icon=google-chrome;"):]
+    step = step[:step.index("\n# ")]
+    # Which browser there is, is known only after it was installed: the step that names it comes after that one.
+    assert dockerfile.index("apt-get install -y --no-install-recommends google-chrome-stable;") < dockerfile.index(step)
+    assert "else name=Chromium icon=chromium; fi;" in step
+    # A mark that is not among the icons would be drawn as nothing: the build stops there.
+    assert 'test -e "/usr/share/icons/hicolor/48x48/apps/$icon.png";' in step
+    assert ("for file in /home/cua/.config/xfce4/panel/launcher-*/browser.desktop "
+            "/home/cua/.local/share/applications/raphael-browser.desktop; do") in step
+    assert 'sed -i -e "s/^Name=.*/Name=$name/" -e "s/^Icon=.*/Icon=$icon/" "$file";' in step
+    # XFCE's own "Web Browser".
+    assert "'X-XFCE-Binaries=raphael-browser;' 'X-XFCE-Category=WebBrowser'" in step
+    assert "> /usr/share/xfce4/helpers/raphael-browser.desktop;" in step
+    assert "sed -i 's/^WebBrowser=.*/WebBrowser=raphael-browser/' /home/cua/.config/xfce4/helpers.rc;" in step
+    assert "grep -qx 'WebBrowser=raphael-browser' /home/cua/.config/xfce4/helpers.rc;" in step
+    # The menu's other browser entries start the computer's browser and are out of the menu; Firefox stays
+    # installed and is out of the menu.
+    assert "for entry in google-chrome com.google.Chrome chromium; do" in step
+    assert "'Exec=raphael-browser %U' \"Icon=$icon\" 'Terminal=false' 'NoDisplay=true'" in step
+    hide = "sed -e '0,/^\\[Desktop Entry\\]$/d' -e '/^NoDisplay=/d' /usr/share/applications/firefox-esr.desktop"
+    assert hide in step and "> /home/cua/.local/share/applications/firefox-esr.desktop;" in step
+    assert "apt-get purge" not in dockerfile and "apt-get remove" not in dockerfile
+    assert 'update-alternatives --install "/usr/bin/$link" "$link" /usr/local/bin/raphael-browser 500;' in step
+    assert 'test "$(readlink -f /usr/bin/x-www-browser)" = /usr/local/bin/raphael-browser' in step
+    # The files are the session user's, as the ones they replace were.
+    assert "chown cua:cua /home/cua/.config/xfce4/helpers.rc" in step
+    # What the repository keeps is the entry before it is named: it starts the computer's browser either way.
+    entry = (image / "desktop/browser.desktop").read_text(encoding="utf-8").splitlines()
+    assert "Exec=raphael-browser %U" in entry
+    # The entry Firefox is hidden with keeps everything but its heading and any NoDisplay of its own.
+    sed = shutil.which("sed")
+    if sed is not None:
+        sample = b"[Desktop Entry]\nName=Firefox ESR\nNoDisplay=false\nExec=firefox-esr %u\n\n[Desktop Action new-window]\nName=New\n"
+        kept = subprocess.run([sed, "-e", r"0,/^\[Desktop Entry\]$/d", "-e", "/^NoDisplay=/d"], input=sample, capture_output=True, timeout=10)
+        assert kept.returncode == 0, kept.stderr
+        assert kept.stdout.replace(b"\r\n", b"\n") == b"Name=Firefox ESR\nExec=firefox-esr %u\n\n[Desktop Action new-window]\nName=New\n"
 
 
 def test_the_members_browser_is_never_signed_in_to_as_a_browser_and_keeps_nothing_typed():
@@ -619,14 +665,16 @@ wmctrl() {{ printf '%s\\n' '0x4  0 0 0 1280 851 host other' '0x5  0 {geometry} h
     assert '[ "$attempt" -ge 15 ] && filling' in launcher
 
 
-async def test_the_shared_computer_of_layer_seven_is_made_again_on_the_next_layer(shared_vm):
+@pytest.mark.parametrize("layer", ["7", "8"])
+async def test_the_shared_computer_of_layer_seven_is_made_again_on_the_next_layer(shared_vm, layer):
     # The owner's own computer on the day layer 8 came: six screens, 6 GiB, four cores, labelled layer 7. The
     # acceptance run found that layer 7 was not yet named as a released one, and such a computer did not start.
+    # It was on layer 8, in the same shape, the day layer 9 came.
     vm, runtime = shared_vm
     target = await vm.seat(1)
     raw = container(vm, target, runtime)
-    raw["Config"]["Labels"][f"{module.LABEL}.layer"] = "7"
-    raw["Image"] = "sha256:layer-seven-image"
+    raw["Config"]["Labels"][f"{module.LABEL}.layer"] = layer
+    raw["Image"] = "sha256:the-layer-before"
     assert "RAPHAEL_SCREENS=6" in raw["Config"]["Env"] and raw["HostConfig"]["Memory"] == 6 * 1024**3
     assert not module.compatible(raw, target, vm.owner, runtime.image_id)
     assert module.known_previous(raw, target, vm.owner)

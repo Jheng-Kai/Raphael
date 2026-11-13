@@ -735,6 +735,21 @@ Shift that was not sent (a script's "@", capitals from a Caps Lock that was on b
 sandbox stays off in a computer (every capability is dropped and the container is the sandbox); the image is 4.2 GB where
 layer 7 was 2.7 GB (measured), and its first build downloads Chrome and the packages.
 
+## The desktop names its browser (2026-11-13)
+
+Image layer 9 (R-COMP-READY-02). Owner, of the panel on layer 8: 「但看起來底下不是顯示 Chrome ㄟ?」.
+
+- The panel's launcher on every screen, and the menu's one browser entry, are named Google Chrome under Chrome's
+  mark on amd64 (Chromium under its own on arm64). Until then a globe named "Browser" opened Chrome.
+- XFCE's "Web Browser", the menu's Chrome and Chromium entries and `x-www-browser` start the computer's browser.
+  On layer 8 the first asked which application to prefer, and the menu's Chrome entry could not start at all.
+- Firefox stays installed and is out of the menu: a second browser is where an owner signs in for nobody.
+- Layer 8 computers, the shared six-screen one among them, are made again on layer 9 at their next start. A PC
+  that built layer 8 builds layer 9 from what it kept (measured: 15 s for the new step).
+- Check: `N screens browser mark` in `npm run verify -- --computer`, and the shared block's six launchers.
+
+Stated limit: a member that starts `/usr/bin/chromium` or `firefox` by its own path still gets that browser.
+
 ## Responsive computer tools (2026-11-04)
 
 R-COMP-PERF-01 through R-COMP-PERF-06 supersede the earlier full-screen bootstrap,
