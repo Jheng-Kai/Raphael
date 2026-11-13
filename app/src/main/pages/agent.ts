@@ -78,7 +78,7 @@ import { chatCardAction } from "../chat-cards";
 import { carryInlineSetup, mountInlineConnectionSetup } from "../connection-setup";
 import { carryMail } from "../mail-card";
 import { mountPages } from "../page-card";
-import { menuReactionsHTML, mountMessageMetadata } from "../message-metadata";
+import { menuReactionsHTML, mountMessageMetadata, ownReaction } from "../message-metadata";
 import { MORE_EMOJI, openEmojiPicker } from "../emoji-picker";
 import { mountMailActions } from "../mail-actions";
 import { answerOwnerPage, mountOwnerQuestions, questionWaits } from "../owner-questions";
@@ -2048,7 +2048,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     const ownerAct = pending ? "cancel" : control.dataset.ownerAct;
     if (ownerAct === "edit") items.push({ id: "edit", label: t("chat.edit"), icon: "pencil" });
     if (ownerAct === "cancel") items.push({ id: "cancel", label: t("common.cancel"), icon: "x" });
-    const reactions = source && !owner && message?.querySelector('[data-act="react-message"]') ? source.turn.reactions?.[source.key] ?? [] : null;
+    const reactions = source && !owner && message?.querySelector('[data-act="react-message"]') ? ownReaction(source.turn.reactions?.[source.key]) : null;
     openActions(control, items, pick => {
       if (pick === "regenerate") void regenerate(control);
       else if (pick === "reply") replyMessage(control);

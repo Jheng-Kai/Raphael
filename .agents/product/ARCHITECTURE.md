@@ -109,6 +109,16 @@ context reads metadata through AgentHistory; room transcripts include the same
 explicit non-instruction label. rooms.thread_open validates a main-room root and
 reuses room_threads/thread_id, the existing worker and its isolated transcript.
 
+Migration 82 (2026-11-14) makes the message the primary key of both reaction tables, so a
+message carries one reaction (R-REACT-01), and adds `reaction_asks`, the once-only record of
+the messages whose negative reaction a member already asked about. `set_reaction` replaces in
+one write and returns what the message carries; `agent/reaction_asks.py` waits 4 seconds on the
+latest reaction of each message and then asks the service that owns the message to start the
+ask: `AgentService._ask_about_reaction` (a turn of source `reaction`, written like a greeting
+with no owner message, on the member's own model with no tool and no fallback) or
+`RoomsService._ask_about_reaction` (a one-turn room exchange for the message's author). Only
+these two ever read a reaction to start work, and neither treats it as approval.
+
 slack_draft shares EmailDrafts, its version digest, send claim and ToolGate. It refuses
 room origins at both tool and service boundaries. Discovered Slack sends obey the
 same draft-first/full-permission policy as mail. No second draft engine is added.

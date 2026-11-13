@@ -23,6 +23,7 @@ def test_single_emoji_sequences_and_legacy_removal_reject_text_and_multiple_grap
     for emoji in ('🎉', '👍🏽', '👨‍👩‍👧', '🇹🇼', '1️⃣', '❤️', '🏴\U000e0067\U000e0062\U000e0065\U000e006e\U000e0067\U000e007f'):
         set_reaction(conn, {'message_key': 'reply', 'emoji': emoji, 'active': True}, **scope)
         assert conn.execute(f'SELECT 1 FROM {table} WHERE emoji=?', (emoji,)).fetchone()
+        assert conn.execute(f'SELECT COUNT(*) FROM {table}').fetchone()[0] == 1
     for emoji in ('ab', '👍👍', ' ', '🎉' * 40, '🏽', '\u200d', '1', '🇹', '🎉\u200d', 'A\ufe0f', '🎉🏽'):
         with pytest.raises(RpcError, match='reaction requires a supported emoji and boolean active') as caught:
             set_reaction(conn, {'message_key': 'reply', 'emoji': emoji, 'active': True}, **scope)
@@ -33,20 +34,35 @@ def test_single_emoji_sequences_and_legacy_removal_reject_text_and_multiple_grap
         assert not conn.execute(f'SELECT 1 FROM {table} WHERE emoji=?', (emoji,)).fetchone()
 
 
-def test_twenty_distinct_reactions_are_bounded_per_message_but_removal_and_idempotence_work(conn, message):
+def shown(conn, table):
+    return [row[0] for row in conn.execute(f'SELECT emoji FROM {table}')]
+
+
+def test_a_message_carries_one_reaction_choosing_another_replaces_it_and_the_same_again_takes_it_back(conn, message):
     scope, table = message
-    emojis = list('😀😁😂😃😄😅😆😇😈😉😊😋😌😍😎😏😐😑😒😓😔')
-    for emoji in emojis[:20]:
-        set_reaction(conn, {'message_key': 'reply', 'emoji': emoji, 'active': True}, **scope)
-    set_reaction(conn, {'message_key': 'reply', 'emoji': emojis[0], 'active': True}, **scope)
-    with pytest.raises(RpcError) as caught:
-        set_reaction(conn, {'message_key': 'reply', 'emoji': emojis[20], 'active': True}, **scope)
-    assert caught.value.code == INVALID_PARAMS
-    assert conn.execute(f'SELECT COUNT(*) FROM {table}').fetchone()[0] == 20
-    set_reaction(conn, {'message_key': 'reply', 'emoji': emojis[0], 'active': False}, **scope)
-    set_reaction(conn, {'message_key': 'reply', 'emoji': emojis[20], 'active': True}, **scope)
+    react = lambda emoji, active=True: set_reaction(conn, {'message_key': 'reply', 'emoji': emoji, 'active': active}, **scope)
+    assert react('👍') == '👍' and shown(conn, table) == ['👍']
+    assert react('👍') == '👍' and shown(conn, table) == ['👍']
+    assert react('😂') == '😂' and shown(conn, table) == ['😂']
+    assert react('👍', False) == '😂' and shown(conn, table) == ['😂']
+    assert react('😂', False) is None and shown(conn, table) == []
+    assert react('🎉', False) is None and shown(conn, table) == []
+    assert react('🎉') == '🎉' and react('❤️') == '❤️'
+    assert shown(conn, table) == ['❤️']
     if 'turn_id' in scope:
-        set_reaction(conn, {'message_key': 'owner', 'emoji': emojis[0], 'active': True}, **scope)
+        set_reaction(conn, {'message_key': 'owner', 'emoji': '👍', 'active': True}, **scope)
+        assert [tuple(row) for row in conn.execute('SELECT message_key,emoji FROM message_reactions ORDER BY message_key')] == [('owner', '👍'), ('reply', '❤️')]
+
+
+def test_the_primary_key_refuses_a_second_reaction_whatever_wrote_it(conn, message):
+    import sqlite3
+    scope, table = message
+    set_reaction(conn, {'message_key': 'reply', 'emoji': '👍', 'active': True}, **scope)
+    with pytest.raises(sqlite3.IntegrityError), conn:
+        if 'turn_id' in scope:
+            conn.execute('INSERT INTO message_reactions VALUES(?,?,?)', (scope['turn_id'], 'reply', '😂'))
+        else:
+            conn.execute('INSERT INTO room_reactions VALUES(?,?)', (scope['message_id'], '😂'))
 
 
 def test_unicode_17_additions_are_emoji_but_unassigned_neighbors_are_not(conn, message):

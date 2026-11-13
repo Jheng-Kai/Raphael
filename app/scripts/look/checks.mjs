@@ -342,9 +342,34 @@ export function checkRendered(name, context = {}) {
     const message = document.querySelector('.tn[data-id="8201"] .owner-message'), row = message?.querySelector('.message-reactions');
     require(row && visible(row) && row.closest('.bubble'), "the owner's reactions are drawn on the owner's own bubble");
     const chips = [...row.querySelectorAll('[data-reaction]')];
-    require(chips.map(chip => chip.dataset.reaction).join(' ') === '🎉 😂', `both reactions are there (${chips.map(chip => chip.dataset.reaction).join(' ')})`);
-    const tops = chips.map(chip => chip.getBoundingClientRect().top);
-    require(tops.every(top => Math.abs(top - tops[0]) < 1), 'several reactions share one row');
+    require(chips.map(chip => chip.dataset.reaction).join(' ') === '🎉', `the one reaction is there, never a second (${chips.map(chip => chip.dataset.reaction).join(' ')})`);
+    return { check: name };
+  }
+  if (['reaction-bar-given', 'reaction-replaced', 'reaction-taken-back', 'reaction-ask'].includes(name)) {
+    // One reaction per message (owner, 2026-11-14): another emoji replaces the one given, the same again takes it back.
+    const calls = window.__look.calls.filter(call => call.method === 'agent.react'), message = document.querySelector('.tn[data-id="8201"]');
+    const chips = [...message.querySelectorAll('[data-reaction]')].map(chip => chip.dataset.reaction);
+    if (name === 'reaction-bar-given') {
+      const bar = document.querySelector('#app-popover.reaction-bar');
+      require(visible(bar), 'the bar is open');
+      require([...bar.querySelectorAll('[aria-pressed="true"]')].map(button => button.dataset.quick).join(' ') === '👍', 'the bar presses only the one reaction the reply has');
+    }
+    if (name === 'reaction-replaced') {
+      require(chips.join(' ') === '😂', `the reply carries only the new emoji (${chips.join(' ')})`);
+      require(calls.length === 1 && calls[0].params.emoji === '😂' && calls[0].params.active === true, 'choosing another emoji is one reaction call, not a removal and a second one');
+      require(message.querySelectorAll('.message-reactions .reaction').length === 1 && visible(message.querySelector('.message-reactions')), 'one chip stands on the bubble');
+    }
+    if (name === 'reaction-taken-back') {
+      require(chips.length === 0 && !message.querySelector('.message-reactions'), 'the same emoji again takes the reaction back and leaves no chip');
+      require(calls.length === 1 && calls[0].params.emoji === '👍' && calls[0].params.active === false, 'the call was the removal of that emoji');
+    }
+    if (name === 'reaction-ask') {
+      const ask = document.querySelector('.tn[data-id="8202"]');
+      require(chips.join(' ') === '👎', `the reply keeps its thumbs down (${chips.join(' ')})`);
+      require(ask && visible(ask.querySelector('.chat-message[data-reply]')) && ask.textContent.includes(window.__look.data.chatMetadataSample.askWhatWasWrong), 'the member asks what was wrong, as a message of its own');
+      require(!ask.querySelector('.owner-message, .me'), 'the ask carries no message of the owner');
+      require(!window.__look.calls.some(call => ['agent.ask', 'agent.confirm', 'owner_questions.answer'].includes(call.method)), 'the owner said nothing and answered nothing');
+    }
     return { check: name };
   }
   if (name === 'reaction-signin') {
@@ -768,7 +793,7 @@ export function checkRendered(name, context = {}) {
       const menu = document.querySelector('#app-popover');
       require(visible(menu) && ['👍','😂','👎','❤','🎉'].every(emoji=>menu.textContent.includes(emoji)), 'one compact pill of the five available reactions');
     }
-    if (name === 'reaction-row') require(document.querySelector('.tn[data-id="8201"] [data-reaction="👍"]') && document.querySelector('.tn[data-id="8201"] [data-reaction="❤"]'), 'saved reactions appear on the bubble of their message');
+    if (name === 'reaction-row') require(document.querySelector('.tn[data-id="8201"] [data-reaction="👍"]') && document.querySelectorAll('.tn[data-id="8201"] [data-reaction]').length === 1, 'the one saved reaction appears on the bubble of its message');
     if (name === 'reaction-not-approval') {
       require(calls.some(call=>call.method==='agent.react' && call.params.emoji==='😂'), 'the actual reaction action reached core');
       require(!calls.some(call=>['agent.confirm','owner_questions.answer','integrations.draft_send'].includes(call.method)), 'a reaction never approves, answers or sends');

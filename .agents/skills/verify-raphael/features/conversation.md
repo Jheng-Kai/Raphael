@@ -172,12 +172,26 @@ selected reactions stand on their message's bubble, on its top-right corner (the
 bubble: top-left), over the top edge, as Grok Bot's (R-UI-108, 2026-11-13). They are drawn
 inside the first bubble, so a button (重新登入), card, attachment or failure row under the bubble
 never takes them from it; a message that carries them keeps 8 px more room above it, so they
-never touch the bubble above; they cover neither the words nor the hover actions, and
-several share one row. Scenes: `reaction-row` (reply), `reaction-owner` (the owner's bubble),
+never touch the bubble above; they cover neither the words nor the hover actions.
+A message carries one reaction of the owner's (R-REACT-01, 2026-11-14): choosing another emoji replaces
+it, choosing the same again takes it back, and the bar, the menu and the grid press only that one. The core
+keeps one row per message (migration 82 kept the newest of a message that had several); the app shows only
+the newest of whatever a core lists. Scenes: `reaction-row` (reply), `reaction-owner` (the owner's bubble),
 `reaction-signin` (a failed sign-in reply with 重新登入 under it), `room-thread-open` and
-`room-thread-chip` (room messages), each with the `reaction-layout-rest/hover` check. Repeating a selection removes it. Private
+`room-thread-chip` (room messages), each with the `reaction-layout-rest/hover` check; `reaction-replaced`
+(another emoji replaces the one given, and the open bar presses only that one), `reaction-taken-back` (the
+same emoji again leaves no chip) and `reaction-ask` (a 👎 makes the member ask what was wrong). Private
 model context and room transcripts label reactions as metadata, never approval or
 instructions. No reaction answers a permission, owner question or draft.
+
+Most reactions get no words. A negative one (👎 and the angry, unamused, rolling-eyed, facepalm, cross and pile
+emoji of `agent/reaction_asks.py`) to a member's own finished reply, left standing 4 seconds, makes that member
+ask once what was wrong: a normal turn of the member's own on its own model, with no owner message above it
+(the thread shows only the member's question), no tool and no other model; Raphael does the same. In a group room
+only the author of the reacted message asks, in the same thread. Nothing is asked for 👍 ❤️ 😂 🎉 or any other
+positive emoji, for one taken back or changed within the 4 seconds, for the owner's own message, or twice for
+one message. The mock core of `look` adds that turn for `reaction-ask`; the model path is the tests of
+`core/tests/members/test_reaction_ask.py`, with fake models only.
 
 Room action rows open a side thread. The main room keeps only an N-reply chip under
 the root; rooms.messages defaults to the main thread. The existing room worker and
@@ -201,7 +215,7 @@ Voice memos and manual read-aloud were removed on 2026-11-07 and every other voi
 above): no reply carries a Play/Pause control or transcript, and nothing speaks.
 
 ```powershell
-npm run look -- message-hugs-bubble reaction-picker reaction-row reaction-owner reaction-signin reaction-not-approval room-thread-open room-thread-chip slack-draft calm-thread --theme both --width 1120,720,1920x1080
+npm run look -- message-hugs-bubble reaction-picker reaction-row reaction-owner reaction-signin reaction-replaced reaction-taken-back reaction-ask reaction-not-approval room-thread-open room-thread-chip slack-draft calm-thread --theme both --width 1120,720,1920x1080
 ```
 
 Synthetic zh-TW fixtures replace only native IPC. Inspect all contact sheets and every
@@ -582,8 +596,8 @@ small section labels in Unicode's order (names from emojibase-data in the app's 
 tones left out, emoji newer than 15.1 left out because a Windows font may draw them as boxes), and
 a footer naming the emoji under the pointer. Search filters in place with no labels; the arrows walk
 the grid; a click chooses and closes; one Esc leaves. The data loads the first time the card opens.
-A message shows any emoji it has as its own chip; the core accepts any single emoji, up to 20 on a
-message, and still takes back the old ✓ and ?.
+A message shows the one emoji it has as a chip (one per message, R-REACT-01); the core accepts any
+single emoji and still takes back the old ✓ and ?.
 
 ```powershell
 npm run look -- conversation-sections member-conversation-sections quick-conversation quick-clear-confirm quick-cleared actions reaction-bar emoji-picker emoji-picker-speed header-pill-hover emoji-search thread-new-divider-latest raphael-details details member-panel-details composer-voice-pending-0 composer-voice-pending-1 empty-conversation-recording empty-conversation-hearing --theme both --width 1120,720,1920x1080
