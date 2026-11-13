@@ -1,5 +1,31 @@
 # Conversation
 
+## The owner edits a sent message in its own bubble (owner, 2026-11-14, R-UI-148)
+
+Owner: 「如果使用者選擇編輯的時候，不要把它拉回到我們的對話框裡面，而是直接在原本畫面上的 Message Bubble 做編輯，然後編輯完就直接重新發布出去，邏輯是一樣的」.
+Before, 編輯 in a message's ⋯ moved its words (and files and quote) into the composer, and sending replaced the message
+(`replace_turn_id`). Now the bubble itself becomes the editor (`message-edit.ts`, drawn by `turnHTML` while
+`TimelineState.editing` names the turn): a flat box as wide as the bubble's column (`.owner-message.is-editing`),
+its words in a field with the caret after them, 取消 and the primary 送出 at the right (`btn sm`). The composer keeps
+its draft. Only the place of editing changed: 送出 and Enter call the composer's `send` (`send(edit)` in `pages/agent.ts`), so
+the same `agent_ask_text` goes out with the edited words, the files and the quote of the original and `replaceTurnId`, and the
+core does to the history what it did. While it is on its way the old message leaves its place (it is retracted
+by the core) and the pending bubble shows as for any message; a failed send brings the editor back with the words as typed and
+says so. Escape leaves at once while the words are the original's, and goes through the app's cancel gesture once they
+changed (first press arms 取消, which shows Esc and 「再按一次取消」; the second within 1.5 s leaves). Shift+Enter is a new
+line. Files that are not stored any more show as chips with × and block 送出 until dropped, as in the composer. A group room has no edit.
+Not in the editor: attaching more files, removing the quote or a stored file (they stay as the message had them).
+
+```powershell
+npm run look -- message-edit-open message-edit-long message-edit-armed message-edit-sent chat actions message-hugs-bubble reaction-owner reaction-row composer-queued-withdraw --theme both --width 1120,720,1920x1080
+```
+
+`message-edit-open` and `message-edit-long` (a message of several lines) assert the editor (focus and caret, no bubble or
+actions beside it, as wide as its column and ending where the bubble ended, every word in view, 取消 and a ready primary
+送出 of one height at the right edge, the composer empty); `message-edit-armed` is the first Escape on changed words (取消 armed,
+editor open); `message-edit-sent` types new words and presses Enter: one `agent_ask_text` with the words and `replaceTurnId`,
+no editor, one bubble with the new words.
+
 ## The delete dialog is Grok Bot's (owner, 2026-11-12)
 
 Owner: 「刪除的 UI，跟我跟你說的那個好像不太一樣，這邊你可能要改一下」. The question before a deletion or a history

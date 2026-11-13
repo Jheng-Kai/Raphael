@@ -8814,5 +8814,42 @@ export function checkRendered(name, context = {}) {
       return { check: name, opens: watch.opens, pressedAt: pressed.hit, overScrim: pressed.overScrim, width: innerWidth };
     })();
   }
+  if (name === "message-edit-open" || name === "message-edit-armed" || name === "message-edit-sent") {
+    // R-UI-148: the owner's message is edited in its own place; the composer is not touched and what is sent is the composer's own edit.
+    const turn = document.querySelector('.tn[data-id="8201"]'), composerField = document.querySelector('.cmp-input');
+    require(composerField && composerField.value === '', 'the composer keeps its own (empty) draft: nothing of the message went into it');
+    if (name === "message-edit-sent") {
+      const words = "改過的說法：請整理這份範例研究摘要，並列出三個重點。";
+      const asks = window.__look.calls.filter(call => call.command === 'agent_ask_text');
+      require(asks.length === 1 && asks[0].replaceTurnId === 8201 && asks[0].text === words && asks[0].memberId === 1, 'Enter asks once, with the edited words and the message it replaces, as the composer\'s edit did');
+      require(!document.querySelector('[data-edit-input], .msg-editor') && !document.querySelector('.tn[data-id="8201"]'), 'the editor is gone with the message it replaced');
+      const bubbles = [...document.querySelectorAll('.thread .owner-message .bubble')];
+      require(bubbles.length === 1 && bubbles[0].querySelector('.message-text').textContent.trim() === words && visible(bubbles[0]), 'the edited message stands in its bubble, once');
+      require(!document.querySelector('.tn.is-pending'), 'nothing is left waiting beside it');
+      return { check: name, bubble: Math.round(bubbles[0].getBoundingClientRect().width) };
+    }
+    const field = turn.querySelector('[data-edit-input]'), box = turn.querySelector('.msg-editor'), me = turn.querySelector('.me');
+    require(visible(field) && visible(box), 'the bubble is an editor');
+    require(document.activeElement === field && (name === "message-edit-armed" || field.selectionStart === field.value.length && field.selectionEnd === field.value.length), 'the field has the focus, the caret after its words');
+    require(!turn.querySelector('.owner-message .bubble') && !turn.querySelector('.owner-message .message-actions'), 'the editor takes the bubble\'s place: no bubble and no actions beside it');
+    const b = box.getBoundingClientRect(), m = me.getBoundingClientRect();
+    require(Math.abs(b.right - m.right) <= 1, `the editor ends where the bubble ended (${Math.round(b.right)} vs ${Math.round(m.right)})`);
+    require(b.width <= m.width && b.width >= Math.min(m.width * .6, 300), `the editor is as wide as the bubble's column (${Math.round(b.width)} of ${Math.round(m.width)})`);
+    require(field.scrollWidth <= field.clientWidth + 1 && field.scrollHeight <= field.clientHeight + 1, 'all of the words are in view');
+    const buttons = [...box.querySelectorAll('.msg-editor-actions .btn')].filter(visible);
+    require(buttons.length === 2 && buttons[1].classList.contains('pri') && !buttons[1].disabled, 'Cancel and, last, the primary Send, ready');
+    const [cancel, send] = buttons.map(button => button.getBoundingClientRect());
+    require(cancel.right <= send.left && Math.abs(cancel.height - send.height) < .5 && Math.abs(send.height - 30) < .5, `Cancel and Send are the thread cards' buttons: 30 px (${Math.round(cancel.height)} px high)`);
+    const pad = parseFloat(getComputedStyle(box).paddingRight);
+    require(Math.abs(send.right - (b.right - 1 - pad)) <= 1.5, 'Send stands at the right edge of the editor');
+    require(!document.querySelector('.tn.is-pending'), 'nothing was sent');
+    if (name === "message-edit-armed") {
+      const armed = buttons[0];
+      require(armed.dataset.cancelArmed === 'true' && armed.dataset.cancelHint && document.activeElement === field && field.isConnected, 'the first Escape arms Cancel with its hint and leaves the editor open');
+    } else {
+      require(!buttons[0].dataset.cancelArmed, 'Cancel is not armed');
+    }
+    return { check: name, editor: Math.round(b.width), height: Math.round(b.height), words: field.value.length };
+  }
   throw new Error(`Unknown rendered check: ${name}`);
 }
