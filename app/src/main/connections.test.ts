@@ -1,3 +1,6 @@
+/// <reference types="node" />
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { Window } from "happy-dom";
 import { setLocale, t } from "./i18n";
@@ -677,6 +680,44 @@ describe("the connected apps", () => {
   });
 });
 
+// Owner, 2026-11-14: 「這個 dialog 應該要可以點那個已連接應該也要可以點，然後那個 button 可以設計得大一點點，不然點不到」.
+describe("a connected row and the back chevron", () => {
+  const css = readFileSync(join(__dirname, "connections.css"), "utf8").replace(/\r\n/g, "\n").replace(/\/\*[\s\S]*?\*\//g, "");
+  const rule = (selector: string): string => css.split("\n").filter((line) => line.startsWith(`${selector} {`)).pop() ?? "";
+
+  test("a row is one real button of the mark, the name and the line, with the switch beside it, and opens the page the main view's row opens", () => {
+    const [notion] = [...dom(connectedList()).querySelectorAll(".cs-linked")];
+    const main = notion!.querySelector<HTMLElement>("button.cs-main")!;
+    expect(main.querySelector(".cs-tile")).not.toBeNull();
+    expect(main.querySelector(".nm")).not.toBeNull();
+    expect(main.querySelector(".ds")).not.toBeNull();
+    expect(main.querySelector('[role="switch"]')).toBeNull();
+    expect(notion!.querySelector(':scope > [role="switch"]')!.getAttribute("data-conn")).toBe("enable");
+    // The row itself opens too, so the gap between the button and the switch is no dead place.
+    expect(notion!.getAttribute("data-conn")).toBe("open");
+    expect(groupPage("ab12")).toBe(appPage("notion"));
+  });
+
+  test("a row says it can be pressed: the pointer over the whole row, and a hover fill of the floating surface clear of its words, in the connected list and the main view alike", () => {
+    expect(rule(".cs-linked")).toMatch(/cursor:\s*pointer/);
+    expect(rule(".cs-card .btn.cs-main:hover:not(:disabled), .cs-linked .btn.cs-main:hover:not(:disabled)")).toMatch(/background:\s*var\(--float-hover\)/);
+    expect(rule(".cs-card .btn.cs-main:active:not(:disabled), .cs-linked .btn.cs-main:active:not(:disabled)")).toMatch(/background:\s*var\(--pressed\)/);
+    // 8 px of padding all round the words (R-UI-53), cancelled on the left by the margin so the mark stays on the content's edge.
+    expect(rule(".cs-card .btn.cs-main, .cs-linked .btn.cs-main")).toMatch(/padding-inline:\s*var\(--sp-2\);\s*margin-inline:\s*calc\(var\(--sp-2\) \* -1\) 0/);
+  });
+
+  test("the back chevron is the dialog ✕'s own control: 36 px, round, bare, with an 18 px glyph", () => {
+    const body = rule(".cs .btn.icon.cs-back");
+    for (const property of ["width", "min-width", "height", "min-height"]) expect(body, property).toMatch(new RegExp(`[{;\\s]${property}:\\s*36px`));
+    expect(body).toMatch(/border-radius:\s*var\(--r-pill\)/);
+    expect(body).not.toMatch(/background|box-shadow|border:/);
+    expect(rule(".cs .btn.icon.cs-back .i")).toMatch(/width:\s*18px;\s*height:\s*18px/);
+    // The list's title row and an app's page carry the same button, and the one view carries none.
+    for (const html of [connectedList(), groupPage("ab12"), appPage("linear")]) expect(dom(html).querySelectorAll(".cs-back")).toHaveLength(1);
+    expect(dom(connectionsHTML(view())).querySelector(".cs-back")).toBeNull();
+  });
+});
+
 describe("the page of a connected app", () => {
   const page = (html: string) => dom(html).querySelector(".cs.cs-page")!;
 
@@ -1280,6 +1321,26 @@ describe("what the dialog does", () => {
     await c.load();
     expect(c.view().groups).toEqual(GROUPS);
     expect((c.view().catalog as StoreService[]).map(s => s.id)).toEqual(CATALOG.map(s => s.id));
+  });
+
+  test("a press on a connected row (its button, its mark, name or line, or the row itself) opens the app's page, and a press on the switch only turns the app off or on", async () => {
+    const c = createConnections(host);
+    await c.load();
+    const row = dom(connectedList()).querySelector(".cs-linked")!;
+    for (const selector of [".cs-main", ".cs-main .ds", ".cs-main .nm", ".cs-main .cs-tile"]) {
+      c.click(button("connected"));
+      expect(c.click(row.querySelector(selector)!), selector).toBe(true);
+      expect(c.view().open, selector).toEqual({ kind: "group", id: "ab12" });
+      c.click(button("back"));
+      expect(c.view(), selector).toMatchObject({ open: null, screen: "connected" });
+    }
+    expect(c.click(row)).toBe(true);
+    expect(c.view().open).toEqual({ kind: "group", id: "ab12" });
+    c.click(button("back"));
+    expect(c.click(row.querySelector('[role="switch"]')!)).toBe(true);
+    expect(c.view().open).toBeNull();
+    await settle();
+    expect(api.integrationsSetEnabled).toHaveBeenCalledWith("ab12", false);
   });
 
   test("opens the list of the connected from the chip, opens a page from a row, and steps back one view at a time", async () => {

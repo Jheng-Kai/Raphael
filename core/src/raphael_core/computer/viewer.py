@@ -18,11 +18,15 @@ from pathlib import Path
 import httpx
 
 from ..protocol import invalid_params
-from .vm import SHARED, VmError
+from .vm import OWNER_IDLE_S, SHARED, VmError
 from .viewer_relay import Policy, ViewerRelay
 from ..paths import local_storage_root
 
 LEASE_SECONDS = 15
+# The owner's press on Take control gives an action a member already has under way this long to end (the member's
+# next action is refused from the moment the press lands): a press that fell between two of a working member's
+# actions used to be answered "desktop busy" and leave him with no way to try again (2026-11-14).
+TAKE_WAIT_S = 10
 # An open page polls every two seconds and each answer starts several Docker processes.
 UNWATCHED_STATUS_S = 10
 # What the owner's press may open; anything else, such as a program a member wrote, is only shown in its folder.
@@ -141,6 +145,9 @@ class Session:
     connection_changes: int = -1
     connection_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     error: str | None = None
+    # The last time his input reached the screen while this view held it, read from the relay's count of forwarded input.
+    input_at: float = 0.0
+    seen_input: int = 0
 
 
 class DesktopViewer:
@@ -159,6 +166,7 @@ class DesktopViewer:
         self.teaching = None
         self.task_artifact = lambda task, evidence: None
         self.open_lock = asyncio.Lock()
+        self.take_wait_s = TAKE_WAIT_S
 
     def register(self, router):
         for name, handler in (("status", self.status), ("open", self.open), ("renew", self.renew),
@@ -446,21 +454,44 @@ class DesktopViewer:
         if pending and (pending.member_id != session.member_id or pending.conversation_id != session.conversation_id):
             raise invalid_params("private conversation required")
         if held:
-            if owner not in (None, token) or (target.key in self.vm.held and owner != token and not pending):
+            # The owner can take over whenever he asks (2026-11-14): another view of his own that still holds the
+            # computer, or a hold nobody keeps and nobody waits on, is his to take. Only a recording in the old
+            # holder's view, which a take-over would cut, refuses.
+            if owner not in (None, token) and self.teaching and self.teaching.active(owner):
                 raise invalid_params("desktop already held")
-            if self.vm.input_busy(target) or self.vm.native_busy(target):
-                raise invalid_params("desktop busy")
             if not session.sockets:
                 state = await self.status_for(target)
                 await self.check_session_target(token, session)
                 if state["state"] != "running":
                     raise invalid_params("desktop unavailable")
-            # Check again after the asynchronous probe. New tools see the phase A hold.
-            if self.vm.input_busy(target) or self.vm.native_busy(target) or self.owners.get(target.key) not in (None, token):
+            if self.owners.get(target.key) not in (owner, token):
                 raise invalid_params("desktop busy")
             self.session(params)
+            replaced, was_held = self.owners.get(target.key), target.key in self.vm.held
+            # Phase A: the hold comes first, so that no tool starts from now on; what already runs gets a bounded time.
             self.owners[target.key] = token
             self.vm.hold(target, True)
+            try:
+                deadline = time.monotonic() + self.take_wait_s
+                while self.vm.input_busy(target) or self.vm.native_busy(target):
+                    if time.monotonic() >= deadline:
+                        raise invalid_params("desktop busy")
+                    await asyncio.sleep(0.05)
+                    self.session(params)
+                    await self.check_session_target(token, session)
+            except BaseException:
+                if replaced is None:
+                    self.owners.pop(target.key, None)
+                    if not was_held:
+                        self.vm.hold(target, False)
+                else:
+                    self.owners[target.key] = replaced
+                raise
+            session.input_at, session.seen_input = self.vm.clock(), self.relay.sequence(token) if self.relay else 0
+            if replaced not in (None, token):
+                self.publish_session(replaced)
+                if self.relay:
+                    await self.relay.call(self.relay.release(replaced))
             await self.disconnect_target(target, keep=session)
             await self.check_session_target(token, session)
         elif owner == token:
@@ -515,14 +546,18 @@ class DesktopViewer:
             if owned:
                 self.owners.pop(session.target.key, None)
             self.publish_session(token)
-            if self.teaching:
-                await self.teaching.disconnected(token)
-            if self.relay:
-                await self.relay.call(self.relay.close_tokens([token]))
-            session.sockets.clear()
-            if owned:
-                await self.disconnect_target(session.target)
-                if not self.vm.work.pending(session.target):
+            try:
+                if self.teaching:
+                    await self.teaching.disconnected(token)
+                if self.relay:
+                    await self.relay.call(self.relay.close_tokens([token]))
+                session.sockets.clear()
+                if owned:
+                    await self.disconnect_target(session.target)
+            finally:
+                # Whatever failed above, a hold whose holder is gone is nobody's: it would turn every member away and
+                # every later Take control down until the core restarted.
+                if owned and not self.vm.work.pending(session.target):
                     self.vm.hold(session.target, False)
             if not any((other.target.remote, other.target.name) == (session.target.remote, session.target.name) for other in self.sessions.values()):
                 await self.vm.close_viewer(session.target)
@@ -537,10 +572,36 @@ class DesktopViewer:
         while True:
             await asyncio.sleep(1)
             for token, session in list(self.sessions.items()):
-                if session.expires <= self.vm.clock():
-                    await self.close({"session": token})
-                elif self.teaching:
-                    await self.teaching.tick(token)
+                # One view that cannot be closed or ticked must not end the watch over every other: the monitor is
+                # the only thing that ends an expired view and its hold.
+                try:
+                    if session.expires <= self.vm.clock():
+                        await self.close({"session": token})
+                    else:
+                        if self.teaching:
+                            await self.teaching.tick(token)
+                        await self.release_if_idle(token, session)
+                except asyncio.CancelledError:
+                    raise
+                except Exception as error:
+                    logging.getLogger(__name__).warning("Desktop viewer upkeep failed (%s)", type(error).__name__)
+
+    async def release_if_idle(self, token, session):
+        """The owner's hold ends by itself after OWNER_IDLE_S without his input; a sign-in request waiting for him and a
+        recording are his until he says so."""
+        target = session.target
+        if session.preview or self.owners.get(target.key) != token:
+            return
+        now = self.vm.clock()
+        sequence = self.relay.sequence(token) if self.relay else 0
+        if sequence != session.seen_input:
+            session.seen_input, session.input_at = sequence, now
+            return
+        if now - session.input_at < OWNER_IDLE_S or self.vm.work.pending(target) or self.teaching and self.teaching.active(token):
+            return
+        async with self.control_lock:
+            if self.sessions.get(token) is session and self.owners.get(target.key) == token:
+                await self._control({"session": token, "held": False})
 
     def publish_session(self, token):
         if not self.relay:

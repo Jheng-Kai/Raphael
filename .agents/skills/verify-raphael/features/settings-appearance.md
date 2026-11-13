@@ -353,7 +353,7 @@ existing viewer stream is not replaced by changing the setting.
 Selected scenes (synthetic zh-TW, both themes, 1120,720,1920x1080):
 profile, settings-owner, appearance, dictation, tools, safety,
 models, connections, about,
-local-command-settings, local-command-setting-always, local-command-setting-never,
+local-command-settings-gone,
 menu-settings-redraw, missing-vision, missing-search, missing-search-repair,
 speaker-draft-chief, speaker-draft-member, speaker-draft-profile,
 desktop-host-local,

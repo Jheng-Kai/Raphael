@@ -1,5 +1,69 @@
 # Member computer (Phases A and B)
 
+## The owner can always take the computer; a hold never outlives its use (owner, 2026-11-14)
+
+R-COMP-TAKE-01, R-COMP-HOLD-01 (main e13ff592, image layer 9, members sharing one computer). The owner's picture: the larger
+view showing a page in Chrome, the pill reading only 觀看中 and no 接手控制 (「為什麼我沒辦法接手啊 ? 理論上不管甚麼時候我都應該要可以接手 ?」).
+A member then told him that four attempts had failed together and a retry succeeded with nothing changed, and that his hold
+on the computer "could not be fully confirmed" as the cause.
+
+What is known and what is not. Verified in the code and reproduced by tests that were red first: the pill and the button
+did not agree (`desktop-viewer.ts` drew 觀看中 whenever the view only watched, and hid 接手控制 when the core said the lease was
+the owner's), a take-over the screen never confirms is given back by a call that may fail while the view goes back to
+watching (`takeFailed`), a second view's Take control was refused for as long as a first view's hold stood, a hold whose
+view failed to close stayed for good, and the monitor that closes expired views ended at the first view it could not close.
+Not proven: which of these happened on his PC (no log of the lease exists: the core keeps no record of holds, and
+`raphael.db` was not opened). The member's four failures are unexplained; the refusal it saw was the bare identifier
+`owner_holds_control`, so what it said about a cause was a guess it admitted to.
+
+What the app does now.
+- A pill that reads 觀看中 always offers 接手控制 (the larger view is open, the computer runs, no recording). One press is
+  `computer.viewer_control {held: true}`; the pill reads 正在接手… until the screen confirms (R-PANEL-09).
+- The core gives the lease to the owner's press (`viewer.py::_control`): another view of his own that holds it, or a hold no
+  view keeps and no sign-in request waits on, is replaced (the old view's policy revoked, its pressed keys released, its
+  sockets closed). A recording in the old holder's view still refuses.
+- A press that lands while a member's action is under way (`vm.input_busy` / `native_busy`) used to be answered "desktop
+  busy" on the spot, after which the view, having left watching, hid 接手控制 for good: pressing while a member works failed about
+  as often as the member's actions were in flight. Now the press takes the hold first (the member's next action is refused from
+  then on), waits up to `TAKE_WAIT_S` = 10 s for what is under way, and takes; an action that outlasts it is answered "desktop
+  busy" with the hold given back as it was. While the core decides the pill reads 正在接手…; a refusal returns 觀看中 with 接手控制.
+- A lease the core no longer gives the view (handed back by the idle bound, replaced, expired) makes its screen view-only on
+  the next renewal (`update()` in `desktop-viewer.ts`), the pill says 觀看中 and 接手控制 returns. 釋放 / 我完成了 is shown only
+  while the view holds the lease or a request waits.
+- How long a lease lives: it ends at 釋放, when the view closes (released at once) or when the app is gone (15 s after the
+  last renewal, by the core's monitor); and, new, `OWNER_IDLE_S` = 300 s after his last click or key (the relay's count of
+  forwarded input) while nothing waits on him. A sign-in or payment request waiting for him and a recording are held until
+  he says so.
+- A hold whose view fails to close is released anyway (`finally` in `viewer.py::_close`), and the monitor carries on past a
+  view it cannot close.
+- A member turned away by the hold is told what is true in one sentence (`vm.py::owner_note`, in the 240 characters a
+  failure keeps): the owner has had the screen's mouse and keyboard for N seconds, nothing was done, it comes back at his press
+  or after 5 minutes without input, do not guess another cause; a waiting sign-in request says that instead. The CLI bridge
+  says the same instead of the bare identifier.
+
+```powershell
+npm run look -- desktop-watch-retake desktop-watch desktop-watch-owner desktop-watch-collapse desktop-owner takeover-bar takeover-handback desktop-takeover-owner desktop-viewer --theme both --width 1120,720,1920x1080
+```
+
+`desktop-watch-retake` is the owner's picture: take control, the screen never confirms (the look's `desktopUnconfirmed`),
+the give-back fails (`releaseFails`), 6 s later the view watches with the failure line under the screen, the core still
+holds the lease (`data-desktop-state="owner"`) and 接手控制 is shown and enabled. The check `desktop-watch` no longer skips
+the button when the lease is the owner's. Native, not run: the owner's own real take-over of a seat after a failed one.
+
+## The disk notice names the disk that is full (owner, 2026-11-14)
+
+R-COMP-DISK-01. A member told the owner 電腦磁碟快滿了 and named `.browser-profiles` (326 MiB), `.raphael-checkpoints` (12 MiB)
+and a member folder (0 MiB). `docker exec ... df -Pk / /home/cua/workspace` on the running shared computer (read only):
+`/` is Docker's overlay at 2 percent; `/home/cua/workspace` and `/home/cua/team` are the bind mount of this PC's `C:\` at 94
+percent (463 602 684 KiB, 29 528 756 KiB free). The reading took the larger of the two, so the notice was about C:, and the
+folders it listed were measured in the workspace only. `lifecycle.py::disk_pressure` now returns a `DiskPressure` (which
+disk, its name, percent, free, the folders, the workspace total); `vm_tools.py::_disk_notice` says the disk and its free space
+and, when the computer's own folders are under 1 GiB, that they are only that much and that cleaning them would not help;
+with 1 GiB or more, or when the computer's own disk is the full one, the notice with its largest folders and the question.
+The new sentence has its translations in all fifteen interface languages (`_ui_words_data.py`). The 90 percent line, the
+once-per-episode rule and the read-only, ask-before-delete behaviour are unchanged. The `computer-low-disk` scene's sample
+reply still shows the folder-listing sentence.
+
 ## One foot under the larger view's screen (owner, 2026-11-13)
 
 R-PANEL-08. The owner's picture after a failed demonstration: the red line began at the window's edge
@@ -44,7 +108,7 @@ proportions (CSS in `desktop-viewer.css`, the one exception to R-CARD-01). Its s
 the larger view opens with the same frame and takes control; the pill offers 我完成了 (`desktop.done` while a
 request waits), which returns the nonce once. The pill reads 正在接手… (`desktop.taking`) until the frame answers
 `interactive` with held, then 你正在控制; with no answer in 6 s (`TAKE_MS`) the lease is given back without the
-request id, `desktop.takeFailed` stands under the screen and the view watches again. Watching always reads 觀看中.
+request id, `desktop.takeFailed` stands under the screen and the view watches again. Watching always reads 觀看中 and, since 2026-11-14, always offers 接手控制 (the first section).
 Whether the shared computer's seat page sends `held` is the core's question (the shared-computer session).
 
 ```powershell
@@ -586,8 +650,9 @@ minutes through SettingsStore; zero means never. Shared/per-member mode is
 read-only. Both local and SSH computers use the existing idle-stop contract.
 
 VmTools reads bounded fake-testable df/du results at most every five minutes.
-At 90 percent disk use, the current member's ordinary persisted conversation reply
-names its three largest workspace/cache folders and asks before deletion. One
+At 90 percent use of the computer's own disk or of the disk its workspace is kept on, the current member's ordinary
+persisted conversation reply names the disk that is full (since 2026-11-14, R-COMP-DISK-01; the first sections) and, when the
+computer's folders can help, its three largest workspace/cache folders, and asks before deletion. One
 notice is emitted per pressure episode in the running core; below-threshold
 readings admit a future episode. It never deletes, buys a service or calls a model.
 
@@ -751,12 +816,31 @@ Image layer 9 (R-COMP-READY-02). Owner, of the panel on layer 8: 「但看起來
   mark on amd64 (Chromium under its own on arm64). Until then a globe named "Browser" opened Chrome.
 - XFCE's "Web Browser", the menu's Chrome and Chromium entries and `x-www-browser` start the computer's browser.
   On layer 8 the first asked which application to prefer, and the menu's Chrome entry could not start at all.
-- Firefox stays installed and is out of the menu: a second browser is where an owner signs in for nobody.
+- Firefox stayed installed and left the menu (layer 10 removes it, below).
 - Layer 8 computers, the shared six-screen one among them, are made again on layer 9 at their next start. A PC
   that built layer 8 builds layer 9 from what it kept (measured: 15 s for the new step).
 - Check: `N screens browser mark` in `npm run verify -- --computer`, and the shared block's six launchers.
 
-Stated limit: a member that starts `/usr/bin/chromium` or `firefox` by its own path still gets that browser.
+Stated limit: a member that starts `/usr/bin/chromium` by its own path still gets that browser.
+
+## Firefox is removed (2026-11-14)
+
+Image layer 10 (R-COMP-READY-03). Owner: 「Firefox 應該是沒有用了，你可以幫我把它從印象檔中移除，沒有關係。」
+
+- Firefox ESR is purged from the image: the package, its `x-www-browser` alternative, its menu entry and mime
+  registrations, `/etc/firefox-esr`, `/usr/lib/mozilla`, XFCE's own Firefox entry in its list of preferred applications. `which firefox firefox-esr` finds nothing.
+- Google Chrome (the members' browser on amd64) and Chromium (the driver's, and the members' on arm64) stay. The
+  launcher, the menu, XFCE's Web Browser and `x-www-browser` still open the members' own browser; the last fallback
+  of `raphael-browser` is now an error line and not Firefox.
+- Layer 9 computers, the shared six-screen one among them, are made again on layer 10 at their next start, workspace
+  kept. A PC that built layer 9 builds layer 10 from what it kept (measured: 14 s, nothing downloaded).
+- The image is no smaller (4.17 GB before and after): the base image's own layer still holds Firefox's files and a
+  later layer cannot take them out. The browser is gone, the bytes are not.
+- Check: `N screens browser mark` in `npm run verify -- --computer` reads the computer for any Firefox ESR package,
+  program, entry, configuration or mention; the `previous layer 9` blocks start a layer 9 computer of each shape on
+  layer 10 when a layer 9 image is on the PC.
+
+Stated limit: a `.browser-profiles/mozilla` folder that an existing workspace already has stays in it.
 
 ## Responsive computer tools (2026-11-04)
 
@@ -1061,10 +1145,10 @@ members/test_local_commands.py and brain/test_owner.py. No look scene changes: n
 Owner-PC diagnostics and CLI work use local__local_exec rather than the Linux
 sandbox or guarded real-desktop mouse/keyboard tool. A quick question sees the
 pinned local_exec/local_job definitions on API and CLI MCP paths, no other turn does.
-Settings > Raphael places Local commands beside Computer use, with Ask every time
-(default), Always allow and Never. First consent names the requesting member and
-asks for all members, with four real answers. Later command cards show Allow/Skip
-and a settings action. Exact multiline commands and cwd appear on the shared
+Settings has no control for the mode (removed 2026-11-14 at the owner's word: 「本機指定我覺得應該可以先拿掉」),
+and the setting itself stays: ask (default), always and never, one value for a quick question. First consent names the
+requesting member and asks for all members, with four real answers. Later command cards show Allow/Skip
+and no way into a setting. Exact multiline commands and cwd appear on the shared
 permission card; no command arguments or results appear in public steps. The
 background renderer uses the same card. Chat has no timer (also in CLI/shell);
 background questions expire after 30 minutes. Esc denies once. Phone/Telegram
@@ -1080,7 +1164,7 @@ the owner card remains the permission boundary. cua-driver session is removed
 from both schema variants and rejected if injected at execution.
 
 ```powershell
-npm run look -- local-command-consent local-command-later local-command-background local-command-once local-command-always local-command-never local-command-deny local-command-manage local-command-settings local-command-setting-always local-command-setting-never local-permission-card --theme both --width 1120,720,1920x1080
+npm run look -- local-command-consent local-command-later local-command-background local-command-once local-command-always local-command-never local-command-deny local-command-settings-gone local-permission-card --theme both --width 1120,720,1920x1080
 ```
 
 Inspect every contact sheet, all pending/settled/background cards and settings at

@@ -226,6 +226,7 @@ pub fn run() {
             commands::main_events,
             commands::agent_ask_text,
             commands::agent_retract,
+            commands::agent_voice_composed,
             commands::agent_question_open,
             commands::agent_question_answer,
             commands::agent_page_shown,

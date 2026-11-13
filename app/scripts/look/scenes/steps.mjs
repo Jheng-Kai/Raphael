@@ -1,13 +1,16 @@
 export const stableClick = (selector, then = []) => ({ action: "stable-click", selector, then });
 export const click = selector => ({ action: "click", selector });
 export const hover = selector => ({ action: "hover", selector });
+/** A real press at a fraction (x, y) of the element, then the page `expect` names must be on screen. */
+export const pressAt = (selector, x, y, expect) => ({ action: "click-position", selector, x, y, expect });
 export const hold = (selector, ms = 500) => ({ action: "hold", selector, ms });
 // A press on `selector` moved `dx` px across and let go there (a pane's edge resizes it, edge-drag.ts). `wide`: only on a desktop-width window, where the list is not a drawer.
 export const drag = (selector, dx, options = {}) => ({ action: "drag", selector, dx, ...options });
 // A step for the full list only: the rail of faces on a narrow window has no folder headings (driver.mjs `perform`).
 export const wide = step => ({ ...step, wide: true });
 export const type = (selector, text) => ({ action: "type", selector, text });
-export const wait = selector => ({ action: "wait", selector });
+// `timeout` (ms) for what the app itself waits for before it shows it (the screen's 6 s to confirm a take-over).
+export const wait = (selector, timeout) => ({ action: "wait", selector, ...(timeout ? { timeout } : {}) });
 export const waitGone = selector => ({ action: "wait-gone", selector });
 export const codexArrives = () => ({ action: "codex-arrives" });
 // A CLI's sign-in console ended: `done`, or `stopped` as when its window was closed first.

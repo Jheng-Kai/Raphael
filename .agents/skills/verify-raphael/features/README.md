@@ -184,11 +184,11 @@ details-routines and automation-edit. Use both themes at
 Since 2026-11-13 only a quick question has them (R-PC-01): see
 [member-computer.md](member-computer.md#the-owners-pc-is-for-a-quick-question-alone-2026-11-13-r-pc-01), and
 [member-computer.md](member-computer.md#owner-pc-commands-2026-11-01-now-a-quick-questions-alone-see-above) for the
-shared command setting, first consent, subsequent approvals and background job gate.
+stored command mode, first consent, subsequent approvals and background job gate.
+Settings has no control for the mode since 2026-11-14.
 Selected scenes: local-command-consent, local-command-later,
 local-command-background, local-command-once, local-command-always,
-local-command-never, local-command-deny, local-command-manage,
-local-command-settings, local-command-setting-always, local-command-setting-never
+local-command-never, local-command-deny, local-command-settings-gone
 and the existing local-permission-card consumer. Run both themes at
 1120,720,1920x1080.
 

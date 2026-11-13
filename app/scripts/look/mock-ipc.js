@@ -23,10 +23,16 @@ export function installMock(fixture, config = {}, target = window) {
     // A reply whose paragraphs run far past one line, with a list: the shape that once stretched a message to the column.
     data.chatMetadataSample = { ...data.chatMetadataSample, reply: `${'這份範例紀錄只有期限，沒有操作步驟，所以下面的步驟是依公開的說明整理的。'.repeat(4)}\n\n**準備**\n\n1. 範例卡片\n2. 電腦\n3. 讀卡機\n\n${'完成後系統會核對資料，帳號就註冊完成。'.repeat(3)}` };
   }
+  if (variant.ownerEdit === 'long') {
+    // The owner's own words run over several lines: the editor must hold all of them.
+    data.chatMetadataSample = { ...data.chatMetadataSample, question: `${'請整理這份範例研究摘要，並且把每一段的來源、日期和不確定的地方都分開列出來。'.repeat(3)}
+
+另外，請用三個重點收尾。` };
+  }
   if (variant.chatMetadata) {
     const sample = data.chatMetadataSample, base = structuredClone(data.mailTurns.draft);
     data.members.forEach(member => Object.assign(member, {unread:false,unread_from:null,activity:"idle",waiting:false}));
-    const turn = {...base,id:8201,question:sample.question,text:sample.reply,created_at_ms:data.now, messages:[],drafts:[],reactions:{reply:["👍","❤"],...(variant.chatMetadata === 'owner' ? {owner:["🎉","😂"]} : {})},owner_questions:[],permissions:[]};
+    const turn = {...base,id:8201,question:sample.question,text:sample.reply,created_at_ms:data.now, messages:[],drafts:[],reactions:{reply:["👍"],...(variant.chatMetadata === 'owner' ? {owner:["🎉"]} : {})},owner_questions:[],permissions:[]};
     if (['slack','approval'].includes(variant.chatMetadata)) {
       const draft = {...structuredClone(base.drafts[0]),id:'slack-1',kind:'slack',to:sample.channel,subject:'',body:sample.body,from:{key:'mcp:slack/send_message',name:'Slack'},senders:[{key:'mcp:slack/send_message',name:'Slack'}]};
       turn.drafts = [draft];
@@ -767,12 +773,15 @@ export function installMock(fixture, config = {}, target = window) {
     data.managedConnectors.push({id:"composio:googlecalendar",kind:"composio",name:"Google Calendar",status:"ACTIVE",enabled:true,enabled_tools:["GOOGLECALENDAR_EVENTS_LIST"],disabled_tools:[]});
     data.home.calendar_google="connected";
   }
-  // A subscription nearly used up, as the account menu's 用量 shows it (the tightest window): Codex's weekly window 96% used, resetting in six days.
-  if (variant.allowanceTight) {
-    const codex = data.allowances.brains.find(brain => brain.id === "codex");
+  // Subscriptions nearly used up, as the account menu's 用量 lists them (each one's tightest window): Codex's weekly window 96% used, resetting in six days,
+  // and Claude's 97% used, resetting in three (what its last turn reported, stamped 20 minutes ago). `allowanceTwo` leaves the two the owner has connected.
+  if (variant.allowanceTight || variant.allowanceTwo) {
+    const codex = data.allowances.brains.find(brain => brain.id === "codex"), claude = data.allowances.brains.find(brain => brain.id === "claude");
     codex.source = "live";
     codex.windows = [{ period: "weekly", remaining_percent: 4, resets_at: Math.round(data.now / 1000) + 6 * 86400 }, ...codex.windows.filter(window => window.period !== "weekly")];
+    claude.windows = [{ period: "weekly", remaining_percent: 3, resets_at: Math.round(data.now / 1000) + 3 * 86400, updated_at_ms: data.now - 20 * 60000 }, ...claude.windows.filter(window => window.period !== "weekly")];
   }
+  if (variant.allowanceTwo) data.allowances.brains = data.allowances.brains.filter(brain => brain.id === "claude" || brain.id === "codex");
   if (variant.homeEmpty) {
     data.home.calendar_days = []; data.home.calendar_items = []; data.home.calendar_counts = {}; data.home.calendar_events = [];
     data.home.today = []; data.home.reports = []; data.home.calendar = [];
@@ -1081,6 +1090,8 @@ export function installMock(fixture, config = {}, target = window) {
       case "computer.viewer_control": {
         const session = desktopSessions.get(p.session);
         if (session.preview) throw new Error("Read-only preview");
+        // The core that cannot give a lease back: it still holds it for the view (`releaseFails`).
+        if (!p.held && variant.releaseFails) throw new Error("desktop busy");
         session.held = p.held;
         data.desktop.control = p.held ? "owner" : "member";
         if (!p.held && p.takeover) for (const work of data.desktop.works ?? []) if (work.request_id === p.takeover) work.state = "running";
@@ -1412,9 +1423,16 @@ export function installMock(fixture, config = {}, target = window) {
       case "agent.react": {
         const turn = data.turns.find(item=>item.id===p.turn_id && (item.member_id ?? 0)===(p.member_id ?? 0));
         if (!turn) throw new Error('Unknown private message');
-        const reactions = (turn.reactions ??= {});
-        reactions[p.message_key] = (reactions[p.message_key] ?? []).filter(emoji=>emoji!==p.emoji);
-        if (p.active) reactions[p.message_key].push(p.emoji);
+        // One reaction per message, as the core keeps it: another emoji replaces it, the same one takes it back.
+        const reactions = (turn.reactions ??= {}), current = reactions[p.message_key]?.[0];
+        if (p.active) reactions[p.message_key] = [p.emoji];
+        else if (current === p.emoji) reactions[p.message_key] = [];
+        // `reactionAsk`: a thumbs down on a reply makes its member ask what was wrong, in a turn with no message of the owner's.
+        if (variant.reactionAsk && p.active && p.emoji === "👎" && p.message_key !== "owner" && !data.turns.some(item => item.source === "reaction")) {
+          const words = data.chatMetadataSample.askWhatWasWrong;
+          data.turns.push({ ...structuredClone(turn), id: turn.id + 1, session_id: `reaction-${turn.id}`, source: "reaction", route: "answer", question: "", text: words, detail: null, prefix: "",
+            created_at_ms: data.now + 1000, messages: [{ seq: 1, kind: "reply", text: words, at_ms: data.now + 1000 }], reactions: {}, steps: [], drafts: [], owner_questions: [], permissions: [] });
+        }
         notify('AgentTurn',{turn_id:turn.id,member_id:turn.member_id}); return {ok:true};
       }
       case "agent.question.open": return null;
@@ -1525,8 +1543,8 @@ export function installMock(fixture, config = {}, target = window) {
       case "rooms.react": {
         const message = data.messages.find(item=>item.id===p.message_id && item.room_id===p.room_id);
         if (!message) throw new Error('Unknown room message');
-        message.reactions = (message.reactions ?? []).filter(emoji=>emoji!==p.emoji);
-        if (p.active) message.reactions.push(p.emoji);
+        if (p.active) message.reactions = [p.emoji];
+        else if (message.reactions?.[0] === p.emoji) message.reactions = [];
         notify('RoomsChanged',{room_id:p.room_id}); return {ok:true};
       }
       case "rooms.thread_open": {
@@ -1921,6 +1939,8 @@ export function installMock(fixture, config = {}, target = window) {
       if (command === "overlay_log") return;
       if (command === "overlay_confirm") return;
       if (command === "overlay_cancel") { state.overlayChannel?.onmessage({type:"hide"});return; }
+      // The composer's words, files and quote handed to the recording the voice button is ending: taken.
+      if (command === "agent_voice_composed") return true;
       if (command === "agent_retract") {
         data.turns=data.turns.filter(turn=>turn.session_id!==args.sessionId&&turn.id!==args.turnId);
         pendingReplies.get(args.sessionId)?.();pendingReplies.delete(args.sessionId);
@@ -1956,6 +1976,16 @@ export function installMock(fixture, config = {}, target = window) {
           const addition = 901 + data.turns.filter(turn => turn.id >= 901).length;
           data.turns.push({...active, id: addition, session_id: args.requestId, question: args.text, route: variant.queuedOwner ? "answer" : "owner_input", text: "", status: variant.queuedOwner ? "queued" : "done", attachments: [], task: null, steps: [], messages: [], created_at_ms: data.now});
           notify("AgentTurn", {turn_id: addition, member_id: active.member_id});
+          return null;
+        }
+        // A message sent again from its editor: the core retracts the old turn and writes the new one (`replace_turn_id`).
+        if (variant.ownerEdit && args.replaceTurnId !== undefined) {
+          const old = data.turns.find(turn => turn.id === args.replaceTurnId);
+          if (!old) throw new Error("replace_turn_id must name a completed owner message in this thread");
+          data.turns = data.turns.filter(turn => turn.id !== old.id);
+          const id = nextId(data.turns.concat(old));
+          data.turns.push({ ...structuredClone(old), id, session_id: args.requestId, question: args.text, created_at_ms: data.now + 1000, reactions: {} });
+          notify("AgentTurn", { turn_id: id, member_id: old.member_id });
           return null;
         }
         // A member answering what was written under an open page (`pageAsk`): its turn is running until the scene lets it say its reply.

@@ -2006,6 +2006,49 @@ PRAGMA user_version = 81;
 COMMIT;
 """
 
+# One reaction of the owner's per message (owner, 2026-11-14): a message that carried several keeps the newest, and
+# the primary key says it, so no writer can store a second. `reaction_asks` remembers the messages whose reaction was
+# already answered with a question, so that a reaction taken back and given again asks nothing twice.
+_MIGRATIONS[82] = """
+BEGIN;
+DROP TRIGGER clear_message_reactions;
+DROP TRIGGER clear_room_reactions;
+CREATE TABLE message_reactions_v82 (
+    turn_id INTEGER NOT NULL REFERENCES agent_turns(id) ON DELETE CASCADE,
+    message_key TEXT NOT NULL,
+    emoji TEXT NOT NULL,
+    PRIMARY KEY(turn_id, message_key)
+);
+INSERT INTO message_reactions_v82 SELECT turn_id,message_key,emoji FROM message_reactions
+WHERE rowid IN (SELECT MAX(rowid) FROM message_reactions GROUP BY turn_id,message_key);
+DROP TABLE message_reactions;
+ALTER TABLE message_reactions_v82 RENAME TO message_reactions;
+CREATE TABLE room_reactions_v82 (
+    message_id INTEGER NOT NULL PRIMARY KEY REFERENCES room_messages(id) ON DELETE CASCADE,
+    emoji TEXT NOT NULL
+);
+INSERT INTO room_reactions_v82 SELECT message_id,emoji FROM room_reactions
+WHERE rowid IN (SELECT MAX(rowid) FROM room_reactions GROUP BY message_id);
+DROP TABLE room_reactions;
+ALTER TABLE room_reactions_v82 RENAME TO room_reactions;
+CREATE TABLE reaction_asks (
+    kind TEXT NOT NULL CHECK(kind IN ('turn','room')),
+    ref TEXT NOT NULL,
+    PRIMARY KEY(kind, ref)
+);
+CREATE TRIGGER clear_message_reactions AFTER DELETE ON agent_turns BEGIN
+    DELETE FROM message_reactions WHERE turn_id=OLD.id;
+    DELETE FROM reaction_asks WHERE kind='turn' AND ref LIKE OLD.id || ':%';
+END;
+CREATE TRIGGER clear_room_reactions AFTER DELETE ON room_messages BEGIN
+    DELETE FROM room_reactions WHERE message_id=OLD.id;
+    DELETE FROM reaction_asks WHERE kind='room' AND ref=CAST(OLD.id AS TEXT);
+    UPDATE room_threads SET parent_message_id=NULL WHERE parent_message_id=OLD.id;
+END;
+PRAGMA user_version = 82;
+COMMIT;
+"""
+
 LATEST_VERSION = max(_MIGRATIONS)
 
 

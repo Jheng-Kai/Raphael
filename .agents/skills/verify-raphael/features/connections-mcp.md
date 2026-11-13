@@ -18,6 +18,11 @@ row, the 推薦 section under a list of the connected, and the dialog of a conne
   the app's page; 「連結」 runs the existing flow (sign-in, key form, the conversation for n8n, own Google and developer apps).
 - The chip opens the list of the connected apps in the same dialog (rows with tile, name, line and switch; 應用程式 and 尚未連結
   headings as before), behind a back chevron. Esc steps back from an app's page, then from that list, then closes.
+- A connected row is pressable (2026-11-14): the mark, the name, the line and the gap open the app's page (the page the main view's row opens),
+  the switch only turns the app on or off; a row under the pointer has the pointer and `--float-hover` clear of its words, in the main view's rows too (scene `connect-apps-row-hover`). The back chevron (the
+  list's title row and every app's page) is the ✕'s own 36 px round control with an 18 px glyph, on the ✕'s line. Scenes
+  `connect-apps-connected-rows` (a real press on each part of a row, the keyboard, the switch, the hover) and `connect-app-from-row`; the check
+  `connect-back` is on every scene that shows the chevron.
 - An app's page replaces the view (no title row; a bare back chevron and the dialog's ✕): the mark on a 56 px white tile with the name,
   and at the right 「連結」 (white, round) or, when connected, 「✓ 已連結」 with its switch and ⋯; a paragraph; accounts; for a connected app
   a 工具 card (kind switches, the folded tool list); a 資訊 card (提供者, 類別, 登入方式, 伺服器, 工具) of 38 px rows; the latest actions and
@@ -31,7 +36,7 @@ row, the 推薦 section under a list of the connected, and the dialog of a conne
   `connections-delete`, `connect-apps-more`).
 
 ```powershell
-npm run look -- connect-apps connect-apps-scrolled connect-apps-category connect-apps-more connect-apps-search connect-apps-connected connect-app-oauth connect-app-key connect-app-connected --theme both --width 1120,720,1920x1080
+npm run look -- connect-apps connect-apps-scrolled connect-apps-category connect-apps-more connect-apps-search connect-apps-connected connect-app-oauth connect-app-key connect-app-connected connect-apps-connected-rows connect-app-from-row connect-apps-row-hover --theme both --width 1120,720,1920x1080
 npm run look -- member-delete-ask context-menu-member composer-model-small composer-model-sources member-maker automations-detail-own automations-create-slot appearance-menu model-choices-answer profile connections-add-menu server-menu connections-delete --theme both --width 1120,720,1920x1080
 ```
 

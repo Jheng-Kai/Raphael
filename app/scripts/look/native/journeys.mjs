@@ -34,6 +34,7 @@ export const journeys = [
   { name: "slime-sharp", description: "Twelve slimes in the real sidebar: moving, each paints the pixels of its pose held still, and what they cost while idle" },
   { name: "locale-sweep", description: "Switch every locale and visit main pages and settings" },
   { name: "voice-conversation", description: "Speak into a newly created conversation and inspect persistence" },
+  { name: "dictation-dictionary", description: "The owner's dictation on MAI-Transcribe 2 through his key: a dictionary word comes out as spelled, a correction of a misheard name is learned with its pill and page row, and the next dictation spells it" },
   { name: "voice-keys", description: "The real worker: after the composer's microphone the dictation key works during the answer, one Esc ends it, the recognising light shows, and a slow brain at high depth finishes" },
   { name: "long-think", description: "The real core: a model that thinks past the old 60 second deadline finishes its turn, and the answer reaches the window" },
   { name: "every-source", description: "One real turn on every signed-in CLI: Claude Code, Codex, Antigravity, with Claude's models as the CLI lists them" },
@@ -1886,6 +1887,86 @@ if (!pillWindow || !(pillWindow.style & 0x08000000) || !pillWindow.rounded) thro
     result.recordingEscape = await snapshot();
     if (result.recordingEscape.agent_turns.length !== beforeCancel) throw new Error("One Escape created a voice answer instead of cancelling capture");
     await capture("recording-one-escape");
+  } else if (name === "dictation-dictionary") {
+    await keepFocus(page);
+    const learnedPage = await context.learnedPage();
+    if (!learnedPage) throw new Error("Native learned notification target is missing");
+    // The corrected message goes to a free model: the journey pays only for speech and cleanup.
+    const { llm } = await context.rpc("models.catalog", {});
+    const free = llm.filter(model => model.free && model.roles?.answer?.usable && !model.id.startsWith("@") && !model.id.startsWith("cli:"));
+    if (!free.length) throw new Error("OpenRouter lists no free model to answer the corrected message");
+    await context.rpc("settings.set", { key: "agent_model", value: free[0].id });
+    await newConversation(context);
+    const logged = async (words, from, what) => {
+      for (let i = 0; i < 150; i++) { if ((await context.nativeLog()).slice(from).includes(words)) return; await pause(100); }
+      throw new Error(what);
+    };
+    const composer = () => page.$eval(".composer .cmp-input", el => el.value);
+    const dictate = async label => {
+      const before = (await context.rpc("history.latest", {})).item?.id ?? 0;
+      await click(page, ".composer .cmp-input");
+      await page.$eval(".composer .cmp-input", el => { el.value = ""; el.dispatchEvent(new Event("input", { bubbles: true })); });
+      // A dictation pastes into the window in front when the key is released: only ours may be there.
+      if (!(await context.windowAction("front")).front) throw new Error("The journey's window could not come to the front; nothing was dictated");
+      const mark = (await context.nativeLog()).length;
+      await page.keyboard.press("AltRight");
+      await logged("dictation: recording", mark, "The dictation key did not start a recording");
+      await pause(context.audioMs + 900);
+      if (!(await context.windowAction("state")).front) {
+        // Someone else's window took the front: cancel, so the words go nowhere.
+        await page.keyboard.press("Escape"); await page.keyboard.press("Escape");
+        throw new Error("Another window came to the front during the recording; the dictation was cancelled");
+      }
+      await page.keyboard.press("AltRight");
+      let item = null;
+      for (let i = 0; i < 240 && !(item?.id > before); i++) { item = (await context.rpc("history.latest", {})).item; if (!(item?.id > before)) await pause(250); }
+      if (!(item?.id > before)) throw new Error(`${label}: no dictation reached the history`);
+      for (let i = 0; i < 60 && !(await composer()).includes(item.text.slice(0, 4)); i++) await pause(250);
+      const pasted = await composer();
+      await capture(label);
+      return { raw: item.raw_text, text: item.text, stt: item.stt, model: item.model, cleaned: item.cleaned, pasted };
+    };
+
+    // 1. A word the owner's dictionary holds comes out as the dictionary spells it.
+    result.first = await dictate("dictated-first");
+    if (!result.first.pasted.includes("grokbot")) throw new Error(`grokbot did not come out as the dictionary spells it: ${JSON.stringify(result.first)}`);
+
+    // 2. He corrects the name speech-to-text got wrong, in the composer, and sends.
+    const misheard = result.first.pasted.match(/[Hh]er+d\w*/)?.[0];
+    result.misheard = misheard ?? null;
+    if (!misheard || misheard === "herdr") throw new Error(`No misheard 「herdr」 to correct: ${result.first.pasted}`);
+    await page.$eval(".composer .cmp-input", (el, word) => { const at = el.value.indexOf(word); el.focus(); el.setSelectionRange(at, at + word.length); }, misheard);
+    await page.keyboard.type("herdr", { delay: 40 });
+    await capture("corrected");
+    await click(page, ".cmp-send");
+    await learnedPage.waitForSelector("#learned-pill:not([hidden])", { visible: true, timeout: 20000 });
+    await learnedPage.hover("#learned-pill");
+    result.pill = await learnedPage.$eval("#learned-pill", el => el.textContent.trim());
+    await capture("learned-pill", learnedPage);
+    const entry = (await context.rpc("dictionary.list", {})).entries.find(row => row.word === "herdr");
+    result.entry = entry ?? null;
+    if (!entry || entry.source !== "learned" || !entry.heard.includes(misheard)) throw new Error(`The correction was not saved with how it was heard: ${JSON.stringify(entry)}`);
+    if (!result.pill.includes("herdr")) throw new Error(`The learned pill does not name the word: ${result.pill}`);
+    // The answer is no part of this journey: two Escapes stop it (R-UI-46), so the model does nothing more.
+    await page.keyboard.press("Escape"); await page.keyboard.press("Escape");
+    await page.waitForSelector('.composer[data-task-state="idle"]', { timeout: 20000 }).catch(() => undefined);
+
+    // 3. The dictionary page shows it, with how it was heard.
+    await perform(page, { action: "account-menu", item: "dictation" });
+    // The page opens with a motion of its own; the tab is pressed once it stands still.
+    await wait(page, '[data-dictation-tab="dictionary"]');
+    await settleMotion(page);
+    await pause(400);
+    await click(page, '[data-dictation-tab="dictionary"]');
+    await page.waitForFunction(word => [...document.querySelectorAll(".wchip .word")].some(el => el.textContent === word), { timeout: 10000 }, "herdr");
+    result.row = await page.$$eval(".wchip", rows => rows.map(row => row.textContent.trim()).find(text => text.includes("herdr")));
+    await capture("dictionary-after");
+    if (!result.row?.includes(misheard)) throw new Error(`The dictionary row does not show how herdr was heard: ${result.row}`);
+
+    // 4. The next dictation spells it.
+    await newConversation(context);
+    result.second = await dictate("dictated-second");
+    if (!result.second.pasted.includes("herdr") || !result.second.pasted.includes("grokbot")) throw new Error(`The next dictation did not use what was learned: ${JSON.stringify(result.second)}`);
   } else if (name === "delete-conversation") {
     await deletionAudit(context, { click, wait, type, pause, details, typed, newConversation, remaining });
     await perform(page, { action: "member", id: 0 });

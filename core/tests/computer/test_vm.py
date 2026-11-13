@@ -982,6 +982,28 @@ async def test_tools_share_snapshot_and_gate_and_owner_control(desktop, conn, tm
     for tool, arguments in calls:
         assert (await gate.call_plugin(tool.key, arguments)).kind == "owner_holds_control"
     assert (len(runtime.calls), len(Bridge.calls)) == before
+    # What the member is told is what happened, when and until when, and carries no guess (a member once answered the
+    # owner that "this could not be fully confirmed" because the refusal was only an identifier).
+    told = await gate.call_plugin(shot.key, {})
+    assert told.text.startswith("The owner has had this screen's mouse and keyboard") and "Nothing was done" in told.text
+    assert "after 5 minutes without input" in told.text and "Do not guess another cause" in told.text
+    real_clock = vm.clock
+    vm.clock = lambda: vm.held_since[target.key] + 42
+    assert " for 42 seconds." in (await gate.call_plugin(shot.key, {})).text
+    vm.clock = lambda: vm.held_since[target.key] + 600
+    assert " for 10 minutes." in (await gate.call_plugin(shot.key, {})).text
+    vm.work.pending = lambda wanted: object()
+    waiting = (await gate.call_plugin(shot.key, {})).text
+    assert "sign-in or payment step you asked for" in waiting and "Wait for their done" in waiting and "has had" not in waiting
+    del vm.work.pending
+    vm.clock = real_clock
+    from raphael_core.agent.service import _tool_result
+    from raphael_core.agent.plugins import PluginResult
+    for text in (told.text.splitlines()[0], waiting.splitlines()[0]):
+        shown = _tool_result(SimpleNamespace(tool=SimpleNamespace(server="computer", name="get_desktop_state")), PluginResult(False, "owner_holds_control", text))
+        # A failure keeps 240 characters of its words: the whole sentence reaches the model.
+        assert shown.error == "owner_holds_control" and shown.ok is False and len(text) <= 240
+        assert shown.data["content"] == text
     assert (await hub.call(shot.key, {}, approver="none")).kind == "blocked"
     vm.hold(target, False)
     for tool, arguments in calls:

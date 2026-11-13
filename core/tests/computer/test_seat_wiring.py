@@ -272,7 +272,10 @@ async def test_a_hold_refuses_its_seat_but_only_blocks_other_seats_native_input(
             result = await hub.call(tool.key, args, approver="auto")
         assert result.kind == kind
         if kind == "computer_busy":
-            assert json.loads(result.text)["held_by"] == "the owner"
+            said = json.loads(result.text)
+            assert said["held_by"] == "the owner"
+            # A member turned away is told what is true, including when it ends, and not to guess another cause.
+            assert "Nothing was done" in said["note"] and "5 minutes without input" in said["note"]
     vm.hold(second, True)
     vm.hold(first, False)
     assert vm.unit_held(first)

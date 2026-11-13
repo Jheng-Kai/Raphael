@@ -1,14 +1,24 @@
-import { scene, member, room, wait, hover, click, check, type, key } from "./steps.mjs";
+import { scene, member, room, wait, waitGone, hover, click, check, type, key } from "./steps.mjs";
 const reply = '.tn[data-id="8201"] .chat-message[data-reply]';
+const reactButton = `${reply} [data-act="react-message"]`;
 const owner = '.tn[data-id="8201"] .chat-message.owner-message';
 const signin = '.chat-message[data-reply] > .turn-signin [data-act="cli-signin"]';
 const privateOpen = [member(1), wait(reply)];
 const root = '[data-room-message="8202"]';
 const roomOpen = [room(1), wait(root)];
+const ownerMenu = `${owner} [data-act="more-message"]`, editField = '.tn[data-id="8201"] [data-edit-input]';
+const openEditor = [...privateOpen, hover(owner), click(ownerMenu), wait('#app-popover [data-pick="edit"]'), click('#app-popover [data-pick="edit"]'), wait(editField)];
 export default [
+  scene('message-edit-open', "Choosing 編輯 on the owner's message turns its bubble into an editor where it stands: the words ready, Cancel and Send, the composer untouched", [...openEditor, check('message-edit-open'), hover('.ra-scroll')], {chatMetadata:'reaction', ownerEdit:'short'}),
+  scene('message-edit-long', "A long message of several lines opens whole in its editor, as wide as its bubble's column", [...openEditor, check('message-edit-open'), hover('.ra-scroll')], {chatMetadata:'reaction', ownerEdit:'long'}),
+  scene('message-edit-armed', 'A changed message needs Escape twice: the first arms Cancel (Esc) and says so, the editor stays', [...openEditor, type(editField, '改到一半的字'), key('Escape'), check('message-edit-armed')], {chatMetadata:'reaction', ownerEdit:'short'}),
+  scene('message-edit-sent', 'Enter sends the edited words with the same call as before and the edited message stands in its bubble', [...openEditor, type(editField, '改過的說法：請整理這份範例研究摘要，並列出三個重點。'), key('Enter'), waitGone('[data-edit-input]'), waitGone('.tn.is-pending'), wait('.thread .owner-message .bubble'), check('message-edit-sent'), hover('.ra-scroll')], {chatMetadata:'reaction', ownerEdit:'short'}),
   scene('reaction-picker', 'One reaction control opens the compact five-reaction pill', [...privateOpen, hover(reply), click(`${reply} [data-act="react-message"]`), check('reaction-picker')], {chatMetadata:'reaction'}),
   scene('message-hugs-bubble', 'A long reply is only as wide as its bubble and actions: the room beside it answers neither the pointer nor a right click', [...privateOpen, hover(reply), check('message-hugs-bubble'), hover('.composer')], {chatMetadata:'long'}),
   scene('reaction-row',"Saved owner reactions sit on their bubble's corner and add no height", [...privateOpen, check('reaction-row'), check('reaction-layout-rest'), hover(reply), check('reaction-layout-hover'), hover('.composer')], {chatMetadata:'reaction'}),
+  scene('reaction-replaced', 'One reaction per message: another emoji replaces the one a reply has, and the bar presses only the one given', [...privateOpen, hover(reply), click(reactButton), wait('#app-popover.reaction-bar'), check('reaction-bar-given'), click('#app-popover [data-quick="😂"]'), wait(`${reply} [data-reaction="😂"]`), check('reaction-replaced'), check('reaction-layout-rest'), hover('.composer')], {chatMetadata:'reaction'}),
+  scene('reaction-taken-back', 'Choosing the emoji a reply already has takes the reaction back', [...privateOpen, hover(reply), click(reactButton), click('#app-popover [data-quick="👍"]'), waitGone(`${reply} [data-reaction]`), check('reaction-taken-back'), hover('.composer')], {chatMetadata:'reaction'}),
+  scene('reaction-ask', 'A thumbs down makes the member ask what was wrong, in a message of its own and with none of the owner', [...privateOpen, hover(reply), click(reactButton), click('#app-popover [data-quick="👎"]'), wait('.tn[data-id="8202"] .chat-message[data-reply]'), check('reaction-ask'), check('reaction-layout-rest'), hover('.composer')], {chatMetadata:'reaction', reactionAsk:true}),
   scene('reaction-owner', "The owner's own bubble carries its reactions on its top-left corner, mirrored", [...privateOpen, check('reaction-owner'), check('reaction-layout-rest'), hover(owner), check('reaction-layout-hover'), hover('.composer')], {chatMetadata:'owner'}),
   scene('reaction-signin', 'A reaction on a failed sign-in reply stands on its bubble, above the 重新登入 button, never below it', [member(1), wait(signin), check('reaction-layout-rest'), check('reaction-signin'), hover('.chat-message[data-reply]'), check('reaction-layout-hover'), hover('.composer')], {cliSignin:'expired', reacted:true}),
   scene('reaction-not-approval', 'A laughing reaction leaves the draft and owner question pending', [...privateOpen, hover(reply), click(`${reply} [data-act="react-message"]`), click('#app-popover [data-quick="😂"]'), wait(`${reply} [data-reaction="😂"]`), check('reaction-not-approval')], {chatMetadata:'approval'}),

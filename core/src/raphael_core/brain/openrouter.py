@@ -58,10 +58,18 @@ _TOKEN = re.compile(r"[\x21-\x7e]+")
 # provider.options.<tag>, where the tag is the one GET /models/{author}/{slug}/endpoints lists, and
 # reach only that provider. gpt-transcribe (tag "openai") takes `keywords`, a free-form `prompt` and
 # `languages`, which replaces the singular `language` (OpenAI's speech-to-text guide); Whisper on
-# Groq takes a `prompt` (OpenRouter's speech-to-text guide). The other models get the language only:
-# their hint fields are not documented, and some providers (Azure) refuse a field they do not know.
-# The models that are given the dictionary that way, for the settings page to say so.
-STT_MODELS_WITH_HINTS = ("openai/gpt-transcribe", "openai/whisper-large-v3-turbo")
+# Groq takes a `prompt` (OpenRouter's speech-to-text guide). MAI-Transcribe 2 (tag "azure") takes the
+# words as an Azure phrase list, `phraseList.phrases`; OpenRouter refuses its top-level `keyterms`
+# and Azure ignores a `prompt` for it (a live check on 2026-11-14 wrote "herdr" for "Herder" and
+# "grokbot" for "Grokbot" with the list, and refused `keyterms` with a 400). The other models get the
+# language only: their hint fields are not documented, and some providers (Azure) refuse a field
+# they do not know. The models that are given the dictionary that way, for the settings page to say
+# so.
+STT_MODELS_WITH_HINTS = (
+    "openai/gpt-transcribe",
+    "openai/whisper-large-v3-turbo",
+    "microsoft/mai-transcribe-2",
+)
 MAX_KEYWORDS = 50
 MAX_KEYWORD_CHARS = 64
 _MAX_WHISPER_PROMPT_CHARS = 200
@@ -718,6 +726,8 @@ def transcription_body(
             body["language"] = language
         if model == "openai/whisper-large-v3-turbo" and keywords:
             provider["options"] = {"groq": {"prompt": _whisper_prompt(keywords)}}
+        if model == "microsoft/mai-transcribe-2" and keywords:
+            provider["options"] = {"azure": {"phraseList": {"phrases": keywords}}}
     body["provider"] = provider
     return body
 

@@ -342,9 +342,34 @@ export function checkRendered(name, context = {}) {
     const message = document.querySelector('.tn[data-id="8201"] .owner-message'), row = message?.querySelector('.message-reactions');
     require(row && visible(row) && row.closest('.bubble'), "the owner's reactions are drawn on the owner's own bubble");
     const chips = [...row.querySelectorAll('[data-reaction]')];
-    require(chips.map(chip => chip.dataset.reaction).join(' ') === '🎉 😂', `both reactions are there (${chips.map(chip => chip.dataset.reaction).join(' ')})`);
-    const tops = chips.map(chip => chip.getBoundingClientRect().top);
-    require(tops.every(top => Math.abs(top - tops[0]) < 1), 'several reactions share one row');
+    require(chips.map(chip => chip.dataset.reaction).join(' ') === '🎉', `the one reaction is there, never a second (${chips.map(chip => chip.dataset.reaction).join(' ')})`);
+    return { check: name };
+  }
+  if (['reaction-bar-given', 'reaction-replaced', 'reaction-taken-back', 'reaction-ask'].includes(name)) {
+    // One reaction per message (owner, 2026-11-14): another emoji replaces the one given, the same again takes it back.
+    const calls = window.__look.calls.filter(call => call.method === 'agent.react'), message = document.querySelector('.tn[data-id="8201"]');
+    const chips = [...message.querySelectorAll('[data-reaction]')].map(chip => chip.dataset.reaction);
+    if (name === 'reaction-bar-given') {
+      const bar = document.querySelector('#app-popover.reaction-bar');
+      require(visible(bar), 'the bar is open');
+      require([...bar.querySelectorAll('[aria-pressed="true"]')].map(button => button.dataset.quick).join(' ') === '👍', 'the bar presses only the one reaction the reply has');
+    }
+    if (name === 'reaction-replaced') {
+      require(chips.join(' ') === '😂', `the reply carries only the new emoji (${chips.join(' ')})`);
+      require(calls.length === 1 && calls[0].params.emoji === '😂' && calls[0].params.active === true, 'choosing another emoji is one reaction call, not a removal and a second one');
+      require(message.querySelectorAll('.message-reactions .reaction').length === 1 && visible(message.querySelector('.message-reactions')), 'one chip stands on the bubble');
+    }
+    if (name === 'reaction-taken-back') {
+      require(chips.length === 0 && !message.querySelector('.message-reactions'), 'the same emoji again takes the reaction back and leaves no chip');
+      require(calls.length === 1 && calls[0].params.emoji === '👍' && calls[0].params.active === false, 'the call was the removal of that emoji');
+    }
+    if (name === 'reaction-ask') {
+      const ask = document.querySelector('.tn[data-id="8202"]');
+      require(chips.join(' ') === '👎', `the reply keeps its thumbs down (${chips.join(' ')})`);
+      require(ask && visible(ask.querySelector('.chat-message[data-reply]')) && ask.textContent.includes(window.__look.data.chatMetadataSample.askWhatWasWrong), 'the member asks what was wrong, as a message of its own');
+      require(!ask.querySelector('.owner-message, .me'), 'the ask carries no message of the owner');
+      require(!window.__look.calls.some(call => ['agent.ask', 'agent.confirm', 'owner_questions.answer'].includes(call.method)), 'the owner said nothing and answered nothing');
+    }
     return { check: name };
   }
   if (name === 'reaction-signin') {
@@ -768,7 +793,7 @@ export function checkRendered(name, context = {}) {
       const menu = document.querySelector('#app-popover');
       require(visible(menu) && ['👍','😂','👎','❤','🎉'].every(emoji=>menu.textContent.includes(emoji)), 'one compact pill of the five available reactions');
     }
-    if (name === 'reaction-row') require(document.querySelector('.tn[data-id="8201"] [data-reaction="👍"]') && document.querySelector('.tn[data-id="8201"] [data-reaction="❤"]'), 'saved reactions appear on the bubble of their message');
+    if (name === 'reaction-row') require(document.querySelector('.tn[data-id="8201"] [data-reaction="👍"]') && document.querySelectorAll('.tn[data-id="8201"] [data-reaction]').length === 1, 'the one saved reaction appears on the bubble of its message');
     if (name === 'reaction-not-approval') {
       require(calls.some(call=>call.method==='agent.react' && call.params.emoji==='😂'), 'the actual reaction action reached core');
       require(!calls.some(call=>['agent.confirm','owner_questions.answer','integrations.draft_send'].includes(call.method)), 'a reaction never approves, answers or sends');
@@ -911,9 +936,10 @@ export function checkRendered(name, context = {}) {
     window.__look.desktopStream = { frame, document: frame.contentDocument, opens: window.__look.calls.filter(call => call.method === 'computer.viewer_open').length, closes: window.__look.calls.filter(call => call.method === 'computer.viewer_close').length };
     return {check:name};
   }
-  if (name === 'desktop-watch' || name === 'desktop-watch-collapse') {
+  if (name === 'desktop-watch' || name === 'desktop-watch-collapse' || name === 'desktop-watch-retake') {
     const panel = document.querySelector('.desktop-panel'), calls = window.__look.calls;
-    require(!calls.some(call => call.method === 'computer.viewer_control'), 'watching never changes owner control');
+    // An earlier take-over (desktop-watch-retake) has asked the core for the lease; every other watch has not.
+    if (name !== 'desktop-watch-retake') require(!calls.some(call => call.method === 'computer.viewer_control'), 'watching never changes owner control');
     if (name === 'desktop-watch-collapse') {
       require(!panel.hasAttribute('data-expanded'), 'Esc returns to conversation');
       const before = window.__look.desktopStream, frame = document.querySelector('iframe[data-desktop-stream]');
@@ -934,7 +960,15 @@ export function checkRendered(name, context = {}) {
       // Grok Bot's two states: watching offers Take control; in control offers Stop (which hands the computer back).
       const take = dock.querySelector('[data-desktop="take"]'), stopControl = dock.querySelector('[data-desktop="return"]');
       require(!visible(stopControl), 'watching offers no Stop of control');
-      if (panel.dataset.desktopState !== 'owner') require(visible(take) && take.textContent === '接手控制', 'watching the pill offers Take control');
+      // Whoever the core says holds the lease: the owner can take over whenever the pill watches (owner, 2026-11-14:
+      // 「為什麼我沒辦法接手啊 ? 理論上不管甚麼時候我都應該要可以接手」, a picture of 觀看中 with no button).
+      require(visible(take) && take.textContent === '接手控制' && !take.disabled, 'watching the pill offers Take control');
+      if (name === 'desktop-watch-retake') {
+        require(panel.dataset.desktopState === 'owner', `the core still keeps the lease of the earlier take-over (${panel.dataset.desktopState})`);
+        require(calls.filter(call => call.method === 'computer.viewer_control' && call.params.held === true).length === 1
+          && calls.filter(call => call.method === 'computer.viewer_control' && call.params.held === false).length === 1, 'one earlier take and one failed give-back');
+        require(visible(panel.querySelector('.desktop-error')), 'the failed take says so under the screen');
+      }
       if (name === 'desktop-watch' && window.__look.data.desktop.works?.some(work => work.state === 'running')) {
         const stop = panel.querySelector('[data-desktop="stop"]');
         require(visible(stop) && stop.title === stop.getAttribute('aria-label') && stop.title.trim(), 'Stop has its translated tooltip');
@@ -1359,9 +1393,9 @@ export function checkRendered(name, context = {}) {
     return { check: name };
   }
   if (name === "menu-settings-redraw") {
-    const anchor = document.querySelector('.sel[data-k="local-commands"]'), menu = document.getElementById('app-popover');
+    const anchor = document.querySelector('.sel[data-k="retention"]'), menu = document.getElementById('app-popover');
     require(visible(menu) && anchor.getAttribute('aria-expanded') === 'true', "the replacement control keeps its open menu");
-    require(menu.querySelector('[data-value="never"][aria-checked="true"]'), "the refreshed choice keeps its check");
+    require(menu.querySelector('[data-value="7"][aria-checked="true"]'), "the refreshed choice keeps its check");
     return { check: name };
   }
   if (name === "submenu-placement" || name === "submenu-flip") {
@@ -2401,17 +2435,15 @@ export function checkRendered(name, context = {}) {
     }
     return { check: name, state: card.dataset.cardState };
   }
-  if (name.startsWith("local-command-setting") || name === "local-command-menu") {
-    const picker = document.querySelector('[data-k="local-commands"]');
-    require(visible(picker) && picker.classList.contains('sel'), 'local commands use the shared settings dropdown');
-    if (name === "local-command-menu") {
-      require([...document.querySelectorAll('.menu [data-value]')].map(item => item.dataset.value).join(',') === 'ask,always,never', 'the shared setting offers ask, always and never');
-    }
-    if (name === "local-command-setting-saved") {
-      const saved = window.__look.calls.filter(call => call.method === 'settings.set' && call.params.key === 'local_commands_mode');
-      require(saved.length === 1 && ['always', 'never'].includes(saved[0].params.value), 'the choice reaches shared core settings');
-    }
-    return {check:name, label:picker.textContent};
+  if (name === "local-command-setting-gone") {
+    // Owner, 2026-11-14: only a quick question reaches this PC, so Settings has no control for local commands, in any words.
+    const pane = document.querySelector('.modal-scrim');
+    require(visible(pane.querySelector('[data-pane][aria-current="page"]')), 'Safety is open');
+    require(!pane.querySelector('[data-k="local-commands"]'), 'there is no local commands control');
+    require(!/本機指令|Local commands|Ask every time|每次詢問/.test(pane.textContent), `no word of it is left in Safety: ${pane.textContent.slice(0, 120)}`);
+    const last = [...pane.querySelectorAll('.sgroup')].at(-1);
+    require(visible(last) && last.querySelectorAll('.slist > *').length >= 1, 'the computer section still has its row (the apps always allowed, or the note that there are none)');
+    return {check:name};
   }
   if (name === "local-command-card" || name === "local-command-settled") {
     const card = document.querySelector('[data-permission-card="perm-local"]'), box = card?.getBoundingClientRect();
@@ -2422,8 +2454,7 @@ export function checkRendered(name, context = {}) {
     const command = card.querySelector('.local-command');
     require(command.textContent.includes('Get-Process | Sort-Object CPU') && command.textContent.includes('LoadPercentage'), 'the exact multiline command survives escaping');
     require(command.scrollWidth <= command.clientWidth + 1, 'long command lines wrap inside the card');
-    if (card.dataset.cardState === 'pending') require(visible(card.querySelector('[data-act="local-settings"]')), 'command access can be managed from the opened details');
-    else require(!card.querySelector('[data-act="local-settings"]'), 'settled commands remove their settings action');
+    require(!card.querySelector('[data-act="local-settings"], [data-act="manage-local"]'), 'the card has no way into a setting: there is none to manage (owner, 2026-11-14)');
     const answers = [...card.querySelectorAll('.cc-actions button')];
     if (name === "local-command-card") {
       require(answers.length === (card.dataset.kind === 'local_access' ? 4 : 2), 'first consent has four real answers; later commands have two');
@@ -2658,17 +2689,15 @@ export function checkRendered(name, context = {}) {
       footNear(m.left,a.left,'the menu\'s left edge is the face\'s');
       require(m.bottom<=a.top-2&&m.bottom>=a.top-8,'the menu opens above the face');
     }
-    const usage=rows[0],used=usage.querySelector('.account-used'),chevron=usage.querySelector(':scope > svg.i');
-    require(!!used===usage.hasAttribute('aria-haspopup')&&!!used===!!chevron,'用量 has its number and a chevron together, or neither');
-    if(used){
-      require(/\d+\s*%/.test(used.textContent)&&visible(used)&&footBox(used).right<=footBox(chevron).left+1,'the number stands at the right, before the chevron');
-      require(footBox(chevron).right<=m.right-4&&footBox(chevron).right>=m.right-16,'the chevron ends the row');
-    }
+    const usage=rows[0],chevron=usage.querySelector(':scope > svg.i');
+    require(!usage.querySelector('.account-used')&&!/\d\s*%/.test(usage.textContent),'用量 has no number: one provider\'s figure under the bare word would read as everyone\'s');
+    require(!!chevron===usage.hasAttribute('aria-haspopup'),'用量 has its chevron when it has a submenu, and neither otherwise');
+    if(chevron)require(visible(chevron)&&footBox(chevron).right<=m.right-4&&footBox(chevron).right>=m.right-16,'the chevron ends the row');
     require(rows.slice(1).every(row=>!row.hasAttribute('aria-haspopup')&&!row.querySelector(':scope > svg.i')),'the other rows are plain');
     const tokens=(()=>{const probe=document.createElement('span');probe.style.backgroundColor='var(--menu)';document.body.append(probe);const value=getComputedStyle(probe).backgroundColor;probe.remove();return value;})();
     require(getComputedStyle(menu).backgroundColor===tokens,'the menu wears the app\'s menu token');
     require(menu.contains(document.activeElement)||!!document.getElementById('app-submenu')?.contains(document.activeElement),'the focus is in the menu or its submenu');
-    return {check:name,rail:footRail(),used:used?.textContent??null,menu:[Math.round(m.left),Math.round(m.top),Math.round(m.width),Math.round(m.height)]};
+    return {check:name,rail:footRail(),chevron:!!chevron,menu:[Math.round(m.left),Math.round(m.top),Math.round(m.width),Math.round(m.height)]};
   }
   if(name==='foot-usage-submenu'){
     const menu=document.getElementById('app-popover'),sub=document.getElementById('app-submenu');
@@ -2677,11 +2706,22 @@ export function checkRendered(name, context = {}) {
     require(row.getAttribute('aria-expanded')==='true','the row says its submenu is open');
     require(s.left>=m.right-2&&s.left<=m.right+12||s.right<=m.left+2,'the submenu stands at the menu\'s edge');
     require(s.top<=r.bottom&&s.bottom>=r.top,'and level with its row');
-    const name1=sub.querySelector('.account-window-name'),used=sub.querySelector('.account-window-used'),reset=sub.querySelector('.account-window-reset'),manage=sub.querySelector('[data-account="manage"]');
-    require(name1&&/Codex|Claude|Antigravity/.test(name1.textContent)&&/\d+\s*%/.test(used.textContent)&&reset&&/\d/.test(reset.textContent),`the window's name, its number and when it resets: ${sub.textContent}`);
-    require(visible(manage)&&manage.textContent.trim().length>0&&sub.querySelectorAll('.menu-sep').length===1&&sub.querySelector('.menu-sep').nextElementSibling===manage,'a hairline, then 管理用量');
-    require(footBox(used).right>=s.right-16&&footBox(used).left>footBox(name1).left,'the number stands at the right of the window\'s name');
-    require(s.left>=0&&s.right<=innerWidth&&s.bottom<=innerHeight,'the submenu lies inside the window');
+    // One block for every subscription the reading gives a window for, in the reading's order (the mock core's, read here).
+    const known=window.__look.data.allowances.brains.filter(brain=>brain.windows.some(span=>typeof span.remaining_percent==='number'));
+    const blocks=[...sub.querySelectorAll('.account-window')],manage=sub.querySelector('[data-account="manage"]');
+    require(known.length>=2&&blocks.length===known.length,`a block for each of the ${known.length} subscriptions, not only the tightest (${blocks.length})`);
+    const names=blocks.map(block=>block.querySelector('.account-window-name').textContent.trim().split(' ')[0]);
+    require(new Set(names).size===names.length&&names.every(word=>/^(Claude|Codex|Antigravity)$/.test(word)),`each block names its own subscription: ${names.join(', ')}`);
+    require(names.join()===known.map(brain=>({claude:'Claude',codex:'Codex',gemini:'Antigravity',antigravity:'Antigravity'}[brain.id])).join(),`in the reading's order: ${names.join(', ')}`);
+    blocks.forEach((block,at)=>{
+      const name1=block.querySelector('.account-window-name'),used=block.querySelector('.account-window-used'),reset=block.querySelector('.account-window-reset'),r1=footBox(block);
+      require(/\d+\s*%/.test(used.textContent)&&reset&&/\d/.test(reset.textContent)&&visible(name1)&&visible(used)&&visible(reset),`block ${at}: the window's name, its number and when it resets: ${block.textContent}`);
+      require(footBox(used).right>=r1.right-16&&footBox(used).left>footBox(name1).left,`block ${at}: the number stands at the right of the window\'s name`);
+      require(name1.scrollWidth<=name1.clientWidth+1&&footBox(used).right<=s.right,`block ${at}: its words show whole inside the submenu`);
+      if(at)require(r1.top>=footBox(blocks[at-1]).bottom-1,`block ${at} stands under the one before it`);
+    });
+    require(visible(manage)&&manage.textContent.trim().length>0&&sub.querySelectorAll('.menu-sep').length===1&&sub.querySelector('.menu-sep').nextElementSibling===manage&&footBox(blocks.at(-1)).bottom<=footBox(sub.querySelector('.menu-sep')).top+1,'a hairline after the last block, then 管理用量');
+    require(s.left>=0&&s.right<=innerWidth&&s.bottom<=innerHeight&&s.top>=0,'the submenu lies inside the window');
     return {check:name,sub:[Math.round(s.left),Math.round(s.top),Math.round(s.width),Math.round(s.height)],words:sub.textContent};
   }
   if(name==='foot-usage-none'){
@@ -3588,7 +3628,7 @@ export function checkRendered(name, context = {}) {
     const pill = document.querySelector('.ob-actions > .btn.pri'), box = pill.getBoundingClientRect();
     // The guide keeps its own wide pills instead of the shared button height.
     require(box.width >= 240 && box.height >= 40 && parseFloat(getComputedStyle(pill).borderTopLeftRadius) >= box.height / 2 - 1, "the one button is a wide pill");
-    // The welcome's one pill is 360 px wide, or what a narrow card leaves it; a rerun's × and pill fill the same width.
+    // The welcome's one pill is 360 px wide, or what a narrow card leaves it, on a first run and on a rerun alike.
     const foot = document.querySelector('.ob-foot'), footStyle = getComputedStyle(foot), room = foot.getBoundingClientRect().width - parseFloat(footStyle.paddingLeft) - parseFloat(footStyle.paddingRight);
     require(Math.abs(box.width - Math.min(360, room)) <= 1, `the welcome's pill is 360 px wide, or its room (${Math.round(box.width)} px of ${Math.round(Math.min(360, room))})`);
     require(!document.querySelector('.ob-foot .ob-pair'), "the welcome's row is its own, not a step's pair");
@@ -3655,34 +3695,6 @@ export function checkRendered(name, context = {}) {
     require(ink.bottom <= card.bottom && left.bottom <= card.bottom && left.left >= card.left && ink.right <= card.right, "both stay inside the card");
     return { back: left, ink };
   };
-  // A rerun's welcome keeps the welcome's own row: a round × for the way out at the left of the one wide pill (a close is
-  // the × alone, never a word button; owner, 2026-11-11).
-  const requireWelcomeRow = card => {
-    const primary = document.querySelector('.ob-actions > .btn.pri'), back = document.querySelector('.ob-actions > .btn.ob-back'), rowEl = document.querySelector('.ob-actions'), row = rowEl.getBoundingClientRect();
-    const foot = document.querySelector('.ob-foot'), footBox = foot.getBoundingClientRect(), footStyle = getComputedStyle(foot);
-    const ink = primary.getBoundingClientRect(), arrow = back?.getBoundingClientRect();
-    require(ink.width >= row.width * .8 && ink.width >= 240 && parseFloat(getComputedStyle(primary).borderTopLeftRadius) >= ink.height / 2 - 1, "the primary action is a wide pill that fills what the arrow leaves of its row");
-    require(back && back.matches('.btn.icon') && !back.textContent.trim() && back.querySelector(':scope > svg.i'), "the way back is a button with an arrow drawn in it and no words");
-    require(back.getAttribute('aria-label')?.trim() && back.getAttribute('aria-label') === back.getAttribute('title'), `the arrow is named for assistive tech and its tooltip alike (${back.getAttribute('aria-label')})`);
-    // One row at any width: the arrow and the pill centre on one line, the arrow at the left with the gap of the spacing token.
-    require(Math.abs((arrow.top + arrow.bottom) / 2 - (ink.top + ink.bottom) / 2) <= 1, `the arrow and the pill are on one row (${Math.round((arrow.top + arrow.bottom) / 2)} against ${Math.round((ink.top + ink.bottom) / 2)})`);
-    const gap = parseFloat(getComputedStyle(rowEl).columnGap);
-    require(arrow.right <= ink.left && Math.abs(ink.left - arrow.right - gap) <= 1 && gap === 8, `the arrow is left of the pill with an 8 px gap (${Math.round(ink.left - arrow.right)} px)`);
-    require(Math.abs(arrow.width - arrow.height) <= 1 && Math.abs(arrow.height - ink.height) <= 1 && parseFloat(getComputedStyle(back).borderTopLeftRadius) >= arrow.height / 2 - 1, `the arrow is a circle as tall as the pill (${Math.round(arrow.width)} x ${Math.round(arrow.height)} against ${Math.round(ink.height)})`);
-    const surface = getComputedStyle(back).backgroundColor;
-    require(!['rgba(0, 0, 0, 0)', 'transparent'].includes(surface) && surface !== getComputedStyle(primary).backgroundColor && surface !== getComputedStyle(document.querySelector('.ob-card')).backgroundColor, `the arrow keeps a surface of its own, not the card's or the pill's (${surface})`);
-    // Together they are as wide as the welcome's single pill: the foot's padding leaves the row 360 px, or less in a narrow card.
-    const room = footBox.width - parseFloat(footStyle.paddingLeft) - parseFloat(footStyle.paddingRight), together = ink.right - arrow.left;
-    require(Math.abs(together - Math.min(360, room)) <= 1 && Math.abs(arrow.left - row.left) <= 1 && Math.abs(ink.right - row.right) <= 1, `the arrow and the pill fill the width of the welcome's pill (${Math.round(together)} px of ${Math.round(Math.min(360, room))})`);
-    require(Math.abs((arrow.left + ink.right) / 2 - (card.left + card.width / 2)) <= 2, "the arrow and the pill are centred in the card");
-    // The foot is one control and its padding tall: the second pill's height is the content's.
-    const pad = parseFloat(footStyle.paddingTop) + parseFloat(footStyle.paddingBottom);
-    require(footBox.height <= ink.height + pad + 1, `the foot is one control plus its padding tall (${Math.round(footBox.height)} px, a control ${Math.round(ink.height)} + ${Math.round(pad)})`);
-    require(document.querySelector('.ob-body').getBoundingClientRect().bottom <= footBox.top + 1, "the content area ends where the foot begins");
-    // Tab order: the arrow, then the pill.
-    require(!!(back.compareDocumentPosition(primary) & Node.DOCUMENT_POSITION_FOLLOWING), "the arrow comes before the pill in the tab order");
-    return { ink, arrow };
-  };
   if (name === "onboarding-back-hover" || name === "onboarding-back-focus") {
     // The way back of a step's pair (owner, 2026-11-11): a round button on a quiet grey of its own, one step lighter under
     // the pointer, with no edge; the keyboard shows the app's usual ring on it, and it comes before the primary.
@@ -3705,16 +3717,13 @@ export function checkRendered(name, context = {}) {
     return { check: name };
   }
   if (name === "onboarding-rerun") {
-    // The guide opened again from Settings: its welcome is one row, the way out being a round × (a close is the × alone,
-    // never a word button; owner, 2026-11-11), then the wide pill. Nothing stacks.
-    const card = document.querySelector('.ob-card').getBoundingClientRect();
+    // The guide opened again from Settings: its welcome is the first run's own, the one wide pill and nothing beside it, no × to
+    // leave by (owner, 2026-11-14: 「第一頁應該只會有開始就好了」). The later pages keep their pair.
     require(visible(document.querySelector('.ob-emblem canvas.ob-emb')) && document.querySelector('.ob-col > h2.ob-wordmark'), "the welcome is on screen");
-    require(!document.querySelector('.ob-foot .ob-pair'), "the welcome's row is its own, not a step's pair");
-    const { ink, arrow } = requireWelcomeRow(card);
-    const back = document.querySelector('.ob-actions > .btn.ob-back');
-    require(back.dataset.ob === "back" && back.querySelector('svg.i') && !back.textContent.trim(), "the way out is a × with no words");
-    require(document.querySelectorAll('.ob-foot .btn').length === 2, "the foot holds the × and the pill and nothing else");
-    return { check: name, arrow: Math.round(arrow.width), pill: Math.round(ink.width) };
+    require(!document.querySelector('.ob-foot .ob-pair, .ob-foot [data-ob="back"], .ob-foot .btn.icon'), "the welcome's row is its own: no pair, no way back, no ×");
+    const buttons = [...document.querySelectorAll('.ob-foot .btn')];
+    require(buttons.length === 1 && buttons[0].dataset.ob === "next" && buttons[0].textContent.trim().length > 0, "the foot holds the one worded pill and nothing else");
+    return { check: name, pill: Math.round(buttons[0].getBoundingClientRect().width) };
   }
   if (name === "onboarding-tools" || name === "onboarding-services" || name === "onboarding-abilities") {
     // Each first-run choice is one calm centred column in one card of a designed size: a title with two small slimes
@@ -4489,6 +4498,20 @@ export function checkRendered(name, context = {}) {
     if (name === "composer-voice-destination") require(visible(document.querySelector('[data-key="hearing"]')) && document.querySelector('.composer').dataset.taskState === "ack", "the original thread has a waiting line and Stop");
     else require(visible(document.querySelector('.tn[data-id="301"]')) && !document.querySelector('[data-key="hearing"]'), "the answer replaces the pending line in this thread");
     return { check: name, member: args.memberId, conversation: expected };
+  }
+  if (name === "composer-voice-attachment") {
+    // One press on the voice button sends the recording and everything the composer held (owner, 2026-11-14): the picture and the words go to
+    // the recording before its key ends it, and the composer is empty afterwards, as after a typed send.
+    const calls = window.__look.calls, handed = calls.filter(call => call.command === "agent_voice_composed"), keys = calls.filter(call => call.command === "window_hotkey" && ["agent_down", "agent_up"].includes(call.kind));
+    require(handed.length === 1, `the composer was handed over once: ${handed.length}`);
+    const [composed] = handed;
+    require(composed.text === "Look at this picture" && Array.isArray(composed.attachments) && composed.attachments.length === 1 && composed.attachments[0].mime.startsWith("image/") && typeof composed.attachments[0].data === "string" && composed.attachments[0].data.length > 0, `the words and the picture went with the recording: ${JSON.stringify({ ...composed, attachments: (composed.attachments ?? []).map(file => [file.name, file.mime]) })}`);
+    require(keys.length >= 1 && calls.indexOf(composed) < calls.indexOf(keys.at(-1)), "they were handed over before the key ended the recording");
+    require(keys.every(call => call.conversationId === composed.conversationId && (call.memberId ?? 0) === (composed.memberId ?? 0)), "the key and the composer name the same conversation");
+    require(!calls.some(call => call.command === "agent_ask_text"), "no second, typed message was sent");
+    const form = [...document.querySelectorAll('.composer')].find(visible);
+    require(form.querySelector('textarea').value === "" && !form.querySelector('.cmp-chip'), "the composer is empty, as after a typed send");
+    return { check: name, member: composed.memberId ?? 0, conversation: composed.conversationId, files: composed.attachments.length };
   }
   if (name === "thread-clear-of-fade") {
     const scroller = [...document.querySelectorAll(".ra-scroll")].find(visible), top = scroller.getBoundingClientRect().top + 40;
@@ -6904,6 +6927,49 @@ export function checkRendered(name, context = {}) {
     require(back.getBoundingClientRect().left - edge <= 40, "the chevron stands at the top left");
     return { check: name, rows: rows.length };
   }
+  if (name === "connect-back") {
+    const modal = connectModal(), back = modal.querySelector('.cs-back'), close = modal.querySelector('.modal-x'), content = modal.querySelector('.cs');
+    require(visible(back) && visible(close) && back.matches('button[data-conn="back"]'), "the back chevron and the dialog's ✕ are both real buttons on screen");
+    const a = back.getBoundingClientRect(), x = close.getBoundingClientRect(), centreY = (a.top + a.bottom) / 2, centreX = (a.left + a.right) / 2;
+    require(Math.round(a.width) === Math.round(x.width) && Math.round(a.height) === Math.round(x.height) && a.width >= 30, `the back chevron is the ✕'s own size, not smaller (${a.width}x${a.height} against ${x.width}x${x.height})`);
+    require(parseFloat(getComputedStyle(back).borderTopLeftRadius) >= a.height / 2, "it is round");
+    require(Math.abs(centreY - (x.top + x.bottom) / 2) <= 1, `it stands on the ✕'s line (${centreY} against ${(x.top + x.bottom) / 2})`);
+    const misses = [[a.left + 3, centreY], [a.right - 3, centreY], [centreX, a.top + 3], [centreX, a.bottom - 3], [centreX, centreY]].filter(([px, py]) => { const hit = document.elementFromPoint(px, py); return !(hit && (hit === back || back.contains(hit))); });
+    require(misses.length === 0, `a press anywhere on its 36 px lands on it (${misses.length} points did not)`);
+    const glyph = back.querySelector('svg.i').getBoundingClientRect();
+    require(Math.round(glyph.width) === 18 && Math.abs(glyph.left - content.getBoundingClientRect().left) <= 3, `its glyph is 18 px and stands on the content's left edge (${glyph.left} against ${content.getBoundingClientRect().left})`);
+    return { check: name, size: [a.width, a.height], close: [x.width, x.height] };
+  }
+  if (name === "connect-app-from-row") {
+    const modal = connectModal(), page = modal.querySelector('.cs-page');
+    require(visible(page) && page.querySelector('h2.big')?.textContent === 'Notion', "a press on a connected row opened that app's page");
+    require(visible(page.querySelector('.cs-head .cs-state')) && visible(page.querySelector('.cs-tools')), "the page is the one the main view's row opens: its connected state and its tools");
+    return { check: name };
+  }
+  if (name === "connected-rows") {
+    const modal = connectModal(), list = modal.querySelector('.cs-connected'), rows = [...list.querySelectorAll('.cs-linked')];
+    require(visible(list) && !modal.querySelector('.cs-page') && rows.length >= 3, "the list is on screen and no app's page opened from a press on a switch");
+    const notion = list.querySelector('.cs-linked[data-id="composio:notion"] [role="switch"]');
+    require(notion.getAttribute('aria-checked') === 'true', "the switch only turned the app off and on");
+    const main = list.querySelector('.cs-linked:nth-child(2) .cs-main'), style = getComputedStyle(main);
+    require(main.matches(':hover') && style.backgroundColor === colourOf('backgroundColor', '--float-hover') && style.cursor === 'pointer', `a row under the pointer has the pointer and the hover fill of the floating surface (${style.backgroundColor}, ${style.cursor})`);
+    require(getComputedStyle(main.closest('.cs-linked')).cursor === 'pointer', "the whole row has the pointer");
+    const box = main.getBoundingClientRect(), tile = main.querySelector('.cs-tile').getBoundingClientRect(), text = main.querySelector('.tx').getBoundingClientRect();
+    require(tile.left - box.left >= 6 && box.right - text.right >= 6 && tile.top - box.top >= 6 && box.bottom - tile.bottom >= 6, `the fill stands 6 px or more clear of the words and the mark (${tile.left - box.left}, ${box.right - text.right})`);
+    const switchBox = main.closest('.cs-linked').querySelector('[role="switch"]').getBoundingClientRect();
+    require(switchBox.left - box.right >= 8, `the fill stops 8 px or more before the switch (${switchBox.left - box.right})`);
+    return { check: name, rows: rows.length };
+  }
+  if (name === "app-row-hover") {
+    const modal = connectModal(), row = modal.querySelector('.cs-card .cs-main:hover');
+    require(row && visible(row), "a row of the main view is under the pointer");
+    const style = getComputedStyle(row), box = row.getBoundingClientRect(), tile = row.querySelector('.cs-tile').getBoundingClientRect(), text = row.querySelector('.tx').getBoundingClientRect();
+    require(style.backgroundColor === colourOf('backgroundColor', '--float-hover') && style.cursor === 'pointer', `a row under the pointer has the pointer and the hover fill of the floating surface, as a connected row has (${style.backgroundColor}, ${style.cursor})`);
+    require(tile.left - box.left >= 6 && box.right - text.right >= 6 && tile.top - box.top >= 6 && box.bottom - tile.bottom >= 6, `the fill stands 6 px or more clear of the words and the mark (${tile.left - box.left}, ${box.right - text.right})`);
+    const join = row.parentElement.querySelector('.cs-connect, .cs-state');
+    require(!join || join.getBoundingClientRect().left - box.right >= 8, "the fill stops 8 px or more before the 連結 button");
+    return { check: name };
+  }
   if (name === "connect-app-oauth" || name === "connect-app-key" || name === "connect-app-connected") {
     const modal = connectModal(), page = modal.querySelector('.cs-page'), back = page.querySelector('[data-conn="back"]'), close = modal.querySelector('.modal-x');
     require(visible(page) && !page.querySelector('.cs-top') && visible(back) && back.tagName === 'BUTTON', "an app's page has a bare back chevron and no title row");
@@ -8916,6 +8982,43 @@ export function checkRendered(name, context = {}) {
       require(watch.opens === 1, `it was opened ${watch.opens} times, once by the first press and not again by the second`);
       return { check: name, opens: watch.opens, pressedAt: pressed.hit, overScrim: pressed.overScrim, width: innerWidth };
     })();
+  }
+  if (name === "message-edit-open" || name === "message-edit-armed" || name === "message-edit-sent") {
+    // R-UI-148: the owner's message is edited in its own place; the composer is not touched and what is sent is the composer's own edit.
+    const turn = document.querySelector('.tn[data-id="8201"]'), composerField = document.querySelector('.cmp-input');
+    require(composerField && composerField.value === '', 'the composer keeps its own (empty) draft: nothing of the message went into it');
+    if (name === "message-edit-sent") {
+      const words = "改過的說法：請整理這份範例研究摘要，並列出三個重點。";
+      const asks = window.__look.calls.filter(call => call.command === 'agent_ask_text');
+      require(asks.length === 1 && asks[0].replaceTurnId === 8201 && asks[0].text === words && asks[0].memberId === 1, 'Enter asks once, with the edited words and the message it replaces, as the composer\'s edit did');
+      require(!document.querySelector('[data-edit-input], .msg-editor') && !document.querySelector('.tn[data-id="8201"]'), 'the editor is gone with the message it replaced');
+      const bubbles = [...document.querySelectorAll('.thread .owner-message .bubble')];
+      require(bubbles.length === 1 && bubbles[0].querySelector('.message-text').textContent.trim() === words && visible(bubbles[0]), 'the edited message stands in its bubble, once');
+      require(!document.querySelector('.tn.is-pending'), 'nothing is left waiting beside it');
+      return { check: name, bubble: Math.round(bubbles[0].getBoundingClientRect().width) };
+    }
+    const field = turn.querySelector('[data-edit-input]'), box = turn.querySelector('.msg-editor'), me = turn.querySelector('.me');
+    require(visible(field) && visible(box), 'the bubble is an editor');
+    require(document.activeElement === field && (name === "message-edit-armed" || field.selectionStart === field.value.length && field.selectionEnd === field.value.length), 'the field has the focus, the caret after its words');
+    require(!turn.querySelector('.owner-message .bubble') && !turn.querySelector('.owner-message .message-actions'), 'the editor takes the bubble\'s place: no bubble and no actions beside it');
+    const b = box.getBoundingClientRect(), m = me.getBoundingClientRect();
+    require(Math.abs(b.right - m.right) <= 1, `the editor ends where the bubble ended (${Math.round(b.right)} vs ${Math.round(m.right)})`);
+    require(b.width <= m.width && b.width >= Math.min(m.width * .6, 300), `the editor is as wide as the bubble's column (${Math.round(b.width)} of ${Math.round(m.width)})`);
+    require(field.scrollWidth <= field.clientWidth + 1 && field.scrollHeight <= field.clientHeight + 1, 'all of the words are in view');
+    const buttons = [...box.querySelectorAll('.msg-editor-actions .btn')].filter(visible);
+    require(buttons.length === 2 && buttons[1].classList.contains('pri') && !buttons[1].disabled, 'Cancel and, last, the primary Send, ready');
+    const [cancel, send] = buttons.map(button => button.getBoundingClientRect());
+    require(cancel.right <= send.left && Math.abs(cancel.height - send.height) < .5 && Math.abs(send.height - 30) < .5, `Cancel and Send are the thread cards' buttons: 30 px (${Math.round(cancel.height)} px high)`);
+    const pad = parseFloat(getComputedStyle(box).paddingRight);
+    require(Math.abs(send.right - (b.right - 1 - pad)) <= 1.5, 'Send stands at the right edge of the editor');
+    require(!document.querySelector('.tn.is-pending'), 'nothing was sent');
+    if (name === "message-edit-armed") {
+      const armed = buttons[0];
+      require(armed.dataset.cancelArmed === 'true' && armed.dataset.cancelHint && document.activeElement === field && field.isConnected, 'the first Escape arms Cancel with its hint and leaves the editor open');
+    } else {
+      require(!buttons[0].dataset.cancelArmed, 'Cancel is not armed');
+    }
+    return { check: name, editor: Math.round(b.width), height: Math.round(b.height), words: field.value.length };
   }
   throw new Error(`Unknown rendered check: ${name}`);
 }

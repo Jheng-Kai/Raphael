@@ -11,7 +11,7 @@ import { contactSheets } from "../contact-sheet.mjs";
 import { BROWSER_ARGS, browserPath } from "../runner.mjs";
 import { launch, stopOwned, connectWebView, freePort } from "./process.mjs";
 import { collectErrors, paidRequests, toastError } from "./errors.mjs";
-import { prepareVoiceSample, requireVoiceModels } from "./audio.mjs";
+import { prepareDictionarySample, prepareVoiceSample, requireVoiceModels } from "./audio.mjs";
 import { drive, journeys, pause, nativeLaunches, startupEvidence } from "./journeys.mjs";
 import { decodeVisibleImages, settleMotion } from "../driver.mjs";
 
@@ -82,6 +82,8 @@ async function run(options) {
       // The owner's frozen return: WebView2 refused one power step and the rest never ran.
       if (journey.name === "hidden-window-refused") env.RAPHAEL_TEST_NATIVE_POWER_REFUSE = "normal memory";
       if (journey.name === "openrouter-turn") delete env.RAPHAEL_FAKE_LLM;
+      // The owner's real speech-to-text and cleanup through his OpenRouter key, a fraction of a cent.
+      if (journey.name === "dictation-dictionary") delete env.RAPHAEL_FAKE_LLM;
       if (journey.name === "owner-words") env.RAPHAEL_TEST_NATIVE_LOCAL = "1";
       if (journey.name === "long-think") env.RAPHAEL_NATIVE_THINK_S = "75";
       if (journey.name === "typing") env.RAPHAEL_NATIVE_THINK_S = "35";
@@ -125,6 +127,12 @@ async function run(options) {
           result.modelReadiness = await database("voice-models", env.RAPHAEL_MODELS_DIR);
           requireVoiceModels(result.modelReadiness);
         } else {
+          if (journey.name === "dictation-dictionary") {
+            const sample = await prepareDictionarySample(journeyDir);
+            env.RAPHAEL_FAKE_AUDIO = sample.file;
+            const { stdout } = await execute(python, ["-c", "import sys,wave; w=wave.open(sys.argv[1]); print(round(w.getnframes()/w.getframerate()*1000))", sample.file], { windowsHide: true });
+            audioMs = Number(stdout.trim()); result.audio = { ...sample, milliseconds: audioMs, engine: "cloud microsoft/mai-transcribe-2" };
+          }
           env.RAPHAEL_MODELS_DIR = join(data, "models");
           // VAD is a startup prerequisite even when no speech journey is selected.
           const installed = installedModels();
@@ -214,7 +222,7 @@ async function run(options) {
           }
         }
         result.cliDiagnosticLog = log.split(/\r?\n/).filter(line => line.includes("Native CLI diagnostic "));
-        const costs = paidRequests(log, ["gmail-connect", "store-finder", "catalog-connect"].includes(journey.name), journey.name === "openrouter-turn" ? ["openrouter.ai"] : []);
+        const costs = paidRequests(log, ["gmail-connect", "store-finder", "catalog-connect"].includes(journey.name), ["openrouter-turn", "dictation-dictionary"].includes(journey.name) ? ["openrouter.ai"] : []);
         if (costs.length) result.failures.push(`Undeclared paid/Composio requests: ${JSON.stringify(costs)}`);
         if (journey.name === "gmail-connect") result.connectorLog = log.split(/\r?\n/).flatMap((line, index, lines) => /connect|composio|card/i.test(line) ? lines.slice(Math.max(0, index - 2), index + 3) : []);
         result.failed = !!(result.failures.length || result.runtimeErrors.length);

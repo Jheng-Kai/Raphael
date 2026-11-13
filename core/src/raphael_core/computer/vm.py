@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 
 BASE = "docker.io/trycua/xfce-cua@sha256:274eb636f5cf3fc58f705916ee72b7a701270b3877369d08533a385c5325be9b"
 VERSION = "0.37.0"
-IMAGE = "raphael/cua-local-vm:driver-0.37.0-v9"
+IMAGE = "raphael/cua-local-vm:driver-0.37.0-v10"
 GUEST = "/home/cua/workspace"
 SHARED = "/home/cua/team"
 MEMORY_GB = 3
@@ -38,8 +38,11 @@ DRIVER = "/usr/local/libexec/raphael/cua-driver"
 SOCKET = "/run/user/1000/raphael-cua.sock"
 SCREENS_READY = "/dev/shm/raphael-screens.ready"
 LABEL = "org.raphael.computer"
-IMAGE_LABELS = {LABEL: "1", f"{LABEL}.driver": VERSION, f"{LABEL}.base": BASE, f"{LABEL}.layer": "9"}
+IMAGE_LABELS = {LABEL: "1", f"{LABEL}.driver": VERSION, f"{LABEL}.base": BASE, f"{LABEL}.layer": "10"}
 MAX_OUTPUT = 50_000  # what a task may be shown of a result at most (`worker.guards`)
+# The owner's hold of a screen ends by itself after this long without a click or a key of his (a sign-in request that
+# waits for him and a recording are held until he says so): a lease nobody uses blocks every member (2026-11-14).
+OWNER_IDLE_S = 300
 # The longest a command may be waited for, and the longest a job started in the background may run.
 FOREGROUND_S = 1800
 BACKGROUND_S = 21_600
@@ -298,13 +301,13 @@ def known_previous(raw, target, owner):
         shared_upgrade = target.container == "shared" and target.screens == 6
         screens = [entry for entry in env if entry.startswith("RAPHAEL_SCREENS=")]
         # Layer 7 is the one the computer every member shares was released on (2026-11-12): six screens, and the
-        # owner's own computer the day layer 8 came; layer 8 kept that shape. A layer that is not named here is
+        # owner's own computer the day layer 8 came; layers 8 and 9 kept that shape. A layer that is not named here is
         # refused as incompatible, and its computer does not start: each new layer adds the one before it.
-        six = shared_upgrade and layer in ("5", "7", "8") and screens == ["RAPHAEL_SCREENS=6"]
-        memory = 6 if six else {"3": 2, "4": 3, "5": 3, "6": 3, "7": 3, "8": 3}.get(layer)
+        six = shared_upgrade and layer in ("5", "7", "8", "9") and screens == ["RAPHAEL_SCREENS=6"]
+        memory = 6 if six else {"3": 2, "4": 3, "5": 3, "6": 3, "7": 3, "8": 3, "9": 3}.get(layer)
         # Layer 5 was the first to say its screen count; the two before it had no such entry.
         if ((target.screens != 1 and not shared_upgrade) or memory is None
-                or screens != ([f"RAPHAEL_SCREENS={6 if six else 1}"] if layer in ("5", "6", "7", "8") else [])
+                or screens != ([f"RAPHAEL_SCREENS={6 if six else 1}"] if layer in ("5", "6", "7", "8", "9") else [])
                 or host.get("NanoCpus") != (4 if six else 2) * 1_000_000_000
                 or host.get("Memory") != memory * 1024**3 or host.get("MemorySwap") != memory * 1024**3):
             return False
@@ -324,6 +327,7 @@ class LocalVm:
         self.enabled = enabled
         self.settings, self.run, self.clock = settings, runner or Docker(), clock
         self.last_activity, self.active, self.held = {}, {}, set()
+        self.held_since = {}  # target key -> when the screen was last taken (what a blocked member is told)
         self.locks, self.targets = {}, {}
         self.task = None
         self.busy = lambda key: False
@@ -1226,12 +1230,28 @@ exec /opt/venv/bin/python /opt/raphael-desktop/wallpaper.py --watch'''
 
     def hold(self, target, held):
         if held:
+            if target.key not in self.held:
+                self.held_since[target.key] = self.clock()
             self.held.add(target.key)
             self.held_targets[target.key] = target
         else:
             self.held.discard(target.key)
             self.held_targets.pop(target.key, None)
+            self.held_since.pop(target.key, None)
         self.last_activity[target.state_key] = self.clock()
+
+    def owner_note(self, target):
+        """What a member that the owner's hold turned away is told, within the 240 characters a failure keeps: who holds
+        the screen, for how long, that nothing was done and when it ends. None of it is a guess."""
+        since = self.held_since.get(target.key)
+        seconds = None if since is None else max(0, round(self.clock() - since))
+        waited = "" if seconds is None else f" for {seconds} seconds" if seconds < 120 else f" for {seconds // 60} minutes"
+        if self.work.pending(target) is not None:
+            return (f"The owner is finishing a sign-in or payment step you asked for{waited}. Nothing was done. "
+                    "Wait for their done, or do other work that needs no computer. Do not guess another cause.")
+        return (f"The owner has had this screen's mouse and keyboard{waited}. Nothing was done. Do other work, or call "
+                f"again later: it comes back at their press or after {OWNER_IDLE_S // 60} minutes without input. "
+                "Do not guess another cause.")
 
     async def checkpoint(self, target, action, **metadata):
         from . import checkpoints

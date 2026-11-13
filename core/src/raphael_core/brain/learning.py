@@ -1,6 +1,6 @@
 """Persistence validation for learned terms selected by the native pure capture rule."""
 
-from .mishearing import _CJK_FUNCTION_WORDS, _LATIN_FUNCTION_WORDS, _is_cjk
+from .mishearing import _CJK_FUNCTION_WORDS, _LATIN_FUNCTION_WORDS, _is_cjk, is_plausible
 
 
 _COMMON_CJK = _CJK_FUNCTION_WORDS | frozenset("後天 明日 再 討論 真的 很好 謝謝 ありがとう こんにちは".split())
@@ -48,4 +48,16 @@ def accepted(word: str, misheard: str) -> bool:
         return False
     if not 0.4 <= len(misheard) / len(word) <= 2.5:
         return False
+    if _plain_latin(word) and _plain_latin(misheard) and not is_plausible(word, misheard):
+        # A word in lower case letters only carries no mark of a name, so only a correction that
+        # sounds or is spelled like what was heard is a recognition error ("Grok Bus" for
+        # "grokbot"); "meeting" for "workshop" is rewording, never a dictionary term.
+        return False
     return True
+
+
+def _plain_latin(text: str) -> bool:
+    """Whether `text` is Latin words in lower case only: no capital, digit or CJK character."""
+    return any(c.isalpha() for c in text) and not any(
+        c.isupper() or c.isdigit() or _is_cjk(c) for c in text
+    )

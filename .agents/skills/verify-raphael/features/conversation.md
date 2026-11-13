@@ -1,5 +1,31 @@
 # Conversation
 
+## The owner edits a sent message in its own bubble (owner, 2026-11-14, R-UI-148)
+
+Owner: 「如果使用者選擇編輯的時候，不要把它拉回到我們的對話框裡面，而是直接在原本畫面上的 Message Bubble 做編輯，然後編輯完就直接重新發布出去，邏輯是一樣的」.
+Before, 編輯 in a message's ⋯ moved its words (and files and quote) into the composer, and sending replaced the message
+(`replace_turn_id`). Now the bubble itself becomes the editor (`message-edit.ts`, drawn by `turnHTML` while
+`TimelineState.editing` names the turn): a flat box as wide as the bubble's column (`.owner-message.is-editing`),
+its words in a field with the caret after them, 取消 and the primary 送出 at the right (`btn sm`). The composer keeps
+its draft. Only the place of editing changed: 送出 and Enter call the composer's `send` (`send(edit)` in `pages/agent.ts`), so
+the same `agent_ask_text` goes out with the edited words, the files and the quote of the original and `replaceTurnId`, and the
+core does to the history what it did. While it is on its way the old message leaves its place (it is retracted
+by the core) and the pending bubble shows as for any message; a failed send brings the editor back with the words as typed and
+says so. Escape leaves at once while the words are the original's, and goes through the app's cancel gesture once they
+changed (first press arms 取消, which shows Esc and 「再按一次取消」; the second within 1.5 s leaves). Shift+Enter is a new
+line. Files that are not stored any more show as chips with × and block 送出 until dropped, as in the composer. A group room has no edit.
+Not in the editor: attaching more files, removing the quote or a stored file (they stay as the message had them).
+
+```powershell
+npm run look -- message-edit-open message-edit-long message-edit-armed message-edit-sent chat actions message-hugs-bubble reaction-owner reaction-row composer-queued-withdraw --theme both --width 1120,720,1920x1080
+```
+
+`message-edit-open` and `message-edit-long` (a message of several lines) assert the editor (focus and caret, no bubble or
+actions beside it, as wide as its column and ending where the bubble ended, every word in view, 取消 and a ready primary
+送出 of one height at the right edge, the composer empty); `message-edit-armed` is the first Escape on changed words (取消 armed,
+editor open); `message-edit-sent` types new words and presses Enter: one `agent_ask_text` with the words and `replaceTurnId`,
+no editor, one bubble with the new words.
+
 ## The delete dialog is Grok Bot's (owner, 2026-11-12)
 
 Owner: 「刪除的 UI，跟我跟你說的那個好像不太一樣，這邊你可能要改一下」. The question before a deletion or a history
@@ -146,12 +172,26 @@ selected reactions stand on their message's bubble, on its top-right corner (the
 bubble: top-left), over the top edge, as Grok Bot's (R-UI-108, 2026-11-13). They are drawn
 inside the first bubble, so a button (重新登入), card, attachment or failure row under the bubble
 never takes them from it; a message that carries them keeps 8 px more room above it, so they
-never touch the bubble above; they cover neither the words nor the hover actions, and
-several share one row. Scenes: `reaction-row` (reply), `reaction-owner` (the owner's bubble),
+never touch the bubble above; they cover neither the words nor the hover actions.
+A message carries one reaction of the owner's (R-REACT-01, 2026-11-14): choosing another emoji replaces
+it, choosing the same again takes it back, and the bar, the menu and the grid press only that one. The core
+keeps one row per message (migration 82 kept the newest of a message that had several); the app shows only
+the newest of whatever a core lists. Scenes: `reaction-row` (reply), `reaction-owner` (the owner's bubble),
 `reaction-signin` (a failed sign-in reply with 重新登入 under it), `room-thread-open` and
-`room-thread-chip` (room messages), each with the `reaction-layout-rest/hover` check. Repeating a selection removes it. Private
+`room-thread-chip` (room messages), each with the `reaction-layout-rest/hover` check; `reaction-replaced`
+(another emoji replaces the one given, and the open bar presses only that one), `reaction-taken-back` (the
+same emoji again leaves no chip) and `reaction-ask` (a 👎 makes the member ask what was wrong). Private
 model context and room transcripts label reactions as metadata, never approval or
 instructions. No reaction answers a permission, owner question or draft.
+
+Most reactions get no words. A negative one (👎 and the angry, unamused, rolling-eyed, facepalm, cross and pile
+emoji of `agent/reaction_asks.py`) to a member's own finished reply, left standing 4 seconds, makes that member
+ask once what was wrong: a normal turn of the member's own on its own model, with no owner message above it
+(the thread shows only the member's question), no tool and no other model; Raphael does the same. In a group room
+only the author of the reacted message asks, in the same thread. Nothing is asked for 👍 ❤️ 😂 🎉 or any other
+positive emoji, for one taken back or changed within the 4 seconds, for the owner's own message, or twice for
+one message. The mock core of `look` adds that turn for `reaction-ask`; the model path is the tests of
+`core/tests/members/test_reaction_ask.py`, with fake models only.
 
 Room action rows open a side thread. The main room keeps only an N-reply chip under
 the root; rooms.messages defaults to the main thread. The existing room worker and
@@ -175,7 +215,7 @@ Voice memos and manual read-aloud were removed on 2026-11-07 and every other voi
 above): no reply carries a Play/Pause control or transcript, and nothing speaks.
 
 ```powershell
-npm run look -- message-hugs-bubble reaction-picker reaction-row reaction-owner reaction-signin reaction-not-approval room-thread-open room-thread-chip slack-draft calm-thread --theme both --width 1120,720,1920x1080
+npm run look -- message-hugs-bubble reaction-picker reaction-row reaction-owner reaction-signin reaction-replaced reaction-taken-back reaction-ask reaction-not-approval room-thread-open room-thread-chip slack-draft calm-thread --theme both --width 1120,720,1920x1080
 ```
 
 Synthetic zh-TW fixtures replace only native IPC. Inspect all contact sheets and every
@@ -556,8 +596,8 @@ small section labels in Unicode's order (names from emojibase-data in the app's 
 tones left out, emoji newer than 15.1 left out because a Windows font may draw them as boxes), and
 a footer naming the emoji under the pointer. Search filters in place with no labels; the arrows walk
 the grid; a click chooses and closes; one Esc leaves. The data loads the first time the card opens.
-A message shows any emoji it has as its own chip; the core accepts any single emoji, up to 20 on a
-message, and still takes back the old ✓ and ?.
+A message shows the one emoji it has as a chip (one per message, R-REACT-01); the core accepts any
+single emoji and still takes back the old ✓ and ?.
 
 ```powershell
 npm run look -- conversation-sections member-conversation-sections quick-conversation quick-clear-confirm quick-cleared actions reaction-bar emoji-picker emoji-picker-speed header-pill-hover emoji-search thread-new-divider-latest raphael-details details member-panel-details composer-voice-pending-0 composer-voice-pending-1 empty-conversation-recording empty-conversation-hearing --theme both --width 1120,720,1920x1080
@@ -1301,7 +1341,7 @@ Room speech uses the shared dictation finalizer and dictionary learning (`chat-c
 See [Owner polish](owner-polish.md) for the group recording comparison and shared conversation-find matrix.
 
 ```powershell
-npm run look -- composer-voice-recording composer-voice-sent composer-stop-voice composer-stop-voice-result composer-stop-pending composer-send-while-working composer-stop-armed-with-words esc-recording-cancel composer-learn chat --theme both --width 1120,720,1920x1080
+npm run look -- composer-voice-recording composer-voice-sent composer-voice-attachment-quick composer-voice-attachment-member composer-stop-voice composer-stop-voice-result composer-stop-pending composer-send-while-working composer-stop-armed-with-words esc-recording-cancel composer-learn chat --theme both --width 1120,720,1920x1080
 ```
 
 `composer-send-while-working` sends three messages during running work and checks the slot never moves, each message shows in order and nothing stops.
@@ -1330,7 +1370,7 @@ npm run look -- dialog-caption-confirm --theme both --width 1120,720,1920x1080
 
 `composer-voice-recording` measures the button at rest and while recording (same place and size, send glyph and label, no Stop,
 no second control); `composer-voice-sent` presses it and checks the same button is Stop once the recording is sent, with one
-question key down and up and no cancellation. The unit tests are `agent-stop.test.ts` (the whole sequence in the real page),
+question key down and up and no cancellation. `composer-voice-attachment-quick` and `composer-voice-attachment-member` paste a picture, type words, record and press the same button (owner, 2026-11-14, R-UI-106): the words and the picture cross to the recording once (`agent_voice_composed`) before the key ends it, no typed message is sent and the composer is empty. The native side holds them for the question being recorded and sends them with the words said (`dictation.rs`), so the turn is one voice message with its files and quote; the fixture proves the page's half, the Rust tests the controller's. The unit tests are `agent-stop.test.ts` (the whole sequence in the real page),
 `agent-members.test.ts` and `chat-composer.test.ts` (`drawTaskSlot`). The fixture cannot prove a microphone or the native key.
 
 ## Rich replies
@@ -1714,7 +1754,7 @@ npm run look -- card-mail-close card-page-close card-connect-close --theme both 
 npm run look -- card-key-guide-retry --theme both --width 1120,720,1920x1080
 ```
 
-| One-card local command consent and folded settings | `npm run look -- local-command-consent local-command-later local-command-background local-command-manage room-question-card card-background --theme both --width 1120,720,1920x1080` | Exact command/directory remain in disclosure; named command consent, original answer and settings boundaries remain. |
+| One-card local command consent | `npm run look -- local-command-consent local-command-later local-command-background room-question-card card-background --theme both --width 1120,720,1920x1080` | Exact command/directory remain in disclosure; named command consent and the original answer remain; the card has no way into a setting. |
 | One-card settled local command | `npm run look -- local-command-once --theme both --width 1120,720,1920x1080` | One answer settles the original card and removes decision/settings controls. |
 | Connected message draft rows | `npm run look -- card-message-waiting card-message-once card-message-deny card-message-failed card-message-retry --theme both --width 1120,720,1920x1080` | Exact delivery fields and body survive settlement/failure; retry answers only the original approval. |
 

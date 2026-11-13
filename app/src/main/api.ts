@@ -238,6 +238,18 @@ export const agentAskText = (text: string, attachments: WireAttachment[] = [], m
     ...(memberId ? { memberId } : {}),
     ...options,
   });
+/**
+ * The composer's words, files and quote, handed to the recording its voice button is ending: they go out with the words
+ * said, as a typed send carries them. True when that recording took them, false when none is being made there.
+ */
+export const agentVoiceComposed = (text: string, attachments: WireAttachment[], memberId: number, conversationId: number, quote?: import("./types").MessageQuote): Promise<boolean> =>
+  invoke("agent_voice_composed", {
+    text,
+    ...(attachments.length > 0 ? { attachments } : {}),
+    ...(memberId ? { memberId } : {}),
+    conversationId,
+    ...(quote ? { quote } : {}),
+  });
 /** Stops and removes exactly one owner's request, including a request still on its way. */
 export const agentRetract = (sessionId: string, memberId: number, turnId?: number): Promise<void> =>
   invoke("agent_retract", { sessionId, memberId, ...(turnId !== undefined ? { turnId } : {}) });

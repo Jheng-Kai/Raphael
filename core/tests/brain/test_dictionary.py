@@ -211,9 +211,9 @@ def test_the_count_of_a_pair_survives_reopening_the_database(tmp_path):
 @pytest.mark.parametrize(
     ("word", "misheard", "sentence"),
     [
-        ("parser", "widget", "Run widget today."),
+        ("Parser", "widget", "Run widget today."),
         ("轉錄", "轉入", "我想把錢轉入帳戶"),
-        ("workshop", "meeting", "Join the meeting."),
+        ("Workshop", "meeting", "Join the meeting."),
     ],
 )
 def test_pairs_that_may_not_be_rules_stay_hints_however_often_they_are_seen(
@@ -257,6 +257,43 @@ def test_automatic_learning_keeps_corrected_names_and_technical_terms(conn, word
     d = DictionaryStore(conn)
     assert d.learn_pair(word, misheard) is Learned.TERM
     assert [(entry.word, entry.source) for entry in d.list()] == [(word, "learned")]
+
+
+@pytest.mark.parametrize(("word", "misheard"), [("workshop", "meeting"), ("parser", "widget"),
+                                               ("today", "tomorrow"), ("cron", "box")])
+def test_a_lower_case_word_that_neither_sounds_nor_looks_like_what_was_heard_is_rewording(
+    conn, word, misheard
+):
+    # The owner's rule (2026-11-07): learning keeps names and jargon the recogniser gets wrong, never
+    # colloquial rewording. A word in lower case carries no mark of a name, so it must be a
+    # plausible mishearing of what speech-to-text wrote.
+    d = DictionaryStore(conn)
+    assert d.learn_pair(word, misheard) is Learned.NOTHING
+    assert d.list() == []
+
+
+@pytest.mark.parametrize(("word", "misheard"), [
+    # What speech-to-text wrote for the owner's dictionary words (history, 2026-11-13/14).
+    ("grokbot", "Grokbox"), ("grokbot", "Grok Bus"), ("grokbot", "Grabbot"), ("herdr", "Herder"),
+    ("grokbot", "grokbox"), ("claude", "cloud"),
+])
+def test_a_lower_case_name_corrected_from_its_mishearing_is_learned(conn, word, misheard):
+    d = DictionaryStore(conn)
+    assert d.learn_pair(word, misheard) is Learned.TERM
+    assert d.hint_forms() == [(misheard, word)]
+
+
+def test_a_correction_of_a_word_the_owner_added_is_kept_and_becomes_a_rule_when_seen_again(conn):
+    d = DictionaryStore(conn)
+    d.add("grokbot")
+    assert d.learn_pair("grokbot", "Grokbox") is Learned.PENDING
+    assert d.replacements() == [] and d.hint_forms() == [("Grokbox", "grokbot")]
+    assert d.learn_pair("grokbot", "Grokbox") is Learned.RULE
+    assert apply_replacements("你可以看一下Grokbox是怎麼做的", d.replacements()) == (
+        "你可以看一下grokbot是怎麼做的"
+    )
+    [entry] = d.list()
+    assert (entry.word, entry.misheard, entry.source) == ("grokbot", ["Grokbox"], "manual")
 
 
 def test_direct_learned_add_cannot_bypass_term_acceptance(conn):

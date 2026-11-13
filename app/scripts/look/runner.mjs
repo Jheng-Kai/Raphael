@@ -133,7 +133,7 @@ export async function run(options) {
           const disposition = requestDisposition(url, origin);
           const desktopResponse = url.startsWith(origin + "/") && desktopResponses[new URL(url).pathname];
           if (desktopResponse && new URL(url).pathname.endsWith('/control')) {
-            void request.frame().evaluate(() => window.__desktopAcceptedInputs ?? 0).then(input_sequence => request.respond({ status:200, contentType:'application/json', body:JSON.stringify({held:true,input_sequence}) })).catch(() => {});
+            void request.frame().evaluate(() => window.__desktopAcceptedInputs ?? 0).then(input_sequence => request.respond({ status:200, contentType:'application/json', body:JSON.stringify({held:!scene.fixture?.desktopUnconfirmed,input_sequence}) })).catch(() => {});
           } else if (desktopResponse) void request.respond({ status: 200, ...desktopResponse }).catch(() => {});
           else if (imageResponses[url] && request.resourceType() === "image") void request.respond({ status: 200, contentType: "image/svg+xml", body: imageResponses[url] }).catch(() => {});
           else if (disposition === "empty") void request.respond({ status: 204 }).catch(() => {});
