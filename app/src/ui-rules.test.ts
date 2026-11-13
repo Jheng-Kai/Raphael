@@ -330,7 +330,8 @@ describe("icons", () => {
   // their lines thin out and blur. The window's own minimise, maximise and close are Windows' caption glyphs, drawn for
   // 12 px: not icons of the set.
   const SIZES = new Set(["16px", "18px", "20px"]);
-  const NOT_ICONS = new Set([".slime-cels > svg", ".slime-prop-cels > svg", ".slime-blink-cels > svg", ".window-button svg"]);
+  // A report's charts (report-chart.ts) are drawings stretched over their plot, not icons of the set.
+  const NOT_ICONS = new Set([".slime-cels > svg", ".slime-prop-cels > svg", ".slime-blink-cels > svg", ".window-button svg", ".rs-spark > svg", ".rc-svg", ".rc-disc > svg"]);
   const strip = (css: string): string => css.replace(/\/\*[\s\S]*?\*\//g, "");
   const cssFiles = [...mainFiles, ...walk(join(SRC, "overlay"))].filter((f) => f.endsWith(".css"));
   const iconRules = (): { file: string; selector: string; body: string }[] =>

@@ -5,6 +5,7 @@ No page is served from the application's origin.
 """
 
 import asyncio
+import base64
 import html as html_lib
 import ipaddress
 import json
@@ -31,13 +32,36 @@ class PageError(Exception):
         self.kind = kind
 
 
+# What an embedded file or a library's fingerprint holds is content, not a credential: a picture's or a font's bytes in
+# base64 and a script's integrity hash read as long random runs. A text file (an SVG, JSON, plain text) is decoded and
+# read like the rest of the page; a binary one is not read.
+_EMBEDDED = re.compile(r"data:([\w.+-]+/[\w.+-]+)?((?:;[\w.+-]+=[\w.+-]+)*);base64,([A-Za-z0-9+/=\s]+)", re.I)
+_TEXT_FILES = re.compile(r"text/[\w.+-]+|image/svg\+xml|application/(?:json|xml|javascript|ld\+json)", re.I)
+_INTEGRITY = re.compile(r"\bsha(?:256|384|512)-[A-Za-z0-9+/]{40,}={0,2}")
+
+
+def _readings(value):
+    """The text the scanner reads of `value`: it with embedded files and fingerprints set aside, and each embedded text."""
+    texts = []
+
+    def embedded(match):
+        if _TEXT_FILES.fullmatch(match[1] or "text/plain"):
+            try:
+                texts.append(base64.b64decode(re.sub(r"\s", "", match[3]) + "==").decode("utf-8", "replace"))
+            except ValueError:
+                return match[0]
+        return "data:;base64,"
+
+    return [_INTEGRITY.sub("", _EMBEDDED.sub(embedded, value)), *texts]
+
+
 def checked_text(value, name, limit, *, required=False):
     if not isinstance(value, str) or (required and not value.strip()):
         raise PageError("bad_arguments", f"{name} must be nonempty text")
     if len(value.encode("utf-8")) > limit:
         raise PageError("too_large", f"{name} exceeds {limit} UTF-8 bytes; shorten it and try again")
     # Decode character references too, so HTML cannot disguise a secret from the existing scanner.
-    if find_secret(value) or find_secret(html_lib.unescape(value)):
+    if any(find_secret(text) for text in (*_readings(value), *_readings(html_lib.unescape(value)))):
         raise PageError("secret", f"{name} contains a secret; remove credentials and try again")
     return value
 
@@ -94,6 +118,23 @@ def page_csp(page):
     ))
 
 
+# The app's own theme (app/src/main/styles.css; app/src/main/page-theme.test.ts keeps the two equal), so a page reads as a
+# part of the app in either theme: its surfaces, three greys of text, its line, links, status colours and the eight chart
+# colours a report's charts draw with (report-chart.ts), in that order.
+CHART = {"light": ("#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#6250d6", "#e34948"),
+         "dark": ("#3987e5", "#d95926", "#199e70", "#c98500", "#d55181", "#008300", "#9085e9", "#e66767")}
+THEME = {
+    theme: {**dict(zip(("bg", "surface", "fg", "fg-2", "muted", "line", "accent", "on-accent", "link", "ok", "warn", "err"),
+                       colors)), **{f"chart-{n}": value for n, value in enumerate(CHART[theme], 1)}}
+    for theme, colors in (
+        ("light", ("#ffffff", "#f7f7f7", "#0a0a0a", "#404040", "#595959", "#ebebeb", "#0a0a0a", "#ffffff", "#1f63d1",
+                   "#15703f", "#80560f", "#b3261e")),
+        ("dark", ("#0a0a0a", "#161616", "#f5f5f5", "#b4b4b4", "#999999", "#262626", "#f5f5f5", "#0a0a0a", "#7aaef5",
+                  "#9fd7b5", "#edc677", "#ff9aa9")))
+}
+FONT = '"Inter","Noto Sans TC","PingFang TC","Microsoft JhengHei UI","Microsoft JhengHei",system-ui,sans-serif'
+
+
 _HELPER = """<script>
 (() => {
   const post = (type, data) => parent.postMessage({raphaelPage: 1, type, ...data}, '*');
@@ -138,12 +179,10 @@ def document(page, theme):
             content = "" if end < 0 else content[end + 1:]
         if content == before:
             break
-    colors = ("#18181b", "#fafafa", "#a1a1aa", "#3f3f46", "#a78bfa") if theme == "dark" else (
-        "#ffffff", "#18181b", "#71717a", "#e4e4e7", "#7c3aed")
-    variables = ";".join(f"--{key}:{value}" for key, value in zip(("bg", "fg", "muted", "line", "accent"), colors))
+    variables = ";".join(f"--{key}:{value}" for key, value in {**THEME[theme], "font": FONT}.items())
     return ('<!DOCTYPE html><meta charset="utf-8"><meta name="viewport" content="width=device-width">'
             f"<title>{html_lib.escape(page['title'])}</title><style>:root{{{variables};color-scheme:{theme}}}"
-            "body{background:var(--bg);color:var(--fg);font-family:system-ui,sans-serif}</style>" + _HELPER + content)
+            "body{background:var(--bg);color:var(--fg);font-family:var(--font)}</style>" + _HELPER + content)
 
 
 class PageStore:

@@ -296,6 +296,8 @@ export const it = {
   "page.report.contents": "In questa pagina",
   "page.report.all": "Tutto",
   "page.report.status": "Stato",
+  "page.chart.other": "Altro",
+  "page.chart.total": "Totale",
   "page.report.gone": "Ex membro",
   "page.report.share": "Salva come file",
   "page.report.saved": "Salvato in {p0}",

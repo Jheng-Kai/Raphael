@@ -296,6 +296,8 @@ export const tr = {
   "page.report.contents": "Bu sayfada",
   "page.report.all": "Tümü",
   "page.report.status": "Durum",
+  "page.chart.other": "Diğer",
+  "page.chart.total": "Toplam",
   "page.report.gone": "Eski üye",
   "page.report.share": "Dosya olarak kaydet",
   "page.report.saved": "{p0} klasörüne kaydedildi",

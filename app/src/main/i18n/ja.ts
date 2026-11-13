@@ -1473,6 +1473,8 @@ export const ja = {
   "page.report.saved": "「{p0}」に保存しました",
   "page.report.downloads": "ダウンロード",
   "page.report.saveFailed": "ファイルを保存できませんでした。もう一度お試しください。",
+  "page.chart.other": "その他",
+  "page.chart.total": "合計",
   "page.status.running": "稼働中",
   "page.status.done": "完了",
   "page.status.pending": "実行待ち",

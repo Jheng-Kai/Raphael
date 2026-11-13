@@ -2213,6 +2213,63 @@ diagram layout invariants, open/close/refresh; the file, its style, the theme's 
 drawing only; a real member turn on a real model, the core writing the file and File Explorer
 selecting it are the native boundary.
 
+## Daily overview: figures and charts on a report (owner, 2026-11-14)
+
+R-PAGE-04, R-PAGE-05. The owner replaced the old home (removed 2026-11-12; the app opens on
+Raphael's conversation) with a daily overview a 07:00 routine of Raphael's sends there: weather,
+schedule, investments, projects by status and owner (after his Notion 「目前狀態」 stacked chart) and
+the members' work, as one page with every common kind of chart. Raphael's first try made only a
+members table: his integrated page was refused twice by the page's secret check, on two ordinary
+links (AccuWeather's `…/taichung-city/315040/weather-forecast/315040`, NVIDIA's press release).
+
+- **Kinds.** A report section `stats` (core `report_page._stats`; app `report-chart.ts statsHTML`):
+  up to six tiles of name, value, unit, change (`delta`, arrow by its sign, text colour), note,
+  sparkline (`trend`) and status word; rows of equal length (`data-cols`, two under 520 px or in a
+  half section). A section `chart` (`_chart`, `chartHTML`): `line`, `area`, `bar`, `stacked`, `hbar`,
+  `pie`, `donut`; `labels`, up to eight `series` (`values`, `name`, `member_id`), `unit`, `note`.
+  Any section may take `span: "half"`; `halves()` pairs two in a row, side by side at 640 px of page
+  and wider; with no span anywhere (the live runs' pages gave none even when told), two charts in a
+  row of at most twelve labels each pair the same way. More than six titled sections: the contents only beside the page (`data-many`).
+- **Drawing.** Percent layout and a stretched SVG with `vector-effect: non-scaling-stroke`, so the
+  same markup is the app at every width and the shared file (`preserveAspectRatio` is the one
+  attribute the core's file list gained). `--chart-1`…`--chart-8` (styles.css, both themes;
+  check-palette reports their contrast), member colours only when every series is a member.
+  Single-series columns write every value and draw no axis; otherwise at most five round ticks.
+- **Pointing.** `mountChartHover` (report view): `.rc-tip` in the app's float, crosshair and points
+  on lines, the column on columns, the row on bars, the part on a pie; arrow keys on the focused
+  plot (`role="img"`, named with every value) do the same.
+- **The secret check.** `memory/scan.py` `_readable`: words and numbers joined by `/ - _` are a
+  path, not a key; card numbers begin with 2–6. `agent/pages.py` `_readings`: embedded binary
+  files and integrity hashes are not read as keys, embedded text is decoded and read.
+- **HTML pages** get the app's theme words (`pages.py THEME`, `page-theme.test.ts` keeps them equal
+  to styles.css) and may load chart libraries from the three CDNs; `connect-src` stays `'none'`.
+
+How to get to it: in Raphael's conversation, ask for a daily dashboard of the members' reports
+(or let the 07:00 routine send it); press the page card under his few words.
+
+```powershell
+npm run look -- page-dashboard-card page-dashboard page-dashboard-projects page-dashboard-lines page-dashboard-lower page-dashboard-file page-report page-report-team page-report-tab page-report-file page-report-share page-report-close --theme both --width 1120,720,1920x1080
+```
+
+page-dashboard-card checks the routine's few words and the link card; page-dashboard ten sections,
+every tile and chart part inside its section, no chart word over another, no cut word, the three
+pairs side by side where the page is 640 px wide and stacked where it is not, the tiles' values,
+arrow and sparkline, the area's last value and the rain columns' values and heights;
+page-dashboard-projects the stacked totals 14|6|22|92|0, the legend in the chart colours in order,
+one rounded top per column and the box of 等待回覆's owners and total inside the page;
+page-dashboard-lines the gap (four stretches, three end dots), the crosshair and the box;
+page-dashboard-lower the ring's whole, unit and shares, the bars' totals and lengths and the members'
+routines; page-dashboard-file the same in the saved file, with nothing to run, focus or float. The
+report scenes are the consumers of the shared report body (its grid and contents).
+
+Tests: core `tests/agent/test_pages.py` (the dashboard kept, every chart refusal, the links,
+pictures, libraries and times that are not secrets, the keys still refused, the theme words);
+`tests/memory/test_scan.py` (readable paths, keys in links, millisecond times);
+`app/src/main/report-chart.test.ts` (ticks, labels, tiles, every chart kind, colours, the arrow
+keys); `page-theme.test.ts`; `report-page.test.ts` (the file's elements and attributes).
+Native boundary: a real Raphael turn on a real model building the page and the routine is proven
+in an isolated core (`RpcDriver`, Codex CLI); the owner's own build and data are not touched.
+
 ## Diagnostic credential security (2026-11-05)
 
 R-SEC-LOG-01: core/tests/test_security_redaction.py covers complete quoted passwords,

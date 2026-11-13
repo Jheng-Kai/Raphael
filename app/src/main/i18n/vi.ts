@@ -296,6 +296,8 @@ export const vi = {
   "page.report.contents": "Trên trang này",
   "page.report.all": "Tất cả",
   "page.report.status": "Trạng thái",
+  "page.chart.other": "Khác",
+  "page.chart.total": "Tổng",
   "page.report.gone": "Thành viên cũ",
   "page.report.share": "Lưu thành tệp",
   "page.report.saved": "Đã lưu vào {p0}",

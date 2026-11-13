@@ -416,11 +416,21 @@ export interface ReportItem { title: string; text?: string; status?: ReportStatu
 export interface ReportRow { cells: string[]; group?: string; member_id?: number; status?: ReportStatus; label?: string }
 export interface ReportNode { id: string; member_id?: number; owner?: true; name?: string; note?: string }
 export interface ReportEdge { from: string; to: string; label?: string }
-export type ReportSection =
+/** A figure on a tile: what it is, its value as written, its unit, its change ("+1.35%"), a few words, its recent values. */
+export interface ReportTile { name: string; value: string; unit?: string; delta?: string; note?: string; trend?: number[]; status?: ReportStatus; label?: string }
+/** One line or set of bars: a value for each label (null: a gap in a line), its name and the member whose colour it takes. */
+export interface ReportSeries { values: (number | null)[]; name?: string; member_id?: number }
+export type ReportChartType = "line" | "area" | "bar" | "stacked" | "hbar" | "pie" | "donut";
+export type ReportChart = { kind: "chart"; title?: string; span?: "half"; type: ReportChartType; labels: string[]; series: ReportSeries[]; unit?: string; note?: string };
+export type ReportStats = { kind: "stats"; title?: string; span?: "half"; tiles: ReportTile[] };
+export type ReportSection = (
   | { kind: "findings"; title?: string; callout?: string; items: ReportItem[] }
   | { kind: "table"; title?: string; columns: string[]; rows: ReportRow[]; status_title?: string }
   | { kind: "team"; title?: string; nodes: ReportNode[]; edges: ReportEdge[]; notes?: { label: string; text: string }[] }
-  | { kind: "text"; title?: string; text: string };
+  | { kind: "text"; title?: string; text: string }
+  | ReportStats
+  | ReportChart
+) & { span?: "half" };
 export interface Report { as_of: string; sections: ReportSection[] }
 export interface ReportOpened { kind: "report"; title: string; rev: number; report: Report }
 /** Where a report's file went (`report_save`): the owner's output folder, by its name, or Downloads. */

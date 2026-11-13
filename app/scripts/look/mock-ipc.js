@@ -614,6 +614,19 @@ export function installMock(fixture, config = {}, target = window) {
       messages: [{ seq: 1, kind: "reply", text: opening, at_ms: data.now - 60000 }, { seq: 2, kind: "reply", text: done, at_ms: data.now }], attachments: [],
       pages: [{ id: "page-report", title: data.pageReport.title, rev: 1, height: 320, source: "html", server: null, fallback: data.pageReport.title, kind: "report" }] });
   }
+  // Raphael's daily overview (owner, 2026-11-14: the old home is now this page, sent by a 07:00 routine to his conversation):
+  // a routine's turn that says in a few words what it did, and the page.
+  if (variant.dashboardTurn) {
+    const base = data.turns.find(turn => turn.member_id === 0 && turn.conversation_id === 1);
+    // The newest thing in the conversation, as it is when the owner opens the app in the morning.
+    const start = new Date(data.now - 60000);
+    const said = "早安。今天的總覽好了：台北午後有雨、三個行程，台股昨天收漲 1.35%；專案有 14 件待處理，小森的掃描沒跑完，重新登入後會補跑。";
+    data.turns.push({ ...structuredClone(base), id: 804, created_at_ms: start.getTime(), session_id: "routine-dashboard", source: "routine", route: "routine",
+      question: "每日總覽", text: said, status: "done", steps: [], attachments: [],
+      routine: { id: 4, member_id: 0, title: "每日總覽", prompt: "問重要成員今天的狀況，整理成一頁總覽。", schedule: { kind: "daily", time: "07:00" }, enabled: true },
+      messages: [{ seq: 1, kind: "reply", text: said, at_ms: start.getTime() }],
+      pages: [{ id: "page-dashboard", title: data.pageDashboard.title, rev: 1, height: 320, source: "html", server: null, fallback: data.pageDashboard.title, kind: "report" }] });
+  }
   if (variant.roomOwnerCard) {
     const kind = variant.roomOwnerCard;
     const base = kind === "connect" ? data.connectorTurns.gmail : kind === "secret" ? data.secretTurns.notion : kind === "mail" ? data.mailTurns.draft : data.turns.at(-1);
@@ -1014,9 +1027,9 @@ export function installMock(fixture, config = {}, target = window) {
       case "pages.open":
         if (variant.pageGone) throw { kind: "not_found", message: "gone" };
         // A report has no frame: its checked content, which the app draws, and the time its data is from.
-        if (p.id === "page-report") {
-          const { title, sections } = data.pageReport;
-          return { kind: "report", title, rev: state.pageRevs["page-report"] ?? 1, height: 320, source: "html", server: null, report: { as_of: new Date(data.now - 30 * 60000).toISOString().replace(/\.\d+Z$/, "Z"), sections: structuredClone(sections) } };
+        if (p.id === "page-report" || p.id === "page-dashboard") {
+          const { title, sections } = p.id === "page-report" ? data.pageReport : data.pageDashboard;
+          return { kind: "report", title, rev: state.pageRevs[p.id] ?? 1, height: 320, source: "html", server: null, report: { as_of: new Date(data.now - 30 * 60000).toISOString().replace(/\.\d+Z$/, "Z"), sections: structuredClone(sections) } };
         }
         // Not a file of the dev server, which would write its own client into the page.
         // A page its member changed (`state.updatePage`) is another page: the news page's last heading, the product's price.

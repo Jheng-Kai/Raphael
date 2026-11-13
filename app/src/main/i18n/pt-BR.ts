@@ -296,6 +296,8 @@ export const ptBR = {
   "page.report.contents": "Nesta página",
   "page.report.all": "Tudo",
   "page.report.status": "Status",
+  "page.chart.other": "Outros",
+  "page.chart.total": "Total",
   "page.report.gone": "Ex-membro",
   "page.report.share": "Salvar como arquivo",
   "page.report.saved": "Salvo em {p0}",
