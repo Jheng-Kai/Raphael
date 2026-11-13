@@ -310,7 +310,9 @@ including compact focus, filtering, long names and the room finder.
 
 R-OWNER-03, R-CARD-09 and R-CARD-10 extend the shared conversation cards.
 The existing Other/free-answer field remains in ownerQuestionHTML. A shared
-pending-questions controller mounts above each private/room scrollport and uses
+pending-questions controller mounts above each private/room scrollport, below the
+top row (R-TOP-01; the stage reaches the window's top, so the row takes the thread's lead
+as its top margin and the thread gives it up), with the thread's sides, and uses
 a soft filled compact button and shared menu (R-UI-98). The button has no input
 outline (R-UI-18 exception), and uses the shared chat icon, truncated title, small
 pending count and downward chevron. It observes scroll,
@@ -347,11 +349,11 @@ fields, ordinary code and owner text. This does not prove live provider behavior
 Selected integration matrix (both themes; 1120,720,1920x1080):
 
 ```powershell
-npm run look -- owner-question-pending owner-question-brought owner-question-pending-page owner-question-pending-room owner-question-pending-many owner-question-asked owner-question-typed owner-question-text owner-question-answered owner-question-cancelled owner-question-room permission-detail-label local-permission-card card-message-waiting composio-readable-result member-text room-text --theme both --width 1120,720,1920x1080
+npm run look -- owner-question-pending owner-question-brought owner-question-pending-page owner-question-pending-room owner-question-pending-room-row owner-question-pending-many owner-question-asked owner-question-typed owner-question-text owner-question-answered owner-question-cancelled owner-question-room permission-detail-label local-permission-card card-message-waiting composio-readable-result member-text room-text --theme both --width 1120,720,1920x1080
 ```
 
 New scenes: owner-question-pending, owner-question-brought,
-owner-question-pending-page, owner-question-pending-room,
+owner-question-pending-page, owner-question-pending-room, owner-question-pending-room-row,
 owner-question-pending-many, permission-detail-label, composio-readable-result.
 Compare the floating compact button with conversation controls, its list with shared
 menus, and permission details with card-message-waiting at matching sizes/themes.
