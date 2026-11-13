@@ -32,11 +32,11 @@ back, in turn: the two stacked pills, because the stack took room the AI tools a
 (「這個不是這樣做，我要的是左右 button」); and a worded pill at each end of the row (「改成集中在中間這邊好不好？
 然後 icon 改一下，可以改特別一點點，不一定要寫字，can 用兩個三角形之類的」). The pair stands in the same place on
 every step and never stacks, and the height a second pill used belongs to the step's content. The welcome keeps
-its one wide pill (360 px) in the middle, with a round × at its left on a rerun; a status in a tile
-wraps inside it in every language. There is no back arrow at the top; the first run's welcome has the pill alone.
-The left slot is the way out of the screen: on a rerun's welcome (the guide opened again from Settings, scene
-`onboarding-rerun`) it is the same round button holding a × named 取消, which leaves the guide (a close is the × alone,
-never a word button; owner, 2026-11-11), so nothing in the guide stacks.
+its one wide pill (360 px) in the middle and nothing else; a status in a tile
+wraps inside it in every language. There is no back arrow at the top: the welcome has the pill alone, on a first run and
+on a rerun (the guide opened again from Settings, scene `onboarding-rerun`) alike. Owner, 2026-11-14: 「第一頁應該只會有開始就好了。
+它那個叉叉現在是因為我已經導覽過了，所以才會有叉叉，那基本上一般的使用者不會看到這個」; the Settings entry stays for now (「先不用關啦」),
+and a rerun leaves by its last step's check. Before that, on a rerun a round × named 取消 stood at the pill's left.
 
 0. **Welcome** (`onboarding`, check `onboarding-welcome`): Raphael's emblem (the voice screen's
    canvas renderer, appearing as on the desktop), his name as one wordmark for every language,
@@ -114,7 +114,7 @@ grid fades out over it, that the steps' content ends above the foot, that nothin
 and that the dark theme has no light edges. `onboarding-back-hover` hovers the way back (a lighter surface than at rest)
 and `onboarding-back-focus` presses Shift+Tab from the primary (the way back takes the app's focus ring, so it
 is before the primary in the tab order); `onboarding-rerun` opens the guide from Settings 導覽 and checks that the
-welcome's row is the × and the pill on one line. Native proof needs an authorized fresh `RAPHAEL_DATA_DIR`: finish the
+welcome is the first run's own: the one pill, no pair and no ×. Native proof needs an authorized fresh `RAPHAEL_DATA_DIR`: finish the
 steps, relaunch and verify onboarding stays dismissed and the chosen tools, services and switches
 persist. Keep sanitized readback and stop the owned dev process.
 
@@ -143,8 +143,8 @@ columns, the control inside its tile, whole names, a headline, the floating slim
 title, the arrow and the pill on one centred row as wide as the welcome's pill (the foot one control
 tall plus its padding, the content ending above it) and no purpose line. Vitest
 (`onboarding/mount.test.ts`): a step with a way back draws the arrow, which has no text and the name
-`onboarding.back` and goes back, then the pill and nothing else; the first run's welcome draws the pill alone and
-a rerun's the × (named 取消, leaves the guide) then the pill.
+`onboarding.back` and goes back, then the pill and nothing else; the welcome draws the pill alone on a first run and
+on a rerun, and the way back from the first step returns to it.
 
 UI hand-off also runs these named scenes at 1920x1080 in both themes, as required by the shared
 guardian hand-off gate.

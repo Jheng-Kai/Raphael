@@ -76,7 +76,6 @@ export interface BackgroundQuestionsHost {
   asker?(question?: BackgroundQuestion): Asker;
   /** The cards changed (one came or went): the page may keep its thread at the bottom. */
   changed?(): void;
-  manageLocal?(): void;
 }
 
 export interface BackgroundQuestions {
@@ -173,7 +172,6 @@ export function createBackgroundQuestions(host: BackgroundQuestionsHost): Backgr
     if (local) {
       e.stopPropagation();
       if (local.disabled) return;
-      if (local.dataset.act === "local-settings") { host.manageLocal?.(); return; }
       const task = Number(local.closest<HTMLElement>("[data-task]")?.dataset.task);
       if (Number.isInteger(task)) void answer(task, local.dataset.card ?? "", ["perm-always", "perm-once"].includes(local.dataset.act ?? ""), local.dataset.act);
       return;

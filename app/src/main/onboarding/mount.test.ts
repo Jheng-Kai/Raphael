@@ -166,21 +166,18 @@ describe("the guide", () => {
     expect(root.querySelector('[data-ob="back"]')).toBeNull();
   });
 
-  test("a rerun's welcome is one row too: a round × that leaves the guide, then the pill", async () => {
+  test("a rerun's welcome is the first run's own: the one pill, with no × beside it", async () => {
     await open("rerun");
-    const [close, primary, ...more] = [...root.querySelectorAll<HTMLElement>(".ob-foot .btn")];
-    expect(more).toHaveLength(0);
-    expect(close!.dataset.ob).toBe("back");
-    expect(primary!.dataset.ob).toBe("next");
-    // A close is the × alone, with the name 取消 had: no words, a drawing, the same round button as the arrow.
-    expect(close!.classList.contains("icon") && close!.classList.contains("ob-back")).toBe(true);
-    expect(close!.textContent).toBe("");
-    expect(close!.getAttribute("aria-label")).toBe("Cancel");
-    expect(close!.getAttribute("title")).toBe("Cancel");
-    expect(close!.querySelector("svg.i")).not.toBeNull();
+    const controls = [...root.querySelectorAll<HTMLElement>(".ob-foot .btn")];
+    expect(controls.map(control => control.dataset.ob)).toEqual(["next"]);
+    expect(root.querySelector('.ob-foot [data-ob="back"], .ob-foot .icon, .ob-foot [aria-label="Cancel"]')).toBeNull();
+    expect(text('[data-ob="next"]')).toBe("Start");
     expect(done).not.toHaveBeenCalled();
-    await press('.ob-foot button[aria-label="Cancel"]');
-    expect(done).toHaveBeenCalledWith({ finished: false });
+    await press('[data-ob="next"]');
+    expect(root.dataset.step).toBe("tools");
+    await press('.ob-foot [data-ob="back"]');
+    expect(root.dataset.step).toBe("welcome");
+    expect(root.querySelector('.ob-foot [data-ob="back"]')).toBeNull();
   });
 
   test("a first run saves onboarded once, on the last step, and tells who opened it", async () => {
@@ -195,15 +192,15 @@ describe("the guide", () => {
     expect(root.children).toHaveLength(0);
   });
 
-  test("a rerun saves nothing and can be left from its welcome", async () => {
+  test("a rerun saves nothing, and its welcome has no way out", async () => {
     await open("rerun");
     for (let i = 0; i < 3; i++) await press('[data-ob="next"]');
     await press('[data-ob="next"]');
     expect(setDevice).not.toHaveBeenCalled();
     expect(done).toHaveBeenCalledWith({ finished: true });
     await open("rerun");
-    await press('[data-ob="back"]');
-    expect(done).toHaveBeenLastCalledWith({ finished: false });
+    expect(root.querySelector('[data-ob="back"]')).toBeNull();
+    expect(done).toHaveBeenCalledTimes(1);
   });
 
   test("a failed save keeps the guide open and says why", async () => {

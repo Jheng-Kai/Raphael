@@ -46,11 +46,6 @@ export const APPEARANCES: Choice[] = [
   { value: "light", get label() { return t("settings.015"); } },
   { value: "dark", get label() { return t("settings.016"); } },
 ];
-export const LOCAL_COMMAND_MODES: Choice[] = [
-  { value: "ask", get label() { return t("local.ask"); } },
-  { value: "always", get label() { return t("local.always"); } },
-  { value: "never", get label() { return t("local.never"); } },
-];
 /** What one background task may spend (brain/settings.py, WORKER_COST_CAPS). */
 export const WORKER_COST_CAPS: Choice[] = [
   { value: "0.1", label: "US$0.10" },
@@ -500,13 +495,10 @@ export const computerApps = (device: DeviceSettings): readonly { exe: string; na
  */
 function computerRows(v: SettingsView): string[] {
   const apps = computerApps(v.device);
-  const desktop = [
-    row(t("local.title"), "", sel(LOCAL_COMMAND_MODES, v.brain?.local_commands_mode ?? "ask", t("local.title"), ` data-k="local-commands"${v.brain === null ? " disabled" : ""}`)),
-  ];
-  if (apps.length === 0) return [...desktop, row(`<span class="val">${esc(t("settings.computerNone"))}</span>`)];
-  return [...desktop, ...apps.map((app) =>
+  if (apps.length === 0) return [row(`<span class="val">${esc(t("settings.computerNone"))}</span>`)];
+  return apps.map((app) =>
     row(esc(app.name), "", iconBtn("more", t("members.more", { p0: app.name }), ` data-act="computer-menu" data-exe="${esc(app.exe)}" aria-haspopup="menu" aria-expanded="false"`)),
-  )];
+  );
 }
 
 /** Services shared by every member. */

@@ -170,11 +170,10 @@
 .mb-sec.mb-hidden[data-empty]:not(:has([data-hidden-rooms] > *)) { display: none; }
 .mb-hidden-rooms { display: flex; flex-direction: column; gap: var(--sp-1); }
 .mb-hidden-rooms:empty { display: none; }
-/* The account menu (R-SIDE-02): rows of an icon and words, 用量 with its number at the right before its chevron; the submenu names the window, its number
-   and when it resets, then a hairline and 管理用量. Colours are the menu's own tokens. */
+/* The account menu (R-SIDE-02): rows of an icon and words, 用量 with a chevron at the right; the submenu has a block for each subscription (its window, its
+   number and when it resets), then a hairline and 管理用量. Colours are the menu's own tokens. */
 .menu.account-menu { min-width: 232px; }
-.menu.account-menu .account-used { flex: none; margin-left: auto; color: var(--text-3); font-size: var(--fs-xs); white-space: nowrap; }
-.menu.account-menu button > svg.i { flex: none; color: var(--text-3); }
+.menu.account-menu button > svg.i { flex: none; margin-left: auto; color: var(--text-3); }
 .menu.account-usage { min-width: 220px; }
 .account-window { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: var(--sp-4); row-gap: 2px; padding: var(--sp-2); font-size: var(--fs-sm); }
 .account-window-name { color: var(--text-3); }

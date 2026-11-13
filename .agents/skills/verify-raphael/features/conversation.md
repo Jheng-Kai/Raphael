@@ -1740,7 +1740,7 @@ npm run look -- card-mail-close card-page-close card-connect-close --theme both 
 npm run look -- card-key-guide-retry --theme both --width 1120,720,1920x1080
 ```
 
-| One-card local command consent and folded settings | `npm run look -- local-command-consent local-command-later local-command-background local-command-manage room-question-card card-background --theme both --width 1120,720,1920x1080` | Exact command/directory remain in disclosure; named command consent, original answer and settings boundaries remain. |
+| One-card local command consent | `npm run look -- local-command-consent local-command-later local-command-background room-question-card card-background --theme both --width 1120,720,1920x1080` | Exact command/directory remain in disclosure; named command consent and the original answer remain; the card has no way into a setting. |
 | One-card settled local command | `npm run look -- local-command-once --theme both --width 1120,720,1920x1080` | One answer settles the original card and removes decision/settings controls. |
 | Connected message draft rows | `npm run look -- card-message-waiting card-message-once card-message-deny card-message-failed card-message-retry --theme both --width 1120,720,1920x1080` | Exact delivery fields and body survive settlement/failure; retry answers only the original approval. |
 

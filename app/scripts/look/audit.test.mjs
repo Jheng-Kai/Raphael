@@ -816,8 +816,8 @@ describe("rendered look checks", () => {
     const { audit } = productAudit('<nav class="side"><button class="btn icon sidebar-tool" style="border:0;background:gray"></button></nav><button class="btn icon" style="border:0;background:gray"></button>');
     expect(audit().productRules.filter(item => item.rule === 'R-UI-16')).toHaveLength(1);
   });
-  it("lets the guide's round arrow keep the grey surface of the pill it replaced, and no other icon (R-UI-16)", () => {
-    const { audit } = productAudit('<div class="ob-foot"><div class="action-row ob-actions"><button class="btn icon ob-back" style="border:0;background:gray"></button><button class="btn pri" style="border:1px solid gray">Next</button></div></div><button class="btn icon" style="border:0;background:gray"></button>');
+  it("lets the guide's pair of round buttons keep their grey surface, and no other icon (R-UI-16)", () => {
+    const { audit } = productAudit('<div class="ob-foot"><div class="action-row ob-actions ob-pair"><button class="btn icon" style="border:0;background:gray"></button><button class="btn icon pri" style="border:0;background:gray"></button></div></div><button class="btn icon" style="border:0;background:gray"></button>');
     expect(audit().productRules.filter(item => item.rule === 'R-UI-16')).toHaveLength(1);
   });
   it("rejects icon surfaces, incorrect glyph sizing and off-center icons (R-UI-16/19)", () => {

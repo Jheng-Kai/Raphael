@@ -1359,9 +1359,9 @@ export function checkRendered(name, context = {}) {
     return { check: name };
   }
   if (name === "menu-settings-redraw") {
-    const anchor = document.querySelector('.sel[data-k="local-commands"]'), menu = document.getElementById('app-popover');
+    const anchor = document.querySelector('.sel[data-k="retention"]'), menu = document.getElementById('app-popover');
     require(visible(menu) && anchor.getAttribute('aria-expanded') === 'true', "the replacement control keeps its open menu");
-    require(menu.querySelector('[data-value="never"][aria-checked="true"]'), "the refreshed choice keeps its check");
+    require(menu.querySelector('[data-value="7"][aria-checked="true"]'), "the refreshed choice keeps its check");
     return { check: name };
   }
   if (name === "submenu-placement" || name === "submenu-flip") {
@@ -2401,17 +2401,15 @@ export function checkRendered(name, context = {}) {
     }
     return { check: name, state: card.dataset.cardState };
   }
-  if (name.startsWith("local-command-setting") || name === "local-command-menu") {
-    const picker = document.querySelector('[data-k="local-commands"]');
-    require(visible(picker) && picker.classList.contains('sel'), 'local commands use the shared settings dropdown');
-    if (name === "local-command-menu") {
-      require([...document.querySelectorAll('.menu [data-value]')].map(item => item.dataset.value).join(',') === 'ask,always,never', 'the shared setting offers ask, always and never');
-    }
-    if (name === "local-command-setting-saved") {
-      const saved = window.__look.calls.filter(call => call.method === 'settings.set' && call.params.key === 'local_commands_mode');
-      require(saved.length === 1 && ['always', 'never'].includes(saved[0].params.value), 'the choice reaches shared core settings');
-    }
-    return {check:name, label:picker.textContent};
+  if (name === "local-command-setting-gone") {
+    // Owner, 2026-11-14: only a quick question reaches this PC, so Settings has no control for local commands, in any words.
+    const pane = document.querySelector('.modal-scrim');
+    require(visible(pane.querySelector('[data-pane][aria-current="page"]')), 'Safety is open');
+    require(!pane.querySelector('[data-k="local-commands"]'), 'there is no local commands control');
+    require(!/本機指令|Local commands|Ask every time|每次詢問/.test(pane.textContent), `no word of it is left in Safety: ${pane.textContent.slice(0, 120)}`);
+    const last = [...pane.querySelectorAll('.sgroup')].at(-1);
+    require(visible(last) && last.querySelectorAll('.slist > *').length >= 1, 'the computer section still has its row (the apps always allowed, or the note that there are none)');
+    return {check:name};
   }
   if (name === "local-command-card" || name === "local-command-settled") {
     const card = document.querySelector('[data-permission-card="perm-local"]'), box = card?.getBoundingClientRect();
@@ -2422,8 +2420,7 @@ export function checkRendered(name, context = {}) {
     const command = card.querySelector('.local-command');
     require(command.textContent.includes('Get-Process | Sort-Object CPU') && command.textContent.includes('LoadPercentage'), 'the exact multiline command survives escaping');
     require(command.scrollWidth <= command.clientWidth + 1, 'long command lines wrap inside the card');
-    if (card.dataset.cardState === 'pending') require(visible(card.querySelector('[data-act="local-settings"]')), 'command access can be managed from the opened details');
-    else require(!card.querySelector('[data-act="local-settings"]'), 'settled commands remove their settings action');
+    require(!card.querySelector('[data-act="local-settings"], [data-act="manage-local"]'), 'the card has no way into a setting: there is none to manage (owner, 2026-11-14)');
     const answers = [...card.querySelectorAll('.cc-actions button')];
     if (name === "local-command-card") {
       require(answers.length === (card.dataset.kind === 'local_access' ? 4 : 2), 'first consent has four real answers; later commands have two');
@@ -2658,17 +2655,15 @@ export function checkRendered(name, context = {}) {
       footNear(m.left,a.left,'the menu\'s left edge is the face\'s');
       require(m.bottom<=a.top-2&&m.bottom>=a.top-8,'the menu opens above the face');
     }
-    const usage=rows[0],used=usage.querySelector('.account-used'),chevron=usage.querySelector(':scope > svg.i');
-    require(!!used===usage.hasAttribute('aria-haspopup')&&!!used===!!chevron,'用量 has its number and a chevron together, or neither');
-    if(used){
-      require(/\d+\s*%/.test(used.textContent)&&visible(used)&&footBox(used).right<=footBox(chevron).left+1,'the number stands at the right, before the chevron');
-      require(footBox(chevron).right<=m.right-4&&footBox(chevron).right>=m.right-16,'the chevron ends the row');
-    }
+    const usage=rows[0],chevron=usage.querySelector(':scope > svg.i');
+    require(!usage.querySelector('.account-used')&&!/\d\s*%/.test(usage.textContent),'用量 has no number: one provider\'s figure under the bare word would read as everyone\'s');
+    require(!!chevron===usage.hasAttribute('aria-haspopup'),'用量 has its chevron when it has a submenu, and neither otherwise');
+    if(chevron)require(visible(chevron)&&footBox(chevron).right<=m.right-4&&footBox(chevron).right>=m.right-16,'the chevron ends the row');
     require(rows.slice(1).every(row=>!row.hasAttribute('aria-haspopup')&&!row.querySelector(':scope > svg.i')),'the other rows are plain');
     const tokens=(()=>{const probe=document.createElement('span');probe.style.backgroundColor='var(--menu)';document.body.append(probe);const value=getComputedStyle(probe).backgroundColor;probe.remove();return value;})();
     require(getComputedStyle(menu).backgroundColor===tokens,'the menu wears the app\'s menu token');
     require(menu.contains(document.activeElement)||!!document.getElementById('app-submenu')?.contains(document.activeElement),'the focus is in the menu or its submenu');
-    return {check:name,rail:footRail(),used:used?.textContent??null,menu:[Math.round(m.left),Math.round(m.top),Math.round(m.width),Math.round(m.height)]};
+    return {check:name,rail:footRail(),chevron:!!chevron,menu:[Math.round(m.left),Math.round(m.top),Math.round(m.width),Math.round(m.height)]};
   }
   if(name==='foot-usage-submenu'){
     const menu=document.getElementById('app-popover'),sub=document.getElementById('app-submenu');
@@ -2677,11 +2672,22 @@ export function checkRendered(name, context = {}) {
     require(row.getAttribute('aria-expanded')==='true','the row says its submenu is open');
     require(s.left>=m.right-2&&s.left<=m.right+12||s.right<=m.left+2,'the submenu stands at the menu\'s edge');
     require(s.top<=r.bottom&&s.bottom>=r.top,'and level with its row');
-    const name1=sub.querySelector('.account-window-name'),used=sub.querySelector('.account-window-used'),reset=sub.querySelector('.account-window-reset'),manage=sub.querySelector('[data-account="manage"]');
-    require(name1&&/Codex|Claude|Antigravity/.test(name1.textContent)&&/\d+\s*%/.test(used.textContent)&&reset&&/\d/.test(reset.textContent),`the window's name, its number and when it resets: ${sub.textContent}`);
-    require(visible(manage)&&manage.textContent.trim().length>0&&sub.querySelectorAll('.menu-sep').length===1&&sub.querySelector('.menu-sep').nextElementSibling===manage,'a hairline, then 管理用量');
-    require(footBox(used).right>=s.right-16&&footBox(used).left>footBox(name1).left,'the number stands at the right of the window\'s name');
-    require(s.left>=0&&s.right<=innerWidth&&s.bottom<=innerHeight,'the submenu lies inside the window');
+    // One block for every subscription the reading gives a window for, in the reading's order (the mock core's, read here).
+    const known=window.__look.data.allowances.brains.filter(brain=>brain.windows.some(span=>typeof span.remaining_percent==='number'));
+    const blocks=[...sub.querySelectorAll('.account-window')],manage=sub.querySelector('[data-account="manage"]');
+    require(known.length>=2&&blocks.length===known.length,`a block for each of the ${known.length} subscriptions, not only the tightest (${blocks.length})`);
+    const names=blocks.map(block=>block.querySelector('.account-window-name').textContent.trim().split(' ')[0]);
+    require(new Set(names).size===names.length&&names.every(word=>/^(Claude|Codex|Antigravity)$/.test(word)),`each block names its own subscription: ${names.join(', ')}`);
+    require(names.join()===known.map(brain=>({claude:'Claude',codex:'Codex',gemini:'Antigravity',antigravity:'Antigravity'}[brain.id])).join(),`in the reading's order: ${names.join(', ')}`);
+    blocks.forEach((block,at)=>{
+      const name1=block.querySelector('.account-window-name'),used=block.querySelector('.account-window-used'),reset=block.querySelector('.account-window-reset'),r1=footBox(block);
+      require(/\d+\s*%/.test(used.textContent)&&reset&&/\d/.test(reset.textContent)&&visible(name1)&&visible(used)&&visible(reset),`block ${at}: the window's name, its number and when it resets: ${block.textContent}`);
+      require(footBox(used).right>=r1.right-16&&footBox(used).left>footBox(name1).left,`block ${at}: the number stands at the right of the window\'s name`);
+      require(name1.scrollWidth<=name1.clientWidth+1&&footBox(used).right<=s.right,`block ${at}: its words show whole inside the submenu`);
+      if(at)require(r1.top>=footBox(blocks[at-1]).bottom-1,`block ${at} stands under the one before it`);
+    });
+    require(visible(manage)&&manage.textContent.trim().length>0&&sub.querySelectorAll('.menu-sep').length===1&&sub.querySelector('.menu-sep').nextElementSibling===manage&&footBox(blocks.at(-1)).bottom<=footBox(sub.querySelector('.menu-sep')).top+1,'a hairline after the last block, then 管理用量');
+    require(s.left>=0&&s.right<=innerWidth&&s.bottom<=innerHeight&&s.top>=0,'the submenu lies inside the window');
     return {check:name,sub:[Math.round(s.left),Math.round(s.top),Math.round(s.width),Math.round(s.height)],words:sub.textContent};
   }
   if(name==='foot-usage-none'){
@@ -3588,7 +3594,7 @@ export function checkRendered(name, context = {}) {
     const pill = document.querySelector('.ob-actions > .btn.pri'), box = pill.getBoundingClientRect();
     // The guide keeps its own wide pills instead of the shared button height.
     require(box.width >= 240 && box.height >= 40 && parseFloat(getComputedStyle(pill).borderTopLeftRadius) >= box.height / 2 - 1, "the one button is a wide pill");
-    // The welcome's one pill is 360 px wide, or what a narrow card leaves it; a rerun's × and pill fill the same width.
+    // The welcome's one pill is 360 px wide, or what a narrow card leaves it, on a first run and on a rerun alike.
     const foot = document.querySelector('.ob-foot'), footStyle = getComputedStyle(foot), room = foot.getBoundingClientRect().width - parseFloat(footStyle.paddingLeft) - parseFloat(footStyle.paddingRight);
     require(Math.abs(box.width - Math.min(360, room)) <= 1, `the welcome's pill is 360 px wide, or its room (${Math.round(box.width)} px of ${Math.round(Math.min(360, room))})`);
     require(!document.querySelector('.ob-foot .ob-pair'), "the welcome's row is its own, not a step's pair");
@@ -3655,34 +3661,6 @@ export function checkRendered(name, context = {}) {
     require(ink.bottom <= card.bottom && left.bottom <= card.bottom && left.left >= card.left && ink.right <= card.right, "both stay inside the card");
     return { back: left, ink };
   };
-  // A rerun's welcome keeps the welcome's own row: a round × for the way out at the left of the one wide pill (a close is
-  // the × alone, never a word button; owner, 2026-11-11).
-  const requireWelcomeRow = card => {
-    const primary = document.querySelector('.ob-actions > .btn.pri'), back = document.querySelector('.ob-actions > .btn.ob-back'), rowEl = document.querySelector('.ob-actions'), row = rowEl.getBoundingClientRect();
-    const foot = document.querySelector('.ob-foot'), footBox = foot.getBoundingClientRect(), footStyle = getComputedStyle(foot);
-    const ink = primary.getBoundingClientRect(), arrow = back?.getBoundingClientRect();
-    require(ink.width >= row.width * .8 && ink.width >= 240 && parseFloat(getComputedStyle(primary).borderTopLeftRadius) >= ink.height / 2 - 1, "the primary action is a wide pill that fills what the arrow leaves of its row");
-    require(back && back.matches('.btn.icon') && !back.textContent.trim() && back.querySelector(':scope > svg.i'), "the way back is a button with an arrow drawn in it and no words");
-    require(back.getAttribute('aria-label')?.trim() && back.getAttribute('aria-label') === back.getAttribute('title'), `the arrow is named for assistive tech and its tooltip alike (${back.getAttribute('aria-label')})`);
-    // One row at any width: the arrow and the pill centre on one line, the arrow at the left with the gap of the spacing token.
-    require(Math.abs((arrow.top + arrow.bottom) / 2 - (ink.top + ink.bottom) / 2) <= 1, `the arrow and the pill are on one row (${Math.round((arrow.top + arrow.bottom) / 2)} against ${Math.round((ink.top + ink.bottom) / 2)})`);
-    const gap = parseFloat(getComputedStyle(rowEl).columnGap);
-    require(arrow.right <= ink.left && Math.abs(ink.left - arrow.right - gap) <= 1 && gap === 8, `the arrow is left of the pill with an 8 px gap (${Math.round(ink.left - arrow.right)} px)`);
-    require(Math.abs(arrow.width - arrow.height) <= 1 && Math.abs(arrow.height - ink.height) <= 1 && parseFloat(getComputedStyle(back).borderTopLeftRadius) >= arrow.height / 2 - 1, `the arrow is a circle as tall as the pill (${Math.round(arrow.width)} x ${Math.round(arrow.height)} against ${Math.round(ink.height)})`);
-    const surface = getComputedStyle(back).backgroundColor;
-    require(!['rgba(0, 0, 0, 0)', 'transparent'].includes(surface) && surface !== getComputedStyle(primary).backgroundColor && surface !== getComputedStyle(document.querySelector('.ob-card')).backgroundColor, `the arrow keeps a surface of its own, not the card's or the pill's (${surface})`);
-    // Together they are as wide as the welcome's single pill: the foot's padding leaves the row 360 px, or less in a narrow card.
-    const room = footBox.width - parseFloat(footStyle.paddingLeft) - parseFloat(footStyle.paddingRight), together = ink.right - arrow.left;
-    require(Math.abs(together - Math.min(360, room)) <= 1 && Math.abs(arrow.left - row.left) <= 1 && Math.abs(ink.right - row.right) <= 1, `the arrow and the pill fill the width of the welcome's pill (${Math.round(together)} px of ${Math.round(Math.min(360, room))})`);
-    require(Math.abs((arrow.left + ink.right) / 2 - (card.left + card.width / 2)) <= 2, "the arrow and the pill are centred in the card");
-    // The foot is one control and its padding tall: the second pill's height is the content's.
-    const pad = parseFloat(footStyle.paddingTop) + parseFloat(footStyle.paddingBottom);
-    require(footBox.height <= ink.height + pad + 1, `the foot is one control plus its padding tall (${Math.round(footBox.height)} px, a control ${Math.round(ink.height)} + ${Math.round(pad)})`);
-    require(document.querySelector('.ob-body').getBoundingClientRect().bottom <= footBox.top + 1, "the content area ends where the foot begins");
-    // Tab order: the arrow, then the pill.
-    require(!!(back.compareDocumentPosition(primary) & Node.DOCUMENT_POSITION_FOLLOWING), "the arrow comes before the pill in the tab order");
-    return { ink, arrow };
-  };
   if (name === "onboarding-back-hover" || name === "onboarding-back-focus") {
     // The way back of a step's pair (owner, 2026-11-11): a round button on a quiet grey of its own, one step lighter under
     // the pointer, with no edge; the keyboard shows the app's usual ring on it, and it comes before the primary.
@@ -3705,16 +3683,13 @@ export function checkRendered(name, context = {}) {
     return { check: name };
   }
   if (name === "onboarding-rerun") {
-    // The guide opened again from Settings: its welcome is one row, the way out being a round × (a close is the × alone,
-    // never a word button; owner, 2026-11-11), then the wide pill. Nothing stacks.
-    const card = document.querySelector('.ob-card').getBoundingClientRect();
+    // The guide opened again from Settings: its welcome is the first run's own, the one wide pill and nothing beside it, no × to
+    // leave by (owner, 2026-11-14: 「第一頁應該只會有開始就好了」). The later pages keep their pair.
     require(visible(document.querySelector('.ob-emblem canvas.ob-emb')) && document.querySelector('.ob-col > h2.ob-wordmark'), "the welcome is on screen");
-    require(!document.querySelector('.ob-foot .ob-pair'), "the welcome's row is its own, not a step's pair");
-    const { ink, arrow } = requireWelcomeRow(card);
-    const back = document.querySelector('.ob-actions > .btn.ob-back');
-    require(back.dataset.ob === "back" && back.querySelector('svg.i') && !back.textContent.trim(), "the way out is a × with no words");
-    require(document.querySelectorAll('.ob-foot .btn').length === 2, "the foot holds the × and the pill and nothing else");
-    return { check: name, arrow: Math.round(arrow.width), pill: Math.round(ink.width) };
+    require(!document.querySelector('.ob-foot .ob-pair, .ob-foot [data-ob="back"], .ob-foot .btn.icon'), "the welcome's row is its own: no pair, no way back, no ×");
+    const buttons = [...document.querySelectorAll('.ob-foot .btn')];
+    require(buttons.length === 1 && buttons[0].dataset.ob === "next" && buttons[0].textContent.trim().length > 0, "the foot holds the one worded pill and nothing else");
+    return { check: name, pill: Math.round(buttons[0].getBoundingClientRect().width) };
   }
   if (name === "onboarding-tools" || name === "onboarding-services" || name === "onboarding-abilities") {
     // Each first-run choice is one calm centred column in one card of a designed size: a title with two small slimes
