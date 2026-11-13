@@ -1,7 +1,9 @@
 // The account menu (R-SIDE-02, owner 2026-11-12, after Grok Bot's): the owner's face at the foot of the sidebar opens it above
-// the face, left edges together; on the rail it opens to the right of the face. 用量 shows the tightest subscription window the
-// app knows and opens a submenu at its right edge (the window, when it resets, 管理用量); 聽寫, 行事曆 (the calendar, on today in a
-// fresh session, R-CAL-04) and, after a hairline, 設定 follow. The numbers come from `usage.allowances` through the existing API and nowhere else.
+// the face, left edges together; on the rail it opens to the right of the face. 用量 opens, on a chevron alone, the subscription windows the
+// app knows: a submenu at its right edge, one block for each connected provider (its tightest window, its number, when it
+// resets) and 管理用量. The row itself carries no number: one provider's figure under the bare word would read as everyone's.
+// 聽寫, 行事曆 (the calendar, on today in a fresh session, R-CAL-04) and, after a hairline, 設定 follow. The numbers come from
+// `usage.allowances` through the existing API and nowhere else.
 
 import { getLocale, t } from "./i18n";
 import type { AppContext } from "./types";
@@ -9,7 +11,7 @@ import { closeMenu, esc, ico, openPopover, placeMenu } from "./ui";
 import { PERIODS, subscriptionName } from "./usage-analytics";
 import type { CliAllowances } from "./usage-analytics-types";
 
-/** The window of a subscription that has the least left. */
+/** The window of one subscription that has the least left. */
 export interface UsageWindow {
   /** The subscription and its window, `Codex 每週`. */
   name: string;
@@ -20,19 +22,22 @@ export interface UsageWindow {
 }
 
 /**
- * The window with the most used, among the windows that give a percentage. A number reported by an earlier run whose reset
- * has passed is no longer true and is left out, as the usage card says it is.
+ * For each subscription the app reads, in the order the reading gives them, the window with the most used among those that give a
+ * percentage; a subscription with none is left out. A number reported by an earlier run whose reset has passed is no longer true and
+ * is left out, as the usage card says it is.
  */
-export function tightestWindow(allowances: CliAllowances | null, now = Date.now()): UsageWindow | null {
-  let found: UsageWindow | null = null;
+export function usageWindows(allowances: CliAllowances | null, now = Date.now()): UsageWindow[] {
+  const found: UsageWindow[] = [];
   for (const brain of allowances?.brains ?? []) {
+    let tightest: UsageWindow | null = null;
     for (const span of brain.windows) {
       const left = span.remaining_percent;
       if (typeof left !== "number" || !Number.isFinite(left)) continue;
       if (brain.source === "reported" && span.resets_at && span.resets_at * 1000 <= now) continue;
       const used = Math.min(100, Math.max(0, Math.round(100 - left)));
-      if (!found || used > found.used) found = { name: `${subscriptionName(brain.id, brain.name)} ${t(PERIODS[span.period])}`, used, resetsAt: span.resets_at };
+      if (!tightest || used > tightest.used) tightest = { name: `${subscriptionName(brain.id, brain.name)} ${t(PERIODS[span.period])}`, used, resetsAt: span.resets_at };
     }
+    if (tightest) found.push(tightest);
   }
   return found;
 }
@@ -48,21 +53,21 @@ export function resetsIn(resetsAt: number, now = Date.now()): string {
 
 const usedWords = (span: UsageWindow): string => t("overview.used", { p0: span.used });
 
-/** The rows of the menu. A window that is known gives 用量 its number and a submenu; with none it opens the settings itself. */
-export function accountMenuHTML(span: UsageWindow | null): string {
+/** The rows of the menu. With a window known 用量 has a chevron and a submenu; with none it opens the settings itself. */
+export function accountMenuHTML(windows: UsageWindow[]): string {
   const row = (id: string, icon: Parameters<typeof ico>[0], words: string, trail = "", extra = ""): string =>
     `<button type="button" role="menuitem" tabindex="-1" data-account="${id}"${extra}><span class="ck">${ico(icon)}</span><span class="mt">${esc(words)}</span>${trail}</button>`;
-  const usage = span
-    ? row("usage", "gauge", t("models.usage"), `<span class="account-used num">${esc(usedWords(span))}</span>${ico("right")}`, ' aria-haspopup="menu" aria-expanded="false"')
+  const usage = windows.length
+    ? row("usage", "gauge", t("models.usage"), ico("right"), ' aria-haspopup="menu" aria-expanded="false"')
     : row("usage-settings", "gauge", t("models.usage"));
   return usage + row("dictation", "mic", t("nav.dictation")) + row("calendar", "calendar", t("overview.calendar")) +
     `<div class="menu-sep" role="separator"></div>` + row("settings", "gear", t("nav.settings"));
 }
 
-/** The submenu of 用量: the window, its number, when it resets, and the way to the settings' usage. */
-export function usageSubmenuHTML(span: UsageWindow): string {
-  return `<div class="account-window"><span class="account-window-name">${esc(span.name)}</span><span class="account-window-used num">${esc(usedWords(span))}</span>` +
-    (span.resetsAt ? `<span class="account-window-reset">${esc(resetsIn(span.resetsAt))}</span>` : "") + `</div>` +
+/** The submenu of 用量: each subscription's window, its number and when it resets, then the way to the settings' usage. */
+export function usageSubmenuHTML(windows: UsageWindow[]): string {
+  return windows.map(span => `<div class="account-window" data-menu-row><span class="account-window-name">${esc(span.name)}</span><span class="account-window-used num">${esc(usedWords(span))}</span>` +
+    (span.resetsAt ? `<span class="account-window-reset">${esc(resetsIn(span.resetsAt))}</span>` : "") + `</div>`).join("") +
     `<div class="menu-sep" role="separator"></div>` +
     `<button type="button" role="menuitem" tabindex="-1" data-account="manage"><span class="mt">${esc(t("brains.manageUsage"))}</span></button>`;
 }
@@ -80,7 +85,7 @@ let known: CliAllowances | null = null;
  * (dismissals.ts, R-UI-124); the menu closes itself on a pick, a press outside or Escape, and the face gets the focus back.
  */
 export function openAccountMenu(anchor: HTMLElement, host: AccountMenuHost, side: "above" | "right"): void {
-  let shown = tightestWindow(known);
+  let shown = usageWindows(known);
   // On the rail the menu stands beside the whole rail, never over its other buttons: its place is the rail's right edge at the face's height.
   const rail = anchor.closest<HTMLElement>(".sidebar");
   const railRect = (): DOMRect => { const face = anchor.getBoundingClientRect(), bar = rail?.getBoundingClientRect() ?? face; return new DOMRect(bar.left, face.top, bar.right - bar.left, face.height); };
@@ -90,7 +95,7 @@ export function openAccountMenu(anchor: HTMLElement, host: AccountMenuHost, side
     const item = (event.target as Element).closest<HTMLElement>("[data-account]");
     if (!item) return;
     const id = item.dataset.account;
-    if (id === "usage" && shown) {
+    if (id === "usage" && shown.length) {
       const sub = openPopover(item, usageSubmenuHTML(shown), { className: "menu menu-submenu account-usage", role: "menu", label: item.textContent?.trim() || undefined, placement: "beside" });
       sub.addEventListener("click", press => {
         if ((press.target as Element).closest('[data-account="manage"]')) leave(() => host.go("settings", "usage"));
@@ -108,7 +113,7 @@ export function openAccountMenu(anchor: HTMLElement, host: AccountMenuHost, side
   void host.allowances().then(next => {
     known = next;
     if (!root.isConnected || document.getElementById("app-submenu")) return;
-    const fresh = tightestWindow(next);
+    const fresh = usageWindows(next);
     if (JSON.stringify(fresh) === JSON.stringify(shown)) return;
     // The rows keep their places, so the focus stays on the same place of the menu.
     const at = [...root.querySelectorAll("button")].indexOf(document.activeElement as HTMLButtonElement);

@@ -68,7 +68,7 @@ export async function openRoomThread(host: HTMLElement, app: AppContext, roomId:
     stopTask: async () => { await api.roomStop(roomId, result.thread_id); if (alive) await refresh(); },
   });
   pane.querySelector(".room-thread-dock")!.append(composer.el);
-  const questions = createBackgroundQuestions({ memberId: () => 0, roomId: () => roomId, threadId: () => result.thread_id, manageLocal: () => app.go("settings", "safety"), changed });
+  const questions = createBackgroundQuestions({ memberId: () => 0, roomId: () => roomId, threadId: () => result.thread_id, changed });
   pane.querySelector(".room-thread-dock")!.prepend(questions.element);
   mountConversationCardActions(pane, () => app.go("settings", "connections"));
   mountOwnerQuestions(pane, () => { void refresh().catch(error => toaster.info(describeError(error))); });
