@@ -392,7 +392,6 @@ export const zhCN = {
   "template.review.skills": "技能",
   "members.profile.skillsTitle": "技能",
   "members.panelSkills": "技能",
-  "completion.all": "显示全部 {count} 个",
   "completion.previous": "上一页",
   "completion.next": "下一页",
   "media.image": "画图",

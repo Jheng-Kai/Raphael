@@ -384,7 +384,7 @@ export function swapHTML(host: HTMLElement, html: string): void {
 interface MenuState {
   el: HTMLElement; anchor: HTMLElement; rect: DOMRect; stopOutside(): void;
   onKey?: (e: KeyboardEvent) => boolean; onClose?: () => void;
-  parent: MenuState | null; placement?: "beside" | "start" | "pointer" | "above" | "center" | "right"; anchorRect?: () => DOMRect;
+  parent: MenuState | null; placement?: "beside" | "start" | "pointer" | "above" | "center" | "right" | "middle"; anchorRect?: () => DOMRect;
   /** Set when a right click asked for the menu: it stands at that point rather than under its button. */
   at?: PointerAt;
   stopHover?: () => void;
@@ -555,10 +555,15 @@ export function menuPlacement(
   anchor: Pick<DOMRect, "top" | "bottom" | "right"> & Partial<Pick<DOMRect, "left">>,
   size: { width: number; height: number },
   viewport: { width: number; height: number; headerBottom: number },
-  alignment: "end" | "start" | "pointer" | "above" | "center" | "right" = "end",
+  alignment: "end" | "start" | "pointer" | "above" | "center" | "right" | "middle" = "end",
 ): { left: number; top: number; maxHeight: number } {
   const upper = viewport.headerBottom + 8;
   const lower = Math.max(upper, viewport.height - 8);
+  if (alignment === "middle") {
+    // A dialog: the middle of the window both ways, whatever the anchor, kept below the window controls and inside the window.
+    const room = Math.max(0, lower - upper), height = Math.min(size.height, room);
+    return { left: Math.max(8, Math.min((viewport.width - size.width) / 2, viewport.width - size.width - 8)), top: Math.max(upper, Math.min((viewport.height - height) / 2, lower - height)), maxHeight: room };
+  }
   if (alignment === "right") {
     // Beside the anchor on its right, ending where the anchor ends (the avatar at the foot of the rail), kept inside the window.
     const room = Math.max(0, lower - upper), height = Math.min(size.height, room);
@@ -604,9 +609,14 @@ export function placeMenu(): void {
   // A dropdown's menu is at least as wide as the dropdown itself.
   if (anchor.classList?.contains("sel")) el.style.minWidth = `${Math.round(r.width)}px`;
   // Release the previous side's height limit before measuring a menu after scrolling or redraw.
-  el.style.maxHeight = `${Math.max(0, innerHeight - headerBottom - 16)}px`;
+  const room = Math.max(0, innerHeight - headerBottom - 16);
+  el.style.maxHeight = "";
+  // A menu that scrolls (`menu-scroll`) has a height of its own in its CSS; the window's room only ever shortens it.
+  const cap = el.classList?.contains("menu-scroll") ? Math.min(room, parseFloat(getComputedStyle(el).maxHeight) || room) : room;
+  el.style.maxHeight = `${cap}px`;
   const size = { width: el.offsetWidth, height: el.offsetHeight }, viewport = { width: innerWidth, height: innerHeight, headerBottom };
-  const placement = menu.placement === "beside" ? submenuPlacement(r, size, viewport) : menuPlacement(r, size, viewport, menu.placement === "start" || menu.placement === "pointer" || menu.placement === "above" || menu.placement === "center" || menu.placement === "right" ? menu.placement : "end");
+  const placement = menu.placement === "beside" ? submenuPlacement(r, size, viewport) : menuPlacement(r, size, viewport, menu.placement === "start" || menu.placement === "pointer" || menu.placement === "above" || menu.placement === "center" || menu.placement === "right" || menu.placement === "middle" ? menu.placement : "end");
+  if (cap < room) placement.maxHeight = Math.min(placement.maxHeight, cap);
   if (menu.placement === "beside") {
     // The first row is a button, or a block marked `data-menu-row` where the menu starts with words that are not a button.
     const first = el.querySelector<HTMLElement>("button, [data-menu-row]");
@@ -675,8 +685,8 @@ function listenForSubmenus(state: MenuState): void {
 }
 
 export interface PopoverOptions {
-  /** Beside preserves its parent menu; start aligns text completions above their character; right stands on the anchor's right, ending where it ends. */
-  placement?: "beside" | "start" | "above" | "center" | "right";
+  /** Beside preserves its parent menu; start aligns text completions above their character; right stands on the anchor's right, ending where it ends; middle stands in the middle of the window, whatever the anchor. */
+  placement?: "beside" | "start" | "above" | "center" | "right" | "middle";
   /** A live text/caret rectangle; the field remains the dismissal and focus anchor. */
   anchorRect?: () => DOMRect;
   onClose?: () => void;
@@ -695,7 +705,7 @@ export interface PopoverOptions {
 export function openPopover(anchor: HTMLElement, html: string, o: PopoverOptions): HTMLElement {
   listenForMenuEvents();
   // A panel that places itself (a caret, a submenu) keeps its own place; any other from a button that a right click pressed stands where it was.
-  const pointed = o.anchorRect || o.placement === "beside" ? undefined : pointedAt.get(anchor);
+  const pointed = o.anchorRect || o.placement === "beside" || o.placement === "middle" ? undefined : pointedAt.get(anchor);
   const at = pointed && pointed.until > performance.now() ? pointed : undefined;
   let parent: MenuState | null = null;
   if (o.placement === "beside") for (let current = menu; current; current = current.parent) if (current.el.contains(anchor)) { parent = current; break; }
@@ -791,7 +801,8 @@ export function openMenu(
   onPick: (value: string) => void,
   head?: string,
   actions: readonly MenuAction[] = [],
-  placement?: Pick<PopoverOptions, "placement" | "anchorRect"> & { selectionIndicator?: boolean; /** `false`: the focus stays where it is (a field an input method is composing in). */ focus?: boolean; completion?: boolean; className?: string; pageSize?: number },
+  placement?: Pick<PopoverOptions, "placement" | "anchorRect"> & { selectionIndicator?: boolean; /** `false`: the focus stays where it is (a field an input method is composing in). */ focus?: boolean; completion?: boolean; className?: string; pageSize?: number;
+    /** The menu has a fixed height in its CSS and every row stays on one list that scrolls (a mouse wheel, the arrow keys), never in pages. */ scroll?: boolean },
 ): void {
   if (placement?.pageSize && options.length > placement.pageSize) {
     const pageSize = placement.pageSize;
@@ -840,12 +851,12 @@ export function openMenu(
       .join("");
   const el = openPopover(anchor, html, {
     ...placement,
-    className: `menu${detailed ? " detailed" : ""}${described ? " described" : ""}${placement?.placement === "beside" ? " menu-submenu" : ""}${placement?.completion ? " completion-menu" : ""}${placement?.className ? " " + placement.className : ""}`,
+    className: `menu${detailed ? " detailed" : ""}${described ? " described" : ""}${placement?.placement === "beside" ? " menu-submenu" : ""}${placement?.completion ? " completion-menu" : ""}${placement?.scroll ? " menu-scroll" : ""}${placement?.className ? " " + placement.className : ""}`,
     role: placement?.completion ? "listbox" : "menu",
     label: anchor.getAttribute("aria-label") ?? undefined,
     onClose: placement?.completion ? () => { anchor.removeEventListener("keydown", completionKey, true); anchor.removeAttribute("aria-activedescendant"); } : undefined,
   });
-  if (placement?.completion && options.length > 1 && el.scrollHeight > el.clientHeight + 1) {
+  if (placement?.completion && !placement.scroll && options.length > 1 && el.scrollHeight > el.clientHeight + 1) {
     const rowHeight = Math.max(34, ...[...el.querySelectorAll("button")].map(row => row.getBoundingClientRect().height));
     const headingsHeight = [...el.querySelectorAll(".menu-head")].reduce((height, head) => height + (head.getBoundingClientRect().height || 24) + 4, 0);
     const pageSize = Math.max(1, Math.min(8, options.length - 1, Math.floor((el.clientHeight - headingsHeight - 34 * (actions.length + 2) - 16) / rowHeight)));
@@ -854,7 +865,7 @@ export function openMenu(
   }
   let selected = 0;
   const buttons = [...el.querySelectorAll<HTMLButtonElement>("button")];
-  function highlight(): void {
+  function highlight(keyboard = false): void {
     buttons.forEach((button, index) => {
       button.id = `completion-${index}`;
       if (button.hasAttribute("aria-selected")) button.setAttribute("aria-selected", String(index === selected));
@@ -862,6 +873,8 @@ export function openMenu(
       button.classList.toggle("is-active", index === selected);
     });
     if (buttons[selected]) anchor.setAttribute("aria-activedescendant", buttons[selected].id);
+    // The arrow keys carry the highlight out of sight in a list that scrolls: the row they land on comes into view.
+    if (keyboard && placement?.scroll) buttons[selected]?.scrollIntoView?.({ block: "nearest" });
   }
   function completionKey(event: KeyboardEvent): void {
     if (event.isComposing || event.keyCode === 229 || !["ArrowDown", "ArrowUp", "Enter", "Tab", "Escape"].includes(event.key)) return;
@@ -869,12 +882,18 @@ export function openMenu(
     if (event.key === "Escape") { closeMenu(); return; }
     if (event.key === "Enter" || event.key === "Tab") { buttons[selected]?.click(); return; }
     selected = (selected + (event.key === "ArrowDown" ? 1 : -1) + buttons.length) % buttons.length;
-    highlight();
+    highlight(true);
   }
   if (placement?.completion) {
     anchor.addEventListener("keydown", completionKey, true);
     el.addEventListener("pointerdown", event => event.preventDefault());
-    buttons.forEach((button, index) => button.addEventListener("pointermove", () => { selected = index; highlight(); }));
+    // A list that scrolls moves under a pointer that has not: the browser's own pointermove for that carries the same point and is no choice.
+    let lastPoint = "";
+    buttons.forEach((button, index) => button.addEventListener("pointermove", event => {
+      const point = `${event.clientX},${event.clientY}`;
+      if (point === lastPoint) return;
+      lastPoint = point; selected = index; highlight();
+    }));
     highlight();
   }
   // The menu is only so wide (styles.css): a label it cuts short has its whole text as a tooltip.

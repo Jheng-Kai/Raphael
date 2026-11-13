@@ -392,7 +392,6 @@ export const vi = {
   "template.review.skills": "Kỹ năng",
   "members.profile.skillsTitle": "Kỹ năng",
   "members.panelSkills": "Kỹ năng",
-  "completion.all": "Hiện tất cả {count}",
   "completion.previous": "Trước",
   "completion.next": "Tiếp",
   "media.image": "Vẽ ảnh",

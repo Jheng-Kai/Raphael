@@ -70,7 +70,7 @@ export function teamMentions(input: HTMLTextAreaElement, list: MembersList, allo
   const toChoice = (target: RosterEntry): Choice => ({ value: target.name, label: target.name, lead: target.mark(16), tag: target.tag, aliases: target.aliases,
     trail: t(target.kind === "app" ? "completion.kindApp" : "completion.kindMember") });
   const found = (rows: RosterEntry[]): Choice[] => matchingChoices(rows.map(toChoice), query);
-  const choices = query ? [...found(people), ...found(apps)].slice(0, 8) : [...people, ...apps.slice(0, 5)].map(toChoice);
+  const choices = query ? [...found(people), ...found(apps)].slice(0, 8) : [...people, ...apps].map(toChoice);
   if (!choices.length) { closeMenu(); return; }
   const caret = input.selectionStart;
   const signIn = new Set(apps.filter(waiting).map(app => app.name));
@@ -88,13 +88,10 @@ export function teamMentions(input: HTMLTextAreaElement, list: MembersList, allo
     input.focus(); input.setSelectionRange(prefix.length + value.length + 2, prefix.length + value.length + 2);
     input.dispatchEvent(new Event("input", { bubbles: true }));
   };
-  const draw = (expanded = false): void => {
-    openMenu(input, expanded ? apps.map(toChoice) : choices, "", pick, undefined,
-      !query && !expanded && apps.length > 5 ? [{ label: t("completion.all", { count: apps.length }), run: () => draw(true) }] : [],
-      { placement: "start", anchorRect: () => textPositionRect(input, match.index), selectionIndicator: false, focus: false, completion: true, className: "team-mentions-menu", pageSize: expanded ? 8 : undefined });
-    document.querySelector<HTMLElement>("#app-popover")!.dataset.teamMentions = "true";
-  };
-  draw();
+  // One list in a menu of a fixed height: the mouse wheel and the arrow keys take it from the first member to the last app (Grok Bot's).
+  openMenu(input, choices, "", pick, undefined, [],
+    { placement: "start", anchorRect: () => textPositionRect(input, match.index), selectionIndicator: false, focus: false, completion: true, scroll: true, className: "team-mentions-menu" });
+  document.querySelector<HTMLElement>("#app-popover")!.dataset.teamMentions = "true";
 }
 
 export interface TeamMentionsSource extends MentionMenuOptions { list: MembersList | null; allowed?: number[] }

@@ -313,7 +313,6 @@ export const ja = {
   "completion.kindApp": "アプリ",
   "completion.commands": "コマンド",
   "completion.skills": "スキル",
-  "completion.all": "すべて表示 ({count})",
   "completion.previous": "前へ",
   "completion.next": "次へ",
   "media.image": "画像を描く",

@@ -313,7 +313,6 @@ export const en = {
   "completion.kindApp": "App",
   "completion.commands": "Commands",
   "completion.skills": "Skills",
-  "completion.all": "Show all {count}",
   "completion.previous": "Previous",
   "completion.next": "Next",
   "media.image": "Draw images",

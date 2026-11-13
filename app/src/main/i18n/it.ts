@@ -392,7 +392,6 @@ export const it = {
   "template.review.skills": "Competenze",
   "members.profile.skillsTitle": "Competenze",
   "members.panelSkills": "Competenze",
-  "completion.all": "Mostra tutti i {count}",
   "completion.previous": "Precedente",
   "completion.next": "Successivo",
   "media.image": "Disegna immagini",

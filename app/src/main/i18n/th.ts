@@ -392,7 +392,6 @@ export const th = {
   "template.review.skills": "ทักษะ",
   "members.profile.skillsTitle": "ทักษะ",
   "members.panelSkills": "ทักษะ",
-  "completion.all": "แสดงทั้งหมด {count}",
   "completion.previous": "ก่อนหน้า",
   "completion.next": "ถัดไป",
   "media.image": "วาดภาพ",

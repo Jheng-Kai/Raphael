@@ -245,7 +245,7 @@ apply.
 ## Sidebar redesign (2026-10-30)
 
 One sidebar (348px since 2026-11-12, R-SIDE-01) has no brand. Search and plus stand side by side at the top as Grok Bot's two
-36px soft round buttons (2026-11-06); search opens a card in the middle of the dimmed window with the
+36px soft round buttons (2026-11-06); search opens a card in the middle of the dimmed window, across and down (R-MENU-04), with the
 field, every member as face, name and last line, message results once words are typed, and 新增成員
 at its foot (Enter opens the first row). The edge drags the list down to an 88px rail of faces (hover
 names a face; the plus moves above the owner, with no search on the rail), which is also what the list is under 860px. The chief, without a star, is the first ordinary row; any pinned member leaves the
@@ -260,7 +260,7 @@ the account menu's 行事曆 owns calendar navigation. Owner avatar upload reuse
 existing picker/crop component and presets; footer and owner messages share identity.
 
 Selected acceptance: sidebar, sidebar-folders, sidebar-folded, sidebar-many,
-sidebar-unread, sidebar-drawer, sidebar-air, sidebar-air-foot, sidebar-rail-menu, sidebar-drag-row, sidebar-metrics, sidebar-search, sidebar-chief-pinned, sidebar-rail, sidebar-plus, sidebar-group-avatar,
+sidebar-unread, sidebar-drawer, sidebar-air, sidebar-air-foot, sidebar-rail-menu, sidebar-drag-row, sidebar-metrics, sidebar-search, sidebar-search-rail, sidebar-chief-pinned, sidebar-rail, sidebar-plus, sidebar-group-avatar,
 sidebar-group-avatar-pair, sidebar-group-avatar-four, sidebar-owner, sidebar-owner-upload, sidebar-owner-crop, sidebar-owner-crop-held, chat, details, profile, plugins-installed,
 the calendar scenes (including full/sparse/empty, edge-only hover and month gestures), both themes at 1120,720,1920x1080,1280x800. Check these scenes in black at 1120,720,1920x1080 too.
 Run `npm run verify -- --contract`, then the selected look matrix and inspect every

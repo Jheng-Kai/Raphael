@@ -183,7 +183,7 @@ npm run look -- sidebar-group-avatar-hover sidebar-group-avatar-pair sidebar-gro
 The following retained room and sidebar journeys cover their shared consumers:
 
 ```powershell
-npm run look -- sidebar sidebar-many sidebar-unread sidebar-drawer sidebar-search sidebar-plus sidebar-owner room --theme both --width 1120,720,1920x1080
+npm run look -- sidebar sidebar-many sidebar-unread sidebar-drawer sidebar-search sidebar-search-rail sidebar-plus sidebar-owner room --theme both --width 1120,720,1920x1080
 npm run look -- room-composer-empty room-composer-hover room-workflow-blocked room-final-owner room-progress-status-only room-no-dangling-mention room-short-wrapup room-handoff-queued --theme both --width 1120,720,1920x1080
 npm run look -- room-handoff-running room-handoff-result room-handoff-failed room-immediate-work room-source-dates-not-schedule handoff-centred-line mentions-bots-apps plus-create-room --theme both --width 1120,720,1920x1080
 npm run look -- room-routing-fallback room-role-assignment room-round-typing room-mention-after-hop-limit room-mention-after-turn-limit room-mention-blocked room-wrapup-after-replies compact-rooms --theme both --width 1120,720,1920x1080

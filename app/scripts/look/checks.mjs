@@ -1792,7 +1792,9 @@ export function checkRendered(name, context = {}) {
     require(getComputedStyle(menu).position === 'fixed', 'completion is outside composer layout');
     if (window.__look.completionComposerBottom !== undefined) require(Math.abs(input.closest('.composer').getBoundingClientRect().bottom - window.__look.completionComposerBottom) <= 1, 'the menu never pushes the composer');
     require(box.left >= 8 && box.right <= innerWidth - 8 && box.top >= 32 && box.bottom <= innerHeight - 8, 'the menu stays inside the window');
-    require(menu.scrollHeight <= menu.clientHeight + 1 && getComputedStyle(menu).overflowY !== 'auto', 'all rows fit without an inner scrollbar');
+    // The @ menu is one list of a fixed height that scrolls (owner, 2026-11-14); every other completion fits without an inner scrollbar.
+    const scrolls = menu.classList.contains('menu-scroll');
+    if (!scrolls) require(menu.scrollHeight <= menu.clientHeight + 1 && getComputedStyle(menu).overflowY !== 'auto', 'all rows fit without an inner scrollbar');
     const rows = [...menu.querySelectorAll('[data-value]')], values = rows.map(row => row.dataset.value);
     const heads = [...menu.querySelectorAll('.menu-head')].map(head => head.textContent);
     const painted = [...menu.querySelectorAll('button')].filter(row => !['rgba(0, 0, 0, 0)', 'transparent'].includes(getComputedStyle(row).backgroundColor));
@@ -1801,7 +1803,7 @@ export function checkRendered(name, context = {}) {
     require(!menu.querySelector('.menu-head[tabindex], .menu-head[role="option"]'), 'headings are not options or focus targets');
     require(document.activeElement === input, 'completion keeps the input focus');
     for (const row of rows) {
-      require(row.getBoundingClientRect().top >= box.top && row.getBoundingClientRect().bottom <= box.bottom, 'every option is visible');
+      if (!scrolls) require(row.getBoundingClientRect().top >= box.top && row.getBoundingClientRect().bottom <= box.bottom, 'every option is visible');
       require(!row.querySelector('.ck'), 'completion shares the ordinary row without a check column');
       if (row.dataset.value?.startsWith('Notebook')) {
         const tag = row.querySelector('.mtag')?.textContent ?? null;
@@ -1816,17 +1818,30 @@ export function checkRendered(name, context = {}) {
       require(kinds.every(kind => kind === '成員' || kind === '應用程式') && kinds.indexOf('應用程式') >= kinds.lastIndexOf('成員'), 'members first, then apps, each saying which it is at the right');
       require(!values.includes('所有人') && window.__look.data.groups.every(group => !values.includes(group.name)), 'no group and no everyone in the @ menu');
       if (name === 'completion-mentions') require(!values.includes(window.__look.data.members[0].name), 'the conversation never offers its own member');
-      require(values.filter(value => value.startsWith('Notebook')).join('|') === [31,30,29,28,27].map(i=>`Notebook ${i}`).join('|'), 'only the five most recent ready services show');
-      require(menu.textContent.includes('顯示全部 32 個'), 'show all is a real action with the full count');
+      const services = values.filter(value => value.startsWith('Notebook'));
+      require(services.length === 32 && services.slice(0, 5).join('|') === [31,30,29,28,27].map(i=>`Notebook ${i}`).join('|'), 'every service is on the one list, the most recent ready ones first');
+      require(new Set(services.slice(-2)).size === 2 && services.slice(-2).every(value => ['Notebook 00', 'Notebook 01'].includes(value)), 'the services that need a sign-in or a key come last');
+      require(!menu.querySelector('.menu-action, .menu-sep') && !menu.textContent.includes('顯示全部'), 'there is no show-all row and no page buttons');
+      const unit = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--h-menu'));
+      require(scrolls && getComputedStyle(menu).overflowY === 'auto' && menu.scrollHeight > menu.clientHeight + 1 && menu.scrollTop === 0, 'the list is longer than its menu and starts at the top');
+      require(box.height <= unit * 7.5 + 8 + 2 + 1 && box.height >= unit * 5, `the menu has a fixed maximum height (${box.height}px)`);
+      const edge = rows.find(row => row.getBoundingClientRect().bottom > box.bottom - 4);
+      require(edge && edge.getBoundingClientRect().top < box.bottom - 4, 'the row cut at the foot says the list goes on');
       if (name === 'completion-group') {
         const data = window.__look.data, allowed = data.rooms.find(room => room.id === 1).member_ids;
         require(data.members.filter(member => !allowed.includes(member.id)).every(member => !values.includes(member.name)) && data.groups.every(group => !values.includes(group.name)), 'group membership limits mentions');
       }
     } else if (name === 'completion-filtered') {
       require(values.length === 8 && heads.length === 0, 'aliases filter the apps with eight results and no heading');
-    } else if (name === 'completion-expanded' || name === 'completion-expanded-last') {
-      require(values.length === 8 && heads.length === 0 && input.value === '@', 'show all opens bounded app pages in place');
-      if (name.endsWith('-last')) require(values.includes('Notebook 00') && menu.textContent.includes('需要登入') && menu.textContent.includes('需要金鑰'), 'unready services follow ready services and keep their tags');
+    } else if (name === 'completion-scrolled' || name === 'completion-arrows') {
+      // More apps than fit: the wheel (or the arrow keys) takes the one list to its end, where the services that need a sign-in or a key are, with their tags.
+      const inside = row => row.getBoundingClientRect().top >= box.top && row.getBoundingClientRect().bottom <= box.bottom + 0.5;
+      const last = rows.at(-1), first = rows[0];
+      require(heads.length === 0 && input.value === '@' && !menu.querySelector('.menu-action'), 'the menu is still one list of the same words, with no show-all row');
+      require(menu.scrollTop > 0 && Math.abs(menu.scrollTop + menu.clientHeight - menu.scrollHeight) <= 1.5, 'the list is at its end');
+      require(last.dataset.value === 'Notebook 00' && inside(last) && last.querySelector('.mtag')?.textContent === '需要登入', 'the last app is whole in view with its tag');
+      require(rows.slice(-4).some(row => row.querySelector('.mtag')?.textContent === '需要金鑰') && !inside(first), 'the key tag is within reach and the first member has scrolled away');
+      if (name === 'completion-arrows') require(last.classList.contains('is-active') && input.getAttribute('aria-activedescendant') === last.id && document.activeElement === input, 'the arrow key carried the highlight to the last row and the focus stayed in the field');
     } else {
       require(rows.every(row => row.querySelector('.mdesc')?.textContent), 'commands and skills have descriptions');
       if (name === 'completion-slash' || name === 'completion-clash') require(heads.join('|') === '指令|技能', 'commands and skills have separate headings');
@@ -2881,6 +2896,21 @@ export function checkRendered(name, context = {}) {
     require(m.left>=0&&m.right<=innerWidth&&m.top>=0&&m.bottom<=innerHeight,'the menu stays inside the window');
     return {check:name,left:Math.round(m.left)};
   }
+  // Every way the member search opens (the button, Ctrl+Shift+F, the palette, the rail) puts the same card in the middle of the window, and typing never moves it.
+  if(name==='search-card-middle'||name==='sidebar-search-typed'){
+    const card=document.querySelector('#app-popover.side-search'),input=card?.querySelector('.side-search-input');
+    require(visible(card)&&document.activeElement===input,'the card is open with the keys in its field');
+    const box=card.getBoundingClientRect();
+    const chrome=document.getElementById('window-chrome')?.getBoundingClientRect().bottom??0;
+    require(Math.abs(box.left+box.width/2-innerWidth/2)<=2&&box.width<=560&&box.left>=12&&box.right<=innerWidth-12,`the card stands in the middle of the window, across (${Math.round(box.left)}..${Math.round(box.right)} of ${innerWidth})`);
+    require(box.top>=chrome+8-0.5&&box.bottom<=innerHeight-8+0.5&&(Math.abs(box.top+box.height/2-innerHeight/2)<=2||box.top<=chrome+8.5||box.bottom>=innerHeight-8.5),`the card stands in the middle of the window, down, and inside it (${Math.round(box.top)}..${Math.round(box.bottom)} of ${innerHeight})`);
+    if(name==='sidebar-search-typed'){
+      const before=window.__sidebarSearchBox;
+      require(!before||['left','top','width','height'].every(side=>Math.abs(box[side]-before[side])<=0.5),'typing in the field never moves or resizes the card (a window under 860px has no button to take a first reading from; it is centred again after typing)');
+      require(card.querySelectorAll('.side-search-rows > .side-search-row').length>=1&&visible(card.querySelector('.side-search-new')),'the words found a member and 新增成員 stays at the foot');
+    }
+    return {check:name,box:{x:Math.round(box.x),y:Math.round(box.y),width:Math.round(box.width),height:Math.round(box.height)},viewport:[innerWidth,innerHeight]};
+  }
   if(name==='sidebar-search-before'||name==='sidebar-search-open'){
     const buttons=[...document.querySelectorAll('#nav [data-col]')];
     const positions=buttons.map(button=>button.getBoundingClientRect().toJSON());
@@ -2894,7 +2924,10 @@ export function checkRendered(name, context = {}) {
     const card=document.querySelector('#app-popover.side-search'),input=card?.querySelector('.side-search-input');
     require(visible(card)&&document.activeElement===input,'search opens its card with the keys in its field');
     const box=card.getBoundingClientRect();
-    require(Math.abs(box.left+box.width/2-innerWidth/2)<=2&&box.width<=560&&box.left>=12&&box.bottom<=innerHeight,'the card stands in the middle of the window');
+    const chrome=document.getElementById('window-chrome')?.getBoundingClientRect().bottom??0;
+    require(Math.abs(box.left+box.width/2-innerWidth/2)<=2&&box.width<=560&&box.left>=12&&box.right<=innerWidth-12,`the card stands in the middle of the window, across (${Math.round(box.left)}..${Math.round(box.right)} of ${innerWidth})`);
+    require(box.top>=chrome+8-0.5&&box.bottom<=innerHeight-8+0.5&&(Math.abs(box.top+box.height/2-innerHeight/2)<=2||box.top<=chrome+8.5||box.bottom>=innerHeight-8.5),`the card stands in the middle of the window, down, and inside it (${Math.round(box.top)}..${Math.round(box.bottom)} of ${innerHeight})`);
+    window.__sidebarSearchBox=box.toJSON();
     require(/\b\d{3,}px\b/.test(getComputedStyle(card).boxShadow),'the page behind the card is dimmed by its wide shadow');
     require(getComputedStyle(document.querySelector('.window-chrome')).backgroundColor==='rgba(0, 0, 0, 0)','the caption takes the same dim as everything else');
     const rows=[...card.querySelectorAll('.side-search-rows > .side-search-row')],add=card.querySelector('.side-search-new');
