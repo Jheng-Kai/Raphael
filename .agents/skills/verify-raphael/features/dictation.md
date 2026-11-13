@@ -1,5 +1,53 @@
 # Dictation
 
+## The dictionary on every dictation, and learning that fires (2026-11-14)
+
+Owner, 2026-11-14: 「像是 grokbot 他從來沒有根據我們的字典去做修正…自動儲存到字典的那個功能…好像一次都沒有」.
+Where the dictionary was lost, and what now carries it (R-DICT-STT-01, R-DICT-SPELL-01, R-DICT-PROMPT-01):
+
+1. Speech-to-text. His MAI-Transcribe 2 got no hints; it now gets the dictionary as an Azure phrase list
+   (`openrouter.transcription_body`, `provider.options.azure.phraseList.phrases`; `keyterms` is a 400). Words the
+   owner chose come first, learned ones after, 50 at most. Local Qwen3-ASR keeps its hotwords; the other cloud models
+   still get none (their fields are undocumented, and Azure refuses unknown ones).
+2. Cleanup prompt. Beside each word the transcript may hold misheard, the prompt names those parts (「這次可能是」,
+   `mishearing.misheard_spans`: same first letter, one edit in six letters and two in more, no plural, not another
+   dictionary word, or the word split apart); rule 10 says text listed under an entry is that entry misheard. The
+   short-sentence shortcut runs only when no such part is found (`BrainService._needs_no_model`).
+3. Final text. His cleanup model ignored the named word five times in six, so the paste is respelled by rule inside
+   Chinese or Japanese text (`textnorm.respell_dictionary_words`): other letter case, a split, or a name misspelt with a
+   capital or split ("Grokbox", "Grabbot", "Grok Bus" → 「grokbot」, "Herder" → 「herdr」). English text, lower-case
+   ordinary words and dictionary words of four letters or fewer are left alone. A dictionary entry's case wins in
+   Chinese text: his 「alt」 and 「Bots」 come out as he typed them.
+
+Learning (R-LEARN-UIA-01, R-LEARN-TERM-01, R-LEARN-SHOW-01): in a member's conversation the composer learned only
+when `agent_ask_text` returned, which is when the whole answer ended, so a long turn hid the pill for minutes; it now
+learns as the message goes (a group composer still learns on delivery). Outside the app, 69 of his 72 pastes from
+11-11 to 11-14 never started a
+watch (`probe stopped (stage: focused_ancestry)` in `%LOCALAPPDATA%\Raphael Dev\logs`): Claude's desktop composer is
+36 levels deep and the walk stopped at 32. The walk now allows 128 and every `Chrome_WidgetWin_*` window is Chromium
+(retries). A lower-case name corrected from a plausible mishearing is learned; rewording never is. The first correction
+makes the word a term and the pair a hint: in the phrase list and the prompt from the next dictation, shown under
+常被聽成 in the Dictionary row (`dictionary.list` `heard`), and a replacement rule when the same pair is seen again.
+
+Proof, in this order:
+
+```powershell
+npm run look -- dictation-dictionary stable-dictionary-controls --theme both --width 1120,720,1920x1080
+```
+
+`npm.cmd run native -- dictation-dictionary` (owner's OpenRouter key, about US$0.002 a run) synthesizes mixed speech
+(Hanhan for the Chinese, David for 「herder」 and 「grok bot」), plays it as the microphone through
+`RAPHAEL_FAKE_AUDIO`, and drives the real dictation key, MAI-Transcribe 2, his cleanup model and the paste into the
+composer: 「grokbot」 comes out as spelled; the owner's edit of "Herder" to 「herdr」 is learned with its pill and
+Dictionary row; the next dictation writes 「herdr」. The sample is a remark, never a request, the journey's agent may only
+plan (`action_mode` plan), and two Escapes stop the corrected message's turn once the pill is up. The journey brings its own window to the front before a recording
+stops and cancels the dictation if another window takes it, so no words are pasted anywhere else.
+
+The learning watch in a Chromium window has no journey (no external window is driven): the ignored
+`learn::uia::tests::native_read_only_foreground_probe` runs against a throwaway Edge window (`--app`, its own empty
+profile) whose composer is 40 groups deep, brought to the front without a key press. With the old 32-level walk it
+logs `focused_ancestry`; with the fix it reads the field (`field probe (sources: 2)`, `fixture_found=true`).
+
 ## Cleanup v3 production decision and calibrated comparison (2026-11-05)
 
 Follow-up 5 explicitly adopts v3 for the owner's short-prompt, clear-structure goal.

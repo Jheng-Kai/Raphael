@@ -115,6 +115,38 @@ test("a sure page gesture appends a draft and sends nothing until the owner subm
   agent.hide(); Reflect.deleteProperty(navigator, "userActivation");
 });
 
+test("a dictated correction is learned as the message goes, not when its answer ends, and once", async () => {
+  // The page waits for the whole turn; a member's answer can take minutes (native run, 2026-11-14).
+  api.agentHistoryList.mockResolvedValue({ turns: [] });
+  let answered!: () => void, failed!: (error: Error) => void;
+  api.agentAskText.mockImplementationOnce(() => new Promise<void>(resolve => { answered = resolve; }));
+  const agent = mount(); await flush();
+  const input = agent.el.querySelector<HTMLTextAreaElement>(".cmp-input")!;
+  const dictated = "幫我用 Herder 開兩個分頁";
+  input.value = dictated; input.dispatchEvent(new Event("input", { bubbles: true }));
+  input.dispatchEvent(new CustomEvent("dictation-pasted", { detail: dictated }));
+  input.value = "幫我用 herdr 開兩個分頁"; input.dispatchEvent(new Event("input", { bubbles: true }));
+  agent.el.querySelector<HTMLFormElement>("form.composer")!.requestSubmit(); await flush();
+  const learned = () => api.core.mock.calls.filter(([method]) => method === "dictionary.correct");
+  expect(learned()).toEqual([["dictionary.correct", { edits: [{ before: dictated, after: "幫我用 herdr 開兩個分頁" }] }]]);
+  answered(); await flush();
+  expect(learned()).toHaveLength(1);
+  // A send that fails gives the draft back without the evidence: sending it again learns nothing twice.
+  api.agentAskText.mockImplementationOnce(() => new Promise<void>((_, reject) => { failed = reject; }));
+  input.value = dictated; input.dispatchEvent(new Event("input", { bubbles: true }));
+  input.dispatchEvent(new CustomEvent("dictation-pasted", { detail: dictated }));
+  input.value = "幫我用 herdr 開兩個分頁"; input.dispatchEvent(new Event("input", { bubbles: true }));
+  agent.el.querySelector<HTMLFormElement>("form.composer")!.requestSubmit(); await flush();
+  failed(new Error("busy")); await flush();
+  expect(learned()).toHaveLength(2);
+  expect(input.value).toBe("幫我用 herdr 開兩個分頁");
+  api.agentAskText.mockResolvedValue(undefined);
+  agent.el.querySelector<HTMLFormElement>("form.composer")!.requestSubmit(); await flush();
+  expect(api.agentAskText).toHaveBeenCalledTimes(3);
+  expect(learned()).toHaveLength(2);
+  agent.hide();
+});
+
 test("the header has no computer button, and an idle computer adds nothing to the name", async () => {
   const previous = getLocale();
   setLocale("zh-TW");

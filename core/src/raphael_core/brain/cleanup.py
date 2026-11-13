@@ -31,7 +31,7 @@ from importlib import resources
 
 from ..languages import DEFAULT_LANGUAGES, display_name
 from .dictionary import DictionaryStore
-from .mishearing import may_be_heard_in
+from .mishearing import may_be_heard_in, misheard_spans
 from .openrouter import CLEANUP_FALLBACKS, Completion, OpenRouterError
 from .providers.base import ModelProvider
 from .providers.registry import for_purpose
@@ -400,6 +400,37 @@ PROMPT_MAX_FORMS = 5
 PROMPT_MAX_CHARS = 4_000
 
 
+def _forms_by_word(replacements: Sequence[tuple[str, str]]) -> dict[str, list[str]]:
+    """The `(misheard, word)` pairs as each word's forms, on one line each, in their order."""
+    forms: dict[str, list[str]] = {}
+    for misheard, word in replacements:
+        form = _one_line(misheard)
+        if form:
+            forms.setdefault(_one_line(word), []).append(form)
+    return forms
+
+
+def dictionary_spans(
+    words: Sequence[str], replacements: Sequence[tuple[str, str]], heard: str
+) -> dict[str, list[str]]:
+    """The dictionary words that `heard` may hold misheard, each with those parts of it
+    (`mishearing.misheard_spans`), in the order of `words`. `words` and `replacements` are what
+    `DictionaryStore.hint_words()` and `hint_forms()` return. Empty when the transcript writes every
+    word of the dictionary as the dictionary does: then the cleanup has nothing to correct for it,
+    and a short clear sentence may skip the model."""
+    forms = _forms_by_word(replacements)
+    lines = [_one_line(word) for word in words]
+    found: dict[str, list[str]] = {}
+    for word in lines:
+        if not word or word in found:
+            continue
+        others = [other for other in lines if other and other != word]
+        spans = misheard_spans(word, heard, forms.get(word, ()), others)
+        if spans:
+            found[word] = spans
+    return found
+
+
 def build_system_prompt(
     words: Sequence[str],
     replacements: Sequence[tuple[str, str]],
@@ -434,13 +465,11 @@ def build_system_prompt(
     `heard` is the transcript the prompt is for. Given, the block leaves out the words it cannot
     hold (`mishearing.may_be_heard_in`): a Latin word with nothing like it in a Chinese or Japanese
     transcript only invites the model to translate what was said into it. Those words do not count
-    towards the cut-off.
+    towards the cut-off. A word that the transcript may hold misheard (`dictionary_spans`) also
+    names those parts of the transcript ("這次可能是").
     """
-    misheard_forms: dict[str, list[str]] = {}
-    for misheard, word in replacements:
-        form = _one_line(misheard)
-        if form:
-            misheard_forms.setdefault(_one_line(word), []).append(form)
+    misheard_forms = _forms_by_word(replacements)
+    spans = {} if heard is None else dictionary_spans(words, replacements, heard)
     lines: list[str] = []
     size = 0  # the characters of the lines, a line break after each
     for word in map(_one_line, words):
@@ -449,9 +478,16 @@ def build_system_prompt(
         if len(lines) == PROMPT_MAX_WORDS:
             break
         forms = misheard_forms.get(word)
-        if heard is not None and not may_be_heard_in(word, heard, forms or ()):
+        if heard is not None and word not in spans and not may_be_heard_in(word, heard, forms or ()):
             continue
-        line = f"- {word}（常被聽成：{'、'.join(forms[:PROMPT_MAX_FORMS])}）" if forms else f"- {word}"
+        notes = []
+        if forms:
+            notes.append(f"常被聽成：{'、'.join(forms[:PROMPT_MAX_FORMS])}")
+        named = {form.casefold() for form in forms or ()}
+        fresh = [span for span in spans.get(word, ()) if span.casefold() not in named]
+        if fresh:
+            notes.append(f"這次可能是：{'、'.join(fresh[:PROMPT_MAX_FORMS])}")
+        line = f"- {word}（{'；'.join(notes)}）" if notes else f"- {word}"
         if size + len(line) + 1 > PROMPT_MAX_CHARS:
             continue
         lines.append(line)

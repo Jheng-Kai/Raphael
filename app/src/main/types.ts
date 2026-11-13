@@ -673,6 +673,8 @@ export interface DictionaryEntry {
   id: number;
   word: string;
   misheard: string[];
+  /** Forms learned from the user's corrections that are hints for the models so far, not replacement rules. */
+  heard?: string[];
   /** "manual" for a word the user typed or imported, "suggested" for one taken from a suggestion of an earlier version, "learned" for one Raphael added by itself after the user corrected it in a pasted dictation. */
   source: "manual" | "suggested" | "learned";
 }

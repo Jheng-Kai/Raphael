@@ -700,3 +700,69 @@ def test_remove_stutters_is_idempotent():
 ])
 def test_public_progress_never_exposes_a_reply_envelope(text, expected):
     assert textnorm.public_line(text, "zh-TW") == expected
+
+
+# --- respell_dictionary_words ------------------------------------------------------------------
+# The owner's dictionary and what his dictation pasted (history 2026-11-13/14; the native journey
+# of 2026-11-14 heard 「grok bot」 as "Grokbot.", a piece of its own that speech-to-text capitalized).
+
+OWNER_WORDS = ["grokbot", "GitHub", "computer use", "OpenRouter", "Space", "claude", "herdr", "Telegram"]
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("然後看一下 Grokbot 是怎麼做的", "然後看一下 grokbot 是怎麼做的"),
+        ("像是Grokbot這樣子區分開來嗎？", "像是grokbot這樣子區分開來嗎？"),
+        ("跟 Grok Bot 一樣", "跟 grokbot 一樣"),
+        ("跟grok-bot一樣", "跟grokbot一樣"),
+        ("GitHub 上面現在有 50 幾個 branch，github 的頁面", "GitHub 上面現在有 50 幾個 branch，GitHub 的頁面"),
+        ("我們可以用 Computer Use 測試", "我們可以用 computer use 測試"),
+        ("接上 open router 就好", "接上 OpenRouter 就好"),
+        ("用 Herdr 開兩個分頁", "用 herdr 開兩個分頁"),
+        ("「Telegram」傳給我", "「Telegram」傳給我"),
+        ("（tele gram）傳給我", "（Telegram）傳給我"),
+        # Misspelt the way speech-to-text writes a name it does not know (his history).
+        ("我記得 Grabbot 是可以自己喚醒自己的", "我記得 grokbot 是可以自己喚醒自己的"),
+        ("你這邊的話就是跟Grok Bus一樣，設計是滑鼠滾輪往下", "你這邊的話就是跟grokbot一樣，設計是滑鼠滾輪往下"),
+        ("你可以看一下Grokbox是怎麼做的", "你可以看一下grokbot是怎麼做的"),
+        ("幫我用 Herder 開兩個分頁", "幫我用 herdr 開兩個分頁"),
+    ],
+)
+def test_a_dictionary_word_inside_chinese_is_written_as_the_dictionary_spells_it(text, expected):
+    assert textnorm.respell_dictionary_words(text, OWNER_WORDS) == expected
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        # English text keeps the case of its sentence.
+        "Leave some space for the title",
+        "Grokbot is what we are building",
+        # A word next to other Latin words is part of a phrase or an address.
+        "上傳到 github.com 就好",
+        "用 Claude Code 寫",
+        "打開 Space key 的設定",
+        # Not the word: a plural, letters of a longer word, a word too far from any.
+        "像是Grokbots這樣子", "我的iCloud空間", "我記得 Grok 是可以的", "上傳到 Drive 就好",
+        # A word in lower case is ordinary English the speaker said.
+        "幫我用 herder 開兩個分頁", "跟 grabbot 一樣",
+        # A word of the dictionary is never another one's misspelling.
+        "接上 Telegram 跟 Space 就好",
+        # Short dictionary words have too many real words a letter away.
+        "設定 Crop 的時間",
+        # A split is joined only from words that are no function words.
+        "我想要 type less",
+        # Already as the dictionary spells it.
+        "看一下 grokbot 是怎麼做的",
+    ],
+)
+def test_other_text_is_left_as_it_is(text):
+    words = [*OWNER_WORDS, "Typeless", "cron"]
+    assert textnorm.respell_dictionary_words(text, words) == text
+
+
+def test_the_first_word_of_the_dictionary_wins_two_that_spell_alike():
+    assert textnorm.respell_dictionary_words("用 Claude 寫", ["CLAUDE", "claude"]) == "用 CLAUDE 寫"
+    assert textnorm.respell_dictionary_words("用 Claude 寫", []) == "用 Claude 寫"
+    assert textnorm.respell_dictionary_words("用 拉菲爾 寫", ["拉斐爾"]) == "用 拉菲爾 寫"
