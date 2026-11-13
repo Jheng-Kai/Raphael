@@ -2657,7 +2657,8 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     presentationVersion++;
     drawFaces();
     void members.load();
-    for (const child of thread.children) drawnHTML.delete(child); // every face is drawn again
+    // A line that the new picture changes differs in its HTML and is replaced by the next draw. The ones it does not change stay:
+    // the start-up reads (the emblem texture, the owner's picture) end after the first draw and must not cost the reader every line.
     if (visible) render();
   });
 
